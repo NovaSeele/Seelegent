@@ -60,6 +60,13 @@ watch(
   },
 )
 
+/** The suggestion row, unless the message already says exactly what the suggestion says. */
+const showSuggestion = computed(() => {
+  const s = props.suggestion
+  if (s?.state === 'failed') return true
+  return s?.state === 'ready' && (s.message ?? '').trim() !== message.value.trim()
+})
+
 const paths = computed(() => committable(props.files, chosen.value))
 const all = computed(() => props.files.length > 0 && paths.value.length === props.files.length)
 const some = computed(() => paths.value.length > 0 && !all.value)
@@ -133,7 +140,7 @@ const fileLabel = (file: GitFile) => (file.oldPath ? `${file.oldPath} → ${file
           @keydown="onKeydown"
         />
         <div
-          v-if="suggestion?.state === 'ready' || suggestion?.state === 'failed'"
+          v-if="suggestion && showSuggestion"
           class="cd__suggestion"
           :class="{ 'cd__suggestion--failed': suggestion.state === 'failed' }"
         >

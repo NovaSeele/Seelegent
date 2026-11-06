@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue'
+import { computed, onBeforeUnmount, ref, shallowRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import type { TaskDetail, TaskSummary } from '@/api/types'
@@ -42,11 +42,20 @@ const zoomOptions = computed(() => [
 const scroller = ref<HTMLElement | null>(null)
 const available = shallowRef(0)
 let observer: ResizeObserver | null = null
-onMounted(() => {
-  if (!scroller.value || typeof ResizeObserver === 'undefined') return
-  observer = new ResizeObserver(([entry]) => (available.value = entry?.contentRect.width ?? 0))
-  observer.observe(scroller.value)
-})
+// The scroller appears only once the events are loaded (ProcessFrame shows a loading state first), so watch the
+// ref instead of measuring on mount; without a width, Fit would fall back to the default scale and overflow.
+watch(
+  scroller,
+  (el) => {
+    observer?.disconnect()
+    if (!el) return
+    available.value = el.clientWidth
+    if (typeof ResizeObserver === 'undefined') return
+    observer ??= new ResizeObserver(([entry]) => (available.value = entry?.contentRect.width ?? 0))
+    observer.observe(el)
+  },
+  { flush: 'post' },
+)
 onBeforeUnmount(() => observer?.disconnect())
 
 const hasRunning = computed(() => model.steps.value.some((step) => step.state === 'running'))
@@ -273,8 +282,13 @@ const summary = computed(() =>
   border-radius: 0 var(--radius-md) var(--radius-md) 0;
 }
 
+/* Keyboard focus only (a click never rings it). Once a bar is selected, that bar carries the focus mark instead
+   of a ring around the whole graph. */
 .graph__scroll:focus-visible {
   outline: none;
+}
+
+.graph__scroll:focus-visible:not(:has(.graph__rect--selected)) {
   box-shadow: inset 0 0 0 var(--focus-ring-width) var(--border-focus);
 }
 
@@ -346,6 +360,10 @@ const summary = computed(() =>
 .graph__rect--selected {
   stroke: var(--border-focus);
   stroke-width: 2;
+}
+
+.graph__scroll:focus-visible .graph__rect--selected {
+  stroke-width: 3;
 }
 
 .graph__detail {

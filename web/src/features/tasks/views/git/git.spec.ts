@@ -245,6 +245,13 @@ describe('CommitDialog', () => {
     suggestion.value = { state: 'ready', message: 'refactor: move card' }
     await flush()
     expect(message.value).toBe('refactor: move card')
+    // The message already is the suggestion: no Use / Dismiss row repeating it.
+    expect(document.querySelector('.cd__suggestion')).toBeNull()
+    message.value = 'refactor: move the card'
+    await flush()
+    expect(document.querySelector('.cd__suggestion')?.textContent).toContain('refactor: move card')
+    message.value = 'refactor: move card'
+    await flush()
 
     const boxes = [...document.querySelectorAll<HTMLInputElement>('.cd__list input')]
     boxes[0]?.click()

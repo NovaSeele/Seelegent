@@ -140,7 +140,7 @@ defineExpose({ focusSelected })
 
 .gfl__status--modified,
 .gfl__status--renamed {
-  color: var(--attention-fg);
+  color: var(--diff-mod);
 }
 
 .gfl__status--deleted {
