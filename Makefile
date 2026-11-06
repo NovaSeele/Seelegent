@@ -1,0 +1,63 @@
+# Build, test and lint Seelegent. On Windows without make, use scripts/build.ps1 (see docs/development.md).
+
+SHELL := bash
+.SHELLFLAGS := -eu -o pipefail -c
+.DEFAULT_GOAL := build
+
+GO   ?= go
+PNPM ?= pnpm
+
+MODULE  := github.com/NovaSeele/Seelegent
+BIN_DIR := bin
+BINARY  := seelegent$(if $(filter Windows_NT,$(OS)),.exe,)
+
+VERSION ?= $(shell git describe --tags --dirty 2>/dev/null || echo dev)
+COMMIT  ?= $(shell git rev-parse --short=12 HEAD 2>/dev/null || echo unknown)
+DATE    ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
+LDFLAGS := -s -w \
+	-X $(MODULE)/internal/buildinfo.version=$(VERSION) \
+	-X $(MODULE)/internal/buildinfo.commit=$(COMMIT) \
+	-X $(MODULE)/internal/buildinfo.date=$(DATE)
+
+# golangci-lint is built with the module's toolchain so it understands the targeted Go version.
+GO_TOOLCHAIN          := $(shell sed -n 's/^toolchain //p' go.mod)
+GOLANGCI_LINT_VERSION ?= v2.15.0
+GOLANGCI_LINT         ?= GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
+
+# Extra flags for go test, for example GOTESTFLAGS=-race.
+GOTESTFLAGS ?=
+
+.PHONY: web build test test-web lint lint-web fmt generate clean dev-daemon
+
+web: ## Build the dashboard into web/dist
+	cd web && $(PNPM) install --frozen-lockfile && $(PNPM) build
+
+build: web ## Build bin/seelegent with the dashboard embedded
+	$(GO) build -trimpath -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/$(BINARY) ./cmd/seelegent
+
+test: ## Run the Go tests
+	$(GO) test $(GOTESTFLAGS) ./...
+
+test-web: ## Run the dashboard tests
+	cd web && $(PNPM) test
+
+lint: ## Lint the Go code
+	$(GO) vet ./...
+	$(GOLANGCI_LINT) run ./...
+
+lint-web: ## Lint and type-check the dashboard
+	cd web && $(PNPM) lint && $(PNPM) typecheck
+
+fmt: ## Format Go and web sources
+	$(GOLANGCI_LINT) fmt ./...
+	cd web && $(PNPM) format
+
+generate: ## Generate TypeScript API types (tygo, from milestone 5)
+	@echo "generate: nothing to generate yet; tygo will write web/src/api/types.gen.ts from internal/api"
+
+clean: ## Remove build output
+	rm -rf $(BIN_DIR)
+	find web/dist -mindepth 1 ! -name .gitkeep -exec rm -rf {} +
+
+dev-daemon: ## Run a development daemon (from milestone 7)
+	@echo "dev-daemon: not available yet; it will run the daemon on port 47831 with SEELEGENT_HOME in a temp dir"

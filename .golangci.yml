@@ -1,0 +1,87 @@
+# golangci-lint v2 configuration. Run with `make lint` (pinned version) or `golangci-lint run ./...`.
+version: "2"
+
+linters:
+  # standard = errcheck, govet, ineffassign, staticcheck, unused
+  default: standard
+  enable:
+    - bodyclose
+    - errorlint
+    - gocritic
+    - gosec
+    - misspell
+    - noctx
+    - nolintlint
+    - revive
+    - unconvert
+    - unparam
+    - usestdlibvars
+  settings:
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - style
+        - performance
+      disabled-checks:
+        # nolintlint already requires explanations for //nolint directives.
+        - whyNoLint
+        # Small immutable structs are passed by value on purpose.
+        - hugeParam
+    govet:
+      enable-all: true
+      disable:
+        # Field order is chosen for readability, not padding.
+        - fieldalignment
+        # Shadowing err in nested scopes is idiomatic.
+        - shadow
+    misspell:
+      locale: US
+    nolintlint:
+      require-explanation: true
+      require-specific: true
+    revive:
+      rules:
+        - name: blank-imports
+        - name: context-as-argument
+        - name: context-keys-type
+        - name: dot-imports
+        - name: error-naming
+        - name: error-return
+        - name: error-strings
+        - name: errorf
+        - name: exported
+        - name: increment-decrement
+        - name: indent-error-flow
+        - name: package-comments
+        - name: range
+        - name: receiver-naming
+        - name: redefines-builtin-id
+        - name: superfluous-else
+        - name: time-naming
+        - name: unexported-return
+        - name: unreachable-code
+        - name: unused-parameter
+        - name: var-declaration
+        - name: var-naming
+  exclusions:
+    generated: lax
+    presets:
+      - common-false-positives
+      - std-error-handling
+    rules:
+      # Tests may use fixed file modes, unchecked fixture paths and long helpers.
+      - path: _test\.go
+        linters:
+          - gosec
+          - unparam
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/NovaSeele/Seelegent
+  exclusions:
+    generated: lax
