@@ -46,6 +46,15 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
+// selfExe is the absolute path of this test binary. os.Args[0] can be relative ("./x.test"), and the children run
+// in other directories.
+func selfExe() string {
+	if p, err := os.Executable(); err == nil {
+		return p
+	}
+	return os.Args[0]
+}
+
 // runWorker runs the fake worker steps: print:<text>, partial:<text>, stderr:<text>, sleep:<ms>, env:<NAME>,
 // stdin, pid:<file>, spawn:<file> (a grandchild that writes its pid to file and sleeps), exit:<code>.
 func runWorker(steps []string) int {
@@ -69,7 +78,7 @@ func runWorker(steps []string) int {
 		case "pid":
 			_ = os.WriteFile(arg, []byte(strconv.Itoa(os.Getpid())), 0o600)
 		case "spawn":
-			child := exec.CommandContext(context.Background(), os.Args[0], "worker", "pid:"+arg, "sleep:60000")
+			child := exec.CommandContext(context.Background(), selfExe(), "worker", "pid:"+arg, "sleep:60000")
 			if err := child.Start(); err != nil {
 				return 3
 			}
@@ -84,10 +93,10 @@ func runWorker(steps []string) int {
 // testOptions starts this test binary as launcher and as worker running steps.
 func testOptions(dir string, steps ...string) Options {
 	return Options{
-		Launcher: []string{os.Args[0], "__launch"},
+		Launcher: []string{selfExe(), "__launch"},
 		Dir:      dir,
 		Spec: Spec{
-			Argv:      append([]string{os.Args[0], "worker"}, steps...),
+			Argv:      append([]string{selfExe(), "worker"}, steps...),
 			Dir:       dir,
 			KillGrace: time.Second,
 		},
@@ -305,7 +314,7 @@ func TestStartValidates(t *testing.T) {
 // the launch from this process, as a restarted daemon would, and resumes reading from a committed offset.
 func TestSurvivesDaemonExit(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "a1")
-	daemon := exec.CommandContext(context.Background(), os.Args[0], "daemon", dir,
+	daemon := exec.CommandContext(context.Background(), selfExe(), "daemon", dir,
 		"print:l1", "sleep:400", "print:l2", "sleep:400", "print:l3", "exit:0")
 	platform.HideWindow(daemon)
 	if out, err := daemon.CombinedOutput(); err != nil {
@@ -401,7 +410,7 @@ func TestRunInProcessCanceledByContext(t *testing.T) {
 	dir := t.TempDir()
 	f := FilesIn(dir)
 	sf := specFile{
-		Spec:   Spec{Argv: []string{os.Args[0], "worker", "sleep:60000"}, Dir: dir, KillGrace: time.Second},
+		Spec:   Spec{Argv: []string{selfExe(), "worker", "sleep:60000"}, Dir: dir, KillGrace: time.Second},
 		Stream: f.Stream, Stderr: f.Stderr, Exit: f.Exit, Cancel: f.Cancel,
 	}
 	if err := writeJSON(f.Spec, sf); err != nil {

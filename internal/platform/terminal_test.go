@@ -93,7 +93,7 @@ func TestTerminalScriptRuns(t *testing.T) {
 	spec := TerminalSpec{
 		Title:      "test",
 		Banner:     []string{"Sign in & paste the code > here", ""},
-		Argv:       []string{os.Args[0], "a b", "c&d", "50%"},
+		Argv:       []string{selfExe(), "a b", "c&d", "50%"},
 		Dir:        dir,
 		Env:        append(os.Environ(), roleEnv+"=print"),
 		StdoutPath: out,

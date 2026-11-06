@@ -27,7 +27,7 @@ func TestMain(m *testing.M) {
 		os.Exit(0)
 	case "parent", "parent-exit":
 		pidFile := os.Args[len(os.Args)-1]
-		child := exec.CommandContext(context.Background(), os.Args[0], pidFile+".child")
+		child := exec.CommandContext(context.Background(), selfExe(), pidFile+".child")
 		child.Env = append(os.Environ(), roleEnv+"=sleeper")
 		if err := child.Start(); err != nil {
 			os.Exit(3)
@@ -46,6 +46,15 @@ func TestMain(m *testing.M) {
 }
 
 // writePids writes the pids to path atomically enough for the test (temp file, then rename).
+// selfExe is the absolute path of this test binary. os.Args[0] can be relative ("./x.test"), and the children run
+// in other directories.
+func selfExe() string {
+	if p, err := os.Executable(); err == nil {
+		return p
+	}
+	return os.Args[0]
+}
+
 func writePids(path string, pids ...int) {
 	parts := make([]string, len(pids))
 	for i, p := range pids {
@@ -87,7 +96,7 @@ func readPids(t *testing.T, path string) []int {
 
 // helper builds a command that runs this test binary in the given role.
 func helper(role string, args ...string) *exec.Cmd {
-	cmd := exec.CommandContext(context.Background(), os.Args[0], args...)
+	cmd := exec.CommandContext(context.Background(), selfExe(), args...)
 	cmd.Env = append(os.Environ(), roleEnv+"="+role)
 	return cmd
 }
