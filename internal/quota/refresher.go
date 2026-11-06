@@ -50,7 +50,8 @@ type RefresherOptions struct {
 	Interval func() time.Duration
 	// Timeout bounds the read of one account (DefaultTimeout when zero).
 	Timeout time.Duration
-	// Parallel is how many accounts are read at once (DefaultParallel when zero).
+	// Parallel is how many accounts are read at once, by cycles and requests together (DefaultParallel when
+	// zero). Refresh called directly is not limited.
 	Parallel int
 	// Clock is the time source (the system clock when nil).
 	Clock clock.Clock
@@ -79,6 +80,7 @@ type Refresher struct {
 	o       RefresherOptions
 	kick    chan struct{}
 	request chan struct{}
+	sem     chan struct{} // Parallel slots, shared by cycles and requests
 
 	mu       sync.Mutex
 	inflight map[string]*refreshCall
@@ -113,7 +115,7 @@ func NewRefresher(o RefresherOptions) (*Refresher, error) {
 		o.Logger = slog.New(slog.DiscardHandler)
 	}
 	return &Refresher{o: o, kick: make(chan struct{}, 1), request: make(chan struct{}, 1),
-		inflight: map[string]*refreshCall{}, pending: map[string]bool{}}, nil
+		sem: make(chan struct{}, o.Parallel), inflight: map[string]*refreshCall{}, pending: map[string]bool{}}, nil
 }
 
 // Run refreshes every account at once and then once per interval (±10 % jitter) until ctx ends, and serves
@@ -174,6 +176,12 @@ func (r *Refresher) serveRequests(ctx context.Context) {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
+				select {
+				case r.sem <- struct{}{}: // requests share the Parallel limit with the cycles
+				case <-ctx.Done():
+					return
+				}
+				defer func() { <-r.sem }()
 				if _, err := r.Refresh(ctx, id); err != nil && ctx.Err() == nil {
 					r.o.Logger.Debug("quota refresh on request", "account", id, "err", err)
 				}
@@ -233,7 +241,6 @@ func (r *Refresher) RefreshAll(ctx context.Context) []Result {
 		todo = append(todo, *a)
 	}
 	results := make([]Result, len(todo))
-	sem := make(chan struct{}, r.o.Parallel)
 	var wg sync.WaitGroup
 	for i := range todo {
 		a := todo[i]
@@ -241,12 +248,12 @@ func (r *Refresher) RefreshAll(ctx context.Context) []Result {
 		go func() {
 			defer wg.Done()
 			select {
-			case sem <- struct{}{}:
+			case r.sem <- struct{}{}:
 			case <-ctx.Done():
 				results[i] = Result{AccountID: a.ID, Err: ctx.Err()}
 				return
 			}
-			defer func() { <-sem }()
+			defer func() { <-r.sem }()
 			results[i] = r.refresh(ctx, a, false)
 		}()
 	}

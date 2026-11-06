@@ -192,3 +192,43 @@ func TestRequestReadsInBackground(t *testing.T) {
 		t.Fatalf("reads = %d, want 2", n)
 	}
 }
+
+// Requested reads share the Parallel limit with the cycles (re-review finding 3).
+func TestRequestsShareParallelLimit(t *testing.T) {
+	release := make(chan struct{})
+	var signedOut atomic.Bool
+	signedOut.Store(true)
+	f := newRefFixture(t, func(_ context.Context, id string) (backend.Quota, error) {
+		if id == "acc1" {
+			<-release
+			return okQuota(0.5), nil
+		}
+		if signedOut.Load() {
+			return backend.Quota{}, ErrNeedsLogin
+		}
+		return okQuota(0.5), nil
+	})
+	f.r.sem = make(chan struct{}, 1) // Parallel 1
+	a1 := f.add(t, account.New{Backend: "agy", Kind: account.KindIsolated, Enabled: true})
+	a2 := f.add(t, account.New{Backend: "agy", Kind: account.KindIsolated, Enabled: true})
+	if _, err := f.r.Refresh(t.Context(), a2.ID); !errors.Is(err, ErrNeedsLogin) {
+		t.Fatal(err)
+	}
+	signedOut.Store(false)
+	ctx, cancel := context.WithCancel(t.Context())
+	done := make(chan struct{})
+	go func() {
+		f.r.Run(ctx) // its cycle reads acc1 only (acc2 is signed out) and holds the one slot
+		close(done)
+	}()
+	waitFor(t, "the cycle's read", func() bool { return f.reader.count(a1.ID) == 1 })
+	f.r.Request(a2.ID)
+	time.Sleep(50 * time.Millisecond)
+	if n := f.reader.count(a2.ID); n != 1 {
+		t.Fatalf("requested read ran beside the cycle's read: %d reads", n)
+	}
+	close(release)
+	waitFor(t, "the requested read", func() bool { return f.reader.count(a2.ID) == 2 })
+	cancel()
+	<-done
+}
