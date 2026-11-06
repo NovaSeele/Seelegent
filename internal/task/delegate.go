@@ -162,7 +162,7 @@ func (s *Service) Delegate(ctx context.Context, req api.DelegateRequest) (api.Ta
 // prerequisites starts only with Force; the message then joins its first request.
 func (s *Service) Followup(ctx context.Context, id string, req api.FollowupRequest) (api.TaskSummary, error) {
 	msg := strings.TrimSpace(req.Message)
-	if msg == "" {
+	if msg == "" && !req.Force {
 		return api.TaskSummary{}, invalidf("message is required")
 	}
 	by := req.By
@@ -191,19 +191,26 @@ func (s *Service) Followup(ctx context.Context, id string, req api.FollowupReque
 				return nil, badStatef("task %s waits for its prerequisites (%s); pass force to start it anyway", id,
 					t.DepsReason)
 			}
-			tu := t.TurnN(1)
-			who := "lead"
-			if by == ByUser {
-				who = "user"
+			// force may come without a message: it only starts the task (old C-B8).
+			var evs []NewEvent
+			if msg != "" {
+				who := "lead"
+				if by == ByUser {
+					who = "user"
+				}
+				tu := t.TurnN(1)
+				tu.Message += "\n\n## Additional instructions from the " + who + "\n\n" + msg
+				evs = append(evs, NewEvent{Type: api.EventLeadMessage, Turn: 1, Data: api.LeadMessageData{Message: msg, By: by}})
 			}
-			tu.Message += "\n\n## Additional instructions from the " + who + "\n\n" + msg
-			evs := []NewEvent{{Type: api.EventLeadMessage, Turn: 1, Data: api.LeadMessageData{Message: msg, By: by}}}
 			more, err := s.startFromDeps(ctx, t, true)
 			if err != nil {
 				return nil, err
 			}
 			start = true
 			return append(evs, more...), nil
+		}
+		if msg == "" {
+			return nil, invalidf("message is required")
 		}
 		ev, err := s.addTurn(ctx, t, by, msg, req)
 		if err != nil {

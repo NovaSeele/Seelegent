@@ -467,6 +467,23 @@ func TestDependencies(t *testing.T) {
 		t.Fatalf("turns = %+v", te.Turns[0])
 	}
 
+	// force alone (no message) starts a waiting dependent (old C-B8); without force a message is required.
+	g := h.delegate(api.DelegateRequest{Prompt: "Task G", After: []string{d.ID}})
+	h.waitStatus(g.ID, StatusBlockedDeps)
+	if _, err := h.s.Followup(t.Context(), g.ID, api.FollowupRequest{}); !errors.Is(err, ErrInvalid) {
+		t.Errorf("empty followup: %v", err)
+	}
+	h.queue.Push(t, okScript("conv-g", "G is done."))
+	if _, err := h.s.Followup(t.Context(), g.ID, api.FollowupRequest{Force: true}); err != nil {
+		t.Fatal(err)
+	}
+	if tg := h.waitStatus(g.ID, StatusDone); tg.Turns[0].Message != "Task G" {
+		t.Fatalf("message = %q", tg.Turns[0].Message)
+	}
+	if _, err := h.s.Followup(t.Context(), g.ID, api.FollowupRequest{Force: true}); !errors.Is(err, ErrInvalid) {
+		t.Errorf("force without a message on a finished task: %v", err)
+	}
+
 	// Cancelling a waiting dependent is immediate.
 	f := h.delegate(api.DelegateRequest{Prompt: "Task F", After: []string{e.ID, d.ID}})
 	if _, stopped, err := h.s.Cancel(t.Context(), f.ID, api.CancelRequest{}); err != nil || !stopped {

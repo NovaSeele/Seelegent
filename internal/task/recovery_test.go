@@ -279,3 +279,30 @@ func TestRestartDuringTakeover(t *testing.T) {
 		t.Fatalf("takeover end = %+v", end)
 	}
 }
+
+// TestRestartHonorsCancel stops a worker whose cancel the earlier daemon recorded but could not finish.
+func TestRestartHonorsCancel(t *testing.T) {
+	h := newHarness(t)
+	h.agy("only", 0)
+	h.queue.Push(t, hangScript("conv-x"))
+	sum := h.delegate(api.DelegateRequest{})
+	h.runningWorker(sum.ID)
+	h.stop()
+	tk := h.task(sum.ID)
+	tk.CancelRequested = true
+	if _, err := h.s.repo.Save(t.Context(), tk, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	h.start()
+	tk = h.waitStatus(sum.ID, StatusCancelled)
+	if tk.LastTurn().Status != TurnCancelled || tk.CancelRequested {
+		t.Fatalf("turn = %s, cancelRequested = %v", tk.LastTurn().Status, tk.CancelRequested)
+	}
+	hd, err := launch.Attach(tk.LastTurn().Attempts[0].LaunchDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if exit, ended, err := hd.Exited(); err != nil || !ended || exit.Reason != launch.ReasonCanceled {
+		t.Fatalf("worker exit = %+v %v %v", exit, ended, err)
+	}
+}
