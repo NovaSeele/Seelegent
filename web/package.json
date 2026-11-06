@@ -14,7 +14,8 @@
     "typecheck": "vue-tsc --build",
     "lint": "eslint . && prettier --check .",
     "format": "prettier --write .",
-    "test": "vitest run"
+    "test": "vitest run",
+    "mock": "node dev/mock-daemon.mjs"
   },
   "dependencies": {
     "pinia": "4.1.0",
