@@ -30,7 +30,6 @@
   "question": {
     "title": "워커의 질문",
     "own": "또는 직접 답변 작성",
-    "placeholder": "답변…",
     "hint": "1–9 선택 · Ctrl+Enter 보내기",
     "send": "답변 보내기",
     "sent": "답변을 보냈습니다. 워커가 계속 진행합니다"
@@ -51,7 +50,9 @@
       "standard": "표준",
       "strong": "강함",
       "max": "최대"
-    }
+    },
+    "driving": "이 작업을 직접 조작하는 중입니다. 되돌려준 뒤 후속 요청을 보낼 수 있습니다.",
+    "waitingAnswer": "워커가 위 질문에 대한 답을 기다리고 있습니다."
   },
   "review": {
     "verdict": {

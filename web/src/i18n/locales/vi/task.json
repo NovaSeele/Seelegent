@@ -30,7 +30,6 @@
   "question": {
     "title": "Worker hỏi",
     "own": "Hoặc tự viết câu trả lời",
-    "placeholder": "Câu trả lời của bạn…",
     "hint": "1–9 chọn đáp án · Ctrl+Enter để gửi",
     "send": "Gửi câu trả lời",
     "sent": "Đã gửi câu trả lời; worker làm tiếp"
@@ -51,7 +50,9 @@
       "standard": "Tiêu chuẩn",
       "strong": "Mạnh",
       "max": "Tối đa"
-    }
+    },
+    "driving": "Bạn đang điều khiển tác vụ này. Trả lại cho worker rồi mới gửi tiếp được.",
+    "waitingAnswer": "Worker đang chờ bạn trả lời câu hỏi ở trên."
   },
   "review": {
     "verdict": {

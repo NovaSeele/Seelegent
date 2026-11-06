@@ -17,6 +17,7 @@ import {
   canTakeOver,
   displayStatus,
   isActive,
+  isBlocked,
 } from '@/lib/taskStatus'
 
 import { TASK_KEYS } from './taskKeys'
@@ -180,7 +181,11 @@ function onMenu(id: string) {
       </span>
       <span class="th__id">{{ task.id }}</span>
     </p>
-    <p v-if="task.activeStep && task.status === 'running'" class="th__step">
+    <p
+      v-if="task.activeStep && task.status === 'running'"
+      class="th__step"
+      :class="{ 'th__step--attention': isBlocked(task) }"
+    >
       <span class="th__step-label">{{ task.activeStep.label }}</span>
       <span class="th__step-time">
         {{ fmt.duration(Math.max(0, now - Date.parse(task.activeStep.since))) }}
@@ -281,6 +286,11 @@ function onMenu(id: string) {
   color: var(--status-running-fg);
   font-family: var(--font-mono);
   font-size: var(--fs-xs);
+}
+
+.th__step--attention {
+  background: var(--attention-bg);
+  color: var(--attention-fg);
 }
 
 .th__step-label {

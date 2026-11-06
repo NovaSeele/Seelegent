@@ -151,12 +151,14 @@ const loadingFirst = computed(() => !summary.value && !error.value)
   flex-direction: column;
   height: 100%;
   min-height: 0;
+  /* Only the view scrolls. When the header and a long question leave less than the view's minimum (a phone in
+     landscape), the detail scrolls as a whole rather than clipping it. */
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .td__top {
   flex: none;
-  max-height: 50%;
-  overflow: auto;
 }
 
 .td__error {
@@ -187,7 +189,7 @@ const loadingFirst = computed(() => !summary.value && !error.value)
   display: flex;
   flex: 1;
   flex-direction: column;
-  min-height: 200px;
+  min-height: 12rem;
 }
 
 .td-state {

@@ -30,7 +30,6 @@
   "question": {
     "title": "El worker pregunta",
     "own": "O escribe tu propia respuesta",
-    "placeholder": "Tu respuesta…",
     "hint": "1–9 elige una opción · Ctrl+Enter envía",
     "send": "Enviar respuesta",
     "sent": "Respuesta enviada; el worker continúa"
@@ -51,7 +50,9 @@
       "standard": "Estándar",
       "strong": "Potente",
       "max": "Máximo"
-    }
+    },
+    "driving": "Estás manejando esta tarea. Devuélvela para enviar un seguimiento.",
+    "waitingAnswer": "El worker espera tu respuesta a la pregunta de arriba."
   },
   "review": {
     "verdict": {

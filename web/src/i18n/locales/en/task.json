@@ -30,7 +30,6 @@
   "question": {
     "title": "The worker asks",
     "own": "Or write your own answer",
-    "placeholder": "Your answer…",
     "hint": "1–9 pick a choice · Ctrl+Enter sends",
     "send": "Send answer",
     "sent": "Answer sent; the worker continues"
@@ -51,7 +50,9 @@
       "standard": "Standard",
       "strong": "Strong",
       "max": "Max"
-    }
+    },
+    "driving": "You are driving this task. Hand it back to follow up.",
+    "waitingAnswer": "The worker is waiting for your answer above."
   },
   "review": {
     "verdict": {

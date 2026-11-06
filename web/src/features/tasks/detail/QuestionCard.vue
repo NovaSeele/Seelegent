@@ -48,7 +48,7 @@ function onKeydown(event: KeyboardEvent) {
 
 <template>
   <section class="qc" :aria-labelledby="`${id}-title`" @keydown="onKeydown">
-    <h3 :id="`${id}-title`" class="qc__title">{{ t('task.question.title') }}</h3>
+    <h3 :id="`${id}-title`" class="sr-only">{{ t('task.question.title') }}</h3>
     <RichText v-if="parsed.text" :text="parsed.text" class="qc__text" />
     <div v-if="parsed.options.length" class="qc__options">
       <Button
@@ -64,17 +64,17 @@ function onKeydown(event: KeyboardEvent) {
         {{ option.label }}
       </Button>
     </div>
-    <label :for="`${id}-answer`" class="qc__label">{{ t('task.question.own') }}</label>
-    <textarea
-      :id="`${id}-answer`"
-      v-model="answer"
-      class="qc__input"
-      rows="2"
-      :placeholder="t('task.question.placeholder')"
-      :disabled="sending"
-    />
-    <div class="qc__foot">
-      <span class="qc__hint">{{ t('task.question.hint') }}</span>
+    <div class="qc__answer">
+      <label :for="`${id}-answer`" class="sr-only">{{ t('task.question.own') }}</label>
+      <textarea
+        :id="`${id}-answer`"
+        v-model="answer"
+        class="qc__input"
+        rows="1"
+        :placeholder="t('task.question.own')"
+        :disabled="sending"
+        :aria-describedby="`${id}-hint`"
+      />
       <Button
         size="sm"
         variant="primary"
@@ -86,6 +86,7 @@ function onKeydown(event: KeyboardEvent) {
         {{ t('task.question.send') }}
       </Button>
     </div>
+    <span :id="`${id}-hint`" class="qc__hint">{{ t('task.question.hint') }}</span>
   </section>
 </template>
 
@@ -94,11 +95,6 @@ function onKeydown(event: KeyboardEvent) {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-}
-
-.qc__title {
-  font-size: var(--fs-sm);
-  font-weight: var(--fw-semibold);
 }
 
 .qc__text {
@@ -117,22 +113,27 @@ function onKeydown(event: KeyboardEvent) {
   text-align: left;
 }
 
-.qc__label {
-  color: var(--text-secondary);
-  font-size: var(--fs-xs);
+.qc__answer {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
 }
 
 .qc__input {
-  width: 100%;
-  min-height: 56px;
-  padding: var(--space-2);
+  flex: 1;
+  min-width: 0;
+  min-height: var(--control-sm);
+  max-height: 8rem;
+  padding: var(--space-1) var(--space-2);
   border: var(--border-width) solid var(--border-strong);
   border-radius: var(--radius-md);
   background: var(--bg-surface);
   color: var(--text-primary);
   font: inherit;
   font-size: var(--fs-sm);
-  resize: vertical;
+  line-height: var(--lh-ui);
+  resize: none;
+  field-sizing: content;
 }
 
 .qc__input:focus-visible {
@@ -141,16 +142,8 @@ function onKeydown(event: KeyboardEvent) {
   box-shadow: var(--focus-ring);
 }
 
-.qc__foot {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2);
-}
-
 .qc__hint {
-  color: var(--text-muted);
+  color: var(--text-secondary);
   font-size: var(--fs-2xs);
 }
 </style>

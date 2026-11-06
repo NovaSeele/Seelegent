@@ -30,7 +30,6 @@
   "question": {
     "title": "worker 的问题",
     "own": "或者自己写答案",
-    "placeholder": "你的回答…",
     "hint": "1–9 选择选项 · Ctrl+Enter 发送",
     "send": "发送回答",
     "sent": "回答已发送，worker 继续工作"
@@ -51,7 +50,9 @@
       "standard": "标准",
       "strong": "强",
       "max": "最强"
-    }
+    },
+    "driving": "你正在接管此任务。交还后才能继续追问。",
+    "waitingAnswer": "worker 正在等你回答上面的问题。"
   },
   "review": {
     "verdict": {

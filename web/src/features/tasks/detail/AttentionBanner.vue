@@ -54,39 +54,48 @@ const tone = computed(() =>
   <section v-else-if="attention" class="banner" :class="`tone-${tone}`" role="status">
     <Icon :name="question ? 'question' : 'statusBlocked'" class="banner__icon" />
     <div class="banner__body">
-      <p class="banner__title">
-        <strong>{{ reason }}</strong>
-        <span class="banner__who">
-          ·
-          {{ t(attention.who === 'user' ? 'task.attention.needsYou' : 'task.attention.needsLead') }}
-        </span>
-        <time class="banner__since" :datetime="attention.since">
-          · {{ fmt.relative(attention.since, now) }}
-        </time>
-      </p>
+      <div class="banner__head">
+        <p class="banner__title">
+          <strong>{{ reason }}</strong>
+          <span class="banner__who">
+            ·
+            {{
+              t(attention.who === 'user' ? 'task.attention.needsYou' : 'task.attention.needsLead')
+            }}
+          </span>
+          <time class="banner__since" :datetime="attention.since">
+            · {{ fmt.relative(attention.since, now) }}
+          </time>
+        </p>
+        <div class="banner__actions">
+          <Button
+            size="sm"
+            variant="ghost"
+            :loading="actions.busy.value === 'dismiss'"
+            @click="actions.dismiss()"
+          >
+            {{ t('task.attention.dismiss') }}
+          </Button>
+          <Button
+            v-if="canTakeOver(task)"
+            size="sm"
+            variant="ghost"
+            @click="emit('confirm', 'takeover')"
+          >
+            {{ t('task.actions.takeover') }}
+          </Button>
+          <Button
+            v-if="canCancel(task)"
+            size="sm"
+            variant="ghost"
+            @click="emit('confirm', 'cancel')"
+          >
+            {{ t('task.actions.cancel') }}
+          </Button>
+        </div>
+      </div>
       <QuestionCard v-if="question" :detail="attention.detail" :actions="actions" />
       <p v-else-if="attention.detail" class="banner__detail">{{ attention.detail }}</p>
-      <div class="banner__actions">
-        <Button
-          size="sm"
-          variant="ghost"
-          :loading="actions.busy.value === 'dismiss'"
-          @click="actions.dismiss()"
-        >
-          {{ t('task.attention.dismiss') }}
-        </Button>
-        <Button
-          v-if="canTakeOver(task)"
-          size="sm"
-          variant="ghost"
-          @click="emit('confirm', 'takeover')"
-        >
-          {{ t('task.actions.takeover') }}
-        </Button>
-        <Button v-if="canCancel(task)" size="sm" variant="ghost" @click="emit('confirm', 'cancel')">
-          {{ t('task.actions.cancel') }}
-        </Button>
-      </div>
     </div>
   </section>
 </template>
@@ -96,7 +105,7 @@ const tone = computed(() =>
   display: flex;
   gap: var(--space-3);
   margin: 0 var(--space-5) var(--space-3);
-  padding: var(--space-3) var(--space-4);
+  padding: var(--space-2) var(--space-4) var(--space-3);
   border: var(--border-width) solid var(--tone-border);
   border-radius: var(--radius-lg);
   background: var(--tone-bg);
@@ -104,7 +113,7 @@ const tone = computed(() =>
 
 .banner__icon {
   flex: none;
-  margin-top: 2px;
+  margin-top: var(--space-2);
   color: var(--tone-fg);
   font-size: var(--icon-lg);
 }
@@ -117,7 +126,16 @@ const tone = computed(() =>
   min-width: 0;
 }
 
+.banner__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-1) var(--space-3);
+}
+
 .banner__title {
+  min-width: 0;
   color: var(--text-primary);
   font-size: var(--fs-sm);
 }
@@ -142,7 +160,8 @@ const tone = computed(() =>
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-1);
-  margin-left: calc(-1 * var(--space-2));
+  margin-right: calc(-1 * var(--space-2));
+  margin-left: auto;
 }
 
 @media (width < 600px) {
