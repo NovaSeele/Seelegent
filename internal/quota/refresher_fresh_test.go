@@ -58,7 +58,7 @@ func TestRefreshAfterSignInDoesNotJoinStaleRead(t *testing.T) {
 		snap, err := f.r.Refresh(ctx, a.ID)
 		got <- answer{snap, err}
 	}()
-	time.Sleep(20 * time.Millisecond) // let Refresh find the stale read in flight
+	waitFor(t, "Refresh waiting for the stale read", func() bool { return f.waiting.Load() == 1 })
 	close(release)
 
 	if res := <-cycle; len(res) != 1 || !errors.Is(res[0].Err, ErrNeedsLogin) {
@@ -120,7 +120,9 @@ func TestRefreshWaitsForOlderReadAndSharesNewer(t *testing.T) {
 			}
 		}()
 	}
-	time.Sleep(20 * time.Millisecond)
+	// Both requests must be queued behind the first read before it ends; otherwise a late one would rightly read a
+	// third time.
+	waitFor(t, "both refreshes waiting", func() bool { return f.waiting.Load() == 2 })
 	close(release)
 	wg.Wait()
 	if n := f.reader.count(a.ID); n != 2 || most.Load() != 1 {

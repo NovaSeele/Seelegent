@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -54,6 +55,9 @@ type Handle struct {
 	mu        sync.Mutex
 	lastProbe time.Time
 	alive     bool
+
+	treeMu sync.Mutex
+	tree   *platform.WorkerTree // set by Start, or by Tree once a record checks out
 }
 
 // Start writes the spec into opts.Dir, starts the launcher detached and waits until the worker runs (or has
@@ -72,7 +76,11 @@ func Start(ctx context.Context, opts Options) (*Handle, error) {
 	if exists(f.Spec) {
 		return nil, fmt.Errorf("start launch: %s already holds a launch", f.Dir)
 	}
-	sf := specFile{Spec: opts.Spec, Stream: f.Stream, Stderr: f.Stderr, Exit: f.Exit, Cancel: f.Cancel}
+	job, err := platform.NewTreeName()
+	if err != nil {
+		return nil, fmt.Errorf("start launch: %w", err)
+	}
+	sf := specFile{Spec: opts.Spec, Stream: f.Stream, Stderr: f.Stderr, Exit: f.Exit, Cancel: f.Cancel, Job: job}
 	if err := writeJSON(f.Spec, sf); err != nil {
 		return nil, fmt.Errorf("start launch: %w", err)
 	}
@@ -86,10 +94,15 @@ func Start(ctx context.Context, opts Options) (*Handle, error) {
 	if err != nil {
 		return nil, fmt.Errorf("start launcher: %w", err)
 	}
+	// The tree is known now, from the launcher this daemon started: no file a worker could rewrite is involved,
+	// and a worker cannot connect before its tree is known.
+	launcher := cmd.Process.Pid
+	start, _ := platform.ProcessStartTime(launcher)
+	h := &Handle{files: f, tree: &platform.WorkerTree{ID: f.Dir, RootPID: launcher, RootStart: start, Job: job}}
+
 	exited := make(chan error, 1)
 	go func() { exited <- cmd.Wait() }() // reap the launcher if it ends while this daemon still runs
 
-	h := &Handle{files: f}
 	timeout := opts.ReadyTimeout
 	if timeout <= 0 {
 		timeout = defaultReadyTimeout
@@ -136,6 +149,62 @@ func (h *Handle) Ready() (Ready, bool) {
 		return Ready{}, false
 	}
 	return r, true
+}
+
+// Tree describes the worker's process tree for platform.SocketOwnerInTrees and platform.WorkerTree.PIDs; the
+// result is a copy whose ID is the launch directory (callers that want another id, the task id, set it).
+//
+// A handle from Start knows the tree from the moment the launcher runs (its process id and start time, and the
+// job name it chose), before the worker starts, and never reads it from files a worker could rewrite. A handle
+// from Attach reads launch.json and ready.json once and keeps the result when it checks out: the job names in
+// both files agree, the launcher process still runs with the recorded start time and, on Linux, it is the
+// process holding the launch lock (/proc/locks). A record that does not check out while the launcher runs (or a
+// running launcher without a ready record yet) gives a tree with neither root nor job: listing it fails, so the
+// worker guard fails closed. ok is false when the launch has no running launcher.
+func (h *Handle) Tree() (tree *platform.WorkerTree, ok bool) {
+	h.treeMu.Lock()
+	defer h.treeMu.Unlock()
+	if h.tree == nil {
+		t, ok, verified := h.loadTree()
+		if !verified {
+			return t, ok
+		}
+		h.tree = t
+	}
+	c := *h.tree
+	return &c, true
+}
+
+// loadTree reads the tree of an attached launch. verified says whether the result may be kept.
+func (h *Handle) loadTree() (t *platform.WorkerTree, ok, verified bool) {
+	unknown := &platform.WorkerTree{ID: h.files.Dir} // lists nothing: callers fail closed
+	var sf specFile
+	if err := readJSON(h.files.Spec, &sf); err != nil {
+		return unknown, true, false
+	}
+	r, ready := h.Ready()
+	if !ready {
+		if exists(h.files.Exit) || !h.launcherAlive() {
+			return nil, false, false
+		}
+		if sf.Job != "" {
+			return &platform.WorkerTree{ID: h.files.Dir, Job: sf.Job}, true, false // starting (Windows)
+		}
+		return unknown, true, false
+	}
+	if !h.launcherAlive() {
+		return nil, false, false
+	}
+	if r.Job != sf.Job || r.LauncherPID <= 0 {
+		return unknown, true, false
+	}
+	if start, err := platform.ProcessStartTime(r.LauncherPID); err != nil || start != r.LauncherStart {
+		return unknown, true, false
+	}
+	if holders, err := platform.LockHolders(h.files.Lock); err == nil && !slices.Contains(holders, r.LauncherPID) {
+		return unknown, true, false
+	}
+	return &platform.WorkerTree{ID: h.files.Dir, RootPID: r.LauncherPID, RootStart: r.LauncherStart, Job: r.Job}, true, true
 }
 
 // Cancel asks the launcher to stop the whole worker process tree. It returns at once; Wait reports the end. It is
