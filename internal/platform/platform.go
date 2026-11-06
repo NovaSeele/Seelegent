@@ -4,6 +4,11 @@
 // whether a TCP connection came from it (WorkerTree, SocketOwnerInTrees), checking whether a process is alive,
 // linking files into a profile, and opening a URL or a terminal window for an interactive sign-in.
 //
+// Worker trees are a bar, not a sandbox. A worker runs as the user and can ask a service of that user to start a
+// process for it, outside its tree: on Windows through WMI (Win32_Process.Create), the Task Scheduler or an
+// out-of-process COM server; on Linux through `systemd-run --user`, at or cron; on macOS through launchd. Such a
+// process escapes cancel and timeout, and SocketOwnerInTrees sees it as the lead.
+//
 // Everything else in Seelegent stays free of build tags; it calls the functions here.
 package platform
 

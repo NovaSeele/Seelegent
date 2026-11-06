@@ -57,6 +57,11 @@ an installed binary rather than through `go run`), and run the Linux tests in WS
 binary: `GOOS=linux go test -c -o <tmp>/platform.test ./internal/platform`, then run it inside WSL from a Linux
 directory such as `/tmp`.
 
+Worker trees (cancel, timeout and the worker guard) are a bar, not a sandbox: a worker can still have a process
+started outside its tree by a service of the same user (Windows: WMI `Win32_Process.Create`, the Task Scheduler or
+out-of-process COM; Linux: `systemd-run --user`, at, cron; macOS: launchd). Such processes escape cancel and are
+seen as the lead. See the `platform` package documentation.
+
 ## Dev ports and the dashboard
 
 - The installed Seelegent daemon uses port 47821 and `~/.seelegent`. Development runs never touch them: run the
