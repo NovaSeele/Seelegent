@@ -141,7 +141,8 @@ func accountExists(ctx context.Context, tx *sql.Tx, id string) (bool, error) {
 	return err == nil, err
 }
 
-const accountColumns = `id, backend, kind, label, enabled, priority, provider, key_hint, created_at, updated_at`
+const accountColumns = `id, backend, kind, label, enabled, priority, provider, key_hint, key_set_at, created_at,
+	updated_at`
 
 // Get returns the account with the id, or an error matching ErrNotFound.
 func (r *Repo) Get(ctx context.Context, id string) (Account, error) {
@@ -230,11 +231,12 @@ func (r *Repo) Update(ctx context.Context, id string, p Patch) (Account, error) 
 	return a, nil
 }
 
-// SetKeyHint records the hint of the stored key ("" when the key was removed).
+// SetKeyHint records the hint of the stored key ("" when the key was removed) and when the key changed.
 func (r *Repo) SetKeyHint(ctx context.Context, id, hint string) error {
 	err := r.db.Write(ctx, func(tx *sql.Tx) error {
-		res, err := tx.ExecContext(ctx, "UPDATE accounts SET key_hint = ?, updated_at = ? WHERE id = ?",
-			hint, formatTime(r.stamp()), id)
+		now := formatTime(r.stamp())
+		res, err := tx.ExecContext(ctx, "UPDATE accounts SET key_hint = ?, key_set_at = ?, updated_at = ? WHERE id = ?",
+			hint, now, now, id)
 		if err != nil {
 			return err
 		}
@@ -260,14 +262,14 @@ type scanner interface{ Scan(dest ...any) error }
 
 func scanAccount(s scanner) (Account, error) {
 	var (
-		a                 Account
-		kind              string
-		provider          sql.NullString
-		created, updated  string
-		enabled, priority int64
+		a                        Account
+		kind                     string
+		provider                 sql.NullString
+		keySet, created, updated string
+		enabled, priority        int64
 	)
 	if err := s.Scan(&a.ID, &a.Backend, &kind, &a.Label, &enabled, &priority, &provider, &a.KeyHint,
-		&created, &updated); err != nil {
+		&keySet, &created, &updated); err != nil {
 		return Account{}, err
 	}
 	a.Kind = Kind(kind)
@@ -275,6 +277,11 @@ func scanAccount(s scanner) (Account, error) {
 	a.Priority = int(priority)
 	a.Provider = provider.String
 	var err error
+	if keySet != "" {
+		if a.KeySetAt, err = parseTime(keySet); err != nil {
+			return Account{}, fmt.Errorf("account %s: %w", a.ID, err)
+		}
+	}
 	if a.CreatedAt, err = parseTime(created); err != nil {
 		return Account{}, fmt.Errorf("account %s: %w", a.ID, err)
 	}

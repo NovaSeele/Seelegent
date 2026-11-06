@@ -18,9 +18,11 @@ type treeOS struct {
 	pgid int
 }
 
-// start runs cmd as the leader of a new process group; its descendants inherit the group.
+// start runs cmd as the leader of a new process group; its descendants inherit the group. On Linux the root also
+// gets SIGKILL when the owner of the tree dies (parentDeathSignal).
 func (t *treeOS) start(cmd *exec.Cmd) error {
 	sysProcAttr(cmd).Setpgid = true
+	parentDeathSignal(cmd)
 	if err := cmd.Start(); err != nil {
 		return err
 	}

@@ -19,8 +19,9 @@
 //
 // Cancel is a file (cancel) rather than a signal or a pipe because it works the same on every system, needs no
 // handle or process id, and survives a daemon restart: a daemon that comes back simply creates the file. If the
-// launcher itself is killed, Windows still stops the worker tree (the job is kill-on-close); on Unix the worker may
-// run on until it ends by itself, and the daemon reports the launch as lost.
+// launcher itself is killed, Windows still stops the worker tree (the job is kill-on-close) and Linux kills the
+// worker with its parent-death signal (SIGKILL); on macOS and the BSDs, which have no such signal, the worker may
+// run on until it ends by itself. Either way the daemon reports the launch as lost.
 //
 // The daemon side is Start (new launch), Attach (an existing launch, after a daemon restart), Handle.Tail (follow
 // the stream from a committed byte offset), Handle.Cancel and Handle.Wait.

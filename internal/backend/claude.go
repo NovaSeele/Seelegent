@@ -21,7 +21,8 @@ const claudeEmptyMCP = "mcp-empty.json"
 
 // Claude is the Claude Code CLI.
 type Claude struct {
-	bin string
+	bin   string
+	quota QuotaReader
 }
 
 // Name implements Backend.
@@ -189,8 +190,8 @@ func (c *Claude) SignIn(p account.Profile) (SignIn, error) {
 // QuotaGroup implements Backend: one group per backend.
 func (*Claude) QuotaGroup(string) string { return "Claude" }
 
-// QuotaReader implements Backend (not yet).
-func (*Claude) QuotaReader() QuotaReader { return nil }
+// QuotaReader implements Backend.
+func (c *Claude) QuotaReader() QuotaReader { return c.quota }
 
 // NewParser implements Backend.
 func (*Claude) NewParser(secrets []string) Parser {

@@ -1,0 +1,275 @@
+// Package pool decides which worker account runs a turn and keeps count of the turns running on each account.
+//
+// # Selection
+//
+// For a request (backend, quota group, model, provider, preferred and excluded accounts) an account is a candidate
+// when it belongs to the backend, is enabled and usable (signed in, has its key, its plan allows the backend, it is
+// not the twin of another account), is not excluded, matches the provider (a request without a provider only gets
+// sign-in accounts, a request with one only that provider's API-key accounts) and can run the model (codex
+// sign-ins with a known catalog get the closest model they have). A candidate is resting while a cooldown of the
+// group is in force or, for accounts with active quota, while a window of the group is at or below minRemaining;
+// it is busy while it runs maxConcurrentPerAccount turns. Among the free candidates the preferred ones are tried
+// first; each list is ordered by priority (high first), then running turns (few first), then remaining quota
+// (most first), then age, so the choice is deterministic.
+//
+// # Leases
+//
+// A turn holds its account through a Lease from Acquire (or Wait). Release is idempotent, so callers write
+// `defer lease.Release()` right after acquiring and no error path can leak a slot (bug B3b of the old version).
+// After a daemon restart a still-running worker is counted again with Reattach, which never counts a task twice
+// (bug B3a); Acquire refuses an account the task already holds.
+//
+// # Resting
+//
+// When a turn reports quota_exhausted, MarkExhausted rests the account for that quota group until the governing
+// windows reset (read fresh when possible), the provider's hint, or a default; accounts whose quota cannot be read
+// (API keys, backends without a quota reader) rest for passiveCooldownMinutes. A rest ends by itself, or earlier
+// when a later quota read shows the group usable again. A run refused for its sign-in marks the account signed
+// out (MarkAuthFailed) and asks for a background quota read to confirm. Any confirming read that does not itself
+// say "signed out" clears the mark: a good read, and also an inconclusive one (timeout, HTTP 5xx, format change),
+// because quota.Merge replaces the previous error with the new one. That is deliberate: a mark that only a clean
+// read could lift would stick while the quota source is down. A new key clears the mark of an API-key account.
+package pool
+
+import (
+	"context"
+	"database/sql"
+	"errors"
+	"fmt"
+	"log/slog"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/NovaSeele/Seelegent/internal/account"
+	"github.com/NovaSeele/Seelegent/internal/clock"
+	"github.com/NovaSeele/Seelegent/internal/config"
+	"github.com/NovaSeele/Seelegent/internal/quota"
+)
+
+// Accounts lists the accounts; *account.Manager satisfies it.
+type Accounts interface {
+	List(ctx context.Context) ([]account.Account, error)
+}
+
+// Quotas is the quota cache; *quota.Store satisfies it.
+type Quotas interface {
+	// All returns the cached snapshots by account id.
+	All(ctx context.Context) (map[string]quota.Snapshot, error)
+	// MarkNeedsLogin records that a run of the account was refused for its sign-in or key.
+	MarkNeedsLogin(ctx context.Context, id, backend, message string, at time.Time) error
+}
+
+// RefreshFunc reads one account's quota now (quota.Refresher.Refresh).
+type RefreshFunc func(ctx context.Context, id string) (quota.Snapshot, error)
+
+// DB runs transactions on seelegent.db; *store.Store satisfies it.
+type DB interface {
+	Read(ctx context.Context, fn func(*sql.Tx) error) error
+	Write(ctx context.Context, fn func(*sql.Tx) error) error
+}
+
+// Options configure a Pool. Accounts, Quotas, DB and Settings are required.
+type Options struct {
+	Accounts Accounts
+	Quotas   Quotas
+	DB       DB
+	// Settings returns the current settings (maxConcurrentPerAccount, minRemaining, passiveCooldownMinutes); it is
+	// asked on every decision, so changes apply at once.
+	Settings func() config.Settings
+	// Refresh, when set, reads an account's quota before it is rested, so the rest ends when its windows reset.
+	Refresh RefreshFunc
+	// Confirm, when set, asks for a background quota read of a sign-in account that a run reported as signed out
+	// (quota.Refresher.Request); a successful read clears the mark. It must not block.
+	Confirm func(accountID string)
+	// ActiveQuota reports whether a backend has a quota reader. Sign-in accounts of a backend without one are
+	// treated like API-key accounts (passive): usable with unknown quota, resting only after a quota error, never
+	// waiting for a first read that cannot come. Nil means every backend has a reader.
+	ActiveQuota func(backend string) bool
+	// Clock is the time source (the system clock when nil).
+	Clock clock.Clock
+	// Logger receives slot and rest events (discarded when nil).
+	Logger *slog.Logger
+}
+
+// Pool selects accounts and counts their running turns. It is safe for concurrent use; selection and taking the
+// slot happen in one critical section, so two tasks never take the last slot of an account together.
+type Pool struct {
+	o Options
+
+	mu     sync.Mutex
+	leases map[string]map[string]*Lease // account id -> task id -> lease
+	signal chan struct{}                // closed and replaced whenever something may have become available
+	anon   int                          // counter for leases without a task id
+}
+
+// New returns a pool.
+func New(o Options) (*Pool, error) {
+	if o.Accounts == nil || o.Quotas == nil || o.DB == nil || o.Settings == nil {
+		return nil, errors.New("pool: accounts, quotas, db and settings are required")
+	}
+	if o.Clock == nil {
+		o.Clock = clock.Real()
+	}
+	if o.Logger == nil {
+		o.Logger = slog.New(slog.DiscardHandler)
+	}
+	if o.ActiveQuota == nil {
+		o.ActiveQuota = func(string) bool { return true }
+	}
+	return &Pool{o: o, leases: map[string]map[string]*Lease{}, signal: make(chan struct{})}, nil
+}
+
+// Status says whether an account can take work.
+type Status string
+
+// Account statuses.
+const (
+	// StatusOK: usable.
+	StatusOK Status = "ok"
+	// StatusError: the last quota read failed; the account stays usable with its last known numbers.
+	StatusError Status = "error"
+	// StatusNew: a sign-in account whose quota was never read; it becomes usable (or needs_login) after the first
+	// read. Waiting tasks wait for it.
+	StatusNew Status = "new"
+	// StatusNeedsLogin: signed out; it must sign in again.
+	StatusNeedsLogin Status = "needs_login"
+	// StatusNoKey: an API-key account without a stored key.
+	StatusNoKey Status = "no_key"
+	// StatusNoPlan: the plan cannot use the backend; only a later successful quota read lifts it.
+	StatusNoPlan Status = "no_plan"
+	// StatusTwin: signed in to the same identity as an older enabled account, which takes the work (two accounts
+	// of one identity share one quota).
+	StatusTwin Status = "twin"
+	// StatusDisabled: switched off by the user.
+	StatusDisabled Status = "disabled"
+)
+
+// Usable reports whether an account with this status may be selected.
+func (s Status) Usable() bool { return s == StatusOK || s == StatusError }
+
+// Request describes the turn an account is wanted for.
+type Request struct {
+	// TaskID owns the lease (one lease per task and account).
+	TaskID string
+	// Backend is the worker CLI.
+	Backend string
+	// Group is the quota group of the model (backend.Backend.QuotaGroup).
+	Group string
+	// Model is the resolved model id.
+	Model string
+	// Provider selects API-key accounts of that provider; empty selects sign-in accounts only.
+	Provider string
+	// Account, when set, restricts the choice to that account (the owner of the task's conversation).
+	Account string
+	// Prefer lists accounts tried first, in this order when everything else is equal.
+	Prefer []string
+	// Exclude lists accounts that must not be chosen (for example those that failed this turn).
+	Exclude []string
+	// Allowed filters the models an account with a known catalog may fall back to (nil allows all).
+	Allowed func(model string) bool
+}
+
+// Choice is the account selected for a request.
+type Choice struct {
+	Account account.Account
+	// Model is the model to run: the requested one, or the closest one the account has (codex).
+	Model string
+	// Remaining is the fraction of the group's quota left (quota.UnknownRemaining when not known).
+	Remaining      float64
+	RemainingKnown bool
+}
+
+// Reason says why no account is free.
+type Reason string
+
+// Reasons.
+const (
+	// ReasonNoAccount: no account can ever take the request (none enabled, signed in and matching).
+	ReasonNoAccount Reason = "no_account"
+	// ReasonResting: every matching account rests (cooldown or quota used up).
+	ReasonResting Reason = "resting"
+	// ReasonBusy: every matching account that is not resting runs its maximum of turns.
+	ReasonBusy Reason = "busy"
+)
+
+// Errors matched by Unavailable; use errors.Is.
+var (
+	ErrNoAccount  = errors.New("no account can run this")
+	ErrAllResting = errors.New("every account is resting")
+	ErrAllBusy    = errors.New("every account is busy")
+	// ErrAlreadyHeld: the task already holds a lease on the chosen account (release it first).
+	ErrAlreadyHeld = errors.New("the task already holds this account")
+)
+
+// Unavailable is returned when no account is free. It matches ErrNoAccount, ErrAllResting or ErrAllBusy.
+type Unavailable struct {
+	Reason Reason `json:"reason"`
+	// Until is when the first resting account is back (zero when unknown or when nothing rests).
+	Until time.Time `json:"until,omitzero"`
+	// Candidates, Resting and Busy count the matching accounts.
+	Candidates int    `json:"candidates"`
+	Resting    int    `json:"resting"`
+	Busy       int    `json:"busy"`
+	Backend    string `json:"backend"`
+	Group      string `json:"group,omitempty"`
+}
+
+// Error implements error.
+func (u *Unavailable) Error() string {
+	var b strings.Builder
+	switch u.Reason {
+	case ReasonNoAccount:
+		fmt.Fprintf(&b, "no enabled, signed-in %s account can run this", u.Backend)
+	case ReasonResting:
+		fmt.Fprintf(&b, "all %d %s accounts are resting", u.Resting, u.Backend)
+		if !u.Until.IsZero() {
+			fmt.Fprintf(&b, " until %s", u.Until.UTC().Format(time.RFC3339))
+		}
+	default:
+		fmt.Fprintf(&b, "all %s accounts are busy (%d busy, %d resting)", u.Backend, u.Busy, u.Resting)
+	}
+	if u.Group != "" {
+		fmt.Fprintf(&b, " (quota group %s)", u.Group)
+	}
+	return b.String()
+}
+
+// Is matches the reason's sentinel error.
+func (u *Unavailable) Is(target error) bool {
+	switch u.Reason {
+	case ReasonNoAccount:
+		return target == ErrNoAccount
+	case ReasonResting:
+		return target == ErrAllResting
+	case ReasonBusy:
+		return target == ErrAllBusy
+	}
+	return false
+}
+
+// Notify wakes the tasks waiting for an account (call it when accounts, quota or settings change).
+func (p *Pool) Notify() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.notifyLocked()
+}
+
+func (p *Pool) notifyLocked() {
+	close(p.signal)
+	p.signal = make(chan struct{})
+}
+
+// changed returns a channel that is closed at the next Notify.
+func (p *Pool) changed() <-chan struct{} {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.signal
+}
+
+// Busy returns the number of turns running on an account.
+func (p *Pool) Busy(accountID string) int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return len(p.leases[accountID])
+}

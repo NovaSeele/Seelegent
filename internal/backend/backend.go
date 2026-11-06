@@ -99,15 +99,32 @@ type SignIn struct {
 	Succeeded func(exitCode int) bool
 }
 
-// Quota is an account's quota as a CLI reports it.
+// Quota is an account's quota as a CLI reports it (the output of a QuotaReader; internal/quota stores it per
+// account).
 type Quota struct {
-	Plan     string       `json:"plan,omitempty"`
-	Email    string       `json:"email,omitempty"`
-	Entitled bool         `json:"entitled"`
-	Groups   []QuotaGroup `json:"groups"`
+	// Plan is the subscription plan when the CLI reports one (codex: "Plus", "Pro", ...).
+	Plan string `json:"plan,omitempty"`
+	// Email is the signed-in identity. internal/quota keeps only a hash of it (to find two accounts signed in to
+	// the same identity); it is never logged or stored.
+	Email string `json:"email,omitempty"`
+	// Entitled is false when the plan cannot use this CLI at all. Readers must set it to true explicitly.
+	Entitled bool `json:"entitled"`
+	// EntitlementError says why the account is not entitled.
+	EntitlementError string `json:"entitlementError,omitempty"`
+	// ExhaustedUntil, when set, says the account cannot run before then even if no window shows 100 % used (a rate
+	// or spend limit was reached).
+	ExhaustedUntil time.Time `json:"exhaustedUntil,omitzero"`
+	// ExhaustedReason says which limit was reached.
+	ExhaustedReason string `json:"exhaustedReason,omitempty"`
+	// Models lists the models this account may run when the CLI reports a per-account catalog (codex); nil means
+	// unknown.
+	Models []string `json:"models,omitempty"`
+	// Groups are the limits, by group of models that share them.
+	Groups []QuotaGroup `json:"groups"`
 }
 
-// QuotaGroup is the quota of a group of models that share limits.
+// QuotaGroup is the quota of a group of models that share limits. A group named "<group> <family>" (for example
+// "Claude Opus") is a sub-limit of <group> that only applies to models whose id contains <family>.
 type QuotaGroup struct {
 	Name    string        `json:"name"`
 	Buckets []QuotaBucket `json:"buckets"`
@@ -115,14 +132,17 @@ type QuotaGroup struct {
 
 // QuotaBucket is one limit window.
 type QuotaBucket struct {
+	// Window is a short key of the window length: "5h", "weekly", "30d", "<n>m", or "window" when unknown.
+	Window string `json:"window"`
+	// Label is the CLI's name for the window.
 	Label         string    `json:"label"`
 	WindowMinutes int       `json:"windowMinutes,omitempty"`
 	UsedFraction  float64   `json:"usedFraction"`
 	ResetAt       time.Time `json:"resetAt,omitzero"`
 }
 
-// QuotaReader reads an account's quota. Implementations arrive with the pool (milestone 3); the reader must return
-// errors (never panic) on unexpected output, see bug B2.
+// QuotaReader reads an account's quota (internal/quota implements one per backend). env is the account's run
+// environment and prof its profile. A reader never panics on unexpected output: it returns an error (see bug B2).
 type QuotaReader interface {
 	ReadQuota(ctx context.Context, prof account.Profile, env []string) (Quota, error)
 }
@@ -148,23 +168,40 @@ type Backend interface {
 	SignIn(prof account.Profile) (SignIn, error)
 	// QuotaGroup returns the quota group a model belongs to.
 	QuotaGroup(model string) string
-	// QuotaReader returns the quota reader, or nil when the backend has none yet.
+	// QuotaReader returns the quota reader given to New (WithQuotaReader), or nil.
 	QuotaReader() QuotaReader
 }
 
 // Names returns the backend ids.
 func Names() []string { return []string{config.BackendAgy, config.BackendClaude, config.BackendCodex} }
 
+// Option configures a backend made by New.
+type Option func(*options)
+
+type options struct {
+	quota QuotaReader
+}
+
+// WithQuotaReader gives the backend its quota reader. The readers live in internal/quota (which imports this
+// package), so the composition root passes them in.
+func WithQuotaReader(r QuotaReader) Option {
+	return func(o *options) { o.quota = r }
+}
+
 // New returns the backend with the given name, running the CLI at bin ("" when it is not installed: Command and
 // SignIn then fail with ErrNotInstalled).
-func New(name, bin string) (Backend, error) {
+func New(name, bin string, opts ...Option) (Backend, error) {
+	var o options
+	for _, opt := range opts {
+		opt(&o)
+	}
 	switch name {
 	case config.BackendAgy:
-		return &Agy{bin: bin}, nil
+		return &Agy{bin: bin, quota: o.quota}, nil
 	case config.BackendClaude:
-		return &Claude{bin: bin}, nil
+		return &Claude{bin: bin, quota: o.quota}, nil
 	case config.BackendCodex:
-		return &Codex{bin: bin}, nil
+		return &Codex{bin: bin, quota: o.quota}, nil
 	}
 	return nil, fmt.Errorf("%w %q", ErrUnknownBackend, name)
 }
