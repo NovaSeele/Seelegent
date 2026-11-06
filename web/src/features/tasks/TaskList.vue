@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, ref, shallowRef, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import Button from '@/components/ui/Button.vue'
@@ -10,13 +10,11 @@ import TextField from '@/components/ui/TextField.vue'
 import { useNow } from '@/composables/useNow'
 import { stableComputed } from '@/lib/stable'
 import { readStored, writeStored } from '@/lib/storage'
-import { awaitsReview, canCancel } from '@/lib/taskStatus'
-import { useCommandsStore } from '@/stores/commands'
 import { useTasksStore } from '@/stores/tasks'
 import { useUiStore } from '@/stores/ui'
 
 import BulkBar from './BulkBar.vue'
-import BulkDialog, { type BulkAction } from './BulkDialog.vue'
+import BulkDialog from './BulkDialog.vue'
 import GroupRow from './GroupRow.vue'
 import ListFilters from './ListFilters.vue'
 import {
@@ -24,20 +22,21 @@ import {
   buildRows,
   COLLAPSED_GROUPS,
   LIST_GROUPING,
-  listKey,
   NEEDS_GROUP,
   rowKey,
   sameRows,
   STATUS_FILTER,
   type ListFilters as Filters,
 } from './listModel'
-import { EMPTY_SELECTION, extendTo, prune, selectAll, toggle } from './selection'
 import TaskRow from './TaskRow.vue'
+import { useListKeyboard } from './useListKeyboard'
+import { useTaskSelection } from './useTaskSelection'
 
 /**
- * The Tasks sidebar: search, filters, grouping by project (a pinned "needs you" group on top), keyboard walk,
- * selection with bulk cancel / accept, and paging of older tasks from GET /tasks. Rows are keyed by id and read
- * their own task, so a live update touches one row; the row list itself changes only when ids or groups do.
+ * The Tasks sidebar: search, filters, grouping by project (a pinned "needs you" group on top), keyboard walk
+ * (useListKeyboard), selection with bulk cancel / accept (useTaskSelection), and paging of older tasks from
+ * GET /tasks. Rows are keyed by id and read their own task, so a live update touches one row; the row list itself
+ * changes only when ids or groups do.
  */
 defineProps<{ currentId?: string }>()
 
@@ -47,6 +46,12 @@ const minute = useNow(30_000)
 
 const q = ref('')
 const debouncedQ = ref('')
+let qTimer: ReturnType<typeof setTimeout> | undefined
+watch(q, (value) => {
+  clearTimeout(qTimer)
+  qTimer = setTimeout(() => (debouncedQ.value = value), 200)
+})
+onBeforeUnmount(() => clearTimeout(qTimer))
 
 // "/" from anywhere focuses the search (the shortcut lives in useTasksCommands).
 const ui = useUiStore()
@@ -64,11 +69,7 @@ watch(
   },
   { immediate: true, flush: 'post' },
 )
-let qTimer: ReturnType<typeof setTimeout> | undefined
-watch(q, (value) => {
-  clearTimeout(qTimer)
-  qTimer = setTimeout(() => (debouncedQ.value = value), 200)
-})
+
 const statuses = ref(readStored(STATUS_FILTER))
 const project = ref('')
 const grouping = ref(readStored(LIST_GROUPING))
@@ -116,93 +117,11 @@ function toggleGroup(key: string, force?: boolean) {
   writeStored(COLLAPSED_GROUPS, [...next])
 }
 
-// Selection
-const selectMode = ref(false)
-const selection = shallowRef(EMPTY_SELECTION)
-watch(order, (value) => (selection.value = prune(selection.value, value)))
-watch(selectMode, (on) => !on && (selection.value = EMPTY_SELECTION))
-const selectedIds = computed(() => order.value.filter((id) => selection.value.ids.has(id)))
+const select = useTaskSelection(order)
+const { selectMode, selection, selectedIds, eligible, bulk, onToggle, onBulkDone } = select
 
-function onToggle(id: string, extend: boolean) {
-  selectMode.value = true
-  selection.value = extend
-    ? extendTo(selection.value, order.value, id)
-    : toggle(selection.value, id)
-}
-
-const eligible = computed(() => {
-  const pick = (test: typeof canCancel) =>
-    selectedIds.value.filter((id) => {
-      const task = tasks.get(id)
-      return !!task && test(task)
-    })
-  return { cancel: pick(canCancel), accept: pick(awaitsReview) }
-})
-const bulk = ref<BulkAction | null>(null)
-function onBulkDone() {
-  bulk.value = null
-  selectMode.value = false
-}
-
-const unregister = useCommandsStore().register({
-  id: 'tasks.select',
-  title: { key: 'tasks.cmd.select' },
-  group: 'tasks',
-  icon: 'select',
-  when: () => !selectMode.value,
-  run: () => {
-    selectMode.value = true
-  },
-})
-onBeforeUnmount(() => {
-  unregister()
-  clearTimeout(qTimer)
-})
-
-// Keyboard: one row is in the tab order (roving); arrows walk the rows like a tree.
 const list = ref<HTMLElement | null>(null)
-const focusKey = ref<string | null>(null)
-const tabStop = computed(() => {
-  const keys = rows.value.map(rowKey)
-  if (focusKey.value && keys.includes(focusKey.value)) return focusKey.value
-  return keys[0] ?? null
-})
-
-function focusRow(key: string) {
-  focusKey.value = key
-  void nextTick(() =>
-    list.value?.querySelector<HTMLElement>(`[data-key="${CSS.escape(key)}"]`)?.focus(),
-  )
-}
-
-function onKeydown(event: KeyboardEvent) {
-  if (event.isComposing || event.altKey) return
-  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'a') {
-    event.preventDefault()
-    selectMode.value = true
-    selection.value = selectAll(order.value)
-    return
-  }
-  if (event.key === 'Escape' && selectMode.value) {
-    event.preventDefault()
-    event.stopPropagation()
-    selectMode.value = false
-    return
-  }
-  const current = focusKey.value
-  if (event.key === ' ' && selectMode.value && current?.startsWith('t:')) {
-    event.preventDefault()
-    onToggle(current.slice(2), event.shiftKey)
-    return
-  }
-  if (event.ctrlKey || event.metaKey) return
-  const action = listKey(rows.value, current, event.key)
-  if (!action) return
-  event.preventDefault()
-  if ('focus' in action) focusRow(action.focus)
-  else if ('collapse' in action) toggleGroup(action.collapse, true)
-  else toggleGroup(action.expand, false)
-}
+const { focusKey, tabStop, onKeydown } = useListKeyboard(rows, list, select, toggleGroup)
 
 const groupLabel = (key: string, label: string) =>
   key === NEEDS_GROUP ? t('tasks.list.needsGroup') : label
