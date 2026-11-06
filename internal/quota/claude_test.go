@@ -69,7 +69,7 @@ func TestClaudeReader(t *testing.T) {
 		want   Kind
 	}{
 		{"refused", http.StatusUnauthorized, `{}`, KindNeedsLogin},
-		{"forbidden", http.StatusForbidden, `{}`, KindNeedsLogin},
+		{"forbidden is not signed out", http.StatusForbidden, `{}`, KindFailed},
 		{"server error", http.StatusBadGateway, `oops`, KindUnavailable},
 		{"rate limited", http.StatusTooManyRequests, `{}`, KindUnavailable},
 		{"other status", http.StatusNotFound, `{}`, KindFailed},

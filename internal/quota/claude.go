@@ -110,9 +110,12 @@ func (r *ClaudeReader) ReadQuota(ctx context.Context, prof account.Profile, _ []
 		return backend.Quota{}, fmt.Errorf("claude quota: %w: %w", ErrUnavailable, err)
 	}
 	switch {
-	case resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden:
-		return backend.Quota{}, fmt.Errorf("claude quota: %w: the server refused the sign-in (HTTP %d)", ErrNeedsLogin,
-			resp.StatusCode)
+	case resp.StatusCode == http.StatusUnauthorized:
+		return backend.Quota{}, fmt.Errorf("claude quota: %w: the server refused the sign-in (HTTP 401)", ErrNeedsLogin)
+	case resp.StatusCode == http.StatusForbidden:
+		// 403 is a missing scope, a block or a WAF answer, not a signed-out account: the account keeps its last
+		// numbers and is read again next cycle.
+		return backend.Quota{}, errors.New("claude quota: the server refused the request (HTTP 403)")
 	case resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500:
 		return backend.Quota{}, fmt.Errorf("claude quota: %w: HTTP %d", ErrUnavailable, resp.StatusCode)
 	case resp.StatusCode < 200 || resp.StatusCode > 299:

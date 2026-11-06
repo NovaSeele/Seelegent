@@ -33,6 +33,8 @@ func TestParseAgyUsage(t *testing.T) {
 		{"recorded answer", Output{Stdout: []byte(agyUsageOK)}, nil, 2, 2},
 		{"signed out", Output{Stdout: []byte(`{"status":"ERROR","error":"Authentication required"}`)}, ErrNeedsLogin, 0, 0},
 		{"signed out in stderr", Output{Stderr: []byte("Error: not logged in"), Code: 1}, ErrNeedsLogin, 0, 0},
+		{"sign-in required", Output{Stderr: []byte("Error: authentication required. Please log in again."), Code: 1}, ErrNeedsLogin, 0, 0},
+		{"authentication failed", Output{Stdout: []byte(`{"status":"ERROR","error":"Authentication failed"}`)}, ErrNeedsLogin, 0, 0},
 		{"no JSON at all", Output{Stdout: []byte("panic: something"), Code: 2}, ErrFormat, 0, 0},
 		{"not JSON after brace", Output{Stdout: []byte("{oops")}, ErrFormat, 0, 0},
 		{"groups missing", Output{Stdout: []byte(`{"status":"SUCCESS","command":{"data":{}}}`)}, ErrFormat, 0, 0},
@@ -130,7 +132,7 @@ func TestAgyReaderFakeRun(t *testing.T) {
 	if _, err := broken.ReadQuota(t.Context(), prof, nil); !errors.Is(err, ErrFormat) {
 		t.Fatalf("changed format = %v", err)
 	}
-	if got := agyReadEmail(t.TempDir()); got != "" {
+	if got := newEmailCache().agyEmail(t.TempDir()); got != "" {
 		t.Fatalf("email without logs = %q", got)
 	}
 }
@@ -176,5 +178,51 @@ func TestRunCommand(t *testing.T) {
 	b.limit = 3
 	if n, _ := b.Write([]byte("abcdef")); n != 6 || b.String() != "abc" {
 		t.Fatalf("limited buffer = %q", b.String())
+	}
+}
+
+func TestAgyNetworkErrorIsNotSignedOut(t *testing.T) {
+	for _, text := range []string{
+		"authentication failed: connection reset",
+		"Authentication failed: read ECONNRESET",
+		"authentication failed (proxy returned 502)",
+		"authentication failed: tls handshake timeout",
+	} {
+		_, err := parseAgyUsage(Output{Stderr: []byte(text), Code: 1})
+		if err == nil || errors.Is(err, ErrNeedsLogin) || KindOf(err) != KindFailed {
+			t.Errorf("%q: err = %v (kind %s), want a plain failure", text, err, KindOf(err))
+		}
+	}
+}
+
+func TestAgyEmailCache(t *testing.T) {
+	home := t.TempDir()
+	logDir := filepath.Join(home, ".gemini", "antigravity-cli", "log")
+	older, newer := filepath.Join(logDir, "1.log"), filepath.Join(logDir, "2.log")
+	writeFile(t, older, "applyAuthResult: email=old@example.com\n")
+	writeFile(t, newer, "nothing here\n")
+	base := time.Now().Add(-time.Hour)
+	setTime := func(p string, at time.Time) {
+		if err := os.Chtimes(p, at, at); err != nil {
+			t.Fatal(err)
+		}
+	}
+	setTime(older, base)
+	setTime(newer, base.Add(time.Minute))
+	c := newEmailCache()
+	// The newest log names no email: the next one is searched.
+	if got := c.agyEmail(home); got != "old@example.com" {
+		t.Fatalf("email = %q", got)
+	}
+	// Same size and time: the cached answer is used, the file is not read again.
+	writeFile(t, older, "applyAuthResult: email=xyz@example.com\n")
+	setTime(older, base)
+	if got := c.agyEmail(home); got != "old@example.com" {
+		t.Fatalf("unchanged file read again: %q", got)
+	}
+	// A changed log is read again.
+	setTime(older, base.Add(2*time.Minute))
+	if got := c.agyEmail(home); got != "xyz@example.com" {
+		t.Fatalf("changed file not read: %q", got)
 	}
 }

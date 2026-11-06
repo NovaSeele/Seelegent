@@ -9,11 +9,14 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/NovaSeele/Seelegent/internal/account"
 	"github.com/NovaSeele/Seelegent/internal/backend"
+	"github.com/NovaSeele/Seelegent/internal/fsutil"
 )
 
 // agy reader limits (old backends/agy.js).
@@ -27,8 +30,16 @@ const (
 // agyEmail finds the signed-in email in agy's logs ("applyAuthResult: email=<email>").
 var agyEmail = regexp.MustCompile(`applyAuthResult: email=([^,\s]+)`)
 
-// agyAuthText recognizes a signed-out agy in its output.
-var agyAuthText = regexp.MustCompile(`(?i)authentication required|not logged in|authentication (expired|failed)|log back in`)
+// agyAuthText recognizes a signed-out agy in its output: only wording that asks for a sign-in. A bare
+// "authentication failed" counts only when agyNetworkText does not match, because agy also prints it when the
+// network or a proxy breaks the token exchange ("authentication failed: connection reset").
+var agyAuthText = regexp.MustCompile(`(?i)authentication required|not (logged|signed) in|(log|sign) ?in required|` +
+	`please (log|sign) ?in|(log|sign) back in|(log|sign) ?in again|authentication expired|authentication failed`)
+
+// agyNetworkText recognizes network, proxy and TLS failures; such output never means "signed out".
+var agyNetworkText = regexp.MustCompile(`(?i)connection (reset|refused|closed|aborted|timed out)|timed? ?out|` +
+	`econn(reset|refused|aborted)|etimedout|enotfound|eai_again|socket hang up|network|proxy|\bdns\b|\btls\b|` +
+	`certificate|x509|unreachable|no such host|temporar(y|ily)|\b50[234]\b`)
 
 // AgyReader reads the quota of an agy account with `agy -p /usage --output-format json`, run in the account's
 // profile. It implements backend.QuotaReader.
@@ -36,6 +47,7 @@ type AgyReader struct {
 	bin     string
 	run     RunFunc
 	timeout time.Duration
+	emails  *emailCache
 }
 
 // NewAgyReader returns the reader for the agy CLI at bin ("" when not installed). run nil runs the real command.
@@ -43,7 +55,7 @@ func NewAgyReader(bin string, run RunFunc) *AgyReader {
 	if run == nil {
 		run = runCommand
 	}
-	return &AgyReader{bin: bin, run: run, timeout: AgyTimeout}
+	return &AgyReader{bin: bin, run: run, timeout: AgyTimeout, emails: newEmailCache()}
 }
 
 // agyAnswer is the JSON line agy prints for /usage.
@@ -90,7 +102,7 @@ func (r *AgyReader) ReadQuota(ctx context.Context, prof account.Profile, env []s
 	if err != nil {
 		return backend.Quota{}, fmt.Errorf("agy quota: %w", err)
 	}
-	q.Email = agyReadEmail(prof.Home)
+	q.Email = r.emails.agyEmail(prof.Home)
 	return q, nil
 }
 
@@ -106,7 +118,7 @@ func parseAgyUsage(out Output) (backend.Quota, error) {
 	if line == nil || ans.Status != "SUCCESS" {
 		msg := jsonText(ans.Error)
 		text := string(out.Stdout) + "\n" + string(out.Stderr) + "\n" + msg
-		if agyAuthText.MatchString(text) {
+		if agyAuthText.MatchString(text) && !agyNetworkText.MatchString(text) {
 			return backend.Quota{}, fmt.Errorf("%w: agy is not signed in", ErrNeedsLogin)
 		}
 		if msg == "" {
@@ -172,38 +184,76 @@ func hasBuckets(groups []json.RawMessage) bool {
 	return false
 }
 
-// agyReadEmail returns the email of the newest sign-in in agy's logs under home ("" when none).
-func agyReadEmail(home string) string {
+// emailCache remembers the email found in each agy log by (path, size, modification time), so a refresh does
+// not read megabytes of unchanged logs again. It is safe for concurrent use.
+type emailCache struct {
+	mu    sync.Mutex
+	files map[string]emailEntry
+}
+
+type emailEntry struct {
+	size  int64
+	mtime time.Time
+	email string
+}
+
+func newEmailCache() *emailCache { return &emailCache{files: map[string]emailEntry{}} }
+
+// agyEmail returns the email of the newest sign-in in agy's logs under home ("" when none). Logs are searched
+// newest first and the search stops at the first log that names an email, so usually only one file is read, and
+// only when it changed since the last refresh.
+func (c *emailCache) agyEmail(home string) string {
 	dir := filepath.Join(home, ".gemini", "antigravity-cli")
-	files := []string{filepath.Join(dir, "cli.log")}
+	paths := []string{filepath.Join(dir, "cli.log")}
 	if entries, err := os.ReadDir(filepath.Join(dir, "log")); err == nil {
 		for _, e := range entries {
 			if e.Type().IsRegular() {
-				files = append(files, filepath.Join(dir, "log", e.Name()))
+				paths = append(paths, filepath.Join(dir, "log", e.Name()))
 			}
 		}
 	}
-	var (
-		email  string
-		newest time.Time
-	)
-	for _, f := range files {
-		st, err := os.Stat(f)
-		if err != nil || !st.Mode().IsRegular() {
-			continue
-		}
-		data, err := readTail(f, agyLogTail)
-		if err != nil {
-			continue
-		}
-		m := agyEmail.FindAllSubmatch(data, -1)
-		if len(m) == 0 {
-			continue
-		}
-		if email == "" || !st.ModTime().Before(newest) {
-			email, newest = string(m[len(m)-1][1]), st.ModTime()
+	type logFile struct {
+		path string
+		st   os.FileInfo
+	}
+	var files []logFile
+	for _, p := range paths {
+		if st, err := os.Stat(p); err == nil && st.Mode().IsRegular() {
+			files = append(files, logFile{p, st})
 		}
 	}
+	sort.SliceStable(files, func(i, j int) bool { return files[i].st.ModTime().After(files[j].st.ModTime()) })
+	for _, f := range files {
+		if email := c.fileEmail(f.path, f.st); email != "" {
+			return email
+		}
+	}
+	return ""
+}
+
+// fileEmail returns the last email named in the tail of one log, from the cache while the file is unchanged.
+func (c *emailCache) fileEmail(path string, st os.FileInfo) string {
+	key, err := fsutil.Key(path)
+	if err != nil {
+		key = path
+	}
+	c.mu.Lock()
+	e, ok := c.files[key]
+	c.mu.Unlock()
+	if ok && e.size == st.Size() && e.mtime.Equal(st.ModTime()) {
+		return e.email
+	}
+	data, err := readTail(path, agyLogTail)
+	if err != nil {
+		return ""
+	}
+	email := ""
+	if m := agyEmail.FindAllSubmatch(data, -1); len(m) > 0 {
+		email = string(m[len(m)-1][1])
+	}
+	c.mu.Lock()
+	c.files[key] = emailEntry{size: st.Size(), mtime: st.ModTime(), email: email}
+	c.mu.Unlock()
 	return email
 }
 
