@@ -31,9 +31,60 @@ export function safeHref(href: string): string | null {
   }
 }
 
-// `code`, **bold**, [text](url), bare http(s) URLs.
+interface CodeSpan {
+  start: number
+  end: number
+  code: string
+}
+
+/**
+ * Code spans in one linear pass: each backtick run closes at the next run of the same length (CommonMark's rule),
+ * found through one forward-only cursor per run length. A regex for this backtracks quadratically on unclosed
+ * runs, which a worker's output can easily contain.
+ */
+function codeSpans(text: string): CodeSpan[] {
+  const runs: { start: number; len: number }[] = []
+  for (let i = text.indexOf('`'); i >= 0; i = text.indexOf('`', i)) {
+    let j = i
+    while (text.charCodeAt(j) === 96) j++
+    runs.push({ start: i, len: j - i })
+    i = j
+  }
+  const byLength = new Map<number, number[]>()
+  runs.forEach((run, k) => {
+    const list = byLength.get(run.len)
+    if (list) list.push(k)
+    else byLength.set(run.len, [k])
+  })
+  const cursor = new Map<number, number>()
+  const spans: CodeSpan[] = []
+  for (let k = 0; k < runs.length;) {
+    const open = runs[k] as { start: number; len: number }
+    const list = byLength.get(open.len) ?? []
+    let p = cursor.get(open.len) ?? 0
+    while (p < list.length && (list[p] ?? 0) <= k) p++
+    cursor.set(open.len, p)
+    const closeAt = list[p]
+    const close = closeAt === undefined ? undefined : runs[closeAt]
+    if (closeAt === undefined || !close) {
+      k++
+      continue
+    }
+    spans.push({
+      start: open.start,
+      end: close.start + close.len,
+      code: text.slice(open.start + open.len, close.start),
+    })
+    cursor.set(open.len, p + 1)
+    k = closeAt + 1
+  }
+  return spans
+}
+
+// **bold**, [text](url), bare http(s) URLs. Every repetition stops at a delimiter it cannot cross, so a failed
+// attempt costs at most the distance to that delimiter; link text is capped to keep "[[[[..." lines linear.
 const INLINE =
-  /(`+)([^`]|[^`][\s\S]*?[^`])\1(?!`)|\*\*([^*\n]+?)\*\*|\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s<>()]+[^\s<>().,;:!?'"])/g
+  /\*\*([^*\n]+?)\*\*|\[([^\]\n[]{1,500})\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s<>()]+[^\s<>().,;:!?'"])/g
 
 export function parseInline(text: string): Inline[] {
   const out: Inline[] = []
@@ -43,20 +94,39 @@ export function parseInline(text: string): Inline[] {
     if (last?.t === 'text') last.v += value
     else out.push({ t: 'text', v: value })
   }
+  const spans = codeSpans(text)
+  let next = 0
+  // The leftmost other match from `index` on; reused while it still lies ahead, so the text is scanned once.
+  const pattern = new RegExp(INLINE.source, 'g')
+  let match: RegExpExecArray | null = null
+  let done = false
   let index = 0
-  for (const match of text.matchAll(INLINE)) {
-    const at = match.index ?? 0
-    pushText(text.slice(index, at))
-    index = at + match[0].length
-    if (match[2] !== undefined) out.push({ t: 'code', v: match[2] })
-    else if (match[3] !== undefined) out.push({ t: 'strong', c: parseInline(match[3]) })
-    else if (match[4] !== undefined && match[5] !== undefined) {
-      const href = safeHref(match[5])
-      if (href) out.push({ t: 'link', href, c: parseInline(match[4]) })
+  for (;;) {
+    while (next < spans.length && (spans[next]?.start ?? 0) < index) next++
+    const span = spans[next]
+    if (!done && (!match || match.index < index)) {
+      pattern.lastIndex = index
+      match = pattern.exec(text)
+      // No match from here on means none further on either: never scan the rest again.
+      done = match === null
+    }
+    if (span && (!match || span.start <= match.index)) {
+      pushText(text.slice(index, span.start))
+      out.push({ t: 'code', v: span.code })
+      index = span.end
+      continue
+    }
+    if (!match) break
+    pushText(text.slice(index, match.index))
+    index = match.index + match[0].length
+    if (match[1] !== undefined) out.push({ t: 'strong', c: parseInline(match[1]) })
+    else if (match[2] !== undefined && match[3] !== undefined) {
+      const href = safeHref(match[3])
+      if (href) out.push({ t: 'link', href, c: parseInline(match[2]) })
       else pushText(match[0])
-    } else if (match[6] !== undefined) {
-      const href = safeHref(match[6])
-      if (href) out.push({ t: 'link', href, c: [{ t: 'text', v: match[6] }] })
+    } else if (match[4] !== undefined) {
+      const href = safeHref(match[4])
+      if (href) out.push({ t: 'link', href, c: [{ t: 'text', v: match[4] }] })
       else pushText(match[0])
     }
   }

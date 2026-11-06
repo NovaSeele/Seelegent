@@ -53,6 +53,44 @@ describe('rich text', () => {
     ])
   })
 
+  it('pairs backtick runs by length and leaves unclosed runs as text', () => {
+    expect(parseInline('a ``x ` y`` b `c')).toEqual([
+      { t: 'text', v: 'a ' },
+      { t: 'code', v: 'x ` y' },
+      { t: 'text', v: ' b `c' },
+    ])
+    expect(parseInline('**a `b` c**')).toEqual([
+      {
+        t: 'strong',
+        c: [
+          { t: 'text', v: 'a ' },
+          { t: 'code', v: 'b' },
+          { t: 'text', v: ' c' },
+        ],
+      },
+    ])
+  })
+
+  it('stays linear on adversarial input (about 100 KB each)', () => {
+    const inputs = [
+      '`a'.repeat(50_000),
+      '``a`'.repeat(25_000),
+      Array.from({ length: 400 }, (_, i) => '`'.repeat(i + 1) + 'x').join(''),
+      '['.repeat(100_000),
+      '[a'.repeat(50_000),
+      '**a*'.repeat(25_000),
+      'http://'.repeat(14_000),
+    ]
+    for (const input of inputs) {
+      const started = performance.now()
+      const out = parseInline(input)
+      const ms = performance.now() - started
+      expect(out.length).toBeGreaterThan(0)
+      // Quadratic behaviour takes seconds to minutes here; linear takes a few milliseconds.
+      expect(ms, input.slice(0, 12)).toBeLessThan(250)
+    }
+  })
+
   it('keeps an unclosed fence as code to the end', () => {
     expect(parseRichText('```\nx\ny')).toEqual([{ t: 'code', lang: '', v: 'x\ny' }])
   })
