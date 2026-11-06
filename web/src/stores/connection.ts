@@ -1,63 +1,219 @@
 /**
- * Connection of the dashboard to the daemon: owns the single event stream and tells the shell whether to show
- * the "connection lost" banner. On every (re)connect it reads /api/v1/health for the daemon's version.
+ * Connection of the dashboard to the daemon and the sync of its data.
+ *
+ * Boot: GET /state (everything the first paint needs, with the SSE id of that moment), then the event stream
+ * opened from that id, so nothing between the snapshot and the stream is lost. A failed /state read retries with
+ * the stream's backoff and shows the offline banner (it never leaves an empty dashboard behind, old bug B3).
+ *
+ * While streaming:
+ * - `reset` (the daemon cannot resume this stream): /state is read again; frames that arrive meanwhile are held
+ *   and the ones newer than the snapshot are applied after it.
+ * - `hello` with another `build` than the page was loaded with: the dashboard reloads to the new bundle.
+ *   Another `instance` (daemon restart) also resyncs, in case the daemon's own reset was missed.
+ * - task.* frames go to the tasks store, account.* to the accounts store, settings.updated here.
  */
 import { defineStore } from 'pinia'
 import { ref, shallowRef } from 'vue'
 
+import { api as defaultApi, EVENTS_URL, type ApiClient } from '@/api'
+import { SERVER_EVENT_NAMES, type HelloFrame, type ServerEvents } from '@/api/events'
 import {
-  api as defaultApi,
-  EVENTS_URL,
-  type ApiClient,
-  type Health,
-  type ServerEvents,
-} from '@/api'
-import { createEventStream, type EventSourceLike, type EventStream } from '@/api/sse'
+  backoffDelay,
+  createEventStream,
+  type EventMeta,
+  type EventSourceLike,
+  type EventStream,
+} from '@/api/sse'
+import { createTasksApi, type TasksApi } from '@/api/tasks'
+import type { Backend, BootState, Health, Project, Settings } from '@/api/types'
+
+import { useAccountsStore } from './accounts'
+import { useTasksStore } from './tasks'
 
 export type ConnectionStatus = 'connecting' | 'online' | 'offline'
 
 export interface ConnectionDeps {
   api?: ApiClient
   createSource?: (url: string) => EventSourceLike
+  /** Called when the daemon serves another web bundle (default: location.reload). */
+  reload?: () => void
+  random?: () => number
+}
+
+/** Frames held while a resync reads /state; beyond this the oldest are dropped (the snapshot covers them). */
+export const MAX_HELD_FRAMES = 5000
+
+interface HeldFrame {
+  name: keyof ServerEvents
+  data: unknown
+  id: string
 }
 
 export const useConnectionStore = defineStore('connection', () => {
   const status = ref<ConnectionStatus>('connecting')
   /** When the next reconnect attempt runs (epoch ms), while offline. */
   const retryAt = ref<number | null>(null)
-  const health = ref<Health | null>(null)
+  const health = shallowRef<Health | null>(null)
+  const settings = shallowRef<Settings | null>(null)
+  const backends = shallowRef<readonly Backend[]>([])
+  const projects = shallowRef<readonly Project[]>([])
   /** True once the daemon has answered at least once in this page. */
   const hasConnected = ref(false)
+  /** Server clock minus local clock (ms), from hello.serverTime; elapsed times use it. */
+  const clockOffsetMs = ref(0)
   const stream = shallowRef<EventStream<ServerEvents> | null>(null)
-  let client: ApiClient = defaultApi
-  let cleanup: (() => void) | null = null
 
-  async function checkHealth(): Promise<void> {
-    try {
-      health.value = await client.get<Health>('/health')
-    } catch {
-      // The event stream decides online/offline; a failed health read only leaves the version unknown.
-    }
-  }
+  let tasksApi: TasksApi = createTasksApi(defaultApi)
+  let reload: () => void = () => window.location.reload()
+  let random: () => number = Math.random
+  let cleanup: (() => void) | null = null
+  /** The web bundle this page runs (from the first snapshot). */
+  let pageBuild = ''
+  let instance = ''
+  let syncing = false
+  let held: HeldFrame[] = []
+  let attempt = 0
+  let retryTimer: ReturnType<typeof setTimeout> | undefined
+  let stopped = false
 
   function setStatus(next: ConnectionStatus): void {
     status.value = next
   }
 
-  /** Opens the event stream (once). Dependencies can be swapped in tests. */
+  function checkBuild(build: string | undefined): boolean {
+    if (!build) return false
+    if (!pageBuild) {
+      pageBuild = build
+      return false
+    }
+    if (build === pageBuild) return false
+    reload()
+    return true
+  }
+
+  function applySnapshot(state: BootState): void {
+    if (checkBuild(state.health.build)) return
+    health.value = state.health
+    settings.value = state.settings
+    backends.value = state.backends
+    projects.value = state.projects
+    useAccountsStore().replaceAll(state.accounts)
+    useTasksStore().applySnapshot(state.tasks)
+  }
+
+  /** Reads /state and applies it; frames received meanwhile are held and the newer ones replayed after. */
+  async function sync(): Promise<void> {
+    if (syncing || stopped) return
+    syncing = true
+    held = []
+    clearTimeout(retryTimer)
+    retryTimer = undefined
+    let state: BootState
+    try {
+      state = await tasksApi.bootState()
+    } catch {
+      syncing = false
+      if (stopped) return
+      const events = stream.value
+      // Before the stream runs, a failed boot read is the connection state; once it runs the stream says.
+      const delay = backoffDelay(attempt++, random)
+      if (!events?.running) {
+        status.value = 'offline'
+        retryAt.value = Date.now() + delay
+      }
+      retryTimer = setTimeout(() => void sync(), delay)
+      return
+    }
+    if (stopped) return
+    attempt = 0
+    applySnapshot(state)
+    const since = Number(state.lastEventId)
+    const replay = held
+    held = []
+    syncing = false
+    for (const frame of replay) {
+      const id = Number(frame.id)
+      if (Number.isFinite(since) && Number.isFinite(id) && id <= since) continue
+      apply(frame.name, frame.data)
+    }
+    const events = stream.value
+    if (events && !events.running) {
+      events.setLastEventId(state.lastEventId)
+      events.start()
+    }
+  }
+
+  function onHello(hello: HelloFrame): void {
+    hasConnected.value = true
+    const serverTime = Date.parse(hello.serverTime)
+    if (Number.isFinite(serverTime)) clockOffsetMs.value = serverTime - Date.now()
+    if (checkBuild(hello.build)) return
+    const restarted = instance !== '' && hello.instance !== instance
+    instance = hello.instance
+    if (restarted) void sync()
+  }
+
+  function apply(name: keyof ServerEvents, data: unknown): void {
+    const tasks = useTasksStore()
+    const accounts = useAccountsStore()
+    switch (name) {
+      case 'task.created':
+      case 'task.updated':
+        tasks.upsert(data as ServerEvents['task.updated'])
+        break
+      case 'task.deleted':
+        tasks.remove((data as ServerEvents['task.deleted']).id)
+        break
+      case 'task.event':
+        tasks.applyEvent(data as ServerEvents['task.event'])
+        break
+      case 'account.updated':
+        accounts.upsert(data as ServerEvents['account.updated'])
+        break
+      case 'account.deleted':
+        accounts.remove((data as ServerEvents['account.deleted']).id)
+        break
+      case 'settings.updated':
+        settings.value = data as Settings
+        break
+      default:
+        // Other frames are read by the pages that need them (stream.on).
+        break
+    }
+  }
+
+  function onFrame(name: keyof ServerEvents, data: unknown, meta: EventMeta): void {
+    if (name === 'hello') return onHello(data as HelloFrame)
+    if (name === 'reset') {
+      void sync()
+      return
+    }
+    if (syncing) {
+      held.push({ name, data, id: meta.id })
+      if (held.length > MAX_HELD_FRAMES) held.splice(0, held.length - MAX_HELD_FRAMES)
+      return
+    }
+    apply(name, data)
+  }
+
+  /** Boots the connection (once): /state, then the event stream. Dependencies can be swapped in tests. */
   function start(deps: ConnectionDeps = {}): EventStream<ServerEvents> {
     if (stream.value) return stream.value
-    client = deps.api ?? defaultApi
+    stopped = false
+    tasksApi = createTasksApi(deps.api ?? defaultApi)
+    if (deps.reload) reload = deps.reload
+    if (deps.random) random = deps.random
     const events = createEventStream<ServerEvents>({
       url: EVENTS_URL,
       createSource: deps.createSource,
+      random,
       onState(state, retryIn) {
         if (state === 'open') {
           status.value = 'online'
           retryAt.value = null
           hasConnected.value = true
-          void checkHealth()
         } else if (state === 'closed') {
+          if (stopped) return
           status.value = 'offline'
           retryAt.value = retryIn === null ? null : Date.now() + retryIn
         } else if (status.value !== 'offline') {
@@ -65,11 +221,14 @@ export const useConnectionStore = defineStore('connection', () => {
         }
       },
     })
+    for (const name of SERVER_EVENT_NAMES) {
+      events.on(name, (data, meta) => onFrame(name, data, meta))
+    }
     stream.value = events
-    events.start()
+    void sync()
 
     if (typeof window !== 'undefined') {
-      const retry = () => events.retryNow()
+      const retry = () => retryNow()
       const onVisible = () => {
         if (document.visibilityState === 'visible') retry()
       }
@@ -83,27 +242,52 @@ export const useConnectionStore = defineStore('connection', () => {
     return events
   }
 
+  /** Retries at once: the boot read when it is still failing, else the stream. */
   function retryNow(): void {
-    stream.value?.retryNow()
+    const events = stream.value
+    if (!events) return
+    if (!events.running) {
+      if (!syncing) void sync()
+      return
+    }
+    events.retryNow()
   }
 
   function stop(): void {
+    stopped = true
+    clearTimeout(retryTimer)
+    retryTimer = undefined
     stream.value?.stop()
     stream.value = null
     cleanup?.()
     cleanup = null
+    syncing = false
+    held = []
+    attempt = 0
+    pageBuild = ''
+    instance = ''
+  }
+
+  /** The server's idea of now (epoch ms). */
+  function serverNow(): number {
+    return Date.now() + clockOffsetMs.value
   }
 
   return {
     status,
     retryAt,
     health,
+    settings,
+    backends,
+    projects,
     hasConnected,
+    clockOffsetMs,
     stream,
     setStatus,
     start,
     retryNow,
     stop,
-    checkHealth,
+    sync,
+    serverNow,
   }
 })

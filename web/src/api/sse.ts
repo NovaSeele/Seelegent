@@ -5,7 +5,9 @@
  *   10 s (with a little jitter); a successful open resets the backoff. `retryNow()` skips the wait (used when the
  *   browser comes back online or the tab becomes visible).
  * - Resume: the id of the last event received is sent back on reconnect. A new EventSource cannot set the
- *   Last-Event-ID header itself, so it goes in the `lastEventId` query parameter (the daemon accepts both).
+ *   Last-Event-ID header itself, so it goes in the `lastEventId` query parameter (the daemon accepts both). The
+ *   first connection resumes from `lastEventId` when given (the id of the /state snapshot), so nothing that
+ *   happened between the snapshot and the stream is lost.
  * - Events are named; payloads are JSON and dispatched to typed handlers. A payload that is not JSON is passed
  *   as the raw string.
  */
@@ -35,6 +37,8 @@ export interface EventStreamOptions {
   /** Called with every state change and the delay before the next attempt (when closed). */
   onState?: (state: StreamState, retryInMs: number | null) => void
   random?: () => number
+  /** Resume point of the first connection. */
+  lastEventId?: string
 }
 
 export function backoffDelay(attempt: number, random: () => number = Math.random): number {
@@ -55,7 +59,7 @@ export function createEventStream<Events extends object>(options: EventStreamOpt
   let source: EventSourceLike | null = null
   let timer: ReturnType<typeof setTimeout> | undefined
   let attempt = 0
-  let lastEventId = ''
+  let lastEventId = options.lastEventId ?? ''
   let running = false
   let state: StreamState = 'closed'
 
@@ -120,6 +124,13 @@ export function createEventStream<Events extends object>(options: EventStreamOpt
     },
     get lastEventId() {
       return lastEventId
+    },
+    get running() {
+      return running
+    },
+    /** Sets the resume point used by the next connection (call before start()). */
+    setLastEventId(id: string) {
+      lastEventId = id
     },
     on<K extends keyof Events & string>(type: K, handler: Handler<K>): () => void {
       const set = handlers.get(type) ?? new Set<AnyHandler>()

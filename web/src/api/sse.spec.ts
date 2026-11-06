@@ -76,6 +76,20 @@ describe('event stream', () => {
     expect(states.at(-1)).toEqual(['open', null])
   })
 
+  it('opens the first connection from a given resume point', () => {
+    const stream = createEventStream<Events>({
+      url: '/api/v1/events',
+      createSource: (url) => new FakeEventSource(url),
+      lastEventId: '7',
+    })
+    stream.setLastEventId('9')
+    expect(stream.running).toBe(false)
+    stream.start()
+    expect(stream.running).toBe(true)
+    expect(FakeEventSource.last.url).toBe('/api/v1/events?lastEventId=9')
+    stream.stop()
+  })
+
   it('stops for good', () => {
     const { stream } = setup()
     stream.start()
