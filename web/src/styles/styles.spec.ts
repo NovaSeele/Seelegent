@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from 'vitest'
 
-import { BREAKPOINTS } from '@/config/breakpoints'
+import { BREAKPOINTS, HEIGHT_BREAKPOINTS } from '@/config/breakpoints'
 import { THEMES } from '@/config/themes'
 import { readFiles } from '@/test/files'
 
@@ -116,15 +116,22 @@ describe('style gates', () => {
   })
 
   it('uses only the shared breakpoints, in range syntax', () => {
-    const allowed = new Set<number>([BREAKPOINTS.compact, BREAKPOINTS.rail])
+    const widths = new Set<number>([BREAKPOINTS.compact, BREAKPOINTS.rail])
+    const heights = new Set<number>([HEIGHT_BREAKPOINTS.short])
     const problems: string[] = []
     for (const [path, css] of styled) {
       for (const [query] of css.matchAll(/@media[^{]*/g)) {
-        if (/(min|max)-width/.test(query))
+        if (/(min|max)-(width|height)/.test(query))
           problems.push(`${path}: ${query.trim()} (use range syntax)`)
-        for (const [, px] of query.matchAll(/(\d+(?:\.\d+)?)px/g)) {
+        for (const [, feature, px] of query.matchAll(
+          /(width|height)\s*[<>]=?\s*(\d+(?:\.\d+)?)px/g,
+        )) {
+          const allowed = feature === 'width' ? widths : heights
           if (!allowed.has(Number(px))) problems.push(`${path}: ${query.trim()}`)
         }
+        const all = [...query.matchAll(/\d+(?:\.\d+)?px/g)].length
+        const ranged = [...query.matchAll(/(?:width|height)\s*[<>]=?\s*\d+(?:\.\d+)?px/g)].length
+        if (all !== ranged) problems.push(`${path}: ${query.trim()} (px outside a range)`)
       }
     }
     expect(problems).toEqual([])

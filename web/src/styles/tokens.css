@@ -15,7 +15,8 @@
  * Status is always shown by icon shape + word + colour, never colour alone.
  *
  * Breakpoints: mobile < 600px <= compact < 900px <= rail. The same numbers live in src/config/breakpoints.ts;
- * media queries use range syntax (width < 600px, width >= 900px) and a unit test rejects any other width.
+ * media queries use range syntax (width < 600px, width >= 900px) and a unit test rejects any other width. One height
+ * breakpoint, (height < 760px), tightens the rail on short laptop screens.
  */
 :root {
   /* Fonts: system stacks only, nothing is downloaded (the dashboard works offline). The CJK list is appended to

@@ -53,6 +53,16 @@ describe('AppShell', () => {
     expect(wrapper.get('[aria-current="page"]').attributes('href')).toBe('/proof')
   })
 
+  it('shows each rail entry with a tooltip carrying its name and shortcut', async () => {
+    const { wrapper } = await open('/')
+    const members = wrapper.get('a.rail__item[href="/members"]')
+    members.element.closest('.tooltip-anchor')?.dispatchEvent(new Event('pointerenter'))
+    await new Promise((resolve) => setTimeout(resolve, 500))
+    await flushPromises()
+    const tip = document.querySelector('[role=tooltip]')
+    expect(tip?.textContent?.replace(/\s+/g, '')).toBe('MembersG›E') // the sequence "g e"
+  })
+
   it('shows NotFound for unknown addresses', async () => {
     const { wrapper } = await open('/no/such/page')
     expect(wrapper.text()).toContain('Page not found')

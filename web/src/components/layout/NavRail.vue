@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterLink } from 'vue-router'
 
@@ -10,13 +10,14 @@ import { NAV_ITEMS, PALETTE_SHORTCUT, SETTINGS_SHORTCUT, type NavId } from '@/co
 import { usePaletteStore } from '@/stores/palette'
 
 /**
- * Side navigation from 600px. At 900px and up each entry shows its icon with a short label under it (68px);
- * between 600 and 899px only the icon, with the name in a tooltip (56px). Work pages come first, then a
- * divider and the team pages; the palette and settings sit at the bottom.
+ * Side navigation from 600px. At 900px and up each entry shows its icon with its label under it (68px);
+ * between 600 and 899px only the icon (56px). Every entry has a tooltip with its name and its keyboard
+ * shortcut ("Members  G E"), so the shortcuts can be learnt from the rail. Work pages come first, then a
+ * divider and the team pages; the palette and settings sit at the bottom. Metrics: docs/ui-layout.md.
  */
-const props = defineProps<{ active?: NavId; compact: boolean }>()
+defineProps<{ active?: NavId; compact: boolean }>()
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const palette = usePaletteStore()
 
 const groups = computed(() => [
@@ -24,10 +25,30 @@ const groups = computed(() => [
   NAV_ITEMS.filter((item) => item.group === 'team'),
 ])
 
-/** The tooltip shows the full name when the rail shows nothing or only the short label. */
-function needsTooltip(id: NavId): boolean {
-  return props.compact || t(`nav.${id}.short`) !== t(`nav.${id}.label`)
+// The page list scrolls when it does not fit (short windows, long labels). Its top and bottom edges fade out
+// only while there is more to scroll that way, so a cut-off item reads as "scroll for more".
+const list = ref<HTMLElement | null>(null)
+const fadeTop = ref(false)
+const fadeBottom = ref(false)
+
+function updateFade() {
+  const el = list.value
+  if (!el) return
+  fadeTop.value = el.scrollTop > 1
+  fadeBottom.value = el.scrollTop + el.clientHeight < el.scrollHeight - 1
 }
+
+let observer: ResizeObserver | undefined
+onMounted(() => {
+  updateFade()
+  if (typeof ResizeObserver === 'undefined' || !list.value) return
+  observer = new ResizeObserver(updateFade)
+  observer.observe(list.value)
+  for (const child of list.value.children) observer.observe(child)
+})
+onBeforeUnmount(() => observer?.disconnect())
+// Labels change length with the language.
+watch(locale, () => void nextTick(updateFade))
 </script>
 
 <template>
@@ -35,15 +56,15 @@ function needsTooltip(id: NavId): boolean {
     <RouterLink to="/" class="rail__brand" :aria-label="t('nav.brand.title')">
       <Icon name="brand" />
     </RouterLink>
-    <div class="rail__groups">
+    <div
+      ref="list"
+      class="rail__groups"
+      :class="{ 'rail__groups--fade-top': fadeTop, 'rail__groups--fade-bottom': fadeBottom }"
+      @scroll.passive="updateFade"
+    >
       <ul v-for="(items, index) in groups" :key="index" class="rail__list">
         <li v-for="item in items" :key="item.id">
-          <Tooltip
-            :text="t(`nav.${item.id}.label`)"
-            :shortcut="item.shortcut"
-            placement="right"
-            :disabled="!needsTooltip(item.id)"
-          >
+          <Tooltip :text="t(`nav.${item.id}.label`)" :shortcut="item.shortcut" placement="right">
             <RouterLink
               :to="item.path"
               class="rail__item"
@@ -52,7 +73,7 @@ function needsTooltip(id: NavId): boolean {
               :aria-label="compact ? t(`nav.${item.id}.label`) : undefined"
             >
               <span class="rail__icon"><Icon :name="item.icon" /></span>
-              <span v-if="!compact" class="rail__label">{{ t(`nav.${item.id}.short`) }}</span>
+              <span v-if="!compact" class="rail__label">{{ t(`nav.${item.id}.label`) }}</span>
             </RouterLink>
           </Tooltip>
         </li>
@@ -120,6 +141,24 @@ function needsTooltip(id: NavId): boolean {
   min-height: 0;
   overflow: hidden auto;
   scrollbar-width: none;
+  /* Edge fades, each on only while the list can scroll that way (mask alpha only; no theme colour). */
+  --fade-top: 0px;
+  --fade-bottom: 0px;
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    black var(--fade-top),
+    black calc(100% - var(--fade-bottom)),
+    transparent 100%
+  );
+}
+
+.rail__groups--fade-top {
+  --fade-top: var(--space-6);
+}
+
+.rail__groups--fade-bottom {
+  --fade-bottom: var(--space-6);
 }
 
 .rail__list {
@@ -218,5 +257,42 @@ function needsTooltip(id: NavId): boolean {
   flex-direction: column;
   align-items: center;
   gap: var(--space-1);
+}
+
+/* Touch laptops show the rail too: the footer buttons get a 44px target (IconButton also follows
+   --target-min; this keeps the rail's own footer explicit). */
+@media (pointer: coarse) {
+  .rail__footer :deep(.icon-btn) {
+    width: 44px;
+    height: 44px;
+  }
+}
+
+/* Short windows (1366×768 laptops leave about 680px): 44px items, a 24px icon pill, no gap between items and
+   a tighter divider, so all eleven pages fit (9 × 44 + 2 two-line items × 58 = 512px in 532px). */
+@media (height < 760px) {
+  .rail {
+    gap: var(--space-1);
+  }
+
+  .rail__groups {
+    gap: var(--space-1);
+  }
+
+  .rail__list {
+    gap: 0;
+  }
+
+  .rail__list + .rail__list {
+    padding-top: var(--space-1);
+  }
+
+  .rail__item {
+    min-height: 44px;
+  }
+
+  .rail__icon {
+    height: 24px;
+  }
 }
 </style>
