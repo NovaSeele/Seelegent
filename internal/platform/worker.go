@@ -13,8 +13,10 @@ import (
 var ErrSocketOwnerUnknown = errors.New("cannot find the process that owns the client socket")
 
 // JobUnavailableError is returned (possibly joined with others, use errors.As) when a Windows worker tree's job
-// cannot be opened while its launcher still runs, typically because the daemon runs in another session (Local\
-// names are per session). The tree then fails closed. Callers log it once per launch; doctor reports it.
+// cannot be opened while its launcher still runs in another session than the caller (or a session that cannot be
+// read): Local\ names are per session, so the job may exist out of sight. The tree then fails closed. Callers log
+// it once per launch; doctor reports it. In the caller's own session a missing job is an empty tree (not created
+// yet, or already closed).
 type JobUnavailableError struct {
 	Tree    string // WorkerTree.ID
 	Job     string // the job name
@@ -87,8 +89,8 @@ func LockHolders(path string) ([]int, error) { return lockHolders(path) }
 //
 //   - the client socket is gone or has no owner any more (ErrSocketOwnerUnknown): a client that sent its request
 //     and closed the socket must not pass as the lead;
-//   - a tree cannot be listed at all (Windows: its job cannot be opened while its launcher runs, a
-//     JobUnavailableError);
+//   - a tree cannot be listed at all (Windows: its job cannot be opened while its launcher runs in another
+//     session, a JobUnavailableError);
 //   - Linux: some processes of a tree cannot be read (a non-dumpable program such as ssh-agent), they run as the
 //     socket's user, and the socket was not found in a readable process of the same user outside the trees either.
 //     Unreadable tree processes of another user are ignored, and finding the socket outside the trees is positive
@@ -102,12 +104,6 @@ func LockHolders(path string) ([]int, error) { return lockHolders(path) }
 // lead).
 func SocketOwnerInTrees(local, remote netip.AddrPort, trees []*WorkerTree) (id string, isWorker bool, err error) {
 	return socketOwner(local, remote, trees, lookupOptions{})
-}
-
-// lookupOptions lets tests step into a socket owner lookup.
-type lookupOptions struct {
-	// beforeRecheck runs after the first look found no worker, before that answer is checked again.
-	beforeRecheck func()
 }
 
 func socketOwner(local, remote netip.AddrPort, trees []*WorkerTree, opt lookupOptions) (id string, isWorker bool, err error) {

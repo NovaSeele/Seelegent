@@ -24,10 +24,15 @@ type jobPIDList struct {
 	ProcessIDList             [1]uintptr
 }
 
-// pids opens the named job for a moment and lists its processes. A job that does not exist is a tree that has
-// ended, unless the tree's root (the launcher) still runs: Local\ names are per session, so a daemon running in
-// another session cannot see the job, and that must not pass for "no processes".
-func (w *WorkerTree) pids() ([]int, error) {
+// pids opens the named job for a moment and lists its processes.
+func (w *WorkerTree) pids() ([]int, error) { return w.pidsWith(processSession) }
+
+// pidsWith is pids with the session lookup passed in (tests). A job that does not exist holds no process: the
+// launcher has not created it yet (its worker starts suspended and joins the job before it runs) or has closed it
+// (kill-on-close, no breakaway). That holds only in the launcher's own session, though: Local\ names are per
+// session, so when the launcher still runs in another session than this process (or its session cannot be read),
+// the job may exist out of sight, and that is a JobUnavailableError rather than "no processes".
+func (w *WorkerTree) pidsWith(sessionOf func(pid uint32) (uint32, error)) ([]int, error) {
 	if w.Job == "" {
 		return nil, fmt.Errorf("worker tree %q: no job name", w.ID)
 	}
@@ -39,10 +44,10 @@ func (w *WorkerTree) pids() ([]int, error) {
 	job := windows.Handle(r)
 	if job == 0 {
 		if errors.Is(callErr, windows.ERROR_FILE_NOT_FOUND) {
-			if w.rootRunning() {
+			if w.rootRunning() && !w.sameSession(sessionOf) {
 				return nil, &JobUnavailableError{Tree: w.ID, Job: w.Job, RootPID: w.RootPID, Err: callErr}
 			}
-			return nil, nil // the launcher closed the job: the tree has ended
+			return nil, nil // not created yet, or closed: no process is in the tree
 		}
 		return nil, fmt.Errorf("worker tree %q: open job: %w", w.ID, callErr)
 	}
@@ -60,6 +65,22 @@ func (w *WorkerTree) rootRunning() bool {
 		return true // it runs but cannot be checked: assume it is the root
 	}
 	return w.RootStart == 0 || start == w.RootStart
+}
+
+// sameSession reports whether the tree's root runs in this process's session; false when either cannot be read.
+func (w *WorkerTree) sameSession(sessionOf func(pid uint32) (uint32, error)) bool {
+	root, err1 := sessionOf(uint32(w.RootPID))  //nolint:gosec // RootPID > 0 checked by rootRunning
+	own, err2 := sessionOf(uint32(os.Getpid())) //nolint:gosec // a pid is positive
+	return err1 == nil && err2 == nil && root == own
+}
+
+// processSession returns the Terminal Services session of process pid.
+func processSession(pid uint32) (uint32, error) {
+	var s uint32
+	if err := windows.ProcessIdToSessionId(pid, &s); err != nil {
+		return 0, fmt.Errorf("session of process %d: %w", pid, err)
+	}
+	return s, nil
 }
 
 // jobPIDs lists the processes of job, growing the buffer while processes are added between calls.
@@ -119,6 +140,14 @@ const (
 	tcp6RowSize = 56
 )
 
+// lookupOptions lets tests step into a socket owner lookup.
+type lookupOptions struct {
+	// beforeRecheck runs after the first look found no worker, before that answer is checked again.
+	beforeRecheck func()
+	// sessionOf replaces the session lookup of WorkerTree.PIDs (nil: ProcessIdToSessionId).
+	sessionOf func(pid uint32) (uint32, error)
+}
+
 // socketOwnerInTrees finds the owner of the client socket in the TCP tables and looks for it in the trees' jobs
 // (see SocketOwnerInTrees for the answers).
 func socketOwnerInTrees(local, remote netip.AddrPort, trees []*WorkerTree, opt lookupOptions) (id string, isWorker bool, err error) {
@@ -129,9 +158,13 @@ func socketOwnerInTrees(local, remote netip.AddrPort, trees []*WorkerTree, opt l
 	if owner == os.Getpid() {
 		return "", false, nil
 	}
+	sessionOf := opt.sessionOf
+	if sessionOf == nil {
+		sessionOf = processSession
+	}
 	var treeErrs []error
 	for _, w := range trees {
-		pids, err := w.PIDs()
+		pids, err := w.pidsWith(sessionOf)
 		if err != nil {
 			treeErrs = append(treeErrs, err)
 			continue

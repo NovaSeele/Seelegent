@@ -17,6 +17,12 @@ import (
 // recheckRounds bounds how often a "lead" answer is checked again while new processes keep appearing in the trees.
 const recheckRounds = 4
 
+// lookupOptions lets tests step into a socket owner lookup.
+type lookupOptions struct {
+	// beforeRecheck runs after the first look found no worker, before that answer is checked again.
+	beforeRecheck func()
+}
+
 // tcpSocket is a client socket found in /proc/net/tcp{,6}.
 type tcpSocket struct {
 	inode uint64

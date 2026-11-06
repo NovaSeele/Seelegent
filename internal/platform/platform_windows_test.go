@@ -34,6 +34,16 @@ func startDescribedTree(t *testing.T, cmd *exec.Cmd) (*Tree, *WorkerTree) {
 	return tree, wt
 }
 
+// otherSession fakes a launcher in another session than the daemon. In these tests both are this process, so the
+// fake goes by call order: sameSession asks for the root's session first, then for its own.
+func otherSession() func(uint32) (uint32, error) {
+	calls := uint32(0)
+	return func(uint32) (uint32, error) {
+		calls++
+		return calls % 2, nil
+	}
+}
+
 // TestNamedJob: the job is listed through its name from a separate handle, and a name that exists is refused.
 func TestNamedJob(t *testing.T) {
 	pidFile := filepath.Join(t.TempDir(), "pids")
@@ -75,14 +85,21 @@ func TestNamedJob(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitDead(t, pids...)
-	// The job is gone. Its root (the owner: this process) still runs, as a launcher seen from a daemon in another
-	// session would: that is an error, not an empty tree.
+	// The job is gone while its root (the owner: this process) still runs, as when a launcher closes its job just
+	// before it exits. In the same session that is an empty tree; seen from another session (or when the session
+	// cannot be read) the job may exist out of sight, which is an error.
 	if wt.RootPID != os.Getpid() || wt.RootStart == 0 {
 		t.Fatalf("worker tree root %d/%d, want this process", wt.RootPID, wt.RootStart)
 	}
-	var unavailable *JobUnavailableError
-	if left, err := wt.PIDs(); !errors.As(err, &unavailable) || unavailable.Job != wt.Job || unavailable.Tree != wt.ID {
-		t.Fatalf("missing job with a running root: %v, %v; want a JobUnavailableError", left, err)
+	if left, err := wt.PIDs(); err != nil || len(left) != 0 {
+		t.Fatalf("closed job, root in this session: %v, %v", left, err)
+	}
+	unreadable := func(uint32) (uint32, error) { return 0, errors.New("no session") }
+	for _, sessionOf := range []func(uint32) (uint32, error){otherSession(), unreadable} {
+		var unavailable *JobUnavailableError
+		if left, err := wt.pidsWith(sessionOf); !errors.As(err, &unavailable) || unavailable.Job != wt.Job || unavailable.Tree != wt.ID {
+			t.Fatalf("missing job, root in another session: %v, %v; want a JobUnavailableError", left, err)
+		}
 	}
 	if left, err := (&WorkerTree{ID: "ended", Job: wt.Job, RootPID: pids[0], RootStart: 1}).PIDs(); err != nil || len(left) != 0 {
 		t.Fatalf("closed job with an ended root: %v, %v", left, err)
@@ -99,8 +116,9 @@ func TestNamedJob(t *testing.T) {
 	_ = again.Close()
 }
 
-// TestSocketOwnerUnavailableJob: a tree whose job cannot be opened while its launcher runs makes the lookup fail
-// closed, without a task ID, and the typed error survives for the caller to log.
+// TestSocketOwnerUnavailableJob: a launcher that has not created its job yet (this process, in the daemon's
+// session) holds no worker, so the lead is not refused. The same tree seen from another session makes the lookup
+// fail closed, without a task ID, and the typed error survives for the caller to log.
 func TestSocketOwnerUnavailableJob(t *testing.T) {
 	ln, err := (&net.ListenConfig{}).Listen(context.Background(), "tcp", "127.0.0.1:0")
 	if err != nil {
@@ -125,7 +143,10 @@ func TestSocketOwnerUnavailableJob(t *testing.T) {
 	}
 	name, _ := NewTreeName()
 	unavailable := &WorkerTree{ID: "t1", Job: name, RootPID: os.Getpid(), RootStart: start}
-	id, isWorker, err := SocketOwnerInTrees(local, remote, []*WorkerTree{unavailable})
+	if id, isWorker, err := SocketOwnerInTrees(local, remote, []*WorkerTree{unavailable}); err != nil || isWorker || id != "" {
+		t.Fatalf("job not created yet, same session: id %q, worker %v, err %v", id, isWorker, err)
+	}
+	id, isWorker, err := socketOwner(local, remote, []*WorkerTree{unavailable}, lookupOptions{sessionOf: otherSession()})
 	var jobErr *JobUnavailableError
 	if id != "" || !isWorker || !errors.As(err, &jobErr) || jobErr.Job != name {
 		t.Fatalf("lookup: id %q, worker %v, err %v", id, isWorker, err)
