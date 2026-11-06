@@ -20,6 +20,18 @@ export function relativeTo(path: string, base: string | undefined): string {
   return p
 }
 
+/** `rel` resolved against `base` ('.' and '..' segments applied), with '/' separators. */
+export function joinPath(base: string, rel: string): string {
+  const parts = `${slashes(base).replace(/\/+$/, '')}/${slashes(rel)}`.split('/')
+  const out: string[] = []
+  parts.forEach((part, i) => {
+    if (part === '.' || (part === '' && i > 0)) return
+    if (part === '..' && out.length > 1) out.pop()
+    else if (part !== '..') out.push(part)
+  })
+  return out.join('/') || '/'
+}
+
 /** The last segment of a path. */
 export function baseName(path: string): string {
   const p = slashes(path).replace(/\/+$/, '')

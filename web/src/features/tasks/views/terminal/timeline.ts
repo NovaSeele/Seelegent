@@ -20,6 +20,7 @@ interface Base {
   key: string
   rev: number
   turn?: number
+  attempt?: number
   ts: string
 }
 
@@ -33,7 +34,7 @@ export interface Message {
 export type TimelineItem =
   | (Base & { kind: 'lead' } & LeadMessageData)
   | (Base & { kind: 'route' } & RouteData)
-  | (Base & { kind: 'prompt'; attempt?: number; length: number; preview: string })
+  | (Base & { kind: 'prompt'; length: number; preview: string })
   | (Base & { kind: 'text'; text: string })
   | (Base & {
       kind: 'tool'
@@ -55,13 +56,19 @@ export type TimelineItem =
 
 export type TimelineKind = TimelineItem['kind']
 
-type Draft = TimelineItem & { step?: number; attempt?: number }
+type Draft = TimelineItem & { step?: number }
 
 const tokens = (usage: Usage | null | undefined) => usage?.totalTokens ?? 0
 
 /** Folds one event into the items; returns the item it touched, or null when the event is not shown. */
 function fold(items: Draft[], open: Map<string, Draft>, event: TaskEvent): Draft | null {
-  const base = { key: `e${event.seq}`, rev: event.seq, turn: event.turn, ts: event.ts }
+  const base: Base = {
+    key: `e${event.seq}`,
+    rev: event.seq,
+    turn: event.turn,
+    attempt: event.attempt,
+    ts: event.ts,
+  }
   const notice = (
     tone: Tone,
     icon: IconName,
@@ -76,7 +83,7 @@ function fold(items: Draft[], open: Map<string, Draft>, event: TaskEvent): Draft
     case 'route':
       return { ...base, kind: 'route', ...event.data }
     case 'worker_prompt':
-      return { ...base, kind: 'prompt', attempt: event.attempt, ...event.data }
+      return { ...base, kind: 'prompt', ...event.data }
     case 'turn_end':
       return { ...base, kind: 'turnEnd', ...event.data }
     case 'attempt_end':
@@ -218,7 +225,7 @@ function foldWorker(
         return last
       }
       if (!data.text) return null
-      return { ...base, kind: 'text', text: data.text, step, attempt: event.attempt }
+      return { ...base, kind: 'text', text: data.text, step }
     }
     case 'tool_call':
     case 'tool_result': {
@@ -232,7 +239,7 @@ function foldWorker(
         if (tool.state !== 'calling') open.delete(id)
         return known
       }
-      const item: Draft = { ...base, kind: 'tool', tool, step, attempt: event.attempt }
+      const item: Draft = { ...base, kind: 'tool', tool, step }
       if (tool.state === 'calling') open.set(id, item)
       return item
     }

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, shallowReactive } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowReactive, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import type { TaskSummary } from '@/api/types'
@@ -20,7 +20,11 @@ import TimelineEntry from './TimelineEntry.vue'
  * (useVirtualList). The view follows new output while it is scrolled to the end; scrolling up stops that and
  * shows "Jump to latest". Older events load on demand from the top.
  */
-const props = defineProps<{ task: TaskSummary }>()
+const props = defineProps<{
+  task: TaskSummary
+  /** A timeline key to scroll to and highlight (a step opened from Tree or Graph). */
+  reveal?: string | null
+}>()
 
 const { t } = useI18n()
 const tasks = useTasksStore()
@@ -45,11 +49,13 @@ const keys = stableComputed(
 const byKey = computed(() => new Map(items.value.map((item) => [item.key, item])))
 
 const scroller = ref<HTMLElement | null>(null)
-const { visible, padTop, padBottom, following, measure, scrollToEnd } = useVirtualList({
-  scroller,
-  keys,
-  estimate: 32,
-})
+const { visible, padTop, padBottom, following, measure, scrollToEnd, scrollToKey } = useVirtualList(
+  {
+    scroller,
+    keys,
+    estimate: 32,
+  },
+)
 /** The rendered window: the "load earlier" row or an item, by key. */
 const rows = computed(() =>
   visible.value.map((key) => ({
@@ -67,6 +73,28 @@ function toggle(key: string) {
   if (toggled.has(key)) toggled.delete(key)
   else toggled.add(key)
 }
+
+// Reveal: wait until the item is in the list (the log may still be loading), then scroll and highlight it.
+const flash = ref<string | null>(null)
+let pendingReveal = props.reveal ?? null
+let flashTimer: ReturnType<typeof setTimeout> | undefined
+function tryReveal() {
+  if (!pendingReveal || !scrollToKey(pendingReveal)) return
+  flash.value = pendingReveal
+  pendingReveal = null
+  clearTimeout(flashTimer)
+  flashTimer = setTimeout(() => (flash.value = null), 1600)
+}
+watch(
+  () => props.reveal,
+  (key) => {
+    pendingReveal = key ?? null
+    tryReveal()
+  },
+)
+watch(keys, () => void nextTick(tryReveal), { flush: 'post' })
+onMounted(() => void nextTick(tryReveal))
+onBeforeUnmount(() => clearTimeout(flashTimer))
 
 const unregister = useCommandsStore().register({
   id: 'terminal.end',
@@ -101,7 +129,11 @@ onBeforeUnmount(unregister)
             {{ t('terminal.earlier') }}
           </Button>
         </div>
-        <div v-else-if="row.item" :ref="(el) => measure(el, row.key)">
+        <div
+          v-else-if="row.item"
+          :ref="(el) => measure(el, row.key)"
+          :class="{ term__flash: row.key === flash }"
+        >
           <TimelineEntry
             :item="row.item"
             :task-id="taskId"
@@ -162,6 +194,27 @@ onBeforeUnmount(unregister)
 .term__scroll:focus-visible {
   outline: none;
   box-shadow: inset 0 0 0 var(--focus-ring-width) var(--border-focus);
+}
+
+.term__flash {
+  animation: term-flash 1.6s ease-out;
+}
+
+@keyframes term-flash {
+  from {
+    background: var(--accent-soft);
+  }
+
+  to {
+    background: transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .term__flash {
+    animation: none;
+    background: var(--accent-soft);
+  }
 }
 
 .term__earlier {

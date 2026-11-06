@@ -64,6 +64,18 @@ export function useVirtualList(options: VirtualListOptions) {
     top.value = el.scrollTop
   }
 
+  /** Scrolls so the item starts near the top; false when the key is not in the list. */
+  function scrollToKey(key: string): boolean {
+    const el = scroller.value
+    const index = keys.value.indexOf(key)
+    if (!el || index < 0) return false
+    following.value = false
+    el.scrollTop = Math.max(0, (offsets.value[index] ?? 0) - 48)
+    top.value = el.scrollTop
+    rememberAnchor()
+    return true
+  }
+
   // After the layout changes (items added, measured, loaded above), keep the end or the anchor in view.
   watch(
     offsets,
@@ -153,5 +165,5 @@ export function useVirtualList(options: VirtualListOptions) {
     if (frame) cancelAnimationFrame(frame)
   })
 
-  return { range, visible, padTop, padBottom, following, measure, scrollToEnd }
+  return { range, visible, padTop, padBottom, following, measure, scrollToEnd, scrollToKey }
 }

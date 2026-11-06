@@ -285,7 +285,14 @@ function makeTask(spec) {
 function pushEvent(task, type, data, emit = true) {
   const s = task.summary
   const turn = task.turns.at(-1)
-  const event = { seq: task.events.length + 1, ts: now(), taskId: s.id, type, data }
+  // Seeded turns run on their own clock from the task's creation, a few seconds per event, so the Graph has a
+  // realistic time axis; live events use the wall clock.
+  let ts = now()
+  if (!emit && task.seedClock !== undefined) {
+    task.seedClock += 1500 + Math.floor(rand() * 7000)
+    ts = new Date(Math.min(task.seedClock, Date.now())).toISOString()
+  }
+  const event = { seq: task.events.length + 1, ts, taskId: s.id, type, data }
   if (turn) {
     event.turn = turn.n
     event.attempt = Math.max(1, turn.attempts.length)
@@ -605,6 +612,7 @@ function playTurn(
   status = 'ok',
   response = 'Done. The change is in place and the tests pass.',
 ) {
+  task.seedClock ??= Date.parse(task.summary.createdAt)
   startTurn(task, message)
   for (const step of steps) scriptStep(task, step, false)
   endTurn(task, status, response)

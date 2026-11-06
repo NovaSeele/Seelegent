@@ -9,6 +9,7 @@ import type locale from './locales/en/locale.json'
 import type nav from './locales/en/nav.json'
 import type pages from './locales/en/pages.json'
 import type palette from './locales/en/palette.json'
+import type process from './locales/en/process.json'
 import type settings from './locales/en/settings.json'
 import type task from './locales/en/task.json'
 import type tasks from './locales/en/tasks.json'
@@ -29,6 +30,7 @@ export const NAMESPACES = [
   'tasks',
   'task',
   'terminal',
+  'process',
 ] as const
 export type Namespace = (typeof NAMESPACES)[number]
 
@@ -43,6 +45,7 @@ export interface MessageSchema {
   tasks: typeof tasks
   task: typeof task
   terminal: typeof terminal
+  process: typeof process
 }
 
 declare module 'vue-i18n' {

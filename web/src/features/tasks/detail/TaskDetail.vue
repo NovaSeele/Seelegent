@@ -39,6 +39,9 @@ const isView = (value: unknown): value is TaskView =>
 const view = ref<TaskView>(isView(route.query.view) ? route.query.view : readStored(TASK_VIEW))
 watch(view, (value) => {
   writeStored(TASK_VIEW, value)
+  // A reveal or file pick is for the next time that view opens from a link, not for later tab switches.
+  if (value !== 'terminal') revealKey.value = null
+  if (value !== 'git') gitPath.value = null
   if (route.name === 'tasks' && route.query.view && route.query.view !== value) {
     void router.replace({ query: { ...route.query, view: undefined } })
   }
@@ -53,6 +56,15 @@ watch(
 const tabs = computed(() =>
   TASK_VIEWS.map((value) => ({ value, label: t(`task.views.${value}`), icon: VIEW_ICONS[value] })),
 )
+
+// A step opened from Tree or Graph scrolls the Terminal to it; a file from Files selects it in Git.
+const revealKey = ref<string | null>(null)
+const gitPath = ref<string | null>(null)
+function openIn(target: 'terminal' | 'git', value: string) {
+  if (target === 'terminal') revealKey.value = value
+  else gitPath.value = value
+  view.value = target
+}
 
 const dialog = ref<TaskDialog>(null)
 const composer = ref<InstanceType<typeof FollowupComposer> | null>(null)
@@ -118,7 +130,15 @@ const loadingFirst = computed(() => !summary.value && !error.value)
       role="tabpanel"
       :aria-labelledby="`task-view-tab-${view}`"
     >
-      <TaskViews :view="view" :task="summary" :detail="detail" />
+      <TaskViews
+        :view="view"
+        :task="summary"
+        :detail="detail"
+        :reveal="revealKey"
+        :git-path="gitPath"
+        @reveal="openIn('terminal', $event)"
+        @open-git="openIn('git', $event)"
+      />
     </div>
     <FollowupComposer ref="composer" :task="summary" :actions="actions" />
     <TaskDialogs v-model="dialog" :task="summary" :actions="actions" />
