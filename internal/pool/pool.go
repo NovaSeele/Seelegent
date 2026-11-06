@@ -25,8 +25,10 @@
 // windows reset (read fresh when possible), the provider's hint, or a default; accounts whose quota cannot be read
 // (API keys, backends without a quota reader) rest for passiveCooldownMinutes. A rest ends by itself, or earlier
 // when a later quota read shows the group usable again. A run refused for its sign-in marks the account signed
-// out (MarkAuthFailed) and asks for a background quota read to confirm; a good read clears the mark, a new key
-// clears it for an API-key account.
+// out (MarkAuthFailed) and asks for a background quota read to confirm. Any confirming read that does not itself
+// say "signed out" clears the mark: a good read, and also an inconclusive one (timeout, HTTP 5xx, format change),
+// because quota.Merge replaces the previous error with the new one. That is deliberate: a mark that only a clean
+// read could lift would stick while the quota source is down. A new key clears the mark of an API-key account.
 package pool
 
 import (
