@@ -190,4 +190,23 @@ describe('files model', () => {
       ],
     )
   })
+
+  it('folds case only for Windows paths', () => {
+    const windows = buildFiles(
+      [s('D:/app/Src/A.ts', 'read'), s('d:\\app\\src\\a.ts', 'edit'), s('src/a.TS', 'read')],
+      'D:/app',
+      undefined,
+    )
+    expect(windows.folders.flatMap((f) => f.files)).toHaveLength(1)
+    const posix = buildFiles(
+      [s('/srv/app/Readme.md', 'read'), s('/srv/app/README.md', 'edit'), s('readme.md', 'read')],
+      '/srv/app',
+      undefined,
+    )
+    expect(posix.folders.flatMap((f) => f.files.map((x) => x.rel)).sort()).toEqual([
+      'README.md',
+      'Readme.md',
+      'readme.md',
+    ])
+  })
 })

@@ -6,8 +6,8 @@
 
 const slashes = (path: string) => path.replace(/\\/g, '/')
 
-/** Windows paths compare without case; others as they are. */
-const looksWindows = (path: string) => /^[a-z]:\//i.test(path) || path.startsWith('//')
+/** A Windows path (drive letter or UNC, either separator): those compare without case, others as they are. */
+export const looksWindows = (path: string) => /^[a-z]:[\\/]/i.test(path) || /^[\\/]{2}/.test(path)
 
 /** `path` relative to `base` when it lies inside it, otherwise the path with '/' separators. */
 export function relativeTo(path: string, base: string | undefined): string {

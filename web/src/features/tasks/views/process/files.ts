@@ -3,7 +3,7 @@
  * folder. Paths are shown relative to the task folder (display only); `gitPath` is the same file relative to the
  * repository root, the form the Git view and the daemon use, and is set only for files inside the repository.
  */
-import { dirName, joinPath, relativeTo } from '@/lib/paths'
+import { dirName, joinPath, looksWindows, relativeTo } from '@/lib/paths'
 
 import type { Step } from './process'
 
@@ -45,7 +45,8 @@ export function buildFiles(
     if (!step.path || !step.op) continue
     const absolute = isAbsolute(step.path)
     const rel = absolute ? relativeTo(step.path, cwd) : step.path.replace(/\\/g, '/')
-    const key = rel.toLowerCase()
+    // One row per file: Windows paths fold case (C:\A.ts and c:/a.ts are the same file), others never do.
+    const key = looksWindows(absolute ? step.path : cwd) ? rel.toLowerCase() : rel
     let row = rows.get(key)
     if (!row) {
       const outside = absolute ? rel === step.path.replace(/\\/g, '/') : rel.startsWith('../')
