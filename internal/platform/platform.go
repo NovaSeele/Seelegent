@@ -1,6 +1,8 @@
 // Package platform isolates what differs between operating systems: starting processes without a console window,
-// controlling a whole process tree (a Windows Job Object or a Unix process group), checking whether a process is
-// alive, linking files into a profile, and opening a URL or a terminal window for an interactive sign-in.
+// controlling a whole process tree (a Windows Job Object; on Unix a process group plus the descendants by parent
+// id, with a child subreaper on Linux), describing a worker's tree so that another process can list it and tell
+// whether a TCP connection came from it (WorkerTree, SocketOwnerInTrees), checking whether a process is alive,
+// linking files into a profile, and opening a URL or a terminal window for an interactive sign-in.
 //
 // Everything else in Seelegent stays free of build tags; it calls the functions here.
 package platform

@@ -1,0 +1,199 @@
+//go:build windows
+
+package platform
+
+import (
+	"encoding/binary"
+	"errors"
+	"fmt"
+	"net/netip"
+	"os"
+	"slices"
+	"unsafe"
+
+	"golang.org/x/sys/windows"
+)
+
+// jobObjectQuery is the JOB_OBJECT_QUERY access right: enough to list a job's processes, not to change or end it.
+const jobObjectQuery = 0x0004
+
+// jobPIDList is the head of JOBOBJECT_BASIC_PROCESS_ID_LIST; the ids follow as ULONG_PTRs.
+type jobPIDList struct {
+	NumberOfAssignedProcesses uint32
+	NumberOfProcessIDsInList  uint32
+	ProcessIDList             [1]uintptr
+}
+
+// pids opens the named job for a moment and lists its processes.
+func (w *WorkerTree) pids() ([]int, error) {
+	if w.Job == "" {
+		return nil, fmt.Errorf("worker tree %q: no job name", w.ID)
+	}
+	name, err := windows.UTF16PtrFromString(w.Job)
+	if err != nil {
+		return nil, fmt.Errorf("worker tree %q: %w", w.ID, err)
+	}
+	r, _, callErr := procOpenJobObjectW.Call(jobObjectQuery, 0, uintptr(unsafe.Pointer(name)))
+	job := windows.Handle(r)
+	if job == 0 {
+		if errors.Is(callErr, windows.ERROR_FILE_NOT_FOUND) {
+			return nil, nil // the launcher closed the job: the tree has ended
+		}
+		return nil, fmt.Errorf("worker tree %q: open job: %w", w.ID, callErr)
+	}
+	defer func() { _ = windows.CloseHandle(job) }()
+	return jobPIDs(job)
+}
+
+// jobPIDs lists the processes of job, growing the buffer while processes are added between calls.
+func jobPIDs(job windows.Handle) ([]int, error) {
+	const word = unsafe.Sizeof(uintptr(0))
+	head := int(unsafe.Offsetof(jobPIDList{}.ProcessIDList) / word)
+	capacity := 64
+	for range 8 {
+		buf := make([]uintptr, head+capacity)
+		list := (*jobPIDList)(unsafe.Pointer(&buf[0]))
+		err := windows.QueryInformationJobObject(job, windows.JobObjectBasicProcessIdList,
+			uintptr(unsafe.Pointer(&buf[0])), uint32(uintptr(len(buf))*word), nil) //nolint:gosec // small buffer
+		if err != nil && !errors.Is(err, windows.ERROR_MORE_DATA) {
+			return nil, fmt.Errorf("list job processes: %w", err)
+		}
+		if err == nil && list.NumberOfProcessIDsInList >= list.NumberOfAssignedProcesses {
+			ids := buf[head : head+int(list.NumberOfProcessIDsInList)]
+			out := make([]int, len(ids))
+			for i, id := range ids {
+				out[i] = int(id)
+			}
+			return out, nil
+		}
+		capacity = max(capacity*2, int(list.NumberOfAssignedProcesses)+16)
+	}
+	return nil, errors.New("list job processes: the job keeps growing")
+}
+
+// procStart returns the creation time of process pid as a FILETIME.
+func procStart(pid int) (uint64, error) {
+	if pid <= 0 {
+		return 0, fmt.Errorf("process start time: invalid pid %d", pid)
+	}
+	h, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION, false, uint32(pid)) //nolint:gosec // pid > 0
+	if err != nil {
+		return 0, fmt.Errorf("process %d: %w", pid, err)
+	}
+	defer func() { _ = windows.CloseHandle(h) }()
+	var created, exited, kernel, user windows.Filetime
+	if err := windows.GetProcessTimes(h, &created, &exited, &kernel, &user); err != nil {
+		return 0, fmt.Errorf("process %d: %w", pid, err)
+	}
+	return uint64(created.HighDateTime)<<32 | uint64(created.LowDateTime), nil
+}
+
+// Functions and constants of the IP helper API that golang.org/x/sys/windows does not wrap.
+var (
+	modiphlpapi             = windows.NewLazySystemDLL("iphlpapi.dll")
+	procGetExtendedTCPTable = modiphlpapi.NewProc("GetExtendedTcpTable")
+)
+
+const (
+	// tcpTableOwnerPIDConnections is TCP_TABLE_OWNER_PID_CONNECTIONS: connected sockets with their owner.
+	tcpTableOwnerPIDConnections = 4
+	// tcpRowSize and tcp6RowSize are the sizes of MIB_TCPROW_OWNER_PID and MIB_TCP6ROW_OWNER_PID.
+	tcpRowSize  = 24
+	tcp6RowSize = 56
+)
+
+// socketOwnerInTrees finds the owner of the client socket in the TCP tables and looks for it in the trees' jobs.
+func socketOwnerInTrees(local, remote netip.AddrPort, trees []*WorkerTree) (id string, isWorker bool, err error) {
+	owner, err := clientSocketOwner(local, remote)
+	if err != nil {
+		return "", true, err
+	}
+	if owner == os.Getpid() {
+		return "", false, nil
+	}
+	for _, w := range trees {
+		pids, err := w.PIDs()
+		if err != nil {
+			return w.ID, true, err
+		}
+		if slices.Contains(pids, owner) {
+			return w.ID, true, nil
+		}
+	}
+	return "", false, nil
+}
+
+// clientSocketOwner returns the process that owns the TCP socket bound to remote and connected to local. A
+// socket that is gone or has no owner any more (pid 0) gives ErrSocketOwnerUnknown.
+func clientSocketOwner(local, remote netip.AddrPort) (int, error) {
+	var readErr error
+	for _, family := range []uint32{windows.AF_INET, windows.AF_INET6} {
+		table, err := tcpTable(family)
+		if err != nil {
+			readErr = err
+			continue
+		}
+		if pid := findOwner(table, family, remote, local); pid != 0 {
+			return pid, nil
+		}
+	}
+	if readErr != nil {
+		return 0, fmt.Errorf("%w: %w", ErrSocketOwnerUnknown, readErr)
+	}
+	return 0, ErrSocketOwnerUnknown
+}
+
+// tcpTable returns the raw MIB_TCPTABLE_OWNER_PID or MIB_TCP6TABLE_OWNER_PID of family.
+func tcpTable(family uint32) ([]byte, error) {
+	size := uint32(16 << 10)
+	for range 8 {
+		buf := make([]byte, size)
+		r, _, _ := procGetExtendedTCPTable.Call(uintptr(unsafe.Pointer(&buf[0])), uintptr(unsafe.Pointer(&size)), 0,
+			uintptr(family), tcpTableOwnerPIDConnections, 0)
+		switch windows.Errno(r) { // the function returns a Win32 error code
+		case 0:
+			return buf[:size], nil
+		case windows.ERROR_INSUFFICIENT_BUFFER:
+			size += 4 << 10 // connections may be added before the next call
+		default:
+			return nil, fmt.Errorf("read tcp table: %w", windows.Errno(r))
+		}
+	}
+	return nil, errors.New("read tcp table: the table keeps growing")
+}
+
+// findOwner returns the owner pid of the row of table whose local address is from and remote address is to, or 0.
+// Ports are stored in network byte order in the low 16 bits of a DWORD, addresses as raw bytes.
+func findOwner(table []byte, family uint32, from, to netip.AddrPort) int {
+	if len(table) < 4 {
+		return 0
+	}
+	n := int(binary.LittleEndian.Uint32(table))
+	rows := table[4:]
+	rowSize := tcpRowSize
+	if family == windows.AF_INET6 {
+		rowSize = tcp6RowSize
+	}
+	port := func(b []byte) uint16 { return binary.BigEndian.Uint16(b) }
+	for i := 0; i < n && (i+1)*rowSize <= len(rows); i++ {
+		row := rows[i*rowSize : (i+1)*rowSize]
+		var l, r netip.AddrPort
+		var pid uint32
+		if family == windows.AF_INET {
+			// dwState, dwLocalAddr, dwLocalPort, dwRemoteAddr, dwRemotePort, dwOwningPid
+			l = netip.AddrPortFrom(netip.AddrFrom4([4]byte(row[4:8])), port(row[8:10]))
+			r = netip.AddrPortFrom(netip.AddrFrom4([4]byte(row[12:16])), port(row[16:18]))
+			pid = binary.LittleEndian.Uint32(row[20:24])
+		} else {
+			// ucLocalAddr[16], dwLocalScopeId, dwLocalPort, ucRemoteAddr[16], dwRemoteScopeId, dwRemotePort,
+			// dwState, dwOwningPid
+			l = netip.AddrPortFrom(netip.AddrFrom16([16]byte(row[0:16])).Unmap(), port(row[20:22]))
+			r = netip.AddrPortFrom(netip.AddrFrom16([16]byte(row[24:40])).Unmap(), port(row[44:46]))
+			pid = binary.LittleEndian.Uint32(row[52:56])
+		}
+		if l == from && r == to && pid != 0 {
+			return int(pid)
+		}
+	}
+	return 0
+}

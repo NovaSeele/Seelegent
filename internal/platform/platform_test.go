@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -52,6 +53,32 @@ func TestMain(m *testing.M) {
 		waitFile(pidFile + ".child")
 		writePids(pidFile, os.Getpid(), child.Process.Pid)
 		os.Exit(0)
+	case "connect":
+		// Starts a child that connects to the address and keeps the connection open.
+		pidFile, addr := os.Args[len(os.Args)-2], os.Args[len(os.Args)-1]
+		child := exec.CommandContext(context.Background(), selfExe(), pidFile+".child", addr)
+		child.Env = append(os.Environ(), roleEnv+"=dial")
+		if err := child.Start(); err != nil {
+			os.Exit(3)
+		}
+		waitFile(pidFile + ".child")
+		writePids(pidFile, os.Getpid(), child.Process.Pid)
+		time.Sleep(time.Minute)
+		os.Exit(0)
+	case "dial":
+		pidFile, addr := os.Args[len(os.Args)-2], os.Args[len(os.Args)-1]
+		conn, err := (&net.Dialer{}).DialContext(context.Background(), "tcp", addr)
+		if err != nil {
+			os.Exit(3)
+		}
+		writePids(pidFile, os.Getpid())
+		_, _ = conn.Write([]byte("x"))
+		time.Sleep(time.Minute)
+		os.Exit(0)
+	default:
+		if runOSRole(os.Getenv(roleEnv)) {
+			os.Exit(0)
+		}
 	}
 	os.Exit(2)
 }
