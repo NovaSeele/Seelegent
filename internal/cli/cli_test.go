@@ -4,10 +4,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/NovaSeele/Seelegent/internal/buildinfo"
+	"github.com/NovaSeele/Seelegent/internal/launch"
 )
 
 var testInfo = buildinfo.Info{
@@ -100,5 +103,30 @@ func TestRunExitCodes(t *testing.T) {
 				t.Errorf("stderr = %q, want prefix %q", errOut.String(), tt.wantStderr)
 			}
 		})
+	}
+}
+
+func TestLaunchCommandIsHidden(t *testing.T) {
+	out, _, err := execute(t, "--help")
+	if err != nil {
+		t.Fatalf("--help: %v", err)
+	}
+	if strings.Contains(out, launchCommandName) {
+		t.Errorf("help lists the internal %s command:\n%s", launchCommandName, out)
+	}
+}
+
+func TestLaunchCommandWithoutSpec(t *testing.T) {
+	dir := t.TempDir()
+	if _, _, err := execute(t, launchCommandName, dir); err == nil {
+		t.Fatal("__launch without a spec should fail")
+	}
+	data, err := os.ReadFile(filepath.Join(dir, launch.ExitFile))
+	if err != nil {
+		t.Fatalf("exit record: %v", err)
+	}
+	var ex launch.Exit
+	if err := json.Unmarshal(data, &ex); err != nil || ex.Reason != launch.ReasonStartFailed {
+		t.Fatalf("exit record %s (%v), want start_failed", data, err)
 	}
 }
