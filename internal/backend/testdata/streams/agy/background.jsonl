@@ -1,0 +1,6 @@
+{"event":"init","conversation_id":"9d9d9d9d-0000-4000-8000-000000000001","init":{"model":"gemini-3.8-flash-medium"}}
+{"event":"step_update","step_update":{"step_index":1,"step_type":"tool","state":"CALLING","tool_name":"run_command","tool_info":{"parameters":{"CommandLine":"npm run dev","Cwd":"/work/web","WaitMsBeforeAsync":500}}}}
+{"event":"step_update","step_update":{"step_index":1,"step_type":"tool","state":"DONE","tool_name":"run_command","tool_info":{"parameters":{"CommandLine":"npm run dev","Cwd":"/work/web","WaitMsBeforeAsync":500},"output":"Background command started with id 1"}}}
+{"event":"step_update","step_update":{"step_index":2,"step_type":"agent_response","state":"RUNNING","text_delta":"The dev server is running."}}
+#!stderr [agy] root agent idle; waiting up to 45m0s for 1 background task(s) to finish
+#!exit 0

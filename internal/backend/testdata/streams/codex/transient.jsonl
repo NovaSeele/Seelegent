@@ -1,0 +1,6 @@
+{"type":"thread.started","thread_id":"0199a3f2-0000-7000-8000-00000000beef"}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"Checking the tests."}}
+{"type":"error","message":"stream error: stream disconnected before completion: error sending request for url (https://api.example.test/v1/responses)"}
+#!stderr 2026-11-06T10:00:00Z ERROR codex_exec: exceeded retry limit, last status: 503 Service Unavailable
+#!exit 1

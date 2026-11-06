@@ -1,0 +1,5 @@
+{"event":"init","conversation_id":"77777777-0000-4000-8000-000000000002","init":{"model":"gemini-3.8-flash-medium"}}
+{"event":"step_update","step_update":{"step_index":1,"step_type":"tool","state":"DONE","tool_name":"run_command","tool_info":{"parameters":{"CommandLine":"go test ./..."},"output":"--- FAIL: TestQuota (0.00s)\n    quota_test.go:429: signing in with design in assigning: 403 forbidden\n"}}}
+#!stderr quota_test.go:429: signing in with design in assigning: 401 forbidden unauthorized
+{"event":"result","result":{"status":"ERROR","error":"model returned an empty response"}}
+#!exit 1
