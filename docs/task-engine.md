@@ -47,13 +47,20 @@ append the events in **one transaction**, then publish on the bus. The log and t
    accounts that needed a sign-in this turn or failed transiently more than twice). No account at all: the task is
    `waiting_quota` with `waiting: no_account` and a blocked flag for the user, and looks again when the pool changes or
    after a minute.
+   A hand-back turn always waits for the conversation's own account instead of moving.
 2. **Brief.** The same conversation gets a short continuation; a fresh conversation (first attempt, another account,
    or a retry that never got a conversation) gets the full brief from `internal/brief`, with role, project memory,
-   review history, constitution, earlier turns, prerequisite context, and the "you continue an interrupted task"
-   section when an attempt came before.
+   review history, constitution, the git baseline, earlier turns, prerequisite context, and the "you continue an
+   interrupted task" section when an attempt came before. Before the first attempt of a task the baseline is taken:
+   `git status --porcelain` (literal pathspecs, no shell, 20 s timeout) lists the files under the task folder that
+   already have uncommitted changes, and the brief tells the worker not to revert them. A retry on the same
+   conversation resends the request itself when the failed attempt never reported a session, and otherwise the retry
+   note together with the request, so a followup is never lost.
 3. **Launch.** `account.Manager.Env` builds the environment (an API key that is missing is an `auth` outcome, not an
    engine error), the backend builds the command, and `launch.Start` runs it under the detached launcher in
-   `tasks/<id>/t<turn>-a<n>/launch`.
+   `tasks/<id>/t<turn>-a<n>/launch`. The launch context ends only on a cancel or a takeover: a daemon that stops
+   during a launch leaves the attempt open for the next daemon, and an attempt cancelled from outside the engine
+   counts as interrupted, not as a cancelled task.
 4. **Follow.** The stream and stderr are tailed from the start. Message deltas of one step are **coalesced for 250 ms**
    and written as one `worker` event; any other event flushes them first. Each write carries the stream and stderr
    offsets it covers, committed in the same transaction (`attempts.data.streamOffset`, `stderrOffset`).
@@ -84,13 +91,14 @@ and a background quota read of the account is requested.
 - `background_wait`: the CLI waits for a command it started in the background.
 - `info` / `review`: a finished turn waits for the lead's verdict.
 
-A watcher re-checks running tasks every 30 s and finished ones every 10 min (flags decay after
+A watcher re-checks running tasks every 30 s and finished ones that still carry a flag every 10 min (flags decay after
 `attentionDecayHours`). It only raises and clears flags; it never stops a worker. A dismissed flag comes back only
 when the worker produces something new or a new turn starts.
 
 ## Waits and the bus
 
-All waits share one notifier (`Bus.Changed`): no listener per wait. A wait ends when its tasks are finished (all, or
+All waits share one notifier: each wait registers for its own tasks (`Bus.TasksChanged`) and wakes only when one of
+their records changes. A wait ends when its tasks are finished (all, or
 with `any` the first), when a still-pending task **newly** needs the lead (flags raised before the wait began do
 not count), on its timeout, or when its context ends. Ending a wait never touches a task (a cancelled MCP wait used
 to cancel workers). SSE subscribers get bounded buffers and are told when they fell behind.
@@ -108,8 +116,11 @@ its message, if any, joins the first request.
 `Takeover` marks the task `manual`, stops the run and waits for the worker to exit (no worker and console in one
 conversation), then opens a console that resumes the conversation with the task's own backend and account. The
 console counts on the account's slots. When it ends, a hand-back turn runs on the same backend, account and
-conversation and asks the worker to summarize what the user did. A cancel during the takeover ends the task; the
-console then ends without a hand-back. After a restart the console is watched through its exit file.
+conversation and asks the worker to summarize what the user did. A cancel during the takeover ends the task and
+frees the console's slot at once; followups are refused until the console itself has ended, and it ends without a
+hand-back. On Linux and macOS the console script records exit code 129 when its window is closed (SIGHUP). The
+console's process (pid and start time) is stored; a console that is gone without an exit code ends the takeover with
+exit code 129, also when that is found after a restart. After a restart the console is watched again.
 
 ## Restart recovery
 
@@ -124,6 +135,8 @@ console then ends without a hand-back. After a restart the console is watched th
   brief.
 - A cancel the earlier daemon recorded is carried out; takeover consoles are watched again; dependents are
   re-evaluated.
+- An active task whose record cannot be read is logged and skipped, so the others still recover;
+  `Service.Unreadable` lists it for doctor.
 
 `Close` stops following and returns; workers keep running under their launchers.
 
