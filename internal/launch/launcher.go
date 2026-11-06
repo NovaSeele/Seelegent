@@ -87,7 +87,10 @@ func supervise(ctx context.Context, f Files, sf specFile) Exit {
 	wt := tree.WorkerTree(f.Dir)
 	ready := Ready{LauncherPID: os.Getpid(), LauncherStart: wt.RootStart, Job: wt.Job, WorkerPID: tree.Pid(), StartedAt: started}
 	if err := writeJSON(f.Ready, ready); err != nil {
-		appendLine(sf.Stderr, "launcher: write ready record: "+err.Error())
+		// Without the record a restarted daemon cannot know the worker's tree: do not run it unseen.
+		ex := failed(fmt.Errorf("write ready record: %w", err))
+		ex.StartedAt = started
+		return ex // the deferred Close stops the tree
 	}
 
 	waited := make(chan struct{})
