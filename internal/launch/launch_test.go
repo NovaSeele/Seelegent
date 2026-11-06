@@ -8,6 +8,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -56,7 +58,9 @@ func selfExe() string {
 }
 
 // runWorker runs the fake worker steps: print:<text>, partial:<text>, stderr:<text>, sleep:<ms>, env:<NAME>,
-// stdin, pid:<file>, spawn:<file> (a grandchild that writes its pid to file and sleeps), exit:<code>.
+// stdin, pid:<file>, spawn:<file> (a grandchild that writes its pid to file and sleeps), escape:<file> (the same,
+// daemonised: setsid + double fork on Unix, detached on Windows), escapeshort:<file> (a daemonised grandchild
+// that exits after 300 ms), exit:<code>.
 func runWorker(steps []string) int {
 	for _, s := range steps {
 		op, arg, _ := strings.Cut(s, ":")
@@ -82,6 +86,29 @@ func runWorker(steps []string) int {
 			if err := child.Start(); err != nil {
 				return 3
 			}
+		case "escape", "escapeshort":
+			// A daemonised grandchild: a detached intermediate (new session on Unix) starts it and exits at once.
+			fork := "fork:"
+			if op == "escapeshort" {
+				fork = "forkshort:"
+			}
+			mid := exec.CommandContext(context.Background(), selfExe(), "worker", fork+arg)
+			detach(mid)
+			if err := mid.Run(); err != nil {
+				return 3
+			}
+			waitPidFile(arg)
+		case "fork", "forkshort":
+			life := "sleep:60000"
+			if op == "forkshort" {
+				life = "sleep:300"
+			}
+			g := exec.CommandContext(context.Background(), selfExe(), "worker", "pid:"+arg, life)
+			detach(g)
+			if err := g.Start(); err != nil {
+				return 3
+			}
+			return 0 // without waiting: the grandchild is orphaned
 		case "exit":
 			code, _ := strconv.Atoi(arg)
 			return code
@@ -226,6 +253,92 @@ func TestCancelStopsWholeTree(t *testing.T) {
 	waitDead(t, r.WorkerPID, grandchild, r.LauncherPID)
 	if lines := collect(t, h, 0); len(lines) != 1 || lines[0].text != "working" {
 		t.Fatalf("lines %v", texts(lines))
+	}
+}
+
+// TestCancelStopsDaemonisedChild: a grandchild that left the worker's session and lost its parent still belongs
+// to the tree (Linux: adopted by the launcher as subreaper; Windows: in the job), the daemon side lists it through
+// Handle.Tree, and cancel stops it.
+func TestCancelStopsDaemonisedChild(t *testing.T) {
+	if !platform.WorkerTreesExact() {
+		t.Skip("worker trees are best effort on " + runtime.GOOS)
+	}
+	dir := filepath.Join(t.TempDir(), "a1")
+	childPid := filepath.Join(dir, "child.pid")
+	h, err := Start(context.Background(), testOptions(dir, "escape:"+childPid, "print:working", "sleep:60000"))
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	r, _ := h.Ready()
+	grandchild := readPid(t, childPid)
+	if !platform.ProcessAlive(grandchild) {
+		t.Fatal("daemonised grandchild not running")
+	}
+	if r.LauncherStart == 0 {
+		t.Fatalf("ready record without launcher start time: %+v", r)
+	}
+	var sf specFile
+	if err := readJSON(h.Files().Spec, &sf); err != nil || sf.Job != r.Job {
+		t.Fatalf("job name in launch.json %q, in ready.json %q (%v)", sf.Job, r.Job, err)
+	}
+	if (runtime.GOOS == "windows") != (r.Job != "") {
+		t.Fatalf("job name %q on %s", r.Job, runtime.GOOS)
+	}
+	tree, ok := h.Tree()
+	if !ok || tree.ID != dir {
+		t.Fatalf("Tree: %+v %v", tree, ok)
+	}
+	pids, err := tree.PIDs()
+	if err != nil || !slices.Contains(pids, grandchild) || !slices.Contains(pids, r.WorkerPID) {
+		t.Fatalf("tree pids %v (%v) should hold worker %d and grandchild %d", pids, err, r.WorkerPID, grandchild)
+	}
+	checkAdopted(t, grandchild, r.LauncherPID)
+
+	if err := h.Cancel(); err != nil {
+		t.Fatalf("Cancel: %v", err)
+	}
+	if ex := wait(t, h); ex.Reason != ReasonCanceled {
+		t.Fatalf("exit %+v, want canceled", ex)
+	}
+	waitDead(t, grandchild, r.WorkerPID, r.LauncherPID)
+	if left, err := tree.PIDs(); err != nil || len(left) != 0 {
+		t.Fatalf("tree of an ended launch: %v, %v", left, err)
+	}
+}
+
+// TestExitCodeWithDaemonisedChild: the worker exits 7 leaving a daemonised grandchild; the exit code is exact and
+// the grandchild ends with the turn.
+func TestExitCodeWithDaemonisedChild(t *testing.T) {
+	if !platform.WorkerTreesExact() {
+		t.Skip("worker trees are best effort on " + runtime.GOOS)
+	}
+	dir := filepath.Join(t.TempDir(), "a1")
+	childPid := filepath.Join(dir, "child.pid")
+	h, err := Start(context.Background(), testOptions(dir, "escape:"+childPid, "exit:7"))
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	ex := wait(t, h)
+	if ex.Reason != ReasonExited || ex.Code != 7 {
+		t.Fatalf("exit %+v, want exited with 7", ex)
+	}
+	waitDead(t, readPid(t, childPid))
+}
+
+func TestTreeBeforeReady(t *testing.T) {
+	dir := t.TempDir()
+	if err := writeJSON(FilesIn(dir).Spec, specFile{Spec: Spec{Argv: []string{"x"}}}); err != nil {
+		t.Fatal(err)
+	}
+	h, _ := Attach(dir)
+	if tree, ok := h.Tree(); ok {
+		t.Fatalf("no ready record and no job name: %+v", tree)
+	}
+	if err := writeJSON(FilesIn(dir).Spec, specFile{Spec: Spec{Argv: []string{"x"}}, Job: `Local\Seelegent-x`}); err != nil {
+		t.Fatal(err)
+	}
+	if tree, ok := h.Tree(); !ok || tree.Job != `Local\Seelegent-x` || tree.RootPID != 0 {
+		t.Fatalf("job name from launch.json: %+v %v", tree, ok)
 	}
 }
 
@@ -468,6 +581,16 @@ func TestDeliverLongLine(t *testing.T) {
 	})
 	if err != nil || string(rest) != "b" || next != 3 {
 		t.Fatalf("rest %q next %d err %v", rest, next, err)
+	}
+}
+
+// waitPidFile waits up to 10 s for path to hold a pid.
+func waitPidFile(path string) {
+	for i := 0; i < 500; i++ {
+		if data, err := os.ReadFile(path); err == nil && strings.TrimSpace(string(data)) != "" {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
 }
 

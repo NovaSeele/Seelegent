@@ -9,11 +9,17 @@
 //  1. takes an exclusive lock on launcher.lock and holds it for its whole life. The operating system releases the
 //     lock when the launcher exits or crashes, so "lock held" is a liveness test that cannot be fooled by a reused
 //     process id (the old version checked pids and sometimes started a second worker on the same conversation);
-//  2. starts the worker as the root of a process tree (platform.StartTree: a kill-on-close Job Object on Windows, a
-//     process group on Unix), with stdout appended to stream.jsonl and stderr to stderr.txt, and writes ready.json;
+//  2. starts the worker as the root of a worker process tree (platform.StartWorkerTree): on Windows a kill-on-close
+//     Job Object named after launch.json's job name (the start fails if that name already exists); on Linux a
+//     process group, with the launcher made a child subreaper so that descendants that double-fork or call setsid
+//     re-parent to the launcher and stay in the tree (the launcher reaps them, and waits for the worker itself
+//     with wait4 so the worker's exit code stays exact); on macOS and the BSDs a process group plus the launcher's
+//     descendants, best effort. Stdout is appended to stream.jsonl and stderr to stderr.txt; then it writes
+//     ready.json (with its own start time and the job name, which describe the tree: Handle.Tree);
 //  3. waits for the worker to exit, for the cancel file to appear (polled every 200 ms), for the timeout, or for
-//     its own context to end (SIGINT/SIGTERM on Unix). On cancel and timeout it stops the whole tree: SIGTERM to the
-//     group, SIGKILL after the grace period on Unix; the job is terminated on Windows;
+//     its own context to end (SIGINT/SIGTERM on Unix). On cancel and timeout it stops the whole tree: on Unix
+//     SIGTERM to the group and every descendant, SIGKILL after the grace period, repeated until nothing is left;
+//     the job is terminated on Windows;
 //  4. when the worker has exited, stops whatever the worker left running in its tree, writes exit.json atomically
 //     and releases the lock.
 //
@@ -24,7 +30,8 @@
 // run on until it ends by itself. Either way the daemon reports the launch as lost.
 //
 // The daemon side is Start (new launch), Attach (an existing launch, after a daemon restart), Handle.Tail (follow
-// the stream from a committed byte offset), Handle.Cancel and Handle.Wait.
+// the stream from a committed byte offset), Handle.Cancel, Handle.Wait and Handle.Tree (the worker's process tree,
+// for telling worker connections from the lead's: platform.SocketOwnerInTrees).
 package launch
 
 import (
@@ -82,6 +89,9 @@ type specFile struct {
 	Exit string `json:"exit"`
 	// Cancel is the file whose appearance asks the launcher to stop the worker tree.
 	Cancel string `json:"cancel"`
+	// Job is the name of the worker tree (platform.NewTreeName: the Windows Job Object `Local\Seelegent-<hex>`;
+	// empty on Unix). The daemon chooses it, so the tree can be found before ready.json exists.
+	Job string `json:"job,omitempty"`
 }
 
 // Reason says why a launch ended.
@@ -119,6 +129,11 @@ type Exit struct {
 type Ready struct {
 	// LauncherPID is the process id of the launcher.
 	LauncherPID int `json:"launcherPid"`
+	// LauncherStart is the launcher's start time (platform.ProcessStartTime), so that a reused LauncherPID is
+	// never taken for the launcher.
+	LauncherStart uint64 `json:"launcherStart,omitempty"`
+	// Job is the name of the worker tree the launcher created (see specFile.Job).
+	Job string `json:"job,omitempty"`
 	// WorkerPID is the process id of the worker (the root of its tree).
 	WorkerPID int `json:"workerPid"`
 	// StartedAt is when the worker started.

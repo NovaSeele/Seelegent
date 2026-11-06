@@ -66,23 +66,35 @@ func supervise(ctx context.Context, f Files, sf specFile) Exit {
 	if len(sf.Argv) == 0 {
 		return failed(errors.New("empty command"))
 	}
+	name := sf.Job
+	if name == "" { // a spec written before trees had names
+		var err error
+		if name, err = platform.NewTreeName(); err != nil {
+			return failed(err)
+		}
+	}
 	cmd, closeFiles, err := workerCommand(sf)
 	if err != nil {
 		return failed(err)
 	}
-	tree, err := platform.StartTree(cmd)
+	tree, err := platform.StartWorkerTree(cmd, name)
 	closeFiles()
 	if err != nil {
 		return failed(fmt.Errorf("start %s: %w", sf.Argv[0], err))
 	}
 	defer func() { _ = tree.Close() }()
 	started := time.Now().UTC()
-	if err := writeJSON(f.Ready, Ready{LauncherPID: os.Getpid(), WorkerPID: tree.Pid(), StartedAt: started}); err != nil {
+	wt := tree.WorkerTree(f.Dir)
+	ready := Ready{LauncherPID: os.Getpid(), LauncherStart: wt.RootStart, Job: wt.Job, WorkerPID: tree.Pid(), StartedAt: started}
+	if err := writeJSON(f.Ready, ready); err != nil {
 		appendLine(sf.Stderr, "launcher: write ready record: "+err.Error())
 	}
 
-	waited := make(chan error, 1)
-	go func() { waited <- tree.Wait() }()
+	waited := make(chan struct{})
+	go func() {
+		_ = tree.Wait() // the exit code comes from tree.ExitCode
+		close(waited)
+	}()
 
 	reason := ReasonExited
 	var timeout <-chan time.Time
@@ -105,11 +117,10 @@ func supervise(ctx context.Context, f Files, sf specFile) Exit {
 		}
 	}
 
-	var waitErr error
 loop:
 	for {
 		select {
-		case waitErr = <-waited:
+		case <-waited:
 			break loop
 		case <-ticker.C:
 			if reason == ReasonExited && exists(sf.Cancel) {
@@ -130,7 +141,7 @@ loop:
 	if err := tree.Close(); err != nil {
 		appendLine(sf.Stderr, "launcher: stop leftover processes: "+err.Error())
 	}
-	return Exit{Reason: reason, Code: exitCode(cmd, waitErr), StartedAt: started, EndedAt: time.Now().UTC()}
+	return Exit{Reason: reason, Code: tree.ExitCode(), StartedAt: started, EndedAt: time.Now().UTC()}
 }
 
 // workerCommand builds the worker command with its files. closeFiles releases the launcher's copies of the files
@@ -175,17 +186,6 @@ func workerCommand(sf specFile) (*exec.Cmd, func(), error) {
 		cmd.Stdin = stdin
 	}
 	return cmd, closeAll, nil
-}
-
-// exitCode returns the worker's exit code from the result of Wait.
-func exitCode(cmd *exec.Cmd, waitErr error) int {
-	if cmd.ProcessState != nil {
-		return cmd.ProcessState.ExitCode()
-	}
-	if waitErr != nil {
-		return -1
-	}
-	return 0
 }
 
 // appendLine appends a line to path, ignoring errors: it only feeds diagnostics.

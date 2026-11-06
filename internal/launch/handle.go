@@ -72,7 +72,11 @@ func Start(ctx context.Context, opts Options) (*Handle, error) {
 	if exists(f.Spec) {
 		return nil, fmt.Errorf("start launch: %s already holds a launch", f.Dir)
 	}
-	sf := specFile{Spec: opts.Spec, Stream: f.Stream, Stderr: f.Stderr, Exit: f.Exit, Cancel: f.Cancel}
+	job, err := platform.NewTreeName()
+	if err != nil {
+		return nil, fmt.Errorf("start launch: %w", err)
+	}
+	sf := specFile{Spec: opts.Spec, Stream: f.Stream, Stderr: f.Stderr, Exit: f.Exit, Cancel: f.Cancel, Job: job}
 	if err := writeJSON(f.Spec, sf); err != nil {
 		return nil, fmt.Errorf("start launch: %w", err)
 	}
@@ -136,6 +140,28 @@ func (h *Handle) Ready() (Ready, bool) {
 		return Ready{}, false
 	}
 	return r, true
+}
+
+// Tree describes the worker's process tree for platform.SocketOwnerInTrees and platform.WorkerTree.PIDs. Its ID is
+// the launch directory; callers that want another id (the task id) set it. On Unix the tree is known once the
+// worker runs (ready.json); on Windows already from the job name in launch.json. ok is false before that. The
+// description stays valid after a daemon restart; once the launch has ended it lists no processes.
+func (h *Handle) Tree() (tree *platform.WorkerTree, ok bool) {
+	t := &platform.WorkerTree{ID: h.files.Dir}
+	r, ready := h.Ready()
+	if ready {
+		t.RootPID, t.RootStart, t.Job = r.LauncherPID, r.LauncherStart, r.Job
+	}
+	if t.Job == "" {
+		var sf specFile
+		if err := readJSON(h.files.Spec, &sf); err == nil {
+			t.Job = sf.Job
+		}
+	}
+	if !ready && t.Job == "" {
+		return nil, false
+	}
+	return t, true
 }
 
 // Cancel asks the launcher to stop the whole worker process tree. It returns at once; Wait reports the end. It is
