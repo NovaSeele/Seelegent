@@ -41,6 +41,17 @@ func TestMain(m *testing.M) {
 	case "print":
 		fmt.Println(strings.Join(os.Args[1:], "|"))
 		os.Exit(3)
+	case "tree-owner":
+		// Starts a tree and dies without closing it, like a launcher that crashes.
+		pidFile := os.Args[len(os.Args)-1]
+		child := exec.CommandContext(context.Background(), selfExe(), pidFile+".child")
+		child.Env = append(os.Environ(), roleEnv+"=sleeper")
+		if _, err := StartTree(child); err != nil {
+			os.Exit(3)
+		}
+		waitFile(pidFile + ".child")
+		writePids(pidFile, os.Getpid(), child.Process.Pid)
+		os.Exit(0)
 	}
 	os.Exit(2)
 }
@@ -113,6 +124,23 @@ func waitDead(t *testing.T, pids ...int) {
 			time.Sleep(20 * time.Millisecond)
 		}
 	}
+}
+
+// The root of a tree dies with the tree's owner: the job is kill-on-close on Windows, the root gets the
+// parent-death signal on Linux. macOS and the BSDs have no equivalent.
+func TestTreeDiesWithOwner(t *testing.T) {
+	if runtime.GOOS != "windows" && runtime.GOOS != "linux" {
+		t.Skip("no parent-death signal on " + runtime.GOOS)
+	}
+	pidFile := filepath.Join(t.TempDir(), "pids")
+	if err := helper("tree-owner", pidFile).Run(); err != nil {
+		t.Fatalf("tree owner: %v", err)
+	}
+	pids := readPids(t, pidFile)
+	if len(pids) != 2 {
+		t.Fatalf("pids = %v", pids)
+	}
+	waitDead(t, pids[1])
 }
 
 func TestTreeKillStopsGrandchildren(t *testing.T) {

@@ -8,7 +8,8 @@ import (
 
 // Tree is a process started with StartTree together with every process it starts. Stopping the tree stops all of
 // them, however deep: on Windows they all belong to a Job Object that the Tree owns (with kill-on-close, so the tree
-// also dies if the owner of the Tree dies), on Unix they share a new process group.
+// also dies if the owner of the Tree dies), on Unix they share a new process group (on Linux the root process also
+// gets SIGKILL when the owner of the Tree dies; macOS and the BSDs have no such signal).
 //
 // Known limit on Unix: a descendant that moves itself into another session or process group (a daemonising
 // program) leaves the tree.
