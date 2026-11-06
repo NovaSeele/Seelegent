@@ -167,7 +167,7 @@ func TestTakeoverAndHandback(t *testing.T) {
 	h.consoles.exit(0, 0)
 	tk := h.waitStatus(sum.ID, StatusDone)
 	tu := tk.LastTurn()
-	if len(tk.Turns) != 2 || !tu.Handback || tu.HandbackOf != "The user renamed the handler." || tu.By != ByUser ||
+	if len(tk.Turns) != 2 || !tu.Handback || tu.HandbackText != "The user renamed the handler." || tu.By != ByUser ||
 		tu.Attempts[0].AccountID != acc.ID || !tu.Attempts[0].Continuing || tk.Manual || tk.Console != nil {
 		t.Fatalf("handback turn = %+v", tu)
 	}
@@ -271,7 +271,7 @@ func TestRestartDuringTakeover(t *testing.T) {
 	h.queue.Push(t, okScript("conv-z", "Handed back."))
 	h.start()
 	tk = h.waitStatus(sum.ID, StatusDone)
-	if len(tk.Turns) != 2 || tk.LastTurn().HandbackOf != "Handed back." {
+	if len(tk.Turns) != 2 || tk.LastTurn().HandbackText != "Handed back." {
 		t.Fatalf("turns = %+v", tk.LastTurn())
 	}
 	var end api.TakeoverData
@@ -329,8 +329,14 @@ func TestTakeoverWindowClosed(t *testing.T) {
 	tk := h.waitStatus(sum.ID, StatusDone)
 	var end api.TakeoverData
 	decode(t, eventsOf(h.events(sum.ID), api.EventTakeover)[1], &end)
-	if end.ExitCode == nil || *end.ExitCode != consoleExitClosed || tk.LastTurn().HandbackOf != "Handed back." {
+	if end.ExitCode == nil || *end.ExitCode != consoleExitClosed || tk.LastTurn().HandbackText != "Handed back." {
 		t.Fatalf("takeover end = %+v, turn = %+v", end, tk.LastTurn())
+	}
+	routes := eventsOf(h.events(sum.ID), api.EventRoute)
+	var route api.RouteData
+	decode(t, routes[len(routes)-1], &route)
+	if !strings.Contains(route.Reason, "hand-back") {
+		t.Fatalf("hand-back route = %+v", route)
 	}
 }
 
@@ -351,7 +357,7 @@ func TestRestartConsoleGone(t *testing.T) {
 	h.queue.Push(t, okScript("conv-g", "Back after the restart."))
 	h.start()
 	tk := h.waitStatus(sum.ID, StatusDone)
-	if len(tk.Turns) != 2 || tk.LastTurn().HandbackOf != "Back after the restart." {
+	if len(tk.Turns) != 2 || tk.LastTurn().HandbackText != "Back after the restart." {
 		t.Fatalf("turns = %+v", tk.LastTurn())
 	}
 }

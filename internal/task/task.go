@@ -198,8 +198,8 @@ type Turn struct {
 	DeniedActions   []string     `json:"deniedActions,omitempty"`
 	Usage           *event.Usage `json:"usage,omitempty"`
 	// Handback marks the turn that summarizes a takeover; it holds the summary once the turn ended.
-	Handback   bool   `json:"handback,omitempty"`
-	HandbackOf string `json:"handbackText,omitempty"`
+	Handback     bool   `json:"handback,omitempty"`
+	HandbackText string `json:"handbackText,omitempty"`
 	// BackgroundContinues counts the continuations after background waits (one per turn).
 	BackgroundContinues int `json:"backgroundContinues,omitempty"`
 

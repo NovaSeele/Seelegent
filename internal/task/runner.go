@@ -292,7 +292,12 @@ func (s *Service) newAttempt(r *run, t *Task, tu *Turn) (bool, error) {
 		Allowed: func(m string) bool { return policy.Allowed(m) == nil },
 	}
 	reason := "best free account"
-	if owner := t.AccountID; owner != "" && !slices.Contains(req.Exclude, owner) {
+	switch owner := t.AccountID; {
+	case owner == "" || slices.Contains(req.Exclude, owner):
+	case tu.Handback:
+		// Only the owner's conversation saw what the user did in the console: wait for it rather than move.
+		req.Account, reason = owner, "the hand-back summary needs the conversation's account"
+	default:
 		h, err := s.o.Pool.Handover(ctx, pool.HandoverInput{Current: owner, Class: classOf(tu.LastAttempt()),
 			Request: req})
 		if err != nil {
@@ -563,7 +568,7 @@ func (s *Service) finishAttempt(r *run, id string, turn, n int, accountID, model
 			evs = append(evs, s.endTurn(t, tu, TurnOK, o))
 			t.Status, t.Error = StatusDone, ""
 			if tu.Handback {
-				tu.HandbackOf = o.Response
+				tu.HandbackText = o.Response
 				evs = append(evs, NewEvent{Type: api.EventHandback, Turn: turn,
 					Data: api.HandbackData{Turn: turn, Response: o.Response}})
 			}

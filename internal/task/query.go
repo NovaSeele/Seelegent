@@ -35,7 +35,7 @@ func (s *Service) Get(ctx context.Context, id string) (api.TaskDetail, error) {
 			RequestedModel: tu.RequestedModel, Tier: tu.Tier, Effort: tu.Effort, StartedAt: api.FormatTime(tu.StartedAt),
 			EndedAt: api.FormatTime(tu.EndedAt), Response: tu.Response, Files: api.NonNil(tu.Files),
 			Commands: api.NonNil(tu.Commands), BlockedCommands: api.NonNil(tu.BlockedCommands),
-			DeniedActions: api.NonNil(tu.DeniedActions), Usage: api.UsageOf(tu.Usage), Handback: tu.HandbackOf,
+			DeniedActions: api.NonNil(tu.DeniedActions), Usage: api.UsageOf(tu.Usage), Handback: tu.HandbackText,
 			Attempts: make([]api.Attempt, 0, len(tu.Attempts))}
 		for _, a := range tu.Attempts {
 			at.Attempts = append(at.Attempts, api.Attempt{AccountID: a.AccountID, AccountLabel: a.AccountLabel,
