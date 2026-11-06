@@ -44,6 +44,9 @@ func (s *Service) Delegate(ctx context.Context, req api.DelegateRequest) (api.Ta
 	if req.Member != "" {
 		return api.TaskSummary{}, invalidf("department members are not available yet")
 	}
+	if err := unsupported(req.Gate, req.Verify, req.Lane, false); err != nil {
+		return api.TaskSummary{}, err
+	}
 	backendName := req.Backend
 	if backendName == "" {
 		backendName = config.BackendAgy
@@ -98,14 +101,15 @@ func (s *Service) Delegate(ctx context.Context, req api.DelegateRequest) (api.Ta
 		t.Spec, t.SpecOutside = spec, outside
 		taskIDs = spec.TaskIDs
 	}
+	afterMode := req.AfterMode
+	if afterMode == "" {
+		afterMode = AfterAccepted
+	}
+	if afterMode != AfterAccepted && afterMode != AfterDone {
+		return api.TaskSummary{}, invalidf("afterMode %q must be accepted or done", req.AfterMode)
+	}
+	t.AfterMode = afterMode
 	if len(req.After) > 0 {
-		mode := req.AfterMode
-		if mode == "" {
-			mode = AfterAccepted
-		}
-		if mode != AfterAccepted && mode != AfterDone {
-			return api.TaskSummary{}, invalidf("afterMode %q must be accepted or done", req.AfterMode)
-		}
 		seen := map[string]bool{}
 		for _, id := range req.After {
 			if seen[id] {
@@ -120,7 +124,6 @@ func (s *Service) Delegate(ctx context.Context, req api.DelegateRequest) (api.Ta
 			}
 			t.After = append(t.After, id)
 		}
-		t.AfterMode = mode
 		t.Status = StatusWaitingDeps
 		t.DepsReason = "waiting for " + strings.Join(t.After, ", ")
 	}
@@ -171,6 +174,9 @@ func (s *Service) Followup(ctx context.Context, id string, req api.FollowupReque
 	}
 	if by != ByLead && by != ByUser {
 		return api.TaskSummary{}, invalidf("by %q must be lead or user", req.By)
+	}
+	if err := unsupported(req.Gate, req.Verify, req.Lane, req.ForceLane); err != nil {
+		return api.TaskSummary{}, err
 	}
 	start := false
 	_, err := s.mutate(ctx, id, func(t *Task) ([]NewEvent, error) {
@@ -325,6 +331,20 @@ func (s *Service) setProfile(ctx context.Context, t *Task, id string) error {
 	}
 	t.Profile = &api.ProfileRef{ID: r.ID, Name: r.Name}
 	t.Prefer = slices.Clone(r.PreferredAccounts)
+	return nil
+}
+
+// unsupported refuses the options of later milestones (gates, verification, lanes) instead of ignoring them.
+// Turning gates or verification off is accepted: nothing runs them yet.
+func unsupported(gate, verify *bool, lane []string, forceLane bool) error {
+	switch {
+	case gate != nil && *gate:
+		return invalidf("gate is not supported yet")
+	case verify != nil && *verify:
+		return invalidf("verify is not supported yet")
+	case len(lane) > 0 || forceLane:
+		return invalidf("lane is not supported yet")
+	}
 	return nil
 }
 

@@ -134,7 +134,7 @@ func (s *Service) summary(t *Task) api.TaskSummary {
 		ParentID: t.ParentID, ContestID: t.ContestID, TicketID: t.TicketID, MeetingID: t.MeetingID,
 		LastEventSeq: t.LastEventSeq,
 	}
-	if sum.AfterMode == "" && len(t.After) > 0 {
+	if sum.AfterMode == "" { // tasks stored before afterMode was always set
 		sum.AfterMode = AfterAccepted
 	}
 	if tu := t.LastTurn(); tu != nil {

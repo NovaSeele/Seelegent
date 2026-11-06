@@ -235,6 +235,7 @@ func TestReportShapes(t *testing.T) {
 
 func TestDelegateValidation(t *testing.T) {
 	h := newHarness(t)
+	yes := true
 	rel := "relative/dir"
 	cases := []api.DelegateRequest{
 		{Prompt: " ", Cwd: h.cwd},
@@ -248,6 +249,10 @@ func TestDelegateValidation(t *testing.T) {
 		{Prompt: "x", Cwd: h.cwd, Spec: &api.SpecRequest{Dir: "specs/none"}},
 		{Prompt: "x", Cwd: h.cwd, Spec: &api.SpecRequest{}},
 		{Prompt: "x", Cwd: h.cwd, After: []string{"a"}, AfterMode: "whenever"},
+		{Prompt: "x", Cwd: h.cwd, AfterMode: "whenever"},
+		{Prompt: "x", Cwd: h.cwd, Gate: &yes},
+		{Prompt: "x", Cwd: h.cwd, Verify: &yes},
+		{Prompt: "x", Cwd: h.cwd, Lane: []string{"src"}},
 	}
 	for _, c := range cases {
 		if _, err := h.s.Delegate(t.Context(), c); !errors.Is(err, ErrInvalid) {
@@ -263,6 +268,14 @@ func TestDelegateValidation(t *testing.T) {
 	if got := title("", "# "+strings.Repeat("long ", 30)+"\nsecond"); len([]rune(got)) != titleChars ||
 		!strings.HasSuffix(got, "…") {
 		t.Errorf("title = %q", got)
+	}
+	no := false
+	if sum, err := h.s.Delegate(t.Context(), api.DelegateRequest{Prompt: "x", Cwd: h.cwd, Gate: &no, Verify: &no}); err != nil ||
+		sum.AfterMode != AfterAccepted {
+		t.Errorf("plain task = %+v, %v; want afterMode accepted", sum.AfterMode, err)
+	}
+	if _, err := h.s.Followup(t.Context(), "nope", api.FollowupRequest{Message: "m", Lane: []string{"x"}}); !errors.Is(err, ErrInvalid) {
+		t.Errorf("followup with a lane = %v", err)
 	}
 	if title("Given", "prompt") != "Given" {
 		t.Error("given title ignored")
