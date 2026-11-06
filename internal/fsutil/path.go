@@ -1,7 +1,7 @@
 package fsutil
 
 import (
-	"crypto/sha1"
+	"crypto/sha1" //nolint:gosec // the old project keys (roles.js) use SHA-1; not a security hash
 	"encoding/hex"
 	"fmt"
 	"os"

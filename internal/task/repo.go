@@ -1,0 +1,564 @@
+package task
+
+import (
+	"context"
+	"database/sql"
+	"encoding/base64"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/NovaSeele/Seelegent/internal/api"
+)
+
+// DB runs transactions on seelegent.db; *store.Store satisfies it.
+type DB interface {
+	Read(ctx context.Context, fn func(*sql.Tx) error) error
+	Write(ctx context.Context, fn func(*sql.Tx) error) error
+}
+
+// timeFormat is how times are stored: UTC, fixed width, so text order is time order.
+const timeFormat = "2006-01-02T15:04:05.000000000Z"
+
+func formatTime(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	return t.UTC().Format(timeFormat)
+}
+
+func parseTime(s string) (time.Time, error) {
+	if s == "" {
+		return time.Time{}, nil
+	}
+	t, err := time.Parse(time.RFC3339Nano, s)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("bad time %q: %w", s, err)
+	}
+	return t.UTC(), nil
+}
+
+// NewEvent is an event to append; the log assigns its seq.
+type NewEvent struct {
+	Type    api.EventType
+	Turn    int
+	Attempt int
+	Data    any
+	// TS is when it happened (the clock's now when zero).
+	TS time.Time
+}
+
+// Repo stores tasks, turns, attempts and the event log in SQLite. Every write that changes a task also appends the
+// events that describe the change, in the same transaction.
+type Repo struct {
+	db  DB
+	now func() time.Time
+}
+
+// NewRepo returns a repository on db. now is the clock (time.Now when nil).
+func NewRepo(db DB, now func() time.Time) *Repo {
+	if now == nil {
+		now = time.Now
+	}
+	return &Repo{db: db, now: now}
+}
+
+// Create inserts a new task with its turns and attempts and appends evs. It returns the stored events.
+func (r *Repo) Create(ctx context.Context, t *Task, evs []NewEvent) ([]api.TaskEvent, error) {
+	var out []api.TaskEvent
+	err := r.db.Write(ctx, func(tx *sql.Tx) error {
+		data, err := json.Marshal(t)
+		if err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `INSERT INTO tasks
+			(id, title, status, project_key, cwd, backend, data, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			t.ID, t.Title, string(t.Status), t.ProjectKey, t.Cwd, t.Backend, string(data),
+			formatTime(t.CreatedAt), formatTime(t.UpdatedAt)); err != nil {
+			return fmt.Errorf("insert task %s: %w", t.ID, err)
+		}
+		if err := saveTurns(ctx, tx, t, t.Turns); err != nil {
+			return err
+		}
+		out, err = r.append(ctx, tx, t, evs)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	r.applySeq(t, out)
+	return out, nil
+}
+
+// Save writes the task record and the given turns (with their attempts; every turn when turns is nil) and appends
+// evs, in one transaction. It returns the stored events. An attempt's prompt is written only when the attempt is
+// new; it never changes afterwards.
+func (r *Repo) Save(ctx context.Context, t *Task, turns []*Turn, evs []NewEvent) ([]api.TaskEvent, error) {
+	if turns == nil {
+		turns = t.Turns
+	}
+	var out []api.TaskEvent
+	err := r.db.Write(ctx, func(tx *sql.Tx) error {
+		data, err := json.Marshal(t)
+		if err != nil {
+			return err
+		}
+		res, err := tx.ExecContext(ctx, `UPDATE tasks SET title = ?, status = ?, project_key = ?, cwd = ?,
+			backend = ?, data = ?, updated_at = ? WHERE id = ?`,
+			t.Title, string(t.Status), t.ProjectKey, t.Cwd, t.Backend, string(data), formatTime(t.UpdatedAt), t.ID)
+		if err != nil {
+			return fmt.Errorf("save task %s: %w", t.ID, err)
+		}
+		if n, _ := res.RowsAffected(); n == 0 {
+			return fmt.Errorf("%w: task %s", ErrNotFound, t.ID)
+		}
+		if err := saveTurns(ctx, tx, t, turns); err != nil {
+			return err
+		}
+		out, err = r.append(ctx, tx, t, evs)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	r.applySeq(t, out)
+	return out, nil
+}
+
+// Append appends evs and, when a is not nil, writes attempt a of turn tu (its committed offsets), in one
+// transaction. The task record itself is not written.
+func (r *Repo) Append(ctx context.Context, t *Task, tu *Turn, a *Attempt, evs []NewEvent) ([]api.TaskEvent, error) {
+	var out []api.TaskEvent
+	err := r.db.Write(ctx, func(tx *sql.Tx) error {
+		if a != nil {
+			if err := saveAttempt(ctx, tx, t.ID, tu.N, a); err != nil {
+				return err
+			}
+		}
+		var err error
+		out, err = r.append(ctx, tx, t, evs)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	r.applySeq(t, out)
+	return out, nil
+}
+
+func (r *Repo) applySeq(t *Task, out []api.TaskEvent) {
+	if len(out) == 0 {
+		return
+	}
+	last := out[len(out)-1]
+	t.LastEventSeq = last.Seq
+	if at, err := api.ParseTime(last.TS); err == nil {
+		t.LastEventAt = at
+	}
+}
+
+func (r *Repo) append(ctx context.Context, tx *sql.Tx, t *Task, evs []NewEvent) ([]api.TaskEvent, error) {
+	if len(evs) == 0 {
+		return nil, nil
+	}
+	var seq int64
+	if err := tx.QueryRowContext(ctx, `SELECT last_event_seq FROM tasks WHERE id = ?`, t.ID).Scan(&seq); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, fmt.Errorf("%w: task %s", ErrNotFound, t.ID)
+		}
+		return nil, err
+	}
+	out := make([]api.TaskEvent, 0, len(evs))
+	var last time.Time
+	for _, e := range evs {
+		ts := e.TS
+		if ts.IsZero() {
+			ts = r.now()
+		}
+		ts = ts.UTC().Truncate(time.Millisecond)
+		data := e.Data
+		if data == nil {
+			data = api.EmptyData{}
+		}
+		raw, err := json.Marshal(data)
+		if err != nil {
+			return nil, fmt.Errorf("event %s: %w", e.Type, err)
+		}
+		seq++
+		if _, err := tx.ExecContext(ctx, `INSERT INTO task_events (task_id, seq, ts, type, turn, attempt, data)
+			VALUES (?, ?, ?, ?, ?, ?, ?)`, t.ID, seq, formatTime(ts), string(e.Type), e.Turn, e.Attempt,
+			string(raw)); err != nil {
+			return nil, fmt.Errorf("append event: %w", err)
+		}
+		last = ts
+		out = append(out, api.TaskEvent{Seq: seq, TS: api.FormatTime(ts), TaskID: t.ID, Turn: e.Turn,
+			Attempt: e.Attempt, Type: e.Type, Data: json.RawMessage(raw)})
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE tasks SET last_event_seq = ?, last_event_at = ? WHERE id = ?`,
+		seq, formatTime(last), t.ID); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func saveTurns(ctx context.Context, tx *sql.Tx, t *Task, turns []*Turn) error {
+	for _, tu := range turns {
+		data, err := json.Marshal(tu)
+		if err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `INSERT INTO turns (task_id, n, status, data) VALUES (?, ?, ?, ?)
+			ON CONFLICT (task_id, n) DO UPDATE SET status = excluded.status, data = excluded.data`,
+			t.ID, tu.N, tu.Status, string(data)); err != nil {
+			return fmt.Errorf("save turn %d of %s: %w", tu.N, t.ID, err)
+		}
+		for _, a := range tu.Attempts {
+			if err := saveAttempt(ctx, tx, t.ID, tu.N, a); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func saveAttempt(ctx context.Context, tx *sql.Tx, taskID string, turn int, a *Attempt) error {
+	data, err := json.Marshal(a)
+	if err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO attempts (task_id, turn, n, account_id, status, prompt, data)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT (task_id, turn, n) DO UPDATE SET account_id = excluded.account_id, status = excluded.status,
+		data = excluded.data`, taskID, turn, a.N, a.AccountID, a.Status, a.Prompt, string(data)); err != nil {
+		return fmt.Errorf("save attempt %d of turn %d of %s: %w", a.N, turn, taskID, err)
+	}
+	return nil
+}
+
+// Get returns the task with its turns and attempts (without prompts), or ErrNotFound.
+func (r *Repo) Get(ctx context.Context, id string) (*Task, error) {
+	var t *Task
+	err := r.db.Read(ctx, func(tx *sql.Tx) error {
+		row := tx.QueryRowContext(ctx, `SELECT `+taskColumns+` FROM tasks WHERE id = ?`, id)
+		var err error
+		t, err = scanTask(row)
+		if errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("%w: task %s", ErrNotFound, id)
+		}
+		if err != nil {
+			return err
+		}
+		return loadTurns(ctx, tx, []*Task{t})
+	})
+	if err != nil {
+		return nil, err
+	}
+	return t, nil
+}
+
+// IDs returns the ids of the tasks with one of the statuses, oldest first.
+func (r *Repo) IDs(ctx context.Context, statuses ...Status) ([]string, error) {
+	if len(statuses) == 0 {
+		return nil, nil
+	}
+	args := make([]any, len(statuses))
+	for i, s := range statuses {
+		args[i] = string(s)
+	}
+	var ids []string
+	err := r.db.Read(ctx, func(tx *sql.Tx) error {
+		//nolint:gosec // only placeholders are concatenated
+		rows, err := tx.QueryContext(ctx, `SELECT id FROM tasks WHERE status IN (`+placeholders(len(args))+`)
+			ORDER BY created_at, id`, args...)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = rows.Close() }()
+		for rows.Next() {
+			var id string
+			if err := rows.Scan(&id); err != nil {
+				return err
+			}
+			ids = append(ids, id)
+		}
+		return rows.Err()
+	})
+	return ids, err
+}
+
+// Query filters the task list.
+type Query struct {
+	Statuses   []Status
+	ProjectKey string
+	// Text matches the title or the id, case-insensitively.
+	Text string
+	// Limit is 1..200 (50 when 0).
+	Limit  int
+	Cursor string
+}
+
+// List returns one page of tasks, newest first by (created_at, id), and the cursor of the next page ("" on the
+// last page).
+func (r *Repo) List(ctx context.Context, q Query) ([]*Task, string, error) {
+	limit := q.Limit
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 200 {
+		return nil, "", invalidf("limit %d is over 200", limit)
+	}
+	var where []string
+	var args []any
+	if len(q.Statuses) > 0 {
+		for _, s := range q.Statuses {
+			if !ValidStatus(s) {
+				return nil, "", invalidf("unknown status %q", s)
+			}
+			args = append(args, string(s))
+		}
+		where = append(where, `status IN (`+placeholders(len(q.Statuses))+`)`)
+	}
+	if q.ProjectKey != "" {
+		where = append(where, `project_key = ?`)
+		args = append(args, q.ProjectKey)
+	}
+	if text := strings.TrimSpace(q.Text); text != "" {
+		where = append(where, `(title LIKE ? ESCAPE '\' OR id LIKE ? ESCAPE '\')`)
+		like := "%" + escapeLike(text) + "%"
+		args = append(args, like, like)
+	}
+	if q.Cursor != "" {
+		at, id, err := decodeCursor(q.Cursor)
+		if err != nil {
+			return nil, "", err
+		}
+		where = append(where, `(created_at < ? OR (created_at = ? AND id < ?))`)
+		args = append(args, at, at, id)
+	}
+	sqlText := `SELECT ` + taskColumns + ` FROM tasks`
+	if len(where) > 0 {
+		sqlText += ` WHERE ` + strings.Join(where, " AND ") //nolint:gosec // fixed filters with placeholders
+	}
+	sqlText += ` ORDER BY created_at DESC, id DESC LIMIT ?`
+	args = append(args, limit+1)
+	var tasks []*Task
+	more := false
+	err := r.db.Read(ctx, func(tx *sql.Tx) error {
+		more = false
+		rows, err := tx.QueryContext(ctx, sqlText, args...)
+		if err != nil {
+			return err
+		}
+		for rows.Next() {
+			t, err := scanTask(rows)
+			if err != nil {
+				_ = rows.Close()
+				return err
+			}
+			tasks = append(tasks, t)
+		}
+		if err := rows.Close(); err != nil {
+			return err
+		}
+		if err := rows.Err(); err != nil {
+			return err
+		}
+		if len(tasks) > limit {
+			tasks, more = tasks[:limit], true
+		}
+		return loadTurns(ctx, tx, tasks)
+	})
+	if err != nil {
+		return nil, "", err
+	}
+	next := ""
+	if more {
+		last := tasks[len(tasks)-1]
+		next = encodeCursor(formatTime(last.CreatedAt), last.ID)
+	}
+	return tasks, next, nil
+}
+
+// Prompt returns the brief of attempt n of turn (the latest attempt when n is 0).
+func (r *Repo) Prompt(ctx context.Context, id string, turn, n int) (string, error) {
+	var prompt string
+	err := r.db.Read(ctx, func(tx *sql.Tx) error {
+		var row *sql.Row
+		if n > 0 {
+			row = tx.QueryRowContext(ctx, `SELECT prompt FROM attempts WHERE task_id = ? AND turn = ? AND n = ?`,
+				id, turn, n)
+		} else {
+			row = tx.QueryRowContext(ctx, `SELECT prompt FROM attempts WHERE task_id = ? AND turn = ?
+				ORDER BY n DESC LIMIT 1`, id, turn)
+		}
+		err := row.Scan(&prompt)
+		if errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("%w: no attempt %d of turn %d of task %s", ErrNotFound, n, turn, id)
+		}
+		return err
+	})
+	return prompt, err
+}
+
+// Events returns up to limit events with seq > after, ascending.
+func (r *Repo) Events(ctx context.Context, id string, after int64, limit int) ([]api.TaskEvent, error) {
+	return r.events(ctx, id, `SELECT seq, ts, type, turn, attempt, data FROM task_events
+		WHERE task_id = ? AND seq > ? ORDER BY seq LIMIT ?`, id, after, limit)
+}
+
+// Tail returns the newest n events, ascending.
+func (r *Repo) Tail(ctx context.Context, id string, n int) ([]api.TaskEvent, error) {
+	return r.events(ctx, id, `SELECT seq, ts, type, turn, attempt, data FROM (
+		SELECT seq, ts, type, turn, attempt, data FROM task_events WHERE task_id = ? ORDER BY seq DESC LIMIT ?)
+		ORDER BY seq`, id, n)
+}
+
+func (r *Repo) events(ctx context.Context, id, query string, args ...any) ([]api.TaskEvent, error) {
+	var out []api.TaskEvent
+	err := r.db.Read(ctx, func(tx *sql.Tx) error {
+		rows, err := tx.QueryContext(ctx, query, args...)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = rows.Close() }()
+		for rows.Next() {
+			var e api.TaskEvent
+			var ts, typ, data string
+			if err := rows.Scan(&e.Seq, &ts, &typ, &e.Turn, &e.Attempt, &data); err != nil {
+				return err
+			}
+			at, err := parseTime(ts)
+			if err != nil {
+				return err
+			}
+			e.TS = api.FormatTime(at)
+			e.TaskID = id
+			e.Type = api.EventType(typ)
+			e.Data = json.RawMessage(data)
+			out = append(out, e)
+		}
+		return rows.Err()
+	})
+	return out, err
+}
+
+const taskColumns = `id, status, data, last_event_seq, last_event_at, created_at, updated_at`
+
+type scanner interface{ Scan(dest ...any) error }
+
+func scanTask(s scanner) (*Task, error) {
+	var id, status, data, lastAt, created, updated string
+	var seq int64
+	if err := s.Scan(&id, &status, &data, &seq, &lastAt, &created, &updated); err != nil {
+		return nil, err
+	}
+	t := &Task{}
+	if err := json.Unmarshal([]byte(data), t); err != nil {
+		return nil, fmt.Errorf("task %s is unreadable: %w", id, err)
+	}
+	t.ID = id
+	t.Status = Status(status)
+	t.LastEventSeq = seq
+	var err error
+	if t.LastEventAt, err = parseTime(lastAt); err != nil {
+		return nil, err
+	}
+	if t.CreatedAt, err = parseTime(created); err != nil {
+		return nil, err
+	}
+	if t.UpdatedAt, err = parseTime(updated); err != nil {
+		return nil, err
+	}
+	return t, nil
+}
+
+// loadTurns fills the turns and attempts of tasks (prompts are left out).
+func loadTurns(ctx context.Context, tx *sql.Tx, tasks []*Task) error {
+	if len(tasks) == 0 {
+		return nil
+	}
+	byID := make(map[string]*Task, len(tasks))
+	args := make([]any, 0, len(tasks))
+	for _, t := range tasks {
+		t.Turns = nil
+		byID[t.ID] = t
+		args = append(args, t.ID)
+	}
+	in := placeholders(len(args))
+	//nolint:gosec // only placeholders are concatenated
+	rows, err := tx.QueryContext(ctx, `SELECT task_id, data FROM turns WHERE task_id IN (`+in+`)
+		ORDER BY task_id, n`, args...)
+	if err != nil {
+		return err
+	}
+	for rows.Next() {
+		var id, data string
+		if err := rows.Scan(&id, &data); err != nil {
+			_ = rows.Close()
+			return err
+		}
+		tu := &Turn{}
+		if err := json.Unmarshal([]byte(data), tu); err != nil {
+			_ = rows.Close()
+			return fmt.Errorf("a turn of task %s is unreadable: %w", id, err)
+		}
+		byID[id].Turns = append(byID[id].Turns, tu)
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	//nolint:gosec // only placeholders are concatenated
+	rows, err = tx.QueryContext(ctx, `SELECT task_id, turn, data FROM attempts WHERE task_id IN (`+in+`)
+		ORDER BY task_id, turn, n`, args...)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var id, data string
+		var turn int
+		if err := rows.Scan(&id, &turn, &data); err != nil {
+			return err
+		}
+		a := &Attempt{}
+		if err := json.Unmarshal([]byte(data), a); err != nil {
+			return fmt.Errorf("an attempt of task %s is unreadable: %w", id, err)
+		}
+		tu := byID[id].TurnN(turn)
+		if tu == nil {
+			return fmt.Errorf("attempt %d of task %s has no turn %d", a.N, id, turn)
+		}
+		tu.Attempts = append(tu.Attempts, a)
+	}
+	return rows.Err()
+}
+
+func placeholders(n int) string {
+	return strings.TrimSuffix(strings.Repeat("?,", n), ",")
+}
+
+func escapeLike(s string) string {
+	return strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(s)
+}
+
+func encodeCursor(createdAt, id string) string {
+	return base64.RawURLEncoding.EncodeToString([]byte(createdAt + "|" + id))
+}
+
+func decodeCursor(c string) (createdAt, id string, err error) {
+	raw, err := base64.RawURLEncoding.DecodeString(c)
+	if err != nil {
+		return "", "", invalidf("bad cursor")
+	}
+	createdAt, id, ok := strings.Cut(string(raw), "|")
+	if !ok || id == "" {
+		return "", "", invalidf("bad cursor")
+	}
+	if _, err := parseTime(createdAt); err != nil {
+		return "", "", invalidf("bad cursor")
+	}
+	return createdAt, id, nil
+}

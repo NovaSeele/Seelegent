@@ -36,6 +36,10 @@ linters:
         - shadow
     misspell:
       locale: US
+      # Wire values of the API contract (task status cancelled, report field cancelling).
+      ignore-rules:
+        - cancelled
+        - cancelling
     nolintlint:
       require-explanation: true
       require-specific: true

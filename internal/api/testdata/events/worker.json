@@ -1,0 +1,18 @@
+{
+  "seq": 7,
+  "ts": "2026-11-07T09:00:00.000Z",
+  "taskId": "t261107090000-ab12",
+  "turn": 1,
+  "attempt": 1,
+  "type": "worker",
+  "data": {
+    "kind": "tool_call",
+    "step": 2,
+    "tool": {
+      "id": "c1",
+      "name": "shell",
+      "state": "calling",
+      "command": "go test ./..."
+    }
+  }
+}
