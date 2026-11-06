@@ -18,6 +18,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/NovaSeele/Seelegent/internal/api"
 	"github.com/NovaSeele/Seelegent/internal/fsutil"
 )
 
@@ -49,7 +50,7 @@ var idPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,39}$`)
 func tiers() []string   { return []string{"fast", "standard", "strong", "max"} }
 func efforts() []string { return []string{"low", "medium", "high", "xhigh", "max"} }
 
-// Role is a worker role.
+// Role is a worker role. The JSON tags are the stored document's (table roles); the API shape is api.Role (ToAPI).
 type Role struct {
 	ID                string    `json:"id"`
 	Name              string    `json:"name"`
@@ -64,9 +65,38 @@ type Role struct {
 	UpdatedAt         time.Time `json:"updatedAt,omitzero"`
 
 	// Scope, OverridesGlobal and Cwd describe where the role was found; they are not stored.
-	Scope           string `json:"scope"`
-	OverridesGlobal bool   `json:"overridesGlobal"`
-	Cwd             string `json:"cwd,omitempty"`
+	Scope           string `json:"-"`
+	OverridesGlobal bool   `json:"-"`
+	Cwd             string `json:"-"`
+}
+
+// ToAPI returns the role as the API shows it.
+func ToAPI(r Role) api.Role {
+	return api.Role{ID: r.ID, Name: r.Name, Description: r.Description, Rules: r.Rules, OutputStyle: r.OutputStyle,
+		Skills: api.NonNil(r.Skills), DefaultTier: r.DefaultTier, DefaultEffort: r.DefaultEffort,
+		PreferredAccounts: api.NonNil(r.PreferredAccounts), Scope: r.Scope, Cwd: r.Cwd,
+		OverridesGlobal: r.OverridesGlobal, CreatedAt: api.FormatTime(r.CreatedAt), UpdatedAt: api.FormatTime(r.UpdatedAt)}
+}
+
+// ListToAPI returns roles and their projects as GET /roles shows them.
+func ListToAPI(roles []Role, projects []Project) api.RoleList {
+	out := api.RoleList{Items: make([]api.Role, 0, len(roles)), Projects: make([]api.RoleProject, 0, len(projects))}
+	for i := range roles {
+		out.Items = append(out.Items, ToAPI(roles[i]))
+	}
+	for _, p := range projects {
+		out.Projects = append(out.Projects, api.RoleProject{Key: p.Key, Cwd: p.Cwd, Name: p.Name, Count: p.Count})
+	}
+	return out
+}
+
+// SkillsToAPI returns skills as GET /roles/skills shows them.
+func SkillsToAPI(skills []Skill) []api.Skill {
+	out := make([]api.Skill, 0, len(skills))
+	for _, sk := range skills {
+		out = append(out, api.Skill{Name: sk.Name, Description: sk.Description, Root: sk.Root})
+	}
+	return out
 }
 
 // DB runs transactions on seelegent.db; *store.Store satisfies it.
@@ -173,7 +203,7 @@ func (s *Store) Upsert(ctx context.Context, r Role, scope, cwd string) (Role, er
 			}
 		}
 		r.UpdatedAt = now
-		data, err := json.Marshal(stored(r))
+		data, err := json.Marshal(r)
 		if err != nil {
 			return err
 		}
@@ -310,10 +340,10 @@ func merge(global, proj []Role, all bool) []Role {
 
 // Project is a project that has roles of its own.
 type Project struct {
-	Key   string `json:"key"`
-	Cwd   string `json:"cwd"`
-	Name  string `json:"name"`
-	Count int    `json:"count"`
+	Key   string
+	Cwd   string
+	Name  string
+	Count int
 }
 
 // Projects lists the projects with roles of their own, by name.
@@ -383,12 +413,6 @@ func exists(ctx context.Context, tx *sql.Tx, scope, key, id string) (bool, error
 		return false, nil
 	}
 	return err == nil, err
-}
-
-// stored is the role without the fields that describe where it was found.
-func stored(r Role) Role {
-	r.Scope, r.Cwd, r.OverridesGlobal = "", "", false
-	return r
 }
 
 func nonNil[T any](s []T) []T {

@@ -3,6 +3,7 @@ package role
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -220,7 +221,7 @@ func TestSkills(t *testing.T) {
 	for _, sk := range skills {
 		names = append(names, sk.Name+"@"+sk.Root)
 	}
-	if strings.Join(names, ",") != "plain@project,speckit-implement@project,go-style@agents" {
+	if strings.Join(names, ",") != "plain@project,speckit-implement@project,go-style@user" {
 		t.Fatalf("skills = %v", names)
 	}
 	if skills[1].Description != "Implement tasks" || len([]rune(skills[2].Description)) != 200 {
@@ -246,5 +247,78 @@ func TestSkills(t *testing.T) {
 	}
 	if b := s.Brief(Role{ID: "r", Name: "R"}, ""); len(b.Skills) != 0 || len(b.Missing) != 0 {
 		t.Fatalf("brief without skills = %+v", b)
+	}
+}
+
+func TestFrontMatter(t *testing.T) {
+	dir := t.TempDir()
+	cases := []struct{ name, content, wantName, wantDesc string }{
+		{"folded", "---\nname: folded\ndescription: >\n  Builds the UI\n  from a spec.\nlicense: MIT\n---\n", "folded",
+			"Builds the UI from a spec."},
+		{"literal", "---\ndescription: |-\n  Line one.\n\n  Line two.\nname: lit\n---\n", "lit", "Line one. Line two."},
+		{"bom", "\ufeff---\r\nname: with-bom\r\ndescription: 'Has a BOM'\r\n---\r\n", "with-bom", "Has a BOM"},
+		{"plain-multi", "---\nname: multi\ndescription: starts here\n  and goes on\nmetadata:\n  name: nested\n---\n",
+			"multi", "starts here and goes on"},
+		{"nested-only", "---\nmetadata:\n  description: nested\n---\n", "nested-only", ""},
+		{"no-header", "# Title\nname: x\n", "no-header", ""},
+	}
+	for _, c := range cases {
+		d := writeSkill(t, dir, c.name, c.content)
+		name, desc := frontMatter(filepath.Join(d, "SKILL.md"), c.name)
+		if name != c.wantName || desc != c.wantDesc {
+			t.Errorf("%s: name %q, description %q", c.name, name, desc)
+		}
+	}
+}
+
+// TestHomeSkillsAreUser labels ~/.agents/skills as the user's for a task folder under home, not as the project's.
+func TestHomeSkillsAreUser(t *testing.T) {
+	s, _, _, home := newStore(t)
+	writeSkill(t, filepath.Join(home, ".agents", "skills"), "mine", "---\nname: mine\n---\n")
+	proj := filepath.Join(home, "code", "app")
+	if err := os.MkdirAll(proj, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	skills := s.Skills(proj)
+	if len(skills) != 1 || skills[0].Root != RootUser {
+		t.Fatalf("skills = %+v", skills)
+	}
+}
+
+func TestAPIShapes(t *testing.T) {
+	ctx := context.Background()
+	s, _, _, _ := newStore(t)
+	g, err := s.Upsert(ctx, Role{ID: "be", Name: "Backend"}, ScopeGlobal, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	projects, err := s.Projects(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, v := range map[string]any{
+		"template": ToAPI(Templates()[0]),
+		"stored":   ToAPI(g),
+		"list":     ListToAPI(nil, projects),
+		"skills":   SkillsToAPI(nil),
+	} {
+		data, err := json.Marshal(v)
+		if err != nil {
+			t.Fatal(err)
+		}
+		text := string(data)
+		if strings.Contains(text, "null") {
+			t.Errorf("%s has a null: %s", name, text)
+		}
+		if name == "stored" && !strings.Contains(text, `"createdAt":"2026-11-07T09:00:00.000Z"`) {
+			t.Errorf("stored role times: %s", text)
+		}
+	}
+	data, err := json.Marshal(g)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), "scope") || strings.Contains(string(data), "overridesGlobal") {
+		t.Errorf("the stored document carries where the role was found: %s", data)
 	}
 }

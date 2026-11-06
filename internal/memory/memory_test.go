@@ -154,3 +154,22 @@ func TestUnreadableIsError(t *testing.T) {
 		t.Error("unreadable history accepted")
 	}
 }
+
+func TestNoteAPI(t *testing.T) {
+	s, _ := newStore(t)
+	cwd := t.TempDir()
+	empty, err := s.Get(context.Background(), cwd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m := empty.API(); m.Cwd == "" || m.Text != "" || m.UpdatedAt != "" {
+		t.Fatalf("empty = %+v", m)
+	}
+	n, err := s.Replace(context.Background(), cwd, "Use tabs.")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m := n.API(); strings.TrimSpace(m.Text) != "Use tabs." || m.UpdatedAt != "2026-11-07T09:31:00.000Z" {
+		t.Fatalf("note = %+v", m)
+	}
+}

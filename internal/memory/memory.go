@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/NovaSeele/Seelegent/internal/api"
 	"github.com/NovaSeele/Seelegent/internal/fsutil"
 )
 
@@ -58,11 +59,16 @@ func New(db DB, now func() time.Time) *Store {
 
 // Note is the memory of one project.
 type Note struct {
-	Cwd  string `json:"cwd"`
-	Key  string `json:"key"`
-	Text string `json:"text"`
+	Cwd  string
+	Key  string
+	Text string
 	// UpdatedAt is zero when the project has no notes.
-	UpdatedAt time.Time `json:"updatedAt,omitzero"`
+	UpdatedAt time.Time
+}
+
+// API returns the note as the API shows it.
+func (n Note) API() api.Memory {
+	return api.Memory{Cwd: n.Cwd, Text: n.Text, UpdatedAt: api.FormatTime(n.UpdatedAt)}
 }
 
 // Project returns the project key and canonical folder of cwd, which must be an absolute path to an existing

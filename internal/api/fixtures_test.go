@@ -17,7 +17,7 @@ var update = flag.Bool("update", false, "rewrite the event fixtures")
 // check (web/src/api) loads: adding a type without a fixture fails here, and a fixture without a union member
 // fails there.
 func eventSamples() map[EventType]any {
-	remaining := 42.5
+	remaining := 0.425
 	code := 0
 	return map[EventType]any{
 		EventWorker: event.Event{Kind: event.KindToolCall, Step: 2, Tool: &event.Tool{ID: "c1", Name: "shell",
@@ -48,26 +48,53 @@ func eventSamples() map[EventType]any {
 	}
 }
 
+// extraSamples are further fixtures for variants of a type the dashboard must handle, by file name.
+func extraSamples() map[string]struct {
+	typ  EventType
+	data any
+} {
+	return map[string]struct {
+		typ  EventType
+		data any
+	}{
+		"attention-cleared": {EventAttention, Attention{State: AttentionCleared, Reason: "The worker went on",
+			Since: "2026-11-07T09:05:00.000Z"}},
+	}
+}
+
 func TestEventFixtures(t *testing.T) {
 	samples := eventSamples()
 	if len(samples) != len(EventTypes()) {
 		t.Fatalf("%d samples for %d types", len(samples), len(EventTypes()))
 	}
-	dir := filepath.Join("testdata", "events")
+	type fixture struct {
+		name string
+		typ  EventType
+		data any
+	}
+	var fixtures []fixture
 	for _, typ := range EventTypes() {
 		data, ok := samples[typ]
 		if !ok {
 			t.Errorf("no sample for %s", typ)
 			continue
 		}
+		fixtures = append(fixtures, fixture{string(typ), typ, data})
+	}
+	for name, x := range extraSamples() {
+		fixtures = append(fixtures, fixture{name, x.typ, x.data})
+	}
+	dir := filepath.Join("testdata", "events")
+	for _, f := range fixtures {
+		typ := f.typ
 		ev := TaskEvent{Seq: 7, TS: "2026-11-07T09:00:00.000Z", TaskID: "t261107090000-ab12", Turn: 1, Attempt: 1,
-			Type: typ, Data: data}
+			Type: typ, Data: f.data}
 		got, err := json.MarshalIndent(ev, "", "  ")
 		if err != nil {
 			t.Fatal(err)
 		}
 		got = append(got, '\n')
-		path := filepath.Join(dir, string(typ)+".json")
+		path := filepath.Join(dir, f.name+".json")
 		if *update {
 			if err := os.MkdirAll(dir, 0o750); err != nil {
 				t.Fatal(err)
@@ -82,7 +109,7 @@ func TestEventFixtures(t *testing.T) {
 			t.Fatalf("%v (run go test ./internal/api -update)", err)
 		}
 		if !bytes.Equal(bytes.ReplaceAll(want, []byte("\r\n"), []byte("\n")), got) {
-			t.Errorf("%s differs from the fixture (run go test ./internal/api -update):\n%s", typ, got)
+			t.Errorf("%s differs from the fixture (run go test ./internal/api -update):\n%s", f.name, got)
 		}
 	}
 }

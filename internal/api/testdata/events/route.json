@@ -11,6 +11,6 @@
     "model": "gemini-3.8-flash",
     "reason": "most quota",
     "continuing": false,
-    "remaining": 42.5
+    "remaining": 0.425
   }
 }

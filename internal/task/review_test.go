@@ -1,6 +1,7 @@
 package task
 
 import (
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -173,5 +174,37 @@ func TestParsePorcelainZ(t *testing.T) {
 	want := []string{filepath.Join(root, "a.go"), filepath.Join(root, "new.go"), filepath.Join(root, "dir", "x y.txt")}
 	if !slices.Equal(got, want) {
 		t.Fatalf("got %q, want %q", got, want)
+	}
+}
+
+// TestMappedListsNeverNull checks the real mappers: a task without prerequisites, spec task ids or files still
+// gives [] lists in its summary, detail and page.
+func TestMappedListsNeverNull(t *testing.T) {
+	h := newHarness(t)
+	h.agy("only", 0)
+	if err := mkdir(filepath.Join(h.cwd, "specs")); err != nil {
+		t.Fatal(err)
+	}
+	h.queue.Push(t, okScript("conv-n", "ok"))
+	sum := h.delegate(api.DelegateRequest{Spec: &api.SpecRequest{Dir: "specs"}})
+	h.waitStatus(sum.ID, StatusDone)
+	detail, err := h.s.Get(t.Context(), sum.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	page, err := h.s.List(t.Context(), Query{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, v := range map[string]any{"summary": sum, "detail": detail, "page": page} {
+		data, err := json.Marshal(v)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, key := range []string{"after", "taskIds", "files", "commands", "blockedCommands", "deniedActions"} {
+			if strings.Contains(string(data), `"`+key+`":null`) {
+				t.Errorf("%s: %s is null: %s", name, key, data)
+			}
+		}
 	}
 }

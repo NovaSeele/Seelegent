@@ -1,7 +1,6 @@
 package api
 
 import (
-	"encoding/json"
 	"testing"
 	"time"
 
@@ -32,21 +31,8 @@ func TestUsageOf(t *testing.T) {
 	}
 }
 
-func TestListsAreNeverNull(t *testing.T) {
-	data, err := json.Marshal(TaskSummary{After: NonNil[string](nil)})
-	if err != nil {
-		t.Fatal(err)
-	}
-	var m map[string]any
-	if err := json.Unmarshal(data, &m); err != nil {
-		t.Fatal(err)
-	}
-	if _, ok := m["after"].([]any); !ok {
-		t.Errorf("after = %v", m["after"])
-	}
-	if m["attention"] != nil {
-		t.Errorf("attention = %v, want null", m["attention"])
-	}
+// The mappers that build these shapes are tested where they live (task, role, memory): lists never null.
+func TestEventTypes(t *testing.T) {
 	if len(EventTypes()) != 21 {
 		t.Errorf("%d event types", len(EventTypes()))
 	}
