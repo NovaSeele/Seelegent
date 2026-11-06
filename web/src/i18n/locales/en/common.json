@@ -1,0 +1,162 @@
+{
+  "action": {
+    "close": "Close",
+    "confirm": "Confirm",
+    "cancel": "Cancel",
+    "dismiss": "Dismiss",
+    "retry": "Retry",
+    "reset": "Reset",
+    "clear": "Clear",
+    "back": "Back",
+    "more": "More",
+    "open": "Open",
+    "remove": "Remove",
+    "undo": "Undo"
+  },
+  "toast": {
+    "close": "Dismiss notification",
+    "region": "Notifications"
+  },
+  "error": {
+    "network": "Cannot reach the server: {error}"
+  },
+  "next": {
+    "openTask": "Open task",
+    "openMeeting": "Open meeting"
+  },
+  "commit": {
+    "done": "Committed {sha}",
+    "doneNoSha": "Committed"
+  },
+  "working": "Working…",
+  "worker": {
+    "unassigned": "Not assigned",
+    "accountDeleted": "Deleted account",
+    "unknown": "unknown"
+  },
+  "time": {
+    "justNow": "just now",
+    "neverUsed": "never used"
+  },
+  "duration": {
+    "seconds": "{n}s",
+    "minSec": "{m}m {s}s",
+    "hourMin": "{h}h {m}m"
+  },
+  "span": {
+    "min": "{m}m",
+    "hour": "{h}h",
+    "hourMin": "{h}h {m}m",
+    "day": "{d}d",
+    "dayHour": "{d}d {h}h"
+  },
+  "countdown": {
+    "refreshing": "refreshing…",
+    "refreshIn": "refreshes in {span}",
+    "secondsLeft": "{n}s left",
+    "linkExpired": "Link expired"
+  },
+  "status": {
+    "queued": {
+      "label": "Queued",
+      "short": "Queued"
+    },
+    "running": {
+      "label": "Running",
+      "short": "Running"
+    },
+    "waiting": {
+      "label": "Waiting for quota",
+      "short": "Quota"
+    },
+    "waitingWorker": {
+      "label": "Waiting for a worker",
+      "short": "No worker"
+    },
+    "blocked": {
+      "label": "Needs action",
+      "short": "Action"
+    },
+    "review": {
+      "label": "Awaiting review",
+      "short": "Review?"
+    },
+    "accepted": {
+      "label": "Accepted",
+      "short": "Accepted"
+    },
+    "rejected": {
+      "label": "Redo",
+      "short": "Redo"
+    },
+    "failed": {
+      "label": "Failed",
+      "short": "Failed"
+    },
+    "cancelled": {
+      "label": "Cancelled",
+      "short": "Cancelled"
+    },
+    "waitingDeps": {
+      "label": "Waiting on earlier task",
+      "short": "Waiting"
+    },
+    "blockedDeps": {
+      "label": "Earlier task failed",
+      "short": "Dep failed"
+    }
+  },
+  "attention": {
+    "stalled": "Stalled",
+    "looping": "Looping",
+    "question": "Asks the lead",
+    "noResponse": "Worker not responding",
+    "auth": "Needs sign-in",
+    "noAccounts": "No accounts left",
+    "failed": "Failed",
+    "review": "Awaiting review",
+    "quotaWait": "Waiting for quota",
+    "waitingWorker": "Waiting for a worker",
+    "manual": "You are driving",
+    "gate": "Gate check",
+    "gateRed": "Gate failed",
+    "workAtRisk": "Work may be lost",
+    "depsBlocked": "Earlier task failed",
+    "waitingDeps": "Waiting on earlier task"
+  },
+  "stage": {
+    "explore": "Explore",
+    "edit": "Edit",
+    "verify": "Verify",
+    "run": "Run",
+    "report": "Report"
+  },
+  "taskStatus": {
+    "queued": "Queued",
+    "running": "Running",
+    "waitingQuota": "Waiting for quota",
+    "done": "Done",
+    "accepted": "Accepted",
+    "rejected": "Redo requested",
+    "failed": "Failed",
+    "cancelled": "Cancelled"
+  },
+  "accountStatus": {
+    "ok": "Ready",
+    "needsLogin": "Needs sign-in",
+    "new": "Not signed in",
+    "error": "Error",
+    "checking": "Checking",
+    "noPlan": "No plan"
+  },
+  "ui": {
+    "loading": "Loading…",
+    "quotaUsed": "{value} used",
+    "quotaLeft": "{value} left",
+    "skipToContent": "Skip to content",
+    "resizeSidebar": "Resize sidebar",
+    "collapseSidebar": "Hide sidebar",
+    "expandSidebar": "Show sidebar",
+    "noResults": "No results"
+  }
+}

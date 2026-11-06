@@ -1,0 +1,11 @@
+{
+  "label": "言語 / Language",
+  "desc": "ダッシュボードの言語です。変更はすぐに反映されます。",
+  "command": {
+    "pick": "言語を変更",
+    "prefix": "言語:",
+    "apply": "言語: {name}",
+    "group": "言語"
+  },
+  "browser": "ブラウザーに合わせる"
+}

@@ -1,0 +1,30 @@
+{
+  "title": "コマンドパレット",
+  "open": "コマンドを検索",
+  "placeholder": "コマンドやページを入力…",
+  "results": "コマンド",
+  "empty": "「{query}」に一致するコマンドはありません",
+  "hint": {
+    "move": "移動",
+    "run": "実行",
+    "close": "閉じる"
+  },
+  "group": {
+    "navigation": "移動",
+    "general": "全般",
+    "settings": "設定",
+    "appearance": "外観",
+    "language": "言語"
+  },
+  "cmd": {
+    "openSettings": "設定を開く",
+    "pickTheme": "テーマを変更",
+    "themePrefix": "テーマ:",
+    "applyTheme": "テーマ: {name}",
+    "toggleSidebar": "サイドバーの表示を切り替え"
+  },
+  "keywords": {
+    "settings": "設定 環境設定 オプション",
+    "theme": "テーマ 色 ダーク ライト モード"
+  }
+}

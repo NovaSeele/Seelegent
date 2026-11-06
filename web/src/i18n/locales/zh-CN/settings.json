@@ -1,0 +1,194 @@
+{
+  "title": "设置",
+  "back": "全部设置",
+  "sectionsLabel": "设置分区",
+  "search": {
+    "label": "搜索设置",
+    "placeholder": "搜索设置",
+    "results": "匹配的设置",
+    "empty": "没有匹配“{query}”的设置"
+  },
+  "comingSoon": {
+    "title": "暂不可用",
+    "desc": "这些设置由 Seelegent 服务保存，新控制面板能读取后就会显示在这里。",
+    "planned": "此分区的设置"
+  },
+  "sections": {
+    "appearance": {
+      "label": "外观",
+      "desc": "主题、字体和动效。仅保存在此浏览器中。"
+    },
+    "workers": {
+      "label": "工人",
+      "desc": "同时运行多少个工人，以及可用的模型。"
+    },
+    "quota": {
+      "label": "配额",
+      "desc": "保留多少配额，以及账号如何轮换。"
+    },
+    "gates": {
+      "label": "关卡",
+      "desc": "工作算作完成前必须通过的命令。"
+    },
+    "notifications": {
+      "label": "通知",
+      "desc": "Seelegent 何时、以何种方式提醒你。"
+    },
+    "shortcuts": {
+      "label": "键盘快捷键",
+      "desc": "页面和命令的按键。"
+    },
+    "hooks": {
+      "label": "钩子",
+      "desc": "任务变化时调用其他服务。"
+    },
+    "memory": {
+      "label": "记忆",
+      "desc": "提供给每个工人的项目信息。"
+    },
+    "experiments": {
+      "label": "实验",
+      "desc": "仍在试验中的功能。"
+    },
+    "language": {
+      "label": "语言",
+      "desc": "控制面板的语言。更改立即生效。"
+    }
+  },
+  "items": {
+    "theme": {
+      "label": "主题",
+      "desc": "整个控制面板的配色。“自动”跟随系统的浅色或深色模式。",
+      "keywords": "颜色 深色 浅色 模式 配色"
+    },
+    "fontUi": {
+      "label": "界面字体",
+      "desc": "只使用本机已安装的字体，不会下载任何内容。",
+      "keywords": "字体 文字"
+    },
+    "fontMono": {
+      "label": "代码字体",
+      "desc": "日志、差异和终端使用的字体。“跟随主题”使用主题推荐的字体。",
+      "keywords": "等宽 终端 字体"
+    },
+    "sizeUi": {
+      "label": "界面字号",
+      "desc": "整个控制面板的基础字号。",
+      "keywords": "字号 大小 缩放"
+    },
+    "sizeTerm": {
+      "label": "代码字号",
+      "desc": "日志、差异和终端中的字号。",
+      "keywords": "字号 终端 等宽"
+    },
+    "lineHeightTerm": {
+      "label": "代码行距",
+      "desc": "日志和终端中行与行的间距。",
+      "keywords": "行距 行高 终端"
+    },
+    "motion": {
+      "label": "动效",
+      "desc": "动画和过渡。“跟随系统”遵循系统的减少动态效果设置。",
+      "keywords": "动画 减少动态 过渡"
+    },
+    "reset": {
+      "label": "重置外观",
+      "desc": "恢复默认的主题、字体、字号和动效。",
+      "keywords": "默认 恢复"
+    },
+    "locale": {
+      "label": "语言",
+      "desc": "“跟随浏览器”使用浏览器首选的语言。",
+      "keywords": "语言 翻译 本地化"
+    },
+    "concurrency": {
+      "label": "同时运行的工人",
+      "desc": "最多可同时运行多少个工人。",
+      "keywords": "并行 并发 上限"
+    },
+    "defaultTier": {
+      "label": "默认档位",
+      "desc": "简报未指定时使用的模型档位。",
+      "keywords": "模型 快速 标准 强"
+    },
+    "modelCap": {
+      "label": "模型上限",
+      "desc": "工人可使用的最强模型。",
+      "keywords": "上限 模型"
+    },
+    "quotaReserve": {
+      "label": "配额预留",
+      "desc": "每个账号为紧急工作保留的配额比例。",
+      "keywords": "上限 余量"
+    },
+    "rotation": {
+      "label": "账号轮换",
+      "desc": "某个账号配额用完时，把工作转给其他账号。",
+      "keywords": "账号 切换 交接"
+    },
+    "gateCommands": {
+      "label": "关卡命令",
+      "desc": "证明任务可用的构建和测试命令。",
+      "keywords": "测试 构建 验证 检查"
+    },
+    "gateBeforeReview": {
+      "label": "审查前运行关卡",
+      "desc": "把任务交给你审查前先运行关卡。",
+      "keywords": "测试 审查 验证"
+    },
+    "desktopNotify": {
+      "label": "桌面通知",
+      "desc": "任务待审查或工人提问时通知你。",
+      "keywords": "提醒 通知"
+    },
+    "sound": {
+      "label": "声音",
+      "desc": "通知时播放提示音。",
+      "keywords": "音频 提示"
+    },
+    "keymap": {
+      "label": "快捷键",
+      "desc": "查看并修改页面和命令的按键。",
+      "keywords": "热键 键位 键盘"
+    },
+    "webhooks": {
+      "label": "Webhook",
+      "desc": "任务开始、完成或失败时调用的地址。",
+      "keywords": "钩子 http 集成"
+    },
+    "projectMemory": {
+      "label": "项目记忆",
+      "desc": "附加到每份简报的约定、命令和常见陷阱。",
+      "keywords": "事实 笔记 约定"
+    },
+    "experimental": {
+      "label": "实验功能",
+      "desc": "开启仍在测试中的功能。",
+      "keywords": "测试版 预览"
+    }
+  },
+  "appearance": {
+    "auto": {
+      "label": "自动",
+      "desc": "白天 {light}，夜间 {dark}"
+    },
+    "themeGroup": {
+      "seelegent": "Seelegent",
+      "claude": "Claude",
+      "codex": "Codex",
+      "jetbrains": "JetBrains",
+      "vscode": "VS Code",
+      "popular": "热门"
+    },
+    "fontSystem": "系统默认",
+    "fontTheme": "跟随主题",
+    "px": "{value} 像素",
+    "motion": {
+      "system": "跟随系统",
+      "on": "开",
+      "off": "关"
+    },
+    "reset": "重置",
+    "resetDone": "外观已恢复默认"
+  }
+}

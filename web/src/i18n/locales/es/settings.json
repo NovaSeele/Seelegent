@@ -1,0 +1,194 @@
+{
+  "title": "Ajustes",
+  "back": "Todos los ajustes",
+  "sectionsLabel": "Secciones de ajustes",
+  "search": {
+    "label": "Buscar ajustes",
+    "placeholder": "Buscar ajustes",
+    "results": "Ajustes encontrados",
+    "empty": "Ningún ajuste coincide con “{query}”"
+  },
+  "comingSoon": {
+    "title": "Aún no disponible",
+    "desc": "El servicio Seelegent guarda estos ajustes. Aparecerán aquí cuando el nuevo panel pueda leerlos.",
+    "planned": "Ajustes de esta sección"
+  },
+  "sections": {
+    "appearance": {
+      "label": "Apariencia",
+      "desc": "Tema, fuentes y movimiento. Solo se guarda en este navegador."
+    },
+    "workers": {
+      "label": "Workers",
+      "desc": "Cuántos workers trabajan a la vez y qué modelos pueden usar."
+    },
+    "quota": {
+      "label": "Cuota",
+      "desc": "Cuánta cuota reservar y cómo se turnan las cuentas."
+    },
+    "gates": {
+      "label": "Controles",
+      "desc": "Comandos que deben pasar para dar el trabajo por terminado."
+    },
+    "notifications": {
+      "label": "Notificaciones",
+      "desc": "Cuándo y cómo te avisa Seelegent de que algo te necesita."
+    },
+    "shortcuts": {
+      "label": "Atajos de teclado",
+      "desc": "Teclas para páginas y comandos."
+    },
+    "hooks": {
+      "label": "Hooks",
+      "desc": "Llamadas a otros servicios cuando cambian las tareas."
+    },
+    "memory": {
+      "label": "Memoria",
+      "desc": "Datos del proyecto que recibe cada worker."
+    },
+    "experiments": {
+      "label": "Experimentos",
+      "desc": "Funciones que aún se están probando."
+    },
+    "language": {
+      "label": "Idioma",
+      "desc": "Idioma del panel. Los cambios se aplican al instante."
+    }
+  },
+  "items": {
+    "theme": {
+      "label": "Tema",
+      "desc": "Colores de todo el panel. Automático sigue el modo claro u oscuro del sistema.",
+      "keywords": "color oscuro claro modo paleta"
+    },
+    "fontUi": {
+      "label": "Fuente de la interfaz",
+      "desc": "Solo se usan fuentes instaladas en este equipo; no se descarga nada.",
+      "keywords": "tipografía letra texto"
+    },
+    "fontMono": {
+      "label": "Fuente del código",
+      "desc": "Fuente de registros, diffs y terminales. «Según el tema» usa la elección del tema.",
+      "keywords": "monoespaciada terminal tipografía"
+    },
+    "sizeUi": {
+      "label": "Tamaño del texto",
+      "desc": "Tamaño base del texto en todo el panel.",
+      "keywords": "tamaño fuente zoom escala"
+    },
+    "sizeTerm": {
+      "label": "Tamaño del código",
+      "desc": "Tamaño del texto en registros, diffs y terminales.",
+      "keywords": "tamaño fuente terminal monoespaciada"
+    },
+    "lineHeightTerm": {
+      "label": "Interlineado del código",
+      "desc": "Espacio entre líneas en registros y terminales.",
+      "keywords": "interlineado altura de línea terminal"
+    },
+    "motion": {
+      "label": "Movimiento",
+      "desc": "Animaciones y transiciones. «Sistema» respeta tu ajuste de reducir movimiento.",
+      "keywords": "animación reducir transiciones"
+    },
+    "reset": {
+      "label": "Restablecer apariencia",
+      "desc": "Vuelve al tema, fuentes, tamaños y movimiento predeterminados.",
+      "keywords": "predeterminado restaurar"
+    },
+    "locale": {
+      "label": "Idioma",
+      "desc": "«Según el navegador» usa los idiomas preferidos de tu navegador.",
+      "keywords": "idioma traducción lengua"
+    },
+    "concurrency": {
+      "label": "Workers simultáneos",
+      "desc": "Cuántos workers pueden trabajar al mismo tiempo.",
+      "keywords": "paralelo concurrente límite"
+    },
+    "defaultTier": {
+      "label": "Nivel predeterminado",
+      "desc": "Nivel de modelo cuando el encargo no indica ninguno.",
+      "keywords": "modelo rápido estándar potente"
+    },
+    "modelCap": {
+      "label": "Modelo máximo",
+      "desc": "El modelo más potente que pueden usar los workers.",
+      "keywords": "límite modelo"
+    },
+    "quotaReserve": {
+      "label": "Reserva de cuota",
+      "desc": "Parte de la cuota de cada cuenta guardada para trabajo urgente.",
+      "keywords": "límite margen"
+    },
+    "rotation": {
+      "label": "Rotación de cuentas",
+      "desc": "Pasa el trabajo a otra cuenta cuando una agota su cuota.",
+      "keywords": "cuentas cambiar relevo"
+    },
+    "gateCommands": {
+      "label": "Comandos de control",
+      "desc": "Comandos de build y test que demuestran que una tarea funciona.",
+      "keywords": "test build verificar comprobar"
+    },
+    "gateBeforeReview": {
+      "label": "Controles antes de revisar",
+      "desc": "Ejecuta los controles antes de pasarte una tarea para revisión.",
+      "keywords": "test revisión verificar"
+    },
+    "desktopNotify": {
+      "label": "Notificaciones de escritorio",
+      "desc": "Avisa cuando una tarea espera revisión o un worker pregunta algo.",
+      "keywords": "alerta aviso"
+    },
+    "sound": {
+      "label": "Sonido",
+      "desc": "Reproduce un sonido con las notificaciones.",
+      "keywords": "audio alerta"
+    },
+    "keymap": {
+      "label": "Teclas de atajo",
+      "desc": "Consulta y cambia las teclas de páginas y comandos.",
+      "keywords": "atajo teclado combinación"
+    },
+    "webhooks": {
+      "label": "Webhooks",
+      "desc": "Direcciones a las que se llama cuando una tarea empieza, termina o falla.",
+      "keywords": "hook http integración"
+    },
+    "projectMemory": {
+      "label": "Memoria del proyecto",
+      "desc": "Convenciones, comandos y trampas que se añaden a cada encargo.",
+      "keywords": "datos notas convenciones"
+    },
+    "experimental": {
+      "label": "Funciones experimentales",
+      "desc": "Activa funciones que todavía se están probando.",
+      "keywords": "beta vista previa"
+    }
+  },
+  "appearance": {
+    "auto": {
+      "label": "Automático",
+      "desc": "{light} de día, {dark} de noche"
+    },
+    "themeGroup": {
+      "seelegent": "Seelegent",
+      "claude": "Claude",
+      "codex": "Codex",
+      "jetbrains": "JetBrains",
+      "vscode": "VS Code",
+      "popular": "Populares"
+    },
+    "fontSystem": "Predeterminada del sistema",
+    "fontTheme": "Según el tema",
+    "px": "{value} px",
+    "motion": {
+      "system": "Sistema",
+      "on": "Activado",
+      "off": "Desactivado"
+    },
+    "reset": "Restablecer",
+    "resetDone": "Apariencia restablecida"
+  }
+}

@@ -1,0 +1,120 @@
+{
+  "brand": {
+    "title": "Seelegent — あなたの AI 部門"
+  },
+  "goTo": "{page}へ移動",
+  "watch": {
+    "label": "監視",
+    "short": "監視",
+    "title": "監視",
+    "view": "監視ボード",
+    "desc": "実行中のすべてと、あなたの対応が必要なものを一つのボードに。"
+  },
+  "tasks": {
+    "label": "タスク",
+    "short": "タスク",
+    "view": "タスクの進行",
+    "title": "タスク",
+    "desc": "各タスクの進行状況、レポート、レビュー。"
+  },
+  "issues": {
+    "label": "Issue",
+    "short": "Issue",
+    "title": "Issue → PR",
+    "desc": "GitHub リポジトリの issue を追跡し、pull request を作成します。",
+    "view": "Issue → PR"
+  },
+  "meetings": {
+    "label": "会議",
+    "short": "会議",
+    "title": "会議",
+    "desc": "リードが複数のメンバーにラウンドごとに意見を聞きます。非公開の回答、匿名の相互検証と根拠の確認、決定と議事録。",
+    "view": "会議"
+  },
+  "contests": {
+    "label": "コンテスト",
+    "short": "コンテスト",
+    "title": "コンテスト",
+    "desc": "一つの課題を複数の版が専用の worktree で並行して作ります。機械が採点し、審査員が匿名で比較し、あなたが勝者を選んで作業フォルダーに適用します。",
+    "view": "コンテスト"
+  },
+  "automations": {
+    "label": "自動化",
+    "short": "自動化",
+    "title": "自動化",
+    "desc": "スケジュールに沿ってワーカーに渡す作業です。事前チェックのコマンドが許可し、クォータが足りるときだけ実行します。",
+    "view": "自動化"
+  },
+  "proof": {
+    "label": "証拠",
+    "short": "証拠",
+    "title": "証拠",
+    "desc": "どの要件がゲートコマンドで証明済みで、どれがまだかを示します。すべてのゲートを再実行して回帰を見つけます。",
+    "view": "検証の証拠"
+  },
+  "accounts": {
+    "label": "アカウント",
+    "short": "アカウント",
+    "title": "アカウント",
+    "desc": "ワーカーが作業の実行に使うアカウントと API キーです。",
+    "view": "アカウントとクォータ"
+  },
+  "usage": {
+    "label": "使用量",
+    "short": "使用量",
+    "title": "使用量",
+    "desc": "時間別、プロジェクト別、アカウント別のトークン、コスト、上限です。",
+    "view": "使用量"
+  },
+  "roles": {
+    "label": "ロール",
+    "short": "ロール",
+    "title": "ワーカーのロール",
+    "desc": "ワーカーの専門能力、必須ルール、報告スタイル、スキルセットを定義します。",
+    "view": "ワーカーのロール"
+  },
+  "members": {
+    "label": "メンバー",
+    "short": "メンバー",
+    "title": "メンバー",
+    "desc": "部門の誰が、どのワーカーとモデルで仕事を受けるかを決めます。",
+    "view": "メンバー"
+  },
+  "settings": {
+    "label": "設定",
+    "short": "設定",
+    "aria": "システム設定"
+  },
+  "appearance": {
+    "label": "外観"
+  },
+  "more": {
+    "label": "その他"
+  },
+  "rail": {
+    "main": "メインナビゲーション",
+    "pages": "主なページ",
+    "mobile": "モバイルナビゲーション"
+  },
+  "badge": {
+    "contests": "版の選択を待つコンテスト {count} 件",
+    "automations": "前回の実行に失敗した自動化 {count} 件",
+    "watch": "レビュー待ちのタスク {count} 件",
+    "meetings": "あなたを待つ会議 {count} 件",
+    "more": "対応が必要なページ {count} 件"
+  },
+  "conn": {
+    "lost": "Seelegent との接続が切れました。再試行しています…",
+    "restored": "接続が回復しました",
+    "retryIn": "{n} 秒後に再試行"
+  },
+  "statusBar": {
+    "summary": "状態の概要",
+    "idle": "空き",
+    "idleTitle": "タスクを実行していないアカウント / アカウント総数",
+    "running": "実行",
+    "runningTitle": "実行中のタスク数",
+    "waiting": "待機",
+    "waitingTitle": "キューで待機中のタスク数"
+  }
+}

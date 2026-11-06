@@ -1,0 +1,12 @@
+{
+  "placeholder": {
+    "title": "This view is on its way",
+    "desc": "It is being rebuilt for the new dashboard and will show live data here.",
+    "listEmpty": "Nothing here yet"
+  },
+  "notFound": {
+    "title": "Page not found",
+    "desc": "This address does not match any page. It may have moved.",
+    "home": "Go to Watch"
+  }
+}

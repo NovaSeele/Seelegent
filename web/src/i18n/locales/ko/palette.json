@@ -1,0 +1,30 @@
+{
+  "title": "명령 팔레트",
+  "open": "명령 검색",
+  "placeholder": "명령이나 페이지를 입력하세요…",
+  "results": "명령",
+  "empty": "“{query}”와 일치하는 명령이 없습니다",
+  "hint": {
+    "move": "이동",
+    "run": "실행",
+    "close": "닫기"
+  },
+  "group": {
+    "navigation": "이동",
+    "general": "일반",
+    "settings": "설정",
+    "appearance": "모양",
+    "language": "언어"
+  },
+  "cmd": {
+    "openSettings": "설정 열기",
+    "pickTheme": "테마 변경",
+    "themePrefix": "테마:",
+    "applyTheme": "테마: {name}",
+    "toggleSidebar": "사이드바 보이기/숨기기"
+  },
+  "keywords": {
+    "settings": "설정 환경설정 옵션",
+    "theme": "테마 색상 다크 라이트 모드"
+  }
+}

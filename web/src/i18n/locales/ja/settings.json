@@ -1,0 +1,194 @@
+{
+  "title": "設定",
+  "back": "すべての設定",
+  "sectionsLabel": "設定のセクション",
+  "search": {
+    "label": "設定を検索",
+    "placeholder": "設定を検索",
+    "results": "一致する設定",
+    "empty": "「{query}」に一致する設定はありません"
+  },
+  "comingSoon": {
+    "title": "まだ利用できません",
+    "desc": "これらの設定は Seelegent サービスが保持しています。新しいダッシュボードが読み込めるようになるとここに表示されます。",
+    "planned": "このセクションの設定"
+  },
+  "sections": {
+    "appearance": {
+      "label": "外観",
+      "desc": "テーマ、フォント、モーション。このブラウザーにのみ保存されます。"
+    },
+    "workers": {
+      "label": "ワーカー",
+      "desc": "同時に動くワーカーの数と、使えるモデル。"
+    },
+    "quota": {
+      "label": "クォータ",
+      "desc": "どれだけクォータを残すか、アカウントをどう交代させるか。"
+    },
+    "gates": {
+      "label": "ゲート",
+      "desc": "作業を完了とみなす前に通る必要があるコマンド。"
+    },
+    "notifications": {
+      "label": "通知",
+      "desc": "Seelegent がいつ、どのように知らせるか。"
+    },
+    "shortcuts": {
+      "label": "キーボードショートカット",
+      "desc": "ページとコマンドのキー。"
+    },
+    "hooks": {
+      "label": "フック",
+      "desc": "タスクが変わったときに他のサービスを呼び出します。"
+    },
+    "memory": {
+      "label": "メモリー",
+      "desc": "すべてのワーカーに渡すプロジェクト情報。"
+    },
+    "experiments": {
+      "label": "実験",
+      "desc": "まだ試験中の機能。"
+    },
+    "language": {
+      "label": "言語",
+      "desc": "ダッシュボードの言語です。変更はすぐに反映されます。"
+    }
+  },
+  "items": {
+    "theme": {
+      "label": "テーマ",
+      "desc": "ダッシュボード全体の配色。「自動」はシステムのライト/ダークモードに従います。",
+      "keywords": "色 ダーク ライト モード 配色"
+    },
+    "fontUi": {
+      "label": "UI フォント",
+      "desc": "このコンピューターにインストール済みのフォントだけを使い、何もダウンロードしません。",
+      "keywords": "フォント 書体 文字"
+    },
+    "fontMono": {
+      "label": "コードフォント",
+      "desc": "ログ、差分、ターミナルのフォント。「テーマに合わせる」はテーマの推奨を使います。",
+      "keywords": "等幅 ターミナル フォント"
+    },
+    "sizeUi": {
+      "label": "UI の文字サイズ",
+      "desc": "ダッシュボード全体の基本の文字サイズ。",
+      "keywords": "文字サイズ 拡大 縮小"
+    },
+    "sizeTerm": {
+      "label": "コードの文字サイズ",
+      "desc": "ログ、差分、ターミナルの文字サイズ。",
+      "keywords": "文字サイズ ターミナル 等幅"
+    },
+    "lineHeightTerm": {
+      "label": "コードの行間",
+      "desc": "ログとターミナルの行の間隔。",
+      "keywords": "行間 行の高さ ターミナル"
+    },
+    "motion": {
+      "label": "モーション",
+      "desc": "アニメーションと切り替え効果。「システム」は視差効果を減らす設定に従います。",
+      "keywords": "アニメーション 動きを減らす 切り替え"
+    },
+    "reset": {
+      "label": "外観をリセット",
+      "desc": "テーマ、フォント、サイズ、モーションを既定に戻します。",
+      "keywords": "既定 復元"
+    },
+    "locale": {
+      "label": "言語",
+      "desc": "「ブラウザーに合わせる」はブラウザーの優先言語を使います。",
+      "keywords": "言語 翻訳 ローカライズ"
+    },
+    "concurrency": {
+      "label": "同時ワーカー数",
+      "desc": "同時に動けるワーカーの上限。",
+      "keywords": "並列 同時 上限"
+    },
+    "defaultTier": {
+      "label": "既定のティア",
+      "desc": "ブリーフで指定がないときに使うモデルのティア。",
+      "keywords": "モデル 高速 標準 強力"
+    },
+    "modelCap": {
+      "label": "モデルの上限",
+      "desc": "ワーカーが使える最も強いモデル。",
+      "keywords": "上限 モデル"
+    },
+    "quotaReserve": {
+      "label": "クォータの予備",
+      "desc": "急ぎの作業のために各アカウントで残しておくクォータの割合。",
+      "keywords": "上限 余裕"
+    },
+    "rotation": {
+      "label": "アカウントの交代",
+      "desc": "クォータが尽きたら作業を別のアカウントへ移します。",
+      "keywords": "アカウント 切り替え 引き継ぎ"
+    },
+    "gateCommands": {
+      "label": "ゲートコマンド",
+      "desc": "タスクが動くことを証明するビルドとテストのコマンド。",
+      "keywords": "テスト ビルド 検証 チェック"
+    },
+    "gateBeforeReview": {
+      "label": "レビュー前にゲートを実行",
+      "desc": "タスクをレビューに回す前にゲートを実行します。",
+      "keywords": "テスト レビュー 検証"
+    },
+    "desktopNotify": {
+      "label": "デスクトップ通知",
+      "desc": "タスクがレビュー待ちになったときやワーカーが質問したときに通知します。",
+      "keywords": "アラート 通知"
+    },
+    "sound": {
+      "label": "サウンド",
+      "desc": "通知と一緒に音を鳴らします。",
+      "keywords": "音 アラート"
+    },
+    "keymap": {
+      "label": "ショートカットキー",
+      "desc": "ページとコマンドのキーを確認・変更します。",
+      "keywords": "ホットキー キー割り当て キーボード"
+    },
+    "webhooks": {
+      "label": "Webhook",
+      "desc": "タスクの開始、完了、失敗時に呼び出すアドレス。",
+      "keywords": "フック http 連携"
+    },
+    "projectMemory": {
+      "label": "プロジェクトメモリー",
+      "desc": "すべてのブリーフに追加される規約、コマンド、注意点。",
+      "keywords": "事実 メモ 規約"
+    },
+    "experimental": {
+      "label": "実験的な機能",
+      "desc": "まだテスト中の機能を有効にします。",
+      "keywords": "ベータ プレビュー"
+    }
+  },
+  "appearance": {
+    "auto": {
+      "label": "自動",
+      "desc": "昼は {light}、夜は {dark}"
+    },
+    "themeGroup": {
+      "seelegent": "Seelegent",
+      "claude": "Claude",
+      "codex": "Codex",
+      "jetbrains": "JetBrains",
+      "vscode": "VS Code",
+      "popular": "人気"
+    },
+    "fontSystem": "システム既定",
+    "fontTheme": "テーマに合わせる",
+    "px": "{value} px",
+    "motion": {
+      "system": "システム",
+      "on": "オン",
+      "off": "オフ"
+    },
+    "reset": "リセット",
+    "resetDone": "外観を既定に戻しました"
+  }
+}

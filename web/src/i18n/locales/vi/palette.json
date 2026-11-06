@@ -1,0 +1,30 @@
+{
+  "title": "Bảng lệnh",
+  "open": "Tìm lệnh",
+  "placeholder": "Gõ tên lệnh hoặc trang…",
+  "results": "Lệnh",
+  "empty": "Không có lệnh nào khớp “{query}”",
+  "hint": {
+    "move": "di chuyển",
+    "run": "chạy",
+    "close": "đóng"
+  },
+  "group": {
+    "navigation": "Đi tới",
+    "general": "Chung",
+    "settings": "Cài đặt",
+    "appearance": "Giao diện",
+    "language": "Ngôn ngữ"
+  },
+  "cmd": {
+    "openSettings": "Mở cài đặt",
+    "pickTheme": "Đổi chủ đề màu",
+    "themePrefix": "Chủ đề:",
+    "applyTheme": "Chủ đề: {name}",
+    "toggleSidebar": "Ẩn hoặc hiện thanh bên"
+  },
+  "keywords": {
+    "settings": "cài đặt tuỳ chọn thiết lập",
+    "theme": "chủ đề màu sắc giao diện tối sáng"
+  }
+}

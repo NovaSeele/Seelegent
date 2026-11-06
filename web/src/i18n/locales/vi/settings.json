@@ -1,0 +1,194 @@
+{
+  "title": "Cài đặt",
+  "back": "Tất cả cài đặt",
+  "sectionsLabel": "Các mục cài đặt",
+  "search": {
+    "label": "Tìm cài đặt",
+    "placeholder": "Tìm cài đặt",
+    "results": "Cài đặt khớp",
+    "empty": "Không có cài đặt nào khớp “{query}”"
+  },
+  "comingSoon": {
+    "title": "Chưa dùng được",
+    "desc": "Dịch vụ Seelegent giữ các cài đặt này. Chúng sẽ hiện ở đây khi bảng điều khiển mới đọc được.",
+    "planned": "Cài đặt trong mục này"
+  },
+  "sections": {
+    "appearance": {
+      "label": "Giao diện",
+      "desc": "Chủ đề màu, phông chữ và chuyển động. Chỉ lưu trong trình duyệt này."
+    },
+    "workers": {
+      "label": "Thợ",
+      "desc": "Số thợ chạy cùng lúc và các mô hình được dùng."
+    },
+    "quota": {
+      "label": "Hạn mức",
+      "desc": "Giữ lại bao nhiêu hạn mức và các tài khoản thay phiên ra sao."
+    },
+    "gates": {
+      "label": "Cổng kiểm tra",
+      "desc": "Lệnh phải chạy đạt thì việc mới tính là xong."
+    },
+    "notifications": {
+      "label": "Thông báo",
+      "desc": "Khi nào và bằng cách nào Seelegent báo việc cần bạn."
+    },
+    "shortcuts": {
+      "label": "Phím tắt",
+      "desc": "Phím cho các trang và lệnh."
+    },
+    "hooks": {
+      "label": "Hook",
+      "desc": "Gọi sang dịch vụ khác khi tác vụ thay đổi."
+    },
+    "memory": {
+      "label": "Bộ nhớ",
+      "desc": "Thông tin dự án gửi kèm cho mọi thợ."
+    },
+    "experiments": {
+      "label": "Thử nghiệm",
+      "desc": "Tính năng còn đang thử."
+    },
+    "language": {
+      "label": "Ngôn ngữ",
+      "desc": "Ngôn ngữ của bảng điều khiển. Đổi là áp dụng ngay."
+    }
+  },
+  "items": {
+    "theme": {
+      "label": "Chủ đề màu",
+      "desc": "Màu của toàn bộ bảng điều khiển. Tự động sẽ theo chế độ sáng hoặc tối của hệ thống.",
+      "keywords": "màu sắc giao diện tối sáng theme"
+    },
+    "fontUi": {
+      "label": "Phông giao diện",
+      "desc": "Chỉ dùng phông đã cài trên máy này; không tải gì về.",
+      "keywords": "phông chữ kiểu chữ font"
+    },
+    "fontMono": {
+      "label": "Phông mã",
+      "desc": "Phông cho nhật ký, diff và terminal. Theo chủ đề sẽ dùng phông chủ đề chọn.",
+      "keywords": "monospace terminal phông chữ font"
+    },
+    "sizeUi": {
+      "label": "Cỡ chữ giao diện",
+      "desc": "Cỡ chữ gốc của toàn bộ bảng điều khiển.",
+      "keywords": "cỡ chữ phóng to thu nhỏ"
+    },
+    "sizeTerm": {
+      "label": "Cỡ chữ mã",
+      "desc": "Cỡ chữ trong nhật ký, diff và terminal.",
+      "keywords": "cỡ chữ terminal monospace"
+    },
+    "lineHeightTerm": {
+      "label": "Giãn dòng mã",
+      "desc": "Khoảng cách giữa các dòng trong nhật ký và terminal.",
+      "keywords": "giãn dòng chiều cao dòng terminal"
+    },
+    "motion": {
+      "label": "Chuyển động",
+      "desc": "Hiệu ứng và chuyển cảnh. Theo hệ thống sẽ tôn trọng cài đặt giảm chuyển động.",
+      "keywords": "hiệu ứng hoạt ảnh giảm chuyển động"
+    },
+    "reset": {
+      "label": "Đặt lại giao diện",
+      "desc": "Trở về chủ đề, phông, cỡ chữ và chuyển động mặc định.",
+      "keywords": "mặc định khôi phục"
+    },
+    "locale": {
+      "label": "Ngôn ngữ",
+      "desc": "Theo trình duyệt sẽ dùng ngôn ngữ trình duyệt ưu tiên.",
+      "keywords": "ngôn ngữ dịch tiếng"
+    },
+    "concurrency": {
+      "label": "Số thợ cùng lúc",
+      "desc": "Tối đa bao nhiêu thợ được chạy cùng một lúc.",
+      "keywords": "song song đồng thời giới hạn"
+    },
+    "defaultTier": {
+      "label": "Bậc mặc định",
+      "desc": "Bậc mô hình dùng khi brief không ghi rõ.",
+      "keywords": "mô hình nhanh chuẩn mạnh tier"
+    },
+    "modelCap": {
+      "label": "Trần mô hình",
+      "desc": "Mô hình mạnh nhất mà thợ được dùng.",
+      "keywords": "giới hạn mô hình"
+    },
+    "quotaReserve": {
+      "label": "Hạn mức dự phòng",
+      "desc": "Phần hạn mức của mỗi tài khoản giữ lại cho việc gấp.",
+      "keywords": "giới hạn dự trữ"
+    },
+    "rotation": {
+      "label": "Xoay vòng tài khoản",
+      "desc": "Chuyển việc sang tài khoản khác khi một tài khoản hết hạn mức.",
+      "keywords": "tài khoản chuyển giao đổi"
+    },
+    "gateCommands": {
+      "label": "Lệnh cổng kiểm tra",
+      "desc": "Lệnh build và test chứng minh tác vụ chạy đúng.",
+      "keywords": "test build kiểm tra xác minh"
+    },
+    "gateBeforeReview": {
+      "label": "Chạy cổng trước khi duyệt",
+      "desc": "Chạy các cổng trước khi giao tác vụ cho bạn duyệt.",
+      "keywords": "test duyệt kiểm tra"
+    },
+    "desktopNotify": {
+      "label": "Thông báo trên máy",
+      "desc": "Báo khi có tác vụ chờ duyệt hoặc thợ đặt câu hỏi.",
+      "keywords": "cảnh báo báo tin"
+    },
+    "sound": {
+      "label": "Âm thanh",
+      "desc": "Phát âm thanh kèm thông báo.",
+      "keywords": "tiếng chuông"
+    },
+    "keymap": {
+      "label": "Bảng phím tắt",
+      "desc": "Xem và đổi phím cho các trang và lệnh.",
+      "keywords": "phím tắt bàn phím hotkey"
+    },
+    "webhooks": {
+      "label": "Webhook",
+      "desc": "Địa chỉ được gọi khi tác vụ bắt đầu, xong hoặc lỗi.",
+      "keywords": "hook http tích hợp"
+    },
+    "projectMemory": {
+      "label": "Bộ nhớ dự án",
+      "desc": "Quy ước, lệnh và lỗi hay gặp, gửi kèm mọi brief.",
+      "keywords": "ghi chú quy ước thông tin"
+    },
+    "experimental": {
+      "label": "Tính năng thử nghiệm",
+      "desc": "Bật các tính năng còn đang được thử.",
+      "keywords": "beta xem trước"
+    }
+  },
+  "appearance": {
+    "auto": {
+      "label": "Tự động",
+      "desc": "Ban ngày {light}, ban đêm {dark}"
+    },
+    "themeGroup": {
+      "seelegent": "Seelegent",
+      "claude": "Claude",
+      "codex": "Codex",
+      "jetbrains": "JetBrains",
+      "vscode": "VS Code",
+      "popular": "Phổ biến"
+    },
+    "fontSystem": "Mặc định hệ thống",
+    "fontTheme": "Theo chủ đề",
+    "px": "{value} px",
+    "motion": {
+      "system": "Theo hệ thống",
+      "on": "Bật",
+      "off": "Tắt"
+    },
+    "reset": "Đặt lại",
+    "resetDone": "Đã đặt lại giao diện về mặc định"
+  }
+}

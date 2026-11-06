@@ -1,0 +1,11 @@
+{
+  "label": "언어 / Language",
+  "desc": "대시보드 언어입니다. 바로 적용됩니다.",
+  "command": {
+    "pick": "언어 변경",
+    "prefix": "언어:",
+    "apply": "언어: {name}",
+    "group": "언어"
+  },
+  "browser": "브라우저 설정 따르기"
+}

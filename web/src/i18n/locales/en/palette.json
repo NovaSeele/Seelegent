@@ -1,0 +1,30 @@
+{
+  "title": "Command palette",
+  "open": "Search commands",
+  "placeholder": "Type a command or a page…",
+  "results": "Commands",
+  "empty": "No commands match “{query}”",
+  "hint": {
+    "move": "move",
+    "run": "run",
+    "close": "close"
+  },
+  "group": {
+    "navigation": "Go to",
+    "general": "General",
+    "settings": "Settings",
+    "appearance": "Appearance",
+    "language": "Language"
+  },
+  "cmd": {
+    "openSettings": "Open settings",
+    "pickTheme": "Change theme",
+    "themePrefix": "Theme:",
+    "applyTheme": "Theme: {name}",
+    "toggleSidebar": "Show or hide the sidebar"
+  },
+  "keywords": {
+    "settings": "settings preferences options",
+    "theme": "theme colour color dark light mode"
+  }
+}

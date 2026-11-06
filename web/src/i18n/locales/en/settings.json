@@ -1,0 +1,194 @@
+{
+  "title": "Settings",
+  "back": "All settings",
+  "sectionsLabel": "Settings sections",
+  "search": {
+    "label": "Search settings",
+    "placeholder": "Search settings",
+    "results": "Matching settings",
+    "empty": "No settings match “{query}”"
+  },
+  "comingSoon": {
+    "title": "Not available yet",
+    "desc": "The Seelegent service keeps these settings. They appear here once the new dashboard can read them.",
+    "planned": "Settings in this section"
+  },
+  "sections": {
+    "appearance": {
+      "label": "Appearance",
+      "desc": "Theme, fonts and motion. Saved in this browser only."
+    },
+    "workers": {
+      "label": "Workers",
+      "desc": "How many workers run at once and which models they may use."
+    },
+    "quota": {
+      "label": "Quota",
+      "desc": "How much quota to keep in reserve and how accounts take turns."
+    },
+    "gates": {
+      "label": "Gates",
+      "desc": "Commands that must pass before work counts as done."
+    },
+    "notifications": {
+      "label": "Notifications",
+      "desc": "When and how Seelegent tells you something needs you."
+    },
+    "shortcuts": {
+      "label": "Keyboard shortcuts",
+      "desc": "Keys for pages and commands."
+    },
+    "hooks": {
+      "label": "Hooks",
+      "desc": "Calls to other services when tasks change."
+    },
+    "memory": {
+      "label": "Memory",
+      "desc": "Project facts given to every worker."
+    },
+    "experiments": {
+      "label": "Experiments",
+      "desc": "Features still being tried out."
+    },
+    "language": {
+      "label": "Language",
+      "desc": "Language of the dashboard. Changes apply at once."
+    }
+  },
+  "items": {
+    "theme": {
+      "label": "Theme",
+      "desc": "Colours of the whole dashboard. Auto follows your system’s light or dark mode.",
+      "keywords": "colour color dark light mode palette"
+    },
+    "fontUi": {
+      "label": "Interface font",
+      "desc": "Only fonts installed on this computer are used; nothing is downloaded.",
+      "keywords": "typeface text font"
+    },
+    "fontMono": {
+      "label": "Code font",
+      "desc": "Font for logs, diffs and terminals. Theme default uses the theme’s pick.",
+      "keywords": "monospace terminal typeface font"
+    },
+    "sizeUi": {
+      "label": "Interface text size",
+      "desc": "Base size of text across the dashboard.",
+      "keywords": "font size zoom scale"
+    },
+    "sizeTerm": {
+      "label": "Code text size",
+      "desc": "Size of text in logs, diffs and terminals.",
+      "keywords": "font size terminal monospace"
+    },
+    "lineHeightTerm": {
+      "label": "Code line spacing",
+      "desc": "Space between lines in logs and terminals.",
+      "keywords": "line height leading terminal"
+    },
+    "motion": {
+      "label": "Motion",
+      "desc": "Animations and transitions. System follows your reduced-motion setting.",
+      "keywords": "animation reduce transitions"
+    },
+    "reset": {
+      "label": "Reset appearance",
+      "desc": "Back to the default theme, fonts, sizes and motion.",
+      "keywords": "default restore"
+    },
+    "locale": {
+      "label": "Language",
+      "desc": "Browser default follows the languages your browser prefers.",
+      "keywords": "language locale translation"
+    },
+    "concurrency": {
+      "label": "Workers at once",
+      "desc": "How many workers may run at the same time.",
+      "keywords": "parallel concurrent limit"
+    },
+    "defaultTier": {
+      "label": "Default tier",
+      "desc": "Model tier used when a brief does not name one.",
+      "keywords": "model fast standard strong"
+    },
+    "modelCap": {
+      "label": "Model cap",
+      "desc": "The strongest model workers may use.",
+      "keywords": "limit model"
+    },
+    "quotaReserve": {
+      "label": "Quota reserve",
+      "desc": "Share of each account’s quota kept free for urgent work.",
+      "keywords": "limit buffer"
+    },
+    "rotation": {
+      "label": "Account rotation",
+      "desc": "Move work to another account when one runs out of quota.",
+      "keywords": "accounts switch handoff"
+    },
+    "gateCommands": {
+      "label": "Gate commands",
+      "desc": "Build and test commands that prove a task works.",
+      "keywords": "test build verify check"
+    },
+    "gateBeforeReview": {
+      "label": "Run gates before review",
+      "desc": "Run the gates before a task is handed to you for review.",
+      "keywords": "test review verify"
+    },
+    "desktopNotify": {
+      "label": "Desktop notifications",
+      "desc": "Notify when a task needs review or a worker asks a question.",
+      "keywords": "alert notify"
+    },
+    "sound": {
+      "label": "Sound",
+      "desc": "Play a sound with notifications.",
+      "keywords": "audio alert"
+    },
+    "keymap": {
+      "label": "Shortcut keys",
+      "desc": "See and change the keys for pages and commands.",
+      "keywords": "hotkey keybinding keyboard"
+    },
+    "webhooks": {
+      "label": "Webhooks",
+      "desc": "Addresses called when a task starts, finishes or fails.",
+      "keywords": "hook http integration"
+    },
+    "projectMemory": {
+      "label": "Project memory",
+      "desc": "Conventions, commands and pitfalls added to every brief.",
+      "keywords": "facts notes conventions"
+    },
+    "experimental": {
+      "label": "Experimental features",
+      "desc": "Turn on features that are still being tested.",
+      "keywords": "beta preview labs"
+    }
+  },
+  "appearance": {
+    "auto": {
+      "label": "Auto",
+      "desc": "{light} by day, {dark} at night"
+    },
+    "themeGroup": {
+      "seelegent": "Seelegent",
+      "claude": "Claude",
+      "codex": "Codex",
+      "jetbrains": "JetBrains",
+      "vscode": "VS Code",
+      "popular": "Popular"
+    },
+    "fontSystem": "System default",
+    "fontTheme": "Theme default",
+    "px": "{value} px",
+    "motion": {
+      "system": "System",
+      "on": "On",
+      "off": "Off"
+    },
+    "reset": "Reset",
+    "resetDone": "Appearance reset to defaults"
+  }
+}

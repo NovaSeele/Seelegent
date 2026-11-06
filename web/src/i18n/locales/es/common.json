@@ -1,0 +1,162 @@
+{
+  "action": {
+    "close": "Cerrar",
+    "confirm": "Confirmar",
+    "cancel": "Cancelar",
+    "dismiss": "Descartar",
+    "retry": "Reintentar",
+    "reset": "Restablecer",
+    "clear": "Borrar",
+    "back": "Atrás",
+    "more": "Más",
+    "open": "Abrir",
+    "remove": "Quitar",
+    "undo": "Deshacer"
+  },
+  "toast": {
+    "close": "Cerrar aviso",
+    "region": "Notificaciones"
+  },
+  "error": {
+    "network": "No se puede conectar con el servidor: {error}"
+  },
+  "next": {
+    "openTask": "Abrir tarea",
+    "openMeeting": "Abrir reunión"
+  },
+  "commit": {
+    "done": "Commit hecho: {sha}",
+    "doneNoSha": "Commit hecho"
+  },
+  "working": "Procesando…",
+  "worker": {
+    "unassigned": "Sin asignar",
+    "accountDeleted": "Cuenta eliminada",
+    "unknown": "desconocido"
+  },
+  "time": {
+    "justNow": "ahora mismo",
+    "neverUsed": "sin usar"
+  },
+  "duration": {
+    "seconds": "{n} s",
+    "minSec": "{m} min {s} s",
+    "hourMin": "{h} h {m} min"
+  },
+  "span": {
+    "min": "{m} min",
+    "hour": "{h} h",
+    "hourMin": "{h} h {m} min",
+    "day": "{d} d",
+    "dayHour": "{d} d {h} h"
+  },
+  "countdown": {
+    "refreshing": "actualizando…",
+    "refreshIn": "se actualiza en {span}",
+    "secondsLeft": "Quedan {n} s",
+    "linkExpired": "El enlace caducó"
+  },
+  "status": {
+    "queued": {
+      "label": "En cola",
+      "short": "En cola"
+    },
+    "running": {
+      "label": "En curso",
+      "short": "En curso"
+    },
+    "waiting": {
+      "label": "Esperando cuota",
+      "short": "Cuota"
+    },
+    "waitingWorker": {
+      "label": "Esperando un worker libre",
+      "short": "Sin worker"
+    },
+    "blocked": {
+      "label": "Requiere acción",
+      "short": "Acción"
+    },
+    "review": {
+      "label": "Pendiente de revisión",
+      "short": "¿Revisar?"
+    },
+    "accepted": {
+      "label": "Aprobada",
+      "short": "Aprobada"
+    },
+    "rejected": {
+      "label": "Rehacer",
+      "short": "Rehacer"
+    },
+    "failed": {
+      "label": "Error",
+      "short": "Error"
+    },
+    "cancelled": {
+      "label": "Cancelada",
+      "short": "Cancelada"
+    },
+    "waitingDeps": {
+      "label": "Esperando tarea previa",
+      "short": "Espera"
+    },
+    "blockedDeps": {
+      "label": "Falló la tarea previa",
+      "short": "Previa falló"
+    }
+  },
+  "attention": {
+    "stalled": "Detenida",
+    "looping": "En bucle",
+    "question": "Pregunta al lead",
+    "noResponse": "El worker no responde",
+    "auth": "Requiere iniciar sesión",
+    "noAccounts": "Sin cuentas disponibles",
+    "failed": "Falló",
+    "review": "Pendiente de revisión",
+    "quotaWait": "Esperando cuota",
+    "waitingWorker": "Esperando un worker libre",
+    "manual": "Tienes el control",
+    "gate": "Comprobando gate",
+    "gateRed": "Gate fallido",
+    "workAtRisk": "Se puede perder trabajo",
+    "depsBlocked": "Falló la tarea previa",
+    "waitingDeps": "Esperando tarea previa"
+  },
+  "stage": {
+    "explore": "Explorar",
+    "edit": "Editar",
+    "verify": "Verificar",
+    "run": "Comando",
+    "report": "Informe"
+  },
+  "taskStatus": {
+    "queued": "En cola",
+    "running": "En curso",
+    "waitingQuota": "Esperando cuota",
+    "done": "Terminada",
+    "accepted": "Aprobada",
+    "rejected": "Se pidió rehacer",
+    "failed": "Falló",
+    "cancelled": "Cancelada"
+  },
+  "accountStatus": {
+    "ok": "Lista",
+    "needsLogin": "Requiere iniciar sesión",
+    "new": "Sin sesión",
+    "error": "Error",
+    "checking": "Comprobando",
+    "noPlan": "Sin plan"
+  },
+  "ui": {
+    "loading": "Cargando…",
+    "quotaUsed": "{value} usado",
+    "quotaLeft": "{value} disponible",
+    "skipToContent": "Saltar al contenido",
+    "resizeSidebar": "Cambiar ancho del panel lateral",
+    "collapseSidebar": "Ocultar panel lateral",
+    "expandSidebar": "Mostrar panel lateral",
+    "noResults": "Sin resultados"
+  }
+}

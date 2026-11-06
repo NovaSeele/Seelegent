@@ -1,0 +1,30 @@
+{
+  "title": "命令面板",
+  "open": "搜索命令",
+  "placeholder": "输入命令或页面…",
+  "results": "命令",
+  "empty": "没有匹配“{query}”的命令",
+  "hint": {
+    "move": "移动",
+    "run": "执行",
+    "close": "关闭"
+  },
+  "group": {
+    "navigation": "前往",
+    "general": "常规",
+    "settings": "设置",
+    "appearance": "外观",
+    "language": "语言"
+  },
+  "cmd": {
+    "openSettings": "打开设置",
+    "pickTheme": "更换主题",
+    "themePrefix": "主题：",
+    "applyTheme": "主题：{name}",
+    "toggleSidebar": "显示或隐藏侧栏"
+  },
+  "keywords": {
+    "settings": "设置 偏好 选项",
+    "theme": "主题 颜色 深色 浅色 模式"
+  }
+}

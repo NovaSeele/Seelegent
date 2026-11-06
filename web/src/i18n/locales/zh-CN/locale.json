@@ -1,0 +1,11 @@
+{
+  "label": "语言 / Language",
+  "desc": "控制面板的语言。更改立即生效。",
+  "command": {
+    "pick": "切换语言",
+    "prefix": "语言：",
+    "apply": "语言：{name}",
+    "group": "语言"
+  },
+  "browser": "跟随浏览器"
+}

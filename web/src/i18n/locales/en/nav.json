@@ -1,0 +1,120 @@
+{
+  "brand": {
+    "title": "Seelegent — your AI department"
+  },
+  "goTo": "Go to {page}",
+  "watch": {
+    "label": "Watch",
+    "short": "Watch",
+    "title": "Watch",
+    "view": "Watch board",
+    "desc": "Everything running right now and what needs you, on one board."
+  },
+  "tasks": {
+    "label": "Tasks",
+    "short": "Tasks",
+    "view": "Task progress",
+    "title": "Tasks",
+    "desc": "Every task with its progress, report and review."
+  },
+  "issues": {
+    "label": "Issues",
+    "short": "Issues",
+    "title": "Issue → PR",
+    "desc": "Track issues and open pull requests from GitHub repositories.",
+    "view": "Issue → PR"
+  },
+  "meetings": {
+    "label": "Meetings",
+    "short": "Meetings",
+    "title": "Meetings",
+    "desc": "The lead asks several members in rounds: private answers, then an anonymous cross-check with verified evidence, a decision and minutes.",
+    "view": "Meetings"
+  },
+  "contests": {
+    "label": "Contests",
+    "short": "Contests",
+    "title": "Contests",
+    "desc": "One brief, several attempts in parallel, each in its own worktree. A machine scores them, a judge compares them blind, and you pick the winner to apply to your working folder.",
+    "view": "Contests"
+  },
+  "automations": {
+    "label": "Automations",
+    "short": "Auto",
+    "title": "Automations",
+    "desc": "Work handed to workers on a schedule. It runs only when the pre-check command allows it and there is enough quota.",
+    "view": "Automations"
+  },
+  "proof": {
+    "label": "Proof",
+    "short": "Proof",
+    "title": "Proof",
+    "desc": "Which requirements a gate command proves and which it does not. Re-run every gate to catch regressions.",
+    "view": "Gate proof"
+  },
+  "accounts": {
+    "label": "Accounts",
+    "short": "Accounts",
+    "title": "Accounts",
+    "desc": "The accounts and API keys workers use to run jobs.",
+    "view": "Accounts and quota"
+  },
+  "usage": {
+    "label": "Usage",
+    "short": "Usage",
+    "title": "Usage",
+    "desc": "Tokens, cost and limits over time, by project and by account.",
+    "view": "Usage"
+  },
+  "roles": {
+    "label": "Roles",
+    "short": "Roles",
+    "title": "Worker roles",
+    "desc": "Define skills, required rules, report style and skill sets for workers.",
+    "view": "Worker roles"
+  },
+  "members": {
+    "label": "Members",
+    "short": "Members",
+    "title": "Members",
+    "desc": "Who in the department takes work, with which worker source and model.",
+    "view": "Members"
+  },
+  "settings": {
+    "label": "Settings",
+    "short": "Settings",
+    "aria": "System settings"
+  },
+  "appearance": {
+    "label": "Appearance"
+  },
+  "more": {
+    "label": "More"
+  },
+  "rail": {
+    "main": "Main navigation",
+    "pages": "Main pages",
+    "mobile": "Mobile navigation"
+  },
+  "badge": {
+    "contests": "{count} contest waiting for a pick | {count} contests waiting for a pick",
+    "automations": "{count} automation failed its last run | {count} automations failed their last run",
+    "watch": "{count} task waiting for review | {count} tasks waiting for review",
+    "meetings": "{count} meeting waiting for you | {count} meetings waiting for you",
+    "more": "{count} page needs you | {count} pages need you"
+  },
+  "conn": {
+    "lost": "Lost connection to Seelegent, retrying…",
+    "restored": "Connection restored",
+    "retryIn": "Next try in {n} s"
+  },
+  "statusBar": {
+    "summary": "Status overview",
+    "idle": "Idle",
+    "idleTitle": "Accounts running no task / total accounts",
+    "running": "Active",
+    "runningTitle": "Tasks running",
+    "waiting": "Queued",
+    "waitingTitle": "Tasks waiting in the queue"
+  }
+}
