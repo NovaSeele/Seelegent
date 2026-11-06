@@ -63,7 +63,10 @@ func startE2E(t *testing.T, name, script string, prof account.Profile, turn Turn
 	if env == nil {
 		env = os.Environ()
 	}
-	env = append(env, "FAKECLI_SCRIPT="+abs, "FAKECLI_RECORD="+r.record)
+	// Under `go test -cover` every child process writes coverage data when it exits; parallel children sharing one
+	// GOCOVERDIR collide on Windows and print the failure on the fake CLI's stderr. Each run gets its own.
+	env = append(withoutVar(env, "GOCOVERDIR"), "GOCOVERDIR="+t.TempDir(),
+		"FAKECLI_SCRIPT="+abs, "FAKECLI_RECORD="+r.record)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	r.handle, err = launch.Start(ctx, launch.Options{
