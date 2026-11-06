@@ -6,9 +6,11 @@ Seelegent is a Go daemon + CLI + MCP server in one binary, with a Vue 3 + TypeSc
 ## Layout
 
 - `cmd/seelegent/main.go` only calls `internal/cli.Execute()`.
-- `internal/<pkg>/` — one job per package: `buildinfo`, `cli` (thin cobra commands), and later `app` (composition
-  root), `config`, `store`, `task`, `pool`, `backend`, `httpapi`, `api` (DTOs, source for tygo), `mcpserver`,
-  `setup`, `migrate`, ...
+- `internal/<pkg>/` — one job per package: `buildinfo`, `cli` (thin cobra commands), `fsutil` (atomic writes, file
+  locks, path keys), `config` (data paths, settings, config.json; see [docs/configuration.md](docs/configuration.md)),
+  `store` (SQLite, migrations in `store/migrations/NNNN_name.sql`), `logx` (slog setup, log rotation, secret
+  redaction), and later `app` (composition root), `task`, `pool`, `backend`, `httpapi`, `api` (DTOs, source for
+  tygo), `mcpserver`, `setup`, `migrate`, ...
 - `web/` — Vue app with its own `package.json`; `web/embed.go` embeds `web/dist`.
   `web/src/`: `main.ts`, `App.vue`, `router/`, `api/`, `stores/` (Pinia), `i18n/` (`locales/<lang>/<ns>.json`),
   `styles/` (tokens), `components/ui/`, `components/`, `features/<area>/`, `composables/`.
@@ -21,6 +23,9 @@ Seelegent is a Go daemon + CLI + MCP server in one binary, with a Vue 3 + TypeSc
 - No package-level mutable state: dependencies come through constructors. Every blocking call takes a
   `context.Context`.
 - New Go or npm dependencies need the lead's OK.
+- Files under the data directory are written with `fsutil.WriteFileAtomic`; compare or hash paths through
+  `fsutil.Key`, never raw strings. A store that cannot be read is an error, never a silent reset to empty. Log
+  through `logx` so secrets are masked.
 - Frontend: `<script setup lang="ts">`, strict TypeScript, no `any`, no `v-html` with task or worker text,
   components under about 300 lines, all user-visible text through vue-i18n, colours only through tokens,
   keyboard accessible and responsive.
