@@ -11,7 +11,7 @@ with owner-only permissions when a command starts, never earlier.
 | Path               | What it holds                                                                          |
 | ------------------ | -------------------------------------------------------------------------------------- |
 | `config.json`      | the settings described below                                                           |
-| `seelegent.db`     | the SQLite database (WAL mode, so `seelegent.db-wal` and `seelegent.db-shm` sit beside it) |
+| `seelegent.db`     | the SQLite database (WAL mode, so `seelegent.db-wal` and `seelegent.db-shm` sit beside it): accounts, quota cache, rest periods, usage history (hourly snapshots kept 30 days, attempt usage kept 60 days) |
 | `profiles/<id>/`   | one isolated CLI profile per worker account (same place as the old version)            |
 | `profiles/<id>/home/` | the home directory the worker CLI sees, with links into your real home (`linkIntoProfiles`) |
 | `profiles/<id>/seelegent-key` | API key of an API-key account: a DPAPI blob on Windows, a 0600 file elsewhere; never inside `home/` |
@@ -80,10 +80,10 @@ no look-ahead: write `"^gemini-3\\.8-"` (the JSON spelling of `^gemini-3\.8-`) r
 | Setting | Type | Default | Meaning |
 | --- | --- | --- | --- |
 | `maxConcurrentPerAccount` | integer 1–64 | `2` | Turns that may run at the same time on one account. |
-| `quotaRefreshMinutes` | integer ≥ 1 | `10` | How often quota is read from every account. |
-| `minRemaining` | number 0 ≤ x < 1 | `0.03` | An account is skipped for a quota group once its remaining fraction is at or below this. |
+| `quotaRefreshMinutes` | integer ≥ 1 | `10` | How often quota is read from every account (each cycle ±10 % so accounts are not all read at the same instant). A change applies from the next cycle. |
+| `minRemaining` | number 0 ≤ x < 1 | `0.03` | An account is skipped for a quota group once its remaining fraction is at or below this; it rests until the used-up windows reset. |
 | `passiveCooldownMinutes` | integer ≥ 1 | `60` | Rest after a quota error for API-key accounts whose provider cannot report the reset time. |
-| `usageHistory` | boolean | `true` | Record hourly usage snapshots. |
+| `usageHistory` | boolean | `true` | Record hourly usage snapshots (kept 30 days). The usage summary per task and account is recorded either way. |
 | `taskTimeoutMinutes` | integer ≥ 1 | `45` | Hard limit of one worker turn. |
 | `linkIntoProfiles` | list of relative paths | `.gitconfig`, `.git-credentials`, `.npmrc`, `.ssh`, `.config`, `.cargo`, `.rustup`, `.m2`, `.gradle`, `.nuget`, `go` | Entries of your real home directory linked into every isolated profile so worker commands keep their configuration. `[]` links nothing. |
 
