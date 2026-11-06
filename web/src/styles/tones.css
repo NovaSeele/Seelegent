@@ -1,0 +1,45 @@
+/*
+ * Tone classes: map one colour role to --tone-fg / --tone-bg / --tone-border, used by Badge, Chip, StatusPill,
+ * ProgressBar and Toast. Roles are explained in tokens.css; "accent" is for selection, never for a state.
+ */
+.tone-neutral {
+  --tone-fg: var(--neutral-fg);
+  --tone-bg: var(--neutral-bg);
+  --tone-border: var(--neutral-border);
+}
+
+.tone-accent {
+  --tone-fg: var(--accent);
+  --tone-bg: var(--accent-soft);
+  --tone-border: var(--accent-border);
+}
+
+.tone-running {
+  --tone-fg: var(--status-running-fg);
+  --tone-bg: var(--status-running-bg);
+  --tone-border: var(--status-running-border);
+}
+
+.tone-attention {
+  --tone-fg: var(--attention-fg);
+  --tone-bg: var(--attention-bg);
+  --tone-border: var(--attention-border);
+}
+
+.tone-success {
+  --tone-fg: var(--status-accepted-fg);
+  --tone-bg: var(--status-accepted-bg);
+  --tone-border: var(--status-accepted-border);
+}
+
+.tone-danger {
+  --tone-fg: var(--status-danger-fg);
+  --tone-bg: var(--status-danger-bg);
+  --tone-border: var(--status-danger-border);
+}
+
+.tone-muted {
+  --tone-fg: var(--status-cancelled-fg);
+  --tone-bg: var(--status-cancelled-bg);
+  --tone-border: var(--status-cancelled-border);
+}

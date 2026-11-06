@@ -33,5 +33,13 @@ export default defineConfig(
       'vue/no-v-html': 'error',
     },
   },
+  {
+    // UI primitives are named after what they are (Button, Dialog, Select). SFC templates are compiled, so
+    // <Button> never collides with the native <button>; the rule guards in-DOM templates, which are not used.
+    files: ['src/components/ui/**/*.vue'],
+    rules: {
+      'vue/multi-word-component-names': 'off',
+    },
+  },
   prettier,
 )

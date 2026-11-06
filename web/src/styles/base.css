@@ -27,6 +27,11 @@ body {
   min-height: 100dvh;
 }
 
+/* Japanese has no spaces between words: break lines at phrase boundaries where the browser can. */
+:root:lang(ja) {
+  word-break: auto-phrase;
+}
+
 h1,
 h2,
 h3,
@@ -89,6 +94,11 @@ samp {
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border: 0;
+}
+
+/* A modal layer is open (stores/layers.ts): the page behind it does not scroll. */
+:root[data-scroll-locked] {
+  overflow: hidden;
 }
 
 @keyframes spin {
