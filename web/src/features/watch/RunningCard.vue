@@ -4,7 +4,7 @@ import { useI18n } from 'vue-i18n'
 
 import StatusPill from '@/components/ui/StatusPill.vue'
 import { useFormat } from '@/composables/useFormat'
-import { displayStatus } from '@/lib/taskStatus'
+import { displayStatus, statusWordKey } from '@/lib/taskStatus'
 import { useTasksStore } from '@/stores/tasks'
 
 /** A task in progress: what it is doing now, for how long, and on which account. */
@@ -31,7 +31,7 @@ const until = computed(() =>
 <template>
   <article v-if="task" class="run" :data-status="task.status">
     <header class="run__head">
-      <StatusPill :status="status" size="sm" />
+      <StatusPill :status="status" :label="t(statusWordKey(task))" size="sm" />
       <span class="run__elapsed">
         <time :datetime="task.createdAt" :title="fmt.dateTime(task.createdAt)">
           {{ t('watch.running.elapsed', { time: fmt.duration(elapsed) }) }}

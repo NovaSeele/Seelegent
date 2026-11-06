@@ -109,7 +109,7 @@
   "attention": {
     "stalled": "停滞",
     "looping": "循环重复",
-    "question": "询问负责人",
+    "question": "有问题要问",
     "noResponse": "工人无响应",
     "auth": "需要登录",
     "noAccounts": "没有可用账号",

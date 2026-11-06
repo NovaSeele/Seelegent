@@ -17,14 +17,6 @@
     "empty": "Không có việc nào đang chờ bạn.",
     "waiting": "đã chờ {time}"
   },
-  "kind": {
-    "question": "Có câu hỏi",
-    "blocked": "Bị chặn",
-    "stalled": "Đứng im",
-    "failed": "Thất bại",
-    "depsBlocked": "Tác vụ trước bị lỗi",
-    "review": "Chờ duyệt"
-  },
   "next": {
     "answer": "Trả lời",
     "review": "Xem thay đổi",

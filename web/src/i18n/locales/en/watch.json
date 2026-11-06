@@ -17,14 +17,6 @@
     "empty": "Nothing is waiting for you.",
     "waiting": "waiting {time}"
   },
-  "kind": {
-    "question": "Has a question",
-    "blocked": "Blocked",
-    "stalled": "Stalled",
-    "failed": "Failed",
-    "depsBlocked": "Earlier task failed",
-    "review": "Ready for review"
-  },
   "next": {
     "answer": "Answer",
     "review": "Review changes",

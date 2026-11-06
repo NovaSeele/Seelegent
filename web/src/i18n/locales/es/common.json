@@ -90,8 +90,8 @@
       "short": "Rehacer"
     },
     "failed": {
-      "label": "Error",
-      "short": "Error"
+      "label": "Falló",
+      "short": "Falló"
     },
     "cancelled": {
       "label": "Cancelada",
@@ -109,7 +109,7 @@
   "attention": {
     "stalled": "Detenida",
     "looping": "En bucle",
-    "question": "Pregunta al lead",
+    "question": "Tiene una pregunta",
     "noResponse": "El worker no responde",
     "auth": "Requiere iniciar sesión",
     "noAccounts": "Sin cuentas disponibles",

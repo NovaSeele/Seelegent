@@ -21,7 +21,7 @@
     "network": "Lỗi kết nối máy chủ: {error}"
   },
   "next": {
-    "openTask": "Mở task",
+    "openTask": "Mở tác vụ",
     "openMeeting": "Mở cuộc họp"
   },
   "commit": {
@@ -70,8 +70,8 @@
       "short": "Quota"
     },
     "waitingWorker": {
-      "label": "Chờ thợ rảnh",
-      "short": "Chờ thợ"
+      "label": "Chờ worker rảnh",
+      "short": "Chờ worker"
     },
     "blocked": {
       "label": "Cần xử lý",
@@ -90,39 +90,39 @@
       "short": "Làm lại"
     },
     "failed": {
-      "label": "Lỗi",
-      "short": "Lỗi"
+      "label": "Thất bại",
+      "short": "Thất bại"
     },
     "cancelled": {
       "label": "Đã huỷ",
       "short": "Huỷ"
     },
     "waitingDeps": {
-      "label": "Chờ task trước",
+      "label": "Chờ tác vụ trước",
       "short": "Chờ trước"
     },
     "blockedDeps": {
-      "label": "Task trước lỗi",
-      "short": "Trước lỗi"
+      "label": "Tác vụ trước thất bại",
+      "short": "Trước thất bại"
     }
   },
   "attention": {
-    "stalled": "Đứng im",
+    "stalled": "Bị kẹt",
     "looping": "Lặp lại",
-    "question": "Hỏi lead",
-    "noResponse": "Thợ không trả lời",
+    "question": "Có câu hỏi",
+    "noResponse": "Worker không trả lời",
     "auth": "Cần đăng nhập",
     "noAccounts": "Hết tài khoản",
     "failed": "Thất bại",
     "review": "Chờ duyệt",
     "quotaWait": "Chờ quota",
-    "waitingWorker": "Chờ thợ rảnh",
-    "manual": "Bạn đang lái",
+    "waitingWorker": "Chờ worker rảnh",
+    "manual": "Bạn đang điều khiển",
     "gate": "Kiểm cổng",
     "gateRed": "Cổng lỗi",
     "workAtRisk": "Có thể mất việc",
-    "depsBlocked": "Task trước lỗi",
-    "waitingDeps": "Chờ task trước"
+    "depsBlocked": "Tác vụ trước thất bại",
+    "waitingDeps": "Chờ tác vụ trước"
   },
   "stage": {
     "explore": "Khám phá",

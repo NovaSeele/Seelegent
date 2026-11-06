@@ -90,8 +90,8 @@
       "short": "やり直し"
     },
     "failed": {
-      "label": "エラー",
-      "short": "エラー"
+      "label": "失敗",
+      "short": "失敗"
     },
     "cancelled": {
       "label": "キャンセル済み",
@@ -109,7 +109,7 @@
   "attention": {
     "stalled": "停止中",
     "looping": "繰り返し",
-    "question": "リードに質問",
+    "question": "質問があります",
     "noResponse": "ワーカーが応答しない",
     "auth": "ログインが必要",
     "noAccounts": "使えるアカウントがない",

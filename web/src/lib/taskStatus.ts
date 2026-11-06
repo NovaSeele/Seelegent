@@ -62,6 +62,20 @@ export function displayStatus(task: TaskSummary): DisplayStatus {
   }
 }
 
+/**
+ * The i18n key of a task's status word. A blocked task says why (a question, stalled) so the pill, the list,
+ * the banner and the Watch board use one name per state.
+ */
+export function statusWordKey(task: TaskSummary): string {
+  const status = displayStatus(task)
+  if (status === 'blocked') {
+    const state = task.attention?.state
+    if (state === 'question') return 'common.attention.question'
+    if (state === 'stalled') return 'common.attention.stalled'
+  }
+  return `common.status.${status}.label`
+}
+
 /** Why a task is on the "needs you" board, most urgent first. */
 export type NeedKind = 'question' | 'blocked' | 'stalled' | 'failed' | 'depsBlocked' | 'review'
 
@@ -73,6 +87,16 @@ export const NEED_ORDER: readonly NeedKind[] = [
   'depsBlocked',
   'review',
 ]
+
+/** The word for each reason on the board: the same words the status pill and the banner use. */
+export const NEED_WORD_KEY: Readonly<Record<NeedKind, string>> = {
+  question: 'common.attention.question',
+  blocked: 'common.status.blocked.label',
+  stalled: 'common.attention.stalled',
+  failed: 'common.status.failed.label',
+  depsBlocked: 'common.status.blockedDeps.label',
+  review: 'common.status.review.label',
+}
 
 /** Failed tasks stay on the board this long; after that they are history. */
 export const FAILED_NEEDS_MS = 24 * 3600_000

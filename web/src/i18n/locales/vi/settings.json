@@ -19,8 +19,8 @@
       "desc": "Chủ đề màu, phông chữ và chuyển động. Chỉ lưu trong trình duyệt này."
     },
     "workers": {
-      "label": "Thợ",
-      "desc": "Số thợ chạy cùng lúc và các mô hình được dùng."
+      "label": "Worker",
+      "desc": "Số worker chạy cùng lúc và các mô hình được dùng."
     },
     "quota": {
       "label": "Hạn mức",
@@ -44,7 +44,7 @@
     },
     "memory": {
       "label": "Bộ nhớ",
-      "desc": "Thông tin dự án gửi kèm cho mọi thợ."
+      "desc": "Thông tin dự án gửi kèm cho mọi worker."
     },
     "experiments": {
       "label": "Thử nghiệm",
@@ -107,8 +107,8 @@
       "keywords": "ngôn ngữ dịch tiếng"
     },
     "concurrency": {
-      "label": "Số thợ cùng lúc",
-      "desc": "Tối đa bao nhiêu thợ được chạy cùng một lúc.",
+      "label": "Số worker cùng lúc",
+      "desc": "Tối đa bao nhiêu worker được chạy cùng một lúc.",
       "keywords": "song song đồng thời giới hạn"
     },
     "defaultTier": {
@@ -118,7 +118,7 @@
     },
     "modelCap": {
       "label": "Trần mô hình",
-      "desc": "Mô hình mạnh nhất mà thợ được dùng.",
+      "desc": "Mô hình mạnh nhất mà worker được dùng.",
       "keywords": "giới hạn mô hình"
     },
     "quotaReserve": {
@@ -143,7 +143,7 @@
     },
     "desktopNotify": {
       "label": "Thông báo trên máy",
-      "desc": "Báo khi có tác vụ chờ duyệt hoặc thợ đặt câu hỏi.",
+      "desc": "Báo khi có tác vụ chờ duyệt hoặc worker đặt câu hỏi.",
       "keywords": "cảnh báo báo tin"
     },
     "sound": {

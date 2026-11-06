@@ -5,7 +5,7 @@ import { useI18n } from 'vue-i18n'
 import Button from '@/components/ui/Button.vue'
 import Icon from '@/components/ui/Icon.vue'
 import { useFormat } from '@/composables/useFormat'
-import type { NeedKind } from '@/lib/taskStatus'
+import { NEED_WORD_KEY, type NeedKind } from '@/lib/taskStatus'
 import { useTasksStore } from '@/stores/tasks'
 
 import { NEED_LOOK, nextStep, OVERDUE_MS } from './watchModel'
@@ -48,7 +48,7 @@ const target = computed(() =>
     <header class="need__head">
       <span class="need__kind">
         <Icon :name="look.icon" class="need__icon" />
-        {{ t(`watch.kind.${kind}`) }}
+        {{ t(NEED_WORD_KEY[kind]) }}
       </span>
       <span class="need__age" :class="{ 'need__age--overdue': overdue }">
         <time :datetime="since" :title="fmt.dateTime(since)">

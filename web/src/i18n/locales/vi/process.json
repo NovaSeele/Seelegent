@@ -9,7 +9,7 @@
   "state": {
     "running": "Đang chạy",
     "ok": "Xong",
-    "failed": "Lỗi"
+    "failed": "Thất bại"
   },
   "partial": "Mới tải các bước gần nhất.",
   "loadEarlier": "Tải các bước cũ hơn",

@@ -5,7 +5,7 @@ import { useI18n } from 'vue-i18n'
 import Icon from '@/components/ui/Icon.vue'
 import { TASK_STATUS } from '@/components/ui/tone'
 import { useFormat } from '@/composables/useFormat'
-import { displayStatus } from '@/lib/taskStatus'
+import { displayStatus, statusWordKey } from '@/lib/taskStatus'
 import { useTasksStore } from '@/stores/tasks'
 
 /**
@@ -70,7 +70,7 @@ function onClick(event: MouseEvent, navigate: (e?: MouseEvent) => unknown) {
           :name="look.icon"
           class="row__status"
           :class="`tone-${look.tone}`"
-          :label="t(`common.status.${status}.label`)"
+          :label="t(statusWordKey(task))"
         />
         <span class="row__body">
           <span class="row__title">{{ task.title }}</span>

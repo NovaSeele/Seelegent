@@ -17,14 +17,6 @@
     "empty": "기다리고 있는 일이 없습니다.",
     "waiting": "{time}째 대기"
   },
-  "kind": {
-    "question": "질문이 있음",
-    "blocked": "막힘",
-    "stalled": "멈춤",
-    "failed": "실패",
-    "depsBlocked": "선행 작업 실패",
-    "review": "검토 대기"
-  },
   "next": {
     "answer": "답변",
     "review": "변경 사항 보기",

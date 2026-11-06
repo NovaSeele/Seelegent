@@ -83,7 +83,7 @@
   "detail": {
     "loading": "Đang tải tác vụ…",
     "notFound": "Không mở được tác vụ này",
-    "error": "Lỗi gì đã xảy ra"
+    "error": "Đã xảy ra lỗi"
   },
   "views": {
     "label": "Các chế độ xem tác vụ",

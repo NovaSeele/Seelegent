@@ -2,7 +2,15 @@ import { describe, expect, it } from 'vitest'
 
 import { iso, makeTask, T0 } from '@/test/fixtures'
 
-import { canCancel, canFollowup, displayStatus, isVisibleTask, needKind } from './taskStatus'
+import {
+  canCancel,
+  canFollowup,
+  displayStatus,
+  isVisibleTask,
+  NEED_WORD_KEY,
+  needKind,
+  statusWordKey,
+} from './taskStatus'
 
 const attention = (state: 'blocked' | 'question' | 'stalled' | 'info') => ({
   state,
@@ -53,5 +61,19 @@ describe('task status', () => {
     expect(canFollowup(makeTask({ status: 'done', manual: true }))).toBe(false)
     expect(canCancel(makeTask({ status: 'waiting_deps' }))).toBe(true)
     expect(canCancel(makeTask({ status: 'done' }))).toBe(false)
+  })
+})
+
+describe('status words', () => {
+  it('names a blocked task by why it waits, the same word the Watch board uses', () => {
+    const question = makeTask({ status: 'running', attention: attention('question') })
+    expect(statusWordKey(question)).toBe('common.attention.question')
+    expect(NEED_WORD_KEY.question).toBe(statusWordKey(question))
+    const stalled = makeTask({ status: 'running', attention: attention('stalled') })
+    expect(statusWordKey(stalled)).toBe(NEED_WORD_KEY.stalled)
+    const blocked = makeTask({ status: 'running', attention: attention('blocked') })
+    expect(statusWordKey(blocked)).toBe(NEED_WORD_KEY.blocked)
+    expect(statusWordKey(makeTask({ status: 'done', review: null }))).toBe(NEED_WORD_KEY.review)
+    expect(statusWordKey(makeTask({ status: 'failed' }))).toBe(NEED_WORD_KEY.failed)
   })
 })

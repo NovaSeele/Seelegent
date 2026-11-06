@@ -17,14 +17,6 @@
     "empty": "Nada está esperando por ti.",
     "waiting": "esperando {time}"
   },
-  "kind": {
-    "question": "Tiene una pregunta",
-    "blocked": "Bloqueada",
-    "stalled": "Detenida",
-    "failed": "Falló",
-    "depsBlocked": "Falló una tarea previa",
-    "review": "Lista para revisar"
-  },
   "next": {
     "answer": "Responder",
     "review": "Revisar cambios",

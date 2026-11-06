@@ -17,14 +17,6 @@
     "empty": "没有等你处理的事。",
     "waiting": "已等待 {time}"
   },
-  "kind": {
-    "question": "有问题要问",
-    "blocked": "被阻塞",
-    "stalled": "停滞",
-    "failed": "失败",
-    "depsBlocked": "前置任务失败",
-    "review": "待审查"
-  },
   "next": {
     "answer": "回答",
     "review": "查看改动",

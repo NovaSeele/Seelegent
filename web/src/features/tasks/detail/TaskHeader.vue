@@ -18,6 +18,7 @@ import {
   displayStatus,
   isActive,
   isBlocked,
+  statusWordKey,
 } from '@/lib/taskStatus'
 
 import { TASK_KEYS } from './taskKeys'
@@ -88,7 +89,7 @@ function onMenu(id: string) {
       >
         {{ t('nav.tasks.label') }}
       </Button>
-      <StatusPill :status="status" />
+      <StatusPill :status="status" :label="t(statusWordKey(task))" />
       <span v-if="task.manual" class="th__manual">{{ t('task.header.driving') }}</span>
       <div class="th__actions">
         <template v-if="reviewable">

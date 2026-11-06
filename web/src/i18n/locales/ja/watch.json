@@ -17,14 +17,6 @@
     "empty": "あなたを待っているものはありません。",
     "waiting": "{time} 待機中"
   },
-  "kind": {
-    "question": "質問があります",
-    "blocked": "ブロック中",
-    "stalled": "停止中",
-    "failed": "失敗",
-    "depsBlocked": "前のタスクが失敗",
-    "review": "レビュー待ち"
-  },
   "next": {
     "answer": "回答する",
     "review": "変更を確認",
