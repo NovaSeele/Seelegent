@@ -113,17 +113,13 @@ func (s *treeScan) scanTrees(trees []*WorkerTree) (id string, found bool, fresh 
 
 // classifyUnreadable decides when no readable tree process holds the socket. Unreadable tree processes that run
 // as another user than the socket's cannot have created it and are ignored. If any are left, the socket must be
-// found in a readable process outside the trees (positive evidence for the lead); otherwise the caller may be one
-// of them and counts as a worker of no particular task.
+// found in a readable process outside the trees (positive evidence for the lead); only processes of the socket's
+// user are looked at there. Otherwise the caller may be one of them and counts as a worker of no particular task.
 func (s *treeScan) classifyUnreadable(sock tcpSocket) (id string, isWorker bool, err error) {
 	var suspects []int
 	for _, pid := range s.unreadable {
-		euid, fsuid, err := procUIDs(pid)
-		if errors.Is(err, fs.ErrNotExist) {
-			continue // gone
-		}
-		if err == nil && euid != sock.uid && fsuid != sock.uid {
-			continue
+		if ok, err := mayOwn(pid, sock.uid); errors.Is(err, fs.ErrNotExist) || (err == nil && !ok) {
+			continue // gone, or another user's
 		}
 		suspects = append(suspects, pid)
 	}
@@ -134,11 +130,23 @@ func (s *treeScan) classifyUnreadable(sock tcpSocket) (id string, isWorker bool,
 		if s.inTree[p.pid] || p.zombie {
 			continue
 		}
+		if ok, err := mayOwn(p.pid, sock.uid); err != nil || !ok {
+			continue
+		}
 		if has, err := hasOpenFile(p.pid, s.link); err == nil && has {
 			return "", false, nil
 		}
 	}
 	return "", true, fmt.Errorf("%w: cannot read the open files of worker tree processes %v", ErrSocketOwnerUnknown, suspects)
+}
+
+// mayOwn reports whether process pid runs as uid (effective or file-system id), the user a socket was created by.
+func mayOwn(pid, uid int) (bool, error) {
+	euid, fsuid, err := procUIDs(pid)
+	if err != nil {
+		return false, err
+	}
+	return euid == uid || fsuid == uid, nil
 }
 
 // procUIDs returns the effective and file-system user ids of pid from /proc/<pid>/status, which stays readable

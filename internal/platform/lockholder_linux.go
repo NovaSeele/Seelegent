@@ -25,6 +25,12 @@ func lockHolders(path string) ([]int, error) {
 }
 
 // parseProcLocks returns the pids that hold a lock on inode ino.
+//
+// The device (MAJ:MIN) is deliberately not compared: /proc/locks prints the device of the inode's super block,
+// while stat reports another one on btrfs subvolumes (an anonymous device per subvolume, the Fedora default) and
+// on overlayfs (containers), so a device check would turn a real launcher into "not the lock holder" there and the
+// worker guard would fail closed for the whole run. An inode number that matches on another file system only
+// matters if that same process, already checked by id and start time, also holds a lock on that other file.
 func parseProcLocks(data []byte, ino uint64) []int {
 	var out []int
 	sc := bufio.NewScanner(bytes.NewReader(data))
