@@ -186,6 +186,7 @@ func (s *Service) endRun(r *run) {
 
 // runTask works on the task until its open turn ended, it was cancelled or taken over, or the daemon stops.
 func (s *Service) runTask(r *run) {
+	baselineTried := false
 	for {
 		t, err := s.repo.Get(s.root, r.id)
 		if err != nil {
@@ -211,6 +212,10 @@ func (s *Service) runTask(r *run) {
 			return
 		case r.ctx.Err() != nil:
 			return
+		case !t.BaselineTaken && !baselineTried && tu.N == 1 && len(tu.Attempts) == 0:
+			baselineTried = true
+			s.takeBaseline(r.ctx, t)
+			continue
 		default:
 			more, err = s.newAttempt(r, t, tu)
 		}
@@ -224,6 +229,28 @@ func (s *Service) runTask(r *run) {
 		if !more {
 			return
 		}
+	}
+}
+
+// takeBaseline records which files under the task's folder already had uncommitted changes before its first
+// worker ran, so the brief tells the worker not to revert them (old A10).
+func (s *Service) takeBaseline(ctx context.Context, t *Task) {
+	root, files := captureBaseline(ctx, t.Cwd)
+	if ctx.Err() != nil {
+		return
+	}
+	_, err := s.mutate(ctx, t.ID, func(cur *Task) ([]NewEvent, error) {
+		if cur.BaselineTaken {
+			return nil, errNoChange
+		}
+		cur.BaselineTaken, cur.Baseline = true, files
+		if cur.RepoRoot == "" {
+			cur.RepoRoot = root
+		}
+		return nil, nil
+	})
+	if err != nil && ctx.Err() == nil {
+		s.log.Warn("task: baseline", "task", t.ID, "err", err)
 	}
 }
 
@@ -800,7 +827,7 @@ func (s *Service) prompt(ctx context.Context, t *Task, tu *Turn, continuing bool
 		return request
 	}
 	in := brief.Input{Cwd: t.Cwd, Plan: t.Mode == ModePlan, Spec: spec, Deps: t.DepsContext,
-		Interrupted: len(tu.Attempts) > 0, Message: tu.Message}
+		Interrupted: len(tu.Attempts) > 0, Message: tu.Message, Baseline: displayPaths(t.Cwd, t.Baseline)}
 	if t.Session != nil {
 		in.Lead = brief.LeadName(t.Session.HostID)
 	}

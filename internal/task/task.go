@@ -125,6 +125,10 @@ type Task struct {
 	DepsReason string   `json:"depsReason,omitempty"`
 	// DepsContext is the context from the prerequisites, fixed when the task starts (brief.DepsContext).
 	DepsContext string `json:"depsContext,omitempty"`
+	// Baseline lists the files (absolute paths) that already had uncommitted changes when the task's first turn
+	// started; BaselineTaken records that the capture ran, even when it found nothing.
+	Baseline      []string `json:"baseline,omitempty"`
+	BaselineTaken bool     `json:"baselineTaken,omitempty"`
 
 	// AccountID owns the conversation ConversationID: a later turn on the same account resumes it.
 	AccountID      string `json:"accountId,omitempty"`

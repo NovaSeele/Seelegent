@@ -2,6 +2,9 @@ package task
 
 import (
 	"os"
+	"os/exec"
+	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -123,4 +126,52 @@ func TestCancelledTakeoverFreesSlot(t *testing.T) {
 	b := h.delegate(api.DelegateRequest{Prompt: "Another task."})
 	h.waitStatus(b.ID, StatusDone)
 	h.consoles.exit(0, 0)
+}
+
+// TestBaselineInBrief captures the files with uncommitted changes when the task starts and lists them in the brief.
+func TestBaselineInBrief(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git is not installed")
+	}
+	h := newHarness(t)
+	h.agy("only", 0)
+	git := func(args ...string) {
+		t.Helper()
+		cmd := exec.CommandContext(t.Context(), "git", args...)
+		cmd.Dir = h.cwd
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	git("init", "-q")
+	git("-c", "user.email=t@example.com", "-c", "user.name=t", "commit", "-q", "--allow-empty", "-m", "init")
+	if err := mkdir(filepath.Join(h.cwd, "sub")); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeText(filepath.Join(h.cwd, "sub", "wip [1].go"), "package sub\n"); err != nil {
+		t.Fatal(err)
+	}
+	h.queue.Push(t, okScript("conv-b", "ok"))
+	sum := h.delegate(api.DelegateRequest{})
+	tk := h.waitStatus(sum.ID, StatusDone)
+	if !tk.BaselineTaken || len(tk.Baseline) != 1 || tk.RepoRoot == "" {
+		t.Fatalf("baseline = %v (taken %v), root %q", tk.Baseline, tk.BaselineTaken, tk.RepoRoot)
+	}
+	p, err := h.s.Prompt(t.Context(), sum.ID, 1, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(p, "- sub/wip [1].go") {
+		t.Fatalf("the brief does not list the baseline:\n%s", p)
+	}
+}
+
+func TestParsePorcelainZ(t *testing.T) {
+	root := filepath.FromSlash("/r")
+	out := []byte(" M a.go\x00R  new.go\x00old.go\x00?? dir/x y.txt\x00")
+	got := parsePorcelainZ(root, out)
+	want := []string{filepath.Join(root, "a.go"), filepath.Join(root, "new.go"), filepath.Join(root, "dir", "x y.txt")}
+	if !slices.Equal(got, want) {
+		t.Fatalf("got %q, want %q", got, want)
+	}
 }
