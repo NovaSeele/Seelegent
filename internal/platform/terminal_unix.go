@@ -27,5 +27,5 @@ func openTerminal(ctx context.Context, spec TerminalSpec, base, exitFile string)
 		return nil, &NoTerminalError{Command: "sh " + shQuote(scriptPath), Reason: err.Error()}
 	}
 	go func() { _ = cmd.Wait() }() // reap the launcher process; the window is tracked through exitFile
-	return &Terminal{exitFile: exitFile}, nil
+	return &Terminal{exitFile: exitFile, pidFile: pidFileFor(exitFile)}, nil
 }

@@ -42,5 +42,5 @@ func openTerminal(_ context.Context, spec TerminalSpec, base, exitFile string) (
 	if err := cmd.Start(); err != nil {
 		return nil, fmt.Errorf("open terminal: %w", err)
 	}
-	return &Terminal{exitFile: exitFile, process: cmd}, nil
+	return &Terminal{exitFile: exitFile, process: cmd, pid: cmd.Process.Pid}, nil
 }
