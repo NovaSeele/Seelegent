@@ -3,14 +3,18 @@
  * viewport are in the DOM, padded above and below to the full height. Rendered items are measured with a
  * ResizeObserver. While `following`, the list stays pinned to the end as items arrive or grow; otherwise the
  * first visible item keeps its place when items load above it or change height (manual scroll anchoring, so the
- * container sets `overflow-anchor: none`).
+ * container sets `overflow-anchor: none`). Following stops only on the reader's own input (wheel, touch, keys,
+ * the scrollbar); a scroll the layout causes (items measured shorter or taller than estimated) re-pins the end.
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, shallowRef, watch, type Ref } from 'vue'
 
-import { keepsFollowing, layout, visibleRange } from '@/lib/virtual'
+import { fromBottom, keepsFollowing, layout, visibleRange } from '@/lib/virtual'
 
 /** Within this many px of the end counts as "at the end" (the user is following). */
 export const FOLLOW_THRESHOLD = 48
+/** A scroll this soon after the reader's input is theirs (wheel and key scrolls arrive a frame or two later). */
+export const READER_INPUT_MS = 600
+const UP_KEYS = new Set(['PageUp', 'ArrowUp', 'Home'])
 
 export interface VirtualListOptions {
   scroller: Readonly<Ref<HTMLElement | null>>
@@ -50,10 +54,35 @@ export function useVirtualList(options: VirtualListOptions) {
     anchor = key === undefined ? null : { key, delta: el.scrollTop - (all[i] ?? 0) }
   }
 
+  // The reader's own scrolling: only this may stop following.
+  let inputAt = -Infinity
+  let draggingBar = false
+  const readerInput = () => draggingBar || Date.now() - inputAt < READER_INPUT_MS
+  const markInput = () => (inputAt = Date.now())
+  const onWheel = (event: WheelEvent) => event.deltaY < 0 && markInput()
+  const onKeydown = (event: KeyboardEvent) => {
+    if (UP_KEYS.has(event.key) || (event.key === ' ' && event.shiftKey)) markInput()
+  }
+  /**
+   * A press on the scroller itself, not on an item: its scrollbar (classic or overlay, which sits inside the
+   * client box) or its padding. Counts as reader input until the pointer is released.
+   */
+  const onPointerdown = (event: PointerEvent) => {
+    if (!scroller.value || event.target !== scroller.value) return
+    draggingBar = true
+    markInput()
+  }
+  const onPointerup = () => {
+    if (draggingBar) markInput()
+    draggingBar = false
+  }
+
   function onScroll() {
     const el = scroller.value
     if (!el) return
-    following.value = keepsFollowing(following.value, lastTop, el, FOLLOW_THRESHOLD)
+    following.value = keepsFollowing(following.value, lastTop, el, FOLLOW_THRESHOLD, readerInput())
+    // Still following but off the end: the layout moved it (a clamp after re-measuring), so go back.
+    if (following.value && fromBottom(el) > FOLLOW_THRESHOLD) el.scrollTop = el.scrollHeight
     lastTop = el.scrollTop
     top.value = el.scrollTop
     rememberAnchor()
@@ -164,12 +193,23 @@ export function useVirtualList(options: VirtualListOptions) {
     if (!el) return
     viewport.value = el.clientHeight
     el.addEventListener('scroll', onScroll, { passive: true })
+    el.addEventListener('wheel', onWheel, { passive: true })
+    el.addEventListener('touchmove', markInput, { passive: true })
+    el.addEventListener('keydown', onKeydown)
+    el.addEventListener('pointerdown', onPointerdown)
+    window.addEventListener('pointerup', onPointerup)
     viewportObserver?.observe(el)
     scrollToEnd()
   })
 
   onBeforeUnmount(() => {
-    scroller.value?.removeEventListener('scroll', onScroll)
+    const el = scroller.value
+    el?.removeEventListener('scroll', onScroll)
+    el?.removeEventListener('wheel', onWheel)
+    el?.removeEventListener('touchmove', markInput)
+    el?.removeEventListener('keydown', onKeydown)
+    el?.removeEventListener('pointerdown', onPointerdown)
+    window.removeEventListener('pointerup', onPointerup)
     observer?.disconnect()
     viewportObserver?.disconnect()
     if (frame) cancelAnimationFrame(frame)

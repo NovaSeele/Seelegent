@@ -48,12 +48,16 @@ describe('following the end', () => {
 
   it('keeps following when content grows below a programmatic jump to the end', () => {
     // Jumped to 800 (the end); items were then measured taller, so the end moved to 1400.
-    expect(keepsFollowing(true, 800, el(800, 1400), 48)).toBe(true)
+    expect(keepsFollowing(true, 800, el(800, 1400), 48, false)).toBe(true)
+  })
+
+  it('keeps following when scrollTop drops without reader input (clamped after re-measuring)', () => {
+    expect(keepsFollowing(true, 2000, el(1219, 2362), 48, false)).toBe(true)
   })
 
   it('stops only when the reader scrolls up, and resumes at the end', () => {
-    expect(keepsFollowing(true, 800, el(600), 48)).toBe(false)
-    expect(keepsFollowing(false, 600, el(700), 48)).toBe(false)
-    expect(keepsFollowing(false, 700, el(790), 48)).toBe(true)
+    expect(keepsFollowing(true, 800, el(600), 48, true)).toBe(false)
+    expect(keepsFollowing(false, 600, el(700), 48, false)).toBe(false)
+    expect(keepsFollowing(false, 700, el(790), 48, false)).toBe(true)
   })
 })

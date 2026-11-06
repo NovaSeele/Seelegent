@@ -58,17 +58,20 @@ export const fromBottom = (el: { scrollTop: number; scrollHeight: number; client
   el.scrollHeight - el.scrollTop - el.clientHeight
 
 /**
- * Whether a feed keeps following its end after a scroll event. Only the reader scrolling up stops following:
- * content that grows after a programmatic jump to the end (the scroll event arrives a frame later, when items
- * have been measured taller) must not, or a running task opens mid-way with "Jump to latest" showing.
+ * Whether a feed keeps following its end after a scroll event. Only the reader scrolling up stops following,
+ * and only with real input behind it (`readerInput`: wheel, touch, keys, the scrollbar). Everything else moves
+ * scrollTop too: content measured taller after a jump to the end, or shorter than its estimate so the browser
+ * clamps scrollTop down (a decrease nobody asked for). Those keep following, or a running task opens mid-way
+ * with "Jump to latest" showing.
  */
 export function keepsFollowing(
   following: boolean,
   previousTop: number,
   el: { scrollTop: number; scrollHeight: number; clientHeight: number },
   threshold: number,
+  readerInput: boolean,
 ): boolean {
   if (fromBottom(el) <= threshold) return true
-  if (el.scrollTop < previousTop - 1) return false
+  if (readerInput && el.scrollTop < previousTop - 1) return false
   return following
 }
