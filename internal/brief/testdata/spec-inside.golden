@@ -33,7 +33,7 @@ Your tasks from tasks.md: the tasks the lead names below. Implement only these, 
 Do not edit tasks.md or any spec file: the lead ticks tasks after review. If the spec and your tasks conflict or are ambiguous, make no guess on behavior: report it under Open issues.
 
 ## Uncommitted work already in this folder
-1 file already have uncommitted changes from other people, so git diff and git status will show them and this is expected and is not yours to clean:
+1 file has uncommitted changes from other people, so git diff and git status will show them; this is expected, and they are not yours to clean up or revert:
 - go.mod
 
 ## Task

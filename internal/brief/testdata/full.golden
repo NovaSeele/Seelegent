@@ -63,7 +63,7 @@ Your tasks from C:/specs/app-spec/specs/001-x/tasks.md: T001, T002. Implement on
 Do not edit C:/specs/app-spec/specs/001-x/tasks.md or any spec file: the lead ticks tasks after review. If the spec and your tasks conflict or are ambiguous, make no guess on behavior: report it under Open issues.
 
 ## Uncommitted work already in this folder
-32 files already have uncommitted changes from other people, so git diff and git status will show them and this is expected and is not yours to clean:
+32 files have uncommitted changes from other people, so git diff and git status will show them; this is expected, and they are not yours to clean up or revert:
 - filea.go
 - fileb.go
 - filec.go

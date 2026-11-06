@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -855,15 +856,28 @@ func (s *Service) prompt(ctx context.Context, t *Task, tu *Turn, continuing bool
 			s.log.Warn("task: review history", "task", t.ID, "err", err)
 		}
 	}
-	if data, err := os.ReadFile(filepath.Join(t.Cwd, ".specify", "memory", "constitution.md")); err == nil {
-		in.Constitution = string(data)
-	}
+	in.Constitution = readPrefix(filepath.Join(t.Cwd, ".specify", "memory", "constitution.md"), 4*brief.ConstitutionChars)
 	for _, x := range t.Turns {
 		if x.N < tu.N {
 			in.Earlier = append(in.Earlier, brief.Turn{N: x.N, Message: x.Message, Response: x.Response, Files: x.Files})
 		}
 	}
 	return brief.Worker(in)
+}
+
+// readPrefix returns up to max bytes from the start of a file ("" when it cannot be read): the brief keeps only the
+// first few thousand characters, so a huge file is never read whole.
+func readPrefix(path string, maxBytes int64) string {
+	f, err := os.Open(path)
+	if err != nil {
+		return ""
+	}
+	defer func() { _ = f.Close() }()
+	data, err := io.ReadAll(io.LimitReader(f, maxBytes))
+	if err != nil {
+		return ""
+	}
+	return strings.ToValidUTF8(string(data), "")
 }
 
 // briefSpec is the task's Spec Kit feature as the brief shows it.

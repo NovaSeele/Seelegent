@@ -83,7 +83,7 @@ func TestWorkerFull(t *testing.T) {
 func TestWorkerInsideSpecAndOneBaselineFile(t *testing.T) {
 	got := Worker(Input{Cwd: "/p", Spec: &Spec{Dir: "specs/002-y"}, Baseline: []string{"go.mod"}, Message: "Go."})
 	golden(t, "spec-inside", got)
-	if !strings.Contains(got, "1 file already have") || !strings.Contains(got, "the tasks the lead names below") {
+	if !strings.Contains(got, "1 file has uncommitted changes") || !strings.Contains(got, "the tasks the lead names below") {
 		t.Errorf("unexpected brief:\n%s", got)
 	}
 }
@@ -122,5 +122,25 @@ func TestSmallHelpers(t *testing.T) {
 	}
 	if Retry == "" || BackgroundWait == "" || !strings.HasPrefix(Handback, "## Hand-back") {
 		t.Error("fixed prompts")
+	}
+}
+
+func TestQuotedAndPreview(t *testing.T) {
+	report := "## Summary\nDid it.\n```sh\n# a comment\n```\n#hashtag\n    ## indented code\n### Files changed\n- a.go"
+	want := "##### Summary\nDid it.\n```sh\n# a comment\n```\n#hashtag\n    ## indented code\n###### Files changed\n- a.go"
+	if got := quoted(report, 1000); got != want {
+		t.Errorf("quoted =\n%s", got)
+	}
+	if got := quoted(strings.Repeat("x", 20), 10); got != strings.Repeat("x", 10)+"…" {
+		t.Errorf("cut turn = %q", got)
+	}
+	a := Preview(Worker(Input{Cwd: "/a", Message: "Task A"}))
+	b := Preview(Worker(Input{Cwd: "/b", Message: "Task B"}))
+	if a == b || !strings.HasPrefix(a, "Working directory: /a") {
+		t.Errorf("previews %q / %q", a, b)
+	}
+	w := Worker(Input{Cwd: "/p", Earlier: []Turn{{N: 1, Message: "m", Response: "## Summary\nok"}}, Message: "next"})
+	if !strings.Contains(w, "##### Summary") || strings.Contains(w, "reported\n## Summary") {
+		t.Errorf("the earlier report's heading was not demoted:\n%s", w)
 	}
 }

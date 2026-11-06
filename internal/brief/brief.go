@@ -176,9 +176,9 @@ func Worker(in Input) string {
 			"you do not share their chat history). Inspect the current state of the files before acting; some work " +
 			"below may be partially done."}
 		for _, t := range in.Earlier {
-			lines = append(lines, fmt.Sprintf("### Turn %d: the lead asked", t.N), cut(t.Message, TurnChars, ""))
+			lines = append(lines, fmt.Sprintf("### Turn %d: the lead asked", t.N), quoted(t.Message, TurnChars))
 			if t.Response != "" {
-				lines = append(lines, fmt.Sprintf("### Turn %d: the worker reported", t.N), cut(t.Response, TurnChars, ""))
+				lines = append(lines, fmt.Sprintf("### Turn %d: the worker reported", t.N), quoted(t.Response, TurnChars))
 			}
 			if len(t.Files) > 0 {
 				lines = append(lines, "Files touched: "+strings.Join(t.Files, ", "))
@@ -235,7 +235,7 @@ func DepsContext(deps []Dep) string {
 		if title == "" {
 			title = "(untitled)"
 		}
-		text := cut(strings.TrimSpace(d.Response), DepChars, "…")
+		text := quoted(strings.TrimSpace(d.Response), DepChars)
 		if text == "" {
 			text = "(no report)"
 		}
@@ -263,8 +263,35 @@ func LeadName(host string) string {
 	return "a CLI user"
 }
 
-// Preview returns the first PreviewChars characters of a brief.
-func Preview(prompt string) string { return cut(prompt, PreviewChars, "") }
+// Preview returns the first PreviewChars characters of a brief after the fixed rules, which every full brief starts
+// with, so previews of different tasks differ.
+func Preview(prompt string) string {
+	return cut(strings.TrimLeft(strings.TrimPrefix(prompt, workerRules), "\n"), PreviewChars, "")
+}
+
+// quoted prepares text written by a worker or the lead for a brief section: cut to n characters with a "…" mark,
+// and its Markdown headings demoted three levels (outside code fences), so a report's "## Summary" cannot end the
+// section it is quoted in.
+func quoted(text string, n int) string {
+	lines := strings.Split(cut(text, n, "…"), "\n")
+	fence := false
+	for i, line := range lines {
+		trimmed := strings.TrimLeft(line, " ")
+		if strings.HasPrefix(trimmed, "```") || strings.HasPrefix(trimmed, "~~~") {
+			fence = !fence
+			continue
+		}
+		if fence || len(line)-len(trimmed) > 3 {
+			continue
+		}
+		level := len(trimmed) - len(strings.TrimLeft(trimmed, "#"))
+		if level == 0 || level > 6 || (len(trimmed) > level && trimmed[level] != ' ' && trimmed[level] != '\t') {
+			continue
+		}
+		lines[i] = strings.Repeat("#", min(level+3, 6)) + trimmed[level:]
+	}
+	return strings.Join(lines, "\n")
+}
 
 func roleSection(r *Role) string {
 	if r == nil {
@@ -338,13 +365,13 @@ func baselineSection(paths []string) string {
 	if n > BaselineShown {
 		more = fmt.Sprintf("\n... and %d more", n-BaselineShown)
 	}
-	plural := "s"
+	plural, verb := "s", " have"
 	if n == 1 {
-		plural = ""
+		plural, verb = "", " has"
 	}
-	return fmt.Sprintf("## Uncommitted work already in this folder\n%d file%s already have uncommitted changes from "+
-		"other people, so git diff and git status will show them and this is expected and is not yours to clean:\n%s%s",
-		n, plural, strings.Join(lines, "\n"), more)
+	return fmt.Sprintf("## Uncommitted work already in this folder\n%d file%s%s uncommitted changes from "+
+		"other people, so git diff and git status will show them; this is expected, and they are not yours to clean "+
+		"up or revert:\n%s%s", n, plural, verb, strings.Join(lines, "\n"), more)
 }
 
 // cut returns at most n characters (runes) of s, followed by tail when it was cut.
