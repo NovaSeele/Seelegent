@@ -1,4 +1,5 @@
 /// <reference types="vitest/config" />
+import { readdirSync } from 'node:fs'
 import { fileURLToPath, URL } from 'node:url'
 
 import vue from '@vitejs/plugin-vue'
@@ -6,6 +7,33 @@ import { defineConfig, type Plugin } from 'vite'
 
 // Development daemon (see docs/development.md); the installed daemon on 47821 is never touched.
 const devDaemon = 'http://127.0.0.1:47831'
+
+const themesDir = fileURLToPath(new URL('./src/styles/themes', import.meta.url))
+
+/** Theme ids, one per palette file in src/styles/themes/ (the single source of the list). */
+function themeIds(): string[] {
+  return readdirSync(themesDir)
+    .filter((name) => name.endsWith('.css'))
+    .map((name) => name.slice(0, -'.css'.length))
+    .sort()
+}
+
+/** The marker in index.html's pre-paint script that receives the theme id list. */
+const THEMES_MARKER = '/*seelegent:themes*/ []'
+
+/**
+ * Fills the theme id list into the pre-paint script, so it can only ever set a theme that has a palette
+ * (an unknown id would leave the page without colours).
+ */
+function prepaintThemes(): Plugin {
+  return {
+    name: 'seelegent:prepaint-themes',
+    transformIndexHtml(html) {
+      if (!html.includes(THEMES_MARKER)) throw new Error('index.html: theme marker missing')
+      return html.replace(THEMES_MARKER, JSON.stringify(themeIds()))
+    },
+  }
+}
 
 /**
  * Re-creates dist/.gitkeep after the build empties dist/. The Go package in web/ embeds dist/ and needs the
@@ -22,7 +50,7 @@ function keepDistPlaceholder(): Plugin {
 }
 
 export default defineConfig({
-  plugins: [vue(), keepDistPlaceholder()],
+  plugins: [vue(), prepaintThemes(), keepDistPlaceholder()],
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),

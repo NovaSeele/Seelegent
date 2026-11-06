@@ -1,41 +1,245 @@
-/* Design tokens. Components use these variables only, never raw colours. */
+/*
+ * Design tokens. Components style themselves with these variables only.
+ *
+ * Colour values live in themes/<id>.css (one file per theme, selected by <html data-theme="<id>">); this file holds
+ * every non-colour token plus the derived colour layer, which is written in var() only. Never put a colour literal
+ * outside styles/themes/ (a unit test enforces it).
+ *
+ * Colour roles (one meaning each, in every theme):
+ *   accent     actions (primary buttons, links) and selection / active / focus. Never a state or a count.
+ *   running    in progress now (running task, current step).                 --status-running-*
+ *   attention  needs you: blocked, awaiting review, questions, low quota.     --attention-*
+ *   success    accepted, gate pass, diff +.                                  --status-accepted-*
+ *   danger     real errors: failed, rejected, red gate, diff -.              --status-danger-*
+ *   neutral    no hue: queued, waiting for quota, cancelled, counts, chips.   --neutral-*
+ * Status is always shown by icon shape + word + colour, never colour alone.
+ *
+ * Breakpoints: mobile < 600px <= compact < 900px <= rail. The same numbers live in src/config/breakpoints.ts;
+ * media queries use range syntax (width < 600px, width >= 900px) and a unit test rejects any other width.
+ */
 :root {
-  color-scheme: light dark;
+  /* Fonts: system stacks only, nothing is downloaded (the dashboard works offline). The CJK list is appended to
+     every stack and ordered per UI language below, so Han, Kana and Hangul take the right glyph shapes. */
+  --font-cjk:
+    'Microsoft YaHei', 'PingFang SC', 'Noto Sans CJK SC', 'Malgun Gothic', 'Apple SD Gothic Neo',
+    'Noto Sans CJK KR', 'Yu Gothic UI', 'Hiragino Sans', 'Noto Sans CJK JP';
+  --font-ui-system:
+    'Segoe UI Variable Text', 'Segoe UI Variable', 'Segoe UI', system-ui, -apple-system, Roboto,
+    'Helvetica Neue', Arial, var(--font-cjk), sans-serif;
+  --font-ui-inter: Inter, var(--font-ui-system);
+  --font-ui-ibm-plex-sans: 'IBM Plex Sans', var(--font-ui-system);
+  --font-ui-roboto: Roboto, var(--font-ui-system);
+  --font-ui-arial: Arial, var(--font-ui-system);
+  --font-mono-fallback: ui-monospace, 'SF Mono', Menlo, Consolas, var(--font-cjk), monospace;
+  --font-mono-cascadia-code: 'Cascadia Code', 'Cascadia Mono', var(--font-mono-fallback);
+  --font-mono-cascadia-mono: 'Cascadia Mono', 'Cascadia Code', var(--font-mono-fallback);
+  --font-mono-jetbrains-mono: 'JetBrains Mono', var(--font-mono-fallback);
+  --font-mono-fira-code: 'Fira Code', var(--font-mono-fallback);
+  --font-mono-consolas: Consolas, var(--font-mono-fallback);
+  --font-mono-source-code-pro: 'Source Code Pro', var(--font-mono-fallback);
+  --font-mono-ibm-plex-mono: 'IBM Plex Mono', var(--font-mono-fallback);
+  --font-mono-iosevka: Iosevka, var(--font-mono-fallback);
+  --font-mono-menlo: Menlo, var(--font-mono-fallback);
+  --font-mono-theme: var(--font-mono-cascadia-code);
 
-  --color-bg: #f7f7f8;
-  --color-surface: #ffffff;
-  --color-text: #1b1c1f;
-  --color-text-muted: #5d6068;
-  --color-border: #dcdde1;
-  --color-accent: #3b5bdb;
+  /* The active families; <html data-font-ui / data-font-mono> pick another stack (see below). */
+  --font-sans: var(--font-ui-system);
+  --font-mono: var(--font-mono-theme);
 
-  --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-  --font-mono: ui-monospace, 'Cascadia Code', 'SF Mono', Menlo, Consolas, monospace;
+  /* Type scale. --font-size-ui is the user's UI size (13-16px); everything else follows it. Never below 11px. */
+  --font-size-ui: 14px;
+  --font-size-term: 13.5px;
+  --line-height-term: 1.55;
+  --fs-2xs: max(11px, calc(var(--font-size-ui) - 3px));
+  --fs-xs: max(11px, calc(var(--font-size-ui) - 2px));
+  --fs-sm: calc(var(--font-size-ui) - 1px);
+  --fs-md: var(--font-size-ui);
+  --fs-lg: calc(var(--font-size-ui) + 2px);
+  --fs-xl: calc(var(--font-size-ui) + 6px);
+  --fs-title: calc(var(--font-size-ui) + 10px);
+  --lh-tight: 1.25;
+  --lh-ui: 1.45;
+  --lh-prose: 1.6;
+  --fw-regular: 400;
+  --fw-medium: 500;
+  --fw-semibold: 600;
+  --fw-bold: 700;
 
+  /* Spacing: 4px grid. */
+  --space-0: 2px;
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
   --space-4: 16px;
+  --space-5: 20px;
   --space-6: 24px;
+  --space-7: 32px;
+  --space-8: 48px;
 
-  --radius-sm: 4px;
-  --radius-md: 8px;
+  /* Radius scale. Concentric rule: a rounded child sitting `gap` inside a rounded parent uses
+     max(0px, parent - gap), written inline where it applies, e.g. a segment in a segmented control with 2px
+     padding: max(0px, calc(var(--radius-md) - var(--space-0))). Custom properties resolve where they are declared,
+     so this cannot be a single :root token. */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px; /* controls: buttons, inputs, chips */
+  --radius-lg: 12px; /* cards, panels, the workspace */
+  --radius-xl: 16px; /* dialogs and sheets */
+  --radius-pill: 999px; /* status pills, badges */
+
+  /* Control heights; coarse pointers raise every target to 44px (below). */
+  --control-sm: 28px;
+  --control-md: 32px;
+  --control-lg: 36px;
+  --target-min: 0px;
+  --icon-sm: 14px;
+  --icon-md: 16px;
+  --icon-lg: 20px;
+  --border-width: 1px;
+  --focus-ring-width: 2px;
+  --focus-ring: 0 0 0 var(--focus-ring-width) var(--border-focus);
+
+  /* Motion. <html data-motion="off"> (user setting, or "system" + prefers-reduced-motion) zeroes all of it. */
+  --duration-fast: 120ms;
+  --duration-base: 180ms;
+  --duration-slow: 260ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-out: cubic-bezier(0, 0, 0.2, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --transition-fast: var(--duration-fast) var(--ease-standard);
+
+  /* Layout. */
+  --rail-width: 68px;
+  --rail-width-compact: 56px;
+  --top-bar-height: 48px;
+  --bottom-nav-height: 56px;
+  --workspace-inset: var(--space-2);
+  --sidebar-width: 300px;
+  --sidebar-min: 240px;
+  --sidebar-max: 560px;
+  --content-max: 1200px;
+  --status-stripe: 3px;
+
+  /* Stacking order. */
+  --z-base: 0;
+  --z-nav: 10;
+  --z-banner: 20;
+  --z-overlay: 100;
+  --z-popover: 200;
+  --z-toast: 300;
+  --z-tooltip: 400;
 }
 
-@media (prefers-color-scheme: dark) {
+/* Coarse pointers (touch): at least 44px hit targets. */
+@media (pointer: coarse) {
   :root {
-    --color-bg: #121316;
-    --color-surface: #1b1c20;
-    --color-text: #e6e7ea;
-    --color-text-muted: #9a9ca5;
-    --color-border: #2e3036;
-    --color-accent: #748ffc;
+    --target-min: 44px;
   }
 }
 
-body {
-  margin: 0;
-  background: var(--color-bg);
-  color: var(--color-text);
-  font-family: var(--font-sans);
+/* CJK glyph order per UI language (<html lang>). */
+:root:lang(zh) {
+  --font-cjk:
+    'Microsoft YaHei', 'PingFang SC', 'Noto Sans CJK SC', 'Yu Gothic UI', 'Hiragino Sans',
+    'Malgun Gothic';
+}
+:root:lang(ja) {
+  --font-cjk:
+    'Yu Gothic UI', 'Hiragino Sans', Meiryo, 'Noto Sans CJK JP', 'Microsoft YaHei', 'Malgun Gothic';
+}
+:root:lang(ko) {
+  --font-cjk:
+    'Malgun Gothic', 'Apple SD Gothic Neo', 'Noto Sans CJK KR', 'Microsoft YaHei', 'Yu Gothic UI';
+}
+
+/* User font choices (Settings > Appearance). Unknown ids match nothing and keep the defaults above. */
+:root[data-font-ui='inter'] {
+  --font-sans: var(--font-ui-inter);
+}
+:root[data-font-ui='ibm-plex-sans'] {
+  --font-sans: var(--font-ui-ibm-plex-sans);
+}
+:root[data-font-ui='roboto'] {
+  --font-sans: var(--font-ui-roboto);
+}
+:root[data-font-ui='arial'] {
+  --font-sans: var(--font-ui-arial);
+}
+:root[data-font-mono='cascadia-code'] {
+  --font-mono: var(--font-mono-cascadia-code);
+}
+:root[data-font-mono='cascadia-mono'] {
+  --font-mono: var(--font-mono-cascadia-mono);
+}
+:root[data-font-mono='jetbrains-mono'] {
+  --font-mono: var(--font-mono-jetbrains-mono);
+}
+:root[data-font-mono='fira-code'] {
+  --font-mono: var(--font-mono-fira-code);
+}
+:root[data-font-mono='consolas'] {
+  --font-mono: var(--font-mono-consolas);
+}
+:root[data-font-mono='source-code-pro'] {
+  --font-mono: var(--font-mono-source-code-pro);
+}
+:root[data-font-mono='ibm-plex-mono'] {
+  --font-mono: var(--font-mono-ibm-plex-mono);
+}
+:root[data-font-mono='iosevka'] {
+  --font-mono: var(--font-mono-iosevka);
+}
+:root[data-font-mono='menlo'] {
+  --font-mono: var(--font-mono-menlo);
+}
+
+/* Motion off: the setting, or "system" while the OS asks for reduced motion (resolved by the pre-paint script). */
+:root[data-motion='off'] {
+  --duration-fast: 0ms;
+  --duration-base: 0ms;
+  --duration-slow: 0ms;
+}
+
+/*
+ * Derived colour layer: written only in terms of the base palette every theme defines, so every theme agrees on
+ * what a colour means. Declared on [data-theme-preview] as well so preview cards resolve against their own theme.
+ * Themes may still override any of these (Seelegent Ink/Paper tune the stage hues and the cancelled tone).
+ */
+:root,
+[data-theme-preview] {
+  --neutral-fg: var(--status-queued-fg);
+  --neutral-bg: var(--status-queued-bg);
+  --neutral-border: var(--status-queued-border);
+
+  --status-waiting-fg: var(--neutral-fg);
+  --status-waiting-bg: var(--neutral-bg);
+  --status-waiting-border: var(--neutral-border);
+  --status-blocked-fg: var(--attention-fg);
+  --status-blocked-bg: var(--attention-bg);
+  --status-blocked-border: var(--attention-border);
+  --status-review-fg: var(--attention-fg);
+  --status-review-bg: var(--attention-bg);
+  --status-review-border: var(--attention-border);
+  --status-cancelled-fg: var(--text-muted);
+  --status-cancelled-bg: var(--bg-surface-2);
+  --status-cancelled-border: var(--border-strong);
+
+  --diff-add: var(--status-accepted-fg);
+  --diff-del: var(--status-danger-fg);
+  --diff-add-bg: var(--term-diff-add-bg);
+  --diff-del-bg: var(--term-diff-del-bg);
+
+  --role-lead: var(--text-primary);
+  --role-lead-soft: var(--bg-surface-2);
+  --role-worker: var(--text-secondary);
+  --role-worker-soft: var(--bg-surface-2);
+
+  --stage-explore: var(--term-path);
+  --stage-edit: var(--attention-fg);
+  --stage-verify: var(--status-accepted-fg);
+  --stage-run: var(--text-muted);
+  --stage-report: var(--text-secondary);
+
+  --link: var(--accent);
+  --scrollbar-thumb: var(--border-strong);
 }

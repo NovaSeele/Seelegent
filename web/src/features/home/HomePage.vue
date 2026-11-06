@@ -17,6 +17,6 @@ const { t } = useI18n()
 
 .home__title {
   margin: 0;
-  color: var(--color-text);
+  color: var(--text-primary);
 }
 </style>
