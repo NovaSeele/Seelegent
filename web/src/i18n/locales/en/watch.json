@@ -57,10 +57,16 @@
       "busy": "Busy",
       "resting": "Resting",
       "exhausted": "Out of quota",
-      "auth_required": "Needs sign-in",
-      "signing_in": "Signing in",
+      "checking": "Checking quota",
+      "signingIn": "Signing in",
+      "needsLogin": "Sign-in required",
+      "noKey": "No API key",
+      "noPlan": "Plan not supported",
+      "twin": "Duplicate",
       "disabled": "Off"
-    }
+    },
+    "twin": "Same sign-in as {name}; that account gets the work.",
+    "readFailed": "Last quota read failed; numbers may be old."
   },
   "empty": {
     "title": "Nothing to watch yet",

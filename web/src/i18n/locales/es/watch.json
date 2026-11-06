@@ -57,10 +57,16 @@
       "busy": "Ocupada",
       "resting": "En pausa",
       "exhausted": "Sin cuota",
-      "auth_required": "Requiere iniciar sesión",
-      "signing_in": "Iniciando sesión",
+      "checking": "Comprobando cuota",
+      "signingIn": "Iniciando sesión",
+      "needsLogin": "Requiere iniciar sesión",
+      "noKey": "Sin clave de API",
+      "noPlan": "Plan no compatible",
+      "twin": "Duplicada",
       "disabled": "Desactivada"
-    }
+    },
+    "twin": "Misma sesión que {name}; esa cuenta recibe el trabajo.",
+    "readFailed": "Falló la última lectura de cuota; los datos pueden ser antiguos."
   },
   "empty": {
     "title": "Todavía no hay nada que vigilar",

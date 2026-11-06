@@ -68,36 +68,70 @@ function cwdPrefix(p) {
 }
 
 const accounts = [
-  account('acc-work', 'agy', 'isolated', 'Work Pro', 10, 'busy', 1, [
-    quota('gemini-pro', 'Gemini Pro', 0.62, 3 * HOUR),
-    quota('gemini-flash', 'Gemini Flash', 0.91, 3 * HOUR),
-  ]),
-  account('acc-personal', 'agy', 'isolated', 'Personal', 5, 'ready', 0, [
-    quota('gemini-pro', 'Gemini Pro', 0.18, 50 * MIN),
-    quota('gemini-flash', 'Gemini Flash', 0.74, 50 * MIN),
-  ]),
-  account('acc-claude', 'claude', 'system', 'Claude Max', 3, 'exhausted', 0, [
-    { ...quota('opus', 'Opus', 0, 2 * HOUR), exhaustedUntil: ago(-2 * HOUR) },
-  ]),
-  account('acc-codex', 'codex', 'api-key', 'Codex API', 1, 'auth_required', 0, [], {
-    keyHint: '…9f2c',
-    lastError: 'The API key was rejected (401).',
+  account('acc-work', 'agy', 'isolated', 'Work Pro', 10, 'ok', 1, {
+    plan: 'Google AI Pro',
+    groups: [
+      group('gemini-pro', [win('5h', 0.62, 3 * HOUR), win('weekly', 0.8, 4 * 24 * HOUR)]),
+      group('gemini-flash', [win('5h', 0.91, 3 * HOUR)]),
+    ],
   }),
+  account('acc-personal', 'agy', 'isolated', 'Personal', 5, 'ok', 0, {
+    plan: 'Google AI Pro',
+    groups: [
+      group('gemini-pro', [win('5h', 0.18, 50 * MIN)]),
+      group('gemini-flash', [win('5h', 0.74, 50 * MIN)]),
+    ],
+  }),
+  account(
+    'acc-claude',
+    'claude',
+    'system',
+    'Claude Max',
+    3,
+    'ok',
+    0,
+    {
+      plan: 'Max',
+      groups: [group('opus', [win('5h', 0, 2 * HOUR)])],
+      exhaustedUntil: ago(-2 * HOUR),
+      exhaustedReason: 'Usage limit reached.',
+    },
+    { resting: true, restingUntil: ago(-2 * HOUR) },
+  ),
+  account('acc-backup', 'agy', 'isolated', 'Backup login', 2, 'error', 0, {
+    groups: [group('gemini-pro', [win('5h', 0.55, 2 * HOUR)])],
+    error: { kind: 'unavailable', message: 'The quota service did not answer.', at: ago(6 * MIN) },
+  }),
+  account(
+    'acc-codex',
+    'codex',
+    'api-key',
+    'Codex API',
+    1,
+    'needs_login',
+    0,
+    { source: 'passive' },
+    {
+      keyHint: '…9f2c',
+    },
+  ),
 ]
 
-function account(id, backend, kind, label, priority, state, busy, quotaList, extra = {}) {
+/** Account per contract §4: the pool status and runtime, and a quota snapshot. */
+function account(id, backend, kind, label, priority, status, busy, quotaSnapshot, extra = {}) {
   return {
     id,
     backend,
     kind,
     label,
-    enabled: state !== 'disabled',
+    enabled: status !== 'disabled',
     priority,
-    state,
+    status,
     busy,
     maxConcurrent: 2,
-    quota: quotaList,
-    lastRefreshAt: ago(4 * MIN),
+    resting: false,
+    signingIn: false,
+    quota: { source: 'active', fetchedAt: ago(4 * MIN), groups: [], ...quotaSnapshot },
     models: backend === 'agy' ? ['gemini-3.8-flash', 'gemini-3.8-pro'] : [],
     createdAt: ago(40 * 24 * HOUR),
     updatedAt: ago(4 * MIN),
@@ -105,8 +139,12 @@ function account(id, backend, kind, label, priority, state, busy, quotaList, ext
   }
 }
 
-function quota(group, label, remaining, resetsIn) {
-  return { group, label, remaining, resetsAt: ago(-resetsIn), source: 'cli' }
+function group(name, windows) {
+  return { name, windows }
+}
+
+function win(window, remaining, resetsIn) {
+  return { window, remaining, resetAt: ago(-resetsIn) }
 }
 
 const backends = [
@@ -332,7 +370,7 @@ function startTurn(task, message, by = 'lead', emit = false) {
         model: s.model,
         reason: n === 1 ? 'highest priority with quota' : 'same account, resuming the conversation',
         continuing: n > 1,
-        remaining: acc.quota[0]?.remaining ?? undefined,
+        remaining: acc.quota.groups[0]?.windows[0]?.remaining,
       },
       emit,
     )

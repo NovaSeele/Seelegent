@@ -57,10 +57,16 @@
       "busy": "使用中",
       "resting": "休止中",
       "exhausted": "クォータ切れ",
-      "auth_required": "ログインが必要",
-      "signing_in": "ログイン中",
+      "checking": "クォータ確認中",
+      "signingIn": "ログイン中",
+      "needsLogin": "ログインが必要",
+      "noKey": "API キーなし",
+      "noPlan": "プラン非対応",
+      "twin": "重複",
       "disabled": "オフ"
-    }
+    },
+    "twin": "{name} と同じログインです。作業はそちらのアカウントが受けます。",
+    "readFailed": "前回のクォータ取得に失敗しました。数値が古い可能性があります。"
   },
   "empty": {
     "title": "まだ監視するものはありません",

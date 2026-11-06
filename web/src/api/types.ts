@@ -494,6 +494,9 @@ export interface TaskReport {
 
 // §4 Accounts, providers, quota, usage
 
+export type AccountStatus =
+  'ok' | 'error' | 'new' | 'needs_login' | 'no_key' | 'no_plan' | 'twin' | 'disabled'
+
 export interface Account {
   id: string
   backend: 'agy' | 'claude' | 'codex'
@@ -503,29 +506,61 @@ export interface Account {
   priority: number
   provider?: string
   keyHint?: string
-  state: 'ready' | 'busy' | 'resting' | 'exhausted' | 'auth_required' | 'signing_in' | 'disabled'
-  /** Shown in the local UI only; never logged. */
-  email?: string
+  /**
+   * The pool's status, computed on read. UI wording: ok → Ready, new → Checking quota, error → Ready (last read
+   * failed, old numbers), needs_login → Sign-in required, no_key → No API key, no_plan → Plan cannot use this
+   * backend, twin → Same sign-in as twinOf, disabled → Off.
+   */
+  status: AccountStatus
+  twinOf?: string
+  /** Running turns. */
   busy: number
   maxConcurrent: number
-  quota: QuotaWindow[]
+  /** A cooldown, or a window at/below minRemaining. */
+  resting: boolean
   restingUntil?: string
-  lastRefreshAt?: string
-  lastError?: string
+  signingIn: boolean
+  /** Shown in the local UI only; never logged. */
+  email?: string
+  quota: Quota
   models: string[]
   createdAt: string
   updatedAt: string
 }
 
-export interface QuotaWindow {
-  /** Model group, e.g. "gemini-pro". */
-  group: string
-  label: string
-  /** 0..1, null = unknown. */
-  remaining: number | null
-  resetsAt?: string
+/** Mirrors internal/quota.Snapshot. */
+export interface Quota {
+  /** Read from the CLI/service, or only observed from runs (API-key accounts: groups []). */
+  source: 'active' | 'passive'
+  fetchedAt?: string
+  plan?: string
+  noPlan?: boolean
+  noPlanReason?: string
   exhaustedUntil?: string
-  source: 'cli' | 'api' | 'observed'
+  exhaustedReason?: string
+  /** A group "<group> <family>" is a sub-limit of <group>. */
+  groups: QuotaGroup[]
+  /** Absent when the last read succeeded. */
+  error?: {
+    kind: 'needs_login' | 'token_expired' | 'format' | 'unavailable' | 'failed'
+    message: string
+    at: string
+  }
+}
+
+export interface QuotaGroup {
+  name: string
+  windows: QuotaWindow[]
+}
+
+export interface QuotaWindow {
+  /** "5h", "weekly", "30d", "<n>m", "window". */
+  window: string
+  label?: string
+  minutes?: number
+  /** 0..1 */
+  remaining: number
+  resetAt?: string
 }
 
 export interface LoginSession {
@@ -546,27 +581,155 @@ export interface Provider {
   accounts: number
 }
 
+// UsageSummary and UsageHistory mirror internal/usage.Summary and internal/usage.History (the source of truth).
+
+export interface UsageTotals {
+  tokens: number
+  costUsd: number
+  /** Some attempt reported a cost. */
+  hasCost: boolean
+  tasks: number
+  turns: number
+  attempts: number
+}
+
+export interface UsageDayTotal {
+  date: string
+  tokens: number
+  costUsd: number
+  tasks: number
+}
+
+export interface UsageTurn {
+  n: number
+  tokens: number
+  costUsd: number
+  durationMs: number
+  attempts: number
+  at: string
+  accountId: string
+  account: string
+  model: string
+}
+
+export interface UsageTask {
+  id: string
+  title: string
+  status: string
+  backend: string
+  tokens: number
+  costUsd: number
+  durationMs: number
+  lastAt: string
+  accountId: string
+  account: string
+  turns: number
+  items: UsageTurn[]
+  more: number
+}
+
+export interface ProjectUsage {
+  key: string
+  name: string
+  tokens: number
+  costUsd: number
+  durationMs: number
+  tasks: number
+  turns: number
+  items: UsageTask[]
+  more: number
+}
+
+export interface ModelUsage {
+  model: string
+  tokens: number
+  costUsd: number
+  attempts: number
+  durationMs: number
+}
+
+export interface AccountUsage {
+  id: string
+  /** Never an email (replaced by the id). */
+  label: string
+  backend: string
+  tokens: number
+  costUsd: number
+  attempts: number
+  durationMs: number
+  models: ModelUsage[]
+  more: number
+}
+
 export interface UsageSummary {
   days: number
   since: string
-  totals: { tasks: number; turns: number; tokens: number }
-  perAccount: {
-    accountId: string
-    label: string
-    backend: string
-    turns: number
-    tokens: number
-    remaining: number | null
-  }[]
-  perModel: { model: string; turns: number; tokens: number }[]
+  until: string
+  previousSince: string
+  /** The oldest attempt kept; absent when there is none. */
+  dataSince?: string
+  totals: UsageTotals
+  previous: UsageTotals
+  daily: UsageDayTotal[]
+  projects: ProjectUsage[]
+  moreProjects: number
+  accounts: AccountUsage[]
+  moreAccounts: number
+}
+
+/** One quota window in a usage snapshot (internal/usage.Window). */
+export interface UsageWindow {
+  group: string
+  window: string
+  label?: string
+  remaining: number
+  resetAt?: string
+  /** The lowest remaining of the day (daily rollup only). */
+  minRemaining?: number
+}
+
+/** One account at one hour. */
+export interface UsageSnapshot {
+  at: string
+  accountId: string
+  backend: string
+  label: string
+  enabled: boolean
+  status: string
+  plan?: string
+  quota: UsageWindow[]
+  /** Usage on the snapshot's local day so far. */
+  tokensToday: number
+  costToday: number
+}
+
+/** One account on one local day: the lowest remaining per window, the largest running counters. */
+export interface UsageDay {
+  date: string
+  accountId: string
+  backend: string
+  label: string
+  enabled: boolean
+  status: string
+  plan?: string
+  samples: number
+  firstAt: string
+  lastAt: string
+  quota: UsageWindow[]
+  tokensToday: number
+  costToday: number
 }
 
 export interface UsageHistory {
   bucket: 'hour' | 'day'
   since: string
   until: string
+  /** The oldest snapshot kept; absent when there is none. */
   firstAt?: string
-  rows: { at: string; accountId: string; group: string; remaining: number | null; tokens: number }[]
+  /** bucket hour. */
+  rows?: UsageSnapshot[]
+  /** bucket day. */
+  days?: UsageDay[]
 }
 
 // §5 Settings: config.json of internal/config.Settings in camelCase. The nested backend shapes are prefixed

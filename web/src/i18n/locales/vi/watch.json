@@ -57,10 +57,16 @@
       "busy": "Đang bận",
       "resting": "Đang nghỉ",
       "exhausted": "Hết quota",
-      "auth_required": "Cần đăng nhập",
-      "signing_in": "Đang đăng nhập",
+      "checking": "Đang kiểm tra quota",
+      "signingIn": "Đang đăng nhập",
+      "needsLogin": "Cần đăng nhập",
+      "noKey": "Chưa có khoá API",
+      "noPlan": "Gói không hỗ trợ",
+      "twin": "Trùng lặp",
       "disabled": "Đã tắt"
-    }
+    },
+    "twin": "Cùng đăng nhập với {name}; tài khoản đó sẽ nhận việc.",
+    "readFailed": "Lần đọc quota gần nhất bị lỗi; số liệu có thể đã cũ."
   },
   "empty": {
     "title": "Chưa có gì để theo dõi",

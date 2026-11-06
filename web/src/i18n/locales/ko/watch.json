@@ -57,10 +57,16 @@
       "busy": "사용 중",
       "resting": "휴식 중",
       "exhausted": "할당량 소진",
-      "auth_required": "로그인 필요",
-      "signing_in": "로그인 중",
+      "checking": "할당량 확인 중",
+      "signingIn": "로그인 중",
+      "needsLogin": "로그인 필요",
+      "noKey": "API 키 없음",
+      "noPlan": "지원되지 않는 요금제",
+      "twin": "중복",
       "disabled": "꺼짐"
-    }
+    },
+    "twin": "{name}와 같은 로그인입니다. 작업은 그 계정이 맡습니다.",
+    "readFailed": "마지막 할당량 확인에 실패했습니다. 수치가 오래되었을 수 있습니다."
   },
   "empty": {
     "title": "아직 지켜볼 것이 없습니다",

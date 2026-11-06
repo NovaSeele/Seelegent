@@ -2,42 +2,27 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 
-import type { Account, QuotaWindow } from '@/api/types'
 import QuotaBar from '@/components/ui/QuotaBar.vue'
 import { useFormat } from '@/composables/useFormat'
+import { ACCOUNT_TONE, accountState, tightestWindow, windowName } from '@/lib/accountState'
 import { useAccountsStore } from '@/stores/accounts'
 
 /**
  * One tile per account: its state, how busy it is, and its tightest quota window (the one that runs out first),
  * so a glance tells whether new work can start. The tiles link to Accounts, where they are managed.
  */
-defineProps<{ now: number }>()
+const props = defineProps<{ now: number }>()
 
 const { t } = useI18n()
 const fmt = useFormat()
 const accounts = useAccountsStore()
 
-const TONE: Record<Account['state'], string> = {
-  ready: 'success',
-  busy: 'running',
-  resting: 'neutral',
-  exhausted: 'attention',
-  auth_required: 'danger',
-  signing_in: 'neutral',
-  disabled: 'muted',
-}
-
-type KnownWindow = QuotaWindow & { remaining: number }
-
-/** The window with the least left; windows the daemon could not measure (remaining null) are skipped. */
-function tightest(quota: readonly QuotaWindow[]): KnownWindow | undefined {
-  return quota
-    .filter((w): w is KnownWindow => w.remaining !== null)
-    .sort((a, b) => a.remaining - b.remaining)[0]
-}
-
 const tiles = computed(() =>
-  accounts.accounts.map((account) => ({ account, quota: tightest(account.quota) })),
+  accounts.accounts.map((account) => {
+    const state = accountState(account, props.now)
+    const twin = account.twinOf ? (accounts.get(account.twinOf)?.label ?? account.twinOf) : ''
+    return { account, state, twin, window: tightestWindow(account) }
+  }),
 )
 </script>
 
@@ -49,27 +34,33 @@ const tiles = computed(() =>
     </div>
     <p v-if="!tiles.length" class="strip__empty">{{ t('watch.accounts.empty') }}</p>
     <ul v-else class="strip__list">
-      <li v-for="{ account, quota } in tiles" :key="account.id" class="tile">
+      <li v-for="{ account, state, twin, window } in tiles" :key="account.id" class="tile">
         <div class="tile__head">
           <span class="tile__label">{{ account.label }}</span>
-          <span class="tile__state" :class="`tone-${TONE[account.state]}`">
-            {{ t(`watch.accounts.state.${account.state}`) }}
+          <span class="tile__state" :class="`tone-${ACCOUNT_TONE[state]}`">
+            {{ t(`watch.accounts.state.${state}`) }}
           </span>
         </div>
         <QuotaBar
-          v-if="quota"
-          :used="1 - quota.remaining"
+          v-if="window"
+          :used="1 - window.remaining"
           mode="left"
           :warn-at="0.85"
-          :label="quota.label"
+          :label="windowName(window)"
         />
         <p v-else class="tile__none">{{ t('watch.accounts.noQuota') }}</p>
+        <p v-if="state === 'twin'" class="tile__note">
+          {{ t('watch.accounts.twin', { name: twin }) }}
+        </p>
+        <p v-else-if="account.quota.error" class="tile__note" :title="account.quota.error.message">
+          {{ t('watch.accounts.readFailed') }}
+        </p>
         <p class="tile__foot">
           <span>{{
             t('watch.accounts.busy', { busy: account.busy, max: account.maxConcurrent })
           }}</span>
-          <span v-if="quota?.resetsAt">
-            {{ t('watch.accounts.resets', { time: fmt.relative(quota.resetsAt, now) }) }}
+          <span v-if="window?.resetAt">
+            {{ t('watch.accounts.resets', { time: fmt.relative(window.resetAt, now) }) }}
           </span>
         </p>
       </li>
@@ -148,6 +139,11 @@ const tiles = computed(() =>
   color: var(--tone-fg);
   font-size: var(--fs-2xs);
   line-height: 18px;
+}
+
+.tile__note {
+  color: var(--text-secondary);
+  font-size: var(--fs-2xs);
 }
 
 .tile__none,

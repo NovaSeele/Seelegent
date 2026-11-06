@@ -57,10 +57,16 @@
       "busy": "忙碌",
       "resting": "休息中",
       "exhausted": "额度用尽",
-      "auth_required": "需要登录",
-      "signing_in": "正在登录",
+      "checking": "正在检查额度",
+      "signingIn": "正在登录",
+      "needsLogin": "需要登录",
+      "noKey": "没有 API 密钥",
+      "noPlan": "套餐不支持",
+      "twin": "重复",
       "disabled": "已关闭"
-    }
+    },
+    "twin": "与 {name} 是同一登录；工作交给那个账号。",
+    "readFailed": "上次读取额度失败，数据可能已过时。"
   },
   "empty": {
     "title": "暂时没有可监控的内容",
