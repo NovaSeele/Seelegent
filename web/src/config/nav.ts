@@ -1,7 +1,8 @@
 /**
  * The app's main pages, in navigation order: the rail, the bottom bar, the palette and the router all read this
  * list. "work" pages are the day-to-day flow; "team" pages configure who does the work. Labels live in
- * nav.json under nav.<id>.{label,short,title,desc}.
+ * nav.json under nav.<id>.{label,desc}: one label everywhere (rail, bottom bar, More sheet, palette, page
+ * title, document title), so a page is never called two different things.
  */
 import type { IconName } from '@/components/ui/icons'
 
@@ -28,6 +29,8 @@ export interface NavItem {
   group: 'work' | 'team'
   /** One of the four tabs of the phone bottom bar; the rest go under "More". */
   mobilePrimary: boolean
+  /** nav.<id>.keywords holds extra search words for the palette ("Issue → PR", "Worker roles"). */
+  keywords?: boolean
   /** Default "go to" key sequence. */
   shortcut: string
 }
@@ -49,6 +52,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
     group: 'work',
     mobilePrimary: true,
     shortcut: 'g i',
+    keywords: true,
   },
   {
     id: 'meetings',
@@ -105,6 +109,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
     group: 'team',
     mobilePrimary: false,
     shortcut: 'g r',
+    keywords: true,
   },
   {
     id: 'members',

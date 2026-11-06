@@ -5,84 +5,52 @@
   "goTo": "Đi tới {page}",
   "watch": {
     "label": "Theo dõi",
-    "short": "Theo dõi",
-    "title": "Theo dõi",
-    "view": "Bảng theo dõi",
     "desc": "Mọi việc đang chạy và những gì cần bạn, gom trên một bảng."
   },
   "tasks": {
     "label": "Tiến trình",
-    "short": "Tiến trình",
-    "view": "Tiến trình tác vụ",
-    "title": "Tiến trình",
     "desc": "Mọi tác vụ cùng tiến độ, báo cáo và kết quả duyệt."
   },
   "issues": {
     "label": "Issue",
-    "short": "Issue",
-    "title": "Issue → PR",
-    "desc": "Theo dõi issue và tạo pull request từ kho lưu trữ GitHub.",
-    "view": "Issue → PR"
+    "keywords": "Issue → PR",
+    "desc": "Theo dõi issue và tạo pull request từ kho lưu trữ GitHub."
   },
   "meetings": {
     "label": "Họp",
-    "short": "Họp",
-    "title": "Họp",
-    "desc": "Trưởng dự án hỏi ý kiến nhiều thành viên theo vòng: vòng kín, rồi đối chất ẩn danh, có kiểm chứng dẫn chứng, quyết định và biên bản.",
-    "view": "Họp"
+    "desc": "Trưởng dự án hỏi ý kiến nhiều thành viên theo vòng: vòng kín, rồi đối chất ẩn danh, có kiểm chứng dẫn chứng, quyết định và biên bản."
   },
   "contests": {
     "label": "Cuộc thi",
-    "short": "Cuộc thi",
-    "title": "Cuộc thi",
-    "desc": "Một đề bài, nhiều bản làm song song trong worktree riêng. Máy chấm điểm, giám khảo so sánh ẩn danh, bạn chọn bản thắng để áp vào thư mục làm việc.",
-    "view": "Cuộc thi"
+    "desc": "Một đề bài, nhiều bản làm song song trong worktree riêng. Máy chấm điểm, giám khảo so sánh ẩn danh, bạn chọn bản thắng để áp vào thư mục làm việc."
   },
   "automations": {
     "label": "Tự động",
-    "short": "Tự động",
-    "title": "Tự động",
-    "desc": "Việc giao cho thợ theo lịch. Chỉ chạy khi lệnh kiểm tra trước cho phép và quota còn đủ.",
-    "view": "Tự động"
+    "desc": "Việc giao cho thợ theo lịch. Chỉ chạy khi lệnh kiểm tra trước cho phép và quota còn đủ."
   },
   "proof": {
     "label": "Bằng chứng",
-    "short": "Bằng chứng",
-    "title": "Bằng chứng",
-    "desc": "Yêu cầu nào đã có lệnh cổng chứng minh, yêu cầu nào chưa. Chạy lại toàn bộ cổng để phát hiện hồi quy.",
-    "view": "Bằng chứng kiểm tra"
+    "desc": "Yêu cầu nào đã có lệnh cổng chứng minh, yêu cầu nào chưa. Chạy lại toàn bộ cổng để phát hiện hồi quy."
   },
   "accounts": {
     "label": "Tài khoản",
-    "short": "Tài khoản",
-    "title": "Tài khoản",
-    "desc": "Tài khoản và khoá API mà thợ dùng để chạy việc.",
-    "view": "Tài khoản và Quota"
+    "desc": "Tài khoản và khoá API mà thợ dùng để chạy việc."
   },
   "usage": {
     "label": "Sử dụng",
-    "short": "Sử dụng",
-    "title": "Sử dụng",
-    "desc": "Token, chi phí và hạn mức theo thời gian, theo dự án và theo tài khoản.",
-    "view": "Sử dụng"
+    "desc": "Token, chi phí và hạn mức theo thời gian, theo dự án và theo tài khoản."
   },
   "roles": {
     "label": "Vai trò",
-    "short": "Vai trò",
-    "title": "Vai trò thợ",
-    "desc": "Định nghĩa năng lực chuyên môn, quy tắc bắt buộc, phong cách báo cáo và bộ kỹ năng cho thợ thi công.",
-    "view": "Vai trò thợ"
+    "keywords": "Vai trò thợ",
+    "desc": "Định nghĩa năng lực chuyên môn, quy tắc bắt buộc, phong cách báo cáo và bộ kỹ năng cho thợ thi công."
   },
   "members": {
     "label": "Thành viên",
-    "short": "Thành viên",
-    "title": "Thành viên",
-    "desc": "Ai trong phòng ban nhận việc, với nguồn thợ và model nào.",
-    "view": "Thành viên"
+    "desc": "Ai trong phòng ban nhận việc, với nguồn thợ và model nào."
   },
   "settings": {
     "label": "Cài đặt",
-    "short": "Cài đặt",
     "aria": "Cài đặt hệ thống"
   },
   "appearance": {

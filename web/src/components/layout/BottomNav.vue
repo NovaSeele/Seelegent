@@ -32,7 +32,7 @@ const moreActive = computed(() => secondary.some((item) => item.id === props.act
       :aria-current="active === item.id ? 'page' : undefined"
     >
       <span class="bottom-nav__icon"><Icon :name="item.icon" /></span>
-      <span class="bottom-nav__label">{{ t(`nav.${item.id}.short`) }}</span>
+      <span class="bottom-nav__label">{{ t(`nav.${item.id}.label`) }}</span>
     </RouterLink>
     <button
       type="button"

@@ -4,6 +4,8 @@
  */
 import { describe, expect, it } from 'vitest'
 
+import { NAV_IDS, navItem } from '@/config/nav'
+
 import { createAppI18n, NAMESPACES, PLURAL_FORMS, SUPPORTED_LOCALES, type Locale } from '.'
 
 const files = import.meta.glob<Record<string, unknown>>('./locales/*/*.json', {
@@ -75,6 +77,33 @@ describe('catalogs', () => {
         .filter((key) => (messages[key] ?? '').split(' | ').length !== wanted)
       expect(wrong).toEqual([])
     })
+  })
+
+  it('gives each page one name: no short or alternative titles that could drift apart', () => {
+    for (const id of NAV_IDS) {
+      const keys = Object.keys(en).filter((key) => key.startsWith(`nav.${id}.`))
+      const allowed = navItem(id).keywords ? ['desc', 'keywords', 'label'] : ['desc', 'label']
+      expect(keys.map((key) => key.slice(`nav.${id}.`.length)).sort(), id).toEqual(allowed)
+    }
+  })
+
+  // The rail's label box is 68px of 11px text: about 11 Latin or Cyrillic letters, or 5 CJK characters (which are
+  // about twice as wide). A longer word would be cut mid-word, so pick a shorter page name instead.
+  it.each(SUPPORTED_LOCALES)('%s page names fit the rail word by word', (loc) => {
+    const flat = catalog(loc)
+    const width = (word: string) =>
+      [...word].reduce(
+        (sum, ch) =>
+          sum +
+          (/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u.test(ch)
+            ? 2
+            : 1),
+        0,
+      )
+    const tooWide = NAV_IDS.flatMap((id) => (flat[`nav.${id}.label`] ?? '').split(/\s+/)).filter(
+      (word) => width(word) > 11,
+    )
+    expect(tooWide).toEqual([])
   })
 
   it('renders every message in every locale', () => {

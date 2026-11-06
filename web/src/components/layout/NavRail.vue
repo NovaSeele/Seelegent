@@ -10,7 +10,7 @@ import { NAV_ITEMS, PALETTE_SHORTCUT, SETTINGS_SHORTCUT, type NavId } from '@/co
 import { usePaletteStore } from '@/stores/palette'
 
 /**
- * Side navigation from 600px. At 900px and up each entry shows its icon with its label under it (68px);
+ * Side navigation from 600px. At 900px and up each entry shows its icon with its label under it (76px);
  * between 600 and 899px only the icon (56px). Every entry has a tooltip with its name and its keyboard
  * shortcut ("Members  G E"), so the shortcuts can be learnt from the rail. Work pages come first, then a
  * divider and the team pages; the palette and settings sit at the bottom. Metrics: docs/ui-layout.md.
@@ -231,11 +231,11 @@ watch(locale, () => void nextTick(updateFade))
   background: transparent;
 }
 
-/* Up to two lines: short labels in some languages are two words ("Bằng chứng"); the tooltip has the full name. */
+/* Up to two lines, broken between words ("Bằng chứng"). Page names are chosen so no single word is wider than
+   the 68px label box (catalogs.spec.ts checks a length limit); the tooltip repeats the name. */
 .rail__label {
   display: -webkit-box;
   max-width: 100%;
-  padding: 0 var(--space-0);
   overflow: hidden;
   font-size: var(--fs-2xs);
   font-weight: var(--fw-medium);

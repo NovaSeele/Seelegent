@@ -63,6 +63,18 @@ describe('AppShell', () => {
     expect(tip?.textContent?.replace(/\s+/g, '')).toBe('MembersG›E') // the sequence "g e"
   })
 
+  it('calls a page by the same name in the rail, the palette, its heading and the tab title', async () => {
+    const { wrapper } = await open('/automations')
+    const rail = wrapper.get('a.rail__item[href="/automations"] .rail__label').text()
+    const palette = useCommandsStore().search('autom')[0]?.title
+    expect([rail, palette, wrapper.get('h1').text()]).toEqual([
+      'Automations',
+      'Automations',
+      'Automations',
+    ])
+    expect(document.title).toBe('Automations · Seelegent')
+  })
+
   it('shows NotFound for unknown addresses', async () => {
     const { wrapper } = await open('/no/such/page')
     expect(wrapper.text()).toContain('Page not found')

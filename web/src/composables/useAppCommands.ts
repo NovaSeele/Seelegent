@@ -56,7 +56,7 @@ export function useAppCommands() {
     ...NAV_ITEMS.map((item): Command => ({
       id: `nav.${item.id}`,
       title: { key: `nav.${item.id}.label` },
-      keywords: { key: `nav.${item.id}.title` },
+      keywords: item.keywords ? { key: `nav.${item.id}.keywords` } : undefined,
       group: 'navigation',
       icon: item.icon,
       shortcut: item.shortcut,

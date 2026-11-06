@@ -31,7 +31,7 @@ const item = navItem(props.id)
       </div>
       <p class="list-empty">{{ t('pages.placeholder.listEmpty') }}</p>
     </template>
-    <PageHeader :title="t(`nav.${id}.title`)" :description="t(`nav.${id}.desc`)" />
+    <PageHeader :title="t(`nav.${id}.label`)" :description="t(`nav.${id}.desc`)" />
     <EmptyState
       :icon="item.icon"
       :title="t('pages.placeholder.title')"
@@ -39,7 +39,7 @@ const item = navItem(props.id)
     />
   </SplitLayout>
   <div v-else class="page">
-    <PageHeader :title="t(`nav.${id}.title`)" :description="t(`nav.${id}.desc`)" />
+    <PageHeader :title="t(`nav.${id}.label`)" :description="t(`nav.${id}.desc`)" />
     <EmptyState
       :icon="item.icon"
       :title="t('pages.placeholder.title')"
