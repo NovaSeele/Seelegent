@@ -14,7 +14,8 @@ var (
 	ErrInvalid = errors.New("invalid")
 	// ErrBadState: the task is not in a state that allows the action (a followup while the task runs, ...).
 	ErrBadState = errors.New("bad state")
-	// ErrUnavailable: the engine is shutting down.
+	// ErrUnavailable: something the action needs is missing (no terminal for a takeover console, the engine is
+	// shutting down).
 	ErrUnavailable = errors.New("unavailable")
 )
 
