@@ -156,3 +156,46 @@ func TestKeyIsStableForCanonicalInput(t *testing.T) {
 		t.Fatalf("Key(dir) = %q, Key(canonical) = %q", k1, k2)
 	}
 }
+
+func TestProjectKey(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "My Project!")
+	if err := os.Mkdir(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	key, name, err := ProjectKey(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if name != "My Project!" {
+		t.Errorf("name = %q", name)
+	}
+	if !strings.HasPrefix(key, "my-project-") || len(key) != len("my-project-")+8 {
+		t.Errorf("key = %q", key)
+	}
+	again, _, err := ProjectKey(dir + string(filepath.Separator) + ".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again != key {
+		t.Errorf("same folder, other spelling: %q != %q", again, key)
+	}
+	if runtime.GOOS == "windows" {
+		upper, _, err := ProjectKey(strings.ToUpper(dir))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if upper != key {
+			t.Errorf("letter case changed the key: %q != %q", upper, key)
+		}
+	}
+	other, _, err := ProjectKey(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if other == key {
+		t.Error("two folders share a key")
+	}
+	if safeName("***") != "project" || safeName("a  b__c") != "a-b__c" {
+		t.Errorf("safeName: %q %q", safeName("***"), safeName("a  b__c"))
+	}
+}

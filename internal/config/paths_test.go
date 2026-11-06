@@ -21,12 +21,13 @@ func TestNewPaths(t *testing.T) {
 		"Logs":     filepath.Join(home, "logs"),
 		"Run":      filepath.Join(home, "run"),
 		"Backups":  filepath.Join(home, "backups"),
+		"Tasks":    filepath.Join(home, "tasks"),
 		"LockFile": filepath.Join(home, "run", "daemon.lock"),
 		"PortFile": filepath.Join(home, "run", "daemon.port"),
 	}
 	got := map[string]string{
 		"Config": p.Config, "DB": p.DB, "Profiles": p.Profiles, "Logs": p.Logs, "Run": p.Run,
-		"Backups": p.Backups, "LockFile": p.LockFile, "PortFile": p.PortFile,
+		"Backups": p.Backups, "Tasks": p.Tasks, "LockFile": p.LockFile, "PortFile": p.PortFile,
 	}
 	for k, w := range want {
 		if got[k] != w {
@@ -116,7 +117,7 @@ func TestEnsureDirs(t *testing.T) {
 	if err := p.EnsureDirs(); err != nil {
 		t.Fatalf("second EnsureDirs: %v", err)
 	}
-	for _, dir := range []string{p.Home, p.Profiles, p.Logs, p.Run, p.Backups} {
+	for _, dir := range []string{p.Home, p.Profiles, p.Logs, p.Run, p.Backups, p.Tasks} {
 		info, err := os.Stat(dir)
 		if err != nil || !info.IsDir() {
 			t.Fatalf("%s: %v", dir, err)

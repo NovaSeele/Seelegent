@@ -19,6 +19,7 @@ with owner-only permissions when a command starts, never earlier.
 | `run/daemon.lock`  | single-instance lock of the daemon                                                     |
 | `run/daemon.port`  | port of the running daemon                                                             |
 | `backups/`         | copies taken before migrations and imports                                             |
+| `tasks/<id>/t<turn>-a<attempt>/` | files of one worker attempt: `launch/` (launch spec, stream, stderr, exit record), the prompt of CLIs that read it on standard input, a long agy brief |
 
 ## Environment variables
 

@@ -45,6 +45,9 @@ type Paths struct {
 	Run string
 	// Backups holds copies taken before migrations and imports.
 	Backups string
+	// Tasks holds one directory per task with the files of its worker attempts (launch spec, stream, stderr,
+	// long briefs): tasks/<task-id>/t<turn>-a<attempt>/.
+	Tasks string
 	// LockFile is the single-instance lock of the daemon (run/daemon.lock).
 	LockFile string
 	// PortFile records the port the running daemon listens on (run/daemon.port).
@@ -69,6 +72,7 @@ func NewPaths(home string) (Paths, error) {
 		Logs:     filepath.Join(abs, "logs"),
 		Run:      run,
 		Backups:  filepath.Join(abs, "backups"),
+		Tasks:    filepath.Join(abs, "tasks"),
 		LockFile: filepath.Join(run, "daemon.lock"),
 		PortFile: filepath.Join(run, "daemon.port"),
 	}, nil
@@ -95,7 +99,7 @@ func DefaultPaths() (Paths, error) {
 // EnsureDirs creates the data directory and its subdirectories (owner-only permissions) if they are missing.
 // Directories are created when a command starts, never as a side effect of building Paths.
 func (p Paths) EnsureDirs() error {
-	for _, dir := range []string{p.Home, p.Profiles, p.Logs, p.Run, p.Backups} {
+	for _, dir := range []string{p.Home, p.Profiles, p.Logs, p.Run, p.Backups, p.Tasks} {
 		if err := os.MkdirAll(dir, dirPerm); err != nil {
 			return fmt.Errorf("create %s: %w", dir, err)
 		}

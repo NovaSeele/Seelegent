@@ -1,6 +1,8 @@
 package fsutil
 
 import (
+	"crypto/sha1"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -67,6 +69,46 @@ func keyOf(canonical, goos string) string {
 // caseInsensitive reports whether file systems on goos ignore letter case by default.
 func caseInsensitive(goos string) bool {
 	return goos == "windows" || goos == "darwin" || goos == "ios"
+}
+
+// ProjectKey returns the key and display name of the project whose folder is dir: name is the base name of the
+// canonical path, and key is that name made safe for file names and URLs (lower-case letters, digits, '.', '_' and
+// '-') followed by '-' and the first 8 hex digits of the SHA-1 of Key(dir). Every spelling of the same folder (8.3
+// short names, junctions, letter case on Windows) gives the same key (old bug B11).
+func ProjectKey(dir string) (key, name string, err error) {
+	c, err := Canonical(dir)
+	if err != nil {
+		return "", "", err
+	}
+	k := keyOf(c, runtime.GOOS)
+	name = filepath.Base(c)
+	if name == "." || name == string(filepath.Separator) || name == "" {
+		name = c
+	}
+	sum := sha1.Sum([]byte(k)) //nolint:gosec // a short, stable name, not a security hash
+	return safeName(name) + "-" + hex.EncodeToString(sum[:])[:8], name, nil
+}
+
+// safeName lower-cases s and replaces every run of other characters than letters, digits, '.', '_' and '-' by '-'.
+func safeName(s string) string {
+	var b strings.Builder
+	dash := false
+	for _, r := range strings.ToLower(s) {
+		ok := (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '.' || r == '_' || r == '-'
+		switch {
+		case ok:
+			b.WriteRune(r)
+			dash = false
+		case !dash:
+			b.WriteByte('-')
+			dash = true
+		}
+	}
+	out := strings.Trim(b.String(), "-")
+	if out == "" {
+		out = "project"
+	}
+	return out
 }
 
 // SamePath reports whether a and b name the same location (see Key).
