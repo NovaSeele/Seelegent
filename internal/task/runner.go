@@ -36,12 +36,19 @@ const extraAttempts = 3
 // errStop tells the runner that the task was cancelled or taken over while it prepared an attempt.
 var errStop = errors.New("stopped")
 
+// errShutdown ends a run because the daemon stops; the attempt stays open for the next daemon to recover.
+var errShutdown = errors.New("the daemon is stopping")
+
 // run is the goroutine that works on one task: it runs the open turn attempt by attempt until the turn ends.
 type run struct {
 	id   string
 	ctx  context.Context // ends on cancel, takeover or shutdown; never stops a worker by itself
 	stop context.CancelFunc
-	done chan struct{}
+	// stopCtx ends only on cancel or takeover, never at shutdown: a launch that is starting is aborted only then,
+	// so a daemon shutdown never cancels a worker.
+	stopCtx    context.Context
+	stopLaunch context.CancelFunc
+	done       chan struct{}
 
 	mu      sync.Mutex
 	stopped bool
@@ -76,6 +83,7 @@ func (r *run) requestStop() {
 	h := r.handle
 	r.mu.Unlock()
 	r.stop()
+	r.stopLaunch()
 	if h != nil {
 		_ = h.Cancel()
 	}
@@ -129,7 +137,8 @@ func (s *Service) startRun(id string) {
 		return
 	}
 	ctx, stop := context.WithCancel(s.root)
-	r := &run{id: id, ctx: ctx, stop: stop, done: make(chan struct{})}
+	stopCtx, stopLaunch := context.WithCancel(context.Background())
+	r := &run{id: id, ctx: ctx, stop: stop, stopCtx: stopCtx, stopLaunch: stopLaunch, done: make(chan struct{})}
 	s.runs[id] = r
 	s.mu.Unlock()
 	ok := s.spawn("run", id, func() {
@@ -163,6 +172,7 @@ func (s *Service) endRun(r *run) {
 	closed := s.closed
 	s.mu.Unlock()
 	r.stop()
+	r.stopLaunch()
 	close(r.done)
 	if closed {
 		return
@@ -354,11 +364,17 @@ func (s *Service) newAttempt(r *run, t *Task, tu *Turn) (bool, error) {
 // as a failed outcome (auth for an account without a usable key), never as an engine error.
 func (s *Service) launchAndFollow(r *run, t *Task, turn, n int, acc account.Account, b backend.Backend,
 	prompt, model string, continuing bool, dir, launchDir string) (attemptResult, error) {
+	ctx := r.ctx
 	failed := func(class event.Class, err error) (attemptResult, error) {
+		switch {
+		case s.root.Err() != nil:
+			return attemptResult{}, errShutdown // the next daemon closes the attempt and starts another
+		case r.stopCtx.Err() != nil:
+			return attemptResult{outcome: backend.Outcome{Status: backend.OutcomeCanceled}, interrupted: true}, nil
+		}
 		return attemptResult{outcome: backend.Outcome{Status: backend.OutcomeFailed, Class: class,
 			Error: err.Error()}, interrupted: true}, nil
 	}
-	ctx := r.ctx
 	set := s.settings()
 	tu := t.TurnN(turn)
 	env, err := s.o.Accounts.Env(ctx, acc, b, account.EnvOptions{Base: s.o.BaseEnv(), Model: model,
@@ -373,7 +389,11 @@ func (s *Service) launchAndFollow(r *run, t *Task, turn, n int, acc account.Acco
 	if acc.Provider != "" {
 		p, err := s.o.Accounts.GetProvider(ctx, acc.Provider)
 		if err != nil {
-			return failed(event.ClassAuthRequired, fmt.Errorf("provider %s: %w", acc.Provider, err))
+			class := event.ClassFatal
+			if errors.Is(err, account.ErrNotFound) || errors.Is(err, account.ErrProviderUnavailable) {
+				class = event.ClassAuthRequired
+			}
+			return failed(class, fmt.Errorf("provider %s: %w", acc.Provider, err))
 		}
 		prov = &p
 	}
@@ -397,11 +417,9 @@ func (s *Service) launchAndFollow(r *run, t *Task, turn, n int, acc account.Acco
 	if err != nil {
 		return failed(event.ClassFatal, err)
 	}
-	h, err := launch.Start(ctx, launch.Options{Launcher: s.o.Launcher, Dir: launchDir, Spec: spec, Env: env.Vars})
+	h, err := launch.Start(r.stopCtx, launch.Options{Launcher: s.o.Launcher, Dir: launchDir, Spec: spec,
+		Env: env.Vars})
 	if err != nil {
-		if ctx.Err() != nil {
-			return attemptResult{outcome: backend.Outcome{Status: backend.OutcomeCanceled}, interrupted: true}, nil
-		}
 		return failed(event.ClassFatal, fmt.Errorf("start the worker: %w", err))
 	}
 	r.setHandle(h, acc.ID, s.clk.Now())
@@ -500,6 +518,13 @@ func (s *Service) finishAttempt(r *run, id string, turn, n int, accountID, model
 		case AttemptAuth:
 			evs = append(evs, NewEvent{Type: api.EventAuthFailed, Turn: turn, Attempt: n,
 				Data: api.AccountProblemData{AccountID: accountID, Error: errText}})
+		}
+		if status == AttemptCancelled && !t.CancelRequested && !t.Manual {
+			// Nobody here cancelled it (a cancel file left by an earlier daemon, a launcher stopped from outside):
+			// the turn goes on with a new attempt.
+			status, errText = AttemptTransient, "the worker was stopped from outside the engine"
+			a.Status, a.Error = status, errText
+			res.interrupted = true
 		}
 		switch {
 		case status == AttemptCancelled || t.CancelRequested || t.Manual:
@@ -758,15 +783,21 @@ func lastError(tu *Turn) string {
 func (s *Service) prompt(ctx context.Context, t *Task, tu *Turn, continuing bool) string {
 	spec := s.briefSpec(t)
 	if continuing {
+		request := brief.Continue(tu.Message, spec, tu.TaskIDsPassed)
 		if last := tu.LastAttempt(); last != nil {
 			switch last.Status {
 			case AttemptTransient:
-				return brief.Retry
+				// A failed attempt that never reported its conversation may not have delivered the request: send it
+				// again. One that did gets the retry note, with the request in case it was cut off.
+				if last.Outcome == nil || last.Outcome.ConversationID == "" {
+					return request
+				}
+				return brief.RetryRequest(request)
 			case AttemptBackgroundWait:
 				return brief.BackgroundWait
 			}
 		}
-		return brief.Continue(tu.Message, spec, tu.TaskIDsPassed)
+		return request
 	}
 	in := brief.Input{Cwd: t.Cwd, Plan: t.Mode == ModePlan, Spec: spec, Deps: t.DepsContext,
 		Interrupted: len(tu.Attempts) > 0, Message: tu.Message}

@@ -14,6 +14,7 @@ import (
 	"github.com/NovaSeele/Seelegent/internal/api"
 	"github.com/NovaSeele/Seelegent/internal/backend"
 	"github.com/NovaSeele/Seelegent/internal/brief"
+	"github.com/NovaSeele/Seelegent/internal/pool"
 )
 
 // Takeover timings.
@@ -52,6 +53,8 @@ func (s *Service) Takeover(ctx context.Context, id string) (api.TaskSummary, err
 		switch {
 		case t.Manual:
 			return nil, badStatef("task %s is already taken over", id)
+		case s.consoleOpen(id):
+			return nil, badStatef("the takeover console of task %s is still open", id)
 		case t.Status == StatusWaitingDeps || t.Status == StatusBlockedDeps:
 			return nil, badStatef("task %s waits for its prerequisites", id)
 		case t.CancelRequested:
@@ -100,9 +103,9 @@ func (s *Service) Takeover(ctx context.Context, id string) (api.TaskSummary, err
 			return evs, nil
 		})
 	}
-	var wait ConsoleWait
+	var open OpenConsole
 	if err == nil {
-		wait, err = s.o.Consoles.Open(ctx, spec)
+		open, err = s.o.Consoles.Open(ctx, spec)
 		if err != nil {
 			err = fmt.Errorf("%w: cannot open a console: %w", ErrUnavailable, err)
 		}
@@ -116,7 +119,7 @@ func (s *Service) Takeover(ctx context.Context, id string) (api.TaskSummary, err
 		return api.TaskSummary{}, err
 	}
 	if cur.Console != nil {
-		s.watchConsole(id, cur.Console, wait)
+		s.watchConsole(id, cur.Console, &open)
 	}
 	return s.summary(cur), nil
 }
@@ -205,55 +208,123 @@ func (s *Service) revertTakeover(id string, prev Status, why string) {
 	}
 }
 
-// watchConsole counts the console on its account until it ends, then hands the task back. wait is nil after a
-// daemon restart; the exit file is polled then.
-func (s *Service) watchConsole(id string, c *Console, wait ConsoleWait) {
+// consoleExitClosed is the exit code recorded for a console whose process ended without writing one (its window
+// was closed); the Unix terminal script writes the same code when it is hung up.
+const consoleExitClosed = 129
+
+// consoleWatch is a console being watched: the account slot it holds and whether that slot was given back.
+type consoleWatch struct {
+	lease *pool.Lease
+}
+
+// watchConsole counts the console on its account until it ends, then hands the task back. open is nil after a
+// daemon restart. The console ends when its command reports an exit code (the wait, or the exit file), or when its
+// process is gone without one (a closed window). A cancel gives the slot back at once (releaseConsole); the watch
+// itself goes on until the console really ends, so no followup runs beside it.
+func (s *Service) watchConsole(id string, c *Console, open *OpenConsole) {
 	s.mu.Lock()
-	if s.watches[id] {
+	if s.watches[id] != nil {
 		s.mu.Unlock()
 		return
 	}
-	s.watches[id] = true
+	w := &consoleWatch{lease: s.o.Pool.Reattach(c.AccountID, id)}
+	s.watches[id] = w
 	s.mu.Unlock()
-	lease := s.o.Pool.Reattach(c.AccountID, id)
-	exitFile := c.ExitFile
+	exitFile, since, proc := c.ExitFile, c.Since, c.Process
 	ok := s.spawn("console", id, func() {
 		defer func() {
+			w.lease.Release()
 			s.mu.Lock()
-			delete(s.watches, id)
+			if s.watches[id] == w {
+				delete(s.watches, id)
+			}
 			s.mu.Unlock()
 		}()
+		waited := make(chan int, 1)
+		if open != nil && open.Wait != nil {
+			go func() {
+				code, err := open.Wait(s.root)
+				if err != nil {
+					code = -1
+				}
+				waited <- code
+			}()
+		}
 		code := -1
-		if wait != nil {
-			c, err := wait(s.root)
-			if s.root.Err() != nil {
-				return // the next daemon watches the exit file
-			}
-			if err == nil {
+		for {
+			if c, ok := readExitFile(exitFile); ok {
 				code = c
+				break
 			}
-		} else {
-			for {
+			if proc == nil && open != nil && open.Identity != nil {
+				if p, ok := open.Identity(); ok {
+					proc = &p
+					s.noteConsoleProcess(id, since, p)
+				}
+			}
+			if proc != nil && !s.o.Consoles.Running(*proc) {
+				code = consoleExitClosed
 				if c, ok := readExitFile(exitFile); ok {
 					code = c
-					break
 				}
-				s.sleep(s.root, consolePoll, nil)
+				break
+			}
+			timer := s.clk.NewTimer(consolePoll)
+			select {
+			case <-s.root.Done():
+				timer.Stop()
+				return // the next daemon watches the console again
+			case c := <-waited:
+				timer.Stop()
 				if s.root.Err() != nil {
 					return
 				}
-				if t, err := s.repo.Get(s.root, id); err == nil && !t.Manual {
-					break // cancelled meanwhile
-				}
+				code = c
+			case <-timer.C():
+				continue
 			}
+			break
 		}
-		lease.Release()
+		w.lease.Release()
 		s.handback(id, code)
 	})
 	if !ok {
+		w.lease.Release()
 		s.mu.Lock()
 		delete(s.watches, id)
 		s.mu.Unlock()
+	}
+}
+
+// releaseConsole gives back the account slot of a console whose task left the takeover (cancel, failure). The
+// console may stay open; it no longer counts on the account.
+func (s *Service) releaseConsole(id string) {
+	s.mu.Lock()
+	w := s.watches[id]
+	s.mu.Unlock()
+	if w != nil {
+		w.lease.Release()
+	}
+}
+
+// consoleOpen reports whether a takeover console of task id is still being watched.
+func (s *Service) consoleOpen(id string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.watches[id] != nil
+}
+
+// noteConsoleProcess stores the console's process so a restarted daemon can check that it still runs.
+func (s *Service) noteConsoleProcess(id string, since time.Time, p ConsoleProcess) {
+	_, err := s.mutate(s.background(), id, func(t *Task) ([]NewEvent, error) {
+		if !t.Manual || t.Console == nil || !t.Console.Since.Equal(since) {
+			return nil, errNoChange
+		}
+		t.Console.Process = &p
+		return nil, nil
+	})
+	if err != nil && s.root.Err() == nil {
+		s.log.Warn("task: console process", "task", id, "err", err)
 	}
 }
 

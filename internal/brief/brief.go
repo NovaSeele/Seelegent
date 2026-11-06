@@ -208,6 +208,12 @@ func Continue(message string, spec *Spec, taskIDsPassed bool) string {
 	return message
 }
 
+// RetryRequest is the retry of a turn whose worker may not have received the request: the retry note plus the
+// request itself, so a followup is never lost when the first attempt failed after the conversation resumed.
+func RetryRequest(request string) string {
+	return Retry + "\n\nIf the request below did not reach you, carry it out now:\n\n" + request
+}
+
 // Dep is a prerequisite task in the dependency context.
 type Dep struct {
 	ID     string

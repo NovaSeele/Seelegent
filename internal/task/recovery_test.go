@@ -208,12 +208,12 @@ func TestTakeoverStopsRunningWorker(t *testing.T) {
 	if err != nil || !stopped || cs.Status != StatusCancelled || cs.Manual {
 		t.Fatalf("cancel = %+v %v %v", cs, stopped, err)
 	}
+	// The console is still open: no followup may run beside it.
+	if _, err := h.s.Followup(t.Context(), sum.ID, api.FollowupRequest{Message: "go on"}); !errors.Is(err, ErrBadState) {
+		t.Errorf("followup with the console open: %v", err)
+	}
 	h.consoles.exit(0, 0)
-	h.waitFor("the console watch to end", func() bool {
-		h.s.mu.Lock()
-		defer h.s.mu.Unlock()
-		return !h.s.watches[sum.ID]
-	})
+	h.waitFor("the console watch to end", func() bool { return !h.s.consoleOpen(sum.ID) })
 	if tk := h.task(sum.ID); tk.Status != StatusCancelled || len(tk.Turns) != 1 {
 		t.Fatalf("handed back after a cancel: %s, %d turns", tk.Status, len(tk.Turns))
 	}
@@ -304,5 +304,53 @@ func TestRestartHonorsCancel(t *testing.T) {
 	}
 	if exit, ended, err := hd.Exited(); err != nil || !ended || exit.Reason != launch.ReasonCanceled {
 		t.Fatalf("worker exit = %+v %v %v", exit, ended, err)
+	}
+}
+
+// TestTakeoverWindowClosed ends a takeover whose console process is gone without an exit code (a closed window):
+// the task is handed back with exit code 129 instead of staying taken over forever.
+func TestTakeoverWindowClosed(t *testing.T) {
+	h := newHarness(t)
+	h.agy("only", 0)
+	h.queue.Push(t, okScript("conv-w", "ok"))
+	sum := h.delegate(api.DelegateRequest{})
+	h.waitStatus(sum.ID, StatusDone)
+	if _, err := h.s.Takeover(t.Context(), sum.ID); err != nil {
+		t.Fatal(err)
+	}
+	h.waitFor("the console process", func() bool { c := h.task(sum.ID).Console; return c != nil && c.Process != nil })
+	h.queue.Push(t, okScript("conv-w", "Handed back."))
+	h.consoles.close(0)
+	h.waitFor("the hand-back", func() bool {
+		h.clk.Advance(consolePoll)
+		return !h.task(sum.ID).Manual
+	})
+	tk := h.waitStatus(sum.ID, StatusDone)
+	var end api.TakeoverData
+	decode(t, eventsOf(h.events(sum.ID), api.EventTakeover)[1], &end)
+	if end.ExitCode == nil || *end.ExitCode != consoleExitClosed || tk.LastTurn().HandbackOf != "Handed back." {
+		t.Fatalf("takeover end = %+v, turn = %+v", end, tk.LastTurn())
+	}
+}
+
+// TestRestartConsoleGone ends, after a restart, a takeover whose console process ended while no daemon ran and left
+// no exit code.
+func TestRestartConsoleGone(t *testing.T) {
+	h := newHarness(t)
+	h.agy("only", 0)
+	h.queue.Push(t, okScript("conv-g", "ok"))
+	sum := h.delegate(api.DelegateRequest{})
+	h.waitStatus(sum.ID, StatusDone)
+	if _, err := h.s.Takeover(t.Context(), sum.ID); err != nil {
+		t.Fatal(err)
+	}
+	h.waitFor("the console process", func() bool { c := h.task(sum.ID).Console; return c != nil && c.Process != nil })
+	h.stop()
+	h.consoles.close(0)
+	h.queue.Push(t, okScript("conv-g", "Back after the restart."))
+	h.start()
+	tk := h.waitStatus(sum.ID, StatusDone)
+	if len(tk.Turns) != 2 || tk.LastTurn().HandbackOf != "Back after the restart." {
+		t.Fatalf("turns = %+v", tk.LastTurn())
 	}
 }

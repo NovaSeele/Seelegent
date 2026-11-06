@@ -178,6 +178,9 @@ func (s *Service) Followup(ctx context.Context, id string, req api.FollowupReque
 		if t.Manual {
 			return nil, badStatef("task %s is taken over by the user", id)
 		}
+		if s.consoleOpen(id) {
+			return nil, badStatef("the takeover console of task %s is still open; close it first", id)
+		}
 		if Active(t.Status) {
 			return nil, badStatef("task %s is %s; wait for it or cancel it first", id, t.Status)
 		}

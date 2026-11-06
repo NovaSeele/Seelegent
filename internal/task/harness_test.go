@@ -278,30 +278,52 @@ func (h *harness) runningWorker(id string) {
 }
 
 // fakeConsoles opens takeover consoles that end when the test says so.
+// Console i runs as process 1000+i until it exits or is marked gone.
 type fakeConsoles struct {
 	mu    sync.Mutex
 	specs []ConsoleSpec
 	exits []chan int
+	gone  map[int]bool
 	fail  error
 }
 
-func (f *fakeConsoles) Open(_ context.Context, spec ConsoleSpec) (ConsoleWait, error) {
+func (f *fakeConsoles) Open(_ context.Context, spec ConsoleSpec) (OpenConsole, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.fail != nil {
-		return nil, f.fail
+		return OpenConsole{}, f.fail
 	}
 	ch := make(chan int, 1)
+	pid := 1000 + len(f.specs)
 	f.specs = append(f.specs, spec)
 	f.exits = append(f.exits, ch)
-	return func(ctx context.Context) (int, error) {
-		select {
-		case code := <-ch:
-			return code, nil
-		case <-ctx.Done():
-			return 0, ctx.Err()
-		}
+	return OpenConsole{
+		Wait: func(ctx context.Context) (int, error) {
+			select {
+			case code := <-ch:
+				return code, nil
+			case <-ctx.Done():
+				return 0, ctx.Err()
+			}
+		},
+		Identity: func() (ConsoleProcess, bool) { return ConsoleProcess{Pid: pid, Start: 1}, true },
 	}, nil
+}
+
+func (f *fakeConsoles) Running(p ConsoleProcess) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return !f.gone[p.Pid]
+}
+
+// close marks console i's process gone without an exit code (a closed window).
+func (f *fakeConsoles) close(i int) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.gone == nil {
+		f.gone = map[int]bool{}
+	}
+	f.gone[1000+i] = true
 }
 
 // exit ends console i with code.

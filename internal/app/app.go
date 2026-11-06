@@ -305,11 +305,16 @@ func (a *App) Close(ctx context.Context) error {
 // terminals opens takeover consoles as terminal windows.
 type terminals struct{}
 
-func (terminals) Open(ctx context.Context, spec task.ConsoleSpec) (task.ConsoleWait, error) {
+func (terminals) Open(ctx context.Context, spec task.ConsoleSpec) (task.OpenConsole, error) {
 	term, err := platform.OpenTerminal(ctx, platform.TerminalSpec{Title: spec.Title, Banner: spec.Banner,
 		Argv: spec.Argv, Dir: spec.Dir, Env: spec.Env, ScriptDir: spec.ScriptDir, Name: spec.Name})
 	if err != nil {
-		return nil, err
+		return task.OpenConsole{}, err
 	}
-	return term.Wait, nil
+	return task.OpenConsole{Wait: term.Wait, Identity: func() (task.ConsoleProcess, bool) {
+		pid, start, ok := term.Identity()
+		return task.ConsoleProcess{Pid: pid, Start: start}, ok
+	}}, nil
 }
+
+func (terminals) Running(p task.ConsoleProcess) bool { return platform.ProcessRunning(p.Pid, p.Start) }

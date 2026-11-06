@@ -167,6 +167,8 @@ type Console struct {
 	Since     time.Time `json:"since"`
 	// ExitFile is where the terminal writes the exit code when the console ends (polled after a daemon restart).
 	ExitFile string `json:"exitFile,omitempty"`
+	// Process is the console's process once known; a restarted daemon checks that it still runs.
+	Process *ConsoleProcess `json:"process,omitempty"`
 }
 
 // Turn is one message to the worker and its answer.

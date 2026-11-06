@@ -80,9 +80,26 @@ type ConsoleSpec struct {
 // closed first.
 type ConsoleWait func(ctx context.Context) (int, error)
 
+// ConsoleProcess identifies the process that runs a console's command (its id and start time), so a restarted
+// daemon can tell whether the console still runs.
+type ConsoleProcess struct {
+	Pid   int    `json:"pid"`
+	Start uint64 `json:"start,omitempty"`
+}
+
+// OpenConsole is a console that was opened.
+type OpenConsole struct {
+	// Wait follows the console until its command ends.
+	Wait ConsoleWait
+	// Identity returns the console's process once it is known (ok is false before); nil when it cannot be known.
+	Identity func() (p ConsoleProcess, ok bool)
+}
+
 // Consoles opens takeover consoles (platform.OpenTerminal in the daemon).
 type Consoles interface {
-	Open(ctx context.Context, spec ConsoleSpec) (ConsoleWait, error)
+	Open(ctx context.Context, spec ConsoleSpec) (OpenConsole, error)
+	// Running reports whether the console process p still runs (false once it ended, even without an exit code).
+	Running(p ConsoleProcess) bool
 }
 
 // Options configure a Service. DB, Accounts, Pool, Backends, Settings, TasksDir and Launcher are required.
@@ -129,7 +146,7 @@ type Service struct {
 	mu      sync.Mutex
 	locks   map[string]*sync.Mutex
 	runs    map[string]*run
-	watches map[string]bool
+	watches map[string]*consoleWatch
 	root    context.Context
 	cancel  context.CancelFunc
 	started bool
@@ -161,7 +178,7 @@ func New(o Options) (*Service, error) {
 	root, cancel := context.WithCancel(context.Background())
 	return &Service{
 		o: o, repo: NewRepo(o.DB, o.Clock.Now), bus: NewBus(), clk: o.Clock, log: o.Logger,
-		locks: map[string]*sync.Mutex{}, runs: map[string]*run{}, watches: map[string]bool{},
+		locks: map[string]*sync.Mutex{}, runs: map[string]*run{}, watches: map[string]*consoleWatch{},
 		root: root, cancel: cancel,
 	}, nil
 }
@@ -340,6 +357,7 @@ func (s *Service) fail(id, message string) {
 		s.log.Error("task: cannot record the failure", "task", id, "err", err)
 		return
 	}
+	s.releaseConsole(id)
 	s.checkDeps(ctx)
 }
 

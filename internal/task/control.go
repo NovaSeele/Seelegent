@@ -96,6 +96,7 @@ func (s *Service) Cancel(ctx context.Context, id string, req api.CancelRequest) 
 	s.mu.Unlock()
 	switch {
 	case direct:
+		s.releaseConsole(id) // a cancelled takeover no longer counts on the account
 		s.checkDeps(s.background())
 	case r != nil:
 		r.requestStop()
