@@ -75,9 +75,10 @@ type RecorderOptions struct {
 type Recorder struct {
 	o RecorderOptions
 
-	mu       sync.Mutex
-	lastHour string // hour key of the newest snapshot written by this recorder
-	warned   bool
+	mu        sync.Mutex
+	lastHour  string // hour key of the newest snapshot written by this recorder
+	lastPrune string // hour key of the last prune
+	warned    bool
 }
 
 // NewRecorder returns a recorder.
@@ -120,20 +121,19 @@ func (r *Recorder) Run(ctx context.Context) {
 	}
 }
 
-// Tick writes this hour's snapshot unless this recorder already wrote it, and prunes old rows. It returns the
-// number of accounts written. Rows already stored for the hour (before a restart) are kept, not duplicated.
+// Tick writes this hour's snapshot unless this recorder already handled the hour, and prunes old rows. It returns
+// the number of accounts written. Rows already stored for the hour (before a restart) are kept, not duplicated.
+// With usageHistory off no snapshot is written, but old snapshots and attempt usage are still pruned every hour.
 func (r *Recorder) Tick(ctx context.Context) (int, error) {
-	if r.o.Settings != nil && !r.o.Settings().UsageHistory {
-		return 0, nil
-	}
+	history := r.o.Settings == nil || r.o.Settings().UsageHistory
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	now := r.o.Clock.Now()
 	key := hourKey(now, r.o.Location)
-	if r.lastHour == key {
+	if (history && r.lastHour == key) || (!history && r.lastPrune == key) {
 		return 0, nil
 	}
-	n, err := r.write(ctx, now, key)
+	n, err := r.write(ctx, now, key, history)
 	if err != nil {
 		if !r.warned && ctx.Err() == nil {
 			r.warned = true
@@ -142,11 +142,22 @@ func (r *Recorder) Tick(ctx context.Context) (int, error) {
 		}
 		return 0, err
 	}
-	r.lastHour, r.warned = key, false
+	if history {
+		r.lastHour = key
+	}
+	r.lastPrune, r.warned = key, false
 	return n, nil
 }
 
-func (r *Recorder) write(ctx context.Context, now time.Time, key string) (int, error) {
+// write stores the snapshot of the hour key (only when history is on) and prunes old rows, in one transaction.
+func (r *Recorder) write(ctx context.Context, now time.Time, key string, history bool) (int, error) {
+	if !history {
+		err := r.o.DB.Write(ctx, func(tx *sql.Tx) error { return prune(ctx, tx, now, r.o.Location) })
+		if err != nil {
+			return 0, fmt.Errorf("usage prune: %w", err)
+		}
+		return 0, nil
+	}
 	states, err := r.o.States.States(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("usage snapshot: %w", err)

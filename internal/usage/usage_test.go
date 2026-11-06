@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -372,5 +373,35 @@ func TestDayHelpers(t *testing.T) {
 	}
 	if roundCost(-1) != 0 || roundCost(0.1234564) != 0.123456 {
 		t.Fatal("roundCost")
+	}
+}
+
+// With usageHistory off nothing is recorded, but old rows are still pruned (review finding D).
+func TestPruneWhenHistoryOff(t *testing.T) {
+	f := newFixture(t)
+	ctx := t.Context()
+	f.states.set(accountStates(0.5), nil)
+	if n, _ := f.recorder(RecorderOptions{}).Tick(ctx); n != 2 {
+		t.Fatal("no snapshot")
+	}
+	f.record(Attempt{TaskID: "old", EndedAt: t0})
+	var on atomic.Bool
+	settings := func() config.Settings {
+		s := config.Defaults()
+		s.UsageHistory = on.Load()
+		return s
+	}
+	r := f.recorder(RecorderOptions{Settings: settings})
+	f.clk.Advance(61 * 24 * time.Hour)
+	if n, err := r.Tick(ctx); n != 0 || err != nil {
+		t.Fatalf("tick with history off = %d, %v", n, err)
+	}
+	if f.count("usage_snapshots") != 0 || f.count("usage_turns") != 0 {
+		t.Fatalf("not pruned: %d snapshots, %d attempts", f.count("usage_snapshots"), f.count("usage_turns"))
+	}
+	// Turned on again within the same hour: the snapshot of the hour is written.
+	on.Store(true)
+	if n, err := r.Tick(ctx); n != 2 || err != nil {
+		t.Fatalf("tick after turning history on = %d, %v", n, err)
 	}
 }
