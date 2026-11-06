@@ -90,8 +90,58 @@ func TestSocketOwnerInTrees(t *testing.T) {
 		t.Fatalf("Close: %v", err)
 	}
 	waitDead(t, dialer)
-	if left, err := wt.PIDs(); err != nil || len(left) != 0 {
+	ended := *wt
+	if runtime.GOOS == "windows" {
+		// The root of a Windows worker tree is its owner, this process, which still runs (TestNamedJob).
+		ended.RootPID, ended.RootStart = 0, 0
+	}
+	if left, err := ended.PIDs(); err != nil || len(left) != 0 {
 		t.Fatalf("PIDs after Close: %v, %v", left, err)
+	}
+}
+
+// TestSocketOwnerRechecksLead: a "lead" answer is only given if the client socket is still there when it is
+// checked again; a client that went away in between is not the lead.
+func TestSocketOwnerRechecksLead(t *testing.T) {
+	ln, err := (&net.ListenConfig{}).Listen(context.Background(), "tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = ln.Close() }()
+	dir := t.TempDir()
+	tree, wt := startDescribedTree(t, helper("sleeper", filepath.Join(dir, "tree")))
+	defer func() { _ = tree.Close() }()
+	readPids(t, filepath.Join(dir, "tree"))
+
+	dialer := helper("dial", filepath.Join(dir, "dial"), ln.Addr().String()) // outside every tree
+	HideWindow(dialer)
+	if err := dialer.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = dialer.Process.Kill(); _ = dialer.Wait() }()
+	conn, err := ln.Accept()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = conn.Close() }()
+	readPids(t, filepath.Join(dir, "dial"))
+	local, remote := addrPorts(t, conn)
+	trees := []*WorkerTree{wt}
+
+	id, isWorker, err := socketOwner(local, remote, trees, lookupOptions{})
+	if errors.Is(err, errors.ErrUnsupported) {
+		t.Skip("socket owner lookup is not supported on " + runtime.GOOS)
+	}
+	if err != nil || isWorker || id != "" {
+		t.Fatalf("client outside the trees: id %q, worker %v, err %v", id, isWorker, err)
+	}
+	gone := func() {
+		_ = dialer.Process.Kill()
+		_ = dialer.Wait()
+	}
+	id, isWorker, err = socketOwner(local, remote, trees, lookupOptions{beforeRecheck: gone})
+	if !isWorker || id != "" || !errors.Is(err, ErrSocketOwnerUnknown) {
+		t.Fatalf("client gone before the check: id %q, worker %v, err %v", id, isWorker, err)
 	}
 }
 

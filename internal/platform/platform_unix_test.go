@@ -79,7 +79,7 @@ func runOSRole(role string) bool {
 		}
 		return true
 	}
-	return false
+	return runLinuxRole(role)
 }
 
 // readPidsNoT reads the first pid of a pid file.

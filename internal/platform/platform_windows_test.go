@@ -1,7 +1,10 @@
 package platform
 
 import (
+	"context"
 	"errors"
+	"net"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
@@ -72,8 +75,17 @@ func TestNamedJob(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitDead(t, pids...)
-	if left, err := wt.PIDs(); err != nil || len(left) != 0 {
-		t.Fatalf("closed job still listed: %v, %v", left, err)
+	// The job is gone. Its root (the owner: this process) still runs, as a launcher seen from a daemon in another
+	// session would: that is an error, not an empty tree.
+	if wt.RootPID != os.Getpid() || wt.RootStart == 0 {
+		t.Fatalf("worker tree root %d/%d, want this process", wt.RootPID, wt.RootStart)
+	}
+	var unavailable *JobUnavailableError
+	if left, err := wt.PIDs(); !errors.As(err, &unavailable) || unavailable.Job != wt.Job || unavailable.Tree != wt.ID {
+		t.Fatalf("missing job with a running root: %v, %v; want a JobUnavailableError", left, err)
+	}
+	if left, err := (&WorkerTree{ID: "ended", Job: wt.Job, RootPID: pids[0], RootStart: 1}).PIDs(); err != nil || len(left) != 0 {
+		t.Fatalf("closed job with an ended root: %v, %v", left, err)
 	}
 	// The name is free again once the job is gone.
 	again, err := StartWorkerTree(helper("print"), wt.Job)
@@ -85,4 +97,37 @@ func TestNamedJob(t *testing.T) {
 		t.Fatalf("exit code %d, want 3", code)
 	}
 	_ = again.Close()
+}
+
+// TestSocketOwnerUnavailableJob: a tree whose job cannot be opened while its launcher runs makes the lookup fail
+// closed, without a task ID, and the typed error survives for the caller to log.
+func TestSocketOwnerUnavailableJob(t *testing.T) {
+	ln, err := (&net.ListenConfig{}).Listen(context.Background(), "tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = ln.Close() }()
+	dialer := helper("dial", filepath.Join(t.TempDir(), "dial"), ln.Addr().String())
+	HideWindow(dialer)
+	if err := dialer.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = dialer.Process.Kill(); _ = dialer.Wait() }()
+	conn, err := ln.Accept()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = conn.Close() }()
+	local, remote := addrPorts(t, conn)
+	start, err := ProcessStartTime(os.Getpid())
+	if err != nil {
+		t.Fatal(err)
+	}
+	name, _ := NewTreeName()
+	unavailable := &WorkerTree{ID: "t1", Job: name, RootPID: os.Getpid(), RootStart: start}
+	id, isWorker, err := SocketOwnerInTrees(local, remote, []*WorkerTree{unavailable})
+	var jobErr *JobUnavailableError
+	if id != "" || !isWorker || !errors.As(err, &jobErr) || jobErr.Job != name {
+		t.Fatalf("lookup: id %q, worker %v, err %v", id, isWorker, err)
+	}
 }

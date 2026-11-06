@@ -24,7 +24,9 @@ type jobPIDList struct {
 	ProcessIDList             [1]uintptr
 }
 
-// pids opens the named job for a moment and lists its processes.
+// pids opens the named job for a moment and lists its processes. A job that does not exist is a tree that has
+// ended, unless the tree's root (the launcher) still runs: Local\ names are per session, so a daemon running in
+// another session cannot see the job, and that must not pass for "no processes".
 func (w *WorkerTree) pids() ([]int, error) {
 	if w.Job == "" {
 		return nil, fmt.Errorf("worker tree %q: no job name", w.ID)
@@ -37,12 +39,27 @@ func (w *WorkerTree) pids() ([]int, error) {
 	job := windows.Handle(r)
 	if job == 0 {
 		if errors.Is(callErr, windows.ERROR_FILE_NOT_FOUND) {
+			if w.rootRunning() {
+				return nil, &JobUnavailableError{Tree: w.ID, Job: w.Job, RootPID: w.RootPID, Err: callErr}
+			}
 			return nil, nil // the launcher closed the job: the tree has ended
 		}
 		return nil, fmt.Errorf("worker tree %q: open job: %w", w.ID, callErr)
 	}
 	defer func() { _ = windows.CloseHandle(job) }()
 	return jobPIDs(job)
+}
+
+// rootRunning reports whether the tree's root process still runs with its recorded start time.
+func (w *WorkerTree) rootRunning() bool {
+	if w.RootPID <= 0 || !processAlive(w.RootPID) {
+		return false
+	}
+	start, err := procStart(w.RootPID)
+	if err != nil {
+		return true // it runs but cannot be checked: assume it is the root
+	}
+	return w.RootStart == 0 || start == w.RootStart
 }
 
 // jobPIDs lists the processes of job, growing the buffer while processes are added between calls.
@@ -102,8 +119,9 @@ const (
 	tcp6RowSize = 56
 )
 
-// socketOwnerInTrees finds the owner of the client socket in the TCP tables and looks for it in the trees' jobs.
-func socketOwnerInTrees(local, remote netip.AddrPort, trees []*WorkerTree) (id string, isWorker bool, err error) {
+// socketOwnerInTrees finds the owner of the client socket in the TCP tables and looks for it in the trees' jobs
+// (see SocketOwnerInTrees for the answers).
+func socketOwnerInTrees(local, remote netip.AddrPort, trees []*WorkerTree, opt lookupOptions) (id string, isWorker bool, err error) {
 	owner, err := clientSocketOwner(local, remote)
 	if err != nil {
 		return "", true, err
@@ -111,14 +129,27 @@ func socketOwnerInTrees(local, remote netip.AddrPort, trees []*WorkerTree) (id s
 	if owner == os.Getpid() {
 		return "", false, nil
 	}
+	var treeErrs []error
 	for _, w := range trees {
 		pids, err := w.PIDs()
 		if err != nil {
-			return w.ID, true, err
+			treeErrs = append(treeErrs, err)
+			continue
 		}
 		if slices.Contains(pids, owner) {
 			return w.ID, true, nil
 		}
+	}
+	if len(treeErrs) > 0 {
+		return "", true, errors.Join(treeErrs...)
+	}
+	// Check the "not in any job" answer again: an owner that exited before the jobs were listed has left them.
+	if opt.beforeRecheck != nil {
+		opt.beforeRecheck()
+	}
+	again, err := clientSocketOwner(local, remote)
+	if err != nil || again != owner {
+		return "", true, fmt.Errorf("%w: the client socket changed while it was looked up", ErrSocketOwnerUnknown)
 	}
 	return "", false, nil
 }
