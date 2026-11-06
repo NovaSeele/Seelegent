@@ -9,6 +9,7 @@
  */
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 
+import type { PageWidth } from '@/components/layout/pageWidth'
 import WatchPage from '@/features/watch/WatchPage.vue'
 import type { NavId } from '@/config/nav'
 
@@ -20,6 +21,8 @@ declare module 'vue-router' {
     nav?: NavId
     /** Rendered as an overlay over the previous page. */
     overlay?: boolean
+    /** Page width (docs/ui-layout.md): 'full' for split-pane views; unset = 'readable'. */
+    width?: PageWidth
   }
 }
 
@@ -36,7 +39,7 @@ export const routes: RouteRecordRaw[] = [
     name: 'tasks',
     component: () => import('@/features/tasks/TasksPage.vue'),
     props: true,
-    meta: { nav: 'tasks', titleKey: 'nav.tasks.label' },
+    meta: { nav: 'tasks', titleKey: 'nav.tasks.label', width: 'full' },
   },
   {
     path: '/issues/:ticketId?',

@@ -75,6 +75,24 @@ describe('AppShell', () => {
     expect(document.title).toBe('Automations · Seelegent')
   })
 
+  it('centres document pages and gives split views the full width, also under settings', async () => {
+    const { wrapper, router } = await open('/usage')
+    expect(wrapper.get('.page').attributes('data-page-width')).toBe('readable')
+    for (const path of ['/issues', '/meetings', '/contests', '/members']) {
+      await router.push(path)
+      await flushPromises()
+      expect(wrapper.get('.page').attributes('data-page-width'), path).toBe('readable')
+    }
+    await router.push('/tasks')
+    await flushPromises()
+    expect(wrapper.find('.page').exists()).toBe(false)
+    expect(wrapper.find('.split').exists()).toBe(true)
+    expect(wrapper.get('main').attributes('data-page-width')).toBe('full')
+    await router.push('/settings/appearance')
+    await flushPromises()
+    expect(wrapper.get('main').attributes('data-page-width')).toBe('full')
+  })
+
   it('shows NotFound for unknown addresses', async () => {
     const { wrapper } = await open('/no/such/page')
     expect(wrapper.text()).toContain('Page not found')

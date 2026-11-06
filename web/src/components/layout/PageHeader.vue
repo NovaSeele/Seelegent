@@ -36,7 +36,7 @@ defineProps<{ title: string; description?: string }>()
 }
 
 .page-header__desc {
-  max-width: 72ch;
+  max-width: var(--measure-prose);
   margin-top: var(--space-1);
   color: var(--text-secondary);
   font-size: var(--fs-sm);

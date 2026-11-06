@@ -328,7 +328,7 @@ function close() {
 }
 
 .settings__section-desc {
-  max-width: 72ch;
+  max-width: var(--measure-prose);
   color: var(--text-secondary);
   font-size: var(--fs-sm);
   line-height: var(--lh-prose);

@@ -4,13 +4,14 @@ import { useI18n } from 'vue-i18n'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import { navItem, type NavId } from '@/config/nav'
 
+import PageContainer from './PageContainer.vue'
 import PageHeader from './PageHeader.vue'
 import SplitLayout from './SplitLayout.vue'
 
 /**
  * Stand-in for a page whose data views arrive in later milestones: the page title and description, and an
- * empty state saying the view is coming. List pages (`split`) show the list + detail layout so the sidebar can be
- * tried out.
+ * empty state saying the view is coming. Split views (`split`, Tasks) show the list + detail layout at full
+ * width; every other page is a PageContainer at its route's width (docs/ui-layout.md).
  */
 const props = defineProps<{
   id: NavId
@@ -38,22 +39,17 @@ const item = navItem(props.id)
       :description="t('pages.placeholder.desc')"
     />
   </SplitLayout>
-  <div v-else class="page">
+  <PageContainer v-else>
     <PageHeader :title="t(`nav.${id}.label`)" :description="t(`nav.${id}.desc`)" />
     <EmptyState
       :icon="item.icon"
       :title="t('pages.placeholder.title')"
       :description="t('pages.placeholder.desc')"
     />
-  </div>
+  </PageContainer>
 </template>
 
 <style scoped>
-.page {
-  max-width: var(--content-max);
-  margin: 0 auto;
-}
-
 .list-head {
   display: flex;
   align-items: center;

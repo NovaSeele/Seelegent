@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import PlaceholderPage from '@/components/layout/PlaceholderPage.vue'
 
-// The route passes its parameter as a prop (props: true), so it follows the page on screen even while an
-// overlay route (settings) is the current one.
+// The list is a readable-width page; the detail parameter (props: true, so it follows the page on screen even
+// under the settings overlay) is accepted now and used when the detail view lands.
 defineProps<{ meetingId?: string }>()
 </script>
 
 <template>
-  <PlaceholderPage id="meetings" split :detail-id="meetingId" />
+  <PlaceholderPage id="meetings" />
 </template>

@@ -109,7 +109,7 @@
   --ease-in: cubic-bezier(0.4, 0, 1, 1);
   --transition-fast: var(--duration-fast) var(--ease-standard);
 
-  /* Layout. */
+  /* Layout (docs/ui-layout.md). */
   --rail-width: 76px;
   --rail-width-compact: 56px;
   --top-bar-height: 48px;
@@ -118,7 +118,10 @@
   --sidebar-width: 300px;
   --sidebar-min: 240px;
   --sidebar-max: 560px;
-  --content-max: 1200px;
+  /* Readable pages (documents, tables, settings) centre at this width; split views always use the full width. */
+  --page-max-readable: 1200px;
+  /* Running text (descriptions, help) wraps at this measure inside any page. */
+  --measure-prose: 72ch;
   --status-stripe: 3px;
 
   /* Stacking order. */

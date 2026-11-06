@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, shallowRef, watch, watchEffect } from 'vue'
+import { computed, nextTick, provide, shallowRef, watch, watchEffect } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterView, useRoute, useRouter, type RouteLocationNormalizedLoaded } from 'vue-router'
 
@@ -13,6 +13,7 @@ import SettingsDialog from '@/features/settings/SettingsDialog.vue'
 import BottomNav from './BottomNav.vue'
 import ConnectionBanner from './ConnectionBanner.vue'
 import NavRail from './NavRail.vue'
+import { DEFAULT_PAGE_WIDTH, PAGE_WIDTH_KEY } from './pageWidth'
 import TopAppBar from './TopAppBar.vue'
 
 /**
@@ -40,6 +41,9 @@ watch(
 const home = router.resolve('/') as unknown as RouteLocationNormalizedLoaded
 const background = computed(() => lastPage.value ?? home)
 const activeNav = computed(() => background.value.meta.nav)
+// The width contract follows the page on screen, so it does not change while settings is open over it.
+const pageWidth = computed(() => background.value.meta.width ?? DEFAULT_PAGE_WIDTH)
+provide(PAGE_WIDTH_KEY, pageWidth)
 
 useShortcutDispatcher()
 useAppCommands()
@@ -53,7 +57,10 @@ watchEffect(() => {
 const workspace = shallowRef<HTMLElement | null>(null)
 watch(
   () => background.value.path,
-  () => void nextTick(() => workspace.value?.scrollTo({ top: 0 })),
+  () =>
+    void nextTick(() => {
+      if (workspace.value) workspace.value.scrollTop = 0
+    }),
 )
 </script>
 
@@ -64,7 +71,7 @@ watch(
     <NavRail v-else :active="activeNav" :compact="tier === 'compact'" />
     <div class="shell__main">
       <ConnectionBanner />
-      <main id="main" ref="workspace" class="workspace" tabindex="-1">
+      <main id="main" ref="workspace" class="workspace" tabindex="-1" :data-page-width="pageWidth">
         <RouterView :route="background" />
       </main>
     </div>
