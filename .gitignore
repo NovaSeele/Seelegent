@@ -1,0 +1,48 @@
+# Go
+/bin/
+/dist/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+go.work
+go.work.sum
+
+# Coverage
+coverage/
+coverage.*
+*.coverprofile
+*.lcov
+
+# Web
+node_modules/
+web/dist/*
+!web/dist/.gitkeep
+web/coverage/
+*.tsbuildinfo
+.vite/
+.eslintcache
+
+# Environment
+.env
+.env.*
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Editors
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
