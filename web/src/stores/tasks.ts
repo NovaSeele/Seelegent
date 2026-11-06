@@ -323,18 +323,33 @@ export const useTasksStore = defineStore('tasks', () => {
     }
   }
 
-  /** Reads forward from the last held seq until the log is current, then applies buffered frames. */
+  /**
+   * Reads forward from the last held seq until the log is current, then applies buffered frames. A read that
+   * does not move lastSeq although there is more (the server's page skips seqs, or held frames stay out of reach)
+   * would repeat forever: the log reloads its tail instead and drops the held frames (the tail covers them).
+   */
   async function catchUp(log: LogInternal): Promise<void> {
     if (log.syncing || log.state.status !== 'ready') return
     log.syncing = true
     try {
+      let stuck = false
       for (;;) {
-        const page = await client.events(log.taskId, { after: log.state.lastSeq, limit: PAGE })
+        const before = log.state.lastSeq
+        const page = await client.events(log.taskId, { after: before, limit: PAGE })
         if (logs.get(log.taskId) !== log) return
         append(log, bySeq(page.items))
+        if (log.state.lastSeq === before) {
+          stuck = page.items.length > 0 || log.pending.some((event) => event.seq > before)
+          break
+        }
         if (page.items.length < PAGE || log.state.lastSeq >= page.lastSeq) break
       }
       log.syncing = false
+      if (stuck) {
+        log.pending = []
+        void loadTail(log)
+        return
+      }
       drainPending(log)
     } catch (error) {
       log.syncing = false

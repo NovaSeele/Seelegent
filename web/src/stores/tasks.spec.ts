@@ -186,6 +186,27 @@ describe('tasks store: event logs', () => {
     ])
   })
 
+  it('reloads the tail instead of looping when the server skips seqs in a full page', async () => {
+    const { store, server } = setup(5)
+    const log = store.retainEvents('t1')
+    await flushPromises()
+    server.add(PAGE + 20)
+    // The daemon lost seq 6: every read after 5 starts at 7 and is a full page.
+    const gap = vi.fn(async (_id: string, query: EventsQuery): Promise<TaskEventsPage> => {
+      if ('tail' in query) return server.read('t1', query)
+      return {
+        items: server.events.filter((e) => e.seq > query.after && e.seq !== 6).slice(0, PAGE),
+        lastSeq: server.events.length,
+      }
+    })
+    store.setApi(fakeTasksApi({ events: gap }))
+    store.applyEvent(makeEvent('t1', PAGE + 25))
+    await flushPromises()
+    const calls = gap.mock.calls.map((c) => c[1])
+    expect(calls).toEqual([{ after: 5, limit: PAGE }, { tail: TAIL }])
+    expect(log.state).toMatchObject({ status: 'ready', lastSeq: PAGE + 25 })
+  })
+
   it('catches up when a summary says the log grew without frames (after a reset)', async () => {
     const { store, server } = setup(3)
     const log = store.retainEvents('t1')
