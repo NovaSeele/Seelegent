@@ -9,6 +9,7 @@ import { createMemoryHistory } from 'vue-router'
 import { createAppRouter } from '@/router'
 import { useCommandsStore } from '@/stores/commands'
 import { usePaletteStore } from '@/stores/palette'
+import { useUiStore } from '@/stores/ui'
 import { setupApp } from '@/test/app'
 
 import AppShell from './AppShell.vue'
@@ -112,6 +113,32 @@ describe('AppShell', () => {
     const { wrapper } = await open('/settings/appearance')
     expect(wrapper.get('h1').text()).toBe('Watch')
     expect(document.querySelectorAll('[data-theme-preview]').length).toBeGreaterThan(26)
+  })
+
+  it('picks a file icon set below the theme, with previews drawn in each set, and saves it', async () => {
+    await open('/settings/appearance')
+    const rows = [...document.querySelectorAll('[data-setting]')].map((row) =>
+      row.getAttribute('data-setting'),
+    )
+    expect(rows.slice(0, 2)).toEqual(['theme', 'fileIcons'])
+    const cards = [...document.querySelectorAll<HTMLElement>('[data-icon-set]')]
+    expect(cards.map((card) => card.dataset.iconSet)).toEqual([
+      'seelegent',
+      'seelegent-mono',
+      'seti',
+      'material',
+      'jetbrains',
+      'catppuccin',
+      'off',
+    ])
+    const seti = cards[2] as HTMLElement
+    expect(seti.textContent).toContain('MIT')
+    expect(seti.querySelector('img.fi')?.getAttribute('src')).toBe('/fileicons/seti/folder.svg')
+    expect(cards[6]?.querySelectorAll('.fi')).toHaveLength(0)
+    seti.querySelector('input')?.click()
+    await flushPromises()
+    expect(useUiStore().fileIcons).toBe('seti')
+    expect(localStorage.getItem('seelegent.v1.ui.fileIcons')).toBe('"seti"')
   })
 
   it('registers navigation, settings, theme and language commands', async () => {

@@ -19,11 +19,12 @@ import { useFormat } from '@/composables/useFormat'
 import { useToastStore } from '@/stores/toast'
 import { useUiStore } from '@/stores/ui'
 
+import FileIconPicker from './FileIconPicker.vue'
 import RangeField from './RangeField.vue'
 import SettingRow from './SettingRow.vue'
 import ThemePicker from './ThemePicker.vue'
 
-/** Appearance: theme, fonts, text sizes and motion. Changes apply at once and are saved in this browser. */
+/** Appearance: theme, file icons, fonts, text sizes and motion. Changes apply at once and are saved in this browser. */
 defineProps<{ highlight?: string }>()
 
 const { t } = useI18n()
@@ -35,6 +36,7 @@ const theme = computed({ get: () => ui.theme, set: ui.setTheme })
 const fontUi = computed({ get: () => ui.fontUi, set: ui.setFontUi })
 const fontMono = computed({ get: () => ui.fontMono, set: ui.setFontMono })
 const motion = computed({ get: () => ui.motion, set: ui.setMotion })
+const fileIcons = computed({ get: () => ui.fileIcons, set: ui.setFileIcons })
 
 const uiFonts = computed<SelectOption<UiFont>[]>(() =>
   UI_FONTS.map((id) => ({
@@ -63,6 +65,7 @@ function reset() {
     sizeTerm: ui.sizeTerm,
     lineHeightTerm: ui.lineHeightTerm,
     motion: ui.motion,
+    fileIcons: ui.fileIcons,
   }
   ui.resetAppearance()
   toasts.show({
@@ -77,6 +80,9 @@ function reset() {
   <div>
     <SettingRow item="theme" stacked :highlighted="highlight === 'theme'">
       <ThemePicker v-model="theme" />
+    </SettingRow>
+    <SettingRow item="fileIcons" stacked :highlighted="highlight === 'fileIcons'">
+      <FileIconPicker v-model="fileIcons" />
     </SettingRow>
     <SettingRow item="fontUi" :highlighted="highlight === 'fontUi'">
       <Select

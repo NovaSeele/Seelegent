@@ -61,6 +61,11 @@
       "desc": "Màu của toàn bộ bảng điều khiển. Tự động sẽ theo chế độ sáng hoặc tối của hệ thống.",
       "keywords": "màu sắc giao diện tối sáng theme"
     },
+    "fileIcons": {
+      "label": "Biểu tượng tệp",
+      "desc": "Biểu tượng cạnh tên tệp trong các trang Tệp, Git, tiến trình và trong terminal.",
+      "keywords": "biểu tượng icon tệp loại tệp"
+    },
     "fontUi": {
       "label": "Phông giao diện",
       "desc": "Chỉ dùng phông đã cài trên máy này; không tải gì về.",
@@ -189,6 +194,12 @@
       "off": "Tắt"
     },
     "reset": "Đặt lại",
-    "resetDone": "Đã đặt lại giao diện về mặc định"
+    "resetDone": "Đã đặt lại giao diện về mặc định",
+    "fileIcons": {
+      "seelegentMono": "Seelegent đơn sắc",
+      "off": "Tắt",
+      "builtin": "Có sẵn",
+      "namesOnly": "Chỉ hiện tên"
+    }
   }
 }

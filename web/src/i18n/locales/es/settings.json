@@ -61,6 +61,11 @@
       "desc": "Colores de todo el panel. Automático sigue el modo claro u oscuro del sistema.",
       "keywords": "color oscuro claro modo paleta"
     },
+    "fileIcons": {
+      "label": "Iconos de archivo",
+      "desc": "Iconos junto a los nombres de archivo en las vistas de archivos, Git y procesos, y en la terminal.",
+      "keywords": "icono iconos archivo tipo de archivo"
+    },
     "fontUi": {
       "label": "Fuente de la interfaz",
       "desc": "Solo se usan fuentes instaladas en este equipo; no se descarga nada.",
@@ -189,6 +194,12 @@
       "off": "Desactivado"
     },
     "reset": "Restablecer",
-    "resetDone": "Apariencia restablecida"
+    "resetDone": "Apariencia restablecida",
+    "fileIcons": {
+      "seelegentMono": "Seelegent monocromo",
+      "off": "Desactivados",
+      "builtin": "Integrado",
+      "namesOnly": "Solo nombres"
+    }
   }
 }

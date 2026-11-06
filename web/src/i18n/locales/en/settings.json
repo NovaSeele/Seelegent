@@ -61,6 +61,11 @@
       "desc": "Colours of the whole dashboard. Auto follows your system’s light or dark mode.",
       "keywords": "colour color dark light mode palette"
     },
+    "fileIcons": {
+      "label": "File icons",
+      "desc": "Icons next to file names in the Files, Git and process views and in the terminal.",
+      "keywords": "icon icons file type seti material jetbrains catppuccin"
+    },
     "fontUi": {
       "label": "Interface font",
       "desc": "Only fonts installed on this computer are used; nothing is downloaded.",
@@ -189,6 +194,12 @@
       "off": "Off"
     },
     "reset": "Reset",
-    "resetDone": "Appearance reset to defaults"
+    "resetDone": "Appearance reset to defaults",
+    "fileIcons": {
+      "seelegentMono": "Seelegent mono",
+      "off": "Off",
+      "builtin": "Built in",
+      "namesOnly": "Names only"
+    }
   }
 }

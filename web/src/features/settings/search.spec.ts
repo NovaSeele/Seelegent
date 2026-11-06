@@ -19,6 +19,20 @@ describe('settings search', () => {
     expect(searchSettings('theme')[0]?.item).toBe('theme')
   })
 
+  it.each([
+    ['en', 'icon'],
+    ['vi', 'biểu tượng'],
+    ['vi', 'bieu tuong'],
+    ['es', 'iconos'],
+    ['ru', 'значки'],
+    ['ja', 'アイコン'],
+    ['ko', '아이콘'],
+    ['zh-CN', '图标'],
+  ] as const)('finds the file icon setting in %s with "%s"', async (locale, query) => {
+    await setupApp(locale)
+    expect(searchSettings(query)[0]).toMatchObject({ section: 'appearance', item: 'fileIcons' })
+  })
+
   it('returns nothing for an empty query and no scattered-letter noise from descriptions', async () => {
     await setupApp('en')
     expect(searchSettings('  ')).toEqual([])

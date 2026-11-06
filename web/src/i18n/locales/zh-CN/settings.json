@@ -61,6 +61,11 @@
       "desc": "整个控制面板的配色。“自动”跟随系统的浅色或深色模式。",
       "keywords": "颜色 深色 浅色 模式 配色"
     },
+    "fileIcons": {
+      "label": "文件图标",
+      "desc": "在文件、Git、进程视图和终端中显示在文件名旁的图标。",
+      "keywords": "图标 文件 类型"
+    },
     "fontUi": {
       "label": "界面字体",
       "desc": "只使用本机已安装的字体，不会下载任何内容。",
@@ -189,6 +194,12 @@
       "off": "关"
     },
     "reset": "重置",
-    "resetDone": "外观已恢复默认"
+    "resetDone": "外观已恢复默认",
+    "fileIcons": {
+      "seelegentMono": "Seelegent 单色",
+      "off": "关闭",
+      "builtin": "内置",
+      "namesOnly": "仅名称"
+    }
   }
 }

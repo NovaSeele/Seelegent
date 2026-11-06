@@ -39,6 +39,7 @@ export const SECTIONS: readonly SectionInfo[] = [
     ready: true,
     items: [
       'theme',
+      'fileIcons',
       'fontUi',
       'fontMono',
       'sizeUi',
