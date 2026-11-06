@@ -24,6 +24,10 @@ const (
 	DefaultParallel = 4
 	// jitterFraction spreads the cycles: each wait is the interval ±10 %.
 	jitterFraction = 0.1
+	// NeedsLoginRecheck is how often RefreshAll still reads an account that is known to be signed out. One
+	// misread answer must not drop an account for good, but a really signed-out account should not run a CLI every
+	// cycle either: every 6 hours is cheap and bounds the damage of a wrong "signed out".
+	NeedsLoginRecheck = 6 * time.Hour
 )
 
 // Accounts lists the accounts; *account.Manager satisfies it.
@@ -68,16 +72,22 @@ type Result struct {
 
 // Refresher reads the quota of the accounts on a timer and stores it. A failing or slow account never holds up
 // the others or the caller: each runs in its own goroutine with a time limit, panics are recovered into errors,
-// and the first cycle starts in the background (Run). Concurrent refreshes of the same account share one read.
+// and the first cycle starts in the background (Run). An account is never read twice at the same time: a cycle
+// shares a read already in flight, while an on-demand Refresh waits for it and then reads again, because a read
+// that started before the request (for example before a sign-in) may answer for an older state.
 type Refresher struct {
-	o    RefresherOptions
-	kick chan struct{}
+	o       RefresherOptions
+	kick    chan struct{}
+	request chan struct{}
 
 	mu       sync.Mutex
 	inflight map[string]*refreshCall
+	gen      uint64          // number of reads started so far
+	pending  map[string]bool // accounts asked for with Request, not yet read
 }
 
 type refreshCall struct {
+	gen  uint64 // r.gen when the read started
 	done chan struct{}
 	res  Result
 }
@@ -102,12 +112,20 @@ func NewRefresher(o RefresherOptions) (*Refresher, error) {
 	if o.Logger == nil {
 		o.Logger = slog.New(slog.DiscardHandler)
 	}
-	return &Refresher{o: o, kick: make(chan struct{}, 1), inflight: map[string]*refreshCall{}}, nil
+	return &Refresher{o: o, kick: make(chan struct{}, 1), request: make(chan struct{}, 1),
+		inflight: map[string]*refreshCall{}, pending: map[string]bool{}}, nil
 }
 
-// Run refreshes every account at once and then once per interval (±10 % jitter) until ctx ends. Start it in its
-// own goroutine; it never fails.
+// Run refreshes every account at once and then once per interval (±10 % jitter) until ctx ends, and serves
+// Request meanwhile. Start it in its own goroutine; it never fails.
 func (r *Refresher) Run(ctx context.Context) {
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		r.serveRequests(ctx)
+	}()
+	defer wg.Wait()
 	for {
 		r.RefreshAll(ctx)
 		t := r.o.Clock.NewTimer(r.nextWait())
@@ -118,6 +136,48 @@ func (r *Refresher) Run(ctx context.Context) {
 		case <-r.kick:
 			t.Stop()
 		case <-t.C():
+		}
+	}
+}
+
+// Request asks Run to read one account soon, in the background (for example to confirm that a run refused for its
+// sign-in really means the account is signed out). It never blocks; repeated requests for an account that has not
+// been read yet are merged. The read has the semantics of Refresh.
+func (r *Refresher) Request(id string) {
+	r.mu.Lock()
+	r.pending[id] = true
+	r.mu.Unlock()
+	select {
+	case r.request <- struct{}{}:
+	default:
+	}
+}
+
+// serveRequests reads the accounts asked for with Request until ctx ends.
+func (r *Refresher) serveRequests(ctx context.Context) {
+	var wg sync.WaitGroup
+	defer wg.Wait()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-r.request:
+		}
+		r.mu.Lock()
+		ids := make([]string, 0, len(r.pending))
+		for id := range r.pending {
+			ids = append(ids, id)
+		}
+		clear(r.pending)
+		r.mu.Unlock()
+		for _, id := range ids {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				if _, err := r.Refresh(ctx, id); err != nil && ctx.Err() == nil {
+					r.o.Logger.Debug("quota refresh on request", "account", id, "err", err)
+				}
+			}()
 		}
 	}
 }
@@ -145,9 +205,10 @@ func (r *Refresher) nextWait() time.Duration {
 	return d
 }
 
-// RefreshAll reads every account that has active quota: enabled, signed in through the CLI (not an API key),
-// with a reader for its backend, and not known to be signed out (those wait for Refresh after a sign-in). It
-// returns one result per account read, in the order of Accounts.List.
+// RefreshAll reads every account that has active quota: enabled, signed in through the CLI (not an API key) and
+// with a reader for its backend. An account known to be signed out is read only when its last read is
+// NeedsLoginRecheck old (a sign-in, Refresh or Request reads it at once). It returns one result per account read,
+// in the order of Accounts.List.
 func (r *Refresher) RefreshAll(ctx context.Context) []Result {
 	accounts, err := r.o.Accounts.List(ctx)
 	if err != nil {
@@ -165,7 +226,8 @@ func (r *Refresher) RefreshAll(ctx context.Context) []Result {
 		if !a.Enabled || a.Kind == account.KindAPIKey || r.o.Readers[a.Backend] == nil {
 			continue
 		}
-		if snap, ok := cached[a.ID]; ok && snap.ErrorKind() == KindNeedsLogin {
+		if snap, ok := cached[a.ID]; ok && snap.ErrorKind() == KindNeedsLogin &&
+			r.o.Clock.Now().Sub(snap.Error.At) < NeedsLoginRecheck {
 			continue
 		}
 		todo = append(todo, *a)
@@ -185,14 +247,15 @@ func (r *Refresher) RefreshAll(ctx context.Context) []Result {
 				return
 			}
 			defer func() { <-sem }()
-			results[i] = r.refresh(ctx, a)
+			results[i] = r.refresh(ctx, a, false)
 		}()
 	}
 	wg.Wait()
 	return results
 }
 
-// Refresh reads one account now, whatever its last state (use it after a sign-in). It fails with
+// Refresh reads one account now, whatever its last state (use it after a sign-in). The answer always comes from a
+// read that started after the call: a read already in flight is waited for, not shared. It fails with
 // account.ErrNotFound for an unknown id and ErrPassive for an API-key account.
 func (r *Refresher) Refresh(ctx context.Context, id string) (Snapshot, error) {
 	accounts, err := r.o.Accounts.List(ctx)
@@ -204,26 +267,38 @@ func (r *Refresher) Refresh(ctx context.Context, id string) (Snapshot, error) {
 			if a.Kind == account.KindAPIKey {
 				return Snapshot{}, ErrPassive
 			}
-			res := r.refresh(ctx, a)
+			res := r.refresh(ctx, a, true)
 			return res.Snapshot, res.Err
 		}
 	}
 	return Snapshot{}, fmt.Errorf("refresh quota of %s: %w", id, account.ErrNotFound)
 }
 
-// refresh reads one account, sharing a read already in flight for it.
-func (r *Refresher) refresh(ctx context.Context, a account.Account) Result {
+// refresh reads one account; reads of one account never overlap. Without fresh it shares a read already in
+// flight. With fresh it shares only a read that started after this call (another fresh request that came later
+// while it waited); an older read is waited for and then a new one is started.
+func (r *Refresher) refresh(ctx context.Context, a account.Account, fresh bool) Result {
 	r.mu.Lock()
-	if c, ok := r.inflight[a.ID]; ok {
+	after := r.gen
+	for {
+		c, ok := r.inflight[a.ID]
+		if !ok {
+			break
+		}
+		join := !fresh || c.gen > after
 		r.mu.Unlock()
 		select {
 		case <-c.done:
-			return c.res
 		case <-ctx.Done():
 			return Result{AccountID: a.ID, Err: ctx.Err()}
 		}
+		if join {
+			return c.res
+		}
+		r.mu.Lock()
 	}
-	c := &refreshCall{done: make(chan struct{})}
+	r.gen++
+	c := &refreshCall{gen: r.gen, done: make(chan struct{})}
 	r.inflight[a.ID] = c
 	r.mu.Unlock()
 

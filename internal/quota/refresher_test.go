@@ -200,24 +200,24 @@ func TestRefreshSharesInflightRead(t *testing.T) {
 		return okQuota(0.7), nil
 	})
 	a := f.add(t, account.New{Backend: "agy", Kind: account.KindIsolated, Enabled: true})
+	// Two cycles at once share one read.
 	var wg sync.WaitGroup
-	errs := make(chan error, 2)
+	results := make(chan []Result, 2)
 	for range 2 {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_, err := f.r.Refresh(t.Context(), a.ID)
-			errs <- err
+			results <- f.r.RefreshAll(t.Context())
 		}()
 	}
 	<-started
 	time.Sleep(20 * time.Millisecond)
 	close(release)
 	wg.Wait()
-	close(errs)
-	for err := range errs {
-		if err != nil {
-			t.Fatal(err)
+	close(results)
+	for res := range results {
+		if len(res) != 1 || res[0].Err != nil {
+			t.Fatalf("results = %+v", res)
 		}
 	}
 	if n := f.reader.count(a.ID); n != 1 {
