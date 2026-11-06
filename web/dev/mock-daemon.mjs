@@ -877,6 +877,8 @@ function seedData() {
     { state: 'blocked', after: [failed.summary.id], reason: 'The earlier task failed.' },
     false,
   )
+  // Its first status read fails, so the view shows a read error with Retry (never "not a repository").
+  blockedDeps.statusFailures = 1
 
   const manual = makeTask({
     title: 'Debug the flaky upload test',
@@ -1596,7 +1598,13 @@ async function route(req, res, url) {
       if (prompt === undefined) throw notFound(`brief of turn ${turn} attempt ${attempt}`)
       return send(res, 200, { prompt })
     }
-    if (method === 'GET' && sub === 'git') return send(res, 200, taskGit(task))
+    if (method === 'GET' && sub === 'git') {
+      if (task.statusFailures > 0) {
+        task.statusFailures--
+        throw new HttpError(502, 'upstream', 'reading the repository timed out after 20 s')
+      }
+      return send(res, 200, taskGit(task))
+    }
     if (method === 'GET' && sub === 'git/diff') {
       const file = url.searchParams.get('path') ?? ''
       if (!file || file.startsWith('/') || file.split('/').includes('..')) {

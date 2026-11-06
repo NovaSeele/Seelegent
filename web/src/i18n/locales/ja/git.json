@@ -1,0 +1,63 @@
+{
+  "loading": "リポジトリを読み込み中…",
+  "loadError": "リポジトリを読み込めませんでした: {error}",
+  "notRepo": "git リポジトリではありません",
+  "notRepoDesc": "{cwd} は git リポジトリの中にないため、コミットするものはありません。",
+  "noBranch": "detached",
+  "files": "{n} ファイル",
+  "refresh": "再読み込み",
+  "empty": "このタスクの変更はありません",
+  "emptyDesc": "ワーカーが変更したファイルがここに表示され、確認してコミットできます。",
+  "listLabel": "変更されたファイル",
+  "diffLabel": "選択したファイルの変更",
+  "wrap": "折り返し",
+  "preexisting": "このタスクの前から変更されていたファイル {n} 件",
+  "preexistingDesc": "このタスクの作業ではないため、ここではコミット対象にしません。",
+  "failed": "Git: {error}",
+  "binary": "バイナリ",
+  "renamedFrom": "元: {path}",
+  "status": {
+    "added": "追加",
+    "modified": "変更",
+    "deleted": "削除",
+    "renamed": "名前変更",
+    "untracked": "新規・未追跡"
+  },
+  "diff": {
+    "binary": "バイナリファイル: テキストの差分はありません。",
+    "empty": "行の変更はありません（権限または名前のみ）。",
+    "caption": "{path} の変更: {additions} 行追加、{deletions} 行削除",
+    "add": "追加",
+    "del": "削除",
+    "hidden": "さらに {n} 行が非表示です。",
+    "showAll": "{n} 行すべて表示",
+    "truncated": "差分が大きすぎるため途中で切られています。",
+    "loading": "差分を読み込み中…",
+    "error": "差分を読み込めませんでした: {error}"
+  },
+  "commit": {
+    "open": "コミット…",
+    "title": "このタスクのファイルをコミット",
+    "desc": "チェックしたファイルだけがコミットされます。別にステージした内容はそのままです。",
+    "message": "コミットメッセージ",
+    "placeholder": "feat(範囲): 何を変えたか",
+    "files": "ファイル",
+    "all": "すべてのファイル（{n}）",
+    "renameNote": "名前を変えたファイルは、元のパスの削除と一緒にコミットされます。",
+    "active": "ワーカーはまだ実行中です。タスクが終わってからコミットしてください。",
+    "confirm": "{n} ファイルをコミット",
+    "done": "{sha} をコミットしました: {summary}",
+    "busy": "別の git 操作がまだ実行中です。"
+  },
+  "suggest": {
+    "ask": "メッセージを提案",
+    "failed": "メッセージを提案できませんでした。",
+    "use": "使う",
+    "dismiss": "閉じる"
+  },
+  "cmd": {
+    "next": "Git: 次のファイル",
+    "prev": "Git: 前のファイル",
+    "commit": "Git: このタスクのファイルをコミット…"
+  }
+}

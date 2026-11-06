@@ -1,0 +1,341 @@
+<script setup lang="ts">
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
+
+import type { TaskSummary } from '@/api/types'
+import DiffView from '@/components/diff/DiffView.vue'
+import Button from '@/components/ui/Button.vue'
+import EmptyState from '@/components/ui/EmptyState.vue'
+import Icon from '@/components/ui/Icon.vue'
+import IconButton from '@/components/ui/IconButton.vue'
+import Spinner from '@/components/ui/Spinner.vue'
+import Switch from '@/components/ui/Switch.vue'
+import { useFormat } from '@/composables/useFormat'
+import { isBoolean, readStored, writeStored } from '@/lib/storage'
+import { isActive } from '@/lib/taskStatus'
+import { useCommandsStore } from '@/stores/commands'
+
+import CommitDialog from './CommitDialog.vue'
+import { isDrafts, putDraft, stepFile, totals, type Drafts } from './git'
+import GitFileList from './GitFileList.vue'
+import { useGit } from './useGit'
+
+/**
+ * The Git view: the files this task changed (paths from the repository root), the selected file's diff, and a
+ * commit of the ticked ones. Files the repo had changed before the task are listed apart and never offered.
+ * `path` selects a file (opened from the Files view). j/k step through the files.
+ */
+const props = defineProps<{ task: TaskSummary; path?: string | null }>()
+
+const { t } = useI18n()
+const format = useFormat()
+const model = useGit(() => props.task)
+const { git, files, selected, selectedFile, diff } = model
+
+const list = ref<InstanceType<typeof GitFileList> | null>(null)
+const sums = computed(() => totals(files.value))
+const active = computed(() => isActive(props.task))
+
+watch(
+  () => [props.path, files.value] as const,
+  ([path, list]) => {
+    if (path && list.some((f) => f.path === path)) selected.value = path
+  },
+  { immediate: true },
+)
+
+const WRAP = { name: 'git.wrap', fallback: false, validate: isBoolean }
+const wrap = ref(readStored(WRAP))
+watch(wrap, (value) => writeStored(WRAP, value))
+
+const DRAFTS = { name: 'git.drafts', fallback: {} as Drafts, validate: isDrafts }
+const message = ref(readStored(DRAFTS)[props.task.id]?.message ?? '')
+watch(message, (value) =>
+  writeStored(DRAFTS, putDraft(readStored(DRAFTS), props.task.id, value, Date.now())),
+)
+
+const committing = ref(false)
+
+function step(delta: number) {
+  const next = stepFile(files.value, selected.value, delta)
+  if (next) {
+    selected.value = next
+    list.value?.focusSelected()
+  }
+}
+
+const hasFiles = () => files.value.length > 0
+const unregister = useCommandsStore().register(
+  {
+    id: 'git.nextFile',
+    title: { key: 'git.cmd.next' },
+    group: 'task',
+    icon: 'chevronDown',
+    shortcut: 'j',
+    when: hasFiles,
+    run: () => step(1),
+  },
+  {
+    id: 'git.prevFile',
+    title: { key: 'git.cmd.prev' },
+    group: 'task',
+    icon: 'chevronUp',
+    shortcut: 'k',
+    when: hasFiles,
+    run: () => step(-1),
+  },
+  {
+    id: 'git.commit',
+    title: { key: 'git.cmd.commit' },
+    group: 'task',
+    icon: 'git',
+    when: hasFiles,
+    run: () => void (committing.value = true),
+  },
+)
+onBeforeUnmount(unregister)
+</script>
+
+<template>
+  <div class="git">
+    <p v-if="model.state.value.status === 'loading'" class="git__state">
+      <Spinner size="sm" decorative />
+      {{ t('git.loading') }}
+    </p>
+    <div v-else-if="model.state.value.status === 'error'" class="git__state" role="alert">
+      <span>{{ t('git.loadError', { error: model.state.value.error }) }}</span>
+      <Button size="sm" @click="model.reload">{{ t('common.action.retry') }}</Button>
+    </div>
+    <EmptyState
+      v-else-if="git && !git.repo"
+      icon="git"
+      :level="3"
+      :title="t('git.notRepo')"
+      :description="t('git.notRepoDesc', { cwd: task.cwd })"
+    />
+    <template v-else-if="git">
+      <header class="git__bar">
+        <span class="git__branch" :title="git.root">
+          <Icon name="git" />
+          <span>{{ git.branch ?? t('git.noBranch') }}</span>
+        </span>
+        <span class="git__sum">
+          {{ t('git.files', { n: files.length }, files.length) }}
+          <span class="git__add">+{{ format.number(sums.additions) }}</span>
+          <span class="git__del">−{{ format.number(sums.deletions) }}</span>
+        </span>
+        <span
+          v-if="model.state.value.status === 'ready' && model.state.value.refreshError"
+          class="git__stale"
+          role="alert"
+        >
+          {{ t('git.loadError', { error: model.state.value.refreshError }) }}
+        </span>
+        <span class="git__actions">
+          <IconButton icon="refresh" size="sm" :label="t('git.refresh')" @click="model.reload" />
+          <Button size="sm" variant="primary" :disabled="!files.length" @click="committing = true">
+            {{ t('git.commit.open') }}
+          </Button>
+        </span>
+      </header>
+
+      <EmptyState
+        v-if="!files.length"
+        icon="git"
+        :level="3"
+        :title="t('git.empty')"
+        :description="t('git.emptyDesc')"
+      />
+      <div v-else class="git__body">
+        <nav class="git__list">
+          <GitFileList
+            ref="list"
+            v-model:selected="selected"
+            :files="files"
+            :label="t('git.listLabel')"
+          />
+        </nav>
+        <section class="git__diff" :aria-label="t('git.diffLabel')">
+          <div v-if="selectedFile" class="git__diff-bar">
+            <code class="git__diff-path">
+              {{ selectedFile.oldPath ? `${selectedFile.oldPath} → ` : '' }}{{ selectedFile.path }}
+            </code>
+            <Switch v-model="wrap" :label="t('git.wrap')" />
+          </div>
+          <p v-if="diff.status === 'loading'" class="git__state">
+            <Spinner size="sm" decorative />
+            {{ t('git.diff.loading') }}
+          </p>
+          <div v-else-if="diff.status === 'error'" class="git__state" role="alert">
+            <span>{{ t('git.diff.error', { error: diff.error }) }}</span>
+            <Button size="sm" @click="model.reloadDiff">{{ t('common.action.retry') }}</Button>
+          </div>
+          <DiffView v-else-if="diff.status === 'ready'" :diff="diff.diff" :wrap="wrap" />
+        </section>
+      </div>
+
+      <details v-if="git.preexisting.length" class="git__pre">
+        <summary>
+          {{ t('git.preexisting', { n: git.preexisting.length }, git.preexisting.length) }}
+        </summary>
+        <p>{{ t('git.preexistingDesc') }}</p>
+        <ul>
+          <li v-for="pre in git.preexisting" :key="pre">
+            <code>{{ pre }}</code>
+          </li>
+        </ul>
+      </details>
+
+      <CommitDialog
+        v-model:open="committing"
+        v-model:message="message"
+        :files="files"
+        :suggestion="git.suggestion"
+        :busy="model.busy.value"
+        :active="active"
+        :commit="model.commit"
+        @suggest="model.suggest"
+        @dismiss="model.dismiss"
+      />
+    </template>
+  </div>
+</template>
+
+<style scoped>
+.git {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-height: 0;
+  padding: var(--space-3) var(--space-4) var(--space-4);
+  overflow: auto;
+}
+
+.git__state {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-6) var(--space-4);
+  color: var(--text-secondary);
+  font-size: var(--fs-sm);
+}
+
+.git__bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-4);
+  font-size: var(--fs-sm);
+}
+
+.git__branch {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-family: var(--font-mono);
+  font-weight: var(--fw-medium);
+}
+
+.git__sum {
+  display: inline-flex;
+  gap: var(--space-2);
+  color: var(--text-secondary);
+}
+
+.git__add {
+  color: var(--diff-add);
+}
+
+.git__del {
+  color: var(--diff-del);
+}
+
+.git__stale {
+  color: var(--status-danger-fg);
+  font-size: var(--fs-xs);
+}
+
+.git__actions {
+  display: flex;
+  gap: var(--space-2);
+  margin-left: auto;
+}
+
+.git__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.git__list {
+  max-height: 40vh;
+  overflow: auto;
+  border: var(--border-width) solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+}
+
+.git__diff {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.git__diff-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.git__diff-path {
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  overflow-wrap: anywhere;
+}
+
+.git__pre {
+  color: var(--text-secondary);
+  font-size: var(--fs-sm);
+}
+
+.git__pre summary {
+  cursor: pointer;
+}
+
+.git__pre p,
+.git__pre ul {
+  margin-top: var(--space-2);
+  padding-left: var(--space-5);
+}
+
+.git__pre code {
+  font-family: var(--font-mono);
+}
+
+@media (width >= 900px) {
+  .git__body {
+    display: grid;
+    grid-template-columns: minmax(16rem, 30%) minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .git__list {
+    position: sticky;
+    top: 0;
+    max-height: calc(100vh - 16rem);
+  }
+}
+
+@media (width < 600px) {
+  .git {
+    padding-inline: var(--space-2);
+  }
+}
+</style>

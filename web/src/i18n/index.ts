@@ -5,6 +5,7 @@
 import { createI18n } from 'vue-i18n'
 
 import type common from './locales/en/common.json'
+import type git from './locales/en/git.json'
 import type locale from './locales/en/locale.json'
 import type nav from './locales/en/nav.json'
 import type pages from './locales/en/pages.json'
@@ -31,6 +32,7 @@ export const NAMESPACES = [
   'task',
   'terminal',
   'process',
+  'git',
 ] as const
 export type Namespace = (typeof NAMESPACES)[number]
 
@@ -46,6 +48,7 @@ export interface MessageSchema {
   task: typeof task
   terminal: typeof terminal
   process: typeof process
+  git: typeof git
 }
 
 declare module 'vue-i18n' {

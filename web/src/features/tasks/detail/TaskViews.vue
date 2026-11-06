@@ -1,14 +1,12 @@
 <script setup lang="ts">
-import { useI18n } from 'vue-i18n'
-
 import type { TaskDetail, TaskSummary } from '@/api/types'
-import EmptyState from '@/components/ui/EmptyState.vue'
 
+import GitView from '../views/git/GitView.vue'
 import FilesView from '../views/process/FilesView.vue'
 import GraphView from '../views/process/GraphView.vue'
 import TreeView from '../views/process/TreeView.vue'
 import TerminalView from '../views/terminal/TerminalView.vue'
-import { VIEW_ICONS, type TaskView } from './taskKeys'
+import type { TaskView } from './taskKeys'
 
 /**
  * The panel of the selected task view. Tree and Graph steps open in the Terminal (`reveal`); edited files open
@@ -24,8 +22,6 @@ defineProps<{
   gitPath?: string | null
 }>()
 defineEmits<{ reveal: [key: string]; openGit: [path: string] }>()
-
-const { t } = useI18n()
 </script>
 
 <template>
@@ -48,11 +44,5 @@ const { t } = useI18n()
     :detail="detail"
     @open-git="$emit('openGit', $event)"
   />
-  <EmptyState
-    v-else
-    :icon="VIEW_ICONS[view]"
-    :level="3"
-    :title="t(`task.views.${view}`)"
-    :description="t('pages.placeholder.desc')"
-  />
+  <GitView v-else :task="task" :path="gitPath" />
 </template>
