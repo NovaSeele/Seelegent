@@ -24,6 +24,13 @@ export const useAccountsStore = defineStore('accounts', () => {
     accounts.value = order([...accounts.value.filter((a) => a.id !== account.id), account])
   }
 
+  /** Upserts unless the stored account is as new or newer (by updatedAt); for replays that may be stale. */
+  function upsertIfNewer(account: Account): void {
+    const current = byId.value.get(account.id)
+    if (current && Date.parse(current.updatedAt) >= Date.parse(account.updatedAt)) return
+    upsert(account)
+  }
+
   function remove(id: string): void {
     accounts.value = accounts.value.filter((a) => a.id !== id)
   }
@@ -32,5 +39,5 @@ export const useAccountsStore = defineStore('accounts', () => {
     return id ? byId.value.get(id) : undefined
   }
 
-  return { accounts, byId, replaceAll, upsert, remove, get }
+  return { accounts, byId, replaceAll, upsert, upsertIfNewer, remove, get }
 })

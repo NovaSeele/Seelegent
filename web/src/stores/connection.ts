@@ -7,7 +7,7 @@
  *
  * While streaming:
  * - `reset` (the daemon cannot resume this stream): /state is read again; frames that arrive meanwhile are held
- *   and the ones newer than the snapshot are applied after it.
+ *   and the ones newer than the snapshot are applied after it. A reset during that read runs one more pass.
  * - `hello` with another `build` than the page was loaded with: the dashboard reloads to the new bundle.
  *   Another `instance` (daemon restart) also resyncs, in case the daemon's own reset was missed.
  * - task.* frames go to the tasks store, account.* to the accounts store, settings.updated here.
@@ -71,6 +71,8 @@ export const useConnectionStore = defineStore('connection', () => {
   let pageBuild = ''
   let instance = ''
   let syncing = false
+  /** A resync was asked for while one was reading /state: run one more pass when it ends. */
+  let again = false
   let held: HeldFrame[] = []
   let attempt = 0
   let retryTimer: ReturnType<typeof setTimeout> | undefined
@@ -101,11 +103,19 @@ export const useConnectionStore = defineStore('connection', () => {
     useTasksStore().applySnapshot(state.tasks)
   }
 
-  /** Reads /state and applies it; frames received meanwhile are held and the newer ones replayed after. */
-  async function sync(): Promise<void> {
-    if (syncing || stopped) return
+  /**
+   * Reads /state and applies it; frames received meanwhile are held and the newer ones replayed after. Called
+   * while a read is pending, it asks for one more pass instead: that read may predate what the new reset is about.
+   */
+  async function sync(keepHeld = false): Promise<void> {
+    if (stopped) return
+    if (syncing) {
+      again = true
+      return
+    }
     syncing = true
-    held = []
+    again = false
+    if (!keepHeld) held = []
     clearTimeout(retryTimer)
     retryTimer = undefined
     let state: BootState
@@ -113,6 +123,7 @@ export const useConnectionStore = defineStore('connection', () => {
       state = await tasksApi.bootState()
     } catch {
       syncing = false
+      again = false
       if (stopped) return
       const events = stream.value
       // Before the stream runs, a failed boot read is the connection state; once it runs the stream says.
@@ -127,6 +138,12 @@ export const useConnectionStore = defineStore('connection', () => {
     if (stopped) return
     attempt = 0
     applySnapshot(state)
+    if (again) {
+      // Keep the held frames: the next snapshot's id is looked up among them.
+      syncing = false
+      await sync(true)
+      return
+    }
     // Ids are opaque: frames up to the snapshot's own id are covered by it. When that id was not among the held
     // frames, every held frame is replayed with "newer wins" rules (summaries by updatedAt, events by seq).
     const at = held.findIndex((frame) => frame.id === state.lastEventId)
@@ -134,7 +151,8 @@ export const useConnectionStore = defineStore('connection', () => {
     const careful = at < 0
     held = []
     syncing = false
-    for (const frame of replay) apply(frame.name, frame.data, careful)
+    const deleted = careful ? deletedIn(replay) : null
+    for (const frame of replay) apply(frame.name, frame.data, careful, deleted)
     const events = stream.value
     if (events && !events.running) {
       events.setLastEventId(state.lastEventId)
@@ -152,30 +170,57 @@ export const useConnectionStore = defineStore('connection', () => {
     if (restarted) void sync()
   }
 
-  /** `careful`: the frame may be older than the data already applied (replay after a resync). */
-  function apply(name: keyof ServerEvents, data: unknown, careful = false): void {
+  /** Task and account ids that a replay deletes, keyed `task:<id>` / `account:<id>`. */
+  function deletedIn(frames: readonly HeldFrame[]): Set<string> {
+    const ids = new Set<string>()
+    for (const frame of frames) {
+      if (frame.name === 'task.deleted') {
+        ids.add(`task:${(frame.data as ServerEvents['task.deleted']).id}`)
+      } else if (frame.name === 'account.deleted') {
+        ids.add(`account:${(frame.data as ServerEvents['account.deleted']).id}`)
+      }
+    }
+    return ids
+  }
+
+  /**
+   * `careful`: the frame may be older than the snapshot just applied (a replay after a resync whose snapshot id
+   * was not among the held frames). Then summaries and accounts apply only when newer, settings are left to the
+   * snapshot (they carry no time), and nothing a later frame of the replay deletes (`deleted`) comes back.
+   */
+  function apply(
+    name: keyof ServerEvents,
+    data: unknown,
+    careful = false,
+    deleted: ReadonlySet<string> | null = null,
+  ): void {
     const tasks = useTasksStore()
     const accounts = useAccountsStore()
     switch (name) {
       case 'task.created':
-      case 'task.updated':
-        if (careful) tasks.upsertIfNewer(data as ServerEvents['task.updated'])
-        else tasks.upsert(data as ServerEvents['task.updated'])
+      case 'task.updated': {
+        const task = data as ServerEvents['task.updated']
+        if (!careful) tasks.upsert(task)
+        else if (!deleted?.has(`task:${task.id}`)) tasks.upsertIfNewer(task)
         break
+      }
       case 'task.deleted':
         tasks.remove((data as ServerEvents['task.deleted']).id)
         break
       case 'task.event':
         tasks.applyEvent(data as ServerEvents['task.event'])
         break
-      case 'account.updated':
-        accounts.upsert(data as ServerEvents['account.updated'])
+      case 'account.updated': {
+        const account = data as ServerEvents['account.updated']
+        if (!careful) accounts.upsert(account)
+        else if (!deleted?.has(`account:${account.id}`)) accounts.upsertIfNewer(account)
         break
+      }
       case 'account.deleted':
         accounts.remove((data as ServerEvents['account.deleted']).id)
         break
       case 'settings.updated':
-        settings.value = data as Settings
+        if (!careful) settings.value = data as Settings
         break
       default:
         // Other frames are read by the pages that need them (stream.on).
@@ -263,6 +308,7 @@ export const useConnectionStore = defineStore('connection', () => {
     cleanup?.()
     cleanup = null
     syncing = false
+    again = false
     held = []
     attempt = 0
     pageBuild = ''

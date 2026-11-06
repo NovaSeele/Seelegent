@@ -190,6 +190,80 @@ describe('connection store', () => {
     expect(tasks.get('t2')?.title).toBe('fresh')
   })
 
+  it('runs one more /state pass when a reset arrives while /state is pending', async () => {
+    const pending: ((value: Response) => void)[] = []
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(json(boot()))
+      .mockImplementation(() => new Promise<Response>((resolve) => pending.push(resolve)))
+    start(fetch)
+    await flushPromises()
+    const source = FakeEventSource.last
+    source.open()
+    source.emit('reset', '{"reason":"too_old"}')
+    expect(fetch).toHaveBeenCalledTimes(2)
+    source.emit('reset', '{"reason":"too_old"}')
+    source.emit('reset', '{"reason":"too_old"}')
+    expect(fetch).toHaveBeenCalledTimes(2)
+    // A frame after the second reset; the second snapshot's id comes before it.
+    source.emit(
+      'task.updated',
+      JSON.stringify(makeTask({ id: 't1', title: 'after' })),
+      'a1b2c3d4.71',
+    )
+    pending[0]?.(json(boot({ tasks: [makeTask({ id: 't1', title: 'first' })] })))
+    await flushPromises()
+    expect(fetch).toHaveBeenCalledTimes(3)
+    pending[1]?.(
+      json(boot({ lastEventId: 'a1b2c3d4.70', tasks: [makeTask({ id: 't1', title: 'second' })] })),
+    )
+    await flushPromises()
+    expect(fetch).toHaveBeenCalledTimes(3)
+    expect(useTasksStore().get('t1')?.title).toBe('after')
+  })
+
+  it('careful replay keeps the snapshot for settings, older accounts and deleted tasks', async () => {
+    let resolveSecond: (value: Response) => void = () => {}
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(json(boot()))
+      .mockReturnValueOnce(new Promise<Response>((resolve) => (resolveSecond = resolve)))
+    const store = start(fetch)
+    await flushPromises()
+    const source = FakeEventSource.last
+    source.open()
+    source.emit('reset', '{"reason":"restart"}')
+    source.emit('settings.updated', JSON.stringify({ port: 1 }), 'ffff0000.3')
+    source.emit(
+      'account.updated',
+      JSON.stringify(makeAccount({ id: 'a1', label: 'old', updatedAt: iso(1000) })),
+      'ffff0000.4',
+    )
+    source.emit(
+      'account.updated',
+      JSON.stringify(makeAccount({ id: 'a2', label: 'new', updatedAt: iso(1000) })),
+      'ffff0000.5',
+    )
+    source.emit('task.updated', JSON.stringify(makeTask({ id: 'gone' })), 'ffff0000.6')
+    source.emit('task.deleted', JSON.stringify({ id: 'gone' }), 'ffff0000.7')
+    source.emit('task.updated', JSON.stringify(makeTask({ id: 'gone' })), 'ffff0000.8')
+    resolveSecond(
+      json(
+        boot({
+          lastEventId: 'ffff0000.1',
+          settings: { port: 2 } as BootState['settings'],
+          accounts: [makeAccount({ id: 'a1', label: 'snap', updatedAt: iso(5000) })],
+        }),
+      ),
+    )
+    await flushPromises()
+    expect(store.settings?.port).toBe(2)
+    const accounts = useAccountsStore()
+    expect(accounts.get('a1')?.label).toBe('snap')
+    expect(accounts.get('a2')?.label).toBe('new')
+    expect(useTasksStore().get('gone')).toBeUndefined()
+  })
+
   it('reloads when the daemon serves another web bundle', async () => {
     start(vi.fn(async () => json(boot())))
     await flushPromises()
