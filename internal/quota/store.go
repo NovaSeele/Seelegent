@@ -83,6 +83,24 @@ func (s *Store) Put(ctx context.Context, snap Snapshot, now time.Time) error {
 	return nil
 }
 
+// MarkNeedsLogin records that a run of account id (on backend name) was refused for its sign-in or key at now:
+// the account counts as signed out (it keeps its last numbers) until a successful read, or for an API-key account
+// until its key is replaced.
+func (s *Store) MarkNeedsLogin(ctx context.Context, id, name, message string, now time.Time) error {
+	prev, found, err := s.Get(ctx, id)
+	if err != nil {
+		return err
+	}
+	if !found {
+		prev = Snapshot{AccountID: id, Backend: name, Source: SourceActive, Groups: []Group{}}
+	}
+	if message == "" {
+		message = "the sign-in was refused"
+	}
+	prev.Error = newError(fmt.Errorf("%w: %s", ErrNeedsLogin, message), now)
+	return s.Put(ctx, prev, now)
+}
+
 // decodeSnapshot reads a stored snapshot. A row that cannot be read affects only its own account: it comes back
 // as a snapshot without numbers whose error says the stored quota is unreadable, and the next good read replaces
 // it. It is never silently treated as "full quota".

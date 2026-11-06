@@ -399,3 +399,32 @@ func TestStore(t *testing.T) {
 		t.Fatal("quota of a removed account is still there")
 	}
 }
+
+func TestStoreMarkNeedsLogin(t *testing.T) {
+	f := newFixture(t)
+	ctx := t.Context()
+	s := NewStore(f.db)
+	a := f.add(t, account.New{Backend: "agy", Kind: account.KindIsolated, Enabled: true})
+	b := f.add(t, account.New{Backend: "claude", Kind: account.KindIsolated, Enabled: true})
+	if err := s.Put(ctx, FromBackend(a.ID, "agy", okQuota(0.3), t0), t0); err != nil {
+		t.Fatal(err)
+	}
+	at := t0.Add(time.Minute)
+	if err := s.MarkNeedsLogin(ctx, a.ID, "agy", "401 from the CLI", at); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.MarkNeedsLogin(ctx, b.ID, "claude", "", at); err != nil {
+		t.Fatal(err)
+	}
+	got, _, err := s.Get(ctx, a.ID)
+	if err != nil || got.ErrorKind() != KindNeedsLogin || !got.Known() || !got.Error.At.Equal(at) {
+		t.Fatalf("marked snapshot %+v, %v", got, err)
+	}
+	got, found, err := s.Get(ctx, b.ID)
+	if err != nil || !found || got.ErrorKind() != KindNeedsLogin || got.Backend != "claude" || got.Known() {
+		t.Fatalf("new marked snapshot %+v, %v", got, err)
+	}
+	if err := s.MarkNeedsLogin(ctx, "ghost", "agy", "", at); err == nil {
+		t.Fatal("marked an unknown account")
+	}
+}
