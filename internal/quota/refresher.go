@@ -61,6 +61,9 @@ type RefresherOptions struct {
 	Logger *slog.Logger
 	// OnUpdate is called with every stored snapshot (the pool uses it to wake waiting tasks).
 	OnUpdate func(Snapshot)
+
+	// onWait is called when a refresh starts waiting for a read of the account already in flight (tests).
+	onWait func(accountID string)
 }
 
 // Result is the outcome of reading one account.
@@ -294,6 +297,9 @@ func (r *Refresher) refresh(ctx context.Context, a account.Account, fresh bool) 
 		}
 		join := !fresh || c.gen > after
 		r.mu.Unlock()
+		if r.o.onWait != nil {
+			r.o.onWait(a.ID)
+		}
 		select {
 		case <-c.done:
 		case <-ctx.Done():

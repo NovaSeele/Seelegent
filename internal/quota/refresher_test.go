@@ -49,6 +49,7 @@ type refFixture struct {
 	clk     *clock.Fake
 	reader  *scriptReader
 	updates atomic.Int32
+	waiting atomic.Int32 // refreshes that started waiting for a read in flight
 	r       *Refresher
 }
 
@@ -64,6 +65,7 @@ func newRefFixture(t *testing.T, fn func(ctx context.Context, id string) (backen
 		Readers:  map[string]backend.QuotaReader{"agy": f.reader, "codex": f.reader},
 		Jitter:   func(int64) int64 { return 0 },
 		OnUpdate: func(Snapshot) { f.updates.Add(1) },
+		onWait:   func(string) { f.waiting.Add(1) },
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -211,7 +213,7 @@ func TestRefreshSharesInflightRead(t *testing.T) {
 		}()
 	}
 	<-started
-	time.Sleep(20 * time.Millisecond)
+	waitFor(t, "the second cycle waiting for the read", func() bool { return f.waiting.Load() == 1 })
 	close(release)
 	wg.Wait()
 	close(results)
