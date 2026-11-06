@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { fromBottom, indexAt, layout, visibleRange } from './virtual'
+import { fromBottom, indexAt, keepsFollowing, layout, visibleRange } from './virtual'
 
 describe('virtual list layout', () => {
   const keys = ['a', 'b', 'c', 'd', 'e']
@@ -36,5 +36,24 @@ describe('virtual list layout', () => {
 
   it('measures the distance to the end', () => {
     expect(fromBottom({ scrollTop: 100, scrollHeight: 500, clientHeight: 300 })).toBe(100)
+  })
+})
+
+describe('following the end', () => {
+  const el = (scrollTop: number, scrollHeight = 1000) => ({
+    scrollTop,
+    scrollHeight,
+    clientHeight: 200,
+  })
+
+  it('keeps following when content grows below a programmatic jump to the end', () => {
+    // Jumped to 800 (the end); items were then measured taller, so the end moved to 1400.
+    expect(keepsFollowing(true, 800, el(800, 1400), 48)).toBe(true)
+  })
+
+  it('stops only when the reader scrolls up, and resumes at the end', () => {
+    expect(keepsFollowing(true, 800, el(600), 48)).toBe(false)
+    expect(keepsFollowing(false, 600, el(700), 48)).toBe(false)
+    expect(keepsFollowing(false, 700, el(790), 48)).toBe(true)
   })
 })

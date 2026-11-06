@@ -7,7 +7,7 @@
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, shallowRef, watch, type Ref } from 'vue'
 
-import { fromBottom, layout, visibleRange } from '@/lib/virtual'
+import { keepsFollowing, layout, visibleRange } from '@/lib/virtual'
 
 /** Within this many px of the end counts as "at the end" (the user is following). */
 export const FOLLOW_THRESHOLD = 48
@@ -26,6 +26,8 @@ export function useVirtualList(options: VirtualListOptions) {
   const top = shallowRef(0)
   const viewport = shallowRef(0)
   const following = shallowRef(true)
+  /** scrollTop after the last scroll event or programmatic scroll: a smaller one means the reader went up. */
+  let lastTop = 0
   let anchor: { key: string; delta: number } | null = null
 
   const offsets = computed(() => layout(keys.value, heights.value, estimate))
@@ -51,8 +53,9 @@ export function useVirtualList(options: VirtualListOptions) {
   function onScroll() {
     const el = scroller.value
     if (!el) return
+    following.value = keepsFollowing(following.value, lastTop, el, FOLLOW_THRESHOLD)
+    lastTop = el.scrollTop
     top.value = el.scrollTop
-    following.value = fromBottom(el) <= FOLLOW_THRESHOLD
     rememberAnchor()
   }
 
@@ -61,6 +64,7 @@ export function useVirtualList(options: VirtualListOptions) {
     if (!el) return
     following.value = true
     el.scrollTop = el.scrollHeight
+    lastTop = el.scrollTop
     top.value = el.scrollTop
   }
 
@@ -71,6 +75,7 @@ export function useVirtualList(options: VirtualListOptions) {
     if (!el || index < 0) return false
     following.value = false
     el.scrollTop = Math.max(0, (offsets.value[index] ?? 0) - 48)
+    lastTop = el.scrollTop
     top.value = el.scrollTop
     rememberAnchor()
     return true
@@ -85,11 +90,13 @@ export function useVirtualList(options: VirtualListOptions) {
       if (!el) return
       if (following.value) {
         el.scrollTop = el.scrollHeight
+        lastTop = el.scrollTop
       } else if (anchor) {
         const index = keys.value.indexOf(anchor.key)
         if (index >= 0) {
           const target = (offsets.value[index] ?? 0) + anchor.delta
           if (Math.abs(target - el.scrollTop) > 1) el.scrollTop = target
+          lastTop = el.scrollTop
         }
       }
       top.value = el.scrollTop
@@ -146,7 +153,10 @@ export function useVirtualList(options: VirtualListOptions) {
           const el = scroller.value
           if (!el) return
           viewport.value = el.clientHeight
-          if (following.value) el.scrollTop = el.scrollHeight
+          if (following.value) {
+            el.scrollTop = el.scrollHeight
+            lastTop = el.scrollTop
+          }
         })
 
   onMounted(() => {

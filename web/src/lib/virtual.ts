@@ -56,3 +56,19 @@ export function visibleRange(
 /** Distance in px between the bottom of the viewport and the end of the content. */
 export const fromBottom = (el: { scrollTop: number; scrollHeight: number; clientHeight: number }) =>
   el.scrollHeight - el.scrollTop - el.clientHeight
+
+/**
+ * Whether a feed keeps following its end after a scroll event. Only the reader scrolling up stops following:
+ * content that grows after a programmatic jump to the end (the scroll event arrives a frame later, when items
+ * have been measured taller) must not, or a running task opens mid-way with "Jump to latest" showing.
+ */
+export function keepsFollowing(
+  following: boolean,
+  previousTop: number,
+  el: { scrollTop: number; scrollHeight: number; clientHeight: number },
+  threshold: number,
+): boolean {
+  if (fromBottom(el) <= threshold) return true
+  if (el.scrollTop < previousTop - 1) return false
+  return following
+}

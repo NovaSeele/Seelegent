@@ -177,6 +177,8 @@ onBeforeUnmount(unregister)
 .term {
   position: relative;
   display: flex;
+  /* Code reads as typed: "!=" stays two characters, never a ligature. */
+  font-variant-ligatures: none;
   flex: 1;
   flex-direction: column;
   min-height: 0;

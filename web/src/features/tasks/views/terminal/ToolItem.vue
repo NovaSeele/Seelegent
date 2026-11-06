@@ -150,7 +150,9 @@ const outputId = computed(() => `tool-out-${props.item.key}`)
   flex: none;
   align-items: center;
   gap: var(--space-1);
-  min-height: var(--control-sm);
+  justify-content: center;
+  min-width: var(--target-min);
+  min-height: max(var(--control-sm), var(--target-min));
   padding: 0 var(--space-2);
   border: 0;
   border-radius: var(--radius-sm);

@@ -95,6 +95,7 @@ const SIGN = { add: '+', del: '-', context: ' ' } as const
   color: var(--term-fg);
   font-family: var(--font-mono);
   font-size: var(--fs-xs);
+  font-variant-ligatures: none;
   line-height: var(--lh-ui);
 }
 
