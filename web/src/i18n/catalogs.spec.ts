@@ -5,6 +5,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { NAV_IDS, navItem } from '@/config/nav'
+import { SECTION_IDS } from '@/features/settings/sections'
 
 import { createAppI18n, NAMESPACES, PLURAL_FORMS, SUPPORTED_LOCALES, type Locale } from '.'
 
@@ -37,6 +38,8 @@ function catalog(loc: Locale): Flat {
 const placeholders = (message: string) =>
   [...message.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort()
 const isPlural = (message: string) => message.includes(' | ')
+const sameName = (a: string, b: string) =>
+  a.trim().toLocaleLowerCase() === b.trim().toLocaleLowerCase()
 
 const en = catalog('en')
 
@@ -104,6 +107,22 @@ describe('catalogs', () => {
       (word) => width(word) > 11,
     )
     expect(tooWide).toEqual([])
+  })
+
+  // Pages and settings sections share the palette: two entries with one name that go to different places
+  // cannot be told apart, so every name must be unique within its kind and across the two kinds.
+  it.each(SUPPORTED_LOCALES)('%s names every page and settings section differently', (loc) => {
+    const flat = catalog(loc)
+    const pages = NAV_IDS.map((id) => flat[`nav.${id}.label`] ?? '')
+    const sections = SECTION_IDS.map((id) => flat[`settings.sections.${id}.label`] ?? '')
+    const dupes = (names: string[]) =>
+      names.filter((name, i) => names.findIndex((other) => sameName(other, name)) !== i)
+    expect(dupes(pages), 'pages').toEqual([])
+    expect(dupes(sections), 'settings sections').toEqual([])
+    expect(
+      pages.filter((page) => sections.some((section) => sameName(section, page))),
+      'pages named like a settings section',
+    ).toEqual([])
   })
 
   it('renders every message in every locale', () => {
