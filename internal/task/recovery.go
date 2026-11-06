@@ -3,6 +3,7 @@ package task
 import (
 	"context"
 	"errors"
+	"slices"
 
 	"github.com/NovaSeele/Seelegent/internal/account"
 	"github.com/NovaSeele/Seelegent/internal/api"
@@ -19,10 +20,18 @@ func (s *Service) recoverTasks(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	var unreadable []string
 	for _, id := range ids {
 		t, err := s.repo.Get(ctx, id)
 		if err != nil {
-			return err
+			if ctx.Err() != nil {
+				return err
+			}
+			// One broken task must not keep the others from recovering: it is skipped, logged and listed for
+			// doctor (Unreadable).
+			s.log.Error("task: recovery skips an unreadable task", "task", id, "err", err)
+			unreadable = append(unreadable, id)
+			continue
 		}
 		if t.Manual {
 			if t.Console != nil {
@@ -32,8 +41,18 @@ func (s *Service) recoverTasks(ctx context.Context) error {
 		}
 		s.startRun(id)
 	}
+	s.mu.Lock()
+	s.unreadable = unreadable
+	s.mu.Unlock()
 	s.checkDeps(ctx)
 	return nil
+}
+
+// Unreadable lists the active tasks that recovery skipped because their records could not be read (for doctor).
+func (s *Service) Unreadable() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return slices.Clone(s.unreadable)
 }
 
 // resumeAttempt continues an attempt that was running when the daemon stopped. A live worker is attached again and

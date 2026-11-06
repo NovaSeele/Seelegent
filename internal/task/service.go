@@ -144,14 +144,16 @@ type Service struct {
 	log  *slog.Logger
 
 	mu      sync.Mutex
-	locks   map[string]*sync.Mutex
+	locks   map[string]*taskLock
 	runs    map[string]*run
 	watches map[string]*consoleWatch
-	root    context.Context
-	cancel  context.CancelFunc
-	started bool
-	closed  bool
-	wg      sync.WaitGroup
+	// unreadable are the active tasks recovery skipped (Unreadable).
+	unreadable []string
+	root       context.Context
+	cancel     context.CancelFunc
+	started    bool
+	closed     bool
+	wg         sync.WaitGroup
 
 	depsMu sync.Mutex
 }
@@ -178,7 +180,7 @@ func New(o Options) (*Service, error) {
 	root, cancel := context.WithCancel(context.Background())
 	return &Service{
 		o: o, repo: NewRepo(o.DB, o.Clock.Now), bus: NewBus(), clk: o.Clock, log: o.Logger,
-		locks: map[string]*sync.Mutex{}, runs: map[string]*run{}, watches: map[string]*consoleWatch{},
+		locks: map[string]*taskLock{}, runs: map[string]*run{}, watches: map[string]*consoleWatch{},
 		root: root, cancel: cancel,
 	}, nil
 }
@@ -252,16 +254,33 @@ func (s *Service) spawn(name, taskID string, fn func()) bool {
 	return true
 }
 
-// lock returns the lock of one task. Every change to a task (record, turns, attempts, offsets) happens under it.
-func (s *Service) lock(id string) *sync.Mutex {
+// lock takes the lock of one task and returns its release. Every change to a task (record, turns, attempts,
+// offsets) happens under it.
+func (s *Service) lock(id string) (unlock func()) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	l := s.locks[id]
 	if l == nil {
-		l = &sync.Mutex{}
+		l = &taskLock{}
 		s.locks[id] = l
 	}
-	return l
+	l.refs++
+	s.mu.Unlock()
+	l.Lock()
+	return func() {
+		l.Unlock()
+		s.mu.Lock()
+		l.refs--
+		if l.refs == 0 {
+			delete(s.locks, id) // nobody holds or waits for it: the map keeps only tasks in use
+		}
+		s.mu.Unlock()
+	}
+}
+
+// taskLock serializes the changes of one task; refs counts its holders and waiters.
+type taskLock struct {
+	sync.Mutex
+	refs int
 }
 
 // errNoChange makes mutate skip the save.
@@ -271,9 +290,7 @@ var errNoChange = errors.New("no change")
 // its turns) and appends the events in one transaction, and publishes them. Attention and needsSince are brought
 // up to date on every change. fn returning errNoChange (with no events) leaves the task untouched.
 func (s *Service) mutate(ctx context.Context, id string, fn func(t *Task) ([]NewEvent, error)) (*Task, error) {
-	l := s.lock(id)
-	l.Lock()
-	defer l.Unlock()
+	defer s.lock(id)()
 	t, err := s.repo.Get(ctx, id)
 	if err != nil {
 		return nil, err
@@ -303,9 +320,7 @@ func (s *Service) appendEvents(ctx context.Context, id string, evs []NewEvent, o
 	if len(evs) == 0 && off == nil {
 		return nil
 	}
-	l := s.lock(id)
-	l.Lock()
-	defer l.Unlock()
+	defer s.lock(id)()
 	out, err := s.repo.Append(ctx, id, evs, off)
 	if err != nil {
 		return err

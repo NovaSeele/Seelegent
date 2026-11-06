@@ -2,6 +2,7 @@ package task
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"os"
 	"path/filepath"
@@ -353,4 +354,28 @@ func TestRestartConsoleGone(t *testing.T) {
 	if len(tk.Turns) != 2 || tk.LastTurn().HandbackOf != "Back after the restart." {
 		t.Fatalf("turns = %+v", tk.LastTurn())
 	}
+}
+
+// TestRecoverySkipsUnreadable recovers the other tasks when one active task cannot be read, and lists it for doctor.
+func TestRecoverySkipsUnreadable(t *testing.T) {
+	h := newHarness(t)
+	a := h.delegate(api.DelegateRequest{Prompt: "Task A"})
+	b := h.delegate(api.DelegateRequest{Prompt: "Task B"})
+	h.stop()
+	if err := h.db.Write(t.Context(), func(tx *sql.Tx) error {
+		_, err := tx.ExecContext(t.Context(), `UPDATE turns SET data = 'nope' WHERE task_id = ?`, a.ID)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	h.start()
+	if got := h.s.Unreadable(); len(got) != 1 || got[0] != a.ID {
+		t.Fatalf("unreadable = %v", got)
+	}
+	h.queue.Push(t, okScript("conv-b", "b done"))
+	h.agy("only", 0)
+	h.waitFor("task B", func() bool {
+		h.clk.Advance(noAccountRecheck)
+		return h.task(b.ID).Status == StatusDone
+	})
 }
