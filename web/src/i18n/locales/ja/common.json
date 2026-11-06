@@ -1,0 +1,162 @@
+{
+  "action": {
+    "close": "閉じる",
+    "confirm": "確認",
+    "cancel": "キャンセル",
+    "dismiss": "閉じる",
+    "retry": "再試行",
+    "reset": "リセット",
+    "clear": "クリア",
+    "back": "戻る",
+    "more": "その他",
+    "open": "開く",
+    "remove": "削除",
+    "undo": "元に戻す"
+  },
+  "toast": {
+    "close": "通知を閉じる",
+    "region": "通知"
+  },
+  "error": {
+    "network": "サーバーに接続できません: {error}"
+  },
+  "next": {
+    "openTask": "タスクを開く",
+    "openMeeting": "会議を開く"
+  },
+  "commit": {
+    "done": "コミットしました: {sha}",
+    "doneNoSha": "コミットしました"
+  },
+  "working": "処理中…",
+  "worker": {
+    "unassigned": "未割り当て",
+    "accountDeleted": "削除済みのアカウント",
+    "unknown": "不明"
+  },
+  "time": {
+    "justNow": "たった今",
+    "neverUsed": "未使用"
+  },
+  "duration": {
+    "seconds": "{n}秒",
+    "minSec": "{m}分{s}秒",
+    "hourMin": "{h}時間{m}分"
+  },
+  "span": {
+    "min": "{m}分",
+    "hour": "{h}時間",
+    "hourMin": "{h}時間{m}分",
+    "day": "{d}日",
+    "dayHour": "{d}日{h}時間"
+  },
+  "countdown": {
+    "refreshing": "更新中…",
+    "refreshIn": "{span}後に更新",
+    "secondsLeft": "残り{n}秒",
+    "linkExpired": "リンクの期限切れ"
+  },
+  "status": {
+    "queued": {
+      "label": "待機中",
+      "short": "待機"
+    },
+    "running": {
+      "label": "実行中",
+      "short": "実行"
+    },
+    "waiting": {
+      "label": "クォータ待ち",
+      "short": "クォータ"
+    },
+    "waitingWorker": {
+      "label": "ワーカー待ち",
+      "short": "ワーカー"
+    },
+    "blocked": {
+      "label": "対応が必要",
+      "short": "要対応"
+    },
+    "review": {
+      "label": "レビュー待ち",
+      "short": "レビュー?"
+    },
+    "accepted": {
+      "label": "承認済み",
+      "short": "承認"
+    },
+    "rejected": {
+      "label": "やり直し",
+      "short": "やり直し"
+    },
+    "failed": {
+      "label": "エラー",
+      "short": "エラー"
+    },
+    "cancelled": {
+      "label": "キャンセル済み",
+      "short": "取消"
+    },
+    "waitingDeps": {
+      "label": "前のタスク待ち",
+      "short": "前待ち"
+    },
+    "blockedDeps": {
+      "label": "前のタスクが失敗",
+      "short": "前が失敗"
+    }
+  },
+  "attention": {
+    "stalled": "停止中",
+    "looping": "繰り返し",
+    "question": "リードに質問",
+    "noResponse": "ワーカーが応答しない",
+    "auth": "ログインが必要",
+    "noAccounts": "使えるアカウントがない",
+    "failed": "失敗",
+    "review": "レビュー待ち",
+    "quotaWait": "クォータ待ち",
+    "waitingWorker": "ワーカー待ち",
+    "manual": "手動操作中",
+    "gate": "ゲート検査",
+    "gateRed": "ゲート失敗",
+    "workAtRisk": "作業が失われるおそれ",
+    "depsBlocked": "前のタスクが失敗",
+    "waitingDeps": "前のタスク待ち"
+  },
+  "stage": {
+    "explore": "調査",
+    "edit": "編集",
+    "verify": "検証",
+    "run": "コマンド",
+    "report": "報告"
+  },
+  "taskStatus": {
+    "queued": "待機中",
+    "running": "実行中",
+    "waitingQuota": "クォータ待ち",
+    "done": "完了",
+    "accepted": "承認済み",
+    "rejected": "やり直し依頼",
+    "failed": "失敗",
+    "cancelled": "キャンセル済み"
+  },
+  "accountStatus": {
+    "ok": "準備完了",
+    "needsLogin": "ログインが必要",
+    "new": "未ログイン",
+    "error": "エラー",
+    "checking": "確認中",
+    "noPlan": "プランなし"
+  },
+  "ui": {
+    "loading": "読み込み中…",
+    "quotaUsed": "{value} 使用",
+    "quotaLeft": "残り {value}",
+    "skipToContent": "本文へ移動",
+    "resizeSidebar": "サイドバーの幅を変更",
+    "collapseSidebar": "サイドバーを隠す",
+    "expandSidebar": "サイドバーを表示",
+    "noResults": "結果がありません"
+  }
+}

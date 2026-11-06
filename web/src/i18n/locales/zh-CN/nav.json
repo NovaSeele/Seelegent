@@ -1,0 +1,88 @@
+{
+  "brand": {
+    "title": "Seelegent — 你的 AI 部门"
+  },
+  "goTo": "前往{page}",
+  "watch": {
+    "label": "监控",
+    "desc": "正在运行的一切和需要你处理的事，都在一个面板上。"
+  },
+  "tasks": {
+    "label": "任务",
+    "desc": "每个任务的进度、报告和审查。"
+  },
+  "issues": {
+    "label": "Issue",
+    "keywords": "Issue → PR",
+    "desc": "跟踪 issue，并从 GitHub 仓库创建 pull request。"
+  },
+  "meetings": {
+    "label": "会议",
+    "desc": "负责人分轮征求多位成员的意见：先私下作答，再匿名互相质询并核实证据，最后形成决定和纪要。"
+  },
+  "contests": {
+    "label": "竞赛",
+    "desc": "同一题目，多个版本在各自的 worktree 中并行完成。机器打分，评审匿名比较，由你选出胜出版本并应用到工作目录。"
+  },
+  "automations": {
+    "label": "自动化",
+    "desc": "按计划交给工人的工作。只有预检命令允许且配额充足时才会运行。"
+  },
+  "proof": {
+    "label": "证据",
+    "desc": "哪些需求已有关卡命令证明，哪些还没有。重新运行全部关卡以发现回归。"
+  },
+  "accounts": {
+    "label": "账号",
+    "desc": "工人运行任务所用的账号和 API 密钥。"
+  },
+  "usage": {
+    "label": "用量",
+    "desc": "按时间、项目和账号查看令牌、费用和额度。"
+  },
+  "roles": {
+    "label": "角色",
+    "keywords": "工人角色",
+    "desc": "为工人定义专业能力、必守规则、报告风格和技能集。"
+  },
+  "members": {
+    "label": "成员",
+    "desc": "部门中谁来接活，使用哪个工人来源和模型。"
+  },
+  "settings": {
+    "label": "设置",
+    "aria": "系统设置"
+  },
+  "appearance": {
+    "label": "外观"
+  },
+  "more": {
+    "label": "更多"
+  },
+  "rail": {
+    "main": "主导航",
+    "pages": "主要页面",
+    "mobile": "移动端导航"
+  },
+  "badge": {
+    "contests": "{count} 个竞赛等待选择版本",
+    "automations": "{count} 个自动化任务上次运行失败",
+    "watch": "{count} 个任务等待审核",
+    "meetings": "{count} 个会议在等你",
+    "more": "{count} 个页面需要你处理"
+  },
+  "conn": {
+    "lost": "与 Seelegent 的连接已断开，正在重试…",
+    "restored": "连接已恢复",
+    "retryIn": "{n} 秒后重试"
+  },
+  "statusBar": {
+    "summary": "状态概览",
+    "idle": "空闲",
+    "idleTitle": "没有运行任务的账号 / 账号总数",
+    "running": "运行",
+    "runningTitle": "正在运行的任务数",
+    "waiting": "排队",
+    "waitingTitle": "排队等待的任务数"
+  }
+}

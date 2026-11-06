@@ -1,0 +1,205 @@
+{
+  "title": "설정",
+  "back": "모든 설정",
+  "sectionsLabel": "설정 섹션",
+  "search": {
+    "label": "설정 검색",
+    "placeholder": "설정 검색",
+    "results": "일치하는 설정",
+    "empty": "“{query}”와 일치하는 설정이 없습니다"
+  },
+  "comingSoon": {
+    "title": "아직 사용할 수 없음",
+    "desc": "이 설정은 Seelegent 서비스가 보관합니다. 새 대시보드가 읽을 수 있게 되면 여기에 표시됩니다.",
+    "planned": "이 섹션의 설정"
+  },
+  "sections": {
+    "appearance": {
+      "label": "모양",
+      "desc": "테마, 글꼴, 모션. 이 브라우저에만 저장됩니다."
+    },
+    "workers": {
+      "label": "워커",
+      "desc": "동시에 실행할 워커 수와 사용할 수 있는 모델."
+    },
+    "quota": {
+      "label": "할당량",
+      "desc": "남겨 둘 할당량과 계정 교대 방식."
+    },
+    "gates": {
+      "label": "게이트",
+      "desc": "작업이 완료로 인정되기 전에 통과해야 하는 명령."
+    },
+    "notifications": {
+      "label": "알림",
+      "desc": "Seelegent가 언제, 어떻게 알려 줄지."
+    },
+    "shortcuts": {
+      "label": "키보드 단축키",
+      "desc": "페이지와 명령의 키."
+    },
+    "hooks": {
+      "label": "훅",
+      "desc": "작업이 바뀔 때 다른 서비스를 호출합니다."
+    },
+    "memory": {
+      "label": "메모리",
+      "desc": "모든 워커에게 전달되는 프로젝트 정보."
+    },
+    "experiments": {
+      "label": "실험",
+      "desc": "아직 시험 중인 기능."
+    },
+    "language": {
+      "label": "언어",
+      "desc": "대시보드 언어입니다. 바로 적용됩니다."
+    }
+  },
+  "items": {
+    "theme": {
+      "label": "테마",
+      "desc": "대시보드 전체의 색상. 자동은 시스템의 라이트/다크 모드를 따릅니다.",
+      "keywords": "색상 다크 라이트 모드 팔레트"
+    },
+    "fileIcons": {
+      "label": "파일 아이콘",
+      "desc": "파일, Git, 프로세스 보기와 터미널에서 파일 이름 옆에 표시되는 아이콘입니다.",
+      "keywords": "아이콘 파일 유형"
+    },
+    "fontUi": {
+      "label": "인터페이스 글꼴",
+      "desc": "이 컴퓨터에 설치된 글꼴만 사용하며 아무것도 내려받지 않습니다.",
+      "keywords": "글꼴 서체 텍스트 폰트"
+    },
+    "fontMono": {
+      "label": "코드 글꼴",
+      "desc": "로그, diff, 터미널 글꼴. ‘테마 기본값’은 테마가 고른 글꼴을 씁니다.",
+      "keywords": "고정폭 터미널 글꼴 폰트"
+    },
+    "sizeUi": {
+      "label": "인터페이스 글자 크기",
+      "desc": "대시보드 전체의 기본 글자 크기.",
+      "keywords": "글자 크기 확대 배율"
+    },
+    "sizeTerm": {
+      "label": "코드 글자 크기",
+      "desc": "로그, diff, 터미널의 글자 크기.",
+      "keywords": "글자 크기 터미널 고정폭"
+    },
+    "lineHeightTerm": {
+      "label": "코드 줄 간격",
+      "desc": "로그와 터미널의 줄 사이 간격.",
+      "keywords": "줄 간격 줄 높이 터미널"
+    },
+    "motion": {
+      "label": "모션",
+      "desc": "애니메이션과 전환 효과. ‘시스템’은 동작 줄이기 설정을 따릅니다.",
+      "keywords": "애니메이션 동작 줄이기 전환"
+    },
+    "reset": {
+      "label": "모양 초기화",
+      "desc": "기본 테마, 글꼴, 크기, 모션으로 되돌립니다.",
+      "keywords": "기본값 복원"
+    },
+    "locale": {
+      "label": "언어",
+      "desc": "‘브라우저 설정 따르기’는 브라우저가 선호하는 언어를 씁니다.",
+      "keywords": "언어 번역 현지화"
+    },
+    "concurrency": {
+      "label": "동시 워커 수",
+      "desc": "동시에 실행할 수 있는 워커 수.",
+      "keywords": "병렬 동시 제한"
+    },
+    "defaultTier": {
+      "label": "기본 등급",
+      "desc": "브리프에 지정이 없을 때 쓰는 모델 등급.",
+      "keywords": "모델 빠름 표준 강력"
+    },
+    "modelCap": {
+      "label": "모델 상한",
+      "desc": "워커가 쓸 수 있는 가장 강한 모델.",
+      "keywords": "제한 모델"
+    },
+    "quotaReserve": {
+      "label": "할당량 예비분",
+      "desc": "급한 작업을 위해 각 계정에 남겨 둘 할당량 비율.",
+      "keywords": "제한 여유"
+    },
+    "rotation": {
+      "label": "계정 교대",
+      "desc": "한 계정의 할당량이 다 떨어지면 다른 계정으로 작업을 넘깁니다.",
+      "keywords": "계정 전환 인계"
+    },
+    "gateCommands": {
+      "label": "게이트 명령",
+      "desc": "작업이 동작함을 증명하는 빌드 및 테스트 명령.",
+      "keywords": "테스트 빌드 검증 확인"
+    },
+    "gateBeforeReview": {
+      "label": "검토 전 게이트 실행",
+      "desc": "작업을 검토에 넘기기 전에 게이트를 실행합니다.",
+      "keywords": "테스트 검토 검증"
+    },
+    "desktopNotify": {
+      "label": "데스크톱 알림",
+      "desc": "작업이 검토를 기다리거나 워커가 질문하면 알립니다.",
+      "keywords": "경고 알림"
+    },
+    "sound": {
+      "label": "소리",
+      "desc": "알림과 함께 소리를 냅니다.",
+      "keywords": "오디오 경고"
+    },
+    "keymap": {
+      "label": "단축키",
+      "desc": "페이지와 명령의 키를 보고 바꿉니다.",
+      "keywords": "단축키 키 바인딩 키보드"
+    },
+    "webhooks": {
+      "label": "웹훅",
+      "desc": "작업이 시작, 완료, 실패할 때 호출할 주소.",
+      "keywords": "훅 http 연동 webhook"
+    },
+    "projectMemory": {
+      "label": "프로젝트 메모리",
+      "desc": "모든 브리프에 덧붙는 규칙, 명령, 주의점.",
+      "keywords": "사실 메모 규칙"
+    },
+    "experimental": {
+      "label": "실험 기능",
+      "desc": "아직 테스트 중인 기능을 켭니다.",
+      "keywords": "베타 미리보기"
+    }
+  },
+  "appearance": {
+    "auto": {
+      "label": "자동",
+      "desc": "낮에는 {light}, 밤에는 {dark}"
+    },
+    "themeGroup": {
+      "seelegent": "Seelegent",
+      "claude": "Claude",
+      "codex": "Codex",
+      "jetbrains": "JetBrains",
+      "vscode": "VS Code",
+      "popular": "인기"
+    },
+    "fontSystem": "시스템 기본값",
+    "fontTheme": "테마 기본값",
+    "px": "{value}px",
+    "motion": {
+      "system": "시스템",
+      "on": "켜기",
+      "off": "끄기"
+    },
+    "reset": "초기화",
+    "resetDone": "모양을 기본값으로 되돌렸습니다",
+    "fileIcons": {
+      "seelegentMono": "Seelegent 단색",
+      "off": "끄기",
+      "builtin": "기본 제공",
+      "namesOnly": "이름만"
+    }
+  }
+}

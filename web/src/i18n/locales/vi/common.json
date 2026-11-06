@@ -1,0 +1,162 @@
+{
+  "action": {
+    "close": "Đóng",
+    "confirm": "Xác nhận",
+    "cancel": "Huỷ",
+    "dismiss": "Bỏ qua",
+    "retry": "Thử lại",
+    "reset": "Đặt lại",
+    "clear": "Xoá",
+    "back": "Quay lại",
+    "more": "Thêm",
+    "open": "Mở",
+    "remove": "Gỡ",
+    "undo": "Hoàn tác"
+  },
+  "toast": {
+    "close": "Đóng thông báo",
+    "region": "Thông báo"
+  },
+  "error": {
+    "network": "Lỗi kết nối máy chủ: {error}"
+  },
+  "next": {
+    "openTask": "Mở task",
+    "openMeeting": "Mở cuộc họp"
+  },
+  "commit": {
+    "done": "Đã commit {sha}",
+    "doneNoSha": "Đã commit"
+  },
+  "working": "Đang xử lý…",
+  "worker": {
+    "unassigned": "Chưa phân công",
+    "accountDeleted": "Tài khoản đã xoá",
+    "unknown": "không rõ"
+  },
+  "time": {
+    "justNow": "vừa xong",
+    "neverUsed": "chưa dùng"
+  },
+  "duration": {
+    "seconds": "{n} s",
+    "minSec": "{m} ph {s} s",
+    "hourMin": "{h} g {m} ph"
+  },
+  "span": {
+    "min": "{m}p",
+    "hour": "{h}g",
+    "hourMin": "{h}g {m}p",
+    "day": "{d}n",
+    "dayHour": "{d}n {h}g"
+  },
+  "countdown": {
+    "refreshing": "đang làm mới…",
+    "refreshIn": "làm mới sau {span}",
+    "secondsLeft": "Còn {n}s",
+    "linkExpired": "Đã hết hạn link"
+  },
+  "status": {
+    "queued": {
+      "label": "Trong hàng đợi",
+      "short": "Chờ"
+    },
+    "running": {
+      "label": "Đang chạy",
+      "short": "Chạy"
+    },
+    "waiting": {
+      "label": "Chờ quota",
+      "short": "Quota"
+    },
+    "waitingWorker": {
+      "label": "Chờ thợ rảnh",
+      "short": "Chờ thợ"
+    },
+    "blocked": {
+      "label": "Cần xử lý",
+      "short": "Cần xử lý"
+    },
+    "review": {
+      "label": "Chờ duyệt",
+      "short": "Duyệt?"
+    },
+    "accepted": {
+      "label": "Đã duyệt",
+      "short": "Duyệt"
+    },
+    "rejected": {
+      "label": "Làm lại",
+      "short": "Làm lại"
+    },
+    "failed": {
+      "label": "Lỗi",
+      "short": "Lỗi"
+    },
+    "cancelled": {
+      "label": "Đã huỷ",
+      "short": "Huỷ"
+    },
+    "waitingDeps": {
+      "label": "Chờ task trước",
+      "short": "Chờ trước"
+    },
+    "blockedDeps": {
+      "label": "Task trước lỗi",
+      "short": "Trước lỗi"
+    }
+  },
+  "attention": {
+    "stalled": "Đứng im",
+    "looping": "Lặp lại",
+    "question": "Hỏi lead",
+    "noResponse": "Thợ không trả lời",
+    "auth": "Cần đăng nhập",
+    "noAccounts": "Hết tài khoản",
+    "failed": "Thất bại",
+    "review": "Chờ duyệt",
+    "quotaWait": "Chờ quota",
+    "waitingWorker": "Chờ thợ rảnh",
+    "manual": "Bạn đang lái",
+    "gate": "Kiểm cổng",
+    "gateRed": "Cổng lỗi",
+    "workAtRisk": "Có thể mất việc",
+    "depsBlocked": "Task trước lỗi",
+    "waitingDeps": "Chờ task trước"
+  },
+  "stage": {
+    "explore": "Khám phá",
+    "edit": "Sửa",
+    "verify": "Kiểm tra",
+    "run": "Lệnh",
+    "report": "Báo cáo"
+  },
+  "taskStatus": {
+    "queued": "Đang xếp hàng",
+    "running": "Đang chạy",
+    "waitingQuota": "Chờ quota",
+    "done": "Hoàn tất",
+    "accepted": "Đã duyệt",
+    "rejected": "Yêu cầu làm lại",
+    "failed": "Thất bại",
+    "cancelled": "Đã huỷ"
+  },
+  "accountStatus": {
+    "ok": "Sẵn sàng",
+    "needsLogin": "Cần đăng nhập",
+    "new": "Chưa đăng nhập",
+    "error": "Lỗi",
+    "checking": "Đang kiểm tra",
+    "noPlan": "Không có gói"
+  },
+  "ui": {
+    "loading": "Đang tải…",
+    "quotaUsed": "Đã dùng {value}",
+    "quotaLeft": "Còn {value}",
+    "skipToContent": "Bỏ qua, tới nội dung",
+    "resizeSidebar": "Đổi độ rộng thanh bên",
+    "collapseSidebar": "Ẩn thanh bên",
+    "expandSidebar": "Hiện thanh bên",
+    "noResults": "Không có kết quả"
+  }
+}

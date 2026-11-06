@@ -1,0 +1,11 @@
+{
+  "label": "Language",
+  "desc": "Language of the dashboard. Changes apply at once.",
+  "command": {
+    "pick": "Change language",
+    "prefix": "Language:",
+    "apply": "Language: {name}",
+    "group": "Language"
+  },
+  "browser": "Browser default"
+}

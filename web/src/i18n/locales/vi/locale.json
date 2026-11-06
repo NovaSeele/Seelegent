@@ -1,0 +1,11 @@
+{
+  "label": "Ngôn ngữ / Language",
+  "desc": "Ngôn ngữ của bảng điều khiển. Đổi là áp dụng ngay.",
+  "command": {
+    "pick": "Đổi ngôn ngữ",
+    "prefix": "Ngôn ngữ:",
+    "apply": "Ngôn ngữ: {name}",
+    "group": "Ngôn ngữ"
+  },
+  "browser": "Theo trình duyệt"
+}

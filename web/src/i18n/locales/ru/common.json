@@ -1,0 +1,162 @@
+{
+  "action": {
+    "close": "Закрыть",
+    "confirm": "Подтвердить",
+    "cancel": "Отмена",
+    "dismiss": "Скрыть",
+    "retry": "Повторить",
+    "reset": "Сбросить",
+    "clear": "Очистить",
+    "back": "Назад",
+    "more": "Ещё",
+    "open": "Открыть",
+    "remove": "Убрать",
+    "undo": "Отменить"
+  },
+  "toast": {
+    "close": "Закрыть уведомление",
+    "region": "Уведомления"
+  },
+  "error": {
+    "network": "Нет связи с сервером: {error}"
+  },
+  "next": {
+    "openTask": "Открыть задачу",
+    "openMeeting": "Открыть совещание"
+  },
+  "commit": {
+    "done": "Закоммичено: {sha}",
+    "doneNoSha": "Закоммичено"
+  },
+  "working": "Обработка…",
+  "worker": {
+    "unassigned": "Не назначено",
+    "accountDeleted": "Аккаунт удалён",
+    "unknown": "неизвестно"
+  },
+  "time": {
+    "justNow": "только что",
+    "neverUsed": "не использовался"
+  },
+  "duration": {
+    "seconds": "{n} с",
+    "minSec": "{m} мин {s} с",
+    "hourMin": "{h} ч {m} мин"
+  },
+  "span": {
+    "min": "{m} мин",
+    "hour": "{h} ч",
+    "hourMin": "{h} ч {m} мин",
+    "day": "{d} д",
+    "dayHour": "{d} д {h} ч"
+  },
+  "countdown": {
+    "refreshing": "обновление…",
+    "refreshIn": "обновится через {span}",
+    "secondsLeft": "Осталось {n} с",
+    "linkExpired": "Срок ссылки истёк"
+  },
+  "status": {
+    "queued": {
+      "label": "В очереди",
+      "short": "Очередь"
+    },
+    "running": {
+      "label": "Выполняется",
+      "short": "Идёт"
+    },
+    "waiting": {
+      "label": "Ждёт квоту",
+      "short": "Квота"
+    },
+    "waitingWorker": {
+      "label": "Ждёт свободного исполнителя",
+      "short": "Нет исп."
+    },
+    "blocked": {
+      "label": "Требует действий",
+      "short": "Действие"
+    },
+    "review": {
+      "label": "Ждёт проверки",
+      "short": "Проверка?"
+    },
+    "accepted": {
+      "label": "Принято",
+      "short": "Принято"
+    },
+    "rejected": {
+      "label": "На доработку",
+      "short": "Доработка"
+    },
+    "failed": {
+      "label": "Ошибка",
+      "short": "Ошибка"
+    },
+    "cancelled": {
+      "label": "Отменено",
+      "short": "Отмена"
+    },
+    "waitingDeps": {
+      "label": "Ждёт предыдущую задачу",
+      "short": "Ждёт"
+    },
+    "blockedDeps": {
+      "label": "Предыдущая задача упала",
+      "short": "Сбой пред."
+    }
+  },
+  "attention": {
+    "stalled": "Застряла",
+    "looping": "Зациклилась",
+    "question": "Вопрос лиду",
+    "noResponse": "Исполнитель не отвечает",
+    "auth": "Нужен вход",
+    "noAccounts": "Нет доступных аккаунтов",
+    "failed": "Сбой",
+    "review": "Ждёт проверки",
+    "quotaWait": "Ждёт квоту",
+    "waitingWorker": "Ждёт свободного исполнителя",
+    "manual": "Вы управляете",
+    "gate": "Проверка гейта",
+    "gateRed": "Гейт не пройден",
+    "workAtRisk": "Работа может пропасть",
+    "depsBlocked": "Предыдущая задача упала",
+    "waitingDeps": "Ждёт предыдущую задачу"
+  },
+  "stage": {
+    "explore": "Поиск",
+    "edit": "Правка",
+    "verify": "Проверка",
+    "run": "Команда",
+    "report": "Отчёт"
+  },
+  "taskStatus": {
+    "queued": "В очереди",
+    "running": "Выполняется",
+    "waitingQuota": "Ждёт квоту",
+    "done": "Готово",
+    "accepted": "Принято",
+    "rejected": "Нужна доработка",
+    "failed": "Сбой",
+    "cancelled": "Отменено"
+  },
+  "accountStatus": {
+    "ok": "Готов",
+    "needsLogin": "Нужен вход",
+    "new": "Вход не выполнен",
+    "error": "Ошибка",
+    "checking": "Проверка",
+    "noPlan": "Нет тарифа"
+  },
+  "ui": {
+    "loading": "Загрузка…",
+    "quotaUsed": "Использовано {value}",
+    "quotaLeft": "Осталось {value}",
+    "skipToContent": "К содержимому",
+    "resizeSidebar": "Изменить ширину боковой панели",
+    "collapseSidebar": "Скрыть боковую панель",
+    "expandSidebar": "Показать боковую панель",
+    "noResults": "Ничего не найдено"
+  }
+}

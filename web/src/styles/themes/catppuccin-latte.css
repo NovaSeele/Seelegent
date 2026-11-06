@@ -1,0 +1,60 @@
+/* Theme: Catppuccin Latte (catppuccin-latte), light. Ported from the old dashboard; the derived roles live in ../tokens.css. */
+:root[data-theme='catppuccin-latte'],
+[data-theme-preview='catppuccin-latte'] {
+  color-scheme: light;
+  --bg-app: #eff1f5;
+  --bg-surface: #ffffff;
+  --bg-surface-2: #e6e9ef;
+  --bg-elevated: #ffffff;
+  --bg-hover: #dce0e8;
+  --bg-active: #ccd0da;
+  --bg-code: #e6e9ef;
+  --bg-backdrop: rgba(17, 19, 24, 0.45);
+  --border-subtle: rgba(76, 79, 105, 0.1);
+  --border-strong: rgba(76, 79, 105, 0.2);
+  --border-focus: #8839ef;
+  --text-primary: #4c4f69;
+  --text-secondary: #6c6f85;
+  --text-muted: #8c8fa1;
+  --text-on-accent: #ffffff;
+  --accent: #8538ea;
+  --accent-hover: #7725e2;
+  --accent-soft: rgba(136, 57, 239, 0.12);
+  --accent-border: rgba(136, 57, 239, 0.28);
+  --status-queued-fg: #4b5563;
+  --status-queued-bg: rgba(75, 85, 99, 0.1);
+  --status-queued-border: rgba(75, 85, 99, 0.22);
+  --status-running-fg: #1d4ed8;
+  --status-running-bg: rgba(29, 78, 216, 0.1);
+  --status-running-border: rgba(29, 78, 216, 0.24);
+  --attention-fg: #92400e;
+  --attention-bg: rgba(146, 64, 14, 0.11);
+  --attention-border: rgba(146, 64, 14, 0.24);
+  --status-accepted-fg: #166534;
+  --status-accepted-bg: rgba(22, 101, 52, 0.1);
+  --status-accepted-border: rgba(22, 101, 52, 0.24);
+  --status-danger-fg: #b91c1c;
+  --status-danger-bg: rgba(185, 28, 28, 0.09);
+  --status-danger-border: rgba(185, 28, 28, 0.24);
+  --shadow-sm: 0 1px 2px rgba(17, 24, 39, 0.06);
+  --shadow-md: 0 8px 24px rgba(17, 24, 39, 0.12);
+  --term-bg: #e6e9ef;
+  --term-fg: #4c4f69;
+  --term-dim: #8c8fa1;
+  --term-prompt-bg: #dce0e8;
+  --term-prompt-fg: #4c4f69;
+  --term-accent: #ea76cb;
+  --term-ok: #40a02b;
+  --term-err: #d20f39;
+  --term-warn: #df8e1d;
+  --term-tool: #1e66f5;
+  --term-path: #8839ef;
+  --term-diff-add-bg: rgba(22, 163, 74, 0.12);
+  --term-diff-add-fg: #15803d;
+  --term-diff-del-bg: rgba(220, 38, 38, 0.12);
+  --term-diff-del-fg: #b91c1c;
+  --term-border: rgba(76, 79, 105, 0.1);
+  --diff-del: #b51b1b; /* contrast fix 2026-11-06 */
+  --shadow-lg: 0 16px 40px rgba(17, 24, 39, 0.16), 0 4px 12px rgba(17, 24, 39, 0.08);
+  --font-mono-theme: var(--font-mono-jetbrains-mono);
+}

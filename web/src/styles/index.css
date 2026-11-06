@@ -1,0 +1,32 @@
+/* Global stylesheet: tokens first (the derived colour layer must precede the palettes), then every theme palette
+   (all 26 are bundled so the pre-paint script can pick any of them before first paint), then element defaults. */
+@import './tokens.css';
+@import './themes/catppuccin-latte.css';
+@import './themes/catppuccin-mocha.css';
+@import './themes/claude-dark.css';
+@import './themes/claude-light.css';
+@import './themes/codex-dark.css';
+@import './themes/codex-light.css';
+@import './themes/dracula.css';
+@import './themes/everforest-light.css';
+@import './themes/github-dark.css';
+@import './themes/github-light.css';
+@import './themes/gruvbox-dark.css';
+@import './themes/jetbrains-darcula.css';
+@import './themes/jetbrains-islands-dark.css';
+@import './themes/jetbrains-light.css';
+@import './themes/monokai.css';
+@import './themes/nord.css';
+@import './themes/one-dark.css';
+@import './themes/seelegent-dark.css';
+@import './themes/seelegent-light.css';
+@import './themes/solarized-dark.css';
+@import './themes/solarized-light.css';
+@import './themes/synthwave-84.css';
+@import './themes/tokyo-night.css';
+@import './themes/vscode-dark-modern.css';
+@import './themes/vscode-dark-plus.css';
+@import './themes/vscode-light-modern.css';
+@import './base.css';
+@import './tones.css';
+@import './fileicons.css';

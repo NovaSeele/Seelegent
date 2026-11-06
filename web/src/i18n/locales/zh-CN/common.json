@@ -1,0 +1,162 @@
+{
+  "action": {
+    "close": "关闭",
+    "confirm": "确认",
+    "cancel": "取消",
+    "dismiss": "忽略",
+    "retry": "重试",
+    "reset": "重置",
+    "clear": "清除",
+    "back": "返回",
+    "more": "更多",
+    "open": "打开",
+    "remove": "移除",
+    "undo": "撤销"
+  },
+  "toast": {
+    "close": "关闭通知",
+    "region": "通知"
+  },
+  "error": {
+    "network": "无法连接服务器：{error}"
+  },
+  "next": {
+    "openTask": "打开任务",
+    "openMeeting": "打开会议"
+  },
+  "commit": {
+    "done": "已提交 {sha}",
+    "doneNoSha": "已提交"
+  },
+  "working": "处理中…",
+  "worker": {
+    "unassigned": "未分配",
+    "accountDeleted": "账号已删除",
+    "unknown": "未知"
+  },
+  "time": {
+    "justNow": "刚刚",
+    "neverUsed": "从未使用"
+  },
+  "duration": {
+    "seconds": "{n} 秒",
+    "minSec": "{m} 分 {s} 秒",
+    "hourMin": "{h} 小时 {m} 分"
+  },
+  "span": {
+    "min": "{m}分",
+    "hour": "{h}小时",
+    "hourMin": "{h}小时{m}分",
+    "day": "{d}天",
+    "dayHour": "{d}天{h}小时"
+  },
+  "countdown": {
+    "refreshing": "正在刷新…",
+    "refreshIn": "{span}后刷新",
+    "secondsLeft": "剩余 {n} 秒",
+    "linkExpired": "链接已过期"
+  },
+  "status": {
+    "queued": {
+      "label": "排队中",
+      "short": "排队"
+    },
+    "running": {
+      "label": "运行中",
+      "short": "运行"
+    },
+    "waiting": {
+      "label": "等待配额",
+      "short": "配额"
+    },
+    "waitingWorker": {
+      "label": "等待空闲工人",
+      "short": "等工人"
+    },
+    "blocked": {
+      "label": "需要处理",
+      "short": "待处理"
+    },
+    "review": {
+      "label": "等待审核",
+      "short": "待审核"
+    },
+    "accepted": {
+      "label": "已通过",
+      "short": "通过"
+    },
+    "rejected": {
+      "label": "返工",
+      "short": "返工"
+    },
+    "failed": {
+      "label": "失败",
+      "short": "失败"
+    },
+    "cancelled": {
+      "label": "已取消",
+      "short": "取消"
+    },
+    "waitingDeps": {
+      "label": "等待前置任务",
+      "short": "等前置"
+    },
+    "blockedDeps": {
+      "label": "前置任务失败",
+      "short": "前置失败"
+    }
+  },
+  "attention": {
+    "stalled": "停滞",
+    "looping": "循环重复",
+    "question": "询问负责人",
+    "noResponse": "工人无响应",
+    "auth": "需要登录",
+    "noAccounts": "没有可用账号",
+    "failed": "失败",
+    "review": "等待审核",
+    "quotaWait": "等待配额",
+    "waitingWorker": "等待空闲工人",
+    "manual": "你正在接管",
+    "gate": "关卡检查",
+    "gateRed": "关卡未通过",
+    "workAtRisk": "工作可能丢失",
+    "depsBlocked": "前置任务失败",
+    "waitingDeps": "等待前置任务"
+  },
+  "stage": {
+    "explore": "探索",
+    "edit": "修改",
+    "verify": "验证",
+    "run": "命令",
+    "report": "报告"
+  },
+  "taskStatus": {
+    "queued": "排队中",
+    "running": "运行中",
+    "waitingQuota": "等待配额",
+    "done": "已完成",
+    "accepted": "已通过",
+    "rejected": "要求返工",
+    "failed": "失败",
+    "cancelled": "已取消"
+  },
+  "accountStatus": {
+    "ok": "就绪",
+    "needsLogin": "需要登录",
+    "new": "未登录",
+    "error": "错误",
+    "checking": "检查中",
+    "noPlan": "无订阅"
+  },
+  "ui": {
+    "loading": "加载中…",
+    "quotaUsed": "已用 {value}",
+    "quotaLeft": "剩余 {value}",
+    "skipToContent": "跳到正文",
+    "resizeSidebar": "调整侧栏宽度",
+    "collapseSidebar": "隐藏侧栏",
+    "expandSidebar": "显示侧栏",
+    "noResults": "没有结果"
+  }
+}

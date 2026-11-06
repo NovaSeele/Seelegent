@@ -1,0 +1,30 @@
+{
+  "title": "Paleta de comandos",
+  "open": "Buscar comandos",
+  "placeholder": "Escribe un comando o una página…",
+  "results": "Comandos",
+  "empty": "Ningún comando coincide con “{query}”",
+  "hint": {
+    "move": "mover",
+    "run": "ejecutar",
+    "close": "cerrar"
+  },
+  "group": {
+    "navigation": "Ir a",
+    "general": "General",
+    "settings": "Ajustes",
+    "appearance": "Apariencia",
+    "language": "Idioma"
+  },
+  "cmd": {
+    "openSettings": "Abrir ajustes",
+    "pickTheme": "Cambiar tema",
+    "themePrefix": "Tema:",
+    "applyTheme": "Tema: {name}",
+    "toggleSidebar": "Mostrar u ocultar el panel lateral"
+  },
+  "keywords": {
+    "settings": "ajustes preferencias opciones configuración",
+    "theme": "tema color oscuro claro modo"
+  }
+}

@@ -1,0 +1,88 @@
+{
+  "brand": {
+    "title": "Seelegent — tu departamento de IA"
+  },
+  "goTo": "Ir a {page}",
+  "watch": {
+    "label": "Panel",
+    "desc": "Todo lo que está en marcha y lo que te necesita, en un solo panel."
+  },
+  "tasks": {
+    "label": "Tareas",
+    "desc": "Cada tarea con su progreso, informe y revisión."
+  },
+  "issues": {
+    "label": "Issues",
+    "keywords": "Issue → PR",
+    "desc": "Sigue issues y abre pull requests desde repositorios de GitHub."
+  },
+  "meetings": {
+    "label": "Reuniones",
+    "desc": "El lead consulta a varios miembros por rondas: respuestas privadas, luego un contraste anónimo con pruebas verificadas, una decisión y un acta."
+  },
+  "contests": {
+    "label": "Concursos",
+    "desc": "Un enunciado, varias versiones en paralelo, cada una en su worktree. Una máquina puntúa, un juez compara a ciegas y tú eliges la ganadora para aplicarla a tu carpeta de trabajo."
+  },
+  "automations": {
+    "label": "Rutinas",
+    "desc": "Trabajo asignado a los workers según un horario. Solo se ejecuta si el comando de comprobación previa lo permite y queda cuota."
+  },
+  "proof": {
+    "label": "Pruebas",
+    "desc": "Qué requisitos ya demuestra un comando de gate y cuáles no. Vuelve a ejecutar todos los gates para detectar regresiones."
+  },
+  "accounts": {
+    "label": "Cuentas",
+    "desc": "Las cuentas y claves de API que usan los workers para ejecutar trabajos."
+  },
+  "usage": {
+    "label": "Uso",
+    "desc": "Tokens, coste y límites a lo largo del tiempo, por proyecto y por cuenta."
+  },
+  "roles": {
+    "label": "Roles",
+    "keywords": "Roles de worker",
+    "desc": "Define competencias, reglas obligatorias, estilo de informe y conjuntos de habilidades para los workers."
+  },
+  "members": {
+    "label": "Miembros",
+    "desc": "Quién del departamento recibe trabajo, con qué fuente de workers y qué modelo."
+  },
+  "settings": {
+    "label": "Ajustes",
+    "aria": "Ajustes del sistema"
+  },
+  "appearance": {
+    "label": "Apariencia"
+  },
+  "more": {
+    "label": "Más"
+  },
+  "rail": {
+    "main": "Navegación principal",
+    "pages": "Páginas principales",
+    "mobile": "Navegación móvil"
+  },
+  "badge": {
+    "contests": "{count} concurso espera que elijas una versión | {count} concursos esperan que elijas una versión",
+    "automations": "{count} automatización falló en su última ejecución | {count} automatizaciones fallaron en su última ejecución",
+    "watch": "{count} tarea pendiente de revisión | {count} tareas pendientes de revisión",
+    "meetings": "{count} reunión te espera | {count} reuniones te esperan",
+    "more": "{count} página te necesita | {count} páginas te necesitan"
+  },
+  "conn": {
+    "lost": "Se perdió la conexión con Seelegent, reintentando…",
+    "restored": "Conexión restablecida",
+    "retryIn": "Próximo intento en {n} s"
+  },
+  "statusBar": {
+    "summary": "Resumen de estado",
+    "idle": "Libres",
+    "idleTitle": "Cuentas sin tareas en curso / total de cuentas",
+    "running": "En curso",
+    "runningTitle": "Tareas en curso",
+    "waiting": "En cola",
+    "waitingTitle": "Tareas esperando en la cola"
+  }
+}

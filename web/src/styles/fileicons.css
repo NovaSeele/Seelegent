@@ -1,0 +1,163 @@
+/*
+ * File-type icons (components/ui/FileIcon.vue, lib/fileicons.ts), ported from the old dashboard's
+ * ui/css/fileicons.css.
+ *
+ * Glyph colours are fixed per file type, like VS Code, and are not part of a theme: this file is the one colour
+ * table outside styles/themes/, and styles.spec.ts exempts it by name. Each kind sets --fi-c and .fi paints it.
+ * On light themes (.fi--light) every kind takes a darker step that keeps at least 3:1 contrast on every light
+ * surface, hover included (Solarized Light's hover is the worst case).
+ *
+ * Third-party sets are <img class="fi"> in the same 16px box (14px artwork), in their own colours, never
+ * recoloured. Switching sets never changes a row's height.
+ */
+.fi {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  color: var(--fi-c, #7a8896);
+  line-height: 1;
+  user-select: none; /* copying a file name never picks up the glyph's "JS"/"TS" text */
+}
+
+.fi svg {
+  display: block;
+  flex: none;
+}
+
+.fi text {
+  fill: currentColor;
+  font-family: var(--font-ui-system);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+}
+
+img.fi {
+  display: inline-block;
+  box-sizing: border-box;
+  padding: 1px;
+  object-fit: contain;
+  -webkit-user-drag: none;
+}
+
+.fi--dim {
+  opacity: 0.45;
+}
+
+/* Inline before a name inside the name's own (ellipsis) element: 14px, centred on the text line, with its own
+   6px gap; the negative block margins keep it from ever making a line taller. */
+.fi.fi--lead {
+  width: 14px;
+  height: 14px;
+  margin-inline-end: 6px;
+  margin-block: -4px;
+  vertical-align: middle;
+}
+
+.fi.fi--lead svg {
+  width: 14px;
+  height: 14px;
+}
+
+img.fi.fi--lead {
+  padding: 0;
+}
+
+.fi-js {
+  --fi-c: #e8d44d;
+}
+.fi-ts {
+  --fi-c: #4f9ee8;
+}
+.fi-vue {
+  --fi-c: #41b883;
+}
+.fi-go {
+  --fi-c: #3fb6d8;
+}
+.fi-css {
+  --fi-c: #6f9cff;
+}
+.fi-json {
+  --fi-c: #e3b341;
+}
+.fi-rs {
+  --fi-c: #e0844f;
+}
+.fi-html {
+  --fi-c: #f0764a;
+}
+.fi-md {
+  --fi-c: #8fb3d9;
+}
+.fi-test {
+  --fi-c: #5ad48c;
+}
+.fi-img {
+  --fi-c: #c58af9;
+}
+.fi-sh {
+  --fi-c: #8bd17c;
+}
+.fi-cfg {
+  --fi-c: #a7b4c1;
+}
+.fi-folder {
+  --fi-c: #a7b4c1;
+}
+.fi-file {
+  --fi-c: #7a8896;
+}
+
+.fi--light.fi-js {
+  --fi-c: #857616;
+}
+.fi--light.fi-ts {
+  --fi-c: #2c76bd;
+}
+.fi--light.fi-vue {
+  --fi-c: #2b7a57;
+}
+.fi--light.fi-go {
+  --fi-c: #0b6f8c;
+}
+.fi--light.fi-css {
+  --fi-c: #3d6fde;
+}
+.fi--light.fi-json {
+  --fi-c: #946f12;
+}
+.fi--light.fi-rs {
+  --fi-c: #b05e2f;
+}
+.fi--light.fi-html {
+  --fi-c: #c54f24;
+}
+.fi--light.fi-md {
+  --fi-c: #577798;
+}
+.fi--light.fi-test {
+  --fi-c: #368155;
+}
+.fi--light.fi-img {
+  --fi-c: #9653d1;
+}
+.fi--light.fi-sh {
+  --fi-c: #547e4b;
+}
+.fi--light.fi-cfg {
+  --fi-c: #6b7580;
+}
+.fi--light.fi-folder {
+  --fi-c: #6b7580;
+}
+.fi--light.fi-file {
+  --fi-c: #687684;
+}
+
+/* Seelegent mono: the same glyphs in the secondary text colour. */
+.fi.fi--mono {
+  color: var(--text-secondary);
+}

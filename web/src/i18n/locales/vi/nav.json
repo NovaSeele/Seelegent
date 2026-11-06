@@ -1,0 +1,88 @@
+{
+  "brand": {
+    "title": "Seelegent — phòng ban AI của bạn"
+  },
+  "goTo": "Đi tới {page}",
+  "watch": {
+    "label": "Theo dõi",
+    "desc": "Mọi việc đang chạy và những gì cần bạn, gom trên một bảng."
+  },
+  "tasks": {
+    "label": "Tiến trình",
+    "desc": "Mọi tác vụ cùng tiến độ, báo cáo và kết quả duyệt."
+  },
+  "issues": {
+    "label": "Issue",
+    "keywords": "Issue → PR",
+    "desc": "Theo dõi issue và tạo pull request từ kho lưu trữ GitHub."
+  },
+  "meetings": {
+    "label": "Họp",
+    "desc": "Trưởng dự án hỏi ý kiến nhiều thành viên theo vòng: vòng kín, rồi đối chất ẩn danh, có kiểm chứng dẫn chứng, quyết định và biên bản."
+  },
+  "contests": {
+    "label": "Cuộc thi",
+    "desc": "Một đề bài, nhiều bản làm song song trong worktree riêng. Máy chấm điểm, giám khảo so sánh ẩn danh, bạn chọn bản thắng để áp vào thư mục làm việc."
+  },
+  "automations": {
+    "label": "Tự động",
+    "desc": "Việc giao cho thợ theo lịch. Chỉ chạy khi lệnh kiểm tra trước cho phép và quota còn đủ."
+  },
+  "proof": {
+    "label": "Bằng chứng",
+    "desc": "Yêu cầu nào đã có lệnh cổng chứng minh, yêu cầu nào chưa. Chạy lại toàn bộ cổng để phát hiện hồi quy."
+  },
+  "accounts": {
+    "label": "Tài khoản",
+    "desc": "Tài khoản và khoá API mà thợ dùng để chạy việc."
+  },
+  "usage": {
+    "label": "Sử dụng",
+    "desc": "Token, chi phí và hạn mức theo thời gian, theo dự án và theo tài khoản."
+  },
+  "roles": {
+    "label": "Vai trò",
+    "keywords": "Vai trò thợ",
+    "desc": "Định nghĩa năng lực chuyên môn, quy tắc bắt buộc, phong cách báo cáo và bộ kỹ năng cho thợ thi công."
+  },
+  "members": {
+    "label": "Thành viên",
+    "desc": "Ai trong phòng ban nhận việc, với nguồn thợ và model nào."
+  },
+  "settings": {
+    "label": "Cài đặt",
+    "aria": "Cài đặt hệ thống"
+  },
+  "appearance": {
+    "label": "Giao diện"
+  },
+  "more": {
+    "label": "Thêm"
+  },
+  "rail": {
+    "main": "Điều hướng chính",
+    "pages": "Các trang chính",
+    "mobile": "Điều hướng di động"
+  },
+  "badge": {
+    "contests": "{count} cuộc thi chờ chọn bản",
+    "automations": "{count} việc tự động lỗi lần chạy trước",
+    "watch": "{count} việc chờ duyệt",
+    "meetings": "{count} cuộc họp chờ bạn",
+    "more": "{count} trang cần bạn"
+  },
+  "conn": {
+    "lost": "Mất kết nối với Seelegent, đang thử lại…",
+    "restored": "Đã kết nối lại",
+    "retryIn": "Thử lại sau {n} giây"
+  },
+  "statusBar": {
+    "summary": "Tổng quan trạng thái",
+    "idle": "Rảnh",
+    "idleTitle": "Tài khoản không chạy task nào / Tổng số tài khoản",
+    "running": "Chạy",
+    "runningTitle": "Số tác vụ đang chạy",
+    "waiting": "Chờ",
+    "waitingTitle": "Số tác vụ đang xếp hàng chờ"
+  }
+}

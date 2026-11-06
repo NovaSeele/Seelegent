@@ -1,0 +1,12 @@
+{
+  "placeholder": {
+    "title": "Esta vista está en camino",
+    "desc": "Se está rehaciendo para el nuevo panel y mostrará aquí datos en vivo.",
+    "listEmpty": "Aún no hay nada"
+  },
+  "notFound": {
+    "title": "Página no encontrada",
+    "desc": "Esta dirección no corresponde a ninguna página. Puede que se haya movido.",
+    "home": "Ir al Panel"
+  }
+}

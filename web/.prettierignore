@@ -1,3 +1,5 @@
 dist/
 coverage/
 pnpm-lock.yaml
+# Third-party icon sets, kept byte for byte as fetched (see THIRD_PARTY_NOTICES.md).
+public/fileicons/

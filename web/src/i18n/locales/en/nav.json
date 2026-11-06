@@ -1,0 +1,88 @@
+{
+  "brand": {
+    "title": "Seelegent — your AI department"
+  },
+  "goTo": "Go to {page}",
+  "watch": {
+    "label": "Watch",
+    "desc": "Everything running right now and what needs you, on one board."
+  },
+  "tasks": {
+    "label": "Tasks",
+    "desc": "Every task with its progress, report and review."
+  },
+  "issues": {
+    "label": "Issues",
+    "keywords": "Issue → PR",
+    "desc": "Track issues and open pull requests from GitHub repositories."
+  },
+  "meetings": {
+    "label": "Meetings",
+    "desc": "The lead asks several members in rounds: private answers, then an anonymous cross-check with verified evidence, a decision and minutes."
+  },
+  "contests": {
+    "label": "Contests",
+    "desc": "One brief, several attempts in parallel, each in its own worktree. A machine scores them, a judge compares them blind, and you pick the winner to apply to your working folder."
+  },
+  "automations": {
+    "label": "Automations",
+    "desc": "Work handed to workers on a schedule. It runs only when the pre-check command allows it and there is enough quota."
+  },
+  "proof": {
+    "label": "Proof",
+    "desc": "Which requirements a gate command proves and which it does not. Re-run every gate to catch regressions."
+  },
+  "accounts": {
+    "label": "Accounts",
+    "desc": "The accounts and API keys workers use to run jobs."
+  },
+  "usage": {
+    "label": "Usage",
+    "desc": "Tokens, cost and limits over time, by project and by account."
+  },
+  "roles": {
+    "label": "Roles",
+    "keywords": "Worker roles",
+    "desc": "Define skills, required rules, report style and skill sets for workers."
+  },
+  "members": {
+    "label": "Members",
+    "desc": "Who in the department takes work, with which worker source and model."
+  },
+  "settings": {
+    "label": "Settings",
+    "aria": "System settings"
+  },
+  "appearance": {
+    "label": "Appearance"
+  },
+  "more": {
+    "label": "More"
+  },
+  "rail": {
+    "main": "Main navigation",
+    "pages": "Main pages",
+    "mobile": "Mobile navigation"
+  },
+  "badge": {
+    "contests": "{count} contest waiting for a pick | {count} contests waiting for a pick",
+    "automations": "{count} automation failed its last run | {count} automations failed their last run",
+    "watch": "{count} task waiting for review | {count} tasks waiting for review",
+    "meetings": "{count} meeting waiting for you | {count} meetings waiting for you",
+    "more": "{count} page needs you | {count} pages need you"
+  },
+  "conn": {
+    "lost": "Lost connection to Seelegent, retrying…",
+    "restored": "Connection restored",
+    "retryIn": "Next try in {n} s"
+  },
+  "statusBar": {
+    "summary": "Status overview",
+    "idle": "Idle",
+    "idleTitle": "Accounts running no task / total accounts",
+    "running": "Active",
+    "runningTitle": "Tasks running",
+    "waiting": "Queued",
+    "waitingTitle": "Tasks waiting in the queue"
+  }
+}

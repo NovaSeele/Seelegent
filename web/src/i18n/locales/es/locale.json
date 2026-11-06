@@ -1,0 +1,11 @@
+{
+  "label": "Idioma / Language",
+  "desc": "Idioma del panel. Los cambios se aplican al instante.",
+  "command": {
+    "pick": "Cambiar idioma",
+    "prefix": "Idioma:",
+    "apply": "Idioma: {name}",
+    "group": "Idioma"
+  },
+  "browser": "Según el navegador"
+}
