@@ -4,6 +4,7 @@
  * src/prepaint.spec.ts runs that script against these definitions.
  */
 import { isLocale, type Locale } from '@/i18n/locales'
+import { DEFAULT_FILE_ICON_SET, isFileIconSet, type FileIconSetId } from '@/lib/fileicons'
 import { isBoolean, isNumberIn, isOneOf, type StoredValue } from '@/lib/storage'
 
 import {
@@ -46,6 +47,7 @@ export const PREFS = {
     range(RANGES.lineHeightTerm),
   ),
   motion: pref<MotionPref>('ui.motion', 'system', isOneOf(MOTION_PREFS)),
+  fileIcons: pref<FileIconSetId>('ui.fileIcons', DEFAULT_FILE_ICON_SET, isFileIconSet),
   /** null = never chosen: follow the browser's languages. */
   locale: pref<Locale | null>(
     'ui.locale',

@@ -108,10 +108,15 @@ describe('style gates', () => {
     .filter(([path]) => !path.startsWith(THEMES_DIR))
     .map(([path, source]) => [path, styleText(path, source)] as const)
 
+  // File-type glyph colours are fixed per type (like VS Code), not themed, so they live in one table of their own.
+  const COLOUR_TABLES = ['src/styles/fileicons.css']
+
   it('keeps colour literals inside theme files', () => {
     const literal =
       /#[0-9a-f]{3,8}\b|\b(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\(|:\s*(?:white|black)\b/i
-    const offenders = styled.filter(([, css]) => literal.test(css)).map(([path]) => path)
+    const offenders = styled
+      .filter(([path, css]) => !COLOUR_TABLES.includes(path) && literal.test(css))
+      .map(([path]) => path)
     expect(offenders).toEqual([])
   })
 

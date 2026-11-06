@@ -4,6 +4,7 @@
  * always wins. The old keys are left in place so going back to the old dashboard keeps working.
  */
 import { matchLocale } from '@/i18n/locales'
+import { normalizeFileIconSet } from '@/lib/fileicons'
 import { readLegacy, readStored, storageKey, writeStored, type StoredValue } from '@/lib/storage'
 
 import { PREFS } from './prefs'
@@ -56,6 +57,9 @@ export function migrateLegacyPrefs(): void {
   if (legacy) {
     if (fresh(PREFS.theme)) setIfValid(PREFS.theme, legacy.themeId)
     if (fresh(PREFS.motion)) setIfValid(PREFS.motion, legacy.motion)
+    if (fresh(PREFS.fileIcons)) {
+      setIfValid(PREFS.fileIcons, normalizeFileIconSet(legacy.fileIcons))
+    }
     if (fresh(PREFS.sizeUi)) setIfValid(PREFS.sizeUi, Number(legacy.uiSize))
     if (fresh(PREFS.sizeTerm)) setIfValid(PREFS.sizeTerm, Number(legacy.termSize))
     if (fresh(PREFS.lineHeightTerm)) setIfValid(PREFS.lineHeightTerm, Number(legacy.lineHeight))

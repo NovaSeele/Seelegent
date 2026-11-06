@@ -16,6 +16,7 @@ import {
 } from '@/config/themes'
 import { useMediaQuery } from '@/composables/useMediaQuery'
 import { activateLocale, detectLocale, type Locale } from '@/i18n'
+import type { FileIconSetId } from '@/lib/fileicons'
 import { readStored, writeStored, type StoredValue } from '@/lib/storage'
 
 function persisted<T>(spec: StoredValue<T>): Ref<T> {
@@ -36,6 +37,7 @@ export const useUiStore = defineStore('ui', () => {
   const sizeTerm = persisted(PREFS.sizeTerm)
   const lineHeightTerm = persisted(PREFS.lineHeightTerm)
   const motion = persisted(PREFS.motion)
+  const fileIcons = persisted(PREFS.fileIcons)
   const localeChoice = persisted(PREFS.locale)
   const sidebarWidth = persisted(PREFS.sidebarWidth)
   const sidebarCollapsed = persisted(PREFS.sidebarCollapsed)
@@ -80,6 +82,9 @@ export const useUiStore = defineStore('ui', () => {
   function setFontMono(next: MonoFont) {
     fontMono.value = next
   }
+  function setFileIcons(next: FileIconSetId) {
+    fileIcons.value = next
+  }
 
   /** Switches the UI language without a reload; null follows the browser again. */
   async function setLocale(next: Locale | null) {
@@ -104,6 +109,7 @@ export const useUiStore = defineStore('ui', () => {
     sizeTerm.value = PREFS.sizeTerm.fallback
     lineHeightTerm.value = PREFS.lineHeightTerm.fallback
     motion.value = PREFS.motion.fallback
+    fileIcons.value = PREFS.fileIcons.fallback
   }
 
   return {
@@ -114,6 +120,7 @@ export const useUiStore = defineStore('ui', () => {
     sizeTerm,
     lineHeightTerm,
     motion,
+    fileIcons,
     localeChoice,
     sidebarWidth,
     sidebarCollapsed,
@@ -125,6 +132,7 @@ export const useUiStore = defineStore('ui', () => {
     setMotion,
     setFontUi,
     setFontMono,
+    setFileIcons,
     setLocale,
     setSidebarWidth,
     toggleSidebar,

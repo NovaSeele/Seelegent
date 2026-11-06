@@ -60,6 +60,7 @@ describe('migrateLegacyPrefs', () => {
         termSize: 13,
         lineHeight: 1.6,
         motion: 'off',
+        fileIcons: 'mono',
       }),
     )
     window.localStorage.setItem('seelegent_locale', 'zh')
@@ -72,6 +73,7 @@ describe('migrateLegacyPrefs', () => {
     expect(readStored(PREFS.sizeTerm)).toBe(13)
     expect(readStored(PREFS.lineHeightTerm)).toBe(1.6)
     expect(readStored(PREFS.motion)).toBe('off')
+    expect(readStored(PREFS.fileIcons)).toBe('seelegent-mono') // the old "mono" value
     expect(readStored(PREFS.locale)).toBe('zh-CN')
     expect(readStored(PREFS.sidebarWidth)).toBe(360)
 
