@@ -3,6 +3,14 @@
  * generates types.gen.ts from internal/api. Names and fields follow the contract exactly so the generated file
  * can replace this one. Helper shapes the contract leaves unnamed (event payloads, SSE frames, list pages) live in
  * events.ts and the endpoint modules, not here.
+ *
+ * Type names equal the Go struct names tygo will emit. tygo writes one file per Go package, but this file is one
+ * namespace, so names that two packages share, or that shadow a TypeScript global, keep a package prefix:
+ *   internal/quota.Snapshot -> QuotaSnapshot     internal/usage.Snapshot -> UsageSnapshot
+ *   internal/quota.Window   -> QuotaWindow       internal/usage.Window   -> UsageWindow
+ *   internal/quota.Error    -> QuotaError        (Error is the JavaScript global)
+ * Every other name is the Go name as it is (quota.Group, usage.Summary, Totals, DayTotal, TurnUsage, TaskUsage,
+ * ProjectUsage, ModelUsage, AccountUsage, Day, History).
  */
 
 // §2 System
@@ -522,14 +530,14 @@ export interface Account {
   signingIn: boolean
   /** Shown in the local UI only; never logged. */
   email?: string
-  quota: Quota
+  quota: QuotaSnapshot
   models: string[]
   createdAt: string
   updatedAt: string
 }
 
-/** Mirrors internal/quota.Snapshot. */
-export interface Quota {
+/** internal/quota.Snapshot. */
+export interface QuotaSnapshot {
   /** Read from the CLI/service, or only observed from runs (API-key accounts: groups []). */
   source: 'active' | 'passive'
   fetchedAt?: string
@@ -539,16 +547,20 @@ export interface Quota {
   exhaustedUntil?: string
   exhaustedReason?: string
   /** A group "<group> <family>" is a sub-limit of <group>. */
-  groups: QuotaGroup[]
+  groups: Group[]
   /** Absent when the last read succeeded. */
-  error?: {
-    kind: 'needs_login' | 'token_expired' | 'format' | 'unavailable' | 'failed'
-    message: string
-    at: string
-  }
+  error?: QuotaError
 }
 
-export interface QuotaGroup {
+/** internal/quota.Error. */
+export interface QuotaError {
+  kind: 'needs_login' | 'token_expired' | 'format' | 'unavailable' | 'failed'
+  message: string
+  at: string
+}
+
+/** internal/quota.Group. */
+export interface Group {
   name: string
   windows: QuotaWindow[]
 }
@@ -581,9 +593,9 @@ export interface Provider {
   accounts: number
 }
 
-// UsageSummary and UsageHistory mirror internal/usage.Summary and internal/usage.History (the source of truth).
+// internal/usage: Summary and History are the source of truth for these shapes.
 
-export interface UsageTotals {
+export interface Totals {
   tokens: number
   costUsd: number
   /** Some attempt reported a cost. */
@@ -593,14 +605,14 @@ export interface UsageTotals {
   attempts: number
 }
 
-export interface UsageDayTotal {
+export interface DayTotal {
   date: string
   tokens: number
   costUsd: number
   tasks: number
 }
 
-export interface UsageTurn {
+export interface TurnUsage {
   n: number
   tokens: number
   costUsd: number
@@ -612,7 +624,7 @@ export interface UsageTurn {
   model: string
 }
 
-export interface UsageTask {
+export interface TaskUsage {
   id: string
   title: string
   status: string
@@ -624,7 +636,7 @@ export interface UsageTask {
   accountId: string
   account: string
   turns: number
-  items: UsageTurn[]
+  items: TurnUsage[]
   more: number
 }
 
@@ -636,7 +648,7 @@ export interface ProjectUsage {
   durationMs: number
   tasks: number
   turns: number
-  items: UsageTask[]
+  items: TaskUsage[]
   more: number
 }
 
@@ -661,16 +673,16 @@ export interface AccountUsage {
   more: number
 }
 
-export interface UsageSummary {
+export interface Summary {
   days: number
   since: string
   until: string
   previousSince: string
   /** The oldest attempt kept; absent when there is none. */
   dataSince?: string
-  totals: UsageTotals
-  previous: UsageTotals
-  daily: UsageDayTotal[]
+  totals: Totals
+  previous: Totals
+  daily: DayTotal[]
   projects: ProjectUsage[]
   moreProjects: number
   accounts: AccountUsage[]
@@ -704,7 +716,7 @@ export interface UsageSnapshot {
 }
 
 /** One account on one local day: the lowest remaining per window, the largest running counters. */
-export interface UsageDay {
+export interface Day {
   date: string
   accountId: string
   backend: string
@@ -720,7 +732,7 @@ export interface UsageDay {
   costToday: number
 }
 
-export interface UsageHistory {
+export interface History {
   bucket: 'hour' | 'day'
   since: string
   until: string
@@ -729,7 +741,7 @@ export interface UsageHistory {
   /** bucket hour. */
   rows?: UsageSnapshot[]
   /** bucket day. */
-  days?: UsageDay[]
+  days?: Day[]
 }
 
 // §5 Settings: config.json of internal/config.Settings in camelCase. The nested backend shapes are prefixed
