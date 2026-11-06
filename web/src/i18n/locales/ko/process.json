@@ -24,7 +24,9 @@
     "label": "턴별 단계",
     "expandAll": "모두 펼치기",
     "collapseAll": "모두 접기",
-    "noSteps": "이 턴에는 단계가 없습니다."
+    "noSteps": "이 턴에는 단계가 없습니다.",
+    "notLoaded": "불러오지 않음",
+    "notLoadedDesc": "이 턴의 단계는 불러온 부분보다 이전입니다."
   },
   "graph": {
     "label": "시간순 단계, 단계 유형마다 한 줄",

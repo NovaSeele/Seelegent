@@ -60,11 +60,11 @@ function onKeydown(event: KeyboardEvent) {
     :empty-title="t('process.empty')"
     :empty-desc="t('process.emptyDesc')"
   >
-    <div class="tree__bar">
+    <template #bar>
       <Button size="sm" variant="ghost" @click="setAll(!allOpen)">
         {{ allOpen ? t('process.tree.collapseAll') : t('process.tree.expandAll') }}
       </Button>
-    </div>
+    </template>
     <ol ref="root" class="tree" :aria-label="t('process.tree.label')" @keydown="onKeydown">
       <li v-for="turn in turns" :key="turn.n" class="tree__turn">
         <button
@@ -78,7 +78,10 @@ function onKeydown(event: KeyboardEvent) {
           <span class="tree__title">{{ t('process.turn', { n: turn.n }) }}</span>
           <span v-if="turn.by" class="tree__by">{{ t(`terminal.by.${turn.by}`) }}</span>
           <span class="tree__msg">{{ turn.message }}</span>
-          <span class="tree__count">{{ t('process.steps', stepCount(turn)) }}</span>
+          <span v-if="model.notLoaded(turn.n)" class="tree__count">
+            {{ t('process.tree.notLoaded') }}
+          </span>
+          <span v-else class="tree__count">{{ t('process.steps', stepCount(turn)) }}</span>
         </button>
         <div v-if="!collapsed.has(turn.n)" class="tree__body">
           <section v-for="attempt in turn.attempts" :key="attempt.n" class="tree__attempt">
@@ -100,9 +103,18 @@ function onKeydown(event: KeyboardEvent) {
               />
             </ul>
           </section>
-          <p v-if="!stepCount(turn)" class="tree__none">
-            {{ model.partial.value ? t('process.partial') : t('process.tree.noSteps') }}
-          </p>
+          <div v-if="model.notLoaded(turn.n)" class="tree__none">
+            <span>{{ t('process.tree.notLoadedDesc') }}</span>
+            <Button
+              size="sm"
+              variant="ghost"
+              :loading="model.state.loadingEarlier"
+              @click="model.loadEarlier"
+            >
+              {{ t('process.loadEarlier') }}
+            </Button>
+          </div>
+          <p v-else-if="!stepCount(turn)" class="tree__none">{{ t('process.tree.noSteps') }}</p>
         </div>
       </li>
     </ol>
@@ -110,12 +122,6 @@ function onKeydown(event: KeyboardEvent) {
 </template>
 
 <style scoped>
-.tree__bar {
-  display: flex;
-  justify-content: flex-end;
-  padding: var(--space-2) var(--space-4) 0;
-}
-
 .tree {
   display: flex;
   flex-direction: column;
@@ -203,6 +209,10 @@ function onKeydown(event: KeyboardEvent) {
 }
 
 .tree__none {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
   padding: var(--space-1) var(--space-2);
   color: var(--text-muted);
   font-size: var(--fs-xs);

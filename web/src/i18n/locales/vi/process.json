@@ -24,7 +24,9 @@
     "label": "Các bước theo lượt",
     "expandAll": "Mở hết",
     "collapseAll": "Thu hết",
-    "noSteps": "Lượt này không có bước nào."
+    "noSteps": "Lượt này không có bước nào.",
+    "notLoaded": "Chưa tải",
+    "notLoadedDesc": "Các bước của lượt này cũ hơn phần đã tải."
   },
   "graph": {
     "label": "Các bước theo thời gian, mỗi giai đoạn một làn",

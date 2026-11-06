@@ -24,7 +24,9 @@
     "label": "Steps by turn",
     "expandAll": "Expand all",
     "collapseAll": "Collapse all",
-    "noSteps": "No steps in this turn."
+    "noSteps": "No steps in this turn.",
+    "notLoaded": "Not loaded",
+    "notLoadedDesc": "This turn's steps are older than the loaded part."
   },
   "graph": {
     "label": "Steps over time, one lane per stage",

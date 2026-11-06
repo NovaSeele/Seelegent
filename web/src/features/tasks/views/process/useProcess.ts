@@ -25,13 +25,22 @@ export function useProcess(taskId: string, detail: () => TaskDetail | null) {
   const cache: StepCache = new WeakMap()
   const turns = computed(() => buildProcess(items.value, detail()?.turns, cache))
   const steps = computed(() => allSteps(turns.value))
+  const partial = computed(() => log.state.status === 'ready' && log.state.firstSeq > 1)
+  /** The oldest turn the loaded part of the log reaches (Infinity when it reaches none). */
+  const firstLoadedTurn = computed(() => {
+    let first = Infinity
+    for (const item of items.value) if (item.turn && item.turn < first) first = item.turn
+    return first
+  })
 
   return {
     state: log.state,
     turns,
     steps,
     /** Older events exist that the log does not hold yet. */
-    partial: computed(() => log.state.status === 'ready' && log.state.firstSeq > 1),
+    partial,
+    /** True for a turn whose events all lie before the loaded part of the log: its steps are unknown, not zero. */
+    notLoaded: (turn: number) => partial.value && turn < firstLoadedTurn.value,
     loadEarlier: () => tasks.loadEarlier(taskId),
     retry: () => tasks.retryEvents(taskId),
   }

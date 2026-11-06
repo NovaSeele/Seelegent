@@ -41,16 +41,19 @@ const { t } = useI18n()
       :description="emptyDesc"
     />
     <template v-else>
-      <div v-if="model.partial.value" class="pf__partial">
-        <span>{{ t('process.partial') }}</span>
-        <Button
-          size="sm"
-          variant="ghost"
-          :loading="model.state.loadingEarlier"
-          @click="model.loadEarlier"
-        >
-          {{ t('process.loadEarlier') }}
-        </Button>
+      <div v-if="model.partial.value || $slots.bar" class="pf__bar">
+        <template v-if="model.partial.value">
+          <span>{{ t('process.partial') }}</span>
+          <Button
+            size="sm"
+            variant="ghost"
+            :loading="model.state.loadingEarlier"
+            @click="model.loadEarlier"
+          >
+            {{ t('process.loadEarlier') }}
+          </Button>
+        </template>
+        <span class="pf__actions"><slot name="bar" /></span>
       </div>
       <slot />
     </template>
@@ -77,7 +80,8 @@ const { t } = useI18n()
   font-size: var(--fs-sm);
 }
 
-.pf__partial {
+/* One row: the partial-load note and its button on the left, the view's own actions (slot "bar") on the right. */
+.pf__bar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -86,5 +90,15 @@ const { t } = useI18n()
   border-bottom: var(--border-width) solid var(--border-subtle);
   color: var(--text-secondary);
   font-size: var(--fs-xs);
+}
+
+.pf__actions {
+  display: flex;
+  gap: var(--space-2);
+  margin-left: auto;
+}
+
+.pf__actions:empty {
+  display: none;
 }
 </style>

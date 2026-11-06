@@ -24,7 +24,9 @@
     "label": "按轮次的步骤",
     "expandAll": "全部展开",
     "collapseAll": "全部收起",
-    "noSteps": "这一轮没有步骤。"
+    "noSteps": "这一轮没有步骤。",
+    "notLoaded": "未加载",
+    "notLoadedDesc": "这一轮的步骤早于已加载的部分。"
   },
   "graph": {
     "label": "按时间排列的步骤，每个阶段一条泳道",

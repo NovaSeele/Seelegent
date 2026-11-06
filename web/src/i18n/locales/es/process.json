@@ -24,7 +24,9 @@
     "label": "Pasos por turno",
     "expandAll": "Expandir todo",
     "collapseAll": "Contraer todo",
-    "noSteps": "Este turno no tiene pasos."
+    "noSteps": "Este turno no tiene pasos.",
+    "notLoaded": "Sin cargar",
+    "notLoadedDesc": "Los pasos de este turno son anteriores a la parte cargada."
   },
   "graph": {
     "label": "Pasos en el tiempo, un carril por etapa",
