@@ -1,0 +1,313 @@
+package task
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/NovaSeele/Seelegent/internal/account"
+	"github.com/NovaSeele/Seelegent/internal/api"
+	"github.com/NovaSeele/Seelegent/internal/backend"
+	"github.com/NovaSeele/Seelegent/internal/brief"
+)
+
+// Takeover timings.
+const (
+	// takeoverStopWait bounds the wait for a running worker to stop before the console opens.
+	takeoverStopWait = 60 * time.Second
+	// consolePoll is how often a console's exit file is read after a daemon restart.
+	consolePoll = time.Second
+)
+
+// Takeover hands the task's conversation to the user: a running worker is stopped first and the engine waits for
+// it to exit (no worker and console in one conversation, old B4), then a console resumes the conversation with the
+// task's own backend and account. When the console ends, a hand-back turn on the same backend and account asks the
+// worker to summarize what the user did (old B5).
+func (s *Service) Takeover(ctx context.Context, id string) (api.TaskSummary, error) {
+	if s.o.Consoles == nil {
+		return api.TaskSummary{}, fmt.Errorf("%w: consoles are not available", ErrUnavailable)
+	}
+	t, err := s.repo.Get(ctx, id)
+	if err != nil {
+		return api.TaskSummary{}, err
+	}
+	b, err := s.backend(t.Backend)
+	if err != nil {
+		return api.TaskSummary{}, err
+	}
+	owner := t.AccountID
+	if live := s.live(id); t.ConversationID == "" || live.conversation != "" {
+		if live.conversation == "" {
+			return api.TaskSummary{}, badStatef("task %s has no worker conversation to take over yet", id)
+		}
+		owner = live.account // the running attempt's conversation; it is the task's once the attempt ended
+	}
+	prev := t.Status
+	_, err = s.mutate(ctx, id, func(t *Task) ([]NewEvent, error) {
+		switch {
+		case t.Manual:
+			return nil, badStatef("task %s is already taken over", id)
+		case t.Status == StatusWaitingDeps || t.Status == StatusBlockedDeps:
+			return nil, badStatef("task %s waits for its prerequisites", id)
+		case t.CancelRequested:
+			return nil, badStatef("task %s is being cancelled", id)
+		}
+		prev = t.Status
+		if t.Status != StatusRunning {
+			if err := t.SetStatus(StatusRunning); err != nil {
+				return nil, err
+			}
+		}
+		t.Manual = true
+		t.Console = &Console{AccountID: owner, Since: s.now()}
+		t.Waiting, t.WaitDetail, t.WaitingUntil = "", "", time.Time{}
+		turn := 0
+		if tu := t.LastTurn(); tu != nil {
+			turn = tu.N
+		}
+		return []NewEvent{{Type: api.EventTakeover, Turn: turn,
+			Data: api.TakeoverData{State: "start", AccountID: owner}}}, nil
+	})
+	if err != nil {
+		return api.TaskSummary{}, err
+	}
+	if err := s.stopRunFor(ctx, id); err != nil {
+		s.revertTakeover(id, prev, err.Error())
+		return api.TaskSummary{}, err
+	}
+	// The stopped attempt has recorded its conversation and account on the task.
+	dir := filepath.Join(s.o.TasksDir, id, fmt.Sprintf("console-%d", s.now().UnixMilli()))
+	var spec ConsoleSpec
+	if t, err = s.repo.Get(ctx, id); err == nil {
+		spec, err = s.consoleFor(ctx, t, b, dir)
+	}
+	if err == nil {
+		_, err = s.mutate(ctx, id, func(t *Task) ([]NewEvent, error) {
+			if !t.Manual || t.Console == nil {
+				return nil, badStatef("task %s was cancelled", id)
+			}
+			t.Console.AccountID = t.AccountID
+			t.Console.ExitFile = filepath.Join(dir, spec.Name+".exit")
+			var evs []NewEvent
+			if tu := t.LastTurn(); tu != nil && tu.Status == TurnRunning {
+				evs = append(evs, s.endTurn(t, tu, TurnCancelled, backend.Outcome{}))
+			}
+			return evs, nil
+		})
+	}
+	var wait ConsoleWait
+	if err == nil {
+		wait, err = s.o.Consoles.Open(ctx, spec)
+		if err != nil {
+			err = fmt.Errorf("%w: cannot open a console: %w", ErrUnavailable, err)
+		}
+	}
+	if err != nil {
+		s.revertTakeover(id, prev, err.Error())
+		return api.TaskSummary{}, err
+	}
+	cur, err := s.repo.Get(ctx, id)
+	if err != nil {
+		return api.TaskSummary{}, err
+	}
+	if cur.Console != nil {
+		s.watchConsole(id, cur.Console, wait)
+	}
+	return s.summary(cur), nil
+}
+
+// stopRunFor stops the task's run, if any, and waits until it has ended (its worker exited).
+func (s *Service) stopRunFor(ctx context.Context, id string) error {
+	s.mu.Lock()
+	r := s.runs[id]
+	s.mu.Unlock()
+	if r == nil {
+		return nil
+	}
+	r.requestStop()
+	t := s.clk.NewTimer(takeoverStopWait)
+	defer t.Stop()
+	select {
+	case <-r.done:
+		return nil
+	case <-t.C():
+		return badStatef("the worker of task %s did not stop in time", id)
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+// consoleFor builds the console that resumes the task's conversation on its account.
+func (s *Service) consoleFor(ctx context.Context, t *Task, b backend.Backend, dir string) (ConsoleSpec, error) {
+	if t.ConversationID == "" || t.AccountID == "" {
+		return ConsoleSpec{}, badStatef("task %s has no worker conversation to take over", t.ID)
+	}
+	acc, err := s.o.Accounts.Get(ctx, t.AccountID)
+	if err != nil {
+		return ConsoleSpec{}, badStatef("the account %s of the conversation is not available: %v", t.AccountID, err)
+	}
+	if b.Bin() == "" {
+		return ConsoleSpec{}, fmt.Errorf("%w: %s is not installed", ErrUnavailable, b.Name())
+	}
+	env, err := s.o.Accounts.Env(ctx, acc, b, account.EnvOptions{Base: s.o.BaseEnv(), Model: t.Model,
+		AllowGit: t.AllowGit})
+	if err != nil {
+		return ConsoleSpec{}, fmt.Errorf("%w: console environment: %w", ErrUnavailable, err)
+	}
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return ConsoleSpec{}, err
+	}
+	argv := append([]string{b.Bin()}, strings.Fields(b.Capabilities().ResumeFlag)...)
+	argv = append(argv, t.ConversationID)
+	return ConsoleSpec{
+		Title: "Seelegent " + t.ID,
+		Banner: []string{"Seelegent: you are steering task " + t.ID + " (" + t.Title + ").",
+			"When you exit, the worker summarizes what you did."},
+		Argv: argv, Dir: t.Cwd, Env: env.Vars, ScriptDir: dir, Name: "console",
+	}, nil
+}
+
+// revertTakeover undoes a takeover that could not start.
+func (s *Service) revertTakeover(id string, prev Status, why string) {
+	_, err := s.mutate(s.background(), id, func(t *Task) ([]NewEvent, error) {
+		if !t.Manual {
+			return nil, errNoChange
+		}
+		acc := ""
+		if t.Console != nil {
+			acc = t.Console.AccountID
+		}
+		t.Manual, t.Console = false, nil
+		back := prev
+		if Active(prev) {
+			back = StatusCancelled // its turn was stopped for the takeover
+		}
+		var evs []NewEvent
+		if tu := t.LastTurn(); tu != nil && tu.Status == TurnRunning {
+			evs = append(evs, s.endTurn(t, tu, TurnCancelled, backend.Outcome{}))
+		}
+		t.Status = back
+		turn := 0
+		if tu := t.LastTurn(); tu != nil {
+			turn = tu.N
+		}
+		return append(evs, NewEvent{Type: api.EventTakeover, Turn: turn,
+			Data: api.TakeoverData{State: "end", AccountID: acc}},
+			NewEvent{Type: api.EventError, Turn: turn, Data: api.ErrorData{Message: "takeover: " + why}}), nil
+	})
+	if err != nil {
+		s.log.Error("task: revert takeover", "task", id, "err", err)
+	}
+}
+
+// watchConsole counts the console on its account until it ends, then hands the task back. wait is nil after a
+// daemon restart; the exit file is polled then.
+func (s *Service) watchConsole(id string, c *Console, wait ConsoleWait) {
+	s.mu.Lock()
+	if s.watches[id] {
+		s.mu.Unlock()
+		return
+	}
+	s.watches[id] = true
+	s.mu.Unlock()
+	lease := s.o.Pool.Reattach(c.AccountID, id)
+	exitFile := c.ExitFile
+	ok := s.spawn("console", id, func() {
+		defer func() {
+			s.mu.Lock()
+			delete(s.watches, id)
+			s.mu.Unlock()
+		}()
+		code := -1
+		if wait != nil {
+			c, err := wait(s.root)
+			if s.root.Err() != nil {
+				return // the next daemon watches the exit file
+			}
+			if err == nil {
+				code = c
+			}
+		} else {
+			for {
+				if c, ok := readExitFile(exitFile); ok {
+					code = c
+					break
+				}
+				s.sleep(s.root, consolePoll, nil)
+				if s.root.Err() != nil {
+					return
+				}
+				if t, err := s.repo.Get(s.root, id); err == nil && !t.Manual {
+					break // cancelled meanwhile
+				}
+			}
+		}
+		lease.Release()
+		s.handback(id, code)
+	})
+	if !ok {
+		s.mu.Lock()
+		delete(s.watches, id)
+		s.mu.Unlock()
+	}
+}
+
+// handback ends a takeover and starts the hand-back turn on the task's own backend and account.
+func (s *Service) handback(id string, code int) {
+	start := false
+	_, err := s.mutate(s.background(), id, func(t *Task) ([]NewEvent, error) {
+		start = false
+		if !t.Manual || t.Console == nil {
+			return nil, errNoChange // cancelled while the console ran
+		}
+		c := t.Console
+		turn := len(t.Turns) + 1
+		data := api.TakeoverData{State: "end", AccountID: c.AccountID, DurationMs: s.now().Sub(c.Since).Milliseconds()}
+		if code >= 0 {
+			data.ExitCode = &code
+		}
+		t.Manual, t.Console = false, nil
+		t.AccountID = c.AccountID
+		if t.Status != StatusRunning {
+			if err := t.SetStatus(StatusRunning); err != nil {
+				return nil, err
+			}
+		}
+		t.Turns = append(t.Turns, &Turn{N: turn, By: ByUser, Message: brief.Handback, Status: TurnRunning,
+			Model: t.Model, Tier: t.Tier, Effort: t.Effort, StartedAt: s.now(), Handback: true})
+		t.Error, t.Review = "", nil
+		start = true
+		return []NewEvent{{Type: api.EventTakeover, Turn: turn - 1, Data: data},
+			{Type: api.EventLeadMessage, Turn: turn, Data: api.LeadMessageData{Message: brief.Handback, By: ByUser,
+				Model: t.Model, Effort: t.Effort, Tier: t.Tier}}}, nil
+	})
+	if err != nil {
+		if !errors.Is(err, context.Canceled) {
+			s.log.Error("task: hand back", "task", id, "err", err)
+		}
+		return
+	}
+	if start {
+		s.startRun(id)
+	}
+}
+
+func readExitFile(path string) (int, bool) {
+	if path == "" {
+		return 0, false
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return 0, false
+	}
+	code, err := strconv.Atoi(strings.TrimSpace(string(data)))
+	if err != nil {
+		return 0, false
+	}
+	return code, true
+}

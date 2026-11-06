@@ -64,10 +64,12 @@ func TestRepoCreateGetSave(t *testing.T) {
 	}
 	// The prompt is written once: a later save with another prompt does not change it.
 	tu.Attempts[0].Prompt = "changed"
-	tu.Attempts[0].StreamOffset = 42
 	tu.Attempts[0].Usage = &event.Usage{InputTokens: 5, OutputTokens: 6}
-	if _, err := r.Append(ctx, tk, tu, tu.Attempts[0], []NewEvent{{Type: api.EventWorker, Turn: 1, Attempt: 1,
-		Data: event.Event{Kind: event.KindMessage, Text: "hi"}}}); err != nil {
+	if _, err := r.Save(ctx, tk, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.Append(ctx, "t1", []NewEvent{{Type: api.EventWorker, Turn: 1, Attempt: 1,
+		Data: event.Event{Kind: event.KindMessage, Text: "hi"}}}, &Offsets{Turn: 1, Attempt: 1, Stream: 42, Stderr: 7}); err != nil {
 		t.Fatal(err)
 	}
 	got, err := r.Get(ctx, "t1")
@@ -79,7 +81,7 @@ func TestRepoCreateGetSave(t *testing.T) {
 		t.Fatalf("got %+v", got)
 	}
 	a := got.Turns[0].Attempts[0]
-	if a.StreamOffset != 42 || a.Prompt != "" || a.LaunchDir != `C:\l` || got.TokensUsed() != 11 {
+	if a.StreamOffset != 42 || a.StderrOffset != 7 || a.Prompt != "" || a.LaunchDir != `C:\l` || got.TokensUsed() != 11 {
 		t.Fatalf("attempt %+v tokens %d", a, got.TokensUsed())
 	}
 	if p, err := r.Prompt(ctx, "t1", 1, 0); err != nil || p != "the brief" {
@@ -97,7 +99,10 @@ func TestRepoCreateGetSave(t *testing.T) {
 	if _, err := r.Save(ctx, &Task{ID: "nope"}, nil, nil); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("Save(nope) = %v", err)
 	}
-	if _, err := r.Append(ctx, &Task{ID: "nope"}, nil, nil, []NewEvent{{Type: api.EventCancel}}); !errors.Is(err, ErrNotFound) {
+	if _, err := r.Append(ctx, "nope", []NewEvent{{Type: api.EventCancel}}, nil); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("Append(nope) = %v", err)
+	}
+	if _, err := r.Append(ctx, "t1", nil, &Offsets{Turn: 9, Attempt: 1}); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("Append(nope) = %v", err)
 	}
 }
@@ -110,8 +115,8 @@ func TestRepoEventsAndTail(t *testing.T) {
 		t.Fatal(err)
 	}
 	for i := range 10 {
-		if _, err := r.Append(ctx, tk, nil, nil, []NewEvent{{Type: api.EventError,
-			Data: api.ErrorData{Message: fmt.Sprint(i)}, TS: testEpoch.Add(time.Duration(i) * time.Second)}}); err != nil {
+		if _, err := r.Append(ctx, tk.ID, []NewEvent{{Type: api.EventError,
+			Data: api.ErrorData{Message: fmt.Sprint(i)}, TS: testEpoch.Add(time.Duration(i) * time.Second)}}, nil); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -146,9 +151,8 @@ func TestRepoSeqIsMonotonic(t *testing.T) {
 	var wg sync.WaitGroup
 	for range 8 {
 		wg.Go(func() {
-			tk := &Task{ID: "t1"}
 			for range 10 {
-				if _, err := r.Append(ctx, tk, nil, nil, []NewEvent{{Type: api.EventCancel}, {Type: api.EventCancel}}); err != nil {
+				if _, err := r.Append(ctx, "t1", []NewEvent{{Type: api.EventCancel}, {Type: api.EventCancel}}, nil); err != nil {
 					t.Error(err)
 					return
 				}

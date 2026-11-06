@@ -117,12 +117,14 @@ type Task struct {
 	// SpecOutside is true when the spec directory lies outside the task's folder.
 	SpecOutside bool `json:"specOutside,omitempty"`
 	AllowGit    bool `json:"allowGit,omitempty"`
+	// Prefer lists the accounts the lead asked for, tried first.
+	Prefer []string `json:"prefer,omitempty"`
 
 	After      []string `json:"after,omitempty"`
 	AfterMode  string   `json:"afterMode,omitempty"`
 	DepsReason string   `json:"depsReason,omitempty"`
-	// Pending is the first turn of a task that waits for its prerequisites.
-	Pending *PendingTurn `json:"pending,omitempty"`
+	// DepsContext is the context from the prerequisites, fixed when the task starts (brief.DepsContext).
+	DepsContext string `json:"depsContext,omitempty"`
 
 	// AccountID owns the conversation ConversationID: a later turn on the same account resumes it.
 	AccountID      string `json:"accountId,omitempty"`
@@ -134,8 +136,11 @@ type Task struct {
 	// CancelRequested survives a daemon restart, so recovery finishes the cancel.
 	CancelRequested bool `json:"cancelRequested,omitempty"`
 
-	Error                string         `json:"error,omitempty"`
-	WaitingUntil         time.Time      `json:"waitingUntil,omitzero"`
+	Error        string    `json:"error,omitempty"`
+	WaitingUntil time.Time `json:"waitingUntil,omitzero"`
+	// Waiting is why a waiting_quota task waits (pool reason no_account, resting or busy); WaitDetail says more.
+	Waiting              string         `json:"waiting,omitempty"`
+	WaitDetail           string         `json:"waitDetail,omitempty"`
 	NeedsSince           time.Time      `json:"needsSince,omitzero"`
 	Attention            *api.Attention `json:"attention,omitempty"`
 	AttentionDismissedAt time.Time      `json:"attentionDismissedAt,omitzero"`
@@ -154,15 +159,6 @@ type Task struct {
 	// LastEventSeq and LastEventAt are kept by the event log.
 	LastEventSeq int64     `json:"-"`
 	LastEventAt  time.Time `json:"-"`
-}
-
-// PendingTurn is what the first turn of a waiting dependent will run with.
-type PendingTurn struct {
-	Model          string   `json:"model"`
-	RequestedModel string   `json:"requestedModel,omitempty"`
-	Tier           string   `json:"tier,omitempty"`
-	Effort         string   `json:"effort,omitempty"`
-	TaskIDs        []string `json:"taskIds,omitempty"`
 }
 
 // Console is the record of a takeover: the user runs the task's conversation in a terminal window.

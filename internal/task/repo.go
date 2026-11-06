@@ -83,7 +83,7 @@ func (r *Repo) Create(ctx context.Context, t *Task, evs []NewEvent) ([]api.TaskE
 		if err := saveTurns(ctx, tx, t, t.Turns); err != nil {
 			return err
 		}
-		out, err = r.append(ctx, tx, t, evs)
+		out, err = r.append(ctx, tx, t.ID, evs)
 		return err
 	})
 	if err != nil {
@@ -118,7 +118,7 @@ func (r *Repo) Save(ctx context.Context, t *Task, turns []*Turn, evs []NewEvent)
 		if err := saveTurns(ctx, tx, t, turns); err != nil {
 			return err
 		}
-		out, err = r.append(ctx, tx, t, evs)
+		out, err = r.append(ctx, tx, t.ID, evs)
 		return err
 	})
 	if err != nil {
@@ -128,27 +128,35 @@ func (r *Repo) Save(ctx context.Context, t *Task, turns []*Turn, evs []NewEvent)
 	return out, nil
 }
 
-// Append appends evs and, when a is not nil, writes attempt a of turn tu (its committed offsets), in one
-// transaction. The task record itself is not written.
-func (r *Repo) Append(ctx context.Context, t *Task, tu *Turn, a *Attempt, evs []NewEvent) ([]api.TaskEvent, error) {
+// Offsets are the committed stream offsets of one attempt.
+type Offsets struct {
+	Turn, Attempt  int
+	Stream, Stderr int64
+}
+
+// Append appends evs to the log of task id and, when off is not nil, commits the attempt's stream offsets, in one
+// transaction: after a restart every event of the bytes before the offsets is in the log and none after them. The
+// task record itself is not written.
+func (r *Repo) Append(ctx context.Context, id string, evs []NewEvent, off *Offsets) ([]api.TaskEvent, error) {
 	var out []api.TaskEvent
 	err := r.db.Write(ctx, func(tx *sql.Tx) error {
-		if a != nil {
-			if err := saveAttempt(ctx, tx, t.ID, tu.N, a); err != nil {
-				return err
+		if off != nil {
+			res, err := tx.ExecContext(ctx, `UPDATE attempts SET data = json_set(data, '$.streamOffset', ?,
+				'$.stderrOffset', ?) WHERE task_id = ? AND turn = ? AND n = ?`, off.Stream, off.Stderr, id, off.Turn,
+				off.Attempt)
+			if err != nil {
+				return fmt.Errorf("commit offsets: %w", err)
+			}
+			if n, _ := res.RowsAffected(); n == 0 {
+				return fmt.Errorf("%w: attempt %d of turn %d of task %s", ErrNotFound, off.Attempt, off.Turn, id)
 			}
 		}
 		var err error
-		out, err = r.append(ctx, tx, t, evs)
+		out, err = r.append(ctx, tx, id, evs)
 		return err
 	})
-	if err != nil {
-		return nil, err
-	}
-	r.applySeq(t, out)
-	return out, nil
+	return out, err
 }
-
 func (r *Repo) applySeq(t *Task, out []api.TaskEvent) {
 	if len(out) == 0 {
 		return
@@ -160,14 +168,14 @@ func (r *Repo) applySeq(t *Task, out []api.TaskEvent) {
 	}
 }
 
-func (r *Repo) append(ctx context.Context, tx *sql.Tx, t *Task, evs []NewEvent) ([]api.TaskEvent, error) {
+func (r *Repo) append(ctx context.Context, tx *sql.Tx, id string, evs []NewEvent) ([]api.TaskEvent, error) {
 	if len(evs) == 0 {
 		return nil, nil
 	}
 	var seq int64
-	if err := tx.QueryRowContext(ctx, `SELECT last_event_seq FROM tasks WHERE id = ?`, t.ID).Scan(&seq); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT last_event_seq FROM tasks WHERE id = ?`, id).Scan(&seq); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, fmt.Errorf("%w: task %s", ErrNotFound, t.ID)
+			return nil, fmt.Errorf("%w: task %s", ErrNotFound, id)
 		}
 		return nil, err
 	}
@@ -189,16 +197,16 @@ func (r *Repo) append(ctx context.Context, tx *sql.Tx, t *Task, evs []NewEvent) 
 		}
 		seq++
 		if _, err := tx.ExecContext(ctx, `INSERT INTO task_events (task_id, seq, ts, type, turn, attempt, data)
-			VALUES (?, ?, ?, ?, ?, ?, ?)`, t.ID, seq, formatTime(ts), string(e.Type), e.Turn, e.Attempt,
+			VALUES (?, ?, ?, ?, ?, ?, ?)`, id, seq, formatTime(ts), string(e.Type), e.Turn, e.Attempt,
 			string(raw)); err != nil {
 			return nil, fmt.Errorf("append event: %w", err)
 		}
 		last = ts
-		out = append(out, api.TaskEvent{Seq: seq, TS: api.FormatTime(ts), TaskID: t.ID, Turn: e.Turn,
+		out = append(out, api.TaskEvent{Seq: seq, TS: api.FormatTime(ts), TaskID: id, Turn: e.Turn,
 			Attempt: e.Attempt, Type: e.Type, Data: json.RawMessage(raw)})
 	}
 	if _, err := tx.ExecContext(ctx, `UPDATE tasks SET last_event_seq = ?, last_event_at = ? WHERE id = ?`,
-		seq, formatTime(last), t.ID); err != nil {
+		seq, formatTime(last), id); err != nil {
 		return nil, err
 	}
 	return out, nil

@@ -260,6 +260,10 @@ func (p *Pool) notifyLocked() {
 	p.signal = make(chan struct{})
 }
 
+// Changed returns a channel that is closed at the next Notify or release: a task waiting for an account to be added
+// or signed in waits on it.
+func (p *Pool) Changed() <-chan struct{} { return p.changed() }
+
 // changed returns a channel that is closed at the next Notify.
 func (p *Pool) changed() <-chan struct{} {
 	p.mu.Lock()

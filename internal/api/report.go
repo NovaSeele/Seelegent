@@ -24,7 +24,7 @@ type TaskReport struct {
 	CommandsTotal   int              `json:"commands_total,omitempty"`
 	Attempts        []ReportAttempt  `json:"attempts,omitempty"`
 	Attention       *ReportAttention `json:"attention,omitempty"`
-	Question        string           `json:"question,omitempty"`
+	Question        *ReportQuestion  `json:"question,omitempty"`
 	BlockedCommands []string         `json:"blocked_commands,omitempty"`
 	DeniedActions   []string         `json:"denied_actions,omitempty"`
 	DepsReason      string           `json:"deps_reason,omitempty"`
@@ -32,7 +32,8 @@ type TaskReport struct {
 	Error           string           `json:"error,omitempty"`
 	WaitingUntil    string           `json:"waiting_until,omitempty"`
 	AnsweredBy      string           `json:"answered_by,omitempty"`
-	Handback        string           `json:"handback,omitempty"`
+	// Handback is true when the last turn summarized a takeover.
+	Handback bool `json:"handback,omitempty"`
 	// Dashboard is the deep link to the task in the dashboard.
 	Dashboard string `json:"dashboard"`
 }
@@ -56,6 +57,12 @@ type ReportAttempt struct {
 	Model   string `json:"model,omitempty"`
 	Result  string `json:"result"`
 	Error   string `json:"error,omitempty"`
+}
+
+// ReportQuestion is the question of a worker's "## Blocked" section: its text and the options listed under it.
+type ReportQuestion struct {
+	Text    string   `json:"text"`
+	Options []string `json:"options"`
 }
 
 // ReportAttention says why a task needs the lead.
