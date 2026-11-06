@@ -64,8 +64,14 @@ const layout = computed(() => {
   const one = at(1)
   const slope = at(2).width - one.width
   if (available.value <= 0 || slope <= 0) return at(GRAPH_DEFAULTS.pxPerSec)
-  const fit = Math.min(400, Math.max(0.02, (available.value - (one.width - slope)) / slope))
-  return at(fit * (zoom.value === 'fit' ? 1 : Number(zoom.value)))
+  let fit = Math.min(400, Math.max(0.02, (available.value - (one.width - slope)) / slope))
+  // Minimum bar widths stop mattering as the scale grows, so the estimate can overshoot: shrink until it fits.
+  let fitted = at(fit)
+  for (let i = 0; i < 6 && fitted.width > available.value && fit > 0.02; i++) {
+    fit = Math.max(0.02, fit * (available.value / fitted.width) * 0.98)
+    fitted = at(fit)
+  }
+  return zoom.value === 'fit' ? fitted : at(fit * Number(zoom.value))
 })
 const height = TOP + STAGES.length * LANE
 
