@@ -50,6 +50,13 @@ and the VCS data that Go embeds.
 golangci-lint must be built with the module's toolchain (go1.27.3); a binary built with an older Go refuses to
 lint this module. `make lint` and CI take care of that.
 
+Process-tree code (`internal/platform`, `internal/launch`) behaves differently per OS, and some tests run on one
+OS only (the Linux child subreaper, `/proc` socket lookup; the Windows named job). On Windows, check the other
+systems with `GOOS=linux go vet ./...` and `GOOS=darwin go vet ./...` (golangci-lint honours `GOOS` too when run as
+an installed binary rather than through `go run`), and run the Linux tests in WSL from a cross-compiled test
+binary: `GOOS=linux go test -c -o <tmp>/platform.test ./internal/platform`, then run it inside WSL from a Linux
+directory such as `/tmp`.
+
 ## Dev ports and the dashboard
 
 - The installed Seelegent daemon uses port 47821 and `~/.seelegent`. Development runs never touch them: run the
