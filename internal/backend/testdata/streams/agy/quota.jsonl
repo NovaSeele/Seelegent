@@ -1,0 +1,5 @@
+{"event":"init","conversation_id":"5b1e0a1c-aaaa-4bbb-8ccc-0123456789ab","init":{"model":"gemini-3.8-flash-high"}}
+{"event":"step_update","step_update":{"step_index":1,"step_type":"agent_response","state":"RUNNING","text_delta":"Looking at quota.go and the assigning logic. "}}
+#!stderr 2026-11-06T09:12:01Z WARN test log mentions quota and design in assigning (must not decide the class)
+{"event":"result","result":{"status":"ERROR","error":"RESOURCE_EXHAUSTED: You have exhausted your capacity on this model. Your quota will reset after 3h12m.","conversation_id":"5b1e0a1c-aaaa-4bbb-8ccc-0123456789ab"}}
+#!exit 1

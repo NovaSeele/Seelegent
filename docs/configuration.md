@@ -13,6 +13,8 @@ with owner-only permissions when a command starts, never earlier.
 | `config.json`      | the settings described below                                                           |
 | `seelegent.db`     | the SQLite database (WAL mode, so `seelegent.db-wal` and `seelegent.db-shm` sit beside it) |
 | `profiles/<id>/`   | one isolated CLI profile per worker account (same place as the old version)            |
+| `profiles/<id>/home/` | the home directory the worker CLI sees, with links into your real home (`linkIntoProfiles`) |
+| `profiles/<id>/seelegent-key` | API key of an API-key account: a DPAPI blob on Windows, a 0600 file elsewhere; never inside `home/` |
 | `logs/`            | `daemon.log` and its rotated copies `daemon.log.1` … (JSON lines, secrets masked)      |
 | `run/daemon.lock`  | single-instance lock of the daemon                                                     |
 | `run/daemon.port`  | port of the running daemon                                                             |
@@ -24,6 +26,7 @@ with owner-only permissions when a command starts, never earlier.
 | ----------------- | -------------------------------------------------------------------------------------------- |
 | `SEELEGENT_HOME`  | data directory instead of `~/.seelegent`                                                     |
 | `SEELEGENT_PORT`  | daemon port instead of the `port` setting; never written to `config.json`. Development uses 47831 |
+| `SEELEGENT_AGY`, `SEELEGENT_CLAUDE`, `SEELEGENT_CODEX` | path of that worker CLI instead of searching its install locations and `PATH` |
 
 ## How the file is read and written
 

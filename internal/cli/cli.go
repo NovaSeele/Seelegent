@@ -53,6 +53,6 @@ func NewRootCommand(info buildinfo.Info) *cobra.Command {
 		SilenceErrors: true,
 	}
 	root.SetVersionTemplate("{{.Version}}\n")
-	root.AddCommand(newVersionCommand(info))
+	root.AddCommand(newVersionCommand(info), newLaunchCommand())
 	return root
 }

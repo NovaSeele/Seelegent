@@ -1,0 +1,2 @@
+#!stderr Error: authentication required. Please sign in again with `agy`.
+#!exit 1

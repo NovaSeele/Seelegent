@@ -1,0 +1,4 @@
+{"type":"system","subtype":"init","cwd":"/work/demo","session_id":"11111111-2222-4333-8444-555555555555","tools":[],"mcp_servers":[],"model":"claude-sonnet-5","apiKeySource":"ANTHROPIC_AUTH_TOKEN"}
+{"type":"assistant","message":{"id":"msg_x","type":"message","role":"assistant","model":"<synthetic>","content":[{"type":"text","text":"Invalid API key · Please run /login"}]},"session_id":"11111111-2222-4333-8444-555555555555"}
+{"type":"result","subtype":"success","is_error":true,"duration_ms":301,"result":"Invalid API key · Please run /login","session_id":"11111111-2222-4333-8444-555555555555","total_cost_usd":0,"usage":{"input_tokens":0,"output_tokens":0}}
+#!exit 1

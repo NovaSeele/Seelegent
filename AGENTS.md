@@ -9,7 +9,10 @@ Seelegent is a Go daemon + CLI + MCP server in one binary, with a Vue 3 + TypeSc
 - `internal/<pkg>/` — one job per package: `buildinfo`, `cli` (thin cobra commands), `fsutil` (atomic writes, file
   locks, path keys), `config` (data paths, settings, config.json; see [docs/configuration.md](docs/configuration.md)),
   `store` (SQLite, migrations in `store/migrations/NNNN_name.sql`), `logx` (slog setup, log rotation, secret
-  redaction), and later `app` (composition root), `task`, `pool`, `backend`, `httpapi`, `api` (DTOs, source for
+  redaction), `platform` (hidden consoles, process trees, kill-tree, sign-in terminals; per-OS files), `launch`
+  (detached worker launcher behind the hidden `seelegent __launch`), `account` (accounts, providers, profiles, API
+  keys, run environment), `event` (normalized turn events), `backend` (agy/claude/codex commands, env rules and
+  stream parsers), and later `app` (composition root), `task`, `pool`, `httpapi`, `api` (DTOs, source for
   tygo), `mcpserver`, `setup`, `migrate`, ...
 - `web/` — Vue app with its own `package.json`; `web/embed.go` embeds `web/dist`.
   `web/src/`: `main.ts`, `App.vue`, `router/`, `api/`, `stores/` (Pinia), `i18n/` (`locales/<lang>/<ns>.json`),

@@ -67,19 +67,23 @@ func TestOpenSettings(t *testing.T) {
 func TestMigrationsAppliedOnce(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "seelegent.db")
 	ctx := t.Context()
+	all, err := embeddedMigrations()
+	if err != nil {
+		t.Fatal(err)
+	}
 	for i := range 2 {
 		s, err := Open(ctx, path)
 		if err != nil {
 			t.Fatalf("Open #%d: %v", i+1, err)
 		}
 		v, err := s.SchemaVersion(ctx)
-		if err != nil || v != 1 {
-			t.Fatalf("SchemaVersion #%d = %d, %v; want 1", i+1, v, err)
+		if err != nil || v != len(all) {
+			t.Fatalf("SchemaVersion #%d = %d, %v; want %d", i+1, v, err, len(all))
 		}
 		var rows int
 		if err := s.Read(ctx, func(tx *sql.Tx) error {
 			return tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM schema_version").Scan(&rows)
-		}); err != nil || rows != 1 {
+		}); err != nil || rows != len(all) {
 			t.Fatalf("schema_version rows = %d, %v", rows, err)
 		}
 		if err := s.Close(); err != nil {
