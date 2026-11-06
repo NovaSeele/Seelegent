@@ -80,7 +80,7 @@ no look-ahead: write `"^gemini-3\\.8-"` (the JSON spelling of `^gemini-3\.8-`) r
 | Setting | Type | Default | Meaning |
 | --- | --- | --- | --- |
 | `maxConcurrentPerAccount` | integer 1–64 | `2` | Turns that may run at the same time on one account. |
-| `quotaRefreshMinutes` | integer ≥ 1 | `10` | How often quota is read from every account (each cycle ±10 % so accounts are not all read at the same instant). A change applies from the next cycle. |
+| `quotaRefreshMinutes` | integer ≥ 1 | `10` | How often quota is read from every account (each cycle ±10 % so accounts are not all read at the same instant). A change applies from the next cycle. Accounts marked signed out are read every 6 hours instead, or at once after a sign-in or a refused run. |
 | `minRemaining` | number 0 ≤ x < 1 | `0.03` | An account is skipped for a quota group once its remaining fraction is at or below this; it rests until the used-up windows reset. |
 | `passiveCooldownMinutes` | integer ≥ 1 | `60` | Rest after a quota error for API-key accounts whose provider cannot report the reset time. |
 | `usageHistory` | boolean | `true` | Record hourly usage snapshots (kept 30 days). The usage summary per task and account is recorded either way. |
