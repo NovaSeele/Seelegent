@@ -181,6 +181,20 @@ func TestRunCommand(t *testing.T) {
 	}
 }
 
+// A definite sign-in phrase means signed out even when the output also mentions the network (re-review finding 1).
+func TestAgySignInPhraseBeatsNetworkText(t *testing.T) {
+	cases := []Output{
+		{Stdout: []byte(`{"error":"Authentication required"}`), Stderr: []byte("using proxy from HTTPS_PROXY"), Code: 1},
+		{Stderr: []byte("not logged in. Please log in again.\nnetwork: online"), Code: 1},
+		{Stderr: []byte("[warn] request timed out once, retrying\nError: authentication required"), Code: 1},
+	}
+	for _, out := range cases {
+		if _, err := parseAgyUsage(out); !errors.Is(err, ErrNeedsLogin) {
+			t.Errorf("stdout %q stderr %q: err = %v, want signed out", out.Stdout, out.Stderr, err)
+		}
+	}
+}
+
 func TestAgyNetworkErrorIsNotSignedOut(t *testing.T) {
 	for _, text := range []string{
 		"authentication failed: connection reset",
@@ -224,5 +238,23 @@ func TestAgyEmailCache(t *testing.T) {
 	setTime(older, base.Add(2*time.Minute))
 	if got := c.agyEmail(home); got != "xyz@example.com" {
 		t.Fatalf("changed file not read: %q", got)
+	}
+	// Another home's entries are kept; a deleted log's entry is dropped at the next lookup of its home.
+	other := t.TempDir()
+	writeFile(t, filepath.Join(other, ".gemini", "antigravity-cli", "cli.log"), "applyAuthResult: email=b@example.com\n")
+	if got := c.agyEmail(other); got != "b@example.com" {
+		t.Fatalf("other home email = %q", got)
+	}
+	if err := os.Remove(older); err != nil {
+		t.Fatal(err)
+	}
+	if got := c.agyEmail(home); got != "" {
+		t.Fatalf("email after the log was deleted = %q", got)
+	}
+	c.mu.Lock()
+	n := len(c.files)
+	c.mu.Unlock()
+	if n != 2 { // the other home's cli.log and this home's 2.log
+		t.Fatalf("%d cache entries, want 2", n)
 	}
 }

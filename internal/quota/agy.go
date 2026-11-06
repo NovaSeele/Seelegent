@@ -30,13 +30,17 @@ const (
 // agyEmail finds the signed-in email in agy's logs ("applyAuthResult: email=<email>").
 var agyEmail = regexp.MustCompile(`applyAuthResult: email=([^,\s]+)`)
 
-// agyAuthText recognizes a signed-out agy in its output: only wording that asks for a sign-in. A bare
-// "authentication failed" counts only when agyNetworkText does not match, because agy also prints it when the
-// network or a proxy breaks the token exchange ("authentication failed: connection reset").
+// agyAuthText recognizes wording that asks for a sign-in; it always means a signed-out agy, whatever else the
+// output says.
 var agyAuthText = regexp.MustCompile(`(?i)authentication required|not (logged|signed) in|(log|sign) ?in required|` +
-	`please (log|sign) ?in|(log|sign) back in|(log|sign) ?in again|authentication expired|authentication failed`)
+	`please (log|sign) ?in|(log|sign) back in|(log|sign) ?in again|authentication expired`)
 
-// agyNetworkText recognizes network, proxy and TLS failures; such output never means "signed out".
+// agyAuthFailedText is the bare "authentication failed". agy also prints it when the network or a proxy breaks the
+// token exchange ("authentication failed: connection reset"), so it means "signed out" only when agyNetworkText
+// does not match.
+var agyAuthFailedText = regexp.MustCompile(`(?i)authentication failed`)
+
+// agyNetworkText recognizes network, proxy and TLS failures; they veto only agyAuthFailedText.
 var agyNetworkText = regexp.MustCompile(`(?i)connection (reset|refused|closed|aborted|timed out)|timed? ?out|` +
 	`econn(reset|refused|aborted)|etimedout|enotfound|eai_again|socket hang up|network|proxy|\bdns\b|\btls\b|` +
 	`certificate|x509|unreachable|no such host|temporar(y|ily)|\b50[234]\b`)
@@ -118,7 +122,7 @@ func parseAgyUsage(out Output) (backend.Quota, error) {
 	if line == nil || ans.Status != "SUCCESS" {
 		msg := jsonText(ans.Error)
 		text := string(out.Stdout) + "\n" + string(out.Stderr) + "\n" + msg
-		if agyAuthText.MatchString(text) && !agyNetworkText.MatchString(text) {
+		if agySignedOut(text) {
 			return backend.Quota{}, fmt.Errorf("%w: agy is not signed in", ErrNeedsLogin)
 		}
 		if msg == "" {
@@ -173,6 +177,13 @@ func parseAgyUsage(out Output) (backend.Quota, error) {
 	return q, nil
 }
 
+// agySignedOut reports whether agy's output says the account must sign in: a definite sign-in phrase always does;
+// a bare "authentication failed" does unless the output also names a network, proxy or TLS failure.
+func agySignedOut(text string) bool {
+	return agyAuthText.MatchString(text) ||
+		(agyAuthFailedText.MatchString(text) && !agyNetworkText.MatchString(text))
+}
+
 // hasBuckets reports whether any raw group lists buckets (so none being readable means the format changed).
 func hasBuckets(groups []json.RawMessage) bool {
 	for _, raw := range groups {
@@ -185,19 +196,29 @@ func hasBuckets(groups []json.RawMessage) bool {
 }
 
 // emailCache remembers the email found in each agy log by (path, size, modification time), so a refresh does
-// not read megabytes of unchanged logs again. It is safe for concurrent use.
+// not read megabytes of unchanged logs again. Entries of logs that are gone (deleted or rotated away) are dropped
+// at the next lookup of their home. It is safe for concurrent use.
 type emailCache struct {
 	mu    sync.Mutex
-	files map[string]emailEntry
+	files map[string]emailEntry // by fsutil key of the log path
 }
 
 type emailEntry struct {
+	home  string // fsutil key of the profile home the log belongs to
 	size  int64
 	mtime time.Time
 	email string
 }
 
 func newEmailCache() *emailCache { return &emailCache{files: map[string]emailEntry{}} }
+
+// pathKey returns the cache key of a path.
+func pathKey(p string) string {
+	if k, err := fsutil.Key(p); err == nil {
+		return k
+	}
+	return p
+}
 
 // agyEmail returns the email of the newest sign-in in agy's logs under home ("" when none). Logs are searched
 // newest first and the search stops at the first log that names an email, so usually only one file is read, and
@@ -213,18 +234,29 @@ func (c *emailCache) agyEmail(home string) string {
 		}
 	}
 	type logFile struct {
-		path string
-		st   os.FileInfo
+		path, key string
+		st        os.FileInfo
 	}
+	homeKey := pathKey(home)
+	listed := map[string]bool{}
 	var files []logFile
 	for _, p := range paths {
 		if st, err := os.Stat(p); err == nil && st.Mode().IsRegular() {
-			files = append(files, logFile{p, st})
+			k := pathKey(p)
+			listed[k] = true
+			files = append(files, logFile{p, k, st})
 		}
 	}
+	c.mu.Lock()
+	for k, e := range c.files {
+		if e.home == homeKey && !listed[k] {
+			delete(c.files, k)
+		}
+	}
+	c.mu.Unlock()
 	sort.SliceStable(files, func(i, j int) bool { return files[i].st.ModTime().After(files[j].st.ModTime()) })
 	for _, f := range files {
-		if email := c.fileEmail(f.path, f.st); email != "" {
+		if email := c.fileEmail(homeKey, f.key, f.path, f.st); email != "" {
 			return email
 		}
 	}
@@ -232,11 +264,7 @@ func (c *emailCache) agyEmail(home string) string {
 }
 
 // fileEmail returns the last email named in the tail of one log, from the cache while the file is unchanged.
-func (c *emailCache) fileEmail(path string, st os.FileInfo) string {
-	key, err := fsutil.Key(path)
-	if err != nil {
-		key = path
-	}
+func (c *emailCache) fileEmail(homeKey, key, path string, st os.FileInfo) string {
 	c.mu.Lock()
 	e, ok := c.files[key]
 	c.mu.Unlock()
@@ -252,7 +280,7 @@ func (c *emailCache) fileEmail(path string, st os.FileInfo) string {
 		email = string(m[len(m)-1][1])
 	}
 	c.mu.Lock()
-	c.files[key] = emailEntry{size: st.Size(), mtime: st.ModTime(), email: email}
+	c.files[key] = emailEntry{home: homeKey, size: st.Size(), mtime: st.ModTime(), email: email}
 	c.mu.Unlock()
 	return email
 }
