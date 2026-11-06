@@ -106,10 +106,11 @@ function origin(id: FileIconSetId): string {
   white-space: nowrap;
 }
 
-/* A miniature file list on the code background, two columns so six entries stay short. */
+/* A miniature file list on the code background: two columns where a card is wide enough for whole names,
+   one column in narrow cards (phones) so names are never cut. */
 .card__preview {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
   gap: var(--space-1) var(--space-2);
   margin: 0;
   padding: var(--space-2);
