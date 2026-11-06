@@ -22,8 +22,11 @@
 // # Resting
 //
 // When a turn reports quota_exhausted, MarkExhausted rests the account for that quota group until the governing
-// windows reset (read fresh when possible), the provider's hint, or a default; API-key accounts rest for
-// passiveCooldownMinutes. A rest ends by itself, or earlier when a later quota read shows the group usable again.
+// windows reset (read fresh when possible), the provider's hint, or a default; accounts whose quota cannot be read
+// (API keys, backends without a quota reader) rest for passiveCooldownMinutes. A rest ends by itself, or earlier
+// when a later quota read shows the group usable again. A run refused for its sign-in marks the account signed
+// out (MarkAuthFailed) and asks for a background quota read to confirm; a good read clears the mark, a new key
+// clears it for an API-key account.
 package pool
 
 import (
@@ -74,6 +77,13 @@ type Options struct {
 	Settings func() config.Settings
 	// Refresh, when set, reads an account's quota before it is rested, so the rest ends when its windows reset.
 	Refresh RefreshFunc
+	// Confirm, when set, asks for a background quota read of a sign-in account that a run reported as signed out
+	// (quota.Refresher.Request); a successful read clears the mark. It must not block.
+	Confirm func(accountID string)
+	// ActiveQuota reports whether a backend has a quota reader. Sign-in accounts of a backend without one are
+	// treated like API-key accounts (passive): usable with unknown quota, resting only after a quota error, never
+	// waiting for a first read that cannot come. Nil means every backend has a reader.
+	ActiveQuota func(backend string) bool
 	// Clock is the time source (the system clock when nil).
 	Clock clock.Clock
 	// Logger receives slot and rest events (discarded when nil).
@@ -101,6 +111,9 @@ func New(o Options) (*Pool, error) {
 	}
 	if o.Logger == nil {
 		o.Logger = slog.New(slog.DiscardHandler)
+	}
+	if o.ActiveQuota == nil {
+		o.ActiveQuota = func(string) bool { return true }
 	}
 	return &Pool{o: o, leases: map[string]map[string]*Lease{}, signal: make(chan struct{})}, nil
 }

@@ -21,6 +21,7 @@ type view struct {
 	cooldowns map[string]map[string]Cooldown // account -> group -> cooldown
 	status    map[string]Status
 	twinOf    map[string]string
+	passive   map[string]bool // accounts whose quota cannot be read (API key, or no reader for the backend)
 }
 
 // load reads the state a decision needs. Busy counts are not part of it: they are read under the pool's lock.
@@ -40,6 +41,7 @@ func (p *Pool) load(ctx context.Context) (*view, error) {
 	v := &view{
 		now: p.o.Clock.Now().UTC(), settings: p.o.Settings(), accounts: accounts, snaps: snaps,
 		cooldowns: map[string]map[string]Cooldown{}, status: map[string]Status{}, twinOf: map[string]string{},
+		passive: map[string]bool{},
 	}
 	for _, c := range cds {
 		if v.cooldowns[c.AccountID] == nil {
@@ -50,14 +52,22 @@ func (p *Pool) load(ctx context.Context) (*view, error) {
 	for i := range accounts {
 		a := &accounts[i]
 		snap, found := snaps[a.ID]
-		v.status[a.ID] = statusOf(a, snap, found)
+		v.passive[a.ID] = p.passive(a)
+		v.status[a.ID] = statusOf(a, snap, found, v.passive[a.ID])
 	}
 	v.markTwins()
 	return v, nil
 }
 
-// statusOf derives an account's status from its record and its last quota read.
-func statusOf(a *account.Account, snap quota.Snapshot, found bool) Status {
+// passive reports whether the account's quota cannot be read: an API-key account, or a sign-in account of a
+// backend without a quota reader.
+func (p *Pool) passive(a *account.Account) bool {
+	return a.Kind == account.KindAPIKey || !p.o.ActiveQuota(a.Backend)
+}
+
+// statusOf derives an account's status from its record and its last quota read. passive marks an account whose
+// quota is never read: without a read it is usable, not new.
+func statusOf(a *account.Account, snap quota.Snapshot, found, passive bool) Status {
 	switch {
 	case !a.Enabled:
 		return StatusDisabled
@@ -65,9 +75,11 @@ func statusOf(a *account.Account, snap quota.Snapshot, found bool) Status {
 		switch {
 		case a.KeyHint == "":
 			return StatusNoKey
-		case found && snap.ErrorKind() == quota.KindNeedsLogin && !snap.Error.At.Before(a.UpdatedAt):
-			return StatusNeedsLogin // the provider refused the key; a new key lifts it
+		case found && snap.ErrorKind() == quota.KindNeedsLogin && !snap.Error.At.Before(a.KeySetAt):
+			return StatusNeedsLogin // the provider refused the key; only a newer key lifts it
 		}
+		return StatusOK
+	case !found && passive:
 		return StatusOK
 	case !found:
 		return StatusNew
@@ -186,7 +198,7 @@ func (v *view) evaluate(a *account.Account, req *Request, busy int) eval {
 		e.state, e.until = stateResting, c.Until
 		return e
 	}
-	passive := a.Kind == account.KindAPIKey
+	passive := v.passive[a.ID]
 	if found && !passive {
 		if until, exhausted := snap.Exhausted(v.now, req.Group, req.Model, v.settings.MinRemaining); exhausted {
 			if until.IsZero() {

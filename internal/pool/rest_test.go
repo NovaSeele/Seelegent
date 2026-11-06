@@ -215,6 +215,19 @@ func TestMarkAuthFailed(t *testing.T) {
 	if _, err := f.p.Select(ctx, gemini("t")); !errors.Is(err, ErrNoAccount) {
 		t.Fatalf("signed-out account chosen: %v", err)
 	}
+	// The sign-in account is read again in the background to confirm; an API-key account has nothing to read.
+	if got := f.confirmed(); len(got) != 1 || got[0] != a.ID {
+		t.Fatalf("confirm requests %v, want [%s]", got, a.ID)
+	}
+	// Renaming the API-key account is not a new key: it stays refused (review finding F).
+	f.clk.Advance(time.Minute)
+	label := "renamed"
+	if _, err := f.m.Update(ctx, k.ID, account.Patch{Label: &label}); err != nil {
+		t.Fatal(err)
+	}
+	if status(k.ID) != StatusNeedsLogin {
+		t.Fatalf("label change lifted the refused key: %s", status(k.ID))
+	}
 	// A successful read signs the account back in; a new key lifts the API-key account.
 	f.clk.Advance(time.Minute)
 	f.read(a.ID, "agy", 1, time.Time{})

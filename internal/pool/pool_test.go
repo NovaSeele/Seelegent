@@ -29,6 +29,16 @@ type fixture struct {
 	settings atomic.Pointer[config.Settings]
 	refresh  func(ctx context.Context, id string) (quota.Snapshot, error)
 	p        *Pool
+
+	mu       sync.Mutex
+	confirms []string
+	noReader map[string]bool // backends without a quota reader
+}
+
+func (f *fixture) confirmed() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string(nil), f.confirms...)
 }
 
 func newFixture(t *testing.T) *fixture {
@@ -56,6 +66,16 @@ func newFixture(t *testing.T) *fixture {
 				return quota.Snapshot{}, errors.New("no refresher")
 			}
 			return f.refresh(ctx, id)
+		},
+		Confirm: func(id string) {
+			f.mu.Lock()
+			f.confirms = append(f.confirms, id)
+			f.mu.Unlock()
+		},
+		ActiveQuota: func(backend string) bool {
+			f.mu.Lock()
+			defer f.mu.Unlock()
+			return !f.noReader[backend]
 		},
 	})
 	if err != nil {
@@ -506,4 +526,36 @@ func (failingQuotas) All(context.Context) (map[string]quota.Snapshot, error) {
 
 func (failingQuotas) MarkNeedsLogin(context.Context, string, string, string, time.Time) error {
 	return errors.New("db down")
+}
+
+// A sign-in account of a backend without a quota reader never gets a read: it must be usable with unknown quota,
+// not wait as "new" forever (review finding G), and rest passively after a quota error.
+func TestBackendWithoutQuotaReader(t *testing.T) {
+	f := newFixture(t)
+	ctx := t.Context()
+	f.noReader = map[string]bool{"claude": true}
+	c := f.add(account.New{Backend: "claude", Kind: account.KindIsolated})
+	req := Request{Backend: "claude", Group: "Claude", Model: "claude-x"}
+	ch, err := f.p.Select(ctx, req)
+	if err != nil || ch.Account.ID != c.ID || ch.RemainingKnown || ch.Remaining != quota.UnknownRemaining {
+		t.Fatalf("chose %+v, %v", ch, err)
+	}
+	states, _ := f.p.States(ctx)
+	if states[0].Status != StatusOK || states[0].HasQuota {
+		t.Fatalf("state %+v", states[0])
+	}
+	cd, err := f.p.MarkExhausted(ctx, c.ID, Exhaustion{Group: "Claude"})
+	if err != nil || !cd.Passive || !cd.Until.Equal(f.clk.Now().Add(60*time.Minute)) {
+		t.Fatalf("cooldown %+v, %v", cd, err)
+	}
+	// With a reader the same account waits for its first read.
+	f.mu.Lock()
+	f.noReader = nil
+	f.mu.Unlock()
+	if err := f.p.ClearCooldown(ctx, c.ID, ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.p.Select(ctx, req); !errors.Is(err, ErrAllResting) {
+		t.Fatalf("with a reader: %v", err)
+	}
 }

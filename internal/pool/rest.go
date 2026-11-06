@@ -60,7 +60,7 @@ func (p *Pool) MarkExhausted(ctx context.Context, accountID string, ex Exhaustio
 	}
 	s := p.o.Settings()
 	c := Cooldown{AccountID: a.ID, Group: ex.Group, Reason: ex.Reason}
-	if a.Kind == account.KindAPIKey {
+	if p.passive(a) {
 		c.Passive = true
 		c.CreatedAt = p.o.Clock.Now().UTC()
 		c.Until = quota.PassiveRest(c.CreatedAt, ex.ResetAt, s.PassiveCooldownMinutes)
@@ -114,6 +114,10 @@ func (p *Pool) MarkAuthFailed(ctx context.Context, accountID, message string) er
 				return fmt.Errorf("mark %s signed out: %w", accountID, err)
 			}
 			p.o.Logger.Info("pool: account needs sign-in", "account", a.ID)
+			if p.o.Confirm != nil && !p.passive(a) {
+				// One refused run may be a hiccup: read the quota to confirm; a good read clears the mark.
+				p.o.Confirm(a.ID)
+			}
 			return nil
 		}
 	}

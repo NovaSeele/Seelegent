@@ -1,3 +1,7 @@
+-- When the API key of an account was last set or removed (internal/pool): a refused key is lifted only by a newer
+-- key, not by other edits that bump updated_at. Empty when no key was ever set.
+ALTER TABLE accounts ADD COLUMN key_set_at TEXT NOT NULL DEFAULT '';
+
 -- Last quota read of each account (internal/quota). data is the JSON quota snapshot: windows, plan, entitlement
 -- and the last read error. It never holds tokens or email addresses (only a hash of the signed-in identity).
 CREATE TABLE quota_cache (

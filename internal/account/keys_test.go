@@ -149,8 +149,14 @@ func TestManagerKeys(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if a.KeyHint != "…1234" {
-		t.Errorf("KeyHint = %q", a.KeyHint)
+	if a.KeyHint != "…1234" || a.KeySetAt.IsZero() {
+		t.Errorf("KeyHint = %q, KeySetAt = %s", a.KeyHint, a.KeySetAt)
+	}
+	// Other edits do not move KeySetAt.
+	keySet := a.KeySetAt
+	label := "renamed"
+	if a, err = f.m.Update(ctx, a.ID, Patch{Label: &label}); err != nil || !a.KeySetAt.Equal(keySet) {
+		t.Fatalf("Update = %+v, %v; KeySetAt moved from %s", a, err, keySet)
 	}
 	p, key, err := f.m.Credentials(ctx, a)
 	if err != nil || key != "sk-abcdefgh1234" || p.ID != "ds" {

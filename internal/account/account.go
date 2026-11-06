@@ -79,6 +79,8 @@ type Account struct {
 	// KeyHint shows the last four characters of the stored API key ("…abcd"); empty when no key is stored. The key
 	// itself is never part of an Account.
 	KeyHint string `json:"keyHint,omitempty"`
+	// KeySetAt is when the API key was last stored or removed (zero when never); other edits do not change it.
+	KeySetAt time.Time `json:"keySetAt,omitzero"`
 	// CreatedAt and UpdatedAt are UTC times.
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
