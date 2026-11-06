@@ -155,6 +155,26 @@ func TestReadFile(t *testing.T) {
 	}
 }
 
+func TestRename(t *testing.T) {
+	dir := t.TempDir()
+	from, to := filepath.Join(dir, "a"), filepath.Join(dir, "b")
+	if err := os.WriteFile(from, []byte("a"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(to, []byte("b"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := Rename(from, to); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := os.ReadFile(to); string(got) != "a" {
+		t.Fatalf("content = %q, want a", got)
+	}
+	if err := Rename(from, to); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("rename of a missing file: err = %v, want fs.ErrNotExist", err)
+	}
+}
+
 func TestRetryIf(t *testing.T) {
 	errBusy := errors.New("busy")
 	errFatal := errors.New("fatal")

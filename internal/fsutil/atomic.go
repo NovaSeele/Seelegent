@@ -53,7 +53,7 @@ func WriteFileAtomic(path string, data []byte, perm fs.FileMode) (err error) {
 	if err = os.Chmod(tmp, perm); err != nil {
 		return fmt.Errorf("write %s: chmod: %w", path, err)
 	}
-	if err = retry(func() error { return os.Rename(tmp, path) }); err != nil {
+	if err = Rename(tmp, path); err != nil {
 		return fmt.Errorf("write %s: replace: %w", path, err)
 	}
 	if err = syncDir(dir); err != nil {
@@ -76,6 +76,12 @@ func ReadFile(path string) ([]byte, error) {
 		return nil, err
 	}
 	return data, nil
+}
+
+// Rename renames oldpath to newpath like os.Rename (replacing newpath if it exists), but retries for a short time
+// when another process briefly holds one of the files open (Windows sharing violations).
+func Rename(oldpath, newpath string) error {
+	return retry(func() error { return os.Rename(oldpath, newpath) })
 }
 
 // retry runs op until it succeeds, fails with an error that is not transient, or the retry budget is spent.
