@@ -34,9 +34,11 @@ func (s *Service) Wait(ctx context.Context, req api.WaitRequest, reportCwd strin
 	timer := s.clk.NewTimer(time.Duration(req.TimeoutSeconds) * time.Second)
 	defer timer.Stop()
 	for {
-		changed := s.bus.Changed() // before reading, so no change between read and wait is missed
+		// Registered before reading, so no change between read and wait is missed; only these tasks' records wake it.
+		changed, release := s.bus.TasksChanged(req.IDs)
 		tasks, err := s.load(ctx, req.IDs)
 		if err != nil {
+			release()
 			return api.WaitResult{}, err
 		}
 		pending, finished := 0, 0
@@ -51,18 +53,24 @@ func (s *Service) Wait(ctx context.Context, req api.WaitRequest, reportCwd strin
 				finished++
 			}
 		}
+		var res *api.WaitResult
 		switch {
 		case pending == 0 || req.Any && finished > 0:
-			return s.waitResult(tasks, true, api.WokeDone, req.Reports, reportCwd), nil
+			res = new(s.waitResult(tasks, true, api.WokeDone, req.Reports, reportCwd))
 		case blocked:
-			return s.waitResult(tasks, false, api.WokeBlocked, req.Reports, reportCwd), nil
+			res = new(s.waitResult(tasks, false, api.WokeBlocked, req.Reports, reportCwd))
+		default:
+			select {
+			case <-ctx.Done():
+				res = new(s.waitResult(tasks, false, api.WokeCancelled, false, reportCwd))
+			case <-timer.C():
+				res = new(s.waitResult(tasks, false, api.WokeTimeout, req.Reports, reportCwd))
+			case <-changed:
+			}
 		}
-		select {
-		case <-ctx.Done():
-			return s.waitResult(tasks, false, api.WokeCancelled, false, reportCwd), nil
-		case <-timer.C():
-			return s.waitResult(tasks, false, api.WokeTimeout, req.Reports, reportCwd), nil
-		case <-changed:
+		release()
+		if res != nil {
+			return *res, nil
 		}
 	}
 }

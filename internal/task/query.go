@@ -88,7 +88,12 @@ func (s *Service) Events(ctx context.Context, id string, after int64, limit, tai
 	if err != nil {
 		return api.EventPage{}, err
 	}
-	return api.EventPage{Items: api.NonNil(evs), LastSeq: t.LastEventSeq}, nil
+	// The task was read before the events: an event appended in between must not be newer than lastSeq.
+	last := t.LastEventSeq
+	if n := len(evs); n > 0 && evs[n-1].Seq > last {
+		last = evs[n-1].Seq
+	}
+	return api.EventPage{Items: api.NonNil(evs), LastSeq: last}, nil
 }
 
 // Prompt returns the full brief of attempt n of turn (the latest attempt when n is 0).

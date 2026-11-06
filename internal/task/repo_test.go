@@ -260,3 +260,74 @@ func TestRepoUnreadableIsError(t *testing.T) {
 		t.Fatal("unreadable turn accepted by List")
 	}
 }
+
+func TestFoldText(t *testing.T) {
+	if got := foldText("Sửa lỗi ĐĂNG NHẬP – Tiếng Việt, Ångström Çà"); got != "sua loi dang nhap – tieng viet, angstrom ca" {
+		t.Fatalf("foldText = %q", got)
+	}
+}
+
+// TestRepoSearchFolds finds Vietnamese titles whatever the case and accents of the search, also for rows written
+// before the folded column existed (BackfillFold).
+func TestRepoSearchFolds(t *testing.T) {
+	ctx := context.Background()
+	st := openStore(t)
+	r := NewRepo(st, nil)
+	a := newTestTask("t1", testEpoch)
+	a.Title = "Sửa lỗi Đăng nhập"
+	b := newTestTask("t2", testEpoch.Add(time.Second))
+	b.Title = "Thêm trang cài đặt"
+	for _, tk := range []*Task{a, b} {
+		if _, err := r.Create(ctx, tk, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	search := func(text string) []string {
+		t.Helper()
+		got, _, err := r.List(ctx, Query{Text: text})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var ids []string
+		for _, tk := range got {
+			ids = append(ids, tk.ID)
+		}
+		return ids
+	}
+	for text, want := range map[string]string{"dang nhap": "t1", "ĐĂNG": "t1", "SỬA LỖI": "t1", "cai dat": "t2"} {
+		if got := search(text); len(got) != 1 || got[0] != want {
+			t.Errorf("search %q = %v", text, got)
+		}
+	}
+	if err := st.Write(ctx, func(tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, `UPDATE tasks SET title_fold = ''`)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if got := search("dang nhap"); len(got) != 0 {
+		t.Fatalf("search before the backfill = %v", got)
+	}
+	if err := r.BackfillFold(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if got := search("dang nhap"); len(got) != 1 {
+		t.Fatalf("search after the backfill = %v", got)
+	}
+}
+
+func TestRepoAttentionIDs(t *testing.T) {
+	ctx := context.Background()
+	r := NewRepo(openStore(t), nil)
+	for i, att := range []*api.Attention{nil, {State: api.AttentionInfo, Reason: ReasonReview}} {
+		tk := newTestTask(fmt.Sprintf("t%d", i), testEpoch.Add(time.Duration(i)*time.Second))
+		tk.Status, tk.Attention = StatusDone, att
+		if _, err := r.Create(ctx, tk, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ids, err := r.AttentionIDs(ctx, StatusDone, StatusFailed)
+	if err != nil || len(ids) != 1 || ids[0] != "t1" {
+		t.Fatalf("AttentionIDs = %v, %v", ids, err)
+	}
+}

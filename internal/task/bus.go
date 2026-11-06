@@ -1,6 +1,7 @@
 package task
 
 import (
+	"slices"
 	"sync"
 
 	"github.com/NovaSeele/Seelegent/internal/api"
@@ -25,17 +26,61 @@ type Notice struct {
 	Event *api.TaskEvent
 }
 
-// Bus is the one in-process notifier of the engine. Waiters use Changed (no per-wait listeners pile up); streams
-// (SSE) subscribe with a bounded buffer and learn when they fell behind. It is safe for concurrent use.
+// Bus is the one in-process notifier of the engine. Waiters use Changed, or TasksChanged to wake only for the
+// records of their tasks; streams (SSE) subscribe with a bounded buffer and learn when they fell behind. It is safe
+// for concurrent use.
 type Bus struct {
 	mu      sync.Mutex
 	changed chan struct{}
 	subs    map[*Subscription]struct{}
+	// waiters are the TasksChanged registrations by task id.
+	waiters map[string][]*taskWaiter
+}
+
+// taskWaiter is one TasksChanged registration: ch is closed at the first NoticeTask of one of its ids.
+type taskWaiter struct {
+	ids   []string
+	ch    chan struct{}
+	fired bool
 }
 
 // NewBus returns a bus.
 func NewBus() *Bus {
-	return &Bus{changed: make(chan struct{}), subs: map[*Subscription]struct{}{}}
+	return &Bus{changed: make(chan struct{}), subs: map[*Subscription]struct{}{}, waiters: map[string][]*taskWaiter{}}
+}
+
+// TasksChanged returns a channel that is closed at the next NoticeTask of one of ids (a task record changed), and
+// a release that the caller must call when it stops waiting.
+func (b *Bus) TasksChanged(ids []string) (ch <-chan struct{}, release func()) {
+	w := &taskWaiter{ids: ids, ch: make(chan struct{})}
+	b.mu.Lock()
+	for _, id := range ids {
+		b.waiters[id] = append(b.waiters[id], w)
+	}
+	b.mu.Unlock()
+	return w.ch, func() {
+		b.mu.Lock()
+		defer b.mu.Unlock()
+		b.drop(w)
+	}
+}
+
+// drop removes a waiter from every id it waits for. The caller holds b.mu.
+func (b *Bus) drop(w *taskWaiter) {
+	for _, id := range w.ids {
+		list := b.waiters[id]
+		for i, x := range list {
+			if x == w {
+				list = append(list[:i], list[i+1:]...)
+				break
+			}
+		}
+		if len(list) == 0 {
+			delete(b.waiters, id)
+		} else {
+			b.waiters[id] = list
+		}
+	}
 }
 
 // Changed returns a channel that is closed at the next Publish.
@@ -65,6 +110,18 @@ func (b *Bus) Publish(ns ...Notice) {
 			if s.overflow {
 				break
 			}
+		}
+	}
+	for _, n := range ns {
+		if n.Kind != NoticeTask {
+			continue
+		}
+		for _, w := range slices.Clone(b.waiters[n.TaskID]) {
+			if !w.fired {
+				w.fired = true
+				close(w.ch)
+			}
+			b.drop(w)
 		}
 	}
 	close(b.changed)

@@ -323,3 +323,29 @@ func TestDelegateSpecAndPlan(t *testing.T) {
 		t.Fatalf("spec = %+v", tb.Spec)
 	}
 }
+
+func TestBusTasksChanged(t *testing.T) {
+	b := NewBus()
+	ch, release := b.TasksChanged([]string{"a", "b", "a"})
+	b.Publish(Notice{Kind: NoticeTask, TaskID: "c"}, Notice{Kind: NoticeEvent, TaskID: "a"})
+	select {
+	case <-ch:
+		t.Fatal("woken by another task or by an event")
+	default:
+	}
+	b.Publish(Notice{Kind: NoticeTask, TaskID: "b"})
+	select {
+	case <-ch:
+	default:
+		t.Fatal("not woken by its task")
+	}
+	release()
+	b.Publish(Notice{Kind: NoticeTask, TaskID: "a"}) // fired and released: no double close
+	_, release2 := b.TasksChanged([]string{"x"})
+	release2()
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if len(b.waiters) != 0 {
+		t.Fatalf("waiters left: %v", b.waiters)
+	}
+}

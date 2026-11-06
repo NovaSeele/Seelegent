@@ -201,6 +201,9 @@ func (s *Service) Start(ctx context.Context) error {
 	}
 	s.started = true
 	s.mu.Unlock()
+	if err := s.repo.BackfillFold(ctx); err != nil {
+		return fmt.Errorf("task: search titles: %w", err)
+	}
 	if err := s.recoverTasks(ctx); err != nil {
 		return err
 	}

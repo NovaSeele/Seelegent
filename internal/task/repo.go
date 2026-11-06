@@ -74,9 +74,9 @@ func (r *Repo) Create(ctx context.Context, t *Task, evs []NewEvent) ([]api.TaskE
 			return err
 		}
 		if _, err := tx.ExecContext(ctx, `INSERT INTO tasks
-			(id, title, status, project_key, cwd, backend, data, created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			t.ID, t.Title, string(t.Status), t.ProjectKey, t.Cwd, t.Backend, string(data),
+			(id, title, title_fold, status, project_key, cwd, backend, data, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			t.ID, t.Title, foldText(t.Title), string(t.Status), t.ProjectKey, t.Cwd, t.Backend, string(data),
 			formatTime(t.CreatedAt), formatTime(t.UpdatedAt)); err != nil {
 			return fmt.Errorf("insert task %s: %w", t.ID, err)
 		}
@@ -106,9 +106,10 @@ func (r *Repo) Save(ctx context.Context, t *Task, turns []*Turn, evs []NewEvent)
 		if err != nil {
 			return err
 		}
-		res, err := tx.ExecContext(ctx, `UPDATE tasks SET title = ?, status = ?, project_key = ?, cwd = ?,
-			backend = ?, data = ?, updated_at = ? WHERE id = ?`,
-			t.Title, string(t.Status), t.ProjectKey, t.Cwd, t.Backend, string(data), formatTime(t.UpdatedAt), t.ID)
+		res, err := tx.ExecContext(ctx, `UPDATE tasks SET title = ?, title_fold = ?, status = ?, project_key = ?,
+			cwd = ?, backend = ?, data = ?, updated_at = ? WHERE id = ?`,
+			t.Title, foldText(t.Title), string(t.Status), t.ProjectKey, t.Cwd, t.Backend, string(data),
+			formatTime(t.UpdatedAt), t.ID)
 		if err != nil {
 			return fmt.Errorf("save task %s: %w", t.ID, err)
 		}
@@ -297,6 +298,67 @@ func (r *Repo) IDs(ctx context.Context, statuses ...Status) ([]string, error) {
 	return ids, err
 }
 
+// AttentionIDs returns the tasks in statuses whose stored record carries an attention flag.
+func (r *Repo) AttentionIDs(ctx context.Context, statuses ...Status) ([]string, error) {
+	if len(statuses) == 0 {
+		return nil, nil
+	}
+	args := make([]any, len(statuses))
+	for i, s := range statuses {
+		args[i] = string(s)
+	}
+	var ids []string
+	err := r.db.Read(ctx, func(tx *sql.Tx) error {
+		//nolint:gosec // only placeholders are concatenated
+		rows, err := tx.QueryContext(ctx, `SELECT id FROM tasks WHERE status IN (`+placeholders(len(args))+`)
+			AND json_extract(data, '$.attention') IS NOT NULL ORDER BY created_at, id`, args...)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = rows.Close() }()
+		for rows.Next() {
+			var id string
+			if err := rows.Scan(&id); err != nil {
+				return err
+			}
+			ids = append(ids, id)
+		}
+		return rows.Err()
+	})
+	return ids, err
+}
+
+// BackfillFold fills title_fold for rows written before the column existed (migration 0006).
+func (r *Repo) BackfillFold(ctx context.Context) error {
+	return r.db.Write(ctx, func(tx *sql.Tx) error {
+		rows, err := tx.QueryContext(ctx, `SELECT id, title FROM tasks WHERE title_fold = '' AND title <> ''`)
+		if err != nil {
+			return err
+		}
+		titles := map[string]string{}
+		for rows.Next() {
+			var id, title string
+			if err := rows.Scan(&id, &title); err != nil {
+				_ = rows.Close()
+				return err
+			}
+			titles[id] = title
+		}
+		if err := rows.Close(); err != nil {
+			return err
+		}
+		if err := rows.Err(); err != nil {
+			return err
+		}
+		for id, title := range titles {
+			if _, err := tx.ExecContext(ctx, `UPDATE tasks SET title_fold = ? WHERE id = ?`, foldText(title), id); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
 // Query filters the task list.
 type Query struct {
 	Statuses   []Status
@@ -334,8 +396,9 @@ func (r *Repo) List(ctx context.Context, q Query) ([]*Task, string, error) {
 		args = append(args, q.ProjectKey)
 	}
 	if text := strings.TrimSpace(q.Text); text != "" {
-		where = append(where, `(title LIKE ? ESCAPE '\' OR id LIKE ? ESCAPE '\')`)
-		like := "%" + escapeLike(text) + "%"
+		// title_fold and the search are folded in Go (foldText): SQLite's LIKE ignores the case of ASCII only.
+		where = append(where, `(title_fold LIKE ? ESCAPE '\' OR id LIKE ? ESCAPE '\')`)
+		like := "%" + escapeLike(foldText(text)) + "%"
 		args = append(args, like, like)
 	}
 	if q.Cursor != "" {

@@ -235,7 +235,8 @@ func (s *Service) watchAttention() {
 		s.mu.Unlock()
 		if now := s.clk.Now(); now.Sub(lastSweep) >= attentionSweep {
 			lastSweep = now
-			done, err := s.repo.IDs(s.root, StatusDone, StatusFailed)
+			// Only a raised flag can decay on a finished task; the others need no look.
+			done, err := s.repo.AttentionIDs(s.root, StatusDone, StatusFailed)
 			if err != nil {
 				s.log.Warn("task: attention sweep", "err", err)
 			}
