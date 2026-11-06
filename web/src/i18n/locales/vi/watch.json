@@ -1,0 +1,69 @@
+{
+  "loading": "Đang tải tác vụ…",
+  "summary": {
+    "allClear": "Hiện không có việc gì cần bạn.",
+    "needs": "{count} tác vụ cần bạn",
+    "running": "{count} đang chạy",
+    "queued": "{count} đang chờ lượt"
+  },
+  "tabs": {
+    "label": "Hiển thị",
+    "all": "Tất cả",
+    "needs": "Cần bạn ({count})",
+    "running": "Đang chạy ({count})"
+  },
+  "needs": {
+    "title": "Cần bạn",
+    "empty": "Không có việc nào đang chờ bạn.",
+    "waiting": "đã chờ {time}"
+  },
+  "kind": {
+    "question": "Có câu hỏi",
+    "blocked": "Bị chặn",
+    "stalled": "Đứng im",
+    "failed": "Thất bại",
+    "depsBlocked": "Tác vụ trước bị lỗi",
+    "review": "Chờ duyệt"
+  },
+  "next": {
+    "answer": "Trả lời",
+    "review": "Xem thay đổi",
+    "open": "Mở tác vụ"
+  },
+  "running": {
+    "title": "Đang chạy",
+    "empty": "Không có tác vụ nào đang chạy.",
+    "elapsed": "đã chạy {time}",
+    "noStep": "Đang khởi động…",
+    "until": "Có lại quota {time}",
+    "turn": "lượt {n}",
+    "tokens": "{n} token",
+    "files": "{count} tệp"
+  },
+  "recent": {
+    "title": "Vừa xong",
+    "empty": "Chưa có tác vụ nào xong.",
+    "all": "Mọi tác vụ"
+  },
+  "accounts": {
+    "title": "Tài khoản",
+    "manage": "Quản lý tài khoản",
+    "empty": "Chưa có tài khoản nào. Thêm một tài khoản để bắt đầu giao việc.",
+    "noQuota": "Chưa có số liệu quota",
+    "busy": "{busy}/{max} suất đang bận",
+    "resets": "làm mới {time}",
+    "state": {
+      "ready": "Sẵn sàng",
+      "busy": "Đang bận",
+      "resting": "Đang nghỉ",
+      "exhausted": "Hết quota",
+      "auth_required": "Cần đăng nhập",
+      "signing_in": "Đang đăng nhập",
+      "disabled": "Đã tắt"
+    }
+  },
+  "empty": {
+    "title": "Chưa có gì để theo dõi",
+    "desc": "Khi Claude giao việc, các tác vụ sẽ hiện ở đây: việc cần bạn lên trước, rồi đến việc đang chạy."
+  }
+}

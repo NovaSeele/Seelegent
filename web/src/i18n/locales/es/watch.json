@@ -1,0 +1,69 @@
+{
+  "loading": "Cargando tareas…",
+  "summary": {
+    "allClear": "Ahora mismo nada te necesita.",
+    "needs": "{count} tarea te necesita | {count} tareas te necesitan",
+    "running": "{count} en curso | {count} en curso",
+    "queued": "{count} en cola | {count} en cola"
+  },
+  "tabs": {
+    "label": "Mostrar",
+    "all": "Todo",
+    "needs": "Te necesitan ({count})",
+    "running": "En curso ({count})"
+  },
+  "needs": {
+    "title": "Te necesitan",
+    "empty": "Nada está esperando por ti.",
+    "waiting": "esperando {time}"
+  },
+  "kind": {
+    "question": "Tiene una pregunta",
+    "blocked": "Bloqueada",
+    "stalled": "Detenida",
+    "failed": "Falló",
+    "depsBlocked": "Falló una tarea previa",
+    "review": "Lista para revisar"
+  },
+  "next": {
+    "answer": "Responder",
+    "review": "Revisar cambios",
+    "open": "Abrir tarea"
+  },
+  "running": {
+    "title": "En curso",
+    "empty": "No hay ninguna tarea en curso.",
+    "elapsed": "desde hace {time}",
+    "noStep": "Arrancando…",
+    "until": "La cuota vuelve {time}",
+    "turn": "turno {n}",
+    "tokens": "{n} tokens",
+    "files": "{count} archivo | {count} archivos"
+  },
+  "recent": {
+    "title": "Terminadas hace poco",
+    "empty": "Aún no ha terminado ninguna tarea.",
+    "all": "Todas las tareas"
+  },
+  "accounts": {
+    "title": "Cuentas",
+    "manage": "Gestionar cuentas",
+    "empty": "Aún no hay cuentas. Añade una para empezar a delegar trabajo.",
+    "noQuota": "Sin datos de cuota todavía",
+    "busy": "{busy} de {max} huecos ocupados",
+    "resets": "se renueva {time}",
+    "state": {
+      "ready": "Lista",
+      "busy": "Ocupada",
+      "resting": "En pausa",
+      "exhausted": "Sin cuota",
+      "auth_required": "Requiere iniciar sesión",
+      "signing_in": "Iniciando sesión",
+      "disabled": "Desactivada"
+    }
+  },
+  "empty": {
+    "title": "Todavía no hay nada que vigilar",
+    "desc": "Cuando Claude delegue trabajo, las tareas aparecerán aquí: primero lo que te necesita y después lo que está en curso."
+  }
+}

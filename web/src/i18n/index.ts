@@ -10,11 +10,20 @@ import type nav from './locales/en/nav.json'
 import type pages from './locales/en/pages.json'
 import type palette from './locales/en/palette.json'
 import type settings from './locales/en/settings.json'
+import type watch from './locales/en/watch.json'
 import { FALLBACK_LOCALE, PLURAL_FORMS, SUPPORTED_LOCALES, type Locale } from './locales'
 
 export * from './locales'
 
-export const NAMESPACES = ['common', 'nav', 'locale', 'settings', 'palette', 'pages'] as const
+export const NAMESPACES = [
+  'common',
+  'nav',
+  'locale',
+  'settings',
+  'palette',
+  'pages',
+  'watch',
+] as const
 export type Namespace = (typeof NAMESPACES)[number]
 
 export interface MessageSchema {
@@ -24,6 +33,7 @@ export interface MessageSchema {
   settings: typeof settings
   palette: typeof palette
   pages: typeof pages
+  watch: typeof watch
 }
 
 declare module 'vue-i18n' {

@@ -1,0 +1,69 @@
+{
+  "loading": "正在加载任务…",
+  "summary": {
+    "allClear": "目前没有需要你处理的事。",
+    "needs": "{count} 个任务需要你",
+    "running": "{count} 个运行中",
+    "queued": "{count} 个排队中"
+  },
+  "tabs": {
+    "label": "显示",
+    "all": "全部",
+    "needs": "需要你（{count}）",
+    "running": "运行中（{count}）"
+  },
+  "needs": {
+    "title": "需要你",
+    "empty": "没有等你处理的事。",
+    "waiting": "已等待 {time}"
+  },
+  "kind": {
+    "question": "有问题要问",
+    "blocked": "被阻塞",
+    "stalled": "停滞",
+    "failed": "失败",
+    "depsBlocked": "前置任务失败",
+    "review": "待审查"
+  },
+  "next": {
+    "answer": "回答",
+    "review": "查看改动",
+    "open": "打开任务"
+  },
+  "running": {
+    "title": "运行中",
+    "empty": "没有正在运行的任务。",
+    "elapsed": "已运行 {time}",
+    "noStep": "正在启动…",
+    "until": "额度将于{time}恢复",
+    "turn": "第 {n} 轮",
+    "tokens": "{n} 个 token",
+    "files": "{count} 个文件"
+  },
+  "recent": {
+    "title": "最近完成",
+    "empty": "还没有完成的任务。",
+    "all": "全部任务"
+  },
+  "accounts": {
+    "title": "账号",
+    "manage": "管理账号",
+    "empty": "还没有账号。添加一个账号即可开始分派工作。",
+    "noQuota": "暂无额度数据",
+    "busy": "{busy}/{max} 个名额在用",
+    "resets": "{time}重置",
+    "state": {
+      "ready": "就绪",
+      "busy": "忙碌",
+      "resting": "休息中",
+      "exhausted": "额度用尽",
+      "auth_required": "需要登录",
+      "signing_in": "正在登录",
+      "disabled": "已关闭"
+    }
+  },
+  "empty": {
+    "title": "暂时没有可监控的内容",
+    "desc": "Claude 分派工作后，任务会显示在这里：先是需要你处理的，然后是正在运行的。"
+  }
+}
