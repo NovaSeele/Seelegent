@@ -1,5 +1,5 @@
 <script setup lang="ts" generic="T extends string">
-import { computed, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 import { useRovingFocus } from '@/composables/useRovingFocus'
 
@@ -17,6 +17,8 @@ export interface TabItem<V> {
 /**
  * Tab list (role=tablist) with roving focus and automatic activation. Panels are rendered by the parent;
  * give each panel `id="<idPrefix>-panel-<value>"`, `role="tabpanel"` and `aria-labelledby="<idPrefix>-tab-<value>"`.
+ * When the tabs do not fit they scroll sideways: the edges fade while there is more that way (as the nav rail
+ * does) and the selected tab is kept in view.
  */
 const model = defineModel<T>({ required: true })
 
@@ -29,10 +31,51 @@ const props = defineProps<{
 const list = ref<HTMLElement | null>(null)
 const options = computed(() => props.items)
 const { onKeydown } = useRovingFocus(options, (v) => (model.value = v), list)
+
+const fadeStart = ref(false)
+const fadeEnd = ref(false)
+function updateFade() {
+  const el = list.value
+  if (!el) return
+  fadeStart.value = el.scrollLeft > 1
+  fadeEnd.value = el.scrollLeft + el.clientWidth < el.scrollWidth - 1
+}
+
+/** Scrolls the list (never the page) so the selected tab is fully visible, with a little room past it. */
+function revealSelected() {
+  const el = list.value
+  const tab = el?.querySelector<HTMLElement>('[aria-selected="true"]')
+  if (!el || !tab) return
+  const margin = 24
+  const left = tab.getBoundingClientRect().left - el.getBoundingClientRect().left + el.scrollLeft
+  if (left - margin < el.scrollLeft) el.scrollLeft = Math.max(0, left - margin)
+  else if (left + tab.offsetWidth + margin > el.scrollLeft + el.clientWidth) {
+    el.scrollLeft = left + tab.offsetWidth + margin - el.clientWidth
+  }
+  updateFade()
+}
+
+watch(model, () => void nextTick(revealSelected))
+let observer: ResizeObserver | undefined
+onMounted(() => {
+  revealSelected()
+  updateFade()
+  if (typeof ResizeObserver === 'undefined' || !list.value) return
+  observer = new ResizeObserver(updateFade)
+  observer.observe(list.value)
+})
+onBeforeUnmount(() => observer?.disconnect())
 </script>
 
 <template>
-  <div ref="list" class="tabs" role="tablist" :aria-label="label">
+  <div
+    ref="list"
+    class="tabs"
+    :class="{ 'tabs--fade-start': fadeStart, 'tabs--fade-end': fadeEnd }"
+    role="tablist"
+    :aria-label="label"
+    @scroll.passive="updateFade"
+  >
     <button
       v-for="(item, index) in items"
       :id="`${idPrefix}-tab-${item.value}`"
@@ -62,6 +105,24 @@ const { onKeydown } = useRovingFocus(options, (v) => (model.value = v), list)
   overflow-x: auto;
   border-bottom: var(--border-width) solid var(--border-subtle);
   scrollbar-width: none;
+  /* Edge fades, each on only while the tabs can scroll that way (mask alpha only; no theme colour). */
+  --fade-start: 0px;
+  --fade-end: 0px;
+  mask-image: linear-gradient(
+    to right,
+    transparent 0,
+    black var(--fade-start),
+    black calc(100% - var(--fade-end)),
+    transparent 100%
+  );
+}
+
+.tabs--fade-start {
+  --fade-start: var(--space-6);
+}
+
+.tabs--fade-end {
+  --fade-end: var(--space-6);
 }
 
 .tabs__tab {

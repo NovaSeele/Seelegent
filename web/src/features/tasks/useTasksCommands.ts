@@ -1,6 +1,7 @@
 /**
  * App-wide task commands, registered by the shell: one palette entry per task while searching ("Task: title"),
- * "/" to find a task (opens the palette with that prefix), and "b" to jump to the next task that needs you.
+ * "/" to search the task list (from any page; below 900px it shows the list first), and "b" to jump to the next
+ * task that needs you.
  */
 import { onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -10,9 +11,10 @@ import type { TaskSummary } from '@/api/types'
 import { buildBoard } from '@/features/watch/watchModel'
 import { isVisibleTask } from '@/lib/taskStatus'
 import { useCommandsStore, type Command } from '@/stores/commands'
-import { usePaletteStore } from '@/stores/palette'
+import { useBreakpoint } from '@/composables/useMediaQuery'
 import { useTasksStore } from '@/stores/tasks'
 import { useToastStore } from '@/stores/toast'
+import { useUiStore } from '@/stores/ui'
 
 import { TASK_KEYS } from './detail/taskKeys'
 import { fold } from './listModel'
@@ -54,9 +56,10 @@ export function useTasksCommands() {
   const { t } = useI18n()
   const router = useRouter()
   const commands = useCommandsStore()
-  const palette = usePaletteStore()
   const tasks = useTasksStore()
   const toast = useToastStore()
+  const ui = useUiStore()
+  const { isRail } = useBreakpoint()
 
   const prefix = () => t('tasks.cmd.open', { title: '' }).trim()
   const open = (id: string) => router.push({ name: 'tasks', params: { taskId: id } })
@@ -72,7 +75,15 @@ export function useTasksCommands() {
       group: 'tasks',
       icon: 'search',
       shortcut: TASK_KEYS.find,
-      run: () => palette.open(`${prefix()} `),
+      run: async () => {
+        const route = router.currentRoute.value
+        // Below 900px an open task hides the list: go back to it. From 900px show a collapsed sidebar.
+        if (route.name !== 'tasks' || (!isRail.value && route.params.taskId)) {
+          await router.push({ name: 'tasks' })
+        }
+        if (isRail.value && ui.sidebarHidden) ui.toggleSidebar(false)
+        ui.requestTaskSearch()
+      },
     },
     {
       id: 'tasks.nextNeed',

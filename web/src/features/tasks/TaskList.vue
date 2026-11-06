@@ -5,6 +5,7 @@ import { useI18n } from 'vue-i18n'
 import Button from '@/components/ui/Button.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import IconButton from '@/components/ui/IconButton.vue'
+import Kbd from '@/components/ui/Kbd.vue'
 import TextField from '@/components/ui/TextField.vue'
 import { useNow } from '@/composables/useNow'
 import { stableComputed } from '@/lib/stable'
@@ -12,6 +13,7 @@ import { readStored, writeStored } from '@/lib/storage'
 import { awaitsReview, canCancel } from '@/lib/taskStatus'
 import { useCommandsStore } from '@/stores/commands'
 import { useTasksStore } from '@/stores/tasks'
+import { useUiStore } from '@/stores/ui'
 
 import BulkBar from './BulkBar.vue'
 import BulkDialog, { type BulkAction } from './BulkDialog.vue'
@@ -45,6 +47,23 @@ const minute = useNow(30_000)
 
 const q = ref('')
 const debouncedQ = ref('')
+
+// "/" from anywhere focuses the search (the shortcut lives in useTasksCommands).
+const ui = useUiStore()
+const searchField = ref<InstanceType<typeof TextField> | null>(null)
+const searchFocused = ref(false)
+watch(
+  () => ui.taskSearchRequested,
+  (requested) => {
+    if (requested && ui.takeTaskSearchRequest()) {
+      void nextTick(() => {
+        searchField.value?.focus()
+        searchField.value?.select()
+      })
+    }
+  },
+  { immediate: true, flush: 'post' },
+)
 let qTimer: ReturnType<typeof setTimeout> | undefined
 watch(q, (value) => {
   clearTimeout(qTimer)
@@ -210,14 +229,22 @@ const groupLabel = (key: string, label: string) =>
     </header>
     <div class="tl__tools">
       <TextField
+        ref="searchField"
         v-model="q"
         type="search"
         icon="search"
         size="sm"
         hide-label
+        keyshortcuts="/"
         :label="t('tasks.list.search')"
         :placeholder="t('tasks.list.searchPlaceholder')"
-      />
+        @focusin="searchFocused = true"
+        @focusout="searchFocused = false"
+      >
+        <template #end>
+          <Kbd v-if="!q && !searchFocused" keys="/" size="sm" aria-hidden="true" />
+        </template>
+      </TextField>
       <ListFilters
         v-if="showFilters"
         v-model:statuses="statuses"

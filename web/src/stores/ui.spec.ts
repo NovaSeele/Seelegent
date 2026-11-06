@@ -59,4 +59,13 @@ describe('ui store', () => {
     expect(ui.localeChoice).toBeNull()
     expect(ui.locale).toBe('en') // jsdom's navigator.languages is en-US
   })
+
+  it('hands a task search request to exactly one taker', () => {
+    const ui = useUiStore()
+    expect(ui.takeTaskSearchRequest()).toBe(false)
+    ui.requestTaskSearch()
+    expect(ui.taskSearchRequested).toBe(true)
+    expect(ui.takeTaskSearchRequest()).toBe(true)
+    expect(ui.takeTaskSearchRequest()).toBe(false)
+  })
 })

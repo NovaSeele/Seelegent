@@ -77,10 +77,13 @@ function onClick(event: MouseEvent, navigate: (e?: MouseEvent) => unknown) {
           <span class="row__meta">
             <span v-if="showProject">{{ task.projectName }}</span>
             <span v-if="task.manual" class="row__manual">{{ t('tasks.row.manual') }}</span>
-            <span v-else-if="task.activeStep && task.status === 'running'" class="row__step">
-              {{ task.activeStep.label }}
-            </span>
             <span v-else-if="task.accountLabel">{{ task.accountLabel }}</span>
+          </span>
+          <span
+            v-if="!task.manual && task.activeStep && task.status === 'running'"
+            class="row__step"
+          >
+            {{ task.activeStep.label }}
           </span>
         </span>
         <time class="row__time" :datetime="task.createdAt" :title="fmt.dateTime(task.createdAt)">
@@ -183,8 +186,24 @@ function onClick(event: MouseEvent, navigate: (e?: MouseEvent) => unknown) {
   white-space: nowrap;
 }
 
+/* The current step gets its own line, so a narrow sidebar never cuts project and step both. */
 .row__step {
+  overflow: hidden;
+  color: var(--text-muted);
   font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* On the current and selected rows' tinted backgrounds, muted text drops under 4.5:1; use secondary. */
+.row--current .row__meta,
+.row--current .row__step,
+.row--current .row__time,
+.row--selected .row__meta,
+.row--selected .row__step,
+.row--selected .row__time {
+  color: var(--text-secondary);
 }
 
 .row__manual {
