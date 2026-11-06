@@ -3,12 +3,12 @@
  * client with a fake fetch.
  */
 import type { ApiClient } from './client'
+import type { TaskEvent } from './events'
 import type {
   BootState,
   FollowupRequest,
   Project,
   TaskDetail,
-  TaskEvent,
   TaskStatus,
   TaskSummary,
   Verdict,
@@ -69,6 +69,10 @@ export function createTasksApi(client: ApiClient) {
         query: 'tail' in query ? { tail: query.tail } : { after: query.after, limit: query.limit },
       })
     },
+
+    /** The full worker brief of an attempt (latest when `attempt` is omitted); events carry a preview. */
+    prompt: (id: string, turn: number, attempt?: number) =>
+      client.get<{ prompt: string }>(`/tasks/${enc(id)}/prompt`, { query: { turn, attempt } }),
 
     followup: (id: string, body: FollowupRequest) =>
       client.post<TaskSummary>(`/tasks/${enc(id)}/followup`, { body }),

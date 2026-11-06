@@ -17,9 +17,11 @@ import { defineStore } from 'pinia'
 import { shallowReactive, shallowRef, triggerRef, type ShallowRef } from 'vue'
 
 import { tasksApi as defaultApi } from '@/api'
+import { createEventParser, type TaskEvent } from '@/api/events'
 import type { TaskListQuery, TasksApi } from '@/api/tasks'
-import type { TaskEvent, TaskSummary } from '@/api/types'
-import { isPending } from '@/lib/taskStatus'
+import type { TaskSummary } from '@/api/types'
+import { nextFrame } from '@/lib/frame'
+import { awaitsReview, isPending } from '@/lib/taskStatus'
 
 export const TAIL = 500
 export const PAGE = 500
@@ -47,10 +49,17 @@ export interface EventLog {
   readonly state: EventLogState
 }
 
+/** An event as received: only seq and taskId are trusted until the parser has checked it. */
+type RawEvent = Pick<TaskEvent, 'seq' | 'taskId'>
+
+const bySeq = <T extends RawEvent>(events: readonly T[]): T[] =>
+  [...events].sort((a, b) => a.seq - b.seq)
+
 interface LogInternal extends EventLog {
   refs: number
-  pending: TaskEvent[]
+  pending: RawEvent[]
   syncing: boolean
+  renderScheduled: boolean
   releaseTimer?: ReturnType<typeof setTimeout>
   catchUpTimer?: ReturnType<typeof setTimeout>
 }
@@ -71,10 +80,15 @@ function newer(next: TaskSummary, current: TaskSummary | undefined): boolean {
   return next.lastEventSeq >= current.lastEventSeq
 }
 
+/** Tasks GET /state always includes, whatever their age (contract §2). */
+const alwaysInSnapshot = (task: TaskSummary) =>
+  isPending(task) || task.attention !== null || awaitsReview(task)
+
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error))
 
 export const useTasksStore = defineStore('tasks', () => {
   let client: TasksApi = defaultApi
+  const parse = createEventParser()
   const summaries = shallowReactive(new Map<string, TaskSummary>())
   const logs = new Map<string, LogInternal>()
   const paging = shallowReactive<ListPaging>({
@@ -117,17 +131,20 @@ export const useTasksStore = defineStore('tasks', () => {
   }
 
   /**
-   * Applies a /state snapshot: every pending task plus the newest others. A known task missing from it is gone,
-   * unless it is older than the snapshot's oldest finished task (then it is only outside the snapshot's window).
+   * Applies a /state snapshot: every pending task, every task with attention, every done task without a review,
+   * plus the 100 newest others. A known task missing from it is gone, unless it is one of the "others" older than
+   * the snapshot's oldest "other" (then it is only outside the snapshot's window).
    */
   function applySnapshot(tasks: readonly TaskSummary[]): void {
     const ids = new Set(tasks.map((task) => task.id))
-    const finished = tasks.filter((task) => !isPending(task))
-    const horizon = finished.length
-      ? Math.min(...finished.map((task) => Date.parse(task.createdAt)))
+    // The "100 newest others" set the window; tasks the snapshot always carries do not.
+    const others = tasks.filter((task) => !alwaysInSnapshot(task))
+    const horizon = others.length
+      ? Math.min(...others.map((task) => Date.parse(task.createdAt)))
       : Infinity
     for (const [id, task] of summaries) {
-      if (!ids.has(id) && (isPending(task) || Date.parse(task.createdAt) >= horizon)) remove(id)
+      if (ids.has(id)) continue
+      if (alwaysInSnapshot(task) || Date.parse(task.createdAt) >= horizon) remove(id)
     }
     for (const task of tasks) upsert(task)
     loaded.value = true
@@ -194,6 +211,7 @@ export const useTasksStore = defineStore('tasks', () => {
         refs: 0,
         pending: [],
         syncing: false,
+        renderScheduled: false,
       }
       logs.set(taskId, log)
       void loadTail(log)
@@ -232,10 +250,10 @@ export const useTasksStore = defineStore('tasks', () => {
     try {
       const page = await client.events(log.taskId, { tail: TAIL })
       if (logs.get(log.taskId) !== log) return
-      const items = [...page.items].sort((a, b) => a.seq - b.seq)
-      log.items.value = items
-      log.state.firstSeq = items[0]?.seq ?? page.lastSeq + 1
-      log.state.lastSeq = items.at(-1)?.seq ?? page.lastSeq
+      const raw = bySeq(page.items)
+      log.items.value = raw.map(parse).filter((event): event is TaskEvent => event !== null)
+      log.state.firstSeq = raw[0]?.seq ?? page.lastSeq + 1
+      log.state.lastSeq = raw.at(-1)?.seq ?? page.lastSeq
       log.state.status = 'ready'
       log.syncing = false
       drainPending(log)
@@ -247,12 +265,18 @@ export const useTasksStore = defineStore('tasks', () => {
     }
   }
 
-  function append(log: LogInternal, events: readonly TaskEvent[]): void {
+  /**
+   * Appends events that continue the log. An event the parser rejects (an unknown type from a newer daemon)
+   * still advances lastSeq, so it never looks like a gap. Views re-render once per animation frame.
+   */
+  function append(log: LogInternal, events: readonly RawEvent[]): void {
     let added = false
-    for (const event of events) {
-      if (event.seq !== log.state.lastSeq + 1) continue
+    for (const raw of events) {
+      if (raw.seq !== log.state.lastSeq + 1) continue
+      log.state.lastSeq = raw.seq
+      const event = parse(raw)
+      if (!event) continue
       log.items.value.push(event)
-      log.state.lastSeq = event.seq
       added = true
     }
     if (!added) return
@@ -261,7 +285,16 @@ export const useTasksStore = defineStore('tasks', () => {
       log.items.value.splice(0, overflow)
       log.state.firstSeq = log.items.value[0]?.seq ?? log.state.lastSeq + 1
     }
-    triggerRef(log.items)
+    scheduleRender(log)
+  }
+
+  function scheduleRender(log: LogInternal): void {
+    if (log.renderScheduled) return
+    log.renderScheduled = true
+    nextFrame(() => {
+      log.renderScheduled = false
+      triggerRef(log.items)
+    })
   }
 
   /** Applies buffered frames in order; a remaining gap starts a catch-up read. */
@@ -298,10 +331,7 @@ export const useTasksStore = defineStore('tasks', () => {
       for (;;) {
         const page = await client.events(log.taskId, { after: log.state.lastSeq, limit: PAGE })
         if (logs.get(log.taskId) !== log) return
-        append(
-          log,
-          [...page.items].sort((a, b) => a.seq - b.seq),
-        )
+        append(log, bySeq(page.items))
         if (page.items.length < PAGE || log.state.lastSeq >= page.lastSeq) break
       }
       log.syncing = false
@@ -322,7 +352,8 @@ export const useTasksStore = defineStore('tasks', () => {
   }
 
   /** A task.event frame. Only logs on screen keep events; others are told by lastEventSeq later. */
-  function applyEvent(event: TaskEvent): void {
+  function applyEvent(event: RawEvent): void {
+    if (typeof event?.taskId !== 'string' || !Number.isInteger(event.seq)) return
     const log = logs.get(event.taskId)
     if (!log) return
     if (log.syncing || log.state.status !== 'ready') {
@@ -348,9 +379,10 @@ export const useTasksStore = defineStore('tasks', () => {
     try {
       const page = await client.events(taskId, { after, limit: before - 1 - after })
       if (logs.get(taskId) !== log || log.state.firstSeq !== before) return
-      const older = page.items.filter((event) => event.seq < before).sort((a, b) => a.seq - b.seq)
+      const older = bySeq(page.items.filter((event) => event.seq < before))
       if (older.length) {
-        log.items.value = [...older, ...log.items.value]
+        const parsed = older.map(parse).filter((event): event is TaskEvent => event !== null)
+        log.items.value = [...parsed, ...log.items.value]
         log.state.firstSeq = older[0]?.seq ?? before
       }
     } catch (error) {

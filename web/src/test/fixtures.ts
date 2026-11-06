@@ -1,6 +1,7 @@
 /** Builders for API data in tests: complete objects with sensible defaults, overridden per test. */
 import type { TasksApi } from '@/api/tasks'
-import type { Account, TaskDetail, TaskEvent, TaskSummary } from '@/api/types'
+import type { TaskEvent, TaskEventType } from '@/api/events'
+import type { Account, TaskDetail, TaskSummary } from '@/api/types'
 
 export const T0 = Date.parse('2026-11-06T10:00:00.000Z')
 
@@ -54,9 +55,9 @@ export function makeEvent(
   taskId: string,
   seq: number,
   data: Record<string, unknown> = { kind: 'message', text: `m${seq}` },
-  type: TaskEvent['type'] = 'worker',
+  type: TaskEventType = 'worker',
 ): TaskEvent {
-  return { seq, ts: iso(seq * 1000), taskId, turn: 1, attempt: 1, type, data }
+  return { seq, ts: iso(seq * 1000), taskId, turn: 1, attempt: 1, type, data } as TaskEvent
 }
 
 export function makeAccount(overrides: Partial<Account> = {}): Account {
@@ -89,6 +90,7 @@ export function fakeTasksApi(overrides: Partial<TasksApi> = {}): TasksApi {
     list: missing('list') as Fn<'list'>,
     get: missing('get') as Fn<'get'>,
     events: missing('events') as Fn<'events'>,
+    prompt: missing('prompt') as Fn<'prompt'>,
     followup: missing('followup') as Fn<'followup'>,
     review: missing('review') as Fn<'review'>,
     cancel: missing('cancel') as Fn<'cancel'>,

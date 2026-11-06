@@ -27,7 +27,7 @@ function boot(overrides: Partial<BootState> = {}): BootState {
     backends: [],
     tasks: [makeTask({ id: 't1' })],
     projects: [],
-    lastEventId: '41',
+    lastEventId: 'a1b2c3d4.41',
     ...overrides,
   }
 }
@@ -71,7 +71,7 @@ describe('connection store', () => {
     expect(FakeEventSource.instances).toHaveLength(0)
     await flushPromises()
     expect(fetch.mock.calls[0]?.[0]).toBe('/api/v1/state')
-    expect(FakeEventSource.last.url).toBe('/api/v1/events?lastEventId=41')
+    expect(FakeEventSource.last.url).toBe('/api/v1/events?lastEventId=a1b2c3d4.41')
     expect(store.health?.version).toBe('9.9')
     expect(useTasksStore().get('t1')?.title).toBe('Fix the login form')
     expect(useAccountsStore().accounts.map((a) => a.id)).toEqual(['a1'])
@@ -118,10 +118,18 @@ describe('connection store', () => {
     await flushPromises()
     const source = FakeEventSource.last
     source.open()
-    source.emit('task.created', JSON.stringify(makeTask({ id: 't2', title: 'New' })), '42')
-    source.emit('task.updated', JSON.stringify(makeTask({ id: 't1', status: 'done' })), '43')
-    source.emit('task.deleted', JSON.stringify({ id: 't2' }), '44')
-    source.emit('account.updated', JSON.stringify(makeAccount({ id: 'a2', priority: 5 })), '45')
+    source.emit('task.created', JSON.stringify(makeTask({ id: 't2', title: 'New' })), 'a1b2c3d4.42')
+    source.emit(
+      'task.updated',
+      JSON.stringify(makeTask({ id: 't1', status: 'done' })),
+      'a1b2c3d4.43',
+    )
+    source.emit('task.deleted', JSON.stringify({ id: 't2' }), 'a1b2c3d4.44')
+    source.emit(
+      'account.updated',
+      JSON.stringify(makeAccount({ id: 'a2', priority: 5 })),
+      'a1b2c3d4.45',
+    )
     const tasks = useTasksStore()
     expect(tasks.get('t2')).toBeUndefined()
     expect(tasks.get('t1')?.status).toBe('done')
@@ -138,15 +146,48 @@ describe('connection store', () => {
     await flushPromises()
     const source = FakeEventSource.last
     source.open()
-    source.emit('reset', '{"reason":"too_old"}', '50')
+    source.emit('reset', '{"reason":"too_old"}', 'a1b2c3d4.50')
     expect(fetch).toHaveBeenCalledTimes(2)
     // While /state is read: one frame the snapshot already covers, one that is newer.
-    source.emit('task.updated', JSON.stringify(makeTask({ id: 't1', title: 'covered' })), '60')
-    source.emit('task.updated', JSON.stringify(makeTask({ id: 't1', title: 'newer' })), '62')
-    resolveSecond(json(boot({ lastEventId: '61', tasks: [makeTask({ id: 't1', title: 'snap' })] })))
+    source.emit(
+      'task.updated',
+      JSON.stringify(makeTask({ id: 't1', title: 'covered' })),
+      'a1b2c3d4.60',
+    )
+    source.emit(
+      'task.updated',
+      JSON.stringify(makeTask({ id: 't1', title: 'newer' })),
+      'a1b2c3d4.62',
+    )
+    resolveSecond(
+      json(boot({ lastEventId: 'a1b2c3d4.60', tasks: [makeTask({ id: 't1', title: 'snap' })] })),
+    )
     await flushPromises()
     expect(useTasksStore().get('t1')?.title).toBe('newer')
     expect(FakeEventSource.instances).toHaveLength(1)
+  })
+
+  it('replays held frames by "newer wins" when the snapshot id was not among them', async () => {
+    let resolveSecond: (value: Response) => void = () => {}
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(json(boot()))
+      .mockReturnValueOnce(new Promise<Response>((resolve) => (resolveSecond = resolve)))
+    start(fetch)
+    await flushPromises()
+    const source = FakeEventSource.last
+    source.open()
+    source.emit('reset', '{"reason":"restart"}')
+    const stale = makeTask({ id: 't1', title: 'stale', updatedAt: iso(1000) })
+    const fresh = makeTask({ id: 't2', title: 'fresh', updatedAt: iso(9000) })
+    source.emit('task.updated', JSON.stringify(stale), 'ffff0000.3')
+    source.emit('task.created', JSON.stringify(fresh), 'ffff0000.4')
+    const snap = makeTask({ id: 't1', title: 'snap', updatedAt: iso(5000) })
+    resolveSecond(json(boot({ lastEventId: 'ffff0000.2', tasks: [snap] })))
+    await flushPromises()
+    const tasks = useTasksStore()
+    expect(tasks.get('t1')?.title).toBe('snap')
+    expect(tasks.get('t2')?.title).toBe('fresh')
   })
 
   it('reloads when the daemon serves another web bundle', async () => {

@@ -43,6 +43,14 @@ describe('task endpoints', () => {
     expect(call(1).url).toBe('/api/v1/tasks/t1/events?after=12&limit=100')
   })
 
+  it('reads the full brief of a turn on demand', async () => {
+    const { tasks, call } = setup({ prompt: 'brief' })
+    expect(await tasks.prompt('t1', 2)).toEqual({ prompt: 'brief' })
+    expect(call().url).toBe('/api/v1/tasks/t1/prompt?turn=2')
+    await tasks.prompt('t1', 2, 3)
+    expect(call(1).url).toBe('/api/v1/tasks/t1/prompt?turn=2&attempt=3')
+  })
+
   it('sends writes with X-Seelegent and a JSON body', async () => {
     const { tasks, call } = setup({ id: 't1' })
     await tasks.followup('t1', { message: 'again', tier: 'strong' })

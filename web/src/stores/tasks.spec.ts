@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { computed, effectScope } from 'vue'
 
 import type { EventsQuery, TaskEventsPage } from '@/api/tasks'
-import type { TaskEvent } from '@/api/types'
+import type { TaskEvent } from '@/api/events'
 import { setupApp } from '@/test/app'
 import { fakeTasksApi, iso, makeEvent, makeTask } from '@/test/fixtures'
 
@@ -57,14 +57,18 @@ describe('tasks store: summaries', () => {
 
   it('removes tasks missing from a snapshot but keeps older ones outside its window', () => {
     const store = useTasksStore()
-    store.upsert(makeTask({ id: 'old', status: 'done', createdAt: iso(-86400_000) }))
-    store.upsert(makeTask({ id: 'gone', status: 'done', createdAt: iso(1000) }))
+    const review = { verdict: 'accepted' as const, at: iso() }
+    store.upsert(makeTask({ id: 'old', status: 'done', review, createdAt: iso(-86400_000) }))
+    store.upsert(makeTask({ id: 'gone', status: 'done', review, createdAt: iso(1000) }))
+    // The snapshot always carries pending tasks and done tasks without a review, however old.
     store.upsert(makeTask({ id: 'gonePending', status: 'queued', createdAt: iso(-90000_000) }))
+    store.upsert(makeTask({ id: 'goneReview', status: 'done', createdAt: iso(-90000_000) }))
     store.applySnapshot([
-      makeTask({ id: 'keep', status: 'done', createdAt: iso() }),
+      makeTask({ id: 'keep', status: 'done', review, createdAt: iso() }),
+      makeTask({ id: 'unreviewed', status: 'done', createdAt: iso(-99000_000) }),
       makeTask({ id: 'run', status: 'running', createdAt: iso(5000) }),
     ])
-    expect([...store.summaries.keys()].sort()).toEqual(['keep', 'old', 'run'])
+    expect([...store.summaries.keys()].sort()).toEqual(['keep', 'old', 'run', 'unreviewed'])
     expect(store.loaded).toBe(true)
   })
 
@@ -154,6 +158,18 @@ describe('tasks store: event logs', () => {
     server.add(1)
     store.applyEvent(makeEvent('t1', 9))
     expect(log.state.lastSeq).toBe(9)
+  })
+
+  it('skips an event of an unknown type without treating it as a gap', async () => {
+    const { store, server } = setup(2)
+    const log = store.retainEvents('t1')
+    await flushPromises()
+    const unknown = { ...makeEvent('t1', 3), type: 'gate', data: { state: 'red' } }
+    store.applyEvent(unknown as unknown as TaskEvent)
+    store.applyEvent(makeEvent('t1', 4))
+    expect(log.state.lastSeq).toBe(4)
+    expect(seqs(log)).toEqual([1, 2, 4])
+    expect(server.read).toHaveBeenCalledTimes(1)
   })
 
   it('pages a long catch-up until the log is current', async () => {

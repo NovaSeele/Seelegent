@@ -127,15 +127,14 @@ export const useConnectionStore = defineStore('connection', () => {
     if (stopped) return
     attempt = 0
     applySnapshot(state)
-    const since = Number(state.lastEventId)
-    const replay = held
+    // Ids are opaque: frames up to the snapshot's own id are covered by it. When that id was not among the held
+    // frames, every held frame is replayed with "newer wins" rules (summaries by updatedAt, events by seq).
+    const at = held.findIndex((frame) => frame.id === state.lastEventId)
+    const replay = at >= 0 ? held.slice(at + 1) : held
+    const careful = at < 0
     held = []
     syncing = false
-    for (const frame of replay) {
-      const id = Number(frame.id)
-      if (Number.isFinite(since) && Number.isFinite(id) && id <= since) continue
-      apply(frame.name, frame.data)
-    }
+    for (const frame of replay) apply(frame.name, frame.data, careful)
     const events = stream.value
     if (events && !events.running) {
       events.setLastEventId(state.lastEventId)
@@ -153,13 +152,15 @@ export const useConnectionStore = defineStore('connection', () => {
     if (restarted) void sync()
   }
 
-  function apply(name: keyof ServerEvents, data: unknown): void {
+  /** `careful`: the frame may be older than the data already applied (replay after a resync). */
+  function apply(name: keyof ServerEvents, data: unknown, careful = false): void {
     const tasks = useTasksStore()
     const accounts = useAccountsStore()
     switch (name) {
       case 'task.created':
       case 'task.updated':
-        tasks.upsert(data as ServerEvents['task.updated'])
+        if (careful) tasks.upsertIfNewer(data as ServerEvents['task.updated'])
+        else tasks.upsert(data as ServerEvents['task.updated'])
         break
       case 'task.deleted':
         tasks.remove((data as ServerEvents['task.deleted']).id)

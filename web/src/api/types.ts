@@ -193,37 +193,179 @@ export interface Usage {
 
 // §3.2 Events
 
-export type TaskEventType =
-  | 'worker'
-  | 'lead_message'
-  | 'route'
-  | 'worker_prompt'
-  | 'attempt_end'
-  | 'turn_end'
-  | 'quota_exhausted'
-  | 'auth_failed'
-  | 'waiting_quota'
-  | 'retry'
-  | 'handoff'
-  | 'reattach'
-  | 'resumed'
-  | 'attention'
-  | 'deps'
-  | 'takeover'
-  | 'handback'
-  | 'review'
-  | 'cancel'
-  | 'work_at_risk'
-  | 'error'
+// The TaskEvent union itself lives in events.ts (tygo cannot emit it); these are its envelope and data shapes.
 
-export interface TaskEvent {
+export interface TaskEventBase {
   seq: number
   ts: string
   taskId: string
   turn?: number
   attempt?: number
-  type: TaskEventType
-  data: Record<string, unknown>
+}
+
+/** The normalized worker event (internal/event.Event), stored as `type: "worker"`. */
+export interface WorkerEvent {
+  kind:
+    | 'session'
+    | 'message'
+    | 'tool_call'
+    | 'tool_result'
+    | 'file'
+    | 'usage'
+    | 'report'
+    | 'error'
+    | 'log'
+    | 'background_wait'
+  step?: number
+  text?: string
+  session?: WorkerSession
+  tool?: WorkerTool
+  file?: WorkerFile
+  usage?: Usage
+  report?: WorkerReport
+  error?: WorkerError
+}
+
+export interface WorkerSession {
+  conversationId: string
+  model?: string
+}
+
+export interface WorkerTool {
+  id?: string
+  name: string
+  state: 'calling' | 'done' | 'failed'
+  /** The tool's parameters as JSON (secrets masked). */
+  input?: unknown
+  command?: string
+  output?: string
+  durationMs?: number
+  blocked?: boolean
+}
+
+export interface WorkerFile {
+  path: string
+  op: 'read' | 'edit'
+  tool?: string
+}
+
+export interface WorkerReport {
+  status: 'success' | 'error'
+  response?: string
+  error?: string
+  conversationId?: string
+  usage?: Usage
+  durationMs?: number
+  deniedActions?: string[]
+  synthesized?: boolean
+}
+
+export interface WorkerError {
+  class: 'quota_exhausted' | 'auth_required' | 'transient' | 'fatal'
+  message: string
+}
+
+export interface LeadMessageData {
+  message: string
+  by: 'lead' | 'user' | 'gate' | 'verifier'
+  model?: string
+  effort?: string
+  tier?: Tier
+}
+
+export interface RouteData {
+  accountId: string
+  /** Never an email. */
+  accountLabel: string
+  model: string
+  reason: string
+  continuing: boolean
+  remaining?: number
+}
+
+/** The brief itself is read with GET /tasks/{id}/prompt. */
+export interface WorkerPromptData {
+  length: number
+  /** First 500 characters. */
+  preview: string
+}
+
+export interface AttemptEndData {
+  status: Attempt['status']
+  error?: string
+}
+
+export interface TurnEndData {
+  status: Turn['status']
+  response?: string
+  files: string[]
+  usage?: Usage
+}
+
+/** quota_exhausted and auth_failed. */
+export interface AccountFailureData {
+  accountId: string
+  group?: string
+  until?: string
+  error: string
+}
+
+export interface WaitingQuotaData {
+  until?: string
+}
+
+export interface RetryData {
+  delayMs: number
+  error: string
+}
+
+export interface HandoffData {
+  from: string
+  to: string
+  reason: string
+}
+
+/** reattach and resumed. */
+export interface ReattachData {
+  accountId: string
+  offset?: number
+}
+
+export type AttentionEventData = Attention | { state: 'cleared' }
+
+export interface DepsData {
+  state: 'waiting' | 'ready' | 'blocked'
+  after?: string[]
+  reason?: string
+  forced?: boolean
+}
+
+export interface TakeoverData {
+  state: 'start' | 'end'
+  accountId: string
+  durationMs?: number
+  exitCode?: number
+}
+
+export interface HandbackData {
+  turn: number
+  response: string
+}
+
+export interface ReviewData {
+  verdict: Verdict
+  notes?: string
+}
+
+export type CancelData = Record<string, never>
+
+export interface WorkAtRiskData {
+  files: string[]
+  snapshot?: string
+}
+
+export interface ErrorData {
+  message: string
 }
 
 export interface DelegateRequest {
