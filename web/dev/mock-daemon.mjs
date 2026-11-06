@@ -916,12 +916,15 @@ function simStep(task) {
   const sim = task.sim
   const step = SCRIPT[sim.step % SCRIPT.length]
   if (step.msg) {
+    // Every piece of one message carries the same step (the engine coalesces deltas per step).
     sim.pieces ??= chunks(step.msg)
+    sim.msgStep ??= stepNumber(task)
     const text = sim.pieces.shift()
-    pushEvent(task, 'worker', { kind: 'message', step: stepNumber(task), text })
+    pushEvent(task, 'worker', { kind: 'message', step: sim.msgStep, text })
     task.summary.activeStep = { label: 'Thinking', since: now() }
     if (sim.pieces.length) return
     sim.pieces = undefined
+    sim.msgStep = undefined
   } else {
     sim.wait = (sim.wait ?? 0) + 1
     if (sim.wait < 4) return

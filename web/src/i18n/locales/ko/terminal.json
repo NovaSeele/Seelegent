@@ -1,0 +1,111 @@
+{
+  "label": "워커 기록",
+  "loading": "기록을 불러오는 중…",
+  "loadError": "기록을 불러오지 못했습니다: {error}",
+  "earlier": "이전 이벤트 불러오기",
+  "earlierError": "이전 이벤트를 불러오지 못했습니다: {error}",
+  "empty": "아직 아무것도 없습니다. 워커가 실행되면 기록이 채워집니다.",
+  "jump": "최신으로 이동",
+  "jumpCmd": "기록 끝으로 이동",
+  "by": {
+    "lead": "리드",
+    "user": "나",
+    "gate": "검사 게이트",
+    "verifier": "검증자"
+  },
+  "turn": "{n}번째 턴",
+  "route": {
+    "first": "{account}에서 실행 · {model}",
+    "continuing": "{account}에서 계속 · {model}",
+    "left": "{percent} 남음"
+  },
+  "prompt": {
+    "title": "워커에게 보낸 지시",
+    "size": "{n}자",
+    "show": "전체 지시 보기",
+    "hide": "접기",
+    "loading": "지시를 불러오는 중…",
+    "error": "지시를 불러오지 못했습니다: {error}"
+  },
+  "tool": {
+    "running": "실행 중",
+    "failed": "실패",
+    "blocked": "차단됨",
+    "show": "출력 보기",
+    "hide": "출력 숨기기",
+    "noOutput": "출력 없음"
+  },
+  "file": {
+    "read": "읽음",
+    "edit": "수정함"
+  },
+  "report": {
+    "success": "워커 보고서",
+    "error": "워커가 오류를 보고했습니다",
+    "synthesized": "Seelegent가 기록을 바탕으로 작성"
+  },
+  "turnEnd": {
+    "ok": "{n}번째 턴 완료",
+    "failed": "{n}번째 턴 실패",
+    "cancelled": "{n}번째 턴 취소됨",
+    "running": "{n}번째 턴 실행 중",
+    "tokens": "토큰 {n}개",
+    "files": "파일 {count}개 변경"
+  },
+  "status": {
+    "working": "작업 중",
+    "queued": "시작 대기 중"
+  },
+  "until": "{time}까지",
+  "ev": {
+    "attempt": {
+      "running": "시도가 아직 실행 중입니다",
+      "quota": "계정의 할당량이 소진되었습니다",
+      "auth": "계정에 다시 로그인해야 합니다",
+      "transient": "시도 중 일시적인 오류가 발생했습니다",
+      "background_wait": "워커가 백그라운드 작업을 기다리고 있습니다",
+      "error": "시도가 실패했습니다"
+    },
+    "quotaExhausted": "계정의 할당량이 소진되었습니다",
+    "authFailed": "계정에 다시 로그인해야 합니다",
+    "waitingQuota": "할당량 대기 중",
+    "retry": "{seconds}초 후 다시 시도",
+    "handoff": "{from}에서 {to}(으)로 이동",
+    "reattach": "실행 중인 워커에 다시 연결했습니다",
+    "resumed": "데몬 재시작 후 이어서 실행합니다",
+    "attentionCleared": "더 이상 기다리지 않음",
+    "attention": {
+      "blocked": "워커가 막혔습니다",
+      "question": "워커가 질문했습니다",
+      "stalled": "워커가 멈춘 것 같습니다",
+      "background_wait": "워커가 백그라운드 작업을 기다립니다",
+      "info": "Seelegent 알림"
+    },
+    "deps": {
+      "waiting": "{after} 대기 중",
+      "ready": "기다리던 작업이 끝났습니다",
+      "blocked": "기다리던 작업이 실패했습니다: {after}"
+    },
+    "takeover": {
+      "start": "이 작업을 직접 이어받았습니다",
+      "end": "작업을 다시 넘겼습니다"
+    },
+    "handback": "인계 보고서",
+    "review": {
+      "accepted": "승인됨",
+      "rejected": "반려됨"
+    },
+    "cancel": "취소됨",
+    "workAtRisk": "변경된 파일 {count}개가 사라질 수 있습니다",
+    "error": "오류",
+    "worker": {
+      "quota_exhausted": "워커의 할당량이 소진되었습니다",
+      "auth_required": "워커가 로그인해야 합니다",
+      "transient": "워커에 일시적인 오류가 발생했습니다",
+      "fatal": "워커가 실패했습니다"
+    },
+    "backgroundWait": "백그라운드 작업 대기 중",
+    "log": "워커 로그",
+    "session": "대화 시작 · {model}"
+  }
+}

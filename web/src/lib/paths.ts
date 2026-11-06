@@ -1,0 +1,34 @@
+/**
+ * Display helpers for file paths from workers and the daemon. Workers report absolute paths with either
+ * separator; the UI shows them relative to the task's folder when they are inside it. Display only: git reads and
+ * commits use the daemon's repo-relative paths as they are.
+ */
+
+const slashes = (path: string) => path.replace(/\\/g, '/')
+
+/** Windows paths compare without case; others as they are. */
+const looksWindows = (path: string) => /^[a-z]:\//i.test(path) || path.startsWith('//')
+
+/** `path` relative to `base` when it lies inside it, otherwise the path with '/' separators. */
+export function relativeTo(path: string, base: string | undefined): string {
+  const p = slashes(path)
+  if (!base) return p
+  const b = slashes(base).replace(/\/+$/, '')
+  const fold = looksWindows(b) ? (s: string) => s.toLowerCase() : (s: string) => s
+  if (fold(p) === fold(b)) return '.'
+  if (fold(p).startsWith(`${fold(b)}/`)) return p.slice(b.length + 1)
+  return p
+}
+
+/** The last segment of a path. */
+export function baseName(path: string): string {
+  const p = slashes(path).replace(/\/+$/, '')
+  return p.slice(p.lastIndexOf('/') + 1) || p
+}
+
+/** The folder part of a path ('' for a bare name). */
+export function dirName(path: string): string {
+  const p = slashes(path).replace(/\/+$/, '')
+  const at = p.lastIndexOf('/')
+  return at < 0 ? '' : p.slice(0, at)
+}

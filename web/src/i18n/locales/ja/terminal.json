@@ -1,0 +1,111 @@
+{
+  "label": "ワーカーの記録",
+  "loading": "記録を読み込み中…",
+  "loadError": "記録を読み込めませんでした: {error}",
+  "earlier": "以前のイベントを読み込む",
+  "earlierError": "以前のイベントを読み込めませんでした: {error}",
+  "empty": "まだ何もありません。ワーカーが動くと記録が増えていきます。",
+  "jump": "最新へ移動",
+  "jumpCmd": "記録の末尾へ移動",
+  "by": {
+    "lead": "リード",
+    "user": "あなた",
+    "gate": "ゲート",
+    "verifier": "検証者"
+  },
+  "turn": "ターン {n}",
+  "route": {
+    "first": "{account} で実行 · {model}",
+    "continuing": "{account} で続行 · {model}",
+    "left": "残り {percent}"
+  },
+  "prompt": {
+    "title": "ワーカーへの指示",
+    "size": "{n} 文字",
+    "show": "指示をすべて表示",
+    "hide": "折りたたむ",
+    "loading": "指示を読み込み中…",
+    "error": "指示を読み込めませんでした: {error}"
+  },
+  "tool": {
+    "running": "実行中",
+    "failed": "失敗",
+    "blocked": "ブロック",
+    "show": "出力を表示",
+    "hide": "出力を隠す",
+    "noOutput": "出力なし"
+  },
+  "file": {
+    "read": "読み込み",
+    "edit": "編集"
+  },
+  "report": {
+    "success": "ワーカーのレポート",
+    "error": "ワーカーがエラーを報告しました",
+    "synthesized": "記録をもとに Seelegent が作成"
+  },
+  "turnEnd": {
+    "ok": "ターン {n} 完了",
+    "failed": "ターン {n} 失敗",
+    "cancelled": "ターン {n} キャンセル",
+    "running": "ターン {n} 実行中",
+    "tokens": "{n} トークン",
+    "files": "{count} ファイルを変更"
+  },
+  "status": {
+    "working": "作業中",
+    "queued": "開始待ち"
+  },
+  "until": "{time}まで",
+  "ev": {
+    "attempt": {
+      "running": "試行はまだ実行中です",
+      "quota": "アカウントのクォータが切れました",
+      "auth": "アカウントの再ログインが必要です",
+      "transient": "試行中に一時的なエラーが発生しました",
+      "background_wait": "ワーカーはバックグラウンド処理を待っています",
+      "error": "試行に失敗しました"
+    },
+    "quotaExhausted": "アカウントのクォータが切れました",
+    "authFailed": "アカウントの再ログインが必要です",
+    "waitingQuota": "クォータの回復待ち",
+    "retry": "{seconds} 秒後に再試行",
+    "handoff": "{from} から {to} へ移動",
+    "reattach": "実行中のワーカーに再接続しました",
+    "resumed": "デーモンの再起動後に再開しました",
+    "attentionCleared": "待機は解消されました",
+    "attention": {
+      "blocked": "ワーカーがブロックされています",
+      "question": "ワーカーから質問があります",
+      "stalled": "ワーカーが止まっているようです",
+      "background_wait": "ワーカーはバックグラウンド処理を待っています",
+      "info": "Seelegent からのお知らせ"
+    },
+    "deps": {
+      "waiting": "{after} を待機中",
+      "ready": "待っていたタスクが完了しました",
+      "blocked": "待っていたタスクが失敗しました: {after}"
+    },
+    "takeover": {
+      "start": "このタスクを引き継ぎました",
+      "end": "タスクを戻しました"
+    },
+    "handback": "引き継ぎレポート",
+    "review": {
+      "accepted": "承認済み",
+      "rejected": "差し戻し"
+    },
+    "cancel": "キャンセル済み",
+    "workAtRisk": "変更した {count} ファイルが失われる可能性があります",
+    "error": "エラー",
+    "worker": {
+      "quota_exhausted": "ワーカーのクォータが切れました",
+      "auth_required": "ワーカーのログインが必要です",
+      "transient": "ワーカーで一時的なエラーが発生しました",
+      "fatal": "ワーカーが失敗しました"
+    },
+    "backgroundWait": "バックグラウンド処理を待機中",
+    "log": "ワーカーのログ",
+    "session": "会話を開始 · {model}"
+  }
+}

@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 import type { TaskDetail, TaskSummary } from '@/api/types'
 import EmptyState from '@/components/ui/EmptyState.vue'
 
+import TerminalView from '../views/terminal/TerminalView.vue'
 import { VIEW_ICONS, type TaskView } from './taskKeys'
 
 /** The panel of the selected task view. */
@@ -13,7 +14,9 @@ const { t } = useI18n()
 </script>
 
 <template>
+  <TerminalView v-if="view === 'terminal'" :task="task" />
   <EmptyState
+    v-else
     :icon="VIEW_ICONS[view]"
     :level="3"
     :title="t(`task.views.${view}`)"

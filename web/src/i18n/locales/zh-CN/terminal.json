@@ -1,0 +1,111 @@
+{
+  "label": "worker 记录",
+  "loading": "正在加载记录…",
+  "loadError": "无法加载记录：{error}",
+  "earlier": "加载更早的事件",
+  "earlierError": "无法加载更早的事件：{error}",
+  "empty": "暂无内容。worker 运行时记录会逐步出现。",
+  "jump": "跳到最新",
+  "jumpCmd": "跳到记录末尾",
+  "by": {
+    "lead": "主管",
+    "user": "你",
+    "gate": "检查关卡",
+    "verifier": "验证者"
+  },
+  "turn": "第 {n} 轮",
+  "route": {
+    "first": "在 {account} 上运行 · {model}",
+    "continuing": "在 {account} 上继续 · {model}",
+    "left": "剩余 {percent}"
+  },
+  "prompt": {
+    "title": "给 worker 的任务说明",
+    "size": "{n} 个字符",
+    "show": "查看完整说明",
+    "hide": "收起",
+    "loading": "正在加载任务说明…",
+    "error": "无法加载任务说明：{error}"
+  },
+  "tool": {
+    "running": "运行中",
+    "failed": "失败",
+    "blocked": "已拦截",
+    "show": "查看输出",
+    "hide": "隐藏输出",
+    "noOutput": "没有输出"
+  },
+  "file": {
+    "read": "读取",
+    "edit": "修改"
+  },
+  "report": {
+    "success": "worker 报告",
+    "error": "worker 报告了错误",
+    "synthesized": "由 Seelegent 根据记录整理"
+  },
+  "turnEnd": {
+    "ok": "第 {n} 轮完成",
+    "failed": "第 {n} 轮失败",
+    "cancelled": "第 {n} 轮已取消",
+    "running": "第 {n} 轮运行中",
+    "tokens": "{n} 个 token",
+    "files": "改动了 {count} 个文件"
+  },
+  "status": {
+    "working": "工作中",
+    "queued": "等待开始"
+  },
+  "until": "直到 {time}",
+  "ev": {
+    "attempt": {
+      "running": "本次尝试仍在运行",
+      "quota": "账号额度已用完",
+      "auth": "账号需要重新登录",
+      "transient": "本次尝试遇到临时错误",
+      "background_wait": "worker 正在等待后台任务",
+      "error": "本次尝试失败"
+    },
+    "quotaExhausted": "账号额度已用完",
+    "authFailed": "账号需要重新登录",
+    "waitingQuota": "等待额度恢复",
+    "retry": "{seconds} 秒后重试",
+    "handoff": "从 {from} 转到 {to}",
+    "reattach": "已重新连接到运行中的 worker",
+    "resumed": "守护进程重启后继续运行",
+    "attentionCleared": "不再等待",
+    "attention": {
+      "blocked": "worker 被阻塞",
+      "question": "worker 有问题要问",
+      "stalled": "worker 似乎卡住了",
+      "background_wait": "worker 正在等待后台任务",
+      "info": "Seelegent 提示"
+    },
+    "deps": {
+      "waiting": "等待 {after}",
+      "ready": "所等待的任务已完成",
+      "blocked": "所等待的任务失败：{after}"
+    },
+    "takeover": {
+      "start": "你接管了这个任务",
+      "end": "你交回了这个任务"
+    },
+    "handback": "交接报告",
+    "review": {
+      "accepted": "已接受",
+      "rejected": "已退回"
+    },
+    "cancel": "已取消",
+    "workAtRisk": "{count} 个改动的文件可能丢失",
+    "error": "错误",
+    "worker": {
+      "quota_exhausted": "worker 额度已用完",
+      "auth_required": "worker 需要登录",
+      "transient": "worker 遇到临时错误",
+      "fatal": "worker 失败"
+    },
+    "backgroundWait": "等待后台任务",
+    "log": "worker 日志",
+    "session": "对话开始 · {model}"
+  }
+}
