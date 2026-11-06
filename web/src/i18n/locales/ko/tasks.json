@@ -1,0 +1,66 @@
+{
+  "list": {
+    "label": "작업 목록",
+    "search": "작업 검색",
+    "searchPlaceholder": "제목, ID 또는 프로젝트",
+    "filters": "필터",
+    "status": "상태",
+    "project": "프로젝트",
+    "allProjects": "모든 프로젝트",
+    "grouping": "묶기",
+    "groupProject": "프로젝트별",
+    "groupFlat": "묶지 않음",
+    "clearFilters": "필터 지우기",
+    "needsGroup": "처리할 일",
+    "loadMore": "이전 작업 불러오기",
+    "loadError": "이전 작업을 불러오지 못했습니다: {error}",
+    "empty": "아직 작업이 없습니다",
+    "emptyDesc": "Claude가 작업을 맡기면 여기에 표시됩니다.",
+    "noMatch": "일치하는 작업이 없습니다",
+    "noMatchDesc": "다른 단어로 찾거나 필터를 지우세요."
+  },
+  "filter": {
+    "needs": "처리할 일",
+    "active": "실행 중",
+    "review": "검토 대기",
+    "done": "검토 완료",
+    "failed": "실패",
+    "cancelled": "취소됨"
+  },
+  "select": {
+    "start": "작업 선택",
+    "stop": "선택 끝내기",
+    "on": "선택됨",
+    "off": "선택 안 됨",
+    "toolbar": "선택한 작업",
+    "count": "{count}개 선택됨"
+  },
+  "bulk": {
+    "cancel": "취소 ({count})",
+    "accept": "승인 ({count})",
+    "cancelTitle": "이 작업들을 취소할까요?",
+    "acceptTitle": "이 작업들을 승인할까요?",
+    "cancelDesc": "워커가 바로 멈춥니다. 이미 바뀐 파일은 그대로 남습니다.",
+    "acceptDesc": "작업이 검토 완료로 표시되고, 이를 기다리던 작업이 시작될 수 있습니다.",
+    "cancelConfirm": "작업 {count}개 취소",
+    "acceptConfirm": "작업 {count}개 승인",
+    "keep": "돌아가기",
+    "cancelDone": "{total}개 중 {ok}개 취소함",
+    "acceptDone": "{total}개 중 {ok}개 승인함",
+    "failed": "{count}개 실패: {error}"
+  },
+  "row": {
+    "manual": "직접 진행 중"
+  },
+  "detail": {
+    "pick": "작업을 고르세요",
+    "pickDesc": "목록에서 작업을 고르면 워커가 한 일, 변경 사항, 검토 내용을 볼 수 있습니다."
+  },
+  "cmd": {
+    "open": "작업: {title}",
+    "nextNeed": "다음 처리할 작업 열기",
+    "noNeeds": "지금 처리할 일이 없습니다",
+    "search": "작업 목록 검색",
+    "select": "작업 선택"
+  }
+}

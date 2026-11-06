@@ -1,0 +1,104 @@
+{
+  "actions": {
+    "followup": "追加要求",
+    "accept": "接受",
+    "reject": "退回",
+    "takeover": "接管",
+    "cancel": "取消任务",
+    "copyId": "复制任务 ID",
+    "more": "更多操作",
+    "failed": "操作失败：{error}",
+    "cancelled": "任务已取消",
+    "tookOver": "正在打开 worker 对话的控制台",
+    "copied": "已复制任务 ID",
+    "copyFailed": "无法复制：浏览器拒绝了剪贴板权限"
+  },
+  "header": {
+    "driving": "由你接管中",
+    "turn": "第 {n} 轮",
+    "tokens": "{n} 个 token",
+    "started": "开始于 {time}",
+    "after": "前置任务"
+  },
+  "attention": {
+    "driving": "由你接管中 · {account}",
+    "drivingDesc": "worker 的对话已在控制台中打开。关闭后，worker 会写一份交接报告。",
+    "needsYou": "需要你处理",
+    "needsLead": "需要主管处理",
+    "dismiss": "忽略"
+  },
+  "question": {
+    "title": "worker 的问题",
+    "own": "或者自己写答案",
+    "placeholder": "你的回答…",
+    "hint": "1–9 选择选项 · Ctrl+Enter 发送",
+    "send": "发送回答",
+    "sent": "回答已发送，worker 继续工作"
+  },
+  "followup": {
+    "label": "追加要求",
+    "placeholder": "在同一对话中让 worker 继续做更多…",
+    "busy": "worker 正忙。等它完成后再追加，或先取消它。",
+    "hint": "Ctrl+Enter 发送",
+    "send": "发送",
+    "sent": "追加要求已发送",
+    "tierLabel": "档位",
+    "modelLabel": "模型",
+    "sameTier": "沿用档位",
+    "sameModel": "沿用模型",
+    "tier": {
+      "fast": "快速",
+      "standard": "标准",
+      "strong": "强",
+      "max": "最强"
+    }
+  },
+  "review": {
+    "verdict": {
+      "accepted": "已接受",
+      "rejected": "已退回"
+    },
+    "acceptedTitle": "接受这项工作？",
+    "rejectedTitle": "退回这项工作？",
+    "acceptedDesc": "任务会被标记为已审核，等待它的任务可以开始。",
+    "rejectedDesc": "任务会被标记为需要返工。说明要改什么；备注会随审核一起保存。",
+    "notes": "备注（可选）",
+    "notesReject": "需要改什么？",
+    "notesPlaceholder": "简短备注，供记录…",
+    "acceptedConfirm": "接受",
+    "rejectedConfirm": "退回",
+    "acceptedToast": "已接受",
+    "rejectedToast": "已退回"
+  },
+  "confirm": {
+    "cancelTitle": "取消这个任务？",
+    "cancelDesc": "worker 会立即停止。已经改动的文件保持原样。",
+    "cancelConfirm": "取消任务",
+    "takeoverTitle": "接管这个任务？",
+    "takeoverDesc": "会在 worker 的对话上打开一个控制台，由你继续完成。",
+    "takeoverActiveDesc": "正在运行的尝试会先停止，然后在 worker 的对话上打开一个控制台，由你继续完成。",
+    "takeoverConfirm": "接管"
+  },
+  "detail": {
+    "loading": "正在加载任务…",
+    "notFound": "无法打开这个任务",
+    "error": "出了什么问题"
+  },
+  "views": {
+    "label": "任务视图",
+    "terminal": "终端",
+    "tree": "树",
+    "graph": "图",
+    "files": "文件",
+    "git": "Git"
+  },
+  "cmd": {
+    "followup": "对这个任务追加要求",
+    "accept": "接受这个任务",
+    "reject": "退回这个任务",
+    "cancel": "取消这个任务",
+    "takeover": "接管这个任务",
+    "copyId": "复制任务 ID",
+    "view": "显示{name}"
+  }
+}

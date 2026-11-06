@@ -11,6 +11,8 @@
   },
   "group": {
     "navigation": "Ir a",
+    "task": "Esta tarea",
+    "tasks": "Tareas",
     "general": "General",
     "settings": "Ajustes",
     "appearance": "Apariencia",

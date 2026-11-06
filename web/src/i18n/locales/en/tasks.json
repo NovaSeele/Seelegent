@@ -1,0 +1,66 @@
+{
+  "list": {
+    "label": "Task list",
+    "search": "Search tasks",
+    "searchPlaceholder": "Title, id or project",
+    "filters": "Filters",
+    "status": "Status",
+    "project": "Project",
+    "allProjects": "All projects",
+    "grouping": "Group",
+    "groupProject": "By project",
+    "groupFlat": "No groups",
+    "clearFilters": "Clear filters",
+    "needsGroup": "Needs you",
+    "loadMore": "Load older tasks",
+    "loadError": "Could not load older tasks: {error}",
+    "empty": "No tasks yet",
+    "emptyDesc": "Tasks show up here when Claude delegates work.",
+    "noMatch": "No task matches",
+    "noMatchDesc": "Try other words or clear the filters."
+  },
+  "filter": {
+    "needs": "Needs you",
+    "active": "Running",
+    "review": "To review",
+    "done": "Reviewed",
+    "failed": "Failed",
+    "cancelled": "Cancelled"
+  },
+  "select": {
+    "start": "Select tasks",
+    "stop": "Stop selecting",
+    "on": "selected",
+    "off": "not selected",
+    "toolbar": "Selected tasks",
+    "count": "{count} selected | {count} selected"
+  },
+  "bulk": {
+    "cancel": "Cancel ({count})",
+    "accept": "Accept ({count})",
+    "cancelTitle": "Cancel these tasks?",
+    "acceptTitle": "Accept these tasks?",
+    "cancelDesc": "Their workers stop now. Files they already changed stay as they are.",
+    "acceptDesc": "The work is marked as reviewed, and tasks waiting for it can start.",
+    "cancelConfirm": "Cancel {count} task | Cancel {count} tasks",
+    "acceptConfirm": "Accept {count} task | Accept {count} tasks",
+    "keep": "Go back",
+    "cancelDone": "Cancelled {ok} of {total}",
+    "acceptDone": "Accepted {ok} of {total}",
+    "failed": "{count} failed: {error}"
+  },
+  "row": {
+    "manual": "You are driving"
+  },
+  "detail": {
+    "pick": "Pick a task",
+    "pickDesc": "Choose a task in the list to see what the worker did, its changes and its review."
+  },
+  "cmd": {
+    "open": "Task: {title}",
+    "nextNeed": "Open the next task that needs you",
+    "noNeeds": "Nothing needs you right now",
+    "search": "Search the task list",
+    "select": "Select tasks"
+  }
+}

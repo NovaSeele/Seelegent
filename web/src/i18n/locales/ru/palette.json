@@ -11,6 +11,8 @@
   },
   "group": {
     "navigation": "Перейти",
+    "task": "Эта задача",
+    "tasks": "Задачи",
     "general": "Общее",
     "settings": "Настройки",
     "appearance": "Оформление",

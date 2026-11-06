@@ -11,10 +11,13 @@ import type { IconName } from '@/components/ui/icons'
 import { i18n } from '@/i18n'
 import { bestScore } from '@/lib/fuzzy'
 
-export type CommandGroup = 'navigation' | 'settings' | 'appearance' | 'language' | 'general'
+export type CommandGroup =
+  'navigation' | 'task' | 'tasks' | 'settings' | 'appearance' | 'language' | 'general'
 
 export const COMMAND_GROUPS: readonly CommandGroup[] = [
   'navigation',
+  'task',
+  'tasks',
   'general',
   'settings',
   'appearance',
@@ -54,6 +57,12 @@ export interface CommandMatch {
 
 export const MAX_RESULTS = 50
 
+/**
+ * Commands made on the fly from live data (one per task), listed only while searching. A source gets the query
+ * and returns its candidates; they are ranked with the registered commands and run directly, never registered.
+ */
+export type CommandSource = (query: string) => readonly Command[]
+
 export function resolveText(text: Text, locale?: string): string {
   const t = i18n.global.t as (
     key: string,
@@ -69,6 +78,7 @@ export function resolveText(text: Text, locale?: string): string {
 
 export const useCommandsStore = defineStore('commands', () => {
   const commands = shallowRef<ReadonlyMap<string, Command>>(new Map())
+  const sources = shallowRef<readonly CommandSource[]>([])
   /** User remaps: command id -> spec, or null to unbind. Filled from settings later. */
   const overrides = shallowRef<Readonly<Record<string, string | null>>>({})
 
@@ -83,6 +93,11 @@ export const useCommandsStore = defineStore('commands', () => {
       }
       commands.value = remaining
     }
+  }
+
+  function addSource(source: CommandSource): () => void {
+    sources.value = [...sources.value, source]
+    return () => (sources.value = sources.value.filter((s) => s !== source))
   }
 
   const available = computed(() =>
@@ -103,7 +118,12 @@ export const useCommandsStore = defineStore('commands', () => {
 
   async function run(id: string): Promise<boolean> {
     const command = commands.value.get(id)
-    if (!command || (command.when && !command.when())) return false
+    return command ? execute(command) : false
+  }
+
+  /** Runs a command object (a registered one or one a source made for this search). */
+  async function execute(command: Command): Promise<boolean> {
+    if (command.when && !command.when()) return false
     await command.run()
     return true
   }
@@ -122,7 +142,8 @@ export const useCommandsStore = defineStore('commands', () => {
         )
     }
     const scored: CommandMatch[] = []
-    list.forEach((command) => {
+    const extra = sources.value.flatMap((source) => source(trimmed))
+    ;[...list, ...extra].forEach((command) => {
       const title = resolveText(command.title)
       const texts: [string, number][] = [
         [title, 1],
@@ -138,5 +159,16 @@ export const useCommandsStore = defineStore('commands', () => {
     return scored.sort((a, b) => b.score - a.score).slice(0, MAX_RESULTS)
   }
 
-  return { commands, available, overrides, register, shortcutFor, setOverride, run, search }
+  return {
+    commands,
+    available,
+    overrides,
+    register,
+    addSource,
+    shortcutFor,
+    setOverride,
+    run,
+    execute,
+    search,
+  }
 })

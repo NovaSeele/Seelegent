@@ -1,0 +1,104 @@
+{
+  "actions": {
+    "followup": "追加で依頼",
+    "accept": "承認",
+    "reject": "差し戻し",
+    "takeover": "引き継ぐ",
+    "cancel": "タスクをキャンセル",
+    "copyId": "タスク ID をコピー",
+    "more": "その他の操作",
+    "failed": "実行できませんでした: {error}",
+    "cancelled": "タスクをキャンセルしました",
+    "tookOver": "ワーカーの会話でコンソールを開いています",
+    "copied": "タスク ID をコピーしました",
+    "copyFailed": "コピーできませんでした: ブラウザーがクリップボードへのアクセスを拒否しました"
+  },
+  "header": {
+    "driving": "あなたが操作中",
+    "turn": "ターン {n}",
+    "tokens": "{n} トークン",
+    "started": "{time}に開始",
+    "after": "先行タスク"
+  },
+  "attention": {
+    "driving": "あなたが操作中 · {account}",
+    "drivingDesc": "ワーカーの会話がコンソールで開いています。閉じると、ワーカーが引き継ぎレポートを書きます。",
+    "needsYou": "あなたの対応が必要",
+    "needsLead": "リードの対応が必要",
+    "dismiss": "閉じる"
+  },
+  "question": {
+    "title": "ワーカーからの質問",
+    "own": "または自分で回答を書く",
+    "placeholder": "回答…",
+    "hint": "1–9 で選択 · Ctrl+Enter で送信",
+    "send": "回答を送信",
+    "sent": "回答を送信しました。ワーカーが作業を続けます"
+  },
+  "followup": {
+    "label": "追加で依頼",
+    "placeholder": "同じ会話のまま、ワーカーに追加の依頼を…",
+    "busy": "ワーカーは作業中です。終わってから依頼するか、先にキャンセルしてください。",
+    "hint": "Ctrl+Enter で送信",
+    "send": "送信",
+    "sent": "追加の依頼を送信しました",
+    "tierLabel": "ティア",
+    "modelLabel": "モデル",
+    "sameTier": "同じティア",
+    "sameModel": "同じモデル",
+    "tier": {
+      "fast": "高速",
+      "standard": "標準",
+      "strong": "高性能",
+      "max": "最大"
+    }
+  },
+  "review": {
+    "verdict": {
+      "accepted": "承認済み",
+      "rejected": "差し戻し"
+    },
+    "acceptedTitle": "この作業を承認しますか？",
+    "rejectedTitle": "この作業を差し戻しますか？",
+    "acceptedDesc": "タスクはレビュー済みになります。これを待っているタスクが開始できます。",
+    "rejectedDesc": "タスクはやり直しになります。直す点を書いてください。メモはレビューと一緒に保存されます。",
+    "notes": "メモ（任意）",
+    "notesReject": "何を直すべきですか？",
+    "notesPlaceholder": "記録用の短いメモ…",
+    "acceptedConfirm": "承認",
+    "rejectedConfirm": "差し戻し",
+    "acceptedToast": "承認しました",
+    "rejectedToast": "差し戻しました"
+  },
+  "confirm": {
+    "cancelTitle": "このタスクをキャンセルしますか？",
+    "cancelDesc": "ワーカーはすぐに停止します。変更済みのファイルはそのまま残ります。",
+    "cancelConfirm": "タスクをキャンセル",
+    "takeoverTitle": "このタスクを引き継ぎますか？",
+    "takeoverDesc": "ワーカーの会話でコンソールが開き、あなたが続きを進められます。",
+    "takeoverActiveDesc": "実行中の試行を止めてから、ワーカーの会話でコンソールが開き、あなたが続きを進められます。",
+    "takeoverConfirm": "引き継ぐ"
+  },
+  "detail": {
+    "loading": "タスクを読み込み中…",
+    "notFound": "このタスクを開けませんでした",
+    "error": "何が起きたか"
+  },
+  "views": {
+    "label": "タスクの表示",
+    "terminal": "ターミナル",
+    "tree": "ツリー",
+    "graph": "グラフ",
+    "files": "ファイル",
+    "git": "Git"
+  },
+  "cmd": {
+    "followup": "このタスクに追加で依頼",
+    "accept": "このタスクを承認",
+    "reject": "このタスクを差し戻し",
+    "cancel": "このタスクをキャンセル",
+    "takeover": "このタスクを引き継ぐ",
+    "copyId": "タスク ID をコピー",
+    "view": "{name}を表示"
+  }
+}

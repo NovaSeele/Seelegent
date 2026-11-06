@@ -10,6 +10,8 @@ import type nav from './locales/en/nav.json'
 import type pages from './locales/en/pages.json'
 import type palette from './locales/en/palette.json'
 import type settings from './locales/en/settings.json'
+import type task from './locales/en/task.json'
+import type tasks from './locales/en/tasks.json'
 import type watch from './locales/en/watch.json'
 import { FALLBACK_LOCALE, PLURAL_FORMS, SUPPORTED_LOCALES, type Locale } from './locales'
 
@@ -23,6 +25,8 @@ export const NAMESPACES = [
   'palette',
   'pages',
   'watch',
+  'tasks',
+  'task',
 ] as const
 export type Namespace = (typeof NAMESPACES)[number]
 
@@ -34,6 +38,8 @@ export interface MessageSchema {
   palette: typeof palette
   pages: typeof pages
   watch: typeof watch
+  tasks: typeof tasks
+  task: typeof task
 }
 
 declare module 'vue-i18n' {

@@ -75,7 +75,7 @@ async function runAt(index: number) {
   if (!match) return
   palette.close()
   await nextTick()
-  await commands.run(match.command.id)
+  await commands.execute(match.command)
 }
 
 const toggleChords = [PALETTE_SHORTCUT, PALETTE_ALT_SHORTCUT].flatMap(

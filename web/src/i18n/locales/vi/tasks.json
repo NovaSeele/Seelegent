@@ -1,0 +1,66 @@
+{
+  "list": {
+    "label": "Danh sách tác vụ",
+    "search": "Tìm tác vụ",
+    "searchPlaceholder": "Tiêu đề, mã hoặc dự án",
+    "filters": "Bộ lọc",
+    "status": "Trạng thái",
+    "project": "Dự án",
+    "allProjects": "Mọi dự án",
+    "grouping": "Nhóm",
+    "groupProject": "Theo dự án",
+    "groupFlat": "Không nhóm",
+    "clearFilters": "Bỏ lọc",
+    "needsGroup": "Cần bạn",
+    "loadMore": "Tải tác vụ cũ hơn",
+    "loadError": "Không tải được tác vụ cũ hơn: {error}",
+    "empty": "Chưa có tác vụ nào",
+    "emptyDesc": "Tác vụ sẽ hiện ở đây khi Claude giao việc.",
+    "noMatch": "Không có tác vụ nào khớp",
+    "noMatchDesc": "Thử từ khác hoặc bỏ bộ lọc."
+  },
+  "filter": {
+    "needs": "Cần bạn",
+    "active": "Đang chạy",
+    "review": "Chờ duyệt",
+    "done": "Đã duyệt",
+    "failed": "Thất bại",
+    "cancelled": "Đã huỷ"
+  },
+  "select": {
+    "start": "Chọn tác vụ",
+    "stop": "Thôi chọn",
+    "on": "đã chọn",
+    "off": "chưa chọn",
+    "toolbar": "Tác vụ đã chọn",
+    "count": "Đã chọn {count}"
+  },
+  "bulk": {
+    "cancel": "Huỷ ({count})",
+    "accept": "Chấp nhận ({count})",
+    "cancelTitle": "Huỷ các tác vụ này?",
+    "acceptTitle": "Chấp nhận các tác vụ này?",
+    "cancelDesc": "Worker của chúng dừng ngay. Các tệp đã sửa vẫn giữ nguyên.",
+    "acceptDesc": "Công việc được đánh dấu đã duyệt, các tác vụ đang chờ nó có thể bắt đầu.",
+    "cancelConfirm": "Huỷ {count} tác vụ",
+    "acceptConfirm": "Chấp nhận {count} tác vụ",
+    "keep": "Quay lại",
+    "cancelDone": "Đã huỷ {ok}/{total}",
+    "acceptDone": "Đã chấp nhận {ok}/{total}",
+    "failed": "{count} lỗi: {error}"
+  },
+  "row": {
+    "manual": "Bạn đang điều khiển"
+  },
+  "detail": {
+    "pick": "Chọn một tác vụ",
+    "pickDesc": "Chọn một tác vụ trong danh sách để xem worker đã làm gì, các thay đổi và phần duyệt."
+  },
+  "cmd": {
+    "open": "Tác vụ: {title}",
+    "nextNeed": "Mở tác vụ tiếp theo cần bạn",
+    "noNeeds": "Hiện không có việc gì cần bạn",
+    "search": "Tìm trong danh sách tác vụ",
+    "select": "Chọn tác vụ"
+  }
+}
