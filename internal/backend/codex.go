@@ -24,7 +24,8 @@ const codexProviderID = "seelegent"
 
 // Codex is the OpenAI Codex CLI.
 type Codex struct {
-	bin string
+	bin   string
+	quota QuotaReader
 }
 
 // Name implements Backend.
@@ -232,8 +233,8 @@ func (c *Codex) SignIn(p account.Profile) (SignIn, error) {
 // QuotaGroup implements Backend.
 func (*Codex) QuotaGroup(string) string { return "Codex" }
 
-// QuotaReader implements Backend (not yet).
-func (*Codex) QuotaReader() QuotaReader { return nil }
+// QuotaReader implements Backend.
+func (c *Codex) QuotaReader() QuotaReader { return c.quota }
 
 // NewParser implements Backend.
 func (*Codex) NewParser(secrets []string) Parser {

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/NovaSeele/Seelegent/internal/account"
@@ -97,4 +98,109 @@ func (p ModelPolicy) Allowed(model string) error {
 			p.Source)
 	}
 	return nil
+}
+
+// codexFamilies ranks the codex model families; a model of no known family ranks in the middle.
+var codexFamilies = []struct {
+	re   *regexp.Regexp
+	rank float64
+}{
+	{regexp.MustCompile(`(^|[-_.])luna($|[-_.])`), 1},
+	{regexp.MustCompile(`(^|[-_.])terra($|[-_.])`), 2},
+	{regexp.MustCompile(`(^|[-_.])sol($|[-_.])`), 3},
+	{regexp.MustCompile(`(^|[-_.])astra($|[-_.])`), 4},
+}
+
+// codexVersionRe finds the version number in a model id.
+var codexVersionRe = regexp.MustCompile(`\d+(?:\.\d+)?`)
+
+// codexUnknownRank is the rank of a model of no known family.
+const codexUnknownRank = 2.5
+
+// codexRank returns the family rank of a codex model id.
+func codexRank(slug string) float64 {
+	s := strings.ToLower(slug)
+	for _, f := range codexFamilies {
+		if f.re.MatchString(s) {
+			return f.rank
+		}
+	}
+	return codexUnknownRank
+}
+
+// codexVersion returns the first number in a model id (0 when none).
+func codexVersion(slug string) float64 {
+	m := codexVersionRe.FindString(slug)
+	if m == "" {
+		return 0
+	}
+	v, err := strconv.ParseFloat(m, 64)
+	if err != nil {
+		return 0
+	}
+	return v
+}
+
+// FitModel returns the model a turn that asks for requested runs on an account of backend name whose CLI reports
+// the catalog available (nil when unknown). allowed filters the catalog (nil allows everything). ok is false when
+// the account cannot run any allowed model.
+//
+// Only codex sign-ins have per-account catalogs: when the requested model is missing, FitModel picks the closest
+// allowed one (old codex fitModel): families rank luna < terra < sol < astra; the best-ranked model not above the
+// requested rank wins (newer version first), else the lowest-ranked one. Every other account runs requested
+// unchanged.
+func FitModel(name, requested string, available []string, allowed func(string) bool) (model string, ok bool) {
+	if name != config.BackendCodex || available == nil || requested == "" {
+		return requested, true
+	}
+	var list []string
+	for _, m := range available {
+		if m != "" && (allowed == nil || allowed(m)) && !slices.Contains(list, m) {
+			list = append(list, m)
+		}
+	}
+	if len(list) == 0 {
+		return "", false
+	}
+	if slices.Contains(list, requested) {
+		return requested, true
+	}
+	want := codexRank(requested)
+	index := func(m string) int { return slices.Index(list, m) }
+	better := func(a, b string) int { // best first: higher rank, then newer version, then catalog order
+		if ra, rb := codexRank(a), codexRank(b); ra != rb {
+			if ra > rb {
+				return -1
+			}
+			return 1
+		}
+		if va, vb := codexVersion(a), codexVersion(b); va != vb {
+			if va > vb {
+				return -1
+			}
+			return 1
+		}
+		return index(a) - index(b)
+	}
+	var notAbove []string
+	for _, m := range list {
+		if codexRank(m) <= want {
+			notAbove = append(notAbove, m)
+		}
+	}
+	if len(notAbove) > 0 {
+		slices.SortStableFunc(notAbove, better)
+		return notAbove[0], true
+	}
+	lowest := slices.Clone(list)
+	slices.SortStableFunc(lowest, func(a, b string) int {
+		if ra, rb := codexRank(a), codexRank(b); ra != rb {
+			if ra < rb {
+				return -1
+			}
+			return 1
+		}
+		return better(a, b)
+	})
+	return lowest[0], true
 }

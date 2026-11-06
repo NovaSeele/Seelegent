@@ -35,7 +35,8 @@ const agyBackgroundWait = `(?i)root agent idle; waiting up to [0-9hms.]+ for \d+
 
 // Agy is the Antigravity CLI (Gemini models).
 type Agy struct {
-	bin string
+	bin   string
+	quota QuotaReader
 }
 
 // Name implements Backend.
@@ -187,8 +188,8 @@ func (*Agy) QuotaGroup(model string) string {
 	return "Claude and GPT models"
 }
 
-// QuotaReader implements Backend (not yet).
-func (*Agy) QuotaReader() QuotaReader { return nil }
+// QuotaReader implements Backend.
+func (a *Agy) QuotaReader() QuotaReader { return a.quota }
 
 // NewParser implements Backend.
 func (*Agy) NewParser(secrets []string) Parser {
