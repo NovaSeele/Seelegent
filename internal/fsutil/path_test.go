@@ -199,3 +199,19 @@ func TestProjectKey(t *testing.T) {
 		t.Errorf("safeName: %q %q", safeName("***"), safeName("a  b__c"))
 	}
 }
+
+func TestProjectOf(t *testing.T) {
+	dir := t.TempDir()
+	canonical, key, name, err := ProjectOf(dir)
+	if err != nil || canonical == "" || name != filepath.Base(canonical) {
+		t.Fatalf("ProjectOf = %q, %q, %q, %v", canonical, key, name, err)
+	}
+	if want, _, _ := ProjectKey(dir); key != want {
+		t.Fatalf("key %q, want %q", key, want)
+	}
+	for _, bad := range []string{"", "rel", filepath.Join(dir, "missing")} {
+		if _, _, _, err := ProjectOf(bad); err == nil {
+			t.Errorf("ProjectOf(%q) succeeded", bad)
+		}
+	}
+}

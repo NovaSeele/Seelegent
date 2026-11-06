@@ -110,17 +110,7 @@ func New(o Options) *Store {
 
 // project returns the project key and canonical folder of cwd, which must be an absolute path to a folder.
 func project(cwd string) (key, canonical string, err error) {
-	if cwd == "" || !filepath.IsAbs(cwd) {
-		return "", "", fmt.Errorf("%w: cwd %q is not an absolute path", ErrInvalid, cwd)
-	}
-	if st, err := os.Stat(cwd); err != nil || !st.IsDir() {
-		return "", "", fmt.Errorf("%w: cwd %q is not an existing folder", ErrInvalid, cwd)
-	}
-	canonical, err = fsutil.Canonical(cwd)
-	if err != nil {
-		return "", "", fmt.Errorf("%w: %w", ErrInvalid, err)
-	}
-	key, _, err = fsutil.ProjectKey(canonical)
+	canonical, key, _, err = fsutil.ProjectOf(cwd)
 	if err != nil {
 		return "", "", fmt.Errorf("%w: %w", ErrInvalid, err)
 	}
@@ -204,9 +194,10 @@ func (s *Store) Upsert(ctx context.Context, r Role, scope, cwd string) (Role, er
 	return r, nil
 }
 
-// Delete removes a role and reports whether it existed.
-func (s *Store) Delete(ctx context.Context, id, scope, cwd string) (bool, error) {
-	key, _, err := s.scopeKey(scope, cwd)
+// Delete removes a role and reports whether it existed. For a project role, project is the project's folder (an
+// absolute path, which need not exist any more) or its key as Projects lists it.
+func (s *Store) Delete(ctx context.Context, id, scope, project string) (bool, error) {
+	key, err := deleteKey(scope, project)
 	if err != nil {
 		return false, err
 	}
@@ -357,6 +348,31 @@ func (s *Store) scopeKey(scope, cwd string) (key, canonical string, err error) {
 		return project(cwd)
 	}
 	return "", "", fmt.Errorf("%w: scope %q must be global or project", ErrInvalid, scope)
+}
+
+// projectKeyPattern is what fsutil.ProjectKey returns.
+var projectKeyPattern = regexp.MustCompile(`^[a-z0-9._-]*-[0-9a-f]{8}$`)
+
+// deleteKey is the project key a Delete names: a folder that may be gone, or a key.
+func deleteKey(scope, project string) (string, error) {
+	switch scope {
+	case ScopeGlobal:
+		return "", nil
+	case ScopeProject:
+	default:
+		return "", fmt.Errorf("%w: scope %q must be global or project", ErrInvalid, scope)
+	}
+	if filepath.IsAbs(project) {
+		key, _, err := fsutil.ProjectKey(project)
+		if err != nil {
+			return "", fmt.Errorf("%w: %w", ErrInvalid, err)
+		}
+		return key, nil
+	}
+	if !projectKeyPattern.MatchString(project) {
+		return "", fmt.Errorf("%w: project %q is neither an absolute path nor a project key", ErrInvalid, project)
+	}
+	return project, nil
 }
 
 func exists(ctx context.Context, tx *sql.Tx, scope, key, id string) (bool, error) {

@@ -9,8 +9,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -70,18 +68,7 @@ type Note struct {
 // Project returns the project key and canonical folder of cwd, which must be an absolute path to an existing
 // folder.
 func Project(cwd string) (key, canonical string, err error) {
-	if cwd == "" || !filepath.IsAbs(cwd) {
-		return "", "", fmt.Errorf("%w: cwd %q is not an absolute path", ErrInvalid, cwd)
-	}
-	st, err := os.Stat(cwd)
-	if err != nil || !st.IsDir() {
-		return "", "", fmt.Errorf("%w: cwd %q is not an existing folder", ErrInvalid, cwd)
-	}
-	canonical, err = fsutil.Canonical(cwd)
-	if err != nil {
-		return "", "", fmt.Errorf("%w: %w", ErrInvalid, err)
-	}
-	key, _, err = fsutil.ProjectKey(canonical)
+	canonical, key, _, err = fsutil.ProjectOf(cwd)
 	if err != nil {
 		return "", "", fmt.Errorf("%w: %w", ErrInvalid, err)
 	}

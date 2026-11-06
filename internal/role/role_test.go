@@ -132,6 +132,40 @@ func TestScopesAndOverride(t *testing.T) {
 	}
 }
 
+// TestDeleteGoneProject deletes the roles of a project whose folder no longer exists, by its path or its key.
+func TestDeleteGoneProject(t *testing.T) {
+	ctx := context.Background()
+	s, _, _, _ := newStore(t)
+	proj := filepath.Join(t.TempDir(), "Gone App")
+	if err := os.Mkdir(proj, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []string{"a", "b"} {
+		if _, err := s.Upsert(ctx, Role{ID: id, Name: id}, ScopeProject, proj); err != nil {
+			t.Fatal(err)
+		}
+	}
+	projects, err := s.Projects(ctx)
+	if err != nil || len(projects) != 1 {
+		t.Fatalf("Projects = %+v, %v", projects, err)
+	}
+	if err := os.Remove(proj); err != nil {
+		t.Fatal(err)
+	}
+	if ok, err := s.Delete(ctx, "a", ScopeProject, proj); err != nil || !ok {
+		t.Fatalf("Delete by path = %v, %v", ok, err)
+	}
+	if ok, err := s.Delete(ctx, "b", ScopeProject, projects[0].Key); err != nil || !ok {
+		t.Fatalf("Delete by key = %v, %v", ok, err)
+	}
+	if left, err := s.Projects(ctx); err != nil || len(left) != 0 {
+		t.Fatalf("Projects after = %+v, %v", left, err)
+	}
+	if _, err := s.Delete(ctx, "b", ScopeProject, "Not A Key"); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("Delete(bad key) = %v", err)
+	}
+}
+
 func TestUnreadableRoleIsError(t *testing.T) {
 	ctx := context.Background()
 	s, st, _, _ := newStore(t)

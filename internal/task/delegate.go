@@ -331,20 +331,9 @@ func (s *Service) setProfile(ctx context.Context, t *Task, id string) error {
 // checkCwd validates a task folder: an absolute path to an existing folder. It returns the canonical path and the
 // project key and name.
 func checkCwd(cwd string) (canonical, key, name string, err error) {
-	if cwd == "" || !filepath.IsAbs(cwd) {
-		return "", "", "", invalidf("cwd %q must be an absolute path", cwd)
-	}
-	st, err := os.Stat(cwd)
-	if err != nil || !st.IsDir() {
-		return "", "", "", invalidf("cwd %q is not an existing folder", cwd)
-	}
-	canonical, err = fsutil.Canonical(cwd)
+	canonical, key, name, err = fsutil.ProjectOf(cwd)
 	if err != nil {
-		return "", "", "", invalidf("cwd %q: %v", cwd, err)
-	}
-	key, name, err = fsutil.ProjectKey(canonical)
-	if err != nil {
-		return "", "", "", invalidf("cwd %q: %v", cwd, err)
+		return "", "", "", invalidf("%v", err)
 	}
 	return canonical, key, name, nil
 }
