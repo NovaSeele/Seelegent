@@ -21,9 +21,10 @@ const (
 // EnvRules is what a backend contributes to the environment of a turn. internal/backend implements it per CLI; it
 // is declared here, where it is used.
 type EnvRules interface {
-	// Strip reports whether an inherited variable must not reach the CLI (credentials and settings of the user's own
-	// session that would override the account's).
-	Strip(name, value string, prof Profile) bool
+	// Filter decides what becomes of an inherited variable: keep false drops it (credentials and settings of the
+	// user's own session that would override the account's); otherwise value is what the CLI gets (for example PATH
+	// without entries that point into the user's own CLI configuration).
+	Filter(name, value string, prof Profile) (newValue string, keep bool)
 	// ProfileEnv returns the variables that point the CLI at the account's profile.
 	ProfileEnv(prof Profile) map[string]string
 	// KeyEnv returns the variables that make the CLI use the provider with key; model is the resolved model id of
@@ -55,8 +56,8 @@ type RunEnv struct {
 	Profile Profile
 }
 
-// Env assembles the environment of a turn on account a: the inherited environment without the variables the
-// backend strips (and without Seelegent's own markers), then opts.Extra, then the profile variables, then for an
+// Env assembles the environment of a turn on account a: the inherited environment as the backend filters it
+// (without Seelegent's own markers), then opts.Extra, then the profile variables, then for an
 // API-key account the provider and key variables, and finally SEELEGENT_WORKER=1, NO_COLOR=1 and, with AllowGit,
 // SEELEGENT_GIT_GUARD=off. It fails with ErrNoKey or ErrProviderUnavailable when an API-key account cannot run.
 func (m *Manager) Env(ctx context.Context, a Account, rules EnvRules, opts EnvOptions) (RunEnv, error) {
@@ -74,10 +75,12 @@ func (m *Manager) Env(ctx context.Context, a Account, rules EnvRules, opts EnvOp
 		if !ok || name == "" {
 			continue
 		}
-		if ownVariable(name) || rules.Strip(name, value, prof) {
+		if ownVariable(name) {
 			continue
 		}
-		env.set(name, value)
+		if value, keep := rules.Filter(name, value, prof); keep {
+			env.set(name, value)
+		}
 	}
 	env.setAll(opts.Extra)
 	env.setAll(rules.ProfileEnv(prof))

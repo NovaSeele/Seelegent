@@ -13,8 +13,11 @@ type fakeRules struct {
 	keyErr error
 }
 
-func (fakeRules) Strip(name, _ string, _ Profile) bool {
-	return strings.HasPrefix(strings.ToUpper(name), "FAKE_")
+func (fakeRules) Filter(name, value string, _ Profile) (newValue string, keep bool) {
+	if name == "PATH" {
+		return value + "-filtered", true
+	}
+	return value, !strings.HasPrefix(strings.ToUpper(name), "FAKE_")
 }
 
 func (fakeRules) ProfileEnv(p Profile) map[string]string {
@@ -59,7 +62,7 @@ func TestEnvIsolated(t *testing.T) {
 	}
 	got := envMapOf(env.Vars)
 	want := map[string]string{
-		"PATH": "/bin", "KEEP": "extra", "RUSTUP_TOOLCHAIN": "stable", "FAKE_HOME": env.Profile.Home,
+		"PATH": "/bin-filtered", "KEEP": "extra", "RUSTUP_TOOLCHAIN": "stable", "FAKE_HOME": env.Profile.Home,
 		"FAKE_MODE": "isolated", EnvWorker: "1", "NO_COLOR": "1", EnvGitGuard: "off",
 	}
 	if !maps.Equal(got, want) {
@@ -68,7 +71,7 @@ func TestEnvIsolated(t *testing.T) {
 	if len(env.Secrets) != 0 {
 		t.Errorf("secrets = %v", env.Secrets)
 	}
-	if v, ok := Lookup(env.Vars, "PATH"); !ok || v != "/bin" {
+	if v, ok := Lookup(env.Vars, "PATH"); !ok || v != "/bin-filtered" {
 		t.Errorf("Lookup(PATH) = %q, %v", v, ok)
 	}
 	if _, ok := Lookup(env.Vars, "MISSING"); ok {
