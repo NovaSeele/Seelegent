@@ -318,8 +318,13 @@ func (r *Refresher) refresh(ctx context.Context, a account.Account, fresh bool) 
 		case <-ctx.Done():
 			return Result{AccountID: a.ID, Err: ctx.Err()}
 		}
-		if join && (!c.aborted || ctx.Err() != nil) {
+		if join && !c.aborted {
 			return c.res
+		}
+		if join && ctx.Err() != nil {
+			// The shared read was aborted by its starter and this caller is done too: answer with this caller's
+			// own context error, never the other one's.
+			return Result{AccountID: a.ID, Err: ctx.Err()}
 		}
 		if r.o.onWoken != nil {
 			r.o.onWoken(a.ID)
@@ -337,7 +342,8 @@ func (r *Refresher) refresh(ctx context.Context, a account.Account, fresh bool) 
 	r.mu.Unlock()
 
 	c.res = r.readAndStore(ctx, a)
-	c.aborted = ctx.Err() != nil
+	// A read that succeeded is a real answer even when the caller's context ended just after it.
+	c.aborted = c.res.Err != nil && ctx.Err() != nil
 
 	r.mu.Lock()
 	delete(r.inflight, a.ID)
