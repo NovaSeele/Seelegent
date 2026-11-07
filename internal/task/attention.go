@@ -214,17 +214,63 @@ func computeAttention(t *Task, live liveState, acc accountHealth, now time.Time,
 }
 
 // gateDetail names the failing step of a gate.
+// gateDetail says in plain words which steps of a gate failed ("command failed: npm test; syntax check failed:
+// a.json"). The dashboard builds its own text from the turn's steps; this one is for the lead (MCP, CLI).
 func gateDetail(g *api.GateResult) string {
+	var parts []string
 	for i := range g.Steps {
 		s := &g.Steps[i]
 		if (s.State == api.StepRed || s.State == api.StepError) && !s.Foreign {
-			if s.Cmd != "" && s.Cmd != s.Label {
-				return s.Label + ": " + s.Cmd
-			}
-			return s.Label
+			parts = append(parts, stepFailure(s))
 		}
 	}
-	return ""
+	return strings.Join(parts, "; ")
+}
+
+// stepFailure is one failing step in plain words.
+func stepFailure(s *api.GateStep) string {
+	switch s.Kind {
+	case api.StepLane:
+		return withList("files outside the lane", s.Files)
+	case api.StepHygiene:
+		files := make([]string, 0, len(s.Findings))
+		for _, f := range s.Findings {
+			files = append(files, f.Path)
+		}
+		return withList("hygiene findings", files)
+	case api.StepAuto:
+		files := make([]string, 0, len(s.Failures))
+		for _, f := range s.Failures {
+			files = append(files, f.File)
+		}
+		return withList("syntax check failed", files)
+	case api.StepDoctrine:
+		if s.Cmd == "" {
+			return "doctrine file refused: " + s.Label
+		}
+		return "doctrine check " + s.Label + " failed: " + s.Cmd
+	default:
+		cmd := s.Cmd
+		if s.Dir != "" {
+			cmd = "cd " + s.Dir + " && " + cmd
+		}
+		if s.State == api.StepError {
+			return "command could not run: " + cmd
+		}
+		return "command failed: " + cmd
+	}
+}
+
+// withList puts at most three names after head, then says how many more there are.
+func withList(head string, names []string) string {
+	const most = 3
+	switch {
+	case len(names) == 0:
+		return head
+	case len(names) <= most:
+		return head + ": " + strings.Join(names, ", ")
+	}
+	return fmt.Sprintf("%s: %s and %d more", head, strings.Join(names[:most], ", "), len(names)-most)
 }
 
 // hygieneOnly reports whether the hygiene step is the gate's only failure (the hygiene flag says more).

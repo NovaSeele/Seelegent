@@ -123,6 +123,9 @@ func TestGateRedFixTurnGreen(t *testing.T) {
 		var d api.GateEventData
 		decode(t, e, &d)
 		phases = append(phases, d.Phase)
+		if d.Phase == api.GateEventStart && (len(d.Plan) != len(d.Steps) || len(d.Plan) == 0 || d.Plan[len(d.Plan)-1].Cmd == "") {
+			t.Errorf("start plan = %+v, steps = %v", d.Plan, d.Steps)
+		}
 	}
 	if !slices.Contains(phases, api.GateEventStart) || !slices.Contains(phases, api.GateEventResult) {
 		t.Errorf("gate events = %v", phases)
@@ -151,7 +154,7 @@ func TestGateRedWithoutBudgetAndLaneViolation(t *testing.T) {
 	if g == nil || g.State != api.GateRed || g.Steps[0].Kind != api.StepLane || !slices.Equal(g.Steps[0].Files, []string{"a.txt"}) {
 		t.Fatalf("gate = %+v", g)
 	}
-	if a := tk.Attention; a == nil || a.Reason != ReasonGateRed {
+	if a := tk.Attention; a == nil || a.Reason != ReasonGateRed || a.Detail != "files outside the lane: a.txt" {
 		t.Errorf("attention = %+v", tk.Attention)
 	}
 	rep, err := h.s.Report(t.Context(), sum.ID, "")
@@ -407,5 +410,26 @@ func TestGateRunsAgainAfterRestart(t *testing.T) {
 	tk := h.waitStatus(sum.ID, StatusDone)
 	if g := tk.LastTurn().Gate; g == nil || g.State != api.GateGreen {
 		t.Errorf("gate after restart = %+v", g)
+	}
+}
+
+func TestGateDetail(t *testing.T) {
+	exit := 1
+	g := &api.GateResult{State: api.GateRed, Steps: []api.GateStep{
+		{Kind: api.StepLane, Label: "lane", State: api.StepGreen},
+		{Kind: api.StepAuto, Label: "syntax", State: api.StepRed,
+			Failures: []api.GateFailure{{File: "a.json", Message: "bad"}, {File: "b.go", Message: "bad"}}},
+		{Kind: api.StepTask, Label: "T001", Cmd: "npm test", Dir: "web", State: api.StepRed, Exit: &exit},
+		{Kind: api.StepTask, Label: "go vet", Cmd: "go vet", State: api.StepError},
+		{Kind: api.StepTask, Label: "make", Cmd: "make", State: api.StepRed, Foreign: true},
+		{Kind: api.StepDoctrine, Label: "no-todo", Cmd: "check", State: api.StepRed},
+	}}
+	want := "syntax check failed: a.json, b.go; command failed: cd web && npm test; command could not run: go vet; " +
+		"doctrine check no-todo failed: check"
+	if got := gateDetail(g); got != want {
+		t.Errorf("gateDetail = %q, want %q", got, want)
+	}
+	if got := withList("files outside the lane", []string{"a", "b", "c", "d", "e"}); got != "files outside the lane: a, b, c and 2 more" {
+		t.Errorf("withList = %q", got)
 	}
 }

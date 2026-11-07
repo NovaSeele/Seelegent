@@ -447,6 +447,8 @@ export interface GateEventData {
   phase: 'start' | 'step' | 'result' | 'settling'
   /** Steps are the step labels (start). */
   steps?: string[]
+  /** Plan are the planned steps with their kind and command (start), so a view can name them in its language. */
+  plan?: GatePlanStep[]
   /** Index (from 0) and Step are the step that started or ended (step). */
   index?: number
   step?: GateStep
@@ -454,6 +456,15 @@ export interface GateEventData {
   result?: GateResult
   /** BarChanged lists what defines "done" that changed since the task started (result). */
   barChanged?: string[]
+}
+
+/** GatePlanStep is a step of a gate as planned: what it checks, without its result. */
+export interface GatePlanStep {
+  kind: 'lane' | 'hygiene' | 'auto' | 'doctrine' | 'task' | 'detect'
+  label: string
+  cmd?: string
+  dir?: string
+  taskIds?: string[]
 }
 
 /**

@@ -72,7 +72,8 @@ process tree (killed on timeout or cancel). The full output goes to `tasks/<id>/
 keeps the last `gateOutputTailBytes`.
 
 Each step is published as a `gate` task event (`phase: start | step | settling | result`) and stored on the turn
-(`Turn.gate`), so the dashboard shows it live.
+(`Turn.gate`), so the dashboard shows it live. The `start` event carries the plan (each step's kind, command and
+folder), so a view names the steps in its own language.
 
 **Settling.** When the gate fails while another worker of the same repository is at work (running, not in its own
 gate phase), the failure may be that worker's half-done change. The task waits (`gatePhase.state: settling`) until
@@ -83,7 +84,8 @@ count; the result carries a warning.
 **Red.** While `autoFixes < budget`, the daemon opens an automatic fix turn (`by: "gate"`) whose message lists the
 failing steps with their output tails and the files other tasks are changing. The worker fixes, the gate runs
 again. When the budget is used up the task ends `done` with the red gate and the attention reason `gate_red`
-(`hygiene` when the hygiene step is the only failure).
+(`hygiene` when the hygiene step is the only failure). Its detail says in plain English which steps failed
+("command failed: npm test; syntax check failed: a.json"); the dashboard builds its own text from the steps.
 
 **Green.** With the verifier on and changed files, the verifier runs; otherwise the task is done.
 

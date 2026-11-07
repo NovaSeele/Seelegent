@@ -254,13 +254,17 @@ func (s *Service) headBlob(t *Task) func(ctx context.Context, rel string) ([]byt
 func (s *Service) runGate(r *run, id string, turn int, runner gate.Runner, steps []api.GateStep) (api.GateResult, bool) {
 	started := api.FormatTime(s.now())
 	labels := make([]string, len(steps))
+	plan := make([]api.GatePlanStep, len(steps))
 	for i := range steps {
-		labels[i] = steps[i].Label
+		st := &steps[i]
+		labels[i] = st.Label
+		plan[i] = api.GatePlanStep{Kind: st.Kind, Label: st.Label, Cmd: st.Cmd, Dir: st.Dir,
+			TaskIDs: slices.Clone(st.TaskIDs)}
 	}
 	live := api.GateResult{State: api.GateRunning, Steps: slices.Clone(steps), NotRun: []string{}, Warnings: []string{},
 		StartedAt: started}
 	s.saveGate(id, turn, live, NewEvent{Type: api.EventGate, Turn: turn,
-		Data: api.GateEventData{Phase: api.GateEventStart, Steps: labels}})
+		Data: api.GateEventData{Phase: api.GateEventStart, Steps: labels, Plan: plan}})
 	res, ok := runner.Run(r.ctx, steps, func(i int, st api.GateStep) {
 		live.Steps[i] = st
 		s.saveGate(id, turn, live, NewEvent{Type: api.EventGate, Turn: turn,

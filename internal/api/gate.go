@@ -135,6 +135,8 @@ type GateEventData struct {
 	Phase string `json:"phase" ts:"'start' | 'step' | 'result' | 'settling'"`
 	// Steps are the step labels (start).
 	Steps []string `json:"steps,omitempty"`
+	// Plan are the planned steps with their kind and command (start), so a view can name them in its language.
+	Plan []GatePlanStep `json:"plan,omitempty"`
 	// Index (from 0) and Step are the step that started or ended (step).
 	Index int       `json:"index,omitempty"`
 	Step  *GateStep `json:"step,omitempty"`
@@ -142,6 +144,15 @@ type GateEventData struct {
 	Result *GateResult `json:"result,omitempty"`
 	// BarChanged lists what defines "done" that changed since the task started (result).
 	BarChanged []string `json:"barChanged,omitempty"`
+}
+
+// GatePlanStep is a step of a gate as planned: what it checks, without its result.
+type GatePlanStep struct {
+	Kind    string   `json:"kind" ts:"'lane' | 'hygiene' | 'auto' | 'doctrine' | 'task' | 'detect'"`
+	Label   string   `json:"label"`
+	Cmd     string   `json:"cmd,omitempty"`
+	Dir     string   `json:"dir,omitempty"`
+	TaskIDs []string `json:"taskIds,omitempty"`
 }
 
 // Lane event kinds.
