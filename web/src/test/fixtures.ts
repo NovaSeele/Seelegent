@@ -49,6 +49,7 @@ export function makeDetail(overrides: Partial<TaskDetail> = {}): TaskDetail {
     turns: [],
     fileOverlaps: [],
     proof: null,
+    consults: [],
     ...overrides,
   }
 }

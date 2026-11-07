@@ -77,6 +77,8 @@ type TaskSummary struct {
 	ContestID string `json:"contestId,omitempty"`
 	TicketID  string `json:"ticketId,omitempty"`
 	MeetingID string `json:"meetingId,omitempty"`
+	// Variant is the label (V1..) of a contest variant.
+	Variant string `json:"variant,omitempty"`
 
 	// LastEventSeq is the highest event seq of the task.
 	LastEventSeq int64 `json:"lastEventSeq"`
@@ -176,6 +178,10 @@ type TaskDetail struct {
 	FileOverlaps []FileOverlap `json:"fileOverlaps"`
 	// Proof is what the task's gate checks (null for a task without gate, lane or verifier).
 	Proof *TaskProof `json:"proof"`
+	// Consults are the second opinions asked on the task, oldest first.
+	Consults []Consult `json:"consults"`
+	// ProjectCwd is the user's folder a contest variant's worktree stands for.
+	ProjectCwd string `json:"projectCwd,omitempty"`
 }
 
 // Turn is one lead (or user) message and the worker's answer to it.
@@ -313,12 +319,17 @@ type FollowupRequest struct {
 	Verify       *bool    `json:"verify,omitempty"`
 	// Force starts a task that waits for (or is blocked by) its prerequisites anyway.
 	Force bool `json:"force,omitempty"`
+	// Member moves the task to that department member from this turn on (its backend, provider, model or tier,
+	// role and preferred accounts; a new backend starts a new conversation).
+	Member string `json:"member,omitempty"`
 }
 
-// ReviewRequest records the lead's verdict.
+// ReviewRequest records the lead's verdict. AnswerObjection is the lead's written answer to a peer's objection
+// (consult); review accepted is refused without it while the objection stands.
 type ReviewRequest struct {
-	Verdict string `json:"verdict" ts:"Verdict"`
-	Notes   string `json:"notes,omitempty"`
+	Verdict         string `json:"verdict" ts:"Verdict"`
+	Notes           string `json:"notes,omitempty"`
+	AnswerObjection string `json:"answerObjection,omitempty"`
 }
 
 // CancelRequest stops a task; WaitSeconds (0..60) is how long the call waits for the worker to stop.

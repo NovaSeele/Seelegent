@@ -138,12 +138,17 @@ type RetryData struct {
 	Error   string `json:"error"`
 }
 
-// HandoffData is the data of a handoff event.
+// HandoffData is the data of a handoff event: the task moved from one account to another, or (Kind backend) from
+// one backend to the next fallback backend of its member.
 type HandoffData struct {
 	From   string `json:"from"`
 	To     string `json:"to"`
 	Reason string `json:"reason"`
+	Kind   string `json:"kind,omitempty" ts:"'backend'"`
 }
+
+// HandoffBackend is the Kind of a handoff between backends.
+const HandoffBackend = "backend"
 
 // RecoveryData is the data of reattach and resumed events.
 type RecoveryData struct {

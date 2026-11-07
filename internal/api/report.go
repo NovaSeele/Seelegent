@@ -40,6 +40,8 @@ type TaskReport struct {
 	Lane         *ReportLane     `json:"lane,omitempty"`
 	Bar          *ReportBar      `json:"bar,omitempty"`
 	Verifier     *ReportVerifier `json:"verifier,omitempty"`
+	// Consults are the second opinions asked on the task (old B15: the slim report dropped them).
+	Consults     []ReportConsult `json:"consults,omitempty"`
 	DepsReason   string          `json:"deps_reason,omitempty"`
 	Cancelling   bool            `json:"cancelling,omitempty"`
 	Error        string          `json:"error,omitempty"`
@@ -49,6 +51,21 @@ type TaskReport struct {
 	Handback bool `json:"handback,omitempty"`
 	// Dashboard is the deep link to the task in the dashboard.
 	Dashboard string `json:"dashboard"`
+}
+
+// ReportConsult is one consult of a report: the verdict, the findings with their citation checks folded into one
+// line each, and what must change.
+type ReportConsult struct {
+	ID       string   `json:"id"`
+	Member   string   `json:"member"`
+	Rank     string   `json:"rank"`
+	Status   string   `json:"status"`
+	Verdict  string   `json:"verdict,omitempty"`
+	Findings []string `json:"findings,omitempty"`
+	Required []string `json:"required,omitempty"`
+	// Unanswered is true for a peer objection the lead has not answered (review accepted needs answer_objection).
+	Unanswered bool   `json:"unanswered,omitempty"`
+	Error      string `json:"error,omitempty"`
 }
 
 // ReportSpec is the Spec Kit feature of a report.
