@@ -9,20 +9,13 @@ import Menu, { type MenuItem } from '@/components/ui/Menu.vue'
 import NumberField from '@/components/ui/NumberField.vue'
 import StatusPill from '@/components/ui/StatusPill.vue'
 import Switch from '@/components/ui/Switch.vue'
-import { useFormat } from '@/composables/useFormat'
 import { useAccountsStore } from '@/stores/accounts'
 
-import {
-  canSignIn,
-  isExhausted,
-  PILL_TONE,
-  pillState,
-  showsSlots,
-  STATUS_TONE,
-  useActions,
-} from './accountView'
+import AccountFacts from './AccountFacts.vue'
+import { canSignIn, useActions } from './accountView'
 import LoginPanel from './LoginPanel.vue'
 import QuotaGroups from './QuotaGroups.vue'
+import { useAccountState } from './useAccountState'
 
 export type AccountDialog = 'rename' | 'key' | 'delete'
 
@@ -35,39 +28,12 @@ const props = defineProps<{ account: Account; now: number }>()
 const emit = defineEmits<{ dialog: [kind: AccountDialog] }>()
 
 const { t } = useI18n()
-const fmt = useFormat()
 const accounts = useAccountsStore()
 const actions = useActions()
 const id = useId()
 
 const session = computed(() => accounts.logins[props.account.id])
-const twinLabel = computed(() => {
-  const twin = props.account.twinOf
-  return twin ? (accounts.get(twin)?.label ?? twin) : ''
-})
-const exhaustedLabel = computed(() =>
-  t('accounts.exhausted', {
-    time: fmt.value.relative(props.account.quota.exhaustedUntil ?? '', props.now),
-  }),
-)
-const restingLabel = computed(() =>
-  props.account.restingUntil
-    ? t('accounts.restingUntil', {
-        time: fmt.value.relative(props.account.restingUntil, props.now),
-      })
-    : t('accounts.resting'),
-)
-const pill = computed(() => {
-  const state = pillState(props.account, props.now)
-  if (state === 'exhausted')
-    return { state, tone: PILL_TONE.exhausted, label: exhaustedLabel.value }
-  if (state === 'resting') return { state, tone: PILL_TONE.resting, label: restingLabel.value }
-  return {
-    state,
-    tone: STATUS_TONE[props.account.status],
-    label: t(`accounts.status.${props.account.status}`, { name: twinLabel.value }),
-  }
-})
+const { pill } = useAccountState(props)
 const kindLabel = computed(() =>
   props.account.kind === 'api-key'
     ? t('accounts.kind.apiKeyOf', { provider: props.account.provider ?? '?' })
@@ -138,32 +104,7 @@ function setPriority(priority: number) {
       <StatusPill :tone="pill.tone" :label="pill.label" size="sm" />
     </header>
 
-    <ul class="card__facts">
-      <li
-        v-if="showsSlots(account)"
-        :class="account.busy > 0 ? 'tone-running' : 'tone-neutral'"
-        class="card__fact"
-      >
-        {{ t('accounts.busy', { busy: account.busy, max: account.maxConcurrent }) }}
-      </li>
-      <template v-if="pill.state === 'status'">
-        <li v-if="isExhausted(account, now)" class="card__fact tone-attention">
-          {{ exhaustedLabel }}
-        </li>
-        <li v-else-if="account.resting" class="card__fact tone-neutral">{{ restingLabel }}</li>
-      </template>
-      <li v-if="account.signingIn && !session" class="card__fact tone-neutral">
-        {{ t('accounts.signingIn') }}
-      </li>
-    </ul>
-
-    <!-- A failed read with a reason is said once, in the quota box below. -->
-    <p v-if="account.status === 'error' && !account.quota.error" class="card__note">
-      {{ t('accounts.errorNote') }}
-    </p>
-    <p v-if="account.status === 'twin'" class="card__note">
-      {{ t('accounts.twinNote', { name: twinLabel }) }}
-    </p>
+    <AccountFacts :account="account" :now="now" :has-session="!!session" />
 
     <QuotaGroups :account="account" :now="now" />
     <LoginPanel v-if="session" :account="account" :session="session" />
@@ -273,34 +214,6 @@ function setPriority(priority: number) {
 
 .card__email {
   overflow-wrap: anywhere;
-}
-
-.card__facts {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-1);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-/* No chips (an account that cannot run): no empty row and gap. */
-.card__facts:empty {
-  display: none;
-}
-
-.card__fact {
-  padding: 0 var(--space-2);
-  border-radius: var(--radius-pill);
-  background: var(--tone-bg);
-  color: var(--tone-fg);
-  font-size: var(--fs-2xs);
-  line-height: 20px;
-}
-
-.card__note {
-  color: var(--text-secondary);
-  font-size: var(--fs-xs);
 }
 
 .card__next {
