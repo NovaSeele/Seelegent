@@ -104,6 +104,7 @@ async function test() {
           v-for="event in HOOK_EVENTS"
           :key="event"
           :selected="hook.on.includes(event)"
+          :icon="hook.on.includes(event) ? 'check' : undefined"
           @toggle="toggleEvent(event)"
         >
           {{ event }}
