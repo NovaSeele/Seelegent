@@ -113,9 +113,9 @@ func (s *Service) sameAsEnd(ctx context.Context, end snapshot.Manifest, cur snap
 
 // currentFile describes a working-tree file as a snapshot entry, with its content when the store can keep it (nil
 // for a missing, too large or special file).
-func currentFile(root, rel string) (snapshot.File, []byte) {
+func currentFile(root, rel string) (f snapshot.File, data []byte) {
 	full := filepath.Join(root, filepath.FromSlash(rel))
-	f := snapshot.File{Path: rel}
+	f = snapshot.File{Path: rel}
 	st, err := os.Lstat(full)
 	switch {
 	case errors.Is(err, fs.ErrNotExist):
@@ -129,7 +129,7 @@ func currentFile(root, rel string) (snapshot.File, []byte) {
 	if !f.Link && !st.Mode().IsRegular() || f.Size > snapshot.MaxFileBytes {
 		return f, nil
 	}
-	data, err := gitx.ReadWorktree(full, snapshot.MaxFileBytes+1)
+	data, err = gitx.ReadWorktree(full, snapshot.MaxFileBytes+1)
 	switch {
 	case errors.Is(err, fs.ErrNotExist):
 		f.Missing = true
