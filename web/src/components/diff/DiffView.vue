@@ -4,17 +4,22 @@ import { useI18n } from 'vue-i18n'
 
 import type { FileDiff, Note } from '@/api/types'
 import Button from '@/components/ui/Button.vue'
+import { useClientWidth } from '@/composables/useClientWidth'
 import { useFormat } from '@/composables/useFormat'
 
+import DiffExtraRow from './DiffExtraRow.vue'
 import { diffLineCount, diffRows } from './diffRows'
+import { useLinePicker } from './useLinePicker'
 
 /**
  * A parsed diff as a unified table: old and new line numbers, a sign column (named for screen readers) and the
  * text, which keeps its spaces and tabs. Long lines scroll sideways unless `wrap` is on. Past `limit` lines the
  * rest waits behind "Show all"; binary and truncated diffs say so instead of guessing.
  *
- * With `annotatable`, each new-side line number is a button that asks for a review note on that line (`line`);
- * `notes` are shown under the line they follow now (their current line, else the line they were written on).
+ * With `annotatable`, the new-side line numbers are one keyboard group (useLinePicker): choosing one shows a
+ * large "Add a note on line N" button under it (`line`), and the `composer` slot takes its place for
+ * `composerLine`. `notes` show under the line they follow now; a note whose line is gone (currentLine 0) is not
+ * anchored here. Notes, the button and the composer keep to the visible width of the scroll box.
  */
 const props = withDefaults(
   defineProps<{
@@ -23,8 +28,9 @@ const props = withDefaults(
     wrap?: boolean
     annotatable?: boolean
     notes?: readonly Note[]
+    composerLine?: number | null
   }>(),
-  { limit: 2000, notes: () => [] },
+  { limit: 2000, notes: () => [], composerLine: null },
 )
 const emit = defineEmits<{ line: [line: number] }>()
 
@@ -40,16 +46,26 @@ const model = computed(() => diffRows(props.diff, showAll.value ? Infinity : pro
 const total = computed(() => diffLineCount(props.diff))
 const SIGN = { add: '+', del: '-', context: ' ' } as const
 
-/** Notes by the new-side line they sit under. */
+/** Notes by the new-side line they sit under now. */
 const notesAt = computed(() => {
   const out = new Map<number, Note[]>()
   for (const n of props.notes) {
-    if (n.side !== 'new') continue
-    const line = n.currentLine || n.line
-    out.set(line, [...(out.get(line) ?? []), n])
+    if (n.side !== 'new' || !n.currentLine) continue
+    out.set(n.currentLine, [...(out.get(n.currentLine) ?? []), n])
   }
   return out
 })
+
+const table = ref<HTMLElement | null>(null)
+const picker = useLinePicker(table, () => props.composerLine)
+const lines = computed(() =>
+  model.value.rows.flatMap((r) => (r.kind !== 'hunk' && r.newNo ? [r.newNo] : [])),
+)
+const stop = computed(() => picker.stopOf(lines.value))
+
+// The visible width of the scroll box, for the rows under a line (DiffExtraRow).
+const scroller = ref<HTMLElement | null>(null)
+const boxWidth = useClientWidth(scroller)
 </script>
 
 <template>
@@ -57,7 +73,11 @@ const notesAt = computed(() => {
     <p v-if="diff.binary" class="diff__note">{{ t('git.diff.binary') }}</p>
     <p v-else-if="!diff.hunks.length" class="diff__note">{{ t('git.diff.empty') }}</p>
     <template v-else>
-      <div class="diff__scroll">
+      <div
+        ref="scroller"
+        class="diff__scroll"
+        :style="boxWidth ? { '--diff-box': `${boxWidth}px` } : undefined"
+      >
         <table class="diff__table">
           <caption class="sr-only">
             {{
@@ -68,9 +88,17 @@ const notesAt = computed(() => {
               })
             }}
           </caption>
-          <tbody>
+          <tbody ref="table" @click="picker.onClick" @keydown="picker.onKeydown">
             <template v-for="row in model.rows" :key="row.key">
-              <tr :class="`diff__row--${row.kind}`">
+              <tr
+                :class="[
+                  `diff__row--${row.kind}`,
+                  {
+                    'is-selected':
+                      row.kind !== 'hunk' && row.newNo && row.newNo === picker.selected.value,
+                  },
+                ]"
+              >
                 <template v-if="row.kind === 'hunk'">
                   <td colspan="4" class="diff__hunk">{{ row.text }}</td>
                 </template>
@@ -80,8 +108,10 @@ const notesAt = computed(() => {
                     <button
                       type="button"
                       class="diff__pick"
-                      :aria-label="t('team.notes.addOnLine', { line: row.newNo })"
-                      @click="emit('line', row.newNo)"
+                      :data-line="row.newNo"
+                      :tabindex="row.newNo === stop ? 0 : -1"
+                      :aria-pressed="row.newNo === picker.selected.value"
+                      :aria-label="t('team.notes.pickLine', { line: row.newNo })"
                     >
                       {{ row.newNo }}
                     </button>
@@ -96,14 +126,25 @@ const notesAt = computed(() => {
                   <td class="diff__text">{{ row.text }}</td>
                 </template>
               </tr>
-              <template v-if="row.kind !== 'hunk' && row.newNo && row.kind !== 'del'">
-                <tr v-for="n in notesAt.get(row.newNo) ?? []" :key="n.id" class="diff__row--note">
-                  <td colspan="4" class="diff__notecell">
+              <template v-if="row.kind !== 'hunk' && row.newNo">
+                <template v-if="row.kind !== 'del'">
+                  <DiffExtraRow v-for="n in notesAt.get(row.newNo) ?? []" :key="n.id">
                     <slot name="note" :note="n">
                       <p class="diff__notebody">{{ n.body }}</p>
                     </slot>
-                  </td>
-                </tr>
+                  </DiffExtraRow>
+                </template>
+                <DiffExtraRow v-if="annotatable && row.newNo === composerLine">
+                  <slot name="composer" :line="row.newNo" />
+                </DiffExtraRow>
+                <DiffExtraRow
+                  v-else-if="annotatable && row.newNo === picker.selected.value"
+                  tone="action"
+                >
+                  <Button size="md" icon="plus" class="diff__add" @click="emit('line', row.newNo)">
+                    {{ t('team.notes.addOnLine', { line: row.newNo }) }}
+                  </Button>
+                </DiffExtraRow>
               </template>
             </template>
           </tbody>
@@ -176,13 +217,9 @@ const notesAt = computed(() => {
   user-select: none;
 }
 
+/* A line number keeps the row's normal height; the large target is the add button it reveals. */
 .diff__pick {
-  /* The number sits at the top, level with the old line number, also when a touch screen makes the target 44px. */
-  display: inline-flex;
-  align-items: flex-start;
-  justify-content: flex-end;
-  min-width: max(4ch, var(--target-min));
-  min-height: var(--target-min);
+  min-width: 4ch;
   padding: 0;
   border: 0;
   border-radius: var(--radius-xs);
@@ -193,7 +230,8 @@ const notesAt = computed(() => {
   cursor: pointer;
 }
 
-.diff__pick:hover {
+.diff__pick:hover,
+.diff__pick[aria-pressed='true'] {
   background: var(--term-prompt-bg);
   color: var(--term-fg);
 }
@@ -203,12 +241,13 @@ const notesAt = computed(() => {
   box-shadow: var(--focus-ring);
 }
 
-.diff__notecell {
-  padding: var(--space-2) var(--space-3);
-  background: var(--bg-surface);
-  color: var(--text-primary);
-  font-family: var(--font-sans);
-  white-space: normal;
+.diff__row--context.is-selected,
+.diff__row--add.is-selected {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.diff__add {
+  min-height: var(--target-min);
 }
 
 .diff__notebody {

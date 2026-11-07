@@ -1,6 +1,6 @@
 /**
- * The review notes of one task: read when the Git view opens, again on notes.changed for the task and after a
- * resync. Each write answers the note (or the sent ids) and the list is read again, since a send changes every
+ * The review notes of one task: read when the Git view opens, again on notes.changed for the task, when the
+ * task's turn ends and after a resync. Each write answers the note (or the sent ids) and the list is read again, since a send changes every
  * draft's status.
  */
 import { computed, onUnmounted, shallowRef, watch } from 'vue'
@@ -13,7 +13,7 @@ import { useTeamStore } from '@/stores/team'
 /** Notes that the next send includes: drafts and those the last turn left unaddressed. */
 export const sendable = (n: Note) => n.status === 'draft' || n.status === 'unaddressed'
 
-export function useNotes(taskId: () => string) {
+export function useNotes(taskId: () => string, active: () => boolean = () => false) {
   const team = useTeamStore()
   const notes = shallowRef<readonly Note[]>([])
   const loader = createLoader(
@@ -36,6 +36,10 @@ export function useNotes(taskId: () => string) {
     },
     { immediate: true },
   )
+  // A turn that ends decides what the sent notes came to (addressed or not) without a notes.changed frame.
+  watch(active, (now, before) => {
+    if (before && !now) void loader.load()
+  })
 
   const toSend = computed(() => notes.value.filter(sendable))
 

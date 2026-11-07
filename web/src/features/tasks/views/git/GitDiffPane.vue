@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { errorMessage } from '@/api/client'
@@ -15,8 +15,9 @@ import type { DiffState } from './useGit'
 import type { NotesModel } from './useNotes'
 
 /**
- * The diff of the file selected in the Git view, with its path and the line-wrap switch. A new-side line number
- * starts a review note on that line; the file's notes show under their lines.
+ * The diff of the file selected in the Git view, with its path and the line-wrap switch. Choosing a new-side line
+ * number offers "Add a note on line N"; the composer then opens right under that line with the focus in it, and
+ * the focus goes back to the line number when it closes (Escape cancels). The file's notes show under their lines.
  */
 const props = defineProps<{
   file: GitFile | null | undefined
@@ -31,6 +32,7 @@ const line = ref<number | null>(null)
 const body = ref('')
 const adding = ref(false)
 const failure = ref('')
+const composer = ref<HTMLFormElement | null>(null)
 
 const fileNotes = computed(() =>
   props.file ? props.notes.notes.value.filter((n) => n.file === props.file?.path) : [],
@@ -40,9 +42,15 @@ watch(
   () => (line.value = null),
 )
 
-function pick(n: number) {
+async function pick(n: number) {
   line.value = n
   failure.value = ''
+  await nextTick()
+  composer.value?.querySelector('textarea')?.focus()
+}
+
+function close() {
+  if (!adding.value) line.value = null
 }
 
 async function add() {
@@ -78,38 +86,47 @@ async function add() {
       <span>{{ t('git.diff.error', { error: diff.error }) }}</span>
       <Button size="sm" @click="emit('retry')">{{ t('common.action.retry') }}</Button>
     </div>
-    <form v-if="file && line !== null" class="pane__composer" @submit.prevent="add">
-      <TextArea
-        v-model="body"
-        :label="t('team.notes.composer.title', { file: file.path, line })"
-        :rows="3"
-      />
-      <p v-if="failure" class="pane__error" role="alert">{{ failure }}</p>
-      <div class="pane__actions">
-        <Button size="sm" variant="ghost" :disabled="adding" @click="line = null">
-          {{ t('common.action.cancel') }}
-        </Button>
-        <Button
-          type="submit"
-          size="sm"
-          variant="primary"
-          :loading="adding"
-          :disabled="!body.trim()"
-        >
-          {{ t('team.notes.composer.add') }}
-        </Button>
-      </div>
-    </form>
     <DiffView
       v-if="diff.status === 'ready'"
       :diff="diff.diff"
       :wrap="wrap"
       annotatable
       :notes="fileNotes"
+      :composer-line="line"
       @line="pick"
     >
       <template #note="{ note }">
         <NoteItem :note="note" :notes="notes" />
+      </template>
+      <template #composer>
+        <form
+          v-if="file && line !== null"
+          ref="composer"
+          class="pane__composer"
+          @submit.prevent="add"
+          @keydown.esc.prevent="close"
+        >
+          <TextArea
+            v-model="body"
+            :label="t('team.notes.composer.title', { file: file.path, line })"
+            :rows="3"
+          />
+          <p v-if="failure" class="pane__error" role="alert">{{ failure }}</p>
+          <div class="pane__actions">
+            <Button size="sm" variant="ghost" :disabled="adding" @click="close">
+              {{ t('common.action.cancel') }}
+            </Button>
+            <Button
+              type="submit"
+              size="sm"
+              variant="primary"
+              :loading="adding"
+              :disabled="!body.trim()"
+            >
+              {{ t('team.notes.composer.add') }}
+            </Button>
+          </div>
+        </form>
       </template>
     </DiffView>
   </section>

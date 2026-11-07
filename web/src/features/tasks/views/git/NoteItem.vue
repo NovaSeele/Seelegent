@@ -52,7 +52,7 @@ const line = () => props.note.currentLine || props.note.line
     <div class="note__head">
       <button v-if="where" type="button" class="note__where" @click="emit('open', note.file)">
         {{
-          note.currentLine === 0 && note.status !== 'draft'
+          note.currentLine === 0
             ? t('team.notes.lineGone', { file: note.file })
             : t('team.notes.where', { file: note.file, line: line() })
         }}

@@ -327,6 +327,7 @@
     "extra": "Lời nhắn sau các ghi chú (không bắt buộc)",
     "send": "Gửi {n} ghi chú",
     "sent": "Đã gửi {n} ghi chú cho worker",
-    "busy": "Có thể gửi ghi chú khi lượt của worker đã kết thúc."
+    "busy": "Có thể gửi ghi chú khi lượt của worker đã kết thúc.",
+    "pickLine": "Dòng {line}"
   }
 }

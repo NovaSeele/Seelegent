@@ -62,7 +62,10 @@ watch(message, (value) =>
 )
 
 const committing = ref(false)
-const notes = useNotes(() => props.task.id)
+const notes = useNotes(
+  () => props.task.id,
+  () => active.value,
+)
 
 function step(delta: number) {
   const next = stepFile(files.value, selected.value, delta)

@@ -327,6 +327,7 @@
     "extra": "Mensaje después de las notas (opcional)",
     "send": "Enviar {n} nota | Enviar {n} notas",
     "sent": "{n} nota enviada al trabajador | {n} notas enviadas al trabajador",
-    "busy": "Las notas se pueden enviar cuando termine el turno del trabajador."
+    "busy": "Las notas se pueden enviar cuando termine el turno del trabajador.",
+    "pickLine": "Línea {line}"
   }
 }
