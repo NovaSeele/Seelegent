@@ -155,17 +155,17 @@ func (d *Detector) Access(ctx context.Context, force bool) Access {
 }
 
 // access is one attempt of Access; gen is the generation the answer belongs to.
-func (d *Detector) access(ctx context.Context, force bool) (Access, int) {
+func (d *Detector) access(ctx context.Context, force bool) (a Access, gen int) {
 	d.mu.Lock()
-	gen := d.gen
+	gen = d.gen
 	if d.ok && !force && d.now().Sub(d.cached.CheckedAt) < accessTTL {
-		a := d.cached
+		a = d.cached
 		d.mu.Unlock()
 		return a, gen
 	}
 	if f := d.flight; f != nil {
 		if d.ok && !force {
-			a := d.cached // stale by less than the detection takes
+			a = d.cached // stale by less than the detection takes
 			d.mu.Unlock()
 			return a, gen
 		}
