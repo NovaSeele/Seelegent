@@ -125,6 +125,8 @@ func (s *Server) delegate(ctx context.Context, k *call) (result, error) {
 	if err != nil {
 		return result{}, err
 	}
+	k.announce(ctx, "Seelegent created task "+sum.ID+"; waiting for its report.",
+		map[string]any{"task_id": sum.ID, "status": sum.Status})
 	// A dependent task usually waits for others: do not block on it unless asked.
 	def := defaultWait
 	if len(a.After) > 0 {

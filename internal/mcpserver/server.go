@@ -113,8 +113,10 @@ func New(o Options) (*Server, error) {
 			"enabled backends and department members on request). You are the lead: design, write precise briefs, " +
 			"review and test; let workers write the code. Live view: " + s.dashboard(),
 		// The SDK logs every session start and end at Info; only its warnings and errors are worth stderr.
-		Logger:       slog.New(minLevel{h: o.Logger.Handler(), min: slog.LevelWarn}),
-		Capabilities: &mcp.ServerCapabilities{Tools: &mcp.ToolCapabilities{}},
+		Logger: slog.New(minLevel{h: o.Logger.Handler(), min: slog.LevelWarn}),
+		// Logging carries the task id of a new delegate to hosts that ask for log messages (announce).
+		Capabilities: &mcp.ServerCapabilities{Tools: &mcp.ToolCapabilities{},
+			Logging: &mcp.LoggingCapabilities{}}, //nolint:staticcheck // deprecated in 2026-07-28, still delivered
 	})
 	handlers := s.handlers()
 	for _, d := range defs {
@@ -189,7 +191,29 @@ type call struct {
 	s    *Server
 	name string
 	args json.RawMessage
+	req  *mcp.CallToolRequest
 	c    *client.Client
+}
+
+// announce tells the host something before the call ends (such as the id of a task the call created, so a host
+// that cancels the wait still has it): as a progress notification when the call carries a progress token, and as a
+// log message (notifications/message), which the host gets when it asked for log messages.
+func (k *call) announce(ctx context.Context, msg string, data map[string]any) {
+	if k.req == nil || k.req.Session == nil {
+		return
+	}
+	if token := k.req.Params.GetProgressToken(); token != nil {
+		if err := k.req.Session.NotifyProgress(ctx, &mcp.ProgressNotificationParams{ProgressToken: token,
+			Message: msg}); err != nil {
+			k.s.o.Logger.Debug("mcp: progress notification", "err", err)
+		}
+	}
+	data["message"] = msg
+	//nolint:staticcheck // logging is deprecated in protocol 2026-07-28 but still delivered; older hosts rely on it
+	if err := k.req.Session.Log(ctx, &mcp.LoggingMessageParams{Level: "info", Logger: serverName,
+		Data: data}); err != nil {
+		k.s.o.Logger.Debug("mcp: log notification", "err", err)
+	}
 }
 
 // client returns the daemon client, finding or starting the daemon on first use.
@@ -221,7 +245,7 @@ func (s *Server) wrap(name string, fn toolFunc) mcp.ToolHandler {
 		if s.o.ConfigErr != nil && !s.unavailable[name] {
 			return s.fail(name, fmt.Errorf("the settings cannot be read: %w", s.o.ConfigErr)), nil
 		}
-		k := &call{s: s, name: name, args: req.Params.Arguments}
+		k := &call{s: s, name: name, args: req.Params.Arguments, req: req}
 		res, err := fn(ctx, k)
 		if err != nil {
 			if ctx.Err() != nil {

@@ -586,6 +586,66 @@ func TestUnsupportedOptions(t *testing.T) {
 	}
 }
 
+// TestDelegateAnnouncesTask: the new task's id reaches the host before the wait, as a progress notification and a
+// log message, so a host that cancels the wait still has it.
+func TestDelegateAnnouncesTask(t *testing.T) {
+	_, c := newStub(t, map[string]http.HandlerFunc{
+		"POST /tasks": answer(http.StatusOK, api.TaskSummary{ID: "t42", Status: api.StatusQueued}),
+		"POST /wait": func(_ http.ResponseWriter, r *http.Request) {
+			<-r.Context().Done() // the host cancels the wait
+		},
+	})
+	srv, err := mcpserver.New(mcpserver.Options{Daemon: fixedDaemon{c: c}, Version: "test", Port: 47831,
+		Getwd: func() (string, error) { return t.TempDir(), nil }, Getenv: func(string) string { return "" }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	st, ct := mcp.NewInMemoryTransports()
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	go func() { _ = srv.Run(ctx, st) }()
+	progress, logged := make(chan string, 4), make(chan string, 4)
+	cs, err := mcp.NewClient(&mcp.Implementation{Name: "test", Version: "0"}, &mcp.ClientOptions{
+		ProgressNotificationHandler: func(_ context.Context, r *mcp.ProgressNotificationClientRequest) {
+			progress <- r.Params.Message
+		},
+		//nolint:staticcheck // the logging feature is deprecated in 2026-07-28 but still delivered
+		LoggingMessageHandler: func(_ context.Context, r *mcp.LoggingMessageRequest) {
+			data, _ := json.Marshal(r.Params.Data)
+			logged <- string(data)
+		},
+	}).Connect(t.Context(), ct, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = cs.Close() }()
+	params := &mcp.CallToolParams{Name: "delegate", Arguments: map[string]any{"prompt": "p", "cwd": `C:\p`},
+		Meta: mcp.Meta{"progressToken": "tok", mcp.MetaKeyLogLevel: "info"}} //nolint:staticcheck // as above
+	callCtx, stop := context.WithCancel(t.Context())
+	done := make(chan error, 1)
+	go func() { _, err := cs.CallTool(callCtx, params); done <- err }()
+	select {
+	case msg := <-progress:
+		if !strings.Contains(msg, "t42") {
+			t.Fatalf("progress = %q", msg)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("no progress notification")
+	}
+	select {
+	case data := <-logged:
+		if !strings.Contains(data, `"task_id":"t42"`) {
+			t.Fatalf("log = %s", data)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("no log message")
+	}
+	stop()
+	if err := <-done; err == nil {
+		t.Fatal("the cancelled delegate returned no error")
+	}
+}
+
 // lockedBuffer is a log sink the SDK's goroutines may write to.
 type lockedBuffer struct {
 	mu  sync.Mutex
