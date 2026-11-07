@@ -184,6 +184,8 @@ func daemon(ctx context.Context, o Options) (Check, *client.Client) {
 		c.Status, c.Message = Fail, err.Error()
 		var foreign *client.ForeignError
 		switch {
+		case errors.As(err, &foreign) && foreign.OlderBuild:
+			c.Fix = "stop that daemon with the Seelegent build that started it, then run this one"
 		case errors.As(err, &foreign) && foreign.OtherHome:
 			c.Fix = "give each data directory its own port (SEELEGENT_PORT or the settings' port)"
 		case errors.As(err, &foreign) && !client.TimedOut(err):

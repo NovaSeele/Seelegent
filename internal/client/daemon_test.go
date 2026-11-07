@@ -73,10 +73,21 @@ func TestFind(t *testing.T) {
 	}
 }
 
-// TestFindOtherHome: a Seelegent daemon of another data directory on this home's port (or one that names no home)
-// is refused, never adopted: Find and Ensure report the conflict with its pid and start nothing.
+// TestFindOtherHome: a Seelegent daemon of another data directory on this home's port, or an older build that names
+// no data directory, is refused, never adopted: Find and Ensure report the conflict with its pid and start nothing.
 func TestFindOtherHome(t *testing.T) {
-	for name, home := range map[string]string{"other home": filepath.Join(t.TempDir(), "a"), "no home id": ""} {
+	cases := map[string]struct {
+		home  string
+		older bool
+		want  string
+	}{
+		"other home": {filepath.Join(t.TempDir(), "a"), false, "another data directory (pid 4321): give this data " +
+			"directory its own port"},
+		"older build": {"", true, "an older Seelegent build (pid 4321) that does not report its data directory: " +
+			"stop it with that build"},
+	}
+	for name, c := range cases {
+		home := c.home
 		t.Run(name, func(t *testing.T) {
 			port := freePort(t)
 			mux := http.NewServeMux()
@@ -93,9 +104,12 @@ func TestFindOtherHome(t *testing.T) {
 			for _, look := range []func(context.Context) (*Client, error){d.Find, d.Ensure} {
 				_, err := look(t.Context())
 				var fe *ForeignError
-				if !errors.As(err, &fe) || !fe.OtherHome || fe.PID != 4321 || started ||
-					!strings.Contains(err.Error(), "another data directory (pid 4321)") {
-					t.Fatalf("other home = %v (started %v)", err, started)
+				if !errors.As(err, &fe) || fe.OtherHome == c.older || fe.OlderBuild != c.older || fe.PID != 4321 ||
+					started || !strings.Contains(err.Error(), c.want) {
+					t.Fatalf("%s = %v (started %v)", name, err, started)
+				}
+				if c.older && strings.Contains(err.Error(), "its own port") {
+					t.Fatalf("older build told to change the port: %v", err)
 				}
 			}
 		})

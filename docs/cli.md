@@ -35,7 +35,8 @@ the defaults.
 One daemon per data directory: the daemon's health answer names its data directory (`homeId`, a hash). A
 Seelegent daemon of another data directory on this one's port is never used, adopted or stopped: every command
 reports "port N is served by a Seelegent daemon of another data directory (pid X)" (`daemon_unavailable`) and
-nothing is started. `stop` also asks a daemon to stop only while this data directory's lock is held or its port
+nothing is started. An older build that does not report its data directory is refused the same way, with "port N
+is served by an older Seelegent build (pid X) that does not report its data directory: stop it with that build". `stop` also asks a daemon to stop only while this data directory's lock is held or its port
 file exists.
 
 ### Worker guard (old B12)

@@ -60,6 +60,9 @@ type ForeignError struct {
 	// (its health homeId differs); PID is that daemon's process id. It is never used, and never stopped.
 	OtherHome bool
 	PID       int
+	// OlderBuild is set when a Seelegent daemon of this API version answers without naming its data directory
+	// (a build before homeId): whose it is cannot be told, so it is treated like OtherHome.
+	OlderBuild bool
 }
 
 // TimedOut reports whether err is a probe that got no answer in time.
@@ -69,6 +72,10 @@ func TimedOut(err error) bool {
 }
 
 func (e *ForeignError) Error() string {
+	if e.OlderBuild {
+		return fmt.Sprintf("port %d is served by an older Seelegent build (pid %d) that does not report its data "+
+			"directory: stop it with that build", e.Port, e.PID)
+	}
 	if e.OtherHome {
 		return fmt.Sprintf("port %d is served by a Seelegent daemon of another data directory (pid %d): give this "+
 			"data directory its own port with SEELEGENT_PORT or the port setting", e.Port, e.PID)
@@ -230,8 +237,11 @@ func (d *Daemon) probe(ctx context.Context, port int) (*Client, error) {
 	switch {
 	case err == nil && h.OK && h.APIVersion == api.APIVersion && h.HomeID == d.homeID:
 		return c, nil
+	case err == nil && h.OK && h.APIVersion == api.APIVersion && h.HomeID == "":
+		// A build before homeId: whose daemon it is cannot be told, so it is never used or stopped either.
+		return nil, &ForeignError{Port: port, OlderBuild: true, PID: h.PID}
 	case err == nil && h.OK && h.APIVersion == api.APIVersion:
-		// Another data directory's daemon (or a build before homeId): never ours to use or stop.
+		// Another data directory's daemon: never ours to use or stop.
 		return nil, &ForeignError{Port: port, OtherHome: true, PID: h.PID}
 	case err == nil && h.APIVersion != 0:
 		return nil, &ForeignError{Port: port, APIVersion: h.APIVersion}

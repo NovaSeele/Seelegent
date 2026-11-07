@@ -48,9 +48,11 @@ by it. `seelegent stop` asks the daemon to shut down through `POST /api/v1/daemo
    back to step 2. So a daemon started with `--port`, or before the port setting changed, is found.
 2. Probe `GET /api/v1/health` on the configured port. A daemon that answers `ok` with `apiVersion: 1` and this data
    directory's `homeId` is used. Anything else that answers (another program, an older Seelegent, another API
-   version, or a Seelegent daemon of another data directory: "port N is served by a Seelegent daemon of another data
-   directory (pid X)") is reported, never used or stopped, and nothing is started. A port that accepts but does not answer within 1.5 s is reported as a busy or hung daemon (or another
-   program), and nothing is started either.
+   version, a Seelegent daemon of another data directory: "port N is served by a Seelegent daemon of another data
+   directory (pid X)", or an older build without `homeId`: "... an older Seelegent build (pid X) that does not
+   report its data directory: stop it with that build") is reported, never used or stopped, and nothing is started.
+   A port that accepts but does not answer within 1.5 s is reported as a busy or hung daemon (or another program),
+   and nothing is started either.
 3. When nothing answers, take `<home>/run/start.lock`, probe again (another MCP server may have just started it).
    While another daemon holds `run/daemon.lock` without answering yet (still starting, or shutting down), keep
    probing and use it as soon as it answers; nothing is started while the lock is held, and a holder that never
