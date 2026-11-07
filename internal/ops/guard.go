@@ -20,11 +20,12 @@ func IsWorker(getenv func(string) string) bool { return getenv(EnvWorker) == "1"
 // Mutating reports whether operation name with this action changes anything, so a worker may not run it (old
 // mcp.js isMutating, inventory §1.3). The daemon refuses workers too (contract §1.3); this is the second layer, which
 // also covers operations whose daemon side is not built yet. Names are the MCP tool names; the command line maps
-// its commands onto them (run is delegate; stop, restart and ui are "daemon").
+// its commands onto them (run is delegate; stop, restart and ui are "daemon"). setup and migrate are command-line
+// only: they change the host configs and the data folder.
 func Mutating(name, action string) bool {
 	notIn := func(read ...string) bool { return !slices.Contains(read, action) }
 	switch name {
-	case "delegate", "followup", "review", "cancel", "consult", "daemon":
+	case "delegate", "followup", "review", "cancel", "consult", "daemon", "setup", "migrate":
 		return true
 	case "meeting":
 		return notIn("status", "list", "wait")

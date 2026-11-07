@@ -2,8 +2,9 @@
 
 `seelegent <command> [flags]`. The commands are thin: they talk to the daemon through `internal/client` and share
 their logic with the MCP tools through `internal/ops` (see [mcp.md](mcp.md)). Code: `internal/cli`, one file per
-group (`delegate.go`, `tasks.go`, `memory.go`, `system.go`, `doctor.go`, `daemon.go`, `mcp.go`); the checks of
-`doctor` are `internal/doctor`.
+group (`delegate.go`, `tasks.go`, `memory.go`, `system.go`, `doctor.go`, `daemon.go`, `mcp.go`, `setup.go`,
+`migrate.go`); the checks of `doctor` are `internal/doctor`, the work of `setup` and `migrate` is `internal/setup`
+and `internal/migrate` ([setup.md](setup.md)).
 
 ## Common rules
 
@@ -42,10 +43,11 @@ file exists.
 ### Worker guard (old B12)
 
 With `SEELEGENT_WORKER=1`, `delegate`, `run`, `followup`, `review`, `cancel`, `memory append|replace`, `stop`,
-`restart`, `ui` and `daemon` (`serve`) print exactly `Seelegent is not available inside a Seelegent worker.` and exit 1 (with `--json`:
+`restart`, `ui`, `daemon` (`serve`), `setup` (a dry run too) and `migrate` print exactly `Seelegent is not available inside a Seelegent worker.` and exit 1 (with `--json`:
 `{"error": that text, "code": "forbidden", "details": {"caller": "worker"}}`). The check runs before the flags are
-parsed and before any call. `status`, `wait`, `task`, `ls`, `memory read`, `doctor` and `version` stay allowed; the
-daemon's own guard decides what a worker may read.
+parsed and before any call. `status`, `wait`, `task`, `ls`, `memory read`, `doctor`, `version`, `skill` and the
+hidden `hook claude-agent` (Claude Code's reminder hook, which may run inside a worker and only prints advice) stay
+allowed; the daemon's own guard decides what a worker may read.
 
 ## Commands
 
@@ -68,6 +70,9 @@ daemon's own guard decides what a worker may read.
 | `memory read\|append\|replace --cwd D [text\|@file]` | A project's notes for workers. | `Memory` |
 | `doctor` | Checks the installation (below); exit 1 when a check fails. | `[{name, status: ok\|warn\|fail, message, fix?}]` |
 | `version` | Version, commit and build date. | `buildinfo.Info` |
+| `setup [--host a,b] [--dry-run] [--remove] [--no-skill] [--hooks] [--force] [--exe path]` | Registers Seelegent with the lead hosts on this machine ([setup.md](setup.md)). Exit 1 when an item is `conflict` or `error`; with `--json` the report is then the only document printed. | `setup.Report` |
+| `skill` | Prints the lead skill `setup` installs. | `{name, version, file, content}` |
+| `migrate [--from dir] [--dry-run]` | Imports the old (Node) Seelegent's data ([setup.md](setup.md)). Exit 1 when an item is `error`; with `--json` the report is then the only document printed. | `migrate.Report` |
 
 Waits (`wait`, `delegate`, `followup`, `run`; the same code as the MCP tools, `ops.WaitReports`):
 
@@ -82,8 +87,8 @@ Waits (`wait`, `delegate`, `followup`, `run`; the same code as the MCP tools, `o
 
 ### Not in this version
 
-There are no `meeting`, `consult`, `issues`, `notes`, `automations`, `contest`, `proof`, `setup`, `update` or
-`skill` commands (`setup` and `skill` come with M8). Options of later milestones keep their old names but are
+There are no `meeting`, `consult`, `issues`, `notes`, `automations`, `contest`, `proof` or `update` commands.
+Options of later milestones keep their old names but are
 refused before anything is sent, with exit 1 and code `not_available`: `--gate <cmd>` (`--no-gate` is accepted),
 `--lane <paths>` (`--no-lane` is accepted), `--force-lane`, `--verify`, `--member`, and the contest options
 `--variants`, `--variant`, `--judge`, `--no-judge`, `--deadline`.
@@ -108,7 +113,8 @@ when no daemon of the data directory runs does it check writability by writing a
 | `accounts` | counts: total, enabled and (daemon running) usable | no enabled account, or counts unknown | – |
 | `path` | no relative PATH entries | relative entries (a worker would resolve them in the project folder) | – |
 
-Host registration checks (MCP entries, skills) come with `setup` in M8.
+There is no host registration check (MCP entries, skills) yet; `seelegent setup --dry-run` shows what is
+registered.
 
 ## Decisions
 
