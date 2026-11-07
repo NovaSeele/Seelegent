@@ -16,8 +16,8 @@ Package `internal/guard` is pure: it reads a command line (POSIX shells, PowerSh
 subshells, wrappers such as `env`, `xargs`, `timeout`, `chrt`, `parallel`, `script -c`, `su -c`, `find -exec`,
 cmd's `if`; interpreters such as `bash -c`, `powershell -EncodedCommand`, `node -e`, `python -c`; a script a
 shell or an interpreter reads from standard input: `bash <<'EOF'`, `cat <<'EOF' | sh`, `sh -s <<< '...'`,
-`printf 'git stash\n' | bash` (with `printf`'s and `echo`'s escapes decoded), `pwsh -Command -`,
-`python3 - <<'EOF'`) and decides. A here-document fed to any other command (`cat` building a commit message, `tee`,
+`printf 'git stash\n' | bash` (with `printf`'s and `echo`'s escapes decoded), `{ echo git stash; } | sh` and
+`(...) | sh`, `echo git stash | xargs -I{} sh -c '{}'`, `pwsh -Command -`, `python3 - <<'EOF'`) and decides. A here-document fed to any other command (`cat` building a commit message, `tee`,
 `sed`, a script file) is data. When the shell is not known (agy's hook reads every dialect), the lines of a POSIX
 here-document are read only as POSIX reads them, except for agy on Windows: its `run_command` runs PowerShell,
 where `<<` starts no here-document and the next lines run as commands, so there `cat <<'EOF'` followed by a line
@@ -34,8 +34,9 @@ script that edits a file mentioning `git stash`, is data. Long options count by 
   `commit -a|--all|--amend`; `branch` and `tag` deletes, moves and forced writes; `apply` unless it only checks;
   `reflog expire|delete`; `worktree remove|prune|move`; `submodule deinit|update|absorbgitdirs`; `config` writes
   of keys that run programs or redirect git (aliases, includes, `core.hooksPath`, `core.editor`, filters and
-  drivers, ...) and of `gc.pruneExpire` and `help.autocorrect` (also as `-c`/`--config-env`); `sparse-checkout`
-  writes; `bisect` steps; `rerere forget|clear|gc`; `notes remove|prune`; `refs migrate`; `symbolic-ref -d`;
+  drivers, ...) and of `gc.pruneExpire` and `help.autocorrect` (also as `-c`/`--config-env`; `git config <key>`
+  and `git config get <key>` only read and pass), `config --edit` and `--rename-section` (the editor or the
+  renamed section can bring any key); `sparse-checkout` writes; `bisect` steps; `rerere forget|clear|gc`; `notes remove|prune`; `refs migrate`; `symbolic-ref -d`;
   `gc --prune=<date>` (plain `gc` and `gc --prune` keep the default expiry);
 - an alias that expands to any of the above (read with `git config --get alias.<name>` in the command's folder);
 - a command that sets `GIT_CONFIG_PARAMETERS`, `GIT_CONFIG_COUNT`, `GIT_CONFIG_KEY_<n>`, `GIT_CONFIG_GLOBAL` or
@@ -80,13 +81,15 @@ subcommand (`git stsh`) is not run as the command git guesses. git takes the las
   integration is not seen either.
 - The guard reads command lines, not files: a command stored in a variable and run later, a script file the worker
   wrote, or a Makefile target are not read. Dynamic words in the git part are refused (fail closed), dynamic words
-  elsewhere are not.
+  elsewhere are not. What is piped into a shell is read from simple commands, subshells and brace groups, not from
+  compound commands (`for x in a; do echo git stash; done | sh`); `xargs` reading its input from a file (`-a`,
+  `--arg-file`) into a shell is not read either.
 - codex has no pre-tool hook. Its own sandbox (`backends.codex.sandbox`, default `workspace-write`; plan mode is
   `read-only`) limits where it can write; the shim covers the git commands it runs through `PATH`. With
   `danger-full-access` only the shim remains.
 - The hooks do not run git, so they cannot turn off `help.autocorrect`: when the user's git config sets it, a
   misspelled subcommand (`git stsh`) passes the hook as an unknown command and git runs the command it guesses.
-  The shim is not affected. A worker cannot set it itself: `git config help.autocorrect` and `-c` are refused.
+  The shim is not affected. A worker cannot set it itself: `git config help.autocorrect <value>` and `-c` are refused.
 - Configuration the alias lookup cannot see is caught only in the forms listed above. Set through a computed name
   (`export GIT_CONFIG_$N=...`), a script file, `set -a`, or through `HOME`/`XDG_CONFIG_HOME` pointing at another
   `.gitconfig`, it is not; and the aliases of `git -C <other repository>` are looked up in the command's folder.
