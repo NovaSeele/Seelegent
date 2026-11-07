@@ -1,10 +1,13 @@
 package app
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -226,6 +229,57 @@ func waitLive(t *testing.T, a *App, id string) {
 			t.Fatalf("no live worker for %s", id)
 		}
 		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// TestInstallShimKeepsWorkingShim: a shim install that fails keeps the shim of an earlier run when it still works,
+// and leaves workers without a shim only when there is none.
+func TestInstallShimKeepsWorkingShim(t *testing.T) {
+	if runtime.GOOS != "windows" && os.Geteuid() == 0 {
+		t.Skip("root ignores the folder permissions this test relies on")
+	}
+	base := t.TempDir()
+	exe := filepath.Join(base, "bin", "seelegent.exe")
+	if err := os.MkdirAll(filepath.Dir(exe), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(exe, []byte("binary"), 0o700); err != nil { //nolint:gosec // a test program
+		t.Fatal(err)
+	}
+	var logs bytes.Buffer
+	log := slog.New(slog.NewTextHandler(&logs, nil))
+	dir := filepath.Join(base, "guard", "bin")
+	if got := installShim(log, dir, exe); got != dir || logs.Len() != 0 {
+		t.Fatalf("first install: %q, logs %s", got, logs.String())
+	}
+	// The next install fails: on Windows the new executable cannot be read (as when a running git.exe blocks the
+	// rename), elsewhere the folder is read-only.
+	other := filepath.Join(base, "bin", "missing.exe")
+	if runtime.GOOS != "windows" {
+		other = filepath.Join(base, "bin", "seelegent-new")
+		if err := os.WriteFile(other, []byte("binary"), 0o700); err != nil { //nolint:gosec // a test program
+			t.Fatal(err)
+		}
+		if err := os.Chmod(dir, 0o500); err != nil { //nolint:gosec // read-only on purpose
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = os.Chmod(dir, 0o700) }) //nolint:gosec // let TempDir remove it
+	}
+	if got := installShim(log, dir, other); got != dir || !strings.Contains(logs.String(), "keeping the one") {
+		t.Fatalf("failed install with a working shim: %q, logs %s", got, logs.String())
+	}
+	// Without an earlier shim there is nothing to keep.
+	logs.Reset()
+	fresh := filepath.Join(base, "fresh")
+	if runtime.GOOS != "windows" {
+		if err := os.MkdirAll(fresh, 0o500); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = os.Chmod(fresh, 0o700) }) //nolint:gosec // let TempDir remove it
+		fresh = filepath.Join(fresh, "bin")
+	}
+	if got := installShim(log, fresh, other); got != "" || !strings.Contains(logs.String(), "unguarded") {
+		t.Fatalf("failed install without a shim: %q, logs %s", got, logs.String())
 	}
 }
 

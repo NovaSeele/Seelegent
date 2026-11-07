@@ -253,6 +253,61 @@ func InstallShim(dir, exe string) error {
 	return nil
 }
 
+// ShimReady reports whether dir holds a git shim a worker can run: on Windows a non-empty git.exe (a copy of a
+// seelegent build), elsewhere an executable script that runs a seelegent executable that still exists. The daemon
+// keeps using such a shim, perhaps of an older build, when InstallShim fails (a worker still runs the old git.exe).
+func ShimReady(dir string) error {
+	path := filepath.Join(dir, ShimName())
+	st, err := os.Stat(path)
+	if err != nil {
+		return err
+	}
+	if !st.Mode().IsRegular() || st.Size() == 0 {
+		return fmt.Errorf("guard: shim %s is not a program", path)
+	}
+	if runtime.GOOS == "windows" {
+		return nil
+	}
+	if st.Mode().Perm()&0o111 == 0 {
+		return fmt.Errorf("guard: shim %s is not executable", path)
+	}
+	data, err := fsutil.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	exe, ok := shimTarget(string(data))
+	if !ok {
+		return fmt.Errorf("guard: shim %s is not a seelegent shim", path)
+	}
+	if _, err := os.Stat(exe); err != nil {
+		return fmt.Errorf("guard: shim %s: %w", path, err)
+	}
+	return nil
+}
+
+// shimTarget returns the executable a POSIX shim script runs (the quoted word after "exec ").
+func shimTarget(script string) (string, bool) {
+	const prefix = "#!/bin/sh\nexec '"
+	if !strings.HasPrefix(script, prefix) || !strings.Contains(script, " "+ShimSubcommand+" ") {
+		return "", false
+	}
+	var b strings.Builder
+	rest := script[len(prefix):]
+	for {
+		end := strings.IndexByte(rest, '\'')
+		if end < 0 {
+			return "", false
+		}
+		b.WriteString(rest[:end])
+		rest = rest[end+1:]
+		if !strings.HasPrefix(rest, `\''`) { // posixQuote writes a quote as '\''
+			return b.String(), true
+		}
+		b.WriteByte('\'')
+		rest = rest[3:]
+	}
+}
+
 // same reports whether a and b are the same file (a hard link).
 func same(a, b string) bool {
 	sa, err := os.Stat(a)

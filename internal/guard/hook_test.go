@@ -177,6 +177,29 @@ func TestInstallShim(t *testing.T) {
 	} else if !strings.Contains(string(data), ShimSubcommand) {
 		t.Fatalf("shim script %q", data)
 	}
+	if err := ShimReady(shim); err != nil {
+		t.Fatalf("ShimReady after install: %v", err)
+	}
+	if err := ShimReady(filepath.Join(dir, "none")); err == nil {
+		t.Fatal("ShimReady of an empty folder")
+	}
+	if runtime.GOOS != "windows" {
+		// The script names its executable; a shim whose executable is gone is not ready.
+		if err := os.Remove(src); err != nil {
+			t.Fatal(err)
+		}
+		if err := ShimReady(shim); err == nil {
+			t.Fatal("ShimReady with its executable gone")
+		}
+	}
+	const quoted = "/opt/it's here/seelegent"
+	script := "#!/bin/sh\nexec " + posixQuote(quoted) + " " + ShimSubcommand + " --shim-dir='/d' \"$@\"\n"
+	if got, ok := shimTarget(script); !ok || got != quoted {
+		t.Fatalf("shimTarget(%q) = %q %v", script, got, ok)
+	}
+	if _, ok := shimTarget("#!/bin/sh\nexec '/usr/bin/git' \"$@\"\n"); ok {
+		t.Fatal("shimTarget accepted a script that is not a seelegent shim")
+	}
 	env := WithoutDir([]string{"PATH=" + shim + string(os.PathListSeparator) + "/usr/bin", "HOME=/h"}, shim)
 	if env[0] != "PATH=/usr/bin" || env[1] != "HOME=/h" {
 		t.Fatalf("WithoutDir: %q", env)
