@@ -114,11 +114,20 @@ func TestPlanAndRun(t *testing.T) {
 }
 
 // A file name with shell syntax in it is never part of a command line (old bug D1): node gets the path as its own
-// argument, so the file is checked as a name and nothing in it runs.
+// argument, so the file is checked as a name and nothing in it runs. Without node on PATH (POSIX only) a fake node
+// that fails every file stands in: a shell between the daemon and node would still have run the name.
 func TestAutoCheckNoShell(t *testing.T) {
 	env := os.Environ()
 	if envx.ResolveCommand("node", env) == "" {
-		t.Skip("node is not on PATH")
+		if runtime.GOOS == "windows" {
+			t.Skip("node is not on PATH")
+		}
+		bin := t.TempDir()
+		writeFile(t, filepath.Join(bin, "node"), "#!/bin/sh\necho \"SyntaxError in $2\" >&2\nexit 1\n")
+		if err := os.Chmod(filepath.Join(bin, "node"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		env = append(env, "PATH="+bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 	}
 	root := t.TempDir()
 	name := "x$(mkdir pwned1)`mkdir pwned2`;mkdir pwned3;.js"
