@@ -15,10 +15,7 @@ export function createSettingsApi(client: ApiClient) {
     putMemory: (cwd: string, text: string) =>
       client.put<Memory>('/memory', { body: { cwd, text } }),
     hooks: (signal?: AbortSignal) => client.get<Hook[]>('/hooks', { signal }),
-    /**
-     * Replaces the hook list. Not in contract v1 yet (it lists only GET /hooks and the test): the dashboard's
-     * proposal for M14 is the whole list, each entry with its stable id ('' for a new one).
-     */
+    /** Replaces the hook list: the whole list, each entry with its stable id ('' for a new one). */
     putHooks: (hooks: readonly HookConfig[]) =>
       client.put<Hook[]>('/hooks', { body: { hooks: [...hooks] } }),
     /** Runs one hook by id (never by list index). 501 not_implemented until the hook runner lands. */
