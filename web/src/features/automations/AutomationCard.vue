@@ -166,6 +166,14 @@ const taskId = computed(() =>
   color: var(--link);
 }
 
+@media (pointer: coarse) {
+  .card__meta a {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--target-min);
+  }
+}
+
 .card__cwd {
   overflow-wrap: anywhere;
 }

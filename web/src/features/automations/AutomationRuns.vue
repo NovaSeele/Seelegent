@@ -109,6 +109,14 @@ watch(open, async (now) => {
   color: var(--link);
 }
 
+@media (pointer: coarse) {
+  .run__meta a {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--target-min);
+  }
+}
+
 .run__detail {
   flex-basis: 100%;
   max-height: 120px;

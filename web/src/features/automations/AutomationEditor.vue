@@ -159,6 +159,7 @@ async function submit() {
 }
 
 .form__more summary {
+  line-height: max(1.5em, var(--target-min));
   cursor: pointer;
   border-radius: var(--radius-sm);
   font-size: var(--fs-sm);
