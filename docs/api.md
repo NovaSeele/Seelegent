@@ -62,6 +62,14 @@ in the daemon.
 - `GET /tasks/{id}/git/diff` accepts `turn` but shows the working-tree diff; per-turn diffs need the snapshot store of
   a later milestone.
 - `Account.email` is never set: no backend reports it reliably yet.
+- `Provider.models` is the allow-list exactly as last set through `models`, never the tier models, and
+  `Provider.allowedModels` is the pattern enforced. A list becomes `^(?:a|b)$`; a hand-written pattern (old data, or
+  sent as `allowedModels`) answers `models: []`. Both empty allow any model, and the tier models are always allowed
+  on top. In a request a non-empty `models` wins over `allowedModels`; `allowedModels` alone sets a pattern;
+  `models: []` clears both (an `allowedModels` sent with it that only repeats the stored list's pattern is ignored,
+  so a client that sends the whole provider back can still clear the list). Neither touches `tiers`. The list is
+  stored in `providers.models`; rows from before that column get it back from their pattern when the pattern was
+  built from a list. `Account.models` of an API-key account is its provider's tier models followed by that list.
 - `PATCH /settings` applies the JSON merge patch to the daemon's in-memory settings and writes `config.json`
   atomically. Unknown keys, type errors and validation errors are reported together in one `400`.
 - `/state` reads `lastEventId` before the snapshot. A frame newer than the id can repeat a change the snapshot holds

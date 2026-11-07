@@ -1,7 +1,6 @@
 package httpapi
 
 import (
-	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -114,7 +113,8 @@ func (v *accountView) resting(st *pool.AccountState) (until time.Time, resting b
 	return until, resting
 }
 
-// models lists the models the account may run: its catalog (codex) filtered by the policy, else the tier models.
+// models lists the models the account may run: its catalog (codex) filtered by the policy, else the tier models
+// followed by its provider's allow-list (API-key accounts).
 func (v *accountView) models(st *pool.AccountState) []string {
 	var prov *account.Provider
 	if st.Account.Kind == account.KindAPIKey {
@@ -135,7 +135,15 @@ func (v *accountView) models(st *pool.AccountState) []string {
 		}
 		return out
 	}
-	return tierModels(pol.Tiers)
+	out := tierModels(pol.Tiers)
+	if prov != nil {
+		for _, m := range prov.Models {
+			if !slices.Contains(out, m) {
+				out = append(out, m)
+			}
+		}
+	}
+	return out
 }
 
 // tierModels returns the distinct models of a tier mapping, in tier order.
@@ -152,10 +160,15 @@ func tierModels(t config.TierModels) []string {
 // providerDTO maps a provider; accounts is the number of accounts that use it.
 func providerDTO(p account.Provider, accounts int) api.Provider {
 	return api.Provider{
-		ID: p.ID, Name: p.Name, Backend: p.Backend, BaseURL: p.BaseURL, Enabled: p.Enabled, Models: tierModels(p.Tiers),
+		ID: p.ID, Name: p.Name, Backend: p.Backend, BaseURL: p.BaseURL, Enabled: p.Enabled, Models: modelList(p.Models),
 		Accounts: accounts, Preset: p.Preset, WireAPI: p.WireAPI, Official: p.Official, AllowedModels: p.AllowedModels,
 		Tiers: p.Tiers, CreatedAt: api.FormatTime(p.CreatedAt), UpdatedAt: api.FormatTime(p.UpdatedAt),
 	}
+}
+
+// modelList is a copy of an allow-list, never nil.
+func modelList(models []string) []string {
+	return append(make([]string, 0, len(models)), models...)
 }
 
 // presetDTOs lists the provider presets by id.
@@ -175,8 +188,15 @@ func presetDTOs() []api.ProviderPreset {
 	return out
 }
 
-// applyProvider applies the fields of in to p. Models without allowedModels becomes the pattern that allows
-// exactly those models.
+// applyProvider applies the fields of in to p (the stored provider, or the new one). The allow-list follows these
+// rules (api.ProviderInput):
+//   - a non-empty models replaces the list; its pattern replaces allowedModels (account.Provider.Validate builds it);
+//   - otherwise a given allowedModels is set as the pattern, and models becomes the list it was built from, or []
+//     for a hand-written pattern; an allowedModels that only repeats the pattern of the stored list, sent together
+//     with models: [], is that list's echo and does not keep it;
+//   - otherwise models: [] clears both: any model.
+//
+// The tiers never change through models or allowedModels.
 func applyProvider(p *account.Provider, in *api.ProviderInput) {
 	if in.Name != nil {
 		p.Name = *in.Name
@@ -193,26 +213,17 @@ func applyProvider(p *account.Provider, in *api.ProviderInput) {
 	if in.Tiers != nil {
 		p.Tiers = *in.Tiers
 	}
+	listEcho := in.Models != nil && in.AllowedModels != nil && len(p.Models) > 0 &&
+		*in.AllowedModels == p.AllowedModels
 	switch {
-	case in.AllowedModels != nil:
-		p.AllowedModels = *in.AllowedModels
+	case in.Models != nil && account.ModelsPattern(*in.Models) != "":
+		p.Models, p.AllowedModels = slices.Clone(*in.Models), ""
+	case in.AllowedModels != nil && !listEcho:
+		p.AllowedModels = strings.TrimSpace(*in.AllowedModels)
+		p.Models = account.ModelsOf(p.AllowedModels)
 	case in.Models != nil:
-		p.AllowedModels = exactPattern(*in.Models)
+		p.Models, p.AllowedModels = []string{}, ""
 	}
-}
-
-// exactPattern is an anchored pattern that matches exactly the given models ("" for none: tier models only).
-func exactPattern(models []string) string {
-	quoted := make([]string, 0, len(models))
-	for _, m := range models {
-		if m = strings.TrimSpace(m); m != "" {
-			quoted = append(quoted, regexp.QuoteMeta(m))
-		}
-	}
-	if len(quoted) == 0 {
-		return ""
-	}
-	return "^(?:" + strings.Join(quoted, "|") + ")$"
 }
 
 // usageSummaryDTO maps a usage summary 1:1.

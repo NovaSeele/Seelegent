@@ -149,13 +149,18 @@ type Provider struct {
 	// BaseURL is empty only for the official Anthropic API.
 	BaseURL string `json:"baseUrl"`
 	Enabled bool   `json:"enabled"`
-	// Models lists the models the provider offers: its tier models, or the list given when it was saved.
+	// Models is the model allow-list as a list, exactly as last set through POST/PATCH models; never the tier
+	// models. It is [] when the provider allows any model and when a hand-written allowedModels pattern (old data,
+	// or set as a raw pattern) restricts it, since such a pattern cannot be expressed as a list.
 	Models []string `json:"models"`
 	// Accounts counts the accounts that use the provider.
-	Accounts      int        `json:"accounts"`
-	Preset        string     `json:"preset,omitempty"`
-	WireAPI       string     `json:"wireApi,omitempty"`
-	Official      bool       `json:"official"`
+	Accounts int    `json:"accounts"`
+	Preset   string `json:"preset,omitempty"`
+	WireAPI  string `json:"wireApi,omitempty"`
+	Official bool   `json:"official"`
+	// AllowedModels is the case-insensitive RE2 pattern actually enforced. Built from a list it matches exactly
+	// that list (^(?:a|b)$); otherwise it is a hand-written pattern and Models is []. Both empty allow any model.
+	// The tier models are always allowed on top of the allow-list.
 	AllowedModels string     `json:"allowedModels"`
 	Tiers         TierModels `json:"tiers"`
 	CreatedAt     string     `json:"createdAt,omitempty"`
@@ -181,8 +186,15 @@ type ProviderList struct {
 }
 
 // ProviderInput is POST /providers (every field but id and backend is optional) and PATCH /providers/{id} (every
-// field is optional; id and backend cannot change). Models, when allowedModels is not given, becomes the pattern
-// that allows exactly those models.
+// field is optional; id and backend cannot change). The allow-list, in order of precedence:
+//   - models with at least one id replaces the list (trimmed, blanks and repeats dropped) and allowedModels becomes
+//     its pattern; a given allowedModels is then ignored;
+//   - otherwise allowedModels sets the pattern; models becomes the list it was built from, or [] for a
+//     hand-written pattern. Sent with models [] and equal to the pattern of the stored list, it is that list's echo
+//     and the list is cleared instead;
+//   - otherwise models [] clears the list and the pattern: any model.
+//
+// Neither ever changes the tiers.
 type ProviderInput struct {
 	ID            *string     `json:"id,omitempty"`
 	Name          *string     `json:"name,omitempty"`

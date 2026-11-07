@@ -523,8 +523,9 @@ func TestModelPolicy(t *testing.T) {
 	if m, err := claude.Resolve("CLAUDE-SONNET-5", "", ""); err != nil || m != "CLAUDE-SONNET-5" {
 		t.Errorf("tier model by id = %q, %v", m, err)
 	}
-	if _, err := claude.Resolve("claude-opus-5", "", ""); !errors.Is(err, ErrModel) {
-		t.Errorf("empty allowedModels allowed another model: %v", err)
+	// An empty allowedModels allows any model (old behaviour), not only the tier models.
+	if m, err := claude.Resolve("claude-opus-5", "", ""); err != nil || m != "claude-opus-5" {
+		t.Errorf("empty allowedModels refused another model: %q, %v", m, err)
 	}
 	if _, err := claude.Resolve("", "max", ""); !errors.Is(err, ErrModel) || !strings.Contains(err.Error(), "no model") {
 		t.Errorf("unmapped tier: %v", err)
@@ -539,6 +540,29 @@ func TestModelPolicy(t *testing.T) {
 	pp, _ := PolicyFor("claude", s, p)
 	if m, err := pp.Resolve("", "fast", ""); err != nil || m != "glm-4.6" || pp.Source != "provider zai" {
 		t.Errorf("provider policy = %q, %v (%+v)", m, err, pp)
+	}
+	// A provider list allows its models and, on top, the tier models; nothing else.
+	ds := &account.Provider{ID: "deepseek", Enabled: true, Models: []string{"deepseek-v4", "deepseek-r2"},
+		AllowedModels: account.ModelsPattern([]string{"deepseek-v4", "deepseek-r2"}),
+		Tiers:         config.TierModels{Fast: "deepseek-chat"}}
+	dp, _ := PolicyFor("claude", s, ds)
+	for _, m := range []string{"deepseek-v4", "DeepSeek-R2", "deepseek-chat"} {
+		if err := dp.Allowed(m); err != nil {
+			t.Errorf("provider list refused %s: %v", m, err)
+		}
+	}
+	if m, err := dp.Resolve("", "fast", ""); err != nil || m != "deepseek-chat" {
+		t.Errorf("provider tier model = %q, %v", m, err)
+	}
+	for _, m := range []string{"deepseek-v4x", "glm-4.6"} {
+		if err := dp.Allowed(m); !errors.Is(err, ErrModel) {
+			t.Errorf("provider list allowed %s: %v", m, err)
+		}
+	}
+	// Both empty: any model.
+	anyp, _ := PolicyFor("claude", s, &account.Provider{ID: "any", Enabled: true})
+	if err := anyp.Allowed("whatever-model-1"); err != nil {
+		t.Errorf("provider without a list refused a model: %v", err)
 	}
 	p.Enabled = false
 	pp, _ = PolicyFor("claude", s, p)

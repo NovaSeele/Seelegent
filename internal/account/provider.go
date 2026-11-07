@@ -3,6 +3,7 @@ package account
 import (
 	"net/url"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -36,7 +37,11 @@ type Provider struct {
 	Official bool `json:"official"`
 	// Enabled providers may be used.
 	Enabled bool `json:"enabled"`
-	// AllowedModels is a case-insensitive RE2 pattern every model must match; empty allows only the tier models.
+	// Models is the model allow-list as a list, exactly as last set (trimmed, without blanks or repeats). When it is
+	// not empty, AllowedModels is the pattern that matches exactly these models (Validate sets it).
+	Models []string `json:"models"`
+	// AllowedModels is the case-insensitive RE2 pattern a model must match: built from Models, or a hand-written
+	// pattern when Models is empty. Both empty allow any model; the tier models are always allowed.
 	AllowedModels string `json:"allowedModels"`
 	// Tiers maps the tiers to this provider's models.
 	Tiers config.TierModels `json:"tiers"`
@@ -124,7 +129,82 @@ func (p *Provider) Validate() error {
 	} else if err := validateBaseURL(p.BaseURL); err != nil {
 		return err
 	}
+	models, err := cleanModels(p.Models)
+	if err != nil {
+		return err
+	}
+	p.Models = models
+	if len(models) > 0 {
+		p.AllowedModels = ModelsPattern(models)
+	}
 	return validatePolicy(p.AllowedModels, p.Tiers)
+}
+
+// cleanModels trims the ids of an allow-list and drops blanks and repeats, keeping the order (never nil).
+func cleanModels(in []string) ([]string, error) {
+	out := make([]string, 0, len(in))
+	for _, m := range in {
+		m = strings.TrimSpace(m)
+		if m == "" || slices.Contains(out, m) {
+			continue
+		}
+		if strings.ContainsFunc(m, func(r rune) bool { return r <= ' ' }) {
+			return nil, invalidf("model id %q must not contain spaces", m)
+		}
+		out = append(out, m)
+	}
+	return out, nil
+}
+
+// ModelsPattern returns the anchored pattern that matches exactly the given models ("" for none: any model).
+func ModelsPattern(models []string) string {
+	quoted := make([]string, 0, len(models))
+	for _, m := range models {
+		if m = strings.TrimSpace(m); m != "" {
+			quoted = append(quoted, regexp.QuoteMeta(m))
+		}
+	}
+	if len(quoted) == 0 {
+		return ""
+	}
+	return "^(?:" + strings.Join(quoted, "|") + ")$"
+}
+
+// ModelsOf turns a pattern made by ModelsPattern back into its list. It returns an empty list for any other
+// pattern (a hand-written one cannot be expressed as a list) and for "".
+func ModelsOf(pattern string) []string {
+	inner, ok := strings.CutPrefix(pattern, "^(?:")
+	if ok {
+		inner, ok = strings.CutSuffix(inner, ")$")
+	}
+	if !ok || inner == "" {
+		return []string{}
+	}
+	var (
+		out []string
+		cur strings.Builder
+		esc bool
+	)
+	for _, r := range inner {
+		switch {
+		case esc:
+			cur.WriteRune(r)
+			esc = false
+		case r == '\\':
+			esc = true
+		case r == '|':
+			out = append(out, cur.String())
+			cur.Reset()
+		default:
+			cur.WriteRune(r)
+		}
+	}
+	out = append(out, cur.String())
+	// Only an exact round trip counts: "^(?:a.b)$" is a hand-written pattern, not the list [a.b].
+	if esc || ModelsPattern(out) != pattern {
+		return []string{}
+	}
+	return out
 }
 
 // validateBaseURL accepts https URLs, and http only for the local machine.
@@ -151,12 +231,11 @@ func validateBaseURL(raw string) error {
 	return nil
 }
 
-// validatePolicy checks the allowed-models pattern and that every tier model matches it.
+// validatePolicy checks the allowed-models pattern and that every tier model is a plain id. A tier model need not
+// match the pattern: the tier models are always allowed on top of the allow-list.
 func validatePolicy(allowed string, tiers config.TierModels) error {
-	var re *regexp.Regexp
 	if allowed != "" {
-		var err error
-		if re, err = regexp.Compile("(?i)" + allowed); err != nil {
+		if _, err := regexp.Compile("(?i)" + allowed); err != nil {
 			return invalidf("allowedModels is not a valid regular expression: %v", err)
 		}
 	}
@@ -167,9 +246,6 @@ func validatePolicy(allowed string, tiers config.TierModels) error {
 		}
 		if strings.ContainsFunc(m, func(r rune) bool { return r <= ' ' }) {
 			return invalidf("tier %s: model id %q must not contain spaces", tier, m)
-		}
-		if re != nil && !re.MatchString(m) {
-			return invalidf("tier %s: model %q does not match allowedModels %q", tier, m, allowed)
 		}
 	}
 	return nil
