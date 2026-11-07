@@ -166,22 +166,29 @@ func short(sha string) string {
 }
 
 // ownPush finds the push of ticket id that sent sha (its outbox entry, in any state, names the commit before the
-// push runs) and the base that commit built on.
-func (s *Service) ownPush(ctx context.Context, id, sha string) (base string, ok bool) {
+// push runs) and the base that commit built on. An outbox that cannot be read is an error, never "not ours" (which
+// would refuse the push as branch_diverged).
+func (s *Service) ownPush(ctx context.Context, id, sha string) (base string, ok bool, err error) {
 	if sha == "" {
-		return "", false
+		return "", false, nil
 	}
-	_ = s.o.DB.Read(ctx, func(tx *sql.Tx) error {
+	err = s.o.DB.Read(ctx, func(tx *sql.Tx) error {
 		list, err := listEntries(ctx, tx, scopeTicket, id)
+		if err != nil {
+			return err
+		}
 		for _, e := range list {
 			if a, _ := e.Args["sha"].(string); e.Kind == api.OutboxPush && a == sha {
 				base, _ = e.Args["base"].(string)
 				ok = true
 			}
 		}
-		return err
+		return nil
 	})
-	return base, ok
+	if err != nil {
+		return "", false, fmt.Errorf("read the ticket's pushes: %w", err)
+	}
+	return base, ok, nil
 }
 
 // planPush works out the commit a push of the ticket sends: its parents, after checking the remote branch and the
@@ -195,7 +202,11 @@ func (s *Service) planPush(ctx context.Context, t *ticketRec) (*pushPlan, error)
 	p.tip = tip
 	pushedBase := t.PushedBase
 	if tip != p.prev {
-		switch base, own := s.ownPush(ctx, t.ID, tip); {
+		base, own, err := s.ownPush(ctx, t.ID, tip)
+		if err != nil {
+			return nil, err
+		}
+		switch {
 		case own:
 			// Seelegent's own commit: a push whose recording was lost (the request went away or the daemon stopped
 			// after GitHub took it). The outbox wrote its sha before the push.
