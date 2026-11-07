@@ -164,7 +164,8 @@ publishes `meeting.updated` with the meeting's summary.
    with `proposal.reasonCode` (`unverified`, `judge_failed`, `judge_running`) saying why.
 7. **Pick.** `POST /contests/{id}/pick {winner?}` (default: the proposal) commits the winner's worktree as it is
    through a temporary index and `git commit-tree` (the worktree itself is not touched), writes that commit's diff
-   against the base to `contests/<id>.<label>.patch` and, under the repository lock, runs `git apply --check` then
+   against the base to `contests/<id>/<label>.patch` (kept: the record of what was applied) and, under the
+   repository lock, runs `git apply --check` then
    `git apply` on the working tree only (never the index). A patch that does not apply changes nothing:
    `409 conflict` with `details.reason: "patch_conflict"` and the files, kept as `lastPickError`. After a pick the
    winner's task is accepted and the other finished variants rejected (losing adds nothing to the review history).
@@ -173,7 +174,11 @@ publishes `meeting.updated` with the meeting's summary.
 
 A followup on a variant while the contest is ready reopens it; it is scored again when the variant ends.
 
-Cleanup: once a variant's task stops running its worktree is removed: the shared-folder links first, then any other
+Cleanup: once a variant's task stops running, its changes are stored in Seelegent's data folder
+(`contests/<id>/<label>.json`: the diff against the base cut at 400 000 bytes, the files and line counts, and a
+SHA-256 of the diff), written atomically; only then is its worktree removed. A worktree whose changes cannot be
+stored stays, with the failure in `cleanupError`, so the worktree and its stored copy are never both gone. Its
+removal: the shared-folder links first, then any other
 link a worker made (removed as links, never followed), then everything left is committed inside the worktree with
 its own index, and only then plain `git worktree remove` runs, which refuses a dirty worktree. Committing after the
 links are gone means a worker that edited `.gitignore` can no longer get a linked folder committed and applied to
@@ -181,7 +186,16 @@ the user's tree (old bug D21). A removal that fails is recorded on the variant (
 next start. `POST /contests/{id}/cancel` stops the variants and the judge; the user's working tree is not touched.
 
 Every change publishes `contest.updated` with the summary. `GET /contests/{id}/variants/{label}/diff` answers the
-variant's diff against the base (cut at 400 000 bytes) as text and parsed per file (`files`, for the dashboard).
+variant's diff against the base (cut at 400 000 bytes, `truncated` then) as text and parsed per file (`files`, for
+the dashboard): from git while the worktree exists, from the stored copy after cleanup.
+
+The commits a contest leaves in the user's repository (`applied.commit`, a variant's `commit`, the commit made
+before `git worktree remove`) are referenced by nothing: Seelegent adds no branch, tag or ref, so `git gc` may prune
+them (after about two weeks, or at once with `--prune=now`). They are informational only; nothing reads them once
+the worktree is gone. A removed variant without a stored copy (a contest cleaned up before copies were kept, or a
+worktree folder deleted by hand) answers `404 not_found` with `details.reason: "variant_data_gone"`; a stored copy
+that does not match its checksum answers `409 bad_state` with `"variant_data_damaged"`. Neither reads as an empty
+diff. There is no way to delete a contest yet, so its folder stays with the contest's record.
 
 ## Event hooks
 

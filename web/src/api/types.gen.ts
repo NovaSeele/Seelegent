@@ -2379,6 +2379,10 @@ export interface ContestVariant {
   cwd?: string
   env: WorktreeEnv | null
   removed: boolean
+  /**
+   * Commit is the variant's last commit, for information only: no ref points at it, so git may prune it. The
+   * views read a removed variant from Seelegent's stored copy.
+   */
   commit?: string
   deadlineCancelled?: boolean
   cleanupError?: string
@@ -2464,6 +2468,10 @@ export interface ContestProposal {
 
 /** ContestApplied records the winner's patch applied to the user's working tree. */
 export interface ContestApplied {
+  /**
+   * Commit holds the applied changes, for information only: no ref points at it, so git may prune it (the
+   * patch is kept in Seelegent's data folder).
+   */
   commit: string
   files: string[]
   by: 'lead' | 'user'

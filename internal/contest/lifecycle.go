@@ -199,19 +199,11 @@ func (s *Service) hitDeadline(ctx context.Context, id string, pending []string) 
 
 // ---- scoring ----------------------------------------------------------------------------------------------------
 
-// treeOf is the tree of a variant now: its worktree's snapshot, or its final commit once the worktree is gone.
+// treeOf is the tree of a live variant: its worktree's snapshot. A variant whose worktree is gone is read from
+// its stored copy (storedVariant), never from a commit, which git may have pruned.
 func (s *Service) treeOf(ctx context.Context, v *api.ContestVariant) (string, error) {
-	if v.Removed || v.Worktree == "" {
-		if v.Commit == "" {
-			return "", errors.New("the variant has no worktree and no commit")
-		}
-		return v.Commit, nil
-	}
-	if _, err := os.Stat(v.Worktree); err != nil {
-		if v.Commit != "" {
-			return v.Commit, nil
-		}
-		return "", err
+	if !live(v) {
+		return "", fmt.Errorf("variant %s has no worktree", v.Label)
 	}
 	tmp := filepath.Join(s.o.Dir, "tmp")
 	if err := os.MkdirAll(tmp, 0o700); err != nil {
@@ -297,16 +289,11 @@ func (s *Service) scoreVariant(ctx context.Context, c *api.Contest, v *api.Conte
 			}
 		}
 	}
-	if tree, err := s.treeOf(ctx, v); err == nil {
-		out, err := s.o.Git.Exec(ctx, c.Root, gitx.ExecOptions{Timeout: gitx.ReadTimeout}, "diff", "--numstat",
-			"--no-renames", c.BaseSha, tree)
-		if err == nil {
-			files, added, removed := parseNumstat(string(out))
-			row.Files, row.Added, row.Removed = len(files), added, removed
-			row.FileList = files[:min(len(files), maxFileList)]
-			if dp != nil && dp.Proof != nil && dp.Proof.Lane != nil && len(dp.Proof.Lane.Paths) > 0 {
-				row.OutOfLane = len(proof.Outside(dp.Proof.Lane.Paths, files))
-			}
+	if files, added, removed, ok := s.lineCounts(ctx, c, v); ok {
+		row.Files, row.Added, row.Removed = len(files), added, removed
+		row.FileList = files[:min(len(files), maxFileList)]
+		if dp != nil && dp.Proof != nil && dp.Proof.Lane != nil && len(dp.Proof.Lane.Paths) > 0 {
+			row.OutOfLane = len(proof.Outside(dp.Proof.Lane.Paths, files))
 		}
 	}
 	row.Disqualified = disqualification(dp, &row, v.DeadlineCancelled)
@@ -419,13 +406,58 @@ func (s *Service) judgeMember(ctx context.Context, c *api.Contest) string {
 	return ""
 }
 
-// diffText is the diff of a variant against the base, cut at limit bytes.
+// lineCounts are the files a variant changed and its added and removed lines: from git while its worktree lives,
+// else from its stored copy. ok is false when neither can be read.
+func (s *Service) lineCounts(ctx context.Context, c *api.Contest, v *api.ContestVariant) (files []string, added,
+	removed int, ok bool) {
+	if !live(v) {
+		rec, err := s.storedVariant(c.ID, v.Label)
+		if err != nil {
+			return nil, 0, 0, false
+		}
+		return rec.Files, rec.Added, rec.Removed, true
+	}
+	tree, err := s.treeOf(ctx, v)
+	if err != nil {
+		return nil, 0, 0, false
+	}
+	out, err := s.o.Git.Exec(ctx, c.Root, gitx.ExecOptions{Timeout: gitx.ReadTimeout}, "diff", "--numstat",
+		"--no-renames", c.BaseSha, tree)
+	if err != nil {
+		return nil, 0, 0, false
+	}
+	files, added, removed = parseNumstat(string(out))
+	return files, added, removed, true
+}
+
+// diffText is the diff of a variant against the base, cut at limit bytes: from git while its worktree lives, else
+// from its stored copy (a DataError when there is none or it is damaged). A variant that never had a worktree has
+// nothing to show.
 func (s *Service) diffText(ctx context.Context, c *api.Contest, v *api.ContestVariant, limit int) (text string, truncated bool,
 	err error) {
+	if !live(v) {
+		if !v.Removed && v.Worktree == "" {
+			return "", false, badStatef("variant %s never had a worktree", v.Label)
+		}
+		rec, err := s.storedVariant(c.ID, v.Label)
+		if err != nil {
+			return "", false, err
+		}
+		if len(rec.Diff) > limit {
+			return rec.Diff[:limit], true, nil
+		}
+		return rec.Diff, rec.Truncated, nil
+	}
 	tree, err := s.treeOf(ctx, v)
 	if err != nil {
 		return "", false, err
 	}
+	return s.gitDiff(ctx, c, tree, limit)
+}
+
+// gitDiff is the diff of tree against the contest's base, cut at limit bytes.
+func (s *Service) gitDiff(ctx context.Context, c *api.Contest, tree string, limit int) (text string, truncated bool,
+	err error) {
 	out, err := s.o.Git.Exec(ctx, c.Root, gitx.ExecOptions{Timeout: gitx.ReadTimeout, Limit: limit}, "diff",
 		"--no-color", "--no-ext-diff", c.BaseSha, tree)
 	var ge *gitx.Error
@@ -673,7 +705,11 @@ func (s *Service) Pick(ctx context.Context, id string, req api.ContestPickReques
 	if err != nil {
 		return api.Contest{}, fmt.Errorf("the %s patch: %w", lbl, err)
 	}
-	patchFile := filepath.Join(s.o.Dir, c.ID+"."+lbl+".patch")
+	// Kept with the contest's stored variants: the record of what was applied, which git may prune as a commit.
+	if err := os.MkdirAll(s.contestDir(c.ID), 0o700); err != nil {
+		return api.Contest{}, err
+	}
+	patchFile := filepath.Join(s.contestDir(c.ID), lbl+".patch")
 	if err := fsutil.WriteFileAtomic(patchFile, patch, 0o600); err != nil {
 		return api.Contest{}, err
 	}
@@ -797,8 +833,10 @@ func (s *Service) cleanup(ctx context.Context, id string) error {
 	return s.cleanupLocked(ctx, id)
 }
 
-// cleanupLocked removes every worktree whose task no longer runs: links first, then a commit inside the worktree,
-// then plain `git worktree remove`. Problems are recorded per variant and retried at the next start.
+// cleanupLocked removes every worktree whose task no longer runs: its changes are stored first (storeVariant),
+// then the links go, then a commit inside the worktree, then plain `git worktree remove`. A worktree whose
+// changes could not be stored stays, so the worktree and the stored copy are never both gone. Problems are
+// recorded per variant and retried at the next start.
 func (s *Service) cleanupLocked(ctx context.Context, id string) error {
 	c, err := s.load(ctx, id)
 	if err != nil {
@@ -817,6 +855,15 @@ func (s *Service) cleanupLocked(ctx context.Context, id string) error {
 		}
 		if d, err := s.o.Tasks.Get(ctx, v.TaskID); err == nil && task.Pending(d.Status) {
 			continue
+		}
+		// A folder already gone (deleted by hand) has nothing to store; Remove only prunes its record then.
+		if _, err := os.Stat(v.Worktree); err == nil {
+			if err := s.storeVariant(ctx, &c, v); err != nil {
+				err = fmt.Errorf("the worktree is kept: storing its changes failed: %w", err)
+				results[v.Label] = result{err: err}
+				s.logStep(ctx, id, "cleanup_failed", map[string]any{"variant": v.Label, "error": err.Error()})
+				continue
+			}
 		}
 		commit, err := s.trees.Remove(ctx, c.Root, v.Worktree, v.Env, "seelegent contest "+c.ID+" "+v.Label)
 		results[v.Label] = result{commit: commit, err: err, done: err == nil}

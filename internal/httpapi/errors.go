@@ -144,6 +144,16 @@ func toAPIError(err error) *apiError {
 		return e
 	}
 	msg := err.Error()
+	// A removed contest variant whose changes cannot be shown: not_found when nothing was stored, bad_state when
+	// the stored copy is damaged; details.reason tells the dashboard which.
+	var de *contest.DataError
+	if errors.As(err, &de) {
+		code := api.CodeBadState
+		if errors.Is(err, contest.ErrNotFound) {
+			code = api.CodeNotFound
+		}
+		return &apiError{code: code, message: msg, details: de.APIDetails()}
+	}
 	// A domain error may carry details for the caller (a lane conflict's tasks, the run already in progress).
 	var withDetails interface{ APIDetails() map[string]any }
 	if errors.As(err, &withDetails) && (errors.Is(err, task.ErrConflict) || errors.Is(err, proof.ErrConflict) ||

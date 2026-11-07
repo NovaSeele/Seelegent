@@ -391,6 +391,134 @@ func TestContestDeadlineConflictAndCancel(t *testing.T) {
 	}
 }
 
+// TestDiffsOutliveGC: after a pick and its cleanup, the commits Seelegent made are referenced by nothing in the
+// user's repository, and git gc prunes them. The contest and each variant's diff still read, from Seelegent's own
+// data folder; nothing is added to the repository's refs.
+func TestDiffsOutliveGC(t *testing.T) {
+	e := setup(t)
+	ctx := t.Context()
+	refsBefore := git(t, e.root, "for-each-ref")
+	c, err := e.s.Create(ctx, api.ContestRequest{DelegateRequest: api.DelegateRequest{Prompt: "Greet.", Cwd: e.root},
+		Variants: 2, NoJudge: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	v1, v2 := c.Variants[0], c.Variants[1]
+	write(t, filepath.Join(v1.Worktree, "greet.txt"), "hello world\n")
+	write(t, filepath.Join(v2.Worktree, "a.txt"), "alpha\nhello\n")
+	e.tasks.finish(v1.TaskID, "Added greet.txt.")
+	e.tasks.finish(v2.TaskID, "Changed a.txt.")
+	c = waitFor(t, e.s, c.ID, status(api.ContestStatusReady))
+	if c, err = e.s.Pick(ctx, c.ID, api.ContestPickRequest{Winner: "V1"}); err != nil {
+		t.Fatal(err)
+	}
+	if c.CleanedAt == "" || c.Applied == nil || c.Applied.Commit == "" {
+		t.Fatalf("picked = %+v", c)
+	}
+	if got := git(t, e.root, "for-each-ref"); got != refsBefore {
+		t.Errorf("refs changed:\n%s\nwas\n%s", got, refsBefore)
+	}
+	git(t, e.root, "reflog", "expire", "--expire=now", "--expire-unreachable=now", "--all")
+	git(t, e.root, "gc", "-q", "--prune=now")
+	gone := []string{c.Applied.Commit}
+	for _, v := range c.Variants {
+		if v.Commit != "" {
+			gone = append(gone, v.Commit)
+		}
+	}
+	for _, sha := range gone {
+		cmd := exec.CommandContext(ctx, "git", "cat-file", "-e", sha+"^{commit}")
+		cmd.Dir = e.root
+		if cmd.Run() == nil {
+			t.Fatalf("commit %s survived gc; the test does not show what it should", sha)
+		}
+	}
+
+	c, err = e.s.Get(ctx, c.ID)
+	if err != nil || c.Status != api.ContestStatusApplied || len(c.Scoreboard) != 2 {
+		t.Fatalf("contest after gc = %+v %v", c, err)
+	}
+	want := map[string][]string{"V1": {"greet.txt", "+hello world"}, "V2": {"a.txt", "+hello"}}
+	for lbl, parts := range want {
+		d, err := e.s.Diff(ctx, c.ID, lbl)
+		if err != nil {
+			t.Fatalf("%s diff after gc: %v", lbl, err)
+		}
+		if len(d.Files) != 1 || d.Files[0].Path != parts[0] || !strings.Contains(d.Diff, parts[1]) || d.Truncated {
+			t.Errorf("%s diff = %+v", lbl, d)
+		}
+	}
+	// The scoreboard's numbers come from the same stored copy when a removed variant is scored again.
+	rows := e.s.scoreVariant(ctx, &c, &c.Variants[1])
+	if rows.Files != 1 || rows.Added != 1 || rows.Removed != 0 {
+		t.Errorf("V2 row from the stored copy = %+v", rows)
+	}
+	if _, err := os.Stat(filepath.Join(e.data, "contests", c.ID, "V1.patch")); err != nil {
+		t.Errorf("the applied patch was not kept: %v", err)
+	}
+
+	// A contest cleaned up before the store existed has no copy: a clear error, never an empty diff.
+	if err := os.Remove(filepath.Join(e.data, "contests", c.ID, "V2.json")); err != nil {
+		t.Fatal(err)
+	}
+	_, err = e.s.Diff(ctx, c.ID, "V2")
+	var de *DataError
+	if !errors.As(err, &de) || de.Reason != DataGone || !errors.Is(err, ErrNotFound) {
+		t.Errorf("diff without a stored copy = %v", err)
+	}
+	// A damaged copy is told apart from a variant without changes.
+	path := filepath.Join(e.data, "contests", c.ID, "V1.json")
+	write(t, path, strings.Replace(read(t, path), "hello world", "hello there", 1))
+	if _, err = e.s.Diff(ctx, c.ID, "V1"); !errors.As(err, &de) || de.Reason != DataDamaged ||
+		!errors.Is(err, ErrBadState) {
+		t.Errorf("diff of a damaged copy = %v", err)
+	}
+}
+
+// TestCleanupKeepsWorktreeWhenStoreFails: a worktree whose changes cannot be stored is not removed; the failure is
+// recorded and the next cleanup finishes the job.
+func TestCleanupKeepsWorktreeWhenStoreFails(t *testing.T) {
+	e := setup(t)
+	ctx := t.Context()
+	c, err := e.s.Create(ctx, api.ContestRequest{DelegateRequest: api.DelegateRequest{Prompt: "Greet.", Cwd: e.root},
+		Variants: 2, NoJudge: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, v := range c.Variants {
+		write(t, filepath.Join(v.Worktree, "greet.txt"), "hello "+v.Label+"\n")
+		e.tasks.finish(v.TaskID, "done")
+	}
+	c = waitFor(t, e.s, c.ID, status(api.ContestStatusReady))
+	// A file where the contest's data folder goes: nothing can be stored.
+	block := filepath.Join(e.data, "contests", c.ID)
+	write(t, block, "in the way")
+	if c, err = e.s.Cancel(ctx, c.ID); err != nil {
+		t.Fatal(err)
+	}
+	for _, v := range c.Variants {
+		if v.Removed || !strings.Contains(v.CleanupError, "storing its changes failed") {
+			t.Errorf("%s = removed %v, error %q", v.Label, v.Removed, v.CleanupError)
+		}
+		if _, err := os.Stat(v.Worktree); err != nil {
+			t.Errorf("%s worktree was removed without a stored copy: %v", v.Label, err)
+		}
+	}
+	if err := os.Remove(block); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.s.cleanup(ctx, c.ID); err != nil {
+		t.Fatal(err)
+	}
+	c, _ = e.s.Get(ctx, c.ID)
+	for _, v := range c.Variants {
+		d, err := e.s.Diff(ctx, c.ID, v.Label)
+		if !v.Removed || v.CleanupError != "" || err != nil || !strings.Contains(d.Diff, "+hello "+v.Label) {
+			t.Errorf("%s after the retry = %+v, diff %v", v.Label, v, err)
+		}
+	}
+}
+
 func TestCreateValidationAndQuota(t *testing.T) {
 	e := setup(t)
 	ctx := t.Context()

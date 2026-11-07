@@ -619,12 +619,14 @@ type ContestVariant struct {
 	TaskID   string      `json:"taskId,omitempty"`
 	Worktree string      `json:"worktree,omitempty"`
 	// Cwd is the variant's folder inside its worktree (the user's folder mirrored).
-	Cwd               string       `json:"cwd,omitempty"`
-	Env               *WorktreeEnv `json:"env"`
-	Removed           bool         `json:"removed"`
-	Commit            string       `json:"commit,omitempty"`
-	DeadlineCancelled bool         `json:"deadlineCancelled,omitempty"`
-	CleanupError      string       `json:"cleanupError,omitempty"`
+	Cwd     string       `json:"cwd,omitempty"`
+	Env     *WorktreeEnv `json:"env"`
+	Removed bool         `json:"removed"`
+	// Commit is the variant's last commit, for information only: no ref points at it, so git may prune it. The
+	// views read a removed variant from Seelegent's stored copy.
+	Commit            string `json:"commit,omitempty"`
+	DeadlineCancelled bool   `json:"deadlineCancelled,omitempty"`
+	CleanupError      string `json:"cleanupError,omitempty"`
 	// Status, Backend, Model and Member come from the variant's task.
 	Status  string `json:"status,omitempty"`
 	Backend string `json:"backend,omitempty"`
@@ -701,6 +703,8 @@ type ContestProposal struct {
 
 // ContestApplied records the winner's patch applied to the user's working tree.
 type ContestApplied struct {
+	// Commit holds the applied changes, for information only: no ref points at it, so git may prune it (the
+	// patch is kept in Seelegent's data folder).
 	Commit string   `json:"commit"`
 	Files  []string `json:"files"`
 	By     string   `json:"by" ts:"'lead' | 'user'"`
