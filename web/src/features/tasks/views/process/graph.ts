@@ -22,6 +22,9 @@ export const GRAPH_DEFAULTS: GraphOptions = {
   pad: 12,
 }
 
+/** Drawing geometry in px: lane height, bar height, and the band above the lanes for turn marks. */
+export const CHART = { lane: 28, bar: 16, top: 22 } as const
+
 export interface Bar {
   step: Step
   lane: number
