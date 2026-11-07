@@ -188,6 +188,11 @@ type Service struct {
 
 	depsMu sync.Mutex
 	// claimMu makes a lane claim check and the task's save one step (old bug D25a).
+	//
+	// Lock order: claimMu first, then a task's lock (mutate). Code that holds a task's lock must never call Delegate,
+	// Followup or anything else that takes claimMu: that is the reverse order and can deadlock with a delegate
+	// waiting on the same task. A child task (verifier, team member) is therefore created only after the parent's
+	// lock has been released.
 	claimMu sync.Mutex
 	// laneChecked, when set (tests), runs after a followup's lane check and before its save.
 	laneChecked func()
