@@ -125,11 +125,19 @@ its message, if any, joins the first request.
 `Takeover` marks the task `manual`, stops the run and waits for the worker to exit (no worker and console in one
 conversation), then opens a console that resumes the conversation with the task's own backend and account. The
 console counts on the account's slots. When it ends, a hand-back turn runs on the same backend, account and
-conversation and asks the worker to summarize what the user did. A cancel during the takeover ends the task and
-frees the console's slot at once; followups are refused until the console itself has ended, and it ends without a
-hand-back. On Linux and macOS the console script records exit code 129 when its window is closed (SIGHUP). The
-console's process (pid and start time) is stored; a console that is gone without an exit code ends the takeover with
-exit code 129, also when that is found after a restart. After a restart the console is watched again.
+conversation (another account only when that one cannot run at all, see "A run") and asks the worker to summarize
+what the user did.
+
+A cancel during the takeover ends the task and frees the console's slot at once. While this daemon still watches
+the console, followups are refused until the console itself has ended, and it ends without a hand-back. The cancel
+forgets the console in the task's record, so a daemon restarted after it no longer watches that window: followups
+then run even if the user left it open.
+
+On Linux and macOS the console script records exit code 129 when its window is closed (SIGHUP). The console's
+process (pid and start time) is stored; a console that is gone without an exit code ends the takeover with exit
+code 129, also when that is found after a restart. After a restart the console of a takeover that was not
+cancelled is watched again.
+
 A console whose command has not started 90 s after it was opened (no process recorded, no exit code: on macOS the
 Automation permission was refused, the daemon has no desktop, the terminal emulator is broken) never opened: the
 takeover is reverted as if the console could not open (the task goes back to its status before the takeover, an
