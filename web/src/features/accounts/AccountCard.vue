@@ -97,7 +97,7 @@ const menu = computed<MenuItem[]>(() => {
   items.push({
     id: 'delete',
     label: t('accounts.action.delete'),
-    icon: 'x',
+    icon: 'trash',
     danger: true,
     separator: true,
   })

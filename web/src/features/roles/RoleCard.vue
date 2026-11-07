@@ -71,7 +71,7 @@ const preferred = computed(() =>
     <footer class="role__foot">
       <Button size="sm" variant="secondary" @click="emit('edit')">{{ t('roles.edit') }}</Button>
       <IconButton
-        icon="x"
+        icon="trash"
         size="sm"
         :label="t('roles.deleteOf', { name: role.name })"
         @click="emit('remove')"
