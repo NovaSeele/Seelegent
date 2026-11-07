@@ -19,7 +19,8 @@ Seelegent is a Go daemon + CLI + MCP server in one binary, with a Vue 3 + TypeSc
   ./internal/api` writes `web/src/api/types.gen.ts` through `api/tsgen`), `task` (task engine: model, event log,
   runner, recovery; see [docs/task-engine.md](docs/task-engine.md)), `brief` (worker briefs, golden files in
   `testdata/`), `memory` (project notes, review history), `role` (worker roles and skills), `gitx` (git status,
-  diffs, branches and commits for the task views), `signin` (account sign-in sessions), `httpapi` (HTTP API v1, SSE
+  diffs, branches and commits for the task views), `guard` (the git guard: command-line reader, hooks, git shim)
+  and `snapshot` (turn snapshots, work at risk, restore; both in [docs/safety.md](docs/safety.md)), `signin` (account sign-in sessions), `httpapi` (HTTP API v1, SSE
   and the embedded dashboard; see [docs/api.md](docs/api.md)), `client` (typed API v1 client, daemon discovery
   and autostart), `ops` (what the MCP tools and the CLI share: worker guard, lead session, waits, active tasks),
   `doctor` (installation checks), `mcpserver` (MCP tools for the lead over the client; see

@@ -107,7 +107,8 @@ type Settings struct {
 	// CodeGraph builds a code graph of the repository and offers it to workers. Not implemented yet: the setting is
 	// kept and validated, but nothing reads it.
 	CodeGraph bool `json:"codeGraph"`
-	// SnapshotRetentionDays is how long work-at-risk snapshots of reviewed tasks are kept.
+	// SnapshotRetentionDays is how long the turn snapshots and attempt folders of a finished task are kept after
+	// its last change.
 	SnapshotRetentionDays int `json:"snapshotRetentionDays"`
 	// ContentionWindowHours is how far back tasks count when warning that several tasks touch the same files.
 	ContentionWindowHours int `json:"contentionWindowHours"`

@@ -753,7 +753,10 @@ export interface Settings {
    * kept and validated, but nothing reads it.
    */
   codeGraph: boolean
-  /** SnapshotRetentionDays is how long work-at-risk snapshots of reviewed tasks are kept. */
+  /**
+   * SnapshotRetentionDays is how long the turn snapshots and attempt folders of a finished task are kept after
+   * its last change.
+   */
   snapshotRetentionDays: number
   /** ContentionWindowHours is how far back tasks count when warning that several tasks touch the same files. */
   contentionWindowHours: number
