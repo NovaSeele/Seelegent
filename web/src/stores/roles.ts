@@ -20,7 +20,10 @@ import { pathKey } from '@/lib/paths'
 import { useConnectionStore } from './connection'
 import { createLoader } from './loader'
 
-/** Where a role lives: its scope ('global' or 'project'; Role.scope is a plain string) and, for a project role, the project's folder. */
+/**
+ * Where a role lives: its scope ('global' or 'project'; Role.scope is a plain string) and, for a project role,
+ * the project's folder.
+ */
 export interface RolePlace {
   id: string
   scope: Role['scope']
