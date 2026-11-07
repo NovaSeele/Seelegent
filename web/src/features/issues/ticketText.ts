@@ -213,7 +213,31 @@ export function logLine(
 ): { label: string; text: string } {
   const label = f.word(`issues.ticket.logType.${e.type}`) ?? e.type
   const parts: string[] = []
-  for (const [k, v] of Object.entries(e.data)) {
+  const data = { ...e.data }
+  const str = (v: unknown) => (typeof v === 'string' ? v : '')
+  // A status change and an outbox step lead with the words the header and the outbox list use; the outbox's own
+  // row number and the flags those words come from are not shown.
+  if (e.type === 'status' && str(data.status)) {
+    const phase = str(data.phase)
+    const word = phase
+      ? f.word(`issues.ticket.phase.${phase}`)
+      : f.word(`issues.ticket.status.${str(data.status)}`)
+    parts.push(word ?? str(data.status))
+    delete data.status
+  }
+  if (e.type === 'outbox' && str(data.kind)) {
+    const kind = str(data.kind)
+    let state = str(data.status)
+    if (state === 'done' && data.manual) state = 'linkReady'
+    else if (state === 'done' && data.skipped) state = 'skipped'
+    const kindWord = f.word(`issues.ticket.outboxKind.${kind}`) ?? kind
+    const stateWord = state ? (f.word(`issues.ticket.outboxStatus.${state}`) ?? state) : ''
+    parts.push(stateWord ? `${kindWord}: ${stateWord}` : kindWord)
+    delete data.kind
+    delete data.status
+  }
+  for (const k of ['id', 'manual', 'skipped', 'phase']) delete data[k]
+  for (const [k, v] of Object.entries(data)) {
     if (v === null || v === undefined || v === '') continue
     const name = f.word(`issues.ticket.logKey.${k}`) ?? k
     parts.push(`${name}: ${logValue(k, v, f)}`)

@@ -234,6 +234,13 @@ func (s *Service) runStepWith(ctx context.Context, ticketID, kind string, args m
 		if e.Error != "" {
 			data["error"] = e.Error
 		}
+		// The log says a step the way the outbox list does: a compare link left for the lead, a step skipped.
+		if u, _ := e.Result["manualUrl"].(string); e.Status == api.OutboxDone && u != "" {
+			data["manual"] = true
+		}
+		if _, sk := e.Result["skipped"]; e.Status == api.OutboxDone && sk {
+			data["skipped"] = true
+		}
 		s.logStep(wctx, tx, ticketID, "outbox", data)
 		return nil
 	})

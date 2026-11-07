@@ -93,8 +93,25 @@ describe('ticketText', () => {
     }
     expect(logLine({ type: 'status', data: { status: 'ready' } }, f)).toEqual({
       label: 'Status',
-      text: 'status: Ready for a PR',
+      text: 'Ready for a PR',
     })
+    words['issues.ticket.phase.open_pr'] = 'Branch pushed: open the PR'
+    words['issues.ticket.outboxKind.open_pr'] = 'Open pull request'
+    words['issues.ticket.outboxStatus.linkReady'] = 'Link ready'
+    words['issues.ticket.outboxStatus.failed'] = 'Failed'
+    words['issues.ticket.logKey.error'] = 'error'
+    // The same words as the header and the outbox list; no row numbers.
+    expect(logLine({ type: 'status', data: { status: 'pr_open', phase: 'open_pr' } }, f).text).toBe(
+      'Branch pushed: open the PR',
+    )
+    expect(
+      logLine({ type: 'outbox', data: { id: 3, kind: 'open_pr', status: 'done', manual: true } }, f)
+        .text,
+    ).toBe('Open pull request: Link ready')
+    expect(
+      logLine({ type: 'outbox', data: { id: 4, kind: 'open_pr', status: 'failed', error: 'x' } }, f)
+        .text,
+    ).toBe('Open pull request: Failed · error: x')
     expect(
       logLine({ type: 'odd', data: { wait: '5m', at: '2026-11-07T10:00:00Z', n: [1, 2] } }, f),
     ).toEqual({ label: 'odd', text: 'wait: 5 min · at: Nov 7, 10:00 · n: 2' })

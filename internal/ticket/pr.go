@@ -487,7 +487,11 @@ func (s *Service) PR(ctx context.Context, id string, req api.PRRequest) (api.Tic
 		if t.PR != nil && (t.PR.State == "merged" || t.PR.State == "closed") {
 			t.Status = api.TicketDone
 		}
-		s.logStep(ctx, tx, id, "status", map[string]any{"status": t.Status})
+		data := map[string]any{"status": t.Status}
+		if next := t.needsAttention(); next != "" {
+			data["phase"] = next // what the header says (a branch pushed for the lead to open its PR by hand)
+		}
+		s.logStep(ctx, tx, id, "status", data)
 		return nil
 	}); err != nil {
 		return api.Ticket{}, err
