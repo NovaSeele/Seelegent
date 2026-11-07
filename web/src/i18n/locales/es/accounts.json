@@ -177,7 +177,6 @@
     "modelsPattern": "Permitidos por el patrón {pattern}; escribir una lista sustituye este patrón.",
     "allowAny": "Permitir cualquier modelo",
     "anyOnSave": "Al guardar se permite cualquier modelo y se quita el patrón.",
-    "keepPattern": "Mantener el patrón",
     "tierModels": "Siempre permitidos (modelos de nivel): {models}",
     "enabled": "Las cuentas pueden usarlo",
     "save": "Guardar proveedor"

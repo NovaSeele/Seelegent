@@ -177,7 +177,6 @@
     "modelsPattern": "패턴 {pattern}(으)로 허용됩니다. 목록을 입력하면 이 패턴이 대체됩니다.",
     "allowAny": "모든 모델 허용",
     "anyOnSave": "저장하면 패턴이 지워지고 모든 모델이 허용됩니다.",
-    "keepPattern": "패턴 유지",
     "tierModels": "항상 허용(티어 모델): {models}",
     "enabled": "계정이 사용 가능",
     "save": "제공자 저장"

@@ -144,8 +144,8 @@ describe('ProviderDialog', () => {
     const zai = makeProvider({ id: 'zai', name: 'Z.ai', allowedModels: '^glm-' })
     const wrapper = await mountDialog(zai, update)
     const button = () =>
-      [...document.body.querySelectorAll('button')].find((b) =>
-        ['Allow any model', 'Keep the pattern'].includes(b.textContent?.trim() ?? ''),
+      [...document.body.querySelectorAll('button')].find(
+        (b) => b.textContent?.trim() === 'Allow any model',
       )
     const allow = button()
     expect(allow?.textContent?.trim()).toBe('Allow any model')
@@ -155,9 +155,10 @@ describe('ProviderDialog', () => {
     allow?.focus()
     allow?.click()
     await flushPromises()
-    // The same button flips its label, so keyboard focus stays on it.
+    // A toggle keeps its label (WAI-ARIA APG): aria-pressed carries the state, and focus stays on it.
     expect(document.activeElement).toBe(allow)
-    expect(allow?.textContent?.trim()).toBe('Keep the pattern')
+    expect(button()).toBe(allow)
+    expect(allow?.textContent?.trim()).toBe('Allow any model')
     expect(allow?.getAttribute('aria-pressed')).toBe('true')
     expect(document.body.textContent).toContain('Any model is allowed once you save')
     expect((field('Models') as HTMLInputElement).placeholder).toBe('any model')
@@ -204,7 +205,8 @@ describe('ProviderDialog', () => {
       [...document.body.querySelectorAll('button')].find((b) => b.textContent?.trim() === label)
     find('Allow any model')?.click()
     await flushPromises()
-    find('Keep the pattern')?.click()
+    expect(find('Allow any model')?.getAttribute('aria-pressed')).toBe('true')
+    find('Allow any model')?.click()
     await flushPromises()
     expect(find('Allow any model')?.getAttribute('aria-pressed')).toBe('false')
     expect(document.body.textContent).toContain('Allowed by pattern ^glm-')
