@@ -6,7 +6,9 @@ Two commands connect Seelegent to the machine and to the data of the old (Node) 
   request, the Claude Code reminder hook.
 - `seelegent migrate` imports the old version's settings, accounts, memory, history and roles.
 
-Both refuse to run inside a Seelegent worker (`SEELEGENT_WORKER=1`). `seelegent skill` prints the lead skill.
+Both refuse to run inside a Seelegent worker (`SEELEGENT_WORKER=1`), with the command line's worker guard: exit 1,
+code `forbidden`, `details.caller: "worker"` ([cli.md](cli.md)). `seelegent skill` prints the lead skill and stays
+allowed. `--json` is the global flag of the command line; extra arguments are a usage error (exit 2).
 
 ## seelegent setup
 
@@ -23,16 +25,16 @@ seelegent setup [--host a,b] [--dry-run] [--remove] [--no-skill] [--hooks] [--fo
 | `--hooks` | Also install the Claude Code reminder hook. `--remove` always removes it. |
 | `--force` | Replace an entry or skill named `seelegent` that another program wrote (the old one is backed up first). |
 | `--exe` | The executable the hosts start. Default: the running `seelegent`, with symbolic links resolved. |
-| `--json` | Print the report as JSON (`setup.Report`). |
+| `--json` | Print the report as JSON (`setup.Report`). When an item failed, the report is the only document printed (exit 1). |
 
 Each host gets the entry `<exe> mcp` under the name `seelegent`. The entry's environment carries
 `SEELEGENT_LEAD`, which tells the MCP server which lead host started it. Its value is one the server knows: `claude`
 (Claude Code), `codex`, `opencode`, `agy` (Antigravity CLI and the Antigravity app) and `gemini` (Gemini CLI). Claude
 Desktop, Cursor and Windsurf have no value of their own, so their entries get no `SEELEGENT_LEAD`. The server then
 detects the host from its session environment or reports the lead as `cli`. Every host's format has a per-server
-environment (`env`, or `environment` for OpenCode). The values must match the server's list of leads (`api.Leads()`
-after M7). The executable must be a stable path that updates replace in place. Setup warns when it is a `go run` build or sits in a
-`versions/` folder (old C-B1: entries that pointed at a versioned `cli.js` broke after the second update).
+environment (`env`, or `environment` for OpenCode). The values come from the server's list of leads, `api.Leads()`.
+The executable must be a stable path that updates replace in place. Setup warns when it is a `go run` build or sits
+in a `versions/` folder (old C-B1: entries that pointed at a versioned `cli.js` broke after the second update).
 
 ### Report
 
