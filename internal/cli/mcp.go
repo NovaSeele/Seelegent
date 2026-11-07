@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"os"
@@ -9,6 +10,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/spf13/cobra"
 
+	"github.com/NovaSeele/Seelegent/internal/account"
 	"github.com/NovaSeele/Seelegent/internal/buildinfo"
 	"github.com/NovaSeele/Seelegent/internal/client"
 	"github.com/NovaSeele/Seelegent/internal/config"
@@ -53,14 +55,22 @@ func runMCP(ctx context.Context, info buildinfo.Info, t mcp.Transport, stderr io
 		configErr, port = err, settings.Port
 	}
 	var start client.StartFunc
-	if os.Getenv(envNoAutoStart) != "1" {
+	noStart := ""
+	switch {
+	case os.Getenv(account.EnvWorker) == "1":
+		// Inside a worker a started daemon would live in the worker's process tree (and die with it), on the
+		// worker profile's data directory, with the worker's environment: only look for the daemon running it.
+		noStart = fmt.Sprintf("the Seelegent daemon running this worker cannot be reached (looked on port %d); "+
+			"a worker never starts a daemon", port)
+	case os.Getenv(envNoAutoStart) != "1":
 		exe, err := os.Executable()
 		if err != nil {
 			return err
 		}
 		start = client.SpawnDaemon(exe, paths, port, os.Environ())
 	}
-	daemon := client.NewDaemon(client.DaemonOptions{Paths: paths, Port: port, Start: start, Logger: log})
+	daemon := client.NewDaemon(client.DaemonOptions{Paths: paths, Port: port, Start: start, NoStart: noStart,
+		Logger: log})
 	srv, err := mcpserver.New(mcpserver.Options{Daemon: daemon, Version: info.Version, Port: port,
 		Tiers: settings.Backends.Agy.Tiers, ConfigErr: configErr, Logger: log})
 	if err != nil {
