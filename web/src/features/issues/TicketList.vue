@@ -2,15 +2,19 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 
+import type { TicketSummary } from '@/api/types'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import Spinner from '@/components/ui/Spinner.vue'
 import StatusPill from '@/components/ui/StatusPill.vue'
 import { useFormat } from '@/composables/useFormat'
 import { useGitHubStore } from '@/stores/github'
 
-import { TICKET_STATUS } from './issueModel'
+import { needsYou, phaseLabel, TICKET_PHASE, ticketPhase } from './issueModel'
 
-/** The chosen repo's tickets, newest change first, live over ticket.updated. */
+/**
+ * The chosen repo's tickets, newest change first, live over ticket.updated: the ones waiting for you (a task to
+ * review, a pull request to open, a refused push, failed checks, a failed start) in their own group on top.
+ */
 const { t } = useI18n()
 const fmt = useFormat()
 const gh = useGitHubStore()
@@ -20,6 +24,15 @@ const shown = computed(() =>
     .filter((x) => x.repoId === gh.repoId)
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
 )
+const groups = computed(() => {
+  const waiting = shown.value.filter((x) => needsYou(ticketPhase(x)))
+  const rest = shown.value.filter((x) => !needsYou(ticketPhase(x)))
+  return [
+    { key: 'needsYou', items: waiting },
+    { key: 'others', items: rest },
+  ].filter((g) => g.items.length > 0)
+})
+const look = (x: TicketSummary) => TICKET_PHASE[ticketPhase(x)]
 </script>
 
 <template>
@@ -30,33 +43,55 @@ const shown = computed(() =>
     :title="t('issues.tickets.empty')"
     :description="t('issues.tickets.emptyDesc')"
   />
-  <ul v-else class="list">
-    <li v-for="x in shown" :key="x.id">
-      <RouterLink class="row" :to="{ name: 'issues', params: { ticketId: x.id } }">
-        <span class="row__main">
-          <span class="row__title">{{ x.issue.title }}</span>
-          <span class="row__meta">
-            <span class="row__mono">{{ x.issueKey }}</span>
-            <span class="row__mono">{{ x.branch }}</span>
-            <span v-if="x.pr?.number">{{ t('issues.tickets.pr', { n: x.pr.number }) }}</span>
-            <span v-if="x.needsAttention" class="row__warn">{{
-              t('issues.ticket.checksFailed')
-            }}</span>
-            <span>{{ fmt.relative(x.updatedAt) }}</span>
-          </span>
-        </span>
-        <StatusPill
-          size="sm"
-          :tone="TICKET_STATUS[x.status].tone"
-          :icon="TICKET_STATUS[x.status].icon"
-          :label="t(`issues.ticket.status.${x.status}`)"
-        />
-      </RouterLink>
-    </li>
-  </ul>
+  <div v-else class="groups">
+    <section v-for="g in groups" :key="g.key" class="group" :aria-labelledby="`tickets-${g.key}`">
+      <h2 :id="`tickets-${g.key}`" class="group__h">
+        {{ t(`issues.tickets.group.${g.key}`, { count: g.items.length }) }}
+      </h2>
+      <ul class="list">
+        <li v-for="x in g.items" :key="x.id">
+          <RouterLink class="row" :to="{ name: 'issues', params: { ticketId: x.id } }">
+            <span class="row__main">
+              <span class="row__title">{{ x.issue.title }}</span>
+              <span class="row__meta">
+                <span class="row__mono">{{ x.issueKey }}</span>
+                <span class="row__mono">{{ x.branch }}</span>
+                <span v-if="x.pr?.number">{{ t('issues.tickets.pr', { n: x.pr.number }) }}</span>
+                <span>{{ fmt.relative(x.updatedAt) }}</span>
+              </span>
+            </span>
+            <StatusPill
+              size="sm"
+              :tone="look(x).tone"
+              :icon="look(x).icon"
+              :label="t(phaseLabel(ticketPhase(x)))"
+            />
+          </RouterLink>
+        </li>
+      </ul>
+    </section>
+  </div>
 </template>
 
 <style scoped>
+.groups {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.group__h {
+  color: var(--text-secondary);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+}
+
 .list {
   display: flex;
   flex-direction: column;
@@ -114,8 +149,9 @@ const shown = computed(() =>
   overflow-wrap: anywhere;
 }
 
-.row__warn {
-  color: var(--attention-fg);
-  font-weight: var(--fw-medium);
+@media (width < 600px) {
+  .row {
+    flex-wrap: wrap;
+  }
 }
 </style>

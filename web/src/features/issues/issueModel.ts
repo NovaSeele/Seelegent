@@ -4,18 +4,48 @@
  */
 import type { IconName } from '@/components/ui/icons'
 import type { TaskStatus as DisplayStatus, Tone } from '@/components/ui/tone'
-import type { Issue, TicketChecks, TicketSummary, TicketTask } from '@/api/types'
+import type { CheckRun, Issue, TicketChecks, TicketSummary, TicketTask } from '@/api/types'
 
 export type TicketStatus = TicketSummary['status']
 
-export const TICKET_STATUS: Readonly<Record<TicketStatus, { tone: Tone; icon: IconName }>> = {
+/**
+ * What a ticket shows: its status, or what the lead has to do when the daemon says so (needsAttention), which
+ * says more than the status alone (a pr_open ticket whose branch waits for its pull request is not "PR open").
+ */
+export type TicketPhase = TicketStatus | NonNullable<TicketSummary['needsAttention']>
+
+export function ticketPhase(t: Pick<TicketSummary, 'status' | 'needsAttention'>): TicketPhase {
+  return t.needsAttention ?? t.status
+}
+
+/**
+ * Attention (amber) means the lead or the user has to act: a task to review, a pull request to open, a refused
+ * push, failed checks. No tier opens a pull request on its own, so a ready ticket waits for someone too. Danger is a
+ * failure; muted is the normal end.
+ */
+export const TICKET_PHASE: Readonly<Record<TicketPhase, { tone: Tone; icon: IconName }>> = {
   working: { tone: 'running', icon: 'statusRunning' },
   review: { tone: 'attention', icon: 'statusReview' },
-  ready: { tone: 'accent', icon: 'statusWaiting' },
+  ready: { tone: 'attention', icon: 'send' },
   pr_open: { tone: 'running', icon: 'git' },
   done: { tone: 'success', icon: 'statusAccepted' },
   dropped: { tone: 'muted', icon: 'statusCancelled' },
   failed: { tone: 'danger', icon: 'statusFailed' },
+  push_refused: { tone: 'attention', icon: 'warning' },
+  open_pr: { tone: 'attention', icon: 'external' },
+  checks_failed: { tone: 'attention', icon: 'statusFailed' },
+}
+
+/** The i18n key of a phase's word: the status's own, or the next step's. */
+export function phaseLabel(phase: TicketPhase): string {
+  return phase === 'push_refused' || phase === 'open_pr' || phase === 'checks_failed'
+    ? `issues.ticket.phase.${phase}`
+    : `issues.ticket.status.${phase}`
+}
+
+/** The phases that wait for the lead or the user: listed first, under "Needs you". */
+export function needsYou(phase: TicketPhase): boolean {
+  return TICKET_PHASE[phase].tone === 'attention' || phase === 'failed'
 }
 
 export const CHECKS_STATE: Readonly<Record<TicketChecks['state'], { tone: Tone; icon: IconName }>> =
@@ -40,6 +70,24 @@ export function failingChecks(checks: TicketChecks | null | undefined): string[]
   return (checks?.runs ?? [])
     .filter((r) => r.conclusion !== undefined && FAILING.has(r.conclusion))
     .map((r) => r.name)
+}
+
+/** One check's result in the words of CHECKS_STATE: running until it concludes, then passed or failed. */
+export function runState(run: Pick<CheckRun, 'status' | 'conclusion'>): TicketChecks['state'] {
+  if (!run.conclusion) return run.status === 'completed' ? 'unknown' : 'pending'
+  if (FAILING.has(run.conclusion)) return 'failure'
+  return run.conclusion === 'success' ? 'success' : 'unknown'
+}
+
+/**
+ * The number of a pull request from what the user typed: "43", "#43" or its address (…/pull/43, with or without
+ * a trailing part). null when there is none.
+ */
+export function prNumber(text: string): number | null {
+  const s = text.trim()
+  const m = /^#?(\d+)$/.exec(s) ?? /\/pull\/(\d+)(?:[/?#].*)?$/.exec(s)
+  const n = m ? Number(m[1]) : NaN
+  return Number.isSafeInteger(n) && n > 0 ? n : null
 }
 
 /**
@@ -109,55 +157,15 @@ export function ticketTaskStatus(task: Pick<TicketTask, 'status' | 'verdict'>): 
   }
 }
 
-/** A short one-line text of a ticket log step's data (the daemon has already masked tokens in it). */
-export function logText(data: Record<string, unknown>, limit = 240): string {
-  const parts: string[] = []
-  for (const [k, v] of Object.entries(data)) {
-    if (v === null || v === undefined || v === '') continue
-    parts.push(`${k}: ${typeof v === 'string' ? v : JSON.stringify(v)}`)
-  }
-  const text = parts.join(' · ')
-  return text.length > limit ? `${text.slice(0, limit - 1)}…` : text
-}
-
-/** A refused push the dashboard explains in the user's language: the i18n key under issues.refusal and its values. */
-export interface PushRefusal {
-  key: 'unsafeFiles' | 'scanFailed' | 'baseMissing' | 'baseNotPushed' | 'branchDiverged'
-  params: Record<string, string | number>
-}
-
 /**
- * The refusal of a pull request push from an error's details (`reason` of a 409, contract §github), or null when
- * the error is something else and the daemon's own message is shown.
+ * True when a failed pr call was a refused push (a 409 whose details carry one of the refusal reasons): the daemon
+ * keeps the refusal on the ticket, and the ticket's banner explains it in the reader's language.
  */
-export function pushRefusal(
-  details: Readonly<Record<string, unknown>>,
-  message: string,
-): PushRefusal | null {
-  const branch = typeof details.branch === 'string' ? details.branch : ''
-  switch (details.reason) {
-    case 'unsafe_files': {
-      const findings = Array.isArray(details.findings) ? details.findings : []
-      const paths = findings.flatMap((f: unknown) => {
-        const p = (f as { path?: unknown }).path
-        return typeof p === 'string' ? [p] : []
-      })
-      const shown = paths.slice(0, 10).join(', ') + (paths.length > 10 ? ', …' : '')
-      return { key: 'unsafeFiles', params: { count: paths.length, files: shown } }
-    }
-    case 'scan_failed': {
-      // The daemon's message is "could not scan …: <git's reason>"; the reason alone follows the translated text.
-      const i = message.indexOf(': ')
-      return { key: 'scanFailed', params: { detail: i >= 0 ? message.slice(i + 2) : message } }
-    }
-    case 'base_not_pushed': {
-      const commits = typeof details.commits === 'number' ? details.commits : 0
-      return commits > 0
-        ? { key: 'baseNotPushed', params: { branch, commits } }
-        : { key: 'baseMissing', params: { branch } }
-    }
-    case 'branch_diverged':
-      return { key: 'branchDiverged', params: { branch } }
-  }
-  return null
+export function isPushRefusal(details: Readonly<Record<string, unknown>>): boolean {
+  return (
+    details.reason === 'unsafe_files' ||
+    details.reason === 'scan_failed' ||
+    details.reason === 'base_not_pushed' ||
+    details.reason === 'branch_diverged'
+  )
 }

@@ -127,7 +127,11 @@
     "loading": "正在加载工单…",
     "empty": "没有工单",
     "emptyDesc": "在收件箱中分配一个 issue 即可创建工单。",
-    "pr": "PR #{n}"
+    "pr": "PR #{n}",
+    "group": {
+      "needsYou": "需要你处理（{count}）",
+      "others": "其他工单（{count}）"
+    }
   },
   "ticket": {
     "back": "全部 issue",
@@ -148,12 +152,9 @@
       "failure": "检查未通过",
       "unknown": "检查状态未知"
     },
-    "checksFailed": "检查未通过",
     "issueLink": "Issue {key}",
     "prLink": "Pull request #{n}",
     "draft": "草稿",
-    "compareLink": "在 GitHub 上创建 pull request",
-    "manualHint": "分支已推送。用上面的链接创建 pull request，然后用“关联 PR”记录它的编号。",
     "meeting": "会议",
     "dropReason": "已放弃：{reason}",
     "worktree": "Worktree",
@@ -182,9 +183,66 @@
       "running": "运行中",
       "done": "已完成",
       "failed": "失败",
-      "unknown": "未知：请查看 GitHub"
+      "unknown": "未知：请查看 GitHub",
+      "linkReady": "链接已就绪",
+      "skipped": "已跳过：不在 GitHub 上"
     },
-    "log": "日志"
+    "log": "日志",
+    "phase": {
+      "push_refused": "未推送",
+      "open_pr": "分支已推送：请创建 PR",
+      "checks_failed": "检查未通过"
+    },
+    "runState": {
+      "pending": "运行中",
+      "success": "通过",
+      "failure": "未通过",
+      "unknown": "其他结果"
+    },
+    "fileRefused": "{what}（未推送）",
+    "logType": {
+      "status": "状态",
+      "task": "任务已启动",
+      "worktree": "已创建 worktree",
+      "worktree_failed": "worktree 失败",
+      "env": "worktree 文件",
+      "outbox": "发送",
+      "outbox_recovered": "停止后确认已完成",
+      "outbox_unknown": "因停止而中断",
+      "pr_refused": "推送被拒绝",
+      "scan_refused": "文件被拒绝",
+      "push_adopted": "已接管分支",
+      "pr_found": "找到 pull request",
+      "link_pr": "已关联 pull request",
+      "checks_failed": "检查未通过",
+      "fix_checks": "修复检查",
+      "meeting": "已发起会议",
+      "retry": "已重新开始",
+      "task_failed": "任务无法启动",
+      "meeting_failed": "会议无法发起",
+      "drop": "已放弃",
+      "cleanup": "已移除 worktree"
+    },
+    "logKey": {
+      "status": "状态",
+      "kind": "步骤",
+      "taskId": "任务",
+      "number": "编号",
+      "state": "状态",
+      "error": "错误",
+      "reason": "原因",
+      "findings": "文件",
+      "member": "成员",
+      "backend": "后端",
+      "branch": "分支",
+      "exposed": "已公开"
+    },
+    "logReason": {
+      "unsafe_files": "不安全的文件",
+      "scan_failed": "检查失败",
+      "base_not_pushed": "基础分支不在 GitHub 上",
+      "branch_diverged": "分支在 GitHub 上被更改"
+    }
   },
   "actions": {
     "pr": "创建 pull request",
@@ -200,7 +258,8 @@
       "link": "记录你为此分支手动创建的 pull request。",
       "task": "在此工单的 worktree 中再运行一个任务。",
       "comment": "在 GitHub issue 上发表评论。",
-      "drop": "停止工单并取消其运行中的任务。worktree 会保留，直到你删除它。"
+      "drop": "停止工单并取消其运行中的任务。worktree 会保留，直到你删除它。",
+      "retry": "在工单的 worktree 中重新启动其任务。选择其他成员或后端即可改派。"
     },
     "prTitle": "标题",
     "prTitleHint": "留空：使用 issue 的标题。",
@@ -208,26 +267,114 @@
     "prBodyHint": "留空：附带 issue 链接的摘要。",
     "draft": "作为草稿创建",
     "number": "Pull request 编号",
-    "numberError": "请输入 pull request 的编号。",
+    "numberError": "请输入 pull request 的编号或地址（…/pull/43）。",
     "textError": "请输入内容。",
     "field": {
       "task": "说明",
       "comment": "评论",
-      "drop": "原因（可选）"
+      "drop": "原因（可选）",
+      "retry": "说明（可选）"
     },
     "submit": {
       "pr": "推送并创建",
       "link": "关联",
       "task": "开始任务",
       "comment": "发表评论",
-      "drop": "放弃工单"
-    }
+      "drop": "放弃工单",
+      "retry": "重新开始"
+    },
+    "retry": "重试",
+    "retryPromptHint": "留空：worker 按 issue 原文处理。",
+    "retrySame": "与之前相同",
+    "backend": "后端",
+    "backendHint": "其他后端使用各自的账号。",
+    "numberHint": "编号或 pull request 的地址。"
   },
   "refusal": {
-    "unsafeFiles": "未推送：有 {count} 个文件看起来是密钥、凭据或垃圾文件：{files}。请删除它们（或加入 .gitignore）后重试。",
-    "scanFailed": "无法扫描这些更改，因此没有提交或推送任何内容。原因：{detail}",
-    "baseMissing": "基础分支 {branch} 不在 GitHub 上。请先推送它，然后重试。",
-    "baseNotPushed": "基础分支 {branch} 有 {commits} 个提交不在 GitHub 上。请先推送 {branch}，然后重试。",
-    "branchDiverged": "自 Seelegent 推送以来，GitHub 上的分支 {branch} 已被更改。Seelegent 从不在这样的分支上继续构建或覆盖它：请在 GitHub 上撤销该更改，或放弃此工单。"
+    "title": {
+      "secrets": "未推送：有 {count} 个文件似乎包含机密",
+      "files": "未推送：有 {count} 个文件不能发送到 GitHub",
+      "scanChanged": "未推送：检查期间 worktree 发生了变化",
+      "scanFailed": "未推送：无法检查这些更改",
+      "baseNotPushed": "未推送：{branch} 有 {commits} 个提交不在 GitHub 上",
+      "baseMissing": "未推送：基础分支 {branch} 不在 GitHub 上",
+      "branchDiverged": "未推送：分支 {branch} 在 GitHub 上已被更改"
+    },
+    "why": {
+      "unsafeFiles": "没有提交或推送任何内容。下方每个文件都写明了处理方法。",
+      "scanChanged": "Seelegent 只推送它检查过的内容；读取期间 worker 或你修改了文件，因此没有发送任何内容。",
+      "scanFailed": "Seelegent 读取更改时 Git 出错，而未经检查的内容绝不会被推送。",
+      "baseNotPushed": "这些提交会随工单的提交一起未经检查地发送到 GitHub。",
+      "branchDiverged": "有人向 {branch} 推送了内容或在 GitHub 上更改了它。Seelegent 绝不会在这样的分支上继续，也不会覆盖它。"
+    },
+    "next": {
+      "unsafeFiles": "然后重试。",
+      "scanChanged": "等工单的任务停止后再重试。",
+      "scanFailed": "请重试。如果仍然失败，请用 git status 检查 worktree。",
+      "baseNotPushed": "先将 {branch} 推送到 GitHub，然后重试。",
+      "branchDiverged": "撤销 GitHub 上的更改后重试；或者放弃此工单。"
+    },
+    "gitSaid": "Git 输出："
+  },
+  "next": {
+    "tryAgain": "重试",
+    "openPr": {
+      "title": "分支已推送：请在 GitHub 上创建 pull request",
+      "why": "还没有 pull request：Seelegent 没有可用于创建它的 GitHub 登录。请通过链接创建，然后用“关联 PR”记录其编号。",
+      "action": "在 GitHub 上打开"
+    },
+    "checks": {
+      "title": "Pull request 有 {count} 项检查未通过",
+      "why": "Pull request 的 CI 检查未通过。",
+      "fixing": "有任务正在修复"
+    },
+    "review": {
+      "title": "有任务等待你审查",
+      "why": "接受该任务后，工单即可创建 pull request；拒绝则退回。",
+      "action": "审查任务"
+    },
+    "ready": {
+      "title": "可以创建 pull request",
+      "why": "任务已被接受。在你或负责人要求之前不会推送任何内容：任何访问级别都不会自行创建 pull request。"
+    },
+    "failed": {
+      "title": "工单的任务无法启动",
+      "why": "请重新启动，可使用同一 worker，或换一个成员或后端。",
+      "action": "重试或改派"
+    },
+    "exposed": {
+      "title": "已公开：旧版本推送了 {count} 个看起来像机密的文件",
+      "why": "GitHub 上的分支包含此版本之前 worker 自己的提交，这些文件就在其中。Seelegent 会在该分支上继续，不会再推送它们的新内容。",
+      "next": "请轮换这些文件中的所有密钥：现在删除它们并不能从 GitHub 收回。"
+    }
+  },
+  "finding": {
+    "kind": {
+      "env": "环境文件（.env）",
+      "private_key": "私钥文件",
+      "key_store": "密钥或证书存储（{ext}）",
+      "credentials": "凭据文件",
+      "device": "Windows 保留设备名",
+      "large": "大于 5 MB",
+      "largeSize": "大于 5 MB（{size}）",
+      "link": "指向 worktree 之外的链接"
+    },
+    "secret": {
+      "github_token": "包含 GitHub 令牌",
+      "aws_key": "包含 AWS 访问密钥",
+      "private_key": "包含私钥",
+      "slack_token": "包含 Slack 令牌",
+      "google_key": "包含 Google API 密钥",
+      "anthropic_key": "包含 Anthropic API 密钥",
+      "stored_token": "包含 Seelegent 中保存的 GitHub 令牌",
+      "unknown": "包含密钥或令牌"
+    },
+    "fix": {
+      "file": "删除它，或将其加入 .gitignore。",
+      "secret": "把密钥从代码中移除（改为从环境变量读取），如果曾经泄露过请轮换。",
+      "large": "删除它；如果是构建产物，请加入 .gitignore。",
+      "device": "删除它：Windows 无法检出这个名字的文件。",
+      "link": "删除该链接，或把它指向的内容复制到 worktree 中。"
+    }
   }
 }

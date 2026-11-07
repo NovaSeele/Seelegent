@@ -6,6 +6,7 @@ import type { IssueState } from '@/api/github'
 import type { Issue } from '@/api/types'
 import Button from '@/components/ui/Button.vue'
 import Chip from '@/components/ui/Chip.vue'
+import Icon from '@/components/ui/Icon.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import SegmentedControl, { type SegmentOption } from '@/components/ui/SegmentedControl.vue'
 import Spinner from '@/components/ui/Spinner.vue'
@@ -14,7 +15,7 @@ import { useFormat } from '@/composables/useFormat'
 import { useGitHubStore } from '@/stores/github'
 
 import AddIssueDialog from './AddIssueDialog.vue'
-import { inboxOrder, safeUrl, TICKET_STATUS } from './issueModel'
+import { inboxOrder, phaseLabel, safeUrl, TICKET_PHASE, ticketPhase } from './issueModel'
 import TriageDialog from './TriageDialog.vue'
 
 /**
@@ -123,14 +124,14 @@ function decide(issue: Issue) {
             v-if="i.ticket"
             class="issue__ticket"
             :to="{ name: 'issues', params: { ticketId: i.ticket.id } }"
+            :aria-label="t('issues.inbox.ticket', { status: t(phaseLabel(ticketPhase(i.ticket))) })"
           >
+            <Icon name="git" class="issue__ticketIcon" />
             <StatusPill
               size="sm"
-              :tone="TICKET_STATUS[i.ticket.status].tone"
-              :icon="TICKET_STATUS[i.ticket.status].icon"
-              :label="
-                t('issues.inbox.ticket', { status: t(`issues.ticket.status.${i.ticket.status}`) })
-              "
+              :tone="TICKET_PHASE[ticketPhase(i.ticket)].tone"
+              :icon="TICKET_PHASE[ticketPhase(i.ticket)].icon"
+              :label="t(phaseLabel(ticketPhase(i.ticket)))"
             />
           </RouterLink>
           <Button
@@ -250,8 +251,22 @@ function decide(issue: Issue) {
 }
 
 .issue__ticket {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: var(--target-min);
   border-radius: var(--radius-sm);
+  color: var(--text-secondary);
   text-decoration: none;
+}
+
+/* Touch screens: the issue text toggle is at least a finger high. */
+@media (pointer: coarse) {
+  .issue__body summary {
+    display: flex;
+    align-items: center;
+    min-height: var(--target-min);
+  }
 }
 
 .issue__ticket:focus-visible {

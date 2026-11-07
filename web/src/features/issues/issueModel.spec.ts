@@ -6,8 +6,12 @@ import {
   failingChecks,
   inboxOrder,
   isAbsolutePath,
-  logText,
-  pushRefusal,
+  isPushRefusal,
+  needsYou,
+  phaseLabel,
+  prNumber,
+  runState,
+  ticketPhase,
   safeUrl,
   ticketDroppable,
   ticketFinished,
@@ -70,34 +74,40 @@ describe('issueModel', () => {
     expect(isAbsolutePath('app')).toBe(false)
   })
 
-  it('writes a log step on one short line', () => {
-    expect(logText({ files: 2, message: 'fix', empty: '' })).toBe('files: 2 · message: fix')
-    expect(logText({ text: 'x'.repeat(300) }, 20)).toHaveLength(20)
+  it('shows what the lead has to do rather than the bare status', () => {
+    expect(ticketPhase({ status: 'pr_open', needsAttention: 'open_pr' })).toBe('open_pr')
+    expect(ticketPhase({ status: 'pr_open' })).toBe('pr_open')
+    expect(phaseLabel('open_pr')).toBe('issues.ticket.phase.open_pr')
+    expect(phaseLabel('ready')).toBe('issues.ticket.status.ready')
+    // Ready waits for someone (no tier opens pull requests on its own); working and done do not.
+    expect(
+      ['review', 'ready', 'push_refused', 'open_pr', 'checks_failed', 'failed'].every((p) =>
+        needsYou(p as Parameters<typeof needsYou>[0]),
+      ),
+    ).toBe(true)
+    expect(needsYou('working') || needsYou('pr_open') || needsYou('done')).toBe(false)
   })
 
-  it('explains a refused push from the error details', () => {
-    const findings = [
-      { path: '.env', reason: 'x' },
-      { path: 'a.pem', reason: 'y' },
-    ]
-    expect(pushRefusal({ reason: 'unsafe_files', findings }, 'm')).toEqual({
-      key: 'unsafeFiles',
-      params: { count: 2, files: '.env, a.pem' },
-    })
-    expect(pushRefusal({ reason: 'base_not_pushed', branch: 'main', commits: 3 }, 'm')).toEqual({
-      key: 'baseNotPushed',
-      params: { branch: 'main', commits: 3 },
-    })
-    expect(pushRefusal({ reason: 'base_not_pushed', branch: 'main', commits: 0 }, 'm')?.key).toBe(
-      'baseMissing',
-    )
-    expect(pushRefusal({ reason: 'branch_diverged', branch: 'b' }, 'm')?.params).toEqual({
-      branch: 'b',
-    })
-    expect(
-      pushRefusal({ reason: 'scan_failed' }, 'could not scan the changes: exit 128: bad object')
-        ?.params,
-    ).toEqual({ detail: 'exit 128: bad object' })
-    expect(pushRefusal({ reason: 'lane_conflict' }, 'm')).toBeNull()
+  it('reads a pull request number from a number or its address', () => {
+    expect(prNumber('43')).toBe(43)
+    expect(prNumber(' #43 ')).toBe(43)
+    expect(prNumber('https://github.com/o/r/pull/43')).toBe(43)
+    expect(prNumber('https://github.com/o/r/pull/43/files?x=1')).toBe(43)
+    expect(prNumber('0')).toBeNull()
+    expect(prNumber('https://github.com/o/r/issues/43')).toBeNull()
+    expect(prNumber('forty')).toBeNull()
+  })
+
+  it('names each check run by its result', () => {
+    expect(runState({ status: 'in_progress' })).toBe('pending')
+    expect(runState({ status: 'completed', conclusion: 'success' })).toBe('success')
+    expect(runState({ status: 'completed', conclusion: 'timed_out' })).toBe('failure')
+    expect(runState({ status: 'completed', conclusion: 'skipped' })).toBe('unknown')
+  })
+
+  it('tells a refused push from other errors', () => {
+    expect(isPushRefusal({ reason: 'unsafe_files' })).toBe(true)
+    expect(isPushRefusal({ reason: 'branch_diverged' })).toBe(true)
+    expect(isPushRefusal({ reason: 'lane_conflict' })).toBe(false)
   })
 })

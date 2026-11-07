@@ -127,7 +127,11 @@
     "loading": "チケットを読み込み中…",
     "empty": "チケットはありません",
     "emptyDesc": "受信箱の issue を割り当てるとチケットができます。",
-    "pr": "PR #{n}"
+    "pr": "PR #{n}",
+    "group": {
+      "needsYou": "対応が必要（{count}）",
+      "others": "その他のチケット（{count}）"
+    }
   },
   "ticket": {
     "back": "すべての issue",
@@ -148,12 +152,9 @@
       "failure": "チェック失敗",
       "unknown": "チェック不明"
     },
-    "checksFailed": "チェック失敗",
     "issueLink": "Issue {key}",
     "prLink": "Pull request #{n}",
     "draft": "ドラフト",
-    "compareLink": "GitHub で pull request を作成",
-    "manualHint": "ブランチは push 済みです。上のリンクから pull request を作成し、「PR を紐付け」で番号を記録してください。",
     "meeting": "会議",
     "dropReason": "取り下げ: {reason}",
     "worktree": "Worktree",
@@ -182,9 +183,66 @@
       "running": "実行中",
       "done": "完了",
       "failed": "失敗",
-      "unknown": "不明: GitHub を確認してください"
+      "unknown": "不明: GitHub を確認してください",
+      "linkReady": "リンク準備完了",
+      "skipped": "スキップ：GitHub にありません"
     },
-    "log": "ログ"
+    "log": "ログ",
+    "phase": {
+      "push_refused": "未プッシュ",
+      "open_pr": "ブランチをプッシュ済み：PR を作成してください",
+      "checks_failed": "チェック失敗"
+    },
+    "runState": {
+      "pending": "実行中",
+      "success": "成功",
+      "failure": "失敗",
+      "unknown": "その他の結果"
+    },
+    "fileRefused": "{what}（プッシュ不可）",
+    "logType": {
+      "status": "状態",
+      "task": "タスク開始",
+      "worktree": "worktree 作成",
+      "worktree_failed": "worktree 作成失敗",
+      "env": "worktree のファイル",
+      "outbox": "送信",
+      "outbox_recovered": "停止後に完了を確認",
+      "outbox_unknown": "停止で中断",
+      "pr_refused": "プッシュ拒否",
+      "scan_refused": "ファイル拒否",
+      "push_adopted": "ブランチを引き継ぎ",
+      "pr_found": "Pull request を検出",
+      "link_pr": "Pull request を紐付け",
+      "checks_failed": "チェック失敗",
+      "fix_checks": "チェックを修正",
+      "meeting": "会議を開始",
+      "retry": "再開",
+      "task_failed": "タスクを開始できず",
+      "meeting_failed": "会議を開始できず",
+      "drop": "取り下げ",
+      "cleanup": "worktree を削除"
+    },
+    "logKey": {
+      "status": "状態",
+      "kind": "手順",
+      "taskId": "タスク",
+      "number": "番号",
+      "state": "状態",
+      "error": "エラー",
+      "reason": "理由",
+      "findings": "ファイル",
+      "member": "メンバー",
+      "backend": "バックエンド",
+      "branch": "ブランチ",
+      "exposed": "公開済み"
+    },
+    "logReason": {
+      "unsafe_files": "危険なファイル",
+      "scan_failed": "確認失敗",
+      "base_not_pushed": "ベースが GitHub にない",
+      "branch_diverged": "GitHub でブランチが変更"
+    }
   },
   "actions": {
     "pr": "Pull request を作成",
@@ -200,7 +258,8 @@
       "link": "このブランチに手動で作成した pull request を記録します。",
       "task": "このチケットの worktree で別のタスクを実行します。",
       "comment": "GitHub の issue にコメントを投稿します。",
-      "drop": "チケットを止め、実行中のタスクを取り消します。worktree は削除するまで残ります。"
+      "drop": "チケットを止め、実行中のタスクを取り消します。worktree は削除するまで残ります。",
+      "retry": "チケットのタスクを worktree で再開します。担当を変えるには別のメンバーかバックエンドを選んでください。"
     },
     "prTitle": "タイトル",
     "prTitleHint": "空欄: issue のタイトル。",
@@ -208,26 +267,114 @@
     "prBodyHint": "空欄: issue へのリンクを含む要約。",
     "draft": "ドラフトとして作成",
     "number": "Pull request の番号",
-    "numberError": "Pull request の番号を入力してください。",
+    "numberError": "pull request の番号かアドレス（…/pull/43）を入力してください。",
     "textError": "テキストを入力してください。",
     "field": {
       "task": "指示",
       "comment": "コメント",
-      "drop": "理由 (任意)"
+      "drop": "理由 (任意)",
+      "retry": "指示（任意）"
     },
     "submit": {
       "pr": "Push して作成",
       "link": "紐付け",
       "task": "タスクを開始",
       "comment": "コメントを投稿",
-      "drop": "チケットを取り下げ"
-    }
+      "drop": "チケットを取り下げ",
+      "retry": "再開する"
+    },
+    "retry": "もう一度試す",
+    "retryPromptHint": "空欄の場合、ワーカーは issue の記載どおりに作業します。",
+    "retrySame": "前回と同じ",
+    "backend": "バックエンド",
+    "backendHint": "別のバックエンドはそれぞれのアカウントを使います。",
+    "numberHint": "番号、または pull request のアドレス。"
   },
   "refusal": {
-    "unsafeFiles": "プッシュしていません：{count} 件のファイルが秘密情報、鍵、または不要なファイルのようです：{files}。削除する（または .gitignore に追加する）してから、もう一度お試しください。",
-    "scanFailed": "変更をスキャンできなかったため、コミットもプッシュもしていません。理由：{detail}",
-    "baseMissing": "ベースブランチ {branch} が GitHub にありません。先にプッシュしてから、もう一度お試しください。",
-    "baseNotPushed": "ベースブランチ {branch} に GitHub にないコミットが {commits} 件あります。先に {branch} をプッシュしてから、もう一度お試しください。",
-    "branchDiverged": "Seelegent がプッシュした後に、GitHub 上のブランチ {branch} が変更されました。Seelegent はそのようなブランチの上に積み上げたり上書きしたりしません。GitHub で変更を取り消すか、このチケットを破棄してください。"
+    "title": {
+      "secrets": "プッシュしていません：{count} 件のファイルに秘密情報が含まれているようです",
+      "files": "プッシュしていません：{count} 件のファイルは GitHub に送れません",
+      "scanChanged": "プッシュしていません：確認中に worktree が変更されました",
+      "scanFailed": "プッシュしていません：変更を確認できませんでした",
+      "baseNotPushed": "プッシュしていません：{branch} に GitHub にないコミットが {commits} 件あります",
+      "baseMissing": "プッシュしていません：ベースブランチ {branch} が GitHub にありません",
+      "branchDiverged": "プッシュしていません：ブランチ {branch} が GitHub 上で変更されました"
+    },
+    "why": {
+      "unsafeFiles": "何もコミットもプッシュもしていません。各ファイルの対処方法は下記のとおりです。",
+      "scanChanged": "Seelegent はプッシュする内容をそのまま確認します。読み取り中にワーカーかあなたがファイルを変更したため、何も送っていません。",
+      "scanFailed": "Seelegent が変更を読み取る間に Git が失敗しました。確認していないものは決してプッシュしません。",
+      "baseNotPushed": "それらのコミットはチケットのコミットと一緒に、確認されないまま GitHub に送られてしまいます。",
+      "branchDiverged": "誰かが {branch} にプッシュしたか、GitHub 上で変更しました。Seelegent はそのようなブランチの上に積み重ねたり、上書きしたりしません。"
+    },
+    "next": {
+      "unsafeFiles": "その後、もう一度お試しください。",
+      "scanChanged": "チケットのタスクが止まるのを待ってから、もう一度お試しください。",
+      "scanFailed": "もう一度お試しください。失敗が続く場合は git status で worktree を確認してください。",
+      "baseNotPushed": "{branch} を GitHub にプッシュしてから、もう一度お試しください。",
+      "branchDiverged": "GitHub 上の変更を元に戻してから、もう一度お試しください。またはこのチケットを取り下げてください。"
+    },
+    "gitSaid": "Git の出力："
+  },
+  "next": {
+    "tryAgain": "もう一度試す",
+    "openPr": {
+      "title": "ブランチをプッシュしました：GitHub で pull request を作成してください",
+      "why": "Pull request はまだありません。Seelegent には作成するための GitHub ログインがありません。リンクから作成し、その番号を「PR を紐付け」で記録してください。",
+      "action": "GitHub で開く"
+    },
+    "checks": {
+      "title": "Pull request のチェックが {count} 件失敗しました",
+      "why": "Pull request の CI チェックが失敗しました。",
+      "fixing": "タスクが修正中"
+    },
+    "review": {
+      "title": "タスクがレビューを待っています",
+      "why": "タスクを承認するとチケットは pull request の準備完了になります。差し戻すには却下してください。",
+      "action": "タスクをレビュー"
+    },
+    "ready": {
+      "title": "Pull request の準備ができました",
+      "why": "タスクは承認されました。あなたかリードが依頼するまで何もプッシュされません。どのアクセス段階でも pull request が自動で作成されることはありません。"
+    },
+    "failed": {
+      "title": "チケットのタスクを開始できませんでした",
+      "why": "同じワーカー、または別のメンバーやバックエンドでもう一度開始してください。",
+      "action": "再試行または担当変更"
+    },
+    "exposed": {
+      "title": "公開済み：以前のバージョンが秘密情報らしきファイルを {count} 件プッシュしています",
+      "why": "GitHub 上のブランチには、このバージョン以前のワーカー自身のコミットがあり、これらのファイルが含まれています。Seelegent はこのブランチの上に積み重ね、これらを新たにプッシュすることはありません。",
+      "next": "これらのファイルにあった鍵はすべて再発行してください。今削除しても GitHub から取り戻すことはできません。"
+    }
+  },
+  "finding": {
+    "kind": {
+      "env": "環境ファイル（.env）",
+      "private_key": "秘密鍵ファイル",
+      "key_store": "鍵または証明書のストア（{ext}）",
+      "credentials": "認証情報ファイル",
+      "device": "Windows の予約済みデバイス名",
+      "large": "5 MB を超えるファイル",
+      "largeSize": "5 MB を超えるファイル（{size}）",
+      "link": "worktree の外を指すリンク"
+    },
+    "secret": {
+      "github_token": "GitHub トークンを含む",
+      "aws_key": "AWS アクセスキーを含む",
+      "private_key": "秘密鍵を含む",
+      "slack_token": "Slack トークンを含む",
+      "google_key": "Google API キーを含む",
+      "anthropic_key": "Anthropic API キーを含む",
+      "stored_token": "Seelegent に保存した GitHub トークンを含む",
+      "unknown": "鍵またはトークンを含む"
+    },
+    "fix": {
+      "file": "削除するか、.gitignore に追加してください。",
+      "secret": "コードから鍵を取り除き（代わりに環境変数から読み込む）、共有したことがあれば再発行してください。",
+      "large": "削除するか、ビルド成果物なら .gitignore に追加してください。",
+      "device": "削除してください。Windows ではこの名前のファイルをチェックアウトできません。",
+      "link": "リンクを削除するか、リンク先の内容を worktree にコピーしてください。"
+    }
   }
 }

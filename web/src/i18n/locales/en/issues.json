@@ -127,7 +127,11 @@
     "loading": "Loading tickets…",
     "empty": "No tickets",
     "emptyDesc": "Assign an issue from the inbox to make a ticket.",
-    "pr": "PR #{n}"
+    "pr": "PR #{n}",
+    "group": {
+      "needsYou": "Needs you ({count})",
+      "others": "Other tickets ({count})"
+    }
   },
   "ticket": {
     "back": "All issues",
@@ -148,12 +152,9 @@
       "failure": "Checks failed",
       "unknown": "Checks unknown"
     },
-    "checksFailed": "Checks failed",
     "issueLink": "Issue {key}",
     "prLink": "Pull request #{n}",
     "draft": "draft",
-    "compareLink": "Open the pull request on GitHub",
-    "manualHint": "The branch is pushed. Open the pull request with the link above, then record its number with Link PR.",
     "meeting": "Meeting",
     "dropReason": "Dropped: {reason}",
     "worktree": "Worktree",
@@ -182,9 +183,66 @@
       "running": "Running",
       "done": "Done",
       "failed": "Failed",
-      "unknown": "Unknown: check GitHub"
+      "unknown": "Unknown: check GitHub",
+      "linkReady": "Link ready",
+      "skipped": "Skipped: not on GitHub"
     },
-    "log": "Log"
+    "log": "Log",
+    "phase": {
+      "push_refused": "Not pushed",
+      "open_pr": "Branch pushed: open the PR",
+      "checks_failed": "Checks failed"
+    },
+    "runState": {
+      "pending": "Running",
+      "success": "Passed",
+      "failure": "Failed",
+      "unknown": "Other result"
+    },
+    "fileRefused": "{what} (not pushed)",
+    "logType": {
+      "status": "Status",
+      "task": "Task started",
+      "worktree": "Worktree made",
+      "worktree_failed": "Worktree failed",
+      "env": "Worktree files",
+      "outbox": "Sent",
+      "outbox_recovered": "Found done after a stop",
+      "outbox_unknown": "Cut off by a stop",
+      "pr_refused": "Push refused",
+      "scan_refused": "Files refused",
+      "push_adopted": "Branch taken over",
+      "pr_found": "Pull request found",
+      "link_pr": "Pull request linked",
+      "checks_failed": "Checks failed",
+      "fix_checks": "Fixing checks",
+      "meeting": "Meeting opened",
+      "retry": "Started again",
+      "task_failed": "Task could not start",
+      "meeting_failed": "Meeting could not open",
+      "drop": "Dropped",
+      "cleanup": "Worktree removed"
+    },
+    "logKey": {
+      "status": "status",
+      "kind": "step",
+      "taskId": "task",
+      "number": "number",
+      "state": "state",
+      "error": "error",
+      "reason": "reason",
+      "findings": "files",
+      "member": "member",
+      "backend": "backend",
+      "branch": "branch",
+      "exposed": "already public"
+    },
+    "logReason": {
+      "unsafe_files": "unsafe files",
+      "scan_failed": "check failed",
+      "base_not_pushed": "base not on GitHub",
+      "branch_diverged": "branch changed on GitHub"
+    }
   },
   "actions": {
     "pr": "Open pull request",
@@ -200,7 +258,8 @@
       "link": "Record a pull request you opened by hand for this branch.",
       "task": "Another task in this ticket's worktree.",
       "comment": "Posts a comment on the GitHub issue.",
-      "drop": "Stops the ticket and cancels its running tasks. The worktree stays until you remove it."
+      "drop": "Stops the ticket and cancels its running tasks. The worktree stays until you remove it.",
+      "retry": "Starts the ticket's task again in its worktree. Pick another member or backend to reassign it."
     },
     "prTitle": "Title",
     "prTitleHint": "Empty: the issue's title.",
@@ -208,26 +267,114 @@
     "prBodyHint": "Empty: a summary that links the issue.",
     "draft": "Open as a draft",
     "number": "Pull request number",
-    "numberError": "Enter the pull request's number.",
+    "numberError": "Enter the pull request's number or its address (…/pull/43).",
     "textError": "Enter some text.",
     "field": {
       "task": "Instructions",
       "comment": "Comment",
-      "drop": "Reason (optional)"
+      "drop": "Reason (optional)",
+      "retry": "Instructions (optional)"
     },
     "submit": {
       "pr": "Push and open",
       "link": "Link",
       "task": "Start task",
       "comment": "Post comment",
-      "drop": "Drop ticket"
-    }
+      "drop": "Drop ticket",
+      "retry": "Start again"
+    },
+    "retry": "Try again",
+    "retryPromptHint": "Empty: the worker works on the issue as written.",
+    "retrySame": "As before",
+    "backend": "Backend",
+    "backendHint": "Another backend uses its own accounts.",
+    "numberHint": "The number, or the pull request's address."
   },
   "refusal": {
-    "unsafeFiles": "Not pushed: {count} file looks like a secret, a key or junk: {files}. Remove it (or add it to .gitignore) and try again. | Not pushed: {count} files look like secrets, keys or junk: {files}. Remove them (or add them to .gitignore) and try again.",
-    "scanFailed": "Could not scan the changes, so nothing was committed or pushed. Reason: {detail}",
-    "baseMissing": "The base branch {branch} is not on GitHub. Push it first, then try again.",
-    "baseNotPushed": "The base branch {branch} has {commits} commit that is not on GitHub. Push {branch} first, then try again. | The base branch {branch} has {commits} commits that are not on GitHub. Push {branch} first, then try again.",
-    "branchDiverged": "The branch {branch} changed on GitHub since Seelegent pushed it. Seelegent never builds on or overwrites such a branch: undo the change on GitHub, or drop this ticket."
+    "title": {
+      "secrets": "Not pushed: {count} file looks like it contains a secret | Not pushed: {count} files look like they contain secrets",
+      "files": "Not pushed: {count} file cannot go to GitHub | Not pushed: {count} files cannot go to GitHub",
+      "scanChanged": "Not pushed: the worktree changed during the check",
+      "scanFailed": "Not pushed: the changes could not be checked",
+      "baseNotPushed": "Not pushed: {branch} has {commits} commit that is not on GitHub | Not pushed: {branch} has {commits} commits that are not on GitHub",
+      "baseMissing": "Not pushed: the base branch {branch} is not on GitHub",
+      "branchDiverged": "Not pushed: the branch {branch} changed on GitHub"
+    },
+    "why": {
+      "unsafeFiles": "Nothing was committed or pushed. Each file below says what to do.",
+      "scanChanged": "Seelegent checks exactly what it pushes; a worker or you changed files while it read them, so nothing was sent.",
+      "scanFailed": "Git failed while Seelegent read the changes, and nothing is ever pushed unchecked.",
+      "baseNotPushed": "Those commits would go to GitHub with the ticket's, unchecked.",
+      "branchDiverged": "Someone pushed to {branch} or changed it on GitHub. Seelegent never builds on such a branch or overwrites it."
+    },
+    "next": {
+      "unsafeFiles": "Then try again.",
+      "scanChanged": "Wait until the ticket's task has stopped, then try again.",
+      "scanFailed": "Try again. If it keeps failing, check the worktree with git status.",
+      "baseNotPushed": "Push {branch} to GitHub, then try again.",
+      "branchDiverged": "Undo the change on GitHub, then try again; or drop this ticket."
+    },
+    "gitSaid": "Git said:"
+  },
+  "next": {
+    "tryAgain": "Try again",
+    "openPr": {
+      "title": "Branch pushed: open the pull request on GitHub",
+      "why": "No pull request exists yet: Seelegent has no GitHub sign-in to open it. Open it with the link, then record its number with Link PR.",
+      "action": "Open on GitHub"
+    },
+    "checks": {
+      "title": "{count} check failed on the pull request | {count} checks failed on the pull request",
+      "why": "The pull request's CI checks failed.",
+      "fixing": "A task is fixing them"
+    },
+    "review": {
+      "title": "A task is waiting for your review",
+      "why": "Accept the task to make the ticket ready for a pull request, or reject it to send it back.",
+      "action": "Review task"
+    },
+    "ready": {
+      "title": "Ready for a pull request",
+      "why": "The task was accepted. Nothing is pushed until you or the lead ask: no access tier opens pull requests on its own."
+    },
+    "failed": {
+      "title": "The ticket's task could not start",
+      "why": "Start it again, with the same worker or another member or backend.",
+      "action": "Try again or reassign"
+    },
+    "exposed": {
+      "title": "Already public: {count} file that looks like a secret was pushed by the earlier version | Already public: {count} files that look like secrets were pushed by the earlier version",
+      "why": "The branch on GitHub holds the worker's own commits from before this version, and these files are in them. Seelegent builds on the branch and pushes nothing new of them.",
+      "next": "Rotate every key these files held: deleting them now does not take them back from GitHub."
+    }
+  },
+  "finding": {
+    "kind": {
+      "env": "An environment file (.env)",
+      "private_key": "A private key file",
+      "key_store": "A key or certificate store ({ext})",
+      "credentials": "A credentials file",
+      "device": "A reserved Windows device name",
+      "large": "Larger than 5 MB",
+      "largeSize": "Larger than 5 MB ({size})",
+      "link": "A link to a place outside the worktree"
+    },
+    "secret": {
+      "github_token": "Holds a GitHub token",
+      "aws_key": "Holds an AWS access key",
+      "private_key": "Holds a private key",
+      "slack_token": "Holds a Slack token",
+      "google_key": "Holds a Google API key",
+      "anthropic_key": "Holds an Anthropic API key",
+      "stored_token": "Holds the GitHub token stored in Seelegent",
+      "unknown": "Holds a key or token"
+    },
+    "fix": {
+      "file": "Delete it, or add it to .gitignore.",
+      "secret": "Take the key out of the code (read it from the environment instead), and rotate it if it was ever shared.",
+      "large": "Remove it, or add it to .gitignore if it is build output.",
+      "device": "Delete it: Windows cannot check out a file with this name.",
+      "link": "Delete the link, or copy what it points to into the worktree."
+    }
   }
 }

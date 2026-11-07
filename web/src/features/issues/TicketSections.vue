@@ -2,26 +2,46 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 
-import type { Ticket } from '@/api/types'
+import type { OutboxEntry, Ticket } from '@/api/types'
+import Icon from '@/components/ui/Icon.vue'
 import StatusPill from '@/components/ui/StatusPill.vue'
 import { TASK_STATUS } from '@/components/ui/tone'
 import { useFormat } from '@/composables/useFormat'
 
-import { failingChecks, logText, safeUrl, ticketFinished, ticketTaskStatus } from './issueModel'
+import { CHECKS_STATE, runState, safeUrl, ticketFinished, ticketTaskStatus } from './issueModel'
+import { findingView } from './ticketText'
+import TicketLog from './TicketLog.vue'
 
 /**
- * The parts of a ticket below its header: its tasks, the CI checks of the pull request, the changed files, what
- * left the machine (the outbox) and the log. Every text here is plain text (check summaries and log data come
- * from outside); links are http(s) only.
+ * The parts of a ticket below its header: its tasks, the CI checks of the pull request, the changed files (the
+ * ones a refused push named are marked), what left the machine (the outbox) and the log. Every text here is plain
+ * text (check summaries and log data come from outside); links are http(s) only.
  */
 const props = defineProps<{ ticket: Ticket }>()
 
 const { t } = useI18n()
 const fmt = useFormat()
 
-const failing = computed(() => new Set(failingChecks(props.ticket.checks)))
-const log = computed(() => [...props.ticket.log].reverse())
 const skipped = computed(() => props.ticket.env?.skipped ?? [])
+const megabytes = (bytes: number) =>
+  fmt.value.number(bytes / 1_048_576, { style: 'unit', unit: 'megabyte', maximumFractionDigits: 1 })
+/** The changed files a refused push named, with what each one is. */
+const refused = computed(
+  () =>
+    new Map(
+      (props.ticket.refusal?.findings ?? []).map((f) => {
+        const v = findingView(f, megabytes)
+        return [f.path, t(v.what.key, v.what.params)] as const
+      }),
+    ),
+)
+
+/** An outbox step's state: a compare link made for the manual tier is "link ready", not "done". */
+function outboxState(o: OutboxEntry): string {
+  if (o.status === 'done' && o.kind === 'open_pr' && o.result.manualUrl) return 'linkReady'
+  if (o.status === 'done' && o.result.skipped) return 'skipped'
+  return o.status
+}
 </script>
 
 <template>
@@ -64,12 +84,13 @@ const skipped = computed(() => props.ticket.env?.skipped ?? [])
           {{ run.name }}
         </a>
         <span v-else class="item__name">{{ run.name }}</span>
-        <span class="item__meta">
-          <span v-if="run.app">{{ run.app }}</span>
-          <span :class="{ item__bad: failing.has(run.name) }">{{
-            run.conclusion || run.status
-          }}</span>
-        </span>
+        <span v-if="run.app" class="item__meta">{{ run.app }}</span>
+        <StatusPill
+          size="sm"
+          :tone="CHECKS_STATE[runState(run)].tone"
+          :icon="CHECKS_STATE[runState(run)].icon"
+          :label="t(`issues.ticket.runState.${runState(run)}`)"
+        />
         <p v-if="run.summary" class="item__text">{{ run.summary }}</p>
       </li>
     </ul>
@@ -85,9 +106,18 @@ const skipped = computed(() => props.ticket.env?.skipped ?? [])
     <h2 class="sec__h">{{ t('issues.ticket.files') }}</h2>
     <p v-if="!ticket.files.length" class="sec__none">{{ t('issues.ticket.noFiles') }}</p>
     <ul v-else class="sec__list sec__list--dense">
-      <li v-for="f in ticket.files" :key="f.path" class="file">
+      <li
+        v-for="f in ticket.files"
+        :key="f.path"
+        class="file"
+        :class="{ 'file--refused tone-attention': refused.has(f.path) }"
+      >
         <span class="file__status" :title="t('issues.ticket.fileStatus')">{{ f.status }}</span>
         <code class="file__path">{{ f.from ? `${f.from} → ${f.path}` : f.path }}</code>
+        <span v-if="refused.has(f.path)" class="file__flag">
+          <Icon name="warning" />
+          {{ t('issues.ticket.fileRefused', { what: refused.get(f.path) ?? '' }) }}
+        </span>
       </li>
     </ul>
     <template v-if="skipped.length">
@@ -108,7 +138,7 @@ const skipped = computed(() => props.ticket.env?.skipped ?? [])
         <span class="item__name">{{ t(`issues.ticket.outboxKind.${o.kind}`) }}</span>
         <span class="item__meta">
           <span :class="{ item__bad: o.status === 'failed' || o.status === 'unknown' }">
-            {{ t(`issues.ticket.outboxStatus.${o.status}`) }}
+            {{ t(`issues.ticket.outboxStatus.${outboxState(o)}`) }}
           </span>
           <span>{{ fmt.dateTime(o.at) }}</span>
         </span>
@@ -117,18 +147,7 @@ const skipped = computed(() => props.ticket.env?.skipped ?? [])
     </ul>
   </section>
 
-  <section v-if="log.length" class="sec" :aria-label="t('issues.ticket.log')">
-    <details>
-      <summary class="sec__h sec__summary">{{ t('issues.ticket.log') }} ({{ log.length }})</summary>
-      <ol class="sec__list sec__list--dense">
-        <li v-for="e in log" :key="e.id" class="log">
-          <span class="log__at">{{ fmt.dateTime(e.at) }}</span>
-          <code class="log__type">{{ e.type }}</code>
-          <span class="log__text">{{ logText(e.data) }}</span>
-        </li>
-      </ol>
-    </details>
-  </section>
+  <TicketLog :entries="ticket.log" />
 </template>
 
 <style scoped>
@@ -152,16 +171,6 @@ const skipped = computed(() => props.ticket.env?.skipped ?? [])
   color: var(--text-secondary);
   font-size: var(--fs-sm);
   font-weight: var(--fw-medium);
-}
-
-.sec__summary {
-  cursor: pointer;
-  border-radius: var(--radius-sm);
-}
-
-.sec__summary:focus-visible {
-  outline: none;
-  box-shadow: var(--focus-ring);
 }
 
 .sec__none {
@@ -251,28 +260,28 @@ const skipped = computed(() => props.ticket.env?.skipped ?? [])
   overflow-wrap: anywhere;
 }
 
-.log {
-  display: grid;
-  grid-template-columns: auto auto 1fr;
-  gap: var(--space-2);
+.file--refused {
+  margin-inline: calc(-1 * var(--space-2));
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--tone-bg);
+}
+
+.file__flag {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--tone-fg);
   font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
 }
 
-.log__at {
-  color: var(--text-muted);
-  white-space: nowrap;
-}
-
-.log__text {
-  min-width: 0;
-  color: var(--text-secondary);
-  overflow-wrap: anywhere;
-}
-
-@media (width < 600px) {
-  .log {
-    grid-template-columns: 1fr;
-    gap: 0;
+/* Touch screens: the task and check links are at least a finger high. */
+@media (pointer: coarse) {
+  .item__link {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--target-min);
   }
 }
 </style>

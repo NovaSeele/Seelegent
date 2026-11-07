@@ -12,17 +12,27 @@ import TextArea from '@/components/ui/TextArea.vue'
 import TextField from '@/components/ui/TextField.vue'
 import { useGitHubStore } from '@/stores/github'
 
-import { pushRefusal, ticketDroppable, ticketFinished, ticketPushable } from './issueModel'
+import {
+  isPushRefusal,
+  prNumber,
+  ticketDroppable,
+  ticketFinished,
+  ticketPhase,
+  ticketPushable,
+} from './issueModel'
+import RetryFields, { type RetryChoice } from './RetryFields.vue'
 
 /**
  * What the user can do with a ticket: push it and open its draft pull request, record one opened by hand, start
- * another task or a task for failing checks, comment on the issue, drop the ticket, or remove a finished ticket's
- * worktree. The buttons follow the daemon's own rules; the daemon still refuses what the state does not allow.
+ * another task or a task for failing checks, start a failed ticket again (with another member or backend),
+ * comment on the issue, drop the ticket, or remove a finished ticket's worktree. The next step the ticket waits for
+ * is offered by its banner (TicketNextStep), which calls act(); the buttons here leave it out. The daemon still
+ * refuses what the state does not allow.
  */
 const props = defineProps<{ ticket: Ticket; repo: Repo | null }>()
-const emit = defineEmits<{ changed: [ticket: Ticket] }>()
+const emit = defineEmits<{ changed: [ticket: Ticket]; refused: [] }>()
 
-type Mode = 'pr' | 'link' | 'task' | 'comment' | 'drop'
+type Mode = 'pr' | 'link' | 'task' | 'comment' | 'drop' | 'retry'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -32,13 +42,22 @@ const mode = ref<Mode | null>(null)
 const text = ref('')
 const body = ref('')
 const draft = ref(true)
+const retry = ref<RetryChoice>({ member: '', backend: '' })
 const busy = ref(false)
 const error = ref('')
+const fieldError = ref('')
 
+const phase = computed(() => ticketPhase(props.ticket))
 const finished = computed(() => ticketFinished(props.ticket.status))
 const pushable = computed(() => ticketPushable(props.ticket.status) && !!props.repo?.remote)
 const onGitHub = computed(() => !!props.repo?.github)
 const fixable = computed(() => !finished.value && props.ticket.checks?.state === 'failure')
+/** The banner offers these as the next step; a second button here would compete with it. */
+const inBanner = computed(() => ({
+  pr: ['ready', 'push_refused', 'open_pr'].includes(phase.value),
+  link: phase.value === 'open_pr',
+  fixChecks: phase.value === 'checks_failed',
+}))
 const open = computed({
   get: () => mode.value !== null,
   set: (v: boolean) => {
@@ -51,7 +70,9 @@ function start(next: Mode) {
   text.value = ''
   body.value = ''
   draft.value = true
+  retry.value = { member: '', backend: '' }
   error.value = ''
+  fieldError.value = ''
 }
 
 async function goToTask(taskId: string) {
@@ -70,8 +91,11 @@ async function run(next: Mode): Promise<Ticket | null> {
         draft: draft.value,
       })
     case 'link': {
-      const n = Number(value.replace(/^#/, ''))
-      if (!Number.isInteger(n) || n < 1) throw new Error(t('issues.actions.numberError'))
+      const n = prNumber(value)
+      if (n === null) {
+        fieldError.value = t('issues.actions.numberError')
+        throw new Error('')
+      }
       return api.linkPR(id, { number: n })
     }
     case 'comment':
@@ -79,9 +103,11 @@ async function run(next: Mode): Promise<Ticket | null> {
       return api.comment(id, { body: value })
     case 'drop':
       return api.drop(id, { reason: value || undefined })
-    case 'task': {
-      if (!value) throw new Error(t('issues.actions.textError'))
-      const res = await api.addTask(id, { prompt: value })
+    case 'task':
+    case 'retry': {
+      if (next === 'task' && !value) throw new Error(t('issues.actions.textError'))
+      const req = { prompt: value, ...pick(retry.value) }
+      const res = next === 'task' ? await api.addTask(id, req) : await api.retry(id, req)
       mode.value = null
       await goToTask(res.taskId)
       return null
@@ -89,27 +115,31 @@ async function run(next: Mode): Promise<Ticket | null> {
   }
 }
 
+/** The member and backend of a retry, only when chosen (the ticket's own otherwise). */
+function pick(c: RetryChoice): { member?: string; backend?: string } {
+  return { member: c.member || undefined, backend: c.backend || undefined }
+}
+
 async function submit() {
   if (!mode.value || busy.value) return
   busy.value = true
   error.value = ''
+  fieldError.value = ''
   try {
     const next = await run(mode.value)
     if (next) emit('changed', next)
     mode.value = null
   } catch (cause) {
-    error.value = failure(cause)
+    if (cause instanceof ApiError && isPushRefusal(cause.details)) {
+      // The refusal is kept on the ticket: its banner explains it, with each file and the next step.
+      mode.value = null
+      emit('refused')
+    } else if (!fieldError.value) {
+      error.value = errorMessage(cause)
+    }
   } finally {
     busy.value = false
   }
-}
-
-/** The text of a failed action: a refused push in the user's language, else the daemon's message. */
-function failure(cause: unknown): string {
-  const refusal = cause instanceof ApiError ? pushRefusal(cause.details, cause.message) : null
-  if (!refusal) return errorMessage(cause)
-  const n = Number(refusal.params.count ?? refusal.params.commits ?? 1)
-  return t(`issues.refusal.${refusal.key}`, refusal.params, n)
 }
 
 async function direct(action: () => Promise<void>) {
@@ -119,7 +149,7 @@ async function direct(action: () => Promise<void>) {
   try {
     await action()
   } catch (cause) {
-    error.value = failure(cause)
+    error.value = errorMessage(cause)
   } finally {
     busy.value = false
   }
@@ -128,16 +158,23 @@ async function direct(action: () => Promise<void>) {
 const fixChecks = () =>
   direct(async () => goToTask((await gh.api().fixChecks(props.ticket.id, {})).taskId))
 const cleanup = () => direct(async () => emit('changed', await gh.api().cleanup(props.ticket.id)))
+
+/** The next step the banner offers. */
+function act(action: 'pr' | 'link' | 'retry' | 'fixChecks') {
+  if (action === 'fixChecks') void fixChecks()
+  else start(action)
+}
+
+defineExpose({ act })
 </script>
 
 <template>
   <div class="acts">
-    <Button v-if="pushable" variant="primary" size="sm" icon="git" @click="start('pr')">
+    <Button v-if="pushable && !inBanner.pr" size="sm" icon="git" @click="start('pr')">
       {{ ticket.pr?.number ? t('issues.actions.push') : t('issues.actions.pr') }}
     </Button>
     <Button
-      v-if="fixable"
-      variant="primary"
+      v-if="fixable && !inBanner.fixChecks"
       size="sm"
       icon="warning"
       :loading="busy && mode === null"
@@ -145,7 +182,11 @@ const cleanup = () => direct(async () => emit('changed', await gh.api().cleanup(
     >
       {{ t('issues.actions.fixChecks') }}
     </Button>
-    <Button v-if="pushable && onGitHub && !ticket.pr?.number" size="sm" @click="start('link')">
+    <Button
+      v-if="pushable && onGitHub && !ticket.pr?.number && !inBanner.link"
+      size="sm"
+      @click="start('link')"
+    >
       {{ t('issues.actions.link') }}
     </Button>
     <Button v-if="!finished" size="sm" icon="plus" @click="start('task')">
@@ -175,7 +216,7 @@ const cleanup = () => direct(async () => emit('changed', await gh.api().cleanup(
       :dismissible="!busy"
       initial-focus="input, textarea"
     >
-      <form id="ticket-action" class="form" @submit.prevent="submit">
+      <form id="ticket-action" class="form" novalidate @submit.prevent="submit">
         <template v-if="mode === 'pr'">
           <TextField
             v-model="text"
@@ -190,13 +231,24 @@ const cleanup = () => direct(async () => emit('changed', await gh.api().cleanup(
           />
           <Checkbox v-model="draft" :label="t('issues.actions.draft')" />
         </template>
-        <TextField v-else-if="mode === 'link'" v-model="text" :label="t('issues.actions.number')" />
-        <TextArea
-          v-else-if="mode === 'task' || mode === 'comment'"
+        <TextField
+          v-else-if="mode === 'link'"
           v-model="text"
-          :label="t(`issues.actions.field.${mode}`)"
-          :rows="5"
+          inputmode="numeric"
+          :label="t('issues.actions.number')"
+          :hint="t('issues.actions.numberHint')"
+          :error="fieldError || undefined"
+          @update:model-value="fieldError = ''"
         />
+        <template v-else-if="mode === 'task' || mode === 'comment' || mode === 'retry'">
+          <TextArea
+            v-model="text"
+            :label="t(`issues.actions.field.${mode}`)"
+            :hint="mode === 'retry' ? t('issues.actions.retryPromptHint') : undefined"
+            :rows="mode === 'retry' ? 3 : 5"
+          />
+          <RetryFields v-if="mode === 'retry'" v-model="retry" />
+        </template>
         <TextField
           v-else-if="mode === 'drop'"
           v-model="text"

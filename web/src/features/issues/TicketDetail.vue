@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import PageHeader from '@/components/layout/PageHeader.vue'
@@ -8,21 +8,32 @@ import Spinner from '@/components/ui/Spinner.vue'
 import StatusPill from '@/components/ui/StatusPill.vue'
 import { useFormat } from '@/composables/useFormat'
 import { useLiveRecord } from '@/features/meetings/useLiveRecord'
+import { truncateMiddle } from '@/lib/paths'
 import { useGitHubStore } from '@/stores/github'
 
-import { CHECKS_STATE, safeUrl, TICKET_STATUS, ticketFinished } from './issueModel'
+import {
+  CHECKS_STATE,
+  phaseLabel,
+  safeUrl,
+  TICKET_PHASE,
+  ticketFinished,
+  ticketPhase,
+} from './issueModel'
 import TicketActions from './TicketActions.vue'
+import TicketNextStep from './TicketNextStep.vue'
 import TicketSections from './TicketSections.vue'
 
 /**
- * One ticket: its issue, branch and worktree, the pull request and its checks, what the user can do now, and
- * below that its tasks, files, outbox and log. Live over ticket.updated for this id.
+ * One ticket: its issue, branch and worktree, the pull request and its checks, the next step it waits for (a
+ * banner with the one thing to do), the other actions, and below that its tasks, files, outbox and log. Live over
+ * ticket.updated for this id.
  */
 const props = defineProps<{ ticketId: string }>()
 
 const { t } = useI18n()
 const fmt = useFormat()
 const gh = useGitHubStore()
+const actions = ref<InstanceType<typeof TicketActions> | null>(null)
 
 const { record, status, error, reload, set } = useLiveRecord(
   () => props.ticketId,
@@ -31,16 +42,20 @@ const { record, status, error, reload, set } = useLiveRecord(
 )
 
 const repo = computed(() => gh.repos.find((r) => r.id === record.value?.repoId) ?? null)
-const look = computed(() => (record.value ? TICKET_STATUS[record.value.status] : null))
-// A finished ticket's checks are no longer read: its header does not shout the last state (F39).
+const phase = computed(() => (record.value ? ticketPhase(record.value) : null))
+// A finished ticket's checks are no longer read: its header does not shout the last state (F39). Failed checks
+// are the phase itself then.
 const checks = computed(() =>
-  record.value?.checks && !ticketFinished(record.value.status)
+  record.value?.checks && !ticketFinished(record.value.status) && phase.value !== 'checks_failed'
     ? CHECKS_STATE[record.value.checks.state]
     : null,
 )
 const prUrl = computed(() => safeUrl(record.value?.pr?.url))
-const manualUrl = computed(() => safeUrl(record.value?.pr?.manualUrl))
 const issueUrl = computed(() => safeUrl(record.value?.issue.url))
+/** "(draft)" only while the pull request is open: a merged or closed one is no draft any more. */
+const draft = computed(
+  () => !!record.value?.pr?.draft && (record.value.pr.state ?? 'open') === 'open',
+)
 </script>
 
 <template>
@@ -69,10 +84,10 @@ const issueUrl = computed(() => safeUrl(record.value?.issue.url))
       <div class="pad">
         <div class="ticket__meta">
           <StatusPill
-            v-if="look"
-            :tone="look.tone"
-            :icon="look.icon"
-            :label="t(`issues.ticket.status.${record.status}`)"
+            v-if="phase"
+            :tone="TICKET_PHASE[phase].tone"
+            :icon="TICKET_PHASE[phase].icon"
+            :label="t(phaseLabel(phase))"
           />
           <StatusPill
             v-if="checks && record.checks"
@@ -85,10 +100,7 @@ const issueUrl = computed(() => safeUrl(record.value?.issue.url))
           </a>
           <a v-if="prUrl" :href="prUrl" target="_blank" rel="noopener noreferrer">
             {{ t('issues.ticket.prLink', { n: record.pr?.number ?? '' }) }}
-            <span v-if="record.pr?.draft">({{ t('issues.ticket.draft') }})</span>
-          </a>
-          <a v-else-if="manualUrl" :href="manualUrl" target="_blank" rel="noopener noreferrer">
-            {{ t('issues.ticket.compareLink') }}
+            <span v-if="draft">({{ t('issues.ticket.draft') }})</span>
           </a>
           <RouterLink
             v-if="record.meetingId"
@@ -98,15 +110,17 @@ const issueUrl = computed(() => safeUrl(record.value?.issue.url))
           </RouterLink>
           <span>{{ fmt.relative(record.updatedAt) }}</span>
         </div>
-        <p v-if="record.error" class="ticket__error" role="alert">{{ record.error }}</p>
+        <p v-if="record.error && phase !== 'failed'" class="ticket__error" role="alert">
+          {{ record.error }}
+        </p>
         <p v-if="record.dropReason" class="ticket__note">
           {{ t('issues.ticket.dropReason', { reason: record.dropReason }) }}
         </p>
-        <p v-if="manualUrl && !prUrl" class="ticket__note">{{ t('issues.ticket.manualHint') }}</p>
+        <TicketNextStep :ticket="record" @act="(a) => actions?.act(a)" />
         <dl class="ticket__facts">
           <dt>{{ t('issues.ticket.worktree') }}</dt>
           <dd>
-            <code>{{ record.worktree }}</code>
+            <code :title="record.worktree">{{ truncateMiddle(record.worktree, 64) }}</code>
             <span v-if="record.worktreeRemoved" class="ticket__muted">
               {{ t('issues.ticket.removed') }}
             </span>
@@ -116,7 +130,13 @@ const issueUrl = computed(() => safeUrl(record.value?.issue.url))
             <code>{{ record.base }}</code>
           </dd>
         </dl>
-        <TicketActions :ticket="record" :repo="repo" @changed="set" />
+        <TicketActions
+          ref="actions"
+          :ticket="record"
+          :repo="repo"
+          @changed="set"
+          @refused="reload()"
+        />
         <TicketSections :ticket="record" />
       </div>
     </template>
@@ -185,6 +205,14 @@ const issueUrl = computed(() => safeUrl(record.value?.issue.url))
   outline: none;
   border-radius: var(--radius-sm);
   box-shadow: var(--focus-ring);
+}
+
+@media (pointer: coarse) {
+  .ticket__meta a {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--target-min);
+  }
 }
 
 .ticket__facts {

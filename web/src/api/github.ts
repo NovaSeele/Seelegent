@@ -83,6 +83,8 @@ export function createGitHubApi(client: ApiClient) {
     ticket: (id: string, signal?: AbortSignal) => client.get<Ticket>(ticket(id), { signal }),
     addTask: (id: string, body: TicketTaskRequest) =>
       client.post<TicketTaskResult>(ticket(id, '/tasks'), { body }),
+    retry: (id: string, body: TicketTaskRequest) =>
+      client.post<TicketTaskResult>(ticket(id, '/retry'), { body }),
     openPR: (id: string, body: PRRequest) => client.post<Ticket>(ticket(id, '/pr'), { body }),
     linkPR: (id: string, body: LinkPRRequest) =>
       client.post<Ticket>(ticket(id, '/link-pr'), { body }),

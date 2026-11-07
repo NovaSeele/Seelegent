@@ -4,7 +4,7 @@
     "check": "Comprobar de nuevo",
     "tier": {
       "gh": "GitHub CLI",
-      "token": "Token",
+      "token": "Token de acceso",
       "manual": "Manual"
     },
     "tierDesc": {
@@ -127,7 +127,11 @@
     "loading": "Cargando tickets…",
     "empty": "No hay tickets",
     "emptyDesc": "Asigna un issue de la bandeja para crear un ticket.",
-    "pr": "PR #{n}"
+    "pr": "PR #{n}",
+    "group": {
+      "needsYou": "Te necesitan ({count})",
+      "others": "Otros tickets ({count})"
+    }
   },
   "ticket": {
     "back": "Todos los issues",
@@ -148,12 +152,9 @@
       "failure": "Checks fallidos",
       "unknown": "Checks desconocidos"
     },
-    "checksFailed": "Checks fallidos",
     "issueLink": "Issue {key}",
     "prLink": "Pull request #{n}",
     "draft": "borrador",
-    "compareLink": "Abrir la pull request en GitHub",
-    "manualHint": "La rama está subida. Abre la pull request con el enlace de arriba y luego registra su número con Vincular PR.",
     "meeting": "Reunión",
     "dropReason": "Descartado: {reason}",
     "worktree": "Worktree",
@@ -171,7 +172,7 @@
     "envSkipped": "Fuera del worktree",
     "outbox": "Enviado desde este equipo",
     "outboxKind": {
-      "commit": "Commit",
+      "commit": "Confirmar cambios",
       "push": "Push",
       "open_pr": "Abrir pull request",
       "comment": "Comentario",
@@ -182,9 +183,66 @@
       "running": "En curso",
       "done": "Hecho",
       "failed": "Fallido",
-      "unknown": "Desconocido: revisa GitHub"
+      "unknown": "Desconocido: revisa GitHub",
+      "linkReady": "Enlace listo",
+      "skipped": "Omitido: no está en GitHub"
     },
-    "log": "Registro"
+    "log": "Registro",
+    "phase": {
+      "push_refused": "Sin enviar",
+      "open_pr": "Rama enviada: abre la PR",
+      "checks_failed": "Checks fallidos"
+    },
+    "runState": {
+      "pending": "En curso",
+      "success": "Superado",
+      "failure": "Fallido",
+      "unknown": "Otro resultado"
+    },
+    "fileRefused": "{what} (no enviado)",
+    "logType": {
+      "status": "Estado",
+      "task": "Tarea iniciada",
+      "worktree": "Worktree creado",
+      "worktree_failed": "Falló el worktree",
+      "env": "Archivos del worktree",
+      "outbox": "Envío",
+      "outbox_recovered": "Encontrado hecho tras una parada",
+      "outbox_unknown": "Cortado por una parada",
+      "pr_refused": "Envío rechazado",
+      "scan_refused": "Archivos rechazados",
+      "push_adopted": "Rama adoptada",
+      "pr_found": "Pull request encontrada",
+      "link_pr": "Pull request vinculada",
+      "checks_failed": "Checks fallidos",
+      "fix_checks": "Corrigiendo checks",
+      "meeting": "Reunión abierta",
+      "retry": "Iniciado de nuevo",
+      "task_failed": "La tarea no pudo empezar",
+      "meeting_failed": "La reunión no pudo abrirse",
+      "drop": "Descartado",
+      "cleanup": "Worktree eliminado"
+    },
+    "logKey": {
+      "status": "estado",
+      "kind": "paso",
+      "taskId": "tarea",
+      "number": "número",
+      "state": "estado",
+      "error": "error",
+      "reason": "motivo",
+      "findings": "archivos",
+      "member": "miembro",
+      "backend": "backend",
+      "branch": "rama",
+      "exposed": "ya públicos"
+    },
+    "logReason": {
+      "unsafe_files": "archivos no seguros",
+      "scan_failed": "falló la comprobación",
+      "base_not_pushed": "base no está en GitHub",
+      "branch_diverged": "la rama cambió en GitHub"
+    }
   },
   "actions": {
     "pr": "Abrir pull request",
@@ -200,7 +258,8 @@
       "link": "Registra una pull request que abriste a mano para esta rama.",
       "task": "Otra tarea en el worktree de este ticket.",
       "comment": "Publica un comentario en el issue de GitHub.",
-      "drop": "Detiene el ticket y cancela sus tareas en curso. El worktree se queda hasta que lo quites."
+      "drop": "Detiene el ticket y cancela sus tareas en curso. El worktree se queda hasta que lo quites.",
+      "retry": "Vuelve a iniciar la tarea del ticket en su worktree. Elige otro miembro o backend para reasignarla."
     },
     "prTitle": "Título",
     "prTitleHint": "Vacío: el título del issue.",
@@ -208,26 +267,114 @@
     "prBodyHint": "Vacío: un resumen que enlaza el issue.",
     "draft": "Abrir como borrador",
     "number": "Número de la pull request",
-    "numberError": "Escribe el número de la pull request.",
+    "numberError": "Escribe el número de la pull request o su dirección (…/pull/43).",
     "textError": "Escribe algo de texto.",
     "field": {
       "task": "Instrucciones",
       "comment": "Comentario",
-      "drop": "Motivo (opcional)"
+      "drop": "Motivo (opcional)",
+      "retry": "Instrucciones (opcional)"
     },
     "submit": {
       "pr": "Subir y abrir",
       "link": "Vincular",
       "task": "Iniciar tarea",
       "comment": "Publicar comentario",
-      "drop": "Descartar ticket"
-    }
+      "drop": "Descartar ticket",
+      "retry": "Volver a empezar"
+    },
+    "retry": "Reintentar",
+    "retryPromptHint": "Vacío: el worker trabaja en el issue tal como está escrito.",
+    "retrySame": "Como antes",
+    "backend": "Backend",
+    "backendHint": "Otro backend usa sus propias cuentas.",
+    "numberHint": "El número o la dirección de la pull request."
   },
   "refusal": {
-    "unsafeFiles": "No se ha enviado: {count} archivo parece un secreto, una clave o basura: {files}. Quítalo (o añádelo a .gitignore) e inténtalo de nuevo. | No se ha enviado: {count} archivos parecen secretos, claves o basura: {files}. Quítalos (o añádelos a .gitignore) e inténtalo de nuevo.",
-    "scanFailed": "No se pudieron analizar los cambios, así que no se ha confirmado ni enviado nada. Motivo: {detail}",
-    "baseMissing": "La rama base {branch} no está en GitHub. Envíala primero y vuelve a intentarlo.",
-    "baseNotPushed": "La rama base {branch} tiene {commits} commit que no está en GitHub. Envía {branch} primero y vuelve a intentarlo. | La rama base {branch} tiene {commits} commits que no están en GitHub. Envía {branch} primero y vuelve a intentarlo.",
-    "branchDiverged": "La rama {branch} cambió en GitHub desde que Seelegent la envió. Seelegent nunca construye sobre una rama así ni la sobrescribe: deshaz el cambio en GitHub o descarta este ticket."
+    "title": {
+      "secrets": "Sin enviar: {count} archivo parece contener un secreto | Sin enviar: {count} archivos parecen contener secretos",
+      "files": "Sin enviar: {count} archivo no puede ir a GitHub | Sin enviar: {count} archivos no pueden ir a GitHub",
+      "scanChanged": "Sin enviar: el worktree cambió durante la comprobación",
+      "scanFailed": "Sin enviar: no se pudieron comprobar los cambios",
+      "baseNotPushed": "Sin enviar: {branch} tiene {commits} commit que no está en GitHub | Sin enviar: {branch} tiene {commits} commits que no están en GitHub",
+      "baseMissing": "Sin enviar: la rama base {branch} no está en GitHub",
+      "branchDiverged": "Sin enviar: la rama {branch} cambió en GitHub"
+    },
+    "why": {
+      "unsafeFiles": "No se ha hecho commit ni envío de nada. Cada archivo indica qué hacer.",
+      "scanChanged": "Seelegent comprueba exactamente lo que envía; un worker o tú cambiasteis archivos mientras los leía, así que no se envió nada.",
+      "scanFailed": "Git falló mientras Seelegent leía los cambios, y nunca se envía nada sin comprobar.",
+      "baseNotPushed": "Esos commits irían a GitHub con los del ticket, sin comprobar.",
+      "branchDiverged": "Alguien envió a {branch} o la cambió en GitHub. Seelegent nunca continúa sobre una rama así ni la sobrescribe."
+    },
+    "next": {
+      "unsafeFiles": "Después, inténtalo de nuevo.",
+      "scanChanged": "Espera a que la tarea del ticket se detenga y vuelve a intentarlo.",
+      "scanFailed": "Inténtalo de nuevo. Si sigue fallando, revisa el worktree con git status.",
+      "baseNotPushed": "Envía {branch} a GitHub y vuelve a intentarlo.",
+      "branchDiverged": "Deshaz el cambio en GitHub y vuelve a intentarlo, o descarta este ticket."
+    },
+    "gitSaid": "Git dijo:"
+  },
+  "next": {
+    "tryAgain": "Reintentar",
+    "openPr": {
+      "title": "Rama enviada: abre la pull request en GitHub",
+      "why": "Todavía no existe ninguna pull request: Seelegent no tiene acceso a GitHub para abrirla. Ábrela con el enlace y luego registra su número con Vincular PR.",
+      "action": "Abrir en GitHub"
+    },
+    "checks": {
+      "title": "Falló {count} check de la pull request | Fallaron {count} checks de la pull request",
+      "why": "Los checks de CI de la pull request fallaron.",
+      "fixing": "Una tarea los está corrigiendo"
+    },
+    "review": {
+      "title": "Una tarea espera tu revisión",
+      "why": "Acepta la tarea para que el ticket quede listo para una pull request, o recházala para devolverla.",
+      "action": "Revisar tarea"
+    },
+    "ready": {
+      "title": "Listo para una pull request",
+      "why": "La tarea fue aceptada. No se envía nada hasta que tú o el líder lo pidáis: ningún nivel de acceso abre pull requests por su cuenta."
+    },
+    "failed": {
+      "title": "La tarea del ticket no pudo empezar",
+      "why": "Vuelve a iniciarla, con el mismo worker u otro miembro o backend.",
+      "action": "Reintentar o reasignar"
+    },
+    "exposed": {
+      "title": "Ya es público: la versión anterior envió {count} archivo que parece un secreto | Ya es público: la versión anterior envió {count} archivos que parecen secretos",
+      "why": "La rama en GitHub contiene los commits del propio worker de antes de esta versión, y estos archivos están en ellos. Seelegent sigue sobre la rama y no envía nada nuevo de ellos.",
+      "next": "Rota todas las claves que tenían estos archivos: borrarlos ahora no los retira de GitHub."
+    }
+  },
+  "finding": {
+    "kind": {
+      "env": "Un archivo de entorno (.env)",
+      "private_key": "Un archivo de clave privada",
+      "key_store": "Un almacén de claves o certificados ({ext})",
+      "credentials": "Un archivo de credenciales",
+      "device": "Un nombre de dispositivo reservado de Windows",
+      "large": "Mayor de 5 MB",
+      "largeSize": "Mayor de 5 MB ({size})",
+      "link": "Un enlace a un lugar fuera del worktree"
+    },
+    "secret": {
+      "github_token": "Contiene un token de GitHub",
+      "aws_key": "Contiene una clave de acceso de AWS",
+      "private_key": "Contiene una clave privada",
+      "slack_token": "Contiene un token de Slack",
+      "google_key": "Contiene una clave de API de Google",
+      "anthropic_key": "Contiene una clave de API de Anthropic",
+      "stored_token": "Contiene el token de GitHub guardado en Seelegent",
+      "unknown": "Contiene una clave o un token"
+    },
+    "fix": {
+      "file": "Bórralo o añádelo a .gitignore.",
+      "secret": "Saca la clave del código (léela del entorno) y rótala si alguna vez se compartió.",
+      "large": "Quítalo, o añádelo a .gitignore si es un resultado de compilación.",
+      "device": "Bórralo: Windows no puede extraer un archivo con este nombre.",
+      "link": "Borra el enlace o copia en el worktree aquello a lo que apunta."
+    }
   }
 }
