@@ -13,6 +13,17 @@ import { accountsApi as defaultApi } from '@/api'
 import type { AccountChanges, AccountsApi, NewAccount } from '@/api/accounts'
 import type { Account, LoginSession } from '@/api/types'
 
+/** The account was created, its key was refused, and deleting it again failed: it exists with no key. */
+export class KeylessAccountError extends Error {
+  constructor(
+    readonly account: Account,
+    readonly reason: unknown,
+  ) {
+    super(`account ${account.id} was created but has no key`)
+    this.name = 'KeylessAccountError'
+  }
+}
+
 function order(list: readonly Account[]): Account[] {
   return [...list].sort((a, b) => b.priority - a.priority || a.label.localeCompare(b.label))
 }
@@ -75,7 +86,8 @@ export const useAccountsStore = defineStore('accounts', () => {
 
   /**
    * Adds an account; with `key`, also stores its API key. The contract has no single route for both, so when the
-   * key cannot be stored the new account is deleted again (old bug: a keyless account was left behind).
+   * key cannot be stored the new account is deleted again (old bug: a keyless account was left behind). When that
+   * delete fails too, a KeylessAccountError says the account exists without a key.
    */
   async function create(body: NewAccount, key?: string): Promise<Account> {
     const account = await keep(client.create(body))
@@ -83,10 +95,12 @@ export const useAccountsStore = defineStore('accounts', () => {
     try {
       return await keep(client.setKey(account.id, key))
     } catch (error) {
-      await client.remove(account.id).then(
-        () => remove(account.id),
-        () => undefined,
+      const removed = await client.remove(account.id).then(
+        () => true,
+        () => false,
       )
+      if (!removed) throw new KeylessAccountError(account, error)
+      remove(account.id)
       throw error
     }
   }

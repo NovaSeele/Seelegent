@@ -10,7 +10,7 @@ import Dialog from '@/components/ui/Dialog.vue'
 import NumberField from '@/components/ui/NumberField.vue'
 import Select from '@/components/ui/Select.vue'
 import TextField from '@/components/ui/TextField.vue'
-import { useAccountsStore } from '@/stores/accounts'
+import { KeylessAccountError, useAccountsStore } from '@/stores/accounts'
 import { useProvidersStore } from '@/stores/providers'
 import { useToastStore } from '@/stores/toast'
 
@@ -39,6 +39,8 @@ const busy = ref(false)
 const errors = ref<Record<string, string>>({})
 const failure = ref('')
 const formEl = ref<HTMLFormElement | null>(null)
+/** Set when the account was created without its key; the dialog then only sets that account's key. */
+const keyless = ref<Account | null>(null)
 
 const hasSystem = computed(() => accounts.accounts.some((a) => a.kind === 'system'))
 
@@ -73,6 +75,7 @@ watch(open, (value) => {
     return
   }
   step.value = 1
+  keyless.value = null
   key.value = ''
   label.value = ''
   priority.value = 0
@@ -104,12 +107,34 @@ async function toDetails() {
   first?.select()
 }
 
+/** The account exists but has no key (its key was refused and it could not be deleted again): set its key. */
+async function setKeyOfKeyless(account: Account) {
+  const saved = await accounts.setKey(account.id, key.value.trim())
+  open.value = false
+  toast.show({ message: t('accounts.done.keySet', { name: saved.label }), tone: 'success' })
+}
+
+function showError(error: unknown) {
+  if (error instanceof KeylessAccountError) {
+    keyless.value = error.account
+    showError(error.reason)
+    failure.value = [t('accounts.add.keyless', { name: error.account.label }), failure.value]
+      .filter(Boolean)
+      .join(' ')
+    return
+  }
+  const problems = fieldProblems(error)
+  errors.value = Object.fromEntries(problems.map((p) => [p.field, p.message]))
+  if (!problems.length) failure.value = errorMessage(error)
+}
+
 async function submit() {
   if (busy.value) return
   busy.value = true
   errors.value = {}
   failure.value = ''
   try {
+    if (keyless.value) return await setKeyOfKeyless(keyless.value)
     const apiKey = kind.value === 'api-key' && key.value.trim() ? key.value.trim() : undefined
     const created = await accounts.create(
       {
@@ -125,9 +150,7 @@ async function submit() {
     toast.show({ message: t('accounts.done.added', { name: created.label }), tone: 'success' })
     if (created.kind === 'isolated') await accounts.login(created.id).catch(() => undefined)
   } catch (error) {
-    const problems = fieldProblems(error)
-    errors.value = Object.fromEntries(problems.map((p) => [p.field, p.message]))
-    if (!problems.length) failure.value = errorMessage(error)
+    showError(error)
   } finally {
     busy.value = false
   }
@@ -155,6 +178,15 @@ async function submit() {
         />
         <ChoiceGroup v-model="kind" :legend="t('accounts.add.kind')" :options="kindOptions" />
       </template>
+      <TextField
+        v-else-if="keyless"
+        v-model="key"
+        type="password"
+        autocomplete="new-password"
+        :label="t('accounts.key.label')"
+        :hint="t('accounts.key.hint')"
+        :error="errors.key"
+      />
       <template v-else>
         <TextField v-model="label" :label="t('accounts.add.label')" :error="errors.label" />
         <NumberField
@@ -186,7 +218,7 @@ async function submit() {
       <p v-if="failure" class="add__error" role="alert">{{ failure }}</p>
     </form>
     <template #footer>
-      <Button v-if="step === 2" variant="ghost" :disabled="busy" @click="step = 1">
+      <Button v-if="step === 2 && !keyless" variant="ghost" :disabled="busy" @click="step = 1">
         {{ t('common.action.back') }}
       </Button>
       <Button
@@ -194,9 +226,15 @@ async function submit() {
         form="add-account"
         variant="primary"
         :loading="busy"
-        :disabled="step === 2 && kind === 'api-key' && !provider"
+        :disabled="keyless ? !key.trim() : step === 2 && kind === 'api-key' && !provider"
       >
-        {{ step === 1 ? t('accounts.add.next') : t('accounts.add.submit') }}
+        {{
+          keyless
+            ? t('accounts.key.save')
+            : step === 1
+              ? t('accounts.add.next')
+              : t('accounts.add.submit')
+        }}
       </Button>
     </template>
   </Dialog>

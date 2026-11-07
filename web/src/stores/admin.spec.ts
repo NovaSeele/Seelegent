@@ -15,7 +15,7 @@ import type { Memory, Role } from '@/api/types'
 import { setupApp } from '@/test/app'
 import { makeAccount, T0 } from '@/test/fixtures'
 
-import { useAccountsStore } from './accounts'
+import { KeylessAccountError, useAccountsStore } from './accounts'
 import { useConnectionStore } from './connection'
 import { createLoader } from './loader'
 import { projectChoices, samePlace, useRolesStore } from './roles'
@@ -86,6 +86,24 @@ describe('accounts store writes', () => {
       'DELETE /api/v1/accounts/k1',
     ])
     expect(store.get('k1')).toBeUndefined()
+  })
+
+  it('says the account stays without a key when deleting it again fails too', async () => {
+    const created = makeAccount({ id: 'k1', kind: 'api-key', backend: 'claude', status: 'no_key' })
+    const { client } = fakeClient((method) => {
+      if (method === 'POST') return { body: created }
+      if (method === 'PUT') return error(400, 'invalid_argument', 'key too short')
+      return error(500, 'internal', 'disk full')
+    })
+    const store = useAccountsStore()
+    store.setApi(createAccountsApi(client))
+    const failure = await store
+      .create({ backend: 'claude', kind: 'api-key', label: 'Key', provider: 'anthropic' }, 'sk')
+      .catch((e: unknown) => e)
+    expect(failure).toBeInstanceOf(KeylessAccountError)
+    expect((failure as KeylessAccountError).account.id).toBe('k1')
+    expect((failure as KeylessAccountError).reason).toMatchObject({ message: 'key too short' })
+    expect(store.get('k1')).toBeDefined()
   })
 
   it('keeps the latest sign-in per account until it is cleared', () => {
