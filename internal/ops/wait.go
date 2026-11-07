@@ -67,8 +67,8 @@ type Wait struct {
 // When the connection is lost without a word (a crash, a killed daemon), it finds or starts the daemon again
 // through connect (Ensure) and waits for the rest of the time. When the daemon answers daemon_stopping (it was
 // asked to stop, or Ctrl+C), it only looks for a daemon that comes back (FindOnly, never starting one) for
-// StopGrace: a restart carries the wait on, and after a plain stop the wait ends with StoppedError instead of
-// starting the daemon that was just stopped.
+// StopGrace: a restart carries the wait on (and from then on the normal rules apply again), and after a plain stop
+// the wait ends with StoppedError instead of starting the daemon that was just stopped.
 func WaitReports(ctx context.Context, connect Connect, w Wait) (api.WaitResult, error) {
 	if w.RetryPause <= 0 {
 		w.RetryPause = time.Second
@@ -94,6 +94,10 @@ func WaitReports(ctx context.Context, connect Connect, w Wait) (api.WaitResult, 
 	for how := Reuse; ; {
 		c, err := lookup(ctx, connect, how, end())
 		switch {
+		case err == nil && how == FindOnly:
+			// A daemon is back (a restart): the normal rules apply again. A later crash is ridden out through
+			// Ensure, and a later stop answers daemon_stopping again, which starts a new grace.
+			stopped = time.Time{}
 		case err == nil:
 		case ctx.Err() != nil:
 			return api.WaitResult{}, ctx.Err()
@@ -133,7 +137,7 @@ func WaitReports(ctx context.Context, connect Connect, w Wait) (api.WaitResult, 
 			w.Logger.Info("the daemon is gone or not answering during a wait; reconnecting", "err", err)
 		}
 		lost = err
-		// Once the daemon said it was stopping, nothing in this wait starts one again.
+		// After the daemon said it was stopping, nothing in this wait starts one until a daemon is found again.
 		how = Ensure
 		if !stopped.IsZero() {
 			how = FindOnly

@@ -562,6 +562,48 @@ func TestWaitDaemonStopping(t *testing.T) {
 	}
 }
 
+// restartThenCrash: the daemon answers daemon_stopping, Find then finds the restarted daemon, which goes away
+// without a word (a crash); after that only Ensure brings the daemon back.
+type restartThenCrash struct {
+	stopping, crashed, live *client.Client
+	finds, ensuresAfter     atomic.Int32
+}
+
+func (f *restartThenCrash) Ensure(context.Context) (*client.Client, error) {
+	if f.finds.Load() == 0 {
+		return f.stopping, nil
+	}
+	f.ensuresAfter.Add(1)
+	return f.live, nil
+}
+
+func (f *restartThenCrash) Find(context.Context) (*client.Client, error) {
+	f.finds.Add(1)
+	return f.crashed, nil
+}
+
+// TestWaitCrashAfterRestart: once a daemon is found again after daemon_stopping, the wait follows the normal rules:
+// a connection lost without the code (a crash of the restarted daemon) goes through Ensure, not daemon_stopped.
+func TestWaitCrashAfterRestart(t *testing.T) {
+	_, stopping := newStub(t, map[string]http.HandlerFunc{"POST /wait": answer(http.StatusServiceUnavailable,
+		api.ErrorBody{Error: api.ErrorInfo{Code: api.CodeDaemonStopping, Message: "the daemon is stopping"}})})
+	_, live := newStub(t, map[string]http.HandlerFunc{"POST /wait": waitAnswer("done")})
+	crashedSrv := httptest.NewServer(http.NotFoundHandler())
+	crashed := client.New(crashedSrv.URL, nil)
+	crashedSrv.Close()
+	fd := &restartThenCrash{stopping: stopping, crashed: crashed, live: live}
+	cs := stubSession(t, stopping, func(o *mcpserver.Options) {
+		o.Daemon = fd
+		o.RetryPause = 20 * time.Millisecond
+		o.StopGrace = 200 * time.Millisecond
+	})
+	var rep api.TaskReport
+	ok(t, cs, "wait", map[string]any{"task_ids": []string{"t1"}, "wait_seconds": 30}, &rep)
+	if rep.Status != "done" || fd.finds.Load() != 1 || fd.ensuresAfter.Load() != 1 {
+		t.Fatalf("crash after restart = %+v after %d finds, %d ensures", rep, fd.finds.Load(), fd.ensuresAfter.Load())
+	}
+}
+
 // TestTaskSteps: steps=N shows the newest N tool steps (old B6 showed the oldest).
 func TestTaskSteps(t *testing.T) {
 	ev := func(seq int64, name, out string) client.RawEvent {

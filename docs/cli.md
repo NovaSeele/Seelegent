@@ -76,7 +76,8 @@ Waits (`wait`, `delegate`, `followup`, `run`; the same code as the MCP tools, `o
 - A daemon that answers `503 daemon_stopping` (it was stopped, or Ctrl+C) is only looked for again, never started,
   for up to 40 s (bounded by the wait's own time): after `seelegent restart` the wait goes on against the new
   daemon; after a plain `stop` it ends with `daemon_stopped` ("the Seelegent daemon was stopped during the wait; the
-  tasks keep running: wait again later"), exit 1. Nothing in that wait starts a daemon afterwards.
+  tasks keep running: wait again later"), exit 1. Nothing in that wait starts a daemon until a daemon is found
+  again; from then on the rules above apply again (a later crash is ridden out, a later stop starts a new grace).
 
 ### Not in this version
 

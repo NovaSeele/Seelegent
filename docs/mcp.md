@@ -76,7 +76,8 @@ That holds for a connection lost without a word (a crash). A daemon that is shut
 `restart`, Ctrl+C) answers the open wait with `503 daemon_stopping` instead; the wait then only looks for a daemon
 that comes back (never starts one) for up to 40 s within its own time. After a restart it goes on against the new
 daemon; after a plain stop the call ends with code `daemon_stopped` ("the Seelegent daemon was stopped during the
-wait; the tasks keep running: wait again later"), and nothing in that wait starts the daemon again.
+wait; the tasks keep running: wait again later"). Nothing in that wait starts the daemon until a daemon is found
+again; from then on the usual rules apply again (a later crash is ridden out, a later stop starts a new grace).
 
 ## Tools
 
