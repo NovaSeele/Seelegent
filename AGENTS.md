@@ -14,11 +14,14 @@ Seelegent is a Go daemon + CLI + MCP server in one binary, with a Vue 3 + TypeSc
   keys, run environment), `event` (normalized turn events), `backend` (agy/claude/codex commands, env rules and
   stream parsers), `clock` (injectable time with a fake for tests), `quota` (quota readers per backend, quota
   cache, background refresher), `pool` (account selection, leases, rest periods, waiting, handover), `usage`
-  (hourly snapshots, attempt usage, history and summary), `api` (DTOs shared with the dashboard, source for
-  tygo), `task` (task engine: model, event log, runner, recovery; see [docs/task-engine.md](docs/task-engine.md)),
-  `brief` (worker briefs, golden files in `testdata/`), `memory` (project notes, review history), `role`
-  (worker roles and skills), `app` (composition root: builds and starts the services), `testutil/fakecli`
-  (the test binary as launcher and fake worker CLI), and later `httpapi`, `mcpserver`, `setup`, `migrate`, ...
+  (hourly snapshots, attempt usage, history and summary), `api` (DTOs shared with the dashboard; `go generate
+  ./internal/api` writes `web/src/api/types.gen.ts` through `api/tsgen`), `task` (task engine: model, event log,
+  runner, recovery; see [docs/task-engine.md](docs/task-engine.md)), `brief` (worker briefs, golden files in
+  `testdata/`), `memory` (project notes, review history), `role` (worker roles and skills), `gitx` (git status,
+  diffs, branches and commits for the task views), `signin` (account sign-in sessions), `httpapi` (HTTP API v1, SSE
+  and the embedded dashboard; see [docs/api.md](docs/api.md)), `app` (composition root: builds and starts the
+  services), `testutil/fakecli` (the test binary as launcher and fake worker CLI), and later `mcpserver`, `setup`,
+  `migrate`, ...
 - `web/` — Vue app with its own `package.json`; `web/embed.go` embeds `web/dist`.
   `web/src/`: `main.ts`, `App.vue`, `router/`, `api/`, `stores/` (Pinia), `i18n/` (`locales/<lang>/<ns>.json`),
   `styles/` (tokens), `components/ui/`, `components/`, `features/<area>/`, `composables/`.
