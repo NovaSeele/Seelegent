@@ -34,7 +34,17 @@
     "daily": "Every day at {at}",
     "weekdays": "Monday to Friday at {at}",
     "weekly": "Every {day} at {at}",
-    "cron": "Cron {expr}"
+    "cron": "Cron {expr}",
+    "cronWords": {
+      "everyMinutes": "Every minute | Every {count} minutes",
+      "hourly": "Every hour at :{minute}",
+      "daily": "every day",
+      "weekdays": "Monday to Friday",
+      "weekly": "every {days}",
+      "monthly": "on day {days} of every month | on days {days} of every month",
+      "sentence": "{time} {days}",
+      "inMonths": "{text}, in {months}"
+    }
   },
   "card": {
     "running": "Running",
@@ -50,7 +60,8 @@
     "ran": "Run: {outcome}",
     "edit": "Edit",
     "history": "History",
-    "delete": "Delete"
+    "delete": "Delete",
+    "unconfirmed": "Not confirmed: it cannot run, now or on its schedule, until you review what it runs and turn it on."
   },
   "editor": {
     "newTitle": "New automation",
@@ -119,7 +130,8 @@
     "create": "Create",
     "save": "Save",
     "savedNew": "Automation saved. It is off until you turn it on.",
-    "savedEdit": "Automation saved."
+    "savedEdit": "Automation saved.",
+    "timezoneError": "Seelegent does not know this time zone. Use local or a zone such as Europe/Berlin."
   },
   "confirm": {
     "title": "Turn on this automation?",
@@ -135,7 +147,8 @@
     "graceText": "Starts up to {n} min late",
     "warn": "The prompt above is exactly what each run sends. If anything here is not what you expect, cancel and edit it.",
     "submit": "Turn on",
-    "done": "{name} is on."
+    "done": "{name} is on.",
+    "nextRuns": "Next runs:"
   },
   "runs": {
     "title": "Runs of {name}",
@@ -143,5 +156,23 @@
     "empty": "No runs yet",
     "emptyDesc": "Runs appear here when the schedule fires or you run it now.",
     "task": "Open task"
+  },
+  "cronField": {
+    "minute": "minute",
+    "hour": "hour",
+    "dom": "day of month",
+    "month": "month",
+    "dow": "day of week"
+  },
+  "cronError": {
+    "count": "A cron expression has 5 fields (minute hour day-of-month month day-of-week); this one has {n}.",
+    "value": "In the {field} field, “{value}” is not a number or a name.",
+    "part": "In the {field} field, “{value}” is not a value, a range or a list.",
+    "step": "In the {field} field, the step “{value}” must be a whole number of 1 or more.",
+    "range": "In the {field} field, {value} is outside {min}–{max}.",
+    "never": "This schedule never runs: no date matches it."
+  },
+  "time": {
+    "withLocal": "{when} ({local} your time)"
   }
 }

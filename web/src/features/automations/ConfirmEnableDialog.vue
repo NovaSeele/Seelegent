@@ -10,18 +10,20 @@ import Spinner from '@/components/ui/Spinner.vue'
 import { useAutomationsStore } from '@/stores/automations'
 import { useToastStore } from '@/stores/toast'
 
-import { scheduleWords } from './automationModel'
+import { useScheduleText } from './useScheduleText'
 
 /**
  * The one place an automation is turned on. It reads the automation fresh and shows everything a run does: the
- * prompt in full, the folder, the worker, the gate, the lane, the precheck and the schedule. Turning on spends a
+ * prompt in full, the folder, the worker, the gate, the lane, the precheck and the schedule with its next three
+ * runs (from the daemon, in the automation's zone and the viewer's own time). Turning on spends a
  * one-time token for exactly this revision; the daemon refuses it if the automation changed in between, and the
  * dialog then shows the new content to confirm again. Only the dashboard can make these two calls.
  */
 const props = defineProps<{ automationId: string | null }>()
 const open = defineModel<boolean>('open', { required: true })
 
-const { t, locale } = useI18n()
+const { t } = useI18n()
+const words = useScheduleText()
 const store = useAutomationsStore()
 const toast = useToastStore()
 
@@ -29,13 +31,27 @@ const shown = shallowRef<Automation | null>(null)
 const loading = shallowRef(false)
 const busy = shallowRef(false)
 const error = shallowRef('')
+// The next runs, or null while unknown (a preview that fails leaves the schedule in words alone).
+const runs = shallowRef<string[] | null>(null)
+
+async function nextRuns(a: Automation): Promise<void> {
+  try {
+    const res = await store.api().preview({ schedule: a.schedule, timezone: a.timezone, count: 3 })
+    if (shown.value === a) runs.value = res.runs
+  } catch {
+    runs.value = null
+  }
+}
 
 async function read(): Promise<void> {
   const id = props.automationId
   if (!id) return
   loading.value = true
+  runs.value = null
   try {
-    shown.value = await store.api().get(id)
+    const a = await store.api().get(id)
+    shown.value = a
+    void nextRuns(a)
   } catch (cause) {
     shown.value = null
     error.value = errorMessage(cause)
@@ -56,11 +72,7 @@ watch(
   { immediate: true },
 )
 
-const schedule = computed(() => {
-  if (!shown.value) return ''
-  const w = scheduleWords(shown.value.schedule, locale.value)
-  return t(w.key, w.params)
-})
+const schedule = computed(() => (shown.value ? words.schedule(shown.value.schedule) : ''))
 const worker = computed(() => {
   const a = shown.value
   if (!a) return ''
@@ -115,7 +127,21 @@ async function turnOn() {
           <code>{{ shown.cwd }}</code>
         </dd>
         <dt>{{ t('automations.editor.schedule') }}</dt>
-        <dd>{{ schedule }} ({{ shown.timezone }})</dd>
+        <dd>
+          {{ schedule }} ({{ shown.timezone }})
+          <template v-if="shown.schedule.cron">
+            · <code>{{ shown.schedule.cron }}</code>
+          </template>
+          <span v-if="runs && !runs.length" class="conf__never">{{
+            t('automations.cronError.never')
+          }}</span>
+          <span v-else-if="runs" class="conf__runs">
+            {{ t('automations.confirm.nextRuns') }}
+            <ul>
+              <li v-for="r in runs" :key="r">{{ words.runTime(r, shown.timezone) }}</li>
+            </ul>
+          </span>
+        </dd>
         <dt>{{ t('automations.confirm.worker') }}</dt>
         <dd>{{ worker }}</dd>
         <dt>{{ t('automations.editor.gateLabel') }}</dt>
@@ -195,6 +221,22 @@ async function turnOn() {
   .conf__facts dd {
     margin-bottom: var(--space-2);
   }
+}
+
+.conf__runs,
+.conf__never {
+  display: block;
+  margin-top: var(--space-1);
+  color: var(--text-secondary);
+}
+
+.conf__never {
+  color: var(--attention-fg);
+}
+
+.conf__runs ul {
+  margin: 0;
+  padding-left: var(--space-4);
 }
 
 .conf__h {

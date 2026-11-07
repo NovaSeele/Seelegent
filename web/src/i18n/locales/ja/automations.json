@@ -34,7 +34,17 @@
     "daily": "毎日 {at}",
     "weekdays": "月曜から金曜の {at}",
     "weekly": "毎週{day} {at}",
-    "cron": "Cron {expr}"
+    "cron": "Cron {expr}",
+    "cronWords": {
+      "everyMinutes": "{count} 分ごと",
+      "hourly": "毎時 {minute} 分",
+      "daily": "毎日",
+      "weekdays": "月曜から金曜",
+      "weekly": "毎週{days}",
+      "monthly": "毎月 {days} 日",
+      "sentence": "{days} {time}",
+      "inMonths": "{months}の{text}"
+    }
   },
   "card": {
     "running": "実行中",
@@ -50,7 +60,8 @@
     "ran": "実行: {outcome}",
     "edit": "編集",
     "history": "履歴",
-    "delete": "削除"
+    "delete": "削除",
+    "unconfirmed": "未確認です。実行内容を確認してオンにするまで、今すぐもスケジュールでも実行できません。"
   },
   "editor": {
     "newTitle": "新しい自動化",
@@ -119,7 +130,8 @@
     "create": "作成",
     "save": "保存",
     "savedNew": "自動化を保存しました。オンにするまではオフです。",
-    "savedEdit": "自動化を保存しました。"
+    "savedEdit": "自動化を保存しました。",
+    "timezoneError": "Seelegent はこのタイムゾーンを認識できません。local または Asia/Tokyo などのゾーンを使ってください。"
   },
   "confirm": {
     "title": "この自動化をオンにしますか?",
@@ -135,7 +147,8 @@
     "graceText": "最大 {n} 分遅れて開始",
     "warn": "上のプロンプトが、各実行でそのまま送られる内容です。想定と違う点があれば、キャンセルして編集してください。",
     "submit": "オンにする",
-    "done": "{name} をオンにしました。"
+    "done": "{name} をオンにしました。",
+    "nextRuns": "次回以降の実行："
   },
   "runs": {
     "title": "{name} の実行",
@@ -143,5 +156,23 @@
     "empty": "実行はまだありません",
     "emptyDesc": "スケジュールの時刻になるか、今すぐ実行すると、ここに表示されます。",
     "task": "タスクを開く"
+  },
+  "cronField": {
+    "minute": "分",
+    "hour": "時",
+    "dom": "日",
+    "month": "月",
+    "dow": "曜日"
+  },
+  "cronError": {
+    "count": "Cron 式は 5 つのフィールド（分 時 日 月 曜日）です。この式は {n} つです。",
+    "value": "{field}フィールドの「{value}」は数値でも名前でもありません。",
+    "part": "{field}フィールドの「{value}」は値、範囲、リストのいずれでもありません。",
+    "step": "{field}フィールドの間隔「{value}」は 1 以上の整数にしてください。",
+    "range": "{field}フィールドの {value} は {min}〜{max} の範囲外です。",
+    "never": "このスケジュールは実行されません。一致する日付がありません。"
+  },
+  "time": {
+    "withLocal": "{when}（あなたの時刻 {local}）"
   }
 }

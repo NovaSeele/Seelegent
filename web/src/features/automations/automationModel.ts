@@ -13,6 +13,8 @@ import type {
   Schedule,
 } from '@/api/types'
 
+import { neverRuns, parseCron } from './cronText'
+
 export type Every = NonNullable<Schedule['every']>
 export type ScheduleMode = 'preset' | 'cron'
 export type GateChoice = 'default' | 'on' | 'off'
@@ -153,6 +155,21 @@ const sameList = (a: readonly string[], b: readonly string[]) =>
   a.length === b.length && a.every((v, i) => v === b[i])
 
 /**
+ * True when two schedules are the same as the daemon stores them (normSchedule, whose result is part of what the
+ * user confirms): a cron expression trimmed, a preset by its period, its time (with the daemon's default) and, for
+ * a weekly one only, its day. Comparing the raw objects would also count a missing weekday or the key order.
+ */
+export function sameSchedule(a: Schedule, b: Schedule): boolean {
+  const cronA = a.cron?.trim() ?? ''
+  const cronB = b.cron?.trim() ?? ''
+  if (cronA || cronB) return cronA === cronB
+  if (a.every !== b.every) return false
+  const at = (s: Schedule) => s.at || (s.every === 'hourly' ? '00:00' : '09:00')
+  if (at(a) !== at(b)) return false
+  return a.every !== 'weekly' || (a.weekday ?? 1) === (b.weekday ?? 1)
+}
+
+/**
  * True when saving the form changes what a run does or when it runs (prompt, folder, worker, gate, lane, precheck,
  * schedule, use-before-reset or the missed-run grace): the daemon then turns an enabled automation off until it is
  * confirmed again. The quota floor alone does not: it can only skip a run.
@@ -172,7 +189,7 @@ export function changesRun(f: AutomationForm, a: Automation): boolean {
     next.noLane !== a.noLane ||
     (next.precheck ?? '') !== (a.precheck ?? '') ||
     (next.timezone ?? 'local') !== a.timezone ||
-    JSON.stringify(next.schedule) !== JSON.stringify(a.schedule) ||
+    !sameSchedule(next.schedule ?? a.schedule, a.schedule) ||
     (next.quota?.useBeforeReset ?? false) !== a.quota.useBeforeReset ||
     (next.graceMinutes ?? a.graceMinutes) !== a.graceMinutes
   )
@@ -188,12 +205,18 @@ export function problems(f: AutomationForm): FormProblem[] {
   if (!f.prompt.trim()) out.push('prompt')
   if (!/^([a-zA-Z]:[\\/]|[\\/])/.test(f.cwd.trim())) out.push('cwd')
   if (f.mode === 'preset' && !TIME.test(f.at.trim())) out.push('at')
-  if (f.mode === 'cron' && f.cron.trim().split(/\s+/).length !== 5) out.push('cron')
+  if (f.mode === 'cron' && cronProblem(f.cron)) out.push('cron')
   if (!Number.isFinite(f.minRemaining) || f.minRemaining < 0 || f.minRemaining > 100)
     out.push('minRemaining')
   if (!Number.isInteger(f.graceMinutes) || f.graceMinutes < 0 || f.graceMinutes > 1440)
     out.push('graceMinutes')
   return out
+}
+
+/** True when a cron expression cannot be saved: it does not parse, or no date matches it. */
+export function cronProblem(expr: string): boolean {
+  const parsed = parseCron(expr)
+  return !('cron' in parsed) || neverRuns(parsed.cron)
 }
 
 /** The name of weekday `d` (0 = Sunday) in `locale`. */

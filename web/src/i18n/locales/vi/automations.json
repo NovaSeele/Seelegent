@@ -34,7 +34,17 @@
     "daily": "Mỗi ngày lúc {at}",
     "weekdays": "Thứ Hai đến thứ Sáu lúc {at}",
     "weekly": "Mỗi {day} lúc {at}",
-    "cron": "Cron {expr}"
+    "cron": "Cron {expr}",
+    "cronWords": {
+      "everyMinutes": "Mỗi {count} phút",
+      "hourly": "Mỗi giờ vào phút {minute}",
+      "daily": "mỗi ngày",
+      "weekdays": "từ thứ Hai đến thứ Sáu",
+      "weekly": "mỗi {days}",
+      "monthly": "ngày {days} hằng tháng",
+      "sentence": "{time} {days}",
+      "inMonths": "{text}, trong {months}"
+    }
   },
   "card": {
     "running": "Đang chạy",
@@ -50,7 +60,8 @@
     "ran": "Lần chạy: {outcome}",
     "edit": "Sửa",
     "history": "Lịch sử",
-    "delete": "Xóa"
+    "delete": "Xóa",
+    "unconfirmed": "Chưa xác nhận: tự động hóa này không chạy được, ngay hay theo lịch, cho đến khi bạn xem nội dung và bật nó."
   },
   "editor": {
     "newTitle": "Thêm việc tự động",
@@ -58,7 +69,7 @@
     "desc": "Một prompt đã lưu, giao cho worker theo lịch. Nó được lưu ở trạng thái tắt: bạn bật sau khi xem lại.",
     "name": "Tên",
     "nameHint": "Để trống: dòng đầu của prompt.",
-    "prompt": "Prompt",
+    "prompt": "Lời nhắc",
     "promptHint": "Việc worker được yêu cầu làm mỗi lần chạy.",
     "promptError": "Hãy nhập prompt.",
     "cwd": "Thư mục",
@@ -119,23 +130,25 @@
     "create": "Tạo",
     "save": "Lưu",
     "savedNew": "Đã lưu việc tự động. Nó đang tắt cho tới khi bạn bật.",
-    "savedEdit": "Đã lưu việc tự động."
+    "savedEdit": "Đã lưu việc tự động.",
+    "timezoneError": "Seelegent không biết múi giờ này. Dùng local hoặc một múi như Asia/Ho_Chi_Minh."
   },
   "confirm": {
     "title": "Bật việc tự động này?",
     "desc": "Nó sẽ tự chạy theo lịch này, không ai theo dõi. Hãy xem kỹ từng dòng.",
     "loading": "Đang tải việc tự động…",
     "already": "Việc tự động này đã bật.",
-    "worker": "Worker",
+    "worker": "Người thực hiện",
     "defaultWorker": "Worker bất kỳ",
     "laneDefault": "Theo cài đặt",
     "none": "Không có",
-    "quota": "Quota",
+    "quota": "Hạn mức",
     "quotaText": "Bỏ qua khi còn dưới {n} %",
     "graceText": "Bắt đầu trễ tối đa {n} phút",
     "warn": "Prompt ở trên chính là nội dung mỗi lần chạy gửi đi. Nếu có gì không như bạn nghĩ, hãy hủy và sửa lại.",
     "submit": "Bật",
-    "done": "Đã bật {name}."
+    "done": "Đã bật {name}.",
+    "nextRuns": "Các lần chạy tới:"
   },
   "runs": {
     "title": "Các lần chạy của {name}",
@@ -143,5 +156,23 @@
     "empty": "Chưa có lần chạy nào",
     "emptyDesc": "Các lần chạy hiện ở đây khi tới giờ theo lịch hoặc khi bạn chạy ngay.",
     "task": "Mở tác vụ"
+  },
+  "cronField": {
+    "minute": "phút",
+    "hour": "giờ",
+    "dom": "ngày trong tháng",
+    "month": "tháng",
+    "dow": "thứ trong tuần"
+  },
+  "cronError": {
+    "count": "Biểu thức cron có 5 trường (phút giờ ngày tháng thứ); biểu thức này có {n}.",
+    "value": "Trường {field}: “{value}” không phải số hay tên.",
+    "part": "Trường {field}: “{value}” không phải giá trị, khoảng hay danh sách.",
+    "step": "Trường {field}: bước “{value}” phải là số nguyên từ 1 trở lên.",
+    "range": "Trường {field}: {value} nằm ngoài {min}–{max}.",
+    "never": "Lịch này không bao giờ chạy: không có ngày nào khớp."
+  },
+  "time": {
+    "withLocal": "{when} ({local} giờ của bạn)"
   }
 }

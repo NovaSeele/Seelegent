@@ -7,6 +7,7 @@ import {
   changesRun,
   formSchedule,
   problems,
+  sameSchedule,
   scheduleWords,
   toForm,
   toInput,
@@ -98,6 +99,32 @@ describe('automationModel', () => {
     )
     expect(scheduleWords({ cron: '*/5 * * * *' }, 'en').key).toBe('automations.schedule.cron')
     expect(weekdayName(1, 'en')).toBe('Monday')
+  })
+
+  it('compares schedules as the daemon stores them', () => {
+    // The daemon drops a preset's weekday unless it is weekly and fills in the default time.
+    expect(
+      sameSchedule({ every: 'daily', at: '07:30', weekday: 3 }, { every: 'daily', at: '07:30' }),
+    ).toBe(true)
+    expect(sameSchedule({ every: 'daily' }, { every: 'daily', at: '09:00' })).toBe(true)
+    expect(sameSchedule({ every: 'hourly' }, { every: 'hourly', at: '00:00' })).toBe(true)
+    expect(
+      sameSchedule({ every: 'weekly', at: '09:00' }, { every: 'weekly', at: '09:00', weekday: 1 }),
+    ).toBe(true)
+    expect(
+      sameSchedule({ every: 'weekly', at: '09:00', weekday: 2 }, { every: 'weekly', at: '09:00' }),
+    ).toBe(false)
+    expect(sameSchedule({ cron: ' 0 6 * * * ' }, { cron: '0 6 * * *' })).toBe(true)
+    expect(sameSchedule({ cron: '0 6 * * *' }, { every: 'daily', at: '06:00' })).toBe(false)
+    const a = automation({ schedule: { every: 'weekly', at: '09:00', weekday: 1 } })
+    expect(changesRun(toForm(a), a)).toBe(false)
+  })
+
+  it('refuses a cron expression that does not parse or never runs', () => {
+    const ok = { ...toForm(automation()), mode: 'cron' as const }
+    expect(problems({ ...ok, cron: '0 6 1 * *' })).toEqual([])
+    expect(problems({ ...ok, cron: '61 * * * *' })).toEqual(['cron'])
+    expect(problems({ ...ok, cron: '0 6 31 2 *' })).toEqual(['cron'])
   })
 
   it('names the state: on, waiting for the user, or off', () => {

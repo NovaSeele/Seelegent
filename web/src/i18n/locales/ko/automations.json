@@ -34,7 +34,17 @@
     "daily": "매일 {at}",
     "weekdays": "월요일부터 금요일 {at}",
     "weekly": "매주 {day} {at}",
-    "cron": "Cron {expr}"
+    "cron": "Cron {expr}",
+    "cronWords": {
+      "everyMinutes": "{count}분마다",
+      "hourly": "매시 {minute}분",
+      "daily": "매일",
+      "weekdays": "월요일부터 금요일",
+      "weekly": "매주 {days}",
+      "monthly": "매월 {days}일",
+      "sentence": "{days} {time}",
+      "inMonths": "{months} {text}"
+    }
   },
   "card": {
     "running": "실행 중",
@@ -50,7 +60,8 @@
     "ran": "실행: {outcome}",
     "edit": "편집",
     "history": "기록",
-    "delete": "삭제"
+    "delete": "삭제",
+    "unconfirmed": "확인되지 않았습니다. 실행 내용을 확인하고 켜기 전까지는 지금도, 일정에 따라서도 실행할 수 없습니다."
   },
   "editor": {
     "newTitle": "새 자동화",
@@ -119,7 +130,8 @@
     "create": "만들기",
     "save": "저장",
     "savedNew": "자동화를 저장했습니다. 켜기 전까지는 꺼져 있습니다.",
-    "savedEdit": "자동화를 저장했습니다."
+    "savedEdit": "자동화를 저장했습니다.",
+    "timezoneError": "Seelegent가 이 시간대를 알지 못합니다. local 또는 Asia/Seoul 같은 시간대를 쓰세요."
   },
   "confirm": {
     "title": "이 자동화를 켤까요?",
@@ -135,7 +147,8 @@
     "graceText": "최대 {n}분 늦게 시작",
     "warn": "위 프롬프트가 실행마다 그대로 보내지는 내용입니다. 예상과 다른 점이 있으면 취소하고 편집하세요.",
     "submit": "켜기",
-    "done": "{name}을(를) 켰습니다."
+    "done": "{name}을(를) 켰습니다.",
+    "nextRuns": "다음 실행:"
   },
   "runs": {
     "title": "{name} 실행 기록",
@@ -143,5 +156,23 @@
     "empty": "아직 실행이 없습니다",
     "emptyDesc": "일정 시각이 되거나 지금 실행하면 여기에 나타납니다.",
     "task": "작업 열기"
+  },
+  "cronField": {
+    "minute": "분",
+    "hour": "시",
+    "dom": "일",
+    "month": "월",
+    "dow": "요일"
+  },
+  "cronError": {
+    "count": "Cron 식은 5개 필드(분 시 일 월 요일)입니다. 이 식은 {n}개입니다.",
+    "value": "{field} 필드의 “{value}”은(는) 숫자나 이름이 아닙니다.",
+    "part": "{field} 필드의 “{value}”은(는) 값, 범위, 목록이 아닙니다.",
+    "step": "{field} 필드의 간격 “{value}”은(는) 1 이상의 정수여야 합니다.",
+    "range": "{field} 필드의 {value}은(는) {min}~{max} 범위를 벗어납니다.",
+    "never": "이 일정은 실행되지 않습니다. 맞는 날짜가 없습니다."
+  },
+  "time": {
+    "withLocal": "{when} (내 시간 {local})"
   }
 }

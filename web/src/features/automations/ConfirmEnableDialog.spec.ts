@@ -40,9 +40,14 @@ describe('ConfirmEnableDialog', () => {
 
   it('shows what a run does when it is mounted open', async () => {
     const { plugins } = await setupApp()
+    const preview = {
+      runs: ['2026-11-08T07:30:00Z', '2026-11-09T07:30:00Z', '2026-11-10T07:30:00Z'],
+      local: [],
+      timezone: 'local',
+    }
     const fetch = vi.fn<typeof globalThis.fetch>(
-      async () =>
-        new Response(JSON.stringify(automation), {
+      async (input) =>
+        new Response(JSON.stringify(String(input).endsWith('/preview') ? preview : automation), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
         }),
@@ -53,9 +58,16 @@ describe('ConfirmEnableDialog', () => {
       { attachTo: document.body, global: { plugins } },
     )
     await flush()
-    expect(fetch).toHaveBeenCalledTimes(1)
     const dialog = document.querySelector('[role=dialog]') as HTMLElement
     await vi.waitFor(() => expect(dialog.textContent).toContain('Tidy the changelog'))
     expect(dialog.textContent).toContain('/srv/app')
+    // Its next three runs come from the daemon's preview of exactly this schedule and zone.
+    await vi.waitFor(() => expect(dialog.querySelectorAll('li')).toHaveLength(3))
+    const urls = fetch.mock.calls.map(([input]) => String(input))
+    expect(urls.filter((u) => u.endsWith('/automations/a1'))).toHaveLength(1)
+    const body = JSON.parse(
+      String(fetch.mock.calls.find(([u]) => String(u).endsWith('/preview'))?.[1]?.body),
+    )
+    expect(body).toEqual({ schedule: automation.schedule, timezone: 'local', count: 3 })
   })
 })

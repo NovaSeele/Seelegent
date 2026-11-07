@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, shallowRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
-import { errorMessage } from '@/api/client'
+import { ApiError, errorMessage } from '@/api/client'
 import type { SchedulePreview } from '@/api/types'
 import SegmentedControl, { type SegmentOption } from '@/components/ui/SegmentedControl.vue'
 import Select, { type SelectOption } from '@/components/ui/Select.vue'
@@ -15,21 +15,26 @@ import {
   type AutomationForm,
   type Every,
   type FormProblem,
+  problems as formProblems,
   type ScheduleMode,
   weekdayName,
 } from './automationModel'
+import { neverRuns, parseCron } from './cronText'
 import { useFormFields } from './useFormFields'
+import { useScheduleText } from './useScheduleText'
 
 /**
  * When an automation runs: a preset (hourly, daily, weekdays, weekly at a time) or a 5-field cron expression, in
- * a time zone. The next run times come from the daemon (the same code that runs the schedule), a moment after
- * the last change.
+ * a time zone. A cron expression is checked as it is typed, a moment after the last key, and what is wrong shows
+ * under the field. The next run times come from the daemon (the same code that runs the schedule); an answer to an
+ * older edit is dropped, and the old times are dimmed while the new ones load.
  */
 const form = defineModel<AutomationForm>({ required: true })
-defineProps<{ problems: readonly FormProblem[] }>()
+const props = defineProps<{ problems: readonly FormProblem[] }>()
 
 const { t, locale } = useI18n()
 const store = useAutomationsStore()
+const words = useScheduleText()
 const field = useFormFields(form)
 const mode = field('mode')
 const every = field('every')
@@ -49,35 +54,62 @@ const weekdays = computed<SelectOption<number>[]>(() =>
   [1, 2, 3, 4, 5, 6, 0].map((value) => ({ value, label: weekdayName(value, locale.value) })),
 )
 
+// The cron text last checked: errors follow the field a moment after typing stops, not at every key. Once Save
+// has refused the field, it is checked at every key until it is right.
+const checked = shallowRef(form.value.cron)
+const cronError = computed(() => {
+  if (mode.value !== 'cron') return undefined
+  const text = (props.problems.includes('cron') ? form.value.cron : checked.value).trim()
+  if (!text) return props.problems.includes('cron') ? t('automations.editor.cronError') : undefined
+  const parsed = parseCron(text)
+  if (!('cron' in parsed)) return words.cronProblem(parsed.problem)
+  return neverRuns(parsed.cron) ? t('automations.cronError.never') : undefined
+})
+
 const preview = shallowRef<SchedulePreview | null>(null)
+const previewZone = shallowRef('local')
+const stale = shallowRef(false)
 const previewError = shallowRef('')
+const zoneError = shallowRef(false)
 let timer: ReturnType<typeof setTimeout> | undefined
 let abort: AbortController | undefined
 
 function refresh() {
   clearTimeout(timer)
-  timer = setTimeout(async () => {
-    abort?.abort()
-    const ctl = new AbortController()
-    abort = ctl
-    try {
-      const res = await store.api().preview(
-        {
-          schedule: formSchedule(form.value),
-          timezone: form.value.timezone.trim() || 'local',
-          count: 5,
-        },
-        ctl.signal,
-      )
-      if (abort !== ctl) return
-      preview.value = res
-      previewError.value = ''
-    } catch (cause) {
-      if (ctl.signal.aborted) return
-      preview.value = null
-      previewError.value = errorMessage(cause)
-    }
-  }, 400)
+  abort?.abort()
+  // What was shown belongs to the old schedule: no old error stays, and the old times are dimmed.
+  previewError.value = ''
+  zoneError.value = false
+  stale.value = true
+  timer = setTimeout(load, 400)
+}
+
+async function load() {
+  checked.value = form.value.cron
+  const zone = form.value.timezone.trim() || 'local'
+  // A schedule the form already refuses has no runs to show (and the field says why).
+  if (formProblems(form.value).some((p) => p === 'cron' || p === 'at')) {
+    preview.value = null
+    return
+  }
+  const ctl = new AbortController()
+  abort = ctl
+  try {
+    const res = await store
+      .api()
+      .preview({ schedule: formSchedule(form.value), timezone: zone, count: 5 }, ctl.signal)
+    // An answer to an older edit (aborted, or overtaken by a newer request) is dropped.
+    if (ctl.signal.aborted || abort !== ctl) return
+    preview.value = res
+    previewZone.value = zone
+    stale.value = false
+  } catch (cause) {
+    if (ctl.signal.aborted || abort !== ctl) return
+    preview.value = null
+    // The schedule itself was checked above, so a refused preview means the zone.
+    if (cause instanceof ApiError && cause.status === 400) zoneError.value = true
+    else previewError.value = errorMessage(cause)
+  }
 }
 
 watch(
@@ -128,22 +160,26 @@ onBeforeUnmount(() => {
         class="sched__cron"
         :label="t('automations.editor.cronLabel')"
         :hint="t('automations.editor.cronHint')"
-        :error="problems.includes('cron') ? t('automations.editor.cronError') : undefined"
+        :error="cronError"
       />
       <TextField
         v-model="timezone"
         :label="t('automations.editor.timezone')"
         :hint="t('automations.editor.timezoneHint')"
+        :error="zoneError ? t('automations.editor.timezoneError') : undefined"
       />
     </div>
     <div class="sched__preview" aria-live="polite">
       <p v-if="previewError" class="sched__error">{{ previewError }}</p>
-      <template v-else-if="preview">
+      <template v-else-if="preview && !cronError && !zoneError">
         <p class="sched__label">
           {{ t('automations.editor.nextRuns', { zone: preview.timezone }) }}
         </p>
-        <ul class="sched__runs">
-          <li v-for="r in preview.local" :key="r">{{ r }}</li>
+        <p v-if="!preview.runs.length" class="sched__error">
+          {{ t('automations.cronError.never') }}
+        </p>
+        <ul v-else class="sched__runs" :class="{ 'sched__runs--stale': stale }" :aria-busy="stale">
+          <li v-for="r in preview.runs" :key="r">{{ words.runTime(r, previewZone) }}</li>
         </ul>
       </template>
     </div>
@@ -200,7 +236,10 @@ onBeforeUnmount(() => {
   margin: var(--space-1) 0 0;
   padding: 0;
   list-style: none;
-  font-family: var(--font-mono);
+}
+
+.sched__runs--stale {
+  opacity: 0.55;
 }
 
 .sched__error {

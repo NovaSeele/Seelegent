@@ -50,7 +50,12 @@ fields follow Vixie cron: when either one starts with `*` (`*`, `*/2`) a day mus
 matching either one runs. So `0 9 */2 * 1` runs on Mondays that fall on an odd day, `0 9 1,15 * 1` on the 1st, the
 15th and every Monday, and `0 9 * * 1` on Mondays only. `timezone` is `local` or an IANA zone; a time that does not exist on a
 daylight-saving day runs as late as the gap is long (02:30 becomes 03:30), and a repeated hour runs once. `POST /automations/preview`
-answers the next run times as the scheduler computes them (the editor shows them as you type).
+answers the next run times as the scheduler computes them (the editor shows them as you type). A schedule no date
+matches within five years (`0 6 31 2 *`) is refused on create and edit (`400 invalid`); its preview has no runs.
+The dashboard reads cron expressions with the same rules (`web/src/features/automations/cronText.ts`): it names the
+wrong field under the cron box, refuses to save a schedule that never runs, and puts common shapes in words
+(`0 6 1 * *` is "06:00 on day 1 of every month"); times show in the automation's zone with the viewer's own in
+brackets.
 
 The timer sleeps until the earliest next run (at most a minute, so the master switch and the before-reset rule are
 seen). A run missed while the daemon was off still starts if it is at most `graceMinutes` late (default 60);

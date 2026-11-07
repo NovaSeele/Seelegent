@@ -34,7 +34,17 @@
     "daily": "每天 {at}",
     "weekdays": "周一至周五 {at}",
     "weekly": "每{day} {at}",
-    "cron": "Cron {expr}"
+    "cron": "Cron {expr}",
+    "cronWords": {
+      "everyMinutes": "每 {count} 分钟",
+      "hourly": "每小时第 {minute} 分",
+      "daily": "每天",
+      "weekdays": "周一至周五",
+      "weekly": "每{days}",
+      "monthly": "每月 {days} 日",
+      "sentence": "{days} {time}",
+      "inMonths": "{months}的{text}"
+    }
   },
   "card": {
     "running": "运行中",
@@ -50,7 +60,8 @@
     "ran": "运行：{outcome}",
     "edit": "编辑",
     "history": "记录",
-    "delete": "删除"
+    "delete": "删除",
+    "unconfirmed": "未确认：在你查看其运行内容并开启之前，它既不能立即运行，也不会按计划运行。"
   },
   "editor": {
     "newTitle": "新建自动化",
@@ -119,14 +130,15 @@
     "create": "创建",
     "save": "保存",
     "savedNew": "自动化已保存。开启前它保持关闭。",
-    "savedEdit": "自动化已保存。"
+    "savedEdit": "自动化已保存。",
+    "timezoneError": "Seelegent 不认识这个时区。请使用 local 或 Asia/Shanghai 这样的时区。"
   },
   "confirm": {
     "title": "开启这个自动化？",
     "desc": "它会按此计划自动运行，无人看管。请逐行检查。",
     "loading": "正在加载自动化…",
     "already": "这个自动化已经开启。",
-    "worker": "Worker",
+    "worker": "执行者",
     "defaultWorker": "任意 worker",
     "laneDefault": "按设置",
     "none": "无",
@@ -135,7 +147,8 @@
     "graceText": "最多延迟 {n} 分钟开始",
     "warn": "上面的提示词就是每次运行发送的内容。如有不符，请取消并编辑。",
     "submit": "开启",
-    "done": "{name} 已开启。"
+    "done": "{name} 已开启。",
+    "nextRuns": "接下来的运行："
   },
   "runs": {
     "title": "{name} 的运行记录",
@@ -143,5 +156,23 @@
     "empty": "还没有运行",
     "emptyDesc": "到达计划时间或你立即运行时，运行记录会显示在这里。",
     "task": "打开任务"
+  },
+  "cronField": {
+    "minute": "分钟",
+    "hour": "小时",
+    "dom": "日",
+    "month": "月",
+    "dow": "星期"
+  },
+  "cronError": {
+    "count": "Cron 表达式有 5 个字段（分 时 日 月 星期），这里有 {n} 个。",
+    "value": "{field}字段中的“{value}”不是数字或名称。",
+    "part": "{field}字段中的“{value}”不是值、范围或列表。",
+    "step": "{field}字段中的步长“{value}”必须是不小于 1 的整数。",
+    "range": "{field}字段中的 {value} 超出 {min}–{max}。",
+    "never": "此计划永远不会运行：没有匹配的日期。"
+  },
+  "time": {
+    "withLocal": "{when}（你的时间 {local}）"
   }
 }

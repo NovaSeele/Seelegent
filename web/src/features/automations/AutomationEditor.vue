@@ -48,6 +48,16 @@ watch(open, (now) => {
   shown.value = []
   error.value = ''
 })
+// After a refused save, the marks follow the fields: a fixed field loses its error at once, and the form's own
+// message goes with the last one (a daemon error goes at the next edit).
+watch(
+  form,
+  () => {
+    if (shown.value.length) shown.value = findProblems(form.value)
+    if (!shown.value.length) error.value = ''
+  },
+  { deep: true },
+)
 
 const editing = computed(() => props.automation !== null)
 const turnsOff = computed(

@@ -34,7 +34,17 @@
     "daily": "Cada día a las {at}",
     "weekdays": "De lunes a viernes a las {at}",
     "weekly": "Cada {day} a las {at}",
-    "cron": "Cron {expr}"
+    "cron": "Cron {expr}",
+    "cronWords": {
+      "everyMinutes": "Cada minuto | Cada {count} minutos",
+      "hourly": "Cada hora en el minuto :{minute}",
+      "daily": "todos los días",
+      "weekdays": "de lunes a viernes",
+      "weekly": "cada {days}",
+      "monthly": "el día {days} de cada mes | los días {days} de cada mes",
+      "sentence": "{time} {days}",
+      "inMonths": "{text}, en {months}"
+    }
   },
   "card": {
     "running": "En curso",
@@ -50,7 +60,8 @@
     "ran": "Ejecución: {outcome}",
     "edit": "Editar",
     "history": "Historial",
-    "delete": "Eliminar"
+    "delete": "Eliminar",
+    "unconfirmed": "Sin confirmar: no puede ejecutarse, ni ahora ni según su programación, hasta que revises lo que ejecuta y la actives."
   },
   "editor": {
     "newTitle": "Nueva automatización",
@@ -58,7 +69,7 @@
     "desc": "Un prompt guardado que se entrega a un worker según un horario. Se guarda desactivada: la activas tras revisarla.",
     "name": "Nombre",
     "nameHint": "Vacío: la primera línea del prompt.",
-    "prompt": "Prompt",
+    "prompt": "Instrucciones",
     "promptHint": "Lo que se pide al worker en cada ejecución.",
     "promptError": "Escribe un prompt.",
     "cwd": "Carpeta",
@@ -119,14 +130,15 @@
     "create": "Crear",
     "save": "Guardar",
     "savedNew": "Automatización guardada. Está desactivada hasta que la actives.",
-    "savedEdit": "Automatización guardada."
+    "savedEdit": "Automatización guardada.",
+    "timezoneError": "Seelegent no conoce esta zona horaria. Usa local o una zona como Europe/Madrid."
   },
   "confirm": {
     "title": "¿Activar esta automatización?",
     "desc": "Se ejecutará sola, con este horario, sin nadie mirando. Revisa cada línea.",
     "loading": "Cargando la automatización…",
     "already": "Esta automatización ya está activada.",
-    "worker": "Worker",
+    "worker": "Quién la ejecuta",
     "defaultWorker": "Cualquier worker",
     "laneDefault": "Según los ajustes",
     "none": "Ninguno",
@@ -135,7 +147,8 @@
     "graceText": "Empieza hasta {n} min tarde",
     "warn": "El prompt de arriba es exactamente lo que envía cada ejecución. Si algo no es lo que esperas, cancela y edítalo.",
     "submit": "Activar",
-    "done": "{name} está activada."
+    "done": "{name} está activada.",
+    "nextRuns": "Próximas ejecuciones:"
   },
   "runs": {
     "title": "Ejecuciones de {name}",
@@ -143,5 +156,23 @@
     "empty": "Aún no hay ejecuciones",
     "emptyDesc": "Las ejecuciones aparecen aquí cuando llega su hora o cuando la ejecutas ahora.",
     "task": "Abrir tarea"
+  },
+  "cronField": {
+    "minute": "minuto",
+    "hour": "hora",
+    "dom": "día del mes",
+    "month": "mes",
+    "dow": "día de la semana"
+  },
+  "cronError": {
+    "count": "Una expresión cron tiene 5 campos (minuto hora día-del-mes mes día-de-la-semana); esta tiene {n}.",
+    "value": "En el campo {field}, «{value}» no es un número ni un nombre.",
+    "part": "En el campo {field}, «{value}» no es un valor, un rango ni una lista.",
+    "step": "En el campo {field}, el paso «{value}» debe ser un número entero de 1 o más.",
+    "range": "En el campo {field}, {value} está fuera de {min}–{max}.",
+    "never": "Esta programación nunca se ejecuta: ninguna fecha coincide."
+  },
+  "time": {
+    "withLocal": "{when} ({local} hora local)"
   }
 }
