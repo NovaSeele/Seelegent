@@ -155,9 +155,10 @@ its counts and the latest regression runs.
 
 A regression run (`POST /proof/run`) runs every spec gate command, feature gate and doctrine check again from the
 repository root and records the results with source `regression`. It is refused while other tasks of the repository
-are active (`409`, `details.activeTaskIds`) unless `force` (then the run is marked `noisy`); one run per project at
-a time. A dirty worktree is marked `dirty`. Progress is published as the SSE event `proof.run`. Runs left running by
-a stopped daemon are marked abandoned (`error`) at the next start.
+are active (`409`, `details.activeTaskIds`; a task waiting for its dependencies has no worker and does not count)
+unless `force` (then the run is marked `noisy`); one run per project at a time. A dirty worktree is marked `dirty`.
+Progress is published as the SSE event `proof.run`. Runs left running by a stopped daemon are marked abandoned
+(`error`) at the next start.
 
 `GET /proof/stats` counts gated tasks, gate runs, first runs that were red, red gates fixed before the lead's
 review, automatic fix turns, budgets used up (a gate red only through foreign steps spent none), lane refusals,

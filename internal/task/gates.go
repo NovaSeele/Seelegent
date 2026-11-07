@@ -527,8 +527,9 @@ func (s *Service) Lanes(ctx context.Context, cwd string) (api.LanesView, error) 
 	return api.LanesView{RepoRoot: root, Mode: s.settings().Lanes, Claims: api.NonNil(claims)}, nil
 }
 
-// ActiveIn returns the ids of the tasks that are pending in the repository at root (proof.Options.Active: a
-// regression run waits for them).
+// ActiveIn returns the ids of the active tasks of the repository at root (proof.Options.Active: a regression run
+// waits for them). A task waiting for its dependencies is left out: it has no worker that could change files under
+// the run (Recent returns it for its lane claim).
 func (s *Service) ActiveIn(ctx context.Context, root string) ([]string, error) {
 	tasks, err := s.repo.Recent(ctx, s.now(), statsTasks)
 	if err != nil {
@@ -537,7 +538,7 @@ func (s *Service) ActiveIn(ctx context.Context, root string) ([]string, error) {
 	key := rootKey(root)
 	var out []string
 	for _, t := range tasks {
-		if Pending(t.Status) && t.Kind != KindVerify && rootKey(claimRoot(t)) == key {
+		if Active(t.Status) && t.Kind != KindVerify && rootKey(claimRoot(t)) == key {
 			out = append(out, t.ID)
 		}
 	}

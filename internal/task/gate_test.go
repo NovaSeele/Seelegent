@@ -579,3 +579,23 @@ func TestStatsForeignRed(t *testing.T) {
 		t.Errorf("stats = %+v", stats)
 	}
 }
+
+// TestActiveInLeavesOutWaitingTasks: a task waiting for its dependencies holds its lane claim but has no worker, so
+// it does not hold up a regression run (409 active_tasks); the task it waits for does.
+func TestActiveInLeavesOutWaitingTasks(t *testing.T) {
+	h := newHarness(t)
+	h.initRepo(map[string]string{"a.txt": "a\n"})
+	// No account: A stays queued and X waits for it.
+	a := h.delegate(api.DelegateRequest{Title: "A", Lane: []string{"a.txt"}})
+	x := h.delegate(api.DelegateRequest{Title: "X", Lane: []string{"docs/"}, After: []string{a.ID}})
+	if st := h.task(x.ID).Status; st != StatusWaitingDeps {
+		t.Fatalf("X = %s", st)
+	}
+	ids, err := h.s.ActiveIn(t.Context(), h.cwd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(ids, []string{a.ID}) {
+		t.Errorf("active = %v, want only %s", ids, a.ID)
+	}
+}
