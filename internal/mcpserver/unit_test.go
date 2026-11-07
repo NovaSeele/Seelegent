@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log/slog"
 	"maps"
 	"net/http"
 	"net/http/httptest"
@@ -582,6 +583,45 @@ func TestUnsupportedOptions(t *testing.T) {
 	}
 	if n := calls.Load(); n != 0 {
 		t.Fatalf("refused options reached the daemon %d times", n)
+	}
+}
+
+// lockedBuffer is a log sink the SDK's goroutines may write to.
+type lockedBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *lockedBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *lockedBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
+
+// TestQuietSDKLog: the SDK's Info lines (session start and end) stay out of the log; the server's own lines stay.
+func TestQuietSDKLog(t *testing.T) {
+	var logs lockedBuffer
+	_, c := newStub(t, nil)
+	cs := stubSession(t, c, func(o *mcpserver.Options) {
+		o.Logger = slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	})
+	fails(t, cs, "meeting", map[string]any{})
+	_ = cs.Close()
+	time.Sleep(100 * time.Millisecond)
+	out := logs.String()
+	if !strings.Contains(out, "mcp: tool error") {
+		t.Fatalf("the server's own line is missing:\n%s", out)
+	}
+	for _, sdk := range []string{"server run start", "session connected", "session ended", "session initialized"} {
+		if strings.Contains(out, sdk) {
+			t.Errorf("SDK line %q logged:\n%s", sdk, out)
+		}
 	}
 }
 

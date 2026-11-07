@@ -112,7 +112,8 @@ func New(o Options) (*Server, error) {
 		Instructions: "Seelegent dispatches coding work to worker accounts (Antigravity/Gemini by default; other " +
 			"enabled backends and department members on request). You are the lead: design, write precise briefs, " +
 			"review and test; let workers write the code. Live view: " + s.dashboard(),
-		Logger:       o.Logger,
+		// The SDK logs every session start and end at Info; only its warnings and errors are worth stderr.
+		Logger:       slog.New(minLevel{h: o.Logger.Handler(), min: slog.LevelWarn}),
 		Capabilities: &mcp.ServerCapabilities{Tools: &mcp.ToolCapabilities{}},
 	})
 	handlers := s.handlers()
@@ -127,6 +128,26 @@ func New(o Options) (*Server, error) {
 		s.mcp.AddTool(&mcp.Tool{Name: d.Name, Description: d.Description, InputSchema: d.InputSchema}, s.wrap(d.Name, h))
 	}
 	return s, nil
+}
+
+// minLevel passes the records of h at or above min.
+type minLevel struct {
+	h   slog.Handler
+	min slog.Level
+}
+
+func (m minLevel) Enabled(ctx context.Context, l slog.Level) bool {
+	return l >= m.min && m.h.Enabled(ctx, l)
+}
+
+func (m minLevel) Handle(ctx context.Context, r slog.Record) error { return m.h.Handle(ctx, r) }
+
+func (m minLevel) WithAttrs(attrs []slog.Attr) slog.Handler {
+	return minLevel{h: m.h.WithAttrs(attrs), min: m.min}
+}
+
+func (m minLevel) WithGroup(name string) slog.Handler {
+	return minLevel{h: m.h.WithGroup(name), min: m.min}
 }
 
 // MCP returns the underlying MCP server (tests connect it to an in-memory transport).
