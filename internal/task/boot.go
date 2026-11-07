@@ -26,6 +26,7 @@ func (s *Service) Boot(ctx context.Context) ([]api.TaskSummary, error) {
 	var tasks []*Task
 	err := s.repo.db.Read(ctx, func(tx *sql.Tx) error {
 		tasks = nil
+		//nolint:gosec // only constant text and placeholders are joined; the kinds are bound arguments
 		rows, err := tx.QueryContext(ctx, `WITH shown AS (SELECT * FROM tasks WHERE `+shown+`)
 			SELECT `+taskColumns+` FROM shown
 			WHERE status IN (?, ?, ?, ?)

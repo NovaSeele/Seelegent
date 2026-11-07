@@ -218,8 +218,8 @@ func view(n api.Note, d api.TaskDetail, files *fileLines) api.Note {
 		}
 	}
 	ended := false
-	for _, tu := range d.Turns {
-		if tu.N == n.SentInTurn && tu.EndedAt != "" {
+	for i := range d.Turns {
+		if tu := &d.Turns[i]; tu.N == n.SentInTurn && tu.EndedAt != "" {
 			ended = true
 		}
 	}
@@ -239,8 +239,8 @@ func (s *Store) List(ctx context.Context, id string) ([]api.Note, error) {
 	}
 	files := &fileLines{root: s.root(ctx, d), cache: map[string][]string{}}
 	out := make([]api.Note, 0, len(list))
-	for _, n := range list {
-		out = append(out, view(n, d, files))
+	for i := range list {
+		out = append(out, view(list[i], d, files))
 	}
 	return out, nil
 }
@@ -274,8 +274,8 @@ func (s *Store) refresh(ctx context.Context, d api.TaskDetail) ([]api.Note, erro
 		return list, nil
 	}
 	if err := s.o.DB.Write(ctx, func(tx *sql.Tx) error {
-		for _, n := range changed {
-			if err := put(ctx, tx, n); err != nil {
+		for i := range changed {
+			if err := put(ctx, tx, changed[i]); err != nil {
 				return err
 			}
 		}
@@ -460,9 +460,9 @@ func (s *Store) Send(ctx context.Context, id string, req api.NotesSendRequest) (
 	}
 	files := &fileLines{root: s.root(ctx, d), cache: map[string][]string{}}
 	var send []api.Note
-	for _, n := range list {
-		if st := view(n, d, files).Status; st == api.NoteStatusDraft || st == api.NoteStatusUnaddressed {
-			send = append(send, n)
+	for i := range list {
+		if st := view(list[i], d, files).Status; st == api.NoteStatusDraft || st == api.NoteStatusUnaddressed {
+			send = append(send, list[i])
 		}
 	}
 	if len(send) == 0 && extra == "" {
@@ -476,7 +476,8 @@ func (s *Store) Send(ctx context.Context, id string, req api.NotesSendRequest) (
 	sent := make([]string, 0, len(send))
 	err = s.o.DB.Write(ctx, func(tx *sql.Tx) error {
 		sent = sent[:0]
-		for _, n := range send {
+		for i := range send {
+			n := send[i]
 			n.State, n.SentInTurn, n.SentAt, n.AnchorTurn = api.NoteSent, sum.TurnCount, now, sum.TurnCount-1
 			if err := put(ctx, tx, n); err != nil {
 				return err
@@ -499,7 +500,8 @@ func Message(notes []api.Note, extra string) string {
 	for _, who := range []string{"user", "lead"} {
 		var b strings.Builder
 		k := 0
-		for _, n := range notes {
+		for i := range notes {
+			n := &notes[i]
 			author := "user"
 			if n.By == "lead" {
 				author = "lead"
@@ -542,7 +544,8 @@ func Message(notes []api.Note, extra string) string {
 func (s *Store) Import(ctx context.Context, notes []api.Note) (added int, err error) {
 	err = s.o.DB.Write(ctx, func(tx *sql.Tx) error {
 		added = 0
-		for _, n := range notes {
+		for i := range notes {
+			n := notes[i]
 			var one int
 			err := tx.QueryRowContext(ctx, `SELECT 1 FROM review_notes WHERE id = ?`, n.ID).Scan(&one)
 			if err == nil {

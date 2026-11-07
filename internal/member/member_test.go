@@ -22,7 +22,7 @@ func (f fakeProviders) GetProvider(_ context.Context, id string) (account.Provid
 	return p, nil
 }
 
-func newStore(t *testing.T, prov fakeProviders) (*Store, *int) {
+func newStore(t *testing.T, prov fakeProviders) (s *Store, calls *int) {
 	t.Helper()
 	st, err := store.Open(context.Background(), filepath.Join(t.TempDir(), "seelegent.db"))
 	if err != nil {
