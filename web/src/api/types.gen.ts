@@ -397,7 +397,13 @@ export interface GateStep {
    * no automatic fix turn is spent on it: the lead decides.
    */
   foreign?: boolean
-  causedBy?: string[]
+  causedBy?: GateCause[]
+}
+
+/** GateCause is another task a foreign failure may be caused by: its id for a link, its title to name it. */
+export interface GateCause {
+  taskId: string
+  title?: string
 }
 
 /** GateFailure is a file an auto check refused. */

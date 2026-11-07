@@ -166,7 +166,7 @@ describe('gate model', () => {
           cmd: 'make',
           state: 'red',
           foreign: true,
-          causedBy: ['t9'],
+          causedBy: [{ taskId: 't9', title: 'API rename' }],
         }),
       ],
     })
@@ -174,7 +174,7 @@ describe('gate model', () => {
       { kindKey: 'task.gate.kind.lane', what: 'a.go, b.go' },
       { kindKey: 'task.gate.kind.auto', what: 'c.json' },
       { kindKey: 'task.gate.kind.task', what: 'npm test · T001' },
-      { kindKey: 'task.gate.kind.doctrine', what: 'make', causedBy: ['t9'] },
+      { kindKey: 'task.gate.kind.doctrine', what: 'api', causedBy: 'API rename' },
     ])
     const view = gateOf(makeTask(), makeDetail({ turns: [turn(1, { by: 'gate' })], proof }))
     expect(budgetUsedUp(view)).toBe(true)
@@ -190,6 +190,35 @@ describe('GatePanel', () => {
       global: { plugins, stubs: { RouterLink: RouterLinkStub } },
     })
   }
+
+  it('names the task a foreign failure may be caused by, as a link to it', async () => {
+    const { plugins } = await setupApp()
+    const wrapper = mount(GateSteps, {
+      props: {
+        turn: 1,
+        result: result({
+          state: 'red',
+          steps: [
+            step({
+              kind: 'doctrine',
+              label: 'api-name',
+              cmd: 'make api',
+              state: 'red',
+              foreign: true,
+              causedBy: [{ taskId: 't9', title: 'API rename' }],
+            }),
+          ],
+        }),
+      },
+      global: { plugins, stubs: { RouterLink: RouterLinkStub } },
+    })
+    const link = wrapper.findComponent(RouterLinkStub)
+    expect(link.props('to')).toEqual({ name: 'tasks', params: { taskId: 't9' } })
+    expect(link.text()).toBe('API rename')
+    expect(wrapper.find('.steps__note').text()).toBe(
+      'May be caused by API rename: it failed only in files that task changed. No automatic fix was started for it.',
+    )
+  })
 
   it('is hidden for a task without a gate', async () => {
     const wrapper = await mountPanel(makeTask(), makeDetail({ turns: [turn(1)] }))

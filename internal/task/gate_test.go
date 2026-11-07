@@ -422,11 +422,12 @@ func TestGateDetail(t *testing.T) {
 			Failures: []api.GateFailure{{File: "a.json", Message: "bad"}, {File: "b.go", Message: "bad"}}},
 		{Kind: api.StepTask, Label: "T001", Cmd: "npm test", Dir: "web", State: api.StepRed, Exit: &exit},
 		{Kind: api.StepTask, Label: "go vet", Cmd: "go vet", State: api.StepError},
-		{Kind: api.StepDoctrine, Label: "api", Cmd: "make api", State: api.StepRed, Foreign: true, CausedBy: []string{"t9"}},
+		{Kind: api.StepDoctrine, Label: "api", Cmd: "make api", State: api.StepRed, Foreign: true,
+			CausedBy: []api.GateCause{{TaskID: "t9", Title: "API rename"}}},
 		{Kind: api.StepDoctrine, Label: "no-todo", Cmd: "check", State: api.StepRed},
 	}}
 	want := "syntax check failed: a.json, b.go; command failed: cd web && npm test; command could not run: go vet; " +
-		"doctrine check api failed: make api (may be caused by t9); doctrine check no-todo failed: check"
+		"doctrine check api failed: make api (may be caused by t9 (API rename)); doctrine check no-todo failed: check"
 	if got := gateDetail(g); got != want {
 		t.Errorf("gateDetail = %q, want %q", got, want)
 	}
@@ -562,7 +563,7 @@ func TestStatsForeignRed(t *testing.T) {
 	h := newHarness(t)
 	now := h.clk.Now()
 	red := &api.GateResult{State: api.GateRed, Steps: []api.GateStep{
-		{Kind: api.StepDoctrine, Label: "api-name", State: api.StepRed, Foreign: true, CausedBy: []string{"t-x"}}}}
+		{Kind: api.StepDoctrine, Label: "api-name", State: api.StepRed, Foreign: true, CausedBy: []api.GateCause{{TaskID: "t-x"}}}}}
 	tk := &Task{ID: "t-foreign", Title: "Caller", Status: StatusDone, Kind: KindNormal, Mode: ModeEdit, Cwd: h.cwd,
 		ProjectKey: "project-1", ProjectName: "project", Prompt: "p", Backend: "agy", CreatedAt: now, UpdatedAt: now,
 		Proof: &Proof{Budget: 2},

@@ -208,7 +208,7 @@
     },
     "exit": "salida {n}",
     "timedOut": "tiempo agotado",
-    "foreign": "Puede deberse a {tasks}: falló solo en archivos que cambiaron. No se inició ninguna corrección automática.",
+    "foreign": "Puede deberse a {tasks}: falló solo en archivos que cambió esa tarea. No se inició ninguna corrección automática.",
     "output": "Salida",
     "notRun": "Sin ejecutar: {steps}",
     "settled": "Se ejecutó de nuevo tras esperar a las otras tareas del repositorio.",

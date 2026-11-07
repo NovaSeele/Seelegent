@@ -134,7 +134,7 @@ func tailPaths(tail string) []string {
 // file one of them changed and none is a file this task changed. Only doctrine checks qualify (as in the old
 // version), and only the files the other tasks actually changed count, never their lanes. A foreign step keeps the
 // gate red; it only spares the task an automatic fix turn it could not do anything with.
-func ForeignCause(s api.GateStep, own []string, others []Other) []string {
+func ForeignCause(s api.GateStep, own []string, others []Other) []api.GateCause {
 	if s.State != api.StepRed || s.Kind != api.StepDoctrine || len(others) == 0 {
 		return nil
 	}
@@ -150,14 +150,14 @@ func ForeignCause(s api.GateStep, own []string, others []Other) []string {
 			return nil
 		}
 	}
-	var by []string
+	var by []api.GateCause
 	for _, p := range paths {
 		i := slices.IndexFunc(others, func(o Other) bool { return match(o.Files, p) })
 		if i < 0 {
 			return nil
 		}
-		if !slices.Contains(by, others[i].ID) {
-			by = append(by, others[i].ID)
+		if !slices.ContainsFunc(by, func(c api.GateCause) bool { return c.TaskID == others[i].ID }) {
+			by = append(by, api.GateCause{TaskID: others[i].ID, Title: others[i].Title})
 		}
 	}
 	return by

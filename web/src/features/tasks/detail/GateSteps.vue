@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { useI18n } from 'vue-i18n'
+import { I18nT, useI18n } from 'vue-i18n'
+import { RouterLink } from 'vue-router'
 
 import type { GateResult } from '@/api/types'
 import Chip from '@/components/ui/Chip.vue'
@@ -45,9 +46,18 @@ const notRunShown = computed(() => props.result.steps.some((s) => s.state === 'n
             step.taskIds.join(', ')
           }}</span>
         </div>
-        <p v-if="step.foreign" class="steps__note">
-          {{ t('task.gate.foreign', { tasks: (step.causedBy ?? []).join(', ') }) }}
-        </p>
+        <I18nT v-if="step.foreign" keypath="task.gate.foreign" tag="p" class="steps__note">
+          <template #tasks>
+            <template v-for="(c, ci) in step.causedBy ?? []" :key="c.taskId"
+              ><template v-if="ci">, </template
+              ><RouterLink
+                :to="{ name: 'tasks', params: { taskId: c.taskId } }"
+                class="steps__link"
+                >{{ c.title || c.taskId }}</RouterLink
+              ></template
+            >
+          </template>
+        </I18nT>
         <ul v-if="step.files?.length && step.kind === 'lane'" class="steps__files">
           <li v-for="file in step.files" :key="file">
             <code>{{ file }}</code>
@@ -135,6 +145,26 @@ const notRunShown = computed(() => props.result.steps.some((s) => s.state === 'n
   color: var(--text-secondary);
   font-size: var(--fs-xs);
   overflow-wrap: anywhere;
+}
+
+.steps__link {
+  color: var(--accent);
+}
+
+/* A touch target of at least 44px around the link, without changing how it looks. */
+@media (pointer: coarse) {
+  .steps__link {
+    position: relative;
+  }
+
+  .steps__link::after {
+    position: absolute;
+    inset: 50% 0 auto;
+    min-width: var(--target-min);
+    height: var(--target-min);
+    content: '';
+    transform: translateY(-50%);
+  }
 }
 
 .steps__files,

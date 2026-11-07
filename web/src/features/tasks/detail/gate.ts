@@ -4,6 +4,7 @@
  * gate event can never overwrite the current state (old bug: chips replayed from history).
  */
 import type {
+  GateCause,
   GateResult,
   GateStep,
   TaskDetail,
@@ -171,15 +172,23 @@ export function fixesUsed(view: GateView): number {
  */
 export function failedSteps(
   result: GateResult | null,
-): { kindKey: string; what: string; causedBy?: string[] }[] {
+): { kindKey: string; what: string; causedBy?: string }[] {
   return failingSteps(result).map((s) => ({
-    ...(s.foreign && s.causedBy?.length ? { causedBy: s.causedBy } : {}),
+    ...(s.foreign && s.causedBy?.length ? { causedBy: causeNames(s.causedBy) } : {}),
     kindKey: stepKindKey(s) ?? 'task.gate.kind.task',
-    what:
-      s.kind === 'auto' && s.failures?.length
-        ? s.failures.map((f) => f.file).join(', ')
-        : s.kind === 'lane'
-          ? (s.files ?? []).join(', ')
-          : stepWhat(s),
+    what: bannerWhat(s),
   }))
+}
+
+/** What the banner shows of a failing step: files, or a doctrine check's id (its command is in the gate panel). */
+function bannerWhat(s: GateStep): string {
+  if (s.kind === 'auto' && s.failures?.length) return s.failures.map((f) => f.file).join(', ')
+  if (s.kind === 'lane') return (s.files ?? []).join(', ')
+  if (s.kind === 'doctrine') return s.label
+  return stepWhat(s)
+}
+
+/** The tasks a foreign failure may be caused by, by title (the id when the title is unknown). */
+export function causeNames(causes: GateCause[] | undefined): string {
+  return (causes ?? []).map((c) => c.title || c.taskId).join(', ')
 }

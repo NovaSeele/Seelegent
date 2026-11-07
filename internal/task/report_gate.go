@@ -53,8 +53,12 @@ func gateReport(t *Task, rep *api.TaskReport) {
 					files = append(files, f.File)
 				}
 			}
+			var causedBy []string
+			for _, c := range st.CausedBy {
+				causedBy = append(causedBy, c.TaskID)
+			}
 			rg.Steps = append(rg.Steps, api.ReportGateStep{Label: st.Label, Kind: st.Kind, Cmd: st.Cmd, Exit: st.Exit,
-				Files: files, Tail: tail, CausedBy: st.CausedBy})
+				Files: files, Tail: tail, CausedBy: causedBy})
 		}
 		rep.Gate = rg
 	}

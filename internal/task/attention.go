@@ -225,11 +225,23 @@ func gateDetail(g *api.GateResult) string {
 		}
 		part := stepFailure(s)
 		if s.Foreign {
-			part += " (may be caused by " + strings.Join(s.CausedBy, ", ") + ")"
+			causes := make([]string, 0, len(s.CausedBy))
+			for _, c := range s.CausedBy {
+				causes = append(causes, causeName(c))
+			}
+			part += " (may be caused by " + strings.Join(causes, ", ") + ")"
 		}
 		parts = append(parts, part)
 	}
 	return strings.Join(parts, "; ")
+}
+
+// causeName names another task for the lead: "t2 (API rename)", the same form as the fix prompt.
+func causeName(c api.GateCause) string {
+	if c.Title == "" {
+		return c.TaskID
+	}
+	return c.TaskID + " (" + c.Title + ")"
 }
 
 // stepFailure is one failing step in plain words.

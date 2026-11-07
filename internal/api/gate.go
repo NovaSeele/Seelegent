@@ -69,8 +69,14 @@ type GateStep struct {
 	Findings []Finding `json:"findings,omitempty"`
 	// Foreign: a doctrine check failed only in files other active tasks changed (CausedBy). The gate stays red, but
 	// no automatic fix turn is spent on it: the lead decides.
-	Foreign  bool     `json:"foreign,omitempty"`
-	CausedBy []string `json:"causedBy,omitempty"`
+	Foreign  bool        `json:"foreign,omitempty"`
+	CausedBy []GateCause `json:"causedBy,omitempty"`
+}
+
+// GateCause is another task a foreign failure may be caused by: its id for a link, its title to name it.
+type GateCause struct {
+	TaskID string `json:"taskId"`
+	Title  string `json:"title,omitempty"`
 }
 
 // GateFailure is a file an auto check refused.

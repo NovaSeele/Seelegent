@@ -113,7 +113,7 @@ const tone = computed(() =>
           }}<template v-if="s.what"
             >: <code>{{ s.what }}</code></template
           ><span v-if="s.causedBy" class="banner__cause">
-            · {{ t('task.gate.causedBy', { tasks: s.causedBy.join(', ') }) }}</span
+            · {{ t('task.gate.causedBy', { tasks: s.causedBy }) }}</span
           >
         </li>
       </ul>

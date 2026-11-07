@@ -206,8 +206,8 @@ func TestFixPromptAndForeign(t *testing.T) {
 	}
 
 	step := api.GateStep{Kind: api.StepDoctrine, State: api.StepRed, Tail: "web/src/a.ts:3:1 error\nweb/src/b.ts(4,2): bad"}
-	others := []Other{{ID: "t2", Lane: []string{"web/"}, Files: []string{"web/src/a.ts", "web/src/b.ts"}}}
-	if by := ForeignCause(step, []string{"internal/x.go"}, others); !slices.Equal(by, []string{"t2"}) {
+	others := []Other{{ID: "t2", Title: "Web", Lane: []string{"web/"}, Files: []string{"web/src/a.ts", "web/src/b.ts"}}}
+	if by := ForeignCause(step, []string{"internal/x.go"}, others); !slices.Equal(by, []api.GateCause{{TaskID: "t2", Title: "Web"}}) {
 		t.Errorf("a doctrine failure only in files t2 changed: caused by %v", by)
 	}
 	if by := ForeignCause(step, []string{"web/src/a.ts"}, others); by != nil {
@@ -238,7 +238,7 @@ func TestForeignNeverGreen(t *testing.T) {
 	doctrine := build
 	doctrine.Kind = api.StepDoctrine
 	by := ForeignCause(doctrine, []string{"a/a.go"}, b)
-	if !slices.Equal(by, []string{"B"}) {
+	if !slices.Equal(by, []api.GateCause{{TaskID: "B"}}) {
 		t.Fatalf("caused by %v", by)
 	}
 	doctrine.Foreign, doctrine.CausedBy = true, by

@@ -7,7 +7,7 @@ import type { TaskEvent } from '@/api/events'
 import type { GateResult, GateStep } from '@/api/types'
 import type { IconName } from '@/components/ui/icons'
 
-import { stepKindKey, stepWhat } from '../../detail/gate'
+import { causeNames, stepKindKey, stepWhat } from '../../detail/gate'
 import type { DetailLine, Message, Tone } from './timeline'
 
 export interface GateNotice {
@@ -63,7 +63,7 @@ export function failingLines(result: GateResult): DetailLine[] {
     ...(i ? [{ text: '' }] : []),
     stepLine(s),
     ...(s.foreign
-      ? [{ label: { key: 'task.gate.foreign', params: { tasks: (s.causedBy ?? []).join(', ') } } }]
+      ? [{ label: { key: 'task.gate.foreign', params: { tasks: causeNames(s.causedBy) } } }]
       : []),
     ...stepFindings(s).map((text) => ({ text })),
   ])

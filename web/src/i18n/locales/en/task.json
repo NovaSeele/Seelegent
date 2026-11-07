@@ -208,7 +208,7 @@
     },
     "exit": "exit {n}",
     "timedOut": "timed out",
-    "foreign": "May be caused by {tasks}: it failed only in files they changed. No automatic fix was started for it.",
+    "foreign": "May be caused by {tasks}: it failed only in files that task changed. No automatic fix was started for it.",
     "output": "Output",
     "notRun": "Not run: {steps}",
     "settled": "Ran again after waiting for the other tasks of the repository.",
