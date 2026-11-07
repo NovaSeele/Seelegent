@@ -135,4 +135,62 @@ describe('ProviderDialog', () => {
     expect(document.body.textContent).not.toContain('Always allowed')
     wrapper.unmount()
   })
+
+  // Review G3: an empty field means "unchanged", so a hand-written pattern could not go back to any model.
+  it('turns a hand-written pattern into any model with the hint button', async () => {
+    const update = vi.fn((_id: string, changes: object) =>
+      Promise.resolve(makeProvider({ id: 'zai', ...changes })),
+    )
+    const zai = makeProvider({ id: 'zai', name: 'Z.ai', allowedModels: '^glm-' })
+    const wrapper = await mountDialog(zai, update)
+    const button = () =>
+      [...document.body.querySelectorAll('button')].find((b) =>
+        ['Allow any model', 'Keep the pattern'].includes(b.textContent?.trim() ?? ''),
+      )
+    const allow = button()
+    expect(allow?.textContent?.trim()).toBe('Allow any model')
+    expect(allow?.type).toBe('button')
+
+    allow?.focus()
+    allow?.click()
+    await flushPromises()
+    // The same button flips its label, so keyboard focus stays on it.
+    expect(document.activeElement).toBe(allow)
+    expect(allow?.textContent?.trim()).toBe('Keep the pattern')
+    expect(document.body.textContent).toContain('Any model is allowed once you save')
+    expect((field('Models') as HTMLInputElement).placeholder).toBe('any model')
+
+    document.body.querySelector<HTMLFormElement>('#provider-form')?.requestSubmit()
+    await flushPromises()
+    expect(update).toHaveBeenCalledWith('zai', { models: [] })
+    wrapper.unmount()
+  })
+
+  it('keeps the pattern when the button is clicked back, and hides it while a list is typed', async () => {
+    const update = vi.fn((_id: string, changes: object) =>
+      Promise.resolve(makeProvider({ id: 'zai', ...changes })),
+    )
+    const zai = makeProvider({ id: 'zai', name: 'Z.ai', allowedModels: '^glm-' })
+    const wrapper = await mountDialog(zai, update)
+    const find = (label: string) =>
+      [...document.body.querySelectorAll('button')].find((b) => b.textContent?.trim() === label)
+    find('Allow any model')?.click()
+    await flushPromises()
+    find('Keep the pattern')?.click()
+    await flushPromises()
+    expect(document.body.textContent).toContain('Allowed by pattern ^glm-')
+
+    const models = field('Models') as HTMLInputElement
+    models.value = 'glm-5'
+    models.dispatchEvent(new Event('input'))
+    await flushPromises()
+    expect(find('Allow any model')).toBeUndefined()
+
+    models.value = ''
+    models.dispatchEvent(new Event('input'))
+    document.body.querySelector<HTMLFormElement>('#provider-form')?.requestSubmit()
+    await flushPromises()
+    expect(update).toHaveBeenCalledWith('zai', {})
+    wrapper.unmount()
+  })
 })

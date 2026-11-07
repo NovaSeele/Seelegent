@@ -24,8 +24,9 @@ import {
 /**
  * Adds a provider (from a preset, or blank) or edits one. The id and backend are fixed once the provider exists.
  * The models field edits the allow-list, a comma-separated list (empty: any model). A provider allowed by a
- * hand-written pattern shows that pattern in the hint, and a list typed over it replaces it; its tier models are
- * shown read-only, since they are always allowed. Field errors from the daemon show next to their field.
+ * hand-written pattern shows that pattern in the hint, and a list typed over it replaces it. An empty field leaves
+ * the pattern alone, so the hint has a button that turns it into "any model" on save (models: []). The tier
+ * models are shown read-only, since they are always allowed. Field errors from the daemon show next to their field.
  */
 const props = defineProps<{ provider: Provider | null }>()
 const open = defineModel<boolean>('open', { required: true })
@@ -37,6 +38,8 @@ const toast = useToastStore()
 const preset = ref('')
 const form = ref<ProviderPreset>(blank())
 const models = ref('')
+/** Set by "Allow any model": save clears the hand-written pattern while the field stays empty. */
+const allowAny = ref(false)
 const busy = ref(false)
 const errors = ref<Record<string, string>>({})
 const failure = ref('')
@@ -55,11 +58,14 @@ function blank(): ProviderPreset {
 
 const editing = computed(() => props.provider !== null)
 const allowed = computed(() => (props.provider ? allowList(props.provider) : null))
-const modelsHint = computed(() =>
-  allowed.value?.kind === 'pattern'
-    ? t('accounts.providers.modelsPattern', { pattern: allowed.value.pattern })
-    : t('accounts.providers.modelsHint'),
-)
+const pattern = computed(() => (allowed.value?.kind === 'pattern' ? allowed.value.pattern : ''))
+/** A typed list replaces the pattern anyway, so the button only shows while the field is empty. */
+const canClear = computed(() => pattern.value !== '' && parseModels(models.value).length === 0)
+const modelsHint = computed(() => {
+  if (!pattern.value) return t('accounts.providers.modelsHint')
+  if (canClear.value && allowAny.value) return t('accounts.providers.anyOnSave')
+  return t('accounts.providers.modelsPattern', { pattern: pattern.value })
+})
 const tiers = computed(() => (props.provider ? tierModels(props.provider) : []))
 
 const presetOptions = computed(() => [
@@ -89,6 +95,7 @@ watch(open, (value) => {
   errors.value = {}
   failure.value = ''
   preset.value = ''
+  allowAny.value = false
   fill(props.provider ?? blank())
   if (props.provider) models.value = listedModels(allowList(props.provider)).join(', ')
 })
@@ -107,7 +114,8 @@ async function submit() {
   try {
     const { name } = form.value
     if (props.provider) {
-      await providers.update(props.provider.id, providerChanges(props.provider, form.value, list))
+      const changes = providerChanges(props.provider, form.value, list, allowAny.value)
+      await providers.update(props.provider.id, changes)
     } else {
       await providers.create(providerInput(form.value, list, preset.value))
     }
@@ -165,10 +173,18 @@ async function submit() {
       <TextField
         v-model="models"
         :label="t('accounts.providers.models')"
-        :placeholder="allowed?.kind === 'pattern' ? undefined : t('accounts.providers.anyModel')"
+        :placeholder="pattern && !allowAny ? undefined : t('accounts.providers.anyModel')"
         :hint="modelsHint"
         :error="errors.models"
-      />
+      >
+        <template v-if="canClear" #hint>
+          {{ modelsHint }}
+          <!-- One button whose label flips, so keyboard focus stays on it. -->
+          <button type="button" class="pform__link" @click="allowAny = !allowAny">
+            {{ allowAny ? t('accounts.providers.keepPattern') : t('accounts.providers.allowAny') }}
+          </button>
+        </template>
+      </TextField>
       <p v-if="tiers.length" class="pform__tiers">
         {{ t('accounts.providers.tierModels', { models: tiers.join(', ') }) }}
       </p>
@@ -202,6 +218,16 @@ async function submit() {
 .pform__tiers {
   color: var(--text-secondary);
   font-size: var(--fs-xs);
+}
+
+.pform__link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--link);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
 }
 
 .pform__error {

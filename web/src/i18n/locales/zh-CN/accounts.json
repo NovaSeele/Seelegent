@@ -175,6 +175,9 @@
     "models": "模型",
     "modelsHint": "用逗号分隔；留空则允许任意模型。",
     "modelsPattern": "由模式 {pattern} 允许；填写列表会替换此模式。",
+    "allowAny": "允许任意模型",
+    "anyOnSave": "保存后将移除该模式，允许任意模型。",
+    "keepPattern": "保留模式",
     "tierModels": "始终允许（各档模型）：{models}",
     "enabled": "允许账号使用",
     "save": "保存提供方"

@@ -74,18 +74,21 @@ export function providerInput(
 /**
  * The PATCH /providers/{id} body: only the fields the user changed. `models` replaces the allow-list (and `[]`
  * clears it to "any model"), so it is sent only when the field differs from the list it was filled with: an
- * untouched field never replaces a hand-written pattern or the list.
+ * untouched field never replaces a hand-written pattern or the list. `allowAny` (the dialog's "Allow any model")
+ * sends `models: []` for an empty field, the only way to turn a hand-written pattern back into "any model".
  */
 export function providerChanges(
   before: Provider,
   form: ProviderPreset,
   models: string[],
+  allowAny = false,
 ): ProviderChanges {
   const changes: ProviderChanges = {}
   if (form.name !== before.name) changes.name = form.name
   if (!before.official && form.baseUrl !== before.baseUrl) changes.baseUrl = form.baseUrl
   if (form.enabled !== before.enabled) changes.enabled = form.enabled
   const current = listedModels(allowList(before))
-  if (models.join('\n') !== current.join('\n')) changes.models = models
+  if (models.join('\n') !== current.join('\n') || (allowAny && !models.length))
+    changes.models = models
   return changes
 }

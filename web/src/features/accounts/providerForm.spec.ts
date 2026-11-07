@@ -128,4 +128,13 @@ describe('provider form', () => {
       {},
     )
   })
+
+  // Review G3: an empty field means "unchanged", so a hand-written pattern could never go back to any model.
+  it('sends models [] for an empty field when the user allows any model', () => {
+    const before = makeProvider({ name: 'Z.ai', models: [], allowedModels: '^glm-' })
+    const same = { ...form, name: 'Z.ai' }
+    expect(providerChanges(before, same, [], true)).toEqual({ models: [] })
+    // A typed list still wins over the button.
+    expect(providerChanges(before, same, ['glm-5'], true)).toEqual({ models: ['glm-5'] })
+  })
 })
