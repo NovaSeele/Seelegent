@@ -6,23 +6,16 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"regexp"
 	"strings"
 
 	"github.com/NovaSeele/Seelegent/internal/api"
 	"github.com/NovaSeele/Seelegent/internal/client"
-	"github.com/NovaSeele/Seelegent/internal/fsutil"
+	"github.com/NovaSeele/Seelegent/internal/ops"
 )
 
 // The issues tool (GitHub issues to draft pull requests) and the automations tool (milestone 15), as the old
 // server's runIssues and runAutomations: the same slim views and argument names over the HTTP API v1. The token
 // and the confirmation of an automation are dashboard-only; no tool reaches them.
-
-// repoIDPattern is a repo id (r + 8 hex).
-var repoIDPattern = regexp.MustCompile(`^r[0-9a-fA-F]{8}$`)
-
-// issueKeyNumber is a bare issue number ("12" or "#12"), which means a GitHub issue.
-var issueKeyNumber = regexp.MustCompile(`^#?\d+$`)
 
 // issuesArgs are the arguments of issues.
 type issuesArgs struct {
@@ -169,11 +162,7 @@ func issueKey(raw json.RawMessage) string {
 	if err := json.Unmarshal(raw, &s); err != nil {
 		s = string(raw)
 	}
-	s = strings.TrimSpace(s)
-	if issueKeyNumber.MatchString(s) {
-		return "gh#" + strings.TrimPrefix(s, "#")
-	}
-	return s
+	return ops.IssueKey(s)
 }
 
 // issueActions are the actions of issues.
@@ -207,35 +196,18 @@ func (s *Server) issues(ctx context.Context, k *call) (result, error) {
 
 // repoID resolves the repo argument: an id, or the path of a connected repo.
 func (s *Server) repoID(ctx context.Context, c *client.Client, a *issuesArgs) (string, error) {
-	repo := strings.TrimSpace(a.Repo)
-	if repo == "" {
+	if strings.TrimSpace(a.Repo) == "" {
 		return "", fmt.Errorf("repo is required for %s (repo id or path)", a.Action)
 	}
-	if repoIDPattern.MatchString(repo) {
-		return strings.ToLower(repo), nil
-	}
-	list, err := c.Repos(ctx)
+	abs, err := s.absPath(a.Repo)
 	if err != nil {
 		return "", err
 	}
-	p, err := s.absPath(repo)
-	if err != nil {
-		return "", err
+	id, err := ops.RepoID(ctx, c, a.Repo, abs)
+	if errors.Is(err, ops.ErrRepoNotConnected) {
+		return "", fmt.Errorf("%w (call issues with action connect first)", err)
 	}
-	want, err := fsutil.Key(p)
-	if err != nil {
-		return "", err
-	}
-	for ix := range list {
-		r := &list[ix]
-		if r.ID == repo {
-			return r.ID, nil
-		}
-		if got, err := fsutil.Key(r.Path); err == nil && got == want {
-			return r.ID, nil
-		}
-	}
-	return "", fmt.Errorf("repo not connected: %s (call issues with action connect first)", repo)
+	return id, err
 }
 
 // repoSettings is the repo_settings view.
