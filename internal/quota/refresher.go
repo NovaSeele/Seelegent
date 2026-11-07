@@ -64,6 +64,8 @@ type RefresherOptions struct {
 
 	// onWait is called when a refresh starts waiting for a read of the account already in flight (tests).
 	onWait func(accountID string)
+	// onWoken is called when a fresh refresh woke from an older read and is about to look again (tests).
+	onWoken func(accountID string)
 }
 
 // Result is the outcome of reading one account.
@@ -87,14 +89,18 @@ type Refresher struct {
 
 	mu       sync.Mutex
 	inflight map[string]*refreshCall
-	gen      uint64          // number of reads started so far
-	pending  map[string]bool // accounts asked for with Request, not yet read
+	last     map[string]*refreshCall // the last finished read per account
+	gen      uint64                  // number of reads started so far
+	pending  map[string]bool         // accounts asked for with Request, not yet read
 }
 
 type refreshCall struct {
 	gen  uint64 // r.gen when the read started
 	done chan struct{}
 	res  Result
+	// aborted: the context of the caller that started the read ended, so res says nothing about the account (a
+	// reader's own time limit is not this: its error is a real result, shared and kept like any other).
+	aborted bool
 }
 
 // NewRefresher returns a refresher.
@@ -118,7 +124,8 @@ func NewRefresher(o RefresherOptions) (*Refresher, error) {
 		o.Logger = slog.New(slog.DiscardHandler)
 	}
 	return &Refresher{o: o, kick: make(chan struct{}, 1), request: make(chan struct{}, 1),
-		sem: make(chan struct{}, o.Parallel), inflight: map[string]*refreshCall{}, pending: map[string]bool{}}, nil
+		sem: make(chan struct{}, o.Parallel), inflight: map[string]*refreshCall{}, last: map[string]*refreshCall{},
+		pending: map[string]bool{}}, nil
 }
 
 // Run refreshes every account at once and then once per interval (±10 % jitter) until ctx ends, and serves
@@ -291,6 +298,12 @@ func (r *Refresher) refresh(ctx context.Context, a account.Account, fresh bool) 
 	r.mu.Lock()
 	after := r.gen
 	for {
+		// A read that started after this call and has already finished answers it too: a fresh request woken
+		// together with another one must not read a third time just because the other's read ended first.
+		if l := r.last[a.ID]; fresh && l != nil && l.gen > after {
+			r.mu.Unlock()
+			return l.res
+		}
 		c, ok := r.inflight[a.ID]
 		if !ok {
 			break
@@ -305,10 +318,23 @@ func (r *Refresher) refresh(ctx context.Context, a account.Account, fresh bool) 
 		case <-ctx.Done():
 			return Result{AccountID: a.ID, Err: ctx.Err()}
 		}
-		if join {
+		if join && !c.aborted {
 			return c.res
 		}
+		if join && ctx.Err() != nil {
+			// The shared read was aborted by its starter and this caller is done too: answer with this caller's
+			// own context error, never the other one's.
+			return Result{AccountID: a.ID, Err: ctx.Err()}
+		}
+		if r.o.onWoken != nil {
+			r.o.onWoken(a.ID)
+		}
 		r.mu.Lock()
+		if join {
+			// The shared read ended only because its own caller went away: read again for this one, sharing
+			// anything that starts from now on.
+			after = c.gen
+		}
 	}
 	r.gen++
 	c := &refreshCall{gen: r.gen, done: make(chan struct{})}
@@ -316,9 +342,14 @@ func (r *Refresher) refresh(ctx context.Context, a account.Account, fresh bool) 
 	r.mu.Unlock()
 
 	c.res = r.readAndStore(ctx, a)
+	// A read that succeeded is a real answer even when the caller's context ended just after it.
+	c.aborted = c.res.Err != nil && ctx.Err() != nil
 
 	r.mu.Lock()
 	delete(r.inflight, a.ID)
+	if !c.aborted {
+		r.last[a.ID] = c
+	}
 	r.mu.Unlock()
 	close(c.done)
 	return c.res

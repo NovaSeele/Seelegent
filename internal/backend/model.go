@@ -77,7 +77,8 @@ func (p ModelPolicy) Resolve(model, tier, defaultTier string) (string, error) {
 }
 
 // Allowed checks a model id against the policy: a tier model is always allowed, any other model must match
-// AllowedModels, and an empty AllowedModels allows any model (as in the old version).
+// AllowedModels, and an empty AllowedModels allows any model (the old version refused every model there for codex,
+// claude and providers; migrate writes a pattern of the tier models instead, ^$ without tiers).
 func (p ModelPolicy) Allowed(model string) error {
 	if model == "" || strings.ContainsFunc(model, func(r rune) bool { return r <= ' ' }) {
 		return fmt.Errorf("%w: invalid model id %q", ErrModel, model)

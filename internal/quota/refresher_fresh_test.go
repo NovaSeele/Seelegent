@@ -3,6 +3,7 @@ package quota
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -241,4 +242,158 @@ func TestRequestsShareParallelLimit(t *testing.T) {
 	waitFor(t, "the requested read", func() bool { return f.reader.count(a2.ID) == 2 })
 	cancel()
 	<-done
+}
+
+// Review of 885c494: two fresh refreshes woken from one older read; the second looks again only after the first
+// one's newer read has finished. It must take that read, not start a third one (the old "reads = 3" flake, now
+// forced every time).
+func TestWokenRefreshSharesFinishedRead(t *testing.T) {
+	release := make(chan struct{})
+	var first sync.Once
+	f := newRefFixture(t, func(context.Context, string) (backend.Quota, error) {
+		block := false
+		first.Do(func() { block = true })
+		if block {
+			<-release
+		}
+		return okQuota(0.5), nil
+	})
+	ctx := t.Context()
+	a := f.add(t, account.New{Backend: "agy", Kind: account.KindIsolated, Enabled: true})
+	oneDone := make(chan struct{})
+	var once sync.Once
+	var woken atomic.Int32
+	f.woken = func() {
+		if woken.Add(1) == 2 {
+			<-oneDone // the second one looks again only after the first one's read has finished
+		}
+	}
+	cycle := make(chan struct{})
+	go func() {
+		defer close(cycle)
+		f.r.RefreshAll(ctx)
+	}()
+	releaseOnce := sync.OnceFunc(func() { close(release) })
+	var wg sync.WaitGroup
+	defer func() { releaseOnce(); once.Do(func() { close(oneDone) }); wg.Wait(); <-cycle }()
+	waitFor(t, "the first read", func() bool { return f.reader.count(a.ID) == 1 })
+	for range 2 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if _, err := f.r.Refresh(ctx, a.ID); err != nil {
+				t.Error(err)
+			}
+			once.Do(func() { close(oneDone) })
+		}()
+	}
+	waitFor(t, "both refreshes waiting", func() bool { return f.waiting.Load() == 2 })
+	releaseOnce()
+	wg.Wait()
+	if n := f.reader.count(a.ID); n != 2 {
+		t.Fatalf("reads = %d, want 2: the second refresh read again instead of sharing the finished one", n)
+	}
+}
+
+// Review of 885c494: a read shared by two callers runs on the context of the caller that started it. When that
+// caller goes away, the other one must not get its context error: it reads again.
+func TestSharedReadCanceledByOtherCaller(t *testing.T) {
+	var calls atomic.Int32
+	f := newRefFixture(t, func(ctx context.Context, _ string) (backend.Quota, error) {
+		if calls.Add(1) == 1 {
+			<-ctx.Done()
+			return backend.Quota{}, ctx.Err()
+		}
+		return okQuota(0.7), nil
+	})
+	a := f.add(t, account.New{Backend: "agy", Kind: account.KindIsolated, Enabled: true})
+	starter, cancel := context.WithCancel(t.Context())
+	started := make(chan Result, 1)
+	go func() { started <- f.r.refresh(starter, a, false) }()
+	waitFor(t, "the first read", func() bool { return f.reader.count(a.ID) == 1 })
+	joined := make(chan Result, 1)
+	go func() { joined <- f.r.refresh(t.Context(), a, false) }()
+	waitFor(t, "the second caller waiting", func() bool { return f.waiting.Load() == 1 })
+	cancel()
+	if res := <-started; !errors.Is(res.Err, context.Canceled) {
+		t.Fatalf("starter: %v, want its own context error", res.Err)
+	}
+	res := <-joined
+	if res.Err != nil {
+		t.Fatalf("joined caller got %v, want a fresh read", res.Err)
+	}
+	if n := f.reader.count(a.ID); n != 2 {
+		t.Fatalf("reads = %d, want 2", n)
+	}
+	// A failed-by-context read is never kept as the last read a later fresh refresh could take.
+	f.r.mu.Lock()
+	last := f.r.last[a.ID]
+	f.r.mu.Unlock()
+	if last == nil || last.res.Err != nil {
+		t.Fatalf("last read = %+v, want the good second read", last)
+	}
+}
+
+// Review of 3801679: a reader that runs out of its own time limit answers with a wrapped DeadlineExceeded while
+// every caller is still live. That is a real result: it is shared, not read again by each caller.
+func TestReaderTimeoutIsShared(t *testing.T) {
+	timedOut := fmt.Errorf("agy quota: %w", context.DeadlineExceeded)
+	release := make(chan struct{})
+	f := newRefFixture(t, func(context.Context, string) (backend.Quota, error) {
+		<-release
+		return backend.Quota{}, timedOut
+	})
+	a := f.add(t, account.New{Backend: "agy", Kind: account.KindIsolated, Enabled: true})
+	results := make(chan Result, 3)
+	for range 3 {
+		go func() { results <- f.r.refresh(t.Context(), a, false) }()
+	}
+	waitFor(t, "two callers waiting on the first one's read", func() bool { return f.waiting.Load() == 2 })
+	close(release)
+	for range 3 {
+		if res := <-results; !errors.Is(res.Err, context.DeadlineExceeded) {
+			t.Fatalf("result = %v, want the reader's timeout", res.Err)
+		}
+	}
+	if n := f.reader.count(a.ID); n != 1 {
+		t.Fatalf("reads = %d, want 1", n)
+	}
+}
+
+// Review of 3801679, fresh case: two fresh refreshes woken from an older read share the newer read even when that
+// read ends in the reader's own timeout: 2 reads in all, not 3.
+func TestFreshRefreshesShareReaderTimeout(t *testing.T) {
+	timedOut := fmt.Errorf("agy quota: %w", context.DeadlineExceeded)
+	release := make(chan struct{})
+	var calls atomic.Int32
+	f := newRefFixture(t, func(context.Context, string) (backend.Quota, error) {
+		if calls.Add(1) == 1 {
+			<-release
+			return okQuota(0.5), nil
+		}
+		return backend.Quota{}, timedOut
+	})
+	ctx := t.Context()
+	a := f.add(t, account.New{Backend: "agy", Kind: account.KindIsolated, Enabled: true})
+	first := make(chan Result, 1)
+	go func() { first <- f.r.refresh(ctx, a, false) }()
+	waitFor(t, "the first read", func() bool { return f.reader.count(a.ID) == 1 })
+	errs := make(chan error, 2)
+	for range 2 {
+		go func() {
+			_, err := f.r.Refresh(ctx, a.ID)
+			errs <- err
+		}()
+	}
+	waitFor(t, "both refreshes waiting", func() bool { return f.waiting.Load() == 2 })
+	close(release)
+	<-first
+	for range 2 {
+		if err := <-errs; !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("refresh = %v, want the reader's timeout", err)
+		}
+	}
+	if n := f.reader.count(a.ID); n != 2 {
+		t.Fatalf("reads = %d, want 2", n)
+	}
 }
