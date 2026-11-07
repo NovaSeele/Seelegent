@@ -263,7 +263,7 @@ func (h jsonHost) install(_ context.Context, o op, want Entry) Item {
 	if err := cfg.doc.set(jpath{h.container, ServerName}, raw); err != nil {
 		return failItem(it, err)
 	}
-	it.Backup, err = cfg.file.write(cfg.doc.bytes())
+	it.Backup, err = cfg.file.write(cfg.doc.bytes(), o.created)
 	if err != nil {
 		return failItem(it, err)
 	}
@@ -301,11 +301,38 @@ func (h jsonHost) remove(_ context.Context, o op) Item {
 	if _, err := cfg.doc.del(jpath{h.container, ServerName}); err != nil {
 		return failItem(it, err)
 	}
-	it.Backup, err = cfg.file.write(cfg.doc.bytes())
+	var note string
+	it.Backup, note, err = o.writeHostFile(cfg.file, cfg.doc.bytes(), h.bare)
 	if err != nil {
 		return failItem(it, err)
 	}
+	it.Detail += note
 	return it
+}
+
+// bare reports whether a config file holds nothing but, at most, Seelegent's entry under the container.
+func (h jsonHost) bare(data []byte) bool {
+	d, err := loadJSONDoc(data, true)
+	if err != nil {
+		return false
+	}
+	c, err := d.root.childObject(h.container)
+	if err != nil {
+		return false
+	}
+	if raw, ok := c.get(ServerName); ok {
+		obj, err := parseObject(raw)
+		if err != nil {
+			return false
+		}
+		if e, ok := readEntry(obj); !ok || !isOurs(e) {
+			return false
+		}
+		if _, err := d.del(jpath{h.container, ServerName}); err != nil {
+			return false
+		}
+	}
+	return d.onlyEmpty(h.container)
 }
 
 // failItem turns an error into an error item.

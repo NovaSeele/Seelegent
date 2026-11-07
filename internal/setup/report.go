@@ -35,16 +35,16 @@ func (r Report) WriteText(w io.Writer) error {
 		}
 	}
 	for _, it := range r.Items {
-		fmt.Fprintf(&b, "%-15s %-5s %-14s %s\n", it.Host, it.Kind, r.verb(it.Action), it.Path)
+		fmt.Fprintf(&b, "%-15s %-6s %-14s %s\n", it.Host, it.Kind, r.verb(it.Action), it.Path)
 		if it.Detail != "" {
-			fmt.Fprintf(&b, "%22s%s\n", "", it.Detail)
+			fmt.Fprintf(&b, "%23s%s\n", "", it.Detail)
 		}
 		if it.Backup != "" {
-			fmt.Fprintf(&b, "%22sbackup: %s\n", "", it.Backup)
+			fmt.Fprintf(&b, "%23sbackup: %s\n", "", it.Backup)
 		}
 		if it.Snippet != "" {
 			for line := range strings.SplitSeq(it.Snippet, "\n") {
-				fmt.Fprintf(&b, "%26s%s\n", "", line)
+				fmt.Fprintf(&b, "%27s%s\n", "", line)
 			}
 		}
 	}

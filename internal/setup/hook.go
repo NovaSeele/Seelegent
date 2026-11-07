@@ -87,6 +87,11 @@ func loadHooks(path string) (*hookSpot, error) {
 	if err != nil {
 		return nil, err
 	}
+	return findHook(f)
+}
+
+// findHook finds the reminder hook in the content of settings.json.
+func findHook(f hostFile) (*hookSpot, error) {
 	doc, err := loadJSONDoc(f.data, f.existed)
 	if err != nil {
 		return nil, err
@@ -192,7 +197,7 @@ func (c claudeCode) installHook(o op) Item {
 	if o.req.DryRun {
 		return planned(it)
 	}
-	if it.Backup, err = s.file.write(s.doc.bytes()); err != nil {
+	if it.Backup, err = s.file.write(s.doc.bytes(), o.created); err != nil {
 		return failItem(it, err)
 	}
 	return it
@@ -221,8 +226,22 @@ func (c claudeCode) removeHook(o op) Item {
 	if err := s.removeOurHook(); err != nil {
 		return failItem(it, err)
 	}
-	if it.Backup, err = s.file.write(s.doc.bytes()); err != nil {
+	var note string
+	if it.Backup, note, err = o.writeHostFile(s.file, s.doc.bytes(), bareSettings); err != nil {
 		return failItem(it, err)
 	}
+	it.Detail += note
 	return it
+}
+
+// bareSettings reports whether settings.json holds nothing but, at most, the reminder hook.
+func bareSettings(data []byte) bool {
+	s, err := findHook(hostFile{data: data, existed: true})
+	if err != nil {
+		return false
+	}
+	if s.group >= 0 && s.removeOurHook() != nil {
+		return false
+	}
+	return s.doc.onlyEmpty("hooks")
 }

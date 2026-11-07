@@ -42,6 +42,8 @@ const (
 	KindMCP   = "mcp"
 	KindSkill = "skill"
 	KindHook  = "hook"
+	// KindFolder is an empty folder setup had created, removed by --remove.
+	KindFolder = "folder"
 )
 
 // Item is the outcome for one host and one kind of thing (MCP entry, skill, hook).
@@ -91,6 +93,10 @@ type Request struct {
 	// Version and Port go into the installed skill.
 	Version string
 	Port    int
+	// Created is the file where setup records the host files and folders it created (setup-created.json in the
+	// data folder), so --remove can delete them once they are empty and never anything that existed before. Empty
+	// records nothing.
+	Created string
 }
 
 // Report is the result of a run.
@@ -141,6 +147,10 @@ func Run(ctx context.Context, env Env, req Request) (Report, error) {
 			return Report{}, fmt.Errorf("%w %q (known: %s)", ErrUnknownHost, id, strings.Join(HostIDs(), ", "))
 		}
 	}
+	made, err := loadCreated(req.Created)
+	if err != nil {
+		return Report{}, err
+	}
 	rep := Report{DryRun: req.DryRun, Remove: req.Remove, Command: req.Exe, Args: []string{"mcp"},
 		Warnings: exeWarnings(req.Exe), Items: []Item{}}
 	detected := map[string]bool{}
@@ -163,7 +173,7 @@ func Run(ctx context.Context, env Env, req Request) (Report, error) {
 			selected = append(selected, h)
 		}
 	}
-	o := op{env: env, req: req}
+	o := op{env: env, req: req, created: made}
 	skillDone := map[string]string{} // skill folder -> host that handled it in this run
 	for _, h := range selected {
 		if err := ctx.Err(); err != nil {
@@ -186,6 +196,14 @@ func Run(ctx context.Context, env Env, req Request) (Report, error) {
 			}
 		}
 	}
+	if req.Remove {
+		rep.Items = append(rep.Items, made.removeFolders(req.DryRun)...)
+	}
+	if !req.DryRun {
+		if err := made.save(); err != nil {
+			rep.Warnings = append(rep.Warnings, "could not update "+req.Created+": "+err.Error())
+		}
+	}
 	return rep, nil
 }
 
@@ -193,6 +211,8 @@ func Run(ctx context.Context, env Env, req Request) (Report, error) {
 type op struct {
 	env Env
 	req Request
+	// created records the files and folders setup creates (never nil inside Run).
+	created *created
 }
 
 // skillItem installs or removes the skill of h, once per skill folder (Codex and OpenCode share one).

@@ -36,7 +36,7 @@ after M7). The executable must be a stable path that updates replace in place. S
 
 ### Report
 
-Every host and item (`mcp`, `skill`, `hook`) gets one line with an action:
+Every host and item (`mcp`, `skill`, `hook`, and on remove `folder`) gets one line with an action:
 
 | Action | Meaning |
 |---|---|
@@ -71,7 +71,18 @@ The exit code is 1 when any item is `conflict` or `error`. Other items still run
 - Claude Code is changed only through its own CLI (`claude mcp add seelegent --scope user -e SEELEGENT_LEAD=claude --
   <exe> mcp`, and `claude mcp remove --scope user seelegent`), because Claude Code rewrites `~/.claude.json` while it
   runs. Setup reads the file before and after, backs it up first, and checks that the entry appeared. Without the CLI
-  the item is `manual` with the command to run.
+  the item is `manual` with the command to run. An update runs `remove` and then `add`; when the `add` fails, setup
+  adds the previous entry back with the CLI. If that fails too, it copies the backup over `~/.claude.json` only when
+  the file is still exactly what the `remove` left (nothing Claude Code wrote since is lost); otherwise the error names
+  the backup to restore by hand.
+- Setup records the host files and folders it creates (they did not exist before) in `setup-created.json` in the
+  data folder. `--remove` deletes such a file once it holds nothing but an empty server list (for example
+  `{"mcpServers": {}}`, an empty `settings.json`, or a `config.toml` with only white space), together with its
+  `.seelegent.bak` when that holds nothing else either. It then deletes the recorded folders that are empty, deepest
+  first, reported as `folder` items with host `setup` (for example `~/.agents/skills` and `~/.claude/skills`). Files
+  and folders that existed before setup are never deleted; a recorded file the user has added to stays, and stays
+  recorded. A dry run reports the folders that are empty already, but not the files it would delete. An unreadable
+  `setup-created.json` stops the run: fix or delete it.
 
 ### Hosts
 

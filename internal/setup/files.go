@@ -54,18 +54,21 @@ func readHostFile(path string) (hostFile, error) {
 }
 
 // write replaces the file with data atomically. An existing file is first copied to <file>.seelegent.bak, whose
-// path is returned.
-func (f hostFile) write(data []byte) (backup string, err error) {
+// path is returned. A new file, and the folders made for it, are recorded in c.
+func (f hostFile) write(data []byte, c *created) (backup string, err error) {
 	if f.existed {
 		backup = f.real + BackupSuffix
 		if err := fsutil.WriteFileAtomic(backup, f.data, f.perm); err != nil {
 			return "", fmt.Errorf("back up %s: %w", f.real, err)
 		}
-	} else if err := os.MkdirAll(filepath.Dir(f.real), 0o700); err != nil {
+	} else if err := c.mkdirAll(filepath.Dir(f.real), 0o700); err != nil {
 		return "", err
 	}
 	if err := fsutil.WriteFileAtomic(f.real, data, f.perm); err != nil {
 		return backup, err
+	}
+	if !f.existed {
+		c.add(f.real, false)
 	}
 	return backup, nil
 }

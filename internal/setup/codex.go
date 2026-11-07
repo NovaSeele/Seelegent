@@ -229,7 +229,7 @@ func (c codex) install(_ context.Context, o op, want Entry) Item {
 	if o.req.DryRun {
 		return planned(it)
 	}
-	if it.Backup, err = file.write([]byte(f.render())); err != nil {
+	if it.Backup, err = file.write([]byte(f.render()), o.created); err != nil {
 		return failItem(it, err)
 	}
 	return it
@@ -269,10 +269,31 @@ func (c codex) remove(_ context.Context, o op) Item {
 		return planned(it)
 	}
 	f.cut(spot.start, spot.end)
-	if it.Backup, err = file.write([]byte(f.render())); err != nil {
+	var note string
+	if it.Backup, note, err = o.writeHostFile(file, []byte(f.render()), c.bare); err != nil {
 		return failItem(it, err)
 	}
+	it.Detail += note
 	return it
+}
+
+// bare reports whether a config.toml holds nothing but white space and, at most, Seelegent's table.
+func (c codex) bare(data []byte) bool {
+	f, err := parseTOML(string(data))
+	if err != nil {
+		return false
+	}
+	spot, err := c.locate(f)
+	if err != nil {
+		return false
+	}
+	if spot.header >= 0 {
+		if _, ours, _ := c.entry(f, spot); !ours {
+			return false
+		}
+		f.cut(spot.start, spot.end)
+	}
+	return blank([]byte(f.render()))
 }
 
 // appendBlock adds the table at the end of the file, after a blank line.

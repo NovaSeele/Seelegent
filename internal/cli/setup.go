@@ -65,6 +65,11 @@ func newSetupCommand(info buildinfo.Info) *cobra.Command {
 				return err
 			}
 			req.Version, req.Port = info.Version, setupSkillPort()
+			paths, err := config.DefaultPaths()
+			if err != nil {
+				return err
+			}
+			req.Created = filepath.Join(paths.Home, setup.CreatedFile)
 			rep, err := setup.Run(cmd.Context(), env, req)
 			if err != nil {
 				return err

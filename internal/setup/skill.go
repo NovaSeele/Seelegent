@@ -109,7 +109,7 @@ func (o op) installSkill(hostID, dir string) Item {
 			return failItem(it, err)
 		}
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+	if err := o.created.mkdirAll(filepath.Dir(path), 0o750); err != nil {
 		return failItem(it, err)
 	}
 	if err := fsutil.WriteFileAtomic(path, []byte(want), skillPerm); err != nil {
