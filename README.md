@@ -97,8 +97,7 @@ or `rejected`. Tasks run in parallel, can wait for each other (`after`), get the
 in every brief, can run as a worker role (rules, output style, skills, default tier), and can take a Spec Kit feature
 folder and task ids instead of the whole spec. Tasks that stall, loop or ask a question wake the lead early, and tasks
 that need you (a sign-in, no account left) go to the top of the dashboard. You can take a task over in a console
-and hand it back. See
-[task engine](docs/task-engine.md).
+and hand it back. See [task engine](docs/task-engine.md).
 
 **Gates, lanes and proof.** After every worker report the daemon runs the task's gate: the lead's commands, the
 spec's `Gate:` lines or the repository's detected test, lint and build commands, the project doctrine, syntax checks
@@ -110,8 +109,9 @@ runs. See [gates](docs/gates.md).
 **Team.** Members are named workers with a backend, a model or tier, a role and a rank (`worker`, `senior`,
 `peer`). Ask a senior or peer for a second opinion on a finished task (a peer's objection blocks acceptance until
 the lead answers it), leave review notes on diff lines and send them as one followup, hold a meeting of up to six
-members before a hard decision, or run one brief as a contest of 2 to 5 variants in separate worktrees and apply
-the winner. Event hooks run your own shell commands when tasks start, finish or need you. See [team](docs/team.md).
+members before a hard decision (a peer may record a formal dissent), or run one brief as a contest of 2 to 5
+variants in separate worktrees and apply the winner. Event hooks run your own shell commands when tasks start,
+finish or need you. See [team](docs/team.md).
 
 **GitHub.** Connect a repository, sync its open issues into an inbox (or add local ones), and triage each one into a
 ticket: its own worktree and branch, worked by one or more tasks. Once the work is accepted, you or the lead ask
