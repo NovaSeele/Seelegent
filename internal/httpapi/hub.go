@@ -50,9 +50,12 @@ type Hub struct {
 	o        HubOptions
 	instance string
 
-	mu        sync.Mutex
-	seq       uint64
+	mu  sync.Mutex
+	seq uint64
+	// ring[head:] are the kept frames, oldest first. Trimming moves head; the slice is compacted only when more
+	// than half of it is dropped, so a full ring costs O(1) per Publish (amortized), not a copy of the ring.
 	ring      []frame
+	head      int
 	ringBytes int
 	clients   map[*hubClient]struct{}
 	closed    bool
@@ -144,20 +147,24 @@ func (h *Hub) Publish(event api.StreamEvent, v any) error {
 	return nil
 }
 
+// kept returns the frames in the ring, oldest first. The slice aliases the ring: copy what outlives the lock.
+func (h *Hub) kept() []frame { return h.ring[h.head:] }
+
 // trimLocked drops frames over the ring's limits.
 func (h *Hub) trimLocked(now time.Time) {
-	drop := 0
-	for drop < len(h.ring) {
-		f := h.ring[drop]
-		if len(h.ring)-drop > h.o.RingFrames || h.ringBytes > h.o.RingBytes || now.Sub(f.at) > h.o.RingAge {
-			h.ringBytes -= len(f.wire)
-			drop++
-			continue
+	for h.head < len(h.ring) {
+		f := &h.ring[h.head]
+		if len(h.ring)-h.head <= h.o.RingFrames && h.ringBytes <= h.o.RingBytes && now.Sub(f.at) <= h.o.RingAge {
+			break
 		}
-		break
+		h.ringBytes -= len(f.wire)
+		*f = frame{} // let the encoded frame go
+		h.head++
 	}
-	if drop > 0 {
-		h.ring = append(h.ring[:0:0], h.ring[drop:]...)
+	if h.head > 0 && h.head*2 >= len(h.ring) {
+		n := copy(h.ring, h.ring[h.head:])
+		clear(h.ring[n:])
+		h.ring, h.head = h.ring[:n], 0
 	}
 }
 
@@ -208,15 +215,14 @@ func (h *Hub) subscribe(lastID string) (*subscription, bool) {
 		case !ok || err != nil || inst != h.instance || seq > h.seq:
 			s.reset = api.ResetRestart
 		case seq == h.seq:
-		case len(h.ring) == 0 || seq+1 < h.ring[0].seq:
+		case len(h.kept()) == 0 || seq+1 < h.kept()[0].seq:
 			s.reset = api.ResetTooOld
 		default:
+			// Seqs in the ring are consecutive, so the first missed frame is at a known index. The replay is a copy:
+			// the ring is compacted in place after the lock is released.
 			s.helloID = lastID
-			for _, f := range h.ring {
-				if f.seq > seq {
-					s.replay = append(s.replay, f)
-				}
-			}
+			kept := h.kept()
+			s.replay = append([]frame(nil), kept[seq+1-kept[0].seq:]...)
 		}
 		if s.reset != "" {
 			s.resetID = h.idLocked(h.seq)

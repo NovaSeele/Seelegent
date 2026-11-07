@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"fmt"
 	"net/netip"
 	"strings"
 	"sync"
@@ -105,10 +106,35 @@ func TestHubRingAgeAndBytes(t *testing.T) {
 	h2, _ := newTestHub(t, HubOptions{RingBytes: 100})
 	publishN(t, h2, 10) // each frame is about 50 bytes
 	h2.mu.Lock()
-	n, size := len(h2.ring), h2.ringBytes
+	n, size := len(h2.kept()), h2.ringBytes
 	h2.mu.Unlock()
 	if n == 0 || n > 2 || size > 100 {
 		t.Fatalf("ring %d frames, %d bytes", n, size)
+	}
+}
+
+// TestHubRingStaysBounded: a full ring trims by moving its head and compacts now and then, so its backing array
+// stays small however many frames pass, and resumes still replay exactly the missed frames.
+func TestHubRingStaysBounded(t *testing.T) {
+	h, _ := newTestHub(t, HubOptions{RingFrames: 8})
+	publishN(t, h, 1000)
+	h.mu.Lock()
+	kept, capacity, head := len(h.kept()), cap(h.ring), h.head
+	first := h.kept()[0].seq
+	h.mu.Unlock()
+	if kept != 8 || first != 993 || capacity > 32 || head >= 8 {
+		t.Fatalf("ring: %d kept from seq %d, cap %d, head %d", kept, first, capacity, head)
+	}
+	for _, from := range []uint64{992, 995, 999} {
+		sub, ok := h.subscribe(fmt.Sprintf("abcd1234.%d", from))
+		if !ok || sub.reset != "" || len(sub.replay) != int(1000-from) || sub.replay[0].seq != from+1 ||
+			sub.replay[len(sub.replay)-1].seq != 1000 {
+			t.Fatalf("resume from %d = %+v", from, sub)
+		}
+		h.unsubscribe(sub.client)
+	}
+	if sub, _ := h.subscribe("abcd1234.991"); sub.reset != api.ResetTooOld {
+		t.Fatalf("resume before the ring = %+v", sub)
 	}
 }
 
