@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/NovaSeele/Seelegent/internal/api"
 	"github.com/NovaSeele/Seelegent/internal/member"
@@ -139,6 +140,41 @@ func TestConsultPeerObjection(t *testing.T) {
 	}
 	if len(d.Consults) != 1 || d.Consults[0].Findings == nil {
 		t.Errorf("detail consults = %+v", d.Consults)
+	}
+}
+
+// TestConsultDuringFollowup creates a consult run while a followup on the parent is saved: the child task is
+// created outside the parent's lock, so neither call waits on the other (lock order: claimMu, then the task).
+func TestConsultDuringFollowup(t *testing.T) {
+	h := newHarness(t)
+	h.initRepo(map[string]string{"a.txt": "one\n"})
+	h.agy("w", 2)
+	h.member(api.MemberInput{ID: "rev", Name: "Reviewer", Backend: "agy", Rank: api.RankPeer})
+	h.queue.Push(t, okScript("conv-p", "Done."))
+	sum := h.delegate(api.DelegateRequest{Title: "parent"})
+	h.waitStatus(sum.ID, StatusDone)
+	h.queue.Push(t, okScript("conv-x", "## Verdict\napprove\n"))
+	h.queue.Push(t, okScript("conv-y", "## Verdict\napprove\n"))
+	errs := make(chan error, 2)
+	go func() {
+		_, err := h.s.Consult(t.Context(), sum.ID, api.ConsultRequest{Member: "rev"})
+		errs <- err
+	}()
+	go func() {
+		_, err := h.s.Followup(t.Context(), sum.ID, api.FollowupRequest{Message: "Once more."})
+		errs <- err
+	}()
+	timeout := time.After(20 * time.Second)
+	for range 2 {
+		select {
+		case err := <-errs:
+			// The followup may find the consult's turn-ended check racing it; only a hang is a failure here.
+			if err != nil && !errors.Is(err, ErrBadState) {
+				t.Errorf("concurrent call: %v", err)
+			}
+		case <-timeout:
+			t.Fatal("consult and followup on the same task deadlocked")
+		}
 	}
 }
 
