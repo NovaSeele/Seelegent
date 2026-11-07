@@ -182,6 +182,7 @@ func (m *migrator) importAccount(ctx context.Context, oa oldAccount, settings co
 		n.Kind, n.Provider = account.KindAPIKey, oa.Provider
 	}
 	created, _ := time.Parse(time.RFC3339Nano, oa.CreatedAt)
+	already := false
 	a, err := m.accounts.Get(ctx, oa.ID)
 	switch {
 	case err == nil && (a.Backend != n.Backend || a.Kind != n.Kind || a.Provider != n.Provider):
@@ -189,6 +190,7 @@ func (m *migrator) importAccount(ctx context.Context, oa oldAccount, settings co
 			"(its profile and key were not imported)", a.Backend, a.Kind)
 		return
 	case err == nil:
+		already = true
 		m.add(KindAccount, oa.ID, Unchanged, "already imported")
 	case !errors.Is(err, account.ErrNotFound):
 		m.add(KindAccount, oa.ID, Error, "%v", err)
@@ -204,7 +206,7 @@ func (m *migrator) importAccount(ctx context.Context, oa oldAccount, settings co
 		m.add(KindAccount, oa.ID, Imported, "%s %s account %q", a.Backend, a.Kind, a.Label)
 	}
 	if a.Kind != account.KindSystem {
-		m.importProfile(a, settings.LinkIntoProfiles)
+		m.importProfile(a, settings.LinkIntoProfiles, already)
 	}
 	if a.Kind == account.KindAPIKey {
 		m.importKey(ctx, a)
@@ -226,8 +228,9 @@ func cleanLabel(l string) string {
 	return l
 }
 
-// importProfile copies the account's profile home from the old folder, unless it is the same folder.
-func (m *migrator) importProfile(a account.Account, links []string) {
+// importProfile copies the account's profile home from the old folder, unless it is the same folder. already says
+// the account was imported by an earlier run, whose copy an existing profile folder then is.
+func (m *migrator) importProfile(a account.Account, links []string, already bool) {
 	src := m.old("profiles", a.ID, "home")
 	prof, err := m.profiles.For(a)
 	if err != nil {
@@ -240,6 +243,10 @@ func (m *migrator) importProfile(a account.Account, links []string) {
 	}
 	if st, err := os.Stat(src); err != nil || !st.IsDir() {
 		m.add(KindProfile, a.ID, Skipped, "no profile folder in the old data; sign the account in again")
+		return
+	}
+	if exists(prof.Home) && already {
+		m.add(KindProfile, a.ID, Unchanged, "the profile folder %s is already there", prof.Home)
 		return
 	}
 	if exists(prof.Home) {

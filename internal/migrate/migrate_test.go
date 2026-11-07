@@ -334,7 +334,7 @@ func TestMigrate(t *testing.T) {
 	}
 	want(t, again, KindSettings, "", Unchanged)
 	want(t, again, KindAccount, "acc5", Unchanged)
-	want(t, again, KindProfile, "acc2", Kept)
+	want(t, again, KindProfile, "acc2", Unchanged)
 	want(t, again, KindKey, "acc5", Unchanged)
 	want(t, again, KindMemory, pk, Unchanged)
 	want(t, again, KindHistory, pk, Unchanged)
