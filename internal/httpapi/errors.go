@@ -147,7 +147,7 @@ func toAPIError(err error) *apiError {
 		return newError(api.CodeBadState, "%s", msg)
 	case errors.Is(err, account.ErrConflict):
 		return newError(api.CodeConflict, "%s", msg)
-	case errors.Is(err, task.ErrUnavailable):
+	case errors.Is(err, task.ErrUnavailable), errors.Is(err, gitx.ErrNoGit):
 		return newError(api.CodeUnavailable, "%s", msg)
 	case errors.Is(err, memory.ErrTooLarge):
 		return newError(api.CodeTooLarge, "%s", msg)

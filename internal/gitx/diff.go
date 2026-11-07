@@ -62,7 +62,7 @@ func (r *Repos) Diff(ctx context.Context, root, rel, base string, untracked bool
 		return untrackedDiff(root, rel)
 	}
 	if base == "HEAD" {
-		if _, _, err := r.run(ctx, root, ReadTimeout, 0, "rev-parse", "--verify", "--quiet", "HEAD^{commit}"); err != nil {
+		if _, _, err := r.run(ctx, root, ReadTimeout, 0, "rev-parse", "--verify", "--quiet", "HEAD"); err != nil {
 			base = emptyTree
 		}
 	}

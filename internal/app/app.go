@@ -242,17 +242,21 @@ func (a *App) build(o Options) error {
 	if consoles == nil {
 		consoles = terminals{}
 	}
+	// One git executable for the daemon, found through its PATH (never a Windows batch shim), shared by the task
+	// engine's baseline and the git views.
+	gitBin := gitx.NewBinary(func() []string { return a.env })
 	a.Tasks, err = task.New(task.Options{
 		DB: a.DB, Accounts: a.Accounts, Pool: p, Backends: a.Backends, Settings: a.Settings,
 		TasksDir: o.Paths.Tasks, Launcher: o.Launcher, Usage: a.Usage, QuotaRefresh: a.Refresher.Request,
 		Memory: a.Memory, Roles: a.Roles, Consoles: consoles, Clock: o.Clock, Logger: a.log,
 		BaseEnv:   func() []string { return a.env },
 		Dashboard: a.dashboardLink,
+		Git:       gitBin,
 	})
 	if err != nil {
 		return err
 	}
-	a.Git = gitx.New(now)
+	a.Git = gitx.New(now, gitBin)
 	a.SignIn = signin.New(signin.Options{
 		Accounts: a.Accounts,
 		Backend: func(name string) (backend.Backend, bool) {

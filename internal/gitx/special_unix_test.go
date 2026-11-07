@@ -34,7 +34,7 @@ func within(t *testing.T, what string, fn func()) {
 func TestSpecialFiles(t *testing.T) {
 	dir := newRepo(t)
 	ctx := context.Background()
-	r := New(nil)
+	r := New(nil, nil)
 	if err := syscall.Mkfifo(filepath.Join(dir, "pipe"), 0o600); err != nil {
 		t.Fatal(err)
 	}

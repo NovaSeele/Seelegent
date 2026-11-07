@@ -12,6 +12,7 @@ import (
 
 	"github.com/NovaSeele/Seelegent/internal/api"
 	"github.com/NovaSeele/Seelegent/internal/brief"
+	"github.com/NovaSeele/Seelegent/internal/gitx"
 	"github.com/NovaSeele/Seelegent/internal/launch"
 )
 
@@ -131,14 +132,15 @@ func TestCancelledTakeoverFreesSlot(t *testing.T) {
 
 // TestBaselineInBrief captures the files with uncommitted changes when the task starts and lists them in the brief.
 func TestBaselineInBrief(t *testing.T) {
-	if _, err := exec.LookPath("git"); err != nil {
-		t.Skip("git is not installed")
+	gitPath, err := gitx.NewBinary(nil).Path() // as the engine finds it: never a Windows batch shim
+	if err != nil {
+		t.Skipf("no usable git: %v", err)
 	}
 	h := newHarness(t)
 	h.agy("only", 0)
 	git := func(args ...string) {
 		t.Helper()
-		cmd := exec.CommandContext(t.Context(), "git", args...)
+		cmd := exec.CommandContext(t.Context(), gitPath, args...)
 		cmd.Dir = h.cwd
 		if out, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("git %v: %v\n%s", args, err, out)

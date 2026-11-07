@@ -263,7 +263,7 @@ func (s *Service) runTask(r *run) {
 // takeBaseline records which files under the task's folder already had uncommitted changes before its first
 // worker ran, so the brief tells the worker not to revert them (old A10).
 func (s *Service) takeBaseline(ctx context.Context, t *Task) {
-	root, files := captureBaseline(ctx, t.Cwd)
+	root, files := captureBaseline(ctx, s.o.Git, t.Cwd)
 	if ctx.Err() != nil {
 		return
 	}

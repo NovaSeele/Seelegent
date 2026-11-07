@@ -14,9 +14,19 @@ import (
 	"github.com/NovaSeele/Seelegent/internal/api"
 )
 
+// gitExe finds git the way the daemon does (never a Windows batch shim); the test skips without one.
+func gitExe(t *testing.T) string {
+	t.Helper()
+	p, err := NewBinary(nil).Path()
+	if err != nil {
+		t.Skipf("no usable git: %v", err)
+	}
+	return p
+}
+
 func git(t *testing.T, dir string, args ...string) string {
 	t.Helper()
-	cmd := exec.CommandContext(t.Context(), "git", args...)
+	cmd := exec.CommandContext(t.Context(), gitExe(t), args...)
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL="+os.DevNull, "GIT_CONFIG_NOSYSTEM=1")
 	out, err := cmd.CombinedOutput()
@@ -39,9 +49,7 @@ func write(t *testing.T, path, text string) {
 // newRepo makes a repository with one commit of a.txt, b.txt, other.txt and pages/[id].vue.
 func newRepo(t *testing.T) string {
 	t.Helper()
-	if _, err := exec.LookPath("git"); err != nil {
-		t.Skip("git is not installed")
-	}
+	gitExe(t)
 	dir := t.TempDir()
 	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
 	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
@@ -61,7 +69,7 @@ func newRepo(t *testing.T) string {
 func TestStatusTaskGitAndCommit(t *testing.T) {
 	dir := newRepo(t)
 	ctx := context.Background()
-	r := New(nil)
+	r := New(nil, nil)
 	write(t, filepath.Join(dir, "a.txt"), "one\nTWO\nthree\nfour\n")
 	write(t, filepath.Join(dir, "new.txt"), "n1\nn2\n")
 	write(t, filepath.Join(dir, "pages", "[id].vue"), "<template>x</template>\n")
@@ -141,7 +149,7 @@ func TestStatusTaskGitAndCommit(t *testing.T) {
 func TestDiff(t *testing.T) {
 	dir := newRepo(t)
 	ctx := context.Background()
-	r := New(nil)
+	r := New(nil, nil)
 	write(t, filepath.Join(dir, "a.txt"), "one\nTWO\nthree\n")
 	write(t, filepath.Join(dir, "new.txt"), "n1\nn2")
 	write(t, filepath.Join(dir, "bin.dat"), "a\x00b")
@@ -178,12 +186,10 @@ func TestDiff(t *testing.T) {
 }
 
 func TestStatusOutsideRepoAndBranchCache(t *testing.T) {
-	if _, err := exec.LookPath("git"); err != nil {
-		t.Skip("git is not installed")
-	}
+	gitExe(t)
 	ctx := context.Background()
 	now := time.Date(2026, 11, 7, 0, 0, 0, 0, time.UTC)
-	r := New(func() time.Time { return now })
+	r := New(func() time.Time { return now }, nil)
 	plain := t.TempDir()
 	st, err := r.Status(ctx, plain)
 	if err != nil || st.Repo {
@@ -212,7 +218,7 @@ func TestStatusOutsideRepoAndBranchCache(t *testing.T) {
 func TestNoTextconv(t *testing.T) {
 	dir := newRepo(t)
 	ctx := context.Background()
-	r := New(nil)
+	r := New(nil, nil)
 	marker := filepath.Join(t.TempDir(), "ran")
 	git(t, dir, "config", "diff.evil.textconv", "touch '"+filepath.ToSlash(marker)+"'; cat")
 	write(t, filepath.Join(dir, ".gitattributes"), "*.txt diff=evil\n")

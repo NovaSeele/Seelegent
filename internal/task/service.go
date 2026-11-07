@@ -18,6 +18,7 @@ import (
 	"github.com/NovaSeele/Seelegent/internal/brief"
 	"github.com/NovaSeele/Seelegent/internal/clock"
 	"github.com/NovaSeele/Seelegent/internal/config"
+	"github.com/NovaSeele/Seelegent/internal/gitx"
 	"github.com/NovaSeele/Seelegent/internal/memory"
 	"github.com/NovaSeele/Seelegent/internal/pool"
 	"github.com/NovaSeele/Seelegent/internal/role"
@@ -132,6 +133,8 @@ type Options struct {
 	BaseEnv func() []string
 	// Dashboard returns the dashboard link of a task (for reports); nil leaves it empty.
 	Dashboard func(taskID string) string
+	// Git is the daemon's git executable, for the baseline (gitx.NewBinary over BaseEnv when nil).
+	Git *gitx.Binary
 	// Clock is the time source (the system clock when nil).
 	Clock clock.Clock
 	// Logger receives engine logs (discarded when nil). Use a logx logger so secrets are masked.
@@ -179,6 +182,9 @@ func New(o Options) (*Service, error) {
 	}
 	if o.BaseEnv == nil {
 		o.BaseEnv = os.Environ
+	}
+	if o.Git == nil {
+		o.Git = gitx.NewBinary(o.BaseEnv)
 	}
 	root, cancel := context.WithCancel(context.Background())
 	return &Service{

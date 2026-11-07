@@ -11,11 +11,16 @@ import (
 	"testing"
 
 	"github.com/NovaSeele/Seelegent/internal/api"
+	"github.com/NovaSeele/Seelegent/internal/gitx"
 )
 
 func gitIn(t *testing.T, dir string, args ...string) string {
 	t.Helper()
-	cmd := exec.CommandContext(t.Context(), "git", args...)
+	gitPath, err := gitx.NewBinary(nil).Path() // as the daemon finds it: never a Windows batch shim
+	if err != nil {
+		t.Skipf("no usable git: %v", err)
+	}
+	cmd := exec.CommandContext(t.Context(), gitPath, args...)
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), "GIT_CONFIG_NOSYSTEM=1", "GIT_TERMINAL_PROMPT=0")
 	out, err := cmd.CombinedOutput()

@@ -1,7 +1,7 @@
 // Package gitx runs the git commands of the HTTP API (contract §3.3): repository status, file diffs (parsed, never
 // sent as unified text), a task's changed files and commits of exactly the files the user picked.
 //
-// Every git call is exec with an argument list, never a shell; paths from users or workers are passed after "--"
+// Every git call is exec with an argument list, never a shell (Binary never picks a Windows batch shim); paths from users or workers are passed after "--"
 // with literal pathspecs, so `pages/[id].vue` or `:!x` are plain names. Read commands time out after 20 s and a
 // commit after 5 min; on timeout the whole process tree is killed (hooks start children). Writes run under a
 // per-repository mutex keyed by fsutil.Key(root), which every git-writing feature shares (Repos.Lock).
@@ -73,7 +73,7 @@ func (e *Error) Unwrap() error { return e.Err }
 
 // Repos runs git for the daemon. It holds the per-repository write locks and the branch cache.
 type Repos struct {
-	git string
+	git *Binary
 	now func() time.Time
 
 	mu       sync.Mutex
@@ -86,12 +86,16 @@ type branchEntry struct {
 	info *api.BranchInfo
 }
 
-// New returns a Repos that runs the git found on PATH. now is the clock of the branch cache (time.Now when nil).
-func New(now func() time.Time) *Repos {
+// New returns a Repos that runs the git of bin (the composition root shares one Binary; NewBinary(nil) when nil).
+// now is the clock of the branch cache (time.Now when nil).
+func New(now func() time.Time, bin *Binary) *Repos {
 	if now == nil {
 		now = time.Now
 	}
-	return &Repos{git: "git", now: now, locks: map[string]*sync.Mutex{}, branches: map[string]branchEntry{}}
+	if bin == nil {
+		bin = NewBinary(nil)
+	}
+	return &Repos{git: bin, now: now, locks: map[string]*sync.Mutex{}, branches: map[string]branchEntry{}}
 }
 
 // Lock takes the write lock of the repository at root and returns its unlock function. Every feature that writes
@@ -126,11 +130,15 @@ func (r *Repos) Lock(ctx context.Context, root string) (func(), error) {
 // reported by the second result.
 func (r *Repos) run(ctx context.Context, dir string, timeout time.Duration, limit int, args ...string) (stdout []byte,
 	truncated bool, err error) {
+	git, err := r.git.Path()
+	if err != nil {
+		return nil, false, err
+	}
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	full := append([]string{"-c", "core.fsmonitor=false", "-c", "core.quotepath=off", "-c", "color.ui=false"},
 		args...)
-	cmd := exec.Command(r.git, full...) //nolint:gosec,noctx // fixed binary, argument list; the tree is killed when ctx ends
+	cmd := exec.Command(git, full...) //nolint:noctx // the tree is killed when ctx ends
 	cmd.Dir = dir
 	cmd.Env = append(cmd.Environ(), "GIT_TERMINAL_PROMPT=0", "GIT_LITERAL_PATHSPECS=1", "LC_ALL=C",
 		"GIT_OPTIONAL_LOCKS=0")
