@@ -6,17 +6,19 @@ import (
 	"time"
 )
 
-// Recent returns up to limit tasks (with turns) that are active or were changed at or after since: active ones
-// first, then the most recently changed (the contention view, old contention.js).
+// Recent returns up to limit tasks (with turns) that are pending (active or waiting for dependencies, whatever their
+// age: they hold their lane claims) or were changed at or after since: pending ones first, then the most recently
+// changed (the contention view, old contention.js).
 func (r *Repo) Recent(ctx context.Context, since time.Time, limit int) ([]*Task, error) {
 	var out []*Task
 	err := r.db.Read(ctx, func(tx *sql.Tx) error {
 		rows, err := tx.QueryContext(ctx, `SELECT `+taskColumns+` FROM tasks
-			WHERE status IN (?, ?, ?) OR updated_at >= ?
-			ORDER BY CASE WHEN status IN (?, ?, ?) THEN 0 ELSE 1 END, updated_at DESC, id
+			WHERE status IN (?, ?, ?, ?) OR updated_at >= ?
+			ORDER BY CASE WHEN status IN (?, ?, ?, ?) THEN 0 ELSE 1 END, updated_at DESC, id
 			LIMIT ?`,
-			string(StatusQueued), string(StatusRunning), string(StatusWaitingQuota), formatTime(since),
-			string(StatusQueued), string(StatusRunning), string(StatusWaitingQuota), limit)
+			string(StatusQueued), string(StatusRunning), string(StatusWaitingQuota), string(StatusWaitingDeps),
+			formatTime(since),
+			string(StatusQueued), string(StatusRunning), string(StatusWaitingQuota), string(StatusWaitingDeps), limit)
 		if err != nil {
 			return err
 		}

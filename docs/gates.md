@@ -116,8 +116,11 @@ recorded as `error` and does not hold the task. `verify` events (`phase: start |
 ## Lanes and claims
 
 A lane is a list of files, folders (`dir/`) and globs relative to the repository root; `..` and absolute paths are
-refused. A task's lane is a claim while the task is pending or running, and for `laneHoldHours` after it ends
-while it is not reviewed. `GET /lanes` lists the claims of a repository.
+refused. A task's lane is a claim while the task is pending (queued, waiting for quota or for its dependencies,
+however long) or running, and for `laneHoldHours` after it ends while it is not reviewed (accepting or rejecting
+it releases the claim). `GET /lanes` lists the claims of a repository. A task leaving its dependencies does not
+check its lane again: its claim was held the whole time, so an overlap can only be one the lead forced or one
+`lanes: warn` allowed.
 
 | `lanes` | A new claim that overlaps another task's | Files changed outside the lane |
 |---|---|---|
@@ -125,7 +128,8 @@ while it is not reviewed. `GET /lanes` lists the claims of a repository.
 | `warn` | allowed with a `lane` event `warning` | lane step `warn` |
 | `off` | not checked | no lane step |
 
-Delegate checks and creates the claim under one lock, so two delegates cannot claim the same files at once. The
+Delegate and followup check and save the claim under one lock, so two requests cannot claim the same files at
+once. The
 milestone 12 overlap warnings (`fileOverlaps`) still report files several tasks changed, lane or not;
 `GET /contention` lists those of the last `contentionWindowHours`.
 

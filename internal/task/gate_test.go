@@ -1,6 +1,7 @@
 package task
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -495,5 +496,62 @@ func TestGateEnvTurnFiles(t *testing.T) {
 	long := []string{strings.Repeat("x", turnFilesEnvMax+1)}
 	if n, _ := count(h.s.gateEnv(&Task{ID: "t1"}, long)); n != 0 {
 		t.Errorf("a list too long kept %d values: the inherited one must go too", n)
+	}
+}
+
+// TestLaneClaimOfWaitingTask: a task waiting for its dependencies holds its lane however long it waits.
+func TestLaneClaimOfWaitingTask(t *testing.T) {
+	h := newHarness(t)
+	h.set(func(s *config.Settings) { s.LaneHoldHours = 0 })
+	if err := mkdir(filepath.Join(h.cwd, "src")); err != nil {
+		t.Fatal(err)
+	}
+	h.initRepo(map[string]string{"src/x.go": "package x\n"})
+	// No account: A stays queued and X waits for it.
+	a := h.delegate(api.DelegateRequest{Title: "A", Lane: []string{"docs/"}})
+	x := h.delegate(api.DelegateRequest{Title: "X", Lane: []string{"src"}, After: []string{a.ID}})
+	if st := h.task(x.ID).Status; st != StatusWaitingDeps {
+		t.Fatalf("X = %s", st)
+	}
+	h.clk.Advance(13 * time.Hour)
+	_, err := h.s.Delegate(t.Context(), api.DelegateRequest{Prompt: "y", Cwd: h.cwd, Lane: []string{"src/x.go"}})
+	var lc *LaneConflictError
+	if !errors.As(err, &lc) || lc.Conflicts[0].TaskID != x.ID {
+		t.Fatalf("overlap with a waiting task's lane = %v", err)
+	}
+}
+
+// TestFollowupLaneClaimRace: a delegate that claims the files a followup is moving its lane to, between the
+// followup's check and its save, waits and is refused (old D25a on the followup path).
+func TestFollowupLaneClaimRace(t *testing.T) {
+	h := newHarness(t)
+	if err := mkdir(filepath.Join(h.cwd, "src")); err != nil {
+		t.Fatal(err)
+	}
+	h.initRepo(map[string]string{"src/x.go": "package x\n"})
+	// No account: A stays queued, F waits for it and the forced followup only queues it.
+	a := h.delegate(api.DelegateRequest{Title: "A", Lane: []string{"docs/"}})
+	f := h.delegate(api.DelegateRequest{Title: "F", Lane: []string{"other/"}, After: []string{a.ID}})
+	var delegateErr error
+	done := make(chan struct{})
+	h.s.laneChecked = func() {
+		h.s.laneChecked = nil
+		go func() {
+			defer close(done)
+			_, delegateErr = h.s.Delegate(context.Background(), api.DelegateRequest{Prompt: "y", Cwd: h.cwd,
+				Lane: []string{"src/x.go"}})
+		}()
+		// Without the lock the delegate would claim src/x.go right now, before the followup saves.
+		select {
+		case <-done:
+		case <-time.After(300 * time.Millisecond):
+		}
+	}
+	if _, err := h.s.Followup(t.Context(), f.ID, api.FollowupRequest{Force: true, Lane: []string{"src/"}}); err != nil {
+		t.Fatalf("followup = %v", err)
+	}
+	<-done
+	if !errors.Is(delegateErr, ErrConflict) {
+		t.Fatalf("the delegate claimed the files the followup took: %v", delegateErr)
 	}
 }

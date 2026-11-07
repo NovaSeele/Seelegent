@@ -205,6 +205,9 @@ func (s *Service) Followup(ctx context.Context, id string, req api.FollowupReque
 	preq := proofRequest{gate: req.Gate, gateCommands: req.GateCommands, lane: req.Lane, noLane: req.NoLane,
 		forceLane: req.ForceLane, verify: req.Verify}
 	start := false
+	// A new lane is checked and saved as one step, as in Delegate (old D25a): claimMu is held through the mutate
+	// (lock order claimMu, then the task).
+	s.claimMu.Lock()
 	_, err := s.mutate(ctx, id, func(t *Task) ([]NewEvent, error) {
 		start = false
 		if t.Manual {
@@ -263,6 +266,7 @@ func (s *Service) Followup(ctx context.Context, id string, req api.FollowupReque
 		start = true
 		return append([]NewEvent{ev}, laneEvs...), nil
 	})
+	s.claimMu.Unlock()
 	if err != nil {
 		return api.TaskSummary{}, err
 	}

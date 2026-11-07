@@ -87,9 +87,10 @@ func (r proofRequest) asksGate() bool {
 		(r.verify != nil && *r.verify)
 }
 
-// followupProof applies the gate part of a followup to t inside its mutate: the automatic fix budget starts again,
-// and a request that changes the gate, the lane or the spec tasks resolves the proof again (checking a new lane).
-// changed reports whether the lane or the gate commands changed, so the continuation repeats them.
+// followupProof applies the gate part of a followup to t inside its mutate, which the caller runs holding claimMu:
+// the automatic fix budget starts again, and a request that changes the gate, the lane or the spec tasks resolves
+// the proof again (checking a new lane). changed reports whether the lane or the gate commands changed, so the
+// continuation repeats them.
 func (s *Service) followupProof(ctx context.Context, t *Task, req proofRequest, tasksChanged bool) (
 	[]NewEvent, bool, error) {
 	if !gated(t) {
@@ -117,11 +118,13 @@ func (s *Service) followupProof(ctx context.Context, t *Task, req proofRequest, 
 			p.Lane.Forced = slices.Clone(prev.Lane.Forced)
 		}
 		if !same || req.forceLane {
-			s.claimMu.Lock()
+			// The caller (Followup) holds claimMu through the save.
 			evs, err = s.checkLane(ctx, t, p, req.forceLane)
-			s.claimMu.Unlock()
 			if err != nil {
 				return nil, false, err
+			}
+			if s.laneChecked != nil {
+				s.laneChecked()
 			}
 		}
 	}

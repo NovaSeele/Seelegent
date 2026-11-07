@@ -189,6 +189,8 @@ type Service struct {
 	depsMu sync.Mutex
 	// claimMu makes a lane claim check and the task's save one step (old bug D25a).
 	claimMu sync.Mutex
+	// laneChecked, when set (tests), runs after a followup's lane check and before its save.
+	laneChecked func()
 
 	// health is the accounts' state the attention rules read, refreshed by the attention watcher.
 	healthMu sync.Mutex
