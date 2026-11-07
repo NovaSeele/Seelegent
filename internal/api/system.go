@@ -25,6 +25,16 @@ type Health struct {
 	PID        int    `json:"pid"`
 	Port       int    `json:"port"`
 	StartedAt  string `json:"startedAt"`
+	// HomeID identifies the data directory the daemon serves (config.HomeID: a hash, never the path). A client of
+	// another data directory refuses this daemon instead of using or stopping it.
+	HomeID string `json:"homeId"`
+}
+
+// DaemonStop is the answer (202) of POST /daemon/stop: the daemon accepted the request and shuts down right after
+// answering, as on Ctrl+C. The caller waits for its lock to be free and its port to go quiet.
+type DaemonStop struct {
+	Stopping bool `json:"stopping" ts:"true"`
+	PID      int  `json:"pid"`
 }
 
 // BootState is GET /state: everything the dashboard needs for its first paint, in one request. LastEventID is the

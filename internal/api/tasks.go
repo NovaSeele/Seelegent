@@ -94,6 +94,23 @@ type Session struct {
 	HostID      string `json:"hostId,omitempty"`
 	Title       string `json:"title,omitempty"`
 	ParentTitle string `json:"parentTitle,omitempty"`
+	// Lead is the lead host (Leads); the worker brief names it. The daemon refuses other values.
+	Lead string `json:"lead,omitempty" ts:"'claude' | 'codex' | 'opencode' | 'gemini' | 'agy' | 'cli'"`
+}
+
+// Lead hosts a Session can name: the lead coding agents Seelegent registers with, and cli for the command line.
+const (
+	LeadClaude   = "claude"
+	LeadCodex    = "codex"
+	LeadOpenCode = "opencode"
+	LeadGemini   = "gemini"
+	LeadAgy      = "agy"
+	LeadCLI      = "cli"
+)
+
+// Leads lists every lead host a Session can name.
+func Leads() []string {
+	return []string{LeadClaude, LeadCodex, LeadOpenCode, LeadGemini, LeadAgy, LeadCLI}
 }
 
 // Attention states.

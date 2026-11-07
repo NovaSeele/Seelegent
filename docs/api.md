@@ -14,7 +14,7 @@ endpoint tables.
 |---|---|
 | §1 rules: Host check, `X-Seelegent` + same-origin, body limit, unknown fields, enums, paths, error shape, keyset lists | `internal/httpapi/server.go` (`serve`), `decode.go`, `errors.go` |
 | §1.3 worker guard | `internal/httpapi/guard.go` (classifier over the task engine's worker process trees) |
-| §2 system (`/health`, `/state`, `/backends`, `/models`, `/logs`, `/projects`, `/spec`) | `system.go` |
+| §2 system (`/health`, `/state`, `/backends`, `/models`, `/logs`, `/projects`, `/spec`, `POST /daemon/stop`) | `system.go` |
 | §3 tasks, wait, task git, repo git | `tasks.go`, `git.go` |
 | §4 accounts, quota, sign-in, keys, providers, usage | `accounts.go`, `convert.go` |
 | §5 settings, memory, roles | `settings.go` |
@@ -82,13 +82,23 @@ in the daemon.
   them), whichever of the handler and that watcher sees the change first. Accounts cannot change provider through
   the API today; the watcher covers it if they ever do.
 - `POST /tasks/wait` takes the cwd for its report from an optional `cwd` query parameter. A wait whose client went
-  away writes nothing.
+  away writes nothing. When the daemon shuts down (`Server.Close`, on `POST /daemon/stop` and on Ctrl+C) every open
+  wait ends at once with `503 daemon_stopping` (a wait that ended on its own just before is answered normally), so
+  `http.Server.Shutdown` does not sit out the waits; the clients take that code to mean "do not start the daemon
+  again" (see [cli.md](cli.md) and [mcp.md](mcp.md)).
+- `GET /health` carries `homeId` (`config.HomeID`: 16 hex digits of the SHA-256 of `fsutil.Key(home)`), so a client
+  of another data directory refuses this daemon instead of using or stopping it.
 - `capabilities.takeover` is true for backends that can resume a session; `apiKey` for every backend but agy;
   `listModels` for codex.
 - Sign-in runs in a terminal window. Once the window is open the session is `in_terminal` ("finish signing in in the
   terminal window that opened"); no backend reaches `waiting_code` or `open_url` today, because the window takes the
   code itself and no URL is captured. `POST /accounts/{id}/login/code` therefore answers `409 bad_state` (`404` without
   a sign-in). Logout recreates the account's profile folder empty.
+- `POST /daemon/stop` only signals (`httpapi.Options.Stop`, wired to `App.RequestStop`) and answers `202
+  DaemonStop`; `seelegent daemon` then leaves its wait and runs the same shutdown as Ctrl+C (port file removed first,
+  `App.Close`, lock released last), and `http.Server.Shutdown` lets the answer finish first. A server built without
+  `Stop` answers `503 unavailable`. The worker guard denies it like every route outside the allow-list. The daemon
+  also writes its pid on the second line of `run/daemon.port`; `seelegent stop` and `doctor` only show it.
 - A worker may call `GET /spec` with an absolute `dir`. The guard checks the task's cwd only, as the contract says,
   and `dir` must stay inside that cwd.
 

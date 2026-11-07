@@ -689,6 +689,7 @@ export type ErrorCode =
   | 'misdirected_request'
   | 'upstream'
   | 'unavailable'
+  | 'daemon_stopping'
   | 'internal'
   | 'not_implemented'
 
@@ -766,6 +767,20 @@ export interface Health {
   pid: number
   port: number
   startedAt: string
+  /**
+   * HomeID identifies the data directory the daemon serves (config.HomeID: a hash, never the path). A client of
+   * another data directory refuses this daemon instead of using or stopping it.
+   */
+  homeId: string
+}
+
+/**
+ * DaemonStop is the answer (202) of POST /daemon/stop: the daemon accepted the request and shuts down right after
+ * answering, as on Ctrl+C. The caller waits for its lock to be free and its port to go quiet.
+ */
+export interface DaemonStop {
+  stopping: true
+  pid: number
 }
 
 /**
@@ -942,6 +957,8 @@ export interface Session {
   hostId?: string
   title?: string
   parentTitle?: string
+  /** Lead is the lead host (Leads); the worker brief names it. The daemon refuses other values. */
+  lead?: 'claude' | 'codex' | 'opencode' | 'gemini' | 'agy' | 'cli'
 }
 
 /** Attention says that a task needs someone to look at it. */

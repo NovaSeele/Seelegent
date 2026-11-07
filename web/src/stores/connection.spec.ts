@@ -21,6 +21,7 @@ function boot(overrides: Partial<BootState> = {}): BootState {
       pid: 1,
       port: 47831,
       startedAt: iso(),
+      homeId: '0123456789abcdef',
     },
     settings: {} as BootState['settings'],
     accounts: [makeAccount()],

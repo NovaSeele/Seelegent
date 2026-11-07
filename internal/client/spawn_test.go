@@ -44,7 +44,7 @@ func fakeDaemon(port string) int {
 	if err != nil {
 		return 3
 	}
-	srv := &http.Server{Handler: healthHandler(api.APIVersion), ReadHeaderTimeout: time.Second}
+	srv := &http.Server{Handler: healthHandler(api.APIVersion, home), ReadHeaderTimeout: time.Second}
 	go func() { _ = srv.Serve(ln) }()
 	deadline := time.Now().Add(30 * time.Second)
 	for time.Now().Before(deadline) {

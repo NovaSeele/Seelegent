@@ -86,8 +86,13 @@ func TestRunExitCodes(t *testing.T) {
 		wantStderr string
 	}{
 		{name: "version", args: []string{"version"}, wantCode: ExitOK, wantStdout: "seelegent "},
-		{name: "unknown command", args: []string{"no-such-command"}, wantCode: ExitError, wantStderr: "Error: unknown command"},
-		{name: "unknown flag", args: []string{"--no-such-flag"}, wantCode: ExitError, wantStderr: "Error: unknown flag"},
+		{name: "unknown command", args: []string{"no-such-command"}, wantCode: ExitUsage, wantStderr: "Error: unknown command"},
+		{name: "unknown flag", args: []string{"--no-such-flag"}, wantCode: ExitUsage, wantStderr: "Error: unknown flag"},
+		{name: "unknown subcommand flag", args: []string{"status", "--nope"}, wantCode: ExitUsage, wantStderr: "Error: unknown flag"},
+		{name: "missing argument", args: []string{"cancel"}, wantCode: ExitUsage, wantStderr: "Error: usage: seelegent cancel"},
+		{name: "json usage error", args: []string{"wait", "--json"}, wantCode: ExitUsage, wantStdout: "{\n  \"error\": \"usage: seelegent wait"},
+		{name: "run unknown flag", args: []string{"run", "--bogus", "x"}, wantCode: ExitUsage, wantStderr: "Error: unknown flag: --bogus"},
+		{name: "no command", args: nil, wantCode: ExitOK, wantStdout: "Seelegent runs a local daemon"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

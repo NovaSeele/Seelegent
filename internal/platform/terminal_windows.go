@@ -7,7 +7,10 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
+
+	"github.com/NovaSeele/Seelegent/internal/fsutil"
 )
 
 // openTerminal writes a batch file and runs it in a new console window through `start /wait`. The `start` builtin
@@ -42,5 +45,18 @@ func openTerminal(_ context.Context, spec TerminalSpec, base, exitFile string) (
 	if err := cmd.Start(); err != nil {
 		return nil, fmt.Errorf("open terminal: %w", err)
 	}
-	return &Terminal{exitFile: exitFile, process: cmd, pid: cmd.Process.Pid}, nil
+	pidFile := pidFileFor(exitFile)
+	// A daemon that restarts finds the console through this file (AttachTerminal). Failing to write it only costs
+	// that: the window is open and this process follows it.
+	_ = recordPID(pidFile, cmd.Process.Pid)
+	return &Terminal{exitFile: exitFile, process: cmd, pid: cmd.Process.Pid, pidFile: pidFile}, nil
+}
+
+// recordPID writes "pid start" (ProcessStartTime, 0 when unknown) to pidFile, the format readPIDFile reads.
+func recordPID(pidFile string, pid int) error {
+	start, err := ProcessStartTime(pid)
+	if err != nil {
+		start = 0
+	}
+	return fsutil.WriteFileAtomic(pidFile, []byte(strconv.Itoa(pid)+" "+strconv.FormatUint(start, 10)+"\n"), 0o600)
 }

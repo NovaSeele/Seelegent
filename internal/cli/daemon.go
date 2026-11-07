@@ -9,7 +9,9 @@ import (
 	"log/slog"
 	"net"
 	"os"
+	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -35,15 +37,19 @@ type daemonFlags struct {
 func newDaemonCommand(info buildinfo.Info) *cobra.Command {
 	var f daemonFlags
 	cmd := &cobra.Command{
-		Use:   "daemon",
-		Short: "Run the daemon in the foreground until Ctrl+C",
+		Use:     "daemon",
+		Aliases: []string{"serve"},
+		Short:   "Run the daemon in the foreground until Ctrl+C or `seelegent stop`",
 		Long: "Run the daemon in the foreground: the task engine, the HTTP API and the dashboard on 127.0.0.1.\n" +
 			"The data directory is SEELEGENT_HOME (default ~/.seelegent); logs go to its logs/daemon.log and\n" +
-			"to this terminal.",
-		Args: cobra.NoArgs,
+			"to this terminal. `serve` is the old name. Exit code 3: another daemon holds the data directory or\n" +
+			"the port is taken.",
+		Args: noArgs,
+		// Inside a worker a daemon would run in the worker's process tree, on the worker profile's data directory.
+		Annotations: map[string]string{annOp: "daemon"},
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if f.port < 0 || f.port > 65535 {
-				return fmt.Errorf("--port %d: must be 1..65535", f.port)
+				return usagef("--port %d: must be 1..65535", f.port)
 			}
 			return runDaemon(cmd.Context(), info, f, cmd.ErrOrStderr())
 		},
@@ -83,6 +89,31 @@ func (e *daemonRunningError) Error() string {
 	return s
 }
 
+// portTakenError says something else listens on the daemon's port (exit 3, like a held lock).
+type portTakenError struct {
+	port int
+	err  error
+}
+
+func (e *portTakenError) Error() string {
+	return fmt.Sprintf("port %d is taken by another program (%v); stop it, or set another port with "+
+		"SEELEGENT_PORT or the settings' port", e.port, e.err)
+}
+
+func (e *portTakenError) Unwrap() error { return e.err }
+
+// wsaeAddrInUse is Windows' WSAEADDRINUSE, which syscall.EADDRINUSE does not match there.
+const wsaeAddrInUse = 10048
+
+// addrInUse reports whether a listen failed because the address is in use.
+func addrInUse(err error) bool {
+	if errors.Is(err, syscall.EADDRINUSE) {
+		return true
+	}
+	var errno syscall.Errno
+	return errors.As(err, &errno) && errno == wsaeAddrInUse
+}
+
 // lockDaemon takes the single-instance lock of the data directory, waiting up to daemonLockWait. Nothing else (log
 // file, store, recovery) is opened before it is held, so a second daemon touches nothing.
 func lockDaemon(ctx context.Context, paths config.Paths) (*fsutil.FileLock, error) {
@@ -102,13 +133,15 @@ func lockDaemon(ctx context.Context, paths config.Paths) (*fsutil.FileLock, erro
 	return nil, err
 }
 
-// writePortFile records the listening address's port in run/daemon.port for discovery (client.Daemon.Find).
+// writePortFile records the listening address's port in run/daemon.port for discovery (client.Daemon.Find), and
+// this process's id on a second line so `seelegent stop` and `doctor` can say which process holds the lock when
+// the daemon does not answer. Nothing ever kills a process by that id (old B3/B14).
 func writePortFile(paths config.Paths, addr string) error {
 	_, port, err := net.SplitHostPort(addr)
 	if err != nil {
 		return err
 	}
-	return fsutil.WriteFileAtomic(paths.PortFile, []byte(port+"\n"), 0o600)
+	return fsutil.WriteFileAtomic(paths.PortFile, []byte(port+"\n"+strconv.Itoa(os.Getpid())+"\n"), 0o600)
 }
 
 // runDaemon runs the daemon until ctx ends. It holds run/daemon.lock for its whole life, so one data directory
@@ -155,6 +188,9 @@ func runDaemon(ctx context.Context, info buildinfo.Info, f daemonFlags, stderr i
 	addr, err := a.ListenHTTP(ctx, port)
 	if err != nil {
 		_ = closeApp()
+		if addrInUse(err) {
+			return &portTakenError{port: port, err: err}
+		}
 		return err
 	}
 	if err := writePortFile(paths, addr); err != nil {
@@ -162,8 +198,12 @@ func runDaemon(ctx context.Context, info buildinfo.Info, f daemonFlags, stderr i
 		return fmt.Errorf("record the daemon port: %w", err)
 	}
 	log.Info("daemon: running", "version", info.Version, "home", paths.Home, "addr", addr)
-	_, _ = fmt.Fprintf(stderr, "Seelegent %s listening on http://%s/ (Ctrl+C stops it)\n", info.Version, addr)
-	<-ctx.Done()
+	_, _ = fmt.Fprintf(stderr, "Seelegent %s listening on http://%s/ (Ctrl+C or `seelegent stop` stops it)\n",
+		info.Version, addr)
+	select {
+	case <-ctx.Done():
+	case <-a.StopRequested(): // POST /daemon/stop (`seelegent stop`, `restart`): the same clean shutdown
+	}
 	log.Info("daemon: stopping")
 	// The port file goes first, so discovery stops sending callers here; the lock is released after the close.
 	if err := os.Remove(paths.PortFile); err != nil && !errors.Is(err, fs.ErrNotExist) {

@@ -47,6 +47,10 @@ func (s *Service) Delegate(ctx context.Context, req api.DelegateRequest) (api.Ta
 	if err := unsupported(req.Gate, req.Verify, req.Lane, false); err != nil {
 		return api.TaskSummary{}, err
 	}
+	session, err := checkSession(req.Session)
+	if err != nil {
+		return api.TaskSummary{}, err
+	}
 	backendName := req.Backend
 	if backendName == "" {
 		backendName = config.BackendAgy
@@ -68,7 +72,7 @@ func (s *Service) Delegate(ctx context.Context, req api.DelegateRequest) (api.Ta
 	t := &Task{
 		Title: title(req.Title, prompt), Status: StatusQueued, Kind: KindNormal, Mode: mode, Cwd: cwd,
 		ProjectKey: key, ProjectName: name, Prompt: prompt, Backend: backendName, Provider: req.Provider,
-		AllowGit: req.AllowGit, Session: req.Session, Role: req.Role,
+		AllowGit: req.AllowGit, Session: session, Role: req.Role,
 	}
 	roleID := req.Profile
 	if roleID == "" {
@@ -346,6 +350,20 @@ func unsupported(gate, verify *bool, lane []string, forceLane bool) error {
 		return invalidf("lane is not supported yet")
 	}
 	return nil
+}
+
+// checkSession validates the lead session of a delegate: its lead, when given, must be one of api.Leads (any case).
+// It returns a copy with the lead in lower case, or nil when there is no session.
+func checkSession(s *api.Session) (*api.Session, error) {
+	if s == nil {
+		return nil, nil
+	}
+	out := *s
+	out.Lead = strings.ToLower(strings.TrimSpace(out.Lead))
+	if out.Lead != "" && !slices.Contains(api.Leads(), out.Lead) {
+		return nil, invalidf("session.lead %q must be one of %s", s.Lead, strings.Join(api.Leads(), ", "))
+	}
+	return &out, nil
 }
 
 // checkCwd validates a task folder: an absolute path to an existing folder. It returns the canonical path and the

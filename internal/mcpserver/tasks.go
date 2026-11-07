@@ -7,10 +7,10 @@ import (
 	"fmt"
 	"math"
 	"strings"
-	"time"
 
 	"github.com/NovaSeele/Seelegent/internal/api"
 	"github.com/NovaSeele/Seelegent/internal/client"
+	"github.com/NovaSeele/Seelegent/internal/ops"
 )
 
 // Wait limits of the old server (seconds).
@@ -19,10 +19,6 @@ const (
 	maxWait       = 3000
 	defaultCancel = 15
 	maxCancel     = 60
-	// stepOutput caps the output of one recent step (task steps=N).
-	stepOutput = 800
-	// stepEvents is how many of the newest events are searched for tool steps.
-	stepEvents = 2000
 )
 
 // handlers maps tool names to their functions (tools a later milestone builds are not listed).
@@ -81,7 +77,7 @@ func (s *Server) delegate(ctx context.Context, k *call) (result, error) {
 		return result{}, err
 	}
 	if given(a.Variants) || given(a.VariantSpecs) {
-		return result{}, &unavailableError{what: "contests (delegate with variants)"}
+		return result{}, &ops.UnavailableError{What: "contests (delegate with variants)"}
 	}
 	if strings.TrimSpace(a.Prompt) == "" {
 		return result{}, errors.New("prompt is required")
@@ -93,7 +89,7 @@ func (s *Server) delegate(ctx context.Context, k *call) (result, error) {
 	if err != nil {
 		return result{}, err
 	}
-	mode, err := taskMode(a.Mode)
+	mode, err := ops.TaskMode(a.Mode)
 	if err != nil {
 		return result{}, err
 	}
@@ -105,8 +101,8 @@ func (s *Server) delegate(ctx context.Context, k *call) (result, error) {
 		return result{}, err
 	}
 	if a.Member != "" {
-		return result{}, &unavailableError{what: "department members (member)",
-			detail: "leave member out and pass backend and model instead"}
+		return result{}, &ops.UnavailableError{What: "department members (member)",
+			Detail: "leave member out and pass backend and model instead"}
 	}
 	req := api.DelegateRequest{Prompt: a.Prompt, Title: a.Title, Cwd: cwd, Mode: mode, Model: a.Model,
 		Effort: a.Effort, Backend: a.Backend, Provider: a.Provider, Profile: a.Profile, After: a.After,
@@ -140,19 +136,6 @@ func (s *Server) delegate(ctx context.Context, k *call) (result, error) {
 	return reportResult(res), nil
 }
 
-// taskMode maps the old mode (full, plan) onto the API's (edit, plan).
-func taskMode(mode string) (string, error) {
-	switch mode {
-	case "":
-		return "", nil
-	case "full", "edit":
-		return "edit", nil
-	case "plan":
-		return "plan", nil
-	}
-	return "", fmt.Errorf("mode %q must be full or plan", mode)
-}
-
 // gateFlag maps the gate argument: false turns gates off; true and commands need the proof gate milestone.
 func gateFlag(g gateArg) (*bool, error) {
 	switch {
@@ -160,7 +143,7 @@ func gateFlag(g gateArg) (*bool, error) {
 		f := false
 		return &f, nil
 	case g.on, len(g.cmds) > 0:
-		return nil, &unavailableError{what: "running gate commands", detail: "leave gate out or pass false"}
+		return nil, &ops.UnavailableError{What: "running gate commands", Detail: "leave gate out or pass false"}
 	}
 	return nil, nil
 }
@@ -171,27 +154,18 @@ func gateFlag(g gateArg) (*bool, error) {
 func unsupported(lane laneArg, verify, forceLane optBool) error {
 	switch {
 	case len(lane.paths) > 0:
-		return &unavailableError{what: "lane enforcement (lane)", detail: "leave lane out or pass false"}
+		return &ops.UnavailableError{What: "lane enforcement (lane)", Detail: "leave lane out or pass false"}
 	case verify.or(false):
-		return &unavailableError{what: "the verifier (verify: true)", detail: "leave verify out"}
+		return &ops.UnavailableError{What: "the verifier (verify: true)", Detail: "leave verify out"}
 	case forceLane.or(false):
-		return &unavailableError{what: "force_lane", detail: "leave force_lane out; lanes are not enforced yet"}
+		return &ops.UnavailableError{What: "force_lane", Detail: "leave force_lane out; lanes are not enforced yet"}
 	}
 	return nil
 }
 
-// session is the lead session that delegates, from the host's environment (as the old server read it).
-func (s *Server) session() *api.Session {
-	id := s.o.Getenv("SEELEGENT_SESSION")
-	if id == "" {
-		id = s.o.Getenv("CLAUDE_CODE_SESSION_ID")
-	}
-	host := s.o.Getenv("CLAUDE_CODE_HOST_SESSION_ID")
-	if id == "" && host == "" {
-		return nil
-	}
-	return &api.Session{ID: id, HostID: host}
-}
+// session is the lead session that delegates, from the host's environment (as the old server read it), with the
+// lead host the worker brief names (old F9).
+func (s *Server) session() *api.Session { return ops.MCPSession(s.o.Getenv) }
 
 // followupArgs are the arguments of followup.
 type followupArgs struct {
@@ -285,132 +259,44 @@ func (s *Server) wait(ctx context.Context, k *call) (result, error) {
 	if len(a.TaskIDs) == 1 {
 		return reportResult(res), nil
 	}
-	return result{value: api.NonNil(res.Reports), summary: waitSummary(res)}, nil
+	return result{value: api.NonNil(res.Reports), summary: ops.WaitSummary(res)}, nil
 }
 
-// waitReports waits for ids through POST /wait and returns the result with the reports (relative to cwd when
-// given, else to each task's folder). When the daemon goes away during the wait (a restart), it finds or starts
-// it again and waits for the rest of the time. Finding the daemon again counts against the wait's own deadline:
-// the wait never runs past it.
+// waitReports waits for ids (ops.WaitReports over the call's client): reports relative to cwd when given, else to
+// each task's folder, and a daemon that goes away during the wait is found or started again within the wait (found
+// only, never started, after it said it was stopping).
 func (s *Server) waitReports(ctx context.Context, k *call, ids []string, seconds int, anyDone, wake bool,
 	cwd string) (api.WaitResult, error) {
-	deadline := time.Now().Add(time.Duration(seconds) * time.Second)
-	var lost error // why the daemon was lost, while reconnecting
-	for reconnecting := false; ; reconnecting = true {
-		c, err := s.waitClient(ctx, k, reconnecting, deadline)
-		switch {
-		case err == nil:
-		case ctx.Err() != nil:
-			return api.WaitResult{}, ctx.Err()
-		case !reconnecting:
-			return api.WaitResult{}, err
-		case !time.Now().Before(deadline):
-			// The daemon did not come back before the wait ended. An error that is only the lookup's own deadline
-			// says nothing: report why the daemon was lost instead.
-			if errors.Is(err, context.DeadlineExceeded) {
-				err = lost
+	connect := func(ctx context.Context, how ops.Lookup) (*client.Client, error) {
+		switch how {
+		case ops.Reuse:
+		case ops.FindOnly:
+			c, err := s.o.Daemon.Find(ctx)
+			if err != nil {
+				return nil, err
 			}
-			return api.WaitResult{}, fmt.Errorf("the daemon did not come back before the wait ended: %w", err)
+			k.c = c
+		default:
+			k.c = nil
 		}
-		if err == nil {
-			// The rest of the time, after any reconnecting: 0 returns the current reports at once.
-			left := max(int(math.Ceil(time.Until(deadline).Seconds())), 0)
-			var res api.WaitResult
-			res, err = c.Wait(ctx, api.WaitRequest{IDs: ids, TimeoutSeconds: left, Any: anyDone,
-				WakeOnBlocked: &wake, Reports: true}, cwd)
-			if err == nil {
-				if len(res.Reports) != len(ids) {
-					return api.WaitResult{}, fmt.Errorf("the daemon returned %d reports for %d tasks",
-						len(res.Reports), len(ids))
-				}
-				return res, nil
-			}
-		}
-		// A restarting daemon is unreachable for a moment, not running yet, or slow to answer its first probe:
-		// wait for it until the wait's own deadline.
-		retry := errors.Is(err, client.ErrUnreachable) || errors.Is(err, client.ErrNotRunning) || client.TimedOut(err)
-		if !retry || !time.Now().Before(deadline) {
-			return api.WaitResult{}, err
-		}
-		lost = err
-		s.o.Logger.Info("mcp: the daemon is gone or not answering during a wait; reconnecting", "err", err)
-		pause := time.NewTimer(min(s.o.RetryPause, time.Until(deadline)))
-		select {
-		case <-ctx.Done():
-			pause.Stop()
-			return api.WaitResult{}, ctx.Err()
-		case <-pause.C:
-		}
-		k.c = nil
-	}
-}
-
-// waitClient is the call's client for waitReports. While reconnecting, finding (or starting) the daemon again is
-// bounded by the wait's deadline.
-func (s *Server) waitClient(ctx context.Context, k *call, reconnecting bool, deadline time.Time) (*client.Client,
-	error) {
-	if !reconnecting {
 		return k.client(ctx)
 	}
-	dctx, cancel := context.WithDeadline(ctx, deadline)
-	defer cancel()
-	return k.client(dctx)
+	return ops.WaitReports(ctx, connect, ops.Wait{IDs: ids, Seconds: seconds, Any: anyDone, WakeOnBlocked: wake,
+		Cwd: cwd, RetryPause: s.o.RetryPause, StopGrace: s.o.StopGrace, Logger: s.o.Logger.With("from", "mcp")})
 }
 
 // reportResult is the result of a call that returns one task's report.
 func reportResult(res api.WaitResult) result {
 	r := res.Reports[0]
-	sum := reportSummary(r)
-	if res.Woke == api.WokeTimeout && pending(r.Status) {
+	sum := ops.ReportSummary(r)
+	if res.Woke == api.WokeTimeout && ops.Pending(r.Status) {
 		sum += " The wait ended before the task did: call wait again."
 	}
 	return result{value: r, summary: sum}
 }
 
-// pending reports whether a task status is not final.
-func pending(status string) bool {
-	switch api.TaskStatus(status) {
-	case api.StatusQueued, api.StatusRunning, api.StatusWaitingQuota, api.StatusWaitingDeps:
-		return true
-	}
-	return false
-}
-
-// reportSummary is the one-line summary of a report.
-func reportSummary(r api.TaskReport) string {
-	var b strings.Builder
-	fmt.Fprintf(&b, "Task %s: %s", r.TaskID, r.Status)
-	if r.Turn > 0 {
-		fmt.Fprintf(&b, ", turn %d", r.Turn)
-	}
-	if n := len(r.FilesChanged); n > 0 {
-		fmt.Fprintf(&b, ", %d file%s changed", n, plural(n))
-	}
-	if r.Attention != nil {
-		fmt.Fprintf(&b, ", needs you: %s", r.Attention.Reason)
-	}
-	if r.Error != "" {
-		b.WriteString(", with an error")
-	}
-	b.WriteString(".")
-	return b.String()
-}
-
-// waitSummary is the one-line summary of a wait for several tasks.
-func waitSummary(res api.WaitResult) string {
-	parts := make([]string, 0, len(res.Reports))
-	for i := range res.Reports {
-		parts = append(parts, res.Reports[i].TaskID+" "+res.Reports[i].Status)
-	}
-	return fmt.Sprintf("Woke: %s. %s.", res.Woke, strings.Join(parts, ", "))
-}
-
-func plural(n int) string {
-	if n == 1 {
-		return ""
-	}
-	return "s"
-}
+// plural is "s" unless n is 1.
+func plural(n int) string { return ops.Plural(n) }
 
 // reviewArgs are the arguments of review.
 type reviewArgs struct {
@@ -490,14 +376,6 @@ type taskArgs struct {
 	Full   optBool `json:"full"`
 }
 
-// step is one recent worker tool step (task steps=N).
-type step struct {
-	Tool   string          `json:"tool"`
-	Params json.RawMessage `json:"params,omitempty"`
-	Output string          `json:"output,omitempty"`
-	Failed bool            `json:"failed,omitempty"`
-}
-
 func (s *Server) task(ctx context.Context, k *call) (result, error) {
 	var a taskArgs
 	if err := k.decode(&a); err != nil {
@@ -510,9 +388,9 @@ func (s *Server) task(ctx context.Context, k *call) (result, error) {
 	if err != nil {
 		return result{}, err
 	}
-	var steps []step
+	var steps []ops.Step
 	if n := int(math.Round(a.Steps.or(0))); n > 0 {
-		if steps, err = recentSteps(ctx, c, a.TaskID, n); err != nil {
+		if steps, err = ops.RecentSteps(ctx, c, a.TaskID, n); err != nil {
 			return result{}, err
 		}
 	}
@@ -523,7 +401,7 @@ func (s *Server) task(ctx context.Context, k *call) (result, error) {
 		}
 		return result{value: struct {
 			api.TaskDetail
-			RecentSteps []step `json:"recent_steps,omitempty"`
+			RecentSteps []ops.Step `json:"recent_steps,omitempty"`
 		}{d, steps}, summary: fmt.Sprintf("Task %s: %s, %d turn%s.", d.ID, d.Status, len(d.Turns), plural(len(d.Turns)))}, nil
 	}
 	r, err := c.Report(ctx, a.TaskID, "")
@@ -532,53 +410,6 @@ func (s *Server) task(ctx context.Context, k *call) (result, error) {
 	}
 	return result{value: struct {
 		api.TaskReport
-		RecentSteps []step `json:"recent_steps,omitempty"`
-	}{r, steps}, summary: reportSummary(r)}, nil
-}
-
-// recentSteps returns the last n finished tool steps of the task, newest last (old B6: the old server showed the
-// oldest ones).
-func recentSteps(ctx context.Context, c *client.Client, id string, n int) ([]step, error) {
-	page, err := c.TailEvents(ctx, id, stepEvents)
-	if err != nil {
-		return nil, err
-	}
-	var out []step
-	for _, e := range page.Items {
-		if e.Type != api.EventWorker {
-			continue
-		}
-		var w struct {
-			Kind string `json:"kind"`
-			Tool *struct {
-				Name    string          `json:"name"`
-				State   string          `json:"state"`
-				Input   json.RawMessage `json:"input"`
-				Command string          `json:"command"`
-				Output  string          `json:"output"`
-			} `json:"tool"`
-		}
-		if json.Unmarshal(e.Data, &w) != nil || w.Kind != "tool_result" || w.Tool == nil {
-			continue
-		}
-		st := step{Tool: w.Tool.Name, Params: w.Tool.Input, Output: truncate(w.Tool.Output, stepOutput),
-			Failed: w.Tool.State == "failed"}
-		if len(st.Params) == 0 && w.Tool.Command != "" {
-			st.Params, _ = json.Marshal(map[string]string{"command": w.Tool.Command})
-		}
-		out = append(out, st)
-	}
-	if len(out) > n {
-		out = out[len(out)-n:]
-	}
-	return out, nil
-}
-
-// truncate keeps the first n runes of s.
-func truncate(s string, n int) string {
-	r := []rune(s)
-	if len(r) <= n {
-		return s
-	}
-	return string(r[:n])
+		RecentSteps []ops.Step `json:"recent_steps,omitempty"`
+	}{r, steps}, summary: ops.ReportSummary(r)}, nil
 }

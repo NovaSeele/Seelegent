@@ -5,7 +5,10 @@ stdin and stdout and forwards every tool to the daemon's HTTP API v1 (see [api.m
 its own: tasks, accounts and memory live in the daemon, so a host restart loses nothing.
 
 Code: `internal/mcpserver` (tools), `internal/client` (typed API client, discovery and autostart),
-`internal/cli/mcp.go` (the command). The tool list is `internal/mcpserver/tools.json`, embedded in the binary.
+`internal/ops` (what the tools share with the command line: the worker guard table, the lead session, the tasks
+that need the lead, recent steps, the wait that survives a restart, the `not_available` refusal),
+`internal/cli/mcp.go` (the command). The tool list is `internal/mcpserver/tools.json`, embedded in the binary. The
+command line ([cli.md](cli.md)) offers the same operations as commands.
 
 ## Starting it from a host
 
@@ -24,6 +27,7 @@ own lines, and only warnings and errors of the MCP SDK).
 | `SEELEGENT_WORKER=1` | Set by the daemon for its workers. The server never starts a daemon and refuses mutating tools (see the worker guard). |
 | `SEELEGENT_SESSION`, else `CLAUDE_CODE_SESSION_ID` | Lead session id sent with `delegate` (`session.id`). |
 | `CLAUDE_CODE_HOST_SESSION_ID` | Host session id sent with `delegate` (`session.hostId`). |
+| `SEELEGENT_LEAD` | Lead host sent with `delegate` (`session.lead`: `claude`, `codex`, `opencode`, `gemini`, `agy` or `cli`); the worker brief says "The lead for this task is Claude Code." and so on. Without it (or with another value) the host is detected: `CLAUDE_CODE_SESSION_ID` → `claude`, `CODEX_SESSION_ID`/`CODEX_THREAD_ID` → `codex`, `GEMINI_SESSION_ID`/`GEMINI_CLI_SESSION` → `gemini`, else `cli`. |
 
 The server reads `config.json` without writing it. If it cannot be read, the server still starts and every
 available tool answers with "the settings cannot be read: ..." so the host sees why.
@@ -33,17 +37,22 @@ available tool answers with "the settings cannot be read: ..." so the host sees 
 `seelegent daemon` takes `<home>/run/daemon.lock` before it opens anything else (log, store, recovery) and holds it
 until it exits. A second daemon on the same home waits up to 3 s (a restarting daemon releases the lock once it has
 closed), then exits with code 3 and "another Seelegent daemon is already running for <home> (port N)". While it
-listens, the daemon records its port in `<home>/run/daemon.port`; it removes the file when it stops cleanly.
+listens, the daemon records its port (and, on a second line, its pid) in `<home>/run/daemon.port`; it removes the
+file when it stops cleanly. The pid is only shown in messages (`seelegent stop`, `doctor`); nothing kills a process
+by it. `seelegent stop` asks the daemon to shut down through `POST /api/v1/daemon/stop`.
 
 ## Finding and starting the daemon
 
 1. If `run/daemon.port` exists and a daemon holds `run/daemon.lock`, probe that port first. A port file whose lock
    is free (the daemon crashed) is ignored, and a port that does not answer, or answers as something else, falls
    back to step 2. So a daemon started with `--port`, or before the port setting changed, is found.
-2. Probe `GET /api/v1/health` on the configured port. A daemon that answers `ok` with `apiVersion: 1` is used.
-   Anything else that answers (another program, an older Seelegent, another API version) is reported and nothing is
-   started. A port that accepts but does not answer within 1.5 s is reported as a busy or hung daemon (or another
-   program), and nothing is started either.
+2. Probe `GET /api/v1/health` on the configured port. A daemon that answers `ok` with `apiVersion: 1` and this data
+   directory's `homeId` is used. Anything else that answers (another program, an older Seelegent, another API
+   version, a Seelegent daemon of another data directory: "port N is served by a Seelegent daemon of another data
+   directory (pid X)", or an older build without `homeId`: "... an older Seelegent build (pid X) that does not
+   report its data directory: stop it with that build") is reported, never used or stopped, and nothing is started.
+   A port that accepts but does not answer within 1.5 s is reported as a busy or hung daemon (or another program),
+   and nothing is started either.
 3. When nothing answers, take `<home>/run/start.lock`, probe again (another MCP server may have just started it).
    While another daemon holds `run/daemon.lock` without answering yet (still starting, or shutting down), keep
    probing and use it as soon as it answers; nothing is started while the lock is held, and a holder that never
@@ -64,6 +73,13 @@ of a wait: an unreachable, not yet running or slow daemon is retried until the w
 starting the daemon again counts against that time and is cut off at the deadline, and the daemon found is asked
 to wait only for what is left, so a restart never stretches the wait past `wait_seconds`; a daemon that is not
 back by then ends the call with `daemon_unavailable`.
+
+That holds for a connection lost without a word (a crash). A daemon that is shutting down (`seelegent stop`,
+`restart`, Ctrl+C) answers the open wait with `503 daemon_stopping` instead; the wait then only looks for a daemon
+that comes back (never starts one) for up to 40 s within its own time. After a restart it goes on against the new
+daemon; after a plain stop the call ends with code `daemon_stopped` ("the Seelegent daemon was stopped during the
+wait; the tasks keep running: wait again later"). Nothing in that wait starts the daemon until a daemon is found
+again; from then on the usual rules apply again (a later crash is ridden out, a later stop starts a new grace).
 
 ## Tools
 
@@ -116,13 +132,14 @@ structured content is `{error: {code, message, status, details}}`:
 | Called from inside a worker (local guard, or the daemon answers 403 with `caller: worker`) | exactly "Seelegent is not available inside a Seelegent worker." (no prefix) |
 | Route, tool or option not built yet (501, or refused locally) | "Seelegent error: ... is not available in this version of Seelegent yet; nothing was done (...)" (code `not_available`) |
 | Other API error | "Seelegent error: <message>" with the API's code and details |
-| No daemon, foreign program on the port, busy daemon, start failed | the reason and what to do (code `daemon_unavailable`) |
+| No daemon, foreign program (or another data directory's daemon) on the port, busy daemon, start failed | the reason and what to do (code `daemon_unavailable`) |
+| The daemon was stopped during a wait and did not come back | "Seelegent error: the Seelegent daemon was stopped during the wait; ..." (code `daemon_stopped`) |
 
 ## Worker guard
 
 Two layers (contract §1.3). The daemon is the authority: it recognises a caller inside a worker's process tree and
 answers 403 with `details.caller: "worker"`, which the server shows as the old refusal text. The server also keeps
-the old local guard (`internal/mcpserver/guard.go`): when `SEELEGENT_WORKER=1` is in its environment (the daemon
+the old local guard (`ops.Mutating`, called from `internal/mcpserver/guard.go`): when `SEELEGENT_WORKER=1` is in its environment (the daemon
 sets it for every worker, so an MCP server a worker starts inherits it), it refuses mutating calls before talking to
 the daemon, with the same text and `{error: {code: "forbidden", details: {caller: "worker"}}}`:
 
@@ -148,4 +165,5 @@ against a stub API, the locally refused options, the task id announcement and th
 against a real daemon built through `internal/app` with the fake worker CLI and a temp data directory.
 `internal/client` tests discovery and start against fake daemons: several servers racing to start one daemon, the
 port file, stale port files, waiting for a daemon that holds the lock, and a started daemon that exits for the lock.
-`internal/cli` runs the mcp command (autostart off, and inside a worker) and two daemons on one data directory.
+`internal/cli` runs the mcp command (autostart off, and inside a worker), two daemons on one data directory, and
+every command of [cli.md](cli.md).

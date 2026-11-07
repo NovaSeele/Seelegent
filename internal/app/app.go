@@ -105,6 +105,9 @@ type App struct {
 	started0   time.Time
 	pid        int
 	patchMu    sync.Mutex
+	// stopCh is closed (once) when someone asked the daemon to stop through the API.
+	stopCh   chan struct{}
+	stopOnce sync.Once
 
 	mu      sync.Mutex
 	api     *httpapi.Server
@@ -145,7 +148,7 @@ func New(ctx context.Context, o Options) (*App, error) {
 	}
 	a := &App{Paths: o.Paths, log: o.Logger, env: o.Env, info: o.Info, web: o.Web, classifier: o.Classifier,
 		devOrigins: o.DevOrigins,
-		redact:     logx.NewRedactor().String, started0: o.Clock.Now(), pid: os.Getpid()}
+		redact:     logx.NewRedactor().String, started0: o.Clock.Now(), pid: os.Getpid(), stopCh: make(chan struct{})}
 	if o.Settings != nil {
 		s := *o.Settings
 		a.settings.Store(&s)
@@ -333,6 +336,18 @@ func (a *App) Start(ctx context.Context) error {
 	}
 	return nil
 }
+
+// RequestStop asks the process that runs the App to shut it down (POST /daemon/stop). It only signals: the owner
+// (`seelegent daemon`) sees StopRequested and closes the App as on Ctrl+C.
+func (a *App) RequestStop() {
+	a.stopOnce.Do(func() {
+		a.log.Info("app: stop requested")
+		close(a.stopCh)
+	})
+}
+
+// StopRequested is closed once RequestStop was called.
+func (a *App) StopRequested() <-chan struct{} { return a.stopCh }
 
 // Close stops the background work and closes the store. Workers keep running under their launchers; the next
 // daemon attaches to them again.

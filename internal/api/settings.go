@@ -18,7 +18,7 @@ type FieldError struct {
 type ErrorCode string
 
 // Error codes and their HTTP status: invalid_argument 400, forbidden 403, not_found 404, conflict 409, bad_state
-// 409, too_large 413, misdirected_request 421, upstream 502, unavailable 503, internal 500.
+// 409, too_large 413, misdirected_request 421, upstream 502, unavailable 503, daemon_stopping 503, internal 500.
 const (
 	CodeInvalidArgument ErrorCode = "invalid_argument"
 	CodeForbidden       ErrorCode = "forbidden"
@@ -29,7 +29,10 @@ const (
 	CodeMisdirected     ErrorCode = "misdirected_request"
 	CodeUpstream        ErrorCode = "upstream"
 	CodeUnavailable     ErrorCode = "unavailable"
-	CodeInternal        ErrorCode = "internal"
+	// CodeDaemonStopping (503) ends a request the daemon cut short because it is shutting down (POST /wait):
+	// unlike a lost connection it tells the caller not to start the daemon again.
+	CodeDaemonStopping ErrorCode = "daemon_stopping"
+	CodeInternal       ErrorCode = "internal"
 	// CodeNotImplemented (501) marks a path a later milestone fills (contract §6, members, hooks).
 	CodeNotImplemented ErrorCode = "not_implemented"
 )
@@ -51,7 +54,7 @@ func (c ErrorCode) HTTPStatus() int {
 		return 421
 	case CodeUpstream:
 		return 502
-	case CodeUnavailable:
+	case CodeUnavailable, CodeDaemonStopping:
 		return 503
 	case CodeNotImplemented:
 		return 501

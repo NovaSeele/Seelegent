@@ -6,9 +6,9 @@ Seelegent is a Go daemon + CLI + MCP server in one binary, with a Vue 3 + TypeSc
 ## Layout
 
 - `cmd/seelegent/main.go` only calls `internal/cli.Execute()`.
-- `internal/<pkg>/` — one job per package: `buildinfo`, `cli` (thin cobra commands), `fsutil` (atomic writes, file
-  locks, path keys), `envx` (variable lookup in env lists, PATH/PATHEXT command lookup; stdlib only), `config`
-  (data paths, settings, config.json; see [docs/configuration.md](docs/configuration.md)),
+- `internal/<pkg>/` — one job per package: `buildinfo`, `cli` (thin cobra commands; see [docs/cli.md](docs/cli.md)),
+  `fsutil` (atomic writes, file locks, path keys), `envx` (variable lookup in env lists, PATH/PATHEXT command
+  lookup; stdlib only), `config` (data paths, settings, config.json; see [docs/configuration.md](docs/configuration.md)),
   `store` (SQLite, migrations in `store/migrations/NNNN_name.sql`), `logx` (slog setup, log rotation, secret
   redaction), `platform` (hidden consoles, process trees, kill-tree, sign-in terminals; per-OS files), `launch`
   (detached worker launcher behind the hidden `seelegent __launch`), `account` (accounts, providers, profiles, API
@@ -21,7 +21,9 @@ Seelegent is a Go daemon + CLI + MCP server in one binary, with a Vue 3 + TypeSc
   `testdata/`), `memory` (project notes, review history), `role` (worker roles and skills), `gitx` (git status,
   diffs, branches and commits for the task views), `signin` (account sign-in sessions), `httpapi` (HTTP API v1, SSE
   and the embedded dashboard; see [docs/api.md](docs/api.md)), `client` (typed API v1 client, daemon discovery
-  and autostart), `mcpserver` (MCP tools for the lead over the client; see [docs/mcp.md](docs/mcp.md)), `app`
+  and autostart), `ops` (what the MCP tools and the CLI share: worker guard, lead session, waits, active tasks),
+  `doctor` (installation checks), `mcpserver` (MCP tools for the lead over the client; see
+  [docs/mcp.md](docs/mcp.md)), `app`
   (composition root: builds and starts the services), `testutil/fakecli` (the test binary as launcher and fake
   worker CLI), and later `setup`, `migrate`, ...
 - `web/` — Vue app with its own `package.json`; `web/embed.go` embeds `web/dist`.

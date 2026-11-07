@@ -20,10 +20,11 @@ import (
 )
 
 // healthHandler answers GET /api/v1/health like a daemon of the given API version.
-func healthHandler(version int) http.Handler {
+func healthHandler(version int, home string) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/v1/health", func(w http.ResponseWriter, _ *http.Request) {
-		writeJSON(w, http.StatusOK, api.Health{OK: true, Version: "test", APIVersion: version})
+		writeJSON(w, http.StatusOK, api.Health{OK: true, Version: "test", APIVersion: version,
+			HomeID: config.HomeID(home)})
 	})
 	return mux
 }
@@ -65,10 +66,65 @@ func TestFind(t *testing.T) {
 		!strings.Contains(err.Error(), "SEELEGENT_NO_AUTO_START") {
 		t.Fatalf("no autostart = %v", err)
 	}
-	listenOn(t, port, healthHandler(api.APIVersion))
+	listenOn(t, port, healthHandler(api.APIVersion, d.o.Paths.Home))
 	c, err := d.Find(t.Context())
 	if err != nil || c.BaseURL() != "http://127.0.0.1:"+strconv.Itoa(port) {
 		t.Fatalf("running = %v, %v", c, err)
+	}
+}
+
+// TestFindOtherHome: a Seelegent daemon of another data directory on this home's port, or an older build that names
+// no data directory, is refused, never adopted: Find and Ensure report the conflict with its pid and start nothing.
+func TestFindOtherHome(t *testing.T) {
+	cases := map[string]struct {
+		home  string
+		older bool
+		want  string
+	}{
+		"other home": {filepath.Join(t.TempDir(), "a"), false, "another data directory (pid 4321): give this data " +
+			"directory its own port"},
+		"older build": {"", true, "an older Seelegent build (pid 4321) that does not report its data directory: " +
+			"stop it with that build"},
+	}
+	for name, c := range cases {
+		home := c.home
+		t.Run(name, func(t *testing.T) {
+			port := freePort(t)
+			mux := http.NewServeMux()
+			mux.HandleFunc("GET /api/v1/health", func(w http.ResponseWriter, _ *http.Request) {
+				h := api.Health{OK: true, Version: "test", APIVersion: api.APIVersion, PID: 4321}
+				if home != "" {
+					h.HomeID = config.HomeID(home)
+				}
+				writeJSON(w, http.StatusOK, h)
+			})
+			listenOn(t, port, mux)
+			started := false
+			d := newTestDaemon(t, port, func(context.Context) (<-chan error, error) { started = true; return nil, nil })
+			for _, look := range []func(context.Context) (*Client, error){d.Find, d.Ensure} {
+				_, err := look(t.Context())
+				var fe *ForeignError
+				if !errors.As(err, &fe) || fe.OtherHome == c.older || fe.OlderBuild != c.older || fe.PID != 4321 ||
+					started || !strings.Contains(err.Error(), c.want) {
+					t.Fatalf("%s = %v (started %v)", name, err, started)
+				}
+				if c.older && strings.Contains(err.Error(), "its own port") {
+					t.Fatalf("older build told to change the port: %v", err)
+				}
+			}
+		})
+	}
+}
+
+// TestHomeID: every spelling of one folder has one id; another folder another id; the id never shows the path.
+func TestHomeID(t *testing.T) {
+	dir := t.TempDir()
+	a := config.HomeID(dir)
+	if b := config.HomeID(dir + string(filepath.Separator) + "."); a != b {
+		t.Fatalf("ids %s and %s for one folder", a, b)
+	}
+	if c := config.HomeID(filepath.Join(dir, "other")); c == a || len(a) != 16 || strings.Contains(a, "Temp") {
+		t.Fatalf("ids %s and %s", a, c)
 	}
 }
 
@@ -77,7 +133,7 @@ func TestFindForeign(t *testing.T) {
 		"old daemon": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 		}),
-		"api v2":     healthHandler(2),
+		"api v2":     healthHandler(2, ""),
 		"not health": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { writeJSON(w, 200, map[string]int{}) }),
 	}
 	for name, h := range cases {
@@ -105,7 +161,7 @@ func TestEnsureStartsOnce(t *testing.T) {
 		starts.Add(1)
 		go func() {
 			time.Sleep(100 * time.Millisecond) // a daemon takes a moment to listen
-			listenOn(t, port, healthHandler(api.APIVersion))
+			listenOn(t, port, healthHandler(api.APIVersion, paths.Home))
 		}()
 		return make(chan error), nil
 	}
@@ -143,7 +199,9 @@ func TestEnsureStartFails(t *testing.T) {
 		!strings.Contains(err.Error(), "daemon.log") {
 		t.Fatalf("exited = %v", err)
 	}
-	silent := NewDaemon(DaemonOptions{Paths: testPaths(t), Port: port, StartTimeout: 200 * time.Millisecond,
+	// Long enough to reach the spawn under load: with less, a busy machine can spend the whole deadline
+	// on the locks and report "ran out before one could be started" instead.
+	silent := NewDaemon(DaemonOptions{Paths: testPaths(t), Port: port, StartTimeout: 1500 * time.Millisecond,
 		PollInterval: 20 * time.Millisecond,
 		Start:        func(context.Context) (<-chan error, error) { return make(chan error), nil }})
 	if _, err := silent.Ensure(t.Context()); err == nil || !strings.Contains(err.Error(), "did not answer") {
@@ -184,7 +242,7 @@ func holdLock(t *testing.T, paths config.Paths) {
 func TestFindThroughPortFile(t *testing.T) {
 	paths := testPaths(t)
 	running, configured := freePort(t), freePort(t)
-	listenOn(t, running, healthHandler(api.APIVersion))
+	listenOn(t, running, healthHandler(api.APIVersion, paths.Home))
 	writePortFile(t, paths, running)
 	holdLock(t, paths)
 	started := false
@@ -237,7 +295,7 @@ func TestStalePortFile(t *testing.T) {
 				Start: func(context.Context) (<-chan error, error) {
 					starts.Add(1)
 					early.Store(c.locked && !released.Load())
-					listenOn(t, configured, healthHandler(api.APIVersion))
+					listenOn(t, configured, healthHandler(api.APIVersion, paths.Home))
 					return make(chan error), nil
 				}})
 			c2, err := d.Ensure(t.Context())
@@ -261,7 +319,7 @@ func TestStartWaitsForLockHolder(t *testing.T) {
 		d := NewDaemon(DaemonOptions{Paths: paths, Port: port, ProbeTimeout: 500 * time.Millisecond,
 			StartTimeout: 5 * time.Second, PollInterval: 20 * time.Millisecond,
 			Start: func(context.Context) (<-chan error, error) { starts.Add(1); return make(chan error), nil }})
-		time.AfterFunc(300*time.Millisecond, func() { listenOn(t, port, healthHandler(api.APIVersion)) })
+		time.AfterFunc(300*time.Millisecond, func() { listenOn(t, port, healthHandler(api.APIVersion, paths.Home)) })
 		begun := time.Now()
 		c, err := d.Ensure(t.Context())
 		if err != nil || starts.Load() != 0 || c.BaseURL() != "http://127.0.0.1:"+strconv.Itoa(port) {
@@ -399,4 +457,76 @@ func TestWithEnv(t *testing.T) {
 	if strings.Join(got, ",") != "A=1,B=2,SEELEGENT_HOME=/new" {
 		t.Fatalf("env = %v", got)
 	}
+}
+
+// TestEnsureOneDeadlineInProcess (old F11): a call that arrives while another call of this process is starting the
+// daemon waits for it at most until its own StartTimeout ends, instead of waiting without a bound and then taking a
+// fresh StartTimeout.
+func TestEnsureOneDeadlineInProcess(t *testing.T) {
+	release := make(chan struct{})
+	defer close(release)
+	var starts atomic.Int32
+	d := NewDaemon(DaemonOptions{Paths: testPaths(t), Port: freePort(t), ProbeTimeout: 200 * time.Millisecond,
+		StartTimeout: time.Second, PollInterval: 20 * time.Millisecond,
+		Start: func(ctx context.Context) (<-chan error, error) {
+			starts.Add(1)
+			select { // a start that hangs, holding the in-process semaphore
+			case <-release:
+			case <-ctx.Done():
+			}
+			return make(chan error), nil
+		}})
+	go func() { _, _ = d.Ensure(t.Context()) }()
+	for starts.Load() == 0 {
+		time.Sleep(10 * time.Millisecond)
+	}
+	begun := time.Now()
+	_, err := d.Ensure(t.Context())
+	took := time.Since(begun)
+	if !errors.Is(err, ErrNotRunning) || !strings.Contains(err.Error(), "another start of the Seelegent daemon in "+
+		"this process") || starts.Load() != 1 {
+		t.Fatalf("second ensure = %v (starts %d)", err, starts.Load())
+	}
+	if took < 900*time.Millisecond || took > 1500*time.Millisecond {
+		t.Fatalf("the second call took %s, want about the 1s StartTimeout", took)
+	}
+}
+
+// TestSpawnNearDeadline (old F12): when the start lock comes free just before the deadline, the daemon spawned then
+// still gets a few poll intervals to answer; once the deadline has passed nothing is spawned.
+func TestSpawnNearDeadline(t *testing.T) {
+	t.Run("spawn gets a floor", func(t *testing.T) {
+		paths := testPaths(t)
+		if err := paths.EnsureDirs(); err != nil {
+			t.Fatal(err)
+		}
+		other, err := fsutil.TryLock(filepath.Join(paths.Run, startLockName))
+		if err != nil {
+			t.Fatal(err)
+		}
+		time.AfterFunc(900*time.Millisecond, func() { _ = other.Unlock() })
+		port := freePort(t)
+		var starts atomic.Int32
+		d := NewDaemon(DaemonOptions{Paths: paths, Port: port, ProbeTimeout: 200 * time.Millisecond,
+			StartTimeout: time.Second, PollInterval: 50 * time.Millisecond,
+			Start: func(context.Context) (<-chan error, error) {
+				starts.Add(1)
+				time.AfterFunc(250*time.Millisecond, func() { listenOn(t, port, healthHandler(api.APIVersion, paths.Home)) })
+				return make(chan error), nil
+			}})
+		c, err := d.Ensure(t.Context())
+		if err != nil || starts.Load() != 1 || c.BaseURL() != "http://127.0.0.1:"+strconv.Itoa(port) {
+			t.Fatalf("ensure = %v, %v (starts %d)", c, err, starts.Load())
+		}
+	})
+	t.Run("no spawn after the deadline", func(t *testing.T) {
+		var starts atomic.Int32
+		d := NewDaemon(DaemonOptions{Paths: testPaths(t), Port: freePort(t), ProbeTimeout: 200 * time.Millisecond,
+			StartTimeout: time.Second, PollInterval: 20 * time.Millisecond,
+			Start: func(context.Context) (<-chan error, error) { starts.Add(1); return make(chan error), nil }})
+		_, err := d.start(t.Context(), time.Now().Add(-time.Millisecond))
+		if !errors.Is(err, ErrNotRunning) || starts.Load() != 0 || !strings.Contains(err.Error(), "ran out") {
+			t.Fatalf("start = %v (starts %d)", err, starts.Load())
+		}
+	})
 }

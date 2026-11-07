@@ -227,7 +227,7 @@ func TestDelegateRequest(t *testing.T) {
 	st.body(t, "POST /tasks", &req)
 	want := map[string]any{"prompt": "p", "cwd": filepath.Join(wd, "sub"), "mode": "edit", "model": "fast",
 		"gate": false, "allowGit": true, "spec": map[string]any{"dir": "specs/001", "taskIds": []any{"T1"}},
-		"after": []any{"t0"}, "afterMode": "done", "session": map[string]any{"id": "lead-1", "hostId": "host-1"}}
+		"after": []any{"t0"}, "afterMode": "done", "session": map[string]any{"id": "lead-1", "hostId": "host-1", "lead": "claude"}}
 	a, _ := json.Marshal(req)
 	b, _ := json.Marshal(want)
 	if !bytes.Equal(a, b) {
@@ -330,6 +330,7 @@ func TestDaemonErrors(t *testing.T) {
 type failingDaemon struct{ err error }
 
 func (f failingDaemon) Ensure(context.Context) (*client.Client, error) { return nil, f.err }
+func (f failingDaemon) Find(context.Context) (*client.Client, error)   { return nil, f.err }
 
 // flakyDaemon hands out the live daemon `skip` times (the server's own lookup at start), then a daemon that is gone,
 // then fails `busy` times (-1: forever) with downErr (default: a busy probe), then hands out the live daemon. With
@@ -341,6 +342,9 @@ type flakyDaemon struct {
 	stall      time.Duration
 	calls      atomic.Int32
 }
+
+// Find is Ensure: these tests lose the daemon without daemon_stopping, so the waits never call it.
+func (f *flakyDaemon) Find(ctx context.Context) (*client.Client, error) { return f.Ensure(ctx) }
 
 func (f *flakyDaemon) Ensure(ctx context.Context) (*client.Client, error) {
 	n := f.calls.Add(1) - f.skip
@@ -493,6 +497,110 @@ func TestWaitSurvivesRestart(t *testing.T) {
 	ok(t, cs, "wait", map[string]any{"task_ids": []string{"t1"}, "wait_seconds": 30}, &rep)
 	if rep.Status != "done" || fd.calls.Load() != 3 {
 		t.Fatalf("wait = %+v after %d ensures", rep, fd.calls.Load())
+	}
+}
+
+// stoppingDaemon hands out a daemon that answers daemon_stopping; after that only Find may be called. Find fails
+// with ErrNotRunning `gone` times (-1: always), then hands out back (a restarted daemon).
+type stoppingDaemon struct {
+	stopping     *client.Client
+	back         *client.Client
+	gone         int32
+	finds        atomic.Int32
+	ensuresAfter atomic.Int32
+}
+
+func (f *stoppingDaemon) Ensure(context.Context) (*client.Client, error) {
+	if f.finds.Load() > 0 {
+		f.ensuresAfter.Add(1)
+	}
+	return f.stopping, nil
+}
+
+func (f *stoppingDaemon) Find(context.Context) (*client.Client, error) {
+	n := f.finds.Add(1)
+	if f.gone < 0 || n <= f.gone {
+		return nil, fmt.Errorf("%w (nothing answers on 127.0.0.1:1)", client.ErrNotRunning)
+	}
+	return f.back, nil
+}
+
+// TestWaitDaemonStopping: a daemon that answers a wait with daemon_stopping is only looked for again (never
+// started): after a plain stop the wait ends with daemon_stopped at the end of the grace, and a daemon that comes
+// back (a restart) carries the wait on.
+func TestWaitDaemonStopping(t *testing.T) {
+	_, stopping := newStub(t, map[string]http.HandlerFunc{"POST /wait": answer(http.StatusServiceUnavailable,
+		api.ErrorBody{Error: api.ErrorInfo{Code: api.CodeDaemonStopping, Message: "the daemon is stopping"}})})
+	_, back := newStub(t, map[string]http.HandlerFunc{"POST /wait": waitAnswer("done")})
+	session := func(fd *stoppingDaemon) *mcp.ClientSession {
+		return stubSession(t, stopping, func(o *mcpserver.Options) {
+			o.Daemon = fd
+			o.RetryPause = 20 * time.Millisecond
+			o.StopGrace = 400 * time.Millisecond
+		})
+	}
+
+	fd := &stoppingDaemon{stopping: stopping, back: back, gone: -1}
+	cs := session(fd)
+	start := time.Now()
+	res := callTool(t, cs, "wait", map[string]any{"task_ids": []string{"t1"}, "wait_seconds": 30})
+	data, _ := json.Marshal(res.StructuredContent)
+	if d := time.Since(start); !res.IsError || !strings.Contains(string(data), `"daemon_stopped"`) ||
+		!strings.Contains(text(res, 0), "keep running") || d > 5*time.Second {
+		t.Fatalf("stopped = %s %s after %v", text(res, 0), data, d)
+	}
+	if fd.finds.Load() == 0 || fd.ensuresAfter.Load() != 0 {
+		t.Fatalf("finds %d, ensures after the stop %d", fd.finds.Load(), fd.ensuresAfter.Load())
+	}
+
+	fd = &stoppingDaemon{stopping: stopping, back: back, gone: 3}
+	cs = session(fd)
+	var rep api.TaskReport
+	ok(t, cs, "wait", map[string]any{"task_ids": []string{"t1"}, "wait_seconds": 30}, &rep)
+	if rep.Status != "done" || fd.finds.Load() != 4 || fd.ensuresAfter.Load() != 0 {
+		t.Fatalf("restart = %+v after %d finds, %d ensures", rep, fd.finds.Load(), fd.ensuresAfter.Load())
+	}
+}
+
+// restartThenCrash: the daemon answers daemon_stopping, Find then finds the restarted daemon, which goes away
+// without a word (a crash); after that only Ensure brings the daemon back.
+type restartThenCrash struct {
+	stopping, crashed, live *client.Client
+	finds, ensuresAfter     atomic.Int32
+}
+
+func (f *restartThenCrash) Ensure(context.Context) (*client.Client, error) {
+	if f.finds.Load() == 0 {
+		return f.stopping, nil
+	}
+	f.ensuresAfter.Add(1)
+	return f.live, nil
+}
+
+func (f *restartThenCrash) Find(context.Context) (*client.Client, error) {
+	f.finds.Add(1)
+	return f.crashed, nil
+}
+
+// TestWaitCrashAfterRestart: once a daemon is found again after daemon_stopping, the wait follows the normal rules:
+// a connection lost without the code (a crash of the restarted daemon) goes through Ensure, not daemon_stopped.
+func TestWaitCrashAfterRestart(t *testing.T) {
+	_, stopping := newStub(t, map[string]http.HandlerFunc{"POST /wait": answer(http.StatusServiceUnavailable,
+		api.ErrorBody{Error: api.ErrorInfo{Code: api.CodeDaemonStopping, Message: "the daemon is stopping"}})})
+	_, live := newStub(t, map[string]http.HandlerFunc{"POST /wait": waitAnswer("done")})
+	crashedSrv := httptest.NewServer(http.NotFoundHandler())
+	crashed := client.New(crashedSrv.URL, nil)
+	crashedSrv.Close()
+	fd := &restartThenCrash{stopping: stopping, crashed: crashed, live: live}
+	cs := stubSession(t, stopping, func(o *mcpserver.Options) {
+		o.Daemon = fd
+		o.RetryPause = 20 * time.Millisecond
+		o.StopGrace = 200 * time.Millisecond
+	})
+	var rep api.TaskReport
+	ok(t, cs, "wait", map[string]any{"task_ids": []string{"t1"}, "wait_seconds": 30}, &rep)
+	if rep.Status != "done" || fd.finds.Load() != 1 || fd.ensuresAfter.Load() != 1 {
+		t.Fatalf("crash after restart = %+v after %d finds, %d ensures", rep, fd.finds.Load(), fd.ensuresAfter.Load())
 	}
 }
 

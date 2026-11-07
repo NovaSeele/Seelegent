@@ -107,6 +107,7 @@ func newDaemon(t *testing.T) *daemon {
 type fixedDaemon struct{ c *client.Client }
 
 func (f fixedDaemon) Ensure(context.Context) (*client.Client, error) { return f.c, nil }
+func (f fixedDaemon) Find(context.Context) (*client.Client, error)   { return f.c, nil }
 
 // connect runs a server with o over an in-memory transport and returns the client session.
 func connect(t *testing.T, o mcpserver.Options) *mcp.ClientSession {
@@ -243,7 +244,8 @@ func TestTasksEndToEnd(t *testing.T) {
 		t.Fatalf("delegate = %+v (%s)", rep, sum)
 	}
 	detail, err := d.a.Tasks.Get(t.Context(), rep.TaskID)
-	if err != nil || detail.Cwd != d.cwd || detail.Session == nil || detail.Session.ID != "sess-1" {
+	if err != nil || detail.Cwd != d.cwd || detail.Session == nil || detail.Session.ID != "sess-1" ||
+		detail.Session.Lead != api.LeadClaude {
 		t.Fatalf("task cwd %q session %+v, %v", detail.Cwd, detail.Session, err)
 	}
 

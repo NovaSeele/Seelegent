@@ -149,6 +149,8 @@ type Options struct {
 	Version, Commit string
 	StartedAt       time.Time
 	PID             int
+	// HomeID identifies the data directory (config.HomeID) in GET /health.
+	HomeID string
 
 	Tasks    Tasks
 	Accounts Accounts
@@ -166,6 +168,10 @@ type Options struct {
 	LogDir string
 	// Redact masks secrets in log lines (logx.Redactor.String); identity when nil.
 	Redact func(string) string
+
+	// Stop asks the daemon to shut down cleanly (POST /daemon/stop). It must only signal and return at once: the
+	// shutdown waits for the answer to be written. Nil answers 503.
+	Stop func()
 
 	// Web is the built dashboard (web.FS()); nil serves 404 for the dashboard.
 	Web fs.FS

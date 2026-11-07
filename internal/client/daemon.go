@@ -24,6 +24,8 @@ const (
 	DefaultProbeTimeout = 1500 * time.Millisecond
 	DefaultStartTimeout = 20 * time.Second
 	defaultPollInterval = 250 * time.Millisecond
+	// spawnFloorPolls is how many poll intervals a daemon spawned near the start deadline still gets to answer.
+	spawnFloorPolls = 8
 )
 
 // startLockName is the lock file (in the data directory's run folder) that lets one process at a time start the
@@ -54,6 +56,13 @@ type ForeignError struct {
 	APIVersion int
 	Detail     string
 	Timeout    time.Duration
+	// OtherHome is set when a Seelegent daemon of this API version answers but serves another data directory
+	// (its health homeId differs); PID is that daemon's process id. It is never used, and never stopped.
+	OtherHome bool
+	PID       int
+	// OlderBuild is set when a Seelegent daemon of this API version answers without naming its data directory
+	// (a build before homeId): whose it is cannot be told, so it is treated like OtherHome.
+	OlderBuild bool
 }
 
 // TimedOut reports whether err is a probe that got no answer in time.
@@ -63,6 +72,14 @@ func TimedOut(err error) bool {
 }
 
 func (e *ForeignError) Error() string {
+	if e.OlderBuild {
+		return fmt.Sprintf("port %d is served by an older Seelegent build (pid %d) that does not report its data "+
+			"directory: stop it with that build", e.Port, e.PID)
+	}
+	if e.OtherHome {
+		return fmt.Sprintf("port %d is served by a Seelegent daemon of another data directory (pid %d): give this "+
+			"data directory its own port with SEELEGENT_PORT or the port setting", e.Port, e.PID)
+	}
 	if e.Timeout > 0 {
 		return fmt.Sprintf("port %d did not answer within %s (a busy or hung Seelegent daemon, or another program): "+
 			"try again shortly, or check logs/daemon.log", e.Port, e.Timeout)
@@ -108,6 +125,8 @@ type DaemonOptions struct {
 // not answer, or answers as something else, falls back to the configured port.
 type Daemon struct {
 	o DaemonOptions
+	// homeID is config.HomeID of o.Paths.Home: a daemon whose health names another id serves another home.
+	homeID string
 	// sem serializes starts within this process (the lock file does it across processes).
 	sem chan struct{}
 }
@@ -126,7 +145,7 @@ func NewDaemon(o DaemonOptions) *Daemon {
 	if o.Logger == nil {
 		o.Logger = slog.New(slog.DiscardHandler)
 	}
-	return &Daemon{o: o, sem: make(chan struct{}, 1)}
+	return &Daemon{o: o, homeID: config.HomeID(o.Paths.Home), sem: make(chan struct{}, 1)}
 }
 
 // Port is the configured port the daemon is looked for on (after the port file's).
@@ -135,15 +154,38 @@ func (d *Daemon) Port() int { return d.o.Port }
 // ReadPortFile returns the port recorded in paths.PortFile by the running daemon (false when there is none or it
 // is not a port).
 func ReadPortFile(paths config.Paths) (int, bool) {
+	port, _, ok := readPortFile(paths)
+	return port, ok
+}
+
+// ReadPortFilePID returns the process id the daemon recorded on the second line of its port file (false when there
+// is none). It is only ever shown to people (where a daemon that does not answer runs), never used to kill.
+func ReadPortFilePID(paths config.Paths) (int, bool) {
+	_, pid, ok := readPortFile(paths)
+	return pid, ok && pid > 0
+}
+
+// readPortFile parses the port file: the port on the first line, the daemon's process id on the second (files of
+// earlier builds have only the port).
+func readPortFile(paths config.Paths) (port, pid int, ok bool) {
 	data, err := os.ReadFile(paths.PortFile)
 	if err != nil {
-		return 0, false
+		return 0, 0, false
 	}
-	port, err := strconv.Atoi(strings.TrimSpace(string(data)))
+	lines := strings.Fields(string(data))
+	if len(lines) == 0 {
+		return 0, 0, false
+	}
+	port, err = strconv.Atoi(lines[0])
 	if err != nil || port < 1 || port > 65535 {
-		return 0, false
+		return 0, 0, false
 	}
-	return port, true
+	if len(lines) > 1 {
+		if n, err := strconv.Atoi(lines[1]); err == nil && n > 0 {
+			pid = n
+		}
+	}
+	return port, pid, true
 }
 
 // lockHeld reports whether a daemon holds the data directory's single-instance lock. Taking the lock without
@@ -169,7 +211,8 @@ func (d *Daemon) filePort() (int, bool) {
 }
 
 // Find returns a client of the running daemon, or an error matching ErrNotRunning when nothing answers, or a
-// *ForeignError when something else answers on the configured port.
+// *ForeignError when something else answers on the configured port: another program, another API version, or a
+// Seelegent daemon of another data directory (its health homeId is not this home's).
 func (d *Daemon) Find(ctx context.Context) (*Client, error) {
 	if port, ok := d.filePort(); ok && port != d.o.Port {
 		c, err := d.probe(ctx, port)
@@ -192,8 +235,14 @@ func (d *Daemon) probe(ctx context.Context, port int) (*Client, error) {
 	defer cancel()
 	h, err := c.Health(pctx)
 	switch {
-	case err == nil && h.OK && h.APIVersion == api.APIVersion:
+	case err == nil && h.OK && h.APIVersion == api.APIVersion && h.HomeID == d.homeID:
 		return c, nil
+	case err == nil && h.OK && h.APIVersion == api.APIVersion && h.HomeID == "":
+		// A build before homeId: whose daemon it is cannot be told, so it is never used or stopped either.
+		return nil, &ForeignError{Port: port, OlderBuild: true, PID: h.PID}
+	case err == nil && h.OK && h.APIVersion == api.APIVersion:
+		// Another data directory's daemon: never ours to use or stop.
+		return nil, &ForeignError{Port: port, OtherHome: true, PID: h.PID}
 	case err == nil && h.APIVersion != 0:
 		return nil, &ForeignError{Port: port, APIVersion: h.APIVersion}
 	case err == nil:
@@ -227,22 +276,37 @@ func (d *Daemon) Ensure(ctx context.Context) (*Client, error) {
 		return nil, fmt.Errorf("%w on port %d and autostart is off (SEELEGENT_NO_AUTO_START=1): run "+
 			"`seelegent daemon`", ErrNotRunning, d.o.Port)
 	}
+	// One deadline bounds the whole call: the wait for a start of this process already under way (old F11: that
+	// wait was unbounded and start() then took a fresh StartTimeout) and every phase of start().
+	end := time.Now().Add(d.o.StartTimeout)
+	sem := time.NewTimer(d.o.StartTimeout)
 	select {
 	case d.sem <- struct{}{}:
+		sem.Stop()
 	case <-ctx.Done():
+		sem.Stop()
 		return nil, ctx.Err()
+	case <-sem.C:
+		// Another call of this process has been starting the daemon for the whole timeout.
+		if c, err := d.Find(ctx); err == nil {
+			return c, nil
+		}
+		return nil, &notRunningError{msg: fmt.Sprintf("another start of the Seelegent daemon in this process has "+
+			"not finished within %s and nothing answers on port %d: try again shortly, or check %s",
+			d.o.StartTimeout, d.o.Port, filepath.Join(d.o.Paths.Logs, "daemon.log"))}
 	}
 	defer func() { <-d.sem }()
-	return d.start(ctx)
+	return d.start(ctx, end)
 }
 
 // start starts the daemon under the start lock unless another process did meanwhile, then waits until it answers.
-// One deadline, StartTimeout from now, bounds every phase, so the waits do not add up.
-func (d *Daemon) start(ctx context.Context) (*Client, error) {
+// One deadline, end, bounds every phase, so the waits do not add up. A daemon is never spawned once end has
+// passed; one spawned just before it gets spawnFloor for its first answer (old F12: a spawn made when the start
+// lock came free near the end got almost no time and was reported as not answering).
+func (d *Daemon) start(ctx context.Context, end time.Time) (*Client, error) {
 	if err := d.o.Paths.EnsureDirs(); err != nil {
 		return nil, err
 	}
-	end := time.Now().Add(d.o.StartTimeout)
 	lctx, cancel := context.WithDeadline(ctx, end)
 	defer cancel()
 	lock, err := fsutil.Lock(lctx, filepath.Join(d.o.Paths.Run, startLockName))
@@ -259,10 +323,17 @@ func (d *Daemon) start(ctx context.Context) (*Client, error) {
 	if c, err := d.awaitHolder(ctx, end); c != nil || err != nil {
 		return c, err
 	}
+	if !time.Now().Before(end) {
+		return nil, &notRunningError{msg: fmt.Sprintf("no Seelegent daemon answers on port %d and the %s start "+
+			"time ran out before one could be started: try again", d.o.Port, d.o.StartTimeout)}
+	}
 	d.o.Logger.Info("daemon: starting", "port", d.o.Port, "home", d.o.Paths.Home)
 	exited, err := d.o.Start(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("start the Seelegent daemon: %w", err)
+	}
+	if floor := time.Now().Add(d.spawnFloor()); end.Before(floor) {
+		end = floor
 	}
 	deadline := time.NewTimer(time.Until(end))
 	defer deadline.Stop()
@@ -291,11 +362,14 @@ func (d *Daemon) start(ctx context.Context) (*Client, error) {
 			exited = nil // not watchable; keep polling until the deadline
 		case <-deadline.C:
 			return nil, fmt.Errorf("the Seelegent daemon did not answer on port %d within %s; see %s", d.o.Port,
-				d.o.StartTimeout, logHint)
+				max(d.o.StartTimeout, d.spawnFloor()), logHint)
 		case <-tick.C:
 		}
 	}
 }
+
+// spawnFloor is the least time a spawned daemon gets to answer, however little of the start deadline is left.
+func (d *Daemon) spawnFloor() time.Duration { return spawnFloorPolls * d.o.PollInterval }
 
 // awaitHolder waits while another daemon of this home holds its single-instance lock but does not answer yet (it is
 // still starting, or shutting down): it returns that daemon as soon as it answers, and nil, nil once nothing answers

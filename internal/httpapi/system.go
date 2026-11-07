@@ -50,11 +50,21 @@ func (s *Server) systemRoutes() {
 		return http.StatusOK, api.NonNil(p), err
 	})
 	s.handle("GET /spec", s.getSpec)
+	s.handle("POST /daemon/stop", func(http.ResponseWriter, *http.Request) (int, any, error) {
+		if s.o.Stop == nil {
+			return 0, nil, newError(api.CodeUnavailable, "this daemon cannot be stopped through the API; stop it "+
+				"where it runs (Ctrl+C)")
+		}
+		s.log.Info("http: stop requested")
+		// Stop only signals: the shutdown waits for this answer to be written (http.Server.Shutdown).
+		s.o.Stop()
+		return http.StatusAccepted, api.DaemonStop{Stopping: true, PID: s.o.PID}, nil
+	})
 }
 
 func (s *Server) health() api.Health {
 	return api.Health{OK: true, Version: s.o.Version, Commit: s.o.Commit, Build: s.build(), APIVersion: api.APIVersion,
-		PID: s.o.PID, Port: s.o.Port, StartedAt: api.FormatTime(s.o.StartedAt)}
+		PID: s.o.PID, Port: s.o.Port, StartedAt: api.FormatTime(s.o.StartedAt), HomeID: s.o.HomeID}
 }
 
 // getState is GET /state. lastEventId is read before the snapshot: every frame is published after its change is

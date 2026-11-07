@@ -878,7 +878,7 @@ func (s *Service) prompt(ctx context.Context, t *Task, tu *Turn, continuing bool
 		in.Message = brief.HandbackElsewhere // a new conversation: the console's context is not available
 	}
 	if t.Session != nil {
-		in.Lead = brief.LeadName(t.Session.HostID)
+		in.Lead = brief.LeadName(t.Session.Lead)
 	}
 	if t.Profile != nil && s.o.Roles != nil {
 		if r, err := s.o.Roles.Get(ctx, t.Profile.ID, t.Cwd); err == nil {
