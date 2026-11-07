@@ -260,7 +260,8 @@ function foldAttention(
     ...extra,
   })
   if (data.state === 'cleared') return line('dim', 'check', { key: 'terminal.ev.attentionCleared' })
-  if (data.reason === 'work_at_risk' && riskShown !== undefined && riskShown === event.turn) return null
+  if (data.reason === 'work_at_risk' && riskShown !== undefined && riskShown === event.turn)
+    return null
   const state = `terminal.ev.attention.${data.state}`
   const message: Message = REASON.test(data.reason)
     ? { key: `common.attention.${reasonKey(data.reason)}`, fallback: state }

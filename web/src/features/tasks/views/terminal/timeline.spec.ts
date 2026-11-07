@@ -158,7 +158,12 @@ describe('terminal timeline', () => {
       ev('restored', { files: ['a.txt'] }),
       flag(1),
       ev('restored', { files: ['notes.md'] }),
-      ev('attention', { state: 'info', reason: 'review', who: 'lead', since: '2026-11-06T12:00:00Z' }),
+      ev('attention', {
+        state: 'info',
+        reason: 'review',
+        who: 'lead',
+        since: '2026-11-06T12:00:00Z',
+      }),
     ])
     const notices = items.flatMap((i) => (i.kind === 'notice' ? [i] : []))
     expect(notices.map((i) => [i.message.key, i.tone])).toEqual([
