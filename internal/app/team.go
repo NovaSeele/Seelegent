@@ -94,8 +94,9 @@ func (a *App) withAPI(fn func(s *httpapi.Server)) {
 	}
 }
 
-// contestAccounts lists the accounts for a contest's quota plan: usable when enabled and in a state that can run,
-// with the lowest fraction left over their quota windows.
+// contestAccounts lists the accounts for a contest's quota plan: usable when enabled and in a state the pool runs
+// work on (an error state keeps its last numbers and still runs, pool.Status.Usable) or about to (new), with the
+// lowest fraction left over their quota windows.
 func (a *App) contestAccounts(ctx context.Context) ([]contest.PoolAccount, error) {
 	states, err := a.Pool.States(ctx)
 	if err != nil {
@@ -106,7 +107,7 @@ func (a *App) contestAccounts(ctx context.Context) ([]contest.PoolAccount, error
 	for i := range states {
 		st := &states[i]
 		pa := contest.PoolAccount{ID: st.Account.ID, Backend: st.Account.Backend, Provider: st.Account.Provider,
-			Usable: st.Account.Enabled && (st.Status == pool.StatusOK || st.Status == pool.StatusNew), Busy: st.Busy}
+			Usable: st.Account.Enabled && (st.Status.Usable() || st.Status == pool.StatusNew), Busy: st.Busy}
 		if st.HasQuota && st.Quota.Known() {
 			left := 1.0
 			for _, g := range st.Quota.Groups {
