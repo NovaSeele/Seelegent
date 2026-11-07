@@ -64,6 +64,7 @@
     "none": "No hay skills instaladas para este lugar.",
     "search": "Buscar skills",
     "missing": "{n} skill elegida no está instalada aquí; los workers no la encontrarán. | {n} skills elegidas no están instaladas aquí; los workers no las encontrarán.",
+    "notInstalled": "No está instalada aquí",
     "root": {
       "project": "Proyecto",
       "user": "Usuario",

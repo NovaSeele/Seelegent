@@ -64,6 +64,7 @@
     "none": "Nơi này chưa cài skill nào.",
     "search": "Tìm skill",
     "missing": "{n} skill đã chọn chưa được cài ở đây; worker sẽ không tìm thấy.",
+    "notInstalled": "Chưa cài ở đây",
     "root": {
       "project": "Dự án",
       "user": "Người dùng",

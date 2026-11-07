@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, shallowRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { errorMessage } from '@/api/client'
@@ -37,6 +37,27 @@ const deleteBusy = ref(false)
 const deleteError = ref('')
 
 onMounted(() => roles.ensure())
+
+/** Installed skill names per place ('' = global), read for the places whose roles name skills. */
+const installed = shallowRef<Readonly<Record<string, ReadonlySet<string>>>>({})
+const placeOf = (role: Role) => (role.scope === 'global' ? '' : (role.cwd ?? ''))
+
+watch(
+  () => roles.items,
+  async (items) => {
+    const places = new Set(items.filter((r) => r.skills.length).map(placeOf))
+    for (const place of places) {
+      if (place in installed.value) continue
+      try {
+        const list = await roles.loadSkills(place)
+        installed.value = { ...installed.value, [place]: new Set(list.map((s) => s.name)) }
+      } catch {
+        // Unknown: the card marks no skill as missing.
+      }
+    }
+  },
+  { immediate: true },
+)
 
 const projectName = (cwd: string | undefined) =>
   roles.projects.find((p) => cwd !== undefined && pathKey(p.cwd) === pathKey(cwd))?.name ??
@@ -141,6 +162,7 @@ async function remove() {
             :key="`${role.scope}:${role.cwd ?? ''}:${role.id}`"
             :role="role"
             :project-name="projectName(role.cwd)"
+            :installed="installed[placeOf(role)] ?? null"
             @edit="target = { role }"
             @remove="askDelete(role)"
           />

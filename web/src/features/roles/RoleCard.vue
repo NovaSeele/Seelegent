@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 
 import type { Role } from '@/api/types'
 import Button from '@/components/ui/Button.vue'
+import Icon from '@/components/ui/Icon.vue'
 import IconButton from '@/components/ui/IconButton.vue'
 import { useAccountsStore } from '@/stores/accounts'
 
@@ -11,7 +12,12 @@ import { useAccountsStore } from '@/stores/accounts'
  * One role: name and id, where it lives (global or a project; a project role can hide a global one with the same
  * id), its description, defaults and skills, and the accounts it prefers.
  */
-const props = defineProps<{ role: Role; projectName: string }>()
+const props = defineProps<{
+  role: Role
+  projectName: string
+  /** The skills installed where the role lives; null while unknown (no skill is marked then). */
+  installed?: ReadonlySet<string> | null
+}>()
 const emit = defineEmits<{ edit: []; remove: [] }>()
 
 const { t } = useI18n()
@@ -59,7 +65,18 @@ const preferred = computed(() =>
       <div v-if="role.skills.length">
         <dt>{{ t('roles.skills.title') }}</dt>
         <dd class="role__skills">
-          <span v-for="skill in role.skills" :key="skill" class="skill">{{ skill }}</span>
+          <template v-for="skill in role.skills" :key="skill">
+            <span
+              v-if="installed && !installed.has(skill)"
+              class="skill skill--missing tone-attention"
+              :title="t('roles.skills.notInstalled')"
+            >
+              <Icon name="warning" :size="12" />
+              {{ skill }}
+              <span class="sr-only">({{ t('roles.skills.notInstalled') }})</span>
+            </span>
+            <span v-else class="skill">{{ skill }}</span>
+          </template>
         </dd>
       </div>
       <div v-if="role.preferredAccounts.length">
@@ -138,6 +155,16 @@ const preferred = computed(() =>
   border: var(--border-width) solid var(--border-subtle);
   color: var(--text-secondary);
   font-family: var(--font-mono);
+}
+
+/* A chosen skill that is not installed where the role lives: workers will not find it. */
+.skill--missing {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  border-color: var(--tone-border);
+  background: var(--tone-bg);
+  color: var(--tone-fg);
 }
 
 .role__desc {
