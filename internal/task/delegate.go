@@ -139,7 +139,11 @@ func (s *Service) DelegateWith(ctx context.Context, req api.DelegateRequest, sp 
 		}
 		r, err := s.o.Roles.Get(ctx, roleID, t.projectDir())
 		if err != nil {
-			return api.TaskSummary{}, invalidf("role %q: %v", roleID, err)
+			byMember := ""
+			if mem != nil && req.Profile == "" && req.Role == "" {
+				byMember = mem.ID
+			}
+			return api.TaskSummary{}, roleErr(roleID, byMember, err)
 		}
 		rl = &r
 		t.Profile = &api.ProfileRef{ID: r.ID, Name: r.Name}
@@ -440,7 +444,7 @@ func (s *Service) setProfile(ctx context.Context, t *Task, id string) error {
 	}
 	r, err := s.o.Roles.Get(ctx, id, t.Cwd)
 	if err != nil {
-		return invalidf("role %q: %v", id, err)
+		return roleErr(id, "", err)
 	}
 	t.Profile = &api.ProfileRef{ID: r.ID, Name: r.Name}
 	t.Prefer = slices.Clone(r.PreferredAccounts)

@@ -39,8 +39,10 @@ Using a member (`delegate`/`followup` with `member`):
 
 - What the request names wins; the member fills the rest: backend or provider, model or tier (its model only on
   its own backend), role and preferred accounts.
-- An unknown member is `400 invalid_argument`; a member that is off (or whose provider is gone, `invalid`) is
-  `409 conflict` with `details.reason: "member_disabled"`.
+- An unknown member is `400 invalid_argument` with `details.reason: "member_missing"`. A member's role is checked
+  when the member is used, not when it is saved (roles can be project-level): a role that is neither the project's
+  nor global is `400 invalid_argument` with `details` `{reason: "role_missing", role, member}`. A member that is
+  off (or whose provider is gone, `invalid`) is `409 conflict` with `details.reason: "member_disabled"`.
 - When no account of the member's backend can run the task, the task moves to the next of its fallback backends,
   forward only. A task on a provider, or on a backend the lead chose outside the list, stays.
 - A followup with `member` moves the task to that member from this turn on (a new backend starts a new

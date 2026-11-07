@@ -172,8 +172,9 @@ func toAPIError(err error) *apiError {
 		errors.Is(err, ticket.ErrConflict)) {
 		return &apiError{code: api.CodeConflict, message: msg, details: withDetails.APIDetails()}
 	}
-	// A member named for work that does not exist: a bad argument that says which (details.reason member_missing).
-	if errors.As(err, &withDetails) && errors.Is(err, member.ErrInvalid) {
+	// A member or role named for work that does not exist: a bad argument that says which (details.reason
+	// member_missing or role_missing).
+	if errors.As(err, &withDetails) && (errors.Is(err, member.ErrInvalid) || errors.Is(err, task.ErrInvalid)) {
 		return &apiError{code: api.CodeInvalidArgument, message: msg, details: withDetails.APIDetails()}
 	}
 	// An automation run now refused because the user has not confirmed it as it is (details.reason not_confirmed).

@@ -43,8 +43,28 @@ func TestMembersOverHTTP(t *testing.T) {
 	if got.Details["reason"] != "member_disabled" || got.Details["member"] != "ana" {
 		t.Errorf("details = %v", got.Details)
 	}
-	e.wantError(e.post("/api/v1/tasks", map[string]any{"prompt": "x", "cwd": e.cwd, "member": "ghost"}),
+	// F22: an unknown member or role is a coded bad argument with details and a message without engine prefixes.
+	got = e.wantError(e.post("/api/v1/tasks", map[string]any{"prompt": "x", "cwd": e.cwd, "member": "ghost"}),
 		http.StatusBadRequest, api.CodeInvalidArgument, "")
+	if got.Details["reason"] != "member_missing" || got.Details["member"] != "ghost" ||
+		got.Message != `no member "ghost"; pick another member or a backend` {
+		t.Errorf("missing member = %+v", got)
+	}
+	got = e.wantError(e.post("/api/v1/tasks", map[string]any{"prompt": "x", "cwd": e.cwd, "role": "nope"}),
+		http.StatusBadRequest, api.CodeInvalidArgument, "")
+	if got.Details["reason"] != "role_missing" || got.Details["role"] != "nope" || got.Details["member"] != nil ||
+		strings.Contains(got.Message, "invalid:") || strings.Contains(got.Message, "not found:") {
+		t.Errorf("missing role = %+v", got)
+	}
+	e.must(e.post("/api/v1/members", map[string]any{"id": "rhea", "name": "Rhea", "backend": "agy",
+		"rank": "senior", "role": "typo-role"}), http.StatusCreated)
+	got = e.wantError(e.post("/api/v1/tasks", map[string]any{"prompt": "x", "cwd": e.cwd, "member": "rhea"}),
+		http.StatusBadRequest, api.CodeInvalidArgument, "")
+	if got.Details["reason"] != "role_missing" || got.Details["role"] != "typo-role" ||
+		got.Details["member"] != "rhea" || !strings.Contains(got.Message, `member "rhea"`) {
+		t.Errorf("member with a missing role = %+v", got)
+	}
+	e.must(e.req(http.MethodDelete, "/api/v1/members/rhea", nil, nil), http.StatusNoContent)
 
 	e.must(e.req(http.MethodPatch, "/api/v1/members/ana", map[string]any{"enabled": true}, nil), http.StatusOK)
 	e.queue.Push(t, ok("c1", "done"))

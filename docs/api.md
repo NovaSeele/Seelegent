@@ -66,7 +66,9 @@ in the daemon.
 - Team routes (M14, [team.md](team.md)). The contract fixed the paths; these are the choices made:
   - `PATCH /members/{id}` merges the body onto the stored member (a field left out keeps its value) and refuses a
     changed `id`. A member that is off is `409 conflict` with `details.reason: "member_disabled"` wherever new work
-    would go to it; an unknown member in a request is `400`.
+    would go to it; an unknown member in a request is `400` with `details.reason: "member_missing"`, and a role (the
+    request's or the member's) that does not exist for the task's project is `400` with `details.reason:
+    "role_missing"` (`role`, and `member` when it was the member's role).
   - `POST /meetings/estimate` and `POST /contests/estimate` (additions) take the body of the open or create call and
     answer the plan without starting anything.
   - `GET /meetings/{id}/wait` and `GET /contests/{id}/wait` take `seconds` 0..1500 (default 600) and return once the
