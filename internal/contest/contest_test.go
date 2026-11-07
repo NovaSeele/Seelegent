@@ -165,6 +165,9 @@ func setup(t *testing.T) *env {
 	root := filepath.Join(dir, "repo")
 	write(t, filepath.Join(root, "a.txt"), "alpha\n")
 	write(t, filepath.Join(root, "b.txt"), "beta\n")
+	// A shared folder (like node_modules): ignored as a folder, so its link would not be.
+	write(t, filepath.Join(root, ".gitignore"), "deps/\n")
+	write(t, filepath.Join(root, "deps", "lib.txt"), "lib\n")
 	git(t, root, "init", "-q")
 	git(t, root, "config", "core.autocrlf", "false")
 	git(t, root, "add", "-A")
@@ -178,6 +181,7 @@ func setup(t *testing.T) *env {
 	data := filepath.Join(dir, "data")
 	s := New(Options{DB: db, Tasks: ft, Members: members, Git: gitx.New(nil, nil), Dir: filepath.Join(data, "contests"),
 		WorktreeBase: filepath.Join(data, "worktrees", "contests"),
+		SharedDirs:   func(string) []string { return []string{"deps"} },
 		Accounts: func(context.Context) ([]PoolAccount, error) {
 			return []PoolAccount{{ID: "a1", Backend: "agy", Usable: true, Remaining: &full},
 				{ID: "a2", Backend: "agy", Usable: true}}, nil
@@ -348,6 +352,17 @@ func TestContestDeadlineConflictAndCancel(t *testing.T) {
 	}
 	if got := read(t, filepath.Join(e.root, "a.txt")); got != "alpha changed by the user\n" {
 		t.Errorf("a.txt = %q", got)
+	}
+	// The variant is as it was: HEAD at the base, its change uncommitted, its shared-folder link in place, so a
+	// follow-up runs with it and still has a diff.
+	if head := strings.TrimSpace(git(t, v1.Worktree, "rev-parse", "HEAD")); head != c.BaseSha {
+		t.Errorf("V1 HEAD = %s, base %s", head, c.BaseSha)
+	}
+	if st := git(t, v1.Worktree, "status", "--porcelain", "--", "a.txt"); !strings.Contains(st, "a.txt") {
+		t.Errorf("V1 status = %q", st)
+	}
+	if got := read(t, filepath.Join(v1.Worktree, "deps", "lib.txt")); got != "lib\n" {
+		t.Errorf("V1 deps/lib.txt = %q", got)
 	}
 	c, _ = e.s.Get(ctx, c.ID)
 	if c.LastPickError == nil || c.Status != api.ContestStatusReady {

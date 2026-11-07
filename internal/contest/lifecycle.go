@@ -17,6 +17,7 @@ import (
 	"github.com/NovaSeele/Seelegent/internal/gitx"
 	"github.com/NovaSeele/Seelegent/internal/proof"
 	"github.com/NovaSeele/Seelegent/internal/task"
+	"github.com/NovaSeele/Seelegent/internal/worktree"
 )
 
 // ---- watching ---------------------------------------------------------------------------------------------------
@@ -216,7 +217,48 @@ func (s *Service) treeOf(ctx context.Context, v *api.ContestVariant) (string, er
 	if err := os.MkdirAll(tmp, 0o700); err != nil {
 		return "", err
 	}
-	return s.o.Git.SnapshotTree(ctx, v.Worktree, tmp)
+	return s.o.Git.SnapshotTree(ctx, v.Worktree, tmp, linked(v.Env)...)
+}
+
+// linked are the shared-folder link paths of a worktree, which no snapshot or commit of it may hold.
+func linked(env *api.WorktreeEnv) []string {
+	if env == nil {
+		return nil
+	}
+	var out []string
+	for _, raw := range env.Linked {
+		if rel, _ := worktree.RelPath(raw); rel != "" {
+			out = append(out, rel)
+		}
+	}
+	return out
+}
+
+// snapshotCommit records the variant's worktree as a commit on top of its HEAD without changing the worktree:
+// HEAD, its index and its shared-folder links stay, so a pick that fails leaves the variant as it was and a
+// follow-up still runs with its links. The final commit (Seal) is made at cleanup.
+func (s *Service) snapshotCommit(ctx context.Context, v *api.ContestVariant, message string) (string, error) {
+	tmp := filepath.Join(s.o.Dir, "tmp")
+	if err := os.MkdirAll(tmp, 0o700); err != nil {
+		return "", err
+	}
+	tree, err := s.o.Git.SnapshotTree(ctx, v.Worktree, tmp, linked(v.Env)...)
+	if err != nil {
+		return "", err
+	}
+	args := append(gitx.Identity(), "commit-tree", tree, "-m", message)
+	if head := s.o.Git.Head(ctx, v.Worktree); head != "" {
+		args = append(args, "-p", head)
+	}
+	out, err := s.o.Git.Exec(ctx, v.Worktree, gitx.ExecOptions{}, args...)
+	if err != nil {
+		return "", err
+	}
+	commit := strings.TrimSpace(string(out))
+	if commit == "" {
+		return "", errors.New("commit-tree gave no commit")
+	}
+	return commit, nil
 }
 
 func (s *Service) scoreVariant(ctx context.Context, c *api.Contest, v *api.ContestVariant) api.ScoreRow {
@@ -608,7 +650,7 @@ func (s *Service) Pick(ctx context.Context, id string, req api.ContestPickReques
 	if _, err := os.Stat(v.Worktree); err != nil {
 		return api.Contest{}, badStatef("variant %s has no worktree any more", lbl)
 	}
-	commit, err := s.trees.Seal(ctx, v.Worktree, v.Env, "seelegent contest "+c.ID+" "+lbl)
+	commit, err := s.snapshotCommit(ctx, v, "seelegent contest "+c.ID+" "+lbl)
 	if err != nil {
 		return api.Contest{}, fmt.Errorf("commit the %s worktree: %w", lbl, err)
 	}

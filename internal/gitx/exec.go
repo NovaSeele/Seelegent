@@ -1,6 +1,7 @@
 package gitx
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -132,11 +133,25 @@ func (r *Repos) Exec(ctx context.Context, dir string, opt ExecOptions, args ...s
 	if timeout <= 0 {
 		timeout = CommitTimeout
 	}
+	if runsHooks(args) {
+		// worktree add runs post-checkout and commit runs post-commit even with --no-verify: the repository's hooks
+		// never run for an internal command. The null device holds no hook on any system.
+		args = append([]string{"-c", "core.hooksPath=" + os.DevNull}, args...)
+	}
 	out, over, err := r.runEnv(ctx, dir, opt.Env, timeout, opt.Limit, args...)
 	if err == nil && over {
 		return out, &Error{Args: args, Err: fmt.Errorf("output larger than %d bytes", opt.Limit)}
 	}
 	return out, err
+}
+
+// runsHooks reports whether args (already checked) name a subcommand that can run repository hooks.
+func runsHooks(args []string) bool {
+	i := 0
+	for i+1 < len(args) && args[i] == "-c" {
+		i += 2
+	}
+	return i < len(args) && (args[i] == "commit" || args[i] == "worktree")
 }
 
 // ExitCode is the exit code of a git command that ran and failed, or -1.
@@ -156,8 +171,9 @@ func Identity() []string {
 
 // SnapshotTree writes the tree of the working tree at dir: HEAD plus every uncommitted and untracked file that is
 // not ignored, staged into a temporary index made in tmpDir. Neither the repository's index nor its files change;
-// the file contents become objects of the repository.
-func (r *Repos) SnapshotTree(ctx context.Context, dir, tmpDir string) (string, error) {
+// the file contents become objects of the repository. The paths in exclude (relative, slash-separated; such as
+// shared-folder links) are left as HEAD has them.
+func (r *Repos) SnapshotTree(ctx context.Context, dir, tmpDir string, exclude ...string) (string, error) {
 	f, err := os.CreateTemp(tmpDir, "index-*")
 	if err != nil {
 		return "", fmt.Errorf("snapshot index: %w", err)
@@ -176,7 +192,21 @@ func (r *Repos) SnapshotTree(ctx context.Context, dir, tmpDir string) (string, e
 			return "", err
 		}
 	}
-	if _, err := r.Exec(ctx, dir, opt, "add", "-A", "--", "."); err != nil {
+	args := []string{"add", "-A", "--", "."}
+	for _, x := range exclude {
+		if x = strings.Trim(filepath.ToSlash(x), "/"); x == "" {
+			continue
+		}
+		// Only what add would stage is excluded: git add fails on an excluded path it ignores anyway (a junction
+		// under "node_modules/") or does not see. A symlink is no folder to "node_modules/", so add would stage it.
+		out, err := r.Exec(ctx, dir, ExecOptions{Timeout: ReadTimeout}, "ls-files", "--others", "--exclude-standard",
+			"-z", "--", ":(literal)"+x)
+		if err != nil || len(bytes.Trim(out, "\x00")) == 0 {
+			continue
+		}
+		args = append(args, ":(exclude,literal)"+x)
+	}
+	if _, err := r.Exec(ctx, dir, opt, args...); err != nil {
 		return "", err
 	}
 	out, err := r.Exec(ctx, dir, opt, "write-tree")

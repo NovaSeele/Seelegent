@@ -135,6 +135,47 @@ func TestWorktreeLifecycle(t *testing.T) {
 	}
 }
 
+// The repository's hooks never run for internal commands, and a symlink git tracks survives the final commit.
+func TestNoHooksAndTrackedLinks(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	root := filepath.Join(dir, "repo")
+	write(t, filepath.Join(root, "a.txt"), "one\n")
+	git(t, root, "init", "-q")
+	git(t, root, "config", "core.autocrlf", "false")
+	tracked := os.Symlink("a.txt", filepath.Join(root, "link.txt")) == nil
+	if tracked {
+		git(t, root, "config", "core.symlinks", "true")
+	}
+	git(t, root, "add", "-A")
+	git(t, root, "commit", "-q", "-m", "init")
+	ran := filepath.Join(dir, "hook-ran")
+	for _, h := range []string{"post-checkout", "post-commit"} {
+		write(t, filepath.Join(root, ".git", "hooks", h), "#!/bin/sh\necho "+h+" >> '"+filepath.ToSlash(ran)+"'\n")
+		if err := os.Chmod(filepath.Join(root, ".git", "hooks", h), 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	trees := &Trees{Git: gitx.New(nil, nil), Base: filepath.Join(dir, "worktrees")}
+	wt, err := trees.Add(ctx, root, filepath.Join(trees.Base, "c1", "V1"), git(t, root, "rev-parse", "HEAD"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	write(t, filepath.Join(wt, "a.txt"), "two\n")
+	commit, err := trees.Remove(ctx, root, wt, nil, "final")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b, err := os.ReadFile(ran); err == nil {
+		t.Errorf("hooks ran: %s", b)
+	}
+	if tracked {
+		if names := git(t, root, "diff", "--name-only", "HEAD", commit); names != "a.txt" {
+			t.Errorf("final commit changed %q; the tracked link must stay", names)
+		}
+	}
+}
+
 func TestCheckSafe(t *testing.T) {
 	refused := [][]string{
 		{"checkout", "x"}, {"reset", "--hard"}, {"stash"}, {"clean", "-fd"}, {"push"},

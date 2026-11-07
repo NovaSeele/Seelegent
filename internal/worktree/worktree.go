@@ -443,7 +443,7 @@ func (t *Trees) Remove(ctx context.Context, root, wt string, env *api.WorktreeEn
 		return "", fmt.Errorf("remove shared-folder links: %w", err)
 	}
 	// Links a worker made itself go too: removing the folder must never reach through one.
-	if err := removeStrayLinks(wt); err != nil {
+	if err := removeStrayLinks(wt, t.trackedLinks(ctx, wt)); err != nil {
 		return "", err
 	}
 	commit, err := t.CommitAll(ctx, wt, message)
@@ -459,8 +459,26 @@ func (t *Trees) Remove(ctx context.Context, root, wt string, env *api.WorktreeEn
 // maxWalk bounds the entries removeStrayLinks looks at.
 const maxWalk = 500_000
 
-// removeStrayLinks removes every symbolic link and junction below wt as itself, never walking into one.
-func removeStrayLinks(wt string) error {
+// trackedLinks are the symbolic links the index of wt tracks (mode 120000), by slash-separated path: git made them,
+// so they stay (removing one would record its deletion in the final commit).
+func (t *Trees) trackedLinks(ctx context.Context, wt string) map[string]bool {
+	out, err := t.Git.Exec(ctx, wt, gitx.ExecOptions{Timeout: gitx.ReadTimeout}, "ls-files", "-s", "-z")
+	if err != nil {
+		return nil
+	}
+	links := map[string]bool{}
+	for _, rec := range strings.Split(string(out), "\x00") {
+		meta, path, ok := strings.Cut(rec, "\t")
+		if ok && strings.HasPrefix(meta, "120000 ") {
+			links[path] = true
+		}
+	}
+	return links
+}
+
+// removeStrayLinks removes every symbolic link and junction below wt as itself, never walking into one, except the
+// tracked links in keep.
+func removeStrayLinks(wt string, keep map[string]bool) error {
 	n := 0
 	var errs error
 	walkErr := filepath.WalkDir(wt, func(p string, d fs.DirEntry, err error) error {
@@ -480,6 +498,12 @@ func removeStrayLinks(wt string) error {
 		fi, err := os.Lstat(p)
 		if err != nil || !platform.IsLink(fi) {
 			return nil //nolint:nilerr // not a link: walked normally
+		}
+		if rel, rerr := filepath.Rel(wt, p); rerr == nil && keep[filepath.ToSlash(rel)] {
+			if d.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
 		}
 		if _, err := platform.RemoveLink(p); err != nil {
 			errs = errors.Join(errs, err)

@@ -78,7 +78,7 @@ type Members interface {
 type Git interface {
 	worktree.Git
 	Root(ctx context.Context, dir string) (string, error)
-	SnapshotTree(ctx context.Context, dir, tmpDir string) (string, error)
+	SnapshotTree(ctx context.Context, dir, tmpDir string, exclude ...string) (string, error)
 	Head(ctx context.Context, dir string) string
 	Lock(ctx context.Context, root string) (func(), error)
 }
