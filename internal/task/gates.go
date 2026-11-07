@@ -189,6 +189,21 @@ func claimRoot(t *Task) string {
 	return t.Cwd
 }
 
+// cwdDir is the task's folder relative to root with '/' separators, or "" for the root itself or a folder outside it.
+func cwdDir(root, cwd string) string {
+	if c, err := fsutil.Canonical(root); err == nil {
+		root = c
+	}
+	if c, err := fsutil.Canonical(cwd); err == nil {
+		cwd = c
+	}
+	rel, err := filepath.Rel(root, cwd)
+	if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return ""
+	}
+	return filepath.ToSlash(rel)
+}
+
 // gated reports whether a task gets a gate at all: a task the lead delegated that may edit files.
 func gated(t *Task) bool { return (t.Kind == KindNormal || t.Kind == "") && t.Mode != ModePlan }
 
@@ -260,9 +275,13 @@ func (s *Service) resolveProof(t *Task, req proofRequest, prev *Proof) (*Proof, 
 	if feature != "" {
 		ids = t.Spec.TaskIDs
 	}
+	// The lead's commands run in the task's folder, as the worker would run them there (cd web && pnpm test in a
+	// monorepo); a spec's Gate: lines run at the repository root, like a regression run.
+	leadDir := cwdDir(root, t.Cwd)
 	for _, c := range p.LeadCommands {
 		// The lead's commands replace the spec's Gate: lines and prove the spec tasks of the turn (old gate).
-		p.Commands = append(p.Commands, api.GateCommand{Cmd: c, TaskIDs: slices.Clone(ids), Kind: api.StepTask})
+		p.Commands = append(p.Commands, api.GateCommand{Cmd: c, Dir: leadDir, TaskIDs: slices.Clone(ids),
+			Kind: api.StepTask})
 	}
 	lines := map[string]string{}
 	if feature != "" {

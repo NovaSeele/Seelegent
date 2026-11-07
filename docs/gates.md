@@ -66,10 +66,19 @@ Steps, in order (`GateResult.steps`):
 | `detect` | each detected command | its command exits non-zero |
 
 The `gates: false` setting keeps only the lane and hygiene steps. Commands run through the platform shell
-(`cmd /c` on Windows, `sh -c` elsewhere) from the repository root (`cd <dir> &&` for a detected command in a sub
-folder), with the daemon's environment plus `CI=1` and `SEELEGENT_GATE=1`, `gateTimeoutSec` each, in their own
+(`cmd /c` on Windows, `sh -c` elsewhere). The lead's commands run in the task's folder (`cd <dir> &&` from the
+repository root when the task works in a sub folder, as in a monorepo package), a detected command in the folder
+of the project file it came from, and a spec's `Gate:` and `Feature gate:` lines at the repository root, the same
+place a regression run uses. The worker's brief prints each command as the gate runs it. They run with the daemon's
+environment plus `CI=1`, `SEELEGENT_GATE=1`, `SEELEGENT_TASK` and `SEELEGENT_TURN_FILES` (the changed files, one
+per line; left out, also when inherited, if longer than 16000 characters), `gateTimeoutSec` each, in their own
 process tree (killed on timeout or cancel). The full output goes to `tasks/<id>/gate-t<turn>-<n>.log`; the step
 keeps the last `gateOutputTailBytes`.
+
+Gate commands run outside the git guard and without `SEELEGENT_WORKER=1`: test suites legitimately run
+`git checkout` or mutating Seelegent commands in their own temp repos, and the guard would fail them for no fault
+of the worker. The trade-off is that a gate runs code the worker can edit (package scripts, Makefiles, tests) in
+the shared folder, unguarded; the lead reviews what the worker changed in them.
 
 Each step is published as a `gate` task event (`phase: start | step | settling | result`) and stored on the turn
 (`Turn.gate`), so the dashboard shows it live. The `start` event carries the plan (each step's kind, command and

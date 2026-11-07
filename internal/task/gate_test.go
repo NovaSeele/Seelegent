@@ -433,3 +433,67 @@ func TestGateDetail(t *testing.T) {
 		t.Errorf("withList = %q", got)
 	}
 }
+
+// TestGateCommandFolders: the lead's gate commands run in the task's folder (a monorepo package), a spec's Gate:
+// lines at the repository root (like a regression run); the brief says so with cd.
+func TestGateCommandFolders(t *testing.T) {
+	h := newHarness(t)
+	h.agy("w", 1)
+	for _, d := range []string{"sub", filepath.Join("specs", "001-x")} {
+		if err := mkdir(filepath.Join(h.cwd, d)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	spec := gateCmd(t, "a.txt", "root")
+	h.initRepo(map[string]string{"a.txt": "root\n", "sub/a.txt": "in-sub\n",
+		"specs/001-x/tasks.md": "# Tasks\n\n- [ ] T001 Write `sub/b.txt` Gate: `" + spec + "`\n"})
+	sub := filepath.Join(h.cwd, "sub")
+	lead := gateCmd(t, "a.txt", "in-sub")
+
+	h.queue.Push(t, editScript("conv-d", filepath.Join(sub, "b.txt"), "b\n", "Wrote b.txt."))
+	sum := h.delegate(api.DelegateRequest{Title: "in sub", Cwd: sub, GateCommands: []string{lead}})
+	tk := h.waitStatus(sum.ID, StatusDone)
+	if g := tk.LastTurn().Gate; g == nil || g.State != api.GateGreen {
+		t.Fatalf("lead command gate = %+v", g)
+	}
+	if c := tk.Proof.Commands; len(c) != 1 || c[0].Dir != "sub" {
+		t.Errorf("lead commands = %+v", c)
+	}
+	brief, err := h.s.Prompt(t.Context(), sum.ID, 1, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(brief, "`cd sub && "+lead+"`") {
+		t.Errorf("brief does not run the command in sub:\n%s", brief)
+	}
+
+	h.queue.Push(t, editScript("conv-e", filepath.Join(sub, "b.txt"), "c\n", "Did T001."))
+	sum = h.delegate(api.DelegateRequest{Title: "spec in sub", Cwd: sub,
+		Spec: &api.SpecRequest{Dir: "../specs/001-x", TaskIDs: []string{"T001"}}})
+	tk = h.waitStatus(sum.ID, StatusDone)
+	if g := tk.LastTurn().Gate; g == nil || g.State != api.GateGreen {
+		t.Fatalf("spec gate = %+v", g)
+	}
+	if c := tk.Proof.Commands; len(c) != 1 || c[0].Dir != "" || c[0].Cmd != spec {
+		t.Errorf("spec commands = %+v", c)
+	}
+}
+func TestGateEnvTurnFiles(t *testing.T) {
+	h := newHarness(t)
+	t.Setenv("SEELEGENT_TURN_FILES", "inherited.go")
+	count := func(env []string) (n int, value string) {
+		for _, kv := range env {
+			if v, ok := strings.CutPrefix(kv, "SEELEGENT_TURN_FILES="); ok {
+				n, value = n+1, v
+			}
+		}
+		return n, value
+	}
+	if n, v := count(h.s.gateEnv(&Task{ID: "t1"}, []string{"a.go", "b.go"})); n != 1 || v != "a.go\nb.go" {
+		t.Errorf("turn files = %d %q", n, v)
+	}
+	long := []string{strings.Repeat("x", turnFilesEnvMax+1)}
+	if n, _ := count(h.s.gateEnv(&Task{ID: "t1"}, long)); n != 0 {
+		t.Errorf("a list too long kept %d values: the inherited one must go too", n)
+	}
+}
