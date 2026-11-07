@@ -22,8 +22,18 @@ import (
 	"github.com/NovaSeele/Seelegent/internal/memory"
 	"github.com/NovaSeele/Seelegent/internal/pool"
 	"github.com/NovaSeele/Seelegent/internal/role"
+	"github.com/NovaSeele/Seelegent/internal/snapshot"
 	"github.com/NovaSeele/Seelegent/internal/usage"
 )
+
+// SafetyGit is the git access of the post-turn checks; *gitx.Repos satisfies it.
+type SafetyGit interface {
+	Blob(ctx context.Context, root, rev, rel string, limit int, filters bool) ([]byte, bool, error)
+	DiffContent(ctx context.Context, rel string, before, after []byte, beforeMissing, afterMissing bool) (
+		api.FileDiff, error)
+	Tracked(ctx context.Context, root, suffix string, n int) ([]string, error)
+	Lock(ctx context.Context, root string) (func(), error)
+}
 
 // Accounts reads accounts and builds the environment of a turn; *account.Manager satisfies it.
 type Accounts interface {
@@ -135,6 +145,19 @@ type Options struct {
 	Dashboard func(taskID string) string
 	// Git is the daemon's git executable, for the baseline (gitx.NewBinary over BaseEnv when nil).
 	Git *gitx.Binary
+	// GitShim is the folder of the git shim (guard.InstallShim) put first on PATH for workers without a pre-tool
+	// hook while the gitGuard setting is on; "" leaves PATH alone.
+	GitShim string
+	// Snapshots records the worktree before and after each turn (work at risk, restore, outside diff); nil turns
+	// the post-turn checks off. Repos is its git access for diffs, hygiene and the per-repo lock; both or none.
+	Snapshots *snapshot.Store
+	Repos     SafetyGit
+	// ScopeAllowed are folders outside the repository a worker may write to without a scope warning (temp
+	// folders, worker profiles); the task's folder and repository are always allowed.
+	ScopeAllowed []string
+	// AccountStates returns the pool's view of every account, for the attention rules that depend on accounts
+	// (pool.Pool.States); nil leaves those rules out.
+	AccountStates func(ctx context.Context) ([]pool.AccountState, error)
 	// Clock is the time source (the system clock when nil).
 	Clock clock.Clock
 	// Logger receives engine logs (discarded when nil). Use a logx logger so secrets are masked.
@@ -162,6 +185,13 @@ type Service struct {
 	wg         sync.WaitGroup
 
 	depsMu sync.Mutex
+
+	// health is the accounts' state the attention rules read, refreshed by the attention watcher.
+	healthMu sync.Mutex
+	health   map[string]accountHealth
+	// overlaps caches the contention view of each repository for a few seconds.
+	overlapMu sync.Mutex
+	overlaps  map[string]overlapCache
 }
 
 // New returns a service. Call Start to recover the tasks of an earlier daemon and start the background work.
@@ -173,6 +203,8 @@ func New(o Options) (*Service, error) {
 		return nil, errors.New("task: no backends")
 	case o.TasksDir == "" || len(o.Launcher) == 0:
 		return nil, errors.New("task: tasks directory and launcher are required")
+	case (o.Snapshots == nil) != (o.Repos == nil):
+		return nil, errors.New("task: snapshots and repos go together")
 	}
 	if o.Clock == nil {
 		o.Clock = clock.Real()
@@ -190,7 +222,7 @@ func New(o Options) (*Service, error) {
 	return &Service{
 		o: o, repo: NewRepo(o.DB, o.Clock.Now), bus: NewBus(), clk: o.Clock, log: o.Logger,
 		locks: map[string]*taskLock{}, runs: map[string]*run{}, watches: map[string]*consoleWatch{},
-		root: root, cancel: cancel,
+		root: root, cancel: cancel, overlaps: map[string]overlapCache{},
 	}, nil
 }
 
@@ -216,7 +248,9 @@ func (s *Service) Start(ctx context.Context) error {
 	if err := s.recoverTasks(ctx); err != nil {
 		return err
 	}
+	s.refreshHealth(ctx)
 	s.spawn("attention", "", s.watchAttention)
+	s.spawn("sweep", "", s.watchSweep)
 	return nil
 }
 

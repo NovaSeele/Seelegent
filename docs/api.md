@@ -56,7 +56,17 @@ in the daemon.
 
 - `GET /git/branches` answers `null` for a folder that does not exist, keyed by the cwd as given. A batch of 50 cwds
   should not fail because one project folder was deleted. A relative cwd is still `400`.
-- `GET /tasks/{id}/turns/{n}/outside-diff` answers `503 unavailable` until the outside-change tracking milestone.
+- `GET /tasks/{id}/turns/{n}/outside-diff` and `POST /tasks/{id}/turns/{n}/restore` (an addition to the contract,
+  body `RestoreRequest` `{files?, force?}`, answer `RestoreResult` `{restored, skipped, backup?}`) work from the turn
+  snapshots ([safety.md](safety.md)). A file changed after the turn ended is skipped with
+  `code: "changed_since_turn"` unless `force`; `backup` names the snapshot that keeps what the restored files held
+  before. A turn
+  without snapshots is `404 not_found`; a restore while the task is active or taken over is `409 bad_state`; a
+  daemon without a snapshot store answers both with `503 unavailable`. Restore is a mutating route, so a worker is
+  refused it like every route outside the allow-list. A restore that wrote any file logs a `restored` event
+  (`{files, backup}`, the event's `turn` is the turn restored from).
+- `TurnGit` is `null` for a turn without snapshots; `Turn.workAtRisk`, `hygiene` and `scope` are empty lists until
+  the turn's checks ran, and `TaskDetail.fileOverlaps` is always a list.
 - `POST /tasks/{id}/git/suggest-message` builds the suggestion locally and at once. It still answers `202 TaskGit`
   and publishes `task.updated`, so clients written for a slow suggestion keep working.
 - `GET /tasks/{id}/git/diff` accepts `turn` but shows the working-tree diff; per-turn diffs need the snapshot store of

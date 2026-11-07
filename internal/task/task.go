@@ -207,8 +207,33 @@ type Turn struct {
 	// BackgroundContinues counts the continuations after background waits (one per turn).
 	BackgroundContinues int `json:"backgroundContinues,omitempty"`
 
+	// Snap records the turn's worktree snapshots (snapshot.Store, see safety.go); nil when none was taken.
+	Snap *TurnSnap `json:"snap,omitempty"`
+	// Changed lists the files (relative to the repository root) whose content the turn changed; Preexisting the
+	// ones of them that already had uncommitted changes when it started.
+	Changed     []string `json:"changed,omitempty"`
+	Preexisting []string `json:"preexisting,omitempty"`
+	// Edited lists the files the worker's edit tools changed, relative to the repository root.
+	Edited []string `json:"edited,omitempty"`
+	// WorkAtRisk are the files whose uncommitted work the turn may have lost.
+	WorkAtRisk []api.RiskFile `json:"workAtRisk,omitempty"`
+	// Hygiene and Scope are the findings of the post-turn checks.
+	Hygiene []api.Finding `json:"hygiene,omitempty"`
+	Scope   []api.Finding `json:"scope,omitempty"`
+
 	// Attempts are stored in the attempts table.
 	Attempts []*Attempt `json:"-"`
+}
+
+// TurnSnap says which snapshots a turn has: the start one (taken before its first attempt) and the end one (taken
+// when it ended, once the checks ran).
+type TurnSnap struct {
+	Root string `json:"root"`
+	Head string `json:"head,omitempty"`
+	// Truncated: the start snapshot hit its limits; files past them are not covered.
+	Truncated bool `json:"truncated,omitempty"`
+	// Checked is set once the end snapshot was taken and the post-turn checks ran.
+	Checked bool `json:"checked,omitempty"`
 }
 
 // Attempt is one run of the worker CLI for a turn on one account.

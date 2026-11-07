@@ -101,5 +101,70 @@
     "takeover": "Tự làm tiếp tác vụ này",
     "copyId": "Chép mã tác vụ",
     "view": "Xem {name}"
+  },
+  "safety": {
+    "title": "Kiểm tra an toàn",
+    "count": "{n} mục",
+    "turn": "Lượt {n}",
+    "risk": {
+      "desc": "Những thay đổi chưa commit có từ trước lượt đã biến mất. Khôi phục sẽ lấy lại các tệp từ bản chụp trước lượt.",
+      "restore": "Khôi phục tệp ({n})",
+      "waitStop": "Có thể khôi phục khi worker đã dừng.",
+      "why": {
+        "outside": "bị đổi ngoài công cụ sửa",
+        "large": "công cụ sửa xóa nhiều dòng"
+      },
+      "lost": "số dòng chưa commit bị mất: {n}",
+      "deleted": "đã xóa",
+      "binary": "tệp nhị phân",
+      "restored": "Đã khôi phục",
+      "restoredTitle": "Đã khôi phục công việc",
+      "restoredDesc": "Các tệp đã được lấy lại từ bản chụp trước lượt {n}.",
+      "restoredDescMany": "Các tệp đã được lấy lại từ bản chụp trước mỗi lượt."
+    },
+    "overlaps": {
+      "title": "Cũng bị tác vụ khác thay đổi",
+      "active": "cả hai đang chạy",
+      "recent": "vừa đổi gần đây"
+    },
+    "findings": "Kiểm tra của lượt {n}",
+    "severity": {
+      "red": "Lỗi",
+      "warn": "Cảnh báo"
+    },
+    "finding": {
+      "eolChanged": "Ký tự xuống dòng bị đổi",
+      "bomChanged": "Dấu BOM bị đổi",
+      "bomNewFile": "Tệp mới bắt đầu bằng BOM",
+      "junkFile": "Tệp rác",
+      "unreportedFile": "Có thay đổi nhưng không có trong báo cáo",
+      "outsideRepoWrite": "Ghi ra ngoài repo",
+      "unfetchedUrl": "URL worker chưa từng mở",
+      "skipped": "Bỏ qua kiểm tra"
+    },
+    "blocked": "Lệnh git đã bị chặn",
+    "blockedNote": "Các lệnh này bị chặn trước khi chạy; không có gì bị thay đổi.",
+    "parts": {
+      "risk": "{count} tệp có nguy cơ mất",
+      "overlaps": "{count} tệp dùng chung",
+      "findings": "{count} phát hiện",
+      "blocked": "{count} lệnh bị chặn",
+      "restored": "đã khôi phục {count}"
+    },
+    "restore": {
+      "title": "Khôi phục các tệp về trước lượt {n}?",
+      "desc": "Nội dung hiện tại của các tệp này sẽ được thay bằng nội dung trước lượt {n}. Bản sao lưu nội dung hiện tại được giữ lại trước.",
+      "doneTitle": "Đã khôi phục xong",
+      "done": "Đã khôi phục {count} tệp.",
+      "nothing": "Không có tệp nào được khôi phục.",
+      "backup": "Nội dung trước đó được giữ trong bản chụp sao lưu",
+      "skippedTitle": "Chưa khôi phục",
+      "changed": "đã đổi sau khi lượt kết thúc",
+      "changedNote": "Các tệp này đã đổi sau khi lượt kết thúc nên được giữ nguyên.",
+      "anyway": "Vẫn khôi phục",
+      "forceTitle": "Ghi đè các thay đổi sau lượt {n}?",
+      "forceDesc": "Các tệp này đã đổi sau khi lượt kết thúc. Nội dung mới hơn sẽ được thay bằng nội dung trước lượt {n}; bản sao lưu được giữ lại trước.",
+      "forceConfirm": "Ghi đè ({n})"
+    }
   }
 }

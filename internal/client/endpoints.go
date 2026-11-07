@@ -60,6 +60,14 @@ func (c *Client) Task(ctx context.Context, id string) (api.TaskDetail, error) {
 	return d, err
 }
 
+// Restore is POST /tasks/{id}/turns/{n}/restore.
+func (c *Client) Restore(ctx context.Context, id string, turn int, req api.RestoreRequest) (api.RestoreResult,
+	error) {
+	var res api.RestoreResult
+	_, err := c.Do(ctx, http.MethodPost, "/tasks/"+seg(id)+"/turns/"+strconv.Itoa(turn)+"/restore", req, &res)
+	return res, err
+}
+
 // Report is GET /tasks/{id}/report. cwd (optional, absolute) is the folder files are shown relative to.
 func (c *Client) Report(ctx context.Context, id, cwd string) (api.TaskReport, error) {
 	var r api.TaskReport

@@ -59,5 +59,13 @@
     "next": "Git: archivo siguiente",
     "prev": "Git: archivo anterior",
     "commit": "Git: confirmar los archivos de esta tarea…"
+  },
+  "outside": {
+    "open": "Cambios externos",
+    "title": "Cambios fuera de las herramientas de edición",
+    "desc": "Lo que el turno cambió con comandos de shell y otros programas, comparado con la instantánea tomada antes.",
+    "turn": "Turno",
+    "error": "No se pudieron leer los cambios: {error}",
+    "empty": "Nada cambió fuera de las herramientas de edición."
   }
 }

@@ -92,8 +92,10 @@ and a background quota read of the account is requested.
 
 `computeAttention` maps the task and what the run knows about its worker onto the contract's states:
 
-- `blocked`: prerequisites failed (`deps_blocked`), no account can run it (`no_accounts`, for the user), a done turn
-  with no answer (`no_response`), a failed task (`failed`).
+- `blocked`: prerequisites failed (`deps_blocked`), no account can run it (`no_accounts`, for the user), every
+  account needs a sign-in (`auth`, for the user), the worker repeats itself (`looping`), a done turn with no answer
+  (`no_response`), red hygiene findings (`hygiene`), files at risk not restored (`work_at_risk`), a failed task
+  (`failed`). The last three come from the post-turn checks ([safety.md](safety.md)).
 - `question`: the answer has a `## Blocked` section (its text and list items become the report's question).
 - `stalled`: no output for `stallMinutes`, one tool call open for `stallToolMinutes`, or no conversation 3 min after
   launch.

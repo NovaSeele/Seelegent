@@ -219,6 +219,7 @@ export type EventType =
   | 'review'
   | 'cancel'
   | 'work_at_risk'
+  | 'restored'
   | 'error'
 
 /** TaskEvent is one entry of a task's append-only event log. Seq starts at 1 and grows by one per task. */
@@ -345,6 +346,20 @@ export type CancelData = Record<string, never>
 export interface WorkAtRiskData {
   files: string[]
   snapshot?: string
+}
+
+/**
+ * RestoredData is the data of a restored event; the event's turn is the turn whose start snapshot the files came
+ * from.
+ */
+export interface RestoredData {
+  /** Files are the restored files, relative to the repository root. */
+  files: string[]
+  /**
+   * Backup names the snapshot that keeps what the files held before the restore (t<turn>-restore-<time>, in the
+   * task's snapshot folder).
+   */
+  backup?: string
 }
 
 /** ErrorData is the data of an error event. */
@@ -475,6 +490,12 @@ export interface TaskReport {
   attention?: ReportAttention
   question?: ReportQuestion
   blocked_commands?: string[]
+  /** WorkAtRisk names the latest turn's files whose uncommitted work may be lost, and how to restore them. */
+  work_at_risk?: ReportRisk
+  file_overlaps?: ReportOverlap[]
+  /** Hygiene and ScopeWarnings are the findings of the last turn's checks. */
+  hygiene?: ReportFinding[]
+  scope_warnings?: ReportFinding[]
   denied_actions?: string[]
   deps_reason?: string
   cancelling?: boolean
@@ -577,6 +598,112 @@ export interface Memory {
   updatedAt?: string
 }
 
+/** RiskFile is one file whose uncommitted work a turn may have lost. Path is relative to the repository root. */
+export interface RiskFile {
+  path: string
+  why: 'outside_tools' | 'large_removal'
+  /** LostLines counts the lines that were uncommitted before the turn and are gone after it. */
+  lostLines?: number
+  deleted?: boolean
+  binary?: boolean
+  /** Restored is set once the file was put back with POST /tasks/{id}/turns/{n}/restore. */
+  restored?: boolean
+}
+
+/** Finding is one result of the hygiene check or the scope warnings of a turn. */
+export interface Finding {
+  kind:
+    | 'eol_changed'
+    | 'bom_changed'
+    | 'bom_new_file'
+    | 'junk_file'
+    | 'unreported_file'
+    | 'outside_repo_write'
+    | 'unfetched_url'
+    | 'skipped'
+  severity: 'red' | 'warn'
+  /** Path is relative to the repository root (hygiene) or absolute (outside_repo_write); empty for URLs. */
+  path?: string
+  /** Detail is a short explanation (the command, the URLs). */
+  detail?: string
+}
+
+/** FileOverlap is a file this task and another task of the same repository changed in overlapping time. */
+export interface FileOverlap {
+  /** File is relative to the repository root. */
+  file: string
+  taskId: string
+  title: string
+  status: TaskStatus
+  /** Severity is active when both tasks are still working, recent otherwise. */
+  severity: 'active' | 'recent'
+}
+
+/** RestoreRequest is the body of POST /tasks/{id}/turns/{n}/restore. */
+export interface RestoreRequest {
+  /** Files are relative to the repository root; empty restores every work-at-risk file of the turn. */
+  files?: string[]
+  /** Force also restores files that changed after the turn ended (skipped as RestoreChangedSinceTurn otherwise). */
+  force?: boolean
+}
+
+/** RestoreResult is the answer of a restore. */
+export interface RestoreResult {
+  restored: string[]
+  skipped: RestoreFailed[]
+  /**
+   * Backup names the snapshot that keeps what the restored files held before (t<turn>-restore-<time>, in the
+   * task's snapshot folder); empty when nothing was written.
+   */
+  backup?: string
+}
+
+/** RestoreFailed is a file a restore could not put back. */
+export interface RestoreFailed {
+  path: string
+  error: string
+  /** Code is a stable reason for the clients ("" for other failures). */
+  code?: 'changed_since_turn'
+}
+
+/**
+ * ReportRisk is the work_at_risk field of a report: the files, the snapshot that holds their earlier content and
+ * the command that restores them (Restore for display, RestoreArgv as the exact argument list).
+ */
+export interface ReportRisk {
+  turn: number
+  snapshot: string
+  files: string[]
+  details: ReportRiskFile[]
+  restore: string
+  restore_argv: string[]
+}
+
+/** ReportRiskFile explains one work-at-risk file of a report. */
+export interface ReportRiskFile {
+  path: string
+  why: string
+  lost_lines?: number
+  deleted?: boolean
+}
+
+/** ReportOverlap is one entry of a report's file_overlaps. */
+export interface ReportOverlap {
+  file: string
+  task_id: string
+  title: string
+  status: string
+  severity: string
+}
+
+/** ReportFinding is one hygiene or scope finding of a report. */
+export interface ReportFinding {
+  kind: string
+  severity: string
+  path?: string
+  detail?: string
+}
+
 /** Settings is GET /settings: config.json as internal/config.Settings describes it (the source of truth). */
 export interface Settings {
   /** Port is the daemon's HTTP port on 127.0.0.1. SEELEGENT_PORT overrides it (see ResolvePort). */
@@ -650,7 +777,10 @@ export interface Settings {
    * kept and validated, but nothing reads it.
    */
   codeGraph: boolean
-  /** SnapshotRetentionDays is how long work-at-risk snapshots of reviewed tasks are kept. */
+  /**
+   * SnapshotRetentionDays is how long the turn snapshots and attempt folders of a finished task are kept after
+   * its last change.
+   */
   snapshotRetentionDays: number
   /** ContentionWindowHours is how far back tasks count when warning that several tasks touch the same files. */
   contentionWindowHours: number
@@ -1005,6 +1135,8 @@ export interface TaskDetail extends TaskSummary {
   repoRoot?: string
   error?: string
   turns: Turn[]
+  /** FileOverlaps are the files this task and another task of the same repository changed in overlapping time. */
+  fileOverlaps: FileOverlap[]
 }
 
 /** Turn is one lead (or user) message and the worker's answer to it. */
@@ -1028,9 +1160,15 @@ export interface Turn {
   attempts: Attempt[]
   git: TurnGit | null
   handback?: string
+  /** WorkAtRisk, Hygiene and Scope are the post-turn checks (empty while the turn runs or without snapshots). */
+  workAtRisk: RiskFile[]
+  hygiene: Finding[]
+  scope: Finding[]
+  /** OutsideDiff is true when the turn has snapshots, so GET /tasks/{id}/turns/{n}/outside-diff can answer. */
+  outsideDiff: boolean
 }
 
-/** TurnGit lists the files a turn changed, relative to the repository root (filled by milestone 12). */
+/** TurnGit lists the files a turn changed, relative to the repository root (null for a turn without snapshots). */
 export interface TurnGit {
   changed: string[]
   preexisting: string[]

@@ -106,6 +106,8 @@
     },
     "backgroundWait": "等待后台任务",
     "log": "worker 日志",
-    "session": "对话开始 · {model}"
+    "session": "对话开始 · {model}",
+    "restored": "已恢复 {count} 个文件（第 {n} 轮）",
+    "atRisk": "仍有 {count} 个文件有风险"
   }
 }

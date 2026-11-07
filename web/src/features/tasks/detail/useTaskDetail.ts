@@ -14,7 +14,7 @@ const REFETCH_GAP_MS = 1000
 /** The summary part of a detail record (what the store keeps). */
 export function summaryOf(detail: TaskDetail): TaskSummary {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { prompt, repoRoot, error, turns, ...summary } = detail
+  const { prompt, repoRoot, error, turns, fileOverlaps, ...summary } = detail
   return summary
 }
 

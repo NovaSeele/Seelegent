@@ -15,6 +15,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -26,6 +27,7 @@ import (
 	"github.com/NovaSeele/Seelegent/internal/config"
 	"github.com/NovaSeele/Seelegent/internal/envx"
 	"github.com/NovaSeele/Seelegent/internal/gitx"
+	"github.com/NovaSeele/Seelegent/internal/guard"
 	"github.com/NovaSeele/Seelegent/internal/httpapi"
 	"github.com/NovaSeele/Seelegent/internal/logx"
 	"github.com/NovaSeele/Seelegent/internal/memory"
@@ -34,6 +36,7 @@ import (
 	"github.com/NovaSeele/Seelegent/internal/quota"
 	"github.com/NovaSeele/Seelegent/internal/role"
 	"github.com/NovaSeele/Seelegent/internal/signin"
+	"github.com/NovaSeele/Seelegent/internal/snapshot"
 	"github.com/NovaSeele/Seelegent/internal/store"
 	"github.com/NovaSeele/Seelegent/internal/task"
 	"github.com/NovaSeele/Seelegent/internal/usage"
@@ -54,6 +57,8 @@ type Options struct {
 	RealHome string
 	// Launcher runs the detached launcher ({os.Executable(), "__launch"} when nil).
 	Launcher []string
+	// GuardExe is the seelegent executable the git guard hooks and the git shim run (os.Executable() when empty).
+	GuardExe string
 	// Bins sets the CLI of a backend (tests); backends not listed are looked up with backend.Find.
 	Bins map[string]string
 	// NoQuotaReaders builds the backends without quota readers (tests): every account is then passive.
@@ -146,6 +151,16 @@ func New(ctx context.Context, o Options) (*App, error) {
 		}
 		o.Launcher = []string{exe, launchCommand}
 	}
+	if o.GuardExe == "" {
+		exe, err := os.Executable()
+		if err != nil {
+			return nil, fmt.Errorf("app: own executable: %w", err)
+		}
+		if resolved, err := filepath.EvalSymlinks(exe); err == nil {
+			exe = resolved
+		}
+		o.GuardExe = exe
+	}
 	a := &App{Paths: o.Paths, log: o.Logger, env: o.Env, info: o.Info, web: o.Web, classifier: o.Classifier,
 		devOrigins: o.DevOrigins,
 		redact:     logx.NewRedactor().String, started0: o.Clock.Now(), pid: os.Getpid(), stopCh: make(chan struct{})}
@@ -194,7 +209,8 @@ func (a *App) build(o Options) error {
 			}
 			bin = found
 		}
-		var opts []backend.Option
+		opts := []backend.Option{backend.WithGuard(backend.Guard{Exe: o.GuardExe,
+			Enabled: func() bool { return a.Settings().GitGuard }})}
 		if !o.NoQuotaReaders {
 			if r := quotaReader(name, bin, now); r != nil {
 				opts = append(opts, backend.WithQuotaReader(r))
@@ -249,18 +265,26 @@ func (a *App) build(o Options) error {
 	// One git executable for the daemon, found through its PATH (never a Windows batch shim), shared by the task
 	// engine's baseline and the git views.
 	gitBin := gitx.NewBinary(func() []string { return a.env }, a.log)
+	// The git shim guards workers whose CLI has no pre-tool hook (codex, system accounts). Without it they keep
+	// only their sandbox and the work-at-risk check.
+	shim := installShim(a.log, o.Paths.GuardBin, o.GuardExe)
+	a.Git = gitx.New(now, gitBin)
 	a.Tasks, err = task.New(task.Options{
 		DB: a.DB, Accounts: a.Accounts, Pool: p, Backends: a.Backends, Settings: a.Settings,
 		TasksDir: o.Paths.Tasks, Launcher: o.Launcher, Usage: a.Usage, QuotaRefresh: a.Refresher.Request,
 		Memory: a.Memory, Roles: a.Roles, Consoles: consoles, Clock: o.Clock, Logger: a.log,
-		BaseEnv:   func() []string { return a.env },
-		Dashboard: a.dashboardLink,
-		Git:       gitBin,
+		BaseEnv:       func() []string { return a.env },
+		Dashboard:     a.dashboardLink,
+		Git:           gitBin,
+		GitShim:       shim,
+		Snapshots:     snapshot.New(o.Paths.Snapshots, a.Git, now),
+		Repos:         a.Git,
+		ScopeAllowed:  scopeAllowed(o.Paths.Profiles, a.env),
+		AccountStates: p.States,
 	})
 	if err != nil {
 		return err
 	}
-	a.Git = gitx.New(now, gitBin)
 	a.SignIn = signin.New(signin.Options{
 		Accounts: a.Accounts,
 		Backend: func(name string) (backend.Backend, bool) {
@@ -298,6 +322,39 @@ func quotaReader(name, bin string, now func() time.Time) backend.QuotaReader {
 		return quota.NewClaudeReader(nil, "", now)
 	}
 	return nil
+}
+
+// installShim installs the git shim into dir and returns dir, or "" when workers without a pre-tool hook get no
+// shim. When installing fails but the shim of an earlier run is still there (a reattached worker running the old
+// git.exe blocks the rename over it), that one keeps guarding them: an older build's guard beats none.
+func installShim(log *slog.Logger, dir, exe string) string {
+	err := guard.InstallShim(dir, exe)
+	if err == nil {
+		return dir
+	}
+	if rerr := guard.ShimReady(dir); rerr == nil {
+		log.Warn("app: install the git shim; keeping the one already installed", "err", err)
+		return dir
+	}
+	log.Warn("app: install the git shim; workers without a pre-tool hook run unguarded", "err", err)
+	return ""
+}
+
+// scopeAllowed lists the folders outside a task's repository a worker may write to without a scope warning: the
+// temp folders, the worker profiles and the CLI homes of system accounts.
+func scopeAllowed(profiles string, env []string) []string {
+	out := []string{profiles, os.TempDir()}
+	for _, name := range []string{"TEMP", "TMP", "TMPDIR"} {
+		if v, ok := envx.Lookup(env, name); ok && v != "" {
+			out = append(out, v)
+		}
+	}
+	if home, err := os.UserHomeDir(); err == nil {
+		for _, d := range []string{".gemini", ".claude", ".codex"} {
+			out = append(out, filepath.Join(home, d))
+		}
+	}
+	return out
 }
 
 // Settings returns the current settings.

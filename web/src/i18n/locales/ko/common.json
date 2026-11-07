@@ -122,7 +122,8 @@
     "gateRed": "게이트 실패",
     "workAtRisk": "작업이 유실될 수 있음",
     "depsBlocked": "선행 작업 실패",
-    "waitingDeps": "선행 작업 대기"
+    "waitingDeps": "선행 작업 대기",
+    "hygiene": "위생 문제"
   },
   "stage": {
     "explore": "탐색",

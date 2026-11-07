@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 
 	"github.com/NovaSeele/Seelegent/internal/api"
 	"github.com/NovaSeele/Seelegent/internal/gitx"
@@ -39,11 +40,26 @@ func (s *Server) gitRoutes() {
 	s.handle("POST /tasks/{id}/git/commit", s.commit)
 	s.handle("GET /tasks/{id}/turns/{n}/outside-diff", func(_ http.ResponseWriter, r *http.Request) (int, any,
 		error) {
-		if _, err := s.o.Tasks.GitScope(r.Context(), r.PathValue("id")); err != nil {
+		n, err := turnNumber(r)
+		if err != nil {
 			return 0, nil, err
 		}
-		// Needs the per-turn snapshots of milestone 12.
-		return 0, nil, newError(api.CodeUnavailable, "changes outside the task's files are not tracked yet")
+		d, err := s.o.Tasks.OutsideDiff(r.Context(), r.PathValue("id"), n)
+		return http.StatusOK, d, err
+	})
+	s.handle("POST /tasks/{id}/turns/{n}/restore", func(w http.ResponseWriter, r *http.Request) (int, any,
+		error) {
+		var req api.RestoreRequest
+		if err := decode(w, r, &req); err != nil {
+			return 0, nil, err
+		}
+		n, err := turnNumber(r)
+		if err != nil {
+			return 0, nil, err
+		}
+		id := r.PathValue("id")
+		res, err := s.o.Tasks.Restore(r.Context(), id, n, req)
+		return http.StatusOK, res, err
 	})
 	s.handle("GET /git/status", func(_ http.ResponseWriter, r *http.Request) (int, any, error) {
 		cwd, err := absDir(r.URL.Query().Get("cwd"))
@@ -55,6 +71,15 @@ func (s *Server) gitRoutes() {
 	})
 	s.handle("GET /git/diff", s.repoDiff)
 	s.handle("GET /git/branches", s.branches)
+}
+
+// turnNumber reads the {n} path value: a turn number from 1.
+func turnNumber(r *http.Request) (int, error) {
+	n, err := strconv.Atoi(r.PathValue("n"))
+	if err != nil || n < 1 {
+		return 0, invalid("the turn must be a positive integer (got %q)", r.PathValue("n")).withField("n")
+	}
+	return n, nil
 }
 
 // taskGit returns the git view of a task with its commit message suggestion.

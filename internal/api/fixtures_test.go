@@ -44,7 +44,8 @@ func eventSamples() map[EventType]any {
 		EventCancel:   EmptyData{},
 		EventWorkAtRisk: WorkAtRiskData{Files: []string{"main.go"},
 			Snapshot: "refs/seelegent/snap/t1"},
-		EventError: ErrorData{Message: "the worker CLI is missing"},
+		EventRestored: RestoredData{Files: []string{"main.go"}, Backup: "t1-restore-1762506000000000000"},
+		EventError:    ErrorData{Message: "the worker CLI is missing"},
 	}
 }
 

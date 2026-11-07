@@ -169,6 +169,8 @@ type TaskDetail struct {
 	RepoRoot string `json:"repoRoot,omitempty"`
 	Error    string `json:"error,omitempty"`
 	Turns    []Turn `json:"turns"`
+	// FileOverlaps are the files this task and another task of the same repository changed in overlapping time.
+	FileOverlaps []FileOverlap `json:"fileOverlaps"`
 }
 
 // Turn is one lead (or user) message and the worker's answer to it.
@@ -192,9 +194,15 @@ type Turn struct {
 	Attempts        []Attempt `json:"attempts"`
 	Git             *TurnGit  `json:"git"`
 	Handback        string    `json:"handback,omitempty"`
+	// WorkAtRisk, Hygiene and Scope are the post-turn checks (empty while the turn runs or without snapshots).
+	WorkAtRisk []RiskFile `json:"workAtRisk"`
+	Hygiene    []Finding  `json:"hygiene"`
+	Scope      []Finding  `json:"scope"`
+	// OutsideDiff is true when the turn has snapshots, so GET /tasks/{id}/turns/{n}/outside-diff can answer.
+	OutsideDiff bool `json:"outsideDiff"`
 }
 
-// TurnGit lists the files a turn changed, relative to the repository root (filled by milestone 12).
+// TurnGit lists the files a turn changed, relative to the repository root (null for a turn without snapshots).
 type TurnGit struct {
 	Changed     []string `json:"changed"`
 	Preexisting []string `json:"preexisting"`

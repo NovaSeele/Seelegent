@@ -105,7 +105,7 @@ func (s *Service) waitResult(tasks []*Task, done bool, woke string, reports bool
 	for _, t := range tasks {
 		res.Tasks = append(res.Tasks, s.summary(t))
 		if reports {
-			res.Reports = append(res.Reports, s.report(t, cwd))
+			res.Reports = append(res.Reports, s.report(s.background(), t, cwd))
 		}
 	}
 	return res

@@ -46,6 +46,7 @@ const FIXTURES: Record<TaskEventType, Record<string, unknown>> = {
   review: { verdict: 'accepted' },
   cancel: {},
   work_at_risk: { files: ['a.go'] },
+  restored: { files: ['a.go'], backup: 't1-restore-1' },
   error: { message: 'boom' },
 }
 

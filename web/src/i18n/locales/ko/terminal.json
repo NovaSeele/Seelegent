@@ -106,6 +106,8 @@
     },
     "backgroundWait": "백그라운드 작업 대기 중",
     "log": "워커 로그",
-    "session": "대화 시작 · {model}"
+    "session": "대화 시작 · {model}",
+    "restored": "파일 {count}개를 복원했습니다 (턴 {n})",
+    "atRisk": "복원되지 않은 파일 {count}개"
   }
 }

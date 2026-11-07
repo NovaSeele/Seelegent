@@ -52,6 +52,7 @@ function fakeGitApi(overrides: Partial<GitApi> = {}): GitApi {
     dismissSuggestion: vi.fn(missing),
     commit: vi.fn(missing),
     outsideDiff: vi.fn(missing),
+    restore: vi.fn(missing),
     ...overrides,
   }
 }

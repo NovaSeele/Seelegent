@@ -101,5 +101,70 @@
     "takeover": "Take over this task",
     "copyId": "Copy task ID",
     "view": "Show {name}"
+  },
+  "safety": {
+    "title": "Safety checks",
+    "count": "{n} found",
+    "turn": "Turn {n}",
+    "risk": {
+      "desc": "Uncommitted changes that were there before the turn are gone. Restore puts the files back from the snapshot taken before the turn.",
+      "restore": "Restore files ({n})",
+      "waitStop": "Restore is possible once the worker has stopped.",
+      "why": {
+        "outside": "changed outside the edit tools",
+        "large": "large removal by an edit tool"
+      },
+      "lost": "uncommitted lines lost: {n}",
+      "deleted": "deleted",
+      "binary": "binary file",
+      "restored": "Restored",
+      "restoredTitle": "Work restored",
+      "restoredDesc": "Files were put back from the snapshot taken before turn {n}.",
+      "restoredDescMany": "Files were put back from the snapshots taken before their turns."
+    },
+    "overlaps": {
+      "title": "Also changed by other tasks",
+      "active": "both working",
+      "recent": "changed recently"
+    },
+    "findings": "Checks of turn {n}",
+    "severity": {
+      "red": "Problem",
+      "warn": "Warning"
+    },
+    "finding": {
+      "eolChanged": "Line endings changed",
+      "bomChanged": "Byte order mark changed",
+      "bomNewFile": "New file starts with a byte order mark",
+      "junkFile": "Junk file",
+      "unreportedFile": "Changed but not in the report",
+      "outsideRepoWrite": "Write outside the repository",
+      "unfetchedUrl": "URL the worker never opened",
+      "skipped": "Check skipped"
+    },
+    "blocked": "Commands the git guard refused",
+    "blockedNote": "The guard stopped these before they ran; nothing was changed.",
+    "parts": {
+      "risk": "{count} file at risk | {count} files at risk",
+      "overlaps": "{count} shared file | {count} shared files",
+      "findings": "{count} finding | {count} findings",
+      "blocked": "{count} command refused | {count} commands refused",
+      "restored": "{count} restored | {count} restored"
+    },
+    "restore": {
+      "title": "Restore files from before turn {n}?",
+      "desc": "The current content of these files is replaced with what they held before turn {n}. A backup of the current content is kept first.",
+      "doneTitle": "Restore finished",
+      "done": "{count} file restored. | {count} files restored.",
+      "nothing": "No file was restored.",
+      "backup": "What they held before is kept in the backup snapshot",
+      "skippedTitle": "Not restored",
+      "changed": "changed since the turn ended",
+      "changedNote": "These files changed after the turn ended, so they were left as they are.",
+      "anyway": "Restore anyway",
+      "forceTitle": "Overwrite changes made after turn {n}?",
+      "forceDesc": "These files changed after the turn ended. Their newer content is replaced with what they held before turn {n}; a backup of it is kept first.",
+      "forceConfirm": "Overwrite ({n})"
+    }
   }
 }

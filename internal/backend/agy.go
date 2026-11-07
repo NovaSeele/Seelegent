@@ -15,6 +15,7 @@ import (
 	"github.com/NovaSeele/Seelegent/internal/config"
 	"github.com/NovaSeele/Seelegent/internal/event"
 	"github.com/NovaSeele/Seelegent/internal/fsutil"
+	"github.com/NovaSeele/Seelegent/internal/guard"
 )
 
 // agy constants (old backends/agy.js).
@@ -25,7 +26,7 @@ const (
 	agyBriefName = "brief.md"
 	// agyLoginResult is where the sign-in command writes agy's /usage answer.
 	agyLoginResult = "seelegent-login.json"
-	// agyDenied is agy's error text for a tool call refused by a pre-tool hook.
+	// agyDenied is agy's error text for a tool call refused by a pre-tool hook (the guard's own reason follows it).
 	agyDenied = "tool call denied by pre-tool hook"
 )
 
@@ -37,6 +38,7 @@ const agyBackgroundWait = `(?i)root agent idle; waiting up to [0-9hms.]+ for \d+
 type Agy struct {
 	bin   string
 	quota QuotaReader
+	guard *Guard
 }
 
 // Name implements Backend.
@@ -132,13 +134,19 @@ func (*Agy) KeyEnv(account.Provider, string, string) (map[string]string, error) 
 	return nil, fmt.Errorf("agy: %w: agy has no API-key accounts", account.ErrInvalid)
 }
 
-// Prepare implements Backend: the profile directories are enough (the git guard arrives with the task engine).
-func (*Agy) Prepare(p account.Profile, _ *account.Provider) error {
+// Prepare implements Backend: the profile home and the git guard hook in its hooks.json. A system account's profile
+// is the user's real home, which is never written to: its workers get the git shim instead.
+func (a *Agy) Prepare(p account.Profile, _ *account.Provider) error {
 	if !p.Isolated() {
 		return nil
 	}
 	if err := os.MkdirAll(p.Home, 0o700); err != nil {
 		return fmt.Errorf("agy: prepare profile: %w", err)
+	}
+	if a.guard != nil {
+		if err := guard.InstallAgy(p.Home, a.guard.Exe, a.guard.Enabled()); err != nil {
+			return fmt.Errorf("agy: prepare profile: %w", err)
+		}
 	}
 	return nil
 }
@@ -303,6 +311,9 @@ func (p *agyParser) tool(s *agyStep) []event.Event {
 	}
 	t.Input = p.maskJSON(params)
 	t.Command = p.mask(stringField(params, "CommandLine", "commandLine", "command"))
+	if t.Command == "" && strings.EqualFold(s.ToolName, "send_command_input") {
+		t.Command = p.mask(stringField(params, "Input", "input"))
+	}
 	if s.Duration != nil {
 		t.DurationMs = seconds(*s.Duration)
 	}

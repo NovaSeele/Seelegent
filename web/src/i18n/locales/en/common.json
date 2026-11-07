@@ -122,7 +122,8 @@
     "gateRed": "Gate failed",
     "workAtRisk": "Work may be lost",
     "depsBlocked": "Earlier task failed",
-    "waitingDeps": "Waiting on earlier task"
+    "waitingDeps": "Waiting on earlier task",
+    "hygiene": "Hygiene problem"
   },
   "stage": {
     "explore": "Explore",

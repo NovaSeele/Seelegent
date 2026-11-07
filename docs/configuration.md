@@ -119,7 +119,7 @@ set). RE2 has no look-ahead: write `"^gemini-3\\.8-"` (the JSON spelling of
 | `verifierTier` | tier | `"fast"` | Model tier of the verifier. |
 | `gitGuard` | boolean | `true` | Install the git guard that stops workers from destroying uncommitted work. |
 | `codeGraph` | boolean | `true` | Build a code graph of the repository and offer it to workers. Not implemented yet: the value is stored and validated, but has no effect. |
-| `snapshotRetentionDays` | integer ≥ 1 | `14` | How long work-at-risk snapshots of reviewed tasks are kept. |
+| `snapshotRetentionDays` | integer ≥ 1 | `14` | How long the turn snapshots and attempt folders of a finished task are kept after its last change ([safety.md](safety.md)). |
 | `contentionWindowHours` | integer ≥ 1 | `24` | How far back tasks count when warning that several tasks touch the same files. |
 
 ### GitHub and automations

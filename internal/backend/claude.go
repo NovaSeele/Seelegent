@@ -13,6 +13,7 @@ import (
 	"github.com/NovaSeele/Seelegent/internal/config"
 	"github.com/NovaSeele/Seelegent/internal/event"
 	"github.com/NovaSeele/Seelegent/internal/fsutil"
+	"github.com/NovaSeele/Seelegent/internal/guard"
 )
 
 // claudeEmptyMCP is the MCP config every claude turn gets: no servers, so a worker never reaches the lead's MCP
@@ -23,6 +24,7 @@ const claudeEmptyMCP = "mcp-empty.json"
 type Claude struct {
 	bin   string
 	quota QuotaReader
+	guard *Guard
 }
 
 // Name implements Backend.
@@ -154,8 +156,8 @@ func (*Claude) KeyEnv(p account.Provider, key, model string) (map[string]string,
 	return env, nil
 }
 
-// Prepare implements Backend: the profile home and its empty MCP config.
-func (*Claude) Prepare(p account.Profile, _ *account.Provider) error {
+// Prepare implements Backend: the profile home, its empty MCP config and the git guard hook in settings.json.
+func (c *Claude) Prepare(p account.Profile, _ *account.Provider) error {
 	if !p.Isolated() {
 		return fmt.Errorf("claude: %w: claude accounts are always isolated", account.ErrInvalid)
 	}
@@ -164,6 +166,11 @@ func (*Claude) Prepare(p account.Profile, _ *account.Provider) error {
 	}
 	if err := fsutil.WriteFileAtomic(filepath.Join(p.Home, claudeEmptyMCP), []byte(`{"mcpServers":{}}`+"\n"), 0o600); err != nil {
 		return fmt.Errorf("claude: prepare profile: %w", err)
+	}
+	if c.guard != nil {
+		if err := guard.InstallClaude(p.Home, c.guard.Exe, c.guard.Enabled()); err != nil {
+			return fmt.Errorf("claude: prepare profile: %w", err)
+		}
 	}
 	return nil
 }
@@ -285,7 +292,7 @@ func (p *claudeParser) assistant(blocks []claudeBlock) []event.Event {
 			}
 		case "tool_use":
 			call := claudeCall{name: b.Name, input: p.maskJSON(b.Input), step: p.step}
-			if strings.EqualFold(b.Name, "Bash") {
+			if strings.EqualFold(b.Name, "Bash") || strings.EqualFold(b.Name, "PowerShell") {
 				call.cmd = p.mask(stringField(b.Input, "command"))
 			}
 			p.calls[b.ID] = call

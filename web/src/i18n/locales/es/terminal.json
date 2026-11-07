@@ -106,6 +106,8 @@
     },
     "backgroundWait": "Esperando trabajo en segundo plano",
     "log": "Registro del worker",
-    "session": "Conversación iniciada · {model}"
+    "session": "Conversación iniciada · {model}",
+    "restored": "Se restauró {count} archivo (turno {n}) | Se restauraron {count} archivos (turno {n})",
+    "atRisk": "{count} archivo sigue en riesgo | {count} archivos siguen en riesgo"
   }
 }

@@ -101,5 +101,70 @@
     "takeover": "接管这个任务",
     "copyId": "复制任务 ID",
     "view": "显示{name}"
+  },
+  "safety": {
+    "title": "安全检查",
+    "count": "{n} 项",
+    "turn": "第 {n} 轮",
+    "risk": {
+      "desc": "本轮之前未提交的修改不见了。恢复会从本轮开始前的快照中取回这些文件。",
+      "restore": "恢复文件 ({n})",
+      "waitStop": "工作者停止后才能恢复。",
+      "why": {
+        "outside": "在编辑工具之外被修改",
+        "large": "编辑工具大量删除"
+      },
+      "lost": "丢失的未提交行: {n}",
+      "deleted": "已删除",
+      "binary": "二进制文件",
+      "restored": "已恢复",
+      "restoredTitle": "工作已恢复",
+      "restoredDesc": "已从第 {n} 轮开始前的快照中取回文件。",
+      "restoredDescMany": "已从各轮开始前的快照中取回文件。"
+    },
+    "overlaps": {
+      "title": "其他任务也修改了",
+      "active": "都在运行",
+      "recent": "最近修改过"
+    },
+    "findings": "第 {n} 轮的检查",
+    "severity": {
+      "red": "问题",
+      "warn": "警告"
+    },
+    "finding": {
+      "eolChanged": "换行符被修改",
+      "bomChanged": "字节顺序标记被修改",
+      "bomNewFile": "新文件以字节顺序标记开头",
+      "junkFile": "垃圾文件",
+      "unreportedFile": "已修改但不在报告中",
+      "outsideRepoWrite": "写入仓库之外",
+      "unfetchedUrl": "工作者从未打开的 URL",
+      "skipped": "已跳过检查"
+    },
+    "blocked": "被 git 防护拒绝的命令",
+    "blockedNote": "防护在这些命令运行前就拦下了它们，没有任何改动。",
+    "parts": {
+      "risk": "{count} 个文件有风险",
+      "overlaps": "{count} 个共享文件",
+      "findings": "{count} 项发现",
+      "blocked": "{count} 条命令被拒绝",
+      "restored": "已恢复 {count} 个"
+    },
+    "restore": {
+      "title": "要把文件恢复到第 {n} 轮之前吗？",
+      "desc": "这些文件的当前内容将被替换为第 {n} 轮之前的内容。替换前会先备份当前内容。",
+      "doneTitle": "恢复完成",
+      "done": "已恢复 {count} 个文件。",
+      "nothing": "没有恢复任何文件。",
+      "backup": "之前的内容保存在备份快照中：",
+      "skippedTitle": "未恢复",
+      "changed": "本轮结束后已被修改",
+      "changedNote": "这些文件在本轮结束后被修改过，因此保持不变。",
+      "anyway": "仍然恢复",
+      "forceTitle": "要覆盖第 {n} 轮之后的修改吗？",
+      "forceDesc": "这些文件在本轮结束后被修改过。它们较新的内容将被替换为第 {n} 轮之前的内容；替换前会先备份。",
+      "forceConfirm": "覆盖 ({n})"
+    }
   }
 }

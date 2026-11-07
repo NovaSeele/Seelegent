@@ -1,0 +1,14 @@
+{
+  "seq": 7,
+  "ts": "2026-11-07T09:00:00.000Z",
+  "taskId": "t261107090000-ab12",
+  "turn": 1,
+  "attempt": 1,
+  "type": "restored",
+  "data": {
+    "files": [
+      "main.go"
+    ],
+    "backup": "t1-restore-1762506000000000000"
+  }
+}

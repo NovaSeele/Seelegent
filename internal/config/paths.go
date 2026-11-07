@@ -52,6 +52,11 @@ type Paths struct {
 	// Tasks holds one directory per task with the files of its worker attempts (launch spec, stream, stderr,
 	// long briefs): tasks/<task-id>/t<turn>-a<attempt>/.
 	Tasks string
+	// Snapshots holds the work-at-risk snapshots of worker turns: content-addressed file copies (blobs/) and one
+	// manifest per task turn (tasks/<task-id>/), never anything inside the user's repository.
+	Snapshots string
+	// GuardBin holds the git shim that workers without a pre-tool hook get first on PATH (guard/bin/).
+	GuardBin string
 	// LockFile is the single-instance lock of the daemon (run/daemon.lock).
 	LockFile string
 	// PortFile records the port the running daemon listens on (run/daemon.port).
@@ -69,16 +74,18 @@ func NewPaths(home string) (Paths, error) {
 	}
 	run := filepath.Join(abs, "run")
 	return Paths{
-		Home:     abs,
-		Config:   filepath.Join(abs, "config.json"),
-		DB:       filepath.Join(abs, "seelegent.db"),
-		Profiles: filepath.Join(abs, "profiles"),
-		Logs:     filepath.Join(abs, "logs"),
-		Run:      run,
-		Backups:  filepath.Join(abs, "backups"),
-		Tasks:    filepath.Join(abs, "tasks"),
-		LockFile: filepath.Join(run, "daemon.lock"),
-		PortFile: filepath.Join(run, "daemon.port"),
+		Home:      abs,
+		Config:    filepath.Join(abs, "config.json"),
+		DB:        filepath.Join(abs, "seelegent.db"),
+		Profiles:  filepath.Join(abs, "profiles"),
+		Logs:      filepath.Join(abs, "logs"),
+		Run:       run,
+		Backups:   filepath.Join(abs, "backups"),
+		Tasks:     filepath.Join(abs, "tasks"),
+		Snapshots: filepath.Join(abs, "snapshots"),
+		GuardBin:  filepath.Join(abs, "guard", "bin"),
+		LockFile:  filepath.Join(run, "daemon.lock"),
+		PortFile:  filepath.Join(run, "daemon.port"),
 	}, nil
 }
 
@@ -103,7 +110,7 @@ func DefaultPaths() (Paths, error) {
 // EnsureDirs creates the data directory and its subdirectories (owner-only permissions) if they are missing.
 // Directories are created when a command starts, never as a side effect of building Paths.
 func (p Paths) EnsureDirs() error {
-	for _, dir := range []string{p.Home, p.Profiles, p.Logs, p.Run, p.Backups, p.Tasks} {
+	for _, dir := range []string{p.Home, p.Profiles, p.Logs, p.Run, p.Backups, p.Tasks, p.Snapshots} {
 		if err := os.MkdirAll(dir, dirPerm); err != nil {
 			return fmt.Errorf("create %s: %w", dir, err)
 		}

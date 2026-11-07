@@ -1,0 +1,207 @@
+# Safety: git guard, snapshots and the post-turn checks
+
+Workers run in folders where other people (the user, the lead, other workers) keep uncommitted work. Seelegent
+protects that work in three layers:
+
+1. the **git guard** refuses the git commands that can throw it away, before they run;
+2. **snapshots** record the uncommitted files before and after every turn, so a loss is noticed and can be undone;
+3. the **post-turn checks** report what the turn did besides its own edits (work at risk, hygiene, scope,
+   contention with other tasks) in the task, its report and its attention state.
+
+None of them ever fails a task. They inform the lead and the dashboard; the lead decides.
+
+## Git guard
+
+Package `internal/guard` is pure: it reads a command line (POSIX shells, PowerShell, cmd.exe; substitutions,
+subshells, wrappers such as `env`, `xargs`, `timeout`, `chrt`, `parallel`, `script -c`, `su -c`, `find -exec`,
+cmd's `if`; interpreters such as `bash -c`, `powershell -EncodedCommand`, `node -e`, `python -c`; a script a
+shell or an interpreter reads from standard input: `bash <<'EOF'`, `cat <<'EOF' | sh`, `sh -s <<< '...'`,
+`pwsh -Command -`, `python3 - <<'EOF'`) and decides. A here-document fed to any other command (`cat` building a
+commit message, `tee`) is data. Long options count by any prefix git accepts (`commit --amen`, `branch --d`). It
+refuses:
+
+- always: `reset`, `restore`, `switch`, `revert`, `rebase`, `merge`, `pull`, `push`, `cherry-pick`, `am`, `rm`,
+  `mv`, `prune`, `filter-branch`, `filter-repo`, `update-ref`, `update-index`, `read-tree`, `checkout-index`,
+  `merge-file`, `replace`;
+- `stash` except `list` and `show`; `clean` without `-n`; `checkout` except `checkout -b|-B <new> [<start>]`;
+  `commit -a|--all|--amend`; `branch` and `tag` deletes, moves and forced writes; `apply` unless it only checks;
+  `reflog expire|delete`; `worktree remove|prune|move`; `submodule deinit|update|absorbgitdirs`; `config` writes
+  of keys that run programs or redirect git (aliases, includes, `core.hooksPath`, `core.editor`, filters and
+  drivers, ...) and of `gc.pruneExpire`; `sparse-checkout` writes; `bisect` steps; `rerere forget|clear|gc`;
+  `notes remove|prune`; `refs migrate`; `symbolic-ref -d`; `gc --prune=<date>` (plain `gc` and `gc --prune` keep
+  the default expiry);
+- an alias that expands to any of the above (read with `git config --get alias.<name>` in the command's folder);
+- fail closed: a line that mentions git and cannot be read (an unclosed quote, a variable used as the git
+  subcommand or an option, nesting deeper than the limit).
+
+Every refusal starts with `Blocked by Seelegent` (`guard.Marker`). The backend parsers look for that text and mark
+the tool call `blocked`; the turn lists the command under `blockedCommands`, the report under `blocked_commands`,
+and the dashboard's terminal and safety panel show it.
+
+### Where it runs
+
+| Worker | How |
+|---|---|
+| Claude Code, isolated account | A `PreToolUse` hook on `Bash` and `PowerShell` in the profile's own `settings.json` runs `seelegent __guard claude`. |
+| agy, isolated account | An entry `seelegent-guard` in the profile's `hooks.json` for `run_command` and `send_command_input` runs `seelegent __guard agy` (on Windows through the batch file `.\seelegent-guard.cmd` next to `hooks.json`, as agy runs hooks with `cmd /c` from that folder; the `.\` keeps it working when `NoDefaultCurrentDirectoryInExePath` is set). |
+| codex (any account) and system accounts of every backend | The git shim: `<data>/guard/bin` first on the worker's `PATH`. On Windows it is a copy of `seelegent.exe` named `git.exe`; elsewhere a `git` script that runs `seelegent __git`. It checks the arguments and runs the real git found on `PATH` without the shim folder. |
+
+Hooks are written only into the worker's own profile (`Prepare` of the backend), never into the user's real
+`~/.claude`, `~/.gemini` or `~/.codex`: a system account's profile is the user's real home, so it gets the shim
+instead. Turning `gitGuard` off in the settings removes the hook at the next `Prepare`. `--allow-git` on
+`delegate`/`followup` sets `SEELEGENT_GIT_GUARD=off` in the worker CLI's environment for that turn, and the daemon
+leaves the shim off `PATH` for such a turn (and whenever `gitGuard` is off).
+
+Only the hooks read `SEELEGENT_GIT_GUARD`. They inherit the environment of the worker CLI, which the daemon builds
+(the variable is never passed through from the daemon's own environment); the commands the worker runs are child
+processes of the CLI (Claude Code's `Bash`/`PowerShell` tools, agy's `run_command` terminals and the shells
+`send_command_input` writes to), and a child cannot change its parent's environment. The shim runs inside those
+commands, so `env SEELEGENT_GIT_GUARD=off git stash` would reach it: it ignores the variable, and `PATH` alone
+decides whether a worker is guarded. The shim also runs git with `-c help.autocorrect=0`, so a misspelled
+subcommand (`git stsh`) is not run as the command git guesses.
+
+### Limits
+
+- The shim only sees programs that look git up on `PATH`. A Git Bash login shell (`bash -l`) rebuilds `PATH` and
+  may put its own `git` ahead of the shim; a script that calls git by its full path, a build tool or an IDE
+  integration is not seen either.
+- The guard reads command lines, not files: a command stored in a variable and run later, a script file the worker
+  wrote, or a Makefile target are not read. Dynamic words in the git part are refused (fail closed), dynamic words
+  elsewhere are not.
+- codex has no pre-tool hook. Its own sandbox (`backends.codex.sandbox`, default `workspace-write`; plan mode is
+  `read-only`) limits where it can write; the shim covers the git commands it runs through `PATH`. With
+  `danger-full-access` only the shim remains.
+- The hooks do not run git, so they cannot turn off `help.autocorrect`: when the user's git config sets it, a
+  misspelled subcommand (`git stsh`) passes the hook as an unknown command and git runs the command it guesses.
+  The shim is not affected.
+- The hooks live in files of the worker's own profile (`settings.json`, `hooks.json`). A worker that edits those
+  files, with its edit tools or a shell command, can remove the hook or (Claude Code's `env` setting) set
+  `SEELEGENT_GIT_GUARD`; writes into the profile folders raise no scope warning.
+- Forms the guard does not read: GNU `parallel` reading its commands from standard input or a file (`parallel <
+  cmds`, `--arg-file`); a `ProcessStartInfo` whose `Arguments` are set as a property before
+  `[Diagnostics.Process]::Start($psi)`; programs started through other language runtimes or APIs than the inline
+  code of the interpreters above (a compiled helper, `Invoke-CimMethod Win32_Process`, `wmic process call create`,
+  `schtasks`). Wrappers not in the list (any program that runs its arguments as a command) are not followed.
+- The snapshots below are the safety net for everything the guard cannot see.
+
+## Snapshots
+
+Package `internal/snapshot`. Before every turn of a task in a git repository (once the task's repository root is
+known) and after it, the task engine records the repository's uncommitted files:
+
+- `git status` (read-only, `GIT_OPTIONAL_LOCKS=0`) lists the changed, deleted and untracked files; nothing touches
+  the user's index, stash, refs or objects (bugs.md D7, D25c);
+- each file's bytes go into a content-addressed store in the data directory, `snapshots/blobs/<aa>/<sha256>`,
+  written once with `fsutil.WriteFileAtomic`; a manifest per turn, `snapshots/tasks/<task>/t<n>-<kind>.json`
+  (`start`, `end`, `restore-<time>`), names the files, their hashes and `HEAD`;
+- limits: 8 MiB per file, 3000 files and 256 MiB per snapshot (`truncated` is set past them); untracked files under
+  `node_modules`, `.venv`, `venv`, `__pycache__`, `.next`, `.nuxt`, `.turbo`, `.cache` and `.gradle` are not copied.
+
+A failed snapshot is logged and the turn runs anyway; its checks are then skipped.
+
+### Retention and the sweep
+
+Every 6 hours (first run 2 minutes after the daemon starts) the sweep removes, for tasks that are no longer in the
+database or that finished and were not updated for `snapshotRetentionDays` (default 14), their attempt folders
+(`tasks/<id>/`) and their snapshot manifests, then every blob no manifest names any more (bugs.md F5). Tasks that
+are not finished, and tasks with a running attempt or a watch, are never swept. A snapshot names its blobs only
+once it is saved, after they were written or reused, so every blob is dated with the store's clock when it is
+written or reused, and the sweep keeps unnamed blobs dated within an hour before it started (`blobGrace`, well
+above the 2- and 3-minute limits of a snapshot and of the post-turn checks).
+
+## Post-turn checks
+
+They run when a turn ends, before the task's end is published, so a lead woken by the report already sees them.
+The turn records `workAtRisk`, `hygiene`, `scope` and `git` (`changed`, `preexisting`); the report adds
+`work_at_risk`, `hygiene`, `scope_warnings` and `file_overlaps`.
+
+### Work at risk
+
+Compares the start and end snapshots. A file is at risk when it was dirty before the turn and
+
+- `outside_tools`: it lost at least one uncommitted line, was deleted, or is binary and changed, and the worker's
+  edit tools did not touch it (a shell command, a formatter or another program did); or
+- `large_removal`: the edit tools touched it and it lost at least 5 lines that were uncommitted before the turn.
+
+Not at risk: files other tasks of the same repository changed while the turn ran, scratch and junk files, lock
+files that still exist, and the task's own lines. In a file the task's edit tools changed in an earlier turn, the
+lines each earlier turn added (its end snapshot minus its start snapshot) count as committed, so only lines someone
+else added (the user, between the turns) can be reported lost; such a file that lost none of them, or a binary one,
+is not reported. When an earlier turn's snapshots or content cannot be read, its files are left out of the check as
+a whole. A turn with files at risk emits a `work_at_risk` event, and when the task is done its attention is
+`work_at_risk` (unless `hygiene` comes first) until the files are restored.
+
+### Restore
+
+`POST /tasks/{id}/turns/{n}/restore` (body `{"files": [...]}`, empty for every file at risk not restored yet) and
+`seelegent restore <id> --turn N [--file=<path>]...` write back the content the files had when turn `n` started.
+The repository is locked while it runs, and paths are cleaned with `gitx.CleanPath` (no `..`, no absolute paths).
+It is refused (`409 bad_state`) while the task is active or taken over.
+
+A file whose content differs from the turn's end state (the turn's end snapshot, or the next turn's start
+snapshot when the end one is missing; a file neither lists is compared with HEAD at that time) was changed by
+someone after the turn ended. Restore leaves it alone and reports it as skipped with `code: "changed_since_turn"`
+(`changed since the turn ended`); `{"force": true}` or `seelegent restore --force` overwrites it anyway. The report's
+restore command never forces. The dashboard asks before every restore, lists the skipped files, and offers
+"Restore anyway" after a second question.
+
+Before writing, the current content of the files it is about to write is kept in a backup snapshot,
+`t<turn>-restore-<time>`, which the result (`backup`), the CLI output and the dashboard name. Restored files are
+marked `restored`, and a `restored` event (the files written and the backup) goes into the task's log.
+
+To undo a restore, put the backup's content back by hand: the backup is
+`<data dir>/snapshots/tasks/<task id>/<backup>.json`, a manifest whose `files` list each file's `path` and the
+`hash` of the content it held (`missing: true` when it did not exist); that content is the blob
+`<data dir>/snapshots/blobs/<first two characters of hash>/<hash>`. Copy each blob back to its path (delete the
+file for a `missing` entry). The backup is kept as long as the task's other snapshots. The report's `work_at_risk.restore` is the command line to paste (POSIX quoting),
+`restore_argv` the same as arguments.
+
+### Outside diff
+
+`GET /tasks/{id}/turns/{n}/outside-diff` returns what turn `n` changed outside the edit tools: start snapshot
+against the end snapshot (or the next turn's start, or the working tree while the turn runs), without the files the
+edit tools touched, other tasks' files and scratch files. At most 20 files, 400 lines per file and 2000 lines in
+all; a turn without snapshots is `404 not_found`.
+
+### Hygiene
+
+For the files the turn changed that were clean before it (not other tasks' files); line endings and BOM are
+compared with `HEAD`, files over 2 MiB, binary and scratch files are skipped:
+
+| Kind | Severity | When |
+|---|---|---|
+| `eol_changed` | red | the file's line endings changed (LF ↔ CRLF) |
+| `bom_changed` | red | a byte order mark was added or removed |
+| `bom_new_file` | red | a new file starts with a BOM while the repository's tracked files of that extension have none (first 20 checked) |
+| `junk_file` | red | a new file that looks like a leftover: `*.orig`, `*.rej`, `*.tmp`, `*.bak`, `*~`, or a Windows device name such as `nul` (from `> nul` in a POSIX shell) |
+| `unreported_file` | warn | a new file the report names neither by its path nor by its file name |
+
+A red finding makes a done task's attention `hygiene`.
+
+### Scope warnings
+
+- `outside_repo_write` (warn): an edit tool, or a shell command's redirection, copy or move target or a file
+  `sed -i`/`perl -i` edits in place (`guard.Writes`), wrote outside the task's folder, the repository, the temp folder and the worker's profile
+  folders. Git Bash paths (`/c/...`) are mapped on Windows; dynamic words and `~` are skipped. At most 20.
+- `unfetched_url` (warn): a URL in the report that appears nowhere in the prompt, the messages, the commands or the
+  tool events of the turn (local hosts ignored). At most 10.
+
+### Contention: file overlaps
+
+`TaskDetail.fileOverlaps` and the report's `file_overlaps` list the files this task and another task of the same
+repository changed in overlapping turns: `active` when both are still working, `recent` otherwise. Parent and child
+tasks are not compared. The repository's recent tasks (up to 200, active first) are read through the task store and
+kept 3 seconds per repository; the repository root itself is never cached (bugs.md D14). Running turns count the
+files their edit tools touched so far.
+
+## Attention
+
+The safety work added these attention reasons (see [task-engine.md](task-engine.md) for the rest):
+
+| Reason | State | Who | When |
+|---|---|---|---|
+| `looping` | `blocked` | lead | the last 5 tool calls failed, or the same call came back 4 times in the last 12 without a new successful edit in between (strict alternation with one other call counts only when that call is the same each time, bugs.md A9) |
+| `auth` | `blocked` | user | a task waits for quota and every enabled account of its backend needs a sign-in |
+| `no_accounts` | `blocked` | user | the task is queued, running or waiting for quota and no account of its backend can run work |
+| `hygiene` | `blocked` | lead | the done task's latest turn has red hygiene findings |
+| `work_at_risk` | `blocked` | lead | the done task has files at risk that were not restored |

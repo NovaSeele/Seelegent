@@ -44,5 +44,5 @@ defineEmits<{ reveal: [key: string]; openGit: [path: string] }>()
     :detail="detail"
     @open-git="$emit('openGit', $event)"
   />
-  <GitView v-else :task="task" :path="gitPath" />
+  <GitView v-else :task="task" :detail="detail" :path="gitPath" />
 </template>

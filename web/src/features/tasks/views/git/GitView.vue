@@ -2,7 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
-import type { TaskSummary } from '@/api/types'
+import type { TaskDetail, TaskSummary } from '@/api/types'
 import Button from '@/components/ui/Button.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import Icon from '@/components/ui/Icon.vue'
@@ -18,13 +18,19 @@ import GitDiffPane from './GitDiffPane.vue'
 import GitFileList from './GitFileList.vue'
 import { useGit } from './useGit'
 import { useGitCommands } from './useGitCommands'
+import OutsideDiffButton from './OutsideDiffButton.vue'
 
 /**
  * The Git view: the files this task changed (paths from the repository root), the selected file's diff, and a
  * commit of the ticked ones. Files the repo had changed before the task are listed apart and never offered.
- * `path` selects a file (opened from the Files view). j/k step through the files.
+ * `path` selects a file (opened from the Files view). j/k step through the files. `detail` says which turns have
+ * changes outside the edit tools to show.
  */
-const props = defineProps<{ task: TaskSummary; path?: string | null }>()
+const props = defineProps<{
+  task: TaskSummary
+  detail?: TaskDetail | null
+  path?: string | null
+}>()
 
 const { t } = useI18n()
 const format = useFormat()
@@ -107,6 +113,7 @@ useGitCommands(
         </span>
         <span class="git__actions">
           <IconButton icon="refresh" size="sm" :label="t('git.refresh')" @click="model.reload" />
+          <OutsideDiffButton :task-id="task.id" :detail="detail" />
           <Button size="sm" variant="primary" :disabled="!files.length" @click="committing = true">
             {{ t('git.commit.open') }}
           </Button>

@@ -22,6 +22,10 @@ const (
 	ReasonQuestion       = "question"
 	ReasonReview         = "review"
 	ReasonFailed         = "failed"
+	ReasonAuth           = "auth"
+	ReasonLooping        = "looping"
+	ReasonWorkAtRisk     = "work_at_risk"
+	ReasonHygiene        = "hygiene"
 )
 
 // Who needs to act.
@@ -60,12 +64,18 @@ type liveState struct {
 	step string
 	// account and conversation are the account of the attempt and the conversation the CLI reported.
 	account, conversation string
+	// steps are the worker's last finished tool calls (at most loopWindow), for the loop check.
+	steps []loopStep
+	// pending is the key of the tool call still open.
+	pending string
+	// edited are the files the worker's edit tools changed so far in this attempt (as reported).
+	edited []string
 }
 
 // computeAttention returns what a task needs from someone, or nil (the rules of the old attention.js, mapped onto
 // the states blocked, question, stalled, background_wait and info). It is pure; prev keeps Since of an unchanged
-// flag.
-func computeAttention(t *Task, live liveState, now time.Time, set config.Settings) *api.Attention {
+// flag. acc is what is known about the accounts of the task's backend.
+func computeAttention(t *Task, live liveState, acc accountHealth, now time.Time, set config.Settings) *api.Attention {
 	att := func(state, reason, who, detail string) *api.Attention {
 		since := api.FormatTime(now)
 		if p := t.Attention; p != nil && p.State == state && p.Reason == reason && p.Since != "" {
@@ -113,6 +123,12 @@ func computeAttention(t *Task, live liveState, now time.Time, set config.Setting
 			return att(api.AttentionStalled, ReasonStalled, WhoLead,
 				fmt.Sprintf("the worker has not started %d min after launch", int(now.Sub(live.started).Minutes())))
 		}
+		if loop, detail := detectLoop(live.steps); loop {
+			return att(api.AttentionBlocked, ReasonLooping, WhoLead, detail)
+		}
+		if acc.known && acc.total > 0 && acc.usable == 0 {
+			return att(api.AttentionBlocked, ReasonNoAccounts, WhoUser, noAccountDetail(t.Backend))
+		}
 		last := live.lastEvent
 		if last.IsZero() {
 			last = live.started
@@ -132,7 +148,19 @@ func computeAttention(t *Task, live liveState, now time.Time, set config.Setting
 			return att(api.AttentionStalled, ReasonStalled, WhoLead, fmt.Sprintf("no output for %d min", mins))
 		}
 		return nil
+	case StatusQueued:
+		if acc.known && acc.usable == 0 {
+			return att(api.AttentionBlocked, ReasonNoAccounts, WhoUser, noAccountDetail(t.Backend))
+		}
+		return nil
 	case StatusWaitingQuota:
+		if acc.known && acc.enabled > 0 && acc.needsLogin == acc.enabled {
+			return att(api.AttentionBlocked, ReasonAuth, WhoUser,
+				fmt.Sprintf("every enabled %s account needs a sign-in", t.Backend))
+		}
+		if acc.known && acc.usable == 0 {
+			return att(api.AttentionBlocked, ReasonNoAccounts, WhoUser, noAccountDetail(t.Backend))
+		}
 		if t.Waiting == string(pool.ReasonNoAccount) {
 			return att(api.AttentionBlocked, ReasonNoAccounts, WhoUser, t.WaitDetail)
 		}
@@ -148,11 +176,46 @@ func computeAttention(t *Task, live liveState, now time.Time, set config.Setting
 		if q := parseBlocked(tu.Response); q != nil {
 			return att(api.AttentionQuestion, ReasonQuestion, WhoLead, q.Text)
 		}
+		if red := redFindings(tu.Hygiene); red > 0 {
+			return att(api.AttentionBlocked, ReasonHygiene, WhoLead, fmt.Sprintf("%d hygiene finding(s)", red))
+		}
+		if n := atRisk(t); n > 0 {
+			return att(api.AttentionBlocked, ReasonWorkAtRisk, WhoLead, fmt.Sprintf("%d file(s) at risk", n))
+		}
 		return att(api.AttentionInfo, ReasonReview, WhoLead, "")
 	case StatusFailed:
 		return att(api.AttentionBlocked, ReasonFailed, WhoLead, t.Error)
 	}
 	return nil
+}
+
+// noAccountDetail explains a no_accounts flag.
+func noAccountDetail(backendName string) string {
+	return fmt.Sprintf("no %s account can run work: sign one in or enable one", backendName)
+}
+
+// redFindings counts the red findings of a check.
+func redFindings(fs []api.Finding) int {
+	n := 0
+	for _, f := range fs {
+		if f.Severity == api.SeverityRed {
+			n++
+		}
+	}
+	return n
+}
+
+// atRisk counts the files at risk of every turn that were not restored.
+func atRisk(t *Task) int {
+	n := 0
+	for _, tu := range t.Turns {
+		for _, r := range tu.WorkAtRisk {
+			if !r.Restored {
+				n++
+			}
+		}
+	}
+	return n
 }
 
 // needsLead reports whether the task waits for the lead (or the user): a blocking flag other than a failure, a
@@ -172,7 +235,7 @@ func needsLead(t *Task) bool {
 // flag changed. It reports whether anything changed.
 func (s *Service) syncAttention(t *Task, evs *[]NewEvent) bool {
 	now := s.now()
-	next := computeAttention(t, s.live(t.ID), now, s.settings())
+	next := computeAttention(t, s.live(t.ID), s.healthOf(t.Backend), now, s.settings())
 	changed := false
 	if !sameAttention(t.Attention, next) {
 		t.Attention = next
@@ -233,6 +296,7 @@ func (s *Service) watchAttention() {
 			ids = append(ids, id)
 		}
 		s.mu.Unlock()
+		s.refreshHealth(s.root)
 		if now := s.clk.Now(); now.Sub(lastSweep) >= attentionSweep {
 			lastSweep = now
 			// Only a raised flag can decay on a finished task; the others need no look.

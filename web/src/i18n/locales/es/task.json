@@ -101,5 +101,70 @@
     "takeover": "Tomar el control de esta tarea",
     "copyId": "Copiar ID de la tarea",
     "view": "Mostrar {name}"
+  },
+  "safety": {
+    "title": "Comprobaciones de seguridad",
+    "count": "{n} encontrados",
+    "turn": "Turno {n}",
+    "risk": {
+      "desc": "Los cambios sin confirmar que existían antes del turno han desaparecido. Restaurar recupera los archivos de la instantánea tomada antes del turno.",
+      "restore": "Restaurar archivos ({n})",
+      "waitStop": "Se puede restaurar cuando el worker se haya detenido.",
+      "why": {
+        "outside": "cambiado fuera de las herramientas de edición",
+        "large": "gran eliminación por una herramienta de edición"
+      },
+      "lost": "líneas sin confirmar perdidas: {n}",
+      "deleted": "eliminado",
+      "binary": "archivo binario",
+      "restored": "Restaurado",
+      "restoredTitle": "Trabajo restaurado",
+      "restoredDesc": "Los archivos se recuperaron de la instantánea tomada antes del turno {n}.",
+      "restoredDescMany": "Los archivos se recuperaron de las instantáneas tomadas antes de sus turnos."
+    },
+    "overlaps": {
+      "title": "También cambiados por otras tareas",
+      "active": "ambas trabajando",
+      "recent": "cambiado hace poco"
+    },
+    "findings": "Comprobaciones del turno {n}",
+    "severity": {
+      "red": "Problema",
+      "warn": "Aviso"
+    },
+    "finding": {
+      "eolChanged": "Finales de línea cambiados",
+      "bomChanged": "Marca de orden de bytes cambiada",
+      "bomNewFile": "El archivo nuevo empieza con una marca de orden de bytes",
+      "junkFile": "Archivo basura",
+      "unreportedFile": "Cambiado pero no está en el informe",
+      "outsideRepoWrite": "Escritura fuera del repositorio",
+      "unfetchedUrl": "URL que el worker nunca abrió",
+      "skipped": "Comprobación omitida"
+    },
+    "blocked": "Comandos que rechazó la protección de git",
+    "blockedNote": "La protección los detuvo antes de ejecutarse; no se cambió nada.",
+    "parts": {
+      "risk": "{count} archivo en riesgo | {count} archivos en riesgo",
+      "overlaps": "{count} archivo compartido | {count} archivos compartidos",
+      "findings": "{count} hallazgo | {count} hallazgos",
+      "blocked": "{count} comando rechazado | {count} comandos rechazados",
+      "restored": "{count} restaurado | {count} restaurados"
+    },
+    "restore": {
+      "title": "¿Restaurar los archivos de antes del turno {n}?",
+      "desc": "El contenido actual de estos archivos se reemplaza por el que tenían antes del turno {n}. Antes se guarda una copia de seguridad del contenido actual.",
+      "doneTitle": "Restauración terminada",
+      "done": "Se restauró {count} archivo. | Se restauraron {count} archivos.",
+      "nothing": "No se restauró ningún archivo.",
+      "backup": "Lo que contenían antes se guarda en la instantánea de respaldo",
+      "skippedTitle": "Sin restaurar",
+      "changed": "cambió después de terminar el turno",
+      "changedNote": "Estos archivos cambiaron después de terminar el turno, así que se dejaron como están.",
+      "anyway": "Restaurar de todos modos",
+      "forceTitle": "¿Sobrescribir los cambios hechos después del turno {n}?",
+      "forceDesc": "Estos archivos cambiaron después de terminar el turno. Su contenido más reciente se reemplaza por el que tenían antes del turno {n}; antes se guarda una copia de seguridad.",
+      "forceConfirm": "Sobrescribir ({n})"
+    }
   }
 }
