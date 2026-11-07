@@ -1,7 +1,7 @@
 /** Builders for API data in tests: complete objects with sensible defaults, overridden per test. */
 import type { TasksApi } from '@/api/tasks'
 import type { TaskEvent, TaskEventType } from '@/api/events'
-import type { Account, TaskDetail, TaskSummary } from '@/api/types'
+import type { Account, Provider, TaskDetail, TaskSummary } from '@/api/types'
 
 export const T0 = Date.parse('2026-11-06T10:00:00.000Z')
 
@@ -75,6 +75,25 @@ export function makeAccount(overrides: Partial<Account> = {}): Account {
     signingIn: false,
     quota: { source: 'active', groups: [] },
     models: [],
+    createdAt: iso(),
+    updatedAt: iso(),
+    ...overrides,
+  }
+}
+
+export function makeProvider(overrides: Partial<Provider> = {}): Provider {
+  return {
+    id: 'zai',
+    name: 'Z.ai GLM',
+    backend: 'claude',
+    baseUrl: 'https://api.z.ai/api/anthropic',
+    enabled: true,
+    models: [],
+    accounts: 0,
+    preset: 'zai',
+    official: false,
+    allowedModels: '',
+    tiers: { fast: '', standard: '', strong: '', max: '' },
     createdAt: iso(),
     updatedAt: iso(),
     ...overrides,

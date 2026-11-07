@@ -12,7 +12,7 @@ import TextField from '@/components/ui/TextField.vue'
 import { useProvidersStore } from '@/stores/providers'
 import { useToastStore } from '@/stores/toast'
 
-import { parseModels, providerInput } from './providerForm'
+import { parseModels, providerChanges, providerInput } from './providerForm'
 
 /**
  * Adds a provider (from a preset, or blank) or edits one. The id and backend are fixed once the provider exists;
@@ -88,9 +88,9 @@ async function submit() {
   failure.value = ''
   const list = parseModels(models.value)
   try {
-    const { name, baseUrl, enabled } = form.value
+    const { name } = form.value
     if (props.provider) {
-      await providers.update(props.provider.id, { name, baseUrl, enabled, models: list })
+      await providers.update(props.provider.id, providerChanges(props.provider, form.value, list))
     } else {
       await providers.create(providerInput(form.value, list, preset.value))
     }
@@ -127,15 +127,18 @@ async function submit() {
           :error="errors.id"
           :disabled="editing"
         />
+        <!-- A preset serves one backend; the daemon refuses another one (400 on backend). -->
         <Select
           v-model="form.backend"
           :label="t('accounts.providers.backend')"
           :options="backendOptions"
-          :disabled="editing"
+          :disabled="editing || preset !== ''"
         />
       </div>
       <TextField v-model="form.name" :label="t('accounts.providers.name')" :error="errors.name" />
+      <!-- The official API has no base URL: the daemon clears whatever is sent for it. -->
       <TextField
+        v-if="!form.official"
         v-model="form.baseUrl"
         type="url"
         :label="t('accounts.providers.baseUrl')"
