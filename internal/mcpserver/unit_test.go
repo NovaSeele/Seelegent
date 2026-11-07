@@ -584,8 +584,8 @@ func TestWorkerGuard(t *testing.T) {
 	}
 }
 
-// TestUnsupportedOptions: lane, verify, force_lane, gate commands (and member on delegate) are refused before any
-// daemon call, as not available, in both delegate and followup.
+// TestUnsupportedOptions: lane, verify, force_lane, gate commands or true (and member on delegate) are refused
+// before any daemon call, as not available, in both delegate and followup.
 func TestUnsupportedOptions(t *testing.T) {
 	var calls atomic.Int32
 	_, c := newStub(t, map[string]http.HandlerFunc{
@@ -604,6 +604,8 @@ func TestUnsupportedOptions(t *testing.T) {
 		"verify":     {"verify": true},
 		"force_lane": {"force_lane": true},
 		"gate":       {"gate": "go test ./..."},
+		"gate list":  {"gate": []string{"go vet ./...", "go test ./..."}},
+		"gate true":  {"gate": true},
 	}
 	for name, opt := range options {
 		for _, tool := range []string{"delegate", "followup"} {

@@ -153,13 +153,13 @@ func taskMode(mode string) (string, error) {
 	return "", fmt.Errorf("mode %q must be full or plan", mode)
 }
 
-// gateFlag maps the gate argument: false turns gates off; commands need the proof gate milestone.
+// gateFlag maps the gate argument: false turns gates off; true and commands need the proof gate milestone.
 func gateFlag(g gateArg) (*bool, error) {
 	switch {
 	case g.off:
 		f := false
 		return &f, nil
-	case len(g.cmds) > 0:
+	case g.on, len(g.cmds) > 0:
 		return nil, &unavailableError{what: "running gate commands", detail: "leave gate out or pass false"}
 	}
 	return nil, nil

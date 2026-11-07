@@ -68,7 +68,7 @@ Seelegent yet." and answer with a tool error that says nothing was done.
 
 | Tool | Routes | Now |
 |---|---|---|
-| `delegate` | `POST /tasks`, then `POST /wait?cwd=` | yes, except `variants`/`variant_specs` (contests), gate commands, lane paths, `verify: true`, `force_lane: true` and `member`: refused before any call (`not_available`) |
+| `delegate` | `POST /tasks`, then `POST /wait?cwd=` | yes, except `variants`/`variant_specs` (contests), gate commands or `gate: true`, lane paths, `verify: true`, `force_lane: true` and `member`: refused before any call (`not_available`) |
 | `followup` | `GET /tasks/{id}` (only to check `provider`), `POST /tasks/{id}/followup`, `POST /wait` | yes, same limits as `delegate` (`member` aside) |
 | `wait` | `POST /wait` (`reports: true`) | yes |
 | `review` | `POST /tasks/{id}/review` | yes; `answer_objection` is appended to the notes |

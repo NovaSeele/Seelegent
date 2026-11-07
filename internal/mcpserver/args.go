@@ -144,10 +144,12 @@ func (l *strList) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-// gateArg is the gate argument: a command, a list of commands, or false.
+// gateArg is the gate argument: a command, a list of commands, or false. true (run the default gates) is kept so
+// it can be refused as not available rather than as a bad argument.
 type gateArg struct {
 	set  bool
 	off  bool
+	on   bool
 	cmds []string
 }
 
@@ -159,7 +161,7 @@ func (g *gateArg) UnmarshalJSON(b []byte) error {
 	case bytes.Equal(s, []byte("false")):
 		*g = gateArg{set: true, off: true}
 	case bytes.Equal(s, []byte("true")):
-		return errors.New("gate is a command, a list of commands, or false")
+		*g = gateArg{set: true, on: true}
 	default:
 		var l strList
 		if err := l.UnmarshalJSON(s); err != nil {
