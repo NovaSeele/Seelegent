@@ -5,11 +5,24 @@ package platform
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"strings"
+	"syscall"
 	"time"
 )
+
+// IsLink reports whether fi (from os.Lstat) is a symbolic link, a junction or another reparse point.
+func IsLink(fi fs.FileInfo) bool {
+	if fi.Mode()&(fs.ModeSymlink|fs.ModeIrregular) != 0 {
+		return true
+	}
+	if d, ok := fi.Sys().(*syscall.Win32FileAttributeData); ok {
+		return d.FileAttributes&syscall.FILE_ATTRIBUTE_REPARSE_POINT != 0
+	}
+	return false
+}
 
 // mklinkTimeout bounds the cmd.exe call that creates a junction.
 const mklinkTimeout = 10 * time.Second

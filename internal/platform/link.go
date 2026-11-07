@@ -31,3 +31,31 @@ func LinkInto(src, dst string) error {
 
 // errNoLink is returned when no link kind works on this system.
 var errNoLink = errors.New("cannot create a link here")
+
+// Link removal results of RemoveLink.
+const (
+	LinkRemoved = "removed"
+	LinkGone    = "gone"
+	LinkNotLink = "not_link"
+)
+
+// RemoveLink removes the symbolic link or junction at p itself, never what it points to. It reports LinkGone when
+// nothing is at p and LinkNotLink, leaving it alone, when p is a real file or folder.
+func RemoveLink(p string) (string, error) {
+	fi, err := os.Lstat(p)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return LinkGone, nil
+		}
+		return "", err
+	}
+	if !IsLink(fi) {
+		return LinkNotLink, nil
+	}
+	// os.Remove deletes the link entry: unlink on Unix, DeleteFile or RemoveDirectory (which removes a junction
+	// without touching its target) on Windows.
+	if err := os.Remove(p); err != nil {
+		return "", fmt.Errorf("remove link %s: %w", p, err)
+	}
+	return LinkRemoved, nil
+}
