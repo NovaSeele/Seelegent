@@ -73,7 +73,8 @@ objection disables Accept and the banner's "Answer objection" sends the answer w
 ## Review notes
 
 A note sits on a line (or a range) of the task's diff, on the new side unless `side: "old"`, written by the user
-or the lead. It keeps the text of its line (`anchorText`); after each turn it follows that text within 50 lines
+or the lead. It keeps the text of its line (`anchorText`, the first 500 characters; a longer line is matched on
+the same start); after each turn it follows that text within 50 lines
 (`currentLine`, always sent: `line` when there is nothing to look for, 0 when the line is gone; such a note is
 listed but not anchored in the diff). Its status is computed when it is read:
 
