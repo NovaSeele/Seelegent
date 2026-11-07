@@ -77,7 +77,10 @@ in the daemon.
 - SSE: the `hello` frame carries an id like every frame (contract §7: "every frame"). On a fresh connect it is the
   current id; on a resume it is the client's id. A `reset` frame carries the current id, so a reconnect after it
   resumes from there. `task.updated` is coalesced per task for 100 ms; account frames are sent when the account's
-  JSON changed, checked on pool and task notices, after account writes and every 30 s.
+  JSON changed, checked on pool and task notices, after account writes and every 30 s. An account added to,
+  removed from or moved to another provider is followed by `providers.changed` (because `Provider.accounts` counts
+  them), whichever of the handler and that watcher sees the change first. Accounts cannot change provider through
+  the API today; the watcher covers it if they ever do.
 - `POST /tasks/wait` takes the cwd for its report from an optional `cwd` query parameter. A wait whose client went
   away writes nothing.
 - `capabilities.takeover` is true for backends that can resume a session; `apiKey` for every backend but agy;

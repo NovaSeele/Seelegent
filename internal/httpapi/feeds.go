@@ -124,11 +124,27 @@ func (s *Server) taskFeed(ctx context.Context) {
 // change and account.deleted for every removal, whether the feed or a handler sees it first.
 type accountCache struct {
 	mu   sync.Mutex
-	last map[string][]byte
+	last map[string]sentAccount
 }
 
-// accountSent publishes account.updated when a differs from what was last sent. Handlers call it with the
-// account they answer with, so a change is never lost between two feed snapshots.
+// sentAccount is the JSON last sent for an account and the provider it used then.
+type sentAccount struct {
+	data     []byte
+	provider string
+}
+
+// providerMoved reports whether an account that used provider was (seen before) now uses another one, counting
+// added and removed accounts: Provider.accounts changed, so clients must hear providers.changed.
+func providerMoved(old sentAccount, seen bool, provider string) bool {
+	if !seen {
+		return provider != ""
+	}
+	return old.provider != provider
+}
+
+// accountSent publishes account.updated when a differs from what was last sent, and providers.changed when the
+// account is new to a provider or moved to another one. Handlers call it with the account they answer with, so a
+// change is never lost between two feed snapshots.
 func (s *Server) accountSent(a *api.Account) {
 	data, err := json.Marshal(a)
 	if err != nil {
@@ -136,19 +152,30 @@ func (s *Server) accountSent(a *api.Account) {
 	}
 	s.acc.mu.Lock()
 	defer s.acc.mu.Unlock()
-	if old, ok := s.acc.last[a.ID]; ok && bytes.Equal(old, data) {
+	old, seen := s.acc.last[a.ID]
+	if seen && bytes.Equal(old.data, data) {
 		return
 	}
-	s.acc.last[a.ID] = data
+	s.acc.last[a.ID] = sentAccount{data: data, provider: a.Provider}
 	s.publish(api.StreamAccountUpdated, a)
+	if providerMoved(old, seen, a.Provider) {
+		s.changed(api.StreamProvidersChanged)
+	}
 }
 
-// accountGone publishes account.deleted.
-func (s *Server) accountGone(id string) {
+// accountGone publishes account.deleted, and providers.changed when the account used a provider (provider is what
+// the caller knew of it, for an account the clients were never told about).
+func (s *Server) accountGone(id, provider string) {
 	s.acc.mu.Lock()
 	defer s.acc.mu.Unlock()
+	if old, ok := s.acc.last[id]; ok && old.provider != "" {
+		provider = old.provider
+	}
 	delete(s.acc.last, id)
 	s.publish(api.StreamAccountDeleted, api.Deleted{ID: id})
+	if provider != "" {
+		s.changed(api.StreamProvidersChanged)
+	}
 }
 
 // syncAccounts compares every account with what was last sent; publish false only records (at start).
@@ -163,6 +190,7 @@ func (s *Server) syncAccounts(ctx context.Context, publish bool) {
 	s.acc.mu.Lock()
 	defer s.acc.mu.Unlock()
 	seen := make(map[string]bool, len(accounts))
+	providers := false // an account was added to, removed from or moved between providers
 	for i := range accounts {
 		a := &accounts[i]
 		seen[a.ID] = true
@@ -170,21 +198,27 @@ func (s *Server) syncAccounts(ctx context.Context, publish bool) {
 		if err != nil {
 			continue
 		}
-		if old, ok := s.acc.last[a.ID]; ok && bytes.Equal(old, data) {
+		old, ok := s.acc.last[a.ID]
+		if ok && bytes.Equal(old.data, data) {
 			continue
 		}
-		s.acc.last[a.ID] = data
+		s.acc.last[a.ID] = sentAccount{data: data, provider: a.Provider}
+		providers = providers || providerMoved(old, ok, a.Provider)
 		if publish {
 			s.publish(api.StreamAccountUpdated, a)
 		}
 	}
-	for id := range s.acc.last {
+	for id, old := range s.acc.last {
 		if !seen[id] {
 			delete(s.acc.last, id)
+			providers = providers || old.provider != ""
 			if publish {
 				s.publish(api.StreamAccountDeleted, api.Deleted{ID: id})
 			}
 		}
+	}
+	if publish && providers {
+		s.changed(api.StreamProvidersChanged)
 	}
 }
 

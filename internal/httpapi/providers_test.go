@@ -3,12 +3,79 @@ package httpapi_test
 import (
 	"net/http"
 	"slices"
+	"strings"
 	"testing"
 
+	"github.com/NovaSeele/Seelegent/internal/account"
 	"github.com/NovaSeele/Seelegent/internal/api"
 )
 
-// TestProviderAllowList: Provider.models is the allow-list exactly as set (never the tier models), allowedModels the
+// TestProvidersChangedOnAccounts: Provider.accounts counts the accounts, so adding or removing an account of a
+// provider sends providers.changed, through the handlers and through the account feed (changes it only sees).
+func TestProvidersChangedOnAccounts(t *testing.T) {
+	e := newEnv(t)
+	e.must(e.post("/api/v1/providers", map[string]any{"id": "ds", "preset": "deepseek"}), http.StatusCreated)
+	var boot api.BootState
+	e.must(e.get("/api/v1/state"), http.StatusOK).json(t, &boot)
+	stream := e.stream(boot.LastEventID)
+	count := func(want int) {
+		t.Helper()
+		var pl api.ProviderList
+		e.must(e.get("/api/v1/providers"), http.StatusOK).json(t, &pl)
+		if len(pl.Items) != 1 || pl.Items[0].Accounts != want {
+			t.Fatalf("providers = %+v, want %d account(s)", pl.Items, want)
+		}
+	}
+	// next returns the next account or provider frame, skipping the rest.
+	next := func() frame {
+		t.Helper()
+		for {
+			f := stream.next()
+			if strings.HasPrefix(f.event, "account.") || f.event == "providers.changed" {
+				return f
+			}
+		}
+	}
+	expect := func(events ...string) {
+		t.Helper()
+		for _, want := range events {
+			if f := next(); f.event != want {
+				t.Fatalf("frame %s %s, want %s", f.event, f.data, want)
+			}
+		}
+	}
+
+	// An account without a provider changes no provider: its account.updated comes alone, and the next frame
+	// belongs to the API-key account.
+	var plain, keyed api.Account
+	e.must(e.post("/api/v1/accounts", map[string]any{"backend": "agy", "kind": "isolated", "label": "P",
+		"enabled": false}), http.StatusCreated).json(t, &plain)
+	expect("account.updated")
+	e.must(e.post("/api/v1/accounts", map[string]any{"backend": "claude", "kind": "api-key", "label": "K",
+		"provider": "ds"}), http.StatusCreated).json(t, &keyed)
+	expect("account.updated", "providers.changed")
+	count(1)
+	e.must(e.req(http.MethodDelete, "/api/v1/accounts/"+keyed.ID, nil, nil), http.StatusNoContent)
+	expect("account.deleted", "providers.changed")
+	count(0)
+
+	// Changes the handlers never saw reach the clients through the feed.
+	a, _, err := e.a.Accounts.Add(t.Context(), account.New{Backend: "claude", Kind: account.KindAPIKey, Label: "D",
+		Provider: "ds"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.a.Pool.Notify()
+	expect("account.updated", "providers.changed")
+	if err := e.a.Accounts.Remove(t.Context(), a.ID); err != nil {
+		t.Fatal(err)
+	}
+	e.a.Pool.Notify()
+	expect("account.deleted", "providers.changed")
+	count(0)
+}
+
+// TestProviderAllowList:Provider.models is the allow-list exactly as set (never the tier models), allowedModels the
 // pattern enforced; a hand-written pattern answers models []; models [] clears both (any model); the tier models
 // stay allowed on top of the list.
 func TestProviderAllowList(t *testing.T) {

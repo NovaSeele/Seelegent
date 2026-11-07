@@ -240,7 +240,7 @@ func New(o Options) (*Server, error) {
 	s := &Server{o: o, log: o.Logger, classifier: o.Classifier, clock: o.Now, ctx: ctx, cancel: cancel,
 		devHosts: devHosts, devOrigins: devOrigins,
 		suggestions: map[string]api.Suggestion{}, accountsKick: make(chan struct{}, 1),
-		acc: accountCache{last: map[string][]byte{}}}
+		acc: accountCache{last: map[string]sentAccount{}}}
 	hub, err := NewHub(HubOptions{Now: o.Now})
 	if err != nil {
 		cancel()
