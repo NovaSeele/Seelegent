@@ -199,7 +199,9 @@ func TestEnsureStartFails(t *testing.T) {
 		!strings.Contains(err.Error(), "daemon.log") {
 		t.Fatalf("exited = %v", err)
 	}
-	silent := NewDaemon(DaemonOptions{Paths: testPaths(t), Port: port, StartTimeout: 200 * time.Millisecond,
+	// Long enough to reach the spawn under load: with less, a busy machine can spend the whole deadline
+	// on the locks and report "ran out before one could be started" instead.
+	silent := NewDaemon(DaemonOptions{Paths: testPaths(t), Port: port, StartTimeout: 1500 * time.Millisecond,
 		PollInterval: 20 * time.Millisecond,
 		Start:        func(context.Context) (<-chan error, error) { return make(chan error), nil }})
 	if _, err := silent.Ensure(t.Context()); err == nil || !strings.Contains(err.Error(), "did not answer") {
