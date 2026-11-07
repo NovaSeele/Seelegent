@@ -9,8 +9,9 @@
 //
 //   - "<exe> __launch <dir>": the launcher (internal/launch.Run), as the daemon runs it;
 //   - with FAKECLI_QUEUE set: the fake CLI. Whatever its arguments, it takes the next script of the queue directory
-//     (scripts are taken in the order they were pushed, each once), records its arguments, standard input and
-//     working directory next to the script, and replays it;
+//     (scripts are taken in the order they were pushed, each once), records its arguments, standard input,
+//     working directory and the variables FAKECLI_RECORD_ENV names (comma-separated) next to the script, and
+//     replays it;
 //   - otherwise: the tests.
 //
 // A script is a recorded stream: every line goes to standard output, except directive lines:
@@ -86,7 +87,12 @@ type Record struct {
 	Args   []string `json:"args"`
 	Stdin  string   `json:"stdin"`
 	Dir    string   `json:"dir"`
+	// Env holds the variables named by FAKECLI_RECORD_ENV that were set.
+	Env map[string]string `json:"env,omitempty"`
 }
+
+// EnvRecord names the variables (comma-separated) the fake CLI records in Record.Env.
+const EnvRecord = "FAKECLI_RECORD_ENV"
 
 // Queue is the list of scripts the fake CLI replays, one per run.
 type Queue struct {
@@ -247,6 +253,14 @@ func runCLI(dir string) int {
 	stdin := readStdin()
 	rec := Record{Script: name, Args: os.Args[1:], Stdin: stdin}
 	rec.Dir, _ = os.Getwd()
+	for _, n := range strings.Split(os.Getenv(EnvRecord), ",") {
+		if v, ok := os.LookupEnv(n); ok && n != "" {
+			if rec.Env == nil {
+				rec.Env = map[string]string{}
+			}
+			rec.Env[n] = v
+		}
+	}
 	if data, err := json.Marshal(rec); err == nil {
 		//nolint:gosec // the test's own queue folder
 		_ = os.WriteFile(filepath.Join(dir, strings.TrimSuffix(name, ".script")+".record.json"), data, 0o600)

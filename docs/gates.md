@@ -72,7 +72,11 @@ of the project file it came from, and a spec's `Gate:` and `Feature gate:` lines
 place a regression run uses. The worker's brief prints each command as the gate runs it. They run with the daemon's
 environment plus `CI=1`, `SEELEGENT_GATE=1`, `SEELEGENT_TASK` and `SEELEGENT_TURN_FILES` (the changed files, one
 per line; left out, also when inherited, if longer than 16000 characters), `gateTimeoutSec` each, in their own
-process tree (killed on timeout or cancel). The full output goes to `tasks/<id>/gate-t<turn>-<n>.log`; the step
+process tree (killed on timeout or cancel). In a Rust repository they also get the `RUSTUP_TOOLCHAIN` the worker
+got: when every Cargo folder within three levels picks the same toolchain (`rustup show active-toolchain`, run
+with the real home and `RUSTUP_AUTO_INSTALL=0`) and the daemon's environment does not set one, that toolchain is
+pinned, so a dependency's own `rust-toolchain.toml` cannot switch compilers mid-build (error E0514). Regression
+runs get the same pin. The full output goes to `tasks/<id>/gate-t<turn>-<n>.log`; the step
 keeps the last `gateOutputTailBytes`.
 
 Gate commands run outside the git guard and without `SEELEGENT_WORKER=1`: test suites legitimately run

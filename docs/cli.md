@@ -210,6 +210,7 @@ when no daemon of the data directory runs does it check writability by writing a
 | `backend_<id>` | enabled and its CLI found (`backend.Find`), or disabled | – | enabled but not found |
 | `accounts` | counts: total, enabled and (daemon running) usable | no enabled account, or counts unknown | – |
 | `path` | no relative PATH entries | relative entries (a worker would resolve them in the project folder) | – |
+| `cargo` (only when rustup is installed) | the first `cargo` on PATH is rustup's proxy | no `cargo` on PATH; or another `cargo` comes first (a dependency's own `rust-toolchain.toml` can then switch compilers mid-build, error E0514, in your own shells; workers and gates are pinned) | – |
 
 There is no host registration check (MCP entries, skills) yet; `seelegent setup --dry-run` shows what is
 registered.

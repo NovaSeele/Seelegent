@@ -128,6 +128,8 @@ type App struct {
 	settings atomic.Pointer[config.Settings]
 	log      *slog.Logger
 	env      []string
+	// toolchains pins RUSTUP_TOOLCHAIN for workers, gates and regression runs in Rust repositories.
+	toolchains *account.Toolchains
 
 	info       buildinfo.Info
 	web        fs.FS
@@ -299,11 +301,15 @@ func (a *App) build(o Options) error {
 	shim := installShim(a.log, o.Paths.GuardBin, o.GuardExe)
 	a.Git = gitx.New(now, gitBin)
 	ledger := proof.NewLedger(a.DB, now)
+	// One toolchain probe for the daemon: worker turns, task gates and regression runs get the same pin (cached
+	// per folder).
+	a.toolchains = account.NewToolchains(o.RealHome, nil, now)
 	a.Tasks, err = task.New(task.Options{
 		DB: a.DB, Accounts: a.Accounts, Pool: p, Backends: a.Backends, Settings: a.Settings,
 		TasksDir: o.Paths.Tasks, Launcher: o.Launcher, Usage: a.Usage, QuotaRefresh: a.Refresher.Request,
 		Memory: a.Memory, Roles: a.Roles, Consoles: consoles, Clock: o.Clock, Logger: a.log,
 		BaseEnv:       func() []string { return a.env },
+		Toolchains:    a.toolchains,
 		Dashboard:     a.dashboardLink,
 		Git:           gitBin,
 		GitShim:       shim,

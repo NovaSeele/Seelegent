@@ -165,7 +165,7 @@ func (s *Service) consoleFor(ctx context.Context, t *Task, b backend.Backend, di
 		return ConsoleSpec{}, fmt.Errorf("%w: %s is not installed", ErrUnavailable, b.Name())
 	}
 	env, err := s.o.Accounts.Env(ctx, acc, b, account.EnvOptions{Base: s.o.BaseEnv(), Model: t.Model,
-		AllowGit: t.AllowGit})
+		AllowGit: t.AllowGit, Extra: s.toolEnv(ctx, t.Cwd)})
 	if err != nil {
 		return ConsoleSpec{}, fmt.Errorf("%w: console environment: %w", ErrUnavailable, err)
 	}

@@ -1,5 +1,6 @@
 // Package doctor checks a Seelegent installation for `seelegent doctor`: the data directory, the settings, the
-// database, the daemon, the embedded dashboard, git, the enabled backend CLIs, the accounts (counts only) and PATH.
+// database, the daemon, the embedded dashboard, git, the enabled backend CLIs, the accounts (counts only), PATH and,
+// when rustup is installed, whether the first cargo on PATH is rustup's proxy.
 // It reads only: it never starts the daemon, never migrates the database and never prints an e-mail address or key.
 package doctor
 
@@ -10,8 +11,10 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
+	"github.com/NovaSeele/Seelegent/internal/account"
 	"github.com/NovaSeele/Seelegent/internal/api"
 	"github.com/NovaSeele/Seelegent/internal/backend"
 	"github.com/NovaSeele/Seelegent/internal/client"
@@ -73,7 +76,11 @@ func Run(ctx context.Context, o Options) []Check {
 	d, c := daemon(ctx, o)
 	out = append(out, d, portFile(o), dashboard(o.Web), git(o.GitPath))
 	out = append(out, backends(o)...)
-	return append(out, accounts(ctx, o, c), pathEntries(o.Env))
+	out = append(out, accounts(ctx, o, c), pathEntries(o.Env))
+	if c, ok := cargo(o.Env, o.RealHome, runtime.GOOS); ok {
+		out = append(out, c)
+	}
+	return out
 }
 
 // Failed reports whether any check failed.
@@ -246,6 +253,32 @@ func backends(o Options) []Check {
 		out = append(out, c)
 	}
 	return out
+}
+
+// cargo checks that the first cargo on PATH is rustup's proxy. ok is false when rustup is not installed (no check).
+func cargo(env []string, realHome, goos string) (c Check, ok bool) {
+	state, rustup, cargo := account.CargoOnPath(env, realHome)
+	userBin := "~/.cargo/bin"
+	if goos == "windows" {
+		userBin = `%USERPROFILE%\.cargo\bin`
+	}
+	c = Check{Name: "cargo"}
+	switch state {
+	case account.CargoNoRustup:
+		return c, false
+	case account.CargoMissing:
+		c.Status, c.Message = Warn, fmt.Sprintf("rustup is installed (%s) but no cargo is on PATH", rustup)
+		c.Fix = "add " + userBin + " to PATH"
+	case account.CargoProxy:
+		c.Status, c.Message = OK, fmt.Sprintf("cargo on PATH is the rustup proxy (%s)", cargo)
+	case account.CargoPlain:
+		c.Status = Warn
+		c.Message = fmt.Sprintf("the first cargo on PATH is %s, not the rustup proxy in %s. A plain cargo lets a "+
+			"dependency's own rust-toolchain.toml switch compilers mid-build (error E0514). Seelegent pins "+
+			"RUSTUP_TOOLCHAIN for workers and gates; your own shells are not covered", cargo, filepath.Dir(rustup))
+		c.Fix = fmt.Sprintf("put %s before %s in PATH", userBin, filepath.Dir(cargo))
+	}
+	return c, true
 }
 
 func envFor(name string) string {

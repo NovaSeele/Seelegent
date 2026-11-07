@@ -492,7 +492,7 @@ func (s *Service) launchAndFollow(r *run, t *Task, turn, n int, acc account.Acco
 	set := s.settings()
 	tu := t.TurnN(turn)
 	env, err := s.o.Accounts.Env(ctx, acc, b, account.EnvOptions{Base: s.o.BaseEnv(), Model: model,
-		AllowGit: t.AllowGit})
+		AllowGit: t.AllowGit, Extra: s.toolEnv(ctx, t.Cwd)})
 	if err != nil {
 		if errors.Is(err, account.ErrNoKey) || errors.Is(err, account.ErrProviderUnavailable) {
 			return failed(event.ClassAuthRequired, err)
