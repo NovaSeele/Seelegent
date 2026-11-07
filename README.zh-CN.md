@@ -60,7 +60,7 @@ curl -fsSL https://raw.githubusercontent.com/NovaSeele/Seelegent/main/scripts/in
 安装脚本会下载最新版本，用该版本的 `checksums.txt` 校验 SHA-256，把 `seelegent` 放入 PATH（Windows 上是
 `%LOCALAPPDATA%\Programs\seelegent\bin`，其他系统是 `~/.local/bin`），如果发现旧版本的数据就导入，然后为本机的
 lead 宿主运行 `seelegent setup`。完成后请打开新的终端并重启 lead 宿主。`--version`、`--install-dir`、`--no-setup`
-等选项见 [docs/release.md](docs/release.md#installing)。
+（sh）或 `-Version`、`-InstallDir`、`-NoSetup`（PowerShell）等选项见 [docs/release.md](docs/release.md#installing)。
 
 ## 快速上手
 
@@ -80,10 +80,11 @@ lead 宿主运行 `seelegent setup`。完成后请打开新的终端并重启 le
 
 ## 功能
 
-**Worker 与账号。** 三种后端（`agy`、`claude`、`codex`）和三种账号：带独立登录的隔离 profile、本机已有的登录，或某个
-提供方的 API 密钥（Anthropic、DeepSeek、Moonshot Kimi、Z.ai GLM、OpenRouter、OpenAI、Groq、本地 Ollama，或自定义
-端点）。账号池读取每个账号的配额窗口，优先选择优先级更高、运行中任务更少、剩余配额更多的账号。模型档位 `fast`、
-`standard`、`strong` 和 `max` 按后端映射到实际模型。见 [配置](docs/configuration.md)。
+**Worker 与账号。** 三种后端（`agy`、`claude`、`codex`）和三种账号：带独立登录的隔离 profile、本机已有的登录（仅
+`agy`），或某个提供方的 API 密钥（仅 `claude` 和 `codex`：Anthropic、DeepSeek、Moonshot Kimi、Z.ai GLM、OpenRouter、
+OpenAI、Groq、本地 Ollama，或自定义端点）。账号池读取每个账号的配额窗口，优先选择优先级更高、运行中任务更少、剩余
+配额更多的账号。模型档位 `fast`、`standard`、`strong` 和 `max` 按后端映射到实际模型。见
+[配置](docs/configuration.md)。
 
 **任务。** 一个任务就是一段对话：先 `delegate`，再按需多次 `followup`，最后用 `review` 给出 `accepted` 或
 `rejected`。任务可以并行运行，可以互相等待（`after`），每份 brief 都附带项目记忆和审阅历史，可以按某个 worker 角色
@@ -99,8 +100,8 @@ worker（默认 2 次），之后才唤醒 lead。通道列出任务可以修改
 **团队。** 成员是有名字的 worker，带有后端、模型或档位、角色和级别（工人、资深、同级：`worker`、`senior`、`peer`）。
 你可以请资深或同级成员对已完成的任务给出第二意见（同级成员的反对意见在 lead 答复之前会阻止接受），在 diff 的行上
 留下审阅备注并作为一次追加要求统一发送，在做艰难决定前召集最多六名成员开会（同级成员可以正式记录异议），或者把同
-一份 brief 作为 2 到 5 个变体的竞赛在各自的 worktree 中运行，再应用胜出者。事件钩子会在任务开始、结束或需要你时运行
-你自己的 shell 命令。见 [团队](docs/team.md)。
+一份 brief 作为 2 到 5 个变体的竞赛在各自的 worktree 中运行，再应用胜出者。事件钩子会在任务、账号和守护进程的事件
+发生时运行你自己的 shell 命令（任务开始、结束或被阻塞，账号配额用尽或需要登录，等等）。见 [团队](docs/team.md)。
 
 **GitHub。** 连接一个仓库，把其中打开的 issue 同步到收件箱（也可以添加本地 issue），再把每个 issue 分拣为工单：拥有
 独立的 worktree 和分支，由一个或多个任务完成。工作被接受后，由你或 lead 让 Seelegent 提交、推送工单分支并创建草稿
@@ -114,8 +115,8 @@ token，再否则使用带比较链接的手动模式。见 [GitHub](docs/github
 每个任务有终端、树、图、文件和 Git 五种视图。26 种配色主题、七种界面语言、命令面板（`Ctrl+K`，macOS 上为
 `Cmd+K`）和键盘快捷键。仪表盘内嵌在二进制文件中，不从互联网加载任何内容。
 
-**命令行。** 每个 MCP 工具都有对应命令，所有命令都支持 `--json`：见 `seelegent --help` 和
-[docs/cli.md](docs/cli.md)。
+**命令行。** 除 `profiles` 外，每个 MCP 工具都有对应命令（worker 角色在 **角色** 页面和通过 `profiles` 工具编辑），
+所有命令都支持 `--json`：见 `seelegent --help` 和 [docs/cli.md](docs/cli.md)。
 
 ### 供 lead 使用的 MCP 工具
 
@@ -147,9 +148,10 @@ token，再否则使用带比较链接的手动模式。见 [GitHub](docs/github
 worker 工作的文件夹里，往往有你和其他 worker 尚未提交的改动。Seelegent 分层保护这些改动；任何一层都不会单独判定
 任务失败，而是告诉 lead 和仪表盘发生了什么。见 [docs/safety.md](docs/safety.md)。
 
-- **Git 保护。** worker 无法运行可能丢掉未提交改动或改写历史的 git 命令：`reset`、`restore`、`stash`、`checkout` 和
-  `switch`（创建新分支除外）、`clean`、`rebase`、`merge`、`pull`、`push`、`commit -a` 和 `--amend` 等等，藏在
-  `bash -c`、PowerShell、管道传给 shell 的命令或 git 别名里也一样。lead 可以用 `allow_git` 为一轮解除保护。
+- **Git 保护。** worker 无法运行可能丢掉未提交改动或改写历史的 git 命令：`reset`、`restore`、`stash`、`checkout`
+  （用 `checkout -b` 创建分支除外）、`switch`、`clean`、`rebase`、`merge`、`pull`、`push`、`commit -a` 和
+  `--amend` 等等，藏在 `bash -c`、PowerShell、管道传给 shell 的命令或 git 别名里也一样。lead 可以用 `allow_git`
+  为一轮解除保护。
 - **快照。** 每轮前后，Seelegent 都会记录仓库中未提交的文件，而不触碰你的 index、stash 或 ref。本轮可能弄丢的文件
   会显示为 *有风险*，可以在仪表盘中点击 **恢复**，或使用 `seelegent restore` 命令。
 - **轮后检查。** 换行符或 BOM 的变化、多余文件、写到项目之外的内容，以及与其他任务的重叠，都会在任务上报告。
@@ -165,17 +167,19 @@ worker 工作的文件夹里，往往有你和其他 worker 尚未提交的改�
 
 ## 数据与隐私
 
-- 一切都在你的机器上运行。守护进程只监听 `127.0.0.1`。没有遥测。
+- 一切都在你的机器上运行。守护进程只监听 `127.0.0.1`。Seelegent 本身不发送任何遥测；各 worker CLI 遵循它们自己的
+  设置。
 - 数据位于 `~/.seelegent`（设置 `SEELEGENT_HOME` 可以改位置）：`config.json`（设置）、`seelegent.db`（任务、账号、
-  用量、团队、工单、自动化）、`profiles/`（每个账号一个隔离 profile）、`snapshots/`、`worktrees/` 和 `logs/`。
-  见 [docs/configuration.md](docs/configuration.md)。
+  用量、团队、工单、自动化）、`profiles/`（每个账号一个隔离 profile，含其 API 密钥）、`github/`（token）、
+  `snapshots/`、`contests/`（保存的竞赛 diff）、`worktrees/`（仅用于竞赛和工单）、`run/` 和 `logs/`。见
+  [docs/configuration.md](docs/configuration.md)。
 - Seelegent 从不索要密码。每个 worker CLI 用自己的流程登录，并把 token 保存在账号的 profile 中。API 密钥和 GitHub
   token 各自存放在单独的文件里：在 Windows 上用 DPAPI 加密，在其他系统上是仅所有者可读（0600）的明文；仪表盘只显示
   最后四个字符，日志会遮盖所有机密。
 - 会离开本机的内容：worker CLI 与各自的服务商通信（这就是工作本身）；配额通过 CLI 读取（对于 Claude 登录账号，则用
   该账号自己的登录信息访问 Anthropic 的用量接口）；API 密钥账号调用你配置的提供方；GitHub 只会因你连接的仓库而被
   访问（同步、每 10 分钟轮询一次 issue 和 pull request，可用 `githubPollMinutes: 0` 关闭，以及你或 lead 要求的推送、
-  pull request 和评论），此外还有安装脚本和 `seelegent update`。
+  pull request 和评论），以及在你打开 **Issue** 页面时检查你的 GitHub 登录；此外还有安装脚本和 `seelegent update`。
 
 ## 更新与卸载
 
@@ -196,13 +200,13 @@ worker 工作的文件夹里，往往有你和其他 worker 尚未提交的改�
 旧的 Node 版本把数据放在同一个文件夹。首次安装时，安装脚本会运行 `seelegent migrate`，导入设置、提供方、账号（含
 profile 和 API 密钥）、项目记忆和审阅历史、角色、成员、钩子、会议记录和自动化（所有自动化都处于关闭状态，需要重新
 确认）。任务、审阅备注、竞赛、证据记录、用量历史和 GitHub 文件夹不会导入：请重新连接仓库并重新保存 token。旧文件夹
-永远不会被修改；在 Windows 上，旧的启动器保留为 `seelegent-node`。安装前请先停止旧的守护进程，并可运行
-`seelegent migrate --dry-run` 预览将导入的内容。见 [docs/setup.md](docs/setup.md#seelegent-migrate)。
+永远不会被修改。在 Windows 上，如果安装文件夹中有旧的启动器，它会保留为 `seelegent-node`。安装前请先停止旧的守护
+进程，并可运行 `seelegent migrate --dry-run` 预览将导入的内容。见 [docs/setup.md](docs/setup.md#seelegent-migrate)。
 
 ## 故障排查
 
 - `seelegent doctor` 检查数据文件夹、设置、数据库、守护进程、git、每个已启用的 worker CLI、账号和 PATH，并说明如何
-  修复失败项。它不会改动任何东西。
+  修复失败项。除了在数据文件夹中做一次写入测试（`.doctor-write-test`，随后删除）之外，它不会改动任何东西。
 - `seelegent status` 显示守护进程、账号及配额，以及需要你处理的任务；`seelegent restart` 重启守护进程。日志位于
   `~/.seelegent/logs/daemon.log`。
 - `seelegent setup --dry-run` 显示各 lead 宿主上已注册的内容。运行 setup 或更新后请重启宿主。

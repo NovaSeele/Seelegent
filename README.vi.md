@@ -65,8 +65,8 @@ curl -fsSL https://raw.githubusercontent.com/NovaSeele/Seelegent/main/scripts/in
 Trình cài đặt tải bản phát hành mới nhất, đối chiếu SHA-256 với `checksums.txt` của bản phát hành, đặt `seelegent`
 vào PATH (`%LOCALAPPDATA%\Programs\seelegent\bin` trên Windows, `~/.local/bin` trên hệ khác), nhập dữ liệu của phiên
 bản cũ nếu có, rồi chạy `seelegent setup` cho các host lead trên máy. Sau đó hãy mở terminal mới và khởi động lại
-các host lead. Các tùy chọn như `--version`, `--install-dir` và `--no-setup` có trong
-[docs/release.md](docs/release.md#installing).
+các host lead. Các tùy chọn như `--version`, `--install-dir` và `--no-setup` (sh) hay `-Version`, `-InstallDir` và
+`-NoSetup` (PowerShell) có trong [docs/release.md](docs/release.md#installing).
 
 ## Bắt đầu
 
@@ -89,11 +89,11 @@ các host lead. Các tùy chọn như `--version`, `--install-dir` và `--no-set
 ## Tính năng
 
 **Worker và tài khoản.** Ba backend (`agy`, `claude`, `codex`) và ba loại tài khoản: profile cô lập với đăng nhập
-riêng, đăng nhập sẵn có của máy này, hoặc khóa API của một nhà cung cấp (Anthropic, DeepSeek, Moonshot Kimi, Z.ai
-GLM, OpenRouter, OpenAI, Groq, Ollama chạy local, hoặc endpoint tùy chỉnh). Nhóm tài khoản đọc các khung hạn mức của
-từng tài khoản và ưu tiên tài khoản có độ ưu tiên cao hơn, ít tác vụ đang chạy hơn và còn nhiều hạn mức hơn. Các mức
-model `fast`, `standard`, `strong` và `max` ánh xạ sang model thật của từng backend. Xem
-[cấu hình](docs/configuration.md).
+riêng, đăng nhập sẵn có của máy này (chỉ `agy`), hoặc khóa API của một nhà cung cấp (chỉ `claude` và `codex`:
+Anthropic, DeepSeek, Moonshot Kimi, Z.ai GLM, OpenRouter, OpenAI, Groq, Ollama chạy local, hoặc endpoint tùy chỉnh).
+Nhóm tài khoản đọc các khung hạn mức của từng tài khoản và ưu tiên tài khoản có độ ưu tiên cao hơn, ít tác vụ đang
+chạy hơn và còn nhiều hạn mức hơn. Các mức model `fast`, `standard`, `strong` và `max` ánh xạ sang model thật của từng
+backend. Xem [cấu hình](docs/configuration.md).
 
 **Tác vụ.** Mỗi tác vụ là một cuộc hội thoại: `delegate`, rồi `followup` bao nhiêu lần tùy ý, rồi `review` với
 `accepted` hoặc `rejected`. Các tác vụ chạy song song, có thể chờ nhau (`after`), mọi brief đều kèm bộ nhớ dự án và
@@ -114,8 +114,9 @@ Ngang hàng: `worker`, `senior`, `peer`). Bạn có thể hỏi ý kiến thứ 
 một tác vụ đã xong (phản đối của thành viên ngang hàng chặn việc chấp nhận cho tới khi lead trả lời), để ghi chú
 review trên từng dòng diff rồi gửi tất cả thành một lần giao thêm, họp tối đa sáu thành viên trước một quyết định khó
 (thành viên ngang hàng còn có thể ghi nhận bất đồng chính thức), hoặc chạy một brief thành cuộc thi 2 đến 5 phiên bản
-trong các worktree riêng rồi áp dụng bản thắng. Hook sự kiện chạy lệnh shell của bạn khi tác vụ bắt đầu, kết thúc
-hoặc cần bạn. Xem [làm việc nhóm](docs/team.md).
+trong các worktree riêng rồi áp dụng bản thắng. Hook sự kiện chạy lệnh shell của bạn khi có sự kiện của tác vụ, tài
+khoản hay daemon (tác vụ bắt đầu, kết thúc hoặc bị chặn, tài khoản hết hạn mức hoặc cần đăng nhập, và nhiều sự kiện
+khác). Xem [làm việc nhóm](docs/team.md).
 
 **GitHub.** Kết nối một kho, đồng bộ các issue đang mở vào hộp thư (hoặc tự thêm issue cục bộ), rồi phân loại từng
 issue thành ticket: một worktree và nhánh riêng, do một hay nhiều tác vụ làm. Khi công việc đã được chấp nhận, bạn
@@ -132,8 +133,8 @@ và Thành viên, cùng hộp thoại Cài đặt có tìm kiếm. Mỗi tác v�
 26 giao diện màu, bảy ngôn ngữ, bảng lệnh (`Ctrl+K`, `Cmd+K` trên macOS) và phím tắt. Dashboard được nhúng sẵn trong
 tệp chạy và không tải gì từ internet.
 
-**Dòng lệnh.** Mỗi công cụ MCP đều có lệnh tương ứng, và mọi lệnh đều nhận `--json`: xem `seelegent --help` và
-[docs/cli.md](docs/cli.md).
+**Dòng lệnh.** Mỗi công cụ MCP, trừ `profiles`, đều có lệnh tương ứng (vai trò worker được sửa ở trang **Vai trò**
+và qua công cụ `profiles`), và mọi lệnh đều nhận `--json`: xem `seelegent --help` và [docs/cli.md](docs/cli.md).
 
 ### Công cụ MCP cho lead
 
@@ -167,9 +168,9 @@ theo nhiều lớp; không lớp nào tự đánh trượt tác vụ, chúng bá
 [docs/safety.md](docs/safety.md).
 
 - **Bảo vệ Git.** Worker không chạy được các lệnh git có thể xóa thay đổi chưa commit hoặc viết lại lịch sử: `reset`,
-  `restore`, `stash`, `checkout` và `switch` (tạo nhánh mới thì được), `clean`, `rebase`, `merge`, `pull`, `push`,
-  `commit -a` và `--amend`, cùng nhiều lệnh khác, kể cả khi nằm trong `bash -c`, PowerShell, lệnh pipe vào shell hay
-  alias của git. Lead có thể tạm gỡ bảo vệ cho một lượt bằng `allow_git`.
+  `restore`, `stash`, `checkout` (trừ `checkout -b` để tạo nhánh), `switch`, `clean`, `rebase`, `merge`, `pull`,
+  `push`, `commit -a` và `--amend`, cùng nhiều lệnh khác, kể cả khi nằm trong `bash -c`, PowerShell, lệnh pipe vào
+  shell hay alias của git. Lead có thể tạm gỡ bảo vệ cho một lượt bằng `allow_git`.
 - **Bản chụp.** Trước và sau mỗi lượt, Seelegent ghi lại các tệp chưa commit của kho mà không đụng tới index, stash
   hay ref của bạn. Tệp mà lượt đó có thể đã làm mất sẽ hiện là *có nguy cơ mất*, kèm nút **Khôi phục** trong dashboard
   và lệnh `seelegent restore`.
@@ -189,10 +190,12 @@ chúng đã sửa.
 
 ## Dữ liệu và quyền riêng tư
 
-- Mọi thứ chạy trên máy bạn. Daemon chỉ lắng nghe trên `127.0.0.1`. Không có telemetry.
+- Mọi thứ chạy trên máy bạn. Daemon chỉ lắng nghe trên `127.0.0.1`. Bản thân Seelegent không gửi telemetry; các CLI
+  worker theo cài đặt riêng của chúng.
 - Dữ liệu nằm ở `~/.seelegent` (đặt `SEELEGENT_HOME` để đổi chỗ): `config.json` (cài đặt), `seelegent.db` (tác vụ,
-  tài khoản, mức sử dụng, nhóm, ticket, tự động), `profiles/` (mỗi tài khoản một profile cô lập), `snapshots/`,
-  `worktrees/` và `logs/`. Xem [docs/configuration.md](docs/configuration.md).
+  tài khoản, mức sử dụng, nhóm, ticket, tự động), `profiles/` (mỗi tài khoản một profile cô lập, kèm khóa API của
+  nó), `github/` (token), `snapshots/`, `contests/` (diff đã lưu của cuộc thi), `worktrees/` (chỉ cho cuộc thi và
+  ticket), `run/` và `logs/`. Xem [docs/configuration.md](docs/configuration.md).
 - Seelegent không bao giờ hỏi mật khẩu. Mỗi CLI worker đăng nhập bằng luồng riêng của nó và giữ token trong profile
   của tài khoản. Khóa API và token GitHub mỗi thứ nằm trong một tệp riêng, được mã hóa bằng DPAPI trên Windows và là
   văn bản thường chỉ chủ sở hữu đọc được (0600) trên hệ khác; dashboard chỉ hiện bốn ký tự cuối, và log che mọi bí
@@ -201,7 +204,8 @@ chúng đã sửa.
   các CLI (và với tài khoản Claude đăng nhập, qua endpoint usage của Anthropic bằng chính đăng nhập của tài khoản đó),
   tài khoản khóa API gọi nhà cung cấp bạn cấu hình, và GitHub chỉ được gọi cho những kho bạn kết nối (đồng bộ, kiểm
   tra issue và pull request mỗi 10 phút, tắt được bằng `githubPollMinutes: 0`, cùng các lần push, pull request và
-  bình luận do bạn hoặc lead yêu cầu), ngoài ra là trình cài đặt và `seelegent update`.
+  bình luận do bạn hoặc lead yêu cầu) và để kiểm tra đăng nhập GitHub của bạn khi bạn mở trang **Issue**, ngoài ra
+  là trình cài đặt và `seelegent update`.
 
 ## Cập nhật và gỡ cài đặt
 
@@ -226,14 +230,15 @@ Phiên bản Node cũ lưu dữ liệu ở cùng thư mục. Ở lần cài đ�
 đặt, nhà cung cấp, tài khoản kèm profile và khóa API, bộ nhớ dự án và lịch sử review, vai trò, thành viên, hook, biên
 bản họp và các tự động (mọi tự động đều tắt, chờ bạn xác nhận lại). Tác vụ, ghi chú review, cuộc thi, bản ghi bằng
 chứng, lịch sử sử dụng và thư mục GitHub không được nhập: hãy kết nối lại các kho và lưu lại token. Thư mục cũ không
-bao giờ bị sửa; trên Windows, lệnh khởi chạy cũ được giữ lại dưới tên `seelegent-node`. Hãy dừng daemon cũ trước khi
-cài, và chạy `seelegent migrate --dry-run` để xem trước những gì sẽ được nhập. Xem
-[docs/setup.md](docs/setup.md#seelegent-migrate).
+bao giờ bị sửa. Trên Windows, nếu lệnh khởi chạy cũ nằm trong thư mục cài đặt, nó được giữ lại dưới tên
+`seelegent-node`. Hãy dừng daemon cũ trước khi cài, và chạy `seelegent migrate --dry-run` để xem trước những gì sẽ
+được nhập. Xem [docs/setup.md](docs/setup.md#seelegent-migrate).
 
 ## Xử lý sự cố
 
 - `seelegent doctor` kiểm tra thư mục dữ liệu, cài đặt, cơ sở dữ liệu, daemon, git, từng CLI worker đang bật, tài
-  khoản và PATH, và chỉ cách sửa những gì hỏng. Lệnh này không thay đổi gì cả.
+  khoản và PATH, và chỉ cách sửa những gì hỏng. Lệnh này không thay đổi gì, ngoài một lần thử ghi trong thư mục dữ
+  liệu (`.doctor-write-test`, được xóa ngay sau đó).
 - `seelegent status` cho thấy daemon, tài khoản và hạn mức, và các tác vụ cần bạn; `seelegent restart` khởi động lại
   daemon. Log của daemon là `~/.seelegent/logs/daemon.log`.
 - `seelegent setup --dry-run` cho thấy những gì đã đăng ký với từng host lead. Khởi động lại host sau khi setup hoặc

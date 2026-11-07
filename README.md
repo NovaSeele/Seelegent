@@ -63,8 +63,8 @@ curl -fsSL https://raw.githubusercontent.com/NovaSeele/Seelegent/main/scripts/in
 The installer downloads the latest release, checks its SHA-256 against the release's `checksums.txt`, puts
 `seelegent` on your PATH (`%LOCALAPPDATA%\Programs\seelegent\bin` on Windows, `~/.local/bin` elsewhere), imports the
 old version's data if it finds any, and runs `seelegent setup` for the lead hosts on this machine. Open a new
-terminal and restart your lead hosts afterwards. Options such as `--version`, `--install-dir` and `--no-setup` are in
-[docs/release.md](docs/release.md#installing).
+terminal and restart your lead hosts afterwards. Options such as `--version`, `--install-dir` and `--no-setup` (sh)
+or `-Version`, `-InstallDir` and `-NoSetup` (PowerShell) are in [docs/release.md](docs/release.md#installing).
 
 ## First steps
 
@@ -87,10 +87,11 @@ terminal and restart your lead hosts afterwards. Options such as `--version`, `-
 ## Features
 
 **Workers and accounts.** Three backends (`agy`, `claude`, `codex`) and three kinds of account: an isolated profile
-with its own sign-in, the sign-in already on this computer, or an API key of a provider (Anthropic, DeepSeek, Moonshot
-Kimi, Z.ai GLM, OpenRouter, OpenAI, Groq, a local Ollama, or a custom endpoint). The pool reads each account's quota
-windows and prefers higher priority, fewer running tasks and more quota left. Model tiers `fast`, `standard`,
-`strong` and `max` map to real models per backend. See [configuration](docs/configuration.md).
+with its own sign-in, the sign-in already on this computer (`agy` only), or an API key of a provider (`claude` and
+`codex` only: Anthropic, DeepSeek, Moonshot Kimi, Z.ai GLM, OpenRouter, OpenAI, Groq, a local Ollama, or a custom
+endpoint). The pool reads each account's quota windows and prefers higher priority, fewer running tasks and more
+quota left. Model tiers `fast`, `standard`, `strong` and `max` map to real models per backend. See
+[configuration](docs/configuration.md).
 
 **Tasks.** A task is a conversation: `delegate`, then `followup` as often as needed, then `review` with `accepted`
 or `rejected`. Tasks run in parallel, can wait for each other (`after`), get the project's memory and review history
@@ -110,8 +111,9 @@ runs. See [gates](docs/gates.md).
 `peer`). Ask a senior or peer for a second opinion on a finished task (a peer's objection blocks acceptance until
 the lead answers it), leave review notes on diff lines and send them as one followup, hold a meeting of up to six
 members before a hard decision (a peer may record a formal dissent), or run one brief as a contest of 2 to 5
-variants in separate worktrees and apply the winner. Event hooks run your own shell commands when tasks start,
-finish or need you. See [team](docs/team.md).
+variants in separate worktrees and apply the winner. Event hooks run your own shell commands on task, account and
+daemon events (a task starts, finishes or is blocked, an account runs out or needs a sign-in, and more). See
+[team](docs/team.md).
 
 **GitHub.** Connect a repository, sync its open issues into an inbox (or add local ones), and triage each one into a
 ticket: its own worktree and branch, worked by one or more tasks. Once the work is accepted, you or the lead ask
@@ -128,8 +130,8 @@ Members, plus a searchable Settings dialog. Each task has Terminal, Tree, Graph,
 themes, seven interface languages, a command palette (`Ctrl+K`, `Cmd+K` on macOS) and keyboard shortcuts. It is
 embedded in the binary and loads nothing from the internet.
 
-**Command line.** Every MCP tool has a command, and every command takes `--json`: `seelegent --help`, and
-[docs/cli.md](docs/cli.md).
+**Command line.** Every MCP tool except `profiles` has a command (worker roles are edited on the **Roles** page and
+through the `profiles` tool), and every command takes `--json`: `seelegent --help`, and [docs/cli.md](docs/cli.md).
 
 ### MCP tools for the lead
 
@@ -162,9 +164,9 @@ Workers run in folders where you and other workers keep uncommitted work. Seeleg
 them fails a task on its own, they tell the lead and the dashboard what happened. See [docs/safety.md](docs/safety.md).
 
 - **Git guard.** Workers cannot run git commands that can throw away uncommitted work or rewrite history:
-  `reset`, `restore`, `stash`, `checkout` and `switch` (creating a branch is fine), `clean`, `rebase`, `merge`,
-  `pull`, `push`, `commit -a` and `--amend`, and more, also inside `bash -c`, PowerShell, pipes into a shell or git
-  aliases. The lead can lift it for one turn with `allow_git`.
+  `reset`, `restore`, `stash`, `checkout` (except `checkout -b` to create a branch), `switch`, `clean`, `rebase`,
+  `merge`, `pull`, `push`, `commit -a` and `--amend`, and more, also inside `bash -c`, PowerShell, pipes into a
+  shell or git aliases. The lead can lift it for one turn with `allow_git`.
 - **Snapshots.** Before and after every turn Seelegent records the repository's uncommitted files, without touching
   your index, stash or refs. Files the turn may have lost show up as *work at risk*, with a Restore button in the
   dashboard and `seelegent restore` on the command line.
@@ -183,10 +185,12 @@ These are guards, not a sandbox: worker CLIs run as your user. Review what they 
 
 ## Data and privacy
 
-- Everything runs on your machine. The daemon listens on `127.0.0.1` only. There is no telemetry.
+- Everything runs on your machine. The daemon listens on `127.0.0.1` only. Seelegent itself sends no telemetry; the
+  worker CLIs follow their own settings.
 - Data lives in `~/.seelegent` (set `SEELEGENT_HOME` to move it): `config.json` (settings), `seelegent.db` (tasks,
-  accounts, usage, team, tickets, automations), `profiles/` (one isolated profile per account), `snapshots/`,
-  `worktrees/` and `logs/`. See [docs/configuration.md](docs/configuration.md).
+  accounts, usage, team, tickets, automations), `profiles/` (one isolated profile per account, with its API key),
+  `github/` (the token), `snapshots/`, `contests/` (stored contest diffs), `worktrees/` (only for contests and
+  tickets), `run/` and `logs/`. See [docs/configuration.md](docs/configuration.md).
 - Seelegent never asks for passwords. Each worker CLI signs in with its own flow and keeps its tokens in the account's
   profile. API keys and the GitHub token are each stored in their own file, encrypted with DPAPI on Windows and as
   owner-only (0600) plain text elsewhere; the dashboard shows only their last four characters, and logs mask secrets.
@@ -194,7 +198,8 @@ These are guards, not a sandbox: worker CLIs run as your user. Review what they 
   CLIs (and, for Claude sign-ins, from Anthropic's usage endpoint with that account's own sign-in), API-key accounts
   call the provider you configured, and GitHub is called only for repositories you connect (syncing, a poll of
   their issues and pull requests every 10 minutes, which `githubPollMinutes: 0` turns off, and the pushes, pull
-  requests and comments you or the lead ask for) and by the installers and `seelegent update`.
+  requests and comments you or the lead ask for), to check your GitHub sign-in when you open **Issues**, and by the
+  installers and `seelegent update`.
 
 ## Update and uninstall
 
@@ -218,14 +223,15 @@ The old Node version kept its data in the same folder. On the first install the 
 which imports settings, providers, accounts with their profiles and API keys, project memory and review history,
 roles, members, hooks, meeting records and automations (every automation off, to confirm again). Tasks, review
 notes, contests, proof records, usage history and the GitHub folder are not imported: connect your repositories and
-store the token again. The old folder is never changed; the old launcher is kept as `seelegent-node` on Windows.
-Stop the old daemon before you install, and run `seelegent migrate --dry-run` to see what would be imported. See
-[docs/setup.md](docs/setup.md#seelegent-migrate).
+store the token again. The old folder is never changed. On Windows, if the old launcher is in the install folder, it
+is kept as `seelegent-node`. Stop the old daemon before you install, and run `seelegent migrate --dry-run` to see
+what would be imported. See [docs/setup.md](docs/setup.md#seelegent-migrate).
 
 ## Troubleshooting
 
 - `seelegent doctor` checks the data folder, settings, database, daemon, git, each enabled worker CLI, accounts and
-  PATH, and says how to fix what fails. It never changes anything.
+  PATH, and says how to fix what fails. It changes nothing apart from a write test in the data folder
+  (`.doctor-write-test`, removed again).
 - `seelegent status` shows the daemon, accounts with quota and the tasks that need you; `seelegent restart` restarts
   the daemon. Its log is `~/.seelegent/logs/daemon.log`.
 - `seelegent setup --dry-run` shows what is registered with each lead host. Restart a host after setup or update.

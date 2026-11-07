@@ -62,8 +62,8 @@ curl -fsSL https://raw.githubusercontent.com/NovaSeele/Seelegent/main/scripts/in
 설치 프로그램은 최신 릴리스를 내려받아 릴리스의 `checksums.txt`로 SHA-256을 확인하고, `seelegent`를 PATH에
 넣고(Windows는 `%LOCALAPPDATA%\Programs\seelegent\bin`, 그 밖에는 `~/.local/bin`), 이전 버전의 데이터가 있으면
 가져온 다음, 이 컴퓨터의 리드 호스트에 대해 `seelegent setup`을 실행합니다. 끝나면 새 터미널을 열고 리드 호스트를
-다시 시작하세요. `--version`, `--install-dir`, `--no-setup` 같은 옵션은 [docs/release.md](docs/release.md#installing)에
-있습니다.
+다시 시작하세요. `--version`, `--install-dir`, `--no-setup`(sh)이나 `-Version`, `-InstallDir`, `-NoSetup`(PowerShell)
+같은 옵션은 [docs/release.md](docs/release.md#installing)에 있습니다.
 
 ## 첫걸음
 
@@ -85,10 +85,10 @@ curl -fsSL https://raw.githubusercontent.com/NovaSeele/Seelegent/main/scripts/in
 ## 기능
 
 **워커와 계정.** 백엔드 세 가지(`agy`, `claude`, `codex`)와 계정 세 종류: 별도 로그인을 가진 격리 프로필, 이 컴퓨터에
-이미 있는 로그인, 제공자의 API 키(Anthropic, DeepSeek, Moonshot Kimi, Z.ai GLM, OpenRouter, OpenAI, Groq, 로컬
-Ollama, 또는 사용자 지정 엔드포인트). 계정 풀은 각 계정의 할당량 창을 읽고, 우선순위가 높고 실행 중인 작업이 적고
-남은 할당량이 많은 계정을 먼저 씁니다. 모델 티어 `fast`, `standard`, `strong`, `max`는 백엔드마다 실제 모델에
-연결됩니다. [설정](docs/configuration.md)을 보세요.
+이미 있는 로그인(`agy`만), 제공자의 API 키(`claude`와 `codex`만: Anthropic, DeepSeek, Moonshot Kimi, Z.ai GLM,
+OpenRouter, OpenAI, Groq, 로컬 Ollama, 또는 사용자 지정 엔드포인트). 계정 풀은 각 계정의 할당량 창을 읽고,
+우선순위가 높고 실행 중인 작업이 적고 남은 할당량이 많은 계정을 먼저 씁니다. 모델 티어 `fast`, `standard`,
+`strong`, `max`는 백엔드마다 실제 모델에 연결됩니다. [설정](docs/configuration.md)을 보세요.
 
 **작업.** 작업은 하나의 대화입니다. `delegate` 다음 필요한 만큼 `followup`을 보내고, 마지막에 `review`로
 `accepted` 또는 `rejected`를 줍니다. 작업은 병렬로 실행되고, 서로를 기다릴 수 있으며(`after`), 모든 브리프에
@@ -107,8 +107,8 @@ Ollama, 또는 사용자 지정 엔드포인트). 계정 풀은 각 계정의 �
 `peer`)을 가집니다. 끝난 작업에 대해 시니어나 동료에게 두 번째 의견을 구하거나(동료의 이의는 리드가 답할 때까지
 승인을 막습니다), diff 줄에 리뷰 노트를 남겨 한 번의 추가 요청으로 보내거나, 어려운 결정 전에 멤버 최대 여섯 명과
 회의를 열거나(동료는 공식적으로 반대를 기록할 수 있습니다), 같은 브리프를 별도 worktree에서 2~5개 변형으로 겨루는
-대회를 열고 우승자를 적용할 수 있습니다. 이벤트 훅은 작업이 시작·종료되거나 여러분이 필요할 때 여러분의 셸 명령을
-실행합니다. [팀](docs/team.md)을 보세요.
+대회를 열고 우승자를 적용할 수 있습니다. 이벤트 훅은 작업, 계정, 데몬 이벤트(작업의 시작·종료·차단, 계정의 할당량
+소진이나 로그인 필요 등)가 있을 때 여러분의 셸 명령을 실행합니다. [팀](docs/team.md)을 보세요.
 
 **GitHub.** 저장소를 연결하고, 열린 이슈를 받은 함으로 동기화하고(로컬 이슈도 추가 가능), 각각을 티켓으로
 분류합니다. 티켓은 자기 worktree와 브랜치를 가지며 하나 이상의 작업으로 처리됩니다. 작업이 승인되면 여러분이나 리드가
@@ -125,8 +125,8 @@ Seelegent에게 커밋, 티켓 브랜치 푸시, 초안 pull request 열기를 �
 명령 팔레트(`Ctrl+K`, macOS에서는 `Cmd+K`), 키보드 단축키를 제공합니다. 대시보드는 바이너리에 내장되어 있으며
 인터넷에서 아무것도 불러오지 않습니다.
 
-**명령줄.** 모든 MCP 도구에 해당 명령이 있고, 모든 명령이 `--json`을 받습니다. `seelegent --help`와
-[docs/cli.md](docs/cli.md)를 보세요.
+**명령줄.** `profiles`를 뺀 모든 MCP 도구에 해당 명령이 있고(워커 역할은 **역할** 페이지와 `profiles` 도구로
+편집합니다), 모든 명령이 `--json`을 받습니다. `seelegent --help`와 [docs/cli.md](docs/cli.md)를 보세요.
 
 ### 리드를 위한 MCP 도구
 
@@ -160,9 +160,9 @@ Seelegent에게 커밋, 티켓 브랜치 푸시, 초안 pull request 열기를 �
 [docs/safety.md](docs/safety.md)를 보세요.
 
 - **Git 보호.** 워커는 커밋하지 않은 변경을 날리거나 기록을 다시 쓸 수 있는 git 명령을 실행할 수 없습니다:
-  `reset`, `restore`, `stash`, `checkout`과 `switch`(새 브랜치 만들기는 허용), `clean`, `rebase`, `merge`, `pull`,
-  `push`, `commit -a`와 `--amend` 등. `bash -c`, PowerShell, 셸로 넘기는 파이프, git 별칭 안에 있어도 마찬가지입니다.
-  리드는 `allow_git`으로 한 턴 동안 보호를 풀 수 있습니다.
+  `reset`, `restore`, `stash`, `checkout`(브랜치를 만드는 `checkout -b`는 제외), `switch`, `clean`, `rebase`,
+  `merge`, `pull`, `push`, `commit -a`와 `--amend` 등. `bash -c`, PowerShell, 셸로 넘기는 파이프, git 별칭 안에
+  있어도 마찬가지입니다. 리드는 `allow_git`으로 한 턴 동안 보호를 풀 수 있습니다.
 - **스냅샷.** 매 턴 전후로 Seelegent는 저장소의 커밋되지 않은 파일을 기록하며, 여러분의 index, stash, ref는 건드리지
   않습니다. 그 턴에서 잃어버렸을 수 있는 파일은 *위험한 파일*로 표시되고, 대시보드의 **복원** 버튼이나
   `seelegent restore`로 되돌릴 수 있습니다.
@@ -182,9 +182,11 @@ Seelegent에게 커밋, 티켓 브랜치 푸시, 초안 pull request 열기를 �
 
 ## 데이터와 개인 정보
 
-- 모든 것이 여러분의 컴퓨터에서 실행됩니다. 데몬은 `127.0.0.1`에서만 수신합니다. 원격 측정은 없습니다.
+- 모든 것이 여러분의 컴퓨터에서 실행됩니다. 데몬은 `127.0.0.1`에서만 수신합니다. Seelegent 자체는 원격 측정을
+  보내지 않으며, 워커 CLI는 각자의 설정을 따릅니다.
 - 데이터는 `~/.seelegent`에 있습니다(`SEELEGENT_HOME`으로 위치 변경 가능): `config.json`(설정), `seelegent.db`(작업,
-  계정, 사용량, 팀, 티켓, 자동화), `profiles/`(계정마다 격리된 프로필), `snapshots/`, `worktrees/`, `logs/`.
+  계정, 사용량, 팀, 티켓, 자동화), `profiles/`(계정마다 격리된 프로필, API 키도 여기에), `github/`(토큰),
+  `snapshots/`, `contests/`(저장된 대회 diff), `worktrees/`(대회와 티켓용만), `run/`, `logs/`.
   [docs/configuration.md](docs/configuration.md)를 보세요.
 - Seelegent는 비밀번호를 묻지 않습니다. 각 워커 CLI는 자기 방식으로 로그인하고 토큰을 계정 프로필에 보관합니다.
   API 키와 GitHub 토큰은 각각 별도 파일에 저장되며, Windows에서는 DPAPI로 암호화되고, 그 밖에서는 소유자만 읽을 수
@@ -192,8 +194,8 @@ Seelegent에게 커밋, 티켓 브랜치 푸시, 초안 pull request 열기를 �
 - 컴퓨터 밖으로 나가는 것: 워커 CLI와 각 제공자의 통신(이것이 작업 자체입니다), CLI를 통한 할당량 읽기(Claude
   로그인 계정은 그 계정 자신의 로그인으로 Anthropic 사용량 엔드포인트를 읽습니다), API 키 계정이 설정한 제공자를
   호출하는 것, 그리고 GitHub 호출입니다. GitHub는 연결한 저장소에 대해서만(동기화, 10분마다 이슈와 pull request
-  폴링(`githubPollMinutes: 0`으로 끄기), 여러분이나 리드가 요청한 푸시, pull request, 댓글), 그리고 설치 프로그램과
-  `seelegent update`에서만 호출됩니다.
+  폴링(`githubPollMinutes: 0`으로 끄기), 여러분이나 리드가 요청한 푸시, pull request, 댓글), **이슈** 페이지를 열 때
+  GitHub 로그인 확인, 그리고 설치 프로그램과 `seelegent update`에서만 호출됩니다.
 
 ## 업데이트와 제거
 
@@ -215,14 +217,15 @@ Seelegent에게 커밋, 티켓 브랜치 푸시, 초안 pull request 열기를 �
 이전 Node 버전도 같은 폴더에 데이터를 두었습니다. 처음 설치할 때 설치 프로그램이 `seelegent migrate`를 실행해
 설정, 제공자, 계정(프로필과 API 키 포함), 프로젝트 메모리와 리뷰 기록, 역할, 멤버, 훅, 회의 기록, 자동화(모두 꺼진
 상태로, 다시 확인 필요)를 가져옵니다. 작업, 리뷰 노트, 대회, 증거 기록, 사용량 기록, GitHub 폴더는 가져오지 않습니다.
-저장소를 다시 연결하고 토큰을 다시 저장하세요. 이전 폴더는 절대 바뀌지 않으며, Windows에서는 이전 실행기가
-`seelegent-node`로 남습니다. 설치 전에 이전 데몬을 멈추고, `seelegent migrate --dry-run`으로 가져올 내용을 미리
-확인하세요. [docs/setup.md](docs/setup.md#seelegent-migrate)를 보세요.
+저장소를 다시 연결하고 토큰을 다시 저장하세요. 이전 폴더는 절대 바뀌지 않습니다. Windows에서는 설치 폴더에 이전
+실행기가 있으면 `seelegent-node`로 남습니다. 설치 전에 이전 데몬을 멈추고, `seelegent migrate --dry-run`으로
+가져올 내용을 미리 확인하세요. [docs/setup.md](docs/setup.md#seelegent-migrate)를 보세요.
 
 ## 문제 해결
 
 - `seelegent doctor`는 데이터 폴더, 설정, 데이터베이스, 데몬, git, 켜진 각 워커 CLI, 계정, PATH를 검사하고 실패한
-  항목을 고치는 법을 알려 줍니다. 아무것도 바꾸지 않습니다.
+  항목을 고치는 법을 알려 줍니다. 데이터 폴더에서의 쓰기 테스트(`.doctor-write-test`, 바로 삭제) 말고는 아무것도
+  바꾸지 않습니다.
 - `seelegent status`는 데몬, 계정과 할당량, 처리할 작업을 보여 줍니다. `seelegent restart`는 데몬을 다시 시작합니다.
   로그는 `~/.seelegent/logs/daemon.log`입니다.
 - `seelegent setup --dry-run`은 각 리드 호스트에 무엇이 등록되어 있는지 보여 줍니다. setup이나 업데이트 뒤에는

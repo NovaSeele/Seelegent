@@ -66,7 +66,8 @@ El instalador descarga la última versión, comprueba su SHA-256 con el `checksu
 en el PATH (`%LOCALAPPDATA%\Programs\seelegent\bin` en Windows, `~/.local/bin` en los demás sistemas), importa los
 datos de la versión antigua si los encuentra y ejecuta `seelegent setup` para los hosts del lead de esta máquina.
 Después, abre una terminal nueva y reinicia los hosts del lead. Las opciones como `--version`, `--install-dir` y
-`--no-setup` están en [docs/release.md](docs/release.md#installing).
+`--no-setup` (sh) o `-Version`, `-InstallDir` y `-NoSetup` (PowerShell) están en
+[docs/release.md](docs/release.md#installing).
 
 ## Primeros pasos
 
@@ -89,8 +90,9 @@ Después, abre una terminal nueva y reinicia los hosts del lead. Las opciones co
 ## Funciones
 
 **Workers y cuentas.** Tres backends (`agy`, `claude`, `codex`) y tres tipos de cuenta: un perfil aislado con su
-propia sesión, la sesión que ya existe en este equipo o una clave de API de un proveedor (Anthropic, DeepSeek, Moonshot
-Kimi, Z.ai GLM, OpenRouter, OpenAI, Groq, un Ollama local o un endpoint propio). El grupo de cuentas lee las ventanas
+propia sesión, la sesión que ya existe en este equipo (solo `agy`) o una clave de API de un proveedor (solo `claude`
+y `codex`: Anthropic, DeepSeek, Moonshot Kimi, Z.ai GLM, OpenRouter, OpenAI, Groq, un Ollama local o un endpoint
+propio). El grupo de cuentas lee las ventanas
 de cuota de cada cuenta y prefiere la de mayor prioridad, con menos tareas en marcha y más cuota restante. Los niveles
 de modelo `fast`, `standard`, `strong` y `max` se asignan a modelos reales en cada backend. Consulta la
 [configuración](docs/configuration.md).
@@ -117,8 +119,9 @@ sénior, par: `worker`, `senior`, `peer`). Puedes pedir a un sénior o a un par 
 terminada (la objeción de un par bloquea la aceptación hasta que el lead la responda), dejar notas de revisión en
 líneas del diff y enviarlas juntas como un solo `followup`, reunir hasta seis miembros antes de una decisión difícil
 (un par puede dejar constancia de un disenso formal) o convertir un brief en un concurso de 2 a 5 variantes en
-worktrees separados y aplicar la ganadora. Los hooks de eventos ejecutan tus propios comandos de shell cuando una tarea
-empieza, termina o te necesita. Consulta el [equipo](docs/team.md).
+worktrees separados y aplicar la ganadora. Los hooks de eventos ejecutan tus propios comandos de shell ante eventos de
+tareas, cuentas y del daemon (una tarea empieza, termina o se bloquea, una cuenta se queda sin cuota o necesita iniciar
+sesión, y más). Consulta el [equipo](docs/team.md).
 
 **GitHub.** Conecta un repositorio, sincroniza sus issues abiertos en una bandeja (o añade issues locales) y clasifica
 cada uno en un ticket: su propio worktree y su propia rama, en los que trabajan una o varias tareas. Cuando el trabajo
@@ -137,8 +140,9 @@ y un diálogo de Ajustes con búsqueda. Cada tarea tiene las vistas Terminal, Á
 color, siete idiomas, una paleta de comandos (`Ctrl+K`, `Cmd+K` en macOS) y atajos de teclado. Va integrado en el
 binario y no carga nada de internet.
 
-**Línea de comandos.** Cada herramienta MCP tiene su comando y todos los comandos aceptan `--json`: consulta
-`seelegent --help` y [docs/cli.md](docs/cli.md).
+**Línea de comandos.** Cada herramienta MCP salvo `profiles` tiene su comando (los roles de worker se editan en la
+página **Roles** y con la herramienta `profiles`) y todos los comandos aceptan `--json`: consulta `seelegent --help` y
+[docs/cli.md](docs/cli.md).
 
 ### Herramientas MCP para el lead
 
@@ -172,8 +176,8 @@ capas; ninguna hace fallar una tarea por sí sola, sino que cuentan al lead y al
 [docs/safety.md](docs/safety.md).
 
 - **Protección de Git.** Los workers no pueden ejecutar comandos de git que puedan tirar trabajo sin confirmar o
-  reescribir el historial: `reset`, `restore`, `stash`, `checkout` y `switch` (crear una rama nueva sí está
-  permitido), `clean`, `rebase`, `merge`, `pull`, `push`, `commit -a` y `--amend`, entre otros, también dentro de
+  reescribir el historial: `reset`, `restore`, `stash`, `checkout` (salvo `checkout -b` para crear una rama),
+  `switch`, `clean`, `rebase`, `merge`, `pull`, `push`, `commit -a` y `--amend`, entre otros, también dentro de
   `bash -c`, PowerShell, tuberías hacia una shell o alias de git. El lead puede levantarla durante un turno con
   `allow_git`.
 - **Instantáneas.** Antes y después de cada turno, Seelegent registra los archivos sin confirmar del repositorio sin
@@ -195,10 +199,12 @@ Son protecciones, no un sandbox: las CLI de los workers se ejecutan con tu usuar
 
 ## Datos y privacidad
 
-- Todo se ejecuta en tu equipo. El daemon solo escucha en `127.0.0.1`. No hay telemetría.
+- Todo se ejecuta en tu equipo. El daemon solo escucha en `127.0.0.1`. Seelegent en sí no envía telemetría; las CLI
+  de los workers siguen sus propios ajustes.
 - Los datos están en `~/.seelegent` (define `SEELEGENT_HOME` para moverlos): `config.json` (ajustes), `seelegent.db`
-  (tareas, cuentas, uso, equipo, tickets, rutinas), `profiles/` (un perfil aislado por cuenta), `snapshots/`,
-  `worktrees/` y `logs/`. Consulta [docs/configuration.md](docs/configuration.md).
+  (tareas, cuentas, uso, equipo, tickets, rutinas), `profiles/` (un perfil aislado por cuenta, con su clave de API),
+  `github/` (el token), `snapshots/`, `contests/` (los diffs guardados de los concursos), `worktrees/` (solo para
+  concursos y tickets), `run/` y `logs/`. Consulta [docs/configuration.md](docs/configuration.md).
 - Seelegent nunca pide contraseñas. Cada CLI de worker inicia sesión con su propio flujo y guarda sus tokens en el
   perfil de la cuenta. Las claves de API y el token de GitHub se guardan cada uno en su propio archivo, cifrados con
   DPAPI en Windows y como texto plano legible solo por su dueño (0600) en los demás sistemas; el panel muestra solo los
@@ -207,8 +213,8 @@ Son protecciones, no un sandbox: las CLI de los workers se ejecutan con tu usuar
   lee a través de las CLI (y, en las cuentas de Claude con sesión, del endpoint de uso de Anthropic con la propia sesión
   de esa cuenta), las cuentas con clave de API llaman al proveedor que configuraste, y a GitHub solo se le llama por los
   repositorios que conectas (sincronización, una consulta de sus issues y pull requests cada 10 minutos, que
-  `githubPollMinutes: 0` desactiva, y los push, pull requests y comentarios que pides tú o el lead) y desde los
-  instaladores y `seelegent update`.
+  `githubPollMinutes: 0` desactiva, y los push, pull requests y comentarios que pides tú o el lead), para comprobar tu
+  sesión de GitHub cuando abres **Issues**, y desde los instaladores y `seelegent update`.
 
 ## Actualizar y desinstalar
 
@@ -234,14 +240,15 @@ La antigua versión en Node guardaba sus datos en la misma carpeta. En la primer
 de los proyectos y el historial de revisiones, los roles, los miembros, los hooks, las actas de reuniones y las rutinas
 (todas apagadas, para confirmarlas de nuevo). No se importan las tareas, las notas de revisión, los concursos, los
 registros de pruebas, el historial de uso ni la carpeta de GitHub: vuelve a conectar tus repositorios y a guardar el
-token. La carpeta antigua nunca se modifica; en Windows, el lanzador antiguo se conserva como `seelegent-node`. Detén
-el daemon antiguo antes de instalar y ejecuta `seelegent migrate --dry-run` para ver qué se importaría. Consulta
-[docs/setup.md](docs/setup.md#seelegent-migrate).
+token. La carpeta antigua nunca se modifica. En Windows, si el lanzador antiguo está en la carpeta de instalación, se
+conserva como `seelegent-node`. Detén el daemon antiguo antes de instalar y ejecuta `seelegent migrate --dry-run` para
+ver qué se importaría. Consulta [docs/setup.md](docs/setup.md#seelegent-migrate).
 
 ## Solución de problemas
 
 - `seelegent doctor` revisa la carpeta de datos, los ajustes, la base de datos, el daemon, git, cada CLI de worker
-  activada, las cuentas y el PATH, y explica cómo arreglar lo que falla. No cambia nada.
+  activada, las cuentas y el PATH, y explica cómo arreglar lo que falla. No cambia nada, salvo una prueba de escritura
+  en la carpeta de datos (`.doctor-write-test`, que borra enseguida).
 - `seelegent status` muestra el daemon, las cuentas con su cuota y las tareas que te necesitan; `seelegent restart`
   reinicia el daemon. Su registro es `~/.seelegent/logs/daemon.log`.
 - `seelegent setup --dry-run` muestra lo que hay registrado en cada host del lead. Reinicia el host después de un setup

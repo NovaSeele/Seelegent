@@ -65,8 +65,8 @@ curl -fsSL https://raw.githubusercontent.com/NovaSeele/Seelegent/main/scripts/in
 インストーラーは最新リリースをダウンロードし、リリースの `checksums.txt` で SHA-256 を検証し、`seelegent` を PATH に
 置き (Windows は `%LOCALAPPDATA%\Programs\seelegent\bin`、それ以外は `~/.local/bin`)、旧バージョンのデータがあれば
 取り込み、このマシンのリード用ホストに対して `seelegent setup` を実行します。終わったら新しいターミナルを開き、
-リード用ホストを再起動してください。`--version`、`--install-dir`、`--no-setup` などのオプションは
-[docs/release.md](docs/release.md#installing) にあります。
+リード用ホストを再起動してください。`--version`、`--install-dir`、`--no-setup` (sh) や `-Version`、`-InstallDir`、
+`-NoSetup` (PowerShell) などのオプションは [docs/release.md](docs/release.md#installing) にあります。
 
 ## はじめの一歩
 
@@ -89,11 +89,11 @@ curl -fsSL https://raw.githubusercontent.com/NovaSeele/Seelegent/main/scripts/in
 ## 機能
 
 **ワーカーとアカウント。** 3 つのバックエンド (`agy`、`claude`、`codex`) と 3 種類のアカウント: 専用のサインインを
-持つ分離プロファイル、このコンピューターにある既存のサインイン、プロバイダーの API キー (Anthropic、DeepSeek、
-Moonshot Kimi、Z.ai GLM、OpenRouter、OpenAI、Groq、ローカルの Ollama、またはカスタムのエンドポイント)。アカウント
-プールは各アカウントのクォータウィンドウを読み取り、優先度が高く、実行中のタスクが少なく、クォータが多く残っている
-アカウントを優先します。モデルのティア `fast`、`standard`、`strong`、`max` は、バックエンドごとに実際のモデルに
-対応づけられます。[設定](docs/configuration.md) を参照してください。
+持つ分離プロファイル、このコンピューターにある既存のサインイン (`agy` のみ)、プロバイダーの API キー (`claude` と
+`codex` のみ: Anthropic、DeepSeek、Moonshot Kimi、Z.ai GLM、OpenRouter、OpenAI、Groq、ローカルの Ollama、または
+カスタムのエンドポイント)。アカウントプールは各アカウントのクォータウィンドウを読み取り、優先度が高く、実行中の
+タスクが少なく、クォータが多く残っているアカウントを優先します。モデルのティア `fast`、`standard`、`strong`、`max`
+は、バックエンドごとに実際のモデルに対応づけられます。[設定](docs/configuration.md) を参照してください。
 
 **タスク。** タスクは 1 つの会話です。`delegate` のあと必要なだけ `followup` し、最後に `review` で `accepted` か
 `rejected` を付けます。タスクは並列に動き、互いを待つこともでき (`after`)、毎回のブリーフにはプロジェクトの
@@ -115,8 +115,8 @@ spec 全体の代わりに Spec Kit の機能フォルダーとタスク ID を�
 (ピアの反対意見は、リードが回答するまで承認を止めます)、差分の行にレビューノートを付けて 1 回の追加依頼として
 まとめて送ったり、難しい判断の前に最大 6 人のメンバーで会議を開いたり (ピアは正式に異議を記録できます)、同じ
 ブリーフを別々の worktree で 2〜5 個のバリアントとして競わせ、勝者を適用したりできます。イベントフックは、
-タスクの開始・終了時や対応が必要なときに、あなたのシェルコマンドを実行します。[チーム](docs/team.md) を参照して
-ください。
+タスク、アカウント、デーモンのイベント (タスクの開始・終了・ブロック、アカウントのクォータ切れやサインインの必要、
+など) で、あなたのシェルコマンドを実行します。[チーム](docs/team.md) を参照してください。
 
 **GitHub。** リポジトリを接続し、オープンな issue を受信箱に同期し (ローカルの issue も追加可能)、それぞれを
 チケットに振り分けます。チケットは専用の worktree とブランチを持ち、1 つ以上のタスクで作業します。作業が承認されたら、
@@ -135,8 +135,9 @@ Seelegent は CI チェックを追い、失敗したチェックを直すタス
 キーボードショートカットを備えています。ダッシュボードはバイナリに組み込まれており、インターネットから何も
 読み込みません。
 
-**コマンドライン。** どの MCP ツールにも対応するコマンドがあり、すべてのコマンドが `--json` を受け付けます。
-`seelegent --help` と [docs/cli.md](docs/cli.md) を参照してください。
+**コマンドライン。** `profiles` 以外のどの MCP ツールにも対応するコマンドがあり (ワーカーのロールは **ロール**
+ページと `profiles` ツールで編集します)、すべてのコマンドが `--json` を受け付けます。`seelegent --help` と
+[docs/cli.md](docs/cli.md) を参照してください。
 
 ### リード向けの MCP ツール
 
@@ -170,8 +171,8 @@ Seelegent は CI チェックを追い、失敗したチェックを直すタス
 [docs/safety.md](docs/safety.md) を参照してください。
 
 - **Git ガード。** ワーカーは、未コミットの変更を捨てたり履歴を書き換えたりしうる git コマンドを実行できません:
-  `reset`、`restore`、`stash`、`checkout` と `switch` (新しいブランチの作成は可)、`clean`、`rebase`、`merge`、
-  `pull`、`push`、`commit -a` と `--amend` など。`bash -c`、PowerShell、シェルへのパイプ、git のエイリアスの
+  `reset`、`restore`、`stash`、`checkout` (ブランチを作る `checkout -b` は除く)、`switch`、`clean`、`rebase`、
+  `merge`、`pull`、`push`、`commit -a` と `--amend` など。`bash -c`、PowerShell、シェルへのパイプ、git のエイリアスの
   中にあっても同じです。リードは `allow_git` で 1 ターンだけガードを外せます。
 - **スナップショット。** 各ターンの前後に、Seelegent はリポジトリの未コミットのファイルを記録します。あなたの
   index、stash、ref には触れません。そのターンで失われたかもしれないファイルは *リスクのあるファイル* として表示され、
@@ -193,10 +194,12 @@ Seelegent は CI チェックを追い、失敗したチェックを直すタス
 
 ## データとプライバシー
 
-- すべてはあなたのマシン上で動きます。デーモンは `127.0.0.1` でのみ待ち受けます。テレメトリはありません。
+- すべてはあなたのマシン上で動きます。デーモンは `127.0.0.1` でのみ待ち受けます。Seelegent 自体はテレメトリを
+  送りません。ワーカー CLI はそれぞれの設定に従います。
 - データは `~/.seelegent` にあります (`SEELEGENT_HOME` で場所を変更可能): `config.json` (設定)、`seelegent.db`
-  (タスク、アカウント、使用量、チーム、チケット、自動化)、`profiles/` (アカウントごとの分離プロファイル)、
-  `snapshots/`、`worktrees/`、`logs/`。[docs/configuration.md](docs/configuration.md) を参照してください。
+  (タスク、アカウント、使用量、チーム、チケット、自動化)、`profiles/` (アカウントごとの分離プロファイル、API キーも
+  ここ)、`github/` (トークン)、`snapshots/`、`contests/` (保存したコンテストの差分)、`worktrees/` (コンテストと
+  チケット用のみ)、`run/`、`logs/`。[docs/configuration.md](docs/configuration.md) を参照してください。
 - Seelegent がパスワードを求めることはありません。各ワーカー CLI は独自の手順でサインインし、トークンを
   アカウントのプロファイルに保存します。API キーと GitHub トークンはそれぞれ専用のファイルに保存され、Windows では
   DPAPI で暗号化、それ以外では所有者だけが読める (0600) 平文です。ダッシュボードには末尾 4 文字しか表示されず、
@@ -205,7 +208,8 @@ Seelegent は CI チェックを追い、失敗したチェックを直すタス
   (Claude のサインインでは、そのアカウント自身のサインインで Anthropic の使用量エンドポイントを読みます)、API キーの
   アカウントから設定したプロバイダーへの呼び出し、そして GitHub への呼び出しです。GitHub へは、接続したリポジトリに
   ついてのみ (同期、10 分ごとの issue と pull request のポーリング (`githubPollMinutes: 0` でオフ)、あなたや
-  リードが依頼したプッシュ、pull request、コメント)、それとインストーラーと `seelegent update` からだけです。
+  リードが依頼したプッシュ、pull request、コメント)、**Issue** ページを開いたときの GitHub のサインイン確認、
+  それとインストーラーと `seelegent update` からだけです。
 
 ## 更新とアンインストール
 
@@ -230,14 +234,16 @@ Seelegent は CI チェックを追い、失敗したチェックを直すタス
 `seelegent migrate` を実行し、設定、プロバイダー、アカウント (プロファイルと API キーを含む)、プロジェクトの
 メモリーとレビュー履歴、ロール、メンバー、フック、会議の記録、自動化 (すべてオフで、改めて確認が必要) を取り込み
 ます。タスク、レビューノート、コンテスト、証拠の記録、使用量の履歴、GitHub フォルダーは取り込まれません。
-リポジトリを接続し直し、トークンを保存し直してください。旧フォルダーが変更されることはなく、Windows では旧ランチャーが
-`seelegent-node` として残ります。インストール前に旧デーモンを止め、`seelegent migrate --dry-run` で取り込まれる
-内容を確認してください。[docs/setup.md](docs/setup.md#seelegent-migrate) を参照してください。
+リポジトリを接続し直し、トークンを保存し直してください。旧フォルダーが変更されることはありません。Windows では、
+インストールフォルダーに旧ランチャーがあれば `seelegent-node` として残ります。インストール前に旧デーモンを止め、
+`seelegent migrate --dry-run` で取り込まれる内容を確認してください。
+[docs/setup.md](docs/setup.md#seelegent-migrate) を参照してください。
 
 ## トラブルシューティング
 
 - `seelegent doctor` は、データフォルダー、設定、データベース、デーモン、git、有効な各ワーカー CLI、アカウント、
-  PATH をチェックし、失敗した項目の直し方を示します。何も変更しません。
+  PATH をチェックし、失敗した項目の直し方を示します。データフォルダーでの書き込みテスト (`.doctor-write-test`、
+  すぐに削除) 以外は何も変更しません。
 - `seelegent status` はデーモン、アカウントとクォータ、対応が必要なタスクを表示します。`seelegent restart` で
   デーモンを再起動します。ログは `~/.seelegent/logs/daemon.log` です。
 - `seelegent setup --dry-run` は、各リード用ホストに何が登録されているかを示します。setup や更新のあとはホストを
