@@ -18,6 +18,7 @@ import (
 
 	"github.com/NovaSeele/Seelegent/internal/account"
 	"github.com/NovaSeele/Seelegent/internal/api"
+	"github.com/NovaSeele/Seelegent/internal/automation"
 	"github.com/NovaSeele/Seelegent/internal/config"
 	"github.com/NovaSeele/Seelegent/internal/hook"
 	"github.com/NovaSeele/Seelegent/internal/meeting"
@@ -163,6 +164,18 @@ func (f *fixture) realistic() {
 	f.write("notes/t1.json", `[{"id": "n1", "file": "a.go", "line": 1, "body": "x"}, {"id": "n2", "file": "a.go", "line": 2, "body": "y"}]`)
 	f.write("contests/k1.json", `{}`)
 	f.write("quota/acc2.json", `{}`)
+	f.write("automations.json", `[
+  {"id": "a1b2c3d4e", "name": "Nightly", "prompt": "Run the tests", "cwd": "`+js(f.project)+`",
+    "schedule": {"every": null, "at": null, "weekday": null, "cron": "0 2 * * 1-5"}, "timezone": "local",
+    "member": null, "backend": "agy", "model": null, "gate": "go test ./...", "lane": false, "precheck": null,
+    "quota": {"minRemaining": 30, "useBeforeReset": true}, "graceMinutes": 15, "enabled": true,
+    "lastRun": {"at": "2026-10-03T02:00:00.000Z", "outcome": "started"}, "createdAt": "2026-10-01T09:00:00.000Z"},
+  {"id": "a5e6f7a8b", "prompt": "Tidy", "cwd": "`+js(f.gone)+`", "schedule": {"every": "weekly", "at": "09:00",
+    "weekday": 1}, "gate": ["a", "b"], "lane": ["src"], "enabled": false},
+  {"prompt": "No id", "cwd": "`+js(f.project)+`", "schedule": {"every": "daily", "at": "08:00"}}
+]`)
+	f.write("automations/a1b2c3d4e.jsonl", `{"outcome": "started"}`+"\n")
+	f.write("github/token.json", `{}`)
 }
 
 func (f *fixture) run(dry bool) Report {
@@ -382,6 +395,23 @@ func TestMigrate(t *testing.T) {
 	}
 	want(t, rep, KindData, "contests", Skipped)
 	want(t, rep, KindData, "quota", Skipped)
+	if it := want(t, rep, KindAutomation, "a1b2c3d4e", Imported); !strings.Contains(it.Detail, "it was on") {
+		t.Errorf("automation detail %q", it.Detail)
+	}
+	want(t, rep, KindAutomation, "a5e6f7a8b", Error)
+	want(t, rep, KindAutomation, "#3", Error)
+	want(t, rep, KindData, "automations", Skipped)
+	if it := want(t, rep, KindData, "github", Skipped); !strings.Contains(it.Detail, "token") {
+		t.Errorf("github detail %q", it.Detail)
+	}
+	autos := automation.New(automation.Options{DB: db})
+	defer autos.Close()
+	if a, err := autos.Get(context.Background(), "a1b2c3d4e"); err != nil || a.Enabled || a.EnableRequested ||
+		a.Schedule.Cron != "0 2 * * 1-5" || a.Gate != nil || !slices.Equal(a.GateCommands, []string{"go test ./..."}) ||
+		!a.NoLane || a.Quota.MinRemaining != 30 || !a.Quota.UseBeforeReset || a.GraceMinutes != 15 ||
+		a.CreatedAt != "2026-10-01T09:00:00.000Z" || a.Name != "Nightly" {
+		t.Errorf("automation %+v, %v", a, err)
+	}
 	if !rep.Failed() {
 		t.Error("errors not reported as failed")
 	}
@@ -430,6 +460,7 @@ func TestMigrate(t *testing.T) {
 	want(t, again, KindMember, "ana", Unchanged)
 	want(t, again, KindHook, "hooks.json", Unchanged)
 	want(t, again, KindMeeting, "m2610011000-ab12", Unchanged)
+	want(t, again, KindAutomation, "a1b2c3d4e", Unchanged)
 	if hooks, _ := hook.New(hook.Options{DB: db}).List(context.Background()); len(hooks) != 2 {
 		t.Errorf("hooks doubled: %+v", hooks)
 	}

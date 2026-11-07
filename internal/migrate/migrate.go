@@ -1,11 +1,11 @@
 // Package migrate imports the data of the old (Node) Seelegent into this version: settings, providers, accounts
 // with their profile folders and API keys, project memory, review history, worker roles, department members, lead
-// hooks and meeting records. It never changes or deletes anything in the old data folder, a dry run writes
+// hooks, meeting records and automations (every one off). It never changes or deletes anything in the old data folder, a dry run writes
 // nothing, and a second run reports "unchanged" for everything it imported before. Each piece is reported on its
 // own, so one unreadable file does not stop the rest.
 //
-// Tasks (and with them their review notes), contests, automations, proof records, usage history and quota caches
-// are not imported (see docs/setup.md).
+// Tasks (and with them their review notes), contests, automation run history, tickets, proof records, usage
+// history and quota caches are not imported (see docs/setup.md).
 package migrate
 
 import (
@@ -19,6 +19,8 @@ import (
 	"time"
 
 	"github.com/NovaSeele/Seelegent/internal/account"
+	"github.com/NovaSeele/Seelegent/internal/automation"
+	"github.com/NovaSeele/Seelegent/internal/clock"
 	"github.com/NovaSeele/Seelegent/internal/config"
 	"github.com/NovaSeele/Seelegent/internal/fsutil"
 	"github.com/NovaSeele/Seelegent/internal/hook"
@@ -48,18 +50,19 @@ const (
 
 // Item kinds.
 const (
-	KindSettings = "settings"
-	KindProvider = "provider"
-	KindAccount  = "account"
-	KindProfile  = "profile"
-	KindKey      = "key"
-	KindMemory   = "memory"
-	KindHistory  = "history"
-	KindRole     = "role"
-	KindData     = "data"
-	KindMember   = "member"
-	KindHook     = "hook"
-	KindMeeting  = "meeting"
+	KindSettings   = "settings"
+	KindProvider   = "provider"
+	KindAccount    = "account"
+	KindProfile    = "profile"
+	KindKey        = "key"
+	KindMemory     = "memory"
+	KindHistory    = "history"
+	KindRole       = "role"
+	KindData       = "data"
+	KindMember     = "member"
+	KindHook       = "hook"
+	KindMeeting    = "meeting"
+	KindAutomation = "automation"
 )
 
 // Item is the outcome for one piece of old data.
@@ -164,6 +167,8 @@ func Run(ctx context.Context, o Options) (Report, error) {
 		meetings: meeting.New(meeting.Options{DB: db, Now: o.Now}), hooks: hook.New(hook.Options{DB: db, Now: o.Now})}
 	defer m.team.meetings.Close()
 	defer m.team.hooks.Close(context.WithoutCancel(ctx))
+	m.automations = automation.New(automation.Options{DB: db, Clock: nowClock(o.Now)})
+	defer m.automations.Close()
 	settings, providers := m.importSettings()
 	m.importProviders(ctx, providers, settings)
 	m.importAccounts(ctx, settings)
@@ -174,6 +179,7 @@ func Run(ctx context.Context, o Options) (Report, error) {
 	m.importMembers(ctx)
 	m.importHooks(ctx)
 	m.importMeetings(ctx)
+	m.importAutomations(ctx)
 	m.notImported()
 	return rep, ctx.Err()
 }
@@ -188,7 +194,15 @@ type migrator struct {
 	memory   *memory.Store
 	roles    *role.Store
 	team     team
+	// automations is never started: it only saves the imported automations.
+	automations *automation.Service
 }
+
+// nowClock is Options.Now as a clock.
+type nowClock func() time.Time
+
+func (c nowClock) Now() time.Time                     { return c() }
+func (nowClock) NewTimer(d time.Duration) clock.Timer { return clock.Real().NewTimer(d) }
 
 func (m *migrator) add(kind, id string, a Action, format string, args ...any) {
 	m.rep.Items = append(m.rep.Items, Item{Kind: kind, ID: id, Action: a, Detail: fmt.Sprintf(format, args...)})

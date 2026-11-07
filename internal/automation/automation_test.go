@@ -254,7 +254,7 @@ func TestEnableNeedsDashboardConfirmation(t *testing.T) {
 	if _, err := f.s.Confirm(ctx, a.ID, tok.Token); !errors.Is(err, ErrForbidden) {
 		t.Fatalf("token reused: %v", err)
 	}
-	// The dashboard still shows the old content: no token for it (old bug F23).
+	// The dashboard still shows the old content: no token for it (F33).
 	if changed.Revision == got.Revision {
 		t.Fatal("revision did not change with the prompt")
 	}

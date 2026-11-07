@@ -105,7 +105,7 @@ type DB interface {
 // Precheck runs a precheck command in dir.
 type Precheck func(ctx context.Context, cmdline, dir string, timeout time.Duration) gate.ExecResult
 
-// Options configure a Service. DB and Tasks are required.
+// Options configure a Service. DB and Tasks are required (Import needs only DB).
 type Options struct {
 	DB      DB
 	Tasks   Tasks

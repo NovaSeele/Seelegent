@@ -376,15 +376,17 @@ func (m *migrator) notImported() {
 		m.add(KindData, "contests", Skipped, "contests are not imported: their variants ran in worktrees of the "+
 			"old daemon (the records stay in %s)", m.old("contests"))
 	}
-	for _, d := range []struct{ name, what string }{
-		{"automations.json", "automations"},
-		{"proof", "proof records"},
-		{"tickets", "tickets"},
-		{"usage-history", "usage history"},
-		{"quota", "quota caches (read again from the accounts)"},
+	for _, d := range []struct{ name, why string }{
+		{"automations", "the run history of automations is not imported (the automations themselves are)"},
+		{"github", "connected repositories, issues, tickets and the GitHub token are not imported: connect the " +
+			"repositories again and store the token again on the Issues page (the old files stay in " +
+			m.old("github") + ")"},
+		{"proof", "proof records are not imported: they name tasks of the old version, which are not imported"},
+		{"usage-history", "usage history is not imported: this version records its own from now on"},
+		{"quota", "quota caches are not imported: they are read again from the accounts"},
 	} {
 		if exists(m.old(d.name)) {
-			m.add(KindData, d.name, Skipped, "%s are not imported: this version does not have them yet", d.what)
+			m.add(KindData, d.name, Skipped, "%s", d.why)
 		}
 	}
 }

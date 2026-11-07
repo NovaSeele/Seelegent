@@ -24,7 +24,7 @@ func (r Report) WriteText(w io.Writer) error {
 		if id == "" {
 			id = "-"
 		}
-		fmt.Fprintf(&b, "%-9s %-28s %-13s %s\n", it.Kind, id, verb, it.Detail)
+		fmt.Fprintf(&b, "%-10s %-28s %-13s %s\n", it.Kind, id, verb, it.Detail)
 	}
 	for _, w := range r.Warnings {
 		fmt.Fprintf(&b, "Warning: %s\n", w)
