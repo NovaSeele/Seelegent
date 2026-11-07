@@ -155,8 +155,10 @@ func deriveStatus(tasks []api.TaskSummary) string {
 			return api.TicketWorking
 		}
 	}
+	// An accepted task makes the ticket ready, a failed one too: the user took its work as it is (as before).
 	last := tasks[len(tasks)-1]
-	if last.Status == task.StatusDone && last.Review != nil && last.Review.Verdict == api.VerdictAccepted {
+	if (last.Status == task.StatusDone || last.Status == api.StatusFailed) && last.Review != nil &&
+		last.Review.Verdict == api.VerdictAccepted {
 		return api.TicketReady
 	}
 	return api.TicketReview

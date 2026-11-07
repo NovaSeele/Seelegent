@@ -68,6 +68,18 @@ func TestScrubLocal(t *testing.T) {
 	}
 }
 
+// TestPRBodyGateLines: a step whose label is its kind is named once (F34).
+func TestPRBodyGateLines(t *testing.T) {
+	body := prBody(prInputs{ticket: &ticketRec{}, gate: &api.GateResult{State: "green", Steps: []api.GateStep{
+		{Kind: "lane", Label: "lane", State: "green"},
+		{Kind: "task", Label: "unit", Cmd: "go test ./...", State: "green"}}}})
+	for _, want := range []string{"- green · lane\n", "- green · task unit — `go test ./...`"} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("%q missing from %q", want, body)
+		}
+	}
+}
+
 func TestSlugifyAndFences(t *testing.T) {
 	cases := map[string]string{
 		"Cache never expires!":      "cache-never-expires",
@@ -105,6 +117,11 @@ func TestDeriveStatus(t *testing.T) {
 		{[]api.TaskSummary{done(api.VerdictAccepted)}, api.TicketReady},
 		{[]api.TaskSummary{done(api.VerdictAccepted), done("")}, api.TicketReview},
 		{[]api.TaskSummary{done(api.VerdictAccepted), {Status: api.StatusRunning}}, api.TicketWorking},
+		// F35: a failed task the user accepted makes the ticket ready, as in the old version.
+		{[]api.TaskSummary{{Status: api.StatusFailed, Review: &api.Review{Verdict: api.VerdictAccepted}}}, api.TicketReady},
+		{[]api.TaskSummary{{Status: api.StatusFailed}}, api.TicketReview},
+		{[]api.TaskSummary{{Status: api.StatusCancelled, Review: &api.Review{Verdict: api.VerdictAccepted}}},
+			api.TicketReview},
 	}
 	for i, c := range cases {
 		if got := deriveStatus(c.tasks); got != c.want {

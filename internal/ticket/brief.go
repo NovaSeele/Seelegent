@@ -220,7 +220,7 @@ func prBody(in prInputs) string {
 				break
 			}
 			line := "- " + st.State + " · " + st.Kind
-			if st.Label != "" {
+			if st.Label != "" && st.Label != st.Kind {
 				line += " " + oneLine(st.Label, 80)
 			}
 			if st.Cmd != "" {
