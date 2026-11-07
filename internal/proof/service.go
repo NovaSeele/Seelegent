@@ -423,7 +423,7 @@ func (s *Service) StartRun(ctx context.Context, req api.ProofRunRequest) (api.Pr
 	if s.o.Git != nil {
 		head, dirty = s.o.Git.Head(ctx, p.Root)
 	}
-	run := api.ProofRun{ID: s.newRunID(), Feature: feature, State: api.RunRunning,
+	run := api.ProofRun{ID: s.newRunID(), RepoRoot: p.Root, Feature: feature, State: api.RunRunning,
 		StartedAt: api.FormatTime(s.o.Now()), GitHead: head, Dirty: dirty, Noisy: len(active) > 0,
 		Total: len(cmds), Results: []api.ProofRunResult{}}
 	s.mu.Lock()

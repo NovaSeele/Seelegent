@@ -249,16 +249,21 @@ func (s *Service) resolveProof(t *Task, req proofRequest, prev *Proof) (*Proof, 
 		p.NoLane, p.Lane = true, nil
 	}
 	if len(req.lane) > 0 {
-		lane, err := s.leadLane(t, root, req.lane)
+		lane, err := s.leadLane(root, req.lane)
 		if err != nil {
 			return nil, err
 		}
 		p.NoLane, p.Lane = false, &api.TaskLane{Paths: lane, Source: "lead"}
 	}
-	for _, c := range p.LeadCommands {
-		p.Commands = append(p.Commands, api.GateCommand{Cmd: c, Kind: api.StepTask})
-	}
 	feature := specFeature(t)
+	var ids []string
+	if feature != "" {
+		ids = t.Spec.TaskIDs
+	}
+	for _, c := range p.LeadCommands {
+		// The lead's commands replace the spec's Gate: lines and prove the spec tasks of the turn (old gate).
+		p.Commands = append(p.Commands, api.GateCommand{Cmd: c, TaskIDs: slices.Clone(ids), Kind: api.StepTask})
+	}
 	lines := map[string]string{}
 	if feature != "" {
 		f := proof.FeatureOf(root, feature)
@@ -303,19 +308,14 @@ func (s *Service) resolveProof(t *Task, req proofRequest, prev *Proof) (*Proof, 
 	return p, nil
 }
 
-// leadLane turns the lead's lane paths (relative to the task's folder) into paths relative to the claim root.
-func (s *Service) leadLane(t *Task, root string, paths []string) ([]string, error) {
-	prefix := ""
-	if rel, ok := relInside(root, t.Cwd); ok && rel != "." {
-		prefix = filepath.ToSlash(rel) + "/"
-	}
+// leadLane checks the lead's lane paths (relative to the repository root, as the old lane) and gives folders their
+// trailing slash.
+func (s *Service) leadLane(root string, paths []string) ([]string, error) {
 	in := make([]string, 0, len(paths))
 	for _, p := range paths {
-		c := proof.Clean(p)
-		if c == "" || c == "." || c == "./" {
-			c = ""
+		if c := proof.Clean(p); c != "" && c != "." && c != "./" {
+			in = append(in, c)
 		}
-		in = append(in, prefix+c)
 	}
 	isDir := func(rel string) bool {
 		st, err := os.Stat(filepath.Join(root, filepath.FromSlash(rel)))
@@ -364,11 +364,13 @@ func (s *Service) specProof(t *Task, root, feature string, p *Proof, lines map[s
 		}
 		lines[id] = tl.Line
 		tokens = append(tokens, tl.PathTokens...)
-		for _, g := range tl.Gates {
-			add(g, []string{id})
+		if len(p.LeadCommands) == 0 {
+			for _, g := range tl.Gates {
+				add(g, []string{id})
+			}
 		}
 	}
-	if len(ids) > 0 {
+	if len(ids) > 0 && len(p.LeadCommands) == 0 {
 		for _, g := range tasks.FeatureGate {
 			add(g, ids)
 		}
@@ -501,6 +503,43 @@ func (s *Service) Lanes(ctx context.Context, cwd string) (api.LanesView, error) 
 		return api.LanesView{}, err
 	}
 	return api.LanesView{RepoRoot: root, Mode: s.settings().Lanes, Claims: api.NonNil(claims)}, nil
+}
+
+// ActiveIn returns the ids of the tasks that are pending in the repository at root (proof.Options.Active: a
+// regression run waits for them).
+func (s *Service) ActiveIn(ctx context.Context, root string) ([]string, error) {
+	tasks, err := s.repo.Recent(ctx, s.now(), statsTasks)
+	if err != nil {
+		return nil, err
+	}
+	key := rootKey(root)
+	var out []string
+	for _, t := range tasks {
+		if Pending(t.Status) && t.Kind != KindVerify && rootKey(claimRoot(t)) == key {
+			out = append(out, t.ID)
+		}
+	}
+	slices.Sort(out)
+	return out, nil
+}
+
+// SpecFeatures returns the spec feature folders the recent tasks of the repository at root work on
+// (proof.Options.TaskFeatures).
+func (s *Service) SpecFeatures(ctx context.Context, root string) []string {
+	tasks, err := s.repo.Recent(ctx, s.now().AddDate(0, 0, -90), statsTasks)
+	if err != nil {
+		s.log.Warn("task: spec features", "err", err)
+		return nil
+	}
+	key := rootKey(root)
+	var out []string
+	for _, t := range tasks {
+		if t.Proof != nil && t.Proof.FeatureDir != "" && rootKey(claimRoot(t)) == key &&
+			!slices.Contains(out, t.Proof.FeatureDir) {
+			out = append(out, t.Proof.FeatureDir)
+		}
+	}
+	return out
 }
 
 // briefGate is what the worker's brief says about the task's lane and gate commands.

@@ -278,11 +278,12 @@ type DelegateRequest struct {
 	AfterMode string       `json:"afterMode,omitempty" ts:"'accepted' | 'done'"`
 	AllowGit  bool         `json:"allowGit,omitempty"`
 	// Gate: true adds the test, lint and build commands found in the repository; false turns the gate's commands
-	// off (lane and hygiene still run). GateCommands are the lead's own gate commands.
+	// off (lane and hygiene still run). GateCommands are the lead's own gate commands; with spec task ids they
+	// replace the tasks' Gate: lines and the feature gate, and prove those tasks.
 	Gate         *bool    `json:"gate,omitempty"`
 	GateCommands []string `json:"gateCommands,omitempty"`
-	// Lane lists the files and globs (relative to cwd) the worker may change; NoLane drops the lane a spec would
-	// give. ForceLane overrides the lane claims of other tasks.
+	// Lane lists the files and globs (relative to the repository root) the worker may change; NoLane drops the
+	// lane a spec would give. ForceLane overrides the lane claims of other tasks.
 	Lane      []string `json:"lane,omitempty"`
 	NoLane    bool     `json:"noLane,omitempty"`
 	ForceLane bool     `json:"forceLane,omitempty"`

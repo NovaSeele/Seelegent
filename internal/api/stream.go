@@ -35,6 +35,8 @@ const (
 	StreamMemoryChanged StreamEvent = "memory.changed"
 	// StreamHookRan: HookRun (milestone 14).
 	StreamHookRan StreamEvent = "hook.ran"
+	// StreamProofRun: ProofRun, at each step of a regression run (milestone 13).
+	StreamProofRun StreamEvent = "proof.run"
 )
 
 // Reset reasons.

@@ -29,6 +29,7 @@ import type {
   LeadMessageData,
   LoginSession,
   MemoryChanged,
+  ProofRun,
   ReattachData,
   Reset,
   RestoredData,
@@ -268,6 +269,7 @@ export interface ServerEvents {
   'members.changed': Changed
   'memory.changed': MemoryChanged
   'hook.ran': HookRun
+  'proof.run': ProofRun
 }
 
 export type ServerEventName = keyof ServerEvents
@@ -292,4 +294,5 @@ export const SERVER_EVENT_NAMES: readonly ServerEventName[] = [
   'members.changed',
   'memory.changed',
   'hook.ran',
+  'proof.run',
 ]

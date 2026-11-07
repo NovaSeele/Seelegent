@@ -824,6 +824,8 @@ export interface ProofRunCounts {
  */
 export interface ProofRun {
   id: string
+  /** RepoRoot is the repository the run belongs to. */
+  repoRoot: string
   feature?: string
   state: 'running' | 'green' | 'red' | 'error' | 'cancelled'
   startedAt: string
@@ -1292,6 +1294,7 @@ export type StreamEvent =
   | 'members.changed'
   | 'memory.changed'
   | 'hook.ran'
+  | 'proof.run'
 
 /** Hello is the data of the hello frame. */
 export interface Hello {
@@ -1675,13 +1678,14 @@ export interface DelegateRequest {
   allowGit?: boolean
   /**
    * Gate: true adds the test, lint and build commands found in the repository; false turns the gate's commands
-   * off (lane and hygiene still run). GateCommands are the lead's own gate commands.
+   * off (lane and hygiene still run). GateCommands are the lead's own gate commands; with spec task ids they
+   * replace the tasks' Gate: lines and the feature gate, and prove those tasks.
    */
   gate?: boolean
   gateCommands?: string[]
   /**
-   * Lane lists the files and globs (relative to cwd) the worker may change; NoLane drops the lane a spec would
-   * give. ForceLane overrides the lane claims of other tasks.
+   * Lane lists the files and globs (relative to the repository root) the worker may change; NoLane drops the
+   * lane a spec would give. ForceLane overrides the lane claims of other tasks.
    */
   lane?: string[]
   noLane?: boolean

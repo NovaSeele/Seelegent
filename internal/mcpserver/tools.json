@@ -88,13 +88,10 @@
               }
             },
             {
-              "type": "boolean",
-              "enum": [
-                false
-              ]
+              "type": "boolean"
             }
           ],
-          "description": "Command or array of commands to run after the worker report (overrides tasks.md gates). Pass false to disable gates (lane check still runs)."
+          "description": "Command or array of commands to run after the worker report (overrides tasks.md and feature gates; with task_ids they prove those tasks). Pass true to run the repository's detected test, lint and build commands. Pass false to disable gate commands (the lane and hygiene checks still run)."
         },
         "lane": {
           "oneOf": [
@@ -111,7 +108,7 @@
               ]
             }
           ],
-          "description": "Allowed file paths/globs relative to repo root. Pass false to disable lane enforcement."
+          "description": "Allowed file paths/globs relative to repo root (a folder covers everything under it). Under lanes: \"enforce\" a claim that overlaps another active task's is refused unless force_lane; files changed outside the lane fail the gate. Pass false to drop the lane a spec would give."
         },
         "force_lane": {
           "type": "boolean",
@@ -123,7 +120,7 @@
         },
         "verify": {
           "type": "boolean",
-          "description": "Run an autonomous verifier worker on the diff and gates before marking the task done."
+          "description": "Run a second-opinion verifier worker (read-only, verifierTier) on the diff once the gate is green, before the task is done; a reject starts an automatic fix turn while the budget lasts. Defaults to the verifier setting."
         },
         "after": {
           "type": "array",
@@ -254,13 +251,10 @@
               }
             },
             {
-              "type": "boolean",
-              "enum": [
-                false
-              ]
+              "type": "boolean"
             }
           ],
-          "description": "Command or array of commands to run after the worker report (overrides tasks.md gates). Pass false to disable gates (lane check still runs)."
+          "description": "Command or array of commands to run after the worker report (overrides tasks.md and feature gates; with task_ids they prove those tasks). Pass true to run the repository's detected test, lint and build commands. Pass false to disable gate commands (the lane and hygiene checks still run)."
         },
         "lane": {
           "oneOf": [
@@ -277,7 +271,7 @@
               ]
             }
           ],
-          "description": "Allowed file paths/globs relative to repo root. Pass false to disable lane enforcement."
+          "description": "Allowed file paths/globs relative to repo root (a folder covers everything under it). Under lanes: \"enforce\" a claim that overlaps another active task's is refused unless force_lane; files changed outside the lane fail the gate. Pass false to drop the lane a spec would give."
         },
         "force_lane": {
           "type": "boolean",
@@ -289,7 +283,7 @@
         },
         "verify": {
           "type": "boolean",
-          "description": "Run an autonomous verifier worker on the diff and gates before marking the task done."
+          "description": "Run a second-opinion verifier worker (read-only, verifierTier) on the diff once the gate is green, before the task is done; a reject starts an automatic fix turn while the budget lasts. Defaults to the verifier setting."
         },
         "wait_seconds": {
           "type": "number",
@@ -512,7 +506,9 @@
             "run",
             "run_status",
             "stats",
-            "lanes"
+            "lanes",
+            "cancel_run",
+            "contention"
           ],
           "description": "Action to execute"
         },
@@ -530,7 +526,7 @@
         },
         "run_id": {
           "type": "string",
-          "description": "Regression run ID for \"run_status\""
+          "description": "Regression run ID for \"run_status\" or \"cancel_run\""
         },
         "wait_seconds": {
           "type": "number",

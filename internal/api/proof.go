@@ -158,7 +158,9 @@ type ProofRunCounts struct {
 // ProofRun is a regression run: every gate command of a project's features (and the doctrine) run again from the
 // repository root.
 type ProofRun struct {
-	ID        string `json:"id"`
+	ID string `json:"id"`
+	// RepoRoot is the repository the run belongs to.
+	RepoRoot  string `json:"repoRoot"`
 	Feature   string `json:"feature,omitempty"`
 	State     string `json:"state" ts:"'running' | 'green' | 'red' | 'error' | 'cancelled'"`
 	StartedAt string `json:"startedAt"`

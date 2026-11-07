@@ -44,6 +44,8 @@ func TestMutating(t *testing.T) {
 		{"profiles", `{"action":"delete"}`, true},
 		{"proof", `{"action":"show"}`, false},
 		{"proof", `{"action":"run"}`, true},
+		{"proof", `{"action":"cancel_run"}`, true},
+		{"proof", `{"action":"matrix"}`, false},
 		{"notes", `{"action":"list"}`, false},
 		{"notes", `{"action":"send"}`, true},
 		{"automations", `{"action":"runs"}`, false},

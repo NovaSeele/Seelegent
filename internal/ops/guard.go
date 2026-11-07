@@ -36,7 +36,7 @@ func Mutating(name, action string) bool {
 	case "profiles":
 		return action == "upsert" || action == "delete"
 	case "proof":
-		return action == "run"
+		return action == "run" || action == "cancel_run"
 	case "notes":
 		return action != "list"
 	case "automations":

@@ -226,7 +226,8 @@ func TestDelegateRequest(t *testing.T) {
 	var req map[string]any
 	st.body(t, "POST /tasks", &req)
 	want := map[string]any{"prompt": "p", "cwd": filepath.Join(wd, "sub"), "mode": "edit", "model": "fast",
-		"gate": false, "allowGit": true, "spec": map[string]any{"dir": "specs/001", "taskIds": []any{"T1"}},
+		"gate": false, "noLane": true, "verify": false, "allowGit": true,
+		"spec":  map[string]any{"dir": "specs/001", "taskIds": []any{"T1"}},
 		"after": []any{"t0"}, "afterMode": "done", "session": map[string]any{"id": "lead-1", "hostId": "host-1", "lead": "claude"}}
 	a, _ := json.Marshal(req)
 	b, _ := json.Marshal(want)
@@ -268,7 +269,6 @@ func TestArgumentErrors(t *testing.T) {
 		{"delegate", map[string]any{"cwd": "x"}, "prompt is required"},
 		{"delegate", map[string]any{"prompt": "p"}, "cwd is required"},
 		{"delegate", map[string]any{"prompt": "p", "cwd": "x", "mode": "yolo"}, `mode "yolo" must be full or plan`},
-		{"delegate", map[string]any{"prompt": "p", "cwd": "x", "gate": "go test ./..."}, "running gate commands is not available"},
 		{"delegate", map[string]any{"prompt": "p", "cwd": "x", "task_ids": []string{"T1"}}, "task_ids needs spec"},
 		{"delegate", map[string]any{"prompt": "p", "cwd": "x", "wait_seconds": "soon"}, "invalid argument"},
 		{"followup", map[string]any{"task_id": "t1"}, "message is required"},
@@ -742,47 +742,59 @@ func TestWorkerGuard(t *testing.T) {
 	}
 }
 
-// TestUnsupportedOptions: lane, verify, force_lane, gate commands or true (and member on delegate) are refused
-// before any daemon call, as not available, in both delegate and followup.
-func TestUnsupportedOptions(t *testing.T) {
+// TestGateOptions: gate (commands, true, false), lane (paths, false), verify and force_lane reach the daemon in both
+// delegate and followup; member on delegate is still refused before any call.
+func TestGateOptions(t *testing.T) {
 	var calls atomic.Int32
-	_, c := newStub(t, map[string]http.HandlerFunc{
+	st, c := newStub(t, map[string]http.HandlerFunc{
 		"POST /tasks": func(w http.ResponseWriter, r *http.Request) {
 			calls.Add(1)
 			answer(http.StatusOK, api.TaskSummary{ID: "t1"})(w, r)
 		},
+		"GET /tasks/t1": answer(http.StatusOK, api.TaskDetail{TaskSummary: api.TaskSummary{ID: "t1"}}),
 		"POST /tasks/t1/followup": func(w http.ResponseWriter, r *http.Request) {
 			calls.Add(1)
 			answer(http.StatusOK, api.TaskSummary{ID: "t1"})(w, r)
 		},
+		"POST /wait": waitAnswer("done"),
 	})
 	cs := stubSession(t, c, nil)
-	options := map[string]map[string]any{
-		"lane":       {"lane": []string{"src/**"}},
-		"verify":     {"verify": true},
-		"force_lane": {"force_lane": true},
-		"gate":       {"gate": "go test ./..."},
-		"gate list":  {"gate": []string{"go vet ./...", "go test ./..."}},
-		"gate true":  {"gate": true},
+	options := []struct {
+		name string
+		args map[string]any
+		want string
+	}{
+		{"lane", map[string]any{"lane": []string{"src/**"}}, `"lane":["src/**"]`},
+		{"no lane", map[string]any{"lane": false}, `"noLane":true`},
+		{"verify", map[string]any{"verify": true}, `"verify":true`},
+		{"force_lane", map[string]any{"force_lane": true}, `"forceLane":true`},
+		{"gate", map[string]any{"gate": "go test ./..."}, `"gateCommands":["go test ./..."]`},
+		{"gate list", map[string]any{"gate": []string{"go vet ./...", "go test ./..."}},
+			`"gateCommands":["go vet ./...","go test ./..."]`},
+		{"gate true", map[string]any{"gate": true}, `"gate":true`},
+		{"gate false", map[string]any{"gate": false}, `"gate":false`},
 	}
-	for name, opt := range options {
-		for _, tool := range []string{"delegate", "followup"} {
-			args := map[string]any{"prompt": "p", "cwd": `C:\p`, "task_id": "t1", "message": "m"}
-			maps.Copy(args, opt)
-			res := callTool(t, cs, tool, args)
-			data, _ := json.Marshal(res.StructuredContent)
-			if !res.IsError || !strings.Contains(text(res, 0), "nothing was done") ||
-				!strings.Contains(string(data), `"code":"not_available"`) {
-				t.Errorf("%s with %s = %s %s", tool, name, text(res, 0), data)
+	for _, opt := range options {
+		for tool, key := range map[string]string{"delegate": "POST /tasks", "followup": "POST /tasks/t1/followup"} {
+			args := map[string]any{"prompt": "p", "cwd": `C:\p`, "task_id": "t1", "message": "m", "wait_seconds": 0}
+			maps.Copy(args, opt.args)
+			var rep any
+			ok(t, cs, tool, args, &rep)
+			st.mu.Lock()
+			body := string(st.bodies[key])
+			st.mu.Unlock()
+			if !strings.Contains(body, opt.want) {
+				t.Errorf("%s with %s: body %s, want %s", tool, opt.name, body, opt.want)
 			}
 		}
 	}
+	before := calls.Load()
 	res := callTool(t, cs, "delegate", map[string]any{"prompt": "p", "cwd": `C:\p`, "member": "m1"})
 	if !res.IsError || !strings.Contains(text(res, 0), "leave member out") {
 		t.Errorf("delegate with member = %s", text(res, 0))
 	}
-	if n := calls.Load(); n != 0 {
-		t.Fatalf("refused options reached the daemon %d times", n)
+	if n := calls.Load(); n != before {
+		t.Fatalf("member reached the daemon")
 	}
 }
 
@@ -889,4 +901,77 @@ func compact(raw json.RawMessage) string {
 	var b bytes.Buffer
 	_ = json.Compact(&b, raw)
 	return b.String()
+}
+
+// TestProofTool: the proof actions map onto the proof routes; run with wait_seconds polls until the run ends; cwd
+// defaults to the server's folder; missing arguments fail before any call.
+func TestProofTool(t *testing.T) {
+	var polls atomic.Int32
+	st, c := newStub(t, map[string]http.HandlerFunc{
+		"GET /proof/index":  answer(http.StatusOK, api.ProofIndex{RepoRoot: `C:\p`, Features: []api.ProofFeature{{Dir: "specs/001"}}}),
+		"GET /proof/matrix": answer(http.StatusOK, api.ProofMatrix{Feature: "specs/001", Counts: api.ProofCounts{Proven: 2}}),
+		"POST /proof/run":   answer(http.StatusAccepted, api.ProofRun{ID: "r1", State: api.RunRunning}),
+		"GET /proof/runs/r1": func(w http.ResponseWriter, r *http.Request) {
+			state := api.RunRunning
+			if polls.Add(1) >= 2 {
+				state = api.RunRed
+			}
+			answer(http.StatusOK, api.ProofRun{ID: "r1", State: state, Counts: api.ProofRunCounts{Red: 1}, Total: 1})(w, r)
+		},
+		"POST /proof/runs/r1/cancel": answer(http.StatusOK, api.ProofRun{ID: "r1", State: api.RunCancelled}),
+		"GET /proof/stats":           answer(http.StatusOK, api.ProofStats{Tasks: 3}),
+		"GET /lanes":                 answer(http.StatusOK, api.LanesView{Mode: "warn", Claims: []api.LaneClaim{}}),
+		"GET /contention":            answer(http.StatusOK, api.ContentionView{WindowHours: 24}),
+	})
+	cs := stubSession(t, c, func(o *mcpserver.Options) {
+		o.Getwd = func() (string, error) { return `C:\p`, nil }
+	})
+	var ix api.ProofIndex
+	ok(t, cs, "proof", map[string]any{"action": "index"}, &ix)
+	if len(ix.Features) != 1 || !strings.Contains(st.uris["GET /proof/index"], "cwd=C%3A%5Cp") {
+		t.Fatalf("index = %+v %s", ix, st.uris["GET /proof/index"])
+	}
+	var m api.ProofMatrix
+	ok(t, cs, "proof", map[string]any{"action": "matrix", "feature": "specs/001"}, &m)
+	if m.Counts.Proven != 2 || !strings.Contains(st.uris["GET /proof/matrix"], "feature=specs%2F001") {
+		t.Fatalf("matrix = %+v %s", m, st.uris["GET /proof/matrix"])
+	}
+	var run api.ProofRun
+	ok(t, cs, "proof", map[string]any{"action": "run", "force": true, "wait_seconds": 30}, &run)
+	if run.State != api.RunRed || polls.Load() < 2 {
+		t.Fatalf("run = %+v after %d polls", run, polls.Load())
+	}
+	var req api.ProofRunRequest
+	st.body(t, "POST /proof/run", &req)
+	if !req.Force || req.Cwd != `C:\p` {
+		t.Fatalf("run request = %+v", req)
+	}
+	// Without wait_seconds the started run comes back at once.
+	before := polls.Load()
+	ok(t, cs, "proof", map[string]any{"action": "run"}, &run)
+	if run.State != api.RunRunning || polls.Load() != before {
+		t.Fatalf("run without wait = %+v", run)
+	}
+	ok(t, cs, "proof", map[string]any{"action": "cancel_run", "run_id": "r1"}, &run)
+	if run.State != api.RunCancelled {
+		t.Fatalf("cancel_run = %+v", run)
+	}
+	var stats api.ProofStats
+	ok(t, cs, "proof", map[string]any{"action": "stats", "since": "2026-01-01T00:00:00Z"}, &stats)
+	if stats.Tasks != 3 || !strings.Contains(st.uris["GET /proof/stats"], "since=2026") {
+		t.Fatalf("stats = %+v %s", stats, st.uris["GET /proof/stats"])
+	}
+	var lanes api.LanesView
+	ok(t, cs, "proof", map[string]any{"action": "lanes"}, &lanes)
+	var cont api.ContentionView
+	ok(t, cs, "proof", map[string]any{"action": "contention"}, &cont)
+	if lanes.Mode != "warn" || cont.WindowHours != 24 {
+		t.Fatalf("lanes = %+v, contention = %+v", lanes, cont)
+	}
+	for args, want := range map[string]string{"matrix": "feature is required", "run_status": "run_id is required",
+		"cancel_run": "run_id is required", "explode": "unknown proof action"} {
+		if msg := fails(t, cs, "proof", map[string]any{"action": args}); !strings.Contains(msg, want) {
+			t.Errorf("proof %s = %q, want %q", args, msg, want)
+		}
+	}
 }
