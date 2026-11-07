@@ -178,6 +178,38 @@ func TestConsultDuringFollowup(t *testing.T) {
 	}
 }
 
+func TestSeniorObjectionWarns(t *testing.T) {
+	cs := []api.Consult{
+		{Member: "sam", Rank: api.RankSenior, Verdict: api.ConsultObject,
+			Findings: []api.Claim{{Text: "the total can go negative"}}},
+		{Member: "pia", Rank: api.RankPeer, Verdict: api.ConsultObject},
+		{Member: "ted", Rank: api.RankSenior, Verdict: api.ConsultConcerns},
+		{Member: "una", Rank: api.RankSenior, Verdict: api.ConsultObject, Required: []string{"add a test"}},
+	}
+	got := seniorObjections(cs)
+	if len(got) != 2 || got[0] != "senior sam objected: the total can go negative" ||
+		got[1] != "senior una objected: add a test" {
+		t.Errorf("warnings = %q", got)
+	}
+}
+
+// A hidden run that continues on another account (a fresh conversation) gets its first brief again; the same
+// conversation gets only the turn's message.
+func TestHiddenRunFreshConversation(t *testing.T) {
+	tk := &Task{Kind: KindMeeting, Turns: []*Turn{{N: 1, Message: "You are P1, a peer."}, {N: 2, Message: "Round 2 of 3."}}}
+	s := &Service{}
+	if got := s.prompt(t.Context(), tk, tk.Turns[1], true); got != "Round 2 of 3." {
+		t.Errorf("continuing = %q", got)
+	}
+	got := s.prompt(t.Context(), tk, tk.Turns[1], false)
+	if !strings.Contains(got, "You are P1, a peer.") || !strings.HasSuffix(got, "Round 2 of 3.") {
+		t.Errorf("fresh conversation = %q", got)
+	}
+	if got := s.prompt(t.Context(), tk, tk.Turns[0], false); got != "You are P1, a peer." {
+		t.Errorf("first turn = %q", got)
+	}
+}
+
 func TestParseConsultDefaults(t *testing.T) {
 	v, f, r := parseConsult("no headings at all", t.TempDir())
 	if v != api.ConsultConcerns || len(f) != 0 || len(r) != 0 || f == nil || r == nil {

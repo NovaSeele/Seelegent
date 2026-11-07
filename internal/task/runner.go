@@ -929,7 +929,13 @@ func lastError(tu *Turn) string {
 // fresh conversation (with the handoff section, so a worker on another account never loses the task, old B7).
 func (s *Service) prompt(ctx context.Context, t *Task, tu *Turn, continuing bool) string {
 	if Hidden(t.Kind) {
-		return tu.Message // the briefs of hidden runs are complete on every turn (verifier, consult, meeting, judge)
+		// A hidden run's first turn carries its whole brief (role, rules, format); later turns (meeting rounds) lean
+		// on the conversation. A fresh conversation on a later turn (another account) gets the first brief again.
+		if continuing || tu.N <= 1 || len(t.Turns) == 0 || t.Turns[0].Message == "" {
+			return tu.Message
+		}
+		return "## Your brief\n(Sent when this work began; you continue it in a new conversation.)\n\n" +
+			t.Turns[0].Message + "\n\n## This turn\n\n" + tu.Message
 	}
 	spec := s.briefSpec(t)
 	if continuing {

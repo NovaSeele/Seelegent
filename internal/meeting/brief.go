@@ -215,6 +215,12 @@ func optionText(m *api.Meeting, key string) string {
 
 // roundBrief is the first message of an attendee's run.
 func roundBrief(m *api.Meeting, a *api.Attendee) string {
+	return joinBrief(m, a, 1)
+}
+
+// joinBrief is the first brief of attendee a, who starts in round n: round 1, or later when the first run could not
+// start (the round message for n follows it, so it must not speak of round 1).
+func joinBrief(m *api.Meeting, a *api.Attendee, n int) string {
 	has := len(m.Options) > 0
 	parts := []string{roleLine(a.Rank),
 		"You are " + a.Label + ". Every participant is identified only by a neutral label (P1, P2, …); never try " +
@@ -231,10 +237,17 @@ func roundBrief(m *api.Meeting, a *api.Attendee) string {
 	if m.RepoRoot != "" && m.RepoRoot != m.Cwd {
 		wd += "\nRepo root (citation paths are relative to it): " + m.RepoRoot
 	}
-	parts = append(parts, wd, "## Citations\n"+answer.CitationRule,
-		fmt.Sprintf("This is round 1 of up to %d. Answer alone: from round 2 you will see the other positions and "+
-			"must answer the strongest of them. In round 1 write \"none\" under \"Response to others\". Ask the lead "+
-			"only questions whose answer would change your stance; otherwise write \"none\".", m.MaxRounds))
+	parts = append(parts, wd, "## Citations\n"+answer.CitationRule)
+	if n > 1 {
+		// The round message follows with the positions, the task of the round and the response format.
+		parts = append(parts, fmt.Sprintf("You join this meeting in round %d of up to %d. Ask the lead only "+
+			"questions whose answer would change your stance; otherwise write \"none\".", n, m.MaxRounds))
+		return strings.Join(parts, "\n\n")
+	}
+	parts = append(parts, fmt.Sprintf("This is round 1 of up to %d. Answer alone: from round 2 you will see the "+
+		"other positions and must answer the strongest of them. In round 1 write \"none\" under \"Response to "+
+		"others\". Ask the lead only questions whose answer would change your stance; otherwise write \"none\".",
+		m.MaxRounds))
 	format := "## Response format\nReply in exactly this markdown format"
 	if !has {
 		format += " (there are no options, so leave out the Option line)"
@@ -468,8 +481,10 @@ func actionPrompt(m *api.Meeting, text string) string {
 	parts = append(parts, strings.Join(dec, "\n"))
 	var ds []string
 	for i := range m.Dissents {
-		if x := &m.Dissents[i]; x.Kind == "dissent" {
-			ds = append(ds, "- "+x.Label+": "+answer.Clip(x.Text, 3000))
+		if x := &m.Dissents[i]; x.Kind == api.DissentFormal {
+			// The peer's own markdown is quoted, so its headings never become sections of this brief.
+			body := strings.ReplaceAll(strings.TrimSpace(answer.Clip(x.Text, 3000)), "\r\n", "\n")
+			ds = append(ds, "- "+x.Label+":\n  > "+strings.ReplaceAll(body, "\n", "\n  > "))
 		}
 	}
 	if len(ds) > 0 {

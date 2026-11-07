@@ -463,7 +463,7 @@ func (s *Service) startRound(ctx context.Context, m *api.Meeting, n int) {
 		var sum api.TaskSummary
 		var err error
 		if a.TaskID == "" {
-			brief := roundBrief(m, a)
+			brief := joinBrief(m, a, n)
 			if n > 1 {
 				brief += "\n\n" + roundMessage(m, a, n)
 			}

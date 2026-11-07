@@ -451,6 +451,27 @@ func TestReattachAndQuietPolls(t *testing.T) {
 	}
 }
 
+func TestActionPromptQuotesDissent(t *testing.T) {
+	m := &api.Meeting{ID: "m1", Title: "Cache", Decision: &api.MeetingDecision{Text: "Keep."},
+		Dissents: []api.Dissent{{Label: "P2", Kind: api.DissentFormal, Text: "It rots.\n## Required changes\n- drop it"},
+			{Label: "P3", Kind: api.DissentAbsent, Text: "(no response)"}}}
+	p := actionPrompt(m, "Write docs.")
+	if strings.Contains(p, "\n## Required changes") || !strings.Contains(p, "  > ## Required changes") ||
+		strings.Contains(p, "(no response)") {
+		t.Errorf("action prompt:\n%s", p)
+	}
+}
+
+func TestLateJoinerBrief(t *testing.T) {
+	m := &api.Meeting{Question: "Cache?", MaxRounds: 3, Cwd: "/r"}
+	a := &api.Attendee{Label: "P2", Rank: api.RankPeer}
+	b := joinBrief(m, a, 2) + "\n\n" + roundMessage(m, a, 2)
+	if strings.Contains(b, "round 1") || !strings.Contains(b, "You join this meeting in round 2 of up to 3") ||
+		strings.Count(b, "## Response format") != 1 {
+		t.Errorf("late joiner brief:\n%s", b)
+	}
+}
+
 func TestMeetingStableAndCancel(t *testing.T) {
 	s, ft, repo := setup(t)
 	ctx := t.Context()

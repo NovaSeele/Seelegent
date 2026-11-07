@@ -89,16 +89,27 @@ func (s *Service) Consult(ctx context.Context, id string, req api.ConsultRequest
 	if strings.TrimSpace(req.Member) == "" {
 		return api.Consult{}, invalidf("member is required")
 	}
-	t, err := s.repo.Get(ctx, id)
+	ended := func(t *Task) error {
+		if Hidden(t.Kind) {
+			return ErrNotFound
+		}
+		if Pending(t.Status) || t.Manual || t.Status == StatusBlockedDeps {
+			return badStatef("task %s is %s; consult after its turn ended", id, t.Status)
+		}
+		return nil
+	}
+	// The check and the copy the brief is made from are taken under the task's lock; the run is created after it
+	// is released (lock order: claimMu, then the task), and the record is only added when no turn began meanwhile.
+	t, err := s.mutate(ctx, id, func(t *Task) ([]NewEvent, error) {
+		if err := ended(t); err != nil {
+			return nil, err
+		}
+		return nil, errNoChange
+	})
 	if err != nil {
 		return api.Consult{}, err
 	}
-	if Hidden(t.Kind) {
-		return api.Consult{}, ErrNotFound
-	}
-	if Pending(t.Status) || t.Manual || t.Status == StatusBlockedDeps {
-		return api.Consult{}, badStatef("task %s is %s; consult after its turn ended", id, t.Status)
-	}
+	turns := len(t.Turns)
 	m, err := s.usableMember(ctx, strings.TrimSpace(req.Member))
 	if err != nil {
 		return api.Consult{}, err
@@ -114,7 +125,13 @@ func (s *Service) Consult(ctx context.Context, id string, req api.ConsultRequest
 		return api.Consult{}, err
 	}
 	var rec api.Consult
-	_, err = s.mutate(ctx, id, func(cur *Task) ([]NewEvent, error) {
+	_, err = s.mutate(s.background(), id, func(cur *Task) ([]NewEvent, error) {
+		if err := ended(cur); err != nil {
+			return nil, err
+		}
+		if len(cur.Turns) != turns {
+			return nil, badStatef("task %s started a new turn; consult after it ended", id)
+		}
 		n := len(cur.Consults) + 1
 		rec = api.Consult{ID: "c" + strconv.Itoa(n), Member: m.ID, Rank: m.Rank, RunTaskID: sum.ID,
 			Status: consultRunning, Findings: []api.Claim{}, Required: []string{}, Focus: focus,
