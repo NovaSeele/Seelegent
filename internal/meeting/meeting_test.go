@@ -576,6 +576,24 @@ func TestSummaryPendingQuestions(t *testing.T) {
 	}
 }
 
+func TestLegacyAbsentReason(t *testing.T) {
+	m, err := decode(`{"rounds": [{"n": 1, "answers": [
+		{"label": "P1", "absent": true, "error": "the run ended failed without an answer: fakecli: no script"},
+		{"label": "P2", "absent": true, "error": "the run was cancelled"},
+		{"label": "P3", "absent": true, "error": "the run is gone"},
+		{"label": "P4", "absent": true, "error": "no account"},
+		{"label": "P5", "absent": true, "absentReason": "cancelled", "error": "the run ended failed"}]}]}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{api.AbsentFailed, api.AbsentCancelled, api.AbsentGone, "", api.AbsentCancelled}
+	for i, a := range m.Rounds[0].Answers {
+		if a.AbsentReason != want[i] {
+			t.Errorf("%s: reason %q, want %q", a.Label, a.AbsentReason, want[i])
+		}
+	}
+}
+
 func TestParseAnswer(t *testing.T) {
 	a := parseAnswer("**Option:** (b) because\nconfidence: 140", []string{"A", "B"})
 	if a.Option != "B" || a.Confidence == nil || *a.Confidence != 100 || a.Stance == "" {

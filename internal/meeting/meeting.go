@@ -1380,7 +1380,28 @@ func decode(data string) (api.Meeting, error) {
 	if m.Usage.ByBackend == nil {
 		m.Usage.ByBackend = map[string]int{}
 	}
+	for ri := range m.Rounds {
+		for ai := range m.Rounds[ri].Answers {
+			if a := &m.Rounds[ri].Answers[ai]; a.Absent && a.AbsentReason == "" {
+				a.AbsentReason = legacyAbsentReason(a.Error)
+			}
+		}
+	}
 	return m, nil
+}
+
+// legacyAbsentReason reads the reason of an absent answer recorded before AbsentReason existed from the detail
+// readRun wrote then; anything else stays without a reason.
+func legacyAbsentReason(why string) string {
+	switch {
+	case strings.HasPrefix(why, "the run ended failed"):
+		return api.AbsentFailed
+	case strings.HasPrefix(why, "the run ended cancelled"), why == "the run was cancelled":
+		return api.AbsentCancelled
+	case why == "the run is gone", why == "the run has no such turn":
+		return api.AbsentGone
+	}
+	return ""
 }
 
 func (s *Service) load(ctx context.Context, id string) (api.Meeting, error) {
