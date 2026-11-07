@@ -141,7 +141,7 @@ async function submit() {
         backend: backend.value,
         kind: kind.value,
         label: label.value.trim(),
-        priority: Math.round(priority.value),
+        priority: priority.value,
         ...(kind.value === 'api-key' ? { provider: provider.value } : {}),
       },
       apiKey,
@@ -194,6 +194,7 @@ async function submit() {
           :label="t('accounts.priority')"
           :hint="t('accounts.add.priorityHint')"
           :error="errors.priority"
+          integer
           @commit="priority = $event"
         />
         <template v-if="kind === 'api-key'">

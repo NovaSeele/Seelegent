@@ -5,7 +5,7 @@ import { computed, ref, useId, watch } from 'vue'
  * A whole or decimal number input with an optional unit after it. Typing does not commit: `commit` fires with the
  * parsed value when the field loses focus or Enter is pressed (or after `debounce` ms of no typing), so an
  * autosaving form does not send every keystroke. Esc puts the last committed value back. An empty or unparsable
- * entry commits nothing and shows the value again.
+ * entry commits nothing and shows the value again. An `integer` field rounds the entry and shows what it sent.
  */
 const props = withDefaults(
   defineProps<{
@@ -19,6 +19,8 @@ const props = withDefaults(
     disabled?: boolean
     /** Commit after this many ms without typing (0 = only on blur and Enter). */
     debounce?: number
+    /** Whole numbers only: the entry is rounded before it commits. */
+    integer?: boolean
   }>(),
   {
     unit: undefined,
@@ -56,11 +58,14 @@ const describedBy = computed(
 function commit() {
   clearTimeout(timer)
   const raw = text.value.trim().replace(',', '.')
-  const value = Number(raw)
-  if (raw === '' || !Number.isFinite(value)) {
+  const parsed = Number(raw)
+  if (raw === '' || !Number.isFinite(parsed)) {
     text.value = String(props.modelValue)
     return
   }
+  // A whole-number field shows the rounded value it commits, so a later blur finds nothing new to send.
+  const value = props.integer ? Math.round(parsed) : parsed
+  if (props.integer) text.value = String(value)
   if (value !== props.modelValue && value !== sent) {
     sent = value
     emit('commit', value)

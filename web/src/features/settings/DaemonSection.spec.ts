@@ -40,6 +40,23 @@ describe('DaemonSection', () => {
     wrapper.unmount()
   })
 
+  it('rounds a whole-number setting and sends it once for Enter then blur', async () => {
+    const patch = vi.fn<SettingsApi['patch']>((body) =>
+      Promise.resolve({ ...SETTINGS, ...body } as Settings),
+    )
+    const wrapper = await mountSection('workers', patch)
+    const input = wrapper.get('[data-setting="concurrency"] input')
+    await input.setValue('4.6')
+    await input.trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+    await input.trigger('blur')
+    await flushPromises()
+    expect(patch).toHaveBeenCalledTimes(1)
+    expect(patch).toHaveBeenCalledWith({ maxConcurrentPerAccount: 5 })
+    expect((input.element as HTMLInputElement).value).toBe('5')
+    wrapper.unmount()
+  })
+
   it('shows the daemon’s message for a refused field and keeps the old value', async () => {
     const patch = vi.fn<SettingsApi['patch']>(() =>
       Promise.reject(

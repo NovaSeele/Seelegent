@@ -91,9 +91,7 @@ function setEnabled(enabled: boolean) {
 }
 
 function setPriority(priority: number) {
-  void actions.run('priority', () =>
-    accounts.update(props.account.id, { priority: Math.round(priority) }),
-  )
+  void actions.run('priority', () => accounts.update(props.account.id, { priority }))
 }
 </script>
 
@@ -169,6 +167,7 @@ function setPriority(priority: number) {
         :model-value="account.priority"
         :label="t('accounts.priority')"
         size="sm"
+        integer
         :disabled="actions.isBusy('priority')"
         @commit="setPriority"
       />

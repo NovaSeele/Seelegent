@@ -125,7 +125,8 @@ async function test() {
         :unit="t('settings.units.s')"
         :error="err('timeoutSeconds')"
         size="sm"
-        @commit="update({ timeoutSeconds: Math.round($event) })"
+        integer
+        @commit="update({ timeoutSeconds: $event })"
       />
     </div>
     <div class="hook__foot">

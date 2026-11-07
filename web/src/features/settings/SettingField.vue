@@ -71,7 +71,8 @@ function saveLines(text: string) {
             :hint="t('settings.daemon.range', { min: def.min, max: def.max })"
             :error="error"
             :debounce="500"
-            @commit="save(Math.round($event))"
+            integer
+            @commit="save"
           />
           <NumberField
             v-else-if="def.kind === 'percent'"
