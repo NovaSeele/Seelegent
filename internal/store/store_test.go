@@ -219,11 +219,13 @@ func TestReadDoesNotWaitForWriter(t *testing.T) {
 	defer cancel()
 	got, _, err := s.GetMeta(readCtx, "k")
 	close(release)
+	// Wait for the writer before any Fatal, so it never outlives the test's temp dir.
+	werr := <-done
 	if err != nil || got != "old" {
 		t.Fatalf("read during write = %q, %v; want old", got, err)
 	}
-	if err := <-done; err != nil {
-		t.Fatal(err)
+	if werr != nil {
+		t.Fatal(werr)
 	}
 }
 

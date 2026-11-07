@@ -54,10 +54,14 @@ func TestLockWaitsForRelease(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	unlocked := make(chan struct{})
 	go func() {
+		defer close(unlocked)
 		time.Sleep(120 * time.Millisecond)
 		_ = held.Unlock()
 	}()
+	// Unlock closes its handle after releasing the lock: wait for it before t.TempDir is removed.
+	defer func() { <-unlocked }()
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
 	l, err := Lock(ctx, path)
