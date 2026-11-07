@@ -72,6 +72,40 @@ func TestPipedGroups(t *testing.T) {
 	}, POSIX)
 }
 
+// TestPipedCompoundsAndGroupInput (F16): a compound command (if..fi, for/while/until..done, case..esac) piped into
+// a shell is a group whose commands' output is the script, and a shell inside a group on the read end of a pipe
+// reads that pipe; read-only lines stay allowed.
+func TestPipedCompoundsAndGroupInput(t *testing.T) {
+	expect(t, Checker{}, map[string]bool{
+		// (a) compound commands on the write end.
+		`if true; then echo git stash; fi | bash`:                          true,
+		`for i in 1; do echo git stash; done | bash`:                       true,
+		`while true; do echo git reset --hard; break; done | sh`:           true,
+		`until false; do printf 'git stash\n'; done | bash`:                true,
+		`case x in x) echo git stash;; esac | bash`:                        true,
+		`if true; then for i in 1; do echo git stash; done; fi | bash`:     true,
+		`if true; then echo cd x; fi; echo git stash | bash`:               true,
+		"if true\nthen\n  echo git stash\nfi | bash":                       true,
+		`for f in a b; do echo git status "$f"; done | bash`:               false,
+		`if true; then echo git stash; fi | cat`:                           false,
+		`while read -r l; do echo "$l"; done < notes.txt | sort`:           false,
+		`for i in 1 2; do echo "fi done esac"; done | bash`:                false,
+		`if [ -f x ]; then echo git stash > notes.txt; fi; echo ok | bash`: false,
+		// (b) a shell inside a group on the read end.
+		`echo git stash | (cd x && bash)`:                         true,
+		`echo git stash | { cd x && bash; }`:                      true,
+		`echo git stash | (cd x; sh -s)`:                          true,
+		`printf 'git reset --hard\n' | ( (bash) )`:                true,
+		`echo git stash | if true; then bash; fi`:                 true,
+		`echo git stash | (cd x && python3)`:                      false,
+		`echo git status | (cd x && bash)`:                        false,
+		`echo git stash | (cd x && cat)`:                          false,
+		`echo git stash | (cd x && bash ./build.sh)`:              false,
+		"echo git stash | (bash <<'EOF'\ngo test ./...\nEOF\n)":   false,
+		`git log --oneline | while read -r l; do echo "$l"; done`: false,
+	}, POSIX)
+}
+
 // TestConfigReads (G-b): git config <key> and git config get <key> read; the writing forms stay refused.
 func TestConfigReads(t *testing.T) {
 	expect(t, Checker{}, map[string]bool{

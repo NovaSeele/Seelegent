@@ -81,9 +81,10 @@ subcommand (`git stsh`) is not run as the command git guesses. git takes the las
   integration is not seen either.
 - The guard reads command lines, not files: a command stored in a variable and run later, a script file the worker
   wrote, or a Makefile target are not read. Dynamic words in the git part are refused (fail closed), dynamic words
-  elsewhere are not. What is piped into a shell is read from simple commands, subshells and brace groups, not from
-  compound commands (`for x in a; do echo git stash; done | sh`); `xargs` reading its input from a file (`-a`,
-  `--arg-file`) into a shell is not read either.
+  elsewhere are not. What is piped into a shell is read from simple commands, subshells, brace groups and compound
+  commands (`for x in a; do echo git stash; done | sh`, `if`, `while`, `until`, `case`), and a shell inside a group
+  on the read end of a pipe reads it too (`echo git stash | (cd x && bash)`); `xargs` reading its input from a file
+  (`-a`, `--arg-file`) into a shell is not read.
 - codex has no pre-tool hook. Its own sandbox (`backends.codex.sandbox`, default `workspace-write`; plan mode is
   `read-only`) limits where it can write; the shim covers the git commands it runs through `PATH`. With
   `danger-full-access` only the shim remains.
