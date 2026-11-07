@@ -106,6 +106,8 @@
     },
     "backgroundWait": "Waiting on background work",
     "log": "Worker log",
-    "session": "Conversation started · {model}"
+    "session": "Conversation started · {model}",
+    "restored": "Restored {count} file (turn {n}) | Restored {count} files (turn {n})",
+    "atRisk": "{count} file still at risk | {count} files still at risk"
   }
 }

@@ -16,6 +16,8 @@ import type {
 } from '@/api/types'
 import type { IconName } from '@/components/ui/icons'
 
+import { reasonKey } from '../../detail/question'
+
 interface Base {
   key: string
   rev: number
@@ -29,6 +31,8 @@ export type Tone = 'info' | 'ok' | 'warn' | 'error' | 'dim'
 export interface Message {
   key: string
   params?: Record<string, string | number>
+  /** Shown instead when the catalog has no `key` (an attention reason this dashboard does not know). */
+  fallback?: string
 }
 
 export type TimelineItem =
@@ -51,6 +55,9 @@ export type TimelineItem =
       message: Message
       /** ISO time shown next to the message ("until …"). */
       until?: string
+      /** A second message after the first ("2 files at risk"). */
+      note?: Message
+      /** Data shown under the line as it is (paths, an error, the worker's question); never daemon prose. */
       detail?: string
     })
 
@@ -58,10 +65,38 @@ export type TimelineKind = TimelineItem['kind']
 
 type Draft = TimelineItem & { step?: number }
 
+/** What folding needs to remember between events. */
+interface Fold {
+  items: Draft[]
+  /** Open tool calls by id. */
+  open: Map<string, Draft>
+  /** Files at risk not restored yet, per turn. */
+  atRisk: Map<number, Set<string>>
+  /** The turn of a work_at_risk notice shown since the last attention or restored event. */
+  riskShown: number | undefined
+}
+
+interface Extra {
+  until?: string
+  note?: Message
+  detail?: string
+}
+
+/** Attention reasons are snake_case words; anything else (older daemons sent prose) has no label. */
+const REASON = /^[a-z][a-z_]*$/
+
+/** The icon of an attention state. */
+const ATTENTION_ICON: Partial<Record<string, IconName>> = {
+  blocked: 'warning',
+  info: 'info',
+}
+
+const openRisk = (f: Fold) => [...f.atRisk.values()].reduce((sum, files) => sum + files.size, 0)
+
 const tokens = (usage: Usage | null | undefined) => usage?.totalTokens ?? 0
 
 /** Folds one event into the items; returns the item it touched, or null when the event is not shown. */
-function fold(items: Draft[], open: Map<string, Draft>, event: TaskEvent): Draft | null {
+function fold(f: Fold, event: TaskEvent): Draft | null {
   const base: Base = {
     key: `e${event.seq}`,
     rev: event.seq,
@@ -74,7 +109,7 @@ function fold(items: Draft[], open: Map<string, Draft>, event: TaskEvent): Draft
     icon: IconName,
     key: string,
     params?: Message['params'],
-    extra: { until?: string; detail?: string } = {},
+    extra: Extra = {},
   ): Draft => ({ ...base, kind: 'notice', tone, icon, message: { key, params }, ...extra })
 
   switch (event.type) {
@@ -145,17 +180,7 @@ function fold(items: Draft[], open: Map<string, Draft>, event: TaskEvent): Draft
     case 'resumed':
       return notice('dim', 'refresh', 'terminal.ev.resumed')
     case 'attention':
-      return event.data.state === 'cleared'
-        ? notice('dim', 'check', 'terminal.ev.attentionCleared')
-        : notice(
-            'warn',
-            'question',
-            `terminal.ev.attention.${event.data.state}`,
-            {},
-            {
-              detail: event.data.detail ?? event.data.reason,
-            },
-          )
+      return foldAttention(f, event, base)
     case 'deps':
       return notice(
         event.data.state === 'blocked' ? 'error' : 'dim',
@@ -178,21 +203,80 @@ function fold(items: Draft[], open: Map<string, Draft>, event: TaskEvent): Draft
       )
     case 'cancel':
       return notice('dim', 'statusCancelled', 'terminal.ev.cancel')
-    case 'work_at_risk':
+    case 'work_at_risk': {
+      const turn = event.turn ?? 0
+      f.atRisk.set(turn, new Set([...(f.atRisk.get(turn) ?? []), ...event.data.files]))
+      f.riskShown = turn
       return notice(
         'error',
         'warning',
         'terminal.ev.workAtRisk',
-        {
-          count: event.data.files.length,
-        },
+        { count: event.data.files.length },
         { detail: event.data.files.join('\n') },
       )
+    }
+    case 'restored': {
+      const files = event.data.files
+      const left = f.atRisk.get(event.turn ?? 0)
+      for (const file of files) left?.delete(file)
+      f.riskShown = undefined
+      return files.length
+        ? notice(
+            'ok',
+            'check',
+            'terminal.ev.restored',
+            { count: files.length, n: event.turn ?? '' },
+            { detail: files.join('\n') },
+          )
+        : null
+    }
     case 'error':
       return notice('error', 'error', 'terminal.ev.error', {}, { detail: event.data.message })
     case 'worker':
-      return foldWorker(items, open, event, base, notice)
+      return foldWorker(f.items, f.open, event, base, notice)
   }
+}
+
+/**
+ * An attention flag. Its line names the reason (common.attention.*, the words of the task's pill) and falls back
+ * to the state; the daemon's English detail is never shown, only the worker's own question or what the transcript
+ * itself knows (the files still at risk). A work_at_risk flag right after that turn's work_at_risk line says
+ * nothing new and is left out.
+ */
+function foldAttention(
+  f: Fold,
+  event: Extract<TaskEvent, { type: 'attention' }>,
+  base: Base,
+): Draft | null {
+  const data = event.data
+  const riskShown = f.riskShown
+  f.riskShown = undefined
+  const line = (tone: Tone, icon: IconName, message: Message, extra: Extra = {}): Draft => ({
+    ...base,
+    kind: 'notice',
+    tone,
+    icon,
+    message,
+    ...extra,
+  })
+  if (data.state === 'cleared') return line('dim', 'check', { key: 'terminal.ev.attentionCleared' })
+  if (data.reason === 'work_at_risk' && riskShown !== undefined && riskShown === event.turn) return null
+  const state = `terminal.ev.attention.${data.state}`
+  const message: Message = REASON.test(data.reason)
+    ? { key: `common.attention.${reasonKey(data.reason)}`, fallback: state }
+    : { key: state }
+  const extra: Extra = {}
+  if (data.reason === 'question' && data.detail) extra.detail = data.detail
+  if (data.reason === 'work_at_risk') {
+    const count = openRisk(f)
+    if (count) extra.note = { key: 'terminal.ev.atRisk', params: { count } }
+  }
+  return line(
+    data.state === 'info' ? 'dim' : 'warn',
+    ATTENTION_ICON[data.state] ?? 'question',
+    message,
+    extra,
+  )
 }
 
 function foldWorker(
@@ -291,10 +375,10 @@ export function buildTimeline(
   events: readonly TaskEvent[],
   previous: readonly TimelineItem[] = [],
 ): TimelineItem[] {
-  const items: Draft[] = []
-  const open = new Map<string, Draft>()
+  const f: Fold = { items: [], open: new Map(), atRisk: new Map(), riskShown: undefined }
+  const items = f.items
   for (const event of events) {
-    const touched = fold(items, open, event)
+    const touched = fold(f, event)
     // A new item carries this event's key; an older item that changed keeps its own.
     if (touched?.key === `e${event.seq}`) items.push(touched)
   }

@@ -45,6 +45,8 @@ const (
 	EventCancel EventType = "cancel"
 	// EventWorkAtRisk: WorkAtRiskData (milestone 12).
 	EventWorkAtRisk EventType = "work_at_risk"
+	// EventRestored: RestoredData, files of a turn put back from its start snapshot (milestone 12).
+	EventRestored EventType = "restored"
 	// EventError: ErrorData.
 	EventError EventType = "error"
 )
@@ -54,7 +56,7 @@ func EventTypes() []EventType {
 	return []EventType{EventWorker, EventLeadMessage, EventRoute, EventWorkerPrompt, EventAttemptEnd, EventTurnEnd,
 		EventQuotaExhausted, EventAuthFailed, EventWaitingQuota, EventRetry, EventHandoff, EventReattach,
 		EventResumed, EventAttention, EventDeps, EventTakeover, EventHandback, EventReview, EventCancel,
-		EventWorkAtRisk, EventError}
+		EventWorkAtRisk, EventRestored, EventError}
 }
 
 // TaskEvent is one entry of a task's append-only event log. Seq starts at 1 and grows by one per task.
@@ -191,6 +193,16 @@ type EmptyData struct{}
 type WorkAtRiskData struct {
 	Files    []string `json:"files"`
 	Snapshot string   `json:"snapshot,omitempty"`
+}
+
+// RestoredData is the data of a restored event; the event's turn is the turn whose start snapshot the files came
+// from.
+type RestoredData struct {
+	// Files are the restored files, relative to the repository root.
+	Files []string `json:"files"`
+	// Backup names the snapshot that keeps what the files held before the restore (t<turn>-restore-<time>, in the
+	// task's snapshot folder).
+	Backup string `json:"backup,omitempty"`
 }
 
 // ErrorData is the data of an error event.

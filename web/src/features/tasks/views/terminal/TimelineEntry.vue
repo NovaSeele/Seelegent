@@ -9,7 +9,7 @@ import { useFormat } from '@/composables/useFormat'
 import { relativeTo } from '@/lib/paths'
 
 import PromptItem from './PromptItem.vue'
-import { turnTokens, type TimelineItem } from './timeline'
+import { turnTokens, type Message, type TimelineItem } from './timeline'
 import ToolItem from './ToolItem.vue'
 
 /** One transcript item. Simple kinds render here; tools and the worker brief have their own components. */
@@ -22,20 +22,23 @@ const props = defineProps<{
 }>()
 defineEmits<{ toggle: [] }>()
 
-const { t } = useI18n()
+const { t, te } = useI18n()
 const format = useFormat()
+
+/** A message in the reader's language, plural by its `count`; `fallback` when the catalog lacks `key`. */
+function say(m: Message): string {
+  const key = m.fallback && !te(m.key) ? m.fallback : m.key
+  const count = m.params?.count
+  return t(key, m.params ?? {}, typeof count === 'number' ? count : 1)
+}
 
 const noticeText = computed(() => {
   const item = props.item
   if (item.kind !== 'notice') return ''
-  const text = t(
-    item.message.key,
-    item.message.params ?? {},
-    (item.message.params?.count as number) ?? 1,
-  )
-  return item.until
-    ? `${text} · ${t('terminal.until', { time: format.value.time(item.until) })}`
-    : text
+  const parts = [say(item.message)]
+  if (item.note) parts.push(say(item.note))
+  if (item.until) parts.push(t('terminal.until', { time: format.value.time(item.until) }))
+  return parts.join(' · ')
 })
 </script>
 

@@ -219,6 +219,7 @@ export type EventType =
   | 'review'
   | 'cancel'
   | 'work_at_risk'
+  | 'restored'
   | 'error'
 
 /** TaskEvent is one entry of a task's append-only event log. Seq starts at 1 and grows by one per task. */
@@ -345,6 +346,20 @@ export type CancelData = Record<string, never>
 export interface WorkAtRiskData {
   files: string[]
   snapshot?: string
+}
+
+/**
+ * RestoredData is the data of a restored event; the event's turn is the turn whose start snapshot the files came
+ * from.
+ */
+export interface RestoredData {
+  /** Files are the restored files, relative to the repository root. */
+  files: string[]
+  /**
+   * Backup names the snapshot that keeps what the files held before the restore (t<turn>-restore-<time>, in the
+   * task's snapshot folder).
+   */
+  backup?: string
 }
 
 /** ErrorData is the data of an error event. */

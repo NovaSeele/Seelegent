@@ -60,7 +60,8 @@ in the daemon.
   body `RestoreRequest`, answer `RestoreResult`) work from the turn snapshots ([safety.md](safety.md)). A turn
   without snapshots is `404 not_found`; a restore while the task is active or taken over is `409 bad_state`; a
   daemon without a snapshot store answers both with `503 unavailable`. Restore is a mutating route, so a worker is
-  refused it like every route outside the allow-list.
+  refused it like every route outside the allow-list. A restore that wrote any file logs a `restored` event
+  (`{files}`, the event's `turn` is the turn restored from).
 - `TurnGit` is `null` for a turn without snapshots; `Turn.workAtRisk`, `hygiene` and `scope` are empty lists until
   the turn's checks ran, and `TaskDetail.fileOverlaps` is always a list.
 - `POST /tasks/{id}/git/suggest-message` builds the suggestion locally and at once. It still answers `202 TaskGit`

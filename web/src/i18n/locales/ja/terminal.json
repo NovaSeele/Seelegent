@@ -106,6 +106,8 @@
     },
     "backgroundWait": "バックグラウンド処理を待機中",
     "log": "ワーカーのログ",
-    "session": "会話を開始 · {model}"
+    "session": "会話を開始 · {model}",
+    "restored": "{count} ファイルを復元しました (ターン {n})",
+    "atRisk": "未復元のファイル {count} 件"
   }
 }

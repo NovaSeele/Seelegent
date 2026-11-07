@@ -113,6 +113,67 @@ describe('terminal timeline', () => {
     expect(items[1]).toMatchObject({ until: '2026-11-06T12:00:00Z' })
   })
 
+  it('names an attention flag by its reason and never shows the daemon prose', () => {
+    seq = 0
+    const set = (state: string, reason: string, detail?: string) =>
+      ev('attention', { state, reason, who: 'lead', since: '2026-11-06T12:00:00Z', detail })
+    const items = buildTimeline([
+      set('blocked', 'hygiene', '1 hygiene finding(s)'),
+      set('question', 'question', 'Which port?'),
+      set('background_wait', 'background_wait', 'the worker CLI waits'),
+      set('info', 'review'),
+      set('stalled', 'The worker went quiet'),
+    ])
+    const notices = items.flatMap((i) => (i.kind === 'notice' ? [i] : []))
+    expect(notices.map((i) => [i.message.key, i.message.fallback, i.tone, i.detail])).toEqual([
+      ['common.attention.hygiene', 'terminal.ev.attention.blocked', 'warn', undefined],
+      ['common.attention.question', 'terminal.ev.attention.question', 'warn', 'Which port?'],
+      [
+        'common.attention.backgroundWait',
+        'terminal.ev.attention.background_wait',
+        'warn',
+        undefined,
+      ],
+      ['common.attention.review', 'terminal.ev.attention.info', 'dim', undefined],
+      ['terminal.ev.attention.stalled', undefined, 'warn', undefined],
+    ])
+  })
+
+  it('shows work at risk once, then the restore, and counts the files still at risk', () => {
+    seq = 0
+    const flag = (turn: number) => ({
+      ...ev('attention', {
+        state: 'blocked',
+        reason: 'work_at_risk',
+        who: 'lead',
+        since: '2026-11-06T12:00:00Z',
+        detail: '2 file(s) at risk',
+      }),
+      turn,
+    })
+    const items = buildTimeline([
+      ev('turn_end', { status: 'ok', files: [] }),
+      ev('work_at_risk', { files: ['a.txt', 'notes.md'] }),
+      flag(1),
+      ev('restored', { files: ['a.txt'] }),
+      flag(1),
+      ev('restored', { files: ['notes.md'] }),
+      ev('attention', { state: 'info', reason: 'review', who: 'lead', since: '2026-11-06T12:00:00Z' }),
+    ])
+    const notices = items.flatMap((i) => (i.kind === 'notice' ? [i] : []))
+    expect(notices.map((i) => [i.message.key, i.tone])).toEqual([
+      ['terminal.ev.workAtRisk', 'error'],
+      ['terminal.ev.restored', 'ok'],
+      ['common.attention.workAtRisk', 'warn'],
+      ['terminal.ev.restored', 'ok'],
+      ['common.attention.review', 'dim'],
+    ])
+    expect(notices[1]).toMatchObject({ message: { params: { count: 1, n: 1 } }, detail: 'a.txt' })
+    // The flag after the first restore is not a repeat: it says how many files are still at risk.
+    expect(notices[2]).toMatchObject({ note: { key: 'terminal.ev.atRisk', params: { count: 1 } } })
+    expect(notices[2]).not.toHaveProperty('detail')
+  })
+
   it('reuses unchanged items so only the item an event touched re-renders', () => {
     seq = 0
     const events = [

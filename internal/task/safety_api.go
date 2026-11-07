@@ -28,7 +28,8 @@ func errNoSnapshots() error {
 
 // Restore writes back the content files had when turn n of task id started (default: the turn's work-at-risk
 // files not restored yet). The current content of each file is kept in a backup snapshot first. It is refused
-// while the task is active or taken over, and runs under the repository's git lock.
+// while the task is active or taken over, and runs under the repository's git lock. A restore that wrote any file
+// logs a restored event.
 func (s *Service) Restore(ctx context.Context, id string, n int, req api.RestoreRequest) (api.RestoreResult, error) {
 	if s.o.Snapshots == nil {
 		return api.RestoreResult{}, errNoSnapshots()
@@ -84,16 +85,15 @@ func (s *Service) Restore(ctx context.Context, id string, n int, req api.Restore
 			res.Restored = append(res.Restored, r.Path)
 			done[snapshot.Key(r.Path)] = true
 		}
-		changed := false
 		for i := range tu.WorkAtRisk {
 			if r := &tu.WorkAtRisk[i]; !r.Restored && done[snapshot.Key(r.Path)] {
-				r.Restored, changed = true, true
+				r.Restored = true
 			}
 		}
-		if !changed {
+		if len(res.Restored) == 0 {
 			return nil, errNoChange
 		}
-		return nil, nil
+		return []NewEvent{{Type: api.EventRestored, Turn: n, Data: api.RestoredData{Files: res.Restored}}}, nil
 	})
 	if err != nil {
 		return api.RestoreResult{}, err

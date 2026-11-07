@@ -187,6 +187,18 @@ func TestWorkAtRiskRestoreAndChecks(t *testing.T) {
 	if atRisk(tk) != 0 {
 		t.Fatalf("still at risk: %+v", tk.LastTurn().WorkAtRisk)
 	}
+	// The transcript says what was put back.
+	evs := h.events(sum.ID)
+	restored := eventsOf(evs, api.EventRestored)
+	if len(restored) != 1 || restored[0].Turn != 1 {
+		t.Fatalf("restored events: %+v", restored)
+	}
+	var data api.RestoredData
+	decode(t, restored[0], &data)
+	slices.Sort(data.Files)
+	if !slices.Equal(data.Files, []string{"a.txt", "notes.md"}) {
+		t.Fatalf("restored data: %+v", data)
+	}
 	if rep, _ := h.s.Report(t.Context(), sum.ID, ""); rep.WorkAtRisk != nil {
 		t.Fatalf("report after restore: %+v", rep.WorkAtRisk)
 	}

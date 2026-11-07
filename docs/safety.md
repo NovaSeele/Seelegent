@@ -106,8 +106,9 @@ are restored.
 `seelegent restore <id> --turn N [--file=<path>]...` write back the content the files had when turn `n` started.
 The current content is first kept in a `restore-<time>` snapshot, the repository is locked while it runs, and
 paths are cleaned with `gitx.CleanPath` (no `..`, no absolute paths). It is refused (`409 bad_state`) while the
-task is active or taken over. Restored files are marked `restored`. The report's `work_at_risk.restore` is the
-command line to paste (POSIX quoting), `restore_argv` the same as arguments.
+task is active or taken over. Restored files are marked `restored`, and a `restored` event (the files written) goes
+into the task's log. The report's `work_at_risk.restore` is the command line to paste (POSIX quoting),
+`restore_argv` the same as arguments.
 
 ### Outside diff
 

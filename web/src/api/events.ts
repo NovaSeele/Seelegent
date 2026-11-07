@@ -29,6 +29,7 @@ import type {
   MemoryChanged,
   ReattachData,
   Reset,
+  RestoredData,
   RetryData,
   ReviewData,
   RouteData,
@@ -67,6 +68,7 @@ export type TaskEvent =
   | Ev<'review', ReviewData>
   | Ev<'cancel', CancelData>
   | Ev<'work_at_risk', WorkAtRiskData>
+  | Ev<'restored', RestoredData>
   | Ev<'error', ErrorData>
 
 export type TaskEventType = TaskEvent['type']
@@ -144,6 +146,7 @@ export const EVENT_REQUIRED: Readonly<Record<TaskEventType, readonly (readonly [
     review: [['verdict', 'string']],
     cancel: [],
     work_at_risk: [['files', 'array']],
+    restored: [['files', 'array']],
     error: [['message', 'string']],
   }
 
