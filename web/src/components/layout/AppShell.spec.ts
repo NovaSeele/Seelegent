@@ -14,7 +14,9 @@ import { setupApp } from '@/test/app'
 
 import AppShell from './AppShell.vue'
 
-describe('AppShell', () => {
+// Each test mounts the whole shell and loads lazy pages; on a loaded machine (the full suite in parallel) the first
+// transform of a page can take seconds, so the tests get room and wait for what they check instead of sleeping.
+describe('AppShell', { timeout: 20_000 }, () => {
   beforeEach(() => {
     document.body.innerHTML = ''
     localStorage.clear()
@@ -30,8 +32,12 @@ describe('AppShell', () => {
   let unmount: () => void
   afterEach(() => {
     unmount?.()
+    vi.useRealTimers()
     vi.unstubAllGlobals()
   })
+
+  /** Waits until check passes (content a lazy page renders), or fails with its last error. */
+  const settle = (check: () => void) => vi.waitFor(check, { timeout: 10_000, interval: 20 })
 
   async function open(path: string) {
     const { plugins } = await setupApp()
@@ -57,8 +63,11 @@ describe('AppShell', () => {
   it('shows each rail entry with a tooltip carrying its name and shortcut', async () => {
     const { wrapper } = await open('/')
     const members = wrapper.get('a.rail__item[href="/members"]')
+    // The tooltip's hover delay runs on fake timers: no real sleep that a busy machine can outrun.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
     members.element.closest('.tooltip-anchor')?.dispatchEvent(new Event('pointerenter'))
-    await new Promise((resolve) => setTimeout(resolve, 500))
+    vi.advanceTimersByTime(1000)
+    vi.useRealTimers()
     await flushPromises()
     const tip = document.querySelector('[role=tooltip]')
     expect(tip?.textContent?.replace(/\s+/g, '')).toBe('MembersG›E') // the sequence "g e"
@@ -76,48 +85,54 @@ describe('AppShell', () => {
     expect(document.title).toBe('Automations · Seelegent')
   })
 
-  // Seven navigations, each loading a lazy page: on a busy machine this passed 5 s, so it gets 15 s.
+  // Seven navigations, each loading a lazy page: each check waits for the page it expects.
   it('centres document pages and gives split views the full width, also under settings', async () => {
     const { wrapper, router } = await open('/usage')
     expect(wrapper.get('.page').attributes('data-page-width')).toBe('readable')
     for (const path of ['/issues', '/meetings', '/contests', '/members']) {
       await router.push(path)
-      await flushPromises()
-      expect(wrapper.get('.page').attributes('data-page-width'), path).toBe('readable')
+      await settle(() =>
+        expect(wrapper.get('.page').attributes('data-page-width'), path).toBe('readable'),
+      )
     }
     await router.push('/tasks')
-    await flushPromises()
-    expect(wrapper.find('.page').exists()).toBe(false)
-    expect(wrapper.find('.split').exists()).toBe(true)
-    expect(wrapper.get('main').attributes('data-page-width')).toBe('full')
+    await settle(() => {
+      expect(wrapper.find('.page').exists()).toBe(false)
+      expect(wrapper.find('.split').exists()).toBe(true)
+      expect(wrapper.get('main').attributes('data-page-width')).toBe('full')
+    })
     await router.push('/settings/appearance')
-    await flushPromises()
-    expect(wrapper.get('main').attributes('data-page-width')).toBe('full')
-  }, 15_000)
+    await settle(() => expect(wrapper.get('main').attributes('data-page-width')).toBe('full'))
+  })
 
   it('shows NotFound for unknown addresses', async () => {
     const { wrapper } = await open('/no/such/page')
-    expect(wrapper.text()).toContain('Page not found')
+    await settle(() => expect(wrapper.text()).toContain('Page not found'))
   })
 
   it('opens settings over the current page and keeps that page rendered', async () => {
     const { wrapper, router } = await open('/tasks')
     await router.push('/settings/language')
-    await flushPromises()
-    expect(wrapper.get('h1').text()).toBe('Tasks')
-    const dialog = document.querySelector('[role=dialog]')
-    expect(dialog?.textContent).toContain('Browser default')
-    expect(document.getElementById('settings-section-title')?.textContent?.trim()).toBe('Language')
+    await settle(() => {
+      expect(wrapper.get('h1').text()).toBe('Tasks')
+      expect(document.querySelector('[role=dialog]')?.textContent).toContain('Browser default')
+      expect(document.getElementById('settings-section-title')?.textContent?.trim()).toBe(
+        'Language',
+      )
+    })
   })
 
   it('renders Watch behind settings on a cold open', async () => {
     const { wrapper } = await open('/settings/appearance')
-    expect(wrapper.get('h1').text()).toBe('Watch')
-    expect(document.querySelectorAll('[data-theme-preview]').length).toBeGreaterThan(26)
+    await settle(() => {
+      expect(wrapper.get('h1').text()).toBe('Watch')
+      expect(document.querySelectorAll('[data-theme-preview]').length).toBeGreaterThan(26)
+    })
   })
 
   it('picks a file icon set below the theme, with previews drawn in each set, and saves it', async () => {
     await open('/settings/appearance')
+    await settle(() => expect(document.querySelectorAll('[data-icon-set]')).toHaveLength(7))
     const rows = [...document.querySelectorAll('[data-setting]')].map((row) =>
       row.getAttribute('data-setting'),
     )
