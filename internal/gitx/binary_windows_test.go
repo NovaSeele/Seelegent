@@ -87,6 +87,24 @@ func TestBinaryShimOnly(t *testing.T) {
 			t.Fatalf("PATH %q: Path = %q, %v; want %q", dirs, got, err, fallback)
 		}
 	}
+
+	// Then the per-user install under %LOCALAPPDATA%\Programs; the machine-wide one wins when both exist.
+	lad := filepath.Join(root, "lad")
+	user := filepath.Join(lad, "Programs", "Git", "cmd", "git.exe")
+	write(t, user, "not run by this test")
+	for _, tt := range []struct {
+		extra []string
+		want  string
+	}{
+		{[]string{"LOCALAPPDATA=" + lad}, user},
+		{[]string{"ProgramFiles=" + filepath.Join(root, "empty-pf"), "LOCALAPPDATA=" + lad}, user},
+		{[]string{"LOCALAPPDATA=" + lad, "ProgramFiles=" + pf}, fallback},
+	} {
+		env := func() []string { return append(shimEnv(bare)(), tt.extra...) }
+		if got, err := NewBinary(env, nil).Path(); err != nil || got != tt.want {
+			t.Fatalf("%q: Path = %q, %v; want %q", tt.extra, got, err, tt.want)
+		}
+	}
 }
 
 // TestBinaryLogsHowGitWasFound: a git found through a shim or a default place is logged once per resolution, a

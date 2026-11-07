@@ -24,8 +24,9 @@ var ErrNoGit = errors.New("git is not available")
 // On Windows a batch shim (git.cmd, git.bat) is never run: Go starts it through cmd.exe, which rewrites the
 // arguments (it eats ^, so HEAD^{commit} became HEAD{commit}) and can run a file name holding & or | as a command.
 // A real git.exe anywhere on PATH wins over a shim earlier on PATH; with only a shim, the git.exe the shim starts
-// is used when the shim names it by path; then Git for Windows' default place (%ProgramFiles%\Git); otherwise
-// Path fails with a clear error. A git found any other way than as a plain PATH hit is logged once per resolution.
+// is used when the shim names it by path; then Git for Windows' default places (%ProgramFiles%\Git, then the
+// per-user %LOCALAPPDATA%\Programs\Git); otherwise Path fails with a clear error. A git found any other way than
+// as a plain PATH hit is logged once per resolution.
 type Binary struct {
 	env func() []string
 	log *slog.Logger
@@ -100,10 +101,15 @@ func findGit(env []string) (path, via string, err error) {
 			return p, "as the target of the batch shim " + shim, nil
 		}
 	}
-	// Git for Windows' default place, for a PATH that only has a shim or no git at all.
-	if pf, ok := envx.Lookup(env, "ProgramFiles"); ok && filepath.IsAbs(pf) {
-		if p := filepath.Join(pf, "Git", "cmd", "git.exe"); isFile(p) {
-			return p, "in Git for Windows' default place under %ProgramFiles%", nil
+	// Git for Windows' default places, machine-wide then per-user, for a PATH that only has a shim or no git at all.
+	for _, place := range []struct{ variable, sub string }{
+		{"ProgramFiles", filepath.Join("Git", "cmd", "git.exe")},
+		{"LOCALAPPDATA", filepath.Join("Programs", "Git", "cmd", "git.exe")},
+	} {
+		if base, ok := envx.Lookup(env, place.variable); ok && filepath.IsAbs(base) {
+			if p := filepath.Join(base, place.sub); isFile(p) {
+				return p, "in Git for Windows' default place under %" + place.variable + "%", nil
+			}
 		}
 	}
 	if shim != "" {
