@@ -243,7 +243,7 @@ func TestInstallShimKeepsWorkingShim(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(exe), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(exe, []byte("binary"), 0o700); err != nil { //nolint:gosec // a test program
+	if err := os.WriteFile(exe, []byte("binary"), 0o700); err != nil {
 		t.Fatal(err)
 	}
 	var logs bytes.Buffer
@@ -257,13 +257,13 @@ func TestInstallShimKeepsWorkingShim(t *testing.T) {
 	other := filepath.Join(base, "bin", "missing.exe")
 	if runtime.GOOS != "windows" {
 		other = filepath.Join(base, "bin", "seelegent-new")
-		if err := os.WriteFile(other, []byte("binary"), 0o700); err != nil { //nolint:gosec // a test program
+		if err := os.WriteFile(other, []byte("binary"), 0o700); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.Chmod(dir, 0o500); err != nil { //nolint:gosec // read-only on purpose
+		if err := os.Chmod(dir, 0o500); err != nil {
 			t.Fatal(err)
 		}
-		t.Cleanup(func() { _ = os.Chmod(dir, 0o700) }) //nolint:gosec // let TempDir remove it
+		t.Cleanup(func() { _ = os.Chmod(dir, 0o700) })
 	}
 	if got := installShim(log, dir, other); got != dir || !strings.Contains(logs.String(), "keeping the one") {
 		t.Fatalf("failed install with a working shim: %q, logs %s", got, logs.String())
@@ -275,7 +275,7 @@ func TestInstallShimKeepsWorkingShim(t *testing.T) {
 		if err := os.MkdirAll(fresh, 0o500); err != nil {
 			t.Fatal(err)
 		}
-		t.Cleanup(func() { _ = os.Chmod(fresh, 0o700) }) //nolint:gosec // let TempDir remove it
+		t.Cleanup(func() { _ = os.Chmod(fresh, 0o700) })
 		fresh = filepath.Join(fresh, "bin")
 	}
 	if got := installShim(log, fresh, other); got != "" || !strings.Contains(logs.String(), "unguarded") {

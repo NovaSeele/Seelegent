@@ -433,7 +433,7 @@ func (s *Store) removeStale(p string, cutoff time.Time) error {
 	if st.ModTime().After(cutoff) {
 		return nil
 	}
-	return os.Remove(p) //nolint:gosec // a blob of the store's own folder, named by its hash
+	return os.Remove(p)
 }
 
 // Key is how two repository-relative paths are compared: '/' separators, and case-folded where the file system
