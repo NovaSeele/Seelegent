@@ -41,6 +41,13 @@ function hash8(text) {
   return h.toString(16).padStart(8, '0')
 }
 
+/**
+ * Memory text as Go's memory.Store.Replace stores it: whitespace only becomes empty, anything else ends with a
+ * newline, so the dashboard meets the same text here as against the real daemon.
+ */
+const normaliseMemory = (text) =>
+  text.trim() === '' ? '' : text.endsWith('\n') ? text : `${text}\n`
+
 /** A project key as the daemon builds it: slug of the folder name plus 8 hex of the path. */
 const projectKey = (cwd, name) =>
   `${name.toLowerCase().replace(/[^a-z0-9._-]+/g, '-')}-${hash8(cwd.toLowerCase())}`
@@ -1198,7 +1205,7 @@ export function createAdminRoutes(ctx) {
         if (typeof body.cwd !== 'string' || !body.cwd) throw invalid('cwd is required', 'cwd')
         if (typeof body.text !== 'string') throw invalid('text is required', 'text')
         if (body.text.length > 65536) throw invalid('memory is limited to 64 KiB', 'text')
-        const saved = { text: body.text, updatedAt: now() }
+        const saved = { text: normaliseMemory(body.text), updatedAt: now() }
         memories.set(body.cwd, saved)
         broadcast('memory.changed', { cwd: body.cwd })
         return send(res, 200, { cwd: body.cwd, ...saved })
