@@ -221,6 +221,8 @@ export function createAdminRoutes(ctx) {
       baseStatus.set(id, status)
       if (!account.enabled) account.status = 'disabled'
       broadcast('account.updated', account)
+      // Like the daemon: Provider.accounts changed, so clients hear providers.changed.
+      if (account.provider) broadcast('providers.changed', { changedAt: now() })
       if (body.kind === 'system') {
         setTimeout(() => {
           account.quota = freshQuota(account)
@@ -257,6 +259,7 @@ export function createAdminRoutes(ctx) {
       accounts.splice(accounts.indexOf(account), 1)
       logins.delete(account.id)
       broadcast('account.deleted', { id: account.id })
+      if (account.provider) broadcast('providers.changed', { changedAt: now() })
       return send(res, 204)
     }
     if (method === 'POST' && sub === 'refresh') {

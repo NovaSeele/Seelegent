@@ -50,8 +50,8 @@ const shown = computed(() => {
 })
 
 /**
- * Accounts using each provider, counted from the live account list: the daemon sends no providers.changed when
- * an account is added or deleted, so Provider.accounts goes stale until the next providers read.
+ * Accounts using each provider, counted from the live account list, so the count follows an account write at
+ * once instead of waiting for the providers read that its providers.changed frame starts.
  */
 const usage = computed(() => {
   const counts = new Map<string, number>()
