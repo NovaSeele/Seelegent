@@ -19,7 +19,8 @@ endpoint tables.
 | §4 accounts, quota, sign-in, keys, providers, usage | `accounts.go`, `convert.go` |
 | §5 settings, memory, roles | `settings.go` |
 | §6 M13: `/lanes`, `/contention`, `/proof/*` | `proof.go` (over `httpapi.Proof`, the proof service, and `httpapi.Gates`, the task engine); behaviour in [gates.md](gates.md) |
-| §6 the rest, `/members*`, `/hooks*` | `501 not_implemented` until their milestones (`server.go`, `reservedRoutes`) |
+| §5 `/members*`, `/hooks*`; §6 M14: `/tasks/{id}/consult`, `/tasks/{id}/notes*`, `/meetings*`, `/contests*` | `team.go` (over `httpapi.Members`, `Consults`, `Notes`, `Meetings`, `Contests`, `Hooks`; each optional, its paths answer `501` without it); behaviour in [team.md](team.md) |
+| §6 M15: `/github/*`, `/automations*` | `501 not_implemented` until their milestone (`server.go`, `reservedRoutes`) |
 | §7 SSE | `hub.go` (ids, ring, client queues), `stream.go` (the response), `feeds.go` (task bus and account watcher) |
 | §8 static dashboard | `web.go` |
 | DTOs | `internal/api`; `go generate ./internal/api` writes `web/src/api/types.gen.ts` (`internal/api/tsgen`), and a test fails when the file is stale |
@@ -61,6 +62,27 @@ in the daemon.
 - `GET /proof/stats` without `cwd` counts every project; the other proof routes need an absolute `cwd`. A
   regression run answers `202` at once and reports its progress as `proof.run` frames, whose `ProofRun.repoRoot`
   says which repository it belongs to.
+
+- Team routes (M14, [team.md](team.md)). The contract fixed the paths; these are the choices made:
+  - `PATCH /members/{id}` merges the body onto the stored member (a field left out keeps its value) and refuses a
+    changed `id`. A member that is off is `409 conflict` with `details.reason: "member_disabled"` wherever new work
+    would go to it; an unknown member in a request is `400`.
+  - `POST /meetings/estimate` and `POST /contests/estimate` (additions) take the body of the open or create call and
+    answer the plan without starting anything.
+  - `GET /meetings/{id}/wait` and `GET /contests/{id}/wait` take `seconds` 0..1500 (default 600) and return once the
+    meeting or contest needs the lead or has ended; `GET .../events` is the step log (`TeamLogEntry[]`). Lists take
+    `limit` 1..200 (default 50).
+  - `POST /tasks/{id}/review` takes `answerObjection`: accepting a task with an unanswered peer objection is `409
+    conflict` with `details` `{reason: "peer_objection", consults}` without it.
+  - `POST /contests/{id}/pick` whose patch does not apply is `409 conflict` with `{reason: "patch_conflict", winner,
+    files}`; nothing was changed. `GET /contests/{id}/variants/{label}/diff` carries the raw `diff` (CLI and MCP) and
+    `files`, the same diff parsed per file, so the dashboard never reads diff text (§3.3).
+  - `POST /tasks` takes `member`; `POST /tasks/{id}/followup` takes `member` too (the task runs as that member from
+    that turn on). Links to meetings, contests and tickets (`meetingId`, `contestId`, `variant`, `parentId`) are set
+    by the daemon only: `POST /tasks` has no such fields, and unknown fields are `400` (old C-B21).
+  - SSE: `members.changed` is sent on every change of the members, through the API or not (`member.Options.Changed`);
+    `meeting.updated` and `contest.updated` carry the summary; `notes.changed` carries `{taskId}`; `hook.ran` carries
+    the `HookRun`. The worker allow-list is unchanged: a worker may call none of the team routes.
 
 - `GET /git/branches` answers `null` for a folder that does not exist, keyed by the cwd as given. A batch of 50 cwds
   should not fail because one project folder was deleted. A relative cwd is still `400`.

@@ -2,8 +2,9 @@
 
 `seelegent <command> [flags]`. The commands are thin: they talk to the daemon through `internal/client` and share
 their logic with the MCP tools through `internal/ops` (see [mcp.md](mcp.md)). Code: `internal/cli`, one file per
-group (`delegate.go`, `tasks.go`, `proof.go`, `memory.go`, `system.go`, `doctor.go`, `daemon.go`, `mcp.go`,
-`setup.go`, `migrate.go`, `update.go`); the checks of `doctor` are `internal/doctor`, the work of `setup` and
+group (`delegate.go`, `tasks.go`, `proof.go`, `memory.go`, `team.go` (members, consult, notes, hooks),
+`meeting.go` (meeting, contest), `system.go`, `doctor.go`, `daemon.go`, `mcp.go`, `setup.go`, `migrate.go`,
+`update.go`); the checks of `doctor` are `internal/doctor`, the work of `setup` and
 `migrate` is `internal/setup` and `internal/migrate` ([setup.md](setup.md)), the work of `update` is
 `internal/update` ([release.md](release.md)).
 
@@ -44,11 +45,13 @@ file exists.
 ### Worker guard (old B12)
 
 With `SEELEGENT_WORKER=1`, `delegate`, `run`, `followup`, `review`, `cancel`, `memory append|replace`, `stop`,
-`restart`, `ui`, `daemon` (`serve`), `setup` (a dry run too), `migrate`, `restore`, `proof run` and `proof cancel-run` print exactly `Seelegent is not available inside a Seelegent worker.` and exit 1 (with `--json`:
+`restart`, `ui`, `daemon` (`serve`), `setup` (a dry run too), `migrate`, `restore`, `proof run`, `proof cancel-run`,
+`consult`, `meeting` (all but `list`, `status` and `wait`), `notes` (all but `list`), `contest pick` and `contest
+cancel`, `members add|set|remove` and `hooks set|test` print exactly `Seelegent is not available inside a Seelegent worker.` and exit 1 (with `--json`:
 `{"error": that text, "code": "forbidden", "details": {"caller": "worker"}}`). The check runs before the flags are
 parsed and before any call. `status`, `wait`, `task`, `ls`, `memory read`, the other `proof` commands, `doctor`, `version`, `skill` and the
 hidden `hook claude-agent` (Claude Code's reminder hook, which may run inside a worker and only prints advice) stay
-allowed; the daemon's own guard decides what a worker may read. `update` is refused the same way in every mode,
+allowed, and so do the read commands of `members`, `meeting`, `contest`, `notes` and `hooks`; the daemon's own guard decides what a worker may read. `update` is refused the same way in every mode,
 `--check` included (it replaces the executable and restarts the daemon that runs the worker).
 
 ## Commands
@@ -61,11 +64,11 @@ allowed; the daemon's own guard decides what a worker may read. `update` is refu
 | `status` | Daemon, backends, accounts (labels and quota, never e-mails) and the tasks that need you. Prints `not running` (exit 0) when no daemon runs; a daemon that holds its lock without answering, or another program on the port, is exit 1. | `{running, dashboard?, health?, backends: Backend[], accounts: Account[], activeTasks: TaskSummary[]}` |
 | `stop` | Asks the daemon to shut down (`POST /api/v1/daemon/stop`) and waits up to 15 s until its lock is free and its port silent; prints `stopped` or `not running`. Open waits are answered at once (`daemon_stopping`), so this takes about a second, and a lead that was waiting does not start the daemon again (see waits below). Removes a port file left by a daemon that is gone. A daemon that holds its lock but does not answer is reported with its pid (when recorded) and the log path, exit 1. Nothing is ever killed by a pid read from a file (old B3, B14). | `{ok, stopped}` |
 | `restart` | `stop`, then start the daemon and wait until it answers. Prints `Daemon restarted.` | `{ok: true, restarted: true}` |
-| `delegate [flags] <prompt\|@file>` | Creates a task and waits for its report. Flags: `--cwd`, `--title`, `--backend`, `--provider`, `--model`, `--effort`, `--mode full\|plan`, `--profile`, `--spec`, `--task T001,T002` (needs `--spec`), `--after t1,t2`, `--after-mode accepted\|done`, `--allow-git`, the gate flags below, `--wait N` (default 600; 0 returns at once; a task with `--after` does not wait unless `--wait` is given). The text report ends with the gate, lane, bar and verifier lines. | `TaskReport` |
+| `delegate [flags] <prompt\|@file>` | Creates a task and waits for its report. Flags: `--cwd`, `--title`, `--backend`, `--provider`, `--model`, `--effort`, `--mode full\|plan`, `--profile`, `--spec`, `--task T001,T002` (needs `--spec`), `--after t1,t2`, `--after-mode accepted\|done`, `--allow-git`, `--member M` (the member's backend, model or tier and role; [team.md](team.md)), the gate flags below, the contest flags below, `--wait N` (default 600; 0 returns at once; a task with `--after` does not wait unless `--wait` is given). The text report ends with the gate, lane, bar and verifier lines. | `TaskReport`; a contest prints the contest |
 | `run [flags] <prompt\|@file>` | Legacy: `delegate` with a 3600 s wait; always prints the report JSON. Same flags as `delegate` except `--wait`. | `TaskReport` |
-| `followup <id> [flags] <message\|@file>` | Sends the next instruction and waits for the report. Flags: `--by lead\|user`, `--model`, `--effort`, `--task`, `--profile`, `--allow-git`, `--force` (start a task waiting for its prerequisites; the message may then be empty), the gate flags below, `--wait N` (default 600). Gate flags on a followup change the gate from this turn on. | `TaskReport` |
+| `followup <id> [flags] <message\|@file>` | Sends the next instruction and waits for the report. Flags: `--by lead\|user`, `--model`, `--effort`, `--task`, `--profile`, `--allow-git`, `--force` (start a task waiting for its prerequisites; the message may then be empty), `--member M` (the task runs as that member from this turn on), the gate flags below, `--wait N` (default 600). Gate flags on a followup change the gate from this turn on. | `TaskReport` |
 | `wait <id...> [--any] [--seconds N] [--no-wake]` | Waits (default 600 s) and prints the reports. `--no-wake` keeps waiting when a task needs the lead. | `WaitResult` with `reports` |
-| `review <id> accepted\|rejected [--notes T] [--answer-objection T\|@file]` | Records the verdict; the answer to an objection is appended to the notes. | `TaskSummary` |
+| `review <id> accepted\|rejected [--notes T] [--answer-objection T\|@file]` | Records the verdict. Accepting a task a peer member objected to (consult verdict `object`) needs `--answer-objection`; the answer is recorded with the review. | `TaskSummary` |
 | `cancel <id> [--wait N]` | Cancels and waits up to N s (default 15, max 60) for the worker to stop. | `TaskReport` read after the cancel (`cancelling: true` while it stops) |
 | `task <id> [--steps N] [--full]` | The report, with the last N worker tool steps; `--full` the whole task with its turns. | `TaskReport` + `recent_steps`, or `TaskDetail` + `recent_steps` |
 | `ls [--active] [--blocked] [--project P] [--limit N]` | Tasks, newest first (limit 1..200, default 50). | `TaskPage` |
@@ -79,6 +82,16 @@ allowed; the daemon's own guard decides what a worker may read. `update` is refu
 | `proof stats [--since T] [--cwd D]` | Gate, lane and verifier statistics (`--since`: RFC 3339). | `ProofStats` |
 | `proof lanes [--cwd D]` | The lane claims held in the repository and the `lanes` mode. | `LanesView` |
 | `proof contention [--cwd D]` | Files several tasks of the repository changed recently. | `ContentionView` |
+| `members list\|track` | The department members; `track` what each member's meetings and consults came to. | `Member[]`, `MemberTrack[]` |
+| `members add --name N --backend B --rank R [flags]`, `members set <id> [flags]`, `members remove <id>` | Change the department. Flags: `--id`, `--name`, `--backend`, `--provider`, `--rank worker\|senior\|peer`, `--tier`, `--model`, `--role`, `--prefer a,b`, `--fallback a,b`, `--enabled`. `set` sends only the flags given. | `Member`; `remove` `{ok, removed}` |
+| `consult <task-id> --member M [--focus T] [--wait N]` | A senior or peer member reads the finished task read-only and answers a verdict (`approve`, `concerns`, `object`) with findings; waits up to N s (default 600). | `Consult` |
+| `notes list\|add\|resolve\|reopen\|delete\|send <task-id> ...` | Review notes on a task's diff. `add --file F --line N [--end-line N] [--side new\|old] <body\|@file>`; `send [--extra T\|@file] [--wait N]` sends the drafts and the notes the last turn left unaddressed as one followup and waits for the report. | `Note[]`, `Note`, `NotesSendResult` or `TaskReport` |
+| `meeting open --attendee id[:rank] ... [--option T]... [--context a,b] [--rounds N] [--sealed T] [--title T] [--cwd D] [--estimate] [--wait N] <question\|@file>` | Opens a meeting of 1 to 6 members (`--estimate` only prints the most runs it takes). | `Meeting` (`RunEstimate` with `--estimate`) |
+| `meeting list\|status <id>\|wait <id> [--seconds N]` | Meetings, one meeting's state and minutes, or a wait (default 600, at most 1500) until it needs you or ends. | `MeetingSummary[]`, `Meeting` |
+| `meeting post <id> --answer q1=text ... [--note T]`, `decide <id> [--option K] [--rationale T] <decision>`, `act <id> [--member M] [--backend B] [--model M] [--cwd D] <brief>`, `cancel <id>`, `dissent-outcome <id> <dissent-id> vindicated\|dismissed` | The lead's side of a meeting: answer questions, decide, turn the decision into a task, cancel, settle a dissent later. | `Meeting`; `act` `MeetingActResult` |
+| `contest list\|status <id>\|wait <id> [--seconds N]\|diff <id> <variant>` | Contests, one contest's scoreboard, judge and proposal, a wait until it is ready or ended, a variant's diff against the base. | `ContestSummary[]`, `Contest`, `ContestDiff` |
+| `contest pick <id> [--winner V2]`, `contest cancel <id>` | Apply the winner (default: the proposal) to the working tree, or stop every variant; both remove the worktrees. | `Contest` |
+| `hooks list\|set <file.json>\|test <id>` | The event hooks: list, replace the list from a JSON file (`{"hooks": [...]}` or a list; ids kept), run one now with a `hook.test` event. | `Hook[]`, `HookRun` |
 | `doctor` | Checks the installation (below); exit 1 when a check fails. | `[{name, status: ok\|warn\|fail, message, fix?}]` |
 | `version [--check-database]` | Version, commit and build date. `--check-database` also reads the data folder's database read-only and fails with `schema_too_new` when this build cannot open it (the installers run it on a downloaded binary). | `buildinfo.Info` + `schemaVersion` (the number of database migrations in the build) + `databaseSchemaVersion` with `--check-database` (0 without a database) |
 | `setup [--host a,b] [--dry-run] [--remove] [--no-skill] [--hooks] [--force] [--exe path]` | Registers Seelegent with the lead hosts on this machine ([setup.md](setup.md)). Exit 1 when an item is `conflict` or `error`; with `--json` the report is then the only document printed. | `setup.Report` |
@@ -147,12 +160,16 @@ Waits (`wait`, `delegate`, `followup`, `run`; the same code as the MCP tools, `o
 
 A plan task (`--mode plan`) refuses `--gate`, `--gate-detect`, `--lane`, `--force-lane` and `--verify`.
 
+### Contest flags
+
+`delegate` and `run` with `--variants N` (2 to 5) or `--variant spec` (repeated; `backend[:model]`, or
+`member=id,provider=id,backend=b,model=m`) start a contest instead of a task ([team.md](team.md)): each variant runs
+the brief in its own worktree. `--judge M` names the judge (default: the first enabled peer), `--no-judge` scores by
+machine only, `--deadline N` sets the minutes (default 60). A contest refuses `--after` and `--mode plan`.
+
 ### Not in this version
 
-There are no `meeting`, `consult`, `issues`, `notes`, `automations` or `contest` commands.
-Options of later milestones keep their old names but are
-refused before anything is sent, with exit 1 and code `not_available`: `--member`, and the contest options
-`--variants`, `--variant`, `--judge`, `--no-judge`, `--deadline`.
+There are no `issues` or `automations` commands.
 
 ## doctor
 

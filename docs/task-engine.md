@@ -131,6 +131,28 @@ and not rejected), blocked when one failed, was cancelled or was rejected. When 
 titles, verdicts and answers are fixed into its brief. A followup with `force` starts a waiting or blocked dependent;
 its message, if any, joins the first request.
 
+## Members, consults and hidden runs
+
+The team features ([team.md](team.md)) use the engine as they find it; what they add:
+
+- **Member.** `DelegateRequest.member` fills the backend or provider, model or tier, role and preferred accounts the
+  request leaves out, and the task records `member`. `FollowupRequest.member` moves the task to another member from
+  that turn on. When no account of the task's backend can run it, `memberFallback` moves it to the next of the
+  member's fallback backends (forward only; not for a provider or a backend outside the member's list).
+- **Kinds.** Tasks have a `kind`: `normal`, or the hidden runs `verify`, `consult`, `meeting` and `judge`. Hidden
+  runs are plan-mode children (`parentId`), take no baseline, gate, lane or snapshots, are left out of every list
+  and of lane claims, and are closed by the engine when they end (`CloseHiddenRun`), so they never ask for a
+  review. Contest variants are normal tasks with `contestId` and `variant`, in the contest's worktree.
+- **Consults.** `Consult` starts a `consult` child on the member's backend and follows it; the parsed verdict,
+  findings and required changes are stored on the parent (`Task.Consults`). `Review` refuses `accepted` while a
+  peer objection has no answer (`PeerObjectionError`, a conflict with `reason: "peer_objection"`) unless the request
+  carries `answerObjection`, which is stored on the objection and appended to the review notes.
+- **Locks.** `claimMu` (the lane claim check and the task's save, one step) is always taken before a task's lock.
+  No child task (verifier, consult, judge, attendee, variant) is created while a task lock is held: the parent's
+  lock is released first. Meetings, contests and notes keep their own locks and call the engine without a task
+  lock; the engine reaches them only through the bus. `TestConsultDuringFollowup` runs a consult and a followup
+  on the same task at once.
+
 ## Takeover
 
 `Takeover` marks the task `manual`, stops the run and waits for the worker to exit (no worker and console in one

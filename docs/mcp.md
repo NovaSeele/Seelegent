@@ -85,26 +85,26 @@ again; from then on the usual rules apply again (a later crash is ridden out, a 
 
 `tools/list` returns 17 tools, the same names and input schemas as the old Node server (sorted by name, as the SDK
 does), with two additions: `gate` of `delegate` and `followup` also takes `true`, and `proof` has the actions
-`cancel_run` and `contention`. Tools that are not built yet are listed with a description starting "Not available in this version of
-Seelegent yet." and answer with a tool error that says nothing was done.
+`cancel_run` and `contention`. `issues` and `automations` are not built yet: they are listed with a description
+starting "Not available in this version of Seelegent yet." and answer with a tool error that says nothing was done.
 
 | Tool | Routes | Now |
 |---|---|---|
-| `delegate` | `POST /tasks`, then `POST /wait?cwd=` | yes, except `variants`/`variant_specs` (contests) and `member`: refused before any call (`not_available`). `gate` (a command, a list, `true` for the detected commands, `false`), `lane` (paths, or `false` for `noLane`), `force_lane` and `verify` map onto `gate`/`gateCommands`/`lane`/`noLane`/`forceLane`/`verify` ([gates.md](gates.md)) |
-| `followup` | `GET /tasks/{id}` (only to check `provider`), `POST /tasks/{id}/followup`, `POST /wait` | yes, same limits as `delegate` (`member` aside) |
+| `delegate` | `POST /tasks`, then `POST /wait?cwd=`; with `variants` or `variant_specs`: `POST /contests`, then `GET /contests/{id}/wait` | yes. `member` runs the task as that member ([team.md](team.md)). `variants`/`variant_specs` start a contest, with `judge` (a member id, or `false` for machine scoring only) and `deadline_minutes`; a contest cannot take `after`. `gate` (a command, a list, `true` for the detected commands, `false`), `lane` (paths, or `false` for `noLane`), `force_lane` and `verify` map onto `gate`/`gateCommands`/`lane`/`noLane`/`forceLane`/`verify` ([gates.md](gates.md)) |
+| `followup` | `GET /tasks/{id}` (only to check `provider`), `POST /tasks/{id}/followup`, `POST /wait` | yes; `member` moves the task to that member |
 | `wait` | `POST /wait` (`reports: true`) | yes |
-| `review` | `POST /tasks/{id}/review` | yes; `answer_objection` is appended to the notes |
+| `review` | `POST /tasks/{id}/review` | yes; `answer_objection` is sent as `answerObjection`, which accepting a task a peer objected to needs |
 | `cancel` | `POST /tasks/{id}/cancel` | yes; 202 is reported as `cancelling` |
 | `task` | `GET /tasks/{id}/report` (or `GET /tasks/{id}` with `full`), `GET /tasks/{id}/events?tail=` | yes |
 | `status` | `GET /accounts`, `GET /tasks?status=`, `GET /backends` | yes |
 | `memory` | `GET`, `POST` (append), `PUT` (replace) `/memory` | yes |
 | `profiles` | `GET /roles`, `POST /roles`, `DELETE /roles/{id}`, `GET /roles/skills` | yes |
-| `members` | `/members*` (501) | not yet |
+| `members` | `GET /members` | yes: id, name, backend, model, tier, rank, provider, role, enabled and why a member cannot be used |
 | `proof` | `GET /proof/index`, `GET /proof/matrix`, `POST /proof/run` (then `GET /proof/runs/{id}` every 500 ms while `wait_seconds` lasts, at most 3000 s), `GET /proof/runs/{id}`, `POST /proof/runs/{id}/cancel`, `GET /proof/stats`, `GET /lanes`, `GET /contention` | yes: actions `matrix` (needs `feature`), `index`, `run` (`feature?`, `force?`, `wait_seconds?`, default 0), `run_status` and `cancel_run` (need `run_id`), `stats` (`since?`), `lanes`, `contention`; `cwd` defaults to the server's folder. `run` and `cancel_run` are mutating for the worker guard |
-| `meeting` | meetings | not yet |
-| `consult` | consult | not yet |
-| `notes` | lead notes | not yet |
-| `contest` | contests | not yet |
+| `meeting` | `/meetings*` | yes: `open` (`estimate_only` answers the run estimate; `wait_seconds` default 0), `status`, `wait` (default 600, at most 1500), `list`, `post` (`answers`, `note`), `decide`, `act` (`items` become tasks), `cancel`, `dissent_outcome`. The slim view carries the minutes and the pending questions; `full` returns the whole record |
+| `consult` | `POST /tasks/{id}/consult`, then `GET /tasks/{id}` every second while `wait_seconds` lasts (default 600) | yes: a senior or peer member reads the finished task read-only and answers a verdict with findings |
+| `notes` | `/tasks/{id}/notes*` | yes: `list`, `add` (`file`, `line`, `end_line?`, `side?`, `body`; by the lead), `resolve`, `reopen`, `delete`, `send` (the drafts and unaddressed notes as one followup, `extra` after them; then waits like `followup`) |
+| `contest` | `/contests*` | yes: `status` (all contests without `contest_id`), `wait` (in daemon waits of at most 1500 s), `pick` (`winner`), `cancel`; `full` returns the whole record |
 | `issues` | GitHub issues | not yet |
 | `automations` | automations | not yet |
 

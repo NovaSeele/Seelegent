@@ -1,4 +1,4 @@
-// Package hook runs the user's event hooks (docs/configuration.md): shell commands the daemon starts on task,
+// Package hook runs the user's event hooks (docs/team.md): shell commands the daemon starts on task,
 // account and daemon events, with the event as JSON on stdin and SEELEGENT_EVENT, SEELEGENT_TASK_ID and
 // SEELEGENT_PORT in the environment. Hooks live in SQLite with a stable id (old bug C-B20: a test ran the hook at a
 // list index, so an edited list could run the wrong one). At most four hooks run at once and fifty events wait;
