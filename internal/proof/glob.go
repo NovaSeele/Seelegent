@@ -1,0 +1,181 @@
+// Package proof holds the Spec Kit side of the proof gates (milestone 13, docs/gates.md): file lanes and their
+// globs, the tasks.md and spec.md parsers, the doctrine file, the frozen bar, the evidence checker for file:line
+// citations, the ledger of gate results per spec task and the requirement matrix built from it, and the
+// regression runs that re-run every gate of a project.
+package proof
+
+import (
+	"path"
+	"regexp"
+	"runtime"
+	"strings"
+)
+
+// foldCase reports whether lane globs ignore letter case: on Windows and macOS, whose file systems do by default
+// (old bug D13: the old version lower-cased on every OS).
+func foldCase() bool { return runtime.GOOS == "windows" || runtime.GOOS == "darwin" }
+
+// Clean normalizes a repository-relative path or glob: forward slashes, no repeated slashes, no leading "./". A
+// trailing slash (a directory lane) is kept.
+func Clean(p string) string {
+	p = strings.ReplaceAll(strings.TrimSpace(p), `\`, "/")
+	for strings.Contains(p, "//") {
+		p = strings.ReplaceAll(p, "//", "/")
+	}
+	for strings.HasPrefix(p, "./") {
+		p = p[2:]
+	}
+	return p
+}
+
+// key is the comparison form of a cleaned path.
+func key(p string) string {
+	p = Clean(p)
+	if foldCase() {
+		p = strings.ToLower(p)
+	}
+	return p
+}
+
+// IsGlob reports whether a lane path matches more than one file: it holds * or ?, or ends with a slash (a folder).
+func IsGlob(p string) bool {
+	return strings.ContainsAny(p, "*?") || strings.HasSuffix(p, "/") || strings.HasSuffix(p, `\`)
+}
+
+// globRegexp compiles a lane glob: ** crosses folders, * and ? stay inside one, a trailing slash covers the folder.
+func globRegexp(pattern string) *regexp.Regexp {
+	p := Clean(pattern)
+	var b strings.Builder
+	b.WriteString("^")
+	if foldCase() {
+		b.WriteString("(?i)")
+	}
+	for i := 0; i < len(p); {
+		switch {
+		case strings.HasPrefix(p[i:], "**/"):
+			b.WriteString("(?:.*/)?")
+			i += 3
+		case p[i:] == "**":
+			b.WriteString(".*")
+			i += 2
+		case i == len(p)-1 && p[i] == '/':
+			b.WriteString("/.*")
+			i++
+		case p[i] == '*':
+			b.WriteString("[^/]*")
+			i++
+		case p[i] == '?':
+			b.WriteString("[^/]")
+			i++
+		default:
+			b.WriteString(regexp.QuoteMeta(p[i : i+1]))
+			i++
+		}
+	}
+	b.WriteString("$")
+	return regexp.MustCompile(b.String())
+}
+
+// Match reports whether the repository-relative file matches the lane path pattern: a glob, or else the same file.
+func Match(pattern, file string) bool {
+	if pattern == "" || file == "" {
+		return false
+	}
+	if !IsGlob(pattern) {
+		return key(pattern) == key(file)
+	}
+	return globRegexp(pattern).MatchString(Clean(file))
+}
+
+// Contains reports whether one of the lane paths matches file.
+func Contains(lane []string, file string) bool {
+	for _, p := range lane {
+		if Match(p, file) {
+			return true
+		}
+	}
+	return false
+}
+
+// Outside returns the files no lane path matches, in their order.
+func Outside(lane, files []string) []string {
+	var out []string
+	for _, f := range files {
+		if !Contains(lane, f) {
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
+// literalPrefix is the part of a lane path before its first wildcard.
+func literalPrefix(p string) string {
+	p = key(p)
+	if i := strings.IndexAny(p, "*?"); i >= 0 {
+		return p[:i]
+	}
+	return p
+}
+
+// PathPair is one overlap between two lanes: a path of mine and one of theirs that can name the same file.
+type PathPair struct {
+	Mine   string `json:"mine"`
+	Theirs string `json:"theirs"`
+}
+
+// Overlap returns every pair of lane paths, one from mine and one from theirs, that can name the same file. Two
+// globs overlap when one's literal prefix starts with the other's (a cautious answer: src/*.go and src/*.ts are
+// reported as overlapping).
+func Overlap(mine, theirs []string) []PathPair {
+	var out []PathPair
+	for _, m := range mine {
+		for _, t := range theirs {
+			mg, tg := IsGlob(m), IsGlob(t)
+			var hit bool
+			switch {
+			case !mg && !tg:
+				hit = key(m) == key(t)
+			case !mg:
+				hit = Match(t, m)
+			case !tg:
+				hit = Match(m, t)
+			default:
+				pm, pt := literalPrefix(m), literalPrefix(t)
+				hit = strings.HasPrefix(pm, pt) || strings.HasPrefix(pt, pm)
+			}
+			if hit {
+				out = append(out, PathPair{Mine: m, Theirs: t})
+			}
+		}
+	}
+	return out
+}
+
+// NormalizeLane cleans the lane paths a lead passed: forward slashes, no duplicates, and a trailing slash on a plain
+// path that names an existing folder, so lane ["src"] covers every file under src/ (old bug D13). isDir reports
+// whether a repository-relative path is a folder. Absolute paths and paths that leave the repository are refused
+// with the offending path.
+func NormalizeLane(paths []string, isDir func(rel string) bool) (out []string, bad string) {
+	seen := map[string]bool{}
+	for _, p := range paths {
+		c := Clean(p)
+		if c == "" {
+			continue
+		}
+		if strings.HasPrefix(c, "/") || (len(c) > 1 && c[1] == ':') || c == ".." || strings.HasPrefix(c, "../") ||
+			strings.Contains(c, "/../") {
+			return nil, p
+		}
+		if !IsGlob(c) && isDir != nil && isDir(strings.TrimSuffix(c, "/")) {
+			c += "/"
+		}
+		if k := key(c); !seen[k] {
+			seen[k] = true
+			out = append(out, c)
+		}
+	}
+	return out, ""
+}
+
+// Ext returns the lower-case extension of a repository-relative path.
+func Ext(p string) string { return strings.ToLower(path.Ext(Clean(p))) }

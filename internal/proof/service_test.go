@@ -1,0 +1,260 @@
+package proof
+
+import (
+	"context"
+	"database/sql"
+	"errors"
+	"path/filepath"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/NovaSeele/Seelegent/internal/api"
+	"github.com/NovaSeele/Seelegent/internal/fsutil"
+	"github.com/NovaSeele/Seelegent/internal/store"
+)
+
+type fakeGit struct{ root string }
+
+func (g fakeGit) Root(context.Context, string) (string, error) { return g.root, nil }
+func (g fakeGit) Head(context.Context, string) (string, bool)  { return "abc123", true }
+
+func newService(t *testing.T, root string, exec func(cmd string) CmdResult, active []string) (*Service, *[]api.ProofRun) {
+	t.Helper()
+	st, err := store.Open(context.Background(), filepath.Join(t.TempDir(), "seelegent.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	var mu sync.Mutex
+	var published []api.ProofRun
+	s := New(Options{Ledger: NewLedger(st, nil), Git: fakeGit{root: root},
+		Exec: func(ctx context.Context, cmd, dir, log string) CmdResult {
+			if same, _ := fsutil.SamePath(dir, root); !same {
+				t.Errorf("dir = %s", dir)
+			}
+			return exec(cmd)
+		},
+		Active:  func(context.Context, string) ([]string, error) { return active, nil },
+		Publish: func(r api.ProofRun) { mu.Lock(); published = append(published, r); mu.Unlock() },
+		LogDir:  t.TempDir()})
+	t.Cleanup(s.Close)
+	return s, &published
+}
+
+func code(n int) *int { return &n }
+
+func waitRun(t *testing.T, s *Service, cwd, id string) api.ProofRun {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		r, err := s.RunStatus(context.Background(), cwd, id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if r.State != api.RunRunning {
+			return r
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatal("the run did not end")
+	return api.ProofRun{}
+}
+
+func TestRegressionRunAndMatrix(t *testing.T) {
+	root := t.TempDir()
+	write(t, filepath.Join(root, "specs", "001-p", "spec.md"), specMD)
+	write(t, filepath.Join(root, "specs", "001-p", "tasks.md"), tasksMD)
+	write(t, filepath.Join(root, ".seelegent", "doctrine.json"), `{"version":1,"checks":[{"id":"d","run":"doctrine-cmd"}]}`)
+	var mu sync.Mutex
+	var ran []string
+	s, published := newService(t, root, func(cmd string) CmdResult {
+		mu.Lock()
+		ran = append(ran, cmd)
+		mu.Unlock()
+		if cmd == "go build ./..." {
+			return CmdResult{Exit: code(2), Tail: "build failed"}
+		}
+		return CmdResult{Exit: code(0)}
+	}, nil)
+	ctx := context.Background()
+	run, err := s.StartRun(ctx, api.ProofRunRequest{Cwd: root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	run = waitRun(t, s, root, run.ID)
+	if run.State != api.RunRed || run.Counts.Red != 1 || run.Counts.Green != 4 || run.Total != 5 || !run.Dirty ||
+		run.GitHead != "abc123" {
+		t.Fatalf("run = %+v", run)
+	}
+	if strings.Join(ran, "|") != "go test ./internal/p|go build ./...|echo ok|go vet ./...|doctrine-cmd" {
+		t.Errorf("ran %v", ran)
+	}
+	if len(*published) < 3 {
+		t.Errorf("published %d", len(*published))
+	}
+	m, err := s.Matrix(ctx, root, "specs/001-p")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// T001 has a red command and no green before: failing.
+	if m.Rows[0].ID != "FR-001" || m.Rows[0].Status != api.ProofFailing || m.Rows[0].Tasks[0].Source != SourceRegression {
+		t.Errorf("row = %+v", m.Rows[0])
+	}
+	idx, err := s.Index(ctx, root)
+	if err != nil || len(idx.Features) != 1 || idx.Features[0].Dir != "specs/001-p" || idx.Totals.Failing != 2 ||
+		len(idx.Runs) != 1 {
+		t.Fatalf("index = %+v, %v", idx, err)
+	}
+	// The same folder spelled differently is the same feature (old bug D12).
+	if _, err := s.Matrix(ctx, root, "./specs/001-p/"); err != nil {
+		t.Error(err)
+	}
+	if _, err := s.Matrix(ctx, root, "specs/none"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("missing feature: %v", err)
+	}
+	if _, err := s.Matrix(ctx, root, "../x"); !errors.Is(err, ErrInvalid) {
+		t.Errorf("outside feature: %v", err)
+	}
+}
+
+func TestRunRefusals(t *testing.T) {
+	root := t.TempDir()
+	write(t, filepath.Join(root, "specs", "001-p", "tasks.md"), tasksMD)
+	release := make(chan struct{})
+	s, _ := newService(t, root, func(string) CmdResult { <-release; return CmdResult{Exit: code(0)} }, nil)
+	ctx := context.Background()
+	run, err := s.StartRun(ctx, api.ProofRunRequest{Cwd: root, Feature: "specs/001-p"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = s.StartRun(ctx, api.ProofRunRequest{Cwd: root})
+	var ce *ConflictError
+	if !errors.As(err, &ce) || ce.Details["runId"] != run.ID {
+		t.Fatalf("second run: %v", err)
+	}
+	close(release)
+	if r := waitRun(t, s, root, run.ID); r.State != api.RunGreen || r.Feature != "specs/001-p" {
+		t.Errorf("run = %+v", r)
+	}
+	s2, _ := newService(t, root, func(string) CmdResult { return CmdResult{Exit: code(0)} }, []string{"t1"})
+	_, err = s2.StartRun(ctx, api.ProofRunRequest{Cwd: root})
+	if !errors.As(err, &ce) || ce.Details["reason"] != "active_tasks" {
+		t.Fatalf("active tasks: %v", err)
+	}
+	r, err := s2.StartRun(ctx, api.ProofRunRequest{Cwd: root, Force: true})
+	if err != nil || !r.Noisy {
+		t.Fatalf("forced run = %+v, %v", r, err)
+	}
+	waitRun(t, s2, root, r.ID)
+}
+
+func TestCancelRun(t *testing.T) {
+	root := t.TempDir()
+	write(t, filepath.Join(root, "specs", "001-p", "tasks.md"), tasksMD)
+	started := make(chan struct{}, 10)
+	st, err := store.Open(context.Background(), filepath.Join(t.TempDir(), "seelegent.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	s := New(Options{Ledger: NewLedger(st, nil), Git: fakeGit{root: root}, LogDir: t.TempDir(),
+		Exec: func(ctx context.Context, cmd, dir, log string) CmdResult {
+			started <- struct{}{}
+			<-ctx.Done()
+			return CmdResult{}
+		}})
+	t.Cleanup(s.Close)
+	ctx := context.Background()
+	run, err := s.StartRun(ctx, api.ProofRunRequest{Cwd: root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	<-started
+	r, err := s.CancelRun(ctx, root, run.ID)
+	if err != nil || r.State != api.RunCancelled || len(r.Results) != 0 {
+		t.Fatalf("cancel = %+v, %v", r, err)
+	}
+	if _, err := s.RunStatus(ctx, root, "r-none"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("unknown run: %v", err)
+	}
+}
+
+// A run whose record cannot be written is not left registered (old bug D11).
+func TestRunNotStuckOnWriteError(t *testing.T) {
+	root := t.TempDir()
+	write(t, filepath.Join(root, "specs", "001-p", "tasks.md"), tasksMD)
+	st, err := store.Open(context.Background(), filepath.Join(t.TempDir(), "seelegent.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	db := &failingDB{DB: st, fail: true}
+	s := New(Options{Ledger: NewLedger(db, nil), Git: fakeGit{root: root}, LogDir: t.TempDir(),
+		Exec: func(context.Context, string, string, string) CmdResult { return CmdResult{Exit: code(0)} }})
+	t.Cleanup(s.Close)
+	ctx := context.Background()
+	if _, err := s.StartRun(ctx, api.ProofRunRequest{Cwd: root}); err == nil {
+		t.Fatal("the run started without its record")
+	}
+	db.fail = false
+	run, err := s.StartRun(ctx, api.ProofRunRequest{Cwd: root})
+	if err != nil {
+		t.Fatalf("the project is stuck: %v", err)
+	}
+	waitRun(t, s, root, run.ID)
+}
+
+type failingDB struct {
+	DB
+	fail bool
+}
+
+func (f *failingDB) Write(ctx context.Context, fn func(*sql.Tx) error) error {
+	if f.fail {
+		return errors.New("disk full")
+	}
+	return f.DB.Write(ctx, fn)
+}
+
+func TestLedgerRecord(t *testing.T) {
+	st, err := store.Open(context.Background(), filepath.Join(t.TempDir(), "seelegent.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	at := time.Date(2026, 11, 7, 9, 0, 0, 0, time.UTC)
+	l := NewLedger(st, func() time.Time { at = at.Add(time.Minute); return at })
+	ctx := context.Background()
+	f := Feature{Key: "k", Display: "specs/001"}
+	for _, state := range []string{api.GateGreen, api.GateRed} {
+		if err := l.Record(ctx, "p", f, []Result{{TaskID: "T1", State: state, Source: SourceTask, Ref: "t"}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	e, err := l.Entries(ctx, "p", "k")
+	if err != nil || e["T1"].State != api.GateRed || e["T1"].LastGreenAt.IsZero() {
+		t.Fatalf("entries = %+v, %v", e, err)
+	}
+	if fs, err := l.Features(ctx, "p"); err != nil || len(fs) != 1 || fs[0].Display != "specs/001" {
+		t.Errorf("features = %v, %v", fs, err)
+	}
+	for range 2 {
+		if err := l.Bump(ctx, "p", CounterLaneRefusals); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if c, err := l.Counters(ctx, "p"); err != nil || c[CounterLaneRefusals] != 2 {
+		t.Errorf("counters = %v, %v", c, err)
+	}
+	if err := l.SaveRun(ctx, "p", api.ProofRun{ID: "r1", State: api.RunRunning, StartedAt: "x"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := l.AbandonRuns(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if r, err := l.Run(ctx, "p", "r1"); err != nil || r.State != api.RunError {
+		t.Errorf("abandoned run = %+v, %v", r, err)
+	}
+}

@@ -367,6 +367,225 @@ export interface ErrorData {
   message: string
 }
 
+/** GateStep is one step of a gate run. */
+export interface GateStep {
+  kind: 'lane' | 'hygiene' | 'auto' | 'doctrine' | 'task' | 'detect'
+  label: string
+  cmd?: string
+  /** Dir is the folder the command runs in, relative to the repository root ("" for the root). */
+  dir?: string
+  /** TaskIDs are the spec tasks whose Gate: line named the command. */
+  taskIds?: string[]
+  state: 'pending' | 'running' | 'green' | 'red' | 'error' | 'warn' | 'not_run'
+  /** Exit is the command's exit code (null when it did not exit: timeout, start failure). */
+  exit?: number
+  ms?: number
+  timedOut?: boolean
+  /** Tail is the end of the command's output (gateOutputTailBytes), or the error. */
+  tail?: string
+  /** Files are the files out of lane (lane) or checked (auto). */
+  files?: string[]
+  /** Failures are the files an auto check refused, with why. */
+  failures?: GateFailure[]
+  /** Findings are the red hygiene findings. */
+  findings?: Finding[]
+  /** Foreign: the step failed only on files other tasks changed; it did not count against this task. */
+  foreign?: boolean
+}
+
+/** GateFailure is a file an auto check refused. */
+export interface GateFailure {
+  file: string
+  message: string
+}
+
+/** GateResult is one gate run of a turn. */
+export interface GateResult {
+  state: 'running' | 'green' | 'red' | 'error' | 'skipped'
+  steps: GateStep[]
+  /** NotRun are the labels of the steps skipped after the first failing one. */
+  notRun: string[]
+  /** Warnings say what the gate could not fully check (settle timeout, lane warnings, foreign failures). */
+  warnings: string[]
+  startedAt: string
+  endedAt?: string
+  /** AutoFix is set when this run's failure started an automatic fix turn (its number). */
+  autoFix?: number
+}
+
+/** VerifierResult is the optional LLM review of a green gate. */
+export interface VerifierResult {
+  verdict: 'running' | 'accept' | 'reject' | 'error'
+  /** ChildID is the hidden verify task that ran the review. */
+  childId?: string
+  reasons: string[]
+  /** Cites are the file:line citations of the reasons, checked against the repository. */
+  cites: CiteCheck[]
+  detail?: string
+  tokens?: number
+}
+
+/** CiteCheck is a checked file:line citation. */
+export interface CiteCheck {
+  path: string
+  line: number
+  endLine?: number
+  state: 'verified' | 'located' | 'quote_mismatch' | 'bad_range' | 'missing_file' | 'outside_repo'
+  detail?: string
+}
+
+/** TaskLane is the file lane of a task: the files it may change. */
+export interface TaskLane {
+  paths: string[]
+  /** Source is lead (passed with delegate or followup) or spec (the path tokens of its spec tasks). */
+  source: 'lead' | 'spec'
+  /** Forced lists the tasks whose claims the lead overrode with forceLane. */
+  forced?: string[]
+}
+
+/** GateCommand is a command of a task's gate. */
+export interface GateCommand {
+  cmd: string
+  /** Dir is the folder the command runs in, relative to the repository root ("" for the root). */
+  dir?: string
+  taskIds?: string[]
+  /** Kind is task (the lead's or a spec task's) or detect (found in the repository). */
+  kind: 'task' | 'detect'
+}
+
+/** TaskProof is what a task's gate checks, fixed when the task started (or at a followup that changed it). */
+export interface TaskProof {
+  /** Gate is false when the lead turned the gate off for the task. */
+  gate: boolean
+  commands: GateCommand[]
+  lane: TaskLane | null
+  verify: boolean
+  /** Doctrine are the ids of the doctrine checks frozen at the start; DoctrineError says why the file was refused. */
+  doctrine: string[]
+  doctrineError?: string
+  /**
+   * BarChanged lists what defines "done" that changed since the task started (spec documents, contracts, gate
+   * commands, its tasks.md lines, constitution, doctrine).
+   */
+  barChanged: string[]
+  /** AutoFixes counts the automatic fix turns since the lead's last message; Budget is the most allowed. */
+  autoFixes: number
+  budget: number
+  /** Feature is the Spec Kit feature folder the ledger records the gate results under. */
+  feature?: string
+}
+
+/** LaneConflict is a held claim a new lane overlaps. */
+export interface LaneConflict {
+  taskId: string
+  title: string
+  status: TaskStatus
+  paths: PathPair[]
+}
+
+/** PathPair is one overlap: a path of the new lane and one of the held claim. */
+export interface PathPair {
+  mine: string
+  theirs: string
+}
+
+/**
+ * LaneClaim is the lane a task holds in a repository: while it is active, and when it is done but not reviewed
+ * within laneHoldHours.
+ */
+export interface LaneClaim {
+  taskId: string
+  title: string
+  status: TaskStatus
+  paths: string[]
+  source: 'lead' | 'spec'
+  /** HeldUntil is when a finished, unreviewed task's claim lapses ("" while the task is active). */
+  heldUntil?: string
+}
+
+/** LanesView is GET /lanes: the claims held in one repository. */
+export interface LanesView {
+  repoRoot: string
+  mode: 'off' | 'warn' | 'enforce'
+  claims: LaneClaim[]
+}
+
+/** ContentionFile is a file at least two tasks of a repository changed within contentionWindowHours. */
+export interface ContentionFile {
+  file: string
+  tasks: ContentionTask[]
+}
+
+/** ContentionTask is one task that changed a contended file. */
+export interface ContentionTask {
+  taskId: string
+  title: string
+  status: TaskStatus
+  at: string
+}
+
+/** ContentionView is GET /contention. */
+export interface ContentionView {
+  repoRoot: string
+  windowHours: number
+  files: ContentionFile[]
+}
+
+/**
+ * ReportGate is the gate field of a report: the last gate run of the task. Steps lists only the failing steps,
+ * with the end of their output, and only when the gate is red or error.
+ */
+export interface ReportGate {
+  state: string
+  auto_fix_turns: number
+  not_run?: string[]
+  steps?: ReportGateStep[]
+  warnings?: string[]
+}
+
+/**
+ * ReportLastGate is the last_gate field of a report while the gate runs or an automatic fix turn works: which turn
+ * the gate is about and whether a fix is under way.
+ */
+export interface ReportLastGate {
+  turn: number
+  state: string
+  fixing: boolean
+  phase?: string
+}
+
+/** ReportGateStep is a failing step of a report's gate. */
+export interface ReportGateStep {
+  label: string
+  kind: string
+  cmd?: string
+  exit?: number
+  files?: string[]
+  tail?: string
+}
+
+/** ReportLane is the lane field of a report. */
+export interface ReportLane {
+  paths: string[]
+  out_of_lane?: string[]
+  warnings?: string[]
+  forced?: string[]
+}
+
+/** ReportBar is the bar field of a report: what defines "done" changed since the task started. */
+export interface ReportBar {
+  changed: string[]
+}
+
+/** ReportVerifier is the verifier field of a report. */
+export interface ReportVerifier {
+  verdict: string
+  reasons?: string[]
+  /** Unverified counts the reasons' file:line citations that do not match the repository. */
+  unverified_cites?: number
+  detail?: string
+}
+
 /** TaskGit is GET /tasks/{id}/git: the repository of a task and the files the task changed in it. */
 export interface TaskGit {
   repo: boolean
@@ -460,6 +679,178 @@ export interface BranchInfo {
   branch: string
   detached: boolean
   dirty: boolean
+}
+
+/** ProofStatus is how far a requirement (FR) or success criterion (SC) is proven. */
+export type ProofStatus =
+  'unmapped' | 'in_progress' | 'unproven' | 'proven' | 'regressed' | 'failing'
+
+/** ProofCounts counts requirements per status. */
+export interface ProofCounts {
+  unmapped: number
+  in_progress: number
+  unproven: number
+  proven: number
+  regressed: number
+  failing: number
+}
+
+/** ProofMatrix is the requirement matrix of one feature. */
+export interface ProofMatrix {
+  /** Feature is the feature folder: relative to the repository root with '/', or absolute when outside it. */
+  feature: string
+  title: string
+  counts: ProofCounts
+  rows: ProofRow[]
+  stories: ProofStory[]
+  /** UncoveredTasks are the spec tasks without a Covers: line. */
+  uncoveredTasks: string[]
+  tasks: ProofTally
+  /** FeatureGate are the commands of the tasks.md "Feature gate:" line. */
+  featureGate: string[]
+}
+
+/** ProofTally counts the spec tasks of a feature. */
+export interface ProofTally {
+  total: number
+  done: number
+}
+
+/** ProofRow is one requirement or success criterion. */
+export interface ProofRow {
+  id: string
+  kind: 'FR' | 'SC'
+  text: string
+  status: ProofStatus
+  stories: string[]
+  tasks: ProofRowTask[]
+}
+
+/** ProofRowTask is a spec task covering a requirement, with its last gate result. */
+export interface ProofRowTask {
+  id: string
+  done: boolean
+  gates: string[]
+  /** State is the last gate result (green, red, error) or "" when the ledger has none. */
+  state?: 'green' | 'red' | 'error'
+  at?: string
+  /** Source is task (a worker's gate) or regression (a regression run). */
+  source?: 'task' | 'regression'
+  /** Ref is the task id or regression run id of the last result. */
+  ref?: string
+}
+
+/** ProofStory is a user story with the counts of the requirements its tasks cover. */
+export interface ProofStory {
+  id: string
+  title: string
+  priority: string
+  counts: ProofCounts
+}
+
+/** ProofFeature is one feature of the project index. */
+export interface ProofFeature {
+  dir: string
+  title: string
+  counts: ProofCounts
+  tasks: ProofTally
+  /** Error says why the feature could not be read (its counts are zero then). */
+  error?: string
+}
+
+/**
+ * ProofIndex is the proof overview of one project: every feature under specs/ and every feature folder the ledger
+ * knows outside the repository.
+ */
+export interface ProofIndex {
+  key: string
+  repoRoot: string
+  totals: ProofCounts
+  features: ProofFeature[]
+  /** Runs are the latest regression runs, newest first. */
+  runs: ProofRun[]
+}
+
+/** ProofRunCounts counts the results of a regression run. */
+export interface ProofRunCounts {
+  green: number
+  red: number
+  error: number
+}
+
+/**
+ * ProofRun is a regression run: every gate command of a project's features (and the doctrine) run again from the
+ * repository root.
+ */
+export interface ProofRun {
+  id: string
+  feature?: string
+  state: 'running' | 'green' | 'red' | 'error' | 'cancelled'
+  startedAt: string
+  endedAt?: string
+  gitHead?: string
+  /** Noisy: other tasks of the repository were active (force), so results may reflect their unfinished work. */
+  noisy?: boolean
+  /** Dirty: the worktree had uncommitted changes. */
+  dirty?: boolean
+  counts: ProofRunCounts
+  total: number
+  results: ProofRunResult[]
+  error?: string
+}
+
+/** ProofRunResult is one command of a regression run. */
+export interface ProofRunResult {
+  cmd: string
+  /** Keys are the spec tasks (feature#Tnnn) the command proves. */
+  keys: string[]
+  kind: 'task' | 'feature' | 'doctrine'
+  state: 'running' | 'green' | 'red' | 'error'
+  exit?: number
+  ms: number
+  tail?: string
+}
+
+/** ProofRunRequest starts a regression run. */
+export interface ProofRunRequest {
+  cwd: string
+  feature?: string
+  /** Force runs even while other tasks of the repository are active. */
+  force?: boolean
+}
+
+/** ProofStats are the gate statistics of a project. */
+export interface ProofStats {
+  since?: string
+  tasks: number
+  gatedTasks: number
+  gateRuns: number
+  firstRunRed: number
+  caughtBeforeReview: number
+  autoFixTurns: number
+  exhaustedBudgets: number
+  laneRefusals: number
+  laneForced: number
+  laneViolationsCaught: number
+  leadFollowups: ProofFollowupStats
+  verifier: ProofVerifierStats
+}
+
+/** ProofFollowupStats is the mean number of lead followups per task, with and without a gate. */
+export interface ProofFollowupStats {
+  gated: number
+  ungated: number
+}
+
+/** ProofVerifierStats counts the verifier's verdicts. */
+export interface ProofVerifierStats {
+  runs: number
+  accepts: number
+  rejects: number
+  errors: number
+  /** Slipped counts accepted turns the lead then followed up or rejected. */
+  slipped: number
+  tokens: number
 }
 
 /**
@@ -1025,7 +1416,7 @@ export type TaskStatus =
  * Verdict is the lead's verdict on a task. Fields keep plain strings (the constants below are untyped); the TS
  * generator emits the union from the Verdict* constants.
  */
-export type Verdict = 'accepted' | 'rejected'
+export type Verdict = 'accept' | 'reject' | 'error' | 'accepted' | 'rejected'
 
 /** TaskSummary is a task as lists and the SSE stream show it. */
 export interface TaskSummary {
