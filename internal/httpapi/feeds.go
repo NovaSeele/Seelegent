@@ -73,7 +73,9 @@ func (s *Server) taskFeed(ctx context.Context) {
 				}
 				continue
 			}
-			s.publish(api.StreamTaskUpdated, sum)
+			if !task.Hidden(sum.Kind) { // hidden runs are read through what started them
+				s.publish(api.StreamTaskUpdated, sum)
+			}
 		}
 		fire = nil
 	}
@@ -102,7 +104,7 @@ func (s *Server) taskFeed(ctx context.Context) {
 				s.publish(api.StreamTaskEvent, n.Event)
 			case n.Kind == task.NoticeTask && n.Created:
 				delete(pending, n.TaskID)
-				if sum, err := s.o.Tasks.Summary(ctx, n.TaskID); err == nil {
+				if sum, err := s.o.Tasks.Summary(ctx, n.TaskID); err == nil && !task.Hidden(sum.Kind) {
 					s.publish(api.StreamTaskCreated, sum)
 				}
 			case n.Kind == task.NoticeTask:

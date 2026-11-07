@@ -2,6 +2,7 @@ package task
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 
@@ -13,7 +14,17 @@ func (s *Service) usableMember(ctx context.Context, id string) (api.Member, erro
 	if s.o.Members == nil {
 		return api.Member{}, invalidf("department members are not available")
 	}
-	return s.o.Members.Usable(ctx, id)
+	m, err := s.o.Members.Usable(ctx, id)
+	if err != nil {
+		// A turned-off member is a conflict with details (member_disabled); anything else is a bad argument of
+		// this request, not a missing task.
+		var detailed interface{ APIDetails() map[string]any }
+		if errors.As(err, &detailed) || ctx.Err() != nil {
+			return api.Member{}, err
+		}
+		return api.Member{}, invalidf("%v", err)
+	}
+	return m, nil
 }
 
 // memberDefaults applies a member to a delegate: the request's own backend, provider, model, tier and role win,

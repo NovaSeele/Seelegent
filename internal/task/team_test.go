@@ -33,7 +33,7 @@ func TestDelegateAndFollowupByMember(t *testing.T) {
 		t.Fatalf("disabled member = %v", err)
 	}
 	if _, err := h.s.Delegate(t.Context(), api.DelegateRequest{Prompt: "x", Cwd: h.cwd, Member: "nobody"}); !errors.Is(err,
-		member.ErrNotFound) {
+		ErrInvalid) {
 		t.Fatalf("unknown member = %v", err)
 	}
 	h.queue.Push(t, okScript("conv-m", "Done."))
