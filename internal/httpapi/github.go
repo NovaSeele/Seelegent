@@ -50,7 +50,7 @@ type Automations interface {
 	Delete(ctx context.Context, id string) error
 	RequestEnable(ctx context.Context, id string) (api.AutomationEnableResult, error)
 	EnableResult(a api.Automation) api.AutomationEnableResult
-	ConfirmToken(ctx context.Context, id string) (api.AutomationConfirmToken, error)
+	ConfirmToken(ctx context.Context, id, revision string) (api.AutomationConfirmToken, error)
 	Confirm(ctx context.Context, id, token string) (api.Automation, error)
 	Runs(ctx context.Context, id string, limit int) ([]api.AutomationRun, error)
 	RunNow(ctx context.Context, id string) (api.AutomationRun, error)
@@ -346,11 +346,15 @@ func (s *Server) automationRoutes() {
 		res, err := a.RequestEnable(r.Context(), r.PathValue("id"))
 		return http.StatusOK, res, err
 	})
-	s.handle("POST /automations/{id}/confirm-token", func(_ http.ResponseWriter, r *http.Request) (int, any, error) {
+	s.handle("POST /automations/{id}/confirm-token", func(w http.ResponseWriter, r *http.Request) (int, any, error) {
 		if err := s.dashboardOnly(r); err != nil {
 			return 0, nil, err
 		}
-		tok, err := a.ConfirmToken(r.Context(), r.PathValue("id"))
+		var req api.AutomationConfirmTokenRequest
+		if err := decode(w, r, &req); err != nil {
+			return 0, nil, err
+		}
+		tok, err := a.ConfirmToken(r.Context(), r.PathValue("id"), req.Revision)
 		return http.StatusOK, tok, err
 	})
 	s.handle("POST /automations/{id}/confirm", func(w http.ResponseWriter, r *http.Request) (int, any, error) {

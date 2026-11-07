@@ -200,6 +200,11 @@ func (r *rec) contentHash() string {
 	return hex.EncodeToString(sum[:])
 }
 
+// revision is the short form of contentHash the API shows (Automation.Revision).
+func (r *rec) revision() string {
+	return r.contentHash()[:16]
+}
+
 func newID() string {
 	b := make([]byte, 5)
 	_, _ = rand.Read(b)
@@ -319,6 +324,7 @@ func (s *Service) running(ctx context.Context, r *rec) (busy bool, why string) {
 
 func (s *Service) view(ctx context.Context, r *rec) api.Automation {
 	v := r.Automation
+	v.Revision = r.revision()
 	v.Running, _ = s.running(ctx, r)
 	v.GateCommands = api.NonNil(v.GateCommands)
 	v.Lane = api.NonNil(v.Lane)
@@ -649,12 +655,20 @@ func tokenKey(token string) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// ConfirmToken issues a one-time token that turns on automation id as it is now (the dashboard asks for it right
-// before the user confirms; the HTTP layer only serves it to the dashboard).
-func (s *Service) ConfirmToken(ctx context.Context, id string) (api.AutomationConfirmToken, error) {
+// ConfirmToken issues a one-time token that turns on automation id as the dashboard shows it: revision is the
+// Revision it shows, and a token is refused when the automation has changed since (the dashboard asks for the
+// token right when the user confirms; the HTTP layer only serves it to the dashboard).
+func (s *Service) ConfirmToken(ctx context.Context, id, revision string) (api.AutomationConfirmToken, error) {
 	r, err := s.get(ctx, id)
 	if err != nil {
 		return api.AutomationConfirmToken{}, err
+	}
+	if strings.TrimSpace(revision) == "" {
+		return api.AutomationConfirmToken{}, invalidf("revision is required: the revision of the automation as shown")
+	}
+	if revision != r.revision() {
+		return api.AutomationConfirmToken{}, fmt.Errorf("%w: the automation changed since it was shown; read it again",
+			ErrBadState)
 	}
 	b := make([]byte, 24)
 	if _, err := rand.Read(b); err != nil {

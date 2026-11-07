@@ -88,6 +88,9 @@ type Automation struct {
 	EnableRequested   bool   `json:"enableRequested"`
 	EnableRequestedAt string `json:"enableRequestedAt,omitempty"`
 	ConfirmedAt       string `json:"confirmedAt,omitempty"`
+	// Revision names what a run does (a hash of the prompt, folder, worker, gate, lane, precheck and schedule). The
+	// dashboard sends the revision it shows when it asks for a confirmation token, so it enables exactly that.
+	Revision string `json:"revision"`
 	// Running is true while the task of the last run is active (ActiveTaskID).
 	Running      bool           `json:"running"`
 	ActiveTaskID string         `json:"activeTaskId,omitempty"`
@@ -154,6 +157,12 @@ type AutomationEnableResult struct {
 type AutomationConfirmToken struct {
 	Token     string `json:"token"`
 	ExpiresAt string `json:"expiresAt"`
+}
+
+// AutomationConfirmTokenRequest is the body of POST /automations/{id}/confirm-token (dashboard only): the
+// revision of the automation as the dashboard shows it. A token is refused when the automation has changed since.
+type AutomationConfirmTokenRequest struct {
+	Revision string `json:"revision"`
 }
 
 // AutomationConfirmRequest is the body of POST /automations/{id}/confirm (dashboard only).

@@ -172,12 +172,17 @@ func TestAutomationRoutes(t *testing.T) {
 	e.wantError(e.post("/api/v1/automations/"+a.ID+"/confirm-token", nil), http.StatusForbidden, api.CodeForbidden, "")
 	e.wantError(e.req(http.MethodPost, "/api/v1/automations/"+a.ID+"/confirm", map[string]string{"token": "x"}, nil),
 		http.StatusForbidden, api.CodeForbidden, "")
+	shown := map[string]string{"revision": a.Revision}
+	e.wantError(e.req(http.MethodPost, "/api/v1/automations/"+a.ID+"/confirm-token", map[string]string{},
+		e.dashboard()), http.StatusBadRequest, api.CodeInvalidArgument, "")
+	e.wantError(e.req(http.MethodPost, "/api/v1/automations/"+a.ID+"/confirm-token",
+		map[string]string{"revision": "0000000000000000"}, e.dashboard()), http.StatusConflict, api.CodeBadState, "")
 	var tok api.AutomationConfirmToken
-	e.must(e.req(http.MethodPost, "/api/v1/automations/"+a.ID+"/confirm-token", nil, e.dashboard()),
+	e.must(e.req(http.MethodPost, "/api/v1/automations/"+a.ID+"/confirm-token", shown, e.dashboard()),
 		http.StatusOK).json(t, &tok)
 	e.wantError(e.req(http.MethodPost, "/api/v1/automations/"+a.ID+"/confirm", map[string]string{"token": "bad"},
 		e.dashboard()), http.StatusForbidden, api.CodeForbidden, "")
-	e.must(e.req(http.MethodPost, "/api/v1/automations/"+a.ID+"/confirm-token", nil, e.dashboard()),
+	e.must(e.req(http.MethodPost, "/api/v1/automations/"+a.ID+"/confirm-token", shown, e.dashboard()),
 		http.StatusOK).json(t, &tok)
 	var on api.Automation
 	e.must(e.req(http.MethodPost, "/api/v1/automations/"+a.ID+"/confirm", map[string]string{"token": tok.Token},

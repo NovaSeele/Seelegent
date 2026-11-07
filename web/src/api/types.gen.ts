@@ -260,6 +260,11 @@ export interface Automation {
   enableRequested: boolean
   enableRequestedAt?: string
   confirmedAt?: string
+  /**
+   * Revision names what a run does (a hash of the prompt, folder, worker, gate, lane, precheck and schedule). The
+   * dashboard sends the revision it shows when it asks for a confirmation token, so it enables exactly that.
+   */
+  revision: string
   /** Running is true while the task of the last run is active (ActiveTaskID). */
   running: boolean
   activeTaskId?: string
@@ -332,6 +337,14 @@ export interface AutomationEnableResult {
 export interface AutomationConfirmToken {
   token: string
   expiresAt: string
+}
+
+/**
+ * AutomationConfirmTokenRequest is the body of POST /automations/{id}/confirm-token (dashboard only): the
+ * revision of the automation as the dashboard shows it. A token is refused when the automation has changed since.
+ */
+export interface AutomationConfirmTokenRequest {
+  revision: string
 }
 
 /** AutomationConfirmRequest is the body of POST /automations/{id}/confirm (dashboard only). */

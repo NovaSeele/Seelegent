@@ -148,7 +148,11 @@ func (f *fixture) create(t *testing.T, in api.AutomationInput) api.Automation {
 // enable confirms a as the dashboard does.
 func (f *fixture) enable(t *testing.T, id string) api.Automation {
 	t.Helper()
-	tok, err := f.s.ConfirmToken(t.Context(), id)
+	shown, err := f.s.Get(t.Context(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tok, err := f.s.ConfirmToken(t.Context(), id, shown.Revision)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -229,12 +233,19 @@ func TestEnableNeedsDashboardConfirmation(t *testing.T) {
 	if _, err := f.s.Confirm(ctx, a.ID, "made-up"); !errors.Is(err, ErrForbidden) {
 		t.Fatalf("made-up token: %v", err)
 	}
-	tok, err := f.s.ConfirmToken(ctx, a.ID)
+	if got.Revision == "" {
+		t.Fatal("no revision")
+	}
+	if _, err := f.s.ConfirmToken(ctx, a.ID, ""); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("token without a revision: %v", err)
+	}
+	tok, err := f.s.ConfirmToken(ctx, a.ID, got.Revision)
 	if err != nil {
 		t.Fatal(err)
 	}
 	// The automation changes after the token was shown: the token no longer fits.
-	if _, err := f.s.Update(ctx, a.ID, api.AutomationPatch{Prompt: ptr("Delete everything")}); err != nil {
+	changed, err := f.s.Update(ctx, a.ID, api.AutomationPatch{Prompt: ptr("Delete everything")})
+	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := f.s.Confirm(ctx, a.ID, tok.Token); !errors.Is(err, ErrBadState) {
@@ -243,7 +254,14 @@ func TestEnableNeedsDashboardConfirmation(t *testing.T) {
 	if _, err := f.s.Confirm(ctx, a.ID, tok.Token); !errors.Is(err, ErrForbidden) {
 		t.Fatalf("token reused: %v", err)
 	}
-	tok, _ = f.s.ConfirmToken(ctx, a.ID)
+	// The dashboard still shows the old content: no token for it (old bug F23).
+	if changed.Revision == got.Revision {
+		t.Fatal("revision did not change with the prompt")
+	}
+	if _, err := f.s.ConfirmToken(ctx, a.ID, got.Revision); !errors.Is(err, ErrBadState) {
+		t.Fatalf("token for a stale revision: %v", err)
+	}
+	tok, _ = f.s.ConfirmToken(ctx, a.ID, changed.Revision)
 	f.clock.Advance(ConfirmTTL + time.Second)
 	if _, err := f.s.Confirm(ctx, a.ID, tok.Token); !errors.Is(err, ErrForbidden) {
 		t.Fatalf("expired token: %v", err)
