@@ -52,6 +52,9 @@ describe('automationModel', () => {
     expect(changesRun({ ...toForm(a), lane: 'docs/' }, a)).toBe(true)
     expect(changesRun({ ...toForm(a), at: '08:00' }, a)).toBe(true)
     expect(changesRun({ ...toForm(a), name: 'Renamed' }, a)).toBe(false)
+    expect(changesRun({ ...toForm(a), minRemaining: 50 }, a)).toBe(false)
+    expect(changesRun({ ...toForm(a), graceMinutes: 5 }, a)).toBe(true)
+    expect(changesRun({ ...toForm(a), useBeforeReset: true }, a)).toBe(true)
   })
 
   it('builds the schedule of the form', () => {

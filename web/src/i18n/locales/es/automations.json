@@ -130,6 +130,7 @@
     "none": "Ninguno",
     "quota": "Cuota",
     "quotaText": "Se omite si queda menos del {n} %",
+    "graceText": "Empieza hasta {n} min tarde",
     "warn": "El prompt de arriba es exactamente lo que envía cada ejecución. Si algo no es lo que esperas, cancela y edítalo.",
     "submit": "Activar",
     "done": "{name} está activada."

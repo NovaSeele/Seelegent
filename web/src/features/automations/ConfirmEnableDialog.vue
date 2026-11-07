@@ -138,6 +138,8 @@ async function turnOn() {
             >· {{ t('automations.editor.beforeReset') }}</template
           >
         </dd>
+        <dt>{{ t('automations.editor.grace') }}</dt>
+        <dd>{{ t('automations.confirm.graceText', { n: shown.graceMinutes }) }}</dd>
       </dl>
       <h3 class="conf__h">{{ t('automations.editor.prompt') }}</h3>
       <pre class="conf__prompt">{{ shown.prompt }}</pre>

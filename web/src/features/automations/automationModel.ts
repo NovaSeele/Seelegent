@@ -153,8 +153,9 @@ const sameList = (a: readonly string[], b: readonly string[]) =>
   a.length === b.length && a.every((v, i) => v === b[i])
 
 /**
- * True when saving the form changes what a run does (prompt, folder, worker, gate, lane, precheck or schedule):
- * the daemon then turns an enabled automation off until it is confirmed again.
+ * True when saving the form changes what a run does or when it runs (prompt, folder, worker, gate, lane, precheck,
+ * schedule, use-before-reset or the missed-run grace): the daemon then turns an enabled automation off until it is
+ * confirmed again. The quota floor alone does not: it can only skip a run.
  */
 export function changesRun(f: AutomationForm, a: Automation): boolean {
   const next = toPatch(f)
@@ -171,7 +172,9 @@ export function changesRun(f: AutomationForm, a: Automation): boolean {
     next.noLane !== a.noLane ||
     (next.precheck ?? '') !== (a.precheck ?? '') ||
     (next.timezone ?? 'local') !== a.timezone ||
-    JSON.stringify(next.schedule) !== JSON.stringify(a.schedule)
+    JSON.stringify(next.schedule) !== JSON.stringify(a.schedule) ||
+    (next.quota?.useBeforeReset ?? false) !== a.quota.useBeforeReset ||
+    (next.graceMinutes ?? a.graceMinutes) !== a.graceMinutes
   )
 }
 
