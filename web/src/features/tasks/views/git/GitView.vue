@@ -1,24 +1,23 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import type { TaskSummary } from '@/api/types'
-import DiffView from '@/components/diff/DiffView.vue'
 import Button from '@/components/ui/Button.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import Icon from '@/components/ui/Icon.vue'
 import IconButton from '@/components/ui/IconButton.vue'
 import Spinner from '@/components/ui/Spinner.vue'
-import Switch from '@/components/ui/Switch.vue'
 import { useFormat } from '@/composables/useFormat'
 import { isBoolean, readStored, writeStored } from '@/lib/storage'
 import { isActive } from '@/lib/taskStatus'
-import { useCommandsStore } from '@/stores/commands'
 
 import CommitDialog from './CommitDialog.vue'
 import { isDrafts, putDraft, stepFile, totals, type Drafts } from './git'
+import GitDiffPane from './GitDiffPane.vue'
 import GitFileList from './GitFileList.vue'
 import { useGit } from './useGit'
+import { useGitCommands } from './useGitCommands'
 
 /**
  * The Git view: the files this task changed (paths from the repository root), the selected file's diff, and a
@@ -64,36 +63,11 @@ function step(delta: number) {
   }
 }
 
-const hasFiles = () => files.value.length > 0
-const unregister = useCommandsStore().register(
-  {
-    id: 'git.nextFile',
-    title: { key: 'git.cmd.next' },
-    group: 'task',
-    icon: 'chevronDown',
-    shortcut: 'j',
-    when: hasFiles,
-    run: () => step(1),
-  },
-  {
-    id: 'git.prevFile',
-    title: { key: 'git.cmd.prev' },
-    group: 'task',
-    icon: 'chevronUp',
-    shortcut: 'k',
-    when: hasFiles,
-    run: () => step(-1),
-  },
-  {
-    id: 'git.commit',
-    title: { key: 'git.cmd.commit' },
-    group: 'task',
-    icon: 'git',
-    when: hasFiles,
-    run: () => void (committing.value = true),
-  },
+useGitCommands(
+  () => files.value.length > 0,
+  step,
+  () => (committing.value = true),
 )
-onBeforeUnmount(unregister)
 </script>
 
 <template>
@@ -155,23 +129,12 @@ onBeforeUnmount(unregister)
             :label="t('git.listLabel')"
           />
         </nav>
-        <section class="git__diff" :aria-label="t('git.diffLabel')">
-          <div v-if="selectedFile" class="git__diff-bar">
-            <code class="git__diff-path">
-              {{ selectedFile.oldPath ? `${selectedFile.oldPath} → ` : '' }}{{ selectedFile.path }}
-            </code>
-            <Switch v-model="wrap" :label="t('git.wrap')" />
-          </div>
-          <p v-if="diff.status === 'loading'" class="git__state">
-            <Spinner size="sm" decorative />
-            {{ t('git.diff.loading') }}
-          </p>
-          <div v-else-if="diff.status === 'error'" class="git__state" role="alert">
-            <span>{{ t('git.diff.error', { error: diff.error }) }}</span>
-            <Button size="sm" @click="model.reloadDiff">{{ t('common.action.retry') }}</Button>
-          </div>
-          <DiffView v-else-if="diff.status === 'ready'" :diff="diff.diff" :wrap="wrap" />
-        </section>
+        <GitDiffPane
+          v-model:wrap="wrap"
+          :file="selectedFile"
+          :diff="diff"
+          @retry="model.reloadDiff"
+        />
       </div>
 
       <details v-if="git.preexisting.length" class="git__pre">
@@ -276,28 +239,6 @@ onBeforeUnmount(unregister)
   border: var(--border-width) solid var(--border-subtle);
   border-radius: var(--radius-md);
   background: var(--bg-surface);
-}
-
-.git__diff {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  min-width: 0;
-}
-
-.git__diff-bar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2);
-}
-
-.git__diff-path {
-  min-width: 0;
-  font-family: var(--font-mono);
-  font-size: var(--fs-sm);
-  overflow-wrap: anywhere;
 }
 
 .git__pre {
