@@ -95,7 +95,15 @@
     "rounds": "ラウンド",
     "roundN": "ラウンド {n}",
     "noAnswers": "回答はまだありません。",
-    "absentAnswer": "{label} は回答しませんでした: {error}",
+    "absentRun": {
+      "failed": "実行に失敗しました",
+      "cancelled": "実行はキャンセルされました",
+      "gone": "実行はもう存在しません",
+      "none": "回答なし"
+    },
+    "absentDetail": "詳細",
+    "yourAnswers": "あなたの回答",
+    "yourNote": "全参加者へのあなたのメモ",
     "option": "選択肢 {key}",
     "confidence": "確信度 {n}%",
     "arguments": "論点",

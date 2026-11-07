@@ -7,6 +7,7 @@ import {
   citeText,
   citeTone,
   contestOpen,
+  leadByRound,
   lines,
   meetingOpen,
   pendingQuestions,
@@ -85,6 +86,26 @@ describe('meetingModel', () => {
       { ids: ['q1', 'q2', 'q4'], labels: ['P1', 'P2'], question: 'Keep v1?' },
       { ids: ['q3'], labels: ['P2'], question: 'Which DB?' },
     ])
+  })
+
+  it("keeps the lead's answers and notes with the round they answer", () => {
+    const m = {
+      ...meeting({
+        attendees: [],
+        leadQa: [
+          { id: 'q1', round: 1, label: 'P1', question: 'Cents? ', answer: 'Int cents.' },
+          { id: 'q2', round: 1, label: 'P2', question: 'cents?', answer: 'Int cents.' },
+          { id: 'q3', round: 1, label: 'P2', question: 'Which DB?' },
+          { id: 'q4', round: 2, label: 'P1', question: 'Round where?', answer: 'Per line.' },
+        ],
+      }),
+      leadNotes: [{ round: 2, text: 'Read docs/money.md.', at: '2026-11-08T00:00:00Z' }],
+    } as Meeting
+    const by = leadByRound(m)
+    expect(by.get(1)?.answers).toEqual([{ id: 'q1', question: 'Cents?', answer: 'Int cents.' }])
+    expect(by.get(1)?.notes.map((n) => n.text)).toEqual(['Read docs/money.md.'])
+    expect(by.get(2)?.answers.map((a) => a.id)).toEqual(['q4'])
+    expect(by.get(2)?.notes).toEqual([])
   })
 
   it('lets only meetings and contests that have not ended be cancelled', () => {

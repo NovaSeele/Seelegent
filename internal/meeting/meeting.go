@@ -484,7 +484,7 @@ func (s *Service) startRound(ctx context.Context, m *api.Meeting, n int) {
 			}
 		}
 		if err != nil {
-			cur.Answers = append(cur.Answers, absent(a.Label, err.Error()))
+			cur.Answers = append(cur.Answers, absent(a.Label, api.AbsentFailed, err.Error()))
 			continue
 		}
 		cur.Runs = append(cur.Runs, api.MeetingRun{Label: a.Label, TaskID: sum.ID, Turn: sum.TurnCount})
@@ -524,9 +524,11 @@ func (s *Service) newerTurn(ctx context.Context, m *api.Meeting, a *api.Attendee
 	return 0
 }
 
-func absent(label, why string) api.MeetingAnswer {
-	return api.MeetingAnswer{Label: label, Absent: true, Error: answer.Clip(why, 500), Arguments: []string{},
-		Claims: []api.Claim{}, Risks: []string{}, Actions: []string{}, Questions: []string{}}
+// absent is the answer of an attendee whose run gave none: reason is a code the dashboard translates, why the
+// detail.
+func absent(label, reason, why string) api.MeetingAnswer {
+	return api.MeetingAnswer{Label: label, Absent: true, AbsentReason: reason, Error: answer.Clip(why, 500),
+		Arguments: []string{}, Claims: []api.Claim{}, Risks: []string{}, Actions: []string{}, Questions: []string{}}
 }
 
 // sortedAttendees returns the attendee indexes by label.
@@ -549,13 +551,14 @@ type runState struct {
 	response string
 	files    []string
 	err      string
+	reason   string // with err: an api.Absent* code
 }
 
 func (s *Service) readRun(ctx context.Context, run api.MeetingRun) runState {
 	d, err := s.o.Tasks.Get(ctx, run.TaskID)
 	if err != nil {
 		if errors.Is(err, task.ErrNotFound) {
-			return runState{err: "the run is gone"}
+			return runState{err: "the run is gone", reason: api.AbsentGone}
 		}
 		return runState{pending: true} // a passing error (a busy database): look again at the next poll
 	}
@@ -563,20 +566,20 @@ func (s *Service) readRun(ctx context.Context, run api.MeetingRun) runState {
 		return runState{pending: true}
 	}
 	if run.Turn < 1 || run.Turn > len(d.Turns) {
-		return runState{err: "the run has no such turn"}
+		return runState{err: "the run has no such turn", reason: api.AbsentGone}
 	}
 	tu := d.Turns[run.Turn-1]
 	switch {
 	case tu.Status == task.TurnRunning:
 		return runState{pending: true}
 	case d.Status == api.StatusCancelled || tu.Status == task.TurnCancelled:
-		return runState{err: "the run was cancelled"}
+		return runState{err: "the run was cancelled", reason: api.AbsentCancelled}
 	case tu.Status != task.TurnOK || strings.TrimSpace(tu.Response) == "":
 		why := "the run ended " + string(d.Status) + " without an answer"
 		if d.Error != "" {
-			why += ": " + d.Error
+			why = d.Error // the reason code already says the run ended without an answer
 		}
-		return runState{err: why}
+		return runState{err: why, reason: api.AbsentFailed}
 	}
 	return runState{response: tu.Response, files: tu.Files}
 }
@@ -601,7 +604,7 @@ func (s *Service) collectRound(ctx context.Context, m *api.Meeting) (done, chang
 		case st.pending:
 			done = false
 		case st.err != "":
-			r.Answers = append(r.Answers, absent(run.Label, st.err))
+			r.Answers = append(r.Answers, absent(run.Label, st.reason, st.err))
 		default:
 			a := parseAnswer(st.response, keys)
 			a.Label = run.Label

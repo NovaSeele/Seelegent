@@ -95,7 +95,15 @@
     "rounds": "回合",
     "roundN": "第 {n} 回合",
     "noAnswers": "还没有回答。",
-    "absentAnswer": "{label} 没有回答：{error}",
+    "absentRun": {
+      "failed": "运行失败",
+      "cancelled": "运行已取消",
+      "gone": "运行已不存在",
+      "none": "没有回答"
+    },
+    "absentDetail": "详情",
+    "yourAnswers": "你的回答",
+    "yourNote": "你给所有参会者的备注",
     "option": "选项 {key}",
     "confidence": "置信度 {n}%",
     "arguments": "论点",

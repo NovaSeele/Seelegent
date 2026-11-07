@@ -95,7 +95,15 @@
     "rounds": "라운드",
     "roundN": "라운드 {n}",
     "noAnswers": "아직 답변이 없습니다.",
-    "absentAnswer": "{label}이(가) 답하지 않았습니다: {error}",
+    "absentRun": {
+      "failed": "실행 실패",
+      "cancelled": "실행 취소됨",
+      "gone": "실행이 더 이상 없습니다",
+      "none": "답변 없음"
+    },
+    "absentDetail": "자세히",
+    "yourAnswers": "내 답변",
+    "yourNote": "모든 참석자에게 보낸 내 메모",
     "option": "선택지 {key}",
     "confidence": "확신도 {n}%",
     "arguments": "논거",

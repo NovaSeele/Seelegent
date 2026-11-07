@@ -300,22 +300,32 @@ type MeetingRun struct {
 
 // MeetingAnswer is an attendee's parsed answer in one round; Absent when the run failed or gave no answer.
 type MeetingAnswer struct {
-	Label      string   `json:"label"`
-	Absent     bool     `json:"absent,omitempty"`
-	Error      string   `json:"error,omitempty"`
-	Option     string   `json:"option,omitempty"`
-	Stance     string   `json:"stance"`
-	Confidence *int     `json:"confidence"`
-	Arguments  []string `json:"arguments"`
-	Claims     []Claim  `json:"claims"`
-	Risks      []string `json:"risks"`
-	Actions    []string `json:"actions"`
-	Questions  []string `json:"questions"`
-	Rebuttal   string   `json:"rebuttal,omitempty"`
-	Moved      string   `json:"moved,omitempty" ts:"'yes' | 'no'"`
+	Label  string `json:"label"`
+	Absent bool   `json:"absent,omitempty"`
+	// AbsentReason says why an absent attendee gave no answer (AbsentFailed, AbsentCancelled, AbsentGone); Error
+	// is the detail. Answers recorded before it existed have none.
+	AbsentReason string   `json:"absentReason,omitempty" ts:"'failed' | 'cancelled' | 'gone'"`
+	Error        string   `json:"error,omitempty"`
+	Option       string   `json:"option,omitempty"`
+	Stance       string   `json:"stance"`
+	Confidence   *int     `json:"confidence"`
+	Arguments    []string `json:"arguments"`
+	Claims       []Claim  `json:"claims"`
+	Risks        []string `json:"risks"`
+	Actions      []string `json:"actions"`
+	Questions    []string `json:"questions"`
+	Rebuttal     string   `json:"rebuttal,omitempty"`
+	Moved        string   `json:"moved,omitempty" ts:"'yes' | 'no'"`
 	// EditedFiles are files the read-only run changed anyway (shown as a warning).
 	EditedFiles []string `json:"editedFiles,omitempty"`
 }
+
+// Why an attendee gave no answer (MeetingAnswer.AbsentReason).
+const (
+	AbsentFailed    = "failed"    // the run failed or could not start
+	AbsentCancelled = "cancelled" // the run was cancelled
+	AbsentGone      = "gone"      // the run or its turn no longer exists
+)
 
 // LeadQuestion is a question an attendee asked the lead, with the lead's answer.
 type LeadQuestion struct {

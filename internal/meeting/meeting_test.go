@@ -480,7 +480,7 @@ func TestMeetingStableAndCancel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if a := answerOf(&m.Rounds[0], labelOf(m, "broken")); a == nil || !a.Absent {
+	if a := answerOf(&m.Rounds[0], labelOf(m, "broken")); a == nil || !a.Absent || a.AbsentReason != api.AbsentFailed {
 		t.Fatalf("broken attendee = %+v", a)
 	}
 	ada := taskOf(m, "ada")

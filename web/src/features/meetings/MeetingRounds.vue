@@ -1,10 +1,13 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import type { Meeting, MeetingAnswer } from '@/api/types'
+import StatusPill from '@/components/ui/StatusPill.vue'
+import type { Tone } from '@/components/ui/tone'
 
 import ClaimList from './ClaimList.vue'
-import { attendeeName } from './meetingModel'
+import { attendeeName, leadByRound } from './meetingModel'
 
 /**
  * The rounds of a meeting, newest first: each attendee's answer with its option, stance, confidence, arguments,
@@ -17,6 +20,13 @@ const { t } = useI18n()
 const lists = ['arguments', 'risks', 'actions', 'questions'] as const
 const listOf = (a: MeetingAnswer, key: (typeof lists)[number]) => a[key] ?? []
 const who = (label: string) => attendeeName(props.meeting, label)
+
+/** A failed run is a failure (danger); a cancelled or vanished one, or an old record without a reason, is muted. */
+const absentTone = (a: MeetingAnswer): Tone => (a.absentReason === 'failed' ? 'danger' : 'muted')
+const absentKey = (a: MeetingAnswer) => `team.meetings.absentRun.${a.absentReason ?? 'none'}`
+
+const lead = computed(() => leadByRound(props.meeting))
+const leadOf = (n: number) => lead.value.get(n) ?? { answers: [], notes: [] }
 </script>
 
 <template>
@@ -32,9 +42,16 @@ const who = (label: string) => attendeeName(props.meeting, label)
       <summary class="round__head">{{ t('team.meetings.roundN', { n: round.n }) }}</summary>
       <p v-if="!round.answers.length" class="rounds__muted">{{ t('team.meetings.noAnswers') }}</p>
       <article v-for="a in round.answers" :key="a.label" class="answer">
-        <p v-if="a.absent" class="answer__absent tone-muted">
-          {{ t('team.meetings.absentAnswer', { label: who(a.label), error: a.error ?? '' }) }}
-        </p>
+        <template v-if="a.absent">
+          <header class="answer__head">
+            <h3 class="answer__who">{{ who(a.label) }}</h3>
+            <StatusPill size="sm" :tone="absentTone(a)" :label="t(absentKey(a))" />
+          </header>
+          <details v-if="a.error" class="answer__detail">
+            <summary>{{ t('team.meetings.absentDetail') }}</summary>
+            <p class="answer__text">{{ a.error }}</p>
+          </details>
+        </template>
         <template v-else>
           <header class="answer__head">
             <h3 class="answer__who">{{ who(a.label) }}</h3>
@@ -70,6 +87,23 @@ const who = (label: string) => attendeeName(props.meeting, label)
           </p>
         </template>
       </article>
+      <section
+        v-if="leadOf(round.n).answers.length || leadOf(round.n).notes.length"
+        class="answer lead"
+        :aria-labelledby="`lead-${round.n}`"
+      >
+        <h3 :id="`lead-${round.n}`" class="answer__who">{{ t('team.meetings.yourAnswers') }}</h3>
+        <dl v-if="leadOf(round.n).answers.length" class="lead__qa">
+          <div v-for="q in leadOf(round.n).answers" :key="q.id">
+            <dt>{{ q.question }}</dt>
+            <dd>{{ q.answer }}</dd>
+          </div>
+        </dl>
+        <div v-for="(n, j) in leadOf(round.n).notes" :key="j" class="answer__block">
+          <h4 class="answer__label">{{ t('team.meetings.yourNote') }}</h4>
+          <p class="answer__text">{{ n.text }}</p>
+        </div>
+      </section>
     </details>
   </section>
 </template>
@@ -162,7 +196,42 @@ const who = (label: string) => attendeeName(props.meeting, label)
   overflow-wrap: anywhere;
 }
 
-.answer__absent,
+.answer__detail summary {
+  color: var(--text-secondary);
+  font-size: var(--fs-xs);
+  cursor: pointer;
+}
+
+.answer__detail summary:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.answer__detail .answer__text {
+  margin-top: var(--space-1);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+}
+
+.lead__qa {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+}
+
+.lead__qa dt {
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.lead__qa dd {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .answer__warn {
   padding: var(--space-1) var(--space-2);
   border-radius: var(--radius-sm);

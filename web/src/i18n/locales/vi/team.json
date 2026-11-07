@@ -95,7 +95,15 @@
     "rounds": "Các vòng",
     "roundN": "Vòng {n}",
     "noAnswers": "Chưa có câu trả lời.",
-    "absentAnswer": "{label} không trả lời: {error}",
+    "absentRun": {
+      "failed": "Lượt chạy thất bại",
+      "cancelled": "Lượt chạy đã bị hủy",
+      "gone": "Lượt chạy không còn nữa",
+      "none": "Không trả lời"
+    },
+    "absentDetail": "Chi tiết",
+    "yourAnswers": "Câu trả lời của bạn",
+    "yourNote": "Ghi chú của bạn cho mọi người dự họp",
     "option": "Phương án {key}",
     "confidence": "Độ tin cậy {n}%",
     "arguments": "Lập luận",

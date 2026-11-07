@@ -81,6 +81,35 @@ export function questionGroups(m: Meeting): QuestionGroup[] {
   return [...groups.values()]
 }
 
+/** What the lead said after one round: answered questions and the notes it sent with them. */
+export interface LeadReply {
+  answers: { id: string; question: string; answer: string }[]
+  notes: Meeting['leadNotes']
+}
+
+/**
+ * The lead's replies by the round whose questions they answer. Identical questions answered alike (one box for
+ * several attendees) are listed once. A note is stored with the round it was sent to (n + 1), so it belongs to n.
+ */
+export function leadByRound(m: Meeting): Map<number, LeadReply> {
+  const out = new Map<number, LeadReply>()
+  const at = (n: number) => {
+    let r = out.get(n)
+    if (!r) out.set(n, (r = { answers: [], notes: [] }))
+    return r
+  }
+  const seen = new Set<string>()
+  for (const q of m.leadQa) {
+    if (!q.answer) continue
+    const key = `${q.round}\u0000${q.question.trim().toLowerCase()}\u0000${q.answer}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    at(q.round).answers.push({ id: q.id, question: q.question.trim(), answer: q.answer })
+  }
+  for (const n of m.leadNotes) at(n.round - 1).notes.push(n)
+  return out
+}
+
 /** The member behind an attendee label (P1..), for showing who said what. */
 export function attendeeName(m: Meeting, label: string): string {
   const a = m.attendees.find((x) => x.label === label)

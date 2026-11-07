@@ -2097,6 +2097,11 @@ export interface MeetingRun {
 export interface MeetingAnswer {
   label: string
   absent?: boolean
+  /**
+   * AbsentReason says why an absent attendee gave no answer (AbsentFailed, AbsentCancelled, AbsentGone); Error
+   * is the detail. Answers recorded before it existed have none.
+   */
+  absentReason?: 'failed' | 'cancelled' | 'gone'
   error?: string
   option?: string
   stance: string

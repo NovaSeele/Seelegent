@@ -95,7 +95,15 @@
     "rounds": "Раунды",
     "roundN": "Раунд {n}",
     "noAnswers": "Ответов пока нет.",
-    "absentAnswer": "{label} не ответил: {error}",
+    "absentRun": {
+      "failed": "Запуск не удался",
+      "cancelled": "Запуск отменён",
+      "gone": "Запуск больше не существует",
+      "none": "Нет ответа"
+    },
+    "absentDetail": "Подробности",
+    "yourAnswers": "Ваши ответы",
+    "yourNote": "Ваша заметка всем участникам",
     "option": "Вариант {key}",
     "confidence": "Уверенность {n}%",
     "arguments": "Доводы",

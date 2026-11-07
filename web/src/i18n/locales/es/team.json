@@ -95,7 +95,15 @@
     "rounds": "Rondas",
     "roundN": "Ronda {n}",
     "noAnswers": "Aún no hay respuestas.",
-    "absentAnswer": "{label} no respondió: {error}",
+    "absentRun": {
+      "failed": "Ejecución fallida",
+      "cancelled": "Ejecución cancelada",
+      "gone": "La ejecución ya no existe",
+      "none": "Sin respuesta"
+    },
+    "absentDetail": "Detalles",
+    "yourAnswers": "Tus respuestas",
+    "yourNote": "Tu nota para todos los asistentes",
     "option": "Opción {key}",
     "confidence": "Confianza {n}%",
     "arguments": "Argumentos",

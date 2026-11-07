@@ -95,7 +95,15 @@
     "rounds": "Rounds",
     "roundN": "Round {n}",
     "noAnswers": "No answers yet.",
-    "absentAnswer": "{label} gave no answer: {error}",
+    "absentRun": {
+      "failed": "Run failed",
+      "cancelled": "Run cancelled",
+      "gone": "Run no longer available",
+      "none": "No answer"
+    },
+    "absentDetail": "Details",
+    "yourAnswers": "Your answers",
+    "yourNote": "Your note to every attendee",
     "option": "Option {key}",
     "confidence": "Confidence {n}%",
     "arguments": "Arguments",
