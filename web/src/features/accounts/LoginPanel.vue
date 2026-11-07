@@ -6,6 +6,7 @@ import type { Account, LoginSession } from '@/api/types'
 import Button from '@/components/ui/Button.vue'
 import Spinner from '@/components/ui/Spinner.vue'
 import TextField from '@/components/ui/TextField.vue'
+import { safeHref } from '@/lib/richText'
 import { useAccountsStore } from '@/stores/accounts'
 import { useToastStore } from '@/stores/toast'
 
@@ -27,8 +28,11 @@ const code = ref('')
 
 const finished = computed(() => props.session.state === 'done' || props.session.state === 'failed')
 
+/** The sign-in link, only when it is http(s): anything else is neither opened nor copied. */
+const link = computed(() => (props.session.url ? safeHref(props.session.url) : null))
+
 function openLink() {
-  if (props.session.url) window.open(props.session.url, '_blank', 'noopener,noreferrer')
+  if (link.value) window.open(link.value, '_blank', 'noopener,noreferrer')
 }
 
 async function copy(text: string, message: string) {
@@ -84,7 +88,7 @@ async function submit() {
           {{ t('accounts.login.copy') }}
         </Button>
       </p>
-      <div v-if="session.url" class="login__row">
+      <div v-if="link" class="login__row">
         <Button size="sm" variant="primary" icon="external" @click="openLink">
           {{ t('accounts.login.open') }}
         </Button>
@@ -92,7 +96,7 @@ async function submit() {
           size="sm"
           variant="secondary"
           icon="copy"
-          @click="copy(session.url, t('accounts.login.linkCopied'))"
+          @click="copy(link, t('accounts.login.linkCopied'))"
         >
           {{ t('accounts.login.copyLink') }}
         </Button>
