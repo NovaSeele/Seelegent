@@ -1,6 +1,7 @@
 package ticket
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -8,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/NovaSeele/Seelegent/internal/api"
+	"github.com/NovaSeele/Seelegent/internal/gitx"
 )
 
 // readyTicket connects the repository, starts a ticket for a local issue and returns it with its task.
@@ -137,7 +139,37 @@ func TestPushScanRefusesCommittedSecret(t *testing.T) {
 	}
 }
 
-// TestPushRemoteRules: a remote branch someone changed is never built on (the push entry fails), and a base with
+// brokenCatFile is git with a cat-file that fails: the scan cannot read what it must check.
+type brokenCatFile struct{ Git }
+
+func (b brokenCatFile) Exec(ctx context.Context, dir string, opt gitx.ExecOptions, args ...string) ([]byte, error) {
+	if len(args) > 0 && args[0] == "cat-file" && opt.Stdin != nil {
+		return nil, errors.New("fatal: unable to read objects")
+	}
+	return b.Git.Exec(ctx, dir, opt, args...)
+}
+
+// TestPushRefusedWhenScanFails is the review's G8: a scan that cannot run refuses the pull request; nothing is
+// committed or pushed unscanned.
+func TestPushRefusedWhenScanFails(t *testing.T) {
+	e := setupFlow(t)
+	tk, task := readyTicket(t, e, "Broken")
+	write(t, filepath.Join(tk.Worktree, "src", "cache.go"), "package src\n\nvar ttl = 3\n")
+	e.tasks.accept(task, "ok")
+	waitTicket(t, e.s, tk.ID, api.TicketReady)
+	e.s.o.Git = brokenCatFile{e.s.o.Git}
+	_, err := e.s.PR(t.Context(), tk.ID, api.PRRequest{})
+	var pe *PushError
+	if !errors.As(err, &pe) || pe.Reason != "scan_failed" || !errors.Is(err, ErrScan) ||
+		!strings.Contains(err.Error(), "could not scan") {
+		t.Fatalf("pr with a broken scan: %v", err)
+	}
+	if e.gh.originSha(tk.Branch) != "" || run(t, tk.Worktree, "status", "--porcelain") == "" {
+		t.Fatal("committed or pushed without a scan")
+	}
+}
+
+// TestPushRemoteRules:a remote branch someone changed is never built on (the push entry fails), and a base with
 // commits the remote does not have is refused.
 func TestPushRemoteRules(t *testing.T) {
 	e := setupFlow(t)
