@@ -304,6 +304,12 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 			s.writeError(w, r, fmt.Errorf("panic: %v", v))
 		}
 	}()
+	// Every answer, refusals included: no page may frame the dashboard (clickjacking), and no link leaks the
+	// daemon's URL to another site.
+	h := w.Header()
+	h.Set("X-Frame-Options", "DENY")
+	h.Set("Content-Security-Policy", "frame-ancestors 'none'")
+	h.Set("Referrer-Policy", "no-referrer")
 	if !s.hostAllowed(r.Host) {
 		s.writeError(w, r, translated(api.CodeMisdirected, "misdirected"))
 		return

@@ -149,3 +149,26 @@ func TestStatic(t *testing.T) {
 		t.Errorf("health = %+v", h)
 	}
 }
+
+// TestAntiFraming: every answer forbids framing and referrers, the dashboard, the API, the stream and refusals
+// alike (clickjacking defense).
+func TestAntiFraming(t *testing.T) {
+	e := newEnv(t)
+	answers := map[string]http.Header{
+		"dashboard":     e.must(e.get("/"), http.StatusOK).header,
+		"history route": e.must(e.get("/tasks/t-1"), http.StatusOK).header,
+		"asset":         e.must(e.get("/assets/app-1a2b.js"), http.StatusOK).header,
+		"missing asset": e.must(e.get("/assets/nope.js"), http.StatusNotFound).header,
+		"api":           e.must(e.get("/api/v1/health"), http.StatusOK).header,
+		"api 404":       e.must(e.get("/api/v1/nope"), http.StatusNotFound).header,
+		"no header":     e.must(e.req(http.MethodPost, "/api/v1/quota/refresh", nil, map[string]string{"X-Seelegent": ""}), http.StatusForbidden).header,
+		"wrong host":    e.must(e.req(http.MethodGet, "/", nil, map[string]string{"Host": "evil.test"}), http.StatusMisdirectedRequest).header,
+		"stream":        e.stream("").header,
+	}
+	for name, h := range answers {
+		if h.Get("X-Frame-Options") != "DENY" || h.Get("Content-Security-Policy") != "frame-ancestors 'none'" ||
+			h.Get("Referrer-Policy") != "no-referrer" {
+			t.Errorf("%s: headers %v", name, h)
+		}
+	}
+}

@@ -283,9 +283,10 @@ func (e *env) wait(ids ...string) api.WaitResult {
 
 // sse is a reader of GET /events.
 type sse struct {
-	t    *testing.T
-	body io.ReadCloser
-	rd   *bufio.Reader
+	t      *testing.T
+	header http.Header
+	body   io.ReadCloser
+	rd     *bufio.Reader
 }
 
 type frame struct {
@@ -316,7 +317,7 @@ func (e *env) streamPath(path, lastID string) *sse {
 		res.Header.Get("X-Accel-Buffering") != "no" || res.Header.Get("Cache-Control") != "no-store" {
 		e.t.Fatalf("events: %d %v", res.StatusCode, res.Header)
 	}
-	s := &sse{t: e.t, body: res.Body, rd: bufio.NewReader(res.Body)}
+	s := &sse{t: e.t, header: res.Header, body: res.Body, rd: bufio.NewReader(res.Body)}
 	e.t.Cleanup(func() {
 		cancel()
 		_ = res.Body.Close()
