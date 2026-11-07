@@ -7,7 +7,7 @@ const writeDepth = 3
 
 // Every argument of these commands may be a path they write, move or delete.
 var writeVerbs = set("rm", "rmdir", "unlink", "shred", "truncate", "mv", "touch", "mkdir", "chmod", "chown", "ln",
-	"tee", "sed", "perl", "del", "erase", "rd", "move", "ren", "rename", "md",
+	"tee", "del", "erase", "rd", "move", "ren", "rename", "md",
 	"remove-item", "ri", "move-item", "mi", "rename-item", "rni", "set-content", "sc", "add-content", "ac",
 	"out-file", "new-item", "ni", "clear-content", "clc", "tee-object")
 
@@ -86,6 +86,10 @@ func segmentWrites(ws []word, sh Shell, depth int, add func(string)) {
 				break
 			}
 		}
+	case name == "sed" || name == "perl":
+		for _, a := range inPlaceFiles(name, args) {
+			add(a)
+		}
 	case writeVerbs[name]:
 		for _, a := range positional(args, sh) {
 			add(a)
@@ -103,6 +107,67 @@ func segmentWrites(ws []word, sh Shell, depth int, add func(string)) {
 			add(pos[len(pos)-1])
 		}
 	}
+}
+
+// inPlaceFiles returns the files sed or perl edits in place (-i, -i.bak, --in-place[=suffix], perl -pi): its file
+// arguments, without the script. Without in-place editing they only read their files: nothing.
+func inPlaceFiles(name string, args []word) []string {
+	inPlace, script := false, false
+	var pos []word
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		t := a.text
+		switch {
+		case a.quoted || a.dynamic || !strings.HasPrefix(t, "-") || t == "-":
+			pos = append(pos, a)
+		case t == "--":
+			pos = append(pos, args[i+1:]...)
+			i = len(args)
+		case strings.HasPrefix(t, "--"):
+			long, _, valued := strings.Cut(t, "=")
+			switch {
+			case name == "sed" && long == "--in-place":
+				inPlace = true
+			case name == "sed" && (long == "--expression" || long == "--file"):
+				script = true
+				if !valued {
+					i++
+				}
+			}
+		default:
+			// A cluster of switches; some take the rest of the word, or the next word, as their value.
+			for j := 1; j < len(t); j++ {
+				c := t[j]
+				if c == 'i' {
+					inPlace = true // the rest of the word is the backup suffix
+					break
+				}
+				if name == "sed" && (c == 'e' || c == 'f' || c == 'l') || name == "perl" && (c == 'e' || c == 'E') {
+					script = script || c != 'l'
+					if j == len(t)-1 {
+						i++
+					}
+					break
+				}
+				if name == "perl" && strings.IndexByte("MmIDdFxC", c) >= 0 {
+					break
+				}
+			}
+		}
+	}
+	if !inPlace {
+		return nil
+	}
+	if !script && len(pos) > 0 {
+		pos = pos[1:] // the script (sed) or the program file (perl)
+	}
+	var out []string
+	for _, a := range pos {
+		if !a.dynamic && a.text != "" {
+			out = append(out, a.text)
+		}
+	}
+	return out
 }
 
 // flagValue returns the word after flag (compared without case).
