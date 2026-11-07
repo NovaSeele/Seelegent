@@ -101,7 +101,9 @@ type Service struct {
 
 	mu       sync.Mutex
 	sessions map[string]*session
-	closed   bool
+	// locks keeps a sign-in's profile preparation and a sign-out's profile replacement of one account apart.
+	locks  map[string]chan struct{}
+	closed bool
 }
 
 type session struct {
@@ -138,7 +140,25 @@ func New(o Options) *Service {
 		o.Logger = slog.New(slog.DiscardHandler)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	return &Service{o: o, ctx: ctx, cancel: cancel, sessions: map[string]*session{}}
+	return &Service{o: o, ctx: ctx, cancel: cancel, sessions: map[string]*session{}, locks: map[string]chan struct{}{}}
+}
+
+// lockAccount takes the profile lock of account id. It gives up when ctx ends, so cancelling a sign-in that waits
+// for the lock frees it at once.
+func (s *Service) lockAccount(ctx context.Context, id string) (unlock func(), err error) {
+	s.mu.Lock()
+	ch, ok := s.locks[id]
+	if !ok {
+		ch = make(chan struct{}, 1)
+		s.locks[id] = ch
+	}
+	s.mu.Unlock()
+	select {
+	case ch <- struct{}{}:
+		return func() { <-ch }, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
 }
 
 // Start begins the sign-in of account id, cancelling one that runs, and returns its first state. The window
@@ -200,11 +220,8 @@ func (s *Service) run(ctx context.Context, sess *session, a account.Account, b b
 		s.update(sess, api.LoginFailed, msg)
 		return false
 	}
-	prof, _, err := s.o.Accounts.EnsureProfile(a, s.o.Links())
+	prof, err := s.prepare(ctx, a, b)
 	if err != nil {
-		return fail("could not prepare the account's profile: " + err.Error())
-	}
-	if err := b.Prepare(prof, nil); err != nil {
 		return fail(err.Error())
 	}
 	si, err := b.SignIn(prof)
@@ -257,6 +274,25 @@ func (s *Service) run(ctx context.Context, sess *session, a account.Account, b b
 	}
 	s.update(sess, api.LoginDone, "Signed in.")
 	return true
+}
+
+// prepare makes the account's profile ready for the sign-in, under the account's profile lock (a sign-out
+// replacing the profile at the same time would remove what was just prepared). The lock is not held while the
+// window is open.
+func (s *Service) prepare(ctx context.Context, a account.Account, b backend.Backend) (account.Profile, error) {
+	unlock, err := s.lockAccount(ctx, a.ID)
+	if err != nil {
+		return account.Profile{}, errors.New("sign-in cancelled")
+	}
+	defer unlock()
+	prof, _, err := s.o.Accounts.EnsureProfile(a, s.o.Links())
+	if err != nil {
+		return account.Profile{}, fmt.Errorf("could not prepare the account's profile: %w", err)
+	}
+	if err := b.Prepare(prof, nil); err != nil {
+		return account.Profile{}, err
+	}
+	return prof, nil
 }
 
 // stop closes the window of a sign-in that is given up.
@@ -351,15 +387,28 @@ func (s *Service) Logout(ctx context.Context, id string) (account.Account, error
 		return account.Account{}, fmt.Errorf("%w: account %s is running a task", ErrBadState, id)
 	}
 	defer release()
+	// Cancel first and never while holding the profile lock: a cancelled sign-in may be waiting for that lock.
 	s.Cancel(id)
-	if err := s.o.Accounts.Profiles().Remove(id); err != nil {
-		return account.Account{}, fmt.Errorf("sign out %s: %w", id, err)
-	}
-	if _, _, err := s.o.Accounts.EnsureProfile(a, s.o.Links()); err != nil {
+	if err := s.replaceProfile(ctx, a); err != nil {
 		return account.Account{}, fmt.Errorf("sign out %s: %w", id, err)
 	}
 	s.o.OnDone(id, false)
 	return a, nil
+}
+
+// replaceProfile removes the account's profile and makes a fresh one, under the account's profile lock, so a
+// sign-in started meanwhile prepares its profile only after the replacement.
+func (s *Service) replaceProfile(ctx context.Context, a account.Account) error {
+	unlock, err := s.lockAccount(ctx, a.ID)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	if err := s.o.Accounts.Profiles().Remove(a.ID); err != nil {
+		return err
+	}
+	_, _, err = s.o.Accounts.EnsureProfile(a, s.o.Links())
+	return err
 }
 
 // Close cancels every sign-in and waits for them.

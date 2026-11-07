@@ -342,3 +342,112 @@ func TestLogoutHoldsTheAccount(t *testing.T) {
 		t.Fatalf("logout of a busy account: %v", err)
 	}
 }
+
+// gatedAccounts blocks the first EnsureProfile until release is closed and records how many EnsureProfile calls
+// for one account ran at once.
+type gatedAccounts struct {
+	*account.Manager
+	entered chan struct{}
+	release chan struct{}
+
+	mu            sync.Mutex
+	calls, inside int
+	maxInside     int
+}
+
+func (g *gatedAccounts) EnsureProfile(a account.Account, links []string) (account.Profile, []string, error) {
+	g.mu.Lock()
+	g.calls++
+	first := g.calls == 1
+	g.inside++
+	g.maxInside = max(g.maxInside, g.inside)
+	g.mu.Unlock()
+	defer func() {
+		g.mu.Lock()
+		g.inside--
+		g.mu.Unlock()
+	}()
+	if first {
+		close(g.entered)
+		select {
+		case <-g.release:
+		case <-time.After(20 * time.Second):
+		}
+	}
+	return g.Manager.EnsureProfile(a, links)
+}
+
+func (g *gatedAccounts) stats() (calls, maxInside int) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.calls, g.maxInside
+}
+
+// TestStartDuringLogoutWaitsForProfile: a sign-in started while sign-out replaces the profile prepares its profile
+// only after the replacement; cancelling a sign-in that waits for the profile frees it at once; both finish.
+func TestStartDuringLogoutWaitsForProfile(t *testing.T) {
+	f := newFixture(t, time.Hour)
+	a := f.add(t, account.KindIsolated, true)
+	g := &gatedAccounts{Manager: f.accounts, entered: make(chan struct{}), release: make(chan struct{})}
+	f.s.o.Accounts = g
+
+	logoutErr := make(chan error, 1)
+	go func() {
+		_, err := f.s.Logout(context.Background(), a.ID)
+		logoutErr <- err
+	}()
+	select {
+	case <-g.entered: // Logout removed the profile and is making the fresh one
+	case <-time.After(10 * time.Second):
+		t.Fatal("Logout did not reach the profile replacement")
+	}
+
+	// A sign-in that waits for the profile lock and is cancelled ends at once.
+	if _, err := f.s.Start(t.Context(), a.ID); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(200 * time.Millisecond)
+	if calls, _ := g.stats(); calls != 1 {
+		t.Fatalf("the sign-in prepared its profile during the replacement (%d EnsureProfile calls)", calls)
+	}
+	cancelled := make(chan struct{})
+	go func() { f.s.Cancel(a.ID); close(cancelled) }()
+	select {
+	case <-cancelled:
+	case <-time.After(3 * time.Second):
+		t.Fatal("Cancel of a sign-in waiting for the profile lock hung")
+	}
+	if l := f.waitState(t, a.ID, api.LoginFailed); l.Message != "sign-in cancelled" {
+		t.Fatalf("cancelled sign-in = %+v", l)
+	}
+
+	f.queue.Push(t, "Successfully logged in\n#!exit 0\n")
+	if _, err := f.s.Start(t.Context(), a.ID); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(200 * time.Millisecond)
+	start := time.Now()
+	close(g.release)
+	select {
+	case err := <-logoutErr:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Logout did not finish")
+	}
+	f.waitState(t, a.ID, api.LoginDone)
+	if d := time.Since(start); d > 5*time.Second {
+		t.Fatalf("Logout and the sign-in took %v", d)
+	}
+	if calls, maxInside := g.stats(); calls != 2 || maxInside != 1 {
+		t.Fatalf("EnsureProfile calls %d, at most %d at once; want 2 calls, never overlapping", calls, maxInside)
+	}
+	prof, err := f.accounts.Profile(a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(prof.Home); err != nil {
+		t.Fatalf("the profile is missing after both: %v", err)
+	}
+}
