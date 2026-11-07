@@ -671,33 +671,61 @@ func (c Checker) stdinScript(s *segment, script Shell, depth int) Result {
 	return res.merge(r)
 }
 
+// feeder is a command whose output goes down a pipeline: its words (without leading keywords) and the bodies of
+// its here-documents and here-strings.
+type feeder struct {
+	words []word
+	stdin []string
+}
+
+// upstream returns the commands whose output a pipeline stage reads from u: u itself, or the commands of a
+// subshell or brace group, each with its leading keywords removed ({ echo x; }: echo x).
+func upstream(u *segment) []feeder {
+	members := []*segment{u}
+	if u.group != nil {
+		members = u.group
+	}
+	out := make([]feeder, 0, len(members))
+	for _, m := range members {
+		ws := m.words
+		for len(ws) > 0 && !ws[0].quoted && keywords[strings.ToLower(ws[0].text)] {
+			ws = ws[1:]
+		}
+		out = append(out, feeder{words: ws, stdin: m.stdin})
+	}
+	return out
+}
+
 // piped checks what is piped into an interpreter that reads its script from standard input: the arguments and the
-// here-documents of every command up the pipeline (cat <<'EOF' | sh, echo 'git stash' | tr -d '\r' | sh).
+// here-documents of every command up the pipeline, inside subshells and brace groups too (cat <<'EOF' | sh,
+// echo 'git stash' | tr -d '\r' | sh, { printf 'git stash\n'; } | sh).
 func (c Checker) piped(s *segment, sh Shell, depth int) Result {
 	if s == nil || !s.piped {
 		return allow
 	}
 	res := allow
 	for u := s.prev; u != nil; u = u.prev {
-		ws := u.words
-		if len(ws) > 0 {
-			ws = ws[1:]
-		}
-		for _, w := range ws {
-			if r := c.Command(w.text); r.Deny {
-				return r
+		for _, m := range upstream(u) {
+			ws := m.words
+			if len(ws) > 0 {
+				ws = ws[1:]
 			}
-		}
-		texts := append([]string{joinWords(ws)}, u.stdin...)
-		if out, ok := printed(u.words); ok {
-			texts = append(texts, out) // printf 'git stash\n' | bash: the \n is a line break by then
-		}
-		for _, text := range texts {
-			r := c.line(text, sh, depth+1)
-			if r.Deny {
-				return r
+			for _, w := range ws {
+				if r := c.Command(w.text); r.Deny {
+					return r
+				}
 			}
-			res = res.merge(r)
+			texts := append([]string{joinWords(ws)}, m.stdin...)
+			if out, ok := printed(m.words); ok {
+				texts = append(texts, out) // printf 'git stash\n' | bash: the \n is a line break by then
+			}
+			for _, text := range texts {
+				r := c.line(text, sh, depth+1)
+				if r.Deny {
+					return r
+				}
+				res = res.merge(r)
+			}
 		}
 		if !u.piped {
 			break
@@ -833,10 +861,12 @@ func (c Checker) stdinCode(s *segment, lang string, depth int) Result {
 	texts := slices.Clone(s.stdin)
 	if s.piped {
 		for u := s.prev; u != nil; u = u.prev {
-			if len(u.words) > 1 {
-				texts = append(texts, joinWords(u.words[1:]))
+			for _, m := range upstream(u) {
+				if len(m.words) > 1 {
+					texts = append(texts, joinWords(m.words[1:]))
+				}
+				texts = append(texts, m.stdin...)
 			}
-			texts = append(texts, u.stdin...)
 			if !u.piped {
 				break
 			}

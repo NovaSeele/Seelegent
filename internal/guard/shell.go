@@ -48,8 +48,11 @@ type segment struct {
 	words []word
 	// piped marks a command that reads the output of the previous one (a | before it).
 	piped bool
-	// prev is the command before a pipe, when piped.
+	// prev is the command before a pipe, when piped: a command of the line, or a group.
 	prev *segment
+	// group, set only on a prev, holds the commands of a subshell or brace group whose output is piped ((...) | sh,
+	// { ...; } | sh); its own words are empty.
+	group []*segment
 	// stdin holds the bodies of the here-documents and here-strings (POSIX <<, <<-, <<<) the command reads: data
 	// for most commands, a script for a shell that reads its script from standard input.
 	stdin []string
@@ -137,16 +140,40 @@ func (p *parser) peek(off int) byte {
 func (p *parser) list(term byte) error {
 	cur := &segment{}
 	var prev *segment
+	// group is a subshell or brace group that just closed: a | right after it pipes the output of its commands.
+	var group *segment
+	// braces holds where each open POSIX brace group starts in the state's commands.
+	var braces []int
 	flush := func(piped bool) {
 		if len(cur.words) > 0 {
 			p.st.out = append(p.st.out, cur)
 			prev = cur
+			if p.sh == POSIX {
+				for _, w := range cur.words {
+					if w.quoted || !keywords[w.text] {
+						break
+					}
+					if w.text == "{" {
+						braces = append(braces, len(p.st.out)-1)
+					}
+				}
+			}
 		}
 		next := &segment{piped: piped}
 		if piped {
 			next.prev = prev
+			if len(cur.words) == 0 && group != nil {
+				next.prev = group
+			}
 		}
-		cur = next
+		cur, group = next, nil
+	}
+	// closeGroup records the commands from p.st.out[start:] as the group that just closed; in is the command that
+	// was waiting for its first word when the group opened (it carries the pipe into the group).
+	closeGroup := func(start int, in *segment) {
+		if start < len(p.st.out) {
+			group = &segment{group: p.st.out[start:len(p.st.out):len(p.st.out)], piped: in.piped, prev: in.prev}
+		}
 	}
 	for p.i < len(p.s) {
 		c := p.s[p.i]
@@ -210,14 +237,25 @@ func (p *parser) list(term byte) error {
 			// A stray closer (a case pattern, a brace group): a separator.
 			p.i++
 			flush(false)
+			if c == '}' && p.sh == POSIX && len(braces) > 0 {
+				start := braces[len(braces)-1]
+				braces = braces[:len(braces)-1]
+				closeGroup(start, p.st.out[start])
+			}
 			continue
 		case c == '(' && (p.sh == POSIX || p.sh == Cmd):
 			// A subshell or a cmd group: its commands stand on their own.
 			p.i++
+			in := cur
+			if len(in.words) > 0 {
+				in = &segment{}
+			}
 			flush(false)
+			start := len(p.st.out)
 			if err := p.sub(')'); err != nil {
 				return err
 			}
+			closeGroup(start, in)
 			continue
 		case c == '<' || c == '>':
 			if err := p.redirect(cur); err != nil {

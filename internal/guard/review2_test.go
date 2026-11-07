@@ -42,3 +42,32 @@ func TestConfigEnvAfterKeywords(t *testing.T) {
 		`$a = $env:GIT_CONFIG_COUNT`:                  false,
 	}, PowerShell)
 }
+
+// TestPipedGroups (G-a): a subshell or brace group piped into a shell has its commands' output read as the script.
+func TestPipedGroups(t *testing.T) {
+	expect(t, Checker{}, map[string]bool{
+		`{ echo git stash; } | bash`:                       true,
+		`(echo git stash) | bash`:                          true,
+		`{ printf 'git stash\n'; } | bash`:                 true,
+		`(printf 'cd x\n'; echo git reset --hard) | sh`:    true,
+		`{ echo cd x; echo git stash; } | tr -d '\r' | sh`: true,
+		`echo x | (cat; echo git stash) | bash`:            true,
+		"{ cat <<'EOF'\ngit stash\nEOF\n} | bash":          true,
+		`(cd sub && echo git stash) 2>&1 | bash`:           true,
+		`( (echo git stash) ) | bash`:                      true,
+		`{ echo git status; echo go test; } | bash`:        false,
+		`(echo git stash) | cat`:                           false,
+		`{ echo git stash; } > notes.txt`:                  false,
+		`(echo git stash); echo ok | bash`:                 false,
+		`{ git log -1; } | grep fix`:                       false,
+	}, POSIX)
+	expect(t, Checker{}, map[string]bool{
+		`(echo git stash) | cmd`:  true,
+		`(echo git status) | cmd`: false,
+	}, Cmd)
+	// The interpreters read a group's output as their code too.
+	expect(t, Checker{}, map[string]bool{
+		`(echo "import os"; echo "os.system('git stash')") | python3`: true,
+		`{ echo "print('git stash')"; } | python3`:                    false,
+	}, POSIX)
+}
