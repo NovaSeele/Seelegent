@@ -223,7 +223,7 @@ func InstallShim(dir, exe string) error {
 		if err := writeIfChanged(path, []byte(script), 0o755); err != nil {
 			return fmt.Errorf("guard: shim: %w", err)
 		}
-		return os.Chmod(path, 0o755)
+		return os.Chmod(path, 0o755) //nolint:gosec // the shim is a program every worker runs
 	}
 	if same(path, exe) {
 		return nil

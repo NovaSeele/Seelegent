@@ -73,6 +73,7 @@ func gitAlias(ctx context.Context, env []string, dir string) func(string) (strin
 		err := bin.Run(func(git string) error {
 			cctx, cancel := context.WithTimeout(ctx, aliasTimeout)
 			defer cancel()
+			//nolint:gosec // git comes from the resolver; the alias name is one argument, never a shell word
 			c := exec.CommandContext(cctx, git, "-c", "core.fsmonitor=false", "config", "--get", "alias."+name)
 			if dir != "" {
 				if st, err := os.Stat(dir); err == nil && st.IsDir() {
@@ -119,6 +120,7 @@ func runGitShim(ctx context.Context, shimDir string, args []string, stdin io.Rea
 		_, _ = fmt.Fprintln(stderr, "seelegent git shim:", err)
 		return 1
 	}
+	//nolint:gosec // the shim runs the real git with the worker's own arguments, after the guard allowed them
 	c := exec.CommandContext(ctx, git, args...)
 	c.Stdin, c.Stdout, c.Stderr = stdin, stdout, stderr
 	c.Env = env // nested git calls (aliases, hooks) go through the shim again

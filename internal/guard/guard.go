@@ -135,6 +135,9 @@ func (c Checker) line(line string, sh Shell, depth int) Result {
 	return res
 }
 
+// isAbbrev reports whether t abbreviates the PowerShell option full (a prefix of it, as pwsh accepts).
+func isAbbrev(t, full string) bool { return strings.HasPrefix(full, t) }
+
 // cmdName is a command word reduced to its name: the last path element, lower case, without .exe/.cmd/.bat/.com.
 func cmdName(w word) string {
 	t := strings.Trim(w.text, `"'`)
@@ -437,12 +440,12 @@ func (c Checker) pwshShell(args []word, s *segment, depth int) Result {
 			t = "-" + t[1:]
 		}
 		switch {
-		case t == "-c" || len(t) >= 3 && strings.HasPrefix("-command", t) && t != "-co":
+		case t == "-c" || len(t) >= 3 && isAbbrev(t, "-command") && t != "-co":
 			return c.line(joinWords(args[i+1:]), PowerShell, depth+1)
 		case t == "-co":
 			// -co is ambiguous for pwsh (-Command, -ConfigurationName); refuse when what follows is git.
 			return c.line(joinWords(args[i+1:]), PowerShell, depth+1)
-		case t == "-e" || t == "-ec" || len(t) >= 3 && strings.HasPrefix("-encodedcommand", t):
+		case t == "-e" || t == "-ec" || len(t) >= 3 && isAbbrev(t, "-encodedcommand"):
 			if i+1 >= len(args) {
 				return allow
 			}
