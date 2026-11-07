@@ -2,7 +2,7 @@
  * Fetch wrapper for the daemon's HTTP API (/api/v1). Every request sends Accept-Language (the daemon localises
  * its messages); mutating requests also send `X-Seelegent: 1` (the daemon's CSRF check, together with a
  * same-origin Origin). Failures surface as typed errors:
- *   ApiError      the daemon answered with an error status ({ "error": { "code", "message" } })
+ *   ApiError      the daemon answered with an error status ({ "error": { "code", "message", "details"? } })
  *   NetworkError  no answer (daemon down, connection refused, CORS)
  *   AbortError    the caller's AbortSignal fired (a DOMException, passed through unchanged)
  */
@@ -13,9 +13,37 @@ export class ApiError extends Error {
     readonly status: number,
     readonly code: string,
     message: string,
+    /** `error.details` of the body (contract §1.1), e.g. `{ fields: [{ field, message }] }`. */
+    readonly details: Readonly<Record<string, unknown>> = {},
   ) {
     super(message)
   }
+}
+
+/** One invalid field of a 400 (`details.field` or `details.fields[]`); `field` is a JSON path. */
+export interface FieldProblem {
+  field: string
+  message: string
+}
+
+/** The invalid fields an error names; empty when it names none. */
+export function fieldProblems(error: unknown): FieldProblem[] {
+  if (!(error instanceof ApiError)) return []
+  const { fields, field } = error.details
+  if (Array.isArray(fields)) {
+    return fields.flatMap((item: unknown) => {
+      const f = item as { field?: unknown; message?: unknown }
+      return typeof f.field === 'string'
+        ? [{ field: f.field, message: typeof f.message === 'string' ? f.message : error.message }]
+        : []
+    })
+  }
+  return typeof field === 'string' ? [{ field, message: error.message }] : []
+}
+
+/** A message to show for any failure: the daemon's own words for an ApiError, else the error text. */
+export function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
 }
 
 export class NetworkError extends Error {
@@ -69,20 +97,25 @@ function buildUrl(base: string, path: string, query?: Query): string {
 }
 
 interface ErrorBody {
-  error?: { code?: unknown; message?: unknown }
+  error?: { code?: unknown; message?: unknown; details?: unknown }
 }
 
 async function toApiError(response: Response): Promise<ApiError> {
   let code = `http_${response.status}`
   let message = response.statusText || code
+  let details: Record<string, unknown> = {}
   try {
     const body = (await response.json()) as ErrorBody
     if (typeof body.error?.code === 'string') code = body.error.code
     if (typeof body.error?.message === 'string') message = body.error.message
+    const raw = body.error?.details
+    if (typeof raw === 'object' && raw !== null && !Array.isArray(raw)) {
+      details = raw as Record<string, unknown>
+    }
   } catch {
     // Not JSON: keep the status text.
   }
-  return new ApiError(response.status, code, message)
+  return new ApiError(response.status, code, message, details)
 }
 
 export function createApiClient(options: ApiClientOptions = {}) {

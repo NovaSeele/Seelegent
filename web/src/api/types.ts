@@ -798,3 +798,104 @@ export interface Settings {
   githubPollMinutes: number
   automationsEnabled: boolean
 }
+
+/**
+ * A JSON merge patch of Settings (RFC 7396) for PATCH /settings: nested objects merge, arrays are replaced whole,
+ * and `null` resets that key to its default.
+ */
+export type SettingsPatch = MergePatch<Settings>
+
+type MergePatch<T> = {
+  [K in keyof T]?:
+    (T[K] extends readonly unknown[] ? T[K] : T[K] extends object ? MergePatch<T[K]> : T[K]) | null
+}
+
+// §4 Providers list
+
+/** A preset is a provider template: everything but the account count. */
+export type ProviderPreset = Omit<Provider, 'accounts'>
+
+export interface ProviderList {
+  items: Provider[]
+  presets: ProviderPreset[]
+}
+
+// §5 Memory and roles (internal/api: Memory, Role, RoleProject, RoleList, Skill)
+
+export interface Memory {
+  cwd: string
+  text: string
+  updatedAt?: string
+}
+
+export type Effort = 'low' | 'medium' | 'high' | 'xhigh' | 'max'
+export type RoleScope = 'global' | 'project'
+
+export interface Role {
+  /** ^[a-z0-9][a-z0-9-]{0,39}$ */
+  id: string
+  name: string
+  description: string
+  rules: string
+  outputStyle: string
+  skills: string[]
+  defaultTier?: Tier
+  defaultEffort?: Effort
+  preferredAccounts: string[]
+  /** Where the role is stored; ignored in POST /roles bodies (scope and cwd travel next to the role). */
+  scope: RoleScope
+  /** The project folder of a project role. */
+  cwd?: string
+  /** A project role that hides a global role with the same id. */
+  overridesGlobal: boolean
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface RoleProject {
+  key: string
+  cwd: string
+  name: string
+  count: number
+}
+
+export interface RoleList {
+  items: Role[]
+  projects: RoleProject[]
+}
+
+/** root: project (.agents/skills at or above the folder), user (~/.agents/skills), gemini or claude. */
+export interface Skill {
+  name: string
+  description: string
+  root: string
+}
+
+// §5 Hooks. The contract pins the shape later (M14: "follows the old one in camelCase"); this is the old
+// hooks.json entry plus the stable id the contract requires.
+
+export interface HookConfig {
+  /** Stable id; '' for a hook not saved yet. */
+  id: string
+  /** Event names, e.g. task.done, account.exhausted. */
+  on: string[]
+  /** A shell command. */
+  run: string
+  /** Only tasks in this folder fire the hook. */
+  project?: string
+  timeoutSeconds: number
+  enabled: boolean
+}
+
+export interface HookRun {
+  hookId: string
+  event: string
+  at: string
+  exitCode?: number
+  durationMs: number
+  timedOut: boolean
+}
+
+export interface Hook extends HookConfig {
+  lastRun: HookRun | null
+}

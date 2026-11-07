@@ -17,6 +17,7 @@ import type {
   ErrorData,
   HandbackData,
   HandoffData,
+  HookRun,
   LeadMessageData,
   LoginSession,
   ReattachData,
@@ -236,7 +237,7 @@ export interface ServerEvents {
   'roles.changed': { changedAt: string }
   'members.changed': { changedAt: string }
   'memory.changed': { cwd: string }
-  'hook.ran': Record<string, unknown>
+  'hook.ran': HookRun
 }
 
 export type ServerEventName = keyof ServerEvents
