@@ -3,10 +3,10 @@
  * generated here from the palette files and the derived layer of tokens.css, so a new theme or a changed token is
  * checked without updating a fixture.
  *
- *   4.5:1  body text (primary on every surface, secondary on the page and card surfaces), text on the accent,
- *          links (accent), status words on their tinted pill, terminal text
- *   3:1    secondary text on the raised surfaces, muted text, and UI parts whose colour carries meaning: the focus
- *          ring and the outline of a control that has no fill of its own (checkbox, --border-control)
+ *   4.5:1  all text: primary, secondary and muted on every surface, text on the accent, links (accent), status
+ *          words on their tinted pill (cancelled too), terminal text and its dim text
+ *   3:1    only UI parts whose colour carries meaning: the focus ring and the outline of a control that has no
+ *          fill of its own (checkbox, --border-control)
  *
  * --border-subtle / --border-strong are separators between areas that already differ in background or spacing;
  * they carry no meaning on their own and are not checked.
@@ -38,9 +38,8 @@ const TONES = [
 
 const RULES: readonly Rule[] = [
   { fg: '--text-primary', on: [...SURFACES, '--bg-hover'], min: 4.5 },
-  { fg: '--text-secondary', on: ['--bg-app', '--bg-surface'], min: 4.5 },
-  { fg: '--text-secondary', on: ['--bg-surface-2', '--bg-elevated'], min: 3 },
-  { fg: '--text-muted', on: SURFACES, min: 3 },
+  { fg: '--text-secondary', on: SURFACES, min: 4.5 },
+  { fg: '--text-muted', on: SURFACES, min: 4.5 },
   { fg: '--text-on-accent', on: ['--accent'], min: 4.5 },
   { fg: '--link', on: ['--bg-app', '--bg-surface'], min: 4.5 },
   { fg: '--border-focus', on: ['--bg-app', '--bg-surface'], min: 3 },
@@ -49,11 +48,11 @@ const RULES: readonly Rule[] = [
   {
     fg: '--status-cancelled-fg',
     on: ['--status-cancelled-bg'],
-    min: 3,
+    min: 4.5,
     base: '--bg-surface',
   },
   { fg: '--term-fg', on: ['--term-bg'], min: 4.5 },
-  { fg: '--term-dim', on: ['--term-bg'], min: 3 },
+  { fg: '--term-dim', on: ['--term-bg'], min: 4.5 },
 ]
 
 /** The custom properties declared in a CSS block (last declaration wins). */

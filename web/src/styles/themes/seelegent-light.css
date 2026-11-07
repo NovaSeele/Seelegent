@@ -4,7 +4,7 @@
   color-scheme: light;
   --bg-app: #f4f6f7;
   --bg-surface: #ffffff;
-  --bg-surface-2: #eef1f3;
+  --bg-surface-2: #f3f5f6;
   --bg-elevated: #ffffff;
   --bg-hover: #e6ebee;
   --bg-active: #dbe3e8;
@@ -36,7 +36,7 @@
   --status-danger-fg: #c63737;
   --status-danger-bg: rgba(211, 59, 59, 0.1);
   --status-danger-border: rgba(211, 59, 59, 0.28);
-  --status-cancelled-fg: #6b7682;
+  --status-cancelled-fg: #646f7b;
   --status-cancelled-bg: rgba(107, 118, 130, 0.1);
   --status-cancelled-border: rgba(107, 118, 130, 0.28);
   /* Stage hues avoid the role colours above (teal accent, blue running, amber, green, red). */

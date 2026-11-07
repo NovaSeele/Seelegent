@@ -4,8 +4,8 @@
   color-scheme: dark;
   --bg-app: #32302f;
   --bg-surface: #3c3836;
-  --bg-surface-2: #4a4441;
-  --bg-elevated: #504945;
+  --bg-surface-2: #423d3a;
+  --bg-elevated: #443f3c;
   --bg-hover: #5a524c;
   --bg-active: #665c54;
   --bg-code: #282828;
@@ -15,7 +15,7 @@
   --border-focus: #fe8019;
   --text-primary: #ebdbb2;
   --text-secondary: #d5c4a1;
-  --text-muted: #a89984;
+  --text-muted: #b8a98f;
   --text-on-accent: #32302f;
   --accent: #fea65e;
   --accent-hover: #ff9238;
