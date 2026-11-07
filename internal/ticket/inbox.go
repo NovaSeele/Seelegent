@@ -87,7 +87,8 @@ func (s *Service) Sync(ctx context.Context, id string) (api.SyncResult, error) {
 		}
 		seen := map[string]bool{}
 		now := api.FormatTime(s.o.Now())
-		for _, f := range fetched {
+		for ix := range fetched {
+			f := &fetched[ix]
 			key := "gh#" + strconv.Itoa(f.Number)
 			seen[key] = true
 			updated := f.UpdatedAt
@@ -117,7 +118,8 @@ func (s *Service) Sync(ctx context.Context, id string) (api.SyncResult, error) {
 		if len(fetched) < syncLimit {
 			// Everything open came back: an issue not in the answer was closed (or moved). Closed issues without a
 			// ticket leave the inbox.
-			for _, it := range items {
+			for ix := range items {
+				it := &items[ix]
 				if it.Source != "github" || seen[it.Key] {
 					continue
 				}
@@ -137,7 +139,7 @@ func (s *Service) Sync(ctx context.Context, id string) (api.SyncResult, error) {
 				}
 				if it.State == "open" {
 					it.State = "closed"
-					if err := saveIssue(ctx, tx, id, it); err != nil {
+					if err := saveIssue(ctx, tx, id, *it); err != nil {
 						return err
 					}
 				}
@@ -175,7 +177,8 @@ func listGitHubIssues(ctx context.Context, c *github.Client) ([]githubIssue, err
 		return nil, err
 	}
 	out := make([]githubIssue, 0, len(list))
-	for _, d := range list {
+	for ix := range list {
+		d := &list[ix]
 		if d.Number <= 0 {
 			continue
 		}
@@ -224,9 +227,10 @@ func (s *Service) Issues(ctx context.Context, id, state string) ([]api.Issue, er
 			return err
 		}
 		out = out[:0]
-		for _, it := range items {
+		for ix := range items {
+			it := &items[ix]
 			if state == "all" || it.State == state {
-				out = append(out, it)
+				out = append(out, *it)
 			}
 		}
 		out, err = withTickets(ctx, tx, id, out)
@@ -273,7 +277,8 @@ func (s *Service) AddIssue(ctx context.Context, id string, in api.IssueInput) (a
 		if err != nil {
 			return err
 		}
-		for _, x := range items {
+		for ix := range items {
+			x := &items[ix]
 			if x.LocalID >= n {
 				n = x.LocalID + 1
 			}

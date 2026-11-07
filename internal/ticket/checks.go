@@ -18,7 +18,8 @@ func checksSig(c *api.TicketChecks) string {
 	}
 	type run struct{ N, S, C string }
 	runs := make([]run, 0, len(c.Runs))
-	for _, r := range c.Runs {
+	for ix := range c.Runs {
+		r := &c.Runs[ix]
 		runs = append(runs, run{r.Name, r.Status, r.Conclusion})
 	}
 	b, _ := json.Marshal([]any{c.State, c.HeadSha, runs})
@@ -55,8 +56,9 @@ func failingNames(c *api.TicketChecks) []string {
 	if c == nil {
 		return out
 	}
-	for _, r := range c.Runs {
-		if github.IsFailing(r) && len(out) < 20 {
+	for ix := range c.Runs {
+		r := &c.Runs[ix]
+		if github.IsFailing(*r) && len(out) < 20 {
 			out = append(out, r.Name)
 		}
 	}
@@ -230,7 +232,7 @@ func (s *Service) FixChecks(ctx context.Context, id string, req api.FixChecksReq
 	if err != nil {
 		return api.TicketTaskResult{}, err
 	}
-	c, access, err := s.client(ctx, r, false)
+	c, access, err := s.client(ctx, r)
 	if err != nil {
 		return api.TicketTaskResult{}, err
 	}
@@ -251,34 +253,36 @@ func (s *Service) FixChecks(ctx context.Context, id string, req api.FixChecksReq
 	}
 	checks := t.Checks
 	var failing []api.CheckRun
-	for _, run := range checks.Runs {
-		if github.IsFailing(run) && len(failing) < maxFixRuns {
-			failing = append(failing, run)
+	for ix := range checks.Runs {
+		run := &checks.Runs[ix]
+		if github.IsFailing(*run) && len(failing) < maxFixRuns {
+			failing = append(failing, *run)
 		}
 	}
 	items := make([]fixItem, 0, len(failing))
-	for _, run := range failing {
+	for ix := range failing {
+		run := &failing[ix]
 		if run.JobID > 0 && (run.App == "github-actions" || run.RunID > 0) {
 			if c == nil || !access.CanWrite() {
-				items = append(items, fixItem{run: run, log: run.Summary, kind: "summary",
+				items = append(items, fixItem{run: *run, log: run.Summary, kind: "summary",
 					note: "job log not available: needs gh or a token"})
 				continue
 			}
 			text, err := c.JobLog(ctx, run.JobID)
 			if err != nil {
-				items = append(items, fixItem{run: run, log: run.Summary, kind: "summary",
+				items = append(items, fixItem{run: *run, log: run.Summary, kind: "summary",
 					note: "job log not available: " + s.redactErr(err, 200)})
 				continue
 			}
 			tail := github.LogTail(s.redact(text), github.LogTailMax)
-			it := fixItem{run: run, log: tail, kind: "log"}
+			it := fixItem{run: *run, log: tail, kind: "log"}
 			if tail == "" {
 				it.note = "the job log was empty"
 			}
 			items = append(items, it)
 			continue
 		}
-		it := fixItem{run: run, log: clip(run.Summary, github.LogTailMax), kind: "summary"}
+		it := fixItem{run: *run, log: clip(run.Summary, github.LogTailMax), kind: "summary"}
 		if run.Summary == "" {
 			it.note = "no log for this check provider; open the link"
 		}
@@ -301,8 +305,8 @@ func (s *Service) FixChecks(ctx context.Context, id string, req api.FixChecksReq
 		return api.TicketTaskResult{}, err
 	}
 	names := make([]string, 0, len(failing))
-	for _, run := range failing {
-		names = append(names, run.Name)
+	for i := range failing {
+		names = append(names, failing[i].Name)
 	}
 	if _, err := s.updateTicket(ctx, id, func(tx *sql.Tx, t *ticketRec) error {
 		t.ChecksFix = &api.ChecksFix{TaskID: taskID, HeadSha: checks.HeadSha, Runs: names,

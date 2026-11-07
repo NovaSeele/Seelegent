@@ -3,7 +3,6 @@ package ticket
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"strings"
 	"time"
 
@@ -48,8 +47,8 @@ func (s *Service) remoteSha(ctx context.Context, t *ticketRec) string {
 }
 
 // client returns the GitHub client of a ticket's repository, or nil when it is not on GitHub.
-func (s *Service) client(ctx context.Context, r *repoRec, force bool) (*github.Client, github.Access, error) {
-	access := s.o.GitHub.Access(ctx, force)
+func (s *Service) client(ctx context.Context, r *repoRec) (*github.Client, github.Access, error) {
+	access := s.o.GitHub.Access(ctx, false)
 	g := s.gh(r)
 	if !g.ok() {
 		return nil, access, nil
@@ -106,7 +105,7 @@ func (s *Service) recheck(ctx context.Context, id string) error {
 				result = map[string]any{"headSha": h}
 			}
 		case e.Kind == api.OutboxOpenPR:
-			c, _, err := s.client(ctx, r, false)
+			c, _, err := s.client(ctx, r)
 			if err == nil && c != nil {
 				if found, err := c.FindPR(ctx, t.Branch); err == nil && found != nil {
 					pr = found
@@ -246,7 +245,7 @@ func (s *Service) PR(ctx context.Context, id string, req api.PRRequest) (api.Tic
 			message = defaultTitle(t)
 		}
 		message = clip(message, 5000)
-		if _, err := s.runStep(ctx, id, api.OutboxCommit, map[string]any{"message": clip(message, 200),
+		if err := s.runStep(ctx, id, api.OutboxCommit, map[string]any{"message": clip(message, 200),
 			"files": len(stage)}, func() (map[string]any, error) {
 			owned := gitx.ExecOptions{Owned: true}
 			for i := 0; i < len(stage); i += 200 {
@@ -274,7 +273,7 @@ func (s *Service) PR(ctx context.Context, id string, req api.PRRequest) (api.Tic
 
 	// 2. Push the ticket branch, never with force.
 	if s.remoteSha(ctx, t) != head {
-		if _, err := s.runStep(ctx, id, api.OutboxPush, map[string]any{"branch": t.Branch, "headSha": head},
+		if err := s.runStep(ctx, id, api.OutboxPush, map[string]any{"branch": t.Branch, "headSha": head},
 			func() (map[string]any, error) {
 				_, err := s.git(ctx, t.Worktree, gitx.ExecOptions{PushBranch: t.Branch, Timeout: pushTimeout},
 					"push", "-u", "--porcelain", "origin", t.Branch)
@@ -302,9 +301,9 @@ func (s *Service) PR(ctx context.Context, id string, req api.PRRequest) (api.Tic
 			body = clip(scrubLocal(body, []string{t.Worktree, r.Path}, s.o.UserHome), maxPRBody)
 		}
 		title, body = s.redact(title), s.redact(body)
-		_, err := s.runStep(ctx, id, api.OutboxOpenPR, map[string]any{"branch": t.Branch, "base": t.Base,
+		err := s.runStep(ctx, id, api.OutboxOpenPR, map[string]any{"branch": t.Branch, "base": t.Base,
 			"draft": draft, "title": title}, func() (map[string]any, error) {
-			c, access, err := s.client(ctx, r, false)
+			c, access, err := s.client(ctx, r)
 			if err != nil {
 				return nil, err
 			}
@@ -383,7 +382,7 @@ func (s *Service) LinkPR(ctx context.Context, id string, req api.LinkPRRequest) 
 	if err != nil {
 		return api.Ticket{}, err
 	}
-	c, access, err := s.client(ctx, r, false)
+	c, access, err := s.client(ctx, r)
 	if err != nil {
 		return api.Ticket{}, err
 	}
@@ -446,7 +445,7 @@ func (s *Service) Comment(ctx context.Context, id string, req api.CommentRequest
 	if err != nil {
 		return api.Ticket{}, err
 	}
-	c, access, err := s.client(ctx, r, false)
+	c, access, err := s.client(ctx, r)
 	if err != nil {
 		return api.Ticket{}, err
 	}
@@ -457,7 +456,7 @@ func (s *Service) Comment(ctx context.Context, id string, req api.CommentRequest
 		return api.Ticket{}, github.ErrManual
 	}
 	body = s.redact(scrubLocal(body, []string{t.Worktree, r.Path}, s.o.UserHome))
-	if _, err := s.runStep(ctx, id, api.OutboxComment, map[string]any{"issue": t.Issue.Number,
+	if err := s.runStep(ctx, id, api.OutboxComment, map[string]any{"issue": t.Issue.Number,
 		"preview": clip(oneLine(body, 200), 120)}, func() (map[string]any, error) {
 		u, err := c.Comment(ctx, t.Issue.Number, body)
 		return map[string]any{"url": u}, err
@@ -476,16 +475,4 @@ func (s *Service) taskPending(ctx context.Context, t *ticketRec) []string {
 		}
 	}
 	return busy
-}
-
-// errText is err's text for a log, or "".
-func errText(err error) string {
-	if err == nil {
-		return ""
-	}
-	var ge *github.Error
-	if errors.As(err, &ge) {
-		return ge.Message
-	}
-	return err.Error()
 }

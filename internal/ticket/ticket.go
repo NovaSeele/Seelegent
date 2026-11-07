@@ -461,7 +461,7 @@ func listTicketRecs(ctx context.Context, tx *sql.Tx, repoID, issueKey string) ([
 		where, args = append(where, "issue_key = ?"), append(args, issueKey)
 	}
 	if len(where) > 0 {
-		q += " WHERE " + strings.Join(where, " AND ")
+		q += " WHERE " + strings.Join(where, " AND ") //nolint:gosec // fixed clauses; the values are parameters
 	}
 	q += " ORDER BY updated_at DESC, id DESC"
 	rows, err := tx.QueryContext(ctx, q, args...)
@@ -511,10 +511,10 @@ func newTicketID(now time.Time) string {
 	return "k" + now.UTC().Format("060102150405") + "-" + hex.EncodeToString(b[:])
 }
 
-func oneLine(s string, max int) string {
+func oneLine(s string, limit int) string {
 	s = strings.Join(strings.Fields(s), " ")
-	if r := []rune(s); len(r) > max {
-		return string(r[:max])
+	if r := []rune(s); len(r) > limit {
+		return string(r[:limit])
 	}
 	return s
 }
@@ -532,11 +532,11 @@ func clip(s string, n int) string {
 func (s *Service) redact(text string) string { return s.o.GitHub.Redact(text) }
 
 // redactErr is a one-line, redacted error text.
-func (s *Service) redactErr(err error, max int) string {
+func (s *Service) redactErr(err error, limit int) string {
 	if err == nil {
 		return ""
 	}
-	return oneLine(s.redact(err.Error()), max)
+	return oneLine(s.redact(err.Error()), limit)
 }
 
 // git runs a safe git command and returns its trimmed output; a failure is a redacted *GitError (never the raw

@@ -57,7 +57,8 @@ func (s *Service) repoView(ctx context.Context, tx *sql.Tx, r *repoRec) (api.Rep
 	if err != nil {
 		return api.Repo{}, err
 	}
-	for _, it := range issues {
+	for ix := range issues {
+		it := &issues[ix]
 		switch {
 		case it.Decision != nil && it.Decision.Action == api.TriageSkip:
 			v.Counts.Skipped++

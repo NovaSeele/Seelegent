@@ -27,8 +27,9 @@ func ChecksState(runs []api.CheckRun) string {
 		return api.ChecksUnknown
 	}
 	pending := false
-	for _, r := range runs {
-		if IsFailing(r) {
+	for ix := range runs {
+		r := &runs[ix]
+		if IsFailing(*r) {
 			return api.ChecksFailure
 		}
 		if r.Status != "completed" {
@@ -146,22 +147,22 @@ var (
 	trailingWsp = regexp.MustCompile(`\s+$`)
 )
 
-// LogTail is the end of a CI log: no ANSI colours, no per-line timestamps, at most max bytes, starting on a line
-// boundary when one is near.
-func LogTail(text string, max int) string {
+// LogTail is the end of a CI log: no ANSI escape codes, no per-line timestamps, at most limit bytes, starting on a
+// line boundary when one is near.
+func LogTail(text string, limit int) string {
 	s := strings.ReplaceAll(strings.ReplaceAll(text, "\r\n", "\n"), "\r", "\n")
 	s = ansiRe.ReplaceAllString(s, "")
 	s = logStampRe.ReplaceAllString(s, "")
 	s = trailingWsp.ReplaceAllString(s, "")
-	if len(s) <= max {
+	if len(s) <= limit {
 		return s
 	}
-	tail := s[len(s)-max:]
+	tail := s[len(s)-limit:]
 	// Start on a whole rune.
-	for len(tail) > 0 && tail[0]&0xC0 == 0x80 {
+	for tail != "" && tail[0]&0xC0 == 0x80 {
 		tail = tail[1:]
 	}
-	if nl := strings.IndexByte(tail, '\n'); nl >= 0 && nl < max/4 {
+	if nl := strings.IndexByte(tail, '\n'); nl >= 0 && nl < limit/4 {
 		tail = tail[nl+1:]
 	}
 	return tail

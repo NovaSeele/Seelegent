@@ -69,7 +69,7 @@ var secretPatterns = []struct {
 	{regexp.MustCompile(`github_pat_[A-Za-z0-9_]{20,}`), "a GitHub token (github_pat_)"},
 	{regexp.MustCompile(`\bgh[pousr]_[A-Za-z0-9]{30,}`), "a GitHub token (gh*_)"},
 	{regexp.MustCompile(`\bAKIA[0-9A-Z]{16}\b`), "an AWS access key (AKIA…)"},
-	{regexp.MustCompile(`-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----`), "a private key"},
+	{regexp.MustCompile(`-{5}BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-{5}`), "a private key"},
 	{regexp.MustCompile(`\bxox[abposr]-[A-Za-z0-9-]{10,}`), "a Slack token"},
 	{regexp.MustCompile(`\bAIza[0-9A-Za-z_-]{35}\b`), "a Google API key"},
 	{regexp.MustCompile(`\bsk-ant-[A-Za-z0-9_-]{20,}`), "an Anthropic API key"},
@@ -169,7 +169,7 @@ func (s *Service) scan(_ context.Context, wt string, files []string) []api.ScanF
 				Reason: fmt.Sprintf("larger than %d MB (%d bytes)", MaxFileBytes>>20, fi.Size())})
 			continue
 		}
-		f, err := os.Open(p) //nolint:gosec // a file of the ticket worktree
+		f, err := os.Open(p)
 		if err != nil {
 			findings = append(findings, api.ScanFinding{Path: rel, Reason: "unreadable: " + oneLine(err.Error(), 100)})
 			continue

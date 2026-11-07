@@ -160,10 +160,10 @@ func recoverRunning(ctx context.Context, tx *sql.Tx) (tickets, repos []string, e
 // runStep runs one outward action of a ticket write-ahead: the entry is saved running first, then done with the
 // action's result or failed with its (redacted) error, which also becomes the ticket's error.
 func (s *Service) runStep(ctx context.Context, ticketID, kind string, args map[string]any,
-	fn func() (map[string]any, error)) (map[string]any, error) {
+	fn func() (map[string]any, error)) error {
 	var id int64
 	now := api.FormatTime(s.o.Now())
-	if _, err := s.updateTicket(ctx, ticketID, func(tx *sql.Tx, t *ticketRec) error {
+	if _, err := s.updateTicket(ctx, ticketID, func(tx *sql.Tx, _ *ticketRec) error {
 		e, err := openEntry(ctx, tx, scopeTicket, ticketID, kind, args, now)
 		if err != nil {
 			return err
@@ -175,7 +175,7 @@ func (s *Service) runStep(ctx context.Context, ticketID, kind string, args map[s
 		s.logStep(ctx, tx, ticketID, "outbox", map[string]any{"id": id, "kind": kind, "status": api.OutboxRunning})
 		return nil
 	}); err != nil {
-		return nil, err
+		return err
 	}
 	result, runErr := fn()
 	_, err := s.updateTicket(context.WithoutCancel(ctx), ticketID, func(tx *sql.Tx, t *ticketRec) error {
@@ -204,9 +204,9 @@ func (s *Service) runStep(ctx context.Context, ticketID, kind string, args map[s
 		return nil
 	})
 	if runErr != nil {
-		return nil, runErr
+		return runErr
 	}
-	return result, err
+	return err
 }
 
 // markRecovered marks an unknown entry done: the action had happened before the daemon stopped.

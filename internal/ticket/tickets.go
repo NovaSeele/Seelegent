@@ -149,7 +149,8 @@ func deriveStatus(tasks []api.TaskSummary) string {
 	if len(tasks) == 0 {
 		return api.TicketWorking
 	}
-	for _, t := range tasks {
+	for ix := range tasks {
+		t := &tasks[ix]
 		if task.Pending(t.Status) {
 			return api.TicketWorking
 		}
@@ -457,7 +458,8 @@ func (s *Service) Ticket(ctx context.Context, id string) (api.Ticket, error) {
 			tt.Verdict = d.Review.Verdict
 		}
 		out.Tasks = append(out.Tasks, tt)
-		for _, tu := range d.Turns {
+		for ix := range d.Turns {
+			tu := &d.Turns[ix]
 			if tu.Gate == nil || tu.Gate.State == "" {
 				continue
 			}

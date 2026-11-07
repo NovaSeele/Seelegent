@@ -300,7 +300,7 @@ func (s *Service) poke() {
 }
 
 // running reports whether a run of r is starting or its task is still active.
-func (s *Service) running(ctx context.Context, r *rec) (bool, string) {
+func (s *Service) running(ctx context.Context, r *rec) (busy bool, why string) {
 	s.mu.Lock()
 	f := s.firing[r.ID]
 	s.mu.Unlock()

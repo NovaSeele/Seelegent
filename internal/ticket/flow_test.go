@@ -133,7 +133,8 @@ func newFakeGitHub(t *testing.T, origin string) *fakeGitHub {
 func (f *fakeGitHub) host() string { return strings.TrimPrefix(f.srv.URL, "http://") }
 
 func (f *fakeGitHub) originSha(branch string) string {
-	out, err := exec.Command("git", "--git-dir", f.origin, "rev-parse", "refs/heads/"+branch).Output()
+	out, err := exec.CommandContext(context.Background(), "git", "--git-dir", f.origin, "rev-parse",
+		"refs/heads/"+branch).Output()
 	if err != nil {
 		return ""
 	}
@@ -203,13 +204,13 @@ func (f *fakeGitHub) serve(w http.ResponseWriter, r *http.Request) {
 // noGh is a gh CLI that is not installed: the tests never run the real gh.
 type noGh struct{}
 
-func (noGh) Run(context.Context, []string, []byte, []string) ([]byte, []byte, error) {
+func (noGh) Run(context.Context, []string, []byte, []string) (stdout, stderr []byte, err error) {
 	return nil, nil, github.ErrNoGh
 }
 
 func run(t *testing.T, dir string, args ...string) string {
 	t.Helper()
-	cmd := exec.Command("git", args...)
+	cmd := exec.CommandContext(t.Context(), "git", args...)
 	cmd.Dir = dir
 	out, err := cmd.CombinedOutput()
 	if err != nil {

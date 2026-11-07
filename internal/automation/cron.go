@@ -130,8 +130,10 @@ func ParseCron(expr string) (Cron, error) {
 		}
 		sets[i] = s
 	}
-	return Cron{minute: sets[0], hour: uint32(sets[1]), dom: uint32(sets[2]), month: uint16(sets[3]),
-		dow: uint8(sets[4]), domAny: parts[2] == "*", dowAny: parts[4] == "*"}, nil
+	// Each field's bits stay below its maximum (23, 31, 12 and 6), so the narrower types hold them.
+	return Cron{minute: sets[0], hour: uint32(sets[1]), dom: uint32(sets[2]), //nolint:gosec // see above
+		month: uint16(sets[3]), dow: uint8(sets[4]), //nolint:gosec // see above
+		domAny: parts[2] == "*", dowAny: parts[4] == "*"}, nil
 }
 
 func (c Cron) dayMatches(t time.Time) bool {

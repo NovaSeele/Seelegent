@@ -31,7 +31,8 @@ type ExecGh struct {
 const maxGhOutput = 32 << 20
 
 // Run implements GhRunner.
-func (g ExecGh) Run(ctx context.Context, args []string, input []byte, env []string) ([]byte, []byte, error) {
+func (g ExecGh) Run(ctx context.Context, args []string, input []byte, env []string) (stdout, stderr []byte,
+	err error) {
 	path := ""
 	if g.Path != nil {
 		path = g.Path()

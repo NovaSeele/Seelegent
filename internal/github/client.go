@@ -216,7 +216,7 @@ func (c *Client) callREST(ctx context.Context, method, path string, input []byte
 	}
 	msg = oneLine(c.Redact(msg), 500)
 	reason := reasonFor(resp.StatusCode, msg)
-	if resp.StatusCode == 403 && resp.Header.Get("X-RateLimit-Remaining") == "0" {
+	if resp.StatusCode == http.StatusForbidden && resp.Header.Get("X-RateLimit-Remaining") == "0" {
 		reason = ReasonRateLimited
 	}
 	return nil, &Error{Reason: reason, Status: resp.StatusCode, Message: msg}
@@ -280,7 +280,8 @@ func (c *Client) ListIssues(ctx context.Context, state string, limit int) ([]Iss
 		if err := c.callJSON(ctx, http.MethodGet, p, nil, &items); err != nil {
 			return nil, err
 		}
-		for _, it := range items {
+		for ix := range items {
+			it := &items[ix]
 			if len(it.PullRequest) > 0 && string(it.PullRequest) != "null" {
 				continue
 			}

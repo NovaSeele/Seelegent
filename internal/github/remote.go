@@ -48,7 +48,8 @@ func validName(s string) bool {
 		return false
 	}
 	for _, r := range s {
-		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '-' || r == '_' || r == '.') {
+		ok := r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '-' || r == '_' || r == '.'
+		if !ok {
 			return false
 		}
 	}
@@ -64,7 +65,7 @@ func ParseRemote(raw string) (Remote, bool) {
 	}
 	if !schemeRe.MatchString(u) {
 		m := scpRemote.FindStringSubmatch(u)
-		if m == nil || strings.HasPrefix(m[2], "/") {
+		if len(m) < 3 || strings.HasPrefix(m[2], "/") {
 			return Remote{}, false
 		}
 		repo := stripGitSuffix(m[3])
@@ -224,7 +225,7 @@ func (h Hosts) Lookup(r Remote) (Host, bool) {
 // ByName returns the listed host with this name.
 func (h Hosts) ByName(name string) (Host, bool) {
 	for _, x := range h.list {
-		if x.Name == strings.ToLower(name) {
+		if strings.EqualFold(x.Name, name) {
 			return x, true
 		}
 	}

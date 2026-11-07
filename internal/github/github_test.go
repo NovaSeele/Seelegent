@@ -132,7 +132,8 @@ type fakeGh struct {
 	fn    func(args []string, input []byte) ([]byte, []byte, error)
 }
 
-func (f *fakeGh) Run(_ context.Context, args []string, input []byte, env []string) ([]byte, []byte, error) {
+func (f *fakeGh) Run(_ context.Context, args []string, input []byte, env []string) (stdout, stderr []byte,
+	err error) {
 	f.mu.Lock()
 	f.calls = append(f.calls, args)
 	f.envs = append(f.envs, env)
@@ -215,8 +216,7 @@ func TestRESTClient(t *testing.T) {
 	logSrv := newFakeAPI(t, func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = io.WriteString(w, "2026-11-07T10:00:00.0000000Z \x1b[31merror\x1b[0m: boom "+token+"\n")
 	})
-	var api2 *fakeAPI
-	api2 = newFakeAPI(t, func(w http.ResponseWriter, r *http.Request) {
+	api2 := newFakeAPI(t, func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case r.URL.Path == "/api/v3/repos/o/r/issues":
 			writeJSON(w, 200, []map[string]any{

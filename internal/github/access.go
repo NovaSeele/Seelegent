@@ -104,7 +104,7 @@ func (a Access) DTO(hosts Hosts) api.GitHubAccess {
 // accessTTL is how long a detected access is reused.
 const accessTTL = 60 * time.Second
 
-// ghEnv are the variables of every gh child: no prompts, no colour, no update check.
+// ghEnv are the variables of every gh child: no prompts, no color codes, no update check.
 var ghEnv = []string{"GH_PROMPT_DISABLED=1", "NO_COLOR=1", "GH_NO_UPDATE_NOTIFIER=1", "GH_SPINNER_DISABLED=1"}
 
 var ghVersionRe = regexp.MustCompile(`(?i)gh version\s+(\S+)`)

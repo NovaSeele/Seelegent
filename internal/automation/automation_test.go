@@ -301,7 +301,7 @@ func TestRunRules(t *testing.T) {
 	f.quota.set(AccountQuota{AccountID: "acc1", Windows: []quota.Window{{Window: "5h", Remaining: 0.1,
 		ResetAt: f.clock.Now().Add(-time.Minute)}}})
 	f.mu.Lock()
-	f.pre = func(cmd string) gate.ExecResult {
+	f.pre = func(string) gate.ExecResult {
 		code := 1
 		return gate.ExecResult{Exit: &code, Tail: "nothing new; token=ghp_abcdefghijklmnopqrstuvwxyz0123456789"}
 	}

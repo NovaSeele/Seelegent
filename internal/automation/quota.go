@@ -32,7 +32,8 @@ func (p PoolQuota) Quota(ctx context.Context, backend, model string) ([]AccountQ
 		group = p.Group(backend, model)
 	}
 	out := []AccountQuota{}
-	for _, st := range states {
+	for ix := range states {
+		st := &states[ix]
 		a := st.Account
 		if a.Backend != backend || !a.Enabled || a.Kind == account.KindAPIKey || !st.Status.Usable() ||
 			!st.HasQuota || !st.Quota.Known() {

@@ -33,11 +33,11 @@ func Redact(text string, secrets ...string) string {
 	return authRe.ReplaceAllString(text, "${1}${2} "+Redacted)
 }
 
-// oneLine flattens s to one line of at most max runes.
-func oneLine(s string, max int) string {
+// oneLine flattens s to one line of at most limit runes.
+func oneLine(s string, limit int) string {
 	s = strings.Join(strings.Fields(s), " ")
-	if r := []rune(s); len(r) > max {
-		return string(r[:max])
+	if r := []rune(s); len(r) > limit {
+		return string(r[:limit])
 	}
 	return s
 }
