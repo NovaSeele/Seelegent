@@ -250,6 +250,68 @@ func TestTakeoverRefusals(t *testing.T) {
 	}
 }
 
+// TestTakeoverConsoleNeverStarts reverts a takeover whose console never runs its command (no process, no exit
+// code: the terminal could not run the script) once the start limit has passed, instead of watching it forever;
+// a cancelled takeover with such a console stops being watched too, so followups run again.
+func TestTakeoverConsoleNeverStarts(t *testing.T) {
+	h := newHarness(t)
+	h.agy("only", 0)
+	h.queue.Push(t, okScript("conv-n", "ok"))
+	sum := h.delegate(api.DelegateRequest{})
+	h.waitStatus(sum.ID, StatusDone)
+	h.consoles.mu.Lock()
+	h.consoles.quiet = true
+	h.consoles.mu.Unlock()
+	if _, err := h.s.Takeover(t.Context(), sum.ID); err != nil {
+		t.Fatal(err)
+	}
+	h.clk.Advance(consoleStartLimit - 2*consolePoll)
+	if tk := h.task(sum.ID); !tk.Manual || !h.s.consoleOpen(sum.ID) {
+		t.Fatal("the takeover ended before the start limit")
+	}
+	h.waitFor("the takeover to be reverted", func() bool {
+		h.clk.Advance(consolePoll)
+		return !h.s.consoleOpen(sum.ID)
+	})
+	tk := h.task(sum.ID)
+	if tk.Status != StatusDone || tk.Manual || tk.Console != nil || len(tk.Turns) != 1 {
+		t.Fatalf("task = %s manual=%v console=%+v turns=%d", tk.Status, tk.Manual, tk.Console, len(tk.Turns))
+	}
+	evs := h.events(sum.ID)
+	errs := eventsOf(evs, api.EventError)
+	if len(eventsOf(evs, api.EventTakeover)) != 2 || len(errs) != 1 {
+		t.Fatalf("events = %v", types(evs))
+	}
+	var e api.ErrorData
+	decode(t, errs[0], &e)
+	if !strings.Contains(e.Message, "did not start") {
+		t.Fatalf("error = %q", e.Message)
+	}
+	h.queue.Push(t, okScript("conv-n", "followed up"))
+	if _, err := h.s.Followup(t.Context(), sum.ID, api.FollowupRequest{Message: "go on"}); err != nil {
+		t.Fatal(err)
+	}
+	h.waitStatus(sum.ID, StatusDone)
+
+	// Cancelled while such a console is watched: the watch still ends at the limit.
+	if _, err := h.s.Takeover(t.Context(), sum.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := h.s.Cancel(t.Context(), sum.ID, api.CancelRequest{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.s.Followup(t.Context(), sum.ID, api.FollowupRequest{Message: "x"}); !errors.Is(err, ErrBadState) {
+		t.Fatalf("followup with the console watched: %v", err)
+	}
+	h.waitFor("the console watch to end", func() bool {
+		h.clk.Advance(consolePoll * 10)
+		return !h.s.consoleOpen(sum.ID)
+	})
+	if tk := h.task(sum.ID); tk.Status != StatusCancelled || tk.Manual {
+		t.Fatalf("after the cancel: %s manual=%v", tk.Status, tk.Manual)
+	}
+}
+
 // TestRestartDuringTakeover watches a console again after a restart through its exit file.
 func TestRestartDuringTakeover(t *testing.T) {
 	h := newHarness(t)

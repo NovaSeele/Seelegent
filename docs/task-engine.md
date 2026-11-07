@@ -121,6 +121,11 @@ frees the console's slot at once; followups are refused until the console itself
 hand-back. On Linux and macOS the console script records exit code 129 when its window is closed (SIGHUP). The
 console's process (pid and start time) is stored; a console that is gone without an exit code ends the takeover with
 exit code 129, also when that is found after a restart. After a restart the console is watched again.
+A console whose command has not started 90 s after it was opened (no process recorded, no exit code: on macOS the
+Automation permission was refused, the daemon has no desktop, the terminal emulator is broken) never opened: the
+takeover is reverted as if the console could not open (the task goes back to its status before the takeover, an
+active one to `cancelled`, with an `error` event saying why) and the watch ends. On Unix a terminal launcher that
+exits with an error within 3 s is reported at once as no terminal.
 
 ## Restart recovery
 

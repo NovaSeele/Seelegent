@@ -89,6 +89,13 @@ func (t *Terminal) Identity() (pid int, start uint64, ok bool) {
 	return pid, start, true
 }
 
+// AttachTerminal returns the terminal whose script writes exitFile, opened earlier (by an earlier daemon), so its
+// Identity and Wait can be followed again. On Windows, where the window's process is not recorded in a file,
+// Identity never knows it.
+func AttachTerminal(exitFile string) *Terminal {
+	return &Terminal{exitFile: exitFile, pidFile: pidFileFor(exitFile)}
+}
+
 // ProcessRunning reports whether process pid still runs and is the one that started at start (from
 // ProcessStartTime). A start of 0 means unknown; only the id is checked then.
 func ProcessRunning(pid int, start uint64) bool {

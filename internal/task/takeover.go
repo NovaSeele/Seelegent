@@ -21,8 +21,12 @@ import (
 const (
 	// takeoverStopWait bounds the wait for a running worker to stop before the console opens.
 	takeoverStopWait = 60 * time.Second
-	// consolePoll is how often a console's exit file is read after a daemon restart.
+	// consolePoll is how often a console's exit file and process are checked.
 	consolePoll = time.Second
+	// consoleStartLimit is how long a console may take to start its command (the terminal script records its
+	// process). A console that neither started nor reported an exit code by then never opened: no terminal could
+	// run it (macOS refused the Automation permission, the daemon has no desktop, a broken terminal emulator).
+	consoleStartLimit = 90 * time.Second
 )
 
 // Takeover hands the task's conversation to the user: a running worker is stopped first and the engine waits for
@@ -67,7 +71,7 @@ func (s *Service) Takeover(ctx context.Context, id string) (api.TaskSummary, err
 			}
 		}
 		t.Manual = true
-		t.Console = &Console{AccountID: owner, Since: s.now()}
+		t.Console = &Console{AccountID: owner, Since: s.now(), From: prev}
 		t.Waiting, t.WaitDetail, t.WaitingUntil = "", "", time.Time{}
 		turn := 0
 		if tu := t.LastTurn(); tu != nil {
@@ -80,7 +84,7 @@ func (s *Service) Takeover(ctx context.Context, id string) (api.TaskSummary, err
 		return api.TaskSummary{}, err
 	}
 	if err := s.stopRunFor(ctx, id); err != nil {
-		s.revertTakeover(id, prev, err.Error())
+		s.revertTakeover(id, prev, time.Time{}, err.Error())
 		return api.TaskSummary{}, err
 	}
 	// The stopped attempt has recorded its conversation and account on the task.
@@ -96,6 +100,7 @@ func (s *Service) Takeover(ctx context.Context, id string) (api.TaskSummary, err
 			}
 			t.Console.AccountID = t.AccountID
 			t.Console.ExitFile = filepath.Join(dir, spec.Name+".exit")
+			t.Console.OpenedAt = s.now()
 			var evs []NewEvent
 			if tu := t.LastTurn(); tu != nil && tu.Status == TurnRunning {
 				evs = append(evs, s.endTurn(t, tu, TurnCancelled, backend.Outcome{}))
@@ -111,7 +116,7 @@ func (s *Service) Takeover(ctx context.Context, id string) (api.TaskSummary, err
 		}
 	}
 	if err != nil {
-		s.revertTakeover(id, prev, err.Error())
+		s.revertTakeover(id, prev, time.Time{}, err.Error())
 		return api.TaskSummary{}, err
 	}
 	cur, err := s.repo.Get(ctx, id)
@@ -175,10 +180,11 @@ func (s *Service) consoleFor(ctx context.Context, t *Task, b backend.Backend, di
 	}, nil
 }
 
-// revertTakeover undoes a takeover that could not start.
-func (s *Service) revertTakeover(id string, prev Status, why string) {
+// revertTakeover undoes a takeover that could not start: the task goes back to prev (cancelled when it was
+// active, since its turn was stopped for the takeover). A non-zero since reverts only the console opened then.
+func (s *Service) revertTakeover(id string, prev Status, since time.Time, why string) {
 	_, err := s.mutate(s.background(), id, func(t *Task) ([]NewEvent, error) {
-		if !t.Manual {
+		if !t.Manual || (!since.IsZero() && (t.Console == nil || !t.Console.Since.Equal(since))) {
 			return nil, errNoChange
 		}
 		acc := ""
@@ -187,7 +193,13 @@ func (s *Service) revertTakeover(id string, prev Status, why string) {
 		}
 		t.Manual, t.Console = false, nil
 		back := prev
-		if Active(prev) {
+		if back == "" { // a takeover recorded before Console.From existed
+			back = StatusCancelled
+			if tu := t.LastTurn(); tu != nil && tu.Status == TurnOK {
+				back = StatusDone
+			}
+		}
+		if Active(back) {
 			back = StatusCancelled // its turn was stopped for the takeover
 		}
 		var evs []NewEvent
@@ -221,6 +233,10 @@ type consoleWatch struct {
 // daemon restart. The console ends when its command reports an exit code (the wait, or the exit file), or when its
 // process is gone without one (a closed window). A cancel gives the slot back at once (releaseConsole); the watch
 // itself goes on until the console really ends, so no followup runs beside it.
+//
+// A console whose command has not started consoleStartLimit after it opened (no process known, no exit code)
+// never opened: the takeover is reverted as if the console could not be opened (the task goes back to its status
+// before the takeover, with an error event saying why), and the watch ends.
 func (s *Service) watchConsole(id string, c *Console, open *OpenConsole) {
 	s.mu.Lock()
 	if s.watches[id] != nil {
@@ -230,7 +246,15 @@ func (s *Service) watchConsole(id string, c *Console, open *OpenConsole) {
 	w := &consoleWatch{lease: s.o.Pool.Reattach(c.AccountID, id)}
 	s.watches[id] = w
 	s.mu.Unlock()
-	exitFile, since, proc := c.ExitFile, c.Since, c.Process
+	exitFile, since, from, proc := c.ExitFile, c.Since, c.From, c.Process
+	opened := c.OpenedAt
+	if opened.IsZero() {
+		opened = since
+	}
+	identify := func() (ConsoleProcess, bool) { return s.o.Consoles.Find(exitFile) }
+	if open != nil && open.Identity != nil {
+		identify = open.Identity
+	}
 	ok := s.spawn("console", id, func() {
 		defer func() {
 			w.lease.Release()
@@ -250,16 +274,19 @@ func (s *Service) watchConsole(id string, c *Console, open *OpenConsole) {
 				waited <- code
 			}()
 		}
-		code := -1
+		code, never := -1, false
 		for {
 			if c, ok := readExitFile(exitFile); ok {
 				code = c
 				break
 			}
-			if proc == nil && open != nil && open.Identity != nil {
-				if p, ok := open.Identity(); ok {
+			if proc == nil {
+				if p, ok := identify(); ok {
 					proc = &p
 					s.noteConsoleProcess(id, since, p)
+				} else if s.now().Sub(opened) >= consoleStartLimit {
+					never = true
+					break
 				}
 			}
 			if proc != nil && !s.o.Consoles.Running(*proc) {
@@ -286,6 +313,12 @@ func (s *Service) watchConsole(id string, c *Console, open *OpenConsole) {
 			break
 		}
 		w.lease.Release()
+		if never {
+			s.revertTakeover(id, from, since, fmt.Sprintf("the console did not start within %s; no terminal "+
+				"window could run it (on macOS, allow Seelegent to control Terminal; on Linux, check $TERMINAL "+
+				"or the desktop session)", consoleStartLimit))
+			return
+		}
 		s.handback(id, code)
 	})
 	if !ok {

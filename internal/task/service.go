@@ -100,6 +100,9 @@ type Consoles interface {
 	Open(ctx context.Context, spec ConsoleSpec) (OpenConsole, error)
 	// Running reports whether the console process p still runs (false once it ended, even without an exit code).
 	Running(p ConsoleProcess) bool
+	// Find returns the process of a console an earlier daemon opened, from its exit file (ScriptDir/Name.exit), once
+	// the console's command has started (ok is false before, and when it cannot be known).
+	Find(exitFile string) (p ConsoleProcess, ok bool)
 }
 
 // Options configure a Service. DB, Accounts, Pool, Backends, Settings, TasksDir and Launcher are required.

@@ -278,13 +278,16 @@ func (h *harness) runningWorker(id string) {
 }
 
 // fakeConsoles opens takeover consoles that end when the test says so.
-// Console i runs as process 1000+i until it exits or is marked gone.
+// Console i runs as process 1000+i until it exits or is marked gone. Consoles opened while silent is set never
+// start their command (no process is ever known), like a terminal that could not run the script.
 type fakeConsoles struct {
-	mu    sync.Mutex
-	specs []ConsoleSpec
-	exits []chan int
-	gone  map[int]bool
-	fail  error
+	mu     sync.Mutex
+	specs  []ConsoleSpec
+	exits  []chan int
+	gone   map[int]bool
+	silent map[int]bool
+	fail   error
+	quiet  bool
 }
 
 func (f *fakeConsoles) Open(_ context.Context, spec ConsoleSpec) (OpenConsole, error) {
@@ -297,6 +300,13 @@ func (f *fakeConsoles) Open(_ context.Context, spec ConsoleSpec) (OpenConsole, e
 	pid := 1000 + len(f.specs)
 	f.specs = append(f.specs, spec)
 	f.exits = append(f.exits, ch)
+	if f.quiet {
+		if f.silent == nil {
+			f.silent = map[int]bool{}
+		}
+		f.silent[pid] = true
+	}
+	identity := func() (ConsoleProcess, bool) { return f.identity(pid) }
 	return OpenConsole{
 		Wait: func(ctx context.Context) (int, error) {
 			select {
@@ -306,8 +316,33 @@ func (f *fakeConsoles) Open(_ context.Context, spec ConsoleSpec) (OpenConsole, e
 				return 0, ctx.Err()
 			}
 		},
-		Identity: func() (ConsoleProcess, bool) { return ConsoleProcess{Pid: pid, Start: 1}, true },
+		Identity: identity,
 	}, nil
+}
+
+func (f *fakeConsoles) identity(pid int) (ConsoleProcess, bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.silent[pid] {
+		return ConsoleProcess{}, false
+	}
+	return ConsoleProcess{Pid: pid, Start: 1}, true
+}
+
+// Find finds a console by its exit file, as a restarted daemon does.
+func (f *fakeConsoles) Find(exitFile string) (ConsoleProcess, bool) {
+	f.mu.Lock()
+	var pid int
+	for i, spec := range f.specs {
+		if samePath(filepath.Join(spec.ScriptDir, spec.Name+".exit"), exitFile) {
+			pid = 1000 + i
+		}
+	}
+	f.mu.Unlock()
+	if pid == 0 {
+		return ConsoleProcess{}, false
+	}
+	return f.identity(pid)
 }
 
 func (f *fakeConsoles) Running(p ConsoleProcess) bool {

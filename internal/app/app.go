@@ -318,3 +318,8 @@ func (terminals) Open(ctx context.Context, spec task.ConsoleSpec) (task.OpenCons
 }
 
 func (terminals) Running(p task.ConsoleProcess) bool { return platform.ProcessRunning(p.Pid, p.Start) }
+
+func (terminals) Find(exitFile string) (task.ConsoleProcess, bool) {
+	pid, start, ok := platform.AttachTerminal(exitFile).Identity()
+	return task.ConsoleProcess{Pid: pid, Start: start}, ok
+}

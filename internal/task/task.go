@@ -169,6 +169,10 @@ type Task struct {
 type Console struct {
 	AccountID string    `json:"accountId"`
 	Since     time.Time `json:"since"`
+	// From is the task's status before the takeover; a console that never starts puts the task back to it.
+	From Status `json:"from,omitempty"`
+	// OpenedAt is when the console was asked to open (after the worker stopped); its start limit counts from it.
+	OpenedAt time.Time `json:"openedAt,omitzero"`
 	// ExitFile is where the terminal writes the exit code when the console ends (polled after a daemon restart).
 	ExitFile string `json:"exitFile,omitempty"`
 	// Process is the console's process once known; a restarted daemon checks that it still runs.
