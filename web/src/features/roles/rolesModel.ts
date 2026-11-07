@@ -1,6 +1,7 @@
 /** Pure helpers of the Roles page: ids from names, the scope filter, and the editor's draft. */
 import type { Effort, Role, RoleScope, Tier } from '@/api/types'
 import type { RoleFields } from '@/api/roles'
+import { pathKey } from '@/lib/paths'
 
 export const ROLE_ID = /^[a-z0-9][a-z0-9-]{0,39}$/
 export const TIERS: readonly Tier[] = ['fast', 'standard', 'strong', 'max']
@@ -27,7 +28,7 @@ export type ScopeFilter = '' | 'global' | string
 export function filterRoles(roles: readonly Role[], filter: ScopeFilter): Role[] {
   if (filter === '') return [...roles]
   if (filter === 'global') return roles.filter((r) => r.scope === 'global')
-  return roles.filter((r) => r.scope === 'project' && r.cwd === filter)
+  return roles.filter((r) => r.scope === 'project' && pathKey(r.cwd ?? '') === pathKey(filter))
 }
 
 /** Global roles first, then by project folder, then by name. */

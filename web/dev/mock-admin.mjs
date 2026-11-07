@@ -1016,14 +1016,23 @@ export function createAdminRoutes(ctx) {
     const items = withOverride.filter(
       (r) => r.scope === 'global' || all || (cwd && r.cwd.toLowerCase() === cwd.toLowerCase()),
     )
+    // Like Go's role.Store.Projects: only folders that have project roles (the editor adds /state's projects).
     const counts = new Map()
-    for (const r of roles)
-      if (r.scope === 'project') counts.set(r.cwd, (counts.get(r.cwd) ?? 0) + 1)
-    const projectRows = projects.map((p) => ({
+    for (const r of roles) {
+      if (r.scope !== 'project') continue
+      const known = roleProject(r.cwd)
+      const cwd = known?.cwd ?? r.cwd
+      const row = counts.get(cwd.toLowerCase()) ?? {
+        cwd,
+        name: known?.name ?? cwd.split(/[\\/]/).filter(Boolean).pop() ?? cwd,
+        count: 0,
+      }
+      row.count += 1
+      counts.set(cwd.toLowerCase(), row)
+    }
+    const projectRows = [...counts.values()].map((p) => ({
       key: projectKey(p.cwd, p.name),
-      cwd: p.cwd,
-      name: p.name,
-      count: counts.get(p.cwd) ?? 0,
+      ...p,
     }))
     return { items, projects: projectRows }
   }

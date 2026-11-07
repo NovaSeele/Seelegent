@@ -12,6 +12,7 @@ import { shallowRef } from 'vue'
 import { rolesApi as defaultApi } from '@/api'
 import type { RoleFields, RolesApi, RoleWrite } from '@/api/roles'
 import type { Role, RoleProject, Skill } from '@/api/types'
+import { pathKey } from '@/lib/paths'
 
 import { useConnectionStore } from './connection'
 import { createLoader } from './loader'
@@ -24,7 +25,34 @@ export interface RolePlace {
 }
 
 export const samePlace = (a: RolePlace, b: RolePlace): boolean =>
-  a.id === b.id && a.scope === b.scope && (a.scope === 'global' || a.cwd === b.cwd)
+  a.id === b.id &&
+  a.scope === b.scope &&
+  (a.scope === 'global' || pathKey(a.cwd ?? '') === pathKey(b.cwd ?? ''))
+
+/** A project a role can be placed in: its folder and name. */
+export interface ProjectChoice {
+  cwd: string
+  name: string
+}
+
+/**
+ * Projects to offer for a project role: every project the daemon knows (/state) plus those that already have
+ * roles (GET /roles lists only those), once per folder.
+ */
+export function projectChoices(
+  known: readonly ProjectChoice[],
+  withRoles: readonly ProjectChoice[],
+): ProjectChoice[] {
+  const seen = new Set<string>()
+  const out: ProjectChoice[] = []
+  for (const p of [...known, ...withRoles]) {
+    const key = pathKey(p.cwd)
+    if (!p.cwd || seen.has(key)) continue
+    seen.add(key)
+    out.push({ cwd: p.cwd, name: p.name })
+  }
+  return out
+}
 
 /** The fields of a role a write carries. */
 export function roleFields(role: Role): RoleFields {

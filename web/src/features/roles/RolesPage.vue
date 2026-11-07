@@ -11,6 +11,7 @@ import Chip from '@/components/ui/Chip.vue'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import Spinner from '@/components/ui/Spinner.vue'
+import { pathKey } from '@/lib/paths'
 import { useRolesStore } from '@/stores/roles'
 import { useToastStore } from '@/stores/toast'
 
@@ -38,7 +39,9 @@ const deleteError = ref('')
 onMounted(() => roles.ensure())
 
 const projectName = (cwd: string | undefined) =>
-  roles.projects.find((p) => p.cwd === cwd)?.name ?? cwd ?? ''
+  roles.projects.find((p) => cwd !== undefined && pathKey(p.cwd) === pathKey(cwd))?.name ??
+  cwd ??
+  ''
 
 const chips = computed(() => [
   { value: '', label: t('roles.filter.all'), count: roles.items.length },

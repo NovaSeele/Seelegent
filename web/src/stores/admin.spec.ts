@@ -17,7 +17,7 @@ import { makeAccount, T0 } from '@/test/fixtures'
 import { useAccountsStore } from './accounts'
 import { useConnectionStore } from './connection'
 import { createLoader } from './loader'
-import { useRolesStore } from './roles'
+import { projectChoices, samePlace, useRolesStore } from './roles'
 import { useSettingsStore } from './settings'
 import { useUsageStore } from './usage'
 
@@ -123,6 +123,33 @@ describe('loader', () => {
 })
 
 describe('roles store', () => {
+  it('offers every known project for a project role, once per folder', () => {
+    const known = [
+      { cwd: 'D:/Work/shop', name: 'shop' },
+      { cwd: 'D:/Work/new', name: 'new' },
+    ]
+    const withRoles = [
+      { cwd: 'd:\\work\\shop\\', name: 'shop' },
+      { cwd: '/srv/old', name: 'old' },
+    ]
+    expect(projectChoices(known, withRoles)).toEqual([
+      { cwd: 'D:/Work/shop', name: 'shop' },
+      { cwd: 'D:/Work/new', name: 'new' },
+      { cwd: '/srv/old', name: 'old' },
+    ])
+    // The first project role: GET /roles lists no project yet.
+    expect(projectChoices(known, []).map((p) => p.cwd)).toEqual(['D:/Work/shop', 'D:/Work/new'])
+  })
+
+  it('treats project folders that differ only in case or separators as one place on Windows', () => {
+    expect(
+      samePlace(
+        { id: 'qa', scope: 'project', cwd: 'D:\\Work\\Shop' },
+        { id: 'qa', scope: 'project', cwd: 'd:/work/shop/' },
+      ),
+    ).toBe(true)
+  })
+
   it('moves a role by writing the new place, then deleting the old one', async () => {
     const { client, calls } = fakeClient((method) =>
       method === 'GET' ? { body: { items: [], projects: [] } } : { status: 204, body: role() },

@@ -12,7 +12,8 @@ import Select from '@/components/ui/Select.vue'
 import TextArea from '@/components/ui/TextArea.vue'
 import TextField from '@/components/ui/TextField.vue'
 import { useAccountsStore } from '@/stores/accounts'
-import { samePlace, useRolesStore, type RolePlace } from '@/stores/roles'
+import { useConnectionStore } from '@/stores/connection'
+import { projectChoices, samePlace, useRolesStore, type RolePlace } from '@/stores/roles'
 import { useToastStore } from '@/stores/toast'
 
 import RoleSkills from './RoleSkills.vue'
@@ -38,6 +39,7 @@ const emit = defineEmits<{ close: [] }>()
 const { t } = useI18n()
 const roles = useRolesStore()
 const accounts = useAccountsStore()
+const connection = useConnectionStore()
 const toast = useToastStore()
 
 const draft = ref(draftOf(undefined))
@@ -75,8 +77,10 @@ watch(
 const scopes = computed(() =>
   (['global', 'project'] as const).map((value) => ({ value, label: t(`roles.scope.${value}`) })),
 )
+/** Every project the daemon knows, not only those with roles yet: the first project role must be placeable. */
+const projects = computed(() => projectChoices(connection.projects, roles.projects))
 const projectOptions = computed(() =>
-  roles.projects.map((p) => ({ value: p.cwd, label: `${p.name} — ${p.cwd}` })),
+  projects.value.map((p) => ({ value: p.cwd, label: `${p.name} — ${p.cwd}` })),
 )
 const tierOptions = computed(() => [
   { value: '' as const, label: t('roles.none') },
@@ -90,7 +94,7 @@ const effortOptions = computed(() => [
 watch(
   () => draft.value.scope,
   (scope) => {
-    if (scope === 'project' && !draft.value.cwd) draft.value.cwd = roles.projects[0]?.cwd ?? ''
+    if (scope === 'project' && !draft.value.cwd) draft.value.cwd = projects.value[0]?.cwd ?? ''
   },
 )
 

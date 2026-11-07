@@ -1,8 +1,15 @@
 import { describe, expect, it } from 'vitest'
 
-import { baseName, dirName, joinPath, relativeTo } from './paths'
+import { baseName, dirName, joinPath, pathKey, relativeTo } from './paths'
 
 describe('paths', () => {
+  it('keys folders like the daemon: separators, trailing slash, and case only on Windows', () => {
+    expect(pathKey('D:\\Work\\App\\')).toBe(pathKey('d:/work/app'))
+    expect(pathKey('/home/me/App')).not.toBe(pathKey('/home/me/app'))
+    expect(pathKey('/home/me/app/')).toBe('/home/me/app')
+    expect(pathKey('/')).toBe('/')
+  })
+
   it('shows paths inside the task folder relative to it', () => {
     expect(relativeTo('D:\\Work\\app\\src\\a.ts', 'D:/Work/app')).toBe('src/a.ts')
     expect(relativeTo('d:/work/APP/src/a.ts', 'D:/Work/app/')).toBe('src/a.ts')
