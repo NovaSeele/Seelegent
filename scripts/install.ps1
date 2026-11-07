@@ -14,6 +14,8 @@
                           default: %LOCALAPPDATA%\Programs\seelegent\bin
       -NoPath             do not add the folder to the user PATH (SEELEGENT_NO_MODIFY_PATH=1)
       -NoSetup            do not run `seelegent setup` (SEELEGENT_NO_SETUP=1)
+      -Force              install a release that does not report which database schema it knows
+                          (SEELEGENT_FORCE=1); a release known to be too old for the database is refused even then
     SEELEGENT_INSTALL_URL (else SEELEGENT_UPDATE_URL) replaces the release information address
     https://api.github.com/repos/NovaSeele/Seelegent/releases/latest, for example with a local test server.
 
@@ -31,7 +33,8 @@ function Install-Seelegent {
         [string] $Version = $env:SEELEGENT_VERSION,
         [string] $InstallDir = $env:SEELEGENT_INSTALL_DIR,
         [switch] $NoPath,
-        [switch] $NoSetup
+        [switch] $NoSetup,
+        [switch] $Force
     )
 
     Set-StrictMode -Version 2.0
@@ -43,6 +46,7 @@ function Install-Seelegent {
     }
     if ($env:SEELEGENT_NO_MODIFY_PATH -eq '1') { $NoPath = $true }
     if ($env:SEELEGENT_NO_SETUP -eq '1') { $NoSetup = $true }
+    if ($env:SEELEGENT_FORCE -eq '1') { $Force = $true }
 
     $repoLatest = 'https://api.github.com/repos/NovaSeele/Seelegent/releases/latest'
     $userAgent = 'seelegent-installer'
@@ -50,13 +54,59 @@ function Install-Seelegent {
     function Write-Step([string] $Message) { Write-Host $Message -ForegroundColor Cyan }
     function Write-Note([string] $Message) { Write-Host "Warning: $Message" -ForegroundColor Yellow }
 
-    # Accepts https, and http only on this machine (a local test server).
+    # Accepts https, and http only on this machine (a local test server): exactly 127.0.0.1, localhost or [::1].
+    # An address with user information (user@host) is refused.
     function Assert-Url([string] $Url) {
         $u = $null
         if (-not [Uri]::TryCreate($Url, [UriKind]::Absolute, [ref] $u)) { throw "Not an address: $Url" }
+        if ($u.UserInfo -or $Url -match '^[^/]*//[^/?#]*[@\\]') { throw "Not an allowed address: $Url" }
         if ($u.Scheme -eq 'https') { return }
-        if ($u.Scheme -eq 'http' -and ($u.IsLoopback -or $u.Host -eq 'localhost')) { return }
+        if ($u.Scheme -eq 'http' -and @('127.0.0.1', 'localhost', '[::1]', '::1') -contains $u.Host) { return }
         throw "Only https addresses (or http on this machine) are allowed: $Url"
+    }
+
+    # Reads $Url into $OutFile, or returns its text when $OutFile is empty. Redirects (at most five) are followed
+    # here, not by the HTTP stack, so every address on the way passes Assert-Url: no plain http except on this
+    # machine (old C-B15). The same code runs in Windows PowerShell 5.1 and PowerShell 7.
+    function Get-Url([string] $Url, [string] $OutFile = '', [string] $Accept = '*/*') {
+        $current = $Url
+        for ($hop = 0; $hop -le 5; $hop++) {
+            Assert-Url $current
+            $request = [System.Net.HttpWebRequest]::Create($current)
+            $request.AllowAutoRedirect = $false
+            $request.UserAgent = $userAgent
+            $request.Accept = $Accept
+            $request.Timeout = 60000
+            $request.ReadWriteTimeout = 300000
+            $response = $null
+            try {
+                try {
+                    $response = $request.GetResponse()
+                } catch [System.Net.WebException] {
+                    if ($null -eq $_.Exception.Response) { throw "Could not read ${current}: $($_.Exception.Message)" }
+                    $response = $_.Exception.Response
+                }
+                $code = [int] $response.StatusCode
+                if ($code -ge 300 -and $code -lt 400) {
+                    $location = $response.Headers['Location']
+                    if (-not $location) { throw "$current redirects without saying where to." }
+                    $current = (New-Object System.Uri -ArgumentList ([Uri] $current), $location).AbsoluteUri
+                    continue
+                }
+                if ($code -lt 200 -or $code -ge 300) { throw "$current answered HTTP $code." }
+                $stream = $response.GetResponseStream()
+                if ($OutFile) {
+                    $file = [System.IO.File]::Create($OutFile)
+                    try { $stream.CopyTo($file) } finally { $file.Dispose() }
+                    return
+                }
+                $reader = New-Object System.IO.StreamReader -ArgumentList $stream, ([System.Text.Encoding]::UTF8)
+                try { return $reader.ReadToEnd() } finally { $reader.Dispose() }
+            } finally {
+                if ($response) { $response.Close() }
+            }
+        }
+        throw "$Url redirects more than five times."
     }
 
     function Get-Tag([string] $Value) {
@@ -103,7 +153,7 @@ function Install-Seelegent {
 
     # Puts $New in place of $Exe. The replaced executable is kept as <exe>.previous for `seelegent update
     # --rollback`. Only renames in one folder, so a running seelegent.exe can be replaced; on failure the old
-    # executable is put back.
+    # executable (and an older kept one) is put back. An older kept executable is deleted only at the end.
     function Install-Executable([string] $New, [string] $Exe) {
         $staged = "$Exe.new"
         $previous = "$Exe.previous"
@@ -116,7 +166,12 @@ function Install-Seelegent {
         $trashedPrevious = $null
         if (Test-Path -LiteralPath $previous) {
             $trashedPrevious = Get-FreeName $Exe
-            [System.IO.File]::Move($previous, $trashedPrevious)
+            try {
+                [System.IO.File]::Move($previous, $trashedPrevious)
+            } catch {
+                Remove-Item -LiteralPath $staged -Force -ErrorAction SilentlyContinue
+                throw "Could not move the older $previous aside: $($_.Exception.Message). Nothing was changed."
+            }
         }
         try {
             [System.IO.File]::Move($Exe, $previous)
@@ -132,6 +187,7 @@ function Install-Seelegent {
             if ($trashedPrevious) { [System.IO.File]::Move($trashedPrevious, $previous) }
             throw "Could not put the new seelegent.exe in place: $($_.Exception.Message). The old one is back."
         }
+        if ($trashedPrevious) { Remove-Item -LiteralPath $trashedPrevious -Force -ErrorAction SilentlyContinue }
         return $previous
     }
 
@@ -236,9 +292,7 @@ function Install-Seelegent {
 
     Write-Step "Reading the release information from $metaUrl ..."
     try {
-        $release = Invoke-RestMethod -Uri $metaUrl -UseBasicParsing -MaximumRedirection 5 -Headers @{
-            'User-Agent' = $userAgent; 'Accept' = 'application/vnd.github+json'
-        }
+        $release = Get-Url $metaUrl '' 'application/vnd.github+json' | ConvertFrom-Json
     } catch {
         throw "Could not read the release information from ${metaUrl}: $($_.Exception.Message)"
     }
@@ -263,7 +317,9 @@ function Install-Seelegent {
         $InstallDir = Join-Path $env:LOCALAPPDATA 'Programs\seelegent\bin'
     }
     $InstallDir = [System.IO.Path]::GetFullPath($InstallDir)
+    if ($InstallDir -match '[;"]') { throw "The install folder may not contain ; or a double quote: $InstallDir" }
     $exe = Join-Path $InstallDir 'seelegent.exe'
+    $dataDir = if ($env:SEELEGENT_HOME) { $env:SEELEGENT_HOME } else { Join-Path $env:USERPROFILE '.seelegent' }
 
     $temp = Join-Path ([System.IO.Path]::GetTempPath()) ('seelegent-install-' + [Guid]::NewGuid().ToString('N'))
     New-Item -ItemType Directory -Path $temp -Force | Out-Null
@@ -273,8 +329,8 @@ function Install-Seelegent {
         $zip = Join-Path $temp $assetName
         $sums = Join-Path $temp 'checksums.txt'
         Write-Step "Downloading $assetName ..."
-        Invoke-WebRequest -Uri $assetUrl -OutFile $zip -UseBasicParsing -MaximumRedirection 5 -Headers @{ 'User-Agent' = $userAgent }
-        Invoke-WebRequest -Uri $sumsUrl -OutFile $sums -UseBasicParsing -MaximumRedirection 5 -Headers @{ 'User-Agent' = $userAgent }
+        Get-Url $assetUrl $zip
+        Get-Url $sumsUrl $sums
         $want = Get-ExpectedSum $sums $assetName
         $got = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
         if ($got -ne $want) {
@@ -288,6 +344,22 @@ function Install-Seelegent {
         try { $reported = ($info | ConvertFrom-Json).version } catch { $reported = $null }
         if ($LASTEXITCODE -ne 0 -or $reported -ne $relTag) {
             throw "The downloaded seelegent.exe does not run here or is not $relTag (it reported '$reported'); nothing was installed."
+        }
+        # A release that knows fewer database migrations than the database has could not open it (migrations are
+        # never undone). The downloaded executable checks the database itself, read-only.
+        if (Test-Path -LiteralPath (Join-Path $dataDir 'seelegent.db')) {
+            $check = Invoke-Quiet $newExe @('version', '--check-database', '--json')
+            if ($LASTEXITCODE -ne 0) {
+                $code = $null
+                try { $code = ($check | ConvertFrom-Json).code } catch { $code = $null }
+                if ($code -eq 'schema_too_new') {
+                    throw "The database in $dataDir is newer than $relTag can open (migrations are never undone); install a newer release. Nothing was installed."
+                }
+                if (-not $Force) {
+                    throw "$relTag does not report which database schema it knows, so it may not open the database in $dataDir; -Force installs it anyway. Nothing was installed."
+                }
+                Write-Note "$relTag does not report which database schema it knows; installing it anyway (-Force)."
+            }
         }
 
         # --- install --------------------------------------------------------------------------------------------
@@ -304,7 +376,17 @@ function Install-Seelegent {
             }
         }
         Write-Step "Installing $exe ..."
-        $previous = Install-Executable $newExe $exe
+        try {
+            $previous = Install-Executable $newExe $exe
+        } catch {
+            if ($wasRunning) {
+                # The old executable is back in place: start the daemon that was stopped for the install again.
+                Write-Note 'the install failed; starting the daemon again ...'
+                $null = Invoke-Quiet $exe @('restart')
+                if ($LASTEXITCODE -ne 0) { Write-Note "the daemon could not be started again; run: $exe restart" }
+            }
+            throw
+        }
         if ($previous) { Write-Step "The previous executable is kept as $previous (seelegent update --rollback)." }
         $shim = Move-OldShim $InstallDir
         if ($shim) { Write-Step "The old version's launcher seelegent.cmd is now $shim." }
@@ -324,7 +406,6 @@ function Install-Seelegent {
         }
 
         # --- data and hosts -------------------------------------------------------------------------------------
-        $dataDir = if ($env:SEELEGENT_HOME) { $env:SEELEGENT_HOME } else { Join-Path $env:USERPROFILE '.seelegent' }
         $oldData = @('settings.json', 'accounts.json', 'roles.json', 'memory') |
             Where-Object { Test-Path -LiteralPath (Join-Path $dataDir $_) }
         if ($oldData -and -not (Test-Path -LiteralPath (Join-Path $dataDir 'seelegent.db'))) {
