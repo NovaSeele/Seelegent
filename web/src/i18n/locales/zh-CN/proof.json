@@ -44,7 +44,6 @@
     "title": "回归运行",
     "empty": "还没有回归运行。",
     "all": "全部功能",
-    "counts": "共 {total} 项：{green} 通过，{red} 未通过，{error} 无法运行",
     "state": {
       "running": "运行中",
       "green": "通过",
@@ -63,7 +62,14 @@
     "force": "即使有任务在进行也运行",
     "start": "重新运行全部关卡",
     "refused": "未开始：还有任务在进行（{tasks}）。请等待，或仍然运行。",
-    "failed": "运行失败：{error}"
+    "failed": "运行失败：{error}",
+    "part": {
+      "green": "{n} 通过",
+      "red": "{n} 未通过",
+      "error": "{n} 无法运行"
+    },
+    "sep": "，",
+    "of": "共 {total} 项：{parts}"
   },
   "lanes": {
     "title": "通道",
@@ -87,7 +93,8 @@
       "lead": "由 lead 设定",
       "spec": "来自 spec 任务"
     },
-    "heldUntil": "保留到 {time}"
+    "heldUntil": "保留到 {time}",
+    "holdNote": "已完成的任务会保留通道，直到被接受或拒绝，或保留时间结束。"
   },
   "stats": {
     "title": "关卡的作用",

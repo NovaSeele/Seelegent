@@ -44,7 +44,6 @@
     "title": "回帰実行",
     "empty": "回帰実行はまだありません。",
     "all": "すべての機能",
-    "counts": "{total} 件中 通過 {green}、失敗 {red}、実行不可 {error}",
     "state": {
       "running": "実行中",
       "green": "通過",
@@ -63,7 +62,14 @@
     "force": "タスクが動いていても実行",
     "start": "すべてのゲートを再実行",
     "refused": "開始しませんでした: まだ動いているタスクがあります ({tasks})。待つか、そのまま実行してください。",
-    "failed": "実行に失敗しました: {error}"
+    "failed": "実行に失敗しました: {error}",
+    "part": {
+      "green": "通過 {n}",
+      "red": "失敗 {n}",
+      "error": "実行不可 {n}"
+    },
+    "sep": "、",
+    "of": "{total} 件中 {parts}"
   },
   "lanes": {
     "title": "レーン",
@@ -87,7 +93,8 @@
       "lead": "リードが指定",
       "spec": "spec のタスクから"
     },
-    "heldUntil": "{time} まで保持"
+    "heldUntil": "{time} まで保持",
+    "holdNote": "終了したタスクは、承認か却下されるまで、または保持期間が終わるまでレーンを保持します。"
   },
   "stats": {
     "title": "ゲートの成果",

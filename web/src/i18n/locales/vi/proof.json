@@ -15,7 +15,7 @@
     "unproven": "Chưa chứng minh",
     "in_progress": "Đang làm",
     "unmapped": "Chưa có tác vụ",
-    "failing": "Đang lỗi",
+    "failing": "Không đạt",
     "regressed": "Bị hồi quy"
   },
   "features": {
@@ -31,7 +31,7 @@
     "open": "chưa xong",
     "result": {
       "green": "Cổng đạt",
-      "red": "Cổng lỗi",
+      "red": "Cổng không đạt",
       "error": "Cổng không chạy được"
     },
     "noResult": "Chưa có kết quả cổng",
@@ -44,11 +44,10 @@
     "title": "Chạy hồi quy",
     "empty": "Chưa chạy hồi quy lần nào.",
     "all": "Mọi tính năng",
-    "counts": "{green} đạt, {red} lỗi, {error} không chạy được, trên tổng {total}",
     "state": {
       "running": "Đang chạy",
       "green": "Đạt",
-      "red": "Lỗi",
+      "red": "Không đạt",
       "error": "Không chạy được",
       "cancelled": "Đã hủy"
     },
@@ -63,7 +62,14 @@
     "force": "Chạy cả khi còn tác vụ đang làm",
     "start": "Chạy lại mọi cổng",
     "refused": "Chưa chạy: vẫn còn tác vụ đang làm ({tasks}). Hãy chờ hoặc vẫn chạy.",
-    "failed": "Lượt chạy lỗi: {error}"
+    "failed": "Lượt chạy lỗi: {error}",
+    "part": {
+      "green": "{n} đạt",
+      "red": "{n} không đạt",
+      "error": "{n} không chạy được"
+    },
+    "sep": ", ",
+    "of": "{parts}, trên tổng {total}"
   },
   "lanes": {
     "title": "Làn",
@@ -80,14 +86,15 @@
       "running": "Đang chạy",
       "waiting_quota": "Chờ hạn mức",
       "done": "Xong",
-      "failed": "Lỗi",
+      "failed": "Thất bại",
       "cancelled": "Đã hủy"
     },
     "source": {
       "lead": "do lead đặt",
       "spec": "lấy từ tác vụ spec"
     },
-    "heldUntil": "giữ đến {time}"
+    "heldUntil": "giữ đến {time}",
+    "holdNote": "Tác vụ đã xong giữ làn cho đến khi được chấp nhận hoặc từ chối, hoặc đến khi hết thời gian giữ."
   },
   "stats": {
     "title": "Cổng đã làm được gì",

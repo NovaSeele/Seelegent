@@ -18,6 +18,15 @@ const emit = defineEmits<{ cancel: [id: string]; expand: [id: string] }>()
 const { t } = useI18n()
 const fmt = useFormat()
 
+/** The run's counts without the zero ones ("2 passed, 1 failed of 3"). */
+function countsText(run: ProofRun): string {
+  const parts = (['green', 'red', 'error'] as const)
+    .filter((state) => run.counts[state] > 0)
+    .map((state) => t(`proof.runs.part.${state}`, { n: run.counts[state] }))
+  const list = parts.length ? parts.join(t('proof.runs.sep')) : t('proof.runs.part.green', { n: 0 })
+  return t('proof.runs.of', { parts: list, total: run.total })
+}
+
 /** The index lists runs without their results: an opened finished run asks for them. */
 function onToggle(run: ProofRun, event: Event) {
   const open = (event.target as HTMLDetailsElement).open
@@ -39,16 +48,7 @@ function onToggle(run: ProofRun, event: Event) {
           <summary class="runs__summary">
             <Chip :tone="runTone(run.state)">{{ t(`proof.runs.state.${run.state}`) }}</Chip>
             <span class="runs__what">{{ run.feature || t('proof.runs.all') }}</span>
-            <span class="runs__muted">
-              {{
-                t('proof.runs.counts', {
-                  green: run.counts.green,
-                  red: run.counts.red,
-                  error: run.counts.error,
-                  total: run.total,
-                })
-              }}
-            </span>
+            <span class="runs__muted">{{ countsText(run) }}</span>
             <time class="runs__muted" :datetime="run.startedAt">{{
               fmt.dateTime(run.startedAt)
             }}</time>

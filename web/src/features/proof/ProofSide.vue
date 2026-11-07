@@ -79,6 +79,9 @@ const statRows = computed(() => {
         </span>
       </li>
     </ul>
+    <p v-if="lanes.claims.some((c) => c.heldUntil)" class="side__muted">
+      {{ t('proof.lanes.holdNote') }}
+    </p>
   </section>
   <section v-if="stats" class="side" :aria-label="t('proof.stats.title')">
     <h2 class="side__title">{{ t('proof.stats.title') }}</h2>

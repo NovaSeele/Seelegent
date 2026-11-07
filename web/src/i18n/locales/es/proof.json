@@ -44,7 +44,6 @@
     "title": "Ejecuciones de regresión",
     "empty": "Aún no hay ejecuciones de regresión.",
     "all": "Todas las funcionalidades",
-    "counts": "{green} superados, {red} fallidos, {error} sin ejecutar, de {total}",
     "state": {
       "running": "En marcha",
       "green": "Superado",
@@ -63,7 +62,14 @@
     "force": "Ejecutar aunque haya tareas activas",
     "start": "Volver a ejecutar todos los gates",
     "refused": "No se inició: aún hay tareas activas ({tasks}). Espera o ejecútalo de todos modos.",
-    "failed": "La ejecución falló: {error}"
+    "failed": "La ejecución falló: {error}",
+    "part": {
+      "green": "{n} superados",
+      "red": "{n} fallidos",
+      "error": "{n} sin ejecutar"
+    },
+    "sep": ", ",
+    "of": "{parts} de {total}"
   },
   "lanes": {
     "title": "Carriles",
@@ -87,7 +93,8 @@
       "lead": "fijado por el lead",
       "spec": "de las tareas de la spec"
     },
-    "heldUntil": "reservado hasta {time}"
+    "heldUntil": "reservado hasta {time}",
+    "holdNote": "Una tarea terminada conserva su carril hasta que se acepta o rechaza, o hasta que acaba la reserva."
   },
   "stats": {
     "title": "Lo que hicieron los gates",

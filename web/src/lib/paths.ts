@@ -53,3 +53,20 @@ export function dirName(path: string): string {
   const at = p.lastIndexOf('/')
   return at < 0 ? '' : p.slice(0, at)
 }
+
+/**
+ * A long path cut in the middle so both ends stay readable ("C:/Users/…/live/repo"), at most `max` characters.
+ * The cut prefers folder boundaries; show the full path in a title next to it.
+ */
+export function truncateMiddle(path: string, max = 48): string {
+  const p = slashes(path)
+  if (p.length <= max) return p
+  const room = max - 1
+  let head = p.slice(0, Math.ceil(room / 3))
+  let tail = p.slice(p.length - (room - head.length))
+  const headCut = head.lastIndexOf('/')
+  if (headCut > 0) head = head.slice(0, headCut + 1)
+  const tailCut = tail.indexOf('/')
+  if (tailCut >= 0 && tailCut < tail.length - 1) tail = tail.slice(tailCut)
+  return `${head}…${tail}`
+}

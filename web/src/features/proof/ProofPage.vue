@@ -11,7 +11,7 @@ import EmptyState from '@/components/ui/EmptyState.vue'
 import Select from '@/components/ui/Select.vue'
 import Spinner from '@/components/ui/Spinner.vue'
 import { readStored, writeStored, type StoredValue } from '@/lib/storage'
-import { pathKey } from '@/lib/paths'
+import { pathKey, truncateMiddle } from '@/lib/paths'
 import { useConnectionStore } from '@/stores/connection'
 import { useToastStore } from '@/stores/toast'
 
@@ -121,9 +121,15 @@ const running = computed(() => proof.index.value?.runs.some((r) => r.state === '
         <section class="proof__overview" :aria-label="t('proof.overview')">
           <div class="proof__totals">
             <p class="proof__root">
-              <code>{{ proof.index.value.repoRoot }}</code>
+              <code :title="proof.index.value.repoRoot">{{
+                truncateMiddle(proof.index.value.repoRoot)
+              }}</code>
             </p>
-            <ProofCounts :counts="proof.index.value.totals" />
+            <!-- With one feature its own counts say the same: the totals only add up several. -->
+            <ProofCounts
+              v-if="proof.index.value.features.length > 1"
+              :counts="proof.index.value.totals"
+            />
           </div>
           <div class="proof__run">
             <Checkbox v-model="force" :label="t('proof.runs.force')" />

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { baseName, dirName, joinPath, pathKey, relativeTo } from './paths'
+import { baseName, dirName, joinPath, pathKey, relativeTo, truncateMiddle } from './paths'
 
 describe('paths', () => {
   it('keys folders like the daemon: separators, trailing slash, and case only on Windows', () => {
@@ -34,5 +34,13 @@ describe('paths', () => {
     expect(baseName('a\\b\\c.go')).toBe('c.go')
     expect(dirName('pages/[id].vue')).toBe('pages')
     expect(dirName('README.md')).toBe('')
+  })
+
+  it('cuts a long path in the middle at folder boundaries', () => {
+    expect(truncateMiddle('D:/app')).toBe('D:/app')
+    const long = 'C:\\Users\\someone\\AppData\\Local\\Temp\\claude\\scratch\\m13\\live\\repo'
+    const cut = truncateMiddle(long, 32)
+    expect(cut.length).toBeLessThanOrEqual(32)
+    expect(cut).toBe('C:/Users/…/m13/live/repo')
   })
 })

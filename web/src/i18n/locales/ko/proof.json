@@ -44,7 +44,6 @@
     "title": "회귀 실행",
     "empty": "아직 회귀 실행이 없습니다.",
     "all": "모든 기능",
-    "counts": "{total}개 중 통과 {green}, 실패 {red}, 실행 불가 {error}",
     "state": {
       "running": "실행 중",
       "green": "통과",
@@ -63,7 +62,14 @@
     "force": "진행 중인 작업이 있어도 실행",
     "start": "모든 게이트 다시 실행",
     "refused": "시작하지 않음: 아직 진행 중인 작업이 있습니다({tasks}). 기다리거나 그래도 실행하세요.",
-    "failed": "실행 실패: {error}"
+    "failed": "실행 실패: {error}",
+    "part": {
+      "green": "통과 {n}",
+      "red": "실패 {n}",
+      "error": "실행 불가 {n}"
+    },
+    "sep": ", ",
+    "of": "{total}개 중 {parts}"
   },
   "lanes": {
     "title": "레인",
@@ -87,7 +93,8 @@
       "lead": "리드가 지정",
       "spec": "spec 작업에서 가져옴"
     },
-    "heldUntil": "{time}까지 유지"
+    "heldUntil": "{time}까지 유지",
+    "holdNote": "끝난 작업은 승인 또는 거절될 때까지, 또는 유지 시간이 끝날 때까지 레인을 유지합니다."
   },
   "stats": {
     "title": "게이트가 한 일",

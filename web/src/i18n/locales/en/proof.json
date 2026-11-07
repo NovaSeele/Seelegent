@@ -44,7 +44,6 @@
     "title": "Regression runs",
     "empty": "No regression run yet.",
     "all": "All features",
-    "counts": "{green} passed, {red} failed, {error} could not run, of {total}",
     "state": {
       "running": "Running",
       "green": "Passed",
@@ -63,7 +62,14 @@
     "force": "Run even while tasks are active",
     "start": "Run every gate again",
     "refused": "Not started: tasks are still active ({tasks}). Wait for them or run anyway.",
-    "failed": "The run failed: {error}"
+    "failed": "The run failed: {error}",
+    "part": {
+      "green": "{n} passed",
+      "red": "{n} failed",
+      "error": "{n} could not run"
+    },
+    "sep": ", ",
+    "of": "{parts} of {total}"
   },
   "lanes": {
     "title": "Lanes",
@@ -87,7 +93,8 @@
       "lead": "set by the lead",
       "spec": "from the spec tasks"
     },
-    "heldUntil": "held until {time}"
+    "heldUntil": "held until {time}",
+    "holdNote": "A finished task keeps its lane until it is accepted or rejected, or until the hold ends."
   },
   "stats": {
     "title": "What the gates did",
