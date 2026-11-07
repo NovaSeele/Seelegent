@@ -341,8 +341,11 @@ func (s *Service) appendEvents(ctx context.Context, id string, evs []NewEvent, o
 	return nil
 }
 
-func (s *Service) publish(id string, evs []api.TaskEvent) {
-	ns := []Notice{{Kind: NoticeTask, TaskID: id}}
+func (s *Service) publish(id string, evs []api.TaskEvent) { s.publishNotices(id, false, evs) }
+
+// publishNotices publishes the change of task id (created marks a new task) and its new events.
+func (s *Service) publishNotices(id string, created bool, evs []api.TaskEvent) {
+	ns := []Notice{{Kind: NoticeTask, TaskID: id, Created: created}}
 	for i := range evs {
 		ns = append(ns, Notice{Kind: NoticeEvent, TaskID: id, Event: &evs[i]})
 	}

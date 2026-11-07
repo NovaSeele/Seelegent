@@ -5,6 +5,7 @@ import (
 	"sort"
 
 	"github.com/NovaSeele/Seelegent/internal/api"
+	"github.com/NovaSeele/Seelegent/internal/platform"
 )
 
 // Event page limits (contract §3).
@@ -122,6 +123,33 @@ func (s *Service) LiveWorkers() []api.LiveWorker {
 		r.mu.Unlock()
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].TaskID < out[j].TaskID })
+	return out
+}
+
+// WorkerTrees returns the process trees of the workers the engine runs right now, for the worker guard (contract
+// §1.3): one per task, with the task id as the tree's ID. A tree is known from the moment its launcher runs (and,
+// after a daemon restart, from Start on), from what this daemon recorded when it started the launcher or from a
+// launch record that checks out (launch.Handle.Tree); a tree that cannot be verified lists nothing, so the guard
+// fails closed. Takeover consoles are the user's and are not listed.
+func (s *Service) WorkerTrees() []*platform.WorkerTree {
+	s.mu.Lock()
+	runs := make([]*run, 0, len(s.runs))
+	for _, r := range s.runs {
+		runs = append(runs, r)
+	}
+	s.mu.Unlock()
+	var out []*platform.WorkerTree
+	for _, r := range runs {
+		h := r.tree()
+		if h == nil {
+			continue
+		}
+		if t, ok := h.Tree(); ok {
+			t.ID = r.id
+			out = append(out, t)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
 	return out
 }
 

@@ -54,14 +54,36 @@ type run struct {
 	mu      sync.Mutex
 	stopped bool
 	handle  *launch.Handle
-	account string
-	live    liveState
+	// starting is a launch whose worker is about to run (launch.Options.Started) or that recovery is about to
+	// attach: its tree counts for the worker guard before handle is set.
+	starting *launch.Handle
+	account  string
+	live     liveState
+}
+
+// setStarting records a launch whose worker is about to run, until setHandle or clearHandle.
+func (r *run) setStarting(h *launch.Handle) {
+	r.mu.Lock()
+	if r.handle == nil {
+		r.starting = h
+	}
+	r.mu.Unlock()
+}
+
+// tree returns the launch whose process tree belongs to this run's worker (nil when none).
+func (r *run) tree() *launch.Handle {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.handle != nil {
+		return r.handle
+	}
+	return r.starting
 }
 
 // setHandle records the worker being followed; a run that was already asked to stop cancels it at once.
 func (r *run) setHandle(h *launch.Handle, accountID string, started time.Time) {
 	r.mu.Lock()
-	r.handle, r.account = h, accountID
+	r.handle, r.starting, r.account = h, nil, accountID
 	r.live = liveState{running: true, started: started, account: accountID}
 	stopped := r.stopped
 	r.mu.Unlock()
@@ -72,7 +94,7 @@ func (r *run) setHandle(h *launch.Handle, accountID string, started time.Time) {
 
 func (r *run) clearHandle() {
 	r.mu.Lock()
-	r.handle, r.account, r.live = nil, "", liveState{}
+	r.handle, r.starting, r.account, r.live = nil, nil, "", liveState{}
 	r.mu.Unlock()
 }
 
@@ -131,7 +153,11 @@ func (s *Service) live(id string) liveState {
 }
 
 // startRun starts the run of task id unless one is going.
-func (s *Service) startRun(id string) {
+func (s *Service) startRun(id string) { s.startRunWith(id, nil) }
+
+// startRunWith starts the run of task id unless one is going; pre is the launch of a worker that recovery will
+// attach (its tree counts for the worker guard at once), or nil.
+func (s *Service) startRunWith(id string, pre *launch.Handle) {
 	s.mu.Lock()
 	if s.closed || s.runs[id] != nil {
 		s.mu.Unlock()
@@ -139,7 +165,8 @@ func (s *Service) startRun(id string) {
 	}
 	ctx, stop := context.WithCancel(s.root)
 	stopCtx, stopLaunch := context.WithCancel(context.Background())
-	r := &run{id: id, ctx: ctx, stop: stop, stopCtx: stopCtx, stopLaunch: stopLaunch, done: make(chan struct{})}
+	r := &run{id: id, ctx: ctx, stop: stop, stopCtx: stopCtx, stopLaunch: stopLaunch, done: make(chan struct{}),
+		starting: pre}
 	s.runs[id] = r
 	s.mu.Unlock()
 	ok := s.spawn("run", id, func() {
@@ -463,8 +490,9 @@ func (s *Service) launchAndFollow(r *run, t *Task, turn, n int, acc account.Acco
 		return failed(event.ClassFatal, err)
 	}
 	h, err := launch.Start(r.stopCtx, launch.Options{Launcher: s.o.Launcher, Dir: launchDir, Spec: spec,
-		Env: env.Vars})
+		Env: env.Vars, Started: r.setStarting})
 	if err != nil {
+		r.clearHandle()
 		return failed(event.ClassFatal, fmt.Errorf("start the worker: %w", err))
 	}
 	r.setHandle(h, acc.ID, s.clk.Now())

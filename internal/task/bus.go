@@ -22,6 +22,8 @@ const (
 type Notice struct {
 	Kind   NoticeKind
 	TaskID string
+	// Created marks the NoticeTask of a task that was just created.
+	Created bool
 	// Event is set for NoticeEvent.
 	Event *api.TaskEvent
 }
