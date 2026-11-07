@@ -12,7 +12,7 @@ import TextField from '@/components/ui/TextField.vue'
 import { useProvidersStore } from '@/stores/providers'
 import { useToastStore } from '@/stores/toast'
 
-import { parseModels, providerChanges, providerInput } from './providerForm'
+import { parseModels, providerChanges, providerInput, providerModels } from './providerForm'
 
 /**
  * Adds a provider (from a preset, or blank) or edits one. The id and backend are fixed once the provider exists;
@@ -74,6 +74,7 @@ watch(open, (value) => {
   failure.value = ''
   preset.value = ''
   fill(props.provider ?? blank())
+  if (props.provider) models.value = (providerModels(props.provider) ?? []).join(', ')
 })
 
 watch(preset, (id) => {
