@@ -188,7 +188,10 @@ exits with an error within 3 s is reported at once as no terminal.
   (`pool.Reattach` is idempotent; the lease is released when the worker exits).
 - An attempt that finished meanwhile is **replayed** from its files (`resumed` event).
 - In both cases the stream and stderr are read from the start so the parser sees the whole turn, and lines at or
-  before the committed offsets are not logged again.
+  before the committed offsets are not logged again. The output is masked for the secrets the worker was started
+  with (an API-key account's key, kept encrypted like the stored keys in the attempt folder's `mask` file until the
+  attempt ends) and for the account's current ones, so removing or changing the key while no daemon runs never
+  unmasks it. A worker whose mask list cannot be written is not started.
 - An attempt whose worker never started is closed as interrupted; the turn goes on with a new attempt and the full
   brief.
 - A cancel the earlier daemon recorded is carried out; takeover consoles are watched again; dependents are

@@ -559,6 +559,10 @@ func (s *Service) launchAndFollow(r *run, t *Task, turn, n int, acc account.Acco
 	if err != nil {
 		return failed(event.ClassFatal, err)
 	}
+	// Fail closed: a worker whose output could not be masked after a daemon restart is never started.
+	if err := saveMask(dir, env.Secrets); err != nil {
+		return failed(event.ClassFatal, fmt.Errorf("keep the mask list: %w", err))
+	}
 	h, err := launch.Start(r.stopCtx, launch.Options{Launcher: s.o.Launcher, Dir: launchDir, Spec: spec,
 		Env: env.Vars, Started: r.setStarting})
 	if err != nil {
@@ -608,6 +612,9 @@ func classify(o backend.Outcome, exit launch.Exit, timeoutMinutes int) (status, 
 func (s *Service) finishAttempt(r *run, id string, turn, n int, accountID, model string, b backend.Backend,
 	res attemptResult) (bool, error) {
 	ctx := s.background()
+	if err := removeMask(s.attemptDir(id, turn, n)); err != nil {
+		s.log.Warn("task: remove the mask list", "task", id, "err", err)
+	}
 	set := s.settings()
 	o := res.outcome
 	status, errText := classify(o, res.exit, set.TaskTimeoutMinutes)

@@ -110,10 +110,14 @@ func (s *Service) resumeAttempt(r *run, t *Task, tu *Turn, a *Attempt) (bool, er
 		Data: api.RecoveryData{AccountID: a.AccountID, Offset: a.StreamOffset}}}, nil); err != nil {
 		return false, err
 	}
-	var secrets []string
+	// Mask what the worker was started with (kept with the attempt) and what the account has now.
+	secrets, err := loadMask(s.attemptDir(t.ID, tu.N, a.N))
+	if err != nil {
+		s.log.Warn("task: read the mask list", "task", t.ID, "err", err)
+	}
 	if acc, err := s.o.Accounts.Get(ctx, a.AccountID); err == nil {
 		if env, err := s.o.Accounts.Env(ctx, acc, b, account.EnvOptions{Base: []string{}, Model: a.Model}); err == nil {
-			secrets = env.Secrets
+			secrets = mergeSecrets(secrets, env.Secrets)
 		}
 	}
 	r.setHandle(h, a.AccountID, a.StartedAt)
