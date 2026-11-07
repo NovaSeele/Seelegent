@@ -346,6 +346,11 @@ func TestJSONHostCommentsAndMalformed(t *testing.T) {
 	if read(t, cfg) != jsonc {
 		t.Error("a JSONC file was rewritten")
 	}
+	rep = run(t, m, Request{Remove: true, Hosts: []string{"opencode"}, NoSkill: true})
+	wantAction(t, rep, "opencode", KindMCP, ActionSkipped) // no entry to remove
+	m.write(".config/opencode/opencode.jsonc", "{\n  // mine\n  \"mcp\": {\"seelegent\": {}},\n}\n")
+	rep = run(t, m, Request{Remove: true, Hosts: []string{"opencode"}, NoSkill: true})
+	wantAction(t, rep, "opencode", KindMCP, ActionManual)
 	broken := `{"mcpServers": {"x": }`
 	cur := m.write(".cursor/mcp.json", broken)
 	rep = run(t, m, Request{Exe: exe, Hosts: []string{"cursor"}})

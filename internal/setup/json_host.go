@@ -273,6 +273,10 @@ func (h jsonHost) remove(_ context.Context, o op) Item {
 	it := Item{Host: h.hostID, Kind: KindMCP, Path: path}
 	cfg, err := h.load(Entry{}, o.env.goos(), path)
 	if errors.Is(err, errJSONC) {
+		if f, rerr := readHostFile(path); rerr == nil && !bytes.Contains(f.data, []byte(`"`+ServerName+`"`)) {
+			it.Action, it.Detail = ActionSkipped, "not registered"
+			return it
+		}
 		it.Action, it.Detail = ActionManual, "the file has comments or trailing commas, which setup would lose; "+
 			"remove the \"seelegent\" entry by hand"
 		return it

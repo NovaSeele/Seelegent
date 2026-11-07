@@ -181,7 +181,11 @@ func (c claudeCode) installHook(o op) Item {
 	path := claudeSettings(o.env)
 	it := Item{Host: c.id(), Kind: KindHook, Path: path}
 	want := hookCommandLine(o.req.Exe, o.env.goos())
-	hook, err := marshalNoEscape(map[string]string{"type": "command", "command": want})
+	type commandHook struct {
+		Type    string `json:"type"`
+		Command string `json:"command"`
+	}
+	hook, err := marshalNoEscape(commandHook{Type: "command", Command: want})
 	if err != nil {
 		return failItem(it, err)
 	}
@@ -208,7 +212,10 @@ func (c claudeCode) installHook(o op) Item {
 	default:
 		it.Action, it.Detail = ActionAdded, "installed the reminder hook (PreToolUse, Agent tool)"
 		var group json.RawMessage
-		group, err = marshalNoEscape(map[string]any{"matcher": hookMatcher, "hooks": []json.RawMessage{hook}})
+		group, err = marshalNoEscape(struct {
+			Matcher string            `json:"matcher"`
+			Hooks   []json.RawMessage `json:"hooks"`
+		}{hookMatcher, []json.RawMessage{hook}})
 		s.groups = append(s.groups, group)
 	}
 	if err != nil {
