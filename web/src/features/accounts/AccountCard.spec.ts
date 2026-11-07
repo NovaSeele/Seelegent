@@ -52,6 +52,14 @@ describe('AccountCard', () => {
     expect(wrapper.find('.card__head .tone-neutral').exists()).toBe(true)
   })
 
+  it('keeps the footer to on/off, priority on one row with its label, and the menu', async () => {
+    const wrapper = await render(makeAccount())
+    const foot = wrapper.get('.card__foot')
+    expect(foot.find('[aria-label="Refresh quota"]').exists()).toBe(false)
+    expect(foot.find('.num--inline').exists()).toBe(true)
+    expect(foot.text()).toContain('Priority')
+  })
+
   it('names the twin by its label', async () => {
     const twin = makeAccount({ id: 'a2', label: 'Personal' })
     const wrapper = await render(makeAccount({ status: 'twin', twinOf: 'a2' }), [twin])

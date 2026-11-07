@@ -21,6 +21,8 @@ const props = withDefaults(
     debounce?: number
     /** Whole numbers only: the entry is rounded before it commits. */
     integer?: boolean
+    /** The label sits before the input on the same row (a compact field in a toolbar or card footer). */
+    inline?: boolean
   }>(),
   {
     unit: undefined,
@@ -97,7 +99,7 @@ function onKeydown(event: KeyboardEvent) {
 </script>
 
 <template>
-  <div class="num" :class="[`num--${size}`, { 'num--invalid': error }]">
+  <div class="num" :class="[`num--${size}`, { 'num--invalid': error, 'num--inline': inline }]">
     <label :for="id" class="num__label" :class="{ 'sr-only': hideLabel }">{{ label }}</label>
     <div class="num__control">
       <input
@@ -198,5 +200,28 @@ function onKeydown(event: KeyboardEvent) {
 
 .num__error {
   color: var(--status-danger-fg);
+}
+
+.num--inline {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.num--inline .num__label {
+  color: var(--text-primary);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-regular);
+}
+
+.num--inline .num__control {
+  flex: none;
+  width: var(--num-inline-width, 72px);
+}
+
+.num--inline .num__hint,
+.num--inline .num__error {
+  flex-basis: 100%;
 }
 </style>

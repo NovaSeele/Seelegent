@@ -184,23 +184,15 @@ function setPriority(priority: number) {
         @update:model-value="setEnabled"
       />
       <NumberField
-        class="card__priority"
         :model-value="account.priority"
         :label="t('accounts.priority')"
         size="sm"
         integer
+        inline
         :disabled="actions.isBusy('priority')"
         @commit="setPriority"
       />
       <span class="card__spacer" />
-      <IconButton
-        icon="refresh"
-        size="sm"
-        variant="secondary"
-        :label="t('accounts.action.refresh')"
-        :disabled="actions.isBusy('refresh')"
-        @click="onMenu('refresh')"
-      />
       <Menu
         :items="menu"
         :label="t('accounts.action.more', { name: account.label })"
@@ -306,14 +298,11 @@ function setPriority(priority: number) {
   margin-top: auto;
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-end;
-  gap: var(--space-2);
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  --num-inline-width: 64px;
   padding-top: var(--space-3);
   border-top: var(--border-width) solid var(--border-subtle);
-}
-
-.card__priority {
-  width: 96px;
 }
 
 .card__spacer {
