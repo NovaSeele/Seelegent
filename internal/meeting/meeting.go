@@ -1119,7 +1119,8 @@ func Summary(m *api.Meeting) api.MeetingSummary {
 	sum := api.MeetingSummary{ID: m.ID, Title: m.Title, Status: m.Status, Round: m.Round, MaxRounds: m.MaxRounds,
 		Attendees: len(m.Attendees), Cwd: m.Cwd, CreatedAt: m.CreatedAt, UpdatedAt: m.UpdatedAt}
 	for _, q := range m.LeadQA {
-		if q.AnsweredAt == "" {
+		// Questions the lead went on without answering are not pending any more.
+		if q.AnsweredAt == "" && m.Status == api.MeetingStatusWaitingLead {
 			sum.PendingQuestions++
 		}
 	}

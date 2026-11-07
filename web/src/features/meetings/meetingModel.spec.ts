@@ -13,7 +13,8 @@ import {
 } from './meetingModel'
 
 // Only the fields the helpers read; the rest of a meeting does not matter here.
-const meeting = (m: Pick<Meeting, 'leadQa' | 'attendees'>) => m as Meeting
+const meeting = (m: Pick<Meeting, 'leadQa' | 'attendees'> & Partial<Pick<Meeting, 'status'>>) =>
+  ({ status: 'waiting_lead', ...m }) as Meeting
 
 const cite = (overrides: Partial<Citation> = {}): Citation => ({
   path: 'internal/a.go',
@@ -64,6 +65,9 @@ describe('meetingModel', () => {
     expect(attendeeName(m, 'P2')).toBe('P2 · arch')
     expect(attendeeName(m, 'P9')).toBe('P9')
     expect(pendingQuestions(m).map((q) => q.id)).toEqual(['q2'])
+    // A meeting that went on (or ended) without the answer takes none any more.
+    expect(pendingQuestions({ ...m, status: 'closed' })).toEqual([])
+    expect(pendingQuestions({ ...m, status: 'round' })).toEqual([])
   })
 
   it('lets only meetings and contests that have not ended be cancelled', () => {

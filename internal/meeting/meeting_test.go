@@ -408,6 +408,20 @@ func TestOpenValidation(t *testing.T) {
 	}
 }
 
+// TestSummaryPendingQuestions: only a meeting waiting for the lead has pending questions; one the lead let go on
+// without an answer has none.
+func TestSummaryPendingQuestions(t *testing.T) {
+	m := api.Meeting{Status: api.MeetingStatusWaitingLead, LeadQA: []api.LeadQuestion{{ID: "q1"},
+		{ID: "q2", Answer: "yes", AnsweredAt: "2026-11-07T00:00:00Z"}}}
+	if n := Summary(&m).PendingQuestions; n != 1 {
+		t.Errorf("waiting_lead pending = %d", n)
+	}
+	m.Status = api.MeetingStatusClosed
+	if n := Summary(&m).PendingQuestions; n != 0 {
+		t.Errorf("closed pending = %d", n)
+	}
+}
+
 func TestParseAnswer(t *testing.T) {
 	a := parseAnswer("**Option:** (b) because\nconfidence: 140", []string{"A", "B"})
 	if a.Option != "B" || a.Confidence == nil || *a.Confidence != 100 || a.Stance == "" {

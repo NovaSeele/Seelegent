@@ -52,6 +52,8 @@ export function lines(text: string): string[] {
 
 /** Questions to the lead that have no answer yet. */
 export function pendingQuestions(m: Meeting): Meeting['leadQa'] {
+  // Only a meeting waiting for the lead takes answers; questions it went on without stay unanswered.
+  if (m.status !== 'waiting_lead') return []
   return m.leadQa.filter((q) => !q.answer)
 }
 
