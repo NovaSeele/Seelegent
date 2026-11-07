@@ -101,5 +101,47 @@
     "takeover": "Take over this task",
     "copyId": "Copy task ID",
     "view": "Show {name}"
+  },
+  "safety": {
+    "title": "Safety checks",
+    "count": "{n} found",
+    "turn": "Turn {n}",
+    "risk": {
+      "title": "Work may be lost",
+      "desc": "Uncommitted changes that were there before the turn are gone. Restore puts the files back from the snapshot taken before the turn.",
+      "restore": "Restore files ({n})",
+      "waitStop": "Restore is possible once the worker has stopped.",
+      "why": {
+        "outside": "changed outside the edit tools",
+        "large": "large removal by an edit tool"
+      },
+      "lost": "uncommitted lines lost: {n}",
+      "deleted": "deleted",
+      "binary": "binary file",
+      "restored": "Restored",
+      "done": "Files restored: {n}",
+      "skipped": "Not restored: {files}"
+    },
+    "overlaps": {
+      "title": "Also changed by other tasks",
+      "active": "both working",
+      "recent": "recently"
+    },
+    "findings": "Checks of turn {n}",
+    "severity": {
+      "red": "Problem",
+      "warn": "Warning"
+    },
+    "finding": {
+      "eolChanged": "Line endings changed",
+      "bomChanged": "Byte order mark changed",
+      "bomNewFile": "New file starts with a byte order mark",
+      "junkFile": "Junk file",
+      "unreportedFile": "Changed but not in the report",
+      "outsideRepoWrite": "Write outside the repository",
+      "unfetchedUrl": "URL the worker never opened",
+      "skipped": "Check skipped"
+    },
+    "blocked": "Commands the git guard refused"
   }
 }

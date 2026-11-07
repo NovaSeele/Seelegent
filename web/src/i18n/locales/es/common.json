@@ -122,7 +122,8 @@
     "gateRed": "Gate fallido",
     "workAtRisk": "Se puede perder trabajo",
     "depsBlocked": "Falló la tarea previa",
-    "waitingDeps": "Esperando tarea previa"
+    "waitingDeps": "Esperando tarea previa",
+    "hygiene": "Problema de higiene"
   },
   "stage": {
     "explore": "Explorar",

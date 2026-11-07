@@ -101,5 +101,47 @@
     "takeover": "Tomar el control de esta tarea",
     "copyId": "Copiar ID de la tarea",
     "view": "Mostrar {name}"
+  },
+  "safety": {
+    "title": "Comprobaciones de seguridad",
+    "count": "{n} encontrados",
+    "turn": "Turno {n}",
+    "risk": {
+      "title": "Puede perderse trabajo",
+      "desc": "Los cambios sin confirmar que existían antes del turno han desaparecido. Restaurar recupera los archivos de la instantánea tomada antes del turno.",
+      "restore": "Restaurar archivos ({n})",
+      "waitStop": "Se puede restaurar cuando el worker se haya detenido.",
+      "why": {
+        "outside": "cambiado fuera de las herramientas de edición",
+        "large": "gran eliminación por una herramienta de edición"
+      },
+      "lost": "líneas sin confirmar perdidas: {n}",
+      "deleted": "eliminado",
+      "binary": "archivo binario",
+      "restored": "Restaurado",
+      "done": "Archivos restaurados: {n}",
+      "skipped": "No restaurados: {files}"
+    },
+    "overlaps": {
+      "title": "También cambiados por otras tareas",
+      "active": "ambas trabajando",
+      "recent": "recientemente"
+    },
+    "findings": "Comprobaciones del turno {n}",
+    "severity": {
+      "red": "Problema",
+      "warn": "Aviso"
+    },
+    "finding": {
+      "eolChanged": "Finales de línea cambiados",
+      "bomChanged": "Marca de orden de bytes cambiada",
+      "bomNewFile": "El archivo nuevo empieza con una marca de orden de bytes",
+      "junkFile": "Archivo basura",
+      "unreportedFile": "Cambiado pero no está en el informe",
+      "outsideRepoWrite": "Escritura fuera del repositorio",
+      "unfetchedUrl": "URL que el worker nunca abrió",
+      "skipped": "Comprobación omitida"
+    },
+    "blocked": "Comandos que rechazó la protección de git"
   }
 }

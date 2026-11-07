@@ -1,6 +1,6 @@
 /** Typed endpoints of a task's git view (contract §3.3). Diffs arrive parsed; the UI never parses diff text. */
 import type { ApiClient } from './client'
-import type { CommitResult, FileDiff, TaskGit } from './types'
+import type { CommitResult, FileDiff, RestoreResult, TaskGit } from './types'
 
 export type { CommitResult }
 
@@ -27,8 +27,15 @@ export function createGitApi(client: ApiClient) {
         body: { message, files: [...files] },
       }),
 
-    outsideDiff: (taskId: string, turn: number) =>
-      client.get<FileDiff[]>(`/tasks/${enc(taskId)}/turns/${turn}/outside-diff`),
+    /** What changed in the turn outside the worker's edit tools; 404 for a turn without snapshots. */
+    outsideDiff: (taskId: string, turn: number, signal?: AbortSignal) =>
+      client.get<FileDiff[]>(`/tasks/${enc(taskId)}/turns/${turn}/outside-diff`, { signal }),
+
+    /** Puts work-at-risk files back from the turn's start snapshot (all of them without `files`). */
+    restore: (taskId: string, turn: number, files?: readonly string[]) =>
+      client.post<RestoreResult>(`/tasks/${enc(taskId)}/turns/${turn}/restore`, {
+        body: files?.length ? { files: [...files] } : {},
+      }),
   }
 }
 

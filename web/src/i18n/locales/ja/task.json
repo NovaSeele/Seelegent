@@ -101,5 +101,47 @@
     "takeover": "このタスクを引き継ぐ",
     "copyId": "タスク ID をコピー",
     "view": "{name}を表示"
+  },
+  "safety": {
+    "title": "安全チェック",
+    "count": "{n} 件",
+    "turn": "ターン {n}",
+    "risk": {
+      "title": "作業が失われた可能性があります",
+      "desc": "ターン前にあった未コミットの変更が消えています。復元すると、ターン前に取ったスナップショットからファイルを戻します。",
+      "restore": "ファイルを復元 ({n})",
+      "waitStop": "ワーカーが停止すると復元できます。",
+      "why": {
+        "outside": "編集ツール以外で変更",
+        "large": "編集ツールによる大量削除"
+      },
+      "lost": "失われた未コミット行: {n}",
+      "deleted": "削除済み",
+      "binary": "バイナリファイル",
+      "restored": "復元済み",
+      "done": "復元したファイル: {n}",
+      "skipped": "復元できませんでした: {files}"
+    },
+    "overlaps": {
+      "title": "他のタスクも変更したファイル",
+      "active": "両方作業中",
+      "recent": "最近"
+    },
+    "findings": "ターン {n} のチェック",
+    "severity": {
+      "red": "問題",
+      "warn": "警告"
+    },
+    "finding": {
+      "eolChanged": "改行コードが変わった",
+      "bomChanged": "BOM が変わった",
+      "bomNewFile": "新しいファイルが BOM で始まる",
+      "junkFile": "不要なファイル",
+      "unreportedFile": "変更されたが報告にない",
+      "outsideRepoWrite": "リポジトリ外への書き込み",
+      "unfetchedUrl": "ワーカーが開いていない URL",
+      "skipped": "チェックをスキップ"
+    },
+    "blocked": "git ガードが拒否したコマンド"
   }
 }

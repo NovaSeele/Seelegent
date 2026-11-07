@@ -122,7 +122,8 @@
     "gateRed": "Cổng lỗi",
     "workAtRisk": "Có thể mất việc",
     "depsBlocked": "Tác vụ trước thất bại",
-    "waitingDeps": "Chờ tác vụ trước"
+    "waitingDeps": "Chờ tác vụ trước",
+    "hygiene": "Lỗi vệ sinh mã"
   },
   "stage": {
     "explore": "Khám phá",

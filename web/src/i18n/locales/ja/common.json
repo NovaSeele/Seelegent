@@ -122,7 +122,8 @@
     "gateRed": "ゲート失敗",
     "workAtRisk": "作業が失われるおそれ",
     "depsBlocked": "前のタスクが失敗",
-    "waitingDeps": "前のタスク待ち"
+    "waitingDeps": "前のタスク待ち",
+    "hygiene": "衛生上の問題"
   },
   "stage": {
     "explore": "調査",

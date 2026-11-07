@@ -101,5 +101,47 @@
     "takeover": "接管这个任务",
     "copyId": "复制任务 ID",
     "view": "显示{name}"
+  },
+  "safety": {
+    "title": "安全检查",
+    "count": "{n} 项",
+    "turn": "第 {n} 轮",
+    "risk": {
+      "title": "工作可能丢失",
+      "desc": "本轮之前未提交的修改不见了。恢复会从本轮开始前的快照中取回这些文件。",
+      "restore": "恢复文件 ({n})",
+      "waitStop": "工作者停止后才能恢复。",
+      "why": {
+        "outside": "在编辑工具之外被修改",
+        "large": "编辑工具大量删除"
+      },
+      "lost": "丢失的未提交行: {n}",
+      "deleted": "已删除",
+      "binary": "二进制文件",
+      "restored": "已恢复",
+      "done": "已恢复文件: {n}",
+      "skipped": "未能恢复: {files}"
+    },
+    "overlaps": {
+      "title": "其他任务也修改了",
+      "active": "都在运行",
+      "recent": "最近"
+    },
+    "findings": "第 {n} 轮的检查",
+    "severity": {
+      "red": "问题",
+      "warn": "警告"
+    },
+    "finding": {
+      "eolChanged": "换行符被修改",
+      "bomChanged": "字节顺序标记被修改",
+      "bomNewFile": "新文件以字节顺序标记开头",
+      "junkFile": "垃圾文件",
+      "unreportedFile": "已修改但不在报告中",
+      "outsideRepoWrite": "写入仓库之外",
+      "unfetchedUrl": "工作者从未打开的 URL",
+      "skipped": "已跳过检查"
+    },
+    "blocked": "被 git 防护拒绝的命令"
   }
 }

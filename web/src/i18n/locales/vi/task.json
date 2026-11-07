@@ -101,5 +101,47 @@
     "takeover": "Tự làm tiếp tác vụ này",
     "copyId": "Chép mã tác vụ",
     "view": "Xem {name}"
+  },
+  "safety": {
+    "title": "Kiểm tra an toàn",
+    "count": "{n} mục",
+    "turn": "Lượt {n}",
+    "risk": {
+      "title": "Có thể mất công việc",
+      "desc": "Những thay đổi chưa commit có từ trước lượt đã biến mất. Khôi phục sẽ lấy lại các tệp từ bản chụp trước lượt.",
+      "restore": "Khôi phục tệp ({n})",
+      "waitStop": "Có thể khôi phục khi worker đã dừng.",
+      "why": {
+        "outside": "bị đổi ngoài công cụ sửa",
+        "large": "công cụ sửa xóa nhiều dòng"
+      },
+      "lost": "số dòng chưa commit bị mất: {n}",
+      "deleted": "đã xóa",
+      "binary": "tệp nhị phân",
+      "restored": "Đã khôi phục",
+      "done": "Đã khôi phục tệp: {n}",
+      "skipped": "Không khôi phục được: {files}"
+    },
+    "overlaps": {
+      "title": "Cũng bị tác vụ khác thay đổi",
+      "active": "cả hai đang chạy",
+      "recent": "gần đây"
+    },
+    "findings": "Kiểm tra của lượt {n}",
+    "severity": {
+      "red": "Lỗi",
+      "warn": "Cảnh báo"
+    },
+    "finding": {
+      "eolChanged": "Ký tự xuống dòng bị đổi",
+      "bomChanged": "Dấu BOM bị đổi",
+      "bomNewFile": "Tệp mới bắt đầu bằng BOM",
+      "junkFile": "Tệp rác",
+      "unreportedFile": "Có thay đổi nhưng không có trong báo cáo",
+      "outsideRepoWrite": "Ghi ra ngoài repo",
+      "unfetchedUrl": "URL worker chưa từng mở",
+      "skipped": "Bỏ qua kiểm tra"
+    },
+    "blocked": "Lệnh bị chốt chặn git từ chối"
   }
 }

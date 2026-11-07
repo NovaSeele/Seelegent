@@ -59,5 +59,13 @@
     "next": "Git: next file",
     "prev": "Git: previous file",
     "commit": "Git: commit this task's files…"
+  },
+  "outside": {
+    "open": "Outside the edit tools",
+    "title": "Changes outside the edit tools",
+    "desc": "What the turn changed through shell commands and other programs, compared with the snapshot taken before it.",
+    "turn": "Turn",
+    "error": "Could not read the changes: {error}",
+    "empty": "Nothing changed outside the edit tools."
   }
 }

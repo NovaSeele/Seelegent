@@ -59,5 +59,13 @@
     "next": "Git: tệp kế tiếp",
     "prev": "Git: tệp trước",
     "commit": "Git: commit các tệp của tác vụ…"
+  },
+  "outside": {
+    "open": "Ngoài công cụ sửa",
+    "title": "Thay đổi ngoài công cụ sửa",
+    "desc": "Những gì lượt này đổi qua lệnh shell và chương trình khác, so với bản chụp trước lượt.",
+    "turn": "Lượt",
+    "error": "Không đọc được thay đổi: {error}",
+    "empty": "Không có thay đổi nào ngoài công cụ sửa."
   }
 }

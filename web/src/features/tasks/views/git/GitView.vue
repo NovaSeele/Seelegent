@@ -18,6 +18,7 @@ import GitDiffPane from './GitDiffPane.vue'
 import GitFileList from './GitFileList.vue'
 import { useGit } from './useGit'
 import { useGitCommands } from './useGitCommands'
+import OutsideDiffDialog from './OutsideDiffDialog.vue'
 
 /**
  * The Git view: the files this task changed (paths from the repository root), the selected file's diff, and a
@@ -54,6 +55,10 @@ watch(message, (value) =>
 )
 
 const committing = ref(false)
+const outside = ref(false)
+const turns = computed(() =>
+  Array.from({ length: props.task.turnCount }, (_, i) => props.task.turnCount - i),
+)
 
 function step(delta: number) {
   const next = stepFile(files.value, selected.value, delta)
@@ -107,6 +112,9 @@ useGitCommands(
         </span>
         <span class="git__actions">
           <IconButton icon="refresh" size="sm" :label="t('git.refresh')" @click="model.reload" />
+          <Button size="sm" variant="ghost" :disabled="!turns.length" @click="outside = true">
+            {{ t('git.outside.open') }}
+          </Button>
           <Button size="sm" variant="primary" :disabled="!files.length" @click="committing = true">
             {{ t('git.commit.open') }}
           </Button>
@@ -160,6 +168,7 @@ useGitCommands(
         @suggest="model.suggest"
         @dismiss="model.dismiss"
       />
+      <OutsideDiffDialog v-if="outside" v-model:open="outside" :task-id="task.id" :turns="turns" />
     </template>
   </div>
 </template>
