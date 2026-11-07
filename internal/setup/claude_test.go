@@ -93,7 +93,7 @@ func TestClaudeCodeThroughCLI(t *testing.T) {
 	// A moved executable: remove, then add again with the env the user added kept.
 	data := strings.Replace(read(t, cfg), `"SEELEGENT_LEAD": "claude"`, `"SEELEGENT_LEAD": "claude", "SEELEGENT_HOME": "D:\\data"`, 1)
 	m.write(".claude.json", data)
-	exe2 := m.write("bin2/seelegent.exe", "binary")
+	exe2 := m.write("bin2/"+exeBase, "binary")
 	rep = run(t, m, Request{Exe: exe2, Hosts: []string{"claude"}})
 	wantAction(t, rep, "claude", KindMCP, ActionUpdated)
 	if len(m.runs) != 2 || !slices.Equal(m.runs[0][1:], removeArgs) || !slices.Contains(m.runs[1], `SEELEGENT_HOME=D:\data`) {
@@ -142,7 +142,7 @@ func TestClaudeCodeAddFailsAfterRemove(t *testing.T) {
 		m := newMachine(t)
 		exe := m.exe()
 		cfg := fakeClaude(t, m)
-		old := m.write("old/seelegent.exe", "binary")
+		old := m.write("old/"+exeBase, "binary")
 		m.write(".claude.json", strings.Replace(original, "OLD", strings.ReplaceAll(old, `\`, `\\`), 1))
 		cli := m.onRun
 		m.onRun = func(name string, args []string) RunResult {
@@ -164,7 +164,7 @@ func TestClaudeCodeAddFailsAfterRemove(t *testing.T) {
 		if len(m.runs) != 3 || !slices.Contains(m.runs[2], "X=1") {
 			t.Errorf("runs %q", m.runs)
 		}
-		if len(m.runs) == 3 && !slices.Contains(m.runs[2], m.path("old", "seelegent.exe")) {
+		if len(m.runs) == 3 && !slices.Contains(m.runs[2], m.path("old", exeBase)) {
 			t.Errorf("re-added %q", m.runs[2])
 		}
 		if got := read(t, cfg); !strings.Contains(got, `"X": "1"`) || !strings.Contains(got, `"seelegent"`) {

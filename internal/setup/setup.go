@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -117,6 +118,10 @@ func (r Report) Failed() bool { return slices.ContainsFunc(r.Items, Item.Failed)
 // ErrUnknownHost is returned for a --host id setup does not know.
 var ErrUnknownHost = errors.New("unknown host")
 
+// ErrExeName is returned when the executable to register is not named seelegent (seelegent.exe on Windows): setup
+// recognizes its own entries by that name, so it would treat what it wrote as another program's entry afterwards.
+var ErrExeName = errors.New("the executable to register is not named seelegent")
+
 // HostIDs lists the ids of the hosts setup knows, in the order it handles them.
 func HostIDs() []string {
 	var ids []string
@@ -134,6 +139,9 @@ func Run(ctx context.Context, env Env, req Request) (Report, error) {
 	}
 	if !req.Remove {
 		if err := checkExe(req.Exe); err != nil {
+			return Report{}, err
+		}
+		if err := checkExeName(req.Exe, env.goos()); err != nil {
 			return Report{}, err
 		}
 	}
@@ -266,6 +274,21 @@ func checkExe(exe string) error {
 		return fmt.Errorf("the seelegent executable %s is a folder", exe)
 	}
 	return nil
+}
+
+// checkExeName makes sure the executable is named seelegent (seelegent.exe on Windows), the name isOurs recognizes.
+func checkExeName(exe, goos string) error {
+	want := ServerName
+	if goos == "windows" {
+		want += ".exe"
+	}
+	base := path.Base(strings.ReplaceAll(exe, `\`, "/"))
+	if strings.EqualFold(base, want) {
+		return nil
+	}
+	return fmt.Errorf("%w: %s is named %q, and setup would not recognize the entries it writes for it as its own; "+
+		"install or copy the binary as %s, or pass --exe <path to a %s executable>", ErrExeName, exe, base, want,
+		ServerName)
 }
 
 // exeWarnings flags executable paths that will not survive: a `go run` build or a versioned install folder.

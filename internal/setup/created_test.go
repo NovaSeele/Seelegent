@@ -59,7 +59,7 @@ func TestRemoveDeletesWhatSetupCreated(t *testing.T) {
 	}
 
 	// An update backs up the file setup created; remove deletes that backup with it.
-	exe2 := m.write("bin2/seelegent.exe", "binary")
+	exe2 := m.write("bin2/"+exeBase, "binary")
 	wantAction(t, run(t, m, Request{Exe: exe2, Hosts: []string{"cursor"}, NoSkill: true, Created: rec}), "cursor",
 		KindMCP, ActionUpdated)
 

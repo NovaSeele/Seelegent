@@ -80,10 +80,50 @@ func (m *machine) mkdir(rel string) {
 	}
 }
 
+// exeBase is the file name setup accepts for the executable on this OS.
+var exeBase = map[bool]string{true: "seelegent.exe", false: "seelegent"}[runtime.GOOS == "windows"]
+
+// The executable must be named seelegent: setup recognizes its entries by that name (an entry for
+// seelegent-dev.exe would be someone else's on the next run). Remove is not blocked.
+func TestExeMustBeNamedSeelegent(t *testing.T) {
+	m := newMachine(t)
+	m.mkdir(".cursor")
+	cfg := m.path(".cursor", "mcp.json")
+	dev := m.write("bin/seelegent-dev"+filepath.Ext(exeBase), "binary")
+	for _, dry := range []bool{false, true} {
+		_, err := Run(context.Background(), m.env(), Request{Exe: dev, DryRun: dry, Hosts: []string{"cursor"}})
+		if !errors.Is(err, ErrExeName) || !strings.Contains(err.Error(), "--exe") {
+			t.Errorf("dry %v: %v", dry, err)
+		}
+	}
+	if exists(cfg) || len(m.runs) != 0 {
+		t.Fatal("a refused run wrote something")
+	}
+	// A seelegent executable (--exe) is accepted, and remove runs whatever the running binary is called.
+	wantAction(t, run(t, m, Request{Exe: m.exe(), Hosts: []string{"cursor"}}), "cursor", KindMCP, ActionAdded)
+	wantAction(t, run(t, m, Request{Exe: m.exe(), Hosts: []string{"cursor"}}), "cursor", KindMCP, ActionUnchanged)
+	wantAction(t, run(t, m, Request{Exe: dev, Remove: true, Hosts: []string{"cursor"}}), "cursor", KindMCP,
+		ActionRemoved)
+	if strings.Contains(read(t, cfg), ServerName) {
+		t.Errorf("entry left: %s", read(t, cfg))
+	}
+	for exe, goos := range map[string]string{`C:\x\SeeLegent.EXE`: "windows", "/usr/local/bin/seelegent": "linux"} {
+		if err := checkExeName(exe, goos); err != nil {
+			t.Errorf("%s on %s: %v", exe, goos, err)
+		}
+	}
+	for exe, goos := range map[string]string{`C:\x\seelegent`: "windows", "/x/seelegent.exe": "linux",
+		`C:\x\seelegent.cmd`: "windows", "/x/setup.test": "darwin"} {
+		if checkExeName(exe, goos) == nil {
+			t.Errorf("%s on %s accepted", exe, goos)
+		}
+	}
+}
+
 // exe makes a fake seelegent executable and returns its path.
 func (m *machine) exe() string {
 	m.t.Helper()
-	return m.write("bin/seelegent.exe", "binary")
+	return m.write("bin/"+exeBase, "binary")
 }
 
 func read(t *testing.T, p string) string {
@@ -255,10 +295,10 @@ func TestJSONHostKeepsOneLineServers(t *testing.T) {
 		t.Errorf("other servers changed:\n%s", got)
 	}
 	// An update (another executable) replaces only the entry.
-	other := m.path("bin2", "seelegent.exe")
-	m.write("bin2/seelegent.exe", "")
+	other := m.path("bin2", exeBase)
+	m.write("bin2/"+exeBase, "")
 	wantAction(t, run(t, m, Request{Exe: other, Hosts: []string{"cursor"}}), "cursor", KindMCP, ActionUpdated)
-	if got2 := read(t, cfg); !strings.HasPrefix(got2, head+",\n") || !strings.Contains(got2, "seelegent.exe") {
+	if got2 := read(t, cfg); !strings.HasPrefix(got2, head+",\n") || !strings.Contains(got2, exeBase) {
 		t.Errorf("update changed other servers:\n%s", got2)
 	}
 	run(t, m, Request{Remove: true, Hosts: []string{"cursor"}})
@@ -307,7 +347,7 @@ func TestJSONHostConflictAndForce(t *testing.T) {
 	}
 	rep = run(t, m, Request{Exe: exe, Hosts: []string{"cursor"}, Force: true})
 	wantAction(t, rep, "cursor", KindMCP, ActionUpdated)
-	if got := read(t, cfg); strings.Contains(got, "other.py") || !strings.Contains(got, "seelegent.exe") {
+	if got := read(t, cfg); strings.Contains(got, "other.py") || !strings.Contains(got, exeBase) {
 		t.Errorf("force did not replace the entry:\n%s", got)
 	}
 }

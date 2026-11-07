@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -37,6 +38,38 @@ func fakeHome(t *testing.T) string {
 	return home
 }
 
+// setupExeBase is the file name setup accepts for the executable on this OS.
+var setupExeBase = map[bool]string{true: "seelegent.exe", false: "seelegent"}[runtime.GOOS == "windows"]
+
+// The test binary (cli.test) is not named seelegent: without --exe, setup refuses before writing anything, a dry
+// run too; --remove still runs; `hook extra` is a usage error.
+func TestSetupExeNameAndHookArgs(t *testing.T) {
+	home := fakeHome(t)
+	cfg := filepath.Join(home, ".cursor", "mcp.json")
+	writeFile(t, cfg, `{"mcpServers": {}}`)
+	for _, args := range [][]string{{"setup"}, {"setup", "--dry-run", "--json"}} {
+		var out, errOut bytes.Buffer
+		code := Run(context.Background(), args, &out, &errOut)
+		if code != ExitError || !strings.Contains(out.String()+errOut.String(), "--exe <path to a seelegent executable>") {
+			t.Errorf("%v: exit %d\n%s%s", args, code, out.String(), errOut.String())
+		}
+	}
+	if data, _ := os.ReadFile(cfg); string(data) != `{"mcpServers": {}}` {
+		t.Errorf("a refused setup wrote %s", data)
+	}
+	var out, errOut bytes.Buffer
+	if code := Run(context.Background(), []string{"setup", "--remove"}, &out, &errOut); code != ExitOK {
+		t.Errorf("remove: exit %d\n%s%s", code, out.String(), errOut.String())
+	}
+	for _, args := range [][]string{{"hook", "extra"}, {"hook", setup.HookCommand, "extra"}} {
+		out.Reset()
+		errOut.Reset()
+		if code := Run(context.Background(), args, &out, &errOut); code != ExitUsage {
+			t.Errorf("%v: exit %d", args, code)
+		}
+	}
+}
+
 func writeFile(t *testing.T, path, content string) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
@@ -49,7 +82,7 @@ func writeFile(t *testing.T, path, content string) {
 
 func TestSetupCommand(t *testing.T) {
 	home := fakeHome(t)
-	exe := filepath.Join(home, "bin", "seelegent.exe")
+	exe := filepath.Join(home, "bin", setupExeBase)
 	writeFile(t, exe, "binary")
 	cfg := filepath.Join(home, ".cursor", "mcp.json")
 	writeFile(t, cfg, `{"mcpServers": {}}`)
@@ -91,7 +124,7 @@ func TestSetupCommand(t *testing.T) {
 
 func TestSetupCommandFails(t *testing.T) {
 	home := fakeHome(t)
-	exe := filepath.Join(home, "bin", "seelegent.exe")
+	exe := filepath.Join(home, "bin", setupExeBase)
 	writeFile(t, exe, "binary")
 	writeFile(t, filepath.Join(home, ".cursor", "mcp.json"), `{"mcpServers": {"seelegent": {"command": "other"}}}`)
 	var out, errOut bytes.Buffer
