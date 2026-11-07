@@ -80,7 +80,9 @@ allowed; the daemon's own guard decides what a worker may read. `update` is refu
 `update` (old `src/update.js`, inventory 6.1):
 
 - Releases come from `https://api.github.com/repos/NovaSeele/Seelegent/releases/latest` (`/releases/tags/<tag>` with
-  `--version`), or from `SEELEGENT_UPDATE_URL`. Only `https`, or `http` on a loopback address (no `user@host`), redirects included.
+  `--version`), or from `SEELEGENT_UPDATE_URL`. Only `https` is accepted, or plain `http` for exactly `127.0.0.1`,
+  `localhost` or `[::1]` (a local test server), never with `user@` in the address; every redirect is checked the
+  same way.
 - `--check` prints `{currentVersion, latestVersion, updateAvailable, devBuild?, releaseUrl?, asset?, message}`. A
   development build (`dev`, a version between tags, `-dirty`, a snapshot) sets `devBuild` and never
   `updateAvailable`; `--apply` then fails with `dev_build` unless `--version` names the release to install.
