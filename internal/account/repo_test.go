@@ -5,7 +5,10 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
+
+	"github.com/NovaSeele/Seelegent/internal/config"
 )
 
 func TestCreateAllocatesIDsNeverReused(t *testing.T) {
@@ -218,6 +221,60 @@ func TestProvidersCRUD(t *testing.T) {
 	}
 	if len(list) != 2 || list[0].ID != "a" || list[1].ID != "b" || !list[0].Official {
 		t.Errorf("ListProviders = %+v", list)
+	}
+}
+
+// The allow-list is stored as a list and read back exactly; rows from before the column existed (NULL) get the list
+// their pattern was built from, or none for a hand-written pattern; a damaged list is an error.
+func TestProviderModelsStored(t *testing.T) {
+	f := newFixture(t)
+	ctx := ctxT(t)
+	p, err := FromPreset("ds", "deepseek")
+	if err != nil {
+		t.Fatal(err)
+	}
+	p.Models = []string{"deepseek-v4", "deepseek-r2"}
+	p.Tiers = config.TierModels{Fast: "deepseek-chat"}
+	if _, err := f.m.CreateProvider(ctx, p); err != nil {
+		t.Fatal(err)
+	}
+	got, err := f.m.GetProvider(ctx, "ds")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(got.Models, p.Models) || got.AllowedModels != `^(?:deepseek-v4|deepseek-r2)$` ||
+		got.Tiers.Fast != "deepseek-chat" {
+		t.Fatalf("stored provider = %+v", got)
+	}
+	got.Models = nil
+	got.AllowedModels = "^glm-"
+	if _, err := f.m.UpdateProvider(ctx, got); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ = f.m.GetProvider(ctx, "ds"); got.Models == nil || len(got.Models) != 0 || got.AllowedModels != "^glm-" {
+		t.Fatalf("raw pattern = %+v", got)
+	}
+
+	set := func(models any, allowed string) {
+		t.Helper()
+		if err := f.db.Write(ctx, func(tx *sql.Tx) error {
+			_, err := tx.ExecContext(ctx, "UPDATE providers SET models = ?, allowed_models = ?", models, allowed)
+			return err
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	set(nil, `^(?:glm-4\.6|glm-5)$`)
+	if got, err = f.m.GetProvider(ctx, "ds"); err != nil || !slices.Equal(got.Models, []string{"glm-4.6", "glm-5"}) {
+		t.Fatalf("legacy list = %+v, %v", got.Models, err)
+	}
+	set(nil, "^glm-")
+	if got, err = f.m.GetProvider(ctx, "ds"); err != nil || got.Models == nil || len(got.Models) != 0 {
+		t.Fatalf("legacy pattern = %+v, %v", got.Models, err)
+	}
+	set("{oops", "")
+	if _, err := f.m.GetProvider(ctx, "ds"); err == nil {
+		t.Fatal("a damaged models list was read")
 	}
 }
 

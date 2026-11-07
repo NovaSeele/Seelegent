@@ -74,7 +74,7 @@ Durations use the unit in their name. "Tier" means one of `fast`, `standard`, `s
 
 `allowedModels` is a case-insensitive Go (RE2) regular expression, matched anywhere in the model id unless you anchor
 it with `^` and `$`. Every model a worker gets must match it, including the tier models (a tier model that does not
-match is a validation error). An **empty** pattern allows only the models listed in that backend's `tiers`. RE2 has
+match is a validation error). An **empty** pattern allows any model, as in the old version. RE2 has
 no look-ahead: write `"^gemini-3\\.8-"` (the JSON spelling of `^gemini-3\.8-`) rather than `"^(?!gemini-4)"`.
 
 ### Accounts, quota and timeouts

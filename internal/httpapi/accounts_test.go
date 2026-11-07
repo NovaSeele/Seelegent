@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -312,10 +313,19 @@ func TestSignIn(t *testing.T) {
 	if got.AccountID != acc.ID {
 		t.Fatalf("GET login = %+v", got)
 	}
+	// The window takes the code: the session says in_terminal, never waiting_code (no code box in the UI).
+	var states []string
 	stream.until("account.login", func(f frame) bool {
 		var s api.LoginSession
-		return json.Unmarshal([]byte(f.data), &s) == nil && s.State == api.LoginDone
+		if json.Unmarshal([]byte(f.data), &s) != nil {
+			return false
+		}
+		states = append(states, s.State)
+		return s.State == api.LoginDone
 	})
+	if !slices.Contains(states, api.LoginInTerminal) || slices.Contains(states, api.LoginWaitingCode) {
+		t.Fatalf("account.login states = %v", states)
+	}
 	deadline := time.Now().Add(limit)
 	for {
 		var list []api.Account

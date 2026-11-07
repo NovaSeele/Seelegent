@@ -86,19 +86,27 @@ type QuotaError struct {
 	At      string `json:"at"`
 }
 
-// Sign-in states of a LoginSession.
+// Sign-in states of a LoginSession. in_terminal: the sign-in goes on in the terminal window that opened (there is
+// no code to post here); waiting_code only when POST /accounts/{id}/login/code can take a code; open_url when a
+// URL was captured.
 const (
 	LoginStarting    = "starting"
 	LoginOpenURL     = "open_url"
+	LoginInTerminal  = "in_terminal"
 	LoginWaitingCode = "waiting_code"
 	LoginDone        = "done"
 	LoginFailed      = "failed"
 )
 
+// LoginStates lists every LoginSession state, in the order a sign-in goes through them.
+func LoginStates() []string {
+	return []string{LoginStarting, LoginOpenURL, LoginInTerminal, LoginWaitingCode, LoginDone, LoginFailed}
+}
+
 // LoginSession is the progress of an account's sign-in (POST/GET /accounts/{id}/login, SSE account.login).
 type LoginSession struct {
 	AccountID string `json:"accountId"`
-	State     string `json:"state" ts:"'starting' | 'open_url' | 'waiting_code' | 'done' | 'failed'"`
+	State     string `json:"state" ts:"'starting' | 'open_url' | 'in_terminal' | 'waiting_code' | 'done' | 'failed'"`
 	URL       string `json:"url,omitempty"`
 	UserCode  string `json:"userCode,omitempty"`
 	Message   string `json:"message,omitempty"`
@@ -141,13 +149,18 @@ type Provider struct {
 	// BaseURL is empty only for the official Anthropic API.
 	BaseURL string `json:"baseUrl"`
 	Enabled bool   `json:"enabled"`
-	// Models lists the models the provider offers: its tier models, or the list given when it was saved.
+	// Models is the model allow-list as a list, exactly as last set through POST/PATCH models; never the tier
+	// models. It is [] when the provider allows any model and when a hand-written allowedModels pattern (old data,
+	// or set as a raw pattern) restricts it, since such a pattern cannot be expressed as a list.
 	Models []string `json:"models"`
 	// Accounts counts the accounts that use the provider.
-	Accounts      int        `json:"accounts"`
-	Preset        string     `json:"preset,omitempty"`
-	WireAPI       string     `json:"wireApi,omitempty"`
-	Official      bool       `json:"official"`
+	Accounts int    `json:"accounts"`
+	Preset   string `json:"preset,omitempty"`
+	WireAPI  string `json:"wireApi,omitempty"`
+	Official bool   `json:"official"`
+	// AllowedModels is the case-insensitive RE2 pattern actually enforced. Built from a list it matches exactly
+	// that list (^(?:a|b)$); otherwise it is a hand-written pattern and Models is []. Both empty allow any model.
+	// The tier models are always allowed on top of the allow-list.
 	AllowedModels string     `json:"allowedModels"`
 	Tiers         TierModels `json:"tiers"`
 	CreatedAt     string     `json:"createdAt,omitempty"`
@@ -173,8 +186,15 @@ type ProviderList struct {
 }
 
 // ProviderInput is POST /providers (every field but id and backend is optional) and PATCH /providers/{id} (every
-// field is optional; id and backend cannot change). Models, when allowedModels is not given, becomes the pattern
-// that allows exactly those models.
+// field is optional; id and backend cannot change). The allow-list, in order of precedence:
+//   - models with at least one id replaces the list (trimmed, blanks and repeats dropped) and allowedModels becomes
+//     its pattern; a given allowedModels is then ignored;
+//   - otherwise allowedModels sets the pattern; models becomes the list it was built from, or [] for a
+//     hand-written pattern. Sent with models [] and equal to the pattern of the stored list, it is that list's echo
+//     and the list is cleared instead;
+//   - otherwise models [] clears the list and the pattern: any model.
+//
+// Neither ever changes the tiers.
 type ProviderInput struct {
 	ID            *string     `json:"id,omitempty"`
 	Name          *string     `json:"name,omitempty"`

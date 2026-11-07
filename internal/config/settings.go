@@ -132,7 +132,7 @@ type Backend struct {
 	// Enabled allows tasks on this backend.
 	Enabled bool `json:"enabled"`
 	// AllowedModels is a case-insensitive regular expression (Go RE2 syntax, unanchored) that every model id must
-	// match. Empty allows only the models mapped in Tiers.
+	// match. Empty allows any model. The models mapped in Tiers are always allowed.
 	AllowedModels string `json:"allowedModels"`
 	// Tiers maps each tier to a model id of this backend; an empty value leaves the tier unavailable.
 	Tiers TierModels `json:"tiers"`

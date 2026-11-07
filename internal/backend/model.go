@@ -18,7 +18,8 @@ type ModelPolicy struct {
 	Backend string
 	// Enabled is false when the backend (or provider) is switched off.
 	Enabled bool
-	// AllowedModels is a case-insensitive RE2 pattern; empty allows only the models in Tiers.
+	// AllowedModels is a case-insensitive RE2 pattern; empty allows any model. The models in Tiers are always
+	// allowed.
 	AllowedModels string
 	// Tiers maps tiers to models.
 	Tiers config.TierModels
@@ -75,19 +76,19 @@ func (p ModelPolicy) Resolve(model, tier, defaultTier string) (string, error) {
 	return model, nil
 }
 
-// Allowed checks a model id against the policy.
+// Allowed checks a model id against the policy: a tier model is always allowed, any other model must match
+// AllowedModels, and an empty AllowedModels allows any model (as in the old version).
 func (p ModelPolicy) Allowed(model string) error {
 	if model == "" || strings.ContainsFunc(model, func(r rune) bool { return r <= ' ' }) {
 		return fmt.Errorf("%w: invalid model id %q", ErrModel, model)
 	}
-	if p.AllowedModels == "" {
-		for _, t := range config.Tiers() {
-			if m, ok := p.Tiers.Model(t); ok && strings.EqualFold(m, model) {
-				return nil
-			}
+	for _, t := range config.Tiers() {
+		if m, ok := p.Tiers.Model(t); ok && strings.EqualFold(m, model) {
+			return nil
 		}
-		return fmt.Errorf("%w: %s allows only its tier models (allowedModels is empty), not %q", ErrModel, p.Source,
-			model)
+	}
+	if p.AllowedModels == "" {
+		return nil
 	}
 	re, err := regexp.Compile("(?i)" + p.AllowedModels)
 	if err != nil {

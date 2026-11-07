@@ -5,6 +5,8 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"regexp"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -158,8 +160,17 @@ func TestProviderValidate(t *testing.T) {
 	bad(Provider{ID: "x", Backend: "claude", BaseURL: "https://u:p@a.test"}, "credentials")
 	bad(Provider{ID: "x", Backend: "claude", BaseURL: "::"}, "valid URL")
 	bad(Provider{ID: "x", Backend: "claude", BaseURL: "https://a.test", AllowedModels: "("}, "regular expression")
-	bad(Provider{ID: "x", Backend: "claude", BaseURL: "https://a.test", AllowedModels: "^glm",
-		Tiers: config.TierModels{Max: "kimi"}}, "does not match")
+	// The tier models are allowed on top of the allow-list, so they need not match it.
+	ok(Provider{ID: "x", Backend: "claude", BaseURL: "https://a.test", AllowedModels: "^glm",
+		Tiers: config.TierModels{Max: "kimi"}})
+	// A list is cleaned and becomes the pattern; it wins over a stale pattern.
+	p = ok(Provider{ID: "ds", Backend: "claude", BaseURL: "https://a.test", AllowedModels: "^old-",
+		Models: []string{" deepseek-v4 ", "", "deepseek-r2", "deepseek-v4"}})
+	if !slices.Equal(p.Models, []string{"deepseek-v4", "deepseek-r2"}) ||
+		p.AllowedModels != `^(?:deepseek-v4|deepseek-r2)$` {
+		t.Errorf("list not applied: %+v", p)
+	}
+	bad(Provider{ID: "x", Backend: "claude", BaseURL: "https://a.test", Models: []string{"a b"}}, "spaces")
 	bad(Provider{ID: "x", Backend: "claude", BaseURL: "https://a.test", Tiers: config.TierModels{Max: "a b"}},
 		"spaces")
 	bad(Provider{ID: "x", Name: "a\x00", Backend: "claude", BaseURL: "https://a.test"}, "control")
@@ -183,5 +194,29 @@ func TestPresets(t *testing.T) {
 	}
 	if _, err := FromPreset("x", "nope"); !errors.Is(err, ErrInvalid) {
 		t.Errorf("unknown preset: %v", err)
+	}
+}
+
+func TestModelsPatternRoundTrip(t *testing.T) {
+	for _, list := range [][]string{{"deepseek-v4", "deepseek-r2"}, {"gpt-5.1"}, {"a|b", `c\d`, "(x)"}} {
+		pat := ModelsPattern(list)
+		if got := ModelsOf(pat); !slices.Equal(got, list) {
+			t.Errorf("ModelsOf(ModelsPattern(%q)) = %q (pattern %q)", list, got, pat)
+		}
+		re := regexp.MustCompile("(?i)" + pat)
+		for _, m := range list {
+			if !re.MatchString(m) || re.MatchString(m+"x") {
+				t.Errorf("pattern %q and model %q", pat, m)
+			}
+		}
+	}
+	// Hand-written patterns are not lists.
+	for _, pat := range []string{"", "^glm-", "^(?:a.b)$", "^(?:a)$x", `^(?:a\)$`, "^(?:)$", "^(?:a b|c)$", "^(?:a\tb)$"} {
+		if got := ModelsOf(pat); got == nil || len(got) != 0 {
+			t.Errorf("ModelsOf(%q) = %q, want []", pat, got)
+		}
+	}
+	if ModelsPattern(nil) != "" {
+		t.Error("an empty list must be the empty pattern")
 	}
 }

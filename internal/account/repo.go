@@ -3,6 +3,7 @@ package account
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
@@ -305,11 +306,11 @@ func (r *Repo) CreateProvider(ctx context.Context, p Provider) (Provider, error)
 			return err
 		}
 		_, err := tx.ExecContext(ctx, `INSERT INTO providers
-			(id, name, backend, preset, base_url, wire_api, official, enabled, allowed_models,
+			(id, name, backend, preset, base_url, wire_api, official, enabled, allowed_models, models,
 			 tier_fast, tier_standard, tier_strong, tier_max, created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			p.ID, p.Name, p.Backend, p.Preset, p.BaseURL, p.WireAPI, p.Official, p.Enabled, p.AllowedModels,
-			p.Tiers.Fast, p.Tiers.Standard, p.Tiers.Strong, p.Tiers.Max, formatTime(now), formatTime(now))
+			modelsJSON(p.Models), p.Tiers.Fast, p.Tiers.Standard, p.Tiers.Strong, p.Tiers.Max, formatTime(now), formatTime(now))
 		return err
 	})
 	if err != nil {
@@ -342,10 +343,10 @@ func (r *Repo) UpdateProvider(ctx context.Context, p Provider) (Provider, error)
 		p.CreatedAt = old.CreatedAt
 		p.UpdatedAt = r.stamp()
 		_, err = tx.ExecContext(ctx, `UPDATE providers SET name = ?, backend = ?, preset = ?, base_url = ?,
-			wire_api = ?, official = ?, enabled = ?, allowed_models = ?, tier_fast = ?, tier_standard = ?,
-			tier_strong = ?, tier_max = ?, updated_at = ? WHERE id = ?`,
+			wire_api = ?, official = ?, enabled = ?, allowed_models = ?, models = ?, tier_fast = ?,
+			tier_standard = ?, tier_strong = ?, tier_max = ?, updated_at = ? WHERE id = ?`,
 			p.Name, p.Backend, p.Preset, p.BaseURL, p.WireAPI, p.Official, p.Enabled, p.AllowedModels,
-			p.Tiers.Fast, p.Tiers.Standard, p.Tiers.Strong, p.Tiers.Max, formatTime(p.UpdatedAt), p.ID)
+			modelsJSON(p.Models), p.Tiers.Fast, p.Tiers.Standard, p.Tiers.Strong, p.Tiers.Max, formatTime(p.UpdatedAt), p.ID)
 		return err
 	})
 	if err != nil {
@@ -368,7 +369,7 @@ func (r *Repo) GetProvider(ctx context.Context, id string) (Provider, error) {
 	return p, nil
 }
 
-const providerColumns = `id, name, backend, preset, base_url, wire_api, official, enabled, allowed_models,
+const providerColumns = `id, name, backend, preset, base_url, wire_api, official, enabled, allowed_models, models,
 	tier_fast, tier_standard, tier_strong, tier_max, created_at, updated_at`
 
 func getProvider(ctx context.Context, tx *sql.Tx, id string) (Provider, error) {
@@ -433,15 +434,19 @@ func scanProvider(s scanner) (Provider, error) {
 		p                 Provider
 		official, enabled int64
 		created, updated  string
+		models            sql.NullString
 	)
 	if err := s.Scan(&p.ID, &p.Name, &p.Backend, &p.Preset, &p.BaseURL, &p.WireAPI, &official, &enabled,
-		&p.AllowedModels, &p.Tiers.Fast, &p.Tiers.Standard, &p.Tiers.Strong, &p.Tiers.Max, &created,
+		&p.AllowedModels, &models, &p.Tiers.Fast, &p.Tiers.Standard, &p.Tiers.Strong, &p.Tiers.Max, &created,
 		&updated); err != nil {
 		return Provider{}, err
 	}
 	p.Official = official != 0
 	p.Enabled = enabled != 0
 	var err error
+	if p.Models, err = parseModels(models, p.AllowedModels); err != nil {
+		return Provider{}, fmt.Errorf("provider %s: %w", p.ID, err)
+	}
 	if p.CreatedAt, err = parseTime(created); err != nil {
 		return Provider{}, fmt.Errorf("provider %s: %w", p.ID, err)
 	}
@@ -476,4 +481,33 @@ func wrap(op string, err error) error {
 		return nil
 	}
 	return fmt.Errorf("%s: %w", op, err)
+}
+
+// modelsJSON is the stored form of an allow-list: a JSON array, never null.
+func modelsJSON(models []string) string {
+	if models == nil {
+		models = []string{}
+	}
+	data, err := json.Marshal(models)
+	if err != nil { // a []string always marshals
+		return "[]"
+	}
+	return string(data)
+}
+
+// parseModels reads the stored allow-list. A row from before the column existed (NULL) gets the list its pattern
+// was built from, or an empty list for a hand-written pattern. A value that is not a JSON array is an error, never
+// a silent empty list.
+func parseModels(v sql.NullString, allowed string) ([]string, error) {
+	if !v.Valid {
+		return ModelsOf(allowed), nil
+	}
+	var out []string
+	if err := json.Unmarshal([]byte(v.String), &out); err != nil {
+		return nil, fmt.Errorf("models is not a JSON list: %w", err)
+	}
+	if out == nil {
+		out = []string{}
+	}
+	return out, nil
 }

@@ -62,6 +62,14 @@ in the daemon.
 - `GET /tasks/{id}/git/diff` accepts `turn` but shows the working-tree diff; per-turn diffs need the snapshot store of
   a later milestone.
 - `Account.email` is never set: no backend reports it reliably yet.
+- `Provider.models` is the allow-list exactly as last set through `models`, never the tier models, and
+  `Provider.allowedModels` is the pattern enforced. A list becomes `^(?:a|b)$`; a hand-written pattern (old data, or
+  sent as `allowedModels`) answers `models: []`. Both empty allow any model, and the tier models are always allowed
+  on top. In a request a non-empty `models` wins over `allowedModels`; `allowedModels` alone sets a pattern;
+  `models: []` clears both (an `allowedModels` sent with it that only repeats the stored list's pattern is ignored,
+  so a client that sends the whole provider back can still clear the list). Neither touches `tiers`. The list is
+  stored in `providers.models`; rows from before that column get it back from their pattern when the pattern was
+  built from a list. `Account.models` of an API-key account is its provider's tier models followed by that list.
 - `PATCH /settings` applies the JSON merge patch to the daemon's in-memory settings and writes `config.json`
   atomically. Unknown keys, type errors and validation errors are reported together in one `400`.
 - `/state` reads `lastEventId` before the snapshot. A frame newer than the id can repeat a change the snapshot holds
@@ -69,13 +77,18 @@ in the daemon.
 - SSE: the `hello` frame carries an id like every frame (contract §7: "every frame"). On a fresh connect it is the
   current id; on a resume it is the client's id. A `reset` frame carries the current id, so a reconnect after it
   resumes from there. `task.updated` is coalesced per task for 100 ms; account frames are sent when the account's
-  JSON changed, checked on pool and task notices, after account writes and every 30 s.
+  JSON changed, checked on pool and task notices, after account writes and every 30 s. An account added to,
+  removed from or moved to another provider is followed by `providers.changed` (because `Provider.accounts` counts
+  them), whichever of the handler and that watcher sees the change first. Accounts cannot change provider through
+  the API today; the watcher covers it if they ever do.
 - `POST /tasks/wait` takes the cwd for its report from an optional `cwd` query parameter. A wait whose client went
   away writes nothing.
 - `capabilities.takeover` is true for backends that can resume a session; `apiKey` for every backend but agy;
   `listModels` for codex.
-- Sign-in runs in a terminal window, so `POST /accounts/{id}/login/code` answers `409 bad_state`. The user types the
-  code into that window. Logout recreates the account's profile folder empty.
+- Sign-in runs in a terminal window. Once the window is open the session is `in_terminal` ("finish signing in in the
+  terminal window that opened"); no backend reaches `waiting_code` or `open_url` today, because the window takes the
+  code itself and no URL is captured. `POST /accounts/{id}/login/code` therefore answers `409 bad_state` (`404` without
+  a sign-in). Logout recreates the account's profile folder empty.
 - A worker may call `GET /spec` with an absolute `dir`. The guard checks the task's cwd only, as the contract says,
   and `dir` must stay inside that cwd.
 

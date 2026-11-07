@@ -85,7 +85,7 @@ export interface QuotaError {
 /** LoginSession is the progress of an account's sign-in (POST/GET /accounts/{id}/login, SSE account.login). */
 export interface LoginSession {
   accountId: string
-  state: 'starting' | 'open_url' | 'waiting_code' | 'done' | 'failed'
+  state: 'starting' | 'open_url' | 'in_terminal' | 'waiting_code' | 'done' | 'failed'
   url?: string
   userCode?: string
   message?: string
@@ -130,13 +130,22 @@ export interface Provider {
   /** BaseURL is empty only for the official Anthropic API. */
   baseUrl: string
   enabled: boolean
-  /** Models lists the models the provider offers: its tier models, or the list given when it was saved. */
+  /**
+   * Models is the model allow-list as a list, exactly as last set through POST/PATCH models; never the tier
+   * models. It is [] when the provider allows any model and when a hand-written allowedModels pattern (old data,
+   * or set as a raw pattern) restricts it, since such a pattern cannot be expressed as a list.
+   */
   models: string[]
   /** Accounts counts the accounts that use the provider. */
   accounts: number
   preset?: string
   wireApi?: string
   official: boolean
+  /**
+   * AllowedModels is the case-insensitive RE2 pattern actually enforced. Built from a list it matches exactly
+   * that list (^(?:a|b)$); otherwise it is a hand-written pattern and Models is []. Both empty allow any model.
+   * The tier models are always allowed on top of the allow-list.
+   */
   allowedModels: string
   tiers: TierModels
   createdAt?: string
@@ -163,8 +172,15 @@ export interface ProviderList {
 
 /**
  * ProviderInput is POST /providers (every field but id and backend is optional) and PATCH /providers/{id} (every
- * field is optional; id and backend cannot change). Models, when allowedModels is not given, becomes the pattern
- * that allows exactly those models.
+ * field is optional; id and backend cannot change). The allow-list, in order of precedence:
+ *   - models with at least one id replaces the list (trimmed, blanks and repeats dropped) and allowedModels becomes
+ *     its pattern; a given allowedModels is then ignored;
+ *   - otherwise allowedModels sets the pattern; models becomes the list it was built from, or [] for a
+ *     hand-written pattern. Sent with models [] and equal to the pattern of the stored list, it is that list's echo
+ *     and the list is cleared instead;
+ *   - otherwise models [] clears the list and the pattern: any model.
+ *
+ * Neither ever changes the tiers.
  */
 export interface ProviderInput {
   id?: string
@@ -1321,7 +1337,7 @@ export interface SettingsBackend {
   enabled: boolean
   /**
    * AllowedModels is a case-insensitive regular expression (Go RE2 syntax, unanchored) that every model id must
-   * match. Empty allows only the models mapped in Tiers.
+   * match. Empty allows any model. The models mapped in Tiers are always allowed.
    */
   allowedModels: string
   /** Tiers maps each tier to a model id of this backend; an empty value leaves the tier unavailable. */

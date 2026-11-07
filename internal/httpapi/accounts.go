@@ -187,8 +187,13 @@ func (s *Server) removeAccount(_ http.ResponseWriter, r *http.Request) (code int
 	if err != nil {
 		return 0, nil, err
 	}
+	provider := ""
 	for i := range states {
-		if states[i].Account.ID == id && states[i].Busy > 0 {
+		if states[i].Account.ID != id {
+			continue
+		}
+		provider = states[i].Account.Provider
+		if states[i].Busy > 0 {
 			return 0, nil, newError(api.CodeBadState, "account %s runs %d turn(s); remove it when they end", id,
 				states[i].Busy).with("busy", states[i].Busy)
 		}
@@ -197,7 +202,7 @@ func (s *Server) removeAccount(_ http.ResponseWriter, r *http.Request) (code int
 	if err := s.o.Accounts.Remove(r.Context(), id); err != nil {
 		return 0, nil, err
 	}
-	s.accountGone(id)
+	s.accountGone(id, provider)
 	s.o.Pool.Notify()
 	s.kickAccounts()
 	return http.StatusNoContent, nil, nil

@@ -183,12 +183,9 @@ func TestTreeClassifierWithoutWorkers(t *testing.T) {
 	}
 }
 
-func TestParseTasksAndPatterns(t *testing.T) {
+func TestParseTasks(t *testing.T) {
 	got := parseTasks("## Phase 1\r\n- [ ] T001 One\r\n  - [x] T002 [P] Two\r\n- [ ] not a task\r\n")
 	if len(got) != 2 || got[0].Phase != "Phase 1" || got[0].Title != "One" || !got[1].Done || !got[1].Parallel {
 		t.Fatalf("tasks = %+v", got)
-	}
-	if exactPattern([]string{"a.b", " ", "c"}) != `^(?:a\.b|c)$` || exactPattern(nil) != "" {
-		t.Fatal("exactPattern")
 	}
 }
