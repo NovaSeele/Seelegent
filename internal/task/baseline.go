@@ -22,16 +22,19 @@ const baselineMax = 1000
 // repository root. A folder outside git, or a git that is missing, fails or times out, gives no baseline and no
 // error: the baseline only warns the worker, it never blocks a task.
 func captureBaseline(ctx context.Context, bin *gitx.Binary, cwd string) (root string, files []string) {
-	git, err := bin.Path()
-	if err != nil {
-		return "", nil
-	}
-	out, err := runGit(ctx, git, cwd, "rev-parse", "--show-toplevel")
-	if err != nil {
+	// The first call goes through bin.Run, so a git removed or moved since it was found is looked up again.
+	var git string
+	var out []byte
+	if err := bin.Run(func(p string) error {
+		var err error
+		git = p
+		out, err = runGit(ctx, p, cwd, "rev-parse", "--show-toplevel")
+		return err
+	}); err != nil {
 		return "", nil
 	}
 	root = filepath.Clean(strings.TrimSpace(string(out)))
-	out, err = runGit(ctx, git, cwd, "--literal-pathspecs", "-c", "core.quotepath=off",
+	out, err := runGit(ctx, git, cwd, "--literal-pathspecs", "-c", "core.quotepath=off",
 		"status", "--porcelain", "-z", "--untracked-files=all", "--", ".")
 	if err != nil {
 		return root, nil

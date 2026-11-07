@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -108,7 +109,7 @@ func TestBinaryShimOnly(t *testing.T) {
 }
 
 // TestBinaryLogsHowGitWasFound: a git found through a shim or a default place is logged once per resolution, a
-// plain PATH hit never.
+// plain PATH hit never; a git found again after the kept one was removed is logged again.
 func TestBinaryLogsHowGitWasFound(t *testing.T) {
 	root := t.TempDir()
 	var buf bytes.Buffer
@@ -160,6 +161,36 @@ func TestBinaryLogsHowGitWasFound(t *testing.T) {
 	}
 	if l := lines(); len(l) != 2 || !strings.Contains(l[1], fallback) || !strings.Contains(l[1], "%ProgramFiles%") {
 		t.Fatalf("ProgramFiles: logged %q", l)
+	}
+
+	// The ProgramFiles git is removed and a per-user one installed: the run that cannot start the old one finds
+	// the new one, which is logged once, after a warning about the old one.
+	if err := os.Remove(fallback); err != nil {
+		t.Fatal(err)
+	}
+	lad := filepath.Join(root, "lad")
+	user := filepath.Join(lad, "Programs", "Git", "cmd", "git.exe")
+	write(t, user, "not run by this test")
+	b.env = func() []string { return append(shimEnv()(), "ProgramFiles="+pf, "LOCALAPPDATA="+lad) }
+	var ran []string
+	err := b.Run(func(git string) error {
+		ran = append(ran, git)
+		if git == fallback {
+			return &fs.PathError{Op: "fork/exec", Path: git, Err: fs.ErrNotExist}
+		}
+		return nil
+	})
+	if err != nil || len(ran) != 2 || ran[1] != user {
+		t.Fatalf("Run = %v, ran %q", err, ran)
+	}
+	if got, err := b.Path(); err != nil || got != user {
+		t.Fatalf("Path after Run = %q, %v", got, err)
+	}
+	if l := lines(); len(l) != 3 || !strings.Contains(l[2], user) || !strings.Contains(l[2], "%LOCALAPPDATA%") {
+		t.Fatalf("per-user git: logged %q", l)
+	}
+	if !strings.Contains(buf.String(), "level=WARN") || !strings.Contains(buf.String(), "git is gone") {
+		t.Fatalf("the removed git was not logged: %s", buf.String())
 	}
 }
 

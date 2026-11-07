@@ -3,8 +3,10 @@ package gitx
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -47,8 +49,8 @@ func NewBinary(env func() []string, log *slog.Logger) *Binary {
 	return &Binary{env: env, log: log}
 }
 
-// Path returns the git executable. A found path is kept for the life of the Binary; a failure is not, so a git
-// installed later is found by the next call.
+// Path returns the git executable. A found path is kept until a run reports it gone (see Run); a failure is not
+// kept, so a git installed later is found by the next call.
 func (b *Binary) Path() (string, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -64,6 +66,40 @@ func (b *Binary) Path() (string, error) {
 	}
 	b.path = p
 	return p, nil
+}
+
+// Run calls fn with the git executable. When fn fails because that executable no longer exists (removed or moved
+// since it was found), the kept path is dropped, git is found again and fn runs once more with the new path.
+func (b *Binary) Run(fn func(git string) error) error {
+	git, err := b.Path()
+	if err != nil {
+		return err
+	}
+	err = fn(git)
+	if !b.forget(git, err) {
+		return err
+	}
+	if git, err = b.Path(); err != nil {
+		return err
+	}
+	return fn(git)
+}
+
+// forget drops the kept path git when err, from running it, says the executable is gone, and reports whether it
+// did. A git that is still a file is kept: the error is about something else, such as a missing working folder.
+// Only the path that failed is dropped, so a newer one found by a concurrent call stays.
+func (b *Binary) forget(git string, err error) bool {
+	missing := errors.Is(err, fs.ErrNotExist) || errors.Is(err, exec.ErrNotFound)
+	if !missing || isFile(git) {
+		return false
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.path == git {
+		b.path = ""
+		b.log.Warn("gitx: git is gone, looking for it again", "path", git)
+	}
+	return true
 }
 
 // findGit resolves git in the PATH of env. Empty and relative PATH entries are skipped (no git from the current
