@@ -52,8 +52,8 @@ fmt: ## Format Go and web sources
 	$(GOLANGCI_LINT) fmt ./...
 	cd web && $(PNPM) format
 
-generate: ## Generate TypeScript API types (tygo, from milestone 5)
-	@echo "generate: nothing to generate yet; tygo will write web/src/api/types.gen.ts from internal/api"
+generate: ## Generate web/src/api/types.gen.ts from internal/api (internal/api/tsgen)
+	$(GO) generate ./internal/api
 
 clean: ## Remove build output
 	rm -rf $(BIN_DIR)

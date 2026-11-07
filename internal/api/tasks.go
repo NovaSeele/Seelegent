@@ -17,6 +17,10 @@ const (
 	StatusCancelled    TaskStatus = "cancelled"
 )
 
+// Verdict is the lead's verdict on a task. Fields keep plain strings (the constants below are untyped); the TS
+// generator emits the union from the Verdict* constants.
+type Verdict string
+
 // Review verdicts.
 const (
 	VerdictAccepted = "accepted"
@@ -29,7 +33,7 @@ type TaskSummary struct {
 	Title       string     `json:"title"`
 	Status      TaskStatus `json:"status"`
 	Kind        string     `json:"kind"`
-	Mode        string     `json:"mode"`
+	Mode        string     `json:"mode" ts:"'edit' | 'plan'"`
 	Cwd         string     `json:"cwd"`
 	ProjectKey  string     `json:"projectKey"`
 	ProjectName string     `json:"projectName"`
@@ -38,7 +42,7 @@ type TaskSummary struct {
 	Provider     string      `json:"provider,omitempty"`
 	Model        string      `json:"model"`
 	Effort       string      `json:"effort,omitempty"`
-	Tier         string      `json:"tier,omitempty"`
+	Tier         string      `json:"tier,omitempty" ts:"Tier"`
 	AccountID    string      `json:"accountId,omitempty"`
 	AccountLabel string      `json:"accountLabel,omitempty"`
 	Member       string      `json:"member,omitempty"`
@@ -65,7 +69,7 @@ type TaskSummary struct {
 	ActiveStep *ActiveStep `json:"activeStep"`
 
 	After      []string `json:"after"`
-	AfterMode  string   `json:"afterMode"`
+	AfterMode  string   `json:"afterMode" ts:"'accepted' | 'done'"`
 	DepsReason string   `json:"depsReason,omitempty"`
 
 	Manual    bool   `json:"manual"`
@@ -105,24 +109,24 @@ const (
 
 // Attention says that a task needs someone to look at it.
 type Attention struct {
-	State  string `json:"state"`
+	State  string `json:"state" ts:"'blocked' | 'question' | 'stalled' | 'background_wait' | 'info'"`
 	Reason string `json:"reason"`
 	// Who is lead or user.
-	Who    string `json:"who"`
+	Who    string `json:"who" ts:"'lead' | 'user'"`
 	Detail string `json:"detail,omitempty"`
 	Since  string `json:"since"`
 }
 
 // Review is the lead's verdict on a task.
 type Review struct {
-	Verdict string `json:"verdict"`
+	Verdict string `json:"verdict" ts:"Verdict"`
 	Notes   string `json:"notes,omitempty"`
 	At      string `json:"at"`
 }
 
 // Gate is the state of a task's proof gate (filled by milestone 13).
 type Gate struct {
-	State     string `json:"state"`
+	State     string `json:"state" ts:"'running' | 'green' | 'red' | 'error' | 'skipped'"`
 	Phase     string `json:"phase,omitempty"`
 	AutoFixes int    `json:"autoFixes"`
 }
@@ -153,12 +157,12 @@ type TaskDetail struct {
 // Turn is one lead (or user) message and the worker's answer to it.
 type Turn struct {
 	N               int       `json:"n"`
-	By              string    `json:"by"`
+	By              string    `json:"by" ts:"'lead' | 'user' | 'gate' | 'verifier'"`
 	Message         string    `json:"message"`
-	Status          string    `json:"status"`
+	Status          string    `json:"status" ts:"'running' | 'ok' | 'failed' | 'cancelled'"`
 	Model           string    `json:"model,omitempty"`
 	RequestedModel  string    `json:"requestedModel,omitempty"`
-	Tier            string    `json:"tier,omitempty"`
+	Tier            string    `json:"tier,omitempty" ts:"Tier"`
 	Effort          string    `json:"effort,omitempty"`
 	StartedAt       string    `json:"startedAt"`
 	EndedAt         string    `json:"endedAt,omitempty"`
@@ -187,9 +191,9 @@ type Attempt struct {
 	StartedAt    string `json:"startedAt"`
 	EndedAt      string `json:"endedAt,omitempty"`
 	// Status is running, ok, quota, auth, transient, background_wait, error or cancelled.
-	Status string `json:"status"`
+	Status string `json:"status" ts:"'running' | 'ok' | 'quota' | 'auth' | 'transient' | 'background_wait' | 'error' | 'cancelled'"`
 	// Kind is "console" for a takeover.
-	Kind  string `json:"kind,omitempty"`
+	Kind  string `json:"kind,omitempty" ts:"'console'"`
 	Error string `json:"error,omitempty"`
 	Usage *Usage `json:"usage"`
 }
@@ -227,8 +231,8 @@ type DelegateRequest struct {
 	Prompt    string       `json:"prompt"`
 	Title     string       `json:"title,omitempty"`
 	Cwd       string       `json:"cwd"`
-	Mode      string       `json:"mode,omitempty"`
-	Tier      string       `json:"tier,omitempty"`
+	Mode      string       `json:"mode,omitempty" ts:"'edit' | 'plan'"`
+	Tier      string       `json:"tier,omitempty" ts:"Tier"`
 	Model     string       `json:"model,omitempty"`
 	Effort    string       `json:"effort,omitempty"`
 	Backend   string       `json:"backend,omitempty"`
@@ -238,7 +242,7 @@ type DelegateRequest struct {
 	Profile   string       `json:"profile,omitempty"`
 	Spec      *SpecRequest `json:"spec,omitempty"`
 	After     []string     `json:"after,omitempty"`
-	AfterMode string       `json:"afterMode,omitempty"`
+	AfterMode string       `json:"afterMode,omitempty" ts:"'accepted' | 'done'"`
 	AllowGit  bool         `json:"allowGit,omitempty"`
 	Gate      *bool        `json:"gate,omitempty"`
 	Lane      []string     `json:"lane,omitempty"`
@@ -250,8 +254,8 @@ type DelegateRequest struct {
 type FollowupRequest struct {
 	Message string `json:"message"`
 	// By is lead (default) or user.
-	By        string   `json:"by,omitempty"`
-	Tier      string   `json:"tier,omitempty"`
+	By        string   `json:"by,omitempty" ts:"'lead' | 'user'"`
+	Tier      string   `json:"tier,omitempty" ts:"Tier"`
 	Model     string   `json:"model,omitempty"`
 	Effort    string   `json:"effort,omitempty"`
 	TaskIDs   []string `json:"taskIds,omitempty"`
@@ -267,7 +271,7 @@ type FollowupRequest struct {
 
 // ReviewRequest records the lead's verdict.
 type ReviewRequest struct {
-	Verdict string `json:"verdict"`
+	Verdict string `json:"verdict" ts:"Verdict"`
 	Notes   string `json:"notes,omitempty"`
 }
 
@@ -303,7 +307,7 @@ const (
 // WaitResult is the outcome of a wait.
 type WaitResult struct {
 	Done    bool          `json:"done"`
-	Woke    string        `json:"woke"`
+	Woke    string        `json:"woke" ts:"'done' | 'blocked' | 'timeout' | 'cancelled'"`
 	Tasks   []TaskSummary `json:"tasks"`
 	Reports []TaskReport  `json:"reports,omitempty"`
 }

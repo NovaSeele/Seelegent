@@ -1,10 +1,15 @@
 // Package api holds the data shapes of the daemon's HTTP API v1 (contracts/api-v1.md): the objects the task engine
 // returns, the requests it takes and the events of a task's log. The HTTP server, the MCP server and the dashboard
-// (through tygo) share them, so field names here are the wire names.
+// (through the generated web/src/api/types.gen.ts) share them, so field names here are the wire names.
 //
 // Times are RFC 3339 UTC strings with milliseconds (FormatTime); optional scalars are omitted when empty, optional
 // objects are null, and lists are never null.
+//
+// After changing a shape, run `go generate ./internal/api` (internal/api/tsgen); a test fails while the committed
+// TypeScript file is stale.
 package api
+
+//go:generate go run ./tsgen
 
 import "time"
 
