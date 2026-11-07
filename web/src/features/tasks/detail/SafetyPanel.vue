@@ -83,7 +83,7 @@ function showOutside(turn: number) {
   <details
     v-if="count || parts.restored"
     class="safety"
-    :class="urgent ? 'tone-danger' : 'tone-neutral'"
+    :class="urgent ? 'tone-attention' : 'tone-neutral'"
     :open="expanded"
     @toggle="expanded = ($event.target as HTMLDetailsElement).open"
   >
@@ -197,6 +197,13 @@ function showOutside(turn: number) {
 @media (height < 760px) {
   .safety__body {
     max-height: 28vh;
+  }
+}
+
+/* On a phone the page itself scrolls; a second scroll area inside it is hard to use. */
+@media (width < 600px) {
+  .safety__body {
+    max-height: none;
   }
 }
 

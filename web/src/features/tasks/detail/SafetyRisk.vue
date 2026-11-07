@@ -97,7 +97,7 @@ const desc = computed(() => {
   display: flex;
   align-items: center;
   gap: var(--space-1);
-  color: var(--status-danger-fg);
+  color: var(--attention-fg);
   font-size: var(--fs-sm);
   font-weight: var(--fw-semibold);
 }

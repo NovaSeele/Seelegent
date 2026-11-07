@@ -167,7 +167,7 @@ describe('terminal timeline', () => {
     ])
     const notices = items.flatMap((i) => (i.kind === 'notice' ? [i] : []))
     expect(notices.map((i) => [i.message.key, i.tone])).toEqual([
-      ['terminal.ev.workAtRisk', 'error'],
+      ['terminal.ev.workAtRisk', 'warn'],
       ['terminal.ev.restored', 'ok'],
       ['common.attention.workAtRisk', 'warn'],
       ['terminal.ev.restored', 'ok'],

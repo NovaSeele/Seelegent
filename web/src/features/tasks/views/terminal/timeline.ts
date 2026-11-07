@@ -208,7 +208,7 @@ function fold(f: Fold, event: TaskEvent): Draft | null {
       f.atRisk.set(turn, new Set([...(f.atRisk.get(turn) ?? []), ...event.data.files]))
       f.riskShown = turn
       return notice(
-        'error',
+        'warn',
         'warning',
         'terminal.ev.workAtRisk',
         { count: event.data.files.length },
