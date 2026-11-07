@@ -66,6 +66,7 @@
     "search": "搜索技能",
     "missing": "有 {n} 个已选技能未在此处安装，工人将找不到它们。",
     "notInstalled": "此处未安装",
+    "notGlobal": "未全局安装；仅在已安装它的项目中可用",
     "root": {
       "project": "项目",
       "user": "用户",

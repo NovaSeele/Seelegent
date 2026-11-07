@@ -31,9 +31,9 @@ async function render(props: Partial<InstanceType<typeof RoleCard>['$props']> = 
 }
 
 describe('RoleCard', () => {
-  it('marks a chosen skill that is not installed where the role lives', async () => {
+  it('marks a chosen skill that is not installed in a project role’s folder', async () => {
     const wrapper = await render({
-      role: role({ skills: ['vue-review', 'gone-skill'] }),
+      role: role({ scope: 'project', cwd: 'D:/shop', skills: ['vue-review', 'gone-skill'] }),
       installed: new Set(['vue-review']),
     })
     const missing = wrapper.findAll('.skill--missing')
@@ -44,6 +44,20 @@ describe('RoleCard', () => {
     // Unknown (not read yet): nothing is marked.
     const unknown = await render({ role: role({ skills: ['gone-skill'] }), installed: null })
     expect(unknown.findAll('.skill--missing')).toHaveLength(0)
+  })
+
+  it('only notes, without a warning, a global role’s skill that is not installed globally', async () => {
+    const wrapper = await render({
+      role: role({ skills: ['shop-conventions'] }),
+      installed: new Set(['vue-review']),
+    })
+    const missing = wrapper.get('.skill--missing')
+    expect(missing.classes()).toContain('tone-neutral')
+    expect(missing.classes()).not.toContain('tone-attention')
+    expect(missing.attributes('title')).toBe(
+      'Not installed globally; available only in projects that have it',
+    )
+    expect(missing.findComponent(Icon).props('name')).toBe('info')
   })
 
   it('says where a project overrides a global role', async () => {

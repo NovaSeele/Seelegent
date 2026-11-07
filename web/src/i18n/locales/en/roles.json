@@ -66,6 +66,7 @@
     "search": "Search skills",
     "missing": "{n} chosen skill is not installed here; workers will not find it. | {n} chosen skills are not installed here; workers will not find them.",
     "notInstalled": "Not installed here",
+    "notGlobal": "Not installed globally; available only in projects that have it",
     "root": {
       "project": "Project",
       "user": "User",

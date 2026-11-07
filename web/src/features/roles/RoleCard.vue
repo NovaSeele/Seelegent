@@ -26,6 +26,17 @@ const { t } = useI18n()
 const accounts = useAccountsStore()
 const id = useId()
 
+/**
+ * How a skill missing from `installed` is shown. A project role cannot use it there: attention. The global list
+ * holds only user-level skills, so a global role's skill may still be installed in the projects that use it:
+ * neutral, saying just that.
+ */
+const missing = computed(() =>
+  props.role.scope === 'global'
+    ? { tone: 'tone-neutral', icon: 'info' as const, text: t('roles.skills.notGlobal') }
+    : { tone: 'tone-attention', icon: 'warning' as const, text: t('roles.skills.notInstalled') },
+)
+
 const preferred = computed(() =>
   props.role.preferredAccounts.map((a) => accounts.get(a)?.label ?? a).join(', '),
 )
@@ -73,12 +84,13 @@ const preferred = computed(() =>
           <template v-for="skill in role.skills" :key="skill">
             <span
               v-if="installed && !installed.has(skill)"
-              class="skill skill--missing tone-attention"
-              :title="t('roles.skills.notInstalled')"
+              class="skill skill--missing"
+              :class="missing.tone"
+              :title="missing.text"
             >
-              <Icon name="warning" :size="12" />
+              <Icon :name="missing.icon" :size="12" />
               {{ skill }}
-              <span class="sr-only">({{ t('roles.skills.notInstalled') }})</span>
+              <span class="sr-only">({{ missing.text }})</span>
             </span>
             <span v-else class="skill">{{ skill }}</span>
           </template>
