@@ -348,7 +348,9 @@ func TestUpdateHonorsContext(t *testing.T) {
 	path := writeFile(t, `{}`)
 	block := make(chan struct{})
 	started := make(chan struct{})
+	done := make(chan struct{})
 	go func() {
+		defer close(done)
 		_, _ = Update(context.Background(), path, func(*Settings) error {
 			close(started)
 			<-block
@@ -356,7 +358,9 @@ func TestUpdateHonorsContext(t *testing.T) {
 		})
 	}()
 	<-started
-	defer close(block)
+	// The first Update still writes the file and its .lock after block opens: wait for it before t.TempDir is
+	// removed.
+	defer func() { close(block); <-done }()
 	ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
 	defer cancel()
 	if _, err := Update(ctx, path, func(*Settings) error { return nil }); !errors.Is(err, context.DeadlineExceeded) {
