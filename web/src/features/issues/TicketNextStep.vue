@@ -86,13 +86,35 @@ const shown = computed(() =>
           <strong>{{ say(refusal.title) }}</strong>
         </p>
         <p v-if="refusal.why" class="banner__text">{{ say(refusal.why) }}</p>
+        <ul v-if="refusal.subjects.length" class="banner__commits">
+          <li v-for="(s, i) in refusal.subjects" :key="i">{{ s }}</li>
+          <li v-if="refusal.moreCommits" class="banner__more">
+            {{
+              t('issues.refusal.moreCommits', { count: refusal.moreCommits }, refusal.moreCommits)
+            }}
+          </li>
+        </ul>
         <FindingList v-if="refusal.findings.length" :findings="refusal.findings" />
         <p v-if="refusal.detail" class="banner__text">
           {{ t('issues.refusal.gitSaid') }} <code>{{ refusal.detail }}</code>
         </p>
         <p class="banner__text banner__next">{{ say(refusal.next) }}</p>
         <div class="banner__actions">
-          <Button size="sm" variant="primary" icon="refresh" @click="emit('act', 'pr')">
+          <Button
+            v-if="refusal.compareUrl"
+            size="sm"
+            variant="primary"
+            icon="external"
+            :href="refusal.compareUrl"
+          >
+            {{ t('issues.refusal.seeCommits') }}
+          </Button>
+          <Button
+            size="sm"
+            :variant="refusal.compareUrl ? 'secondary' : 'primary'"
+            icon="refresh"
+            @click="emit('act', 'pr')"
+          >
             {{ t('issues.next.tryAgain') }}
           </Button>
         </div>
@@ -228,6 +250,19 @@ const shown = computed(() =>
 
 .banner__next {
   color: var(--text-primary);
+}
+
+.banner__commits {
+  margin: 0;
+  padding-left: var(--space-5);
+  color: var(--text-primary);
+  font-size: var(--fs-sm);
+  overflow-wrap: anywhere;
+}
+
+.banner__more {
+  color: var(--text-secondary);
+  list-style: none;
 }
 
 .banner__actions {

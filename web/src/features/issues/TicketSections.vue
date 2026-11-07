@@ -8,7 +8,14 @@ import StatusPill from '@/components/ui/StatusPill.vue'
 import { TASK_STATUS } from '@/components/ui/tone'
 import { useFormat } from '@/composables/useFormat'
 
-import { CHECKS_STATE, runState, safeUrl, ticketFinished, ticketTaskStatus } from './issueModel'
+import {
+  CHECKS_STATE,
+  fileState,
+  runState,
+  safeUrl,
+  ticketFinished,
+  ticketTaskStatus,
+} from './issueModel'
 import { findingView } from './ticketText'
 import TicketLog from './TicketLog.vue'
 
@@ -126,7 +133,13 @@ function outboxState(o: OutboxEntry): string {
         class="file"
         :class="{ 'file--refused tone-attention': refused.has(f.path) }"
       >
-        <span class="file__status" :title="t('issues.ticket.fileStatus')">{{ f.status }}</span>
+        <span
+          class="file__status"
+          aria-hidden="true"
+          :title="t(`issues.ticket.fileState.${fileState(f.status)}`)"
+          >{{ f.status === '?' ? t('issues.ticket.fileState.new') : f.status }}</span
+        >
+        <span class="sr-only">{{ t(`issues.ticket.fileState.${fileState(f.status)}`) }}</span>
         <code class="file__path">{{ f.from ? `${f.from} → ${f.path}` : f.path }}</code>
         <span v-if="refused.has(f.path)" class="file__flag">
           <Icon name="warning" />
@@ -264,7 +277,7 @@ function outboxState(o: OutboxEntry): string {
 
 .file__status {
   min-width: 1.5em;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   font-family: var(--font-mono);
   font-size: var(--fs-xs);
 }

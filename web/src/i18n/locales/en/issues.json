@@ -139,7 +139,7 @@
     "notFound": "Could not load the ticket: {error}",
     "status": {
       "working": "Working",
-      "review": "In review",
+      "review": "Awaiting your review",
       "ready": "Ready for a PR",
       "pr_open": "PR open",
       "done": "Done",
@@ -168,7 +168,6 @@
     "checksFix": "Fixing {runs} in task",
     "files": "Changed files",
     "noFiles": "No changes against the base yet.",
-    "fileStatus": "Git status",
     "envSkipped": "Left out of the worktree",
     "outbox": "Sent from this computer",
     "outboxKind": {
@@ -190,7 +189,7 @@
     },
     "log": "Log",
     "phase": {
-      "push_refused": "Not pushed",
+      "push_refused": "Push blocked",
       "open_pr": "Branch pushed: open the PR",
       "checks_failed": "Checks failed"
     },
@@ -244,7 +243,17 @@
       "base_not_pushed": "base not on GitHub",
       "branch_diverged": "branch changed on GitHub"
     },
-    "outboxRefused": "Seelegent refused this step: why, and what to do, is at the top of the page."
+    "outboxRefused": "Seelegent refused this step: why, and what to do, is at the top of the page.",
+    "fileState": {
+      "added": "Added",
+      "modified": "Modified",
+      "deleted": "Deleted",
+      "renamed": "Renamed",
+      "copied": "Copied",
+      "typeChanged": "Type changed",
+      "conflict": "Conflict",
+      "new": "New"
+    }
   },
   "actions": {
     "pr": "Open pull request",
@@ -306,13 +315,13 @@
       "scanFailed": "Not pushed: the changes could not be checked",
       "baseNotPushed": "Not pushed: {branch} has {commits} commit that is not on GitHub | Not pushed: {branch} has {commits} commits that are not on GitHub",
       "baseMissing": "Not pushed: the base branch {branch} is not on GitHub",
-      "branchDiverged": "Not pushed: the branch {branch} changed on GitHub"
+      "branchDiverged": "Push blocked: the branch {branch} changed on GitHub"
     },
     "why": {
       "unsafeFiles": "Nothing was committed or pushed. Each file below says what to do.",
       "scanChanged": "Seelegent checks exactly what it pushes; a worker or you changed files while it read them, so nothing was sent.",
       "scanFailed": "Git failed while Seelegent read the changes, and nothing is ever pushed unchecked.",
-      "baseNotPushed": "Those commits would go to GitHub with the ticket's, unchecked.",
+      "baseNotPushed": "That commit would go to GitHub with the ticket's, unchecked. | Those commits would go to GitHub with the ticket's, unchecked.",
       "branchDiverged": "Someone pushed to {branch} or changed it on GitHub. Seelegent never builds on such a branch or overwrites it."
     },
     "next": {
@@ -320,9 +329,11 @@
       "scanChanged": "Wait until the ticket's task has stopped, then try again.",
       "scanFailed": "Try again. If it keeps failing, check the worktree with git status.",
       "baseNotPushed": "Push {branch} to GitHub, then try again.",
-      "branchDiverged": "Undo the change on GitHub, then try again; or drop this ticket."
+      "branchDiverged": "Look at the commits Seelegent did not push, undo them on GitHub, then try again; or drop this ticket."
     },
-    "gitSaid": "Git said:"
+    "gitSaid": "Git said:",
+    "moreCommits": "and {count} more commit | and {count} more commits",
+    "seeCommits": "See the commits on GitHub"
   },
   "next": {
     "tryAgain": "Try again",

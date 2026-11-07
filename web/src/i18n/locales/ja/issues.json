@@ -139,7 +139,7 @@
     "notFound": "チケットを読み込めませんでした: {error}",
     "status": {
       "working": "作業中",
-      "review": "レビュー中",
+      "review": "あなたのレビュー待ち",
       "ready": "PR の準備完了",
       "pr_open": "PR オープン",
       "done": "完了",
@@ -168,7 +168,6 @@
     "checksFix": "{runs} をタスクで修正中",
     "files": "変更されたファイル",
     "noFiles": "ベースからの変更はまだありません。",
-    "fileStatus": "Git の状態",
     "envSkipped": "worktree に含めなかったもの",
     "outbox": "このコンピューターから送信したもの",
     "outboxKind": {
@@ -190,7 +189,7 @@
     },
     "log": "ログ",
     "phase": {
-      "push_refused": "未プッシュ",
+      "push_refused": "プッシュ不可",
       "open_pr": "ブランチをプッシュ済み：PR を作成してください",
       "checks_failed": "チェック失敗"
     },
@@ -244,7 +243,17 @@
       "base_not_pushed": "ベースが GitHub にない",
       "branch_diverged": "GitHub でブランチが変更"
     },
-    "outboxRefused": "Seelegent はこの手順を拒否しました。理由と対処はページ上部にあります。"
+    "outboxRefused": "Seelegent はこの手順を拒否しました。理由と対処はページ上部にあります。",
+    "fileState": {
+      "added": "追加",
+      "modified": "変更",
+      "deleted": "削除",
+      "renamed": "名前変更",
+      "copied": "コピー",
+      "typeChanged": "種類の変更",
+      "conflict": "競合",
+      "new": "新規"
+    }
   },
   "actions": {
     "pr": "Pull request を作成",
@@ -306,7 +315,7 @@
       "scanFailed": "プッシュしていません：変更を確認できませんでした",
       "baseNotPushed": "プッシュしていません：{branch} に GitHub にないコミットが {commits} 件あります",
       "baseMissing": "プッシュしていません：ベースブランチ {branch} が GitHub にありません",
-      "branchDiverged": "プッシュしていません：ブランチ {branch} が GitHub 上で変更されました"
+      "branchDiverged": "プッシュ不可：GitHub 上でブランチ {branch} が変更されました"
     },
     "why": {
       "unsafeFiles": "何もコミットもプッシュもしていません。各ファイルの対処方法は下記のとおりです。",
@@ -320,9 +329,11 @@
       "scanChanged": "チケットのタスクが止まるのを待ってから、もう一度お試しください。",
       "scanFailed": "もう一度お試しください。失敗が続く場合は git status で worktree を確認してください。",
       "baseNotPushed": "{branch} を GitHub にプッシュしてから、もう一度お試しください。",
-      "branchDiverged": "GitHub 上の変更を元に戻してから、もう一度お試しください。またはこのチケットを取り下げてください。"
+      "branchDiverged": "Seelegent がプッシュしていないコミットを確認し、GitHub 上で元に戻してから、もう一度お試しください。またはこのチケットを取り下げてください。"
     },
-    "gitSaid": "Git の出力："
+    "gitSaid": "Git の出力：",
+    "moreCommits": "ほか {count} 件のコミット",
+    "seeCommits": "GitHub でコミットを見る"
   },
   "next": {
     "tryAgain": "もう一度試す",

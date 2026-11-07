@@ -293,7 +293,17 @@ func (s *Service) PR(ctx context.Context, id string, req api.PRRequest) (api.Tic
 	plan, err := s.planPush(ctx, t)
 	var pe *PushError
 	if errors.As(err, &pe) && pe.Reason == "branch_diverged" {
-		// The remote changed under the ticket: recorded as a failed push, never built on or forced.
+		// The remote changed under the ticket: recorded as a failed push, never built on or forced. A compare link
+		// shows the lead the commits Seelegent did not push before anything is undone.
+		if c, _, cerr := s.client(ctx, r); cerr == nil && c != nil {
+			from, _ := pe.Details["pushed"].(string)
+			if from == "" {
+				from = t.Base
+			}
+			if remote, _ := pe.Details["remote"].(string); remote != "" {
+				pe.Details["compareUrl"] = c.CommitsURL(from, remote)
+			}
+		}
 		perr := err
 		_ = s.runStep(ctx, id, api.OutboxPush, map[string]any{"branch": t.Branch, "remote": pe.Details["remote"]},
 			func() (map[string]any, error) { return nil, perr })

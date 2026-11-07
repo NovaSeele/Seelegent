@@ -13,6 +13,7 @@ import TextField from '@/components/ui/TextField.vue'
 import { useGitHubStore } from '@/stores/github'
 
 import {
+  branchOnRemote,
   isPushRefusal,
   prNumber,
   ticketDroppable,
@@ -189,7 +190,7 @@ defineExpose({ act })
       {{ t('issues.actions.fixChecks') }}
     </Button>
     <Button
-      v-if="pushable && onGitHub && !ticket.pr?.number && !inBanner.link"
+      v-if="pushable && onGitHub && !ticket.pr?.number && !inBanner.link && branchOnRemote(ticket)"
       size="sm"
       @click="start('link')"
     >

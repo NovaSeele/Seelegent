@@ -139,7 +139,7 @@
     "notFound": "티켓을 불러오지 못했습니다: {error}",
     "status": {
       "working": "작업 중",
-      "review": "검토 중",
+      "review": "내 검토 대기",
       "ready": "PR 준비됨",
       "pr_open": "PR 열림",
       "done": "완료",
@@ -168,7 +168,6 @@
     "checksFix": "작업에서 {runs} 수정 중",
     "files": "변경된 파일",
     "noFiles": "아직 기준 대비 변경이 없습니다.",
-    "fileStatus": "Git 상태",
     "envSkipped": "worktree에서 제외됨",
     "outbox": "이 컴퓨터에서 보낸 것",
     "outboxKind": {
@@ -190,7 +189,7 @@
     },
     "log": "기록",
     "phase": {
-      "push_refused": "푸시 안 됨",
+      "push_refused": "푸시 차단됨",
       "open_pr": "브랜치 푸시됨: PR을 여세요",
       "checks_failed": "체크 실패"
     },
@@ -244,7 +243,17 @@
       "base_not_pushed": "기준이 GitHub에 없음",
       "branch_diverged": "GitHub에서 브랜치 변경"
     },
-    "outboxRefused": "Seelegent가 이 단계를 거부했습니다. 이유와 할 일은 페이지 맨 위에 있습니다."
+    "outboxRefused": "Seelegent가 이 단계를 거부했습니다. 이유와 할 일은 페이지 맨 위에 있습니다.",
+    "fileState": {
+      "added": "추가됨",
+      "modified": "수정됨",
+      "deleted": "삭제됨",
+      "renamed": "이름 바뀜",
+      "copied": "복사됨",
+      "typeChanged": "유형 바뀜",
+      "conflict": "충돌",
+      "new": "새 파일"
+    }
   },
   "actions": {
     "pr": "Pull request 열기",
@@ -306,7 +315,7 @@
       "scanFailed": "푸시하지 않음: 변경 사항을 확인할 수 없었습니다",
       "baseNotPushed": "푸시하지 않음: {branch}에 GitHub에 없는 커밋이 {commits}개 있습니다",
       "baseMissing": "푸시하지 않음: 기준 브랜치 {branch}가 GitHub에 없습니다",
-      "branchDiverged": "푸시하지 않음: 브랜치 {branch}가 GitHub에서 바뀌었습니다"
+      "branchDiverged": "푸시 차단됨: GitHub에서 브랜치 {branch}이(가) 바뀌었습니다"
     },
     "why": {
       "unsafeFiles": "아무것도 커밋하거나 푸시하지 않았습니다. 아래 각 파일에 해야 할 일이 있습니다.",
@@ -320,9 +329,11 @@
       "scanChanged": "티켓 작업이 멈출 때까지 기다린 뒤 다시 시도하세요.",
       "scanFailed": "다시 시도하세요. 계속 실패하면 git status로 worktree를 확인하세요.",
       "baseNotPushed": "{branch}를 GitHub에 푸시한 뒤 다시 시도하세요.",
-      "branchDiverged": "GitHub에서 변경을 되돌린 뒤 다시 시도하거나, 이 티켓을 중단하세요."
+      "branchDiverged": "Seelegent가 푸시하지 않은 커밋을 확인하고 GitHub에서 되돌린 뒤 다시 시도하거나, 이 티켓을 중단하세요."
     },
-    "gitSaid": "Git 메시지:"
+    "gitSaid": "Git 메시지:",
+    "moreCommits": "외 커밋 {count}개",
+    "seeCommits": "GitHub에서 커밋 보기"
   },
   "next": {
     "tryAgain": "다시 시도",

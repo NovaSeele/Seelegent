@@ -68,6 +68,26 @@ describe('ticketText', () => {
     expect(refusalView({ reason: 'branch_diverged', findings: [], branch: 'b' }, mb).next.key).toBe(
       'issues.refusal.next.branchDiverged',
     )
+    // The commits the remote lacks, by subject (the why is plural with them), and how many more.
+    const base = refusalView(
+      {
+        reason: 'base_not_pushed',
+        findings: [],
+        branch: 'main',
+        commits: 5,
+        subjects: ['a', 'b', 'c'],
+      },
+      mb,
+    )
+    expect([base.subjects, base.moreCommits, base.why?.n]).toEqual([['a', 'b', 'c'], 2, 5])
+    // A compare link to the commits Seelegent did not push; only a web address is kept.
+    const diverged = (u: string) =>
+      refusalView({ reason: 'branch_diverged', findings: [], branch: 'b', compareUrl: u }, mb)
+        .compareUrl
+    expect(diverged('https://github.com/o/r/compare/abc...def')).toBe(
+      'https://github.com/o/r/compare/abc...def',
+    )
+    expect(diverged('javascript:alert(1)')).toBe('')
     expect(allSecrets([])).toBe(false)
   })
 

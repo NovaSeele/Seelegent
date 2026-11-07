@@ -139,7 +139,7 @@
     "notFound": "No se pudo cargar el ticket: {error}",
     "status": {
       "working": "En curso",
-      "review": "En revisión",
+      "review": "Esperando tu revisión",
       "ready": "Listo para PR",
       "pr_open": "PR abierta",
       "done": "Hecho",
@@ -168,7 +168,6 @@
     "checksFix": "Corrigiendo {runs} en la tarea",
     "files": "Archivos cambiados",
     "noFiles": "Aún no hay cambios respecto a la base.",
-    "fileStatus": "Estado en Git",
     "envSkipped": "Fuera del worktree",
     "outbox": "Enviado desde este equipo",
     "outboxKind": {
@@ -190,7 +189,7 @@
     },
     "log": "Registro",
     "phase": {
-      "push_refused": "Sin enviar",
+      "push_refused": "Envío bloqueado",
       "open_pr": "Rama enviada: abre la PR",
       "checks_failed": "Checks fallidos"
     },
@@ -244,7 +243,17 @@
       "base_not_pushed": "base no está en GitHub",
       "branch_diverged": "la rama cambió en GitHub"
     },
-    "outboxRefused": "Seelegent rechazó este paso: el motivo y qué hacer están al principio de la página."
+    "outboxRefused": "Seelegent rechazó este paso: el motivo y qué hacer están al principio de la página.",
+    "fileState": {
+      "added": "Añadido",
+      "modified": "Modificado",
+      "deleted": "Eliminado",
+      "renamed": "Renombrado",
+      "copied": "Copiado",
+      "typeChanged": "Tipo cambiado",
+      "conflict": "Conflicto",
+      "new": "Nuevo"
+    }
   },
   "actions": {
     "pr": "Abrir pull request",
@@ -306,13 +315,13 @@
       "scanFailed": "Sin enviar: no se pudieron comprobar los cambios",
       "baseNotPushed": "Sin enviar: {branch} tiene {commits} commit que no está en GitHub | Sin enviar: {branch} tiene {commits} commits que no están en GitHub",
       "baseMissing": "Sin enviar: la rama base {branch} no está en GitHub",
-      "branchDiverged": "Sin enviar: la rama {branch} cambió en GitHub"
+      "branchDiverged": "Envío bloqueado: la rama {branch} cambió en GitHub"
     },
     "why": {
       "unsafeFiles": "No se ha hecho commit ni envío de nada. Cada archivo indica qué hacer.",
       "scanChanged": "Seelegent comprueba exactamente lo que envía; un worker o tú cambiasteis archivos mientras los leía, así que no se envió nada.",
       "scanFailed": "Git falló mientras Seelegent leía los cambios, y nunca se envía nada sin comprobar.",
-      "baseNotPushed": "Esos commits irían a GitHub con los del ticket, sin comprobar.",
+      "baseNotPushed": "Ese commit iría a GitHub con los del ticket, sin comprobar. | Esos commits irían a GitHub con los del ticket, sin comprobar.",
       "branchDiverged": "Alguien envió a {branch} o la cambió en GitHub. Seelegent nunca continúa sobre una rama así ni la sobrescribe."
     },
     "next": {
@@ -320,9 +329,11 @@
       "scanChanged": "Espera a que la tarea del ticket se detenga y vuelve a intentarlo.",
       "scanFailed": "Inténtalo de nuevo. Si sigue fallando, revisa el worktree con git status.",
       "baseNotPushed": "Envía {branch} a GitHub y vuelve a intentarlo.",
-      "branchDiverged": "Deshaz el cambio en GitHub y vuelve a intentarlo, o descarta este ticket."
+      "branchDiverged": "Revisa los commits que Seelegent no envió, deshazlos en GitHub y vuelve a intentarlo, o descarta este ticket."
     },
-    "gitSaid": "Git dijo:"
+    "gitSaid": "Git dijo:",
+    "moreCommits": "y {count} commit más | y {count} commits más",
+    "seeCommits": "Ver los commits en GitHub"
   },
   "next": {
     "tryAgain": "Reintentar",

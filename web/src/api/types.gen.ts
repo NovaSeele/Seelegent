@@ -1229,6 +1229,13 @@ export interface TicketRefusal {
   branch?: string
   /** Commits is how many commits of the base the remote lacks (base_not_pushed; 0: the base branch is missing). */
   commits?: number
+  /** Subjects are the subjects of the newest of those commits, at most 3 (base_not_pushed). */
+  subjects?: string[]
+  /**
+   * CompareURL is the GitHub page listing the commits on the branch that Seelegent did not push
+   * (branch_diverged).
+   */
+  compareUrl?: string
   /**
    * Cause of a scan that could not run (scan_failed): "changed" (the worktree changed while it was read) or "git"
    * (git failed; Detail is git's redacted reason).

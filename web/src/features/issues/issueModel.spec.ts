@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import type { Issue } from '@/api/types'
 
 import {
+  branchOnRemote,
   failingChecks,
   inboxOrder,
   isAbsolutePath,
@@ -54,6 +55,21 @@ describe('issueModel', () => {
     expect(ticketPushable('ready')).toBe(true)
     expect(ticketPushable('pr_open')).toBe(true)
     expect(ticketPushable('working')).toBe(false)
+    // A pull request can be linked only to a branch that is on GitHub.
+    const none = { pr: null, refusal: undefined, outbox: [] }
+    expect(branchOnRemote(none)).toBe(false)
+    expect(
+      branchOnRemote({
+        ...none,
+        refusal: { reason: 'unsafe_files', findings: [], message: '', at: '' },
+      }),
+    ).toBe(false)
+    expect(
+      branchOnRemote({
+        ...none,
+        refusal: { reason: 'branch_diverged', findings: [], message: '', at: '' },
+      }),
+    ).toBe(true)
     expect(ticketFinished('failed')).toBe(true)
     expect(ticketFinished('review')).toBe(false)
     expect(ticketDroppable('failed')).toBe(true)

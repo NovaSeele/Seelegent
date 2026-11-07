@@ -70,6 +70,8 @@ func refusalOf(err error, msg, at string) *api.TicketRefusal {
 	rf.Commits, _ = pe.Details["commits"].(int)
 	rf.Cause, _ = pe.Details["cause"].(string)
 	rf.Detail, _ = pe.Details["detail"].(string)
+	rf.Subjects, _ = pe.Details["subjects"].([]string)
+	rf.CompareURL, _ = pe.Details["compareUrl"].(string)
 	return rf
 }
 

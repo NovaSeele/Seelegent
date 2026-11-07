@@ -233,6 +233,10 @@ func TestPushRemoteRules(t *testing.T) {
 		got.Error != "" || got.NeedsAttention != api.TicketPushRefused {
 		t.Fatalf("diverged refusal = %+v, error %q", rf, got.Error)
 	}
+	// A link to the commits Seelegent did not push, before the lead undoes anything.
+	if u := got.Refusal.CompareURL; !strings.Contains(u, "/octo/demo/compare/") || !strings.HasSuffix(u, "..."+theirs) {
+		t.Fatalf("compare link = %q", u)
+	}
 
 	// A base the remote does not have: the user's main has a commit that was never pushed.
 	write(t, filepath.Join(e.repo, "local.txt"), "not pushed\n")
@@ -250,7 +254,8 @@ func TestPushRemoteRules(t *testing.T) {
 		t.Fatal("pushed on an unpushed base")
 	}
 	if got, _ := e.s.Ticket(ctx, tk2.ID); got.Refusal == nil || got.Refusal.Reason != api.RefusalBaseNotPushed ||
-		got.Refusal.Commits != 1 || got.Refusal.Branch != "main" {
+		got.Refusal.Commits != 1 || got.Refusal.Branch != "main" || len(got.Refusal.Subjects) != 1 ||
+		got.Refusal.Subjects[0] != "local only" {
 		t.Fatalf("base refusal = %+v", got.Refusal)
 	}
 	// Once main is pushed, the pull request goes.

@@ -322,6 +322,11 @@ type TicketRefusal struct {
 	Branch string `json:"branch,omitempty"`
 	// Commits is how many commits of the base the remote lacks (base_not_pushed; 0: the base branch is missing).
 	Commits int `json:"commits,omitempty"`
+	// Subjects are the subjects of the newest of those commits, at most 3 (base_not_pushed).
+	Subjects []string `json:"subjects,omitempty"`
+	// CompareURL is the GitHub page listing the commits on the branch that Seelegent did not push
+	// (branch_diverged).
+	CompareURL string `json:"compareUrl,omitempty"`
 	// Cause of a scan that could not run (scan_failed): "changed" (the worktree changed while it was read) or "git"
 	// (git failed; Detail is git's redacted reason).
 	Cause   string `json:"cause,omitempty" ts:"'changed' | 'git'"`

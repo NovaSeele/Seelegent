@@ -4,7 +4,7 @@
  */
 import type { IconName } from '@/components/ui/icons'
 import type { TaskStatus as DisplayStatus, Tone } from '@/components/ui/tone'
-import type { CheckRun, Issue, TicketChecks, TicketSummary, TicketTask } from '@/api/types'
+import type { CheckRun, Issue, Ticket, TicketChecks, TicketSummary, TicketTask } from '@/api/types'
 
 export type TicketStatus = TicketSummary['status']
 
@@ -126,6 +126,34 @@ export function ticketFinished(status: TicketStatus): boolean {
 /** A ticket whose branch can be pushed and get a pull request (or have one linked). */
 export function ticketPushable(status: TicketStatus): boolean {
   return status === 'ready' || status === 'pr_open'
+}
+
+/**
+ * The ticket's branch is on GitHub, so a pull request can exist to link: Seelegent pushed it, a pull request is
+ * known, or someone else pushed the branch (branch_diverged). A push refused before anything was sent has none.
+ */
+export function branchOnRemote(t: Pick<Ticket, 'pr' | 'refusal' | 'outbox'>): boolean {
+  return (
+    !!t.pr ||
+    t.refusal?.reason === 'branch_diverged' ||
+    t.outbox.some((o) => o.kind === 'push' && o.status === 'done')
+  )
+}
+
+const FILE_STATES: Readonly<Record<string, string>> = {
+  A: 'added',
+  M: 'modified',
+  D: 'deleted',
+  R: 'renamed',
+  C: 'copied',
+  T: 'typeChanged',
+  U: 'conflict',
+  '?': 'new',
+}
+
+/** The word of a changed file's git status letter ("?" is a file git does not track yet: new). */
+export function fileState(letter: string): string {
+  return FILE_STATES[letter] ?? 'modified'
 }
 
 /** A ticket that can still be dropped (a failed one can). */

@@ -5,6 +5,8 @@
  */
 import type { ScanFinding, TicketLogEntry, TicketRefusal } from '@/api/types'
 
+import { safeUrl } from './issueModel'
+
 /** An i18n key with its values; n picks the plural form. */
 export interface Words {
   key: string
@@ -26,6 +28,11 @@ export interface RefusalView {
   next: Words
   detail: string
   findings: FindingView[]
+  /** The subjects of the newest commits the remote lacks (base_not_pushed) and how many more there are. */
+  subjects: string[]
+  moreCommits: number
+  /** The GitHub page with the commits on the branch Seelegent did not push (branch_diverged), "" when unknown. */
+  compareUrl: string
 }
 
 const SECRET_FILES: ReadonlySet<ScanFinding['kind']> = new Set([
@@ -99,12 +106,29 @@ export function allSecrets(findings: readonly ScanFinding[]): boolean {
 
 /** A refused push in the reader's words: one frame for every reason, each with its own explanation and next step. */
 export function refusalView(
+  rf: Pick<
+    TicketRefusal,
+    'reason' | 'findings' | 'branch' | 'commits' | 'cause' | 'detail' | 'subjects' | 'compareUrl'
+  >,
+  megabytes: (bytes: number) => string,
+): RefusalView {
+  const view = refusalWords(rf, megabytes)
+  if (rf.reason === 'base_not_pushed') {
+    view.subjects = (rf.subjects ?? []).slice(0, 3)
+    view.moreCommits = Math.max(0, (rf.commits ?? 0) - view.subjects.length)
+  }
+  if (rf.reason === 'branch_diverged') view.compareUrl = safeUrl(rf.compareUrl) ?? ''
+  return view
+}
+
+function refusalWords(
   rf: Pick<TicketRefusal, 'reason' | 'findings' | 'branch' | 'commits' | 'cause' | 'detail'>,
   megabytes: (bytes: number) => string,
 ): RefusalView {
   const base = 'issues.refusal'
   const branch = rf.branch ?? ''
   const findings = (rf.findings ?? []).map((f) => findingView(f, megabytes))
+  const extra = { subjects: [], moreCommits: 0, compareUrl: '' }
   switch (rf.reason) {
     case 'unsafe_files': {
       const n = findings.length
@@ -118,6 +142,7 @@ export function refusalView(
         next: { key: `${base}.next.unsafeFiles`, params: {} },
         detail: '',
         findings,
+        ...extra,
       }
     }
     case 'scan_failed':
@@ -128,6 +153,7 @@ export function refusalView(
             next: { key: `${base}.next.scanChanged`, params: {} },
             detail: '',
             findings: [],
+            ...extra,
           }
         : {
             title: { key: `${base}.title.scanFailed`, params: {} },
@@ -135,16 +161,18 @@ export function refusalView(
             next: { key: `${base}.next.scanFailed`, params: {} },
             detail: rf.detail ?? '',
             findings: [],
+            ...extra,
           }
     case 'base_not_pushed': {
       const commits = rf.commits ?? 0
       return commits > 0
         ? {
             title: { key: `${base}.title.baseNotPushed`, params: { branch, commits }, n: commits },
-            why: { key: `${base}.why.baseNotPushed`, params: { branch } },
+            why: { key: `${base}.why.baseNotPushed`, params: { branch, commits }, n: commits },
             next: { key: `${base}.next.baseNotPushed`, params: { branch } },
             detail: '',
             findings: [],
+            ...extra,
           }
         : {
             title: { key: `${base}.title.baseMissing`, params: { branch } },
@@ -152,6 +180,7 @@ export function refusalView(
             next: { key: `${base}.next.baseNotPushed`, params: { branch } },
             detail: '',
             findings: [],
+            ...extra,
           }
     }
     default:
@@ -161,6 +190,7 @@ export function refusalView(
         next: { key: `${base}.next.branchDiverged`, params: { branch } },
         detail: '',
         findings: [],
+        ...extra,
       }
   }
 }

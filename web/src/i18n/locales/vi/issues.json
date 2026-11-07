@@ -168,7 +168,6 @@
     "checksFix": "Đang sửa {runs} trong tác vụ",
     "files": "Tệp đã thay đổi",
     "noFiles": "Chưa có thay đổi nào so với gốc.",
-    "fileStatus": "Trạng thái Git",
     "envSkipped": "Không đưa vào worktree",
     "outbox": "Đã gửi từ máy này",
     "outboxKind": {
@@ -190,7 +189,7 @@
     },
     "log": "Nhật ký",
     "phase": {
-      "push_refused": "Chưa đẩy",
+      "push_refused": "Đẩy bị chặn",
       "open_pr": "Đã đẩy nhánh: hãy mở PR",
       "checks_failed": "Kiểm tra không đạt"
     },
@@ -244,7 +243,17 @@
       "base_not_pushed": "nhánh gốc chưa lên GitHub",
       "branch_diverged": "nhánh đã đổi trên GitHub"
     },
-    "outboxRefused": "Seelegent đã từ chối bước này: lý do và việc cần làm ở đầu trang."
+    "outboxRefused": "Seelegent đã từ chối bước này: lý do và việc cần làm ở đầu trang.",
+    "fileState": {
+      "added": "Đã thêm",
+      "modified": "Đã sửa",
+      "deleted": "Đã xóa",
+      "renamed": "Đã đổi tên",
+      "copied": "Đã sao chép",
+      "typeChanged": "Đã đổi loại",
+      "conflict": "Xung đột",
+      "new": "Mới"
+    }
   },
   "actions": {
     "pr": "Mở pull request",
@@ -306,7 +315,7 @@
       "scanFailed": "Chưa đẩy: không thể kiểm tra các thay đổi",
       "baseNotPushed": "Chưa đẩy: {branch} có {commits} commit chưa có trên GitHub",
       "baseMissing": "Chưa đẩy: nhánh gốc {branch} chưa có trên GitHub",
-      "branchDiverged": "Chưa đẩy: nhánh {branch} đã thay đổi trên GitHub"
+      "branchDiverged": "Đẩy bị chặn: nhánh {branch} đã thay đổi trên GitHub"
     },
     "why": {
       "unsafeFiles": "Chưa commit hay đẩy gì cả. Mỗi tệp bên dưới cho biết cần làm gì.",
@@ -320,9 +329,11 @@
       "scanChanged": "Chờ tác vụ của ticket dừng, rồi thử lại.",
       "scanFailed": "Hãy thử lại. Nếu vẫn lỗi, kiểm tra worktree bằng git status.",
       "baseNotPushed": "Đẩy {branch} lên GitHub, rồi thử lại.",
-      "branchDiverged": "Hoàn tác thay đổi trên GitHub rồi thử lại; hoặc bỏ ticket này."
+      "branchDiverged": "Xem các commit mà Seelegent không đẩy, hoàn tác chúng trên GitHub rồi thử lại; hoặc bỏ ticket này."
     },
-    "gitSaid": "Git báo:"
+    "gitSaid": "Git báo:",
+    "moreCommits": "và {count} commit khác",
+    "seeCommits": "Xem các commit trên GitHub"
   },
   "next": {
     "tryAgain": "Thử lại",

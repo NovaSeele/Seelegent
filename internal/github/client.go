@@ -539,6 +539,13 @@ func (c *Client) CompareURL(base, head, title, body string) string {
 		escapeRef(base) + "..." + escapeRef(head) + "?" + strings.Join(q, "&")
 }
 
+// CommitsURL is the web page that lists the commits of head that base does not have (a compare view, without the
+// pull request form).
+func (c *Client) CommitsURL(base, head string) string {
+	return c.host.WebBase() + "/" + url.PathEscape(c.owner) + "/" + url.PathEscape(c.repo) + "/compare/" +
+		escapeRef(base) + "..." + escapeRef(head)
+}
+
 // PRURL is the web page of pull request n.
 func (c *Client) PRURL(n int) string {
 	return c.host.WebBase() + "/" + url.PathEscape(c.owner) + "/" + url.PathEscape(c.repo) + "/pull/" + strconv.Itoa(n)
