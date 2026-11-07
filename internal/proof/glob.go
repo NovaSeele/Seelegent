@@ -194,5 +194,6 @@ func LanePath(p string) (string, bool) {
 	}
 	return c, true
 }
+
 // Ext returns the lower-case extension of a repository-relative path.
 func Ext(p string) string { return strings.ToLower(path.Ext(Clean(p))) }

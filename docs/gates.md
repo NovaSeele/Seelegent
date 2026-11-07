@@ -117,10 +117,12 @@ recorded as `error` and does not hold the task. `verify` events (`phase: start |
 
 A lane is a list of files, folders (`dir/`) and globs relative to the repository root. `.` and `..` segments are
 resolved first (`src/../lib` is `lib`, `a/./b` is `a/b`); then a path that is absolute, leaves the repository or is
-the root itself is refused (`400`), and such a token of a spec task is left out of its lane. A task's lane is a claim while the task is pending (queued, waiting for quota or for its dependencies,
-however long) or running, and for `laneHoldHours` after it ends while it is not reviewed (accepting or rejecting
-it releases the claim). `GET /lanes` lists the claims of a repository. A task leaving its dependencies does not
-check its lane again: its claim was held the whole time, so an overlap can only be one the lead forced or one
+the root itself is refused (`400`), and such a token of a spec task is left out of its lane.
+
+A task's lane is a claim while the task is pending (queued, waiting for quota or for its dependencies, however
+long) or running, and for `laneHoldHours` after it ends while it is not reviewed (accepting or rejecting it
+releases the claim). `GET /lanes` lists the claims of a repository. A task leaving its dependencies does not check
+its lane again: its claim was held the whole time, so an overlap can only be one the lead forced or one
 `lanes: warn` allowed.
 
 | `lanes` | A new claim that overlaps another task's | Files changed outside the lane |
@@ -130,8 +132,7 @@ check its lane again: its claim was held the whole time, so an overlap can only 
 | `off` | not checked | no lane step |
 
 Delegate and followup check and save the claim under one lock, so two requests cannot claim the same files at
-once. The
-milestone 12 overlap warnings (`fileOverlaps`) still report files several tasks changed, lane or not;
+once. The milestone 12 overlap warnings (`fileOverlaps`) still report files several tasks changed, lane or not;
 `GET /contention` lists those of the last `contentionWindowHours`.
 
 ## Proof ledger and matrix
