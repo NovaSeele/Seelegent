@@ -248,8 +248,12 @@ func runCLI(dir string) int {
 	rec := Record{Script: name, Args: os.Args[1:], Stdin: stdin}
 	rec.Dir, _ = os.Getwd()
 	if data, err := json.Marshal(rec); err == nil {
-		//nolint:gosec // the test's own queue folder
-		_ = os.WriteFile(filepath.Join(dir, strings.TrimSuffix(name, ".script")+".record.json"), data, 0o600)
+		// Written aside and renamed, so Records never reads half a record of a run that is still writing it or
+		// was stopped while writing it.
+		path := filepath.Join(dir, strings.TrimSuffix(name, ".script")+".record.json")
+		if os.WriteFile(path+".tmp", data, 0o600) == nil { //nolint:gosec // the test's own queue folder
+			_ = retry(func() error { return os.Rename(path+".tmp", path) })
+		}
 	}
 	out := bufio.NewWriter(os.Stdout)
 	defer func() { _ = out.Flush() }()

@@ -173,13 +173,17 @@ func TestEndToEnd(t *testing.T) {
 		t.Fatalf("attempts = %+v", at)
 	}
 
-	// cancel (the first account rests now, so the second runs it)
-	d.queue.Push(t, initLine("conv-c")+"\n#!hang\n")
+	// cancel (the first account rests now, so the second runs it). The cancel waits until the fake CLI has taken
+	// its script: a live launch only says the worker process started, and a worker stopped before it took the
+	// script leaves it in the queue for the next run, which then hangs (F13).
+	hanging := filepath.Join(d.paths.Home, "hanging")
+	d.queue.Push(t, initLine("conv-c")+"\n#!touch "+hanging+"\n#!hang\n")
 	c, err := d.a.Tasks.Delegate(ctx, api.DelegateRequest{Prompt: "Hang.", Cwd: d.cwd})
 	if err != nil {
 		t.Fatal(err)
 	}
 	waitLive(t, d.a, c.ID)
+	waitFile(t, hanging)
 	cs, stopped, err := d.a.Tasks.Cancel(ctx, c.ID, api.CancelRequest{WaitSeconds: 30})
 	if err != nil || !stopped || cs.Status != task.StatusCancelled {
 		t.Fatalf("cancel = %+v %v %v", cs.Status, stopped, err)
@@ -213,6 +217,21 @@ func TestEndToEnd(t *testing.T) {
 	}
 	if !reattached || len(d.queue.Records(t)) != 6 {
 		t.Fatalf("reattach event %v, runs %d", reattached, len(d.queue.Records(t)))
+	}
+}
+
+// waitFile waits until a script's #!touch has created path.
+func waitFile(t *testing.T, path string) {
+	t.Helper()
+	deadline := time.Now().Add(limit)
+	for {
+		if _, err := os.Stat(path); err == nil {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("%s was never created", filepath.Base(path))
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }
 
