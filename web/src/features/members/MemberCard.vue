@@ -115,8 +115,10 @@ const facts = computed(() => trackFacts(props.track))
   background: var(--bg-surface);
 }
 
+/* Turned off reads from the pill, the name and the switch; the card keeps its surface so the pills on it keep
+   their contrast (a muted pill on --bg-surface-2 fell to 4.2:1). */
 .member--off {
-  background: var(--bg-surface-2);
+  border-style: dashed;
 }
 
 .member--off .member__name {
