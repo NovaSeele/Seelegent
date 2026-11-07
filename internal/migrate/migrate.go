@@ -96,7 +96,7 @@ type Options struct {
 var ErrNotOldData = errors.New("not an old Seelegent data folder")
 
 // ErrDaemonRunning is returned when the daemon holds the data folder.
-var ErrDaemonRunning = errors.New("the Seelegent daemon is running; stop it (seelegent daemon stop) and run migrate again")
+var ErrDaemonRunning = errors.New("the Seelegent daemon is running; stop it (seelegent stop) and run migrate again")
 
 // oldMarkers are files only the old version wrote.
 var oldMarkers = []string{"settings.json", "accounts.json", "roles.json", "memory"}

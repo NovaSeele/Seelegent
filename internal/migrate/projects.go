@@ -219,10 +219,8 @@ func (m *migrator) importHistory(ctx context.Context, projects map[string]string
 				continue
 			}
 			v := memory.Verdict{Cwd: cwd, TaskID: mm[2], Title: mm[3], Verdict: mm[4], Notes: mm[5]}
-			if m.o.DryRun {
-				added++
-				continue
-			}
+			// A dry run imports too: it works on a copy of the database, so verdicts an earlier run imported are
+			// counted as already there, as in a real run.
 			ok, err := m.memory.ImportVerdict(ctx, v, at)
 			switch {
 			case err != nil:

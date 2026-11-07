@@ -196,6 +196,9 @@ func TestMigrate(t *testing.T) {
 		t.Fatalf("dry run created %s", f.paths.Home)
 	}
 	want(t, dry, KindSettings, "", Imported)
+	if it := want(t, dry, KindHistory, pk, Imported); !strings.Contains(it.Detail, "2 verdicts imported") {
+		t.Errorf("dry history detail %q", it.Detail)
+	}
 	want(t, dry, KindAccount, "acc5", Imported)
 	if it := want(t, dry, KindKey, "acc5", Imported); !strings.Contains(it.Detail, "would store") {
 		t.Errorf("dry key detail %q", it.Detail)
@@ -318,6 +321,17 @@ func TestMigrate(t *testing.T) {
 				t.Errorf("old file changed: %s", p)
 			}
 		}
+	}
+
+	// A dry run after the real one finds nothing new, verdicts included.
+	dryAgain := f.run(true)
+	for _, it := range dryAgain.Items {
+		if it.Action == Imported {
+			t.Errorf("dry run after the real one would import %s %s: %s", it.Kind, it.ID, it.Detail)
+		}
+	}
+	if it := want(t, dryAgain, KindHistory, pk, Unchanged); !strings.Contains(it.Detail, "0 verdicts imported, 2 already") {
+		t.Errorf("dry history detail after the real run %q", it.Detail)
 	}
 
 	// A second run changes nothing.
