@@ -13,6 +13,8 @@ package update
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -76,6 +78,8 @@ type Options struct {
 	// Force installs a build that does not report which database schema it knows (a build from before
 	// schemaVersion). A build known to be too old for the database is refused even then.
 	Force bool
+	// LockDir is the folder of the executable's update lock (the user's cache folder + seelegent when empty).
+	LockDir string
 }
 
 // Updater checks for, applies and rolls back updates.
@@ -111,8 +115,7 @@ var (
 // while the new daemon starts) must still stop that daemon and put the old executable back.
 const undoTimeout = 3 * time.Minute
 
-// lockSuffix names the lock next to the executable, so two updates of the same executable from different data
-// folders never race on its .new and .previous files.
+// lockSuffix names the executable's update lock next to it, used only when the user has no cache folder.
 const lockSuffix = ".update.lock"
 
 // CheckResult is the answer of a check.
@@ -209,10 +212,14 @@ func (u *Updater) Check(ctx context.Context, tag string) (CheckResult, error) {
 	return res, nil
 }
 
-// lock takes the update lock of the data folder (its downloads and its daemon) and the one next to the executable
-// (its .new and .previous files), so two updates never run on either at once. The returned function releases both.
+// lock takes the update lock of the data folder (its downloads and its daemon) and the one of the executable (its
+// .new and .previous files), so two updates never run on either at once. The returned function releases both.
 func (u *Updater) lock() (func(), error) {
 	if err := os.MkdirAll(u.o.WorkDir, 0o700); err != nil {
+		return nil, err
+	}
+	exeLock, err := u.exeLockPath()
+	if err != nil {
 		return nil, err
 	}
 	home, err := fsutil.TryLock(filepath.Join(u.o.WorkDir, "update.lock"))
@@ -222,7 +229,7 @@ func (u *Updater) lock() (func(), error) {
 	if err != nil {
 		return nil, err
 	}
-	exe, err := fsutil.TryLock(u.o.Exe + lockSuffix)
+	exe, err := fsutil.TryLock(exeLock)
 	if err != nil {
 		_ = home.Unlock()
 		if errors.Is(err, fsutil.ErrLocked) {
@@ -231,6 +238,40 @@ func (u *Updater) lock() (func(), error) {
 		return nil, err
 	}
 	return func() { _ = exe.Unlock(); _ = home.Unlock() }, nil
+}
+
+// exeLockPath is the executable's update lock. It lives in the user's cache folder (the executable's folder is often
+// one on PATH, where a lock file would stay forever), named after the executable's path key, so every data folder
+// that updates the same executable takes the same lock. Without a usable cache folder it falls back to a lock next to
+// the executable.
+func (u *Updater) exeLockPath() (string, error) {
+	key, err := fsutil.Key(u.o.Exe)
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256([]byte(key))
+	name := "update-" + hex.EncodeToString(sum[:8]) + ".lock"
+	if u.o.LockDir != "" {
+		if err := os.MkdirAll(u.o.LockDir, 0o700); err != nil {
+			return "", err
+		}
+		return filepath.Join(u.o.LockDir, name), nil
+	}
+	if dir, ok := cacheLockDir(); ok {
+		return filepath.Join(dir, name), nil
+	}
+	return u.o.Exe + lockSuffix, nil
+}
+
+// cacheLockDir returns <user cache folder>/seelegent, created when needed; ok is false when there is no user cache
+// folder (no HOME, XDG_CACHE_HOME or LocalAppData) or it cannot be created.
+func cacheLockDir() (dir string, ok bool) {
+	cache, err := os.UserCacheDir()
+	if err != nil {
+		return "", false
+	}
+	dir = filepath.Join(cache, "seelegent")
+	return dir, os.MkdirAll(dir, 0o700) == nil
 }
 
 // checkExe makes sure the executable to replace is an installed seelegent (not a `go run` or test build).

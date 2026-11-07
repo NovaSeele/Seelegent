@@ -251,11 +251,14 @@ type env struct {
 	// dbSchema, when set, is the database's schema version (the schema check runs).
 	dbSchema *int
 	force    bool
+	// lockDir is the executable lock's folder, shared by every updater of the env (as the user's cache folder is).
+	lockDir string
 }
 
 func newEnv(t *testing.T, goos, installed string, rels ...string) *env {
 	t.Helper()
-	e := &env{goos: goos, daemon: &fakeDaemon{running: true}, run: &fakeRun{registeredHosts: []string{"claude"}}}
+	e := &env{goos: goos, daemon: &fakeDaemon{running: true}, run: &fakeRun{registeredHosts: []string{"claude"}},
+		lockDir: filepath.Join(t.TempDir(), "cache", "seelegent")}
 	var frs []*fakeRelease
 	for _, tag := range rels {
 		frs = append(frs, newFakeRelease(t, tag, goos, "amd64"))
@@ -273,7 +276,7 @@ func (e *env) updater(t *testing.T, current string) *Updater {
 	t.Helper()
 	o := Options{Current: current, Exe: e.exe, WorkDir: filepath.Join(t.TempDir(), "update"),
 		MetadataURL: e.server.URL + "/releases/latest", GOOS: e.goos, GOARCH: "amd64", Daemon: e.daemon,
-		Run: e.run.run, Force: e.force}
+		Run: e.run.run, Force: e.force, LockDir: e.lockDir}
 	if e.dbSchema != nil {
 		o.DatabaseSchema = func(context.Context) (int, bool, error) { return *e.dbSchema, true, nil }
 	}
@@ -358,7 +361,7 @@ func TestApplyAndRollback(t *testing.T) {
 	}
 }
 
-// assertNoLeftovers checks that only the executable (and the kept previous one) are in its folder.
+// assertNoLeftovers checks that only the executable (and the kept previous one) are in its folder: no lock either.
 func assertNoLeftovers(t *testing.T, exe string) {
 	t.Helper()
 	entries, err := os.ReadDir(filepath.Dir(exe))
@@ -366,8 +369,7 @@ func assertNoLeftovers(t *testing.T, exe string) {
 		t.Fatal(err)
 	}
 	for _, en := range entries {
-		if n := en.Name(); n != filepath.Base(exe) && n != filepath.Base(PreviousPath(exe)) &&
-			n != filepath.Base(exe+lockSuffix) {
+		if n := en.Name(); n != filepath.Base(exe) && n != filepath.Base(PreviousPath(exe)) {
 			t.Errorf("leftover %s", n)
 		}
 	}
@@ -662,16 +664,57 @@ func TestSchemaCheck(t *testing.T) {
 // Suggestion 5: two updates of the same executable from different data folders never run at once.
 func TestExecutableLock(t *testing.T) {
 	e := newEnv(t, "linux", "v0.0.1", "v0.0.2")
-	l, err := fsutil.TryLock(e.exe + lockSuffix)
+	path, err := e.updater(t, "v0.0.1").exeLockPath()
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = e.updater(t, "v0.0.1").Apply(context.Background(), "")
+	l, err := fsutil.TryLock(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = e.updater(t, "v0.0.1").Apply(context.Background(), "") // another data folder (WorkDir)
 	_ = l.Unlock()
 	if err == nil || !strings.Contains(err.Error(), "another seelegent update of") {
 		t.Fatalf("err = %v", err)
 	}
 	if got := readFile(t, e.exe); got != "seelegent v0.0.1" || len(e.daemon.calls) != 0 {
 		t.Errorf("installed = %q, calls %v", got, e.daemon.calls)
+	}
+}
+
+// G4: the executable's lock lives in the user's cache folder, never next to the executable, and falls back to the
+// executable's folder only without a cache folder.
+func TestExecutableLockLocation(t *testing.T) {
+	cache := t.TempDir()
+	for _, k := range []string{"LocalAppData", "XDG_CACHE_HOME", "HOME"} {
+		t.Setenv(k, cache)
+	}
+	e := newEnv(t, "linux", "v0.0.1", "v0.0.2")
+	e.lockDir = ""
+	u := e.updater(t, "v0.0.1")
+	path, err := u.exeLockPath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, _ := os.UserCacheDir()
+	if filepath.Dir(path) != filepath.Join(want, "seelegent") || !strings.HasPrefix(filepath.Base(path), "update-") {
+		t.Fatalf("lock = %s, want one in %s", path, filepath.Join(want, "seelegent"))
+	}
+	if again, _ := e.updater(t, "v0.0.1").exeLockPath(); again != path {
+		t.Errorf("another data folder locks %s, not %s", again, path)
+	}
+	if _, err := u.Apply(context.Background(), ""); err != nil {
+		t.Fatal(err)
+	}
+	assertNoLeftovers(t, e.exe)
+	if _, err := os.Stat(path); err != nil {
+		t.Errorf("lock file: %v", err)
+	}
+
+	for _, k := range []string{"LocalAppData", "XDG_CACHE_HOME", "HOME"} {
+		t.Setenv(k, "")
+	}
+	if path, err := u.exeLockPath(); err != nil || path != e.exe+lockSuffix {
+		t.Errorf("without a cache folder: lock = %s, %v", path, err)
 	}
 }
