@@ -1075,7 +1075,8 @@ func (s *Service) Act(ctx context.Context, id string, req api.MeetingActRequest)
 		}
 	}
 	// Each task is saved as soon as it exists, and an item whose text already has a task gets that task back: a
-	// retried Act (a lost response, or a failure midway) creates only what is missing.
+	// retried Act (a lost response, or a failure midway) creates only what is missing. A task that failed or was
+	// cancelled does not count, so acting again on its text starts it over.
 	ctx = context.WithoutCancel(ctx)
 	var tasks, created []string
 	var m api.Meeting
@@ -1086,11 +1087,11 @@ func (s *Service) Act(ctx context.Context, id string, req api.MeetingActRequest)
 			if m.Status != api.MeetingStatusClosed {
 				return badStatef("meeting %s is %s; act needs a closed meeting", id, m.Status)
 			}
-			for _, a := range m.Actions {
-				if a.Text == text {
-					tasks = append(tasks, a.TaskID)
-					return nil
-				}
+			if tid, ok, err := s.liveAction(ctx, m, text); err != nil {
+				return err
+			} else if ok {
+				tasks = append(tasks, tid)
+				return nil
 			}
 			cwd := it.Cwd
 			if cwd == "" {
@@ -1118,6 +1119,28 @@ func (s *Service) Act(ctx context.Context, id string, req api.MeetingActRequest)
 	}
 	s.logStep(ctx, id, "act", map[string]any{"tasks": created})
 	return api.MeetingActResult{Meeting: m, Tasks: tasks}, nil
+}
+
+// liveAction returns the task of the latest action with this text, unless that task failed, was cancelled or no
+// longer exists: acting on the same text again then creates a new task (the old action stays listed).
+func (s *Service) liveAction(ctx context.Context, m *api.Meeting, text string) (string, bool, error) {
+	for i := len(m.Actions) - 1; i >= 0; i-- {
+		a := m.Actions[i]
+		if a.Text != text {
+			continue
+		}
+		d, err := s.o.Tasks.Get(ctx, a.TaskID)
+		switch {
+		case errors.Is(err, task.ErrNotFound):
+			return "", false, nil
+		case err != nil:
+			return "", false, err
+		case d.Status == api.StatusFailed || d.Status == api.StatusCancelled:
+			return "", false, nil
+		}
+		return a.TaskID, true, nil
+	}
+	return "", false, nil
 }
 
 // Cancel ends a meeting that has not ended and stops its running turns.

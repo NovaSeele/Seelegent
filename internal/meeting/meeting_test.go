@@ -432,6 +432,21 @@ func TestInterruptedLeadActions(t *testing.T) {
 	if err != nil || len(res.Tasks) != 1 || len(res.Meeting.Actions) != 2 {
 		t.Fatalf("repeated act = %+v %v", res, err)
 	}
+	// A cancelled action task does not count: acting on its text again starts a new task, and the old action
+	// stays listed; the action whose task is still running is reused.
+	cancelled := res.Tasks[0]
+	if _, _, err := ft.Cancel(ctx, cancelled, api.CancelRequest{}); err != nil {
+		t.Fatal(err)
+	}
+	res, err = s.Act(ctx, m.ID, api.MeetingActRequest{Items: []api.ActItem{{Text: "Write docs."}, {Text: "Add a test."}}})
+	if err != nil || len(res.Tasks) != 2 || res.Tasks[0] != first || res.Tasks[1] == cancelled ||
+		len(res.Meeting.Actions) != 3 || res.Meeting.Actions[2].TaskID != res.Tasks[1] {
+		t.Fatalf("act after a cancelled task = %+v %v", res, err)
+	}
+	again, err := s.Act(ctx, m.ID, api.MeetingActRequest{Items: []api.ActItem{{Text: "Add a test."}}})
+	if err != nil || len(again.Tasks) != 1 || again.Tasks[0] != res.Tasks[1] || len(again.Meeting.Actions) != 3 {
+		t.Fatalf("act after the restart = %+v %v", again, err)
+	}
 }
 
 // A meeting left in round without a round (a daemon that stopped while opening it) fails at the next start

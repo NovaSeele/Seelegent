@@ -132,7 +132,9 @@ vindicated|dismissed}`; `open` takes the outcome back (the dashboard's Undo). Th
 `regression` signal could never fire and is gone (old bug D19).
 
 `POST /meetings/{id}/act {items}` turns the decision into up to 20 delegated tasks linked to the meeting
-(`meetingId`). `POST /meetings/{id}/cancel` stops the runs and keeps the record. `GET /meetings/{id}/wait?seconds=`
+(`meetingId`). An item whose text already has a task gets that task back, so a retried act creates only what
+is missing; a task that failed or was cancelled does not count, and acting on its text again starts a new one.
+`POST /meetings/{id}/cancel` stops the runs and keeps the record. `GET /meetings/{id}/wait?seconds=`
 (0 to 1500, default 600) returns once the meeting needs the lead or has ended. The minutes (`Meeting.minutes`) are
 English markdown written from the record; the dashboard draws the structured fields instead. Every change
 publishes `meeting.updated` with the meeting's summary.
