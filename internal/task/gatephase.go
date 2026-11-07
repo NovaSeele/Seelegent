@@ -143,7 +143,7 @@ func (s *Service) othersWorking(ctx context.Context, t *Task) bool {
 
 // gateEnv is the environment of gate commands: the daemon's, plus CI=1 and what the gate is about. The gate's own
 // variables are never inherited: a SEELEGENT_TURN_FILES from the daemon's environment would name other files when
-// this list is too long to pass (old behaviour).
+// this list is too long to pass (as the old version did).
 func (s *Service) gateEnv(t *Task, files []string) []string {
 	own := []string{"CI", "SEELEGENT_GATE", "SEELEGENT_TASK", "SEELEGENT_TURN_FILES"}
 	var env []string
