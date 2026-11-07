@@ -71,3 +71,40 @@ func TestPipedGroups(t *testing.T) {
 		`{ echo "print('git stash')"; } | python3`:                    false,
 	}, POSIX)
 }
+
+// TestConfigReads (G-b): git config <key> and git config get <key> read; the writing forms stay refused.
+func TestConfigReads(t *testing.T) {
+	expect(t, Checker{}, map[string]bool{
+		"git config help.autocorrect":                   false,
+		"git config core.hooksPath":                     false,
+		"git config alias.st":                           false,
+		"git config --global alias.st":                  false,
+		"git config --type=bool core.fsmonitor":         false,
+		"git config -f .gitmodules submodule.x.update":  false,
+		"git config get alias.st":                       false,
+		"git config get --all alias.st":                 false,
+		"git config --get-regexp '^alias\\.'":           false,
+		"git config user.name 'A B'":                    false,
+		"git config --unset user.name":                  false,
+		"git config remove-section user":                false,
+		"git config help.autocorrect immediate":         true,
+		"git config alias.st status":                    true,
+		"git config --add alias.st status":              true,
+		"git config --unset alias.st":                   true,
+		"git config --uns alias.st":                     true,
+		"git config --unset-all core.hooksPath":         true,
+		"git config --replace-all alias.st status":      true,
+		"git config --replace alias.st status":          true,
+		"git config set alias.st status":                true,
+		"git config unset alias.st":                     true,
+		"git config -e":                                 true,
+		"git config --edit --global":                    true,
+		"git config edit":                               true,
+		"git config --rename-section user alias":        true,
+		"git config rename-section foo filter.x":        true,
+		"git config --remove-section alias":             true,
+		"git config remove-section alias":               true,
+		"git config $KEY":                               true,
+		"git config --global core.hooksPath /tmp/hooks": true,
+	}, POSIX)
+}
