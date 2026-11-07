@@ -390,6 +390,12 @@
       "desc": "Как часто искать новые issues в отслеживаемых репозиториях; 0 выключает.",
       "keywords": "github issues опрос"
     },
+    "githubHosts": {
+      "label": "Хосты GitHub Enterprise",
+      "desc": "Хосты, кроме github.com, которые считаются GitHub, по одному в строке. Токен GitHub отправляется только на эти хосты.",
+      "keywords": "github enterprise хост ghe сервер",
+      "placeholder": "github.example.com"
+    },
     "automations": {
       "label": "Автоматизации",
       "desc": "Выполнять запланированные автоматизации.",

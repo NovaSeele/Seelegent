@@ -100,10 +100,9 @@ func TestRequestChecks(t *testing.T) {
 	e.wantError(e.req(http.MethodDelete, "/api/v1/accounts/a-nope", nil, nil), http.StatusNotFound, api.CodeNotFound, "")
 	e.wantError(e.req(http.MethodDelete, "/api/v1/health", nil, nil), http.StatusNotFound, api.CodeNotFound, "")
 
-	// Reserved paths of later milestones.
-	for _, p := range []string{"/api/v1/github/repos", "/api/v1/automations", "/api/v1/automations/a1"} {
-		e.wantError(e.get(p), http.StatusNotImplemented, api.CodeNotImplemented, "")
-	}
+	// Milestone 15 built the last reserved paths: an unknown automation is a plain 404.
+	e.wantError(e.get("/api/v1/automations/a1"), http.StatusNotFound, api.CodeNotFound, "")
+	e.wantError(e.get("/api/v1/github/nothing-here"), http.StatusNotFound, api.CodeNotFound, "")
 }
 
 // TestStatic covers contract §8 and old D-23/B17.

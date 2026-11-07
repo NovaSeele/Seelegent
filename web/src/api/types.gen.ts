@@ -197,6 +197,233 @@ export interface ProviderInput {
   accounts?: number
 }
 
+/** Schedule is a preset (Every with At, and Weekday for weekly) or a 5-field cron expression (Cron). */
+export interface Schedule {
+  every?: 'hourly' | 'daily' | 'weekdays' | 'weekly'
+  /** At is "HH:MM" (hourly uses only the minutes). */
+  at?: string
+  /** Weekday is 0-6, 0 = Sunday (weekly). */
+  weekday?: number
+  /** Cron is "minute hour day-of-month month day-of-week". */
+  cron?: string
+}
+
+/** AutomationQuota are the quota rules of an automation. */
+export interface AutomationQuota {
+  /**
+   * MinRemaining skips a run when the best account of the target backend has less than this percentage left
+   * (0-100) in the bucket that limits it.
+   */
+  minRemaining: number
+  /** UseBeforeReset also starts one run when a weekly bucket resets within 24 h with at least 40 % left. */
+  useBeforeReset: boolean
+}
+
+/** AutomationRun is one attempt to run an automation. */
+export interface AutomationRun {
+  id: number
+  at: string
+  trigger: 'schedule' | 'missed' | 'manual' | 'before_reset'
+  outcome:
+    | 'started'
+    | 'skipped_precheck'
+    | 'precheck_failed'
+    | 'skipped_quota'
+    | 'skipped_overlap'
+    | 'skipped_late'
+    | 'skipped_changed'
+    | 'error'
+    | 'pending'
+  taskId?: string
+  /**
+   * Detail says why a run was skipped or failed (the precheck's output tail, the quota left, ...), in English for
+   * the lead's tools.
+   */
+  detail?: string
+  /** Info is the same as facts, for the dashboard to say in the user's language. Absent on older rows. */
+  info?: AutomationRunInfo
+}
+
+/**
+ * AutomationRunInfo is what a run's outcome rests on. Which fields are set depends on the outcome: skipped_overlap
+ * (Reason, TaskID and TaskStatus of the task still active), skipped_quota (Backend, or Account for a before-reset
+ * run's weekly bucket, with Remaining and MinRemaining in percent), skipped_precheck and precheck_failed (ExitCode,
+ * TimedOut with TimeoutSeconds, or NotStarted; Output is the command's output tail), skipped_late (LateMinutes,
+ * GraceMinutes), skipped_changed (Reason), error (Reason and Member when known, else Message), pending (Due).
+ */
+export interface AutomationRunInfo {
+  reason?:
+    | 'starting'
+    | 'task_running'
+    | 'changed'
+    | 'unconfirmed'
+    | 'disabled'
+    | 'master_off'
+    | 'interrupted'
+    | 'member_missing'
+    | 'member_disabled'
+  taskId?: string
+  taskStatus?: string
+  backend?: string
+  account?: string
+  remaining?: number
+  minRemaining?: number
+  exitCode?: number
+  timedOut?: boolean
+  timeoutSeconds?: number
+  notStarted?: boolean
+  output?: string
+  lateMinutes?: number
+  graceMinutes?: number
+  member?: string
+  message?: string
+  due?: string
+}
+
+/** Automation is a saved delegation on a schedule. */
+export interface Automation {
+  id: string
+  name: string
+  prompt: string
+  cwd: string
+  schedule: Schedule
+  /** Timezone is "local" or an IANA zone. */
+  timezone: string
+  member?: string
+  backend?: string
+  model?: string
+  gate: boolean | null
+  gateCommands: string[]
+  lane: string[]
+  noLane: boolean
+  /**
+   * Precheck is a shell command run in cwd before each run (60 s limit). Exit code 0 runs; 1 skips the run
+   * (skipped_precheck); any other outcome skips it as a broken precheck (precheck_failed).
+   */
+  precheck?: string
+  quota: AutomationQuota
+  /** GraceMinutes: a run missed while the daemon was off still runs if it is at most this late. */
+  graceMinutes: number
+  /**
+   * Enabled automations run on their schedule. EnableRequested says the lead (MCP or CLI) asked to turn it on:
+   * only a confirmation in the dashboard does.
+   */
+  enabled: boolean
+  enableRequested: boolean
+  enableRequestedAt?: string
+  confirmedAt?: string
+  /**
+   * Confirmed is true while what a run does is what the user last confirmed in the dashboard (Revision unchanged
+   * since). Run now needs it: an automation never confirmed, or changed since, is refused (not_confirmed).
+   */
+  confirmed: boolean
+  /**
+   * Revision names what a run does (a hash of the prompt, folder, worker, gate, lane, precheck and schedule). The
+   * dashboard sends the revision it shows when it asks for a confirmation token, so it enables exactly that.
+   */
+  revision: string
+  /** Running is true while the task of the last run is active (ActiveTaskID). */
+  running: boolean
+  activeTaskId?: string
+  nextRun?: string
+  lastRun: AutomationRun | null
+  createdAt: string
+  updatedAt: string
+}
+
+/** AutomationInput is the body of POST /automations. Enabled true only records an enable request. */
+export interface AutomationInput {
+  name: string
+  prompt: string
+  cwd: string
+  schedule: Schedule
+  timezone?: string
+  member?: string
+  backend?: string
+  model?: string
+  gate?: boolean
+  gateCommands?: string[]
+  lane?: string[]
+  noLane?: boolean
+  precheck?: string
+  quota?: AutomationQuota
+  graceMinutes?: number
+  enabled?: boolean
+}
+
+/**
+ * AutomationPatch is the body of PATCH /automations/{id}: the fields to change. Enabled false turns it off at
+ * once; Enabled true only records an enable request. A change of what a run does (prompt, cwd, worker, gate, lane,
+ * precheck) turns an enabled automation off until it is confirmed again.
+ */
+export interface AutomationPatch {
+  name?: string
+  prompt?: string
+  cwd?: string
+  schedule?: Schedule
+  timezone?: string
+  member?: string
+  backend?: string
+  model?: string
+  gate?: boolean
+  gateCommands?: string[]
+  lane?: string[]
+  noLane?: boolean
+  precheck?: string
+  quota?: AutomationQuota
+  graceMinutes?: number
+  enabled?: boolean
+}
+
+/**
+ * AutomationEnableResult answers an enable request (POST /automations/{id}/enable, PATCH enabled true, a create
+ * with enabled true): the automation stays off until the user confirms it in the dashboard at ConfirmURL.
+ */
+export interface AutomationEnableResult {
+  automation: Automation
+  /** Confirm is true: the user has to confirm in the dashboard. */
+  confirm: boolean
+  confirmUrl: string
+  message: string
+}
+
+/**
+ * AutomationConfirmToken answers POST /automations/{id}/confirm-token (dashboard only): a one-time token that
+ * enables exactly the automation as shown, for a few minutes.
+ */
+export interface AutomationConfirmToken {
+  token: string
+  expiresAt: string
+}
+
+/**
+ * AutomationConfirmTokenRequest is the body of POST /automations/{id}/confirm-token (dashboard only): the
+ * revision of the automation as the dashboard shows it. A token is refused when the automation has changed since.
+ */
+export interface AutomationConfirmTokenRequest {
+  revision: string
+}
+
+/** AutomationConfirmRequest is the body of POST /automations/{id}/confirm (dashboard only). */
+export interface AutomationConfirmRequest {
+  token: string
+}
+
+/** SchedulePreviewRequest is the body of POST /automations/preview: the next run times of a schedule. */
+export interface SchedulePreviewRequest {
+  schedule: Schedule
+  timezone?: string
+  count?: number
+}
+
+/** SchedulePreview answers POST /automations/preview. */
+export interface SchedulePreview {
+  /** Runs are the next run times (UTC); Local are the same in the schedule's zone ("2026-11-07 09:00 Mon"). */
+  runs: string[]
+  local: string[]
+  timezone: string
+}
+
 /** EventType names the kind of a task event; Data has one shape per type. */
 export type EventType =
   | 'worker'
@@ -748,6 +975,458 @@ export interface BranchInfo {
   dirty: boolean
 }
 
+/** GitHubAccess is how Seelegent reaches GitHub. The token itself never leaves the daemon: only its hint. */
+export interface GitHubAccess {
+  tier: 'gh' | 'token' | 'manual'
+  ghVersion?: string
+  ghUser?: string
+  /** TokenHint is "…" and the token's last four characters when a token is stored. */
+  tokenHint?: string
+  /**
+   * Hosts are the hosts treated as GitHub: github.com and the enterprise hosts of the settings. A remote on any
+   * other host is not GitHub, and no token is ever sent to it.
+   */
+  hosts: string[]
+  checkedAt: string
+}
+
+/** GitHubTokenRequest is the body of PUT /github/token (dashboard only). */
+export interface GitHubTokenRequest {
+  token: string
+}
+
+/** GitHubTokenResult answers PUT /github/token: only the hint. */
+export interface GitHubTokenResult {
+  tokenHint: string
+}
+
+/** RepoCounts are a repository's issue and ticket counts by board column. */
+export interface RepoCounts {
+  inbox: number
+  working: number
+  waitingPr: number
+  sent: number
+  skipped: number
+}
+
+/** OutboxEntry is one action that leaves the machine (or changes the ticket's branch), written before it runs. */
+export interface OutboxEntry {
+  id: number
+  kind: 'commit' | 'push' | 'open_pr' | 'comment' | 'create_remote'
+  status: 'pending' | 'running' | 'done' | 'failed' | 'unknown'
+  args: Record<string, unknown>
+  result: Record<string, unknown>
+  error?: string
+  at: string
+  doneAt?: string
+}
+
+/** Repo is a connected repository. */
+export interface Repo {
+  id: string
+  path: string
+  name: string
+  /**
+   * Owner, Repo and Host name the GitHub repository of origin; empty when origin is missing or not on a GitHub
+   * host (GitHub false, NotGitHub says why).
+   */
+  owner?: string
+  repo?: string
+  host?: string
+  github: boolean
+  notGithub?: string
+  /** Remote is "origin" when the repository has one; RemoteURL is its URL without credentials. */
+  remote?: string
+  remoteUrl?: string
+  defaultBranch: string
+  sharedDirs: string[]
+  createdAt: string
+  lastSyncAt?: string
+  syncError?: string
+  counts: RepoCounts
+  outbox: OutboxEntry[]
+}
+
+/**
+ * RepoConnectRequest is the body of POST /github/repos: connect the repository at path, or make one there first
+ * (init).
+ */
+export interface RepoConnectRequest {
+  path: string
+  init?: boolean
+  name?: string
+  /** FirstCommit (init, default true) makes an empty first commit when the repository has none. */
+  firstCommit?: boolean
+}
+
+/**
+ * RepoPatch is the body of PATCH /github/repos/{id}: the shared folders linked into new ticket worktrees ([] or
+ * null clears them).
+ */
+export interface RepoPatch {
+  sharedDirs: string[]
+}
+
+/** RemoteRequest is the body of POST /github/repos/{id}/remote: create the GitHub repository (gh or token tier). */
+export interface RemoteRequest {
+  name?: string
+  private?: boolean
+}
+
+/** SyncResult is what an inbox sync changed. */
+export interface SyncResult {
+  added: number
+  updated: number
+  closed: number
+  /** Skipped says why nothing was fetched (no_github: origin is not a GitHub repository). */
+  skipped?: string
+}
+
+/** IssueSuggestion is the lead's suggestion for an issue (no side effects). */
+export interface IssueSuggestion {
+  action: 'assign' | 'meeting' | 'skip'
+  member?: string
+  reason: string
+  at: string
+}
+
+/** IssueDecision is the triage decision on an issue. */
+export interface IssueDecision {
+  action: 'assign' | 'meeting' | 'skip'
+  by: 'lead' | 'user'
+  reason?: string
+  at: string
+  ticketId?: string
+}
+
+/** Issue is an inbox entry: a GitHub issue (key gh#<n>) or a local one (local#<n>). Its text is untrusted. */
+export interface Issue {
+  key: string
+  number?: number
+  localId?: number
+  source: 'github' | 'local'
+  title: string
+  body: string
+  labels: string[]
+  author?: string
+  url?: string
+  state: 'open' | 'closed'
+  updatedAt: string
+  suggestion: IssueSuggestion | null
+  decision: IssueDecision | null
+  /** Ticket is the issue's latest ticket (null when none). */
+  ticket: TicketSummary | null
+}
+
+/** IssueInput is the body of POST /github/repos/{id}/issues: a local issue. */
+export interface IssueInput {
+  title: string
+  body?: string
+}
+
+/** SuggestRequest is the body of POST /github/repos/{id}/issues/{key}/suggest. */
+export interface SuggestRequest {
+  action: 'assign' | 'meeting' | 'skip'
+  member?: string
+  reason: string
+}
+
+/**
+ * TicketTaskOptions are the worker options of a ticket task (triage assign, add task, fix checks), as in
+ * DelegateRequest.
+ */
+export interface TicketTaskOptions {
+  member?: string
+  backend?: string
+  model?: string
+  gate?: boolean
+  gateCommands?: string[]
+  /** Lane defaults to the whole worktree; NoLane drops it. */
+  lane?: string[]
+  noLane?: boolean
+}
+
+/** TriageRequest is the body of POST /github/repos/{id}/issues/{key}/triage. */
+export interface TriageRequest extends TicketTaskOptions {
+  action: 'assign' | 'meeting' | 'skip'
+  by?: 'lead' | 'user'
+  reason?: string
+  /** Prompt is the lead's brief (assign); Seelegent adds the issue as fenced untrusted text and the worktree rules. */
+  prompt?: string
+  /** Question, Attendees, Options and Context open the meeting (meeting). */
+  question?: string
+  attendees?: Array<string | AttendeeRef>
+  options?: string[]
+  context?: string[]
+}
+
+/** TriageResult answers a triage: the issue, its new ticket and the task or meeting started in it. */
+export interface TriageResult {
+  issue: Issue
+  ticket: TicketSummary | null
+  taskId?: string
+  meetingId?: string
+}
+
+/** TicketIssue names the issue of a ticket. */
+export interface TicketIssue {
+  number?: number
+  title: string
+  url?: string
+}
+
+/** TicketPR is the pull request of a ticket. ManualURL is the compare link of the manual tier. */
+export interface TicketPR {
+  number?: number
+  url?: string
+  state?: 'open' | 'closed' | 'merged'
+  draft: boolean
+  headSha?: string
+  manualUrl?: string
+}
+
+/** CheckRun is one CI check of a commit: a check run (Checks API) or a legacy commit status. */
+export interface CheckRun {
+  kind: 'check' | 'status'
+  id?: number
+  name: string
+  status: string
+  conclusion?: string
+  url?: string
+  app?: string
+  runId?: number
+  jobId?: number
+  /** Summary is the check's own output text (untrusted). */
+  summary?: string
+}
+
+/** TicketChecks are the CI checks of the pull request's head commit. */
+export interface TicketChecks {
+  state: 'pending' | 'success' | 'failure' | 'unknown'
+  runs: CheckRun[]
+  headSha?: string
+  at?: string
+  error?: string
+}
+
+/** ChecksFix records the task fix_checks started. */
+export interface ChecksFix {
+  taskId: string
+  headSha?: string
+  runs: string[]
+  at: string
+}
+
+/**
+ * TicketRefusal is why the last pr of a ticket stopped before its branch was pushed, kept on the ticket so the
+ * dashboard explains it in the reader's language. Message is the daemon's English text for the lead (MCP, CLI); the
+ * dashboard never shows it.
+ */
+export interface TicketRefusal {
+  reason: 'unsafe_files' | 'scan_failed' | 'base_not_pushed' | 'branch_diverged'
+  findings: ScanFinding[]
+  /** Branch is the ticket branch (branch_diverged) or the base branch (base_not_pushed). */
+  branch?: string
+  /** Commits is how many commits of the base the remote lacks (base_not_pushed; 0: the base branch is missing). */
+  commits?: number
+  /** Subjects are the subjects of the newest of those commits, at most 3 (base_not_pushed). */
+  subjects?: string[]
+  /**
+   * CompareURL is the GitHub page listing the commits on the branch that Seelegent did not push
+   * (branch_diverged).
+   */
+  compareUrl?: string
+  /**
+   * Cause of a scan that could not run (scan_failed): "changed" (the worktree changed while it was read) or "git"
+   * (git failed; Detail is git's redacted reason).
+   */
+  cause?: 'changed' | 'git'
+  detail?: string
+  message: string
+  at: string
+}
+
+/** TicketSummary is a ticket as lists and the SSE stream show it. */
+export interface TicketSummary {
+  id: string
+  repoId: string
+  issueKey: string
+  issue: TicketIssue
+  branch: string
+  worktree: string
+  status: 'working' | 'review' | 'ready' | 'pr_open' | 'done' | 'dropped' | 'failed'
+  taskIds: string[]
+  /** MeetingID is the meeting triage opened (meeting). */
+  meetingId?: string
+  pr: TicketPR | null
+  checks: TicketChecks | null
+  /**
+   * NeedsAttention says what the lead has to do next: checks_failed while the open pull request's checks failed,
+   * push_refused while Refusal stands (ready or pr_open), open_pr while a pushed branch waits for its pull request
+   * to be opened by hand.
+   */
+  needsAttention?: 'checks_failed' | 'push_refused' | 'open_pr'
+  /** Refusal is why the last pr stopped before pushing (cleared by the next pr or a new task). */
+  refusal?: TicketRefusal
+  /** Error is a failure (a task or meeting that could not start, a GitHub or git call that failed). */
+  error?: string
+  /**
+   * Failure is the known cause of a failed ticket, for the dashboard to explain in its own words (Error stays
+   * the text for the lead's tools and for causes without a code).
+   */
+  failure?: TicketFailure
+  /**
+   * Asked is who the ticket's last task was given to: what a retry or a new task without a member or backend
+   * gets ("as before"). Absent before the first task.
+   */
+  asked?: TicketAsk
+  createdAt: string
+  updatedAt: string
+}
+
+/** TicketAsk is the member, backend and model a ticket's last task was asked for. */
+export interface TicketAsk {
+  member?: string
+  backend?: string
+  model?: string
+}
+
+/** TicketFailure is the known cause of a failed ticket. */
+export interface TicketFailure {
+  reason: 'member_missing' | 'member_disabled'
+  member?: string
+}
+
+/** TicketTask is a task of a ticket as its detail shows it. */
+export interface TicketTask {
+  id: string
+  title: string
+  status: TaskStatus
+  verdict?: 'accepted' | 'rejected'
+  member?: string
+  turns: number
+  updatedAt: string
+}
+
+/** TicketGate is the gate of one turn of a ticket task. */
+export interface TicketGate {
+  taskId: string
+  turn: number
+  state: string
+  at?: string
+  steps: GateStep[]
+}
+
+/** TicketFile is a file the ticket's branch changes against its base (status A, M, D, R, C or ? for untracked). */
+export interface TicketFile {
+  status: string
+  path: string
+  from?: string
+}
+
+/** TicketLogEntry is one step of a ticket's log (token-redacted). */
+export interface TicketLogEntry {
+  id: number
+  at: string
+  type: string
+  data: Record<string, unknown>
+}
+
+/** Ticket is the full ticket (GET /github/tickets/{id}). */
+export interface Ticket extends TicketSummary {
+  slug: string
+  base: string
+  baseSha?: string
+  env: WorktreeEnv | null
+  outbox: OutboxEntry[]
+  checksFix: ChecksFix | null
+  dropReason?: string
+  worktreeRemoved: boolean
+  cleanedAt?: string
+  /**
+   * Exposed lists what the branch already held on GitHub when Seelegent took it over from the previous version
+   * (which pushed the worker's history): files that look like secrets or junk are public already. A warning, not a
+   * block: the keys they hold should be rotated.
+   */
+  exposed?: ScanFinding[]
+  /** Tasks, Gates, Files and Log are read when the ticket is shown. */
+  tasks: TicketTask[]
+  gates: TicketGate[]
+  files: TicketFile[]
+  log: TicketLogEntry[]
+}
+
+/** TicketTaskRequest is the body of POST /github/tickets/{id}/tasks: another task in the ticket's worktree. */
+export interface TicketTaskRequest extends TicketTaskOptions {
+  prompt: string
+}
+
+/** TicketTaskResult answers POST /github/tickets/{id}/tasks and /fix-checks. */
+export interface TicketTaskResult {
+  ticketId: string
+  taskId: string
+}
+
+/**
+ * PRRequest is the body of POST /github/tickets/{id}/pr: commit, push and open a pull request (a draft by
+ * default).
+ */
+export interface PRRequest {
+  title?: string
+  body?: string
+  draft?: boolean
+  commitMessage?: string
+}
+
+/** LinkPRRequest is the body of POST /github/tickets/{id}/link-pr: a pull request the user opened by hand. */
+export interface LinkPRRequest {
+  number: number
+}
+
+/** CommentRequest is the body of POST /github/tickets/{id}/comment. */
+export interface CommentRequest {
+  body: string
+}
+
+/** DropRequest is the body of POST /github/tickets/{id}/drop. */
+export interface DropRequest {
+  reason?: string
+}
+
+/** FixChecksRequest is the body of POST /github/tickets/{id}/fix-checks. */
+export interface FixChecksRequest {
+  member?: string
+  extra?: string
+  backend?: string
+  model?: string
+}
+
+/**
+ * ScanFinding is a file the pull request scan refused (secret, key, junk or too large), with why: Kind and Detail
+ * for the dashboard, Reason in English for the lead.
+ */
+export interface ScanFinding {
+  path: string
+  /**
+   * Kind is env (.env file), private_key (id_rsa ...), key_store (.pem, .p12 ...), credentials (.netrc ...), device
+   * (a Windows device name such as nul), secret (the content holds a key or token), large (over 5 MB) or link (a
+   * link to a place outside the worktree).
+   */
+  kind: 'env' | 'private_key' | 'key_store' | 'credentials' | 'device' | 'secret' | 'large' | 'link'
+  /**
+   * Detail is the extension of a key store, what a secret is (github_token, aws_key, private_key, slack_token,
+   * google_key, anthropic_key, stored_token) or the size in bytes of a large file.
+   */
+  detail?: string
+  reason: string
+}
+
+/** IssuesChanged is the data of issues.changed: refetch that repository's inbox (and the repository list). */
+export interface IssuesChanged {
+  repoId: string
+  changedAt: string
+}
+
 /** ProofStatus is how far a requirement (FR) or success criterion (SC) is proven. */
 export type ProofStatus =
   'unmapped' | 'in_progress' | 'unproven' | 'proven' | 'regressed' | 'failing'
@@ -1274,6 +1953,12 @@ export interface Settings {
   contentionWindowHours: number
   /** GithubPollMinutes is how often pull request states and GitHub inboxes are polled; 0 turns polling off. */
   githubPollMinutes: number
+  /**
+   * GithubEnterpriseHosts are the GitHub Enterprise Server hosts (besides github.com) whose remotes count as
+   * GitHub: a host name ("ghe.example.com", optionally with a port) or an https URL; a plain http URL only for a
+   * loopback address (a local test server). The GitHub token is sent only to github.com and these hosts.
+   */
+  githubEnterpriseHosts: string[]
   /** AutomationsEnabled is the master switch of scheduled automations (each one is still created disabled). */
   automationsEnabled: boolean
 }
@@ -1344,6 +2029,10 @@ export type StreamEvent =
   | 'contest.updated'
   | 'notes.changed'
   | 'proof.run'
+  | 'ticket.updated'
+  | 'issues.changed'
+  | 'automation.updated'
+  | 'automation.deleted'
 
 /** Hello is the data of the hello frame. */
 export interface Hello {
@@ -1563,6 +2252,8 @@ export interface TaskSummary {
   contestId?: string
   ticketId?: string
   meetingId?: string
+  /** AutomationID is the automation whose run started the task. */
+  automationId?: string
   /** Variant is the label (V1..) of a contest variant. */
   variant?: string
   /** LastEventSeq is the highest event seq of the task. */

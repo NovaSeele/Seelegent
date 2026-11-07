@@ -390,6 +390,12 @@
       "desc": "How often tracked repositories are checked for new issues; 0 turns it off.",
       "keywords": "github issues poll"
     },
+    "githubHosts": {
+      "label": "GitHub Enterprise hosts",
+      "desc": "Hosts besides github.com that count as GitHub, one per line. A GitHub token is only ever sent to these hosts.",
+      "keywords": "github enterprise host ghe server",
+      "placeholder": "github.example.com"
+    },
     "automations": {
       "label": "Automations",
       "desc": "Run scheduled automations.",

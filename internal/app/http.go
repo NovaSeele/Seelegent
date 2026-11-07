@@ -76,7 +76,7 @@ func (a *App) ListenHTTP(ctx context.Context, port int) (string, error) {
 		LogDir: a.Paths.Logs, Redact: a.redact, Web: a.web, Classifier: a.classifier, Logger: a.log,
 		DevOrigins: a.devOrigins, Stop: a.RequestStop, Proof: a.Proof, Gates: a.Tasks, HomeID: config.HomeID(a.Paths.Home),
 		Members: a.Members, Consults: a.Tasks, Notes: a.Notes, Meetings: a.Meetings, Contests: a.Contests,
-		Hooks: a.Hooks,
+		Hooks: a.Hooks, Tickets: a.Tickets, Automations: a.Automations,
 	})
 	if err != nil {
 		_ = ln.Close()

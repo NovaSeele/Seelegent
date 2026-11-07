@@ -21,8 +21,8 @@ const (
 	maxCancel     = 60
 )
 
-// handlers maps tool names to their functions (tools a later milestone builds are not listed; team.go has the
-// milestone 14 tools).
+// handlers maps tool names to their functions (team.go has the milestone 14 tools, github.go the milestone 15
+// ones).
 func (s *Server) handlers() map[string]toolFunc {
 	return map[string]toolFunc{
 		"delegate": s.delegate,
@@ -40,6 +40,9 @@ func (s *Server) handlers() map[string]toolFunc {
 		"notes":    s.notes,
 		"meeting":  s.meeting,
 		"contest":  s.contest,
+		// github.go: milestone 15.
+		"issues":      s.issues,
+		"automations": s.automations,
 	}
 }
 

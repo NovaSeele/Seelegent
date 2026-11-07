@@ -25,7 +25,10 @@ Seelegent is a Go daemon + CLI + MCP server in one binary, with a Vue 3 + TypeSc
   [docs/gates.md](docs/gates.md)), `member` (department members), `notes` (review notes on a task's diff),
   `meeting` (meetings, minutes, dissent memory), `contest` (contests: plan, scoring, judge, pick), `worktree` (the
   worktrees Seelegent owns and their environment), `answer` (reading members' answers: sections, citations,
-  redaction) and `hook` (event hooks; all in [docs/team.md](docs/team.md)), `signin` (account sign-in sessions), `httpapi` (HTTP API v1, SSE
+  redaction) and `hook` (event hooks; all in [docs/team.md](docs/team.md)), `github` (access tiers, token store,
+  REST client and `gh` runner, hosts, redaction) and `ticket` (repositories, inbox, triage, tickets, outbox, pull
+  request scan, checks; both in [docs/github.md](docs/github.md)), `automation` (scheduled delegations, cron,
+  confirmation; see [docs/automations.md](docs/automations.md)), `signin` (account sign-in sessions), `httpapi` (HTTP API v1, SSE
   and the embedded dashboard; see [docs/api.md](docs/api.md)), `client` (typed API v1 client, daemon discovery
   and autostart), `ops` (what the MCP tools and the CLI share: worker guard, lead session, waits, active tasks),
   `doctor` (installation checks), `mcpserver` (MCP tools for the lead over the client; see

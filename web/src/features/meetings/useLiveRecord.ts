@@ -1,5 +1,5 @@
 /**
- * One meeting or contest, read when its page opens and again on each update frame for its id and after a resync.
+ * One meeting, contest or ticket, read when its page opens and again on each update frame for its id and after a resync.
  * An action's answer (the record after the change) is applied at once with `set`.
  */
 import { onUnmounted, shallowRef, watch } from 'vue'
@@ -10,7 +10,7 @@ import { createLoader } from '@/stores/loader'
 export function useLiveRecord<T extends { id: string }>(
   id: () => string,
   read: (id: string, signal: AbortSignal) => Promise<T>,
-  event: 'meeting.updated' | 'contest.updated',
+  event: 'meeting.updated' | 'contest.updated' | 'ticket.updated',
 ) {
   const record = shallowRef<T | null>(null)
   const loader = createLoader(

@@ -77,6 +77,8 @@ type TaskSummary struct {
 	ContestID string `json:"contestId,omitempty"`
 	TicketID  string `json:"ticketId,omitempty"`
 	MeetingID string `json:"meetingId,omitempty"`
+	// AutomationID is the automation whose run started the task.
+	AutomationID string `json:"automationId,omitempty"`
 	// Variant is the label (V1..) of a contest variant.
 	Variant string `json:"variant,omitempty"`
 

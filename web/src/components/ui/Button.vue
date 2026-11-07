@@ -22,6 +22,8 @@ const props = withDefaults(
     type?: 'button' | 'submit' | 'reset'
     /** Renders a router link styled as a button. */
     to?: RouteLocationRaw
+    /** Renders a link to another site styled as a button, opened in a new tab (http(s) only; check it first). */
+    href?: string
   }>(),
   {
     variant: 'secondary',
@@ -30,6 +32,7 @@ const props = withDefaults(
     iconEnd: undefined,
     type: 'button',
     to: undefined,
+    href: undefined,
   },
 )
 
@@ -49,6 +52,17 @@ const classes = computed(() => [
     <span class="btn__label"><slot /></span>
     <Icon v-if="iconEnd" :name="iconEnd" class="btn__icon" />
   </RouterLink>
+  <a
+    v-else-if="href && !disabled"
+    :href="href"
+    target="_blank"
+    rel="noopener noreferrer"
+    :class="classes"
+  >
+    <Icon v-if="icon" :name="icon" class="btn__icon" />
+    <span class="btn__label"><slot /></span>
+    <Icon v-if="iconEnd" :name="iconEnd" class="btn__icon" />
+  </a>
   <button
     v-else
     :type="type"

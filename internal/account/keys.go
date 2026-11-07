@@ -121,6 +121,18 @@ func KeyHint(key string) string {
 	return "…" + string(r[len(r)-4:])
 }
 
+// ProtectSecret encrypts a secret of the daemon (such as the GitHub token) the way API keys are stored: DPAPI for
+// the current Windows user, the bytes as they are elsewhere (the caller keeps them in a 0600 file). purpose keeps
+// blobs of different secrets apart.
+func ProtectSecret(data []byte, purpose string) ([]byte, error) {
+	return protect(data, "secret:"+purpose)
+}
+
+// UnprotectSecret decrypts a blob made by ProtectSecret with the same purpose.
+func UnprotectSecret(blob []byte, purpose string) ([]byte, error) {
+	return unprotect(blob, "secret:"+purpose)
+}
+
 // validateKey checks an API key (already trimmed).
 func validateKey(key string) error {
 	if key == "" {

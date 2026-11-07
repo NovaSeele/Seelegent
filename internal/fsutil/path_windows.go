@@ -55,6 +55,25 @@ func finalPath(p string) (string, error) {
 	}
 }
 
+// shortName is the 8.3 short form of an existing path ("" when it has none or cannot be read).
+func shortName(p string) string {
+	name, err := windows.UTF16PtrFromString(p)
+	if err != nil {
+		return ""
+	}
+	buf := make([]uint16, windows.MAX_PATH)
+	for {
+		n, err := windows.GetShortPathName(name, &buf[0], uint32(len(buf))) //nolint:gosec // small buffer
+		if err != nil || n == 0 {
+			return ""
+		}
+		if int(n) < len(buf) {
+			return windows.UTF16ToString(buf[:n])
+		}
+		buf = make([]uint16, n)
+	}
+}
+
 // longPath expands 8.3 short names in p with GetLongPathName.
 func longPath(p string) (string, error) {
 	name, err := windows.UTF16PtrFromString(p)

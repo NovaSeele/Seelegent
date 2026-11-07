@@ -19,6 +19,8 @@ const props = withDefaults(
     size?: 'sm' | 'md'
     disabled?: boolean
     autocomplete?: string
+    /** The on-screen keyboard to show (inputmode), e.g. numeric for a number that may also be pasted as a link. */
+    inputmode?: 'text' | 'numeric' | 'url'
     /** Keyboard shortcut that focuses the field (aria-keyshortcuts). */
     keyshortcuts?: string
   }>(),
@@ -30,6 +32,7 @@ const props = withDefaults(
     icon: undefined,
     size: 'md',
     autocomplete: 'off',
+    inputmode: undefined,
     keyshortcuts: undefined,
   },
 )
@@ -60,6 +63,7 @@ defineExpose({ focus: () => input.value?.focus(), select: () => input.value?.sel
         :placeholder="placeholder"
         :disabled="disabled"
         :autocomplete="autocomplete"
+        :inputmode="inputmode"
         :aria-invalid="error ? 'true' : undefined"
         :aria-describedby="describedBy"
         :aria-keyshortcuts="keyshortcuts"

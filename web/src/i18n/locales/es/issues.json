@@ -1,0 +1,401 @@
+{
+  "access": {
+    "title": "Acceso a GitHub",
+    "check": "Comprobar de nuevo",
+    "tier": {
+      "gh": "GitHub CLI",
+      "token": "Token de acceso",
+      "manual": "Manual"
+    },
+    "tierDesc": {
+      "gh": "Seelegent usa la GitHub CLI (gh) con sesión iniciada para leer issues, abrir pull requests y leer los checks.",
+      "token": "Seelegent usa el token guardado para leer issues, abrir pull requests y leer los checks.",
+      "manual": "Sin sesión en GitHub: Seelegent sube las ramas y te da un enlace para abrir cada pull request tú mismo."
+    },
+    "ghUser": "Sesión iniciada como {user} (gh {version})",
+    "hosts": "Hosts tratados como GitHub: {hosts}.",
+    "hostsEdit": "Cambiar en los ajustes",
+    "token": "Token de acceso personal",
+    "replace": "Reemplazar el token",
+    "stored": "Hay guardado un token que termina en {hint}.",
+    "tokenHint": "Se envía una vez y no se vuelve a mostrar. Solo se usa con los hosts de arriba.",
+    "save": "Guardar token",
+    "saved": "Token guardado",
+    "remove": "Quitar token",
+    "removeTitle": "¿Quitar el token de GitHub?",
+    "removeDesc": "Seelegent vuelve a la GitHub CLI o a las pull requests manuales."
+  },
+  "connect": {
+    "open": "Conectar repositorio",
+    "title": "Conectar un repositorio",
+    "desc": "Un repositorio Git de este equipo. Sus issues vienen de GitHub cuando su origin está en un host de GitHub.",
+    "path": "Carpeta",
+    "pathHint": "La ruta absoluta de la carpeta del repositorio.",
+    "pathError": "Escribe una ruta de carpeta absoluta.",
+    "init": "Convertirla en repositorio",
+    "initDesc": "Ejecuta git init allí primero si la carpeta aún no es un repositorio.",
+    "submit": "Conectar"
+  },
+  "repo": {
+    "label": "Repositorio",
+    "choose": "Repositorio",
+    "loading": "Cargando repositorios…",
+    "loadFailed": "No se pudieron cargar los repositorios: {error}",
+    "empty": "Ningún repositorio conectado",
+    "emptyDesc": "Conecta un repositorio para ver sus issues y convertirlos en tickets.",
+    "sync": "Sincronizar",
+    "synced": "Sincronizado: {added} nuevos, {updated} actualizados, {closed} cerrados.",
+    "syncSkipped": "Nada sincronizado: {reason}",
+    "github": "GitHub ({host})",
+    "notGithub": "No está en GitHub",
+    "lastSync": "Sincronizado {when}",
+    "counts": "{inbox} en la bandeja · {working} en curso · {waitingPr} esperando PR · {sent} enviados · {skipped} omitidos",
+    "disconnect": "Desconectar",
+    "disconnectTitle": "¿Desconectar {name}?",
+    "disconnectDesc": "Seelegent olvida este repositorio y su bandeja. La carpeta, sus ramas y sus worktrees quedan como están."
+  },
+  "tabs": {
+    "label": "Vista de issues",
+    "inbox": "Bandeja",
+    "tickets": "Tickets"
+  },
+  "inbox": {
+    "state": {
+      "open": "Abiertos",
+      "closed": "Cerrados",
+      "all": "Todos"
+    },
+    "stateLabel": "Qué issues",
+    "add": "Añadir issue local",
+    "loading": "Cargando issues…",
+    "loadFailed": "No se pudieron cargar los issues: {error}",
+    "empty": "No hay issues aquí",
+    "emptyDesc": "Sincroniza para traer los issues del repositorio desde GitHub, o añade un issue local.",
+    "closed": "Cerrado",
+    "by": "de {author}",
+    "suggested": "Sugerencia: {action}",
+    "decided": "{action}, decidido por {by}",
+    "who": {
+      "lead": "el lead",
+      "user": "ti"
+    },
+    "body": "Texto del issue",
+    "ticket": "Ticket: {status}",
+    "decide": "Decidir"
+  },
+  "add": {
+    "title": "Añadir un issue local",
+    "desc": "Un issue local se queda en este equipo; nunca llega a GitHub.",
+    "titleField": "Título",
+    "titleError": "Escribe un título.",
+    "body": "Descripción",
+    "submit": "Añadir issue"
+  },
+  "triage": {
+    "title": "Decidir {key}",
+    "decision": "Decisión",
+    "action": {
+      "assign": "Asignar",
+      "meeting": "Reunión",
+      "skip": "Omitir"
+    },
+    "actionDesc": {
+      "assign": "Crea un ticket: su propia rama y worktree, y una tarea para un worker.",
+      "meeting": "Abre una reunión sobre el issue en el worktree de un ticket nuevo.",
+      "skip": "Deja el issue; se guarda el motivo."
+    },
+    "anyWorker": "Cualquier worker",
+    "prompt": "Instrucciones",
+    "promptHint": "Tu encargo para el worker. El texto del issue se añade como datos no confiables.",
+    "member": "Miembro",
+    "model": "Modelo",
+    "modelHint": "Vacío: el del miembro o el del backend.",
+    "question": "Pregunta",
+    "attendees": "Asistentes",
+    "noMembers": "Aún no hay miembros del equipo. Añádelos en la página Miembros.",
+    "reason": "Motivo",
+    "reasonRequired": "Obligatorio para omitir.",
+    "reasonError": "Escribe por qué se omite el issue.",
+    "attendeesError": "Elige al menos un asistente.",
+    "submit": {
+      "assign": "Asignar",
+      "meeting": "Abrir reunión",
+      "skip": "Omitir issue"
+    }
+  },
+  "tickets": {
+    "loading": "Cargando tickets…",
+    "empty": "No hay tickets",
+    "emptyDesc": "Asigna un issue de la bandeja para crear un ticket.",
+    "pr": "PR #{n}",
+    "group": {
+      "needsYou": "Te necesitan ({count})",
+      "others": "Otros tickets ({count})"
+    }
+  },
+  "ticket": {
+    "back": "Todos los issues",
+    "loading": "Cargando el ticket…",
+    "notFound": "No se pudo cargar el ticket: {error}",
+    "status": {
+      "working": "En curso",
+      "review": "Esperando tu revisión",
+      "ready": "Listo para PR",
+      "pr_open": "PR abierta",
+      "done": "Hecho",
+      "dropped": "Descartado",
+      "failed": "Fallido"
+    },
+    "checksState": {
+      "pending": "Checks en curso",
+      "success": "Checks superados",
+      "failure": "Checks fallidos",
+      "unknown": "Checks desconocidos"
+    },
+    "issueLink": "Issue {key}",
+    "prLink": "Pull request #{n}",
+    "draft": "borrador",
+    "meeting": "Reunión",
+    "dropReason": "Descartado: {reason}",
+    "worktree": "Worktree",
+    "removed": "eliminado",
+    "base": "Base",
+    "tasks": "Tareas",
+    "noTasks": "Aún no hay tareas.",
+    "turns": "{n} turno | {n} turnos",
+    "checks": "Checks",
+    "noChecks": "Aún no hay checks.",
+    "checksFix": "Corrigiendo {runs} en la tarea",
+    "files": "Archivos cambiados",
+    "noFiles": "Aún no hay cambios respecto a la base.",
+    "envSkipped": "Fuera del worktree",
+    "outbox": "Enviado desde este equipo",
+    "outboxKind": {
+      "commit": "Confirmar cambios",
+      "push": "Push",
+      "open_pr": "Abrir pull request",
+      "comment": "Comentario",
+      "create_remote": "Crear repositorio en GitHub"
+    },
+    "outboxStatus": {
+      "pending": "Pendiente",
+      "running": "En curso",
+      "done": "Hecho",
+      "failed": "Fallido",
+      "unknown": "Desconocido: revisa GitHub",
+      "linkReady": "Enlace listo",
+      "skipped": "Omitido: no está en GitHub",
+      "refused": "Rechazado"
+    },
+    "log": "Registro",
+    "phase": {
+      "push_refused": "Envío bloqueado",
+      "open_pr": "Rama enviada: abre la PR",
+      "checks_failed": "Checks fallidos"
+    },
+    "runState": {
+      "pending": "En curso",
+      "success": "Superado",
+      "failure": "Fallido",
+      "unknown": "Otro resultado"
+    },
+    "fileRefused": "{what} (no enviado)",
+    "logType": {
+      "status": "Estado",
+      "task": "Tarea iniciada",
+      "worktree": "Worktree creado",
+      "worktree_failed": "Falló el worktree",
+      "env": "Archivos del worktree",
+      "outbox": "Envío",
+      "outbox_recovered": "Encontrado hecho tras una parada",
+      "outbox_unknown": "Cortado por una parada",
+      "pr_refused": "Envío rechazado",
+      "scan_refused": "Archivos rechazados",
+      "push_adopted": "Rama adoptada",
+      "pr_found": "Pull request encontrada",
+      "link_pr": "Pull request vinculada",
+      "checks_failed": "Checks fallidos",
+      "fix_checks": "Corrigiendo checks",
+      "meeting": "Reunión abierta",
+      "retry": "Iniciado de nuevo",
+      "task_failed": "La tarea no pudo empezar",
+      "meeting_failed": "La reunión no pudo abrirse",
+      "drop": "Descartado",
+      "cleanup": "Worktree eliminado"
+    },
+    "logKey": {
+      "status": "estado",
+      "kind": "paso",
+      "taskId": "tarea",
+      "number": "número",
+      "state": "estado",
+      "error": "error",
+      "reason": "motivo",
+      "findings": "archivos",
+      "member": "miembro",
+      "backend": "backend",
+      "branch": "rama",
+      "exposed": "ya públicos"
+    },
+    "logReason": {
+      "unsafe_files": "archivos no seguros",
+      "scan_failed": "falló la comprobación",
+      "base_not_pushed": "base no está en GitHub",
+      "branch_diverged": "la rama cambió en GitHub"
+    },
+    "outboxRefused": "Seelegent rechazó este paso: el motivo y qué hacer están al principio de la página.",
+    "fileState": {
+      "added": "Añadido",
+      "modified": "Modificado",
+      "deleted": "Eliminado",
+      "renamed": "Renombrado",
+      "copied": "Copiado",
+      "typeChanged": "Tipo cambiado",
+      "conflict": "Conflicto",
+      "new": "Nuevo"
+    }
+  },
+  "actions": {
+    "pr": "Abrir pull request",
+    "push": "Subir cambios",
+    "link": "Vincular PR",
+    "task": "Nueva tarea",
+    "comment": "Comentar",
+    "drop": "Descartar",
+    "fixChecks": "Corregir checks",
+    "cleanup": "Quitar worktree",
+    "desc": {
+      "pr": "Hace commit del worktree, sube la rama del ticket y abre una pull request. Los secretos, claves y archivos basura lo detienen.",
+      "link": "Registra una pull request que abriste a mano para esta rama.",
+      "task": "Otra tarea en el worktree de este ticket.",
+      "comment": "Publica un comentario en el issue de GitHub.",
+      "drop": "Detiene el ticket y cancela sus tareas en curso. El worktree se queda hasta que lo quites.",
+      "retry": "Vuelve a iniciar la tarea del ticket en su worktree. Elige otro miembro o backend para reasignarla."
+    },
+    "prTitle": "Título",
+    "prTitleHint": "Vacío: el título del issue.",
+    "prBody": "Descripción",
+    "prBodyHint": "Vacío: un resumen que enlaza el issue.",
+    "draft": "Abrir como borrador",
+    "number": "Número de la pull request",
+    "numberError": "Escribe el número de la pull request o su dirección (…/pull/43).",
+    "textError": "Escribe algo de texto.",
+    "field": {
+      "task": "Instrucciones",
+      "comment": "Comentario",
+      "drop": "Motivo (opcional)",
+      "retry": "Instrucciones (opcional)"
+    },
+    "submit": {
+      "pr": "Subir y abrir",
+      "link": "Vincular",
+      "task": "Iniciar tarea",
+      "comment": "Publicar comentario",
+      "drop": "Descartar ticket",
+      "retry": "Volver a empezar"
+    },
+    "retry": "Reintentar",
+    "retryPromptHint": "Vacío: el worker trabaja en el issue tal como está escrito.",
+    "retrySame": "Como antes",
+    "backend": "Backend",
+    "backendHint": "Otro backend usa sus propias cuentas.",
+    "numberHint": "El número o la dirección de la pull request.",
+    "retrySameWho": "Como antes ({who})",
+    "retrySameMissing": "Como antes ({member}, ya no existe)",
+    "retrySameDisabled": "Como antes ({member}, desactivado)",
+    "retryPickOther": "Elige otro miembro o un backend.",
+    "retryNoMembers": "No hay otros miembros para elegir. Elige un backend.",
+    "retryNoMembersSame": "No hay otros miembros para elegir: se ejecuta como antes o en el backend que elijas."
+  },
+  "refusal": {
+    "title": {
+      "secrets": "Sin enviar: {count} archivo parece contener un secreto | Sin enviar: {count} archivos parecen contener secretos",
+      "files": "Sin enviar: {count} archivo no puede ir a GitHub | Sin enviar: {count} archivos no pueden ir a GitHub",
+      "scanChanged": "Sin enviar: el worktree cambió durante la comprobación",
+      "scanFailed": "Sin enviar: no se pudieron comprobar los cambios",
+      "baseNotPushed": "Sin enviar: {branch} tiene {commits} commit que no está en GitHub | Sin enviar: {branch} tiene {commits} commits que no están en GitHub",
+      "baseMissing": "Sin enviar: la rama base {branch} no está en GitHub",
+      "branchDiverged": "Envío bloqueado: la rama {branch} cambió en GitHub"
+    },
+    "why": {
+      "unsafeFiles": "No se ha hecho commit ni envío de nada. Cada archivo indica qué hacer.",
+      "scanChanged": "Seelegent comprueba exactamente lo que envía; un worker o tú cambiasteis archivos mientras los leía, así que no se envió nada.",
+      "scanFailed": "Git falló mientras Seelegent leía los cambios, y nunca se envía nada sin comprobar.",
+      "baseNotPushed": "Ese commit iría a GitHub con los del ticket, sin comprobar. | Esos commits irían a GitHub con los del ticket, sin comprobar.",
+      "branchDiverged": "Alguien envió a {branch} o la cambió en GitHub. Seelegent nunca continúa sobre una rama así ni la sobrescribe."
+    },
+    "next": {
+      "unsafeFiles": "Después, inténtalo de nuevo.",
+      "scanChanged": "Espera a que la tarea del ticket se detenga y vuelve a intentarlo.",
+      "scanFailed": "Inténtalo de nuevo. Si sigue fallando, revisa el worktree con git status.",
+      "baseNotPushed": "Envía {branch} a GitHub y vuelve a intentarlo.",
+      "branchDiverged": "Revisa los commits que Seelegent no envió, deshazlos en GitHub y vuelve a intentarlo, o descarta este ticket."
+    },
+    "gitSaid": "Git dijo:",
+    "moreCommits": "y {count} commit más | y {count} commits más",
+    "seeCommits": "Ver los commits en GitHub"
+  },
+  "next": {
+    "tryAgain": "Reintentar",
+    "openPr": {
+      "title": "Rama enviada: abre la pull request en GitHub",
+      "why": "Todavía no existe ninguna pull request: Seelegent no tiene acceso a GitHub para abrirla. Ábrela con el enlace y luego registra su número con Vincular PR.",
+      "action": "Abrir en GitHub"
+    },
+    "checks": {
+      "title": "Falló {count} check de la pull request | Fallaron {count} checks de la pull request",
+      "why": "Los checks de CI de la pull request fallaron.",
+      "fixing": "Una tarea los está corrigiendo"
+    },
+    "review": {
+      "title": "Una tarea espera tu revisión",
+      "why": "Acepta la tarea para que el ticket quede listo para una pull request, o recházala para devolverla.",
+      "action": "Revisar tarea"
+    },
+    "ready": {
+      "title": "Listo para una pull request",
+      "why": "La tarea fue aceptada. No se envía nada hasta que tú o el líder lo pidáis: ningún nivel de acceso abre pull requests por su cuenta."
+    },
+    "failed": {
+      "title": "La tarea del ticket no pudo empezar",
+      "why": "Vuelve a iniciarla, con el mismo worker u otro miembro o backend.",
+      "action": "Reintentar o reasignar",
+      "memberMissing": "El miembro «{member}» ya no existe. Asigna la tarea a otro miembro o a un backend.",
+      "memberDisabled": "El miembro «{member}» está desactivado. Actívalo en la página Miembros o asigna la tarea a otro miembro o a un backend."
+    },
+    "exposed": {
+      "title": "Ya es público: la versión anterior envió {count} archivo que parece un secreto | Ya es público: la versión anterior envió {count} archivos que parecen secretos",
+      "why": "La rama en GitHub contiene los commits del propio worker de antes de esta versión, y estos archivos están en ellos. Seelegent sigue sobre la rama y no envía nada nuevo de ellos.",
+      "next": "Rota todas las claves que tenían estos archivos: borrarlos ahora no los retira de GitHub."
+    }
+  },
+  "finding": {
+    "kind": {
+      "env": "Un archivo de entorno (.env)",
+      "private_key": "Un archivo de clave privada",
+      "key_store": "Un almacén de claves o certificados ({ext})",
+      "credentials": "Un archivo de credenciales",
+      "device": "Un nombre de dispositivo reservado de Windows",
+      "large": "Mayor de 5 MB",
+      "largeSize": "Mayor de 5 MB ({size})",
+      "link": "Un enlace a un lugar fuera del worktree"
+    },
+    "secret": {
+      "github_token": "Contiene un token de GitHub",
+      "aws_key": "Contiene una clave de acceso de AWS",
+      "private_key": "Contiene una clave privada",
+      "slack_token": "Contiene un token de Slack",
+      "google_key": "Contiene una clave de API de Google",
+      "anthropic_key": "Contiene una clave de API de Anthropic",
+      "stored_token": "Contiene el token de GitHub guardado en Seelegent",
+      "unknown": "Contiene una clave o un token"
+    },
+    "fix": {
+      "file": "Bórralo o añádelo a .gitignore.",
+      "secret": "Saca la clave del código (léela del entorno) y rótala si alguna vez se compartió.",
+      "large": "Quítalo, o añádelo a .gitignore si es un resultado de compilación.",
+      "device": "Bórralo: Windows no puede extraer un archivo con este nombre.",
+      "link": "Borra el enlace o copia en el worktree aquello a lo que apunta."
+    }
+  }
+}

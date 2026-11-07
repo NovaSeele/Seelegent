@@ -140,7 +140,7 @@ func newTestDaemon(t *testing.T) *testDaemon {
 	d := &testDaemon{queue: fakecli.NewQueue(t), paths: paths, cwd: cwd}
 	set := config.Defaults()
 	a, err := app.New(t.Context(), app.Options{Paths: paths, Settings: &set, Env: d.queue.Env(os.Environ()),
-		RealHome: filepath.Join(home, "realhome"), Launcher: fakecli.Launcher(t), NoQuotaReaders: true,
+		RealHome: filepath.Join(home, "realhome"), Launcher: fakecli.Launcher(t), NoQuotaReaders: true, NoGh: true,
 		Bins: map[string]string{config.BackendAgy: fakecli.Exe(t), config.BackendClaude: "", config.BackendCodex: ""}})
 	if err != nil {
 		t.Fatal(err)
@@ -362,6 +362,8 @@ func TestWorkerGuard(t *testing.T) {
 		{"members", "add", "--name", "x"}, {"members", "remove", "x"}, {"consult", "t-1", "--member", "x"},
 		{"notes", "send", "t-1"}, {"meeting", "open", "q"}, {"meeting", "decide", "m1", "x"},
 		{"contest", "pick", "k1"}, {"hooks", "test", "h1"}, {"hooks", "set", "x.json"},
+		{"issues", "triage", "r1", "gh#1", "skip"}, {"issues", "pr", "k1"}, {"issues", "sync", "r1"},
+		{"automations", "enable", "a1"}, {"automations", "create", "x"}, {"automations", "run", "a1"},
 	} {
 		r := runCLI(t, td, args...)
 		if r.code != ExitError || r.stderr != ops.WorkerMessage+"\n" || r.stdout != "" {
@@ -385,6 +387,102 @@ func TestWorkerGuard(t *testing.T) {
 	must(t, td, "meeting", "list")
 	must(t, td, "contest", "list")
 	must(t, td, "hooks", "list")
+	must(t, td, "issues", "repos")
+	must(t, td, "issues", "tickets")
+	must(t, td, "automations", "list")
+}
+
+// gitIdentity gives git an author where none is configured (a fresh HOME): the first commit of a new repository is
+// the user's, not Seelegent's.
+func gitIdentity(t *testing.T) {
+	t.Helper()
+	for k, v := range map[string]string{"GIT_AUTHOR_NAME": "Test", "GIT_COMMITTER_NAME": "Test",
+		"GIT_AUTHOR_EMAIL": "test@example.invalid", "GIT_COMMITTER_EMAIL": "test@example.invalid"} {
+		t.Setenv(k, v)
+	}
+}
+
+// TestGitHubCommands: the issues and automations commands (milestone 15). Nothing reaches GitHub: the repo has no
+// remote, and the daemon never runs gh (NoGh).
+func TestGitHubCommands(t *testing.T) {
+	gitIdentity(t)
+	d := newTestDaemon(t)
+	td := testDeps(nil)
+	repo := filepath.Join(filepath.Dir(d.cwd), "repo")
+	var r api.Repo
+	must(t, td, "issues", "init", repo, "--json").json(t, &r)
+	if r.ID == "" || r.GitHub {
+		t.Fatalf("init = %+v", r)
+	}
+	if out := must(t, td, "issues", "repos").stdout; !strings.Contains(out, "GitHub access: manual") ||
+		!strings.Contains(out, r.ID) {
+		t.Fatalf("repos:\n%s", out)
+	}
+	var i api.Issue
+	must(t, td, "issues", "add", repo, "--title", "Fix it", "body text", "--json").json(t, &i)
+	if i.Key != "local#1" || i.Body != "body text" {
+		t.Fatalf("add = %+v", i)
+	}
+	must(t, td, "issues", "suggest", r.ID, "local#1", "skip", "--reason", "dup")
+	var tri api.TriageResult
+	must(t, td, "issues", "triage", r.ID, "local#1", "skip", "--reason", "duplicate", "--json").json(t, &tri)
+	if tri.Issue.Decision == nil || tri.Issue.Decision.By != "lead" || tri.Ticket != nil {
+		t.Fatalf("triage = %+v", tri)
+	}
+	if out := must(t, td, "issues", "list", r.ID, "--state", "all").stdout; !strings.Contains(out, "local#1") ||
+		!strings.Contains(out, "skip") {
+		t.Fatalf("list:\n%s", out)
+	}
+	if out := must(t, td, "issues", "shared-dirs", r.ID, "node_modules").stdout; out != "node_modules\n" {
+		t.Fatalf("shared-dirs: %q", out)
+	}
+	if out := must(t, td, "issues", "shared-dirs", r.ID, "--clear").stdout; out != "" {
+		t.Fatalf("shared-dirs --clear: %q", out)
+	}
+	wantErr(t, td, ExitError, "", "issues", "list", filepath.Join(repo, "nope"))
+	wantErr(t, td, ExitError, string(api.CodeNotFound), "issues", "ticket", "k-nope", "--json")
+	wantErr(t, td, ExitUsage, "usage", "issues", "link-pr", "k1", "zero", "--json")
+	wantErr(t, td, ExitUsage, "usage", "issues", "token", "--json")
+
+	var x api.Automation
+	must(t, td, "automations", "create", "--cwd", d.cwd, "--every", "daily", "--at", "09:00", "--precheck",
+		"exit 3", "--name", "nightly", "check the logs", "--json").json(t, &x)
+	if x.ID == "" || x.Enabled || x.Prompt != "check the logs" || x.Quota.MinRemaining != 20 {
+		t.Fatalf("create = %+v", x)
+	}
+	var en api.AutomationEnableResult
+	must(t, td, "automations", "enable", x.ID, "--json").json(t, &en)
+	if !en.Confirm || en.Automation.Enabled || !strings.Contains(en.ConfirmURL, "confirm="+x.ID) {
+		t.Fatalf("enable = %+v", en)
+	}
+	// Run now runs only what the user confirmed in the dashboard.
+	if r := wantErr(t, td, ExitError, "bad_state", "automations", "run", x.ID, "--json"); !strings.Contains(r.stdout,
+		"not_confirmed") {
+		t.Fatalf("run unconfirmed:\n%s", r.stdout)
+	}
+	if out := must(t, td, "automations", "runs", x.ID).stdout; out != "" {
+		t.Fatalf("runs:\n%s", out)
+	}
+	must(t, td, "automations", "update", x.ID, "--min-remaining", "50", "--json").json(t, &x)
+	if x.Quota.MinRemaining != 50 || x.Schedule.At != "09:00" {
+		t.Fatalf("update = %+v", x)
+	}
+	must(t, td, "automations", "disable", x.ID, "--json").json(t, &x)
+	if x.Enabled || x.EnableRequested {
+		t.Fatalf("disable = %+v", x)
+	}
+	var pv api.SchedulePreview
+	must(t, td, "automations", "preview", "--cron", "0 9 * * 1", "--timezone", "UTC", "--count", "2", "--json").
+		json(t, &pv)
+	if len(pv.Runs) != 2 {
+		t.Fatalf("preview = %+v", pv)
+	}
+	wantErr(t, td, ExitUsage, "usage", "automations", "preview", "--json")
+	must(t, td, "automations", "delete", x.ID)
+	if out := must(t, td, "automations", "list").stdout; out != "" {
+		t.Fatalf("list after delete: %q", out)
+	}
+	wantErr(t, td, ExitUsage, "usage", "automations", "confirm", x.ID, "--json")
 }
 
 // TestTeamCommands: members, hooks, meetings, contests and notes through the command line.

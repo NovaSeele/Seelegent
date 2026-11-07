@@ -390,6 +390,12 @@
       "desc": "Cada cuánto se buscan issues nuevas en los repositorios seguidos; 0 lo desactiva.",
       "keywords": "github issues sondeo"
     },
+    "githubHosts": {
+      "label": "Hosts de GitHub Enterprise",
+      "desc": "Hosts, además de github.com, que cuentan como GitHub, uno por línea. El token de GitHub solo se envía a estos hosts.",
+      "keywords": "github enterprise host ghe servidor",
+      "placeholder": "github.example.com"
+    },
     "automations": {
       "label": "Automatizaciones",
       "desc": "Ejecutar las automatizaciones programadas.",

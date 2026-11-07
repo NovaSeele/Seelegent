@@ -175,6 +175,10 @@ type Options struct {
 	Meetings Meetings
 	Contests Contests
 	Hooks    Hooks
+	// Tickets and Automations are the GitHub flow and the automations (milestone 15); the paths of one that is
+	// nil answer 501.
+	Tickets     Tickets
+	Automations Automations
 	// Backends are the worker CLIs by name.
 	Backends map[string]backend.Backend
 	// LogDir is the folder of daemon.log and hooks.log (GET /logs).
@@ -433,16 +437,12 @@ func (s *Server) routes() {
 	s.settingsRoutes()
 	s.proofRoutes()
 	s.teamRoutes()
-	s.reservedRoutes()
+	s.githubRoutes()
+	s.automationRoutes()
 	s.mux.HandleFunc("GET "+apiPrefix+"/events", s.serveEvents)
 	s.mux.HandleFunc(apiPrefix+"/", func(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, r, translated(api.CodeNotFound, "not_found"))
 	})
-}
-
-// reservedRoutes answer 501 for the paths milestone 15 fills (contract §6).
-func (s *Server) reservedRoutes() {
-	s.reserve("/github/", "/automations", "/automations/")
 }
 
 // background runs fn until Close.

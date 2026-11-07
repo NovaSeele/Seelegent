@@ -98,7 +98,7 @@ func newEnvWith(t *testing.T, adjust func(*envOptions)) *env {
 	set.Port = 47831
 	a, err := app.New(t.Context(), app.Options{
 		Paths: paths, Settings: &set, Env: e.queue.Env(os.Environ()), RealHome: filepath.Join(home, "home"),
-		Launcher: fakecli.Launcher(t), NoQuotaReaders: true,
+		Launcher: fakecli.Launcher(t), NoQuotaReaders: true, NoGh: true,
 		Bins: map[string]string{config.BackendAgy: fakecli.Exe(t), config.BackendClaude: "", config.BackendCodex: ""},
 		Web:  webFiles, Classifier: e.who, SignInOpener: opts.opener,
 	})

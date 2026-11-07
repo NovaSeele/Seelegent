@@ -157,3 +157,26 @@ func TestValidationErrorMessage(t *testing.T) {
 		t.Fatalf("err = %v\nwant  %s", err, want)
 	}
 }
+
+func TestGitHubEnterpriseHosts(t *testing.T) {
+	s := Defaults()
+	s.GithubEnterpriseHosts = []string{"ghe.example.com", "https://ghe2.example.com:8443", "http://127.0.0.1:9000"}
+	if err := s.Validate(); err != nil {
+		t.Fatalf("valid hosts refused: %v", err)
+	}
+	for _, bad := range []string{"", "github.com", "http://ghe.example.com", "https://u:p@ghe.example.com",
+		"https://ghe.example.com/api", "ftp://x", "a b", "ghe.example.com:99999"} {
+		s.GithubEnterpriseHosts = []string{bad}
+		if err := s.Validate(); err == nil {
+			t.Errorf("%q accepted", bad)
+		}
+	}
+	s.GithubEnterpriseHosts = []string{"GHE.example.com", "ghe.example.com"}
+	if err := s.Validate(); err == nil {
+		t.Error("duplicate host accepted")
+	}
+	h, err := NormalizeGitHubHost("http://[::1]:8080")
+	if err != nil || h.Host != "[::1]:8080" || h.Scheme != "http" {
+		t.Errorf("loopback v6 = %+v, %v", h, err)
+	}
+}

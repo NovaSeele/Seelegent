@@ -47,7 +47,10 @@ file exists.
 With `SEELEGENT_WORKER=1`, `delegate`, `run`, `followup`, `review`, `cancel`, `memory append|replace`, `stop`,
 `restart`, `ui`, `daemon` (`serve`), `setup` (a dry run too), `migrate`, `restore`, `proof run`, `proof cancel-run`,
 `consult`, `meeting` (all but `list`, `status` and `wait`), `notes` (all but `list`), `contest pick` and `contest
-cancel`, `members add|set|remove` and `hooks set|test` print exactly `Seelegent is not available inside a Seelegent worker.` and exit 1 (with `--json`:
+cancel`, `members add|set|remove`, `hooks set|test`, `issues` (all but `repos`, `list`, `tickets` and `ticket`:
+`connect`, `init`, `create-remote`, `sync`, `add`, `suggest`, `shared-dirs`, `triage`, `add-task`, `retry`, `pr`,
+`link-pr`, `comment`, `drop`, `cleanup`, `fix-checks`) and `automations` (all but `list`, `show`, `runs` and
+`preview`: `create`, `update`, `enable`, `disable`, `delete`, `run`) print exactly `Seelegent is not available inside a Seelegent worker.` and exit 1 (with `--json`:
 `{"error": that text, "code": "forbidden", "details": {"caller": "worker"}}`). The check runs before the flags are
 parsed and before any call. `status`, `wait`, `task`, `ls`, `memory read`, the other `proof` commands, `doctor`, `version`, `skill` and the
 hidden `hook claude-agent` (Claude Code's reminder hook, which may run inside a worker and only prints advice) stay
@@ -91,6 +94,21 @@ allowed, and so do the read commands of `members`, `meeting`, `contest`, `notes`
 | `meeting post <id> --answer q1=text ... [--note T]`, `decide <id> [--option K] [--rationale T] <decision>`, `act <id> [--member M] [--backend B] [--model M] [--cwd D] <brief>`, `cancel <id>`, `dissent-outcome <id> <dissent-id> vindicated\|dismissed` | The lead's side of a meeting: answer questions, decide, turn the decision into a task, cancel, settle a dissent later. | `Meeting`; `act` `MeetingActResult` |
 | `contest list\|status <id>\|wait <id> [--seconds N]\|diff <id> <variant>` | Contests, one contest's scoreboard, judge and proposal, a wait until it is ready or ended, a variant's diff against the base. | `ContestSummary[]`, `Contest`, `ContestDiff` |
 | `contest pick <id> [--winner V2]`, `contest cancel <id>` | Apply the winner (default: the proposal) to the working tree, or stop every variant; both remove the worktrees. | `Contest` |
+| `issues repos` | The connected repos and the GitHub access tier ([github.md](github.md)). | `{access: GitHubAccess, repos: Repo[]}` |
+| `issues connect <path>`, `issues init <path> [--name N] [--no-first-commit]`, `issues create-remote <repo> [--name N] [--public]` | Connect a repository, make one first, or create its GitHub repository (gh or token tier; private unless `--public`). `<repo>` is a repo id or the repository's folder. | `Repo` |
+| `issues sync <repo>`, `issues list <repo> [--state open\|closed\|all]`, `issues add <repo> --title T [body\|@file]` | Refresh the inbox from GitHub, print it, add a local issue. | `SyncResult`, `Issue[]`, `Issue` |
+| `issues suggest <repo> <key> assign\|meeting\|skip [--member M] [--reason T]` | Records a suggestion; nothing else happens. `<key>` is `gh#12`, `local#3` or a bare number (`gh#`). | `Issue` |
+| `issues triage <repo> <key> assign\|meeting\|skip [flags]` | Decides an issue. `assign` makes a ticket (its own worktree and branch) with a task: `--prompt T\|@file`, `--member`, `--backend`, `--model`, `--gate`, `--gate-detect`, `--no-gate`, `--lane`, `--no-lane`, `--wait N` (default 0). `meeting` opens a meeting in that worktree: `--question`, `--attendee id[:rank]`, `--option`, `--context`. `skip` needs `--reason`. | `TriageResult`, or `TaskReport` with `--wait` |
+| `issues tickets [--repo R] [--status s,...]`, `issues ticket <id>` | The tickets, or one with its tasks, gates, files and log. | `TicketSummary[]`, `Ticket` |
+| `issues add-task <ticket> [flags] <prompt\|@file>`, `issues retry <ticket> [flags] [prompt\|@file]`, `issues fix-checks <ticket> [--member M] [--extra T\|@file] [--wait N]` | Another task in the ticket's worktree (the worker flags of `triage`), the task of a failed ticket again (another member, backend or model; the prompt is optional), or a task with the failing CI checks of its pull request. | `TicketTaskResult`, or `TaskReport` with `--wait` |
+| `issues pr <ticket> [--title T] [--body T\|@file] [--commit-message T] [--ready]` | Commits, pushes the ticket branch and opens a draft pull request (`--ready`: not a draft). Refused when a changed file is secret or junk ([github.md](github.md)). In the manual tier it pushes and prints the compare link; record the pull request with `link-pr`. | `Ticket` |
+| `issues link-pr <ticket> <number>`, `issues comment <ticket> <body\|@file>`, `issues drop <ticket> [--reason T]`, `issues cleanup <ticket>` | Record a pull request opened by hand, comment on the issue, end a ticket without a pull request, remove a done or dropped ticket's clean worktree (the branch stays). | `Ticket` |
+| `issues shared-dirs <repo> [dir...] [--clear]` | The gitignored folders (such as `node_modules`) linked into new ticket worktrees; without folders it prints them. | `{id, path, sharedDirs}` |
+| `automations list\|show <id>\|runs <id> [--limit N]` | The automations, one automation, its run history ([automations.md](automations.md)). | `Automation[]`, `Automation`, `AutomationRun[]` |
+| `automations create --every E --at HH:MM \| --cron C [flags] <prompt\|@file>` | Saves a delegation on a schedule, disabled. Flags: `--name`, `--cwd`, `--weekday`, `--timezone`, `--member`, `--backend`, `--model`, `--precheck`, `--min-remaining` (default 20), `--use-before-reset`, `--grace` (default 60), `--gate`, `--gate-detect`, `--no-gate`, `--lane`, `--no-lane`. | `Automation` |
+| `automations update <id> [flags] [prompt\|@file]` | Changes only the flags given. A changed prompt, folder, worker, gate, lane, precheck or schedule turns an enabled automation off until you confirm it again. | `Automation` |
+| `automations enable <id>`, `automations disable <id>` | `enable` only asks: it prints the dashboard link where you confirm. `disable` turns it off and withdraws the request. | `AutomationEnableResult`, `Automation` |
+| `automations run <id>`, `automations delete <id>`, `automations preview --every E --at HH:MM \| --cron C [--timezone Z] [--count N]` | One run now, only of an automation the user confirmed as it is (else `bad_state`, `details.reason: "not_confirmed"`; the overlap, quota and precheck rules still apply), delete with the history, or the next times a schedule fires. | `AutomationRun`, `{ok, deleted}`, `SchedulePreview` |
 | `hooks list\|set <file.json>\|test <id>` | The event hooks: list, replace the list from a JSON file (`{"hooks": [...]}` or a list; ids kept), run one now with a `hook.test` event. | `Hook[]`, `HookRun` |
 | `doctor` | Checks the installation (below); exit 1 when a check fails. | `[{name, status: ok\|warn\|fail, message, fix?}]` |
 | `version [--check-database]` | Version, commit and build date. `--check-database` also reads the data folder's database read-only and fails with `schema_too_new` when this build cannot open it (the installers run it on a downloaded binary). | `buildinfo.Info` + `schemaVersion` (the number of database migrations in the build) + `databaseSchemaVersion` with `--check-database` (0 without a database) |
@@ -167,9 +185,11 @@ A plan task (`--mode plan`) refuses `--gate`, `--gate-detect`, `--lane`, `--forc
 the brief in its own worktree. `--judge M` names the judge (default: the first enabled peer), `--no-judge` scores by
 machine only, `--deadline N` sets the minutes (default 60). A contest refuses `--after` and `--mode plan`.
 
-### Not in this version
+### No token and no confirmation here
 
-There are no `issues` or `automations` commands.
+The GitHub token is stored, and an automation is confirmed, only in the dashboard: the command line (like the MCP
+tools) has no command for either, and the daemon refuses those routes to any caller that is not the dashboard page
+([github.md](github.md), [automations.md](automations.md)).
 
 ## doctor
 

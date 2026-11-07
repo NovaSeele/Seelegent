@@ -1,0 +1,401 @@
+{
+  "access": {
+    "title": "GitHub access",
+    "check": "Check again",
+    "tier": {
+      "gh": "GitHub CLI",
+      "token": "Token",
+      "manual": "Manual"
+    },
+    "tierDesc": {
+      "gh": "Seelegent uses the signed-in GitHub CLI (gh) to read issues, open pull requests and read checks.",
+      "token": "Seelegent uses the stored token to read issues, open pull requests and read checks.",
+      "manual": "No GitHub sign-in: Seelegent pushes branches and gives you a link to open each pull request yourself."
+    },
+    "ghUser": "Signed in as {user} (gh {version})",
+    "hosts": "Hosts treated as GitHub: {hosts}.",
+    "hostsEdit": "Change in settings",
+    "token": "Personal access token",
+    "replace": "Replace the token",
+    "stored": "A token ending in {hint} is stored.",
+    "tokenHint": "Sent once and never shown again. It is used only for the hosts above.",
+    "save": "Save token",
+    "saved": "Token saved",
+    "remove": "Remove token",
+    "removeTitle": "Remove the GitHub token?",
+    "removeDesc": "Seelegent falls back to the GitHub CLI, or to manual pull requests."
+  },
+  "connect": {
+    "open": "Connect repository",
+    "title": "Connect a repository",
+    "desc": "A Git repository on this computer. Its issues come from GitHub when its origin is on a GitHub host.",
+    "path": "Folder",
+    "pathHint": "The absolute path of the repository folder.",
+    "pathError": "Enter an absolute folder path.",
+    "init": "Make it a repository",
+    "initDesc": "Run git init there first if the folder is not a repository yet.",
+    "submit": "Connect"
+  },
+  "repo": {
+    "label": "Repository",
+    "choose": "Repository",
+    "loading": "Loading repositories…",
+    "loadFailed": "Could not load the repositories: {error}",
+    "empty": "No repository connected",
+    "emptyDesc": "Connect a repository to see its issues and turn them into tickets.",
+    "sync": "Sync",
+    "synced": "Synced: {added} new, {updated} updated, {closed} closed.",
+    "syncSkipped": "Nothing synced: {reason}",
+    "github": "GitHub ({host})",
+    "notGithub": "Not on GitHub",
+    "lastSync": "Synced {when}",
+    "counts": "{inbox} in the inbox · {working} working · {waitingPr} waiting for a PR · {sent} sent · {skipped} skipped",
+    "disconnect": "Disconnect",
+    "disconnectTitle": "Disconnect {name}?",
+    "disconnectDesc": "Seelegent forgets this repository and its inbox. The folder, its branches and its worktrees stay as they are."
+  },
+  "tabs": {
+    "label": "Issues view",
+    "inbox": "Inbox",
+    "tickets": "Tickets"
+  },
+  "inbox": {
+    "state": {
+      "open": "Open",
+      "closed": "Closed",
+      "all": "All"
+    },
+    "stateLabel": "Which issues",
+    "add": "Add local issue",
+    "loading": "Loading issues…",
+    "loadFailed": "Could not load the issues: {error}",
+    "empty": "No issues here",
+    "emptyDesc": "Sync to fetch the repository's issues from GitHub, or add a local issue.",
+    "closed": "Closed",
+    "by": "by {author}",
+    "suggested": "Suggested: {action}",
+    "decided": "{action}, decided by {by}",
+    "who": {
+      "lead": "the lead",
+      "user": "you"
+    },
+    "body": "Issue text",
+    "ticket": "Ticket: {status}",
+    "decide": "Decide"
+  },
+  "add": {
+    "title": "Add a local issue",
+    "desc": "A local issue stays on this computer; it never reaches GitHub.",
+    "titleField": "Title",
+    "titleError": "Enter a title.",
+    "body": "Description",
+    "submit": "Add issue"
+  },
+  "triage": {
+    "title": "Decide {key}",
+    "decision": "Decision",
+    "action": {
+      "assign": "Assign",
+      "meeting": "Meeting",
+      "skip": "Skip"
+    },
+    "actionDesc": {
+      "assign": "Make a ticket: its own branch and worktree, and a task for a worker.",
+      "meeting": "Open a meeting about the issue in a new ticket's worktree.",
+      "skip": "Leave the issue; the reason is kept."
+    },
+    "anyWorker": "Any worker",
+    "prompt": "Instructions",
+    "promptHint": "Your brief for the worker. The issue text is added as untrusted data.",
+    "member": "Member",
+    "model": "Model",
+    "modelHint": "Empty: the member's or the backend's default.",
+    "question": "Question",
+    "attendees": "Attendees",
+    "noMembers": "No team members yet. Add some on the Members page.",
+    "reason": "Reason",
+    "reasonRequired": "Required to skip.",
+    "reasonError": "Enter why the issue is skipped.",
+    "attendeesError": "Pick at least one attendee.",
+    "submit": {
+      "assign": "Assign",
+      "meeting": "Open meeting",
+      "skip": "Skip issue"
+    }
+  },
+  "tickets": {
+    "loading": "Loading tickets…",
+    "empty": "No tickets",
+    "emptyDesc": "Assign an issue from the inbox to make a ticket.",
+    "pr": "PR #{n}",
+    "group": {
+      "needsYou": "Needs you ({count})",
+      "others": "Other tickets ({count})"
+    }
+  },
+  "ticket": {
+    "back": "All issues",
+    "loading": "Loading the ticket…",
+    "notFound": "Could not load the ticket: {error}",
+    "status": {
+      "working": "Working",
+      "review": "Awaiting your review",
+      "ready": "Ready for a PR",
+      "pr_open": "PR open",
+      "done": "Done",
+      "dropped": "Dropped",
+      "failed": "Failed"
+    },
+    "checksState": {
+      "pending": "Checks running",
+      "success": "Checks passed",
+      "failure": "Checks failed",
+      "unknown": "Checks unknown"
+    },
+    "issueLink": "Issue {key}",
+    "prLink": "Pull request #{n}",
+    "draft": "draft",
+    "meeting": "Meeting",
+    "dropReason": "Dropped: {reason}",
+    "worktree": "Worktree",
+    "removed": "removed",
+    "base": "Base",
+    "tasks": "Tasks",
+    "noTasks": "No tasks yet.",
+    "turns": "{n} turn | {n} turns",
+    "checks": "Checks",
+    "noChecks": "No checks reported yet.",
+    "checksFix": "Fixing {runs} in task",
+    "files": "Changed files",
+    "noFiles": "No changes against the base yet.",
+    "envSkipped": "Left out of the worktree",
+    "outbox": "Sent from this computer",
+    "outboxKind": {
+      "commit": "Commit",
+      "push": "Push",
+      "open_pr": "Open pull request",
+      "comment": "Comment",
+      "create_remote": "Create GitHub repository"
+    },
+    "outboxStatus": {
+      "pending": "Pending",
+      "running": "Running",
+      "done": "Done",
+      "failed": "Failed",
+      "unknown": "Unknown: check GitHub",
+      "linkReady": "Link ready",
+      "skipped": "Skipped: not on GitHub",
+      "refused": "Refused"
+    },
+    "log": "Log",
+    "phase": {
+      "push_refused": "Push blocked",
+      "open_pr": "Branch pushed: open the PR",
+      "checks_failed": "Checks failed"
+    },
+    "runState": {
+      "pending": "Running",
+      "success": "Passed",
+      "failure": "Failed",
+      "unknown": "Other result"
+    },
+    "fileRefused": "{what} (not pushed)",
+    "logType": {
+      "status": "Status",
+      "task": "Task started",
+      "worktree": "Worktree made",
+      "worktree_failed": "Worktree failed",
+      "env": "Worktree files",
+      "outbox": "Sent",
+      "outbox_recovered": "Found done after a stop",
+      "outbox_unknown": "Cut off by a stop",
+      "pr_refused": "Push refused",
+      "scan_refused": "Files refused",
+      "push_adopted": "Branch taken over",
+      "pr_found": "Pull request found",
+      "link_pr": "Pull request linked",
+      "checks_failed": "Checks failed",
+      "fix_checks": "Fixing checks",
+      "meeting": "Meeting opened",
+      "retry": "Started again",
+      "task_failed": "Task could not start",
+      "meeting_failed": "Meeting could not open",
+      "drop": "Dropped",
+      "cleanup": "Worktree removed"
+    },
+    "logKey": {
+      "status": "status",
+      "kind": "step",
+      "taskId": "task",
+      "number": "number",
+      "state": "state",
+      "error": "error",
+      "reason": "reason",
+      "findings": "files",
+      "member": "member",
+      "backend": "backend",
+      "branch": "branch",
+      "exposed": "already public"
+    },
+    "logReason": {
+      "unsafe_files": "unsafe files",
+      "scan_failed": "check failed",
+      "base_not_pushed": "base not on GitHub",
+      "branch_diverged": "branch changed on GitHub"
+    },
+    "outboxRefused": "Seelegent refused this step: why, and what to do, is at the top of the page.",
+    "fileState": {
+      "added": "Added",
+      "modified": "Modified",
+      "deleted": "Deleted",
+      "renamed": "Renamed",
+      "copied": "Copied",
+      "typeChanged": "Type changed",
+      "conflict": "Conflict",
+      "new": "New"
+    }
+  },
+  "actions": {
+    "pr": "Open pull request",
+    "push": "Push changes",
+    "link": "Link PR",
+    "task": "New task",
+    "comment": "Comment",
+    "drop": "Drop",
+    "fixChecks": "Fix checks",
+    "cleanup": "Remove worktree",
+    "desc": {
+      "pr": "Commits the worktree, pushes the ticket's branch and opens a pull request. Secrets, keys and junk files stop it.",
+      "link": "Record a pull request you opened by hand for this branch.",
+      "task": "Another task in this ticket's worktree.",
+      "comment": "Posts a comment on the GitHub issue.",
+      "drop": "Stops the ticket and cancels its running tasks. The worktree stays until you remove it.",
+      "retry": "Starts the ticket's task again in its worktree. Pick another member or backend to reassign it."
+    },
+    "prTitle": "Title",
+    "prTitleHint": "Empty: the issue's title.",
+    "prBody": "Description",
+    "prBodyHint": "Empty: a summary that links the issue.",
+    "draft": "Open as a draft",
+    "number": "Pull request number",
+    "numberError": "Enter the pull request's number or its address (…/pull/43).",
+    "textError": "Enter some text.",
+    "field": {
+      "task": "Instructions",
+      "comment": "Comment",
+      "drop": "Reason (optional)",
+      "retry": "Instructions (optional)"
+    },
+    "submit": {
+      "pr": "Push and open",
+      "link": "Link",
+      "task": "Start task",
+      "comment": "Post comment",
+      "drop": "Drop ticket",
+      "retry": "Start again"
+    },
+    "retry": "Try again",
+    "retryPromptHint": "Empty: the worker works on the issue as written.",
+    "retrySame": "As before",
+    "backend": "Backend",
+    "backendHint": "Another backend uses its own accounts.",
+    "numberHint": "The number, or the pull request's address.",
+    "retrySameWho": "As before ({who})",
+    "retrySameMissing": "As before ({member}, no longer exists)",
+    "retrySameDisabled": "As before ({member}, turned off)",
+    "retryPickOther": "Pick another member or a backend.",
+    "retryNoMembers": "There are no other members to pick. Choose a backend.",
+    "retryNoMembersSame": "There are no other members to pick: it runs as before, or on the backend you choose."
+  },
+  "refusal": {
+    "title": {
+      "secrets": "Not pushed: {count} file looks like it contains a secret | Not pushed: {count} files look like they contain secrets",
+      "files": "Not pushed: {count} file cannot go to GitHub | Not pushed: {count} files cannot go to GitHub",
+      "scanChanged": "Not pushed: the worktree changed during the check",
+      "scanFailed": "Not pushed: the changes could not be checked",
+      "baseNotPushed": "Not pushed: {branch} has {commits} commit that is not on GitHub | Not pushed: {branch} has {commits} commits that are not on GitHub",
+      "baseMissing": "Not pushed: the base branch {branch} is not on GitHub",
+      "branchDiverged": "Push blocked: the branch {branch} changed on GitHub"
+    },
+    "why": {
+      "unsafeFiles": "Nothing was committed or pushed. Each file below says what to do.",
+      "scanChanged": "Seelegent checks exactly what it pushes; a worker or you changed files while it read them, so nothing was sent.",
+      "scanFailed": "Git failed while Seelegent read the changes, and nothing is ever pushed unchecked.",
+      "baseNotPushed": "That commit would go to GitHub with the ticket's, unchecked. | Those commits would go to GitHub with the ticket's, unchecked.",
+      "branchDiverged": "Someone pushed to {branch} or changed it on GitHub. Seelegent never builds on such a branch or overwrites it."
+    },
+    "next": {
+      "unsafeFiles": "Then try again.",
+      "scanChanged": "Wait until the ticket's task has stopped, then try again.",
+      "scanFailed": "Try again. If it keeps failing, check the worktree with git status.",
+      "baseNotPushed": "Push {branch} to GitHub, then try again.",
+      "branchDiverged": "Look at the commits Seelegent did not push, undo them on GitHub, then try again; or drop this ticket."
+    },
+    "gitSaid": "Git said:",
+    "moreCommits": "and {count} more commit | and {count} more commits",
+    "seeCommits": "See the commits on GitHub"
+  },
+  "next": {
+    "tryAgain": "Try again",
+    "openPr": {
+      "title": "Branch pushed: open the pull request on GitHub",
+      "why": "No pull request exists yet: Seelegent has no GitHub sign-in to open it. Open it with the link, then record its number with Link PR.",
+      "action": "Open on GitHub"
+    },
+    "checks": {
+      "title": "{count} check failed on the pull request | {count} checks failed on the pull request",
+      "why": "The pull request's CI checks failed.",
+      "fixing": "A task is fixing them"
+    },
+    "review": {
+      "title": "A task is waiting for your review",
+      "why": "Accept the task to make the ticket ready for a pull request, or reject it to send it back.",
+      "action": "Review task"
+    },
+    "ready": {
+      "title": "Ready for a pull request",
+      "why": "The task was accepted. Nothing is pushed until you or the lead ask: no access tier opens pull requests on its own."
+    },
+    "failed": {
+      "title": "The ticket's task could not start",
+      "why": "Start it again, with the same worker or another member or backend.",
+      "action": "Try again or reassign",
+      "memberMissing": "The member \"{member}\" no longer exists. Assign the task to another member or a backend.",
+      "memberDisabled": "The member \"{member}\" is turned off. Turn it on on the Members page, or assign the task to another member or a backend."
+    },
+    "exposed": {
+      "title": "Already public: {count} file that looks like a secret was pushed by the earlier version | Already public: {count} files that look like secrets were pushed by the earlier version",
+      "why": "The branch on GitHub holds the worker's own commits from before this version, and these files are in them. Seelegent builds on the branch and pushes nothing new of them.",
+      "next": "Rotate every key these files held: deleting them now does not take them back from GitHub."
+    }
+  },
+  "finding": {
+    "kind": {
+      "env": "An environment file (.env)",
+      "private_key": "A private key file",
+      "key_store": "A key or certificate store ({ext})",
+      "credentials": "A credentials file",
+      "device": "A reserved Windows device name",
+      "large": "Larger than 5 MB",
+      "largeSize": "Larger than 5 MB ({size})",
+      "link": "A link to a place outside the worktree"
+    },
+    "secret": {
+      "github_token": "Holds a GitHub token",
+      "aws_key": "Holds an AWS access key",
+      "private_key": "Holds a private key",
+      "slack_token": "Holds a Slack token",
+      "google_key": "Holds a Google API key",
+      "anthropic_key": "Holds an Anthropic API key",
+      "stored_token": "Holds the GitHub token stored in Seelegent",
+      "unknown": "Holds a key or token"
+    },
+    "fix": {
+      "file": "Delete it, or add it to .gitignore.",
+      "secret": "Take the key out of the code (read it from the environment instead), and rotate it if it was ever shared.",
+      "large": "Remove it, or add it to .gitignore if it is build output.",
+      "device": "Delete it: Windows cannot check out a file with this name.",
+      "link": "Delete the link, or copy what it points to into the worktree."
+    }
+  }
+}

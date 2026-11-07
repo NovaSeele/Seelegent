@@ -14,6 +14,7 @@ import type {
   AccountFailureData,
   AttemptEndData,
   AttentionEventData,
+  Automation,
   CancelData,
   Changed,
   Deleted,
@@ -25,6 +26,7 @@ import type {
   HandoffData,
   Hello,
   HookRun,
+  IssuesChanged,
   LaneEventData,
   LeadMessageData,
   LoginSession,
@@ -44,6 +46,7 @@ import type {
   TakeoverData,
   TaskEventBase,
   TaskSummary,
+  TicketSummary,
   TurnEndData,
   VerifyEventData,
   WaitingQuotaData,
@@ -276,6 +279,10 @@ export interface ServerEvents {
   'contest.updated': ContestSummary
   'notes.changed': NotesChanged
   'proof.run': ProofRun
+  'ticket.updated': TicketSummary
+  'issues.changed': IssuesChanged
+  'automation.updated': Automation
+  'automation.deleted': Deleted
 }
 
 export type ServerEventName = keyof ServerEvents
@@ -304,4 +311,8 @@ export const SERVER_EVENT_NAMES: readonly ServerEventName[] = [
   'contest.updated',
   'notes.changed',
   'proof.run',
+  'ticket.updated',
+  'issues.changed',
+  'automation.updated',
+  'automation.deleted',
 ]

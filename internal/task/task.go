@@ -177,6 +177,8 @@ type Task struct {
 	ContestID string `json:"contestId,omitempty"`
 	TicketID  string `json:"ticketId,omitempty"`
 	MeetingID string `json:"meetingId,omitempty"`
+	// AutomationID is the automation whose run started the task.
+	AutomationID string `json:"automationId,omitempty"`
 	// Variant is the label (V1..) of a contest variant; ProjectCwd is the user's folder that the variant's worktree
 	// stands for (memory, roles and review history are the project's).
 	Variant    string `json:"variant,omitempty"`

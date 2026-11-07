@@ -1,0 +1,401 @@
+{
+  "access": {
+    "title": "GitHub へのアクセス",
+    "check": "再確認",
+    "tier": {
+      "gh": "GitHub CLI",
+      "token": "トークン",
+      "manual": "手動"
+    },
+    "tierDesc": {
+      "gh": "サインイン済みの GitHub CLI (gh) で issue を読み、pull request を作成し、チェックを読みます。",
+      "token": "保存したトークンで issue を読み、pull request を作成し、チェックを読みます。",
+      "manual": "GitHub にサインインしていません。ブランチを push し、各 pull request を自分で作成するためのリンクを表示します。"
+    },
+    "ghUser": "{user} としてサインイン中 (gh {version})",
+    "hosts": "GitHub として扱うホスト: {hosts}",
+    "hostsEdit": "設定で変更",
+    "token": "個人用アクセストークン",
+    "replace": "トークンを置き換える",
+    "stored": "末尾が {hint} のトークンを保存済みです。",
+    "tokenHint": "一度だけ送信され、二度と表示されません。上のホストにだけ使われます。",
+    "save": "トークンを保存",
+    "saved": "トークンを保存しました",
+    "remove": "トークンを削除",
+    "removeTitle": "GitHub のトークンを削除しますか?",
+    "removeDesc": "GitHub CLI、または手動の pull request に戻ります。"
+  },
+  "connect": {
+    "open": "リポジトリを接続",
+    "title": "リポジトリを接続",
+    "desc": "このコンピューター上の Git リポジトリです。origin が GitHub のホストにあれば、issue は GitHub から取得します。",
+    "path": "フォルダー",
+    "pathHint": "リポジトリのフォルダーの絶対パス。",
+    "pathError": "フォルダーの絶対パスを入力してください。",
+    "init": "リポジトリにする",
+    "initDesc": "フォルダーがまだリポジトリでなければ、先に git init を実行します。",
+    "submit": "接続"
+  },
+  "repo": {
+    "label": "リポジトリ",
+    "choose": "リポジトリ",
+    "loading": "リポジトリを読み込み中…",
+    "loadFailed": "リポジトリを読み込めませんでした: {error}",
+    "empty": "接続済みのリポジトリはありません",
+    "emptyDesc": "リポジトリを接続すると、その issue を確認してチケットにできます。",
+    "sync": "同期",
+    "synced": "同期しました: 新規 {added}、更新 {updated}、クローズ {closed}。",
+    "syncSkipped": "同期しませんでした: {reason}",
+    "github": "GitHub ({host})",
+    "notGithub": "GitHub 上にありません",
+    "lastSync": "{when}に同期",
+    "counts": "受信箱 {inbox} · 作業中 {working} · PR 待ち {waitingPr} · 送信済み {sent} · スキップ {skipped}",
+    "disconnect": "接続を解除",
+    "disconnectTitle": "{name} の接続を解除しますか?",
+    "disconnectDesc": "このリポジトリと受信箱の情報を忘れます。フォルダー、ブランチ、worktree はそのまま残ります。"
+  },
+  "tabs": {
+    "label": "Issue の表示",
+    "inbox": "受信箱",
+    "tickets": "チケット"
+  },
+  "inbox": {
+    "state": {
+      "open": "オープン",
+      "closed": "クローズ",
+      "all": "すべて"
+    },
+    "stateLabel": "表示する issue",
+    "add": "ローカル issue を追加",
+    "loading": "issue を読み込み中…",
+    "loadFailed": "issue を読み込めませんでした: {error}",
+    "empty": "issue はありません",
+    "emptyDesc": "同期して GitHub からリポジトリの issue を取得するか、ローカル issue を追加してください。",
+    "closed": "クローズ",
+    "by": "作成者: {author}",
+    "suggested": "提案: {action}",
+    "decided": "{action} ({by}が決定)",
+    "who": {
+      "lead": "リード",
+      "user": "あなた"
+    },
+    "body": "issue の本文",
+    "ticket": "チケット: {status}",
+    "decide": "判断する"
+  },
+  "add": {
+    "title": "ローカル issue を追加",
+    "desc": "ローカル issue はこのコンピューターに残り、GitHub には送られません。",
+    "titleField": "タイトル",
+    "titleError": "タイトルを入力してください。",
+    "body": "説明",
+    "submit": "issue を追加"
+  },
+  "triage": {
+    "title": "{key} を判断",
+    "decision": "判断",
+    "action": {
+      "assign": "割り当て",
+      "meeting": "会議",
+      "skip": "スキップ"
+    },
+    "actionDesc": {
+      "assign": "チケットを作ります。専用のブランチと worktree、ワーカー用のタスクを用意します。",
+      "meeting": "新しいチケットの worktree で、この issue についての会議を開きます。",
+      "skip": "issue をそのままにします。理由は記録されます。"
+    },
+    "anyWorker": "任意のワーカー",
+    "prompt": "指示",
+    "promptHint": "ワーカーへの指示です。issue の本文は信頼できないデータとして添えられます。",
+    "member": "メンバー",
+    "model": "モデル",
+    "modelHint": "空欄: メンバーまたはバックエンドの既定。",
+    "question": "問い",
+    "attendees": "参加者",
+    "noMembers": "チームメンバーがまだいません。メンバーのページで追加してください。",
+    "reason": "理由",
+    "reasonRequired": "スキップには必須です。",
+    "reasonError": "スキップする理由を入力してください。",
+    "attendeesError": "参加者を 1 人以上選んでください。",
+    "submit": {
+      "assign": "割り当てる",
+      "meeting": "会議を開く",
+      "skip": "issue をスキップ"
+    }
+  },
+  "tickets": {
+    "loading": "チケットを読み込み中…",
+    "empty": "チケットはありません",
+    "emptyDesc": "受信箱の issue を割り当てるとチケットができます。",
+    "pr": "PR #{n}",
+    "group": {
+      "needsYou": "対応が必要（{count}）",
+      "others": "その他のチケット（{count}）"
+    }
+  },
+  "ticket": {
+    "back": "すべての issue",
+    "loading": "チケットを読み込み中…",
+    "notFound": "チケットを読み込めませんでした: {error}",
+    "status": {
+      "working": "作業中",
+      "review": "あなたのレビュー待ち",
+      "ready": "PR の準備完了",
+      "pr_open": "PR オープン",
+      "done": "完了",
+      "dropped": "取り下げ",
+      "failed": "失敗"
+    },
+    "checksState": {
+      "pending": "チェック実行中",
+      "success": "チェック成功",
+      "failure": "チェック失敗",
+      "unknown": "チェック不明"
+    },
+    "issueLink": "Issue {key}",
+    "prLink": "Pull request #{n}",
+    "draft": "ドラフト",
+    "meeting": "会議",
+    "dropReason": "取り下げ: {reason}",
+    "worktree": "Worktree",
+    "removed": "削除済み",
+    "base": "ベース",
+    "tasks": "タスク",
+    "noTasks": "タスクはまだありません。",
+    "turns": "{n} ターン",
+    "checks": "チェック",
+    "noChecks": "報告されたチェックはまだありません。",
+    "checksFix": "{runs} をタスクで修正中",
+    "files": "変更されたファイル",
+    "noFiles": "ベースからの変更はまだありません。",
+    "envSkipped": "worktree に含めなかったもの",
+    "outbox": "このコンピューターから送信したもの",
+    "outboxKind": {
+      "commit": "コミット",
+      "push": "Push",
+      "open_pr": "Pull request の作成",
+      "comment": "コメント",
+      "create_remote": "GitHub リポジトリの作成"
+    },
+    "outboxStatus": {
+      "pending": "待機中",
+      "running": "実行中",
+      "done": "完了",
+      "failed": "失敗",
+      "unknown": "不明: GitHub を確認してください",
+      "linkReady": "リンク準備完了",
+      "skipped": "スキップ：GitHub にありません",
+      "refused": "拒否"
+    },
+    "log": "ログ",
+    "phase": {
+      "push_refused": "プッシュ不可",
+      "open_pr": "ブランチをプッシュ済み：PR を作成してください",
+      "checks_failed": "チェック失敗"
+    },
+    "runState": {
+      "pending": "実行中",
+      "success": "成功",
+      "failure": "失敗",
+      "unknown": "その他の結果"
+    },
+    "fileRefused": "{what}（プッシュ不可）",
+    "logType": {
+      "status": "状態",
+      "task": "タスク開始",
+      "worktree": "worktree 作成",
+      "worktree_failed": "worktree 作成失敗",
+      "env": "worktree のファイル",
+      "outbox": "送信",
+      "outbox_recovered": "停止後に完了を確認",
+      "outbox_unknown": "停止で中断",
+      "pr_refused": "プッシュ拒否",
+      "scan_refused": "ファイル拒否",
+      "push_adopted": "ブランチを引き継ぎ",
+      "pr_found": "Pull request を検出",
+      "link_pr": "Pull request を紐付け",
+      "checks_failed": "チェック失敗",
+      "fix_checks": "チェックを修正",
+      "meeting": "会議を開始",
+      "retry": "再開",
+      "task_failed": "タスクを開始できず",
+      "meeting_failed": "会議を開始できず",
+      "drop": "取り下げ",
+      "cleanup": "worktree を削除"
+    },
+    "logKey": {
+      "status": "状態",
+      "kind": "手順",
+      "taskId": "タスク",
+      "number": "番号",
+      "state": "状態",
+      "error": "エラー",
+      "reason": "理由",
+      "findings": "ファイル",
+      "member": "メンバー",
+      "backend": "バックエンド",
+      "branch": "ブランチ",
+      "exposed": "公開済み"
+    },
+    "logReason": {
+      "unsafe_files": "危険なファイル",
+      "scan_failed": "確認失敗",
+      "base_not_pushed": "ベースが GitHub にない",
+      "branch_diverged": "GitHub でブランチが変更"
+    },
+    "outboxRefused": "Seelegent はこの手順を拒否しました。理由と対処はページ上部にあります。",
+    "fileState": {
+      "added": "追加",
+      "modified": "変更",
+      "deleted": "削除",
+      "renamed": "名前変更",
+      "copied": "コピー",
+      "typeChanged": "種類の変更",
+      "conflict": "競合",
+      "new": "新規"
+    }
+  },
+  "actions": {
+    "pr": "Pull request を作成",
+    "push": "変更を push",
+    "link": "PR を紐付け",
+    "task": "新しいタスク",
+    "comment": "コメント",
+    "drop": "取り下げ",
+    "fixChecks": "チェックを修正",
+    "cleanup": "worktree を削除",
+    "desc": {
+      "pr": "worktree をコミットし、チケットのブランチを push して pull request を作成します。秘密情報、鍵、不要ファイルがあれば中止します。",
+      "link": "このブランチに手動で作成した pull request を記録します。",
+      "task": "このチケットの worktree で別のタスクを実行します。",
+      "comment": "GitHub の issue にコメントを投稿します。",
+      "drop": "チケットを止め、実行中のタスクを取り消します。worktree は削除するまで残ります。",
+      "retry": "チケットのタスクを worktree で再開します。担当を変えるには別のメンバーかバックエンドを選んでください。"
+    },
+    "prTitle": "タイトル",
+    "prTitleHint": "空欄: issue のタイトル。",
+    "prBody": "説明",
+    "prBodyHint": "空欄: issue へのリンクを含む要約。",
+    "draft": "ドラフトとして作成",
+    "number": "Pull request の番号",
+    "numberError": "pull request の番号かアドレス（…/pull/43）を入力してください。",
+    "textError": "テキストを入力してください。",
+    "field": {
+      "task": "指示",
+      "comment": "コメント",
+      "drop": "理由 (任意)",
+      "retry": "指示（任意）"
+    },
+    "submit": {
+      "pr": "Push して作成",
+      "link": "紐付け",
+      "task": "タスクを開始",
+      "comment": "コメントを投稿",
+      "drop": "チケットを取り下げ",
+      "retry": "再開する"
+    },
+    "retry": "もう一度試す",
+    "retryPromptHint": "空欄の場合、ワーカーは issue の記載どおりに作業します。",
+    "retrySame": "前回と同じ",
+    "backend": "バックエンド",
+    "backendHint": "別のバックエンドはそれぞれのアカウントを使います。",
+    "numberHint": "番号、または pull request のアドレス。",
+    "retrySameWho": "前回と同じ（{who}）",
+    "retrySameMissing": "前回と同じ（{member}、存在しません）",
+    "retrySameDisabled": "前回と同じ（{member}、オフ）",
+    "retryPickOther": "別のメンバーかバックエンドを選んでください。",
+    "retryNoMembers": "選べるメンバーがほかにいません。バックエンドを選んでください。",
+    "retryNoMembersSame": "選べるメンバーがほかにいません。前回と同じか、選んだバックエンドで実行します。"
+  },
+  "refusal": {
+    "title": {
+      "secrets": "プッシュしていません：{count} 件のファイルに秘密情報が含まれているようです",
+      "files": "プッシュしていません：{count} 件のファイルは GitHub に送れません",
+      "scanChanged": "プッシュしていません：確認中に worktree が変更されました",
+      "scanFailed": "プッシュしていません：変更を確認できませんでした",
+      "baseNotPushed": "プッシュしていません：{branch} に GitHub にないコミットが {commits} 件あります",
+      "baseMissing": "プッシュしていません：ベースブランチ {branch} が GitHub にありません",
+      "branchDiverged": "プッシュ不可：GitHub 上でブランチ {branch} が変更されました"
+    },
+    "why": {
+      "unsafeFiles": "何もコミットもプッシュもしていません。各ファイルの対処方法は下記のとおりです。",
+      "scanChanged": "Seelegent はプッシュする内容をそのまま確認します。読み取り中にワーカーかあなたがファイルを変更したため、何も送っていません。",
+      "scanFailed": "Seelegent が変更を読み取る間に Git が失敗しました。確認していないものは決してプッシュしません。",
+      "baseNotPushed": "それらのコミットはチケットのコミットと一緒に、確認されないまま GitHub に送られてしまいます。",
+      "branchDiverged": "誰かが {branch} にプッシュしたか、GitHub 上で変更しました。Seelegent はそのようなブランチの上に積み重ねたり、上書きしたりしません。"
+    },
+    "next": {
+      "unsafeFiles": "その後、もう一度お試しください。",
+      "scanChanged": "チケットのタスクが止まるのを待ってから、もう一度お試しください。",
+      "scanFailed": "もう一度お試しください。失敗が続く場合は git status で worktree を確認してください。",
+      "baseNotPushed": "{branch} を GitHub にプッシュしてから、もう一度お試しください。",
+      "branchDiverged": "Seelegent がプッシュしていないコミットを確認し、GitHub 上で元に戻してから、もう一度お試しください。またはこのチケットを取り下げてください。"
+    },
+    "gitSaid": "Git の出力：",
+    "moreCommits": "ほか {count} 件のコミット",
+    "seeCommits": "GitHub でコミットを見る"
+  },
+  "next": {
+    "tryAgain": "もう一度試す",
+    "openPr": {
+      "title": "ブランチをプッシュしました：GitHub で pull request を作成してください",
+      "why": "Pull request はまだありません。Seelegent には作成するための GitHub ログインがありません。リンクから作成し、その番号を「PR を紐付け」で記録してください。",
+      "action": "GitHub で開く"
+    },
+    "checks": {
+      "title": "Pull request のチェックが {count} 件失敗しました",
+      "why": "Pull request の CI チェックが失敗しました。",
+      "fixing": "タスクが修正中"
+    },
+    "review": {
+      "title": "タスクがレビューを待っています",
+      "why": "タスクを承認するとチケットは pull request の準備完了になります。差し戻すには却下してください。",
+      "action": "タスクをレビュー"
+    },
+    "ready": {
+      "title": "Pull request の準備ができました",
+      "why": "タスクは承認されました。あなたかリードが依頼するまで何もプッシュされません。どのアクセス段階でも pull request が自動で作成されることはありません。"
+    },
+    "failed": {
+      "title": "チケットのタスクを開始できませんでした",
+      "why": "同じワーカー、または別のメンバーやバックエンドでもう一度開始してください。",
+      "action": "再試行または担当変更",
+      "memberMissing": "メンバー「{member}」はもう存在しません。別のメンバーかバックエンドにタスクを割り当ててください。",
+      "memberDisabled": "メンバー「{member}」はオフになっています。メンバーページでオンにするか、別のメンバーかバックエンドにタスクを割り当ててください。"
+    },
+    "exposed": {
+      "title": "公開済み：以前のバージョンが秘密情報らしきファイルを {count} 件プッシュしています",
+      "why": "GitHub 上のブランチには、このバージョン以前のワーカー自身のコミットがあり、これらのファイルが含まれています。Seelegent はこのブランチの上に積み重ね、これらを新たにプッシュすることはありません。",
+      "next": "これらのファイルにあった鍵はすべて再発行してください。今削除しても GitHub から取り戻すことはできません。"
+    }
+  },
+  "finding": {
+    "kind": {
+      "env": "環境ファイル（.env）",
+      "private_key": "秘密鍵ファイル",
+      "key_store": "鍵または証明書のストア（{ext}）",
+      "credentials": "認証情報ファイル",
+      "device": "Windows の予約済みデバイス名",
+      "large": "5 MB を超えるファイル",
+      "largeSize": "5 MB を超えるファイル（{size}）",
+      "link": "worktree の外を指すリンク"
+    },
+    "secret": {
+      "github_token": "GitHub トークンを含む",
+      "aws_key": "AWS アクセスキーを含む",
+      "private_key": "秘密鍵を含む",
+      "slack_token": "Slack トークンを含む",
+      "google_key": "Google API キーを含む",
+      "anthropic_key": "Anthropic API キーを含む",
+      "stored_token": "Seelegent に保存した GitHub トークンを含む",
+      "unknown": "鍵またはトークンを含む"
+    },
+    "fix": {
+      "file": "削除するか、.gitignore に追加してください。",
+      "secret": "コードから鍵を取り除き（代わりに環境変数から読み込む）、共有したことがあれば再発行してください。",
+      "large": "削除するか、ビルド成果物なら .gitignore に追加してください。",
+      "device": "削除してください。Windows ではこの名前のファイルをチェックアウトできません。",
+      "link": "リンクを削除するか、リンク先の内容を worktree にコピーしてください。"
+    }
+  }
+}

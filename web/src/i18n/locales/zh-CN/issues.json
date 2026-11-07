@@ -1,0 +1,401 @@
+{
+  "access": {
+    "title": "GitHub 访问",
+    "check": "重新检查",
+    "tier": {
+      "gh": "GitHub CLI",
+      "token": "令牌",
+      "manual": "手动"
+    },
+    "tierDesc": {
+      "gh": "Seelegent 使用已登录的 GitHub CLI (gh) 读取 issue、创建 pull request 并读取检查结果。",
+      "token": "Seelegent 使用已保存的令牌读取 issue、创建 pull request 并读取检查结果。",
+      "manual": "未登录 GitHub：Seelegent 推送分支，并给你一个链接，由你自己创建每个 pull request。"
+    },
+    "ghUser": "已登录为 {user}（gh {version}）",
+    "hosts": "视为 GitHub 的主机：{hosts}。",
+    "hostsEdit": "在设置中修改",
+    "token": "个人访问令牌",
+    "replace": "替换令牌",
+    "stored": "已保存一个以 {hint} 结尾的令牌。",
+    "tokenHint": "只发送一次，之后不再显示。只用于上面的主机。",
+    "save": "保存令牌",
+    "saved": "令牌已保存",
+    "remove": "删除令牌",
+    "removeTitle": "删除 GitHub 令牌？",
+    "removeDesc": "Seelegent 将改用 GitHub CLI，或手动创建 pull request。"
+  },
+  "connect": {
+    "open": "连接仓库",
+    "title": "连接仓库",
+    "desc": "这台电脑上的 Git 仓库。当它的 origin 位于 GitHub 主机时，issue 从 GitHub 获取。",
+    "path": "文件夹",
+    "pathHint": "仓库文件夹的绝对路径。",
+    "pathError": "请输入文件夹的绝对路径。",
+    "init": "初始化为仓库",
+    "initDesc": "如果文件夹还不是仓库，先在那里运行 git init。",
+    "submit": "连接"
+  },
+  "repo": {
+    "label": "仓库",
+    "choose": "仓库",
+    "loading": "正在加载仓库…",
+    "loadFailed": "无法加载仓库：{error}",
+    "empty": "尚未连接仓库",
+    "emptyDesc": "连接仓库后即可查看其 issue 并转为工单。",
+    "sync": "同步",
+    "synced": "已同步：新增 {added}，更新 {updated}，关闭 {closed}。",
+    "syncSkipped": "未同步：{reason}",
+    "github": "GitHub（{host}）",
+    "notGithub": "不在 GitHub 上",
+    "lastSync": "{when}同步",
+    "counts": "收件箱 {inbox} · 进行中 {working} · 等待 PR {waitingPr} · 已发送 {sent} · 已跳过 {skipped}",
+    "disconnect": "断开连接",
+    "disconnectTitle": "断开 {name}？",
+    "disconnectDesc": "Seelegent 将忘记这个仓库及其收件箱。文件夹、分支和 worktree 保持不变。"
+  },
+  "tabs": {
+    "label": "Issue 视图",
+    "inbox": "收件箱",
+    "tickets": "工单"
+  },
+  "inbox": {
+    "state": {
+      "open": "打开",
+      "closed": "已关闭",
+      "all": "全部"
+    },
+    "stateLabel": "显示哪些 issue",
+    "add": "添加本地 issue",
+    "loading": "正在加载 issue…",
+    "loadFailed": "无法加载 issue：{error}",
+    "empty": "这里没有 issue",
+    "emptyDesc": "同步以从 GitHub 获取仓库的 issue，或添加本地 issue。",
+    "closed": "已关闭",
+    "by": "作者 {author}",
+    "suggested": "建议：{action}",
+    "decided": "{action}，由{by}决定",
+    "who": {
+      "lead": "负责人",
+      "user": "你"
+    },
+    "body": "Issue 内容",
+    "ticket": "工单：{status}",
+    "decide": "决定"
+  },
+  "add": {
+    "title": "添加本地 issue",
+    "desc": "本地 issue 只保存在这台电脑上，不会发到 GitHub。",
+    "titleField": "标题",
+    "titleError": "请输入标题。",
+    "body": "描述",
+    "submit": "添加 issue"
+  },
+  "triage": {
+    "title": "决定 {key}",
+    "decision": "决定",
+    "action": {
+      "assign": "分配",
+      "meeting": "会议",
+      "skip": "跳过"
+    },
+    "actionDesc": {
+      "assign": "创建工单：独立的分支和 worktree，以及给 worker 的任务。",
+      "meeting": "在新工单的 worktree 中就该 issue 开会。",
+      "skip": "不处理该 issue；会保留原因。"
+    },
+    "anyWorker": "任意 worker",
+    "prompt": "说明",
+    "promptHint": "你给 worker 的要求。issue 内容会作为不可信数据附上。",
+    "member": "成员",
+    "model": "模型",
+    "modelHint": "留空：使用成员或后端的默认值。",
+    "question": "问题",
+    "attendees": "参会者",
+    "noMembers": "还没有团队成员。请在成员页面添加。",
+    "reason": "原因",
+    "reasonRequired": "跳过时必填。",
+    "reasonError": "请输入跳过该 issue 的原因。",
+    "attendeesError": "请至少选择一位参会者。",
+    "submit": {
+      "assign": "分配",
+      "meeting": "开会",
+      "skip": "跳过 issue"
+    }
+  },
+  "tickets": {
+    "loading": "正在加载工单…",
+    "empty": "没有工单",
+    "emptyDesc": "在收件箱中分配一个 issue 即可创建工单。",
+    "pr": "PR #{n}",
+    "group": {
+      "needsYou": "需要你处理（{count}）",
+      "others": "其他工单（{count}）"
+    }
+  },
+  "ticket": {
+    "back": "全部 issue",
+    "loading": "正在加载工单…",
+    "notFound": "无法加载工单：{error}",
+    "status": {
+      "working": "进行中",
+      "review": "等待你审核",
+      "ready": "可以创建 PR",
+      "pr_open": "PR 已打开",
+      "done": "已完成",
+      "dropped": "已放弃",
+      "failed": "失败"
+    },
+    "checksState": {
+      "pending": "检查进行中",
+      "success": "检查通过",
+      "failure": "检查未通过",
+      "unknown": "检查状态未知"
+    },
+    "issueLink": "Issue {key}",
+    "prLink": "Pull request #{n}",
+    "draft": "草稿",
+    "meeting": "会议",
+    "dropReason": "已放弃：{reason}",
+    "worktree": "Worktree",
+    "removed": "已删除",
+    "base": "基准",
+    "tasks": "任务",
+    "noTasks": "还没有任务。",
+    "turns": "{n} 轮",
+    "checks": "检查",
+    "noChecks": "还没有检查结果。",
+    "checksFix": "正在任务中修复 {runs}",
+    "files": "已更改的文件",
+    "noFiles": "相对基准还没有更改。",
+    "envSkipped": "未放入 worktree",
+    "outbox": "从这台电脑发出的操作",
+    "outboxKind": {
+      "commit": "提交",
+      "push": "推送",
+      "open_pr": "创建 pull request",
+      "comment": "评论",
+      "create_remote": "创建 GitHub 仓库"
+    },
+    "outboxStatus": {
+      "pending": "等待中",
+      "running": "运行中",
+      "done": "已完成",
+      "failed": "失败",
+      "unknown": "未知：请查看 GitHub",
+      "linkReady": "链接已就绪",
+      "skipped": "已跳过：不在 GitHub 上",
+      "refused": "已拒绝"
+    },
+    "log": "日志",
+    "phase": {
+      "push_refused": "推送受阻",
+      "open_pr": "分支已推送：请创建 PR",
+      "checks_failed": "检查未通过"
+    },
+    "runState": {
+      "pending": "运行中",
+      "success": "通过",
+      "failure": "未通过",
+      "unknown": "其他结果"
+    },
+    "fileRefused": "{what}（未推送）",
+    "logType": {
+      "status": "状态",
+      "task": "任务已启动",
+      "worktree": "已创建 worktree",
+      "worktree_failed": "worktree 失败",
+      "env": "worktree 文件",
+      "outbox": "发送",
+      "outbox_recovered": "停止后确认已完成",
+      "outbox_unknown": "因停止而中断",
+      "pr_refused": "推送被拒绝",
+      "scan_refused": "文件被拒绝",
+      "push_adopted": "已接管分支",
+      "pr_found": "找到 pull request",
+      "link_pr": "已关联 pull request",
+      "checks_failed": "检查未通过",
+      "fix_checks": "修复检查",
+      "meeting": "已发起会议",
+      "retry": "已重新开始",
+      "task_failed": "任务无法启动",
+      "meeting_failed": "会议无法发起",
+      "drop": "已放弃",
+      "cleanup": "已移除 worktree"
+    },
+    "logKey": {
+      "status": "状态",
+      "kind": "步骤",
+      "taskId": "任务",
+      "number": "编号",
+      "state": "状态",
+      "error": "错误",
+      "reason": "原因",
+      "findings": "文件",
+      "member": "成员",
+      "backend": "后端",
+      "branch": "分支",
+      "exposed": "已公开"
+    },
+    "logReason": {
+      "unsafe_files": "不安全的文件",
+      "scan_failed": "检查失败",
+      "base_not_pushed": "基础分支不在 GitHub 上",
+      "branch_diverged": "分支在 GitHub 上被更改"
+    },
+    "outboxRefused": "Seelegent 拒绝了这一步：原因和处理办法在页面顶部。",
+    "fileState": {
+      "added": "已添加",
+      "modified": "已修改",
+      "deleted": "已删除",
+      "renamed": "已重命名",
+      "copied": "已复制",
+      "typeChanged": "类型已更改",
+      "conflict": "冲突",
+      "new": "新文件"
+    }
+  },
+  "actions": {
+    "pr": "创建 pull request",
+    "push": "推送更改",
+    "link": "关联 PR",
+    "task": "新任务",
+    "comment": "评论",
+    "drop": "放弃",
+    "fixChecks": "修复检查",
+    "cleanup": "删除 worktree",
+    "desc": {
+      "pr": "提交 worktree，推送工单分支并创建 pull request。发现密钥、凭据或垃圾文件时会停止。",
+      "link": "记录你为此分支手动创建的 pull request。",
+      "task": "在此工单的 worktree 中再运行一个任务。",
+      "comment": "在 GitHub issue 上发表评论。",
+      "drop": "停止工单并取消其运行中的任务。worktree 会保留，直到你删除它。",
+      "retry": "在工单的 worktree 中重新启动其任务。选择其他成员或后端即可改派。"
+    },
+    "prTitle": "标题",
+    "prTitleHint": "留空：使用 issue 的标题。",
+    "prBody": "描述",
+    "prBodyHint": "留空：附带 issue 链接的摘要。",
+    "draft": "作为草稿创建",
+    "number": "Pull request 编号",
+    "numberError": "请输入 pull request 的编号或地址（…/pull/43）。",
+    "textError": "请输入内容。",
+    "field": {
+      "task": "说明",
+      "comment": "评论",
+      "drop": "原因（可选）",
+      "retry": "说明（可选）"
+    },
+    "submit": {
+      "pr": "推送并创建",
+      "link": "关联",
+      "task": "开始任务",
+      "comment": "发表评论",
+      "drop": "放弃工单",
+      "retry": "重新开始"
+    },
+    "retry": "重试",
+    "retryPromptHint": "留空：worker 按 issue 原文处理。",
+    "retrySame": "与之前相同",
+    "backend": "后端",
+    "backendHint": "其他后端使用各自的账号。",
+    "numberHint": "编号或 pull request 的地址。",
+    "retrySameWho": "与之前相同（{who}）",
+    "retrySameMissing": "与之前相同（{member}，已不存在）",
+    "retrySameDisabled": "与之前相同（{member}，已关闭）",
+    "retryPickOther": "请选择其他成员或某个后端。",
+    "retryNoMembers": "没有其他成员可选。请选择一个后端。",
+    "retryNoMembersSame": "没有其他成员可选：将按之前的方式运行，或在你选择的后端上运行。"
+  },
+  "refusal": {
+    "title": {
+      "secrets": "未推送：有 {count} 个文件似乎包含机密",
+      "files": "未推送：有 {count} 个文件不能发送到 GitHub",
+      "scanChanged": "未推送：检查期间 worktree 发生了变化",
+      "scanFailed": "未推送：无法检查这些更改",
+      "baseNotPushed": "未推送：{branch} 有 {commits} 个提交不在 GitHub 上",
+      "baseMissing": "未推送：基础分支 {branch} 不在 GitHub 上",
+      "branchDiverged": "推送受阻：分支 {branch} 在 GitHub 上已更改"
+    },
+    "why": {
+      "unsafeFiles": "没有提交或推送任何内容。下方每个文件都写明了处理方法。",
+      "scanChanged": "Seelegent 只推送它检查过的内容；读取期间 worker 或你修改了文件，因此没有发送任何内容。",
+      "scanFailed": "Seelegent 读取更改时 Git 出错，而未经检查的内容绝不会被推送。",
+      "baseNotPushed": "这些提交会随工单的提交一起未经检查地发送到 GitHub。",
+      "branchDiverged": "有人向 {branch} 推送了内容或在 GitHub 上更改了它。Seelegent 绝不会在这样的分支上继续，也不会覆盖它。"
+    },
+    "next": {
+      "unsafeFiles": "然后重试。",
+      "scanChanged": "等工单的任务停止后再重试。",
+      "scanFailed": "请重试。如果仍然失败，请用 git status 检查 worktree。",
+      "baseNotPushed": "先将 {branch} 推送到 GitHub，然后重试。",
+      "branchDiverged": "查看不是 Seelegent 推送的提交，在 GitHub 上撤销它们后重试；或者放弃此工单。"
+    },
+    "gitSaid": "Git 输出：",
+    "moreCommits": "以及另外 {count} 个提交",
+    "seeCommits": "在 GitHub 上查看提交"
+  },
+  "next": {
+    "tryAgain": "重试",
+    "openPr": {
+      "title": "分支已推送：请在 GitHub 上创建 pull request",
+      "why": "还没有 pull request：Seelegent 没有可用于创建它的 GitHub 登录。请通过链接创建，然后用“关联 PR”记录其编号。",
+      "action": "在 GitHub 上打开"
+    },
+    "checks": {
+      "title": "Pull request 有 {count} 项检查未通过",
+      "why": "Pull request 的 CI 检查未通过。",
+      "fixing": "有任务正在修复"
+    },
+    "review": {
+      "title": "有任务等待你审查",
+      "why": "接受该任务后，工单即可创建 pull request；拒绝则退回。",
+      "action": "审查任务"
+    },
+    "ready": {
+      "title": "可以创建 pull request",
+      "why": "任务已被接受。在你或负责人要求之前不会推送任何内容：任何访问级别都不会自行创建 pull request。"
+    },
+    "failed": {
+      "title": "工单的任务无法启动",
+      "why": "请重新启动，可使用同一 worker，或换一个成员或后端。",
+      "action": "重试或改派",
+      "memberMissing": "成员“{member}”已不存在。请把任务交给其他成员或某个后端。",
+      "memberDisabled": "成员“{member}”已关闭。请在成员页面中开启它，或把任务交给其他成员或某个后端。"
+    },
+    "exposed": {
+      "title": "已公开：旧版本推送了 {count} 个看起来像机密的文件",
+      "why": "GitHub 上的分支包含此版本之前 worker 自己的提交，这些文件就在其中。Seelegent 会在该分支上继续，不会再推送它们的新内容。",
+      "next": "请轮换这些文件中的所有密钥：现在删除它们并不能从 GitHub 收回。"
+    }
+  },
+  "finding": {
+    "kind": {
+      "env": "环境文件（.env）",
+      "private_key": "私钥文件",
+      "key_store": "密钥或证书存储（{ext}）",
+      "credentials": "凭据文件",
+      "device": "Windows 保留设备名",
+      "large": "大于 5 MB",
+      "largeSize": "大于 5 MB（{size}）",
+      "link": "指向 worktree 之外的链接"
+    },
+    "secret": {
+      "github_token": "包含 GitHub 令牌",
+      "aws_key": "包含 AWS 访问密钥",
+      "private_key": "包含私钥",
+      "slack_token": "包含 Slack 令牌",
+      "google_key": "包含 Google API 密钥",
+      "anthropic_key": "包含 Anthropic API 密钥",
+      "stored_token": "包含 Seelegent 中保存的 GitHub 令牌",
+      "unknown": "包含密钥或令牌"
+    },
+    "fix": {
+      "file": "删除它，或将其加入 .gitignore。",
+      "secret": "把密钥从代码中移除（改为从环境变量读取），如果曾经泄露过请轮换。",
+      "large": "删除它；如果是构建产物，请加入 .gitignore。",
+      "device": "删除它：Windows 无法检出这个名字的文件。",
+      "link": "删除该链接，或把它指向的内容复制到 worktree 中。"
+    }
+  }
+}

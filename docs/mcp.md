@@ -6,7 +6,8 @@ its own: tasks, accounts and memory live in the daemon, so a host restart loses 
 
 Code: `internal/mcpserver` (tools), `internal/client` (typed API client, discovery and autostart),
 `internal/ops` (what the tools share with the command line: the worker guard table, the lead session, the tasks
-that need the lead, recent steps, the wait that survives a restart, the `not_available` refusal),
+that need the lead, recent steps, the wait that survives a restart, the `not_available` refusal, naming a repo
+and an issue),
 `internal/cli/mcp.go` (the command). The tool list is `internal/mcpserver/tools.json`, embedded in the binary. The
 command line ([cli.md](cli.md)) offers the same operations as commands.
 
@@ -85,8 +86,8 @@ again; from then on the usual rules apply again (a later crash is ridden out, a 
 
 `tools/list` returns 17 tools, the same names and input schemas as the old Node server (sorted by name, as the SDK
 does), with two additions: `gate` of `delegate` and `followup` also takes `true`, and `proof` has the actions
-`cancel_run` and `contention`. `issues` and `automations` are not built yet: they are listed with a description
-starting "Not available in this version of Seelegent yet." and answer with a tool error that says nothing was done.
+`cancel_run` and `contention`. Every tool is built (milestone 15 added `issues` and `automations`); the
+"Not available in this version of Seelegent yet." mechanism stays for a daemon route that answers 501.
 
 | Tool | Routes | Now |
 |---|---|---|
@@ -105,8 +106,8 @@ starting "Not available in this version of Seelegent yet." and answer with a too
 | `consult` | `POST /tasks/{id}/consult`, then `GET /tasks/{id}` every second while `wait_seconds` lasts (default 600) | yes: a senior or peer member reads the finished task read-only and answers a verdict with findings |
 | `notes` | `/tasks/{id}/notes*` | yes: `list`, `add` (`file`, `line`, `end_line?`, `side?`, `body`; by the lead), `resolve`, `reopen`, `delete`, `send` (the drafts and unaddressed notes as one followup, `extra` after them; then waits like `followup`) |
 | `contest` | `/contests*` | yes: `status` (all contests without `contest_id`), `wait` (in daemon waits of at most 1500 s), `pick` (`winner`), `cancel`; `full` returns the whole record |
-| `issues` | GitHub issues | not yet |
-| `automations` | automations | not yet |
+| `issues` | `/github/repos*`, `/github/tickets*`, `GET /github/access` | yes ([github.md](github.md)): `repo` is a repo id or a connected repository's folder (matched with `fsutil.Key`); `key` a bare number means `gh#n`. `list`, `add`, `suggest` and `triage` answer the old slim issue (`key`, `title`, `labels`, `suggestion`, `decision`, `ticket` as id and status), the ticket actions the old slim ticket (checks as state, head and failing names, and `refused`: why the last `pr` stopped); `full: true` returns the records. `triage` sends `by: "lead"`; `decision` becomes `action`, `gate`/`lane` map as in `delegate`. `triage` assign, `add_task`, `retry` (a failed ticket's task again) and `fix_checks` wait like `delegate` only when `wait_seconds` is given (default 0) and then add the report as `task`. `repo_settings` without `shared_dirs` reads the setting. No action reaches the token |
+| `automations` | `/automations*` | yes ([automations.md](automations.md)): `create` never enables (the daemon creates every automation disabled); `enable` is `POST /automations/{id}/enable`, which only records the request and answers `{automation, confirm, confirmUrl, message}`: the user confirms in the dashboard. `disable` is `PATCH {enabled: false}`, which also withdraws a request. `update` sends only the arguments given; `min_remaining` and `use_before_reset` keep the other quota field. `runs` limit 1..200 (default 20). The slim view is the old one plus `enableRequested` |
 
 Argument handling follows the old server: unknown arguments are ignored, numbers and booleans may arrive as
 strings, a single string is accepted where a list is expected, wait seconds are clamped (`delegate`/`followup`/`wait`

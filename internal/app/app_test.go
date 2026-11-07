@@ -56,7 +56,7 @@ func (d *daemon) open() {
 	set.Port = 47831
 	a, err := New(t.Context(), Options{
 		Paths: d.paths, Settings: &set, Env: d.queue.Env(os.Environ()), RealHome: filepath.Join(d.paths.Home, "home"),
-		Launcher: fakecli.Launcher(t), NoQuotaReaders: true,
+		Launcher: fakecli.Launcher(t), NoQuotaReaders: true, NoGh: true,
 		Bins: map[string]string{config.BackendAgy: fakecli.Exe(t), config.BackendClaude: "", config.BackendCodex: ""},
 	})
 	if err != nil {

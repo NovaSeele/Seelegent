@@ -53,6 +53,22 @@ func (e *DisabledError) APIDetails() map[string]any {
 	return map[string]any{"reason": "member_disabled", "member": e.ID}
 }
 
+// MissingError is a member named for new work that does not exist (deleted, or never made). It is a bad argument
+// of the request (ErrInvalid) with details, so a ticket or an automation run can say which member it was.
+type MissingError struct{ ID string }
+
+func (e *MissingError) Error() string {
+	return fmt.Sprintf("no member %q; pick another member or a backend", e.ID)
+}
+
+// Is makes errors.Is(err, ErrInvalid) true.
+func (e *MissingError) Is(target error) bool { return target == ErrInvalid }
+
+// APIDetails are the details of the API error.
+func (e *MissingError) APIDetails() map[string]any {
+	return map[string]any{"reason": "member_missing", "member": e.ID}
+}
+
 func invalidf(format string, args ...any) error {
 	return fmt.Errorf("%w: %s", ErrInvalid, fmt.Sprintf(format, args...))
 }
@@ -387,6 +403,9 @@ func (s *Store) List(ctx context.Context) ([]api.Member, error) {
 // Usable returns the member with id for new work: it must exist, be valid and be turned on.
 func (s *Store) Usable(ctx context.Context, id string) (api.Member, error) {
 	m, err := s.Get(ctx, id)
+	if errors.Is(err, ErrNotFound) {
+		return api.Member{}, &MissingError{ID: id}
+	}
 	if err != nil {
 		return api.Member{}, err
 	}

@@ -10,8 +10,10 @@ import (
 
 	"github.com/NovaSeele/Seelegent/internal/account"
 	"github.com/NovaSeele/Seelegent/internal/api"
+	"github.com/NovaSeele/Seelegent/internal/automation"
 	"github.com/NovaSeele/Seelegent/internal/config"
 	"github.com/NovaSeele/Seelegent/internal/contest"
+	"github.com/NovaSeele/Seelegent/internal/github"
 	"github.com/NovaSeele/Seelegent/internal/gitx"
 	"github.com/NovaSeele/Seelegent/internal/hook"
 	"github.com/NovaSeele/Seelegent/internal/meeting"
@@ -22,6 +24,7 @@ import (
 	"github.com/NovaSeele/Seelegent/internal/role"
 	"github.com/NovaSeele/Seelegent/internal/signin"
 	"github.com/NovaSeele/Seelegent/internal/task"
+	"github.com/NovaSeele/Seelegent/internal/ticket"
 	"github.com/NovaSeele/Seelegent/internal/usage"
 )
 
@@ -143,6 +146,14 @@ func toAPIError(err error) *apiError {
 		}
 		return e
 	}
+	var tge *ticket.GitError
+	if errors.As(err, &tge) {
+		return newError(api.CodeUpstream, "%s", tge.Error()).with("source", "git")
+	}
+	var ghe *github.Error
+	if errors.As(err, &ghe) {
+		return &apiError{code: api.CodeUpstream, message: ghe.Error(), details: ghe.APIDetails()}
+	}
 	msg := err.Error()
 	// A removed contest variant whose changes cannot be shown: not_found when nothing was stored, bad_state when
 	// the stored copy is damaged; details.reason tells the dashboard which.
@@ -157,8 +168,17 @@ func toAPIError(err error) *apiError {
 	// A domain error may carry details for the caller (a lane conflict's tasks, the run already in progress).
 	var withDetails interface{ APIDetails() map[string]any }
 	if errors.As(err, &withDetails) && (errors.Is(err, task.ErrConflict) || errors.Is(err, proof.ErrConflict) ||
-		errors.Is(err, member.ErrDisabled) || errors.Is(err, contest.ErrConflict)) {
+		errors.Is(err, member.ErrDisabled) || errors.Is(err, contest.ErrConflict) ||
+		errors.Is(err, ticket.ErrConflict)) {
 		return &apiError{code: api.CodeConflict, message: msg, details: withDetails.APIDetails()}
+	}
+	// A member named for work that does not exist: a bad argument that says which (details.reason member_missing).
+	if errors.As(err, &withDetails) && errors.Is(err, member.ErrInvalid) {
+		return &apiError{code: api.CodeInvalidArgument, message: msg, details: withDetails.APIDetails()}
+	}
+	// An automation run now refused because the user has not confirmed it as it is (details.reason not_confirmed).
+	if errors.As(err, &withDetails) && errors.Is(err, automation.ErrBadState) {
+		return &apiError{code: api.CodeBadState, message: msg, details: withDetails.APIDetails()}
 	}
 	switch {
 	case errors.Is(err, context.DeadlineExceeded):
@@ -169,13 +189,17 @@ func toAPIError(err error) *apiError {
 	case errors.Is(err, task.ErrNotFound), errors.Is(err, account.ErrNotFound), errors.Is(err, role.ErrNotFound),
 		errors.Is(err, signin.ErrNotFound), errors.Is(err, proof.ErrNotFound), errors.Is(err, member.ErrNotFound),
 		errors.Is(err, notes.ErrNotFound), errors.Is(err, meeting.ErrNotFound), errors.Is(err, contest.ErrNotFound),
-		errors.Is(err, hook.ErrNotFound):
+		errors.Is(err, hook.ErrNotFound), errors.Is(err, ticket.ErrNotFound), errors.Is(err, automation.ErrNotFound):
 		return newError(api.CodeNotFound, "%s", msg)
+	case errors.Is(err, automation.ErrForbidden):
+		return newError(api.CodeForbidden, "%s", msg)
 	case errors.Is(err, task.ErrBadState), errors.Is(err, signin.ErrBadState), errors.Is(err, notes.ErrBadState),
-		errors.Is(err, meeting.ErrBadState), errors.Is(err, contest.ErrBadState):
+		errors.Is(err, meeting.ErrBadState), errors.Is(err, contest.ErrBadState), errors.Is(err, ticket.ErrBadState),
+		errors.Is(err, automation.ErrBadState), errors.Is(err, github.ErrManual):
 		return newError(api.CodeBadState, "%s", msg)
 	case errors.Is(err, account.ErrConflict), errors.Is(err, task.ErrConflict), errors.Is(err, proof.ErrConflict),
-		errors.Is(err, member.ErrConflict), errors.Is(err, member.ErrDisabled), errors.Is(err, contest.ErrConflict):
+		errors.Is(err, member.ErrConflict), errors.Is(err, member.ErrDisabled), errors.Is(err, contest.ErrConflict),
+		errors.Is(err, ticket.ErrConflict):
 		return newError(api.CodeConflict, "%s", msg)
 	case errors.Is(err, task.ErrUnavailable), errors.Is(err, gitx.ErrNoGit):
 		return newError(api.CodeUnavailable, "%s", msg)
@@ -186,7 +210,8 @@ func toAPIError(err error) *apiError {
 		errors.Is(err, memory.ErrInvalid), errors.Is(err, usage.ErrInvalid), errors.Is(err, gitx.ErrInvalid),
 		errors.Is(err, signin.ErrInvalid), errors.Is(err, config.ErrParse), errors.Is(err, gitx.ErrNotRepo),
 		errors.Is(err, proof.ErrInvalid), errors.Is(err, member.ErrInvalid), errors.Is(err, notes.ErrInvalid),
-		errors.Is(err, meeting.ErrInvalid), errors.Is(err, contest.ErrInvalid), errors.Is(err, hook.ErrInvalid):
+		errors.Is(err, meeting.ErrInvalid), errors.Is(err, contest.ErrInvalid), errors.Is(err, hook.ErrInvalid),
+		errors.Is(err, ticket.ErrInvalid), errors.Is(err, automation.ErrInvalid), errors.Is(err, github.ErrInvalid):
 		return newError(api.CodeInvalidArgument, "%s", msg)
 	}
 	return &apiError{code: api.CodeInternal, msgID: "internal", message: messages["internal"]["en"]}

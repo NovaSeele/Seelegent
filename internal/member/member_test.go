@@ -126,6 +126,12 @@ func TestUpdateUsableDelete(t *testing.T) {
 	if _, err := s.Update(ctx, "rev", api.MemberInput{Name: "x", Backend: "agy", Rank: api.RankPeer}); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("update of a deleted member = %v", err)
 	}
+	// A deleted member named for work is a bad argument that says which member (member_missing).
+	var me *MissingError
+	if _, err := s.Usable(ctx, "rev"); !errors.As(err, &me) || !errors.Is(err, ErrInvalid) ||
+		errors.Is(err, ErrNotFound) || me.APIDetails()["reason"] != "member_missing" || me.APIDetails()["member"] != "rev" {
+		t.Fatalf("Usable(deleted) = %v", err)
+	}
 }
 
 func TestImportKeepsExisting(t *testing.T) {

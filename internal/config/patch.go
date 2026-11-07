@@ -53,6 +53,9 @@ func MergePatch(s Settings, patch []byte) (Settings, error) {
 	if out.LinkIntoProfiles == nil {
 		out.LinkIntoProfiles = []string{}
 	}
+	if out.GithubEnterpriseHosts == nil {
+		out.GithubEnterpriseHosts = []string{}
+	}
 	if out.Port != s.Port && typeField != "port" {
 		v.add("port", "cannot be changed here; edit config.json or set SEELEGENT_PORT, then restart the daemon")
 	}
