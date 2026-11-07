@@ -115,6 +115,10 @@ func TestTaskLifecycle(t *testing.T) {
 		t.Fatalf("prompt = %q", prompt.Prompt)
 	}
 	e.wantError(e.get("/api/v1/tasks/"+sum.ID+"/prompt"), http.StatusBadRequest, api.CodeInvalidArgument, "turn")
+	if info := e.wantError(e.get("/api/v1/tasks/"+sum.ID+"/prompt?turn=9"), http.StatusNotFound, api.CodeNotFound,
+		""); !strings.Contains(info.Message, "has no turn 9") {
+		t.Fatalf("prompt of a missing turn: %+v", info)
+	}
 
 	// git: the touched file is the task's change.
 	var g api.TaskGit

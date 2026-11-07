@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -34,6 +35,28 @@ func newTestTask(id string, created time.Time) *Task {
 		Cwd: `D:\proj`, ProjectKey: "proj-1234", ProjectName: "proj", Prompt: "do it", Backend: "agy",
 		Model: "m", CreatedAt: created, UpdatedAt: created,
 		Turns: []*Turn{{N: 1, By: ByLead, Message: "do it", Status: TurnRunning, StartedAt: created}},
+	}
+}
+
+// A turn that has not started an attempt has no prompt yet: a clear not-found, distinct from a missing turn.
+func TestRepoPromptBeforeAttempt(t *testing.T) {
+	ctx := context.Background()
+	r := NewRepo(openStore(t), func() time.Time { return testEpoch })
+	if _, err := r.Create(ctx, newTestTask("t1", testEpoch), nil); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct {
+		turn, n int
+		want    string
+	}{
+		{1, 0, "turn 1 of task t1 has not started an attempt yet"},
+		{1, 2, "turn 1 of task t1 has no attempt 2"},
+		{2, 0, "task t1 has no turn 2"},
+	} {
+		_, err := r.Prompt(ctx, "t1", c.turn, c.n)
+		if !errors.Is(err, ErrNotFound) || !strings.Contains(err.Error(), c.want) {
+			t.Errorf("Prompt(%d, %d) = %v, want %q", c.turn, c.n, err, c.want)
+		}
 	}
 }
 

@@ -466,10 +466,20 @@ func (r *Repo) Prompt(ctx context.Context, id string, turn, n int) (string, erro
 				ORDER BY n DESC LIMIT 1`, id, turn)
 		}
 		err := row.Scan(&prompt)
-		if errors.Is(err, sql.ErrNoRows) {
-			return fmt.Errorf("%w: no attempt %d of turn %d of task %s", ErrNotFound, n, turn, id)
+		if !errors.Is(err, sql.ErrNoRows) {
+			return err
 		}
-		return err
+		var one int
+		switch err := tx.QueryRowContext(ctx, `SELECT 1 FROM turns WHERE task_id = ? AND n = ?`, id, turn).
+			Scan(&one); {
+		case errors.Is(err, sql.ErrNoRows):
+			return fmt.Errorf("%w: task %s has no turn %d", ErrNotFound, id, turn)
+		case err != nil:
+			return err
+		case n > 0:
+			return fmt.Errorf("%w: turn %d of task %s has no attempt %d", ErrNotFound, turn, id, n)
+		}
+		return fmt.Errorf("%w: turn %d of task %s has not started an attempt yet", ErrNotFound, turn, id)
 	})
 	return prompt, err
 }
