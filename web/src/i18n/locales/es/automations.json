@@ -132,7 +132,8 @@
     "save": "Guardar",
     "savedNew": "Automatización guardada. Está desactivada hasta que la actives.",
     "savedEdit": "Automatización guardada.",
-    "timezoneError": "Seelegent no conoce esta zona horaria. Usa local o una zona como Europe/Madrid."
+    "timezoneError": "Seelegent no conoce esta zona horaria. Usa local o una zona como Europe/Madrid.",
+    "nextRunsLocal": "Próximas ejecuciones (tu hora):"
   },
   "confirm": {
     "title": "¿Activar esta automatización?",

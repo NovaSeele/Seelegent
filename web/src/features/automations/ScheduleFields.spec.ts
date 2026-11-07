@@ -105,4 +105,20 @@ describe('ScheduleFields', () => {
     await vi.advanceTimersByTimeAsync(450)
     expect(wrapper.text()).toContain('9:30 AM Monday to Friday')
   })
+
+  it('names the zone of the next runs, and the local one as the reader’s time', async () => {
+    vi.useFakeTimers()
+    const fetch = vi.fn<typeof globalThis.fetch>(async (_input, init) => {
+      const { timezone } = JSON.parse(String(init?.body)) as { timezone: string }
+      const zone = timezone === 'local' ? 'local (Local)' : timezone
+      return json({ runs: ['2026-11-09T06:00:00Z'], local: [], timezone: zone })
+    })
+    const { wrapper, form } = await mountFields(fetch, '0 6 * * *')
+    await vi.advanceTimersByTimeAsync(450)
+    expect(wrapper.text()).toContain('Next runs (UTC):')
+    form.value = { ...form.value, timezone: '' }
+    await vi.advanceTimersByTimeAsync(450)
+    expect(wrapper.text()).toContain('Next runs (your time):')
+    expect(wrapper.text()).not.toContain('(Local)')
+  })
 })

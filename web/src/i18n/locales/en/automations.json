@@ -132,7 +132,8 @@
     "save": "Save",
     "savedNew": "Automation saved. It is off until you turn it on.",
     "savedEdit": "Automation saved.",
-    "timezoneError": "Seelegent does not know this time zone. Use local or a zone such as Europe/Berlin."
+    "timezoneError": "Seelegent does not know this time zone. Use local or a zone such as Europe/Berlin.",
+    "nextRunsLocal": "Next runs (your time):"
   },
   "confirm": {
     "title": "Turn on this automation?",

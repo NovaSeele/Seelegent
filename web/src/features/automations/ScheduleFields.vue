@@ -181,7 +181,11 @@ onBeforeUnmount(() => {
       <p v-if="previewError" class="sched__error">{{ previewError }}</p>
       <template v-else-if="preview && !cronError && !zoneError">
         <p class="sched__label">
-          {{ t('automations.editor.nextRuns', { zone: preview.timezone }) }}
+          {{
+            previewZone === 'local'
+              ? t('automations.editor.nextRunsLocal')
+              : t('automations.editor.nextRuns', { zone: preview.timezone })
+          }}
         </p>
         <p v-if="!preview.runs.length" class="sched__error">
           {{ t('automations.cronError.never') }}

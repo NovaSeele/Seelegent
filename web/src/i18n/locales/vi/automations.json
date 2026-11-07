@@ -132,7 +132,8 @@
     "save": "Lưu",
     "savedNew": "Đã lưu việc tự động. Nó đang tắt cho tới khi bạn bật.",
     "savedEdit": "Đã lưu việc tự động.",
-    "timezoneError": "Seelegent không biết múi giờ này. Dùng local hoặc một múi như Asia/Ho_Chi_Minh."
+    "timezoneError": "Seelegent không biết múi giờ này. Dùng local hoặc một múi như Asia/Ho_Chi_Minh.",
+    "nextRunsLocal": "Các lần chạy tới (giờ của bạn):"
   },
   "confirm": {
     "title": "Bật việc tự động này?",

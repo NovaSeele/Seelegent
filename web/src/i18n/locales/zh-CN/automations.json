@@ -132,7 +132,8 @@
     "save": "保存",
     "savedNew": "自动化已保存。开启前它保持关闭。",
     "savedEdit": "自动化已保存。",
-    "timezoneError": "Seelegent 不认识这个时区。请使用 local 或 Asia/Shanghai 这样的时区。"
+    "timezoneError": "Seelegent 不认识这个时区。请使用 local 或 Asia/Shanghai 这样的时区。",
+    "nextRunsLocal": "接下来的运行（你的时间）："
   },
   "confirm": {
     "title": "开启这个自动化？",

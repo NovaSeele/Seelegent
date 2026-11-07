@@ -132,7 +132,8 @@
     "save": "저장",
     "savedNew": "자동화를 저장했습니다. 켜기 전까지는 꺼져 있습니다.",
     "savedEdit": "자동화를 저장했습니다.",
-    "timezoneError": "Seelegent가 이 시간대를 알지 못합니다. local 또는 Asia/Seoul 같은 시간대를 쓰세요."
+    "timezoneError": "Seelegent가 이 시간대를 알지 못합니다. local 또는 Asia/Seoul 같은 시간대를 쓰세요.",
+    "nextRunsLocal": "다음 실행 (내 시간):"
   },
   "confirm": {
     "title": "이 자동화를 켤까요?",

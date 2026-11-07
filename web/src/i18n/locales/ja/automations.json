@@ -96,7 +96,7 @@
     "cronError": "Cron 式は 5 つのフィールドです。",
     "timezone": "タイムゾーン",
     "timezoneHint": "local、または Asia/Tokyo などのゾーン。",
-    "nextRuns": "次回の実行 ({zone}):",
+    "nextRuns": "次回の実行（{zone}）：",
     "more": "ワーカー、ゲート、制限",
     "member": "メンバー",
     "anyWorker": "任意のワーカー",
@@ -132,7 +132,8 @@
     "save": "保存",
     "savedNew": "自動化を保存しました。オンにするまではオフです。",
     "savedEdit": "自動化を保存しました。",
-    "timezoneError": "Seelegent はこのタイムゾーンを認識できません。local または Asia/Tokyo などのゾーンを使ってください。"
+    "timezoneError": "Seelegent はこのタイムゾーンを認識できません。local または Asia/Tokyo などのゾーンを使ってください。",
+    "nextRunsLocal": "次回の実行（あなたの時刻）："
   },
   "confirm": {
     "title": "この自動化をオンにしますか?",
