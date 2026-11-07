@@ -32,9 +32,7 @@ func MergePatch(s Settings, patch []byte) (Settings, error) {
 	}
 	v := &validator{}
 	applyPatch(v, cur, def, p, "")
-	if len(v.errs) > 0 {
-		return s, v.err()
-	}
+	// Unknown keys were left out of cur, so the checks below still run and every problem is reported at once.
 	raw, err := json.Marshal(cur)
 	if err != nil {
 		return s, err
@@ -42,21 +40,24 @@ func MergePatch(s Settings, patch []byte) (Settings, error) {
 	out := Settings{}
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	dec.DisallowUnknownFields()
+	typeField := ""
 	if err := dec.Decode(&out); err != nil {
 		var te *json.UnmarshalTypeError
-		if errors.As(err, &te) {
-			v.add(te.Field, "must be %s", jsonKind(te.Type.Kind().String()))
-			return s, v.err()
+		if !errors.As(err, &te) {
+			return s, fmt.Errorf("%w: %w", ErrParse, err)
 		}
-		return s, fmt.Errorf("%w: %v", ErrParse, err)
+		// encoding/json reports the first wrong type only.
+		typeField = te.Field
+		v.add(te.Field, "must be %s", jsonKind(te.Type.Kind().String()))
 	}
 	if out.LinkIntoProfiles == nil {
 		out.LinkIntoProfiles = []string{}
 	}
-	if out.Port != s.Port {
+	if out.Port != s.Port && typeField != "port" {
 		v.add("port", "cannot be changed here; edit config.json or set SEELEGENT_PORT, then restart the daemon")
 	}
-	if err := out.Validate(); err != nil {
+	// After a type error the decoded settings are incomplete; range checks would repeat that field.
+	if err := out.Validate(); err != nil && typeField == "" {
 		var ve *ValidationError
 		if !errors.As(err, &ve) {
 			return s, err
