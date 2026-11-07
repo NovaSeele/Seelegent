@@ -33,6 +33,25 @@ describe('AccountCard', () => {
     expect(wrapper.text()).toContain('the numbers below may be old')
   })
 
+  it('shows out of quota in the pill instead of Ready, once', async () => {
+    const base = makeAccount()
+    const until = new Date(Date.now() + 3_600_000).toISOString()
+    const wrapper = await render({ ...base, quota: { ...base.quota, exhaustedUntil: until } })
+    const pill = wrapper.get('.card__head').text()
+    expect(pill).toContain('Out of quota')
+    expect(wrapper.text()).not.toContain('Ready')
+    expect(wrapper.text().match(/Out of quota/g)).toHaveLength(1)
+    expect(wrapper.find('.card__head .tone-attention').exists()).toBe(true)
+  })
+
+  it('shows a resting account as resting, in a neutral pill', async () => {
+    const wrapper = await render(makeAccount({ resting: true }))
+    expect(wrapper.get('.card__head').text()).toContain('Resting')
+    expect(wrapper.text()).not.toContain('Ready')
+    expect(wrapper.text().match(/Resting/g)).toHaveLength(1)
+    expect(wrapper.find('.card__head .tone-neutral').exists()).toBe(true)
+  })
+
   it('names the twin by its label', async () => {
     const twin = makeAccount({ id: 'a2', label: 'Personal' })
     const wrapper = await render(makeAccount({ status: 'twin', twinOf: 'a2' }), [twin])

@@ -12,7 +12,14 @@ import Switch from '@/components/ui/Switch.vue'
 import { useFormat } from '@/composables/useFormat'
 import { useAccountsStore } from '@/stores/accounts'
 
-import { canSignIn, isExhausted, STATUS_TONE, useActions } from './accountView'
+import {
+  canSignIn,
+  isExhausted,
+  PILL_TONE,
+  pillState,
+  STATUS_TONE,
+  useActions,
+} from './accountView'
 import LoginPanel from './LoginPanel.vue'
 import QuotaGroups from './QuotaGroups.vue'
 
@@ -37,9 +44,29 @@ const twinLabel = computed(() => {
   const twin = props.account.twinOf
   return twin ? (accounts.get(twin)?.label ?? twin) : ''
 })
-const statusLabel = computed(() =>
-  t(`accounts.status.${props.account.status}`, { name: twinLabel.value }),
+const exhaustedLabel = computed(() =>
+  t('accounts.exhausted', {
+    time: fmt.value.relative(props.account.quota.exhaustedUntil ?? '', props.now),
+  }),
 )
+const restingLabel = computed(() =>
+  props.account.restingUntil
+    ? t('accounts.restingUntil', {
+        time: fmt.value.relative(props.account.restingUntil, props.now),
+      })
+    : t('accounts.resting'),
+)
+const pill = computed(() => {
+  const state = pillState(props.account, props.now)
+  if (state === 'exhausted')
+    return { state, tone: PILL_TONE.exhausted, label: exhaustedLabel.value }
+  if (state === 'resting') return { state, tone: PILL_TONE.resting, label: restingLabel.value }
+  return {
+    state,
+    tone: STATUS_TONE[props.account.status],
+    label: t(`accounts.status.${props.account.status}`, { name: twinLabel.value }),
+  }
+})
 const kindLabel = computed(() =>
   props.account.kind === 'api-key'
     ? t('accounts.kind.apiKeyOf', { provider: props.account.provider ?? '?' })
@@ -107,25 +134,19 @@ function setPriority(priority: number) {
           <span v-if="account.quota.plan">{{ account.quota.plan }}</span>
         </p>
       </div>
-      <StatusPill :tone="STATUS_TONE[account.status]" :label="statusLabel" size="sm" />
+      <StatusPill :tone="pill.tone" :label="pill.label" size="sm" />
     </header>
 
     <ul class="card__facts">
       <li :class="account.busy > 0 ? 'tone-running' : 'tone-neutral'" class="card__fact">
         {{ t('accounts.busy', { busy: account.busy, max: account.maxConcurrent }) }}
       </li>
-      <li v-if="isExhausted(account, now)" class="card__fact tone-attention">
-        {{
-          t('accounts.exhausted', { time: fmt.relative(account.quota.exhaustedUntil ?? '', now) })
-        }}
-      </li>
-      <li v-else-if="account.resting" class="card__fact tone-neutral">
-        {{
-          account.restingUntil
-            ? t('accounts.restingUntil', { time: fmt.relative(account.restingUntil, now) })
-            : t('accounts.resting')
-        }}
-      </li>
+      <template v-if="pill.state === 'status'">
+        <li v-if="isExhausted(account, now)" class="card__fact tone-attention">
+          {{ exhaustedLabel }}
+        </li>
+        <li v-else-if="account.resting" class="card__fact tone-neutral">{{ restingLabel }}</li>
+      </template>
       <li v-if="account.signingIn && !session" class="card__fact tone-neutral">
         {{ t('accounts.signingIn') }}
       </li>

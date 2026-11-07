@@ -37,6 +37,25 @@ export const isExhausted = (account: Account, now: number): boolean =>
   !!account.quota.exhaustedUntil && Date.parse(account.quota.exhaustedUntil) > now
 
 /**
+ * What the card's pill shows. A Ready account (ok, or error with old numbers) that is out of quota or resting
+ * shows that instead of Ready (attention tone for out of quota, neutral for resting), and the matching chip is
+ * left out; every other status keeps its own word.
+ */
+export type PillState = 'status' | 'exhausted' | 'resting'
+
+export function pillState(account: Account, now: number): PillState {
+  if (account.status !== 'ok' && account.status !== 'error') return 'status'
+  if (isExhausted(account, now)) return 'exhausted'
+  if (account.resting) return 'resting'
+  return 'status'
+}
+
+export const PILL_TONE: Readonly<Record<Exclude<PillState, 'status'>, Tone>> = {
+  exhausted: 'attention',
+  resting: 'neutral',
+}
+
+/**
  * Runs page actions one at a time per key with a busy marker, and shows a failure as an error toast (the daemon's
  * own message). Returns whether the action worked.
  */
