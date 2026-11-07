@@ -123,9 +123,12 @@ func minutes(m *api.Meeting) string {
 	}
 	for _, q := range m.LeadQA {
 		w("- **%s** (%s, round %d): %s", q.ID, q.Label, q.Round, answer.Collapse(q.Question))
-		if q.AnsweredAt != "" {
+		switch {
+		case q.AnsweredAt != "":
 			w("  → %s", answer.Collapse(q.Answer))
-		} else {
+		case q.Round < m.Round || m.Status != api.MeetingStatusWaitingLead:
+			w("  → _(not answered)_") // the lead went on without answering
+		default:
 			w("  → _(not answered yet)_")
 		}
 	}

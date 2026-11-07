@@ -127,6 +127,12 @@ func parseAnswer(text string, keys []string) rawAnswer {
 		if m := opposingRe.FindStringSubmatch(resp); m != nil {
 			r = m[1]
 		}
+		// "Moved: no" written on the same line as the argument is not part of it (the minutes add it once).
+		if loc := movedRe.FindStringIndex(r); loc != nil {
+			before := strings.TrimRight(r[:loc[0]], " \t")
+			after := strings.TrimLeft(r[loc[1]:], " \t-–:,.")
+			r = strings.TrimSpace(before + " " + after)
+		}
 		a.Rebuttal = answer.Clip(strings.TrimSpace(r), maxStance)
 	}
 	return a

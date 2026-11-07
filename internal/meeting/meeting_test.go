@@ -418,6 +418,10 @@ func TestParseAnswer(t *testing.T) {
 	if a.Option != "" || a.Moved != "yes" || a.Rebuttal != "P2 says y" {
 		t.Errorf("answer = %+v", a)
 	}
+	a = parseAnswer("## Response to others\nStrongest opposing argument: P2 says y. Moved: no", []string{"A"})
+	if a.Moved != "no" || a.Rebuttal != "P2 says y." {
+		t.Errorf("same-line moved = %+v", a)
+	}
 	d := parseDissent("## Position\nI concede.\n## Statement\nFine.")
 	if d.kind != "concede" || d.text != "Fine." {
 		t.Errorf("dissent = %+v", d)
