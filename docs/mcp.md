@@ -44,11 +44,14 @@ listens, the daemon records its port in `<home>/run/daemon.port`; it removes the
    Anything else that answers (another program, an older Seelegent, another API version) is reported and nothing is
    started. A port that accepts but does not answer within 1.5 s is reported as a busy or hung daemon (or another
    program), and nothing is started either.
-3. When nothing answers, take `<home>/run/start.lock`, probe again (another MCP server may have just started it),
-   then start `seelegent daemon --port <port>` detached, hidden, in the data directory, and poll health for up to
-   20 s. A daemon that exits first points at `logs/daemon.log`. One that exits with code 3 (another daemon holds the
-   lock) leads to the running daemon when it answers, else to "the daemon for <home> runs on port X; this MCP looked
-   on port Y", or "the previous daemon was still shutting down; try again shortly".
+3. When nothing answers, take `<home>/run/start.lock`, probe again (another MCP server may have just started it).
+   While another daemon holds `run/daemon.lock` without answering yet (still starting, or shutting down), keep
+   probing for up to 20 s and use it as soon as it answers; nothing is started while the lock is held, and a holder
+   that never answers ends with an error that says where it is. Once the lock is free, start
+   `seelegent daemon --port <port>` detached, hidden, in the data directory, and poll health for up to 20 s. A
+   daemon that exits first points at `logs/daemon.log`. One that exits with code 3 (another daemon took the lock
+   meanwhile) leads to the running daemon when it answers, else to "the daemon for <home> runs on port X; this MCP
+   looked on port Y", or "the previous daemon was still shutting down; try again shortly".
 
 Inside a worker (`SEELEGENT_WORKER=1`) step 3 never happens: a daemon started there would live in the worker's
 process tree, on the worker profile's data directory. The error says the daemon running the worker cannot be reached.
@@ -139,5 +142,5 @@ against a stub API, the locally refused options, the task id announcement and th
 (`guard_test.go` pins the old `isMutating` table). `e2e_test.go` runs the tools over in-memory MCP transports
 against a real daemon built through `internal/app` with the fake worker CLI and a temp data directory.
 `internal/client` tests discovery and start against fake daemons: several servers racing to start one daemon, the
-port file, stale port files and a started daemon that exits for the lock. `internal/cli` runs the mcp command
-(autostart off, and inside a worker) and two daemons on one data directory.
+port file, stale port files, waiting for a daemon that holds the lock, and a started daemon that exits for the lock.
+`internal/cli` runs the mcp command (autostart off, and inside a worker) and two daemons on one data directory.

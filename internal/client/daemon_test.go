@@ -169,6 +169,9 @@ func writePortFile(t *testing.T, paths config.Paths, port int) {
 // holdLock holds the data directory's daemon lock until the test ends, as a running daemon does.
 func holdLock(t *testing.T, paths config.Paths) {
 	t.Helper()
+	if err := paths.EnsureDirs(); err != nil {
+		t.Fatal(err)
+	}
 	l, err := fsutil.TryLock(paths.LockFile)
 	if err != nil {
 		t.Fatal(err)
@@ -194,7 +197,7 @@ func TestFindThroughPortFile(t *testing.T) {
 }
 
 // TestStalePortFile: a port file left by a daemon that crashed never blocks a start, whether its port is free or
-// taken by another program, and whether or not something holds the lock.
+// taken by another program. While something holds the lock the start waits, and starts once the lock is free.
 func TestStalePortFile(t *testing.T) {
 	foreign := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
@@ -216,23 +219,73 @@ func TestStalePortFile(t *testing.T) {
 				listenOn(t, stale, foreign)
 			}
 			writePortFile(t, paths, stale)
+			var released atomic.Bool
 			if c.locked {
-				holdLock(t, paths)
+				if err := paths.EnsureDirs(); err != nil {
+					t.Fatal(err)
+				}
+				l, err := fsutil.TryLock(paths.LockFile)
+				if err != nil {
+					t.Fatal(err)
+				}
+				time.AfterFunc(200*time.Millisecond, func() { released.Store(true); _ = l.Unlock() })
 			}
 			var starts atomic.Int32
+			var early atomic.Bool
 			d := NewDaemon(DaemonOptions{Paths: paths, Port: configured, ProbeTimeout: 500 * time.Millisecond,
 				StartTimeout: 5 * time.Second, PollInterval: 20 * time.Millisecond,
 				Start: func(context.Context) (<-chan error, error) {
 					starts.Add(1)
+					early.Store(c.locked && !released.Load())
 					listenOn(t, configured, healthHandler(api.APIVersion))
 					return make(chan error), nil
 				}})
 			c2, err := d.Ensure(t.Context())
-			if err != nil || starts.Load() != 1 || c2.BaseURL() != "http://127.0.0.1:"+strconv.Itoa(configured) {
-				t.Fatalf("ensure = %v, %v (starts %d)", c2, err, starts.Load())
+			if err != nil || starts.Load() != 1 || early.Load() ||
+				c2.BaseURL() != "http://127.0.0.1:"+strconv.Itoa(configured) {
+				t.Fatalf("ensure = %v, %v (starts %d, while locked %v)", c2, err, starts.Load(), early.Load())
 			}
 		})
 	}
+}
+
+// TestStartWaitsForLockHolder: while another daemon of this home holds its lock but does not answer yet, nothing
+// is started; that daemon is used as soon as it answers, and a holder that never answers ends the start with an
+// error after StartTimeout.
+func TestStartWaitsForLockHolder(t *testing.T) {
+	t.Run("holder answers", func(t *testing.T) {
+		paths := testPaths(t)
+		port := freePort(t)
+		holdLock(t, paths)
+		var starts atomic.Int32
+		d := NewDaemon(DaemonOptions{Paths: paths, Port: port, ProbeTimeout: 500 * time.Millisecond,
+			StartTimeout: 5 * time.Second, PollInterval: 20 * time.Millisecond,
+			Start: func(context.Context) (<-chan error, error) { starts.Add(1); return make(chan error), nil }})
+		time.AfterFunc(300*time.Millisecond, func() { listenOn(t, port, healthHandler(api.APIVersion)) })
+		begun := time.Now()
+		c, err := d.Ensure(t.Context())
+		if err != nil || starts.Load() != 0 || c.BaseURL() != "http://127.0.0.1:"+strconv.Itoa(port) {
+			t.Fatalf("ensure = %v, %v (starts %d)", c, err, starts.Load())
+		}
+		if waited := time.Since(begun); waited < 250*time.Millisecond || waited > 4*time.Second {
+			t.Fatalf("returned after %s, want soon after the holder answered", waited)
+		}
+	})
+	t.Run("holder never answers", func(t *testing.T) {
+		paths := testPaths(t)
+		port := freePort(t)
+		holdLock(t, paths)
+		var starts atomic.Int32
+		d := NewDaemon(DaemonOptions{Paths: paths, Port: port, ProbeTimeout: 200 * time.Millisecond,
+			StartTimeout: 300 * time.Millisecond, PollInterval: 20 * time.Millisecond,
+			Start: func(context.Context) (<-chan error, error) { starts.Add(1); return make(chan error), nil }})
+		_, err := d.Ensure(t.Context())
+		if !errors.Is(err, ErrNotRunning) || starts.Load() != 0 ||
+			!strings.Contains(err.Error(), "no Seelegent daemon answered within 300ms") ||
+			!strings.Contains(err.Error(), "holds its lock") || !strings.Contains(err.Error(), paths.Home) {
+			t.Fatalf("ensure = %v (starts %d)", err, starts.Load())
+		}
+	})
 }
 
 // TestProbeTimeout: a port that accepts but never answers is reported as busy or hung, and nothing is started.

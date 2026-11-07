@@ -250,7 +250,7 @@ func (d *Daemon) start(ctx context.Context) (*Client, error) {
 		return nil, fmt.Errorf("wait for another process starting the daemon: %w", err)
 	}
 	defer func() { _ = lock.Unlock() }()
-	if c, err := d.Find(ctx); err == nil || !errors.Is(err, ErrNotRunning) {
+	if c, err := d.awaitHolder(ctx); c != nil || err != nil {
 		return c, err
 	}
 	d.o.Logger.Info("daemon: starting", "port", d.o.Port, "home", d.o.Paths.Home)
@@ -287,6 +287,52 @@ func (d *Daemon) start(ctx context.Context) (*Client, error) {
 			return nil, fmt.Errorf("the Seelegent daemon did not answer on port %d within %s; see %s", d.o.Port,
 				d.o.StartTimeout, logHint)
 		case <-tick.C:
+		}
+	}
+}
+
+// awaitHolder waits while another daemon of this home holds its single-instance lock but does not answer yet (it is
+// still starting, or shutting down): it returns that daemon as soon as it answers, and nil, nil once nothing answers
+// and the lock is free, so the caller starts one. Starting a daemon while the lock is held would only see it exit
+// for the lock. After StartTimeout it gives up with an error that says where the holder is.
+func (d *Daemon) awaitHolder(ctx context.Context) (*Client, error) {
+	c, err := d.Find(ctx)
+	if err == nil || !errors.Is(err, ErrNotRunning) {
+		return c, err
+	}
+	if !d.lockHeld() {
+		return nil, nil
+	}
+	d.o.Logger.Info("daemon: another daemon of this home holds its lock; waiting for it to answer", "port", d.o.Port,
+		"home", d.o.Paths.Home)
+	deadline := time.NewTimer(d.o.StartTimeout)
+	defer deadline.Stop()
+	tick := time.NewTicker(d.o.PollInterval)
+	defer tick.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-deadline.C:
+			c, err := d.locked(ctx)
+			if err != nil {
+				return nil, &notRunningError{msg: fmt.Sprintf("no Seelegent daemon answered within %s: %s",
+					d.o.StartTimeout, err.Error())}
+			}
+			return c, nil
+		case <-tick.C:
+		}
+		c, err := d.Find(ctx)
+		switch {
+		case err == nil:
+			return c, nil
+		case !errors.Is(err, ErrNotRunning) && !TimedOut(err): // a starting daemon may be slow to answer
+			return nil, err
+		case !d.lockHeld():
+			if errors.Is(err, ErrNotRunning) {
+				return nil, nil
+			}
+			return nil, err
 		}
 	}
 }
