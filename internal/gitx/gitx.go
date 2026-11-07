@@ -86,14 +86,14 @@ type branchEntry struct {
 	info *api.BranchInfo
 }
 
-// New returns a Repos that runs the git of bin (the composition root shares one Binary; NewBinary(nil) when nil).
-// now is the clock of the branch cache (time.Now when nil).
+// New returns a Repos that runs the git of bin (the composition root shares one Binary; NewBinary(nil, nil) when
+// nil). now is the clock of the branch cache (time.Now when nil).
 func New(now func() time.Time, bin *Binary) *Repos {
 	if now == nil {
 		now = time.Now
 	}
 	if bin == nil {
-		bin = NewBinary(nil)
+		bin = NewBinary(nil, nil)
 	}
 	return &Repos{git: bin, now: now, locks: map[string]*sync.Mutex{}, branches: map[string]branchEntry{}}
 }
@@ -127,13 +127,21 @@ func (r *Repos) Lock(ctx context.Context, root string) (func(), error) {
 }
 
 // run runs git in dir and returns its standard output. Output beyond limit bytes (0: no limit) is dropped and
-// reported by the second result.
+// reported by the second result. A git that was removed or moved since it was found is looked up again, once
+// (Binary.Run).
 func (r *Repos) run(ctx context.Context, dir string, timeout time.Duration, limit int, args ...string) (stdout []byte,
 	truncated bool, err error) {
-	git, err := r.git.Path()
-	if err != nil {
-		return nil, false, err
-	}
+	err = r.git.Run(func(git string) error {
+		var runErr error
+		stdout, truncated, runErr = r.runGit(ctx, git, dir, timeout, limit, args...)
+		return runErr
+	})
+	return stdout, truncated, err
+}
+
+// runGit is one attempt of run, with the git executable git.
+func (r *Repos) runGit(ctx context.Context, git, dir string, timeout time.Duration, limit int, args ...string) (
+	stdout []byte, truncated bool, err error) {
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	full := append([]string{"-c", "core.fsmonitor=false", "-c", "core.quotepath=off", "-c", "color.ui=false"},

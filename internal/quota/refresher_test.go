@@ -231,7 +231,14 @@ func TestRefreshSharesInflightRead(t *testing.T) {
 		return backend.Quota{}, ctx.Err()
 	})
 	b := f2.add(t, account.New{Backend: "agy", Kind: account.KindIsolated, Enabled: true})
-	go func() { _, _ = f2.r.Refresh(t.Context(), b.ID) }()
+	first, stopFirst := context.WithCancel(t.Context())
+	firstDone := make(chan struct{})
+	go func() {
+		defer close(firstDone)
+		_, _ = f2.r.Refresh(first, b.ID)
+	}()
+	// End the first read and wait for it before the store's temp dir is removed.
+	defer func() { stopFirst(); <-firstDone }()
 	for f2.reader.count(b.ID) == 0 {
 		time.Sleep(time.Millisecond)
 	}

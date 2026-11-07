@@ -14,6 +14,7 @@ import (
 
 	"github.com/NovaSeele/Seelegent/internal/account"
 	"github.com/NovaSeele/Seelegent/internal/config"
+	"github.com/NovaSeele/Seelegent/internal/envx"
 	"github.com/NovaSeele/Seelegent/internal/event"
 	"github.com/NovaSeele/Seelegent/internal/launch"
 	"github.com/NovaSeele/Seelegent/internal/platform"
@@ -83,7 +84,7 @@ func startE2E(t *testing.T, name, script string, prof account.Profile, turn Turn
 func secretsOf(env []string) []string {
 	var out []string
 	for _, n := range []string{"ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_API_KEY", account.EnvProviderKey} {
-		if v, ok := account.Lookup(env, n); ok && v != "" {
+		if v, ok := envx.Lookup(env, n); ok && v != "" {
 			out = append(out, v)
 		}
 	}

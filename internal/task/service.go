@@ -184,7 +184,7 @@ func New(o Options) (*Service, error) {
 		o.BaseEnv = os.Environ
 	}
 	if o.Git == nil {
-		o.Git = gitx.NewBinary(o.BaseEnv)
+		o.Git = gitx.NewBinary(o.BaseEnv, o.Logger)
 	}
 	root, cancel := context.WithCancel(context.Background())
 	return &Service{

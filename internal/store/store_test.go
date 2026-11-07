@@ -219,11 +219,13 @@ func TestReadDoesNotWaitForWriter(t *testing.T) {
 	defer cancel()
 	got, _, err := s.GetMeta(readCtx, "k")
 	close(release)
+	// Wait for the writer before any Fatal, so it never outlives the test's temp dir.
+	werr := <-done
 	if err != nil || got != "old" {
 		t.Fatalf("read during write = %q, %v; want old", got, err)
 	}
-	if err := <-done; err != nil {
-		t.Fatal(err)
+	if werr != nil {
+		t.Fatal(werr)
 	}
 }
 
@@ -243,10 +245,14 @@ func TestWriteWaitsForOtherProcess(t *testing.T) {
 	if _, err := tx.ExecContext(ctx, "INSERT INTO meta (key, value) VALUES ('other', '1')"); err != nil {
 		t.Fatal(err)
 	}
+	done := make(chan struct{})
 	go func() {
+		defer close(done)
 		time.Sleep(200 * time.Millisecond)
 		_ = tx.Commit()
 	}()
+	// Wait for the commit before other is closed and the temp dir removed, also when the test fails.
+	defer func() { <-done }()
 	start := time.Now()
 	if err := s.SetMeta(ctx, "mine", "1"); err != nil {
 		t.Fatalf("SetMeta while another connection writes: %v", err)

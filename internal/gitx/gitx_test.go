@@ -17,7 +17,7 @@ import (
 // gitExe finds git the way the daemon does (never a Windows batch shim); the test skips without one.
 func gitExe(t *testing.T) string {
 	t.Helper()
-	p, err := NewBinary(nil).Path()
+	p, err := NewBinary(nil, nil).Path()
 	if err != nil {
 		t.Skipf("no usable git: %v", err)
 	}

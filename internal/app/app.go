@@ -24,6 +24,7 @@ import (
 	"github.com/NovaSeele/Seelegent/internal/buildinfo"
 	"github.com/NovaSeele/Seelegent/internal/clock"
 	"github.com/NovaSeele/Seelegent/internal/config"
+	"github.com/NovaSeele/Seelegent/internal/envx"
 	"github.com/NovaSeele/Seelegent/internal/gitx"
 	"github.com/NovaSeele/Seelegent/internal/httpapi"
 	"github.com/NovaSeele/Seelegent/internal/logx"
@@ -244,7 +245,7 @@ func (a *App) build(o Options) error {
 	}
 	// One git executable for the daemon, found through its PATH (never a Windows batch shim), shared by the task
 	// engine's baseline and the git views.
-	gitBin := gitx.NewBinary(func() []string { return a.env })
+	gitBin := gitx.NewBinary(func() []string { return a.env }, a.log)
 	a.Tasks, err = task.New(task.Options{
 		DB: a.DB, Accounts: a.Accounts, Pool: p, Backends: a.Backends, Settings: a.Settings,
 		TasksDir: o.Paths.Tasks, Launcher: o.Launcher, Usage: a.Usage, QuotaRefresh: a.Refresher.Request,
@@ -301,7 +302,7 @@ func (a *App) Settings() config.Settings { return *a.settings.Load() }
 
 // dashboardLink is the deep link to a task in the dashboard.
 func (a *App) dashboardLink(id string) string {
-	port, err := config.ResolvePort(a.Settings(), func(k string) string { v, _ := account.Lookup(a.env, k); return v })
+	port, err := config.ResolvePort(a.Settings(), func(k string) string { v, _ := envx.Lookup(a.env, k); return v })
 	if err != nil {
 		port = a.Settings().Port
 	}

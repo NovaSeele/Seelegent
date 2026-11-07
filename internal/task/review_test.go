@@ -132,7 +132,7 @@ func TestCancelledTakeoverFreesSlot(t *testing.T) {
 
 // TestBaselineInBrief captures the files with uncommitted changes when the task starts and lists them in the brief.
 func TestBaselineInBrief(t *testing.T) {
-	gitPath, err := gitx.NewBinary(nil).Path() // as the engine finds it: never a Windows batch shim
+	gitPath, err := gitx.NewBinary(nil, nil).Path() // as the engine finds it: never a Windows batch shim
 	if err != nil {
 		t.Skipf("no usable git: %v", err)
 	}

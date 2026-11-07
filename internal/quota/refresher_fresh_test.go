@@ -108,9 +108,17 @@ func TestRefreshWaitsForOlderReadAndSharesNewer(t *testing.T) {
 	})
 	ctx := t.Context()
 	a := f.add(t, account.New{Backend: "agy", Kind: account.KindIsolated, Enabled: true})
-	go func() { f.r.RefreshAll(ctx) }()
-	waitFor(t, "the first read", func() bool { return f.reader.count(a.ID) == 1 })
+	cycle := make(chan struct{})
+	go func() {
+		defer close(cycle)
+		f.r.RefreshAll(ctx)
+	}()
+	// The cycle and the refreshes store their snapshots after release: wait for them before the store's temp dir
+	// is removed, also when the test fails before releasing them (release first, or wg.Wait hangs).
+	releaseOnce := sync.OnceFunc(func() { close(release) })
 	var wg sync.WaitGroup
+	defer func() { releaseOnce(); wg.Wait(); <-cycle }()
+	waitFor(t, "the first read", func() bool { return f.reader.count(a.ID) == 1 })
 	for range 2 {
 		wg.Add(1)
 		go func() {
@@ -123,7 +131,7 @@ func TestRefreshWaitsForOlderReadAndSharesNewer(t *testing.T) {
 	// Both requests must be queued behind the first read before it ends; otherwise a late one would rightly read a
 	// third time.
 	waitFor(t, "both refreshes waiting", func() bool { return f.waiting.Load() == 2 })
-	close(release)
+	releaseOnce()
 	wg.Wait()
 	if n := f.reader.count(a.ID); n != 2 || most.Load() != 1 {
 		t.Fatalf("reads = %d (want 2), most at once = %d (want 1)", n, most.Load())

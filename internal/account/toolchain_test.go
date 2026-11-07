@@ -9,6 +9,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/NovaSeele/Seelegent/internal/envx"
 )
 
 // fakeRustup puts an executable named rustup in a new folder and returns the PATH entry and its path.
@@ -71,13 +73,13 @@ func TestToolchainsPinsSingleToolchain(t *testing.T) {
 		!strings.HasSuffix(rec.calls[1], "@a") {
 		t.Errorf("calls = %q", rec.calls)
 	}
-	if v, _ := Lookup(rec.env, "HOME"); v != "/real/home" {
+	if v, _ := envx.Lookup(rec.env, "HOME"); v != "/real/home" {
 		t.Errorf("rustup ran with HOME=%q", v)
 	}
-	if v, _ := Lookup(rec.env, "RUSTUP_AUTO_INSTALL"); v != "0" {
+	if v, _ := envx.Lookup(rec.env, "RUSTUP_AUTO_INSTALL"); v != "0" {
 		t.Errorf("RUSTUP_AUTO_INSTALL = %q", v)
 	}
-	if _, ok := Lookup(rec.env, "RUSTUP_TOOLCHAIN"); ok {
+	if _, ok := envx.Lookup(rec.env, "RUSTUP_TOOLCHAIN"); ok {
 		t.Error("rustup ran with RUSTUP_TOOLCHAIN set")
 	}
 
@@ -152,30 +154,6 @@ func TestFindRustupInCargoHome(t *testing.T) {
 	}
 	if got := NewToolchains("", nil, nil).findRustup([]string{"PATH="}); got != "" {
 		t.Errorf("findRustup without home = %q", got)
-	}
-}
-
-func TestResolveCommand(t *testing.T) {
-	dir, bin := fakeRustup(t)
-	empty := t.TempDir()
-	env := []string{"PATH=" + strings.Join([]string{"", `"` + empty + `"`, dir}, string(os.PathListSeparator))}
-	if got := ResolveCommand("rustup", env); got != bin {
-		t.Errorf("ResolveCommand = %q, want %q", got, bin)
-	}
-	if got := ResolveCommand("nothing-here", env); got != "" {
-		t.Errorf("ResolveCommand(nothing) = %q", got)
-	}
-	if runtime.GOOS == "windows" {
-		writeFile(t, filepath.Join(empty, "tool.cmd"), "")
-		if got := ResolveCommand("tool", []string{"PATH=" + empty, "PATHEXT=.EXE;.CMD"}); !strings.EqualFold(got,
-			filepath.Join(empty, "tool.cmd")) {
-			t.Errorf("PATHEXT lookup = %q", got)
-		}
-	} else {
-		writeFile(t, filepath.Join(empty, "plain"), "")
-		if got := ResolveCommand("plain", []string{"PATH=" + empty}); got != "" {
-			t.Errorf("non-executable file resolved: %q", got)
-		}
 	}
 }
 

@@ -9,9 +9,9 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/NovaSeele/Seelegent/internal/account"
 	"github.com/NovaSeele/Seelegent/internal/api"
 	"github.com/NovaSeele/Seelegent/internal/config"
+	"github.com/NovaSeele/Seelegent/internal/envx"
 	"github.com/NovaSeele/Seelegent/internal/httpapi"
 )
 
@@ -20,7 +20,7 @@ const httpShutdown = 5 * time.Second
 
 // Port returns the port the daemon listens on: $SEELEGENT_PORT (from the daemon's environment) or the settings.
 func (a *App) Port() (int, error) {
-	return config.ResolvePort(a.Settings(), func(k string) string { v, _ := account.Lookup(a.env, k); return v })
+	return config.ResolvePort(a.Settings(), func(k string) string { v, _ := envx.Lookup(a.env, k); return v })
 }
 
 // PatchSettings applies a JSON merge patch (config.MergePatch) to the running settings and writes them to

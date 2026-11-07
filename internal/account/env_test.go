@@ -6,6 +6,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/NovaSeele/Seelegent/internal/envx"
 )
 
 // fakeRules is a backend that strips FAKE_* and points FAKE_HOME at the profile.
@@ -71,11 +73,11 @@ func TestEnvIsolated(t *testing.T) {
 	if len(env.Secrets) != 0 {
 		t.Errorf("secrets = %v", env.Secrets)
 	}
-	if v, ok := Lookup(env.Vars, "PATH"); !ok || v != "/bin-filtered" {
-		t.Errorf("Lookup(PATH) = %q, %v", v, ok)
+	if v, ok := envx.Lookup(env.Vars, "PATH"); !ok || v != "/bin-filtered" {
+		t.Errorf("envx.Lookup(PATH) = %q, %v", v, ok)
 	}
-	if _, ok := Lookup(env.Vars, "MISSING"); ok {
-		t.Error("Lookup(MISSING) found something")
+	if _, ok := envx.Lookup(env.Vars, "MISSING"); ok {
+		t.Error("envx.Lookup(MISSING) found something")
 	}
 	if strings.Contains(strings.Join(env.Vars, "\n"), "leak") {
 		t.Error("SEELEGENT_PROVIDER_KEY from the daemon leaked into the worker")
@@ -86,7 +88,7 @@ func TestEnvIsolated(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := Lookup(env.Vars, EnvGitGuard); ok {
+	if _, ok := envx.Lookup(env.Vars, EnvGitGuard); ok {
 		t.Error("git guard turned off without AllowGit")
 	}
 	// nil Base inherits the process environment.
@@ -95,7 +97,7 @@ func TestEnvIsolated(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if v, _ := Lookup(env.Vars, "SEELEGENT_TEST_INHERIT"); v != "yes" {
+	if v, _ := envx.Lookup(env.Vars, "SEELEGENT_TEST_INHERIT"); v != "yes" {
 		t.Error("process environment not inherited")
 	}
 }
@@ -125,8 +127,8 @@ func TestEnvCaseInsensitiveOnWindows(t *testing.T) {
 	if n != 1 {
 		t.Errorf("NO_COLOR appears %d times: %v", n, env.Vars)
 	}
-	if v, _ := Lookup(env.Vars, "PATH"); v != `C:\x` {
-		t.Errorf("Lookup(PATH) = %q", v)
+	if v, _ := envx.Lookup(env.Vars, "PATH"); v != `C:\x` {
+		t.Errorf("envx.Lookup(PATH) = %q", v)
 	}
 }
 
