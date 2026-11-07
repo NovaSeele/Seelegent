@@ -5,10 +5,11 @@
  * first visible item keeps its place when items load above it or change height (manual scroll anchoring, so the
  * container sets `overflow-anchor: none`). Following stops only on the reader's own input: wheel up, touch, the
  * up keys (PageUp, ArrowUp, Home, Shift+Space), a held primary or middle button anywhere in the list (scrollbar,
- * drag-selecting text, middle-click autoscroll) and focus moving inside it (Tab/Shift+Tab scrolling an item in).
- * A scroll the layout causes (items measured shorter or taller than estimated) re-pins the end.
- * Not detected, so re-pinned while following: Ctrl+F find-in-page and screen-reader browse mode (an accepted limit
- * of a virtual list).
+ * drag-selecting text, middle-button autoscroll while the button is held) and keyboard focus moving inside it
+ * (Tab/Shift+Tab scrolling an item in; focus from a click does not count). A scroll the layout causes (items
+ * measured shorter or taller than estimated) re-pins the end.
+ * Not detected, so re-pinned while following: Ctrl+F find-in-page, screen-reader browse mode and click-and-release
+ * middle-button autoscroll (Windows), an accepted limit of a virtual list.
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, shallowRef, watch, type Ref } from 'vue'
 
@@ -79,6 +80,10 @@ export function useVirtualList(options: VirtualListOptions) {
     if (event.button !== 0 && event.button !== 1) return
     pressing = true
     pressOnBar = event.target === scroller.value
+  }
+  /** Keyboard focus only: a click focuses its target on press, which must not count once released. */
+  const onFocusin = () => {
+    if (!pressing) markInput()
   }
   /** pointercancel (a touch pan) and window blur also end a press, so the flag can never stick. */
   const releasePress = () => {
@@ -215,7 +220,7 @@ export function useVirtualList(options: VirtualListOptions) {
     el.addEventListener('keydown', onKeydown)
     el.addEventListener('pointerdown', onPointerdown)
     // Focus moving inside the list (Tab, Shift+Tab) scrolls the focused item into view.
-    el.addEventListener('focusin', markInput)
+    el.addEventListener('focusin', onFocusin)
     window.addEventListener('pointerup', onPointerup)
     window.addEventListener('pointercancel', releasePress)
     window.addEventListener('blur', releasePress)
@@ -230,7 +235,7 @@ export function useVirtualList(options: VirtualListOptions) {
     el?.removeEventListener('touchmove', markInput)
     el?.removeEventListener('keydown', onKeydown)
     el?.removeEventListener('pointerdown', onPointerdown)
-    el?.removeEventListener('focusin', markInput)
+    el?.removeEventListener('focusin', onFocusin)
     window.removeEventListener('pointerup', onPointerup)
     window.removeEventListener('pointercancel', releasePress)
     window.removeEventListener('blur', releasePress)

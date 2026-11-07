@@ -222,6 +222,8 @@ describe('useVirtualList following', () => {
     const { api, wrapper, fromBottom, item, layoutScroll } = setup()
     await nextTick()
     item().dispatchEvent(new PointerEvent('pointerdown', { button: 0, bubbles: true }))
+    // A real browser focuses the clicked control on press.
+    item().dispatchEvent(new FocusEvent('focusin', { bubbles: true }))
     window.dispatchEvent(new PointerEvent('pointerup', { button: 0 }))
     layoutScroll()
     expect(api.following.value).toBe(true)
