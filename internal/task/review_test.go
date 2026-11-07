@@ -142,6 +142,7 @@ func TestBaselineInBrief(t *testing.T) {
 		t.Helper()
 		cmd := exec.CommandContext(t.Context(), gitPath, args...)
 		cmd.Dir = h.cwd
+		cmd.Env = gitx.Env(os.Environ())
 		if out, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("git %v: %v\n%s", args, err, out)
 		}

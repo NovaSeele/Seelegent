@@ -69,7 +69,7 @@ func runGit(ctx context.Context, git, dir string, args ...string) ([]byte, error
 	args = append([]string{"-c", "core.fsmonitor=false"}, args...)
 	cmd := exec.CommandContext(ctx, git, args...)
 	cmd.Dir = dir
-	cmd.Env = append(cmd.Environ(), "GIT_OPTIONAL_LOCKS=0", "GIT_TERMINAL_PROMPT=0")
+	cmd.Env = gitx.Env(cmd.Environ(), "GIT_OPTIONAL_LOCKS=0", "GIT_TERMINAL_PROMPT=0")
 	platform.HideWindow(cmd)
 	return cmd.Output()
 }

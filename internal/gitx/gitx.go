@@ -140,7 +140,7 @@ func (r *Repos) run(ctx context.Context, dir string, timeout time.Duration, limi
 		args...)
 	cmd := exec.Command(git, full...) //nolint:noctx // the tree is killed when ctx ends
 	cmd.Dir = dir
-	cmd.Env = append(cmd.Environ(), "GIT_TERMINAL_PROMPT=0", "GIT_LITERAL_PATHSPECS=1", "LC_ALL=C",
+	cmd.Env = Env(cmd.Environ(), "GIT_TERMINAL_PROMPT=0", "GIT_LITERAL_PATHSPECS=1", "LC_ALL=C",
 		"GIT_OPTIONAL_LOCKS=0")
 	out := &limitedBuffer{limit: limit}
 	errBuf := &limitedBuffer{limit: 64 << 10}
