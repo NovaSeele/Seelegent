@@ -2,6 +2,7 @@ package httpapi_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -172,6 +173,12 @@ func TestAutomationRoutes(t *testing.T) {
 	e.wantError(e.post("/api/v1/automations/"+a.ID+"/confirm-token", nil), http.StatusForbidden, api.CodeForbidden, "")
 	e.wantError(e.req(http.MethodPost, "/api/v1/automations/"+a.ID+"/confirm", map[string]string{"token": "x"}, nil),
 		http.StatusForbidden, api.CodeForbidden, "")
+	// Run now runs only what the user confirmed.
+	refused := e.wantError(e.post("/api/v1/automations/"+a.ID+"/run", nil), http.StatusConflict, api.CodeBadState, "")
+	if refused.Details["reason"] != "not_confirmed" || !strings.Contains(fmt.Sprint(refused.Details["confirmUrl"]),
+		"confirm="+a.ID) {
+		t.Fatalf("run now unconfirmed = %+v", refused)
+	}
 	shown := map[string]string{"revision": a.Revision}
 	e.wantError(e.req(http.MethodPost, "/api/v1/automations/"+a.ID+"/confirm-token", map[string]string{},
 		e.dashboard()), http.StatusBadRequest, api.CodeInvalidArgument, "")
@@ -202,7 +209,8 @@ func TestAutomationRoutes(t *testing.T) {
 
 	var run api.AutomationRun
 	e.must(e.post("/api/v1/automations/"+a.ID+"/run", nil), http.StatusOK).json(t, &run)
-	if run.Outcome != api.AutoSkippedPrecheck || !strings.Contains(run.Detail, "exit code 3") {
+	// exit 3 is a broken precheck, not its answer "skip" (exit 1).
+	if run.Outcome != api.AutoPrecheckFailed || !strings.Contains(run.Detail, "exit code 3") {
 		t.Fatalf("run = %+v", run)
 	}
 	var runs []api.AutomationRun

@@ -455,12 +455,12 @@ func TestGitHubCommands(t *testing.T) {
 	if !en.Confirm || en.Automation.Enabled || !strings.Contains(en.ConfirmURL, "confirm="+x.ID) {
 		t.Fatalf("enable = %+v", en)
 	}
-	var run api.AutomationRun
-	must(t, td, "automations", "run", x.ID, "--json").json(t, &run)
-	if run.Outcome != api.AutoSkippedPrecheck {
-		t.Fatalf("run = %+v", run)
+	// Run now runs only what the user confirmed in the dashboard.
+	if r := wantErr(t, td, ExitError, "bad_state", "automations", "run", x.ID, "--json"); !strings.Contains(r.stdout,
+		"not_confirmed") {
+		t.Fatalf("run unconfirmed:\n%s", r.stdout)
 	}
-	if out := must(t, td, "automations", "runs", x.ID).stdout; !strings.Contains(out, "skipped_precheck") {
+	if out := must(t, td, "automations", "runs", x.ID).stdout; out != "" {
 		t.Fatalf("runs:\n%s", out)
 	}
 	must(t, td, "automations", "update", x.ID, "--min-remaining", "50", "--json").json(t, &x)

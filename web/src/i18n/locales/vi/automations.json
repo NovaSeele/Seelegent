@@ -15,12 +15,13 @@
   },
   "outcome": {
     "started": "Đã bắt đầu",
-    "skipped_precheck": "Bỏ qua: kiểm tra trước",
-    "skipped_quota": "Bỏ qua: quota",
+    "skipped_precheck": "Kiểm tra trước báo bỏ qua",
+    "skipped_quota": "Bỏ qua: hạn mức",
     "skipped_overlap": "Bỏ qua: vẫn đang chạy",
     "skipped_late": "Bỏ qua: quá muộn",
     "error": "Lỗi",
-    "pending": "Đang bắt đầu"
+    "pending": "Đang bắt đầu",
+    "precheck_failed": "Kiểm tra trước bị lỗi"
   },
   "trigger": {
     "schedule": "Theo lịch",

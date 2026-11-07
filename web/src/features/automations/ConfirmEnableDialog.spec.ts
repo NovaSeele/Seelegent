@@ -25,6 +25,7 @@ const automation: Automation = {
   graceMinutes: 60,
   enabled: false,
   enableRequested: true,
+  confirmed: false,
   revision: 'r1',
   running: false,
   lastRun: null,

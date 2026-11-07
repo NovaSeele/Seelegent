@@ -15,12 +15,13 @@
   },
   "outcome": {
     "started": "시작됨",
-    "skipped_precheck": "건너뜀: 사전 확인",
+    "skipped_precheck": "사전 확인: 건너뜀",
     "skipped_quota": "건너뜀: 할당량",
     "skipped_overlap": "건너뜀: 아직 실행 중",
     "skipped_late": "건너뜀: 너무 늦음",
     "error": "오류",
-    "pending": "시작 중"
+    "pending": "시작 중",
+    "precheck_failed": "사전 확인 실패"
   },
   "trigger": {
     "schedule": "일정",

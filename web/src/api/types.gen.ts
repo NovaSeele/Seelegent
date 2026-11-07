@@ -227,6 +227,7 @@ export interface AutomationRun {
   outcome:
     | 'started'
     | 'skipped_precheck'
+    | 'precheck_failed'
     | 'skipped_quota'
     | 'skipped_overlap'
     | 'skipped_late'
@@ -253,7 +254,10 @@ export interface Automation {
   gateCommands: string[]
   lane: string[]
   noLane: boolean
-  /** Precheck is a shell command run in cwd before each run (60 s limit); a non-zero exit skips the run. */
+  /**
+   * Precheck is a shell command run in cwd before each run (60 s limit). Exit code 0 runs; 1 skips the run
+   * (skipped_precheck); any other outcome skips it as a broken precheck (precheck_failed).
+   */
   precheck?: string
   quota: AutomationQuota
   /** GraceMinutes: a run missed while the daemon was off still runs if it is at most this late. */
@@ -266,6 +270,11 @@ export interface Automation {
   enableRequested: boolean
   enableRequestedAt?: string
   confirmedAt?: string
+  /**
+   * Confirmed is true while what a run does is what the user last confirmed in the dashboard (Revision unchanged
+   * since). Run now needs it: an automation never confirmed, or changed since, is refused (not_confirmed).
+   */
+  confirmed: boolean
   /**
    * Revision names what a run does (a hash of the prompt, folder, worker, gate, lane, precheck and schedule). The
    * dashboard sends the revision it shows when it asks for a confirmation token, so it enables exactly that.
@@ -1166,6 +1175,28 @@ export interface ChecksFix {
   at: string
 }
 
+/**
+ * TicketRefusal is why the last pr of a ticket stopped before its branch was pushed, kept on the ticket so the
+ * dashboard explains it in the reader's language. Message is the daemon's English text for the lead (MCP, CLI); the
+ * dashboard never shows it.
+ */
+export interface TicketRefusal {
+  reason: 'unsafe_files' | 'scan_failed' | 'base_not_pushed' | 'branch_diverged'
+  findings: ScanFinding[]
+  /** Branch is the ticket branch (branch_diverged) or the base branch (base_not_pushed). */
+  branch?: string
+  /** Commits is how many commits of the base the remote lacks (base_not_pushed; 0: the base branch is missing). */
+  commits?: number
+  /**
+   * Cause of a scan that could not run (scan_failed): "changed" (the worktree changed while it was read) or "git"
+   * (git failed; Detail is git's redacted reason).
+   */
+  cause?: 'changed' | 'git'
+  detail?: string
+  message: string
+  at: string
+}
+
 /** TicketSummary is a ticket as lists and the SSE stream show it. */
 export interface TicketSummary {
   id: string
@@ -1180,8 +1211,15 @@ export interface TicketSummary {
   meetingId?: string
   pr: TicketPR | null
   checks: TicketChecks | null
-  /** NeedsAttention is checks_failed while the open pull request's checks failed. */
-  needsAttention?: 'checks_failed'
+  /**
+   * NeedsAttention says what the lead has to do next: checks_failed while the open pull request's checks failed,
+   * push_refused while Refusal stands (ready or pr_open), open_pr while a pushed branch waits for its pull request
+   * to be opened by hand.
+   */
+  needsAttention?: 'checks_failed' | 'push_refused' | 'open_pr'
+  /** Refusal is why the last pr stopped before pushing (cleared by the next pr or a new task). */
+  refusal?: TicketRefusal
+  /** Error is a failure (a task or meeting that could not start, a GitHub or git call that failed). */
   error?: string
   createdAt: string
   updatedAt: string
@@ -1285,9 +1323,23 @@ export interface FixChecksRequest {
   model?: string
 }
 
-/** ScanFinding is a file the pull request scan refused (secret, key, junk or too large), with why. */
+/**
+ * ScanFinding is a file the pull request scan refused (secret, key, junk or too large), with why: Kind and Detail
+ * for the dashboard, Reason in English for the lead.
+ */
 export interface ScanFinding {
   path: string
+  /**
+   * Kind is env (.env file), private_key (id_rsa ...), key_store (.pem, .p12 ...), credentials (.netrc ...), device
+   * (a Windows device name such as nul), secret (the content holds a key or token), large (over 5 MB) or link (a
+   * link to a place outside the worktree).
+   */
+  kind: 'env' | 'private_key' | 'key_store' | 'credentials' | 'device' | 'secret' | 'large' | 'link'
+  /**
+   * Detail is the extension of a key store, what a secret is (github_token, aws_key, private_key, slack_token,
+   * google_key, anthropic_key, stored_token) or the size in bytes of a large file.
+   */
+  detail?: string
   reason: string
 }
 

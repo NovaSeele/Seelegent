@@ -15,12 +15,13 @@
   },
   "outcome": {
     "started": "Запущена",
-    "skipped_precheck": "Пропуск: предпроверка",
+    "skipped_precheck": "Предпроверка: пропустить",
     "skipped_quota": "Пропуск: квота",
     "skipped_overlap": "Пропуск: ещё идёт",
     "skipped_late": "Пропуск: слишком поздно",
     "error": "Ошибка",
-    "pending": "Запускается"
+    "pending": "Запускается",
+    "precheck_failed": "Сбой предпроверки"
   },
   "trigger": {
     "schedule": "По расписанию",

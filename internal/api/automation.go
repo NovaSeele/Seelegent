@@ -42,12 +42,16 @@ const (
 
 // Automation run outcomes.
 const (
-	AutoStarted         = "started"
+	AutoStarted = "started"
+	// AutoSkippedPrecheck: the precheck ran and said skip (exit code 1).
 	AutoSkippedPrecheck = "skipped_precheck"
-	AutoSkippedQuota    = "skipped_quota"
-	AutoSkippedOverlap  = "skipped_overlap"
-	AutoSkippedLate     = "skipped_late"
-	AutoError           = "error"
+	// AutoPrecheckFailed: the precheck itself broke (any other non-zero exit code, killed, timed out or could not
+	// start); the run is skipped too.
+	AutoPrecheckFailed = "precheck_failed"
+	AutoSkippedQuota   = "skipped_quota"
+	AutoSkippedOverlap = "skipped_overlap"
+	AutoSkippedLate    = "skipped_late"
+	AutoError          = "error"
 	// AutoPending is a scheduled run the scheduler decided on that has not started yet. It is written together with
 	// the automation's next run time, so a stop in between leaves a trace (resolved at the next start).
 	AutoPending = "pending"
@@ -58,7 +62,7 @@ type AutomationRun struct {
 	ID      int64  `json:"id"`
 	At      string `json:"at"`
 	Trigger string `json:"trigger" ts:"'schedule' | 'missed' | 'manual' | 'before_reset'"`
-	Outcome string `json:"outcome" ts:"'started' | 'skipped_precheck' | 'skipped_quota' | 'skipped_overlap' | 'skipped_late' | 'error' | 'pending'"`
+	Outcome string `json:"outcome" ts:"'started' | 'skipped_precheck' | 'precheck_failed' | 'skipped_quota' | 'skipped_overlap' | 'skipped_late' | 'error' | 'pending'"`
 	TaskID  string `json:"taskId,omitempty"`
 	// Detail says why a run was skipped or failed (the precheck's output tail, the quota left, ...).
 	Detail string `json:"detail,omitempty"`
@@ -80,7 +84,8 @@ type Automation struct {
 	GateCommands []string `json:"gateCommands"`
 	Lane         []string `json:"lane"`
 	NoLane       bool     `json:"noLane"`
-	// Precheck is a shell command run in cwd before each run (60 s limit); a non-zero exit skips the run.
+	// Precheck is a shell command run in cwd before each run (60 s limit). Exit code 0 runs; 1 skips the run
+	// (skipped_precheck); any other outcome skips it as a broken precheck (precheck_failed).
 	Precheck string          `json:"precheck,omitempty"`
 	Quota    AutomationQuota `json:"quota"`
 	// GraceMinutes: a run missed while the daemon was off still runs if it is at most this late.
@@ -91,6 +96,9 @@ type Automation struct {
 	EnableRequested   bool   `json:"enableRequested"`
 	EnableRequestedAt string `json:"enableRequestedAt,omitempty"`
 	ConfirmedAt       string `json:"confirmedAt,omitempty"`
+	// Confirmed is true while what a run does is what the user last confirmed in the dashboard (Revision unchanged
+	// since). Run now needs it: an automation never confirmed, or changed since, is refused (not_confirmed).
+	Confirmed bool `json:"confirmed"`
 	// Revision names what a run does (a hash of the prompt, folder, worker, gate, lane, precheck and schedule). The
 	// dashboard sends the revision it shows when it asks for a confirmation token, so it enables exactly that.
 	Revision string `json:"revision"`

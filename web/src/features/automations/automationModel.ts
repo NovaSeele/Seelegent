@@ -244,9 +244,11 @@ export const STATE_LOOK: Readonly<Record<AutomationState, { tone: Tone; icon: Ic
 export const OUTCOME_LOOK: Readonly<
   Record<AutomationRun['outcome'], { tone: Tone; icon: IconName }>
 > = {
+  // Muted: the automation's own rules skipped the run (normal); danger: something broke and the user should look.
   started: { tone: 'success', icon: 'statusRunning' },
   skipped_precheck: { tone: 'muted', icon: 'statusCancelled' },
-  skipped_quota: { tone: 'attention', icon: 'statusWaiting' },
+  precheck_failed: { tone: 'danger', icon: 'statusFailed' },
+  skipped_quota: { tone: 'muted', icon: 'statusWaiting' },
   skipped_overlap: { tone: 'muted', icon: 'statusWaiting' },
   skipped_late: { tone: 'muted', icon: 'statusCancelled' },
   error: { tone: 'danger', icon: 'statusFailed' },

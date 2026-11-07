@@ -29,6 +29,7 @@ const automation = (overrides: Partial<Automation> = {}): Automation => ({
   graceMinutes: 60,
   enabled: true,
   enableRequested: false,
+  confirmed: true,
   revision: 'abc',
   running: false,
   lastRun: null,

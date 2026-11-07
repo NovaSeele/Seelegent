@@ -15,12 +15,13 @@
   },
   "outcome": {
     "started": "Iniciada",
-    "skipped_precheck": "Omitida: comprobación previa",
+    "skipped_precheck": "La comprobación previa pidió omitir",
     "skipped_quota": "Omitida: cuota",
     "skipped_overlap": "Omitida: aún en curso",
     "skipped_late": "Omitida: demasiado tarde",
-    "error": "Error",
-    "pending": "Iniciando"
+    "error": "Falló",
+    "pending": "Iniciando",
+    "precheck_failed": "Falló la comprobación previa"
   },
   "trigger": {
     "schedule": "Según el horario",

@@ -203,6 +203,11 @@ func (r *rec) contentHash() string {
 	return hex.EncodeToString(sum[:])
 }
 
+// confirmed reports whether what a run does is what the user last confirmed.
+func (r *rec) confirmed() bool {
+	return r.ConfirmedHash != "" && r.ConfirmedHash == r.contentHash()
+}
+
 // revision is the short form of contentHash the API shows (Automation.Revision).
 func (r *rec) revision() string {
 	return r.contentHash()[:16]
@@ -328,6 +333,7 @@ func (s *Service) running(ctx context.Context, r *rec) (busy bool, why string) {
 func (s *Service) view(ctx context.Context, r *rec) api.Automation {
 	v := r.Automation
 	v.Revision = r.revision()
+	v.Confirmed = r.confirmed()
 	v.Running, _ = s.running(ctx, r)
 	v.GateCommands = api.NonNil(v.GateCommands)
 	v.Lane = api.NonNil(v.Lane)
@@ -924,20 +930,26 @@ func (s *Service) fire(ctx context.Context, id, trigger string, reset *resetCand
 	if r.Precheck != "" {
 		res := s.o.Precheck(ctx, r.Precheck, r.Cwd, PrecheckTimeout)
 		if !res.OK() {
+			// Exit code 1 is the precheck's answer "skip" (grep -q, test, git diff --quiet); anything else means the
+			// precheck itself broke: another exit code (2 for a usage error, 126/127 for a missing command, 128 for
+			// a git error), killed, timed out or not started.
+			outcome := api.AutoPrecheckFailed
 			why := res.Err
 			switch {
 			case res.TimedOut:
 				why = "timed out after 60 s"
 			case res.Exit != nil:
 				why = fmt.Sprintf("exit code %d", *res.Exit)
+				if *res.Exit == 1 {
+					outcome = api.AutoSkippedPrecheck
+				}
 			case why == "":
 				why = "did not run"
 			}
 			if tail := strings.TrimSpace(res.Tail); tail != "" && tail != res.Err {
 				why += ": " + tailOf(tail, 400)
 			}
-			return record(ctx, id, api.AutomationRun{Trigger: trigger, Outcome: api.AutoSkippedPrecheck,
-				Detail: why})
+			return record(ctx, id, api.AutomationRun{Trigger: trigger, Outcome: outcome, Detail: why})
 		}
 	}
 	if r, err = s.get(ctx, id); err != nil { // deleted or changed during the precheck
@@ -953,9 +965,37 @@ func (s *Service) fire(ctx context.Context, id, trigger string, reset *resetCand
 	return record(ctx, id, api.AutomationRun{Trigger: trigger, Outcome: api.AutoStarted, TaskID: sum.ID})
 }
 
+// NotConfirmedError refuses run now for an automation whose content the user has not confirmed: never confirmed,
+// or changed since. The lead's tools can create and edit automations, so running one at once would run a prompt the
+// user never saw (the safeguard of old bug D8).
+type NotConfirmedError struct {
+	ID, Name, ConfirmURL string
+}
+
+func (e *NotConfirmedError) Error() string {
+	return fmt.Sprintf("automation %q has not been confirmed in the dashboard as it is now, so it cannot run; the "+
+		"user reviews and turns it on at %s", e.Name, e.ConfirmURL)
+}
+
+// Is makes errors.Is(err, ErrBadState) true.
+func (e *NotConfirmedError) Is(target error) bool { return target == ErrBadState }
+
+// APIDetails are the error details of the HTTP API.
+func (e *NotConfirmedError) APIDetails() map[string]any {
+	return map[string]any{"reason": "not_confirmed", "confirmUrl": e.ConfirmURL}
+}
+
 // RunNow runs an automation at once, with the same rules as a scheduled run, also when it is disabled or the
-// master switch is off.
+// master switch is off. Only what the user confirmed runs: an automation never confirmed, or changed since, is
+// refused (NotConfirmedError).
 func (s *Service) RunNow(ctx context.Context, id string) (api.AutomationRun, error) {
+	r, err := s.get(ctx, id)
+	if err != nil {
+		return api.AutomationRun{}, err
+	}
+	if !r.confirmed() {
+		return api.AutomationRun{}, &NotConfirmedError{ID: r.ID, Name: r.Name, ConfirmURL: s.o.ConfirmURL(r.ID)}
+	}
 	return s.fire(ctx, id, api.TriggerManual, nil, 0)
 }
 

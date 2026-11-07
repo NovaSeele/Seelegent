@@ -172,6 +172,10 @@ func toAPIError(err error) *apiError {
 		errors.Is(err, ticket.ErrConflict)) {
 		return &apiError{code: api.CodeConflict, message: msg, details: withDetails.APIDetails()}
 	}
+	// An automation run now refused because the user has not confirmed it as it is (details.reason not_confirmed).
+	if errors.As(err, &withDetails) && errors.Is(err, automation.ErrBadState) {
+		return &apiError{code: api.CodeBadState, message: msg, details: withDetails.APIDetails()}
+	}
 	switch {
 	case errors.Is(err, context.DeadlineExceeded):
 		return newError(api.CodeUnavailable, "the request timed out")

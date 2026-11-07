@@ -47,6 +47,7 @@ const automation = (overrides: Partial<Automation> = {}): Automation => ({
   graceMinutes: 60,
   enabled: false,
   enableRequested: true,
+  confirmed: false,
   revision: 'r-shown',
   running: false,
   lastRun: null,

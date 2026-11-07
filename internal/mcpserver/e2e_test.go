@@ -504,14 +504,14 @@ func TestIssuesAndAutomations(t *testing.T) {
 		en["automation"].(map[string]any)["enabled"] != false {
 		t.Fatalf("enable = %v", en)
 	}
-	var run api.AutomationRun
-	ok(t, d.cs, "automations", map[string]any{"action": "run", "id": id}, &run)
-	if run.Outcome != api.AutoSkippedPrecheck {
-		t.Fatalf("run = %+v", run)
+	// Run now runs only what the user confirmed in the dashboard.
+	if msg := fails(t, d.cs, "automations", map[string]any{"action": "run", "id": id}); !strings.Contains(msg,
+		"confirm="+id) {
+		t.Fatalf("run unconfirmed = %s", msg)
 	}
 	var runs []api.AutomationRun
 	ok(t, d.cs, "automations", map[string]any{"action": "runs", "id": id}, &runs)
-	if len(runs) != 1 {
+	if len(runs) != 0 {
 		t.Fatalf("runs = %v", runs)
 	}
 	ok(t, d.cs, "automations", map[string]any{"action": "update", "id": id, "lane": false, "min_remaining": 50}, &x)

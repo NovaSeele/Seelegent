@@ -15,12 +15,13 @@
   },
   "outcome": {
     "started": "已启动",
-    "skipped_precheck": "跳过：预检查",
+    "skipped_precheck": "预检查要求跳过",
     "skipped_quota": "跳过：配额",
     "skipped_overlap": "跳过：仍在运行",
     "skipped_late": "跳过：太晚",
     "error": "错误",
-    "pending": "正在启动"
+    "pending": "正在启动",
+    "precheck_failed": "预检查失败"
   },
   "trigger": {
     "schedule": "按计划",

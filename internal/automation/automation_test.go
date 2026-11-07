@@ -298,7 +298,21 @@ func TestRunRules(t *testing.T) {
 	f := newFixture(t)
 	ctx := t.Context()
 	a := f.create(t, api.AutomationInput{Member: "ada", Gate: ptr(false), Lane: []string{"docs/**"}})
-	// run now works while disabled.
+	// Run now runs only what the user confirmed: never confirmed is refused, with the confirmation link.
+	var nc *NotConfirmedError
+	if _, err := f.s.RunNow(ctx, a.ID); !errors.As(err, &nc) || !errors.Is(err, ErrBadState) ||
+		nc.APIDetails()["reason"] != "not_confirmed" || f.tasks.count() != 0 {
+		t.Fatalf("run now unconfirmed: %v", err)
+	}
+	if got, _ := f.s.Get(ctx, a.ID); got.Confirmed {
+		t.Fatal("confirmed before any confirmation")
+	}
+	f.enable(t, a.ID)
+	_, _ = f.s.Update(ctx, a.ID, api.AutomationPatch{Enabled: ptr(false)})
+	if got, _ := f.s.Get(ctx, a.ID); !got.Confirmed {
+		t.Fatal("not confirmed after the confirmation")
+	}
+	// Once confirmed, run now works while disabled.
 	run, err := f.s.RunNow(ctx, a.ID)
 	if err != nil || run.Outcome != api.AutoStarted || run.TaskID == "" || run.Trigger != api.TriggerManual {
 		t.Fatalf("run now = %+v %v", run, err)
@@ -335,15 +349,31 @@ func TestRunRules(t *testing.T) {
 	}
 	f.mu.Unlock()
 	_, _ = f.s.Update(ctx, a.ID, api.AutomationPatch{Precheck: ptr("git log -1")})
+	// A new precheck changes what a run does: confirmed again before run now.
+	if _, err := f.s.RunNow(ctx, a.ID); !errors.As(err, &nc) {
+		t.Fatalf("run now after a change: %v", err)
+	}
+	f.enable(t, a.ID)
+	// Exit code 1 is the precheck's answer "skip"; anything else is a broken precheck.
 	run, _ = f.s.RunNow(ctx, a.ID)
 	if run.Outcome != api.AutoSkippedPrecheck || !strings.Contains(run.Detail, "exit code 1") ||
 		strings.Contains(run.Detail, "ghp_abc") {
 		t.Fatalf("precheck = %+v", run)
 	}
 	f.mu.Lock()
+	f.pre = func(string) gate.ExecResult {
+		code := 128
+		return gate.ExecResult{Exit: &code, Tail: "fatal: not a git repository"}
+	}
+	f.mu.Unlock()
+	if run, _ = f.s.RunNow(ctx, a.ID); run.Outcome != api.AutoPrecheckFailed ||
+		!strings.Contains(run.Detail, "exit code 128: fatal") {
+		t.Fatalf("precheck broken = %+v", run)
+	}
+	f.mu.Lock()
 	f.pre = func(string) gate.ExecResult { return gate.ExecResult{TimedOut: true, Err: "timeout after 1m0s"} }
 	f.mu.Unlock()
-	if run, _ = f.s.RunNow(ctx, a.ID); run.Outcome != api.AutoSkippedPrecheck || !strings.Contains(run.Detail, "timed out") {
+	if run, _ = f.s.RunNow(ctx, a.ID); run.Outcome != api.AutoPrecheckFailed || !strings.Contains(run.Detail, "timed out") {
 		t.Fatalf("precheck timeout = %+v", run)
 	}
 	f.mu.Lock()
@@ -354,7 +384,7 @@ func TestRunRules(t *testing.T) {
 		t.Fatalf("error = %+v", run)
 	}
 	runs := f.runs(t, a.ID)
-	if len(runs) != 6 || runs[0].Outcome != api.AutoError || runs[5].Outcome != api.AutoStarted {
+	if len(runs) != 7 || runs[0].Outcome != api.AutoError || runs[6].Outcome != api.AutoStarted {
 		t.Fatalf("history = %+v", runs)
 	}
 	if err := f.s.Delete(ctx, a.ID); err != nil {

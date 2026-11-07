@@ -65,6 +65,15 @@ and an unattended run must never happen twice. *Run now* runs it if it is still 
 
 ## A run
 
+*Run now* (`POST /automations/{id}/run`) runs only what the user confirmed: an automation never confirmed in the
+dashboard, or changed since (`confirmed: false`), is refused with `409 bad_state`, `details: {reason:
+"not_confirmed", confirmUrl}`, because the lead's tools can create and edit automations and running one at once
+would run a prompt the user never saw. The dashboard shows *Review and turn on* in its place. A confirmed
+automation runs now also while it is off or the master switch is off.
+
+A precheck follows the shell convention of `grep -q`, `test` and `git diff --quiet`: exit code 0 runs, 1 means
+"nothing to do" and skips the run quietly, and anything else is a broken precheck the user should look at.
+
 Every run, scheduled or *run now*, goes through the same checks, and every outcome is recorded (the newest 500 per
 automation are kept):
 
@@ -72,7 +81,8 @@ automation are kept):
 |---|---|
 | `skipped_overlap` | the task of the previous run is still pending, or a run is starting |
 | `skipped_quota` | the best usable account of the backend has less than `quota.minRemaining` % left (default 20) in the bucket that limits it; with no quota known for the backend the run starts |
-| `skipped_precheck` | the precheck command (run in the folder through the shell, 60 s at most, its process tree killed after) exited non-zero, timed out or did not start; the detail carries the end of its output |
+| `skipped_precheck` | the precheck command (run in the folder through the shell, 60 s at most, its process tree killed after) answered "skip": it exited with code 1; the detail carries the end of its output |
+| `precheck_failed` | the precheck itself broke: any other non-zero exit code (2 for a usage error, 126 or 127 for a missing command, 128 for a git error), killed, timed out or could not start; the run is skipped and the detail carries the end of its output |
 | `error` | the delegation itself failed (no folder, no account, a lane conflict) |
 | `pending` | the scheduler decided on the run and it has not started yet (see above) |
 | `started` | a task was delegated; `taskId` names it (the task's `automationId` links back) |

@@ -15,12 +15,13 @@
   },
   "outcome": {
     "started": "開始",
-    "skipped_precheck": "スキップ: 事前チェック",
-    "skipped_quota": "スキップ: クォータ",
-    "skipped_overlap": "スキップ: 実行中",
-    "skipped_late": "スキップ: 遅すぎ",
+    "skipped_precheck": "事前チェックでスキップ",
+    "skipped_quota": "スキップ：クォータ",
+    "skipped_overlap": "スキップ：実行中",
+    "skipped_late": "スキップ：遅すぎ",
     "error": "エラー",
-    "pending": "開始中"
+    "pending": "開始中",
+    "precheck_failed": "事前チェック失敗"
   },
   "trigger": {
     "schedule": "スケジュール",

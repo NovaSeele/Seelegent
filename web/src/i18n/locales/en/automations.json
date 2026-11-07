@@ -15,12 +15,13 @@
   },
   "outcome": {
     "started": "Started",
-    "skipped_precheck": "Skipped: precheck",
+    "skipped_precheck": "Precheck said skip",
     "skipped_quota": "Skipped: quota",
     "skipped_overlap": "Skipped: still running",
     "skipped_late": "Skipped: too late",
     "error": "Error",
-    "pending": "Starting"
+    "pending": "Starting",
+    "precheck_failed": "Precheck failed"
   },
   "trigger": {
     "schedule": "On schedule",
