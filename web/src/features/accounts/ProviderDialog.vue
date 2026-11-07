@@ -12,6 +12,8 @@ import TextField from '@/components/ui/TextField.vue'
 import { useProvidersStore } from '@/stores/providers'
 import { useToastStore } from '@/stores/toast'
 
+import { parseModels, providerInput } from './providerForm'
+
 /**
  * Adds a provider (from a preset, or blank) or edits one. The id and backend are fixed once the provider exists;
  * models are a comma-separated list. Field errors from the daemon show next to their field.
@@ -76,16 +78,13 @@ async function submit() {
   busy.value = true
   errors.value = {}
   failure.value = ''
-  const list = models.value
-    .split(/[\s,]+/)
-    .map((m) => m.trim())
-    .filter(Boolean)
+  const list = parseModels(models.value)
   try {
-    const { id, name, backend, baseUrl, enabled } = form.value
+    const { name, baseUrl, enabled } = form.value
     if (props.provider) {
       await providers.update(props.provider.id, { name, baseUrl, enabled, models: list })
     } else {
-      await providers.create({ id, name, backend, baseUrl, enabled, models: list })
+      await providers.create(providerInput(form.value, list, preset.value))
     }
     open.value = false
     toast.show({ message: t('accounts.providers.saved', { name }), tone: 'success' })

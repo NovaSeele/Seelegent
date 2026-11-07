@@ -591,6 +591,8 @@ export interface Provider {
   enabled: boolean
   models: string[]
   accounts: number
+  /** The preset the provider was made from (absent for none). */
+  preset?: string
 }
 
 // internal/usage: Summary and History are the source of truth for these shapes.
@@ -813,7 +815,10 @@ type MergePatch<T> = {
 // §4 Providers list
 
 /** A preset is a provider template: everything but the account count. */
-export type ProviderPreset = Omit<Provider, 'accounts'>
+export type ProviderPreset = Omit<Provider, 'accounts' | 'preset'>
+
+/** The POST /providers body: a provider's fields, plus the preset it was filled from. */
+export type ProviderInput = ProviderPreset & { preset?: string }
 
 export interface ProviderList {
   items: Provider[]

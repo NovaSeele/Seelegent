@@ -418,7 +418,18 @@ export function createAdminRoutes(ctx) {
     if (parts.length === 1) {
       if (method === 'GET') return send(res, 200, { items: providers.map(providerView), presets })
       if (method !== 'POST') return false
-      const body = await readBody(req, ['id', 'name', 'backend', 'baseUrl', 'enabled', 'models'])
+      const body = await readBody(req, [
+        'id',
+        'name',
+        'backend',
+        'baseUrl',
+        'enabled',
+        'models',
+        'preset',
+      ])
+      if (body.preset !== undefined && !presets.some((p) => p.id === body.preset)) {
+        throw invalid(`unknown preset ${String(body.preset)}`, 'preset')
+      }
       if (typeof body.id !== 'string' || !ID.test(body.id)) {
         throw invalid('the id uses a-z, 0-9 and -, at most 40 characters', 'id')
       }
@@ -433,6 +444,7 @@ export function createAdminRoutes(ctx) {
         body.models ?? [],
       )
       created.enabled = body.enabled ?? true
+      if (body.preset) created.preset = body.preset
       providers.push(created)
       broadcast('providers.changed', { changedAt: now() })
       return send(res, 201, providerView(created))

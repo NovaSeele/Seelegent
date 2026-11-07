@@ -7,7 +7,7 @@ import { shallowRef } from 'vue'
 
 import { providersApi as defaultApi } from '@/api'
 import type { ProviderChanges, ProvidersApi } from '@/api/providers'
-import type { Provider, ProviderPreset } from '@/api/types'
+import type { Provider, ProviderInput, ProviderPreset } from '@/api/types'
 
 import { useConnectionStore } from './connection'
 import { createLoader } from './loader'
@@ -39,7 +39,7 @@ export const useProvidersStore = defineStore('providers', () => {
     void load()
   }
 
-  async function create(body: ProviderPreset): Promise<Provider> {
+  async function create(body: ProviderInput): Promise<Provider> {
     const provider = await client.create(body)
     await load()
     return provider
