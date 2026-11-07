@@ -34,6 +34,9 @@ type Spawn struct {
 	ParentID  string
 	MeetingID string
 	ContestID string
+	// TicketID and AutomationID link a ticket task (internal/ticket) and an automation run (internal/automation).
+	TicketID     string
+	AutomationID string
 	// Variant and ProjectCwd describe a contest variant: its label and the user's folder its worktree stands for.
 	Variant    string
 	ProjectCwd string
@@ -122,7 +125,8 @@ func (s *Service) DelegateWith(ctx context.Context, req api.DelegateRequest, sp 
 		Title: title(req.Title, prompt), Status: StatusQueued, Kind: kind, Mode: mode, Cwd: cwd,
 		ProjectKey: key, ProjectName: name, Prompt: prompt, Backend: backendName, Provider: providerID,
 		AllowGit: req.AllowGit, Session: session, Role: req.Role, ParentID: sp.ParentID, MeetingID: sp.MeetingID,
-		ContestID: sp.ContestID, Variant: sp.Variant, ProjectCwd: projectCwd, BaselineTaken: Hidden(kind),
+		ContestID: sp.ContestID, TicketID: sp.TicketID, AutomationID: sp.AutomationID, Variant: sp.Variant,
+		ProjectCwd: projectCwd, BaselineTaken: Hidden(kind),
 	}
 	var memberPrefer []string
 	if mem != nil {

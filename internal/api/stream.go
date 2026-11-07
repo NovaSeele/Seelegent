@@ -43,6 +43,14 @@ const (
 	StreamNotesChanged StreamEvent = "notes.changed"
 	// StreamProofRun: ProofRun, at each step of a regression run (milestone 13).
 	StreamProofRun StreamEvent = "proof.run"
+	// StreamTicketUpdated: TicketSummary, whenever a ticket changed (milestone 15).
+	StreamTicketUpdated StreamEvent = "ticket.updated"
+	// StreamIssuesChanged: IssuesChanged, when a repository, its inbox or its outbox changed (milestone 15).
+	StreamIssuesChanged StreamEvent = "issues.changed"
+	// StreamAutomationUpdated: Automation, whenever an automation or its runs changed (milestone 15).
+	StreamAutomationUpdated StreamEvent = "automation.updated"
+	// StreamAutomationDeleted: Deleted (milestone 15).
+	StreamAutomationDeleted StreamEvent = "automation.deleted"
 )
 
 // Reset reasons.

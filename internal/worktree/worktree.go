@@ -41,6 +41,9 @@ const IncludeFile = ".worktreeinclude"
 // ErrInvalid is matched by a bad shared-folder list.
 var ErrInvalid = errors.New("invalid worktree setting")
 
+// ErrDirty is matched when a worktree that must be clean has uncommitted changes.
+var ErrDirty = errors.New("the worktree has uncommitted changes")
+
 // Git runs the safe git commands (gitx.Repos.Exec).
 type Git interface {
 	Exec(ctx context.Context, dir string, opt gitx.ExecOptions, args ...string) ([]byte, error)
@@ -203,6 +206,50 @@ func (t *Trees) Add(ctx context.Context, root, dir, commit string) (string, erro
 		return "", err
 	}
 	return canonical(dir), nil
+}
+
+// AddBranch makes a worktree of the repository at root at dir (below Base, not existing yet) on a new branch (named
+// with gitx.BranchPrefix) at commit, and returns its canonical path. Ticket worktrees use it.
+func (t *Trees) AddBranch(ctx context.Context, root, dir, branch, commit string) (string, error) {
+	if _, err := t.owned(dir); err != nil {
+		return "", err
+	}
+	if err := os.MkdirAll(filepath.Dir(dir), 0o700); err != nil {
+		return "", fmt.Errorf("worktree folder: %w", err)
+	}
+	if _, err := t.Git.Exec(ctx, root, gitx.ExecOptions{}, "worktree", "add", "-b", branch, dir, commit); err != nil {
+		return "", err
+	}
+	return canonical(dir), nil
+}
+
+// RemoveClean removes the worktree wt only when nothing in it is uncommitted (else ErrDirty, and the worktree is
+// left as it is): the shared-folder links and any link a worker made go first, never followed, then plain
+// `git worktree remove`. Unlike Remove it commits nothing (a ticket's branch holds only what the lead sent). A
+// worktree whose folder is gone is pruned.
+func (t *Trees) RemoveClean(ctx context.Context, root, wt string, env *api.WorktreeEnv) error {
+	if _, err := t.owned(wt); err != nil {
+		return err
+	}
+	if _, err := os.Lstat(wt); errors.Is(err, os.ErrNotExist) {
+		_, perr := t.Git.Exec(ctx, root, gitx.ExecOptions{}, "worktree", "prune")
+		return perr
+	}
+	st, err := t.Git.Exec(ctx, wt, gitx.ExecOptions{Timeout: gitx.ReadTimeout}, "status", "--porcelain")
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(string(st)) != "" {
+		return fmt.Errorf("%w; commit or discard them first", ErrDirty)
+	}
+	if _, _, err := RemoveLinks(wt, env); err != nil {
+		return fmt.Errorf("remove shared-folder links: %w", err)
+	}
+	if err := removeStrayLinks(wt, t.trackedLinks(ctx, wt)); err != nil {
+		return err
+	}
+	_, err = t.Git.Exec(ctx, root, gitx.ExecOptions{}, "worktree", "remove", wt)
+	return err
 }
 
 // Setup gives the worktree wt of the repository at root its environment: a copy of each gitignored file listed in

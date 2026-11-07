@@ -172,8 +172,8 @@ func (s *Service) summary(t *Task) api.TaskSummary {
 		LastEventAt: api.FormatTime(t.LastEventAt), WaitingUntil: api.FormatTime(t.WaitingUntil),
 		NeedsSince: api.FormatTime(t.NeedsSince), Attention: t.Attention, Review: t.Review, Spec: t.Spec,
 		After: api.NonNil(t.After), AfterMode: t.AfterMode, DepsReason: t.DepsReason, Manual: t.Manual,
-		ParentID: t.ParentID, ContestID: t.ContestID, TicketID: t.TicketID, MeetingID: t.MeetingID, Variant: t.Variant,
-		LastEventSeq: t.LastEventSeq, Gate: gateSummary(t),
+		ParentID: t.ParentID, ContestID: t.ContestID, TicketID: t.TicketID, MeetingID: t.MeetingID,
+		AutomationID: t.AutomationID, Variant: t.Variant, LastEventSeq: t.LastEventSeq, Gate: gateSummary(t),
 	}
 	if sum.AfterMode == "" { // tasks stored before afterMode was always set
 		sum.AfterMode = AfterAccepted
