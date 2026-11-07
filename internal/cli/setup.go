@@ -96,7 +96,8 @@ func newSkillCommand(info buildinfo.Info) *cobra.Command {
 // newHookCommand is the hidden `seelegent hook claude-agent` that Claude Code runs before its Agent tool (installed
 // by `seelegent setup --hooks`). It never fails: a hook error would only get in the lead's way.
 func newHookCommand() *cobra.Command {
-	hook := &cobra.Command{Use: "hook", Short: "Hooks that lead hosts run", Hidden: true}
+	hook := &cobra.Command{Use: "hook", Short: "Hooks that lead hosts run", Hidden: true, Args: noArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error { return cmd.Help() }}
 	hook.AddCommand(&cobra.Command{
 		Use:   setup.HookCommand,
 		Short: "Claude Code PreToolUse hook for the Agent tool: reminds the lead to delegate",
