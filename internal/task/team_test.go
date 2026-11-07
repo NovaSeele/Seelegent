@@ -224,11 +224,14 @@ func TestStopHiddenRunClosesItOnceStopped(t *testing.T) {
 }
 
 // A daemon that stopped between creating a consult run and storing its record leaves a run nobody reads: the next
-// start stops and closes it, and leaves alone a consult run its parent records.
+// start stops and closes it, and leaves alone a consult run its parent records as running. A run whose consult
+// already ended (the daemon stopped between storing the outcome and closing the run) is closed too, whether it
+// finished or still runs.
 func TestStartStopsOrphanConsultRuns(t *testing.T) {
 	h := newHarness(t)
 	h.initRepo(map[string]string{"a.txt": "one\n"})
 	h.agy("w", 3)
+	h.agy("w2", 2) // two turns at a time per account: three runs hang at once
 	h.queue.Push(t, okScript("conv-p", "Done."))
 	parent := h.delegate(api.DelegateRequest{Title: "parent"})
 	h.waitStatus(parent.ID, StatusDone)
@@ -242,16 +245,40 @@ func TestStartStopsOrphanConsultRuns(t *testing.T) {
 		h.runningWorker(run.ID)
 		return run.ID
 	}
-	orphan, recorded := consult("conv-o"), consult("conv-r")
+	orphan, recorded, endedRunning := consult("conv-o"), consult("conv-r"), consult("conv-e")
+	h.queue.Push(t, okScript("conv-d", "Approve."))
+	finished, err := h.s.DelegateWith(t.Context(), api.DelegateRequest{Prompt: "review", Cwd: h.cwd,
+		Title: "Consult: parent", Mode: ModePlan}, Spawn{Kind: KindConsult, ParentID: parent.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.waitStatus(finished.ID, StatusDone)
+	record := func(id, run, status string) api.Consult {
+		return api.Consult{ID: id, Member: "rev", Rank: api.RankPeer, RunTaskID: run, Status: status,
+			Findings: []api.Claim{}, Required: []string{}, At: api.FormatTime(h.clk.Now())}
+	}
 	if _, err := h.s.mutate(t.Context(), parent.ID, func(tk *Task) ([]NewEvent, error) {
-		tk.Consults = append(tk.Consults, api.Consult{ID: "c1", Member: "rev", Rank: api.RankPeer, RunTaskID: recorded,
-			Status: consultRunning, Findings: []api.Claim{}, Required: []string{}, At: api.FormatTime(h.clk.Now())})
+		tk.Consults = append(tk.Consults, record("c1", recorded, consultRunning), record("c2", finished.ID, consultDone),
+			record("c3", endedRunning, consultFailed))
 		return nil, nil
 	}); err != nil {
 		t.Fatal(err)
 	}
+	if open, err := h.s.OpenHiddenRuns(t.Context(), KindConsult); err != nil || len(open) != 4 {
+		t.Fatalf("open hidden runs before the restart = %+v %v", open, err)
+	}
 	h.stop()
 	h.start()
+	h.waitFor("the ended consults' runs to be closed", func() bool {
+		d, e := h.task(finished.ID), h.task(endedRunning)
+		return d.Review != nil && e.Status == StatusCancelled && e.Review != nil
+	})
+	if r := h.task(finished.ID); r.Status != StatusDone || r.Review.Notes != "consult "+consultDone {
+		t.Errorf("finished run of a stored consult = %s, review %+v", r.Status, r.Review)
+	}
+	if r := h.task(endedRunning); r.Review.Notes != "consult "+consultFailed {
+		t.Errorf("running run of an ended consult: review %+v", r.Review)
+	}
 	h.waitFor("the orphan consult run to be closed", func() bool {
 		r := h.task(orphan)
 		return r.Status == StatusCancelled && r.Review != nil

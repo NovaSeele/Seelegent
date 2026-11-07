@@ -60,7 +60,8 @@ record was never stored (a consult whose task started a new turn meanwhile, a me
 cancelled meeting's running turns) is cancelled and closed once its worker has stopped. A daemon that stops first
 leaves such runs open, so at startup the meeting service stops and closes the open `meeting` runs whose meeting
 does not exist (Open starts a meeting's first round before it stores the meeting) or has ended (cancelled, closed,
-failed), and the task engine those of kind `consult` that no consult of their parent task names.
+failed), and the task engine those of kind `consult` that no consult of their parent task names or whose consult
+has already ended (stored as done or failed before the run was closed); a consult still `running` is followed again.
 
 ## Consults
 

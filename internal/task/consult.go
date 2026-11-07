@@ -362,8 +362,11 @@ func (s *Service) OpenHiddenRuns(ctx context.Context, kind string) ([]HiddenRun,
 }
 
 // stopOrphanConsults stops and closes the consult runs nobody reads: a run whose parent task has no consult that
-// names it (the daemon stopped between creating the run and storing its record). It runs at start, before the API
-// serves, and outside any task lock (StopHiddenRun takes its own).
+// names it (the daemon stopped between creating the run and storing its record), and a run whose consult has
+// already ended (the daemon stopped between storing the outcome and closing the run, or the record was ended
+// otherwise while its run stayed open), as meetings do with the runs of an ended meeting. A run whose consult is
+// still running is followed by resumeConsults. It runs at start, before the API serves, and outside any task lock
+// (StopHiddenRun takes its own).
 func (s *Service) stopOrphanConsults(ctx context.Context) error {
 	runs, err := s.OpenHiddenRuns(ctx, KindConsult)
 	if err != nil {
@@ -374,11 +377,23 @@ func (s *Service) stopOrphanConsults(ctx context.Context) error {
 		if err != nil && !errors.Is(err, ErrNotFound) {
 			return err
 		}
-		if err == nil && slices.ContainsFunc(parent.Consults, func(c api.Consult) bool { return c.RunTaskID == r.ID }) {
+		notes := "consult not stored"
+		if err == nil {
+			i := slices.IndexFunc(parent.Consults, func(c api.Consult) bool { return c.RunTaskID == r.ID })
+			if i >= 0 && parent.Consults[i].Status == consultRunning {
+				continue
+			}
+			if i >= 0 {
+				notes = "consult " + parent.Consults[i].Status
+			}
+		}
+		if Finished(r.Status) {
+			s.log.Info("task: close a consult run left open", "task", r.ID, "parent", r.ParentID)
+			s.closeHiddenRun(r.ID, notes)
 			continue
 		}
 		s.log.Info("task: stop a consult run nobody reads", "task", r.ID, "parent", r.ParentID)
-		s.StopHiddenRun(r.ID, "consult not stored")
+		s.StopHiddenRun(r.ID, notes)
 	}
 	return nil
 }
