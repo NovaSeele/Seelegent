@@ -5,6 +5,7 @@ import { useI18n } from 'vue-i18n'
 import { errorMessage, fieldProblems } from '@/api/client'
 import type { HookConfig } from '@/api/types'
 import Button from '@/components/ui/Button.vue'
+import EmptyState from '@/components/ui/EmptyState.vue'
 import Spinner from '@/components/ui/Spinner.vue'
 import { useSettingsStore } from '@/stores/settings'
 import { useToastStore } from '@/stores/toast'
@@ -99,6 +100,13 @@ async function save() {
   <SettingRow item="webhooks" stacked :highlighted="highlight === 'webhooks'">
     <div class="hooks">
       <Spinner v-if="settings.hooksStatus === 'loading'" :label="t('settings.hooks.loading')" />
+      <EmptyState
+        v-else-if="settings.hooksUnsupported"
+        icon="webhook"
+        :title="t('settings.comingSoon.title')"
+        :description="t('settings.hooks.unsupported')"
+        :level="3"
+      />
       <div v-else-if="settings.hooksStatus === 'error'" class="hooks__note" role="alert">
         {{ t('settings.hooks.loadFailed', { error: settings.hooksError }) }}
         <Button size="sm" variant="ghost" @click="settings.loadHooks()">

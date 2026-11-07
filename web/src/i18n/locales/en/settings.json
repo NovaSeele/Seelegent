@@ -122,6 +122,7 @@
   "hooks": {
     "loading": "Loading hooks…",
     "loadFailed": "Hooks could not be loaded: {error}",
+    "unsupported": "This version of the Seelegent service does not support hooks yet. They appear here once it does.",
     "empty": "No hooks yet.",
     "hookN": "Hook {n}",
     "enabled": "Enabled",

@@ -47,6 +47,8 @@ const projectKey = (cwd, name) =>
 
 export function createAdminRoutes(ctx) {
   const { accounts, settings, projects, broadcast, readBody, send, HttpError } = ctx
+  /** Every /hooks route answers 501, as a daemon without hooks does. */
+  const noHooks = ctx.noHooks === true
   const invalid = (message, field) =>
     new HttpError(400, 'invalid_argument', message, field ? { field } : undefined)
   const notFound = (what) => new HttpError(404, 'not_found', `${what} not found`)
@@ -1203,6 +1205,13 @@ export function createAdminRoutes(ctx) {
       }
     }
     if (parts[0] === 'hooks') {
+      if (noHooks) {
+        throw new HttpError(
+          501,
+          'not_implemented',
+          'hooks are not available in this version of the daemon',
+        )
+      }
       if (parts.length === 1 && method === 'GET') return send(res, 200, hooks)
       if (parts.length === 1 && method === 'PUT') {
         const body = await readBody(req, ['hooks'])

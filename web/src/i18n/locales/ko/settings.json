@@ -122,6 +122,7 @@
   "hooks": {
     "loading": "훅을 불러오는 중…",
     "loadFailed": "훅을 불러오지 못했습니다: {error}",
+    "unsupported": "이 버전의 Seelegent 서비스는 아직 훅을 지원하지 않습니다. 지원되면 여기에 표시됩니다.",
     "empty": "아직 훅이 없습니다.",
     "hookN": "훅 {n}",
     "enabled": "사용",

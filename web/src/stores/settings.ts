@@ -10,6 +10,7 @@ import { defineStore } from 'pinia'
 import { shallowRef } from 'vue'
 
 import { settingsApi as defaultApi } from '@/api'
+import { ApiError } from '@/api/client'
 import type { SettingsApi } from '@/api/settings'
 import type { Hook, HookConfig, HookRun, Memory, Settings, SettingsPatch } from '@/api/types'
 
@@ -19,9 +20,21 @@ import { createLoader } from './loader'
 export const useSettingsStore = defineStore('settings', () => {
   let client: SettingsApi = defaultApi
   const hooks = shallowRef<readonly Hook[]>([])
+  /** GET /hooks answered 501: this daemon has no hooks yet, so there is nothing to retry or add. */
+  const hooksUnsupported = shallowRef(false)
   const hooksLoader = createLoader(
-    (signal) => client.hooks(signal),
-    (list) => (hooks.value = list),
+    async (signal): Promise<readonly Hook[] | null> => {
+      try {
+        return await client.hooks(signal)
+      } catch (cause) {
+        if (cause instanceof ApiError && cause.status === 501) return null
+        throw cause
+      }
+    },
+    (list) => {
+      hooksUnsupported.value = list === null
+      hooks.value = list ?? []
+    },
   )
   /** The project folder whose memory is loaded, its text, and whether another writer changed it since. */
   const memory = shallowRef<Memory | null>(null)
@@ -92,6 +105,7 @@ export const useSettingsStore = defineStore('settings', () => {
     hooks,
     hooksStatus: hooksLoader.status,
     hooksError: hooksLoader.error,
+    hooksUnsupported,
     memory,
     memoryChanged,
     setApi,

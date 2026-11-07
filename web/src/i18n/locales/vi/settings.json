@@ -122,6 +122,7 @@
   "hooks": {
     "loading": "Đang tải hook…",
     "loadFailed": "Không tải được hook: {error}",
+    "unsupported": "Phiên bản dịch vụ Seelegent này chưa hỗ trợ hook. Hook sẽ hiện ở đây khi dịch vụ hỗ trợ.",
     "empty": "Chưa có hook nào.",
     "hookN": "Hook {n}",
     "enabled": "Bật",

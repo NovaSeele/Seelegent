@@ -122,6 +122,7 @@
   "hooks": {
     "loading": "Cargando hooks…",
     "loadFailed": "No se pudieron cargar los hooks: {error}",
+    "unsupported": "Esta versión del servicio de Seelegent aún no admite hooks. Aparecerán aquí cuando lo haga.",
     "empty": "Aún no hay hooks.",
     "hookN": "Hook {n}",
     "enabled": "Activado",

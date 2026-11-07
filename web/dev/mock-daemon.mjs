@@ -17,7 +17,8 @@
  * another instance's id, too_old outside the ring), hello first, ping every 25 s, git paths relative to the repo
  * root (Turn.files relative to the cwd).
  *
- * Env: MOCK_PORT (47831), MOCK_TICK_MS (250), MOCK_OLD_TASKS (140 finished tasks for paging).
+ * Env: MOCK_PORT (47831), MOCK_TICK_MS (250), MOCK_OLD_TASKS (140 finished tasks for paging), MOCK_NO_HOOKS=1
+ * (every /hooks route answers 501 not_implemented, like a daemon without hooks).
  */
 import { randomBytes } from 'node:crypto'
 import { createServer } from 'node:http'
@@ -1657,6 +1658,7 @@ const adminRoute = createAdminRoutes({
   readBody,
   send,
   HttpError,
+  noHooks: process.env.MOCK_NO_HOOKS === '1',
 })
 
 const server = createServer((req, res) => {

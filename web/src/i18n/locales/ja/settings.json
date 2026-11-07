@@ -122,6 +122,7 @@
   "hooks": {
     "loading": "フックを読み込み中…",
     "loadFailed": "フックを読み込めませんでした：{error}",
+    "unsupported": "このバージョンの Seelegent サービスはまだフックに対応していません。対応すると、ここに表示されます。",
     "empty": "フックはまだありません。",
     "hookN": "フック {n}",
     "enabled": "有効",

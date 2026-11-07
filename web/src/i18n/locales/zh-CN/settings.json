@@ -122,6 +122,7 @@
   "hooks": {
     "loading": "正在加载钩子…",
     "loadFailed": "无法加载钩子：{error}",
+    "unsupported": "此版本的 Seelegent 服务尚不支持钩子。支持后会显示在这里。",
     "empty": "还没有钩子。",
     "hookN": "钩子 {n}",
     "enabled": "启用",
