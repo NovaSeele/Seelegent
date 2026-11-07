@@ -32,7 +32,7 @@ const { record, status, error, reload, set } = useLiveRecord(
 
 const repo = computed(() => gh.repos.find((r) => r.id === record.value?.repoId) ?? null)
 const look = computed(() => (record.value ? TICKET_STATUS[record.value.status] : null))
-// A finished ticket's checks are no longer read: its header does not shout the last state (F38).
+// A finished ticket's checks are no longer read: its header does not shout the last state (F39).
 const checks = computed(() =>
   record.value?.checks && !ticketFinished(record.value.status)
     ? CHECKS_STATE[record.value.checks.state]

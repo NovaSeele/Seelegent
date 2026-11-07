@@ -32,7 +32,7 @@ const schedule = computed(() => {
   return t(w.key, w.params)
 })
 const last = computed(() => props.automation.lastRun)
-// The task to open: the one running now, else the last run's own (a skipped run has none, F39).
+// The task to open: the one running now, else the last run's own (a skipped run has none, F40).
 const taskId = computed(() =>
   props.automation.running ? props.automation.activeTaskId : last.value?.taskId,
 )

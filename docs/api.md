@@ -112,7 +112,7 @@ in the daemon.
   built from a list. `Account.models` of an API-key account is its provider's tier models followed by that list.
 - `POST /automations/{id}/confirm-token` takes `{revision}`, the `Automation.revision` the dashboard shows, and
   answers `409 bad_state` when the automation changed since (`400` without it), so a token enables exactly what
-  the user read (F33). It and `POST /automations/{id}/confirm`, `PUT` and `DELETE /github/token` answer only
+  the user read (F34). It and `POST /automations/{id}/confirm`, `PUT` and `DELETE /github/token` answer only
   the dashboard's own requests: `403 forbidden` with `details.reason: "dashboard_only"` otherwise.
 - A `POST /tasks` body with `ticketId` is a `400` (C-B21): ticket tasks start only through the ticket routes.
 - `PATCH /settings` applies the JSON merge patch to the daemon's in-memory settings and writes `config.json`

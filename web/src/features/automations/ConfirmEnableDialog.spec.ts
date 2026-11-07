@@ -1,4 +1,4 @@
-/** The confirm dialog reads the automation also when it is open from the start (the ?confirm= link, F36). */
+/** The confirm dialog reads the automation also when it is open from the start (the ?confirm= link, F37). */
 import { mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { h } from 'vue'

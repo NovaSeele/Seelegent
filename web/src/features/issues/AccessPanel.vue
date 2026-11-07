@@ -84,7 +84,7 @@ async function refresh() {
         {{ t('issues.access.check') }}
       </Button>
     </div>
-    <!-- Until the daemon answers, show nothing about the tier: a "Manual" flash would be wrong (F37). -->
+    <!-- Until the daemon answers, show nothing about the tier: a "Manual" flash would be wrong (F38). -->
     <Spinner v-if="!access && gh.accessStatus !== 'error'" :label="t('common.ui.loading')" />
     <template v-else>
       <p class="acc__desc">{{ t(`issues.access.tierDesc.${tier}`) }}</p>

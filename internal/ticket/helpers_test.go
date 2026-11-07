@@ -68,7 +68,7 @@ func TestScrubLocal(t *testing.T) {
 	}
 }
 
-// TestPRBodyGateLines: a step whose label is its kind is named once (F34).
+// TestPRBodyGateLines: a step whose label is its kind is named once (F35).
 func TestPRBodyGateLines(t *testing.T) {
 	body := prBody(prInputs{ticket: &ticketRec{}, gate: &api.GateResult{State: "green", Steps: []api.GateStep{
 		{Kind: "lane", Label: "lane", State: "green"},
@@ -117,7 +117,7 @@ func TestDeriveStatus(t *testing.T) {
 		{[]api.TaskSummary{done(api.VerdictAccepted)}, api.TicketReady},
 		{[]api.TaskSummary{done(api.VerdictAccepted), done("")}, api.TicketReview},
 		{[]api.TaskSummary{done(api.VerdictAccepted), {Status: api.StatusRunning}}, api.TicketWorking},
-		// F35: a failed task the user accepted makes the ticket ready, as in the old version.
+		// F36: a failed task the user accepted makes the ticket ready, as in the old version.
 		{[]api.TaskSummary{{Status: api.StatusFailed, Review: &api.Review{Verdict: api.VerdictAccepted}}}, api.TicketReady},
 		{[]api.TaskSummary{{Status: api.StatusFailed}}, api.TicketReview},
 		{[]api.TaskSummary{{Status: api.StatusCancelled, Review: &api.Review{Verdict: api.VerdictAccepted}}},
