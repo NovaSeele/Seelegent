@@ -165,8 +165,9 @@ func setup(t *testing.T) *env {
 	root := filepath.Join(dir, "repo")
 	write(t, filepath.Join(root, "a.txt"), "alpha\n")
 	write(t, filepath.Join(root, "b.txt"), "beta\n")
-	// A shared folder (like node_modules): ignored as a folder, so its link would not be.
-	write(t, filepath.Join(root, ".gitignore"), "deps/\n")
+	// A shared folder (like node_modules), ignored without a trailing slash so its link (a junction on Windows, a
+	// symlink elsewhere) is ignored too and Setup links it on every OS.
+	write(t, filepath.Join(root, ".gitignore"), "deps\n")
 	write(t, filepath.Join(root, "deps", "lib.txt"), "lib\n")
 	git(t, root, "init", "-q")
 	git(t, root, "config", "core.autocrlf", "false")
@@ -328,6 +329,9 @@ func TestContestDeadlineConflictAndCancel(t *testing.T) {
 		t.Fatal(err)
 	}
 	v1 := c.Variants[0]
+	if v1.Env == nil || len(v1.Env.Linked) != 1 {
+		t.Fatalf("V1 env = %+v", v1.Env)
+	}
 	write(t, filepath.Join(v1.Worktree, "a.txt"), "alpha\nfrom V1\n")
 	e.tasks.finish(v1.TaskID, "done")
 	// The deadline passes with V2 still running: V2 is cancelled and disqualified.
