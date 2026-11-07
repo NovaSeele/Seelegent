@@ -60,7 +60,9 @@
         "name": "이름을 입력하세요.",
         "id": "소문자, 숫자, 하이픈으로 최대 40자까지 쓰세요."
       }
-    }
+    },
+    "enabledFor": "{name} 사용",
+    "turnedOff": "꺼짐"
   },
   "meetings": {
     "new": "새 회의",
@@ -117,10 +119,12 @@
     },
     "lead": {
       "title": "당신에게 온 질문",
-      "answer": "{label} ({id})에게 답변",
+      "answer": "답변",
       "note": "모든 참석자에게 보낼 메모 (선택)",
-      "post": "답변 보내기",
-      "posted": "답변을 보냈습니다"
+      "posted": "답변을 보냈습니다",
+      "askedBy": "질문한 참석자: {who}",
+      "skipped": "답하지 않은 질문 {n}개는 건너뜁니다",
+      "postN": "답변 {n}/{total}개 보내기"
     },
     "decide": {
       "title": "당신의 결정",
@@ -133,9 +137,6 @@
     },
     "decision": "결정",
     "dissents": "반대",
-    "dissent": "공식 반대",
-    "concede": "수용",
-    "watching": "지켜보는 중",
     "signal": {
       "rejected": "{task}이(가) 거부됨",
       "gate_red": "{task}의 게이트가 빨간색이었음"
@@ -153,7 +154,9 @@
       "add": "작업 추가",
       "remove": "작업 {n} 제거",
       "submit": "작업 {n}개 위임",
-      "done": "작업 {n}개를 위임했습니다"
+      "done": "작업 {n}개를 위임했습니다",
+      "open": "작업 추가",
+      "another": "작업 하나 더"
     },
     "tasks": "이 회의에서 나온 작업",
     "cancel": "회의 취소",
@@ -185,7 +188,16 @@
         "cwd": "절대 경로 폴더를 입력하세요.",
         "attendees": "참석자를 1~6명 고르세요."
       }
-    }
+    },
+    "optionLead": "선택지 {key}:",
+    "kind": {
+      "dissent": "공식 반대",
+      "concede": "수용",
+      "absent": "응답 없음"
+    },
+    "signalsN": "이후 문제 {n}건",
+    "watchingLead": "지켜보는 중:",
+    "speaker": "{who}:"
   },
   "contests": {
     "loading": "콘테스트를 불러오는 중…",

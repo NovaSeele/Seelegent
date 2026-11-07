@@ -60,7 +60,9 @@
         "name": "Escribe un nombre.",
         "id": "Usa minúsculas, dígitos y guiones, como máximo 40."
       }
-    }
+    },
+    "enabledFor": "{name} activado",
+    "turnedOff": "Desactivado"
   },
   "meetings": {
     "new": "Nueva reunión",
@@ -117,10 +119,12 @@
     },
     "lead": {
       "title": "Preguntas para ti",
-      "answer": "Respuesta a {label} ({id})",
+      "answer": "Respuesta",
       "note": "Nota para todos los asistentes (opcional)",
-      "post": "Enviar respuestas",
-      "posted": "Respuestas enviadas"
+      "posted": "Respuestas enviadas",
+      "askedBy": "Pregunta de {who}",
+      "skipped": "Se omitirá {n} pregunta sin respuesta | Se omitirán {n} preguntas sin respuesta",
+      "postN": "Enviar {n}/{total} respuestas"
     },
     "decide": {
       "title": "Tu decisión",
@@ -133,9 +137,6 @@
     },
     "decision": "Decisión",
     "dissents": "Disensos",
-    "dissent": "Disenso formal",
-    "concede": "Acepta",
-    "watching": "Vigilando",
     "signal": {
       "rejected": "{task} fue rechazada",
       "gate_red": "{task} tuvo la compuerta en rojo"
@@ -153,7 +154,9 @@
       "add": "Añadir una tarea",
       "remove": "Quitar la tarea {n}",
       "submit": "Delegar {n} tarea | Delegar {n} tareas",
-      "done": "{n} tarea delegada | {n} tareas delegadas"
+      "done": "{n} tarea delegada | {n} tareas delegadas",
+      "open": "Añadir tarea",
+      "another": "Otra tarea"
     },
     "tasks": "Tareas de esta reunión",
     "cancel": "Cancelar reunión",
@@ -185,7 +188,16 @@
         "cwd": "Escribe una carpeta absoluta.",
         "attendees": "Elige de uno a seis asistentes."
       }
-    }
+    },
+    "optionLead": "Opción {key}:",
+    "kind": {
+      "dissent": "Disenso formal",
+      "concede": "Acepta",
+      "absent": "No respondió"
+    },
+    "signalsN": "{n} problema posterior | {n} problemas posteriores",
+    "watchingLead": "Vigilando:",
+    "speaker": "{who}:"
   },
   "contests": {
     "loading": "Cargando concursos…",

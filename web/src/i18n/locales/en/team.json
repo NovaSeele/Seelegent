@@ -60,7 +60,9 @@
         "name": "Enter a name.",
         "id": "Use lower-case letters, digits and dashes, at most 40."
       }
-    }
+    },
+    "enabledFor": "{name} enabled",
+    "turnedOff": "Turned off"
   },
   "meetings": {
     "new": "New meeting",
@@ -117,10 +119,12 @@
     },
     "lead": {
       "title": "Questions for you",
-      "answer": "Answer to {label} ({id})",
+      "answer": "Answer",
       "note": "Note to every attendee (optional)",
-      "post": "Send answers",
-      "posted": "Answers sent"
+      "posted": "Answers sent",
+      "askedBy": "Asked by {who}",
+      "skipped": "{n} unanswered question will be skipped | {n} unanswered questions will be skipped",
+      "postN": "Send {n}/{total} answers"
     },
     "decide": {
       "title": "Your decision",
@@ -133,9 +137,6 @@
     },
     "decision": "Decision",
     "dissents": "Dissents",
-    "dissent": "Formal dissent",
-    "concede": "Concedes",
-    "watching": "Watching",
     "signal": {
       "rejected": "{task} was rejected",
       "gate_red": "{task} had a red gate"
@@ -153,7 +154,9 @@
       "add": "Add a task",
       "remove": "Remove task {n}",
       "submit": "Delegate {n} task | Delegate {n} tasks",
-      "done": "{n} task delegated | {n} tasks delegated"
+      "done": "{n} task delegated | {n} tasks delegated",
+      "open": "Add task",
+      "another": "Another task"
     },
     "tasks": "Tasks from this meeting",
     "cancel": "Cancel meeting",
@@ -185,7 +188,16 @@
         "cwd": "Enter an absolute folder.",
         "attendees": "Pick one to six attendees."
       }
-    }
+    },
+    "optionLead": "Option {key}:",
+    "kind": {
+      "dissent": "Formal dissent",
+      "concede": "Concedes",
+      "absent": "Did not answer"
+    },
+    "signalsN": "{n} later problem | {n} later problems",
+    "watchingLead": "Watching:",
+    "speaker": "{who}:"
   },
   "contests": {
     "loading": "Loading contests…",

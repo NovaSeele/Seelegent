@@ -60,7 +60,9 @@
         "name": "Nhập tên.",
         "id": "Dùng chữ thường, chữ số và gạch ngang, tối đa 40."
       }
-    }
+    },
+    "enabledFor": "Bật {name}",
+    "turnedOff": "Đã tắt"
   },
   "meetings": {
     "new": "Cuộc họp mới",
@@ -117,10 +119,12 @@
     },
     "lead": {
       "title": "Câu hỏi cho bạn",
-      "answer": "Trả lời {label} ({id})",
-      "note": "Ghi chú cho mọi người dự (không bắt buộc)",
-      "post": "Gửi câu trả lời",
-      "posted": "Đã gửi câu trả lời"
+      "answer": "Câu trả lời",
+      "note": "Ghi chú cho mọi người dự họp (không bắt buộc)",
+      "posted": "Đã gửi câu trả lời",
+      "askedBy": "Hỏi bởi {who}",
+      "skipped": "{n} câu hỏi chưa trả lời sẽ bị bỏ qua",
+      "postN": "Gửi {n}/{total} câu trả lời"
     },
     "decide": {
       "title": "Quyết định của bạn",
@@ -133,16 +137,13 @@
     },
     "decision": "Quyết định",
     "dissents": "Phản đối",
-    "dissent": "Phản đối chính thức",
-    "concede": "Chấp nhận",
-    "watching": "Đang theo dõi",
     "signal": {
       "rejected": "{task} bị từ chối",
       "gate_red": "{task} có cổng kiểm tra đỏ"
     },
     "outcome": {
       "vindicated": "Được chứng minh đúng",
-      "dismissed": "Bác bỏ"
+      "dismissed": "Đã bác bỏ"
     },
     "vindicate": "Công nhận đúng",
     "dismiss": "Bác bỏ",
@@ -153,7 +154,9 @@
       "add": "Thêm tác vụ",
       "remove": "Bỏ tác vụ {n}",
       "submit": "Giao {n} tác vụ",
-      "done": "Đã giao {n} tác vụ"
+      "done": "Đã giao {n} tác vụ",
+      "open": "Thêm tác vụ",
+      "another": "Thêm một tác vụ nữa"
     },
     "tasks": "Tác vụ từ cuộc họp này",
     "cancel": "Huỷ cuộc họp",
@@ -185,7 +188,16 @@
         "cwd": "Nhập một thư mục tuyệt đối.",
         "attendees": "Chọn một đến sáu người dự."
       }
-    }
+    },
+    "optionLead": "Phương án {key}:",
+    "kind": {
+      "dissent": "Phản đối chính thức",
+      "concede": "Chấp nhận",
+      "absent": "Không trả lời"
+    },
+    "signalsN": "{n} vấn đề về sau",
+    "watchingLead": "Đang theo dõi:",
+    "speaker": "{who}:"
   },
   "contests": {
     "loading": "Đang tải cuộc thi…",

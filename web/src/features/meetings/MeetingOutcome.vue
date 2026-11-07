@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { errorMessage } from '@/api/client'
@@ -9,6 +9,7 @@ import StatusPill from '@/components/ui/StatusPill.vue'
 import { useTeamStore } from '@/stores/team'
 
 import ClaimList from './ClaimList.vue'
+import MeetingActForm from './MeetingActForm.vue'
 import { attendeeName } from './meetingModel'
 
 /**
@@ -22,6 +23,8 @@ const { t } = useI18n()
 const team = useTeamStore()
 const busy = ref<string | null>(null)
 const failure = ref('')
+/** A closed meeting's decision can still become tasks: the form folds inside the Tasks block. */
+const acting = computed(() => props.meeting.status === 'closed' && !!props.meeting.decision)
 
 async function outcome(d: Dissent, value: 'vindicated' | 'dismissed') {
   busy.value = d.id
@@ -40,9 +43,9 @@ async function outcome(d: Dissent, value: 'vindicated' | 'dismissed') {
   <section v-if="meeting.decision" class="block">
     <h2 class="block__title">{{ t('team.meetings.decision') }}</h2>
     <p class="block__text">
-      <strong v-if="meeting.decision.option"
-        >{{ t('team.meetings.option', { key: meeting.decision.option }) }}:
-      </strong>
+      <strong v-if="meeting.decision.option">{{
+        t('team.meetings.optionLead', { key: meeting.decision.option })
+      }}</strong>
       {{ meeting.decision.text }}
     </p>
     <p v-if="meeting.decision.rationale" class="block__muted">{{ meeting.decision.rationale }}</p>
@@ -55,8 +58,16 @@ async function outcome(d: Dissent, value: 'vindicated' | 'dismissed') {
         <strong>{{ attendeeName(meeting, d.label) }}</strong>
         <StatusPill
           size="sm"
-          :tone="d.kind === 'dissent' ? 'attention' : 'neutral'"
-          :label="t(`team.meetings.${d.kind}`)"
+          :tone="d.kind === 'absent' ? 'muted' : 'neutral'"
+          :label="t(`team.meetings.kind.${d.kind}`)"
+        />
+        <!-- Amber only when later work went wrong on the files it watches: then the lead has to look. -->
+        <StatusPill
+          v-if="d.signals.length && !d.outcome"
+          size="sm"
+          tone="attention"
+          icon="warning"
+          :label="t('team.meetings.signalsN', { n: d.signals.length }, d.signals.length)"
         />
         <StatusPill
           v-if="d.outcome"
@@ -68,7 +79,7 @@ async function outcome(d: Dissent, value: 'vindicated' | 'dismissed') {
       <p class="block__text">{{ d.text }}</p>
       <ClaimList v-if="d.claims.length" :claims="d.claims" />
       <p v-if="d.watchPaths.length" class="block__muted">
-        {{ t('team.meetings.watching') }}:
+        {{ t('team.meetings.watchingLead') }}
         <code v-for="p in d.watchPaths" :key="p" class="dissent__path">{{ p }}</code>
       </p>
       <ul v-if="d.signals.length" class="dissent__signals">
@@ -103,20 +114,23 @@ async function outcome(d: Dissent, value: 'vindicated' | 'dismissed') {
   <section v-if="meeting.adviceNotTaken.length" class="block">
     <h2 class="block__title">{{ t('team.meetings.adviceNotTaken') }}</h2>
     <p v-for="a in meeting.adviceNotTaken" :key="a.label" class="block__text">
-      <strong>{{ attendeeName(meeting, a.label) }}:</strong> {{ a.stance }}
+      <strong>{{ t('team.meetings.speaker', { who: attendeeName(meeting, a.label) }) }}</strong>
+      {{ a.stance }}
     </p>
   </section>
 
-  <section v-if="meeting.actions.length" class="block">
+  <section v-if="meeting.actions.length || acting" class="block">
     <h2 class="block__title">{{ t('team.meetings.tasks') }}</h2>
-    <ul class="block__list">
-      <li v-for="a in meeting.actions" :key="a.taskId">
-        <RouterLink :to="{ name: 'tasks', params: { taskId: a.taskId } }">{{
-          a.taskId
-        }}</RouterLink>
-        {{ a.text }}
+    <ul v-if="meeting.actions.length" class="block__list">
+      <li v-for="a in meeting.actions" :key="a.taskId" class="task">
+        <RouterLink :to="{ name: 'tasks', params: { taskId: a.taskId } }">{{ a.text }}</RouterLink>
+        <span class="block__muted task__id">{{ a.taskId }}</span>
       </li>
     </ul>
+    <details v-if="acting" class="add" :open="!meeting.actions.length">
+      <summary class="add__summary">{{ t('team.meetings.act.open') }}</summary>
+      <MeetingActForm :meeting="meeting" @updated="emit('updated', $event)" />
+    </details>
   </section>
 </template>
 
@@ -181,5 +195,32 @@ async function outcome(d: Dissent, value: 'vindicated' | 'dismissed') {
 .dissent__signals {
   margin: 0;
   padding-left: var(--space-5);
+}
+
+.task__id {
+  margin-left: var(--space-2);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+}
+
+.add {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.add__summary {
+  min-height: max(32px, var(--target-min));
+  font-weight: var(--fw-medium);
+  cursor: pointer;
+}
+
+.add__summary:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.add[open] > .add__summary {
+  margin-bottom: var(--space-2);
 }
 </style>

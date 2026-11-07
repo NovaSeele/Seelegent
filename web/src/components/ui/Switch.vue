@@ -7,10 +7,12 @@ withDefaults(
   defineProps<{
     label: string
     hideLabel?: boolean
+    /** An accessible name more specific than the visible label ("Peri Okafor enabled"). */
+    ariaLabel?: string
     description?: string
     disabled?: boolean
   }>(),
-  { description: undefined },
+  { description: undefined, ariaLabel: undefined },
 )
 
 const id = useId()
@@ -25,8 +27,8 @@ const id = useId()
       class="switch__track"
       :aria-checked="model"
       :aria-describedby="description ? `${id}-desc` : undefined"
-      :aria-label="hideLabel ? label : undefined"
-      :aria-labelledby="hideLabel ? undefined : `${id}-label`"
+      :aria-label="ariaLabel ?? (hideLabel ? label : undefined)"
+      :aria-labelledby="hideLabel || ariaLabel ? undefined : `${id}-label`"
       :disabled="disabled"
       @click="model = !model"
     >

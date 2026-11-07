@@ -60,7 +60,9 @@
         "name": "请输入名字。",
         "id": "使用小写字母、数字和连字符，最多 40 个。"
       }
-    }
+    },
+    "enabledFor": "启用 {name}",
+    "turnedOff": "已停用"
   },
   "meetings": {
     "new": "新会议",
@@ -117,10 +119,12 @@
     },
     "lead": {
       "title": "给你的问题",
-      "answer": "回答 {label}（{id}）",
+      "answer": "回答",
       "note": "给所有参会者的说明（可选）",
-      "post": "发送回答",
-      "posted": "回答已发送"
+      "posted": "回答已发送",
+      "askedBy": "提问者：{who}",
+      "skipped": "{n} 个未回答的问题将被跳过",
+      "postN": "发送 {n}/{total} 个回答"
     },
     "decide": {
       "title": "你的决定",
@@ -133,9 +137,6 @@
     },
     "decision": "决定",
     "dissents": "异议",
-    "dissent": "正式异议",
-    "concede": "认可",
-    "watching": "观察中",
     "signal": {
       "rejected": "{task} 被拒绝",
       "gate_red": "{task} 的检查门为红色"
@@ -153,7 +154,9 @@
       "add": "添加任务",
       "remove": "移除任务 {n}",
       "submit": "委派 {n} 个任务",
-      "done": "已委派 {n} 个任务"
+      "done": "已委派 {n} 个任务",
+      "open": "添加任务",
+      "another": "再加一个任务"
     },
     "tasks": "来自此会议的任务",
     "cancel": "取消会议",
@@ -185,7 +188,16 @@
         "cwd": "请输入绝对路径文件夹。",
         "attendees": "请选择一到六位参会者。"
       }
-    }
+    },
+    "optionLead": "选项 {key}：",
+    "kind": {
+      "dissent": "正式异议",
+      "concede": "认可",
+      "absent": "未回答"
+    },
+    "signalsN": "后续问题 {n} 个",
+    "watchingLead": "观察中：",
+    "speaker": "{who}："
   },
   "contests": {
     "loading": "正在加载竞赛…",

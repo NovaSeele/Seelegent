@@ -44,6 +44,18 @@ const errors = ref<Record<string, string>>({})
 const failure = ref('')
 
 const usable = computed(() => team.members.filter((m) => m.enabled && !m.invalid))
+/** The ticked members that are still listed: one turned off or removed meanwhile is never sent. */
+const chosen = computed(() => {
+  const ids = new Set(usable.value.map((m) => m.id))
+  return attendees.value.filter((a) => ids.has(a))
+})
+
+// An estimate answers one exact request: any change makes it stale, also one made while it was asked.
+let edits = 0
+watch([question, title, cwd, chosen, options, context, rounds, sealed], () => {
+  edits++
+  estimate.value = ''
+})
 
 watch(open, (now) => {
   if (!now) return
@@ -56,7 +68,6 @@ watch(open, (now) => {
 
 function toggle(id: string, on: boolean) {
   attendees.value = on ? [...attendees.value, id] : attendees.value.filter((a) => a !== id)
-  estimate.value = ''
 }
 
 function request(): MeetingRequest | null {
@@ -64,7 +75,7 @@ function request(): MeetingRequest | null {
   if (!question.value.trim()) next.question = t('team.meetings.open.errors.question')
   if (!/^([a-zA-Z]:[\\/]|[\\/])/.test(cwd.value.trim()))
     next.cwd = t('team.meetings.open.errors.cwd')
-  if (attendees.value.length < 1 || attendees.value.length > 6) {
+  if (chosen.value.length < 1 || chosen.value.length > 6) {
     next.attendees = t('team.meetings.open.errors.attendees')
   }
   errors.value = next
@@ -74,7 +85,7 @@ function request(): MeetingRequest | null {
   return {
     question: question.value.trim(),
     cwd: cwd.value.trim(),
-    attendees: [...attendees.value],
+    attendees: [...chosen.value],
     maxRounds: rounds.value,
     ...(title.value.trim() ? { title: title.value.trim() } : {}),
     ...(opts.length ? { options: opts } : {}),
@@ -88,9 +99,10 @@ async function runEstimate() {
   if (!req) return
   busy.value = true
   failure.value = ''
+  const asked = edits
   try {
     const e = await team.api().estimateMeeting(req)
-    estimate.value = t('team.meetings.open.estimateResult', { runs: e.runs })
+    if (asked === edits) estimate.value = t('team.meetings.open.estimateResult', { runs: e.runs })
   } catch (error) {
     failure.value = errorMessage(error)
   } finally {

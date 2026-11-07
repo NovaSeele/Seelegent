@@ -48,6 +48,12 @@ const facts = computed(() => trackFacts(props.track))
         :label="t(`team.rank.${member.rank}`)"
         :title="t(`team.rankHint.${member.rank}`)"
       />
+      <StatusPill
+        v-if="!member.enabled"
+        size="sm"
+        tone="muted"
+        :label="t('team.members.turnedOff')"
+      />
     </div>
     <dl class="member__facts">
       <div>
@@ -76,6 +82,7 @@ const facts = computed(() => trackFacts(props.track))
       <Switch
         :model-value="member.enabled"
         :label="t('team.members.enabled')"
+        :aria-label="t('team.members.enabledFor', { name: member.name })"
         :disabled="busy"
         @update:model-value="emit('toggle', $event)"
       />

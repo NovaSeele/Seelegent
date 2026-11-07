@@ -60,7 +60,9 @@
         "name": "名前を入力してください。",
         "id": "小文字、数字、ハイフンを 40 文字以内で使ってください。"
       }
-    }
+    },
+    "enabledFor": "{name} を有効にする",
+    "turnedOff": "無効"
   },
   "meetings": {
     "new": "新しい会議",
@@ -117,10 +119,12 @@
     },
     "lead": {
       "title": "あなたへの質問",
-      "answer": "{label} ({id}) への回答",
+      "answer": "回答",
       "note": "全参加者へのメモ (任意)",
-      "post": "回答を送信",
-      "posted": "回答を送信しました"
+      "posted": "回答を送信しました",
+      "askedBy": "質問者: {who}",
+      "skipped": "未回答の質問 {n} 件は送られません",
+      "postN": "{n}/{total} 件の回答を送信"
     },
     "decide": {
       "title": "あなたの決定",
@@ -133,9 +137,6 @@
     },
     "decision": "決定",
     "dissents": "異議",
-    "dissent": "正式な異議",
-    "concede": "同意",
-    "watching": "監視中",
     "signal": {
       "rejected": "{task} は却下されました",
       "gate_red": "{task} のゲートが赤でした"
@@ -153,7 +154,9 @@
       "add": "タスクを追加",
       "remove": "タスク {n} を削除",
       "submit": "{n} 件のタスクを委任",
-      "done": "{n} 件のタスクを委任しました"
+      "done": "{n} 件のタスクを委任しました",
+      "open": "タスクを追加",
+      "another": "タスクをもう 1 つ"
     },
     "tasks": "この会議からのタスク",
     "cancel": "会議をキャンセル",
@@ -185,7 +188,16 @@
         "cwd": "絶対パスのフォルダーを入力してください。",
         "attendees": "参加者を 1 から 6 人選んでください。"
       }
-    }
+    },
+    "optionLead": "選択肢 {key}:",
+    "kind": {
+      "dissent": "正式な異議",
+      "concede": "同意",
+      "absent": "回答なし"
+    },
+    "signalsN": "その後の問題 {n} 件",
+    "watchingLead": "監視中:",
+    "speaker": "{who}:"
   },
   "contests": {
     "loading": "コンテストを読み込み中…",

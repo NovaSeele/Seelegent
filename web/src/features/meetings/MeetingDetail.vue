@@ -11,6 +11,7 @@ import Spinner from '@/components/ui/Spinner.vue'
 import StatusPill from '@/components/ui/StatusPill.vue'
 import { useFormat } from '@/composables/useFormat'
 import { RANK_TONE } from '@/features/members/memberModel'
+import { truncateMiddle } from '@/lib/paths'
 import { useTeamStore } from '@/stores/team'
 import { useToastStore } from '@/stores/toast'
 
@@ -41,6 +42,12 @@ const cancelBusy = ref(false)
 const cancelError = ref('')
 
 const look = computed(() => (record.value ? MEETING_STATUS[record.value.status] : null))
+/** Attendees in label order (P1, P2, … P10), whatever order they joined in. */
+const attendees = computed(() =>
+  [...(record.value?.attendees ?? [])].sort((a, b) =>
+    a.label.localeCompare(b.label, undefined, { numeric: true }),
+  ),
+)
 const sealedShown = computed(() => {
   const m = record.value
   return m?.sealed && m.sealed.text && m.round >= m.sealed.revealedRound ? m.sealed : null
@@ -80,7 +87,11 @@ async function cancel() {
       <Spinner v-else-if="!record" :label="t('team.meetings.loading')" />
     </div>
     <template v-if="record">
-      <PageHeader :title="record.title" :description="record.cwd">
+      <PageHeader
+        :title="record.title"
+        :description="truncateMiddle(record.cwd)"
+        :description-title="record.cwd"
+      >
         <template #actions>
           <Button v-if="meetingOpen(record.status)" variant="ghost" @click="cancelling = true">
             {{ t('team.meetings.cancel') }}
@@ -127,10 +138,15 @@ async function cancel() {
           </template>
           <h3 class="meeting__sub">{{ t('team.meetings.attendees') }}</h3>
           <ul class="meeting__attendees">
-            <li v-for="a in record.attendees" :key="a.label" :class="{ 'is-absent': !a.present }">
+            <li v-for="a in attendees" :key="a.label" :class="{ 'is-absent': !a.present }">
               <strong>{{ a.label }}</strong>
               {{ a.name || a.member }}
-              <StatusPill size="sm" :tone="RANK_TONE[a.rank]" :label="t(`team.rank.${a.rank}`)" />
+              <StatusPill
+                size="sm"
+                :tone="RANK_TONE[a.rank]"
+                :label="t(`team.rank.${a.rank}`)"
+                :title="t(`team.rankHint.${a.rank}`)"
+              />
               <span v-if="!a.present" class="meeting__muted">{{ t('team.meetings.absent') }}</span>
             </li>
           </ul>

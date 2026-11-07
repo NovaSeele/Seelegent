@@ -57,6 +57,30 @@ export function pendingQuestions(m: Meeting): Meeting['leadQa'] {
   return m.leadQa.filter((q) => !q.answer)
 }
 
+/** One question to the lead as the form shows it: identical questions from several attendees are one. */
+export interface QuestionGroup {
+  /** The ids of every copy: one answer goes to all of them. */
+  ids: string[]
+  labels: string[]
+  question: string
+}
+
+/** Pending questions merged by their text (trimmed, without case), in the order first asked. */
+export function questionGroups(m: Meeting): QuestionGroup[] {
+  const groups = new Map<string, QuestionGroup>()
+  for (const q of pendingQuestions(m)) {
+    const key = q.question.trim().toLowerCase()
+    const g = groups.get(key)
+    if (g) {
+      g.ids.push(q.id)
+      if (!g.labels.includes(q.label)) g.labels.push(q.label)
+    } else {
+      groups.set(key, { ids: [q.id], labels: [q.label], question: q.question.trim() })
+    }
+  }
+  return [...groups.values()]
+}
+
 /** The member behind an attendee label (P1..), for showing who said what. */
 export function attendeeName(m: Meeting, label: string): string {
   const a = m.attendees.find((x) => x.label === label)

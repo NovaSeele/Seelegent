@@ -9,11 +9,14 @@ export const BACKENDS: readonly Backend[] = ['agy', 'claude', 'codex']
 export const RANKS: readonly Rank[] = ['worker', 'senior', 'peer']
 export const MEMBER_ID = /^[a-z0-9][a-z0-9-]{0,39}$/
 
-/** Rank tones: a peer can block acceptance, so it stands out most. */
+/**
+ * Rank tones. A rank is a fixed property, never a call to act, so it is never amber: a peer (who can block
+ * accepting; the rankHint tooltip says so) takes the accent.
+ */
 export const RANK_TONE: Record<Rank, Tone> = {
   worker: 'muted',
   senior: 'neutral',
-  peer: 'attention',
+  peer: 'accent',
 }
 
 /** "Peri Okafor" for a known member, else its id. */

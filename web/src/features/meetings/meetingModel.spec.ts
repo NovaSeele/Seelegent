@@ -10,6 +10,7 @@ import {
   lines,
   meetingOpen,
   pendingQuestions,
+  questionGroups,
 } from './meetingModel'
 
 // Only the fields the helpers read; the rest of a meeting does not matter here.
@@ -68,6 +69,22 @@ describe('meetingModel', () => {
     // A meeting that went on (or ended) without the answer takes none any more.
     expect(pendingQuestions({ ...m, status: 'closed' })).toEqual([])
     expect(pendingQuestions({ ...m, status: 'round' })).toEqual([])
+  })
+
+  it('merges identical questions so one answer goes to every copy', () => {
+    const m = meeting({
+      attendees: [],
+      leadQa: [
+        { id: 'q1', round: 1, label: 'P1', question: 'Keep v1? ' },
+        { id: 'q2', round: 1, label: 'P2', question: 'keep V1?' },
+        { id: 'q3', round: 1, label: 'P2', question: 'Which DB?' },
+        { id: 'q4', round: 2, label: 'P1', question: 'Keep v1?' },
+      ],
+    })
+    expect(questionGroups(m)).toEqual([
+      { ids: ['q1', 'q2', 'q4'], labels: ['P1', 'P2'], question: 'Keep v1?' },
+      { ids: ['q3'], labels: ['P2'], question: 'Which DB?' },
+    ])
   })
 
   it('lets only meetings and contests that have not ended be cancelled', () => {
