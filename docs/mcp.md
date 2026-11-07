@@ -13,32 +13,49 @@ Code: `internal/mcpserver` (tools), `internal/client` (typed API client, discove
 { "mcpServers": { "seelegent": { "command": "seelegent", "args": ["mcp"] } } }
 ```
 
-or `claude mcp add seelegent -- seelegent mcp`. stdout carries only MCP messages; logs go to stderr.
+or `claude mcp add seelegent -- seelegent mcp`. stdout carries only MCP messages; logs go to stderr (the server's
+own lines, and only warnings and errors of the MCP SDK).
 
 | Environment | Effect |
 |---|---|
 | `SEELEGENT_HOME` | Data directory (default `~/.seelegent`). Passed on to a daemon the server starts. |
 | `SEELEGENT_PORT` | Daemon port when the settings do not set one (default 47821; development uses 47831). |
 | `SEELEGENT_NO_AUTO_START=1` | Never start the daemon; tools fail with a message saying so. |
+| `SEELEGENT_WORKER=1` | Set by the daemon for its workers. The server never starts a daemon and refuses mutating tools (see the worker guard). |
 | `SEELEGENT_SESSION`, else `CLAUDE_CODE_SESSION_ID` | Lead session id sent with `delegate` (`session.id`). |
 | `CLAUDE_CODE_HOST_SESSION_ID` | Host session id sent with `delegate` (`session.hostId`). |
 
 The server reads `config.json` without writing it. If it cannot be read, the server still starts and every
 available tool answers with "the settings cannot be read: ..." so the host sees why.
 
+## One daemon per data directory
+
+`seelegent daemon` takes `<home>/run/daemon.lock` before it opens anything else (log, store, recovery) and holds it
+until it exits. A second daemon on the same home waits up to 3 s (a restarting daemon releases the lock once it has
+closed), then exits with code 3 and "another Seelegent daemon is already running for <home> (port N)". While it
+listens, the daemon records its port in `<home>/run/daemon.port`; it removes the file when it stops cleanly.
+
 ## Finding and starting the daemon
 
-1. Probe `GET /api/v1/health` on `127.0.0.1:<port>`. A daemon that answers `ok` with `apiVersion: 1` is used.
-2. Anything else that answers on the port (another program, an older Seelegent, another API version) is reported as
-   such and nothing is started.
+1. If `run/daemon.port` exists and a daemon holds `run/daemon.lock`, probe that port first. A port file whose lock
+   is free (the daemon crashed) is ignored, and a port that does not answer, or answers as something else, falls
+   back to step 2. So a daemon started with `--port`, or before the port setting changed, is found.
+2. Probe `GET /api/v1/health` on the configured port. A daemon that answers `ok` with `apiVersion: 1` is used.
+   Anything else that answers (another program, an older Seelegent, another API version) is reported and nothing is
+   started. A port that accepts but does not answer within 1.5 s is reported as a busy or hung daemon (or another
+   program), and nothing is started either.
 3. When nothing answers, take `<home>/run/start.lock`, probe again (another MCP server may have just started it),
    then start `seelegent daemon --port <port>` detached, hidden, in the data directory, and poll health for up to
-   20 s. A daemon that exits first points at `logs/daemon.log`.
+   20 s. A daemon that exits first points at `logs/daemon.log`. One that exits with code 3 (another daemon holds the
+   lock) leads to the running daemon when it answers, else to "the daemon for <home> runs on port X; this MCP looked
+   on port Y", or "the previous daemon was still shutting down; try again shortly".
+
+Inside a worker (`SEELEGENT_WORKER=1`) step 3 never happens: a daemon started there would live in the worker's
+process tree, on the worker profile's data directory. The error says the daemon running the worker cannot be reached.
 
 Discovery starts in the background when the server starts and is retried on each tool call, so a daemon that was
 stopped or restarted is found again. `wait`, `delegate` and `followup` also ride out a daemon restart in the middle
-of a wait. The daemon's own single-instance lock and pid/port files are later work (setup); `client.Daemon.candidates`
-is where the port file will be read.
+of a wait: an unreachable or slow daemon is retried until the wait's own deadline.
 
 ## Tools
 
@@ -48,8 +65,8 @@ Seelegent yet." and answer with a tool error that says nothing was done.
 
 | Tool | Routes | Now |
 |---|---|---|
-| `delegate` | `POST /tasks`, then `POST /wait?cwd=` | yes, except `variants`/`variant_specs` (contests), gate commands, and the arguments the daemon refuses for now (`gate: true`, `verify: true`, `lane`, `member`) |
-| `followup` | `GET /tasks/{id}` (only to check `provider`), `POST /tasks/{id}/followup`, `POST /wait` | yes, same limits as `delegate` |
+| `delegate` | `POST /tasks`, then `POST /wait?cwd=` | yes, except `variants`/`variant_specs` (contests), gate commands, lane paths, `verify: true`, `force_lane: true` and `member`: refused before any call (`not_available`) |
+| `followup` | `GET /tasks/{id}` (only to check `provider`), `POST /tasks/{id}/followup`, `POST /wait` | yes, same limits as `delegate` (`member` aside) |
 | `wait` | `POST /wait` (`reports: true`) | yes |
 | `review` | `POST /tasks/{id}/review` | yes; `answer_objection` is appended to the notes |
 | `cancel` | `POST /tasks/{id}/cancel` | yes; 202 is reported as `cancelling` |
@@ -68,9 +85,10 @@ Seelegent yet." and answer with a tool error that says nothing was done.
 
 Argument handling follows the old server: unknown arguments are ignored, numbers and booleans may arrive as
 strings, a single string is accepted where a list is expected, wait seconds are clamped (`delegate`/`followup`/`wait`
-0..3000, default 600, and 0 for a `delegate` with `after`; `cancel` 0..60, default 15). `mode: full` maps to the API's `edit`. Relative paths resolve
-against the server's working directory. `followup`, `wait` and `task` build reports with the task's own project, not
-the server's working directory.
+0..3000, default 600, and 0 for a `delegate` with `after`; `cancel` 0..60, default 15). `mode: full` maps to the
+API's `edit`. `lane: false`, `verify: false` and `force_lane: false` mean "off" and are accepted. Relative paths
+resolve against the server's working directory. `followup`, `wait` and `task` build reports with the task's own
+project, not the server's working directory.
 
 ## Results
 
@@ -78,15 +96,19 @@ the server's working directory.
 - `content[1]`: a one- or two-line summary.
 - `structuredContent`: the same JSON (a list is wrapped as `{"items": [...]}`).
 
+Before `delegate` starts waiting it tells the host the new task id: a progress notification when the call carries a
+progress token, and a log message (`notifications/message`, `{task_id, status, message}`) when the host asked for
+log messages. A host that cancels the wait still knows the task.
+
 Errors are tool results with `isError: true`. Their text starts with "Seelegent error: " as before, and the
 structured content is `{error: {code, message, status, details}}`:
 
 | Case | Text |
 |---|---|
 | Called from inside a worker (local guard, or the daemon answers 403 with `caller: worker`) | exactly "Seelegent is not available inside a Seelegent worker." (no prefix) |
-| Route not built yet (501) or tool not built yet | "Seelegent error: ... is not available in this version of Seelegent yet; nothing was done" (code `not_available`) |
+| Route, tool or option not built yet (501, or refused locally) | "Seelegent error: ... is not available in this version of Seelegent yet; nothing was done (...)" (code `not_available`) |
 | Other API error | "Seelegent error: <message>" with the API's code and details |
-| No daemon, foreign program on the port, start failed | the reason and what to do (code `daemon_unavailable`) |
+| No daemon, foreign program on the port, busy daemon, start failed | the reason and what to do (code `daemon_unavailable`) |
 
 ## Worker guard
 
@@ -113,7 +135,9 @@ for that.
 ## Tests
 
 `internal/mcpserver/unit_test.go` checks the tool schemas against the inventory, the argument-to-request mapping
-against a stub API, and the local worker guard (`guard_test.go` pins the old `isMutating` table). `e2e_test.go` runs the tools over in-memory MCP transports against a real daemon built through
-`internal/app` with the fake worker CLI and a temp data directory. `internal/client` tests discovery and start
-against fake daemons, including several servers racing to start one daemon. `internal/cli/mcp_test.go` runs the
-command with autostart off.
+against a stub API, the locally refused options, the task id announcement and the local worker guard
+(`guard_test.go` pins the old `isMutating` table). `e2e_test.go` runs the tools over in-memory MCP transports
+against a real daemon built through `internal/app` with the fake worker CLI and a temp data directory.
+`internal/client` tests discovery and start against fake daemons: several servers racing to start one daemon, the
+port file, stale port files and a started daemon that exits for the lock. `internal/cli` runs the mcp command
+(autostart off, and inside a worker) and two daemons on one data directory.

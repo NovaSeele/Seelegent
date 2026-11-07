@@ -17,7 +17,8 @@ with owner-only permissions when a command starts, never earlier.
 | `profiles/<id>/seelegent-key` | API key of an API-key account: a DPAPI blob on Windows, a 0600 file elsewhere; never inside `home/` |
 | `logs/`            | `daemon.log` and its rotated copies `daemon.log.1` … (JSON lines, secrets masked)      |
 | `run/daemon.lock`  | single-instance lock of the daemon                                                     |
-| `run/daemon.port`  | port of the running daemon                                                             |
+| `run/daemon.port`  | port of the running daemon (removed when it stops cleanly; see [mcp.md](mcp.md))       |
+| `run/start.lock`   | held by an MCP server while it starts the daemon, so several start only one            |
 | `backups/`         | copies taken before migrations and imports                                             |
 | `tasks/<id>/t<turn>-a<attempt>/` | files of one worker attempt: `launch/` (launch spec, stream, stderr, exit record), the prompt of CLIs that read it on standard input, a long agy brief |
 
