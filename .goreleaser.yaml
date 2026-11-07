@@ -8,7 +8,9 @@ project_name: seelegent
 
 before:
   hooks:
-    # The dashboard is embedded from web/dist, so it is built first.
+    # The dashboard is embedded from web/dist, so it is built first (local and CI snapshots). The release workflow
+    # builds it in a job without the write token and runs `goreleaser release --skip=before`, so npm code never
+    # runs next to that token.
     - pnpm --dir web install --frozen-lockfile
     - pnpm --dir web build
 
