@@ -104,7 +104,8 @@ the repository has none). The worker's commits stay in the local worktree.
 1. **Check the remote** before anything is written:
    - the remote branch must still be the commit Seelegent pushed before (none on the first push). A branch someone
      pushed to or changed on GitHub is never built on or forced: the request is refused (`409`, `details.reason:
-     "branch_diverged"`, with `branch`, `remote` and `pushed`) and the push's outbox row is `failed`. Two remote
+     "branch_diverged"`, with `branch`, `remote`, `pushed` and `compareUrl`, the GitHub page of the commits
+     Seelegent did not push) and the push's outbox row is `failed`. Two remote
      tips the ticket did not record are adopted instead (log step `push_adopted`): a commit one of the ticket's own
      push rows names (`args.sha`, in any state: a push GitHub took while its recording was lost to a stop or a
      cancelled request), with that row's base; and, on a ticket with no recorded push, a branch the previous version
@@ -115,7 +116,8 @@ the repository has none). The worker's commits stay in the local worktree.
    - the base must already be on GitHub: on the first push, and whenever the base moved, every commit of the base
      must be reachable from the remote base branch, or those commits would leave unscanned. Otherwise the request is
      refused (`409`, `details.reason: "base_not_pushed"`, with `branch` and `commits`, the number of base commits
-     GitHub does not have; `0` when the base branch is not on GitHub at all). The user pushes the base branch first.
+     GitHub does not have, `0` when the base branch is not on GitHub at all, and `subjects`, the subjects of the
+     newest 3). The user pushes the base branch first.
 2. **Scan** (old bug D5: the old version ran `git add -A` and committed `.env` files, keys and a file named `nul`).
    The tree to push is written through a temporary index (the worktree plus every uncommitted file git does not
    ignore, never the shared-folder links), and every entry it adds is scanned: each path whose blob differs from
@@ -141,7 +143,8 @@ the repository has none). The worker's commits stay in the local worktree.
    as `aws_key`, or the size in bytes) next to its English `reason`.
 
    A refusal (`unsafe_files`, `scan_failed`, `base_not_pushed`, `branch_diverged`) is kept on the ticket as
-   `refusal {reason, findings, branch, commits, cause, detail, message, at}` and `needsAttention: "push_refused"`,
+   `refusal {reason, findings, branch, commits, subjects, compareUrl, cause, detail, message, at}` and
+   `needsAttention: "push_refused"`,
    so the dashboard explains it in the reader's language with the next step for each file; `message` is the English
    text the lead's tools show. The next pr clears it, and so does a new task in the ticket.
 3. **Commit** exactly the uncommitted files git does not ignore, when there are any, in the worktree.
@@ -178,7 +181,11 @@ open pull request's checks failed (conclusions `failure`, `timed_out`, `startup_
 *Retry* (`POST /github/tickets/{id}/retry`, body as add-task with the prompt optional) starts the task of a
 `failed` ticket again, in its worktree, optionally with another member, backend or model: its first task or
 meeting could not start (an unknown member, no usable account). The ticket is `working` again; a retry that fails
-leaves it `failed` with the new error. A ticket whose worktree could not be made cannot be retried: drop it and
+leaves it `failed` with the new error. A cause with a code is kept as `failure {reason, member}` (`member_missing`:
+the member was deleted; `member_disabled`: it is turned off) for the dashboard to explain; `error` stays the
+English text. A ticket remembers who its last task was asked for (`asked {member, backend, model}`): a retry or a
+new task without a member or backend goes to them again ("as before"), so a ticket whose member is gone needs
+another member or a backend, and the dashboard makes the lead pick one. A ticket whose worktree could not be made cannot be retried: drop it and
 decide the issue again.
 
 *Fix checks* (`POST /github/tickets/{id}/fix-checks`) starts a task in the ticket's worktree with the failing

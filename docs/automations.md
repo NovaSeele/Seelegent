@@ -79,6 +79,13 @@ automation runs now also while it is off or the master switch is off.
 A precheck follows the shell convention of `grep -q`, `test` and `git diff --quiet`: exit code 0 runs, 1 means
 "nothing to do" and skips the run quietly, and anything else is a broken precheck the user should look at.
 
+What runs is the version the checks judged (review A1). A run keeps the content hash of the automation as it read
+it; after the precheck, which can take a minute, it starts only if the automation still has that hash and is
+confirmed, and, for a run of its own (schedule, missed, before reset), is still on with the master switch on.
+Otherwise nothing starts and the run is `skipped_changed`. The delegate uses the fields of that version, and the
+last check and the delegate hold a lock that every change to an automation takes, so no edit, switch-off or delete
+lands between them.
+
 Every run, scheduled or *run now*, goes through the same checks, and every outcome is recorded (the newest 500 per
 automation are kept):
 
@@ -88,9 +95,18 @@ automation are kept):
 | `skipped_quota` | the best usable account of the backend has less than `quota.minRemaining` % left (default 20) in the bucket that limits it; with no quota known for the backend the run starts |
 | `skipped_precheck` | the precheck command (run in the folder through the shell, 60 s at most, its process tree killed after) answered "skip": it exited with code 1; the detail carries the end of its output |
 | `precheck_failed` | the precheck itself broke: any other non-zero exit code (2 for a usage error, 126 or 127 for a missing command, 128 for a git error), killed, timed out or could not start; the run is skipped and the detail carries the end of its output |
-| `error` | the delegation itself failed (no folder, no account, a lane conflict) |
+| `skipped_late` | a run missed while the daemon was off, later than `graceMinutes` |
+| `skipped_changed` | the automation was edited (`reason: changed`), is not confirmed as it is (`unconfirmed`), was turned off (`disabled`) or the master switch went off (`master_off`) while its precheck ran; nothing started |
+| `error` | the delegation itself failed (no folder, no account, a lane conflict; a member that is gone or turned off has `reason: member_missing` or `member_disabled`) |
 | `pending` | the scheduler decided on the run and it has not started yet (see above) |
 | `started` | a task was delegated; `taskId` names it (the task's `automationId` links back) |
+
+A run carries `info`, the facts its outcome rests on, for the dashboard to say in the user's language: `reason`
+(above, and `starting` or `task_running` for an overlap, `interrupted` for a start cut off by a stop), `taskId` and
+`taskStatus` of a task still running, `backend` (or `account`, a before-reset run's weekly bucket) with `remaining`
+and `minRemaining` in percent, the precheck's `exitCode`, `timedOut` with `timeoutSeconds` or `notStarted` and its
+`output` tail, `lateMinutes` and `graceMinutes`, `member`, `message` (an error without a code) and `due` (pending).
+`detail` keeps the same in English for the lead's tools and for rows written before `info` existed.
 
 **Use quota before it resets** (`quota.useBeforeReset`): when a weekly bucket of the backend resets within 24 hours
 with at least 40 % left, one extra run starts for that bucket (trigger `before_reset`). The bucket counts as used
