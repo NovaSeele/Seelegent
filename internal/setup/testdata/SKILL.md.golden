@@ -61,7 +61,7 @@ Keep durable project facts for workers (conventions, commands, pitfalls) with `m
 
 ## Spec Kit
 
-For a Spec Kit feature, pass `spec` (the feature folder, absolute) and `task_ids` (for example `["T001", "T002"]`). The brief points the worker at the spec, plan, tasks and contracts, and the project constitution is included. Workers implement only the named tasks and never edit `tasks.md`; you tick the tasks after review. Use `mode: "full"` when the spec folder is outside the project.
+For a Spec Kit feature, pass `spec` (the feature folder, absolute) and `task_ids` (for example `["T001", "T002"]`). The brief points the worker at the spec, plan, tasks and contracts, and the project constitution is included. Workers implement only the named tasks and never edit `tasks.md`; you tick the tasks after review.
 
 ## Without MCP
 

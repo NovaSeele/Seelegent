@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"encoding/json"
 	"flag"
+	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -288,6 +290,61 @@ func TestSkillGolden(t *testing.T) {
 	}
 	if !strings.Contains(got, "http://127.0.0.1:47821/") || !strings.Contains(got, "v1.2.3") {
 		t.Error("dashboard or version missing")
+	}
+}
+
+// Every option the skill's tool list names is a parameter (or an enum value) of that tool in the MCP server's
+// tools.json, read as a file so setup does not import mcpserver.
+func TestSkillNamesRealParameters(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "mcpserver", "tools.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var tools []struct {
+		Name        string `json:"name"`
+		InputSchema struct {
+			Properties map[string]struct {
+				Enum []any `json:"enum"`
+			} `json:"properties"`
+		} `json:"inputSchema"`
+	}
+	if err := json.Unmarshal(data, &tools); err != nil {
+		t.Fatal(err)
+	}
+	known := map[string]map[string]bool{} // tool -> parameters and enum values
+	for _, tl := range tools {
+		known[tl.Name] = map[string]bool{}
+		for p, s := range tl.InputSchema.Properties {
+			known[tl.Name][p] = true
+			for _, v := range s.Enum {
+				known[tl.Name][fmt.Sprint(v)] = true
+			}
+		}
+	}
+	skill, err := RenderSkill("v1", 47821)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Words in backticks that are values or states, not parameters.
+	values := map[string]bool{"fast": true, "standard": true, "strong": true, "max": true, "blocked_deps": true,
+		"cancelled": true, "cancelling": true, "true": true, "false": true}
+	tick := regexp.MustCompile("`([a-z_]+)(?:: [^`]*)?`")
+	section := strings.SplitN(strings.SplitN(skill, "## Tools\n", 2)[1], "\n## ", 2)[0]
+	for line := range strings.SplitSeq(section, "\n") {
+		if !strings.HasPrefix(line, "- `") {
+			continue
+		}
+		names := tick.FindAllStringSubmatch(line, -1)
+		tool := names[0][1]
+		if known[tool] == nil {
+			t.Errorf("the skill names a tool %q that tools.json does not have", tool)
+			continue
+		}
+		for _, n := range names[1:] {
+			if !known[tool][n[1]] && known[n[1]] == nil && !values[n[1]] {
+				t.Errorf("%s: the skill names %q, which is not a parameter of the tool", tool, n[1])
+			}
+		}
 	}
 }
 
