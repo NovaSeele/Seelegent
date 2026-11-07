@@ -64,6 +64,8 @@ type RefresherOptions struct {
 
 	// onWait is called when a refresh starts waiting for a read of the account already in flight (tests).
 	onWait func(accountID string)
+	// onWoken is called when a fresh refresh woke from an older read and is about to look again (tests).
+	onWoken func(accountID string)
 }
 
 // Result is the outcome of reading one account.
@@ -313,10 +315,18 @@ func (r *Refresher) refresh(ctx context.Context, a account.Account, fresh bool) 
 		case <-ctx.Done():
 			return Result{AccountID: a.ID, Err: ctx.Err()}
 		}
-		if join {
+		if join && !canceledByOther(ctx, c.res.Err) {
 			return c.res
 		}
+		if r.o.onWoken != nil {
+			r.o.onWoken(a.ID)
+		}
 		r.mu.Lock()
+		if join {
+			// The shared read ended only because its own caller went away: read again for this one, sharing
+			// anything that starts from now on.
+			after = c.gen
+		}
 	}
 	r.gen++
 	c := &refreshCall{gen: r.gen, done: make(chan struct{})}
@@ -327,10 +337,23 @@ func (r *Refresher) refresh(ctx context.Context, a account.Account, fresh bool) 
 
 	r.mu.Lock()
 	delete(r.inflight, a.ID)
-	r.last[a.ID] = c
+	if !isCtxErr(c.res.Err) {
+		r.last[a.ID] = c
+	}
 	r.mu.Unlock()
 	close(c.done)
 	return c.res
+}
+
+// isCtxErr reports whether err only says that a caller's context ended.
+func isCtxErr(err error) bool {
+	return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
+}
+
+// canceledByOther reports whether a shared read failed only because the context of the caller that started it
+// ended, while this caller's own context is still live.
+func canceledByOther(ctx context.Context, err error) bool {
+	return isCtxErr(err) && ctx.Err() == nil
 }
 
 // readAndStore reads one account and stores the merged snapshot. A failure is recorded on that account only.

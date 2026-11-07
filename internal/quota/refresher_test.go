@@ -50,6 +50,7 @@ type refFixture struct {
 	reader  *scriptReader
 	updates atomic.Int32
 	waiting atomic.Int32 // refreshes that started waiting for a read in flight
+	woken   func()       // set before refreshes start: called from onWoken
 	r       *Refresher
 }
 
@@ -66,6 +67,11 @@ func newRefFixture(t *testing.T, fn func(ctx context.Context, id string) (backen
 		Jitter:   func(int64) int64 { return 0 },
 		OnUpdate: func(Snapshot) { f.updates.Add(1) },
 		onWait:   func(string) { f.waiting.Add(1) },
+		onWoken: func(string) {
+			if f.woken != nil {
+				f.woken()
+			}
+		},
 	})
 	if err != nil {
 		t.Fatal(err)
