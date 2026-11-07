@@ -17,6 +17,9 @@ import (
 // stillActive is the exit code GetExitCodeProcess reports for a running process (STILL_ACTIVE).
 const stillActive = 259
 
+// setCmdLine sets the raw command line Windows passes to the program (cmd.exe parses its own).
+func setCmdLine(cmd *exec.Cmd, line string) { sysProcAttr(cmd).CmdLine = line }
+
 func hideWindow(cmd *exec.Cmd) {
 	attr := sysProcAttr(cmd)
 	attr.HideWindow = true
