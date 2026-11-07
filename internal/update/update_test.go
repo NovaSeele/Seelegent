@@ -711,20 +711,33 @@ func TestApplyMigratedThenFailedKeepsNew(t *testing.T) {
 		t.Errorf("daemon calls = %v, want %v", e.daemon.calls, want)
 	}
 	assertNoLeftovers(t, e.exe)
+}
 
-	// A failed start that did not migrate is still undone, with the schema check active.
-	e2, db := migratingEnv(t, "v0.0.1", "v0.0.2")
-	e2.daemon.startErr = func(_ context.Context, content string) error {
+// A failed start that left the database's schema as it was is undone exactly as without the schema check.
+func TestApplyStartFailureWithoutMigrationStillUndoes(t *testing.T) {
+	e, db := migratingEnv(t, "v0.0.1", "v0.0.2")
+	e.daemon.startErr = func(_ context.Context, content string) error {
 		if content == "seelegent v0.0.2" {
-			return errors.New("exited before it answered")
+			return errors.New("exited before it answered") // no migration: the database stays at 7
 		}
 		return nil
 	}
-	_, err = e2.updater(t, "v0.0.1").Apply(context.Background(), "")
-	if err == nil || errors.Is(err, ErrMigratedThenFailed) || !strings.Contains(err.Error(), "back in place") ||
-		*db != 7 || readFile(t, e2.exe) != "seelegent v0.0.1" {
-		t.Fatalf("err = %v, installed %q", err, readFile(t, e2.exe))
+	_, err := e.updater(t, "v0.0.1").Apply(context.Background(), "")
+	if err == nil || errors.Is(err, ErrMigratedThenFailed) ||
+		!strings.Contains(err.Error(), "v0.0.1 is back in place and its daemon runs") {
+		t.Fatalf("err = %v", err)
 	}
+	if *db != 7 || readFile(t, e.exe) != "seelegent v0.0.1" {
+		t.Errorf("db %d, installed %q", *db, readFile(t, e.exe))
+	}
+	want := []string{"stop", "start seelegent v0.0.2", "abort", "start seelegent v0.0.1"}
+	if !slices.Equal(e.daemon.calls, want) {
+		t.Errorf("daemon calls = %v, want %v", e.daemon.calls, want)
+	}
+	if _, err := os.Stat(PreviousPath(e.exe)); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("a kept executable appeared: %v", err)
+	}
+	assertNoLeftovers(t, e.exe)
 }
 
 // A schema that cannot be read after the failed start keeps the new build too, with its own message.
