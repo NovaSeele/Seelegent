@@ -5,12 +5,14 @@ import (
 	"path"
 	"slices"
 	"strings"
+
+	"github.com/NovaSeele/Seelegent/internal/api"
 )
 
 // ServerName is the name of Seelegent's MCP server in every host config.
 const ServerName = "seelegent"
 
-// EnvLead tells the MCP server which host started it.
+// EnvLead tells the MCP server which host started it (ops.EnvLead, which setup does not import).
 const EnvLead = "SEELEGENT_LEAD"
 
 // Entry is an MCP server entry reduced to what setup manages: the command line and the environment.
@@ -20,25 +22,19 @@ type Entry struct {
 	Env     map[string]string `json:"env,omitempty"`
 }
 
-// desired is the entry setup registers for a host: the stable executable, the single argument "mcp", and
-// SEELEGENT_LEAD naming the host.
-// leadValues maps a host id to the SEELEGENT_LEAD value the MCP server knows for it. Hosts without one get no
-// SEELEGENT_LEAD: an unknown value would be ignored anyway, and the server then detects the host from its session
-// environment or falls back to "cli".
-//
-// TODO(M7 merge): these values must match api.Leads() (claude, codex, opencode, gemini, agy, cli) once
-// feat/cli-daemon is merged; replace the literals with those constants then.
-var leadValues = map[string]string{
-	"claude":      "claude",
-	"codex":       "codex",
-	"opencode":    "opencode",
-	"agy":         "agy",
-	"antigravity": "agy",
-	"gemini":      "gemini",
+// LeadValue returns the SEELEGENT_LEAD value setup writes for a host: one of api.Leads, or "" for a host the MCP
+// server has no lead value for (Claude Desktop, Cursor, Windsurf). Those get no SEELEGENT_LEAD, and the server then
+// detects the host from its session environment or falls back to "cli". The Antigravity app runs the agy agent.
+func LeadValue(hostID string) string {
+	lead := hostID
+	if hostID == "antigravity" {
+		lead = api.LeadAgy
+	}
+	if lead == api.LeadCLI || !slices.Contains(api.Leads(), lead) {
+		return ""
+	}
+	return lead
 }
-
-// LeadValue returns the SEELEGENT_LEAD value setup writes for a host ("" for none).
-func LeadValue(hostID string) string { return leadValues[hostID] }
 
 // desired is the entry setup registers for a host: the executable with the argument "mcp" and, when the MCP server
 // knows the host, SEELEGENT_LEAD.
