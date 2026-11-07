@@ -30,6 +30,9 @@ const (
 	// the data folder's database has; codeSchemaUnknown: it does not say how many it knows.
 	codeSchemaTooNew  = "schema_too_new"
 	codeSchemaUnknown = "schema_unknown"
+	// codeMigratedThenFailed: the new daemon migrated the database and then did not start; the old build cannot open
+	// the database any more, so the new one stays installed.
+	codeMigratedThenFailed = "migrated_then_failed"
 )
 
 // codedError is an error with its own --json code (exit 1).
@@ -54,6 +57,8 @@ func updateError(err error) error {
 		return &codedError{code: codeSchemaTooNew, err: err}
 	case errors.Is(err, update.ErrSchemaUnknown):
 		return &codedError{code: codeSchemaUnknown, err: err}
+	case errors.Is(err, update.ErrMigratedThenFailed):
+		return &codedError{code: codeMigratedThenFailed, err: err}
 	}
 	return err
 }
@@ -140,14 +145,19 @@ func newUpdater(cmd *cobra.Command, info buildinfo.Info, d deps, force bool) (*u
 	}
 	stderr := cmd.ErrOrStderr()
 	quiet := jsonFlag(cmd)
+	known, err := store.KnownSchemaVersion()
+	if err != nil {
+		return nil, err
+	}
 	return update.New(update.Options{
-		Current:     info.Version,
-		Exe:         exe,
-		WorkDir:     filepath.Join(paths.Home, "update"),
-		MetadataURL: os.Getenv(update.EnvUpdateURL),
-		Daemon:      &updateDaemon{d: d, log: stderr},
-		Run:         runExecutable,
-		Force:       force,
+		Current:       info.Version,
+		Exe:           exe,
+		WorkDir:       filepath.Join(paths.Home, "update"),
+		MetadataURL:   os.Getenv(update.EnvUpdateURL),
+		Daemon:        &updateDaemon{d: d, log: stderr},
+		Run:           runExecutable,
+		Force:         force,
+		CurrentSchema: known,
 		DatabaseSchema: func(ctx context.Context) (int, bool, error) {
 			in, err := store.Inspect(ctx, paths.DB)
 			switch {

@@ -124,6 +124,7 @@ func TestUpdateErrorCodes(t *testing.T) {
 	for err, want := range map[error]string{
 		update.ErrChecksum: codeChecksum, update.ErrDevBuild: codeDevBuild, update.ErrNoPrevious: codeNoPrevious,
 		update.ErrSchemaTooNew: codeSchemaTooNew, update.ErrSchemaUnknown: codeSchemaUnknown,
+		update.ErrMigratedThenFailed: codeMigratedThenFailed,
 	} {
 		if _, out := classify(updateError(err)); out.Code != want {
 			t.Errorf("%v: code %q, want %q", err, out.Code, want)

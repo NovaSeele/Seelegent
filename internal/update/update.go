@@ -7,8 +7,9 @@
 //
 // A failed step leaves the old executable in place: every replacement is a rename in the executable's folder that
 // is undone on failure, and a new daemon that does not start (or answers as another build) is stopped and the old
-// executable put back. A build that knows fewer database migrations than the data folder's database has is never
-// installed: migrations are not undone, and such a daemon could not open the database.
+// executable put back, unless that daemon migrated the database past what the old executable knows (then the new one
+// stays and the error says so). A build that knows fewer database migrations than the data folder's database has is
+// never installed: migrations are not undone, and such a daemon could not open the database.
 package update
 
 import (
@@ -78,6 +79,9 @@ type Options struct {
 	// Force installs a build that does not report which database schema it knows (a build from before
 	// schemaVersion). A build known to be too old for the database is refused even then.
 	Force bool
+	// CurrentSchema is the number of database migrations the running build knows (0: unknown). The running build is
+	// the one an undo puts back, so the undo is skipped when the failed new daemon migrated the database past it.
+	CurrentSchema int
 	// LockDir is the folder of the executable's update lock (the user's cache folder + seelegent when empty).
 	LockDir string
 }
@@ -109,7 +113,17 @@ var (
 	ErrSchemaTooNew = errors.New("the database is newer than that build")
 	// ErrSchemaUnknown: the build to install does not report which database schema it knows (Options.Force).
 	ErrSchemaUnknown = errors.New("that build does not report which database schema it knows")
+	// ErrMigratedThenFailed: the new daemon migrated the database and then did not start; the build an undo would put
+	// back cannot open the database any more, so the new one stays installed.
+	ErrMigratedThenFailed = errors.New("the new daemon migrated the database and then did not start")
 )
+
+// migratedThenFailedError is an error with its own message that reports itself as ErrMigratedThenFailed.
+type migratedThenFailedError struct{ err error }
+
+func (e *migratedThenFailedError) Error() string        { return e.err.Error() }
+func (e *migratedThenFailedError) Unwrap() error        { return e.err }
+func (e *migratedThenFailedError) Is(target error) bool { return target == ErrMigratedThenFailed }
 
 // undoTimeout bounds the undo after a failed start. The undo gets a context of its own: a cancelled command (Ctrl+C
 // while the new daemon starts) must still stop that daemon and put the old executable back.
@@ -527,8 +541,9 @@ type undoInfo struct {
 // undoAfterStartFailure handles a daemon that did not start from the executable sw put in place (or answered as
 // another build): that daemon is stopped, the replaced executable put back and its daemon started. The file sw put
 // in place goes back where it came from: the staged download (which Apply removes) or, for a rollback, the kept
-// executable, which stays for another try (it is never deleted here). Every step runs on a context of its own, so a
-// cancelled command still finishes the undo.
+// executable, which stays for another try (it is never deleted here). When the failed daemon migrated the database
+// past what the replaced executable knows, nothing is put back (see keepAfterMigration). Every step runs on a
+// context of its own, so a cancelled command still finishes the undo.
 func (u *Updater) undoAfterStartFailure(ctx context.Context, sw *swap, cause error, in undoInfo) error {
 	uctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), undoTimeout)
 	defer cancel()
@@ -540,6 +555,9 @@ func (u *Updater) undoAfterStartFailure(ctx context.Context, sw *swap, cause err
 	if err := u.o.Daemon.Abort(uctx); err != nil {
 		return fmt.Errorf("%s: %w; it could not be stopped either (%w), so %s stays installed: stop it with "+
 			"`seelegent stop` and see logs/daemon.log", head, cause, err, in.failed)
+	}
+	if err := u.keepAfterMigration(uctx, head, cause, in); err != nil {
+		return err
 	}
 	if err := sw.undo(); err != nil {
 		return fmt.Errorf("%s: %w; putting %s back failed: %w", head, cause, in.back, err)
@@ -554,6 +572,32 @@ func (u *Updater) undoAfterStartFailure(ctx context.Context, sw *swap, cause err
 		return fmt.Errorf("%s: %w; %s, but its daemon did not start either: %w", head, cause, what, err)
 	}
 	return fmt.Errorf("%s: %w; %s and its daemon runs", head, cause, what)
+}
+
+// keepAfterMigration reads the database's schema again after the failed daemon was stopped. The executable an undo
+// puts back is the running one (Options.CurrentSchema); when the failed daemon migrated the database past it, that
+// build could not open the database, so the swap stays as it is (the failed build installed, the files around it
+// as after a successful update or rollback, nothing deleted) and the error, ErrMigratedThenFailed, says how to go
+// on. A schema that cannot be read is treated the same way, with its own message: putting back a build that may not
+// open the database could leave no build that does. It returns nil when the undo may go ahead.
+func (u *Updater) keepAfterMigration(ctx context.Context, head string, cause error, in undoInfo) error {
+	if u.o.DatabaseSchema == nil || u.o.CurrentSchema <= 0 {
+		return nil
+	}
+	db, exists, err := u.o.DatabaseSchema(ctx)
+	if err != nil {
+		return fmt.Errorf("%s: %w; the database's schema version cannot be read now (%w), so %s was not put back "+
+			"(it might not open the database): %s stays installed and no daemon runs. See logs/daemon.log, then run "+
+			"`seelegent restart`", head, cause, err, in.back, in.failed)
+	}
+	if !exists || db <= u.o.CurrentSchema {
+		return nil
+	}
+	return &migratedThenFailedError{err: fmt.Errorf("%s: %w; %s ran its database migrations (schema %d) first, and "+
+		"%s knows only schema %d, so it cannot open the database any more: %s stays installed and no daemon runs. "+
+		"Fix what logs/daemon.log says, then run `seelegent restart` (or install a release that knows schema %d with "+
+		"`seelegent update --apply --version vX.Y.Z`)", head, cause, in.failed, db, in.back, u.o.CurrentSchema,
+		in.failed, db)}
 }
 
 // Rollback puts back the executable the last update replaced. The version rolled back from is discarded, so a

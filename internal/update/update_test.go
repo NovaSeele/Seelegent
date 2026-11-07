@@ -250,7 +250,11 @@ type env struct {
 	goos   string
 	// dbSchema, when set, is the database's schema version (the schema check runs).
 	dbSchema *int
-	force    bool
+	// dbErr, when set, is what reading the database's schema returns.
+	dbErr error
+	// currentSchema is the schema the running build knows (Options.CurrentSchema).
+	currentSchema int
+	force         bool
 	// lockDir is the executable lock's folder, shared by every updater of the env (as the user's cache folder is).
 	lockDir string
 }
@@ -276,9 +280,14 @@ func (e *env) updater(t *testing.T, current string) *Updater {
 	t.Helper()
 	o := Options{Current: current, Exe: e.exe, WorkDir: filepath.Join(t.TempDir(), "update"),
 		MetadataURL: e.server.URL + "/releases/latest", GOOS: e.goos, GOARCH: "amd64", Daemon: e.daemon,
-		Run: e.run.run, Force: e.force, LockDir: e.lockDir}
+		Run: e.run.run, Force: e.force, LockDir: e.lockDir, CurrentSchema: e.currentSchema}
 	if e.dbSchema != nil {
-		o.DatabaseSchema = func(context.Context) (int, bool, error) { return *e.dbSchema, true, nil }
+		o.DatabaseSchema = func(context.Context) (int, bool, error) {
+			if e.dbErr != nil {
+				return 0, true, e.dbErr
+			}
+			return *e.dbSchema, true, nil
+		}
 	}
 	return New(o)
 }
@@ -658,6 +667,102 @@ func TestSchemaCheck(t *testing.T) {
 	res2, err := e.updater(t, "v0.0.1").Apply(ctx, "v0.0.2")
 	if err != nil || !res2.Applied {
 		t.Fatalf("Apply(v0.0.2) = %+v, %v", res2, err)
+	}
+}
+
+// migratingEnv is a database at schema 7 under the running v0.0.1 (schema 7); v0.0.2 knows schema 8, and its daemon
+// migrates the database to 8 and then fails.
+func migratingEnv(t *testing.T, installed string, rels ...string) (*env, *int) {
+	t.Helper()
+	db := 7
+	e := newEnv(t, "windows", installed, rels...)
+	e.dbSchema, e.currentSchema = &db, 7
+	e.run.schemas = map[string]int{"v0.0.1": 7, "v0.0.2": 8}
+	e.daemon.startErr = func(_ context.Context, content string) error {
+		if content == "seelegent v0.0.2" {
+			db = 8
+			return errors.New("exited before it answered")
+		}
+		return nil
+	}
+	return e, &db
+}
+
+// A new daemon that migrated the database and then failed is not undone: the old build could not open the database.
+func TestApplyMigratedThenFailedKeepsNew(t *testing.T) {
+	e, _ := migratingEnv(t, "v0.0.1", "v0.0.2")
+	_, err := e.updater(t, "v0.0.1").Apply(context.Background(), "")
+	if !errors.Is(err, ErrMigratedThenFailed) {
+		t.Fatalf("err = %v, want ErrMigratedThenFailed", err)
+	}
+	for _, want := range []string{"exited before it answered", "v0.0.2 ran its database migrations (schema 8)",
+		"v0.0.1 knows only schema 7", "v0.0.2 stays installed and no daemon runs", "seelegent restart"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("err = %v\nmissing %q", err, want)
+		}
+	}
+	if got := readFile(t, e.exe); got != "seelegent v0.0.2" {
+		t.Errorf("installed = %q, want the new build", got)
+	}
+	if got := readFile(t, PreviousPath(e.exe)); got != "seelegent v0.0.1" {
+		t.Errorf("previous = %q", got)
+	}
+	if want := []string{"stop", "start seelegent v0.0.2", "abort"}; !slices.Equal(e.daemon.calls, want) {
+		t.Errorf("daemon calls = %v, want %v", e.daemon.calls, want)
+	}
+	assertNoLeftovers(t, e.exe)
+
+	// A failed start that did not migrate is still undone, with the schema check active.
+	e2, db := migratingEnv(t, "v0.0.1", "v0.0.2")
+	e2.daemon.startErr = func(_ context.Context, content string) error {
+		if content == "seelegent v0.0.2" {
+			return errors.New("exited before it answered")
+		}
+		return nil
+	}
+	_, err = e2.updater(t, "v0.0.1").Apply(context.Background(), "")
+	if err == nil || errors.Is(err, ErrMigratedThenFailed) || !strings.Contains(err.Error(), "back in place") ||
+		*db != 7 || readFile(t, e2.exe) != "seelegent v0.0.1" {
+		t.Fatalf("err = %v, installed %q", err, readFile(t, e2.exe))
+	}
+}
+
+// A schema that cannot be read after the failed start keeps the new build too, with its own message.
+func TestApplySchemaUnreadableAfterFailureKeepsNew(t *testing.T) {
+	e, _ := migratingEnv(t, "v0.0.1", "v0.0.2")
+	e.daemon.startErr = func(_ context.Context, content string) error {
+		if content == "seelegent v0.0.2" {
+			e.dbErr = errors.New("file is not a database")
+			return errors.New("exited before it answered")
+		}
+		return nil
+	}
+	_, err := e.updater(t, "v0.0.1").Apply(context.Background(), "")
+	if err == nil || errors.Is(err, ErrMigratedThenFailed) || !strings.Contains(err.Error(), "cannot be read now") ||
+		!strings.Contains(err.Error(), "v0.0.2 stays installed") {
+		t.Fatalf("err = %v", err)
+	}
+	if got := readFile(t, e.exe); got != "seelegent v0.0.2" {
+		t.Errorf("installed = %q", got)
+	}
+}
+
+// The same holds for a rollback to a kept build that knows more migrations than the running one.
+func TestRollbackMigratedThenFailedKeepsKept(t *testing.T) {
+	e, _ := migratingEnv(t, "v0.0.1", "v0.0.1")
+	if err := os.WriteFile(PreviousPath(e.exe), []byte("seelegent v0.0.2"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	_, err := e.updater(t, "v0.0.1").Rollback(context.Background())
+	if !errors.Is(err, ErrMigratedThenFailed) || !strings.Contains(err.Error(), "kept version v0.0.2") ||
+		!strings.Contains(err.Error(), "v0.0.2 stays installed") {
+		t.Fatalf("err = %v", err)
+	}
+	if got := readFile(t, e.exe); got != "seelegent v0.0.2" {
+		t.Errorf("installed = %q", got)
+	}
+	if want := []string{"stop", "start seelegent v0.0.2", "abort"}; !slices.Equal(e.daemon.calls, want) {
+		t.Errorf("daemon calls = %v, want %v", e.daemon.calls, want)
 	}
 }
 

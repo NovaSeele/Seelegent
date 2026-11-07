@@ -125,9 +125,13 @@ See [cli.md](cli.md) for the output. The steps of `--apply`:
 5. Start the daemon again from the new binary when it ran before, and wait up to two minutes for it to answer as the
    new version (its first start may run database migrations). If it fails, answers late or answers as another
    build, that daemon is stopped (gracefully when it answers, else the exact process the update started is killed)
-   and its lock must come free; then the old binary is put back, its daemon started and its version checked. The
-   update fails, and the error says what runs now. The executables are as before, but migrations the new daemon
-   already ran stay (see below). Ctrl+C while the daemon starts still finishes this undo.
+   and its lock must come free. Then the database's schema is read again: when that daemon already ran migrations
+   the old binary does not know, the old binary could not open the database, so nothing is put back. The new binary
+   stays installed (the old one is `<exe>.previous`, as after an update), no daemon runs and the update fails with
+   `migrated_then_failed`: fix what `logs/daemon.log` says, then `seelegent restart` (or install a release that
+   knows that schema). Otherwise the old binary is put back, its daemon started and its version checked; the update
+   fails, the error says what runs now, and the executables are as before. Ctrl+C while the daemon starts still
+   finishes this step.
 6. Refresh the lead hosts (old C-B1): run the new binary's `setup --dry-run --json`, then `setup --host <ids>` for
    the hosts whose MCP entry already exists (action `unchanged` or `updated`). The entry's path did not change, so
    this mostly brings the lead skill to the new version. Hosts without an entry are not added, the reminder hook is
@@ -138,7 +142,8 @@ See [cli.md](cli.md) for the output. The steps of `--apply`:
 `--rollback` puts `<exe>.previous` back the same way (schema check, stop, rename, start, refresh) and discards the
 version it rolls back from, so a second rollback reports `no_previous` instead of rolling forward again (old
 C-B15). To go forward again, run `seelegent update --apply`. When the kept version's daemon does not start, the
-rollback is undone and the kept executable stays for another try.
+rollback is undone and the kept executable stays for another try, unless that daemon migrated the database past the
+running version (a kept version newer than the running one): then the rollback stays, as in step 5.
 
 Lead hosts keep running the MCP server they started until they restart it; the daemon runs the new version at once.
 

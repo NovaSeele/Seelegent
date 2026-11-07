@@ -13,7 +13,7 @@ group (`delegate.go`, `tasks.go`, `memory.go`, `system.go`, `doctor.go`, `daemon
 |---|---|
 | `--json` | Prints the result as JSON on stdout, one shape per command (below). Errors then go to stdout too, as `{"error": "...", "code": "...", "details": {...}}`. Without `--json`, results go to stdout and errors to stderr as `Error: ...`. |
 | Exit codes | `0` ok; `1` runtime or API error, refusal inside a worker, `doctor` with a failed check; `2` usage error (unknown command or flag, missing or wrong arguments); `3` `seelegent daemon` found the data directory locked by another daemon or its port taken. |
-| Error codes | the API's code (`not_found`, `invalid_argument`, `bad_state`, ...), `not_available` (an option or feature of a later version), `forbidden` with `details.caller: "worker"`, `daemon_unavailable` (no daemon, another program on the port, a Seelegent daemon of another data directory on the port, a daemon that holds its lock without answering), `daemon_stopped` (the daemon was stopped during a wait and did not come back; the tasks keep running), `daemon_locked` (exit 3), `usage` (exit 2), `checksum_mismatch`, `dev_build`, `no_previous`, `schema_too_new` and `schema_unknown` (`update`; `schema_too_new` also from `version --check-database`), `error`. |
+| Error codes | the API's code (`not_found`, `invalid_argument`, `bad_state`, ...), `not_available` (an option or feature of a later version), `forbidden` with `details.caller: "worker"`, `daemon_unavailable` (no daemon, another program on the port, a Seelegent daemon of another data directory on the port, a daemon that holds its lock without answering), `daemon_stopped` (the daemon was stopped during a wait and did not come back; the tasks keep running), `daemon_locked` (exit 3), `usage` (exit 2), `checksum_mismatch`, `dev_build`, `no_previous`, `schema_too_new`, `schema_unknown` and `migrated_then_failed` (`update`; `schema_too_new` also from `version --check-database`), `error`. |
 | `@file` | A prompt, message, memory text or objection that starts with `@` is read from that file, relative to `--cwd` when the command has it, else to the current folder. |
 | Flags | Normal flags (`--name value` or `--name=value`) after or between the arguments; `--` ends the flags. Unknown flags are an error, `run` included. |
 
@@ -100,6 +100,11 @@ allowed; the daemon's own guard decides what a worker may read. `update` is refu
   is killed), the old executable is put back and its daemon started and checked; the error says what runs now. A
   failed `--rollback` is undone the same way and keeps the kept executable for another try. Ctrl+C during the start
   still finishes this undo.
+- The undo first reads the database's schema again. When the failed daemon already ran migrations the old executable
+  does not know, the old one could not open the database: nothing is put back, the new executable stays installed
+  (the old one kept as after an update), no daemon runs and the code is `migrated_then_failed`; fix what
+  `logs/daemon.log` says and run `seelegent restart`. A schema that cannot be read then is handled the same way
+  (code `error`).
 - Versions are printed as the binaries report them, with the `v` (`v1.2.3`); the old updater printed `1.2.3`. The
   old `method` and `installRoot` fields are gone: there is one install layout.
 
