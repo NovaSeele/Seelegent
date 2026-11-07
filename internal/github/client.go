@@ -29,20 +29,21 @@ const (
 	maxRedirects   = 5
 )
 
-// NewHTTPClient returns the HTTP client of the REST tier: a redirect to another host never carries the
-// Authorization header (a job log redirects to a storage host), and at most five redirects are followed.
+// NewHTTPClient returns the HTTP client of the REST tier: a redirect to another host, or to another scheme on the
+// same host (https to http would send the token in clear), never carries the Authorization header (a job log
+// redirects to a storage host), and at most five redirects are followed.
 func NewHTTPClient() *http.Client {
-	return &http.Client{
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			if len(via) >= maxRedirects {
-				return errors.New("too many redirects")
-			}
-			if req.URL.Host != via[0].URL.Host {
-				req.Header.Del("Authorization")
-			}
-			return nil
-		},
+	return &http.Client{CheckRedirect: checkRedirect}
+}
+
+func checkRedirect(req *http.Request, via []*http.Request) error {
+	if len(via) >= maxRedirects {
+		return errors.New("too many redirects")
 	}
+	if !strings.EqualFold(req.URL.Host, via[0].URL.Host) || !strings.EqualFold(req.URL.Scheme, via[0].URL.Scheme) {
+		req.Header.Del("Authorization")
+	}
+	return nil
 }
 
 // Client calls the GitHub API of one repository on one host, through gh (tier gh) or the REST API (token and

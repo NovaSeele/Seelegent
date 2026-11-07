@@ -32,7 +32,8 @@ D4: any remote whose URL contained "github" was treated as GitHub and could get 
 host is "not GitHub": its repository still works locally, but no GitHub call is made for it and no token is ever
 sent to it. An enterprise host is a host name (optionally with a port) or an `https` URL; plain `http` is allowed
 only for a loopback address (a local test server). The REST client never sends the `Authorization` header on a
-redirect to another host (job logs redirect to a storage host).
+redirect to another host (job logs redirect to a storage host) or to another scheme on the same host (an `https`
+to `http` redirect would send the token in clear).
 
 **The token** is set and removed only from the dashboard (`PUT/DELETE /github/token` answer only the dashboard's
 own requests, as the automation confirmation does, see [automations.md](automations.md)); no MCP tool or command

@@ -369,3 +369,29 @@ func TestParseChecks(t *testing.T) {
 		t.Errorf("tail = %q", tail)
 	}
 }
+
+// TestRedirectDropsAuthorization: a redirect to another host, or from https to http on the same host (G7), never
+// carries the token.
+func TestRedirectDropsAuthorization(t *testing.T) {
+	first, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, "https://ghe.example.com/api/v3/x", nil)
+	for target, keep := range map[string]bool{
+		"https://ghe.example.com/api/v3/y":    true,
+		"https://GHE.example.com/api/v3/y":    true,
+		"http://ghe.example.com/api/v3/y":     false,
+		"https://ghe.example.com:8443/y":      false,
+		"https://storage.example.com/log.txt": false,
+	} {
+		req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, target, nil)
+		req.Header.Set("Authorization", "Bearer x")
+		if err := checkRedirect(req, []*http.Request{first}); err != nil {
+			t.Fatal(err)
+		}
+		if got := req.Header.Get("Authorization") != ""; got != keep {
+			t.Errorf("%s: authorization kept = %v", target, got)
+		}
+	}
+	req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, "https://ghe.example.com/z", nil)
+	if err := checkRedirect(req, make([]*http.Request, maxRedirects)); err == nil {
+		t.Error("followed a sixth redirect")
+	}
+}
