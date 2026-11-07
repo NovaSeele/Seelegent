@@ -63,8 +63,7 @@ func hookDecision(ctx context.Context, kind string, stdin io.Reader) guard.Resul
 	if strings.TrimSpace(h.Command) == "" {
 		return guard.Result{}
 	}
-	c := guard.Checker{Alias: gitAlias(ctx, os.Environ(), h.Cwd)}
-	return c.Command(h.Command, h.Shells...)
+	return h.Checker(gitAlias(ctx, os.Environ(), h.Cwd)).Command(h.Command, h.Shells...)
 }
 
 // gitAlias returns a resolver that reads git aliases with `git config --get alias.<name>` in dir.

@@ -381,7 +381,9 @@ func TestDepthLimit(t *testing.T) {
 }
 
 func FuzzCheck(f *testing.F) {
-	for _, s := range []string{"git stash", "echo $(git reset --hard)", "a | b && c", "@'\nx\n'@", "`", "\"", "$("} {
+	for _, s := range []string{"git stash", "echo $(git reset --hard)", "a | b && c", "@'\nx\n'@", "`", "\"", "$(",
+		"printf 'git %s\\0101\\x7\\n%' a | bash", "echo -e 'a\\c' | sh", "cat <<'EOF' | tee x\ngit stash\nEOF",
+		"perl -e 'qx{git'", "ruby -e '%x(", "$env:GIT_CONFIG_COUNT=1", "${env:", "env 'A=1' git x"} {
 		f.Add(s)
 	}
 	f.Fuzz(func(t *testing.T, line string) {

@@ -3,6 +3,7 @@ package guard
 import (
 	"encoding/json"
 	"errors"
+	"runtime"
 	"strings"
 )
 
@@ -24,12 +25,26 @@ type HookInput struct {
 	Command string
 	// Cwd is the folder the command runs in, when the CLI says ("" otherwise).
 	Cwd string
-	// Shells are the dialects the command is read in.
+	// Shells are the dialects the command is read in (none: unknown, all of them).
 	Shells []Shell
+	// HeredocAsCommands is Checker.HeredocAsCommands: set for agy on Windows, whose run_command runs PowerShell.
+	HeredocAsCommands bool
+}
+
+// Checker returns the checker for this input, resolving aliases with alias.
+func (h HookInput) Checker(alias func(name string) (string, bool)) Checker {
+	return Checker{Alias: alias, HeredocAsCommands: h.HeredocAsCommands}
 }
 
 // ParseHook reads the hook input of a worker CLI. Input that is not valid JSON is an error (the caller refuses).
 func ParseHook(kind string, data []byte) (HookInput, error) {
+	return parseHook(kind, data, runtime.GOOS)
+}
+
+// parseHook is ParseHook for the operating system goos. The shell agy runs commands in is not in its hook input:
+// on Windows run_command uses PowerShell (a terminal of send_command_input may run any shell), elsewhere a POSIX
+// shell. Both are read in every dialect; on Windows a POSIX here-document's lines are read as commands too.
+func parseHook(kind string, data []byte, goos string) (HookInput, error) {
 	switch kind {
 	case HookClaude:
 		var in struct {
@@ -70,7 +85,8 @@ func ParseHook(kind string, data []byte) (HookInput, error) {
 			}
 			return ""
 		}
-		h := HookInput{Command: str("CommandLine", "commandLine", "command", "Command"), Cwd: in.Cwd}
+		h := HookInput{Command: str("CommandLine", "commandLine", "command", "Command"), Cwd: in.Cwd,
+			HeredocAsCommands: goos == "windows"}
 		if h.Command == "" && strings.EqualFold(in.ToolCall.Name, "send_command_input") {
 			h.Command = str("Input", "input")
 		}

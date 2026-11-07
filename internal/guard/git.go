@@ -266,7 +266,10 @@ func riskyConfigKey(k string) bool {
 		"core.gitproxy", "core.worktree", "sequence.editor", "diff.external", "gpg.program", "credential.helper",
 		"uploadpack.packobjectshook", "include.path", "alias",
 		// Not a program, but the same as gc --prune=now for every later gc, including git's automatic one.
-		"gc.pruneexpire":
+		"gc.pruneexpire",
+		// Makes git run the subcommand it guesses from a typo (git stsh: stash), which the guard reads as an
+		// unknown command; a later -c would also override the git shim's own -c help.autocorrect=0.
+		"help.autocorrect":
 		return true
 	}
 	for _, prefix := range []string{"alias.", "includeif.", "include.", "pager."} {

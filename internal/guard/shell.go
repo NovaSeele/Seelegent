@@ -36,8 +36,11 @@ type word struct {
 	text string
 	// dynamic marks an argument that holds an expansion whose value is not known before the command runs.
 	dynamic bool
-	// quoted marks an argument that had quotes or escapes (so it is never a shell keyword or an assignment).
+	// quoted marks an argument that had quotes or escapes (so it is never a shell keyword).
 	quoted bool
+	// assign marks a NAME=value (or NAME+=value) word whose name and = are unquoted, so that a shell takes it as an
+	// assignment: FOO="a b" is one, "FOO=a" is not.
+	assign bool
 }
 
 // segment is one simple command: the words between separators (; && || | & newline).
@@ -57,6 +60,9 @@ type state struct {
 	out []*segment
 	// writes are the targets of output redirections (> file, >> file), when they are plain words.
 	writes []string
+	// heredocs are the byte ranges of the line that hold here-document bodies with their closing delimiter lines
+	// (POSIX only, and only those of the line itself, not of a nested script).
+	heredocs [][2]int
 }
 
 // parser reads one command line (or a part of it) in one dialect.
@@ -66,6 +72,8 @@ type parser struct {
 	i     int
 	depth int
 	st    *state
+	// root marks the parser of the whole line (its offsets are the line's), not of a nested text.
+	root bool
 	// heredocs wait for the next newline, which starts their bodies.
 	heredocs []heredoc
 }
@@ -93,7 +101,7 @@ func parseState(line string, sh Shell, depth int) (*state, error) {
 		return nil, errDepth
 	}
 	st := &state{}
-	p := &parser{sh: sh, s: line, depth: depth, st: st}
+	p := &parser{sh: sh, s: line, depth: depth, st: st, root: true}
 	if err := p.list(0); err != nil {
 		return st, err
 	}
@@ -378,6 +386,9 @@ func (p *parser) readHeredocs() error {
 			j = lineEnd + 1
 		}
 		p.i = next
+		if p.root {
+			p.st.heredocs = append(p.st.heredocs, [2]int{start, next})
+		}
 		if h.seg != nil {
 			h.seg.stdin = append(h.seg.stdin, p.s[start:bodyEnd])
 		}
@@ -478,6 +489,7 @@ func (p *parser) word() (word, error) {
 		p.i++
 	}
 	w.text = b.String()
+	w.assign = assignment.MatchString(p.s[start:p.i])
 	return w, nil
 }
 
