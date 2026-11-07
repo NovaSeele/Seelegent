@@ -3,8 +3,12 @@
  * viewport are in the DOM, padded above and below to the full height. Rendered items are measured with a
  * ResizeObserver. While `following`, the list stays pinned to the end as items arrive or grow; otherwise the
  * first visible item keeps its place when items load above it or change height (manual scroll anchoring, so the
- * container sets `overflow-anchor: none`). Following stops only on the reader's own input (wheel, touch, keys,
- * the scrollbar); a scroll the layout causes (items measured shorter or taller than estimated) re-pins the end.
+ * container sets `overflow-anchor: none`). Following stops only on the reader's own input: wheel up, touch, the
+ * up keys (PageUp, ArrowUp, Home, Shift+Space), a held primary or middle button anywhere in the list (scrollbar,
+ * drag-selecting text, middle-click autoscroll) and focus moving inside it (Tab/Shift+Tab scrolling an item in).
+ * A scroll the layout causes (items measured shorter or taller than estimated) re-pins the end.
+ * Not detected, so re-pinned while following: Ctrl+F find-in-page and screen-reader browse mode (an accepted limit
+ * of a virtual list).
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, shallowRef, watch, type Ref } from 'vue'
 
@@ -56,25 +60,38 @@ export function useVirtualList(options: VirtualListOptions) {
 
   // The reader's own scrolling: only this may stop following.
   let inputAt = -Infinity
-  let draggingBar = false
-  const readerInput = () => draggingBar || Date.now() - inputAt < READER_INPUT_MS
+  /** A primary or middle button is held down inside the list. */
+  let pressing = false
+  /** That press was on the scroller itself (its scrollbar or padding), not on an item. */
+  let pressOnBar = false
+  const readerInput = () => pressing || Date.now() - inputAt < READER_INPUT_MS
   const markInput = () => (inputAt = Date.now())
   const onWheel = (event: WheelEvent) => event.deltaY < 0 && markInput()
   const onKeydown = (event: KeyboardEvent) => {
     if (UP_KEYS.has(event.key) || (event.key === ' ' && event.shiftKey)) markInput()
   }
   /**
-   * A press on the scroller itself, not on an item: its scrollbar (classic or overlay, which sits inside the
-   * client box) or its padding. Counts as reader input until the pointer is released.
+   * A primary or middle press anywhere in the list counts as reader input until it is released: dragging the
+   * scrollbar (classic or overlay, which sits inside the client box), drag-selecting text past the edge (the
+   * browser autoscrolls) or middle-button autoscroll.
    */
   const onPointerdown = (event: PointerEvent) => {
-    if (!scroller.value || event.target !== scroller.value) return
-    draggingBar = true
-    markInput()
+    if (event.button !== 0 && event.button !== 1) return
+    pressing = true
+    pressOnBar = event.target === scroller.value
   }
+  /** pointercancel (a touch pan) and window blur also end a press, so the flag can never stick. */
+  const releasePress = () => {
+    pressing = false
+    pressOnBar = false
+  }
+  /**
+   * The grace period after release is kept only for a press on the scroller itself (a scrollbar can still be
+   * scrolling); a plain click on an item, such as a ToolItem toggle, does not count once released.
+   */
   const onPointerup = () => {
-    if (draggingBar) markInput()
-    draggingBar = false
+    if (pressing && pressOnBar) markInput()
+    releasePress()
   }
 
   function onScroll() {
@@ -197,7 +214,11 @@ export function useVirtualList(options: VirtualListOptions) {
     el.addEventListener('touchmove', markInput, { passive: true })
     el.addEventListener('keydown', onKeydown)
     el.addEventListener('pointerdown', onPointerdown)
+    // Focus moving inside the list (Tab, Shift+Tab) scrolls the focused item into view.
+    el.addEventListener('focusin', markInput)
     window.addEventListener('pointerup', onPointerup)
+    window.addEventListener('pointercancel', releasePress)
+    window.addEventListener('blur', releasePress)
     viewportObserver?.observe(el)
     scrollToEnd()
   })
@@ -209,7 +230,10 @@ export function useVirtualList(options: VirtualListOptions) {
     el?.removeEventListener('touchmove', markInput)
     el?.removeEventListener('keydown', onKeydown)
     el?.removeEventListener('pointerdown', onPointerdown)
+    el?.removeEventListener('focusin', markInput)
     window.removeEventListener('pointerup', onPointerup)
+    window.removeEventListener('pointercancel', releasePress)
+    window.removeEventListener('blur', releasePress)
     observer?.disconnect()
     viewportObserver?.disconnect()
     if (frame) cancelAnimationFrame(frame)
