@@ -107,10 +107,13 @@ export const useRolesStore = defineStore('roles', () => {
     if (templates.value.length === 0) templates.value = await client.templates()
   }
 
-  /** The skills a role in `cwd` can use (cached per folder); throws when they cannot be read. */
-  async function loadSkills(cwd = ''): Promise<readonly Skill[]> {
+  /**
+   * The skills a role in `cwd` can use (cached per folder; `fresh` reads them again, since skills are installed
+   * outside the dashboard); throws when they cannot be read.
+   */
+  async function loadSkills(cwd = '', fresh = false): Promise<readonly Skill[]> {
     const cached = skills.value[cwd]
-    if (cached) return cached
+    if (cached && !fresh) return cached
     const list = await client.skills(cwd || undefined)
     skills.value = { ...skills.value, [cwd]: list }
     return list

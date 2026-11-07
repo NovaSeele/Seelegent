@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, shallowRef, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { errorMessage } from '@/api/client'
@@ -12,6 +12,7 @@ import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import Spinner from '@/components/ui/Spinner.vue'
 import { pathKey } from '@/lib/paths'
+import { useConnectionStore } from '@/stores/connection'
 import { useRolesStore } from '@/stores/roles'
 import { useToastStore } from '@/stores/toast'
 
@@ -38,26 +39,34 @@ const deleteError = ref('')
 
 onMounted(() => roles.ensure())
 
-/** Installed skill names per place ('' = global), read for the places whose roles name skills. */
+/**
+ * Installed skill names per place ('' = global), read for the places whose roles name skills. Skills are
+ * installed outside the dashboard, so each place is read afresh once per visit to the page and again after a
+ * resync.
+ */
 const installed = shallowRef<Readonly<Record<string, ReadonlySet<string>>>>({})
 const placeOf = (role: Role) => (role.scope === 'global' ? '' : (role.cwd ?? ''))
 
+async function readInstalled(all: boolean) {
+  const places = new Set(roles.items.filter((r) => r.skills.length).map(placeOf))
+  for (const place of places) {
+    if (!all && place in installed.value) continue
+    try {
+      const list = await roles.loadSkills(place, true)
+      installed.value = { ...installed.value, [place]: new Set(list.map((s) => s.name)) }
+    } catch {
+      // Unknown: the card marks no skill as missing.
+    }
+  }
+}
+
 watch(
   () => roles.items,
-  async (items) => {
-    const places = new Set(items.filter((r) => r.skills.length).map(placeOf))
-    for (const place of places) {
-      if (place in installed.value) continue
-      try {
-        const list = await roles.loadSkills(place)
-        installed.value = { ...installed.value, [place]: new Set(list.map((s) => s.name)) }
-      } catch {
-        // Unknown: the card marks no skill as missing.
-      }
-    }
-  },
+  () => void readInstalled(false),
   { immediate: true },
 )
+const stopResync = useConnectionStore().onResync(() => void readInstalled(true))
+onUnmounted(stopResync)
 
 const projectName = (cwd: string | undefined) =>
   roles.projects.find((p) => cwd !== undefined && pathKey(p.cwd) === pathKey(cwd))?.name ??
