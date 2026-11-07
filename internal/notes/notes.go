@@ -20,6 +20,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/NovaSeele/Seelegent/internal/api"
+	"github.com/NovaSeele/Seelegent/internal/fsutil"
 	"github.com/NovaSeele/Seelegent/internal/task"
 )
 
@@ -117,7 +118,8 @@ func (s *Store) root(ctx context.Context, d api.TaskDetail) string {
 	return d.Cwd
 }
 
-// normFile makes file relative to root with '/'; it must stay inside root.
+// normFile makes file relative to root with '/'; it must stay inside root, compared the way the file system does
+// (case, 8.3 names, junctions: fsutil.Within, as proof.CheckCite does), and must not lead out through a link.
 func normFile(root, file string) (string, error) {
 	file = strings.TrimSpace(file)
 	if file == "" {
@@ -127,10 +129,28 @@ func normFile(root, file string) (string, error) {
 	if !filepath.IsAbs(p) {
 		p = filepath.Join(root, p)
 	}
-	rel, err := filepath.Rel(root, filepath.Clean(p))
+	p = filepath.Clean(p)
+	outside := invalidf("file is outside the task's repository: %s", file)
+	if in, err := fsutil.Within(root, p); err != nil || !in {
+		return "", outside
+	}
+	if c, err := fsutil.Canonical(p); err == nil {
+		if in, err := fsutil.Within(root, c); err != nil || !in {
+			return "", invalidf("file leads outside the task's repository: %s", file)
+		}
+	}
+	rel, err := filepath.Rel(root, p)
 	if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) ||
 		filepath.IsAbs(rel) {
-		return "", invalidf("file is outside the task's repository: %s", file)
+		// Inside by key but not by spelling (another case or an 8.3 name): spell both the canonical way.
+		cr, err1 := fsutil.Canonical(root)
+		cp, err2 := fsutil.Canonical(p)
+		if err1 != nil || err2 != nil {
+			return "", outside
+		}
+		if rel, err = filepath.Rel(cr, cp); err != nil || rel == "." || strings.HasPrefix(rel, "..") {
+			return "", outside
+		}
 	}
 	return filepath.ToSlash(rel), nil
 }
@@ -147,6 +167,12 @@ func (f *fileLines) get(rel string) []string {
 	}
 	var lines []string
 	p := filepath.Join(f.root, filepath.FromSlash(rel))
+	if c, err := fsutil.Canonical(p); err == nil {
+		if in, err := fsutil.Within(f.root, c); err != nil || !in {
+			f.cache[rel] = nil // a link out of the repository is not read
+			return nil
+		}
+	}
 	if fi, err := os.Stat(p); err == nil && fi.Mode().IsRegular() && fi.Size() <= maxFile {
 		if data, err := os.ReadFile(p); err == nil {
 			lines = strings.Split(strings.ReplaceAll(string(data), "\r\n", "\n"), "\n")
@@ -273,9 +299,26 @@ func (s *Store) refresh(ctx context.Context, d api.TaskDetail) ([]api.Note, erro
 	if len(changed) == 0 {
 		return list, nil
 	}
+	// Each note is read again in the transaction and only its place changes: a delete, resolve or edit made since
+	// the list was read stays.
 	if err := s.o.DB.Write(ctx, func(tx *sql.Tx) error {
 		for i := range changed {
-			if err := put(ctx, tx, changed[i]); err != nil {
+			c := &changed[i]
+			cur, err := get(ctx, tx, d.ID, c.ID)
+			if errors.Is(err, ErrNotFound) {
+				continue
+			}
+			if err != nil {
+				return err
+			}
+			if cur.AnchorTurn >= c.AnchorTurn {
+				continue // moved already
+			}
+			cur.Line, cur.EndLine, cur.AnchorTurn = c.Line, c.EndLine, c.AnchorTurn
+			if c.State == api.NoteOutdated && cur.State == api.NoteOpen && cur.SentInTurn == 0 {
+				cur.State = api.NoteOutdated
+			}
+			if err := put(ctx, tx, cur); err != nil {
 				return err
 			}
 		}
@@ -284,11 +327,11 @@ func (s *Store) refresh(ctx context.Context, d api.TaskDetail) ([]api.Note, erro
 		return nil, err
 	}
 	s.o.Changed(d.ID)
-	return list, nil
+	return s.load(ctx, d.ID)
 }
 
 func newID() string {
-	var b [4]byte
+	var b [8]byte
 	_, _ = rand.Read(b[:])
 	return "n" + hex.EncodeToString(b[:])
 }
@@ -356,10 +399,15 @@ func (s *Store) Add(ctx context.Context, id string, in api.NoteInput) (api.Note,
 	if endLine == in.Line {
 		endLine = 0
 	}
-	n := api.Note{ID: newID(), TaskID: d.ID, File: file, Line: in.Line, EndLine: endLine, Side: side,
+	n := api.Note{TaskID: d.ID, File: file, Line: in.Line, EndLine: endLine, Side: side,
 		AnchorText: anchor, Body: body, By: by, State: api.NoteOpen, AnchorTurn: len(d.Turns),
 		CreatedAt: s.o.Now().UTC().Format(timeFormat)}
-	if err := s.o.DB.Write(ctx, func(tx *sql.Tx) error { return put(ctx, tx, n) }); err != nil {
+	err = errIDTaken
+	for try := 0; try < 5 && errors.Is(err, errIDTaken); try++ {
+		n.ID = newID()
+		err = s.o.DB.Write(ctx, func(tx *sql.Tx) error { return insert(ctx, tx, n) })
+	}
+	if err != nil {
 		return api.Note{}, err
 	}
 	s.o.Changed(d.ID)
@@ -468,17 +516,31 @@ func (s *Store) Send(ctx context.Context, id string, req api.NotesSendRequest) (
 	if len(send) == 0 && extra == "" {
 		return api.NotesSendResult{}, invalidf("nothing to send: no draft notes and no sent notes left unaddressed")
 	}
-	sum, err := s.o.Tasks.Followup(ctx, id, api.FollowupRequest{Message: Message(send, extra), By: by})
-	if err != nil {
+	msg := Message(send, extra)
+	var sum api.TaskSummary
+	if turn := sentBefore(d, list, send, msg); turn > 0 {
+		// A Send whose followup went out but whose notes were never marked (a lost save): mark them, send nothing.
+		sum, sum.TurnCount = d.TaskSummary, turn
+	} else if sum, err = s.o.Tasks.Followup(ctx, id, api.FollowupRequest{Message: msg, By: by}); err != nil {
 		return api.NotesSendResult{}, err
 	}
+	ctx = context.WithoutCancel(ctx) // the followup went out: its notes must be marked
 	now := s.o.Now().UTC().Format(timeFormat)
 	sent := make([]string, 0, len(send))
 	err = s.o.DB.Write(ctx, func(tx *sql.Tx) error {
 		sent = sent[:0]
 		for i := range send {
-			n := send[i]
-			n.State, n.SentInTurn, n.SentAt, n.AnchorTurn = api.NoteSent, sum.TurnCount, now, sum.TurnCount-1
+			n, err := get(ctx, tx, id, send[i].ID) // as it is now: a body edit or a resolve made meanwhile stays
+			if errors.Is(err, ErrNotFound) {
+				continue
+			}
+			if err != nil {
+				return err
+			}
+			if n.State != api.NoteResolved {
+				n.State = api.NoteSent
+			}
+			n.SentInTurn, n.SentAt, n.AnchorTurn = sum.TurnCount, now, sum.TurnCount-1
 			if err := put(ctx, tx, n); err != nil {
 				return err
 			}
@@ -491,6 +553,21 @@ func (s *Store) Send(ctx context.Context, id string, req api.NotesSendRequest) (
 	}
 	s.o.Changed(id)
 	return api.NotesSendResult{Sent: sent, Task: sum}, nil
+}
+
+// sentBefore returns the task's last turn when it carries exactly msg for notes, no note claims that turn yet and
+// notes are in it: an earlier Send of the same notes went out but was never recorded. Otherwise 0.
+func sentBefore(d api.TaskDetail, all, send []api.Note, msg string) int {
+	n := len(d.Turns)
+	if n == 0 || len(send) == 0 || d.Turns[n-1].Message != msg {
+		return 0
+	}
+	for i := range all {
+		if all[i].SentInTurn == n {
+			return 0 // that turn carried notes on record: this is a new send of the same words
+		}
+	}
+	return n
 }
 
 // Message is the followup for notes: grouped by author, numbered, each with its place and the anchored line.
@@ -585,17 +662,37 @@ func decode(data string) (api.Note, error) {
 	return n, nil
 }
 
-func put(ctx context.Context, tx *sql.Tx, n api.Note) error {
+func encode(n api.Note) (string, error) {
 	n.Status, n.CurrentLine = "", 0
 	data, err := json.Marshal(n)
+	return string(data), err
+}
+
+// put stores a note that exists (of its task); a note deleted meanwhile stays deleted.
+func put(ctx context.Context, tx *sql.Tx, n api.Note) error {
+	data, err := encode(n)
 	if err != nil {
 		return err
 	}
-	created := n.CreatedAt
-	if created == "" {
-		created = time.Now().UTC().Format(timeFormat)
-	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO review_notes (id, task_id, created_at, data) VALUES (?, ?, ?, ?)
-		ON CONFLICT (id) DO UPDATE SET data = excluded.data`, n.ID, n.TaskID, created, string(data))
+	_, err = tx.ExecContext(ctx, `UPDATE review_notes SET data = ? WHERE id = ? AND task_id = ?`, data, n.ID, n.TaskID)
 	return err
 }
+
+// insert stores a new note; an id that is taken already is ErrIDTaken (never another note overwritten).
+func insert(ctx context.Context, tx *sql.Tx, n api.Note) error {
+	data, err := encode(n)
+	if err != nil {
+		return err
+	}
+	res, err := tx.ExecContext(ctx, `INSERT INTO review_notes (id, task_id, created_at, data) VALUES (?, ?, ?, ?)
+		ON CONFLICT (id) DO NOTHING`, n.ID, n.TaskID, n.CreatedAt, data)
+	if err != nil {
+		return err
+	}
+	if k, err := res.RowsAffected(); err == nil && k == 0 {
+		return errIDTaken
+	}
+	return err
+}
+
+var errIDTaken = errors.New("note id taken")

@@ -2,9 +2,11 @@ package notes
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -17,6 +19,8 @@ import (
 type fakeTasks struct {
 	d    api.TaskDetail
 	sent []api.FollowupRequest
+	// onFollowup runs inside Followup (something that happens while a send is under way).
+	onFollowup func()
 }
 
 func (f *fakeTasks) Get(_ context.Context, id string) (api.TaskDetail, error) {
@@ -28,7 +32,10 @@ func (f *fakeTasks) Get(_ context.Context, id string) (api.TaskDetail, error) {
 
 func (f *fakeTasks) Followup(_ context.Context, _ string, req api.FollowupRequest) (api.TaskSummary, error) {
 	f.sent = append(f.sent, req)
-	f.d.Turns = append(f.d.Turns, api.Turn{N: len(f.d.Turns) + 1})
+	if f.onFollowup != nil {
+		f.onFollowup()
+	}
+	f.d.Turns = append(f.d.Turns, api.Turn{N: len(f.d.Turns) + 1, Message: req.Message})
 	f.d.Status = api.StatusRunning
 	f.d.TurnCount = len(f.d.Turns)
 	return f.d.TaskSummary, nil
@@ -149,6 +156,97 @@ func TestNotesLifecycle(t *testing.T) {
 	}
 	if err := s.Delete(ctx, "t1", n2.ID); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("second delete = %v", err)
+	}
+}
+
+// A send whose notes were never marked (a lost save) is not sent twice; a resolve made during a send stays; an
+// update never brings a deleted note back; a taken id never overwrites another note.
+func TestSendRetryAndStaleWrites(t *testing.T) {
+	s, ft, _ := setup(t)
+	ctx := t.Context()
+	n1, err := s.Add(ctx, "t1", api.NoteInput{File: "src/a.go", Line: 4, Body: "return 2"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Send(ctx, "t1", api.NotesSendRequest{}); err != nil {
+		t.Fatal(err)
+	}
+	// Undo the marking, as if the save after the followup had been lost.
+	if err := s.o.DB.Write(ctx, func(tx *sql.Tx) error {
+		n, err := get(ctx, tx, "t1", n1.ID)
+		if err != nil {
+			return err
+		}
+		n.State, n.SentInTurn, n.SentAt, n.AnchorTurn = api.NoteOpen, 0, "", 1
+		return put(ctx, tx, n)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	ft.endTurn()
+	res, err := s.Send(ctx, "t1", api.NotesSendRequest{})
+	if err != nil || len(ft.sent) != 1 || len(res.Sent) != 1 || res.Task.TurnCount != 2 {
+		t.Fatalf("retried send = %+v %v (followups %d)", res, err, len(ft.sent))
+	}
+
+	// A note resolved while the followup goes out stays resolved.
+	n2, err := s.Add(ctx, "t1", api.NoteInput{File: "src/a.go", Line: 3, Body: "rename A"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ft.onFollowup = func() {
+		if _, err := s.Update(ctx, "t1", n2.ID, api.NotePatch{State: api.NoteResolved}); err != nil {
+			t.Error(err)
+		}
+	}
+	if _, err := s.Send(ctx, "t1", api.NotesSendRequest{}); err != nil {
+		t.Fatal(err)
+	}
+	ft.onFollowup = nil
+	list, err := s.List(ctx, "t1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, n := range list {
+		if n.ID == n2.ID && n.State != api.NoteResolved {
+			t.Errorf("resolved during the send: %+v", n)
+		}
+	}
+
+	// A stale copy of a deleted note is not written back; a taken id is refused.
+	if err := s.Delete(ctx, "t1", n2.ID); err != nil {
+		t.Fatal(err)
+	}
+	err = s.o.DB.Write(ctx, func(tx *sql.Tx) error {
+		if err := put(ctx, tx, n2); err != nil {
+			return err
+		}
+		other := n1
+		other.TaskID, other.Body = "t2", "someone else's"
+		return insert(ctx, tx, other)
+	})
+	if !errors.Is(err, errIDTaken) {
+		t.Fatalf("insert over a taken id = %v", err)
+	}
+	if list, _ := s.List(ctx, "t1"); len(list) != 1 || list[0].Body != "return 2" {
+		t.Errorf("notes after stale writes = %+v", list)
+	}
+}
+
+func TestFileInsideRepo(t *testing.T) {
+	s, _, repo := setup(t)
+	ctx := t.Context()
+	outside := t.TempDir()
+	if err := os.Symlink(outside, filepath.Join(repo, "out")); err == nil {
+		write(t, filepath.Join(outside, "x.go"), "secret\n")
+		if _, err := s.Add(ctx, "t1", api.NoteInput{File: "out/x.go", Line: 1, Body: "x"}); !errors.Is(err, ErrInvalid) {
+			t.Errorf("a note through a link out of the repository = %v", err)
+		}
+	}
+	if runtime.GOOS == "windows" {
+		n, err := s.Add(ctx, "t1", api.NoteInput{File: strings.ToUpper(repo) + `\SRC\a.go`, Line: 1, Body: "x"})
+		if err != nil || !strings.EqualFold(n.File, "src/a.go") {
+			t.Errorf("another spelling of the repository = %+v %v", n, err)
+		}
 	}
 }
 
