@@ -121,10 +121,15 @@ type fakeGitHub struct {
 	paths    []string
 	checks   string // check-runs answer
 	jobLog   string
+	// Repositories of the signed-in user "octo" besides octo/demo (CreateRemote), by name, and their branches.
+	repos    map[string]map[string]any
+	branches map[string][]map[string]any
+	creates  []string
 }
 
 func newFakeGitHub(t *testing.T, origin string) *fakeGitHub {
-	f := &fakeGitHub{t: t, origin: origin, checks: `{"check_runs":[]}`}
+	f := &fakeGitHub{t: t, origin: origin, checks: `{"check_runs":[]}`, repos: map[string]map[string]any{},
+		branches: map[string][]map[string]any{}}
 	f.srv = httptest.NewServer(http.HandlerFunc(f.serve))
 	t.Cleanup(f.srv.Close)
 	return f
@@ -151,6 +156,9 @@ func (f *fakeGitHub) serve(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(status)
 		_ = json.NewEncoder(w).Encode(v)
+	}
+	if f.serveUser(r, reply) {
+		return
 	}
 	switch {
 	case r.Method == http.MethodGet && p == "/issues":
@@ -199,6 +207,45 @@ func (f *fakeGitHub) serve(w http.ResponseWriter, r *http.Request) {
 	default:
 		reply(404, map[string]any{"message": "Not Found"})
 	}
+}
+
+// serveUser answers the user and repository creation calls of CreateRemote.
+func (f *fakeGitHub) serveUser(r *http.Request, reply func(int, any)) bool {
+	name, sub, _ := strings.Cut(strings.TrimPrefix(r.URL.Path, "/api/v3/repos/octo/"), "/")
+	switch {
+	case r.Method == http.MethodGet && r.URL.Path == "/api/v3/user":
+		reply(200, map[string]any{"login": "octo"})
+	case r.Method == http.MethodPost && r.URL.Path == "/api/v3/user/repos":
+		var in map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&in)
+		n, _ := in["name"].(string)
+		if f.repos[n] != nil {
+			reply(422, map[string]any{"message": "Repository creation failed: name already exists on this account"})
+			return true
+		}
+		f.creates = append(f.creates, n)
+		f.repos[n] = map[string]any{"name": n, "private": in["private"], "owner": map[string]any{"login": "octo"},
+			"html_url": f.srv.URL + "/octo/" + n, "clone_url": f.srv.URL + "/octo/" + n + ".git"}
+		reply(201, f.repos[n])
+	case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/api/v3/repos/octo/") && name != "demo":
+		switch {
+		case f.repos[name] == nil:
+			reply(404, map[string]any{"message": "Not Found"})
+		case sub == "":
+			reply(200, f.repos[name])
+		case sub == "branches":
+			list := f.branches[name]
+			if list == nil {
+				list = []map[string]any{}
+			}
+			reply(200, list)
+		default:
+			reply(404, map[string]any{"message": "Not Found"})
+		}
+	default:
+		return false
+	}
+	return true
 }
 
 // noGh is a gh CLI that is not installed: the tests never run the real gh.

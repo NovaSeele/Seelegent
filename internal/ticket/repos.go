@@ -4,9 +4,11 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -379,7 +381,15 @@ func (s *Service) Disconnect(ctx context.Context, id string) error {
 }
 
 // CreateRemote creates the GitHub repository of a connected repository that has no origin yet (gh or token tier)
-// on github.com, adds it as origin and pushes the default branch once. Write-ahead like the ticket outbox.
+// on github.com (Options.RemoteHost in tests), adds it as origin and pushes the default branch once. Write-ahead
+// like the ticket outbox.
+//
+// The first publish sends the default branch's whole history, so the whole history is scanned first (every blob
+// any commit added, at every path): a secret committed and deleted long ago is still refused (history_unsafe), and
+// the user cleans the history or pushes it themselves. A repository is only adopted, never created twice, after an
+// attempt that may have created it: one this service recorded creating, or one an attempt cut off by a stop
+// (unknown) may have created. An adopted repository must be empty (or hold exactly this push) and have the asked
+// visibility.
 func (s *Service) CreateRemote(ctx context.Context, id string, req api.RemoteRequest) (api.Repo, error) {
 	unlock, err := s.locks.lock(ctx, "repo:"+id)
 	if err != nil {
@@ -401,12 +411,22 @@ func (s *Service) CreateRemote(ctx context.Context, id string, req api.RemoteReq
 		return api.Repo{}, invalidf(`name may use letters, digits, ".", "_" and "-" (at most 100)`)
 	}
 	private := req.Private == nil || *req.Private
+	b := r.DefaultBranch
+	local := ""
+	if gitx.ValidBranch(b) {
+		local, _ = s.gitOK(ctx, r.Path, "rev-parse", "--verify", "--quiet", "refs/heads/"+b+"^{commit}")
+	}
+	if local != "" {
+		if err := s.scanHistory(ctx, r.Path, b); err != nil {
+			return api.Repo{}, err
+		}
+	}
 	access := s.o.GitHub.Access(ctx, true)
 	if !access.CanWrite() {
 		return api.Repo{}, github.ErrManual
 	}
 	var entry api.OutboxEntry
-	retry := false
+	adopt := false
 	now := api.FormatTime(s.o.Now())
 	err = s.o.DB.Write(ctx, func(tx *sql.Tx) error {
 		list, err := listEntries(ctx, tx, scopeRepo, id)
@@ -424,9 +444,15 @@ func (s *Service) CreateRemote(ctx context.Context, id string, req api.RemoteReq
 			return badStatef("the repository already has an origin remote")
 		}
 		if open != nil {
-			entry, retry = *open, open.Status == api.OutboxUnknown || open.Status == api.OutboxFailed
+			entry = *open
+			// Adopt only what an earlier attempt may have created: one it recorded, or one an attempt cut off by a
+			// stop may have made before recording it.
+			adopt = open.Status == api.OutboxUnknown || createdName(open.Result) != ""
 		} else {
-			entry = api.OutboxEntry{Kind: api.OutboxCreateRemote, Result: map[string]any{}}
+			entry = api.OutboxEntry{Kind: api.OutboxCreateRemote}
+		}
+		if entry.Result == nil {
+			entry.Result = map[string]any{}
 		}
 		entry.Args = map[string]any{"name": name, "private": private}
 		entry.Status, entry.At, entry.Error = api.OutboxRunning, now, ""
@@ -436,65 +462,78 @@ func (s *Service) CreateRemote(ctx context.Context, id string, req api.RemoteReq
 	if err != nil {
 		return api.Repo{}, err
 	}
-	finish := func(result map[string]any, ferr error) {
-		_ = s.o.DB.Write(context.WithoutCancel(ctx), func(tx *sql.Tx) error {
-			if ferr != nil {
-				entry.Status, entry.Error = api.OutboxFailed, s.redactErr(ferr, 600)
-			} else {
-				entry.Status, entry.Result, entry.DoneAt = api.OutboxDone, result, api.FormatTime(s.o.Now())
-			}
-			_, err := saveEntry(ctx, tx, scopeRepo, id, entry)
+	wctx := context.WithoutCancel(ctx)
+	save := func() {
+		_ = s.o.DB.Write(wctx, func(tx *sql.Tx) error {
+			_, err := saveEntry(wctx, tx, scopeRepo, id, entry)
 			return err
 		})
-		s.o.IssuesChanged(id)
 	}
-	client, err := s.o.GitHub.Client(ctx, access, github.DotCom, "", "")
+	fail := func(ferr error) (api.Repo, error) {
+		entry.Status, entry.Error = api.OutboxFailed, s.redactErr(ferr, 600)
+		save()
+		s.o.IssuesChanged(id)
+		return api.Repo{}, ferr
+	}
+	host := s.o.RemoteHost
+	if host.Name == "" {
+		host = github.DotCom
+	}
+	client, err := s.o.GitHub.Client(ctx, access, host, "", "")
 	if err != nil {
-		finish(nil, err)
-		return api.Repo{}, err
+		return fail(err)
 	}
 	var created *github.RepoInfo
-	if retry {
-		// An earlier attempt may have created it before the daemon stopped: adopt it instead of failing.
-		user := access.GhUser
-		if user == "" {
-			user, _ = client.CurrentUser(ctx)
+	pushed := false
+	if adopt {
+		owner := ""
+		if prev := createdName(entry.Result); prev != "" {
+			owner, name, _ = strings.Cut(prev, "/")
+		} else if owner = access.GhUser; owner == "" {
+			owner, _ = client.CurrentUser(ctx)
 		}
-		if user != "" {
-			if created, err = client.GetRepo(ctx, user, name); err != nil {
-				finish(nil, err)
-				return api.Repo{}, err
+		if owner != "" {
+			if created, err = client.GetRepo(ctx, owner, name); err != nil {
+				return fail(err)
+			}
+		}
+		if created != nil {
+			if pushed, err = s.checkAdopted(ctx, client, created, private, b, local); err != nil {
+				return fail(err)
 			}
 		}
 	}
 	if created == nil {
 		info, err := client.CreateRepo(ctx, name, private)
 		if err != nil {
-			finish(nil, err)
-			return api.Repo{}, err
+			return fail(err)
 		}
 		created = &info
+		// Recorded at once: a later attempt adopts this repository instead of creating another.
+		entry.Result = map[string]any{"owner": created.Owner, "repo": created.Repo, "url": created.URL}
+		save()
 	}
 	cloneURL := github.StripCredentials(created.CloneURL)
 	if cloneURL == "" {
-		cloneURL = "https://github.com/" + created.Owner + "/" + created.Repo + ".git"
+		cloneURL = host.WebBase() + "/" + created.Owner + "/" + created.Repo + ".git"
 	}
 	if _, ok := s.gitOK(ctx, r.Path, "remote", "get-url", "origin"); !ok {
 		if _, err := s.git(ctx, r.Path, gitx.ExecOptions{Setup: true}, "remote", "add", "origin", "--", cloneURL); err != nil {
-			finish(nil, err)
-			return api.Repo{}, err
+			return fail(err)
 		}
 	}
-	b := r.DefaultBranch
-	if _, ok := s.gitOK(ctx, r.Path, "rev-parse", "--verify", "--quiet", "refs/heads/"+b); ok && gitx.ValidBranch(b) {
-		// The first publish of a new, empty repository: the only push of a branch other than a ticket's.
+	if local != "" && !pushed {
+		// The first publish of a new, empty repository: the only push of a branch other than a ticket's. The
+		// commit scanned above is the one pushed, whatever the branch became meanwhile.
 		if _, err := s.git(ctx, r.Path, gitx.ExecOptions{PushBranch: b, Timeout: 5 * time.Minute}, "push", "origin",
-			"refs/heads/"+b+":refs/heads/"+b); err != nil {
-			finish(nil, err)
-			return api.Repo{}, err
+			local+":refs/heads/"+b); err != nil {
+			return fail(err)
 		}
 	}
-	finish(map[string]any{"owner": created.Owner, "repo": created.Repo, "url": created.URL}, nil)
+	entry.Status, entry.DoneAt = api.OutboxDone, api.FormatTime(s.o.Now())
+	entry.Result = map[string]any{"owner": created.Owner, "repo": created.Repo, "url": created.URL}
+	save()
+	s.o.IssuesChanged(id)
 	hasOrigin, remoteURL, def := s.remoteInfo(ctx, r.Path)
 	var v api.Repo
 	err = s.o.DB.Write(ctx, func(tx *sql.Tx) error {
@@ -518,4 +557,69 @@ func (s *Service) CreateRemote(ctx context.Context, id string, req api.RemoteReq
 	}
 	s.o.IssuesChanged(id)
 	return v, nil
+}
+
+// createdName is "owner/repo" of the repository an earlier create_remote attempt recorded creating ("" when none).
+func createdName(result map[string]any) string {
+	owner, _ := result["owner"].(string)
+	repo, _ := result["repo"].(string)
+	if owner == "" || repo == "" {
+		return ""
+	}
+	return owner + "/" + repo
+}
+
+// checkAdopted refuses to adopt a repository that is not empty or has another visibility than asked. pushed is
+// true when it holds exactly the branch this publish sends (an earlier attempt pushed it).
+func (s *Service) checkAdopted(ctx context.Context, client *github.Client, info *github.RepoInfo, private bool,
+	branch, local string) (pushed bool, err error) {
+	if info.Private != private {
+		want, has := "public", "private"
+		if private {
+			want, has = has, want
+		}
+		return false, badStatef("the repository %s/%s already exists on GitHub and is %s, not %s: change it on GitHub "+
+			"or choose another name", info.Owner, info.Repo, has, want)
+	}
+	branches, err := client.Branches(ctx, info.Owner, info.Repo)
+	if err != nil {
+		return false, err
+	}
+	if len(branches) == 0 {
+		return false, nil
+	}
+	if len(branches) == 1 && local != "" && branches[0].Name == branch && branches[0].Sha == local {
+		return true, nil
+	}
+	return false, badStatef("the repository %s/%s already exists on GitHub and is not empty: Seelegent only "+
+		"publishes into a new, empty repository; choose another name", info.Owner, info.Repo)
+}
+
+// scanHistory refuses to publish a branch whose history holds a file that looks like a secret or junk: the first
+// push sends every commit, not only the last tree.
+func (s *Service) scanHistory(ctx context.Context, dir, branch string) error {
+	objs, err := s.historyObjects(ctx, dir, "refs/heads/"+branch)
+	if err != nil {
+		return err
+	}
+	findings, err := s.scanObjects(ctx, dir, objs)
+	if err != nil {
+		return err
+	}
+	if len(findings) == 0 {
+		return nil
+	}
+	sort.Slice(findings, func(i, j int) bool { return findings[i].Path < findings[j].Path })
+	names := make([]string, 0, len(findings))
+	for i, f := range findings {
+		if i == 10 {
+			names = append(names, fmt.Sprintf("and %d more", len(findings)-10))
+			break
+		}
+		names = append(names, f.Path+" ("+f.Reason+")")
+	}
+	return &PushError{Reason: "history_unsafe", Findings: findings, Details: map[string]any{"branch": branch},
+		Message: fmt.Sprintf("the history of %s holds files that look like secrets or junk: %s. Publishing sends "+
+			"every commit, so nothing was created or pushed: remove them from the history (for example with git "+
+			"filter-repo) or push the branch to GitHub yourself", branch, strings.Join(names, "; "))}
 }

@@ -128,6 +128,8 @@ type Options struct {
 	GitHub   GitHub
 	// WorktreeBase is the folder of the ticket worktrees (<home>/worktrees/tickets).
 	WorktreeBase string
+	// RemoteHost is where CreateRemote creates repositories (zero: github.com; tests use a fake server).
+	RemoteHost github.Host
 	// PollMinutes is the setting githubPollMinutes (0: no polling).
 	PollMinutes func() int
 	// UserHome is the user's home folder, replaced by "~" in text that leaves the machine.

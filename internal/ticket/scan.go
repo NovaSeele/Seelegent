@@ -165,7 +165,7 @@ func (s *Service) scanErr(err error) error {
 		"pushed: " + s.redactErr(err, 400)}
 }
 
-// object is a blob the push would send: its path in the pushed tree and its mode ("" when unknown: a history scan).
+// object is a blob the push would send: its path and its tree entry mode.
 type object struct {
 	path, mode, sha string
 }
@@ -200,22 +200,35 @@ func (s *Service) changedObjects(ctx context.Context, dir, parent, tree string) 
 	return objs, nil
 }
 
-// historyObjects lists every blob reachable from rev, with the first path it was seen at (the first publish of a
-// branch sends its whole history).
+// historyObjects lists every blob any commit reachable from rev added, at every path it was added at (the first
+// publish of a branch sends its whole history). `rev-list --objects` would name each blob once, at one path, and a
+// .env holding the same bytes as an innocent file would pass the name rules; the raw log of every commit against
+// each of its parents (the root against the empty tree) names them all, with their modes.
 func (s *Service) historyObjects(ctx context.Context, dir, rev string) ([]object, error) {
-	out, err := s.o.Git.Exec(ctx, dir, gitx.ExecOptions{Timeout: 5 * time.Minute}, "rev-list", "--objects", rev)
+	out, err := s.o.Git.Exec(ctx, dir, gitx.ExecOptions{Timeout: 5 * time.Minute}, "log", "--format=", "--raw", "-z",
+		"--no-renames", "--no-abbrev", "-m", "--root", rev)
 	if err != nil {
 		return nil, s.scanErr(err)
 	}
 	var objs []object
 	seen := map[string]bool{}
-	for _, line := range strings.Split(string(out), "\n") {
-		sha, p, ok := strings.Cut(strings.TrimSpace(line), " ")
-		if !ok || p == "" || seen[sha] {
-			continue // a commit, or a blob seen at another path
+	recs := strings.Split(string(out), "\x00")
+	for i := 0; i < len(recs); i++ {
+		rec := strings.TrimLeft(recs[i], "\n")
+		if !strings.HasPrefix(rec, ":") {
+			continue
 		}
-		seen[sha] = true
-		objs = append(objs, object{path: p, sha: sha})
+		meta := strings.Fields(strings.TrimPrefix(rec, ":"))
+		if len(meta) != 5 || i+1 >= len(recs) {
+			return nil, s.scanErr(fmt.Errorf("unexpected log line %q", rec))
+		}
+		i++
+		mode, sha, status, p := meta[1], meta[3], meta[4], recs[i]
+		if status == "D" || mode == modeGitlink || strings.Trim(sha, "0") == "" || seen[p+"\x00"+sha] {
+			continue
+		}
+		seen[p+"\x00"+sha] = true
+		objs = append(objs, object{path: p, mode: mode, sha: sha})
 	}
 	return objs, nil
 }
@@ -254,6 +267,7 @@ func (s *Service) scanObjects(ctx context.Context, dir string, objs []object) ([
 	}
 	var read []object
 	size := map[string]int64{}
+	queued := map[string]bool{}
 	for i, o := range check {
 		f := strings.Fields(lines[i])
 		if len(f) != 3 || f[0] != o.sha {
@@ -272,7 +286,10 @@ func (s *Service) scanObjects(ctx context.Context, dir string, objs []object) ([
 			continue
 		}
 		size[o.sha] = n
-		read = append(read, o)
+		if !queued[o.mode+" "+o.sha] { // the same content at another path is read once
+			queued[o.mode+" "+o.sha] = true
+			read = append(read, o)
+		}
 	}
 	for len(read) > 0 {
 		var chunk []object

@@ -426,11 +426,13 @@ type RepoInfo struct {
 	Repo     string
 	URL      string
 	CloneURL string
+	Private  bool
 }
 
 type ghRepo struct {
-	Name  string `json:"name"`
-	Owner struct {
+	Name    string `json:"name"`
+	Private bool   `json:"private"`
+	Owner   struct {
 		Login string `json:"login"`
 	} `json:"owner"`
 	HTMLURL  string `json:"html_url"`
@@ -438,7 +440,33 @@ type ghRepo struct {
 }
 
 func (r ghRepo) info() RepoInfo {
-	return RepoInfo{Owner: r.Owner.Login, Repo: r.Name, URL: httpURL(r.HTMLURL), CloneURL: httpURL(r.CloneURL)}
+	return RepoInfo{Owner: r.Owner.Login, Repo: r.Name, URL: httpURL(r.HTMLURL), CloneURL: httpURL(r.CloneURL),
+		Private: r.Private}
+}
+
+// Branch is a branch of a repository and its commit.
+type Branch struct {
+	Name string
+	Sha  string
+}
+
+// Branches lists the branches of owner/name (at most 100: enough to tell an empty repository from one in use).
+func (c *Client) Branches(ctx context.Context, owner, name string) ([]Branch, error) {
+	var list []struct {
+		Name   string `json:"name"`
+		Commit struct {
+			Sha string `json:"sha"`
+		} `json:"commit"`
+	}
+	p := "repos/" + url.PathEscape(owner) + "/" + url.PathEscape(name) + "/branches?per_page=100"
+	if err := c.callJSON(ctx, http.MethodGet, p, nil, &list); err != nil {
+		return nil, err
+	}
+	out := make([]Branch, 0, len(list))
+	for _, b := range list {
+		out = append(out, Branch{Name: b.Name, Sha: b.Commit.Sha})
+	}
+	return out, nil
 }
 
 // GetRepo reads owner/name; nil when it does not exist.

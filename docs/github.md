@@ -47,6 +47,18 @@ URLs, `Authorization` values).
 with an empty first commit). Origin is read once and stored without credentials. *Disconnect* forgets the
 repository and its inbox; the folder, its branches and its worktrees stay.
 
+`POST /github/repos/{id}/remote {name?, private?}` (gh or token tier, a repository without origin) creates the
+GitHub repository on github.com (private unless `private: false`), adds it as origin and pushes the default branch
+once, the only push of a branch other than a ticket's. That first push sends every commit, so the whole history of
+the branch is scanned first with the rules of the pull request scan below, every blob any commit added at every path
+it had: a secret committed and deleted long ago refuses it (`409`, `details.reason: "history_unsafe"`, with
+`branch` and `findings`) before anything is created. The user removes it from the history (for example with `git
+filter-repo`) or pushes the branch to GitHub themselves. The creation is write-ahead (an outbox row of the
+repository), and the created repository is recorded at once. A retry adopts a repository only when an earlier
+attempt may have made it: the one it recorded, or, after a stop cut an attempt off (`unknown`), one of that name;
+a repository someone else made is never taken over after a plain failure. An adopted repository must have the asked
+visibility and be empty (or hold exactly the branch this publish sends), else the request is refused.
+
 *Sync* fetches up to 100 open issues of a GitHub repository (pull requests are left out); the poller does the same
 every `githubPollMinutes`. A local issue (`local#N`) never reaches GitHub. Issue keys are `gh#12` (also accepted as
 `#12` or `12`) and `local#3`.
