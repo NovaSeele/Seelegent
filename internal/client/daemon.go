@@ -24,6 +24,8 @@ const (
 	DefaultProbeTimeout = 1500 * time.Millisecond
 	DefaultStartTimeout = 20 * time.Second
 	defaultPollInterval = 250 * time.Millisecond
+	// spawnFloorPolls is how many poll intervals a daemon spawned near the start deadline still gets to answer.
+	spawnFloorPolls = 8
 )
 
 // startLockName is the lock file (in the data directory's run folder) that lets one process at a time start the
@@ -227,22 +229,37 @@ func (d *Daemon) Ensure(ctx context.Context) (*Client, error) {
 		return nil, fmt.Errorf("%w on port %d and autostart is off (SEELEGENT_NO_AUTO_START=1): run "+
 			"`seelegent daemon`", ErrNotRunning, d.o.Port)
 	}
+	// One deadline bounds the whole call: the wait for a start of this process already under way (old F11: that
+	// wait was unbounded and start() then took a fresh StartTimeout) and every phase of start().
+	end := time.Now().Add(d.o.StartTimeout)
+	sem := time.NewTimer(d.o.StartTimeout)
 	select {
 	case d.sem <- struct{}{}:
+		sem.Stop()
 	case <-ctx.Done():
+		sem.Stop()
 		return nil, ctx.Err()
+	case <-sem.C:
+		// Another call of this process has been starting the daemon for the whole timeout.
+		if c, err := d.Find(ctx); err == nil {
+			return c, nil
+		}
+		return nil, &notRunningError{msg: fmt.Sprintf("another start of the Seelegent daemon in this process has "+
+			"not finished within %s and nothing answers on port %d: try again shortly, or check %s",
+			d.o.StartTimeout, d.o.Port, filepath.Join(d.o.Paths.Logs, "daemon.log"))}
 	}
 	defer func() { <-d.sem }()
-	return d.start(ctx)
+	return d.start(ctx, end)
 }
 
 // start starts the daemon under the start lock unless another process did meanwhile, then waits until it answers.
-// One deadline, StartTimeout from now, bounds every phase, so the waits do not add up.
-func (d *Daemon) start(ctx context.Context) (*Client, error) {
+// One deadline, end, bounds every phase, so the waits do not add up. A daemon is never spawned once end has
+// passed; one spawned just before it gets spawnFloor for its first answer (old F12: a spawn made when the start
+// lock came free near the end got almost no time and was reported as not answering).
+func (d *Daemon) start(ctx context.Context, end time.Time) (*Client, error) {
 	if err := d.o.Paths.EnsureDirs(); err != nil {
 		return nil, err
 	}
-	end := time.Now().Add(d.o.StartTimeout)
 	lctx, cancel := context.WithDeadline(ctx, end)
 	defer cancel()
 	lock, err := fsutil.Lock(lctx, filepath.Join(d.o.Paths.Run, startLockName))
@@ -259,10 +276,17 @@ func (d *Daemon) start(ctx context.Context) (*Client, error) {
 	if c, err := d.awaitHolder(ctx, end); c != nil || err != nil {
 		return c, err
 	}
+	if !time.Now().Before(end) {
+		return nil, &notRunningError{msg: fmt.Sprintf("no Seelegent daemon answers on port %d and the %s start "+
+			"time ran out before one could be started: try again", d.o.Port, d.o.StartTimeout)}
+	}
 	d.o.Logger.Info("daemon: starting", "port", d.o.Port, "home", d.o.Paths.Home)
 	exited, err := d.o.Start(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("start the Seelegent daemon: %w", err)
+	}
+	if floor := time.Now().Add(d.spawnFloor()); end.Before(floor) {
+		end = floor
 	}
 	deadline := time.NewTimer(time.Until(end))
 	defer deadline.Stop()
@@ -291,11 +315,14 @@ func (d *Daemon) start(ctx context.Context) (*Client, error) {
 			exited = nil // not watchable; keep polling until the deadline
 		case <-deadline.C:
 			return nil, fmt.Errorf("the Seelegent daemon did not answer on port %d within %s; see %s", d.o.Port,
-				d.o.StartTimeout, logHint)
+				max(d.o.StartTimeout, d.spawnFloor()), logHint)
 		case <-tick.C:
 		}
 	}
 }
+
+// spawnFloor is the least time a spawned daemon gets to answer, however little of the start deadline is left.
+func (d *Daemon) spawnFloor() time.Duration { return spawnFloorPolls * d.o.PollInterval }
 
 // awaitHolder waits while another daemon of this home holds its single-instance lock but does not answer yet (it is
 // still starting, or shutting down): it returns that daemon as soon as it answers, and nil, nil once nothing answers

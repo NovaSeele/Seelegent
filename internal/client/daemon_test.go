@@ -400,3 +400,75 @@ func TestWithEnv(t *testing.T) {
 		t.Fatalf("env = %v", got)
 	}
 }
+
+// TestEnsureOneDeadlineInProcess (old F11): a call that arrives while another call of this process is starting the
+// daemon waits for it at most until its own StartTimeout ends, instead of waiting without a bound and then taking a
+// fresh StartTimeout.
+func TestEnsureOneDeadlineInProcess(t *testing.T) {
+	release := make(chan struct{})
+	defer close(release)
+	var starts atomic.Int32
+	d := NewDaemon(DaemonOptions{Paths: testPaths(t), Port: freePort(t), ProbeTimeout: 200 * time.Millisecond,
+		StartTimeout: time.Second, PollInterval: 20 * time.Millisecond,
+		Start: func(ctx context.Context) (<-chan error, error) {
+			starts.Add(1)
+			select { // a start that hangs, holding the in-process semaphore
+			case <-release:
+			case <-ctx.Done():
+			}
+			return make(chan error), nil
+		}})
+	go func() { _, _ = d.Ensure(t.Context()) }()
+	for starts.Load() == 0 {
+		time.Sleep(10 * time.Millisecond)
+	}
+	begun := time.Now()
+	_, err := d.Ensure(t.Context())
+	took := time.Since(begun)
+	if !errors.Is(err, ErrNotRunning) || !strings.Contains(err.Error(), "another start of the Seelegent daemon in "+
+		"this process") || starts.Load() != 1 {
+		t.Fatalf("second ensure = %v (starts %d)", err, starts.Load())
+	}
+	if took < 900*time.Millisecond || took > 1500*time.Millisecond {
+		t.Fatalf("the second call took %s, want about the 1s StartTimeout", took)
+	}
+}
+
+// TestSpawnNearDeadline (old F12): when the start lock comes free just before the deadline, the daemon spawned then
+// still gets a few poll intervals to answer; once the deadline has passed nothing is spawned.
+func TestSpawnNearDeadline(t *testing.T) {
+	t.Run("spawn gets a floor", func(t *testing.T) {
+		paths := testPaths(t)
+		if err := paths.EnsureDirs(); err != nil {
+			t.Fatal(err)
+		}
+		other, err := fsutil.TryLock(filepath.Join(paths.Run, startLockName))
+		if err != nil {
+			t.Fatal(err)
+		}
+		time.AfterFunc(900*time.Millisecond, func() { _ = other.Unlock() })
+		port := freePort(t)
+		var starts atomic.Int32
+		d := NewDaemon(DaemonOptions{Paths: paths, Port: port, ProbeTimeout: 200 * time.Millisecond,
+			StartTimeout: time.Second, PollInterval: 50 * time.Millisecond,
+			Start: func(context.Context) (<-chan error, error) {
+				starts.Add(1)
+				time.AfterFunc(250*time.Millisecond, func() { listenOn(t, port, healthHandler(api.APIVersion)) })
+				return make(chan error), nil
+			}})
+		c, err := d.Ensure(t.Context())
+		if err != nil || starts.Load() != 1 || c.BaseURL() != "http://127.0.0.1:"+strconv.Itoa(port) {
+			t.Fatalf("ensure = %v, %v (starts %d)", c, err, starts.Load())
+		}
+	})
+	t.Run("no spawn after the deadline", func(t *testing.T) {
+		var starts atomic.Int32
+		d := NewDaemon(DaemonOptions{Paths: testPaths(t), Port: freePort(t), ProbeTimeout: 200 * time.Millisecond,
+			StartTimeout: time.Second, PollInterval: 20 * time.Millisecond,
+			Start: func(context.Context) (<-chan error, error) { starts.Add(1); return make(chan error), nil }})
+		_, err := d.start(t.Context(), time.Now().Add(-time.Millisecond))
+		if !errors.Is(err, ErrNotRunning) || starts.Load() != 0 || !strings.Contains(err.Error(), "ran out") {
+			t.Fatalf("start = %v (starts %d)", err, starts.Load())
+		}
+	})
+}
