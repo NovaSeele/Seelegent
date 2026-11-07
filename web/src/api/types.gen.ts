@@ -2486,6 +2486,8 @@ export interface ContestDiff {
   label: string
   base: string
   diff: string
+  /** Files is the same diff parsed per file (contract §3.3: the dashboard never reads unified diff text). */
+  files: FileDiff[]
   /** Truncated is true when the diff was cut at its size limit. */
   truncated: boolean
 }

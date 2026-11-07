@@ -714,6 +714,8 @@ type ContestDiff struct {
 	Label string `json:"label"`
 	Base  string `json:"base"`
 	Diff  string `json:"diff"`
+	// Files is the same diff parsed per file (contract §3.3: the dashboard never reads unified diff text).
+	Files []FileDiff `json:"files"`
 	// Truncated is true when the diff was cut at its size limit.
 	Truncated bool `json:"truncated"`
 }

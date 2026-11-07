@@ -187,3 +187,64 @@ func count(s string) int {
 	}
 	return atoi(s)
 }
+
+// SplitDiff reads a unified diff of several files (git diff output) into one FileDiff per file, in order.
+// truncated marks a diff cut at the size limit: only the last file is cut, and only that one is marked.
+func SplitDiff(text string, truncated bool) []api.FileDiff {
+	var chunks []string
+	start := -1
+	for i := 0; i < len(text); {
+		line, next := text[i:], len(text)
+		if end := strings.IndexByte(text[i:], '\n'); end >= 0 {
+			line, next = text[i:i+end], i+end+1
+		}
+		if strings.HasPrefix(line, "diff --git ") {
+			if start >= 0 {
+				chunks = append(chunks, text[start:i])
+			}
+			start = i
+		}
+		i = next
+	}
+	if start >= 0 {
+		chunks = append(chunks, text[start:])
+	}
+	out := make([]api.FileDiff, 0, len(chunks))
+	for n, chunk := range chunks {
+		d := ParseDiff(chunk, truncated && n == len(chunks)-1)
+		d.Path, d.OldPath = diffPaths(chunk, d.OldPath)
+		out = append(out, d)
+	}
+	return out
+}
+
+// diffPaths reads a file's path, and its old path when it moved, from the header of its diff.
+func diffPaths(chunk, renamedFrom string) (name, old string) {
+	head, _, _ := strings.Cut(chunk, "\n@@")
+	for _, l := range strings.Split(head, "\n") {
+		l = strings.TrimSuffix(l, "\r")
+		switch {
+		case strings.HasPrefix(l, "rename to "):
+			name = strings.TrimPrefix(l, "rename to ")
+		case strings.HasPrefix(l, "+++ b/") && name == "":
+			name = strings.TrimPrefix(l, "+++ b/")
+		case strings.HasPrefix(l, "--- a/") && old == "":
+			old = strings.TrimPrefix(l, "--- a/")
+		}
+	}
+	if name == "" { // deleted or binary: the b/<name> of the first line
+		first, _, _ := strings.Cut(chunk, "\n")
+		if _, b, ok := strings.Cut(strings.TrimSuffix(first, "\r"), " b/"); ok {
+			name = b
+		} else {
+			name = old
+		}
+	}
+	if renamedFrom != "" {
+		return name, renamedFrom
+	}
+	if old == name {
+		old = ""
+	}
+	return name, old
+}

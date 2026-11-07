@@ -544,7 +544,8 @@ func (s *Service) Diff(ctx context.Context, id, lbl string) (api.ContestDiff, er
 	if err != nil {
 		return api.ContestDiff{}, err
 	}
-	return api.ContestDiff{ID: id, Label: v.Label, Base: c.BaseSha, Diff: text, Truncated: truncated}, nil
+	return api.ContestDiff{ID: id, Label: v.Label, Base: c.BaseSha, Diff: text,
+		Files: gitx.SplitDiff(text, truncated), Truncated: truncated}, nil
 }
 
 // PickError is a winner's patch that does not apply to the user's working tree; nothing was changed.
