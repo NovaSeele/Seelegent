@@ -290,17 +290,31 @@ func (s *Server) wait(ctx context.Context, k *call) (result, error) {
 
 // waitReports waits for ids through POST /wait and returns the result with the reports (relative to cwd when
 // given, else to each task's folder). When the daemon goes away during the wait (a restart), it finds or starts
-// it again and waits for the rest of the time.
+// it again and waits for the rest of the time. Finding the daemon again counts against the wait's own deadline:
+// the wait never runs past it.
 func (s *Server) waitReports(ctx context.Context, k *call, ids []string, seconds int, anyDone, wake bool,
 	cwd string) (api.WaitResult, error) {
 	deadline := time.Now().Add(time.Duration(seconds) * time.Second)
-	left := seconds
+	var lost error // why the daemon was lost, while reconnecting
 	for reconnecting := false; ; reconnecting = true {
-		c, err := k.client(ctx)
-		if err != nil && !reconnecting {
+		c, err := s.waitClient(ctx, k, reconnecting, deadline)
+		switch {
+		case err == nil:
+		case ctx.Err() != nil:
+			return api.WaitResult{}, ctx.Err()
+		case !reconnecting:
 			return api.WaitResult{}, err
+		case !time.Now().Before(deadline):
+			// The daemon did not come back before the wait ended. An error that is only the lookup's own deadline
+			// says nothing: report why the daemon was lost instead.
+			if errors.Is(err, context.DeadlineExceeded) {
+				err = lost
+			}
+			return api.WaitResult{}, fmt.Errorf("the daemon did not come back before the wait ended: %w", err)
 		}
 		if err == nil {
+			// The rest of the time, after any reconnecting: 0 returns the current reports at once.
+			left := max(int(math.Ceil(time.Until(deadline).Seconds())), 0)
 			var res api.WaitResult
 			res, err = c.Wait(ctx, api.WaitRequest{IDs: ids, TimeoutSeconds: left, Any: anyDone,
 				WakeOnBlocked: &wake, Reports: true}, cwd)
@@ -318,15 +332,29 @@ func (s *Server) waitReports(ctx context.Context, k *call, ids []string, seconds
 		if !retry || !time.Now().Before(deadline) {
 			return api.WaitResult{}, err
 		}
+		lost = err
 		s.o.Logger.Info("mcp: the daemon is gone or not answering during a wait; reconnecting", "err", err)
+		pause := time.NewTimer(min(s.o.RetryPause, time.Until(deadline)))
 		select {
 		case <-ctx.Done():
+			pause.Stop()
 			return api.WaitResult{}, ctx.Err()
-		case <-time.After(s.o.RetryPause):
+		case <-pause.C:
 		}
 		k.c = nil
-		left = max(int(math.Ceil(time.Until(deadline).Seconds())), 0)
 	}
+}
+
+// waitClient is the call's client for waitReports. While reconnecting, finding (or starting) the daemon again is
+// bounded by the wait's deadline.
+func (s *Server) waitClient(ctx context.Context, k *call, reconnecting bool, deadline time.Time) (*client.Client,
+	error) {
+	if !reconnecting {
+		return k.client(ctx)
+	}
+	dctx, cancel := context.WithDeadline(ctx, deadline)
+	defer cancel()
+	return k.client(dctx)
 }
 
 // reportResult is the result of a call that returns one task's report.

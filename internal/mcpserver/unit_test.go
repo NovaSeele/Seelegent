@@ -332,16 +332,25 @@ type failingDaemon struct{ err error }
 func (f failingDaemon) Ensure(context.Context) (*client.Client, error) { return nil, f.err }
 
 // flakyDaemon hands out the live daemon `skip` times (the server's own lookup at start), then a daemon that is gone,
-// then fails `busy` times (-1: forever) with downErr (default: a busy probe), then hands out the live daemon.
+// then fails `busy` times (-1: forever) with downErr (default: a busy probe), then hands out the live daemon. With
+// stall set, each lookup after the dead daemon first takes that long (a daemon that is starting), or until ctx ends.
 type flakyDaemon struct {
 	dead, live *client.Client
 	skip, busy int32
 	downErr    error
+	stall      time.Duration
 	calls      atomic.Int32
 }
 
-func (f *flakyDaemon) Ensure(context.Context) (*client.Client, error) {
+func (f *flakyDaemon) Ensure(ctx context.Context) (*client.Client, error) {
 	n := f.calls.Add(1) - f.skip
+	if n > 1 && f.stall > 0 {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(f.stall):
+		}
+	}
 	switch {
 	case n <= 0:
 		return f.live, nil
@@ -422,6 +431,47 @@ func TestWaitRetriesNotRunning(t *testing.T) {
 	if d := time.Since(start); !res.IsError || d < time.Second || d > 5*time.Second ||
 		!strings.Contains(string(data), "daemon_unavailable") {
 		t.Fatalf("daemon never back: %s %s after %v", text(res, 0), data, d)
+	}
+}
+
+// TestWaitKeepsDeadline: finding the daemon again after a restart counts against the wait's own time. A lookup that
+// outlasts the wait is cut at its deadline (daemon_unavailable, not a context error), and a daemon found late gets
+// only the rest of the time.
+func TestWaitKeepsDeadline(t *testing.T) {
+	st, live := newStub(t, map[string]http.HandlerFunc{"POST /wait": waitAnswer("done")})
+	deadSrv := httptest.NewServer(http.NotFoundHandler())
+	dead := client.New(deadSrv.URL, nil)
+	deadSrv.Close()
+	session := func(fd *flakyDaemon) *mcp.ClientSession {
+		cs := stubSession(t, live, func(o *mcpserver.Options) {
+			o.Daemon = fd
+			o.RetryPause = 10 * time.Millisecond
+		})
+		for fd.calls.Load() < fd.skip { // the server's own lookup at start
+			time.Sleep(5 * time.Millisecond)
+		}
+		return cs
+	}
+
+	// The daemon is back after 1.5 s of a 3 s wait: the wait asks the daemon for the remaining 2 s at most.
+	cs := session(&flakyDaemon{dead: dead, live: live, skip: 1, stall: 1500 * time.Millisecond})
+	start := time.Now()
+	var rep api.TaskReport
+	ok(t, cs, "wait", map[string]any{"task_ids": []string{"t1"}, "wait_seconds": 3}, &rep)
+	var req api.WaitRequest
+	st.body(t, "POST /wait", &req)
+	if d := time.Since(start); rep.Status != "done" || req.TimeoutSeconds > 2 || d > 3500*time.Millisecond {
+		t.Fatalf("late daemon: %+v, asked for %d s, after %v", rep, req.TimeoutSeconds, d)
+	}
+
+	// The lookup takes longer than the whole wait: the wait ends at its deadline.
+	cs = session(&flakyDaemon{dead: dead, live: live, skip: 1, stall: 10 * time.Second})
+	start = time.Now()
+	res := callTool(t, cs, "wait", map[string]any{"task_ids": []string{"t1"}, "wait_seconds": 1})
+	data, _ := json.Marshal(res.StructuredContent)
+	if d := time.Since(start); !res.IsError || d < time.Second || d > 1500*time.Millisecond ||
+		!strings.Contains(string(data), "daemon_unavailable") || strings.Contains(text(res, 0), "deadline exceeded") {
+		t.Fatalf("lookup past the deadline: %s %s after %v", text(res, 0), data, d)
 	}
 }
 
