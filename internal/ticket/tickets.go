@@ -190,7 +190,8 @@ func (s *Service) derive(ctx context.Context, id string, sum *api.TaskSummary) {
 		}
 		changed := false
 		if sum != nil && !slices.Contains(t.TaskIDs, sum.ID) {
-			t.TaskIDs = append(t.TaskIDs, sum.ID)
+			// New work changes the worktree: an earlier refusal no longer says what the next pr will find.
+			t.TaskIDs, t.Refusal = append(t.TaskIDs, sum.ID), nil
 			s.logStep(ctx, tx, t.ID, "task", map[string]any{"taskId": sum.ID})
 			changed = true
 		}
@@ -395,6 +396,42 @@ func (s *Service) AddTask(ctx context.Context, id string, req api.TicketTaskRequ
 	taskID, err := s.startTask(ctx, t, issue, req.Prompt, req.TicketTaskOptions,
 		clip(issueLabel(issue)+" "+oneLine(issue.Title, 120), 80))
 	if err != nil {
+		return api.TicketTaskResult{}, err
+	}
+	return api.TicketTaskResult{TicketID: id, TaskID: taskID}, nil
+}
+
+// Retry starts a task again in a failed ticket whose worktree is there: its first task or meeting could not start
+// (an unknown member, no usable account). The lead or the user may pick another member, backend or model; an empty
+// prompt works on the issue as written. The ticket is working again.
+func (s *Service) Retry(ctx context.Context, id string, req api.TicketTaskRequest) (api.TicketTaskResult, error) {
+	unlock, err := s.locks.lock(ctx, "ticket:"+id)
+	if err != nil {
+		return api.TicketTaskResult{}, err
+	}
+	defer unlock()
+	t, err := s.getTicket(ctx, id)
+	if err != nil {
+		return api.TicketTaskResult{}, err
+	}
+	if t.Status != api.TicketFailed {
+		return api.TicketTaskResult{}, badStatef("ticket %s is %s; retry needs failed", id, t.Status)
+	}
+	if !t.worktreeOK() {
+		return api.TicketTaskResult{}, badStatef("the ticket's worktree is missing; drop it and decide the issue again")
+	}
+	if _, err := s.updateTicket(ctx, id, func(tx *sql.Tx, t *ticketRec) error {
+		t.Status, t.Error = api.TicketWorking, ""
+		s.logStep(ctx, tx, id, "retry", map[string]any{"member": req.Member, "backend": req.Backend})
+		return nil
+	}); err != nil {
+		return api.TicketTaskResult{}, err
+	}
+	issue := s.issueOf(ctx, t)
+	taskID, err := s.startTask(ctx, t, issue, req.Prompt, req.TicketTaskOptions,
+		clip(issueLabel(issue)+" "+oneLine(issue.Title, 120), 80))
+	if err != nil {
+		s.failTicket(ctx, id, "task_failed", err)
 		return api.TicketTaskResult{}, err
 	}
 	return api.TicketTaskResult{TicketID: id, TaskID: taskID}, nil

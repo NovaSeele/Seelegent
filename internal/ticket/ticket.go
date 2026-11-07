@@ -270,22 +270,23 @@ type ticketRec struct {
 	BaseSha  string          `json:"baseSha,omitempty"`
 	// PushedSha is the commit Seelegent last pushed to the ticket branch (its own commit, never the worker's
 	// history) and PushedBase the base commit it built on.
-	PushedSha       string            `json:"pushedSha,omitempty"`
-	PushedBase      string            `json:"pushedBase,omitempty"`
-	Worktree        string            `json:"worktree"`
-	Status          string            `json:"status"`
-	TaskIDs         []string          `json:"taskIds"`
-	MeetingID       string            `json:"meetingId,omitempty"`
-	PR              *api.TicketPR     `json:"pr,omitempty"`
-	Checks          *api.TicketChecks `json:"checks,omitempty"`
-	ChecksFix       *api.ChecksFix    `json:"checksFix,omitempty"`
-	Env             *api.WorktreeEnv  `json:"env,omitempty"`
-	Error           string            `json:"error,omitempty"`
-	DropReason      string            `json:"dropReason,omitempty"`
-	WorktreeRemoved bool              `json:"worktreeRemoved,omitempty"`
-	CleanedAt       time.Time         `json:"cleanedAt,omitzero"`
-	CreatedAt       time.Time         `json:"createdAt"`
-	UpdatedAt       time.Time         `json:"updatedAt"`
+	PushedSha       string             `json:"pushedSha,omitempty"`
+	PushedBase      string             `json:"pushedBase,omitempty"`
+	Worktree        string             `json:"worktree"`
+	Status          string             `json:"status"`
+	TaskIDs         []string           `json:"taskIds"`
+	MeetingID       string             `json:"meetingId,omitempty"`
+	PR              *api.TicketPR      `json:"pr,omitempty"`
+	Checks          *api.TicketChecks  `json:"checks,omitempty"`
+	ChecksFix       *api.ChecksFix     `json:"checksFix,omitempty"`
+	Env             *api.WorktreeEnv   `json:"env,omitempty"`
+	Error           string             `json:"error,omitempty"`
+	Refusal         *api.TicketRefusal `json:"refusal,omitempty"`
+	DropReason      string             `json:"dropReason,omitempty"`
+	WorktreeRemoved bool               `json:"worktreeRemoved,omitempty"`
+	CleanedAt       time.Time          `json:"cleanedAt,omitzero"`
+	CreatedAt       time.Time          `json:"createdAt"`
+	UpdatedAt       time.Time          `json:"updatedAt"`
 }
 
 // derived are the statuses that follow the ticket's tasks.
@@ -298,9 +299,21 @@ func finished(st string) bool {
 	return st == api.TicketDone || st == api.TicketDropped || st == api.TicketFailed
 }
 
+// needsAttention is what the lead has to do next on a ticket whose pull request is in its hands: a refused push
+// first, then failed checks, then a pushed branch whose pull request is still to be opened by hand.
 func (t *ticketRec) needsAttention() string {
-	if t.Status == api.TicketPROpen && t.Checks != nil && t.Checks.State == api.ChecksFailure {
+	if t.Status != api.TicketReady && t.Status != api.TicketPROpen {
+		return ""
+	}
+	switch {
+	case t.Refusal != nil:
+		return api.TicketPushRefused
+	case t.Status != api.TicketPROpen:
+		return ""
+	case t.Checks != nil && t.Checks.State == api.ChecksFailure:
 		return api.TicketChecksFailed
+	case t.PR != nil && t.PR.Number == 0 && t.PR.ManualURL != "":
+		return api.TicketOpenPR
 	}
 	return ""
 }
@@ -310,6 +323,11 @@ func (t *ticketRec) summary() api.TicketSummary {
 		Worktree: t.Worktree, Status: t.Status, TaskIDs: api.NonNil(t.TaskIDs), MeetingID: t.MeetingID, PR: t.PR,
 		NeedsAttention: t.needsAttention(), Error: t.Error, CreatedAt: api.FormatTime(t.CreatedAt),
 		UpdatedAt: api.FormatTime(t.UpdatedAt)}
+	if t.Refusal != nil && (t.Status == api.TicketReady || t.Status == api.TicketPROpen) {
+		rf := *t.Refusal
+		rf.Findings = api.NonNil(rf.Findings)
+		sum.Refusal = &rf
+	}
 	if t.Checks != nil {
 		c := *t.Checks
 		c.Runs = api.NonNil(c.Runs)

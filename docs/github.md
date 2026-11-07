@@ -127,9 +127,17 @@ the repository has none). The worker's commits stay in the local worktree.
      stored GitHub token itself, an AWS access key (`AKIA…`), a private key block, a Slack token (`xox?-`), a Google
      API key (`AIza…`) or an Anthropic key (`sk-ant-`).
 
-   There is no override: nothing is committed or pushed; the user removes the file (or adds it to `.gitignore`)
-   and asks again. A scan that cannot run (a git error) refuses the request too (`409`, `details.reason:
-   "scan_failed"`): nothing is ever sent unscanned.
+   There is no override: nothing is committed or pushed; the user deletes the file or adds it to `.gitignore` (a
+   key or token inside a source file: takes it out of the file) and asks again. A scan that cannot run (a git
+   error, or the worktree changed while it was read) refuses the request too (`409`, `details.reason:
+   "scan_failed"`): nothing is ever sent unscanned. Each finding carries `kind` (`env`, `private_key`, `key_store`,
+   `credentials`, `device`, `secret`, `large`, `link`) and `detail` (the store's extension, what the secret is such
+   as `aws_key`, or the size in bytes) next to its English `reason`.
+
+   A refusal (`unsafe_files`, `scan_failed`, `base_not_pushed`, `branch_diverged`) is kept on the ticket as
+   `refusal {reason, findings, branch, commits, cause, detail, message, at}` and `needsAttention: "push_refused"`,
+   so the dashboard explains it in the reader's language with the next step for each file; `message` is the English
+   text the lead's tools show. The next pr clears it, and so does a new task in the ticket.
 3. **Commit** exactly the uncommitted files git does not ignore, when there are any, in the worktree.
 4. **Push** Seelegent's commit: `commit-tree` of the scanned tree (checked against the worktree's tree), then
    `push origin <sha>:refs/heads/<branch>` with no hooks (`core.hooksPath` set to the null device), no prompts
@@ -138,8 +146,9 @@ the repository has none). The worker's commits stay in the local worktree.
 5. **Open** a draft pull request (or adopt the one the branch already has). Its body is generated from the tasks'
    summaries with local paths removed (`file://` links, the worktree, the repository and the home folder in every
    spelling: either slash, the 8.3 short form such as `C:\Users\NOVASE~1`, and WSL's `/mnt/c/...`). In the manual tier the
-   answer carries a compare link (`pr.manualUrl`); the user opens the pull request and records its number with
-   `link-pr`.
+   answer carries a compare link (`pr.manualUrl`) and the ticket shows `needsAttention: "open_pr"` (the branch is
+   pushed, no pull request exists yet); the user opens the pull request and records its number with `link-pr`. No
+   tier opens a pull request on its own: a ready ticket waits for the lead or the user to ask.
 
 Each step is a row of the **outbox**, written as `running` before it starts and `done` or `failed` after (old bug
 D6: records are SQLite rows, and a row that cannot be read is an error, never an empty list). A row still `running`
@@ -157,6 +166,12 @@ marker first, and the comment is posted only when it is not there, so it never a
 While a pull request is open its head commit's check runs and commit statuses are read on every poll. The ticket
 shows `checks.state` (`pending`, `success`, `failure`, `unknown`) and `needsAttention: "checks_failed"` while the
 open pull request's checks failed (conclusions `failure`, `timed_out`, `startup_failure`, `error`).
+
+*Retry* (`POST /github/tickets/{id}/retry`, body as add-task with the prompt optional) starts the task of a
+`failed` ticket again, in its worktree, optionally with another member, backend or model: its first task or
+meeting could not start (an unknown member, no usable account). The ticket is `working` again; a retry that fails
+leaves it `failed` with the new error. A ticket whose worktree could not be made cannot be retried: drop it and
+decide the issue again.
 
 *Fix checks* (`POST /github/tickets/{id}/fix-checks`) starts a task in the ticket's worktree with the failing
 checks' names, their summaries and the tail of each GitHub Actions job log (at most 4,000 characters, ANSI codes

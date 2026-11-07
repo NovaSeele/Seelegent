@@ -26,6 +26,9 @@ import (
 
 const testToken = "ghp_FlowTestToken0123456789abcdefABCDEF"
 
+// unknownMember is a member the fake task engine refuses, as the real one refuses a member that does not exist.
+const unknownMember = "search-squad"
+
 // fakeTasks is a task engine whose runs the test ends.
 type fakeTasks struct {
 	mu     sync.Mutex
@@ -44,6 +47,9 @@ func (f *fakeTasks) Bus() *task.Bus { return f.bus }
 func (f *fakeTasks) DelegateWith(_ context.Context, req api.DelegateRequest, sp task.Spawn) (api.TaskSummary, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if req.Member == unknownMember {
+		return api.TaskSummary{}, fmt.Errorf("%w: not found: no member %q", task.ErrInvalid, req.Member)
+	}
 	f.n++
 	id := fmt.Sprintf("t%d", f.n)
 	member := req.Member

@@ -120,6 +120,14 @@ func (c *Client) TicketTask(ctx context.Context, id string, req api.TicketTaskRe
 	return v, err
 }
 
+// RetryTicket is POST /github/tickets/{id}/retry.
+func (c *Client) RetryTicket(ctx context.Context, id string, req api.TicketTaskRequest) (api.TicketTaskResult,
+	error) {
+	var v api.TicketTaskResult
+	_, err := c.Do(ctx, http.MethodPost, "/github/tickets/"+seg(id)+"/retry", req, &v)
+	return v, err
+}
+
 // TicketPR is POST /github/tickets/{id}/pr.
 func (c *Client) TicketPR(ctx context.Context, id string, req api.PRRequest) (api.Ticket, error) {
 	var v api.Ticket

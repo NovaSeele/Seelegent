@@ -22,8 +22,8 @@ import (
 // is committed or pushed, every blob that commit adds — each entry that differs from its parents, with its path
 // and its content as git stores it — is checked, and the pull request is refused when one of them is a secret, a
 // key, junk or too large. Nothing is committed or pushed then; the refusal names each file and why. There is no
-// override: the user removes the file (or adds it to .gitignore) and calls pr again. A scan that cannot run
-// refuses the pull request too.
+// override: the user removes the file, adds it to .gitignore or takes the secret out of it, and calls pr again. A scan
+// that cannot run refuses the pull request too. The refusal is kept on the ticket (api.TicketRefusal).
 
 // MaxFileBytes is the largest file a pull request may carry.
 const MaxFileBytes = 5 << 20
@@ -43,7 +43,8 @@ func (e *ScanError) Error() string {
 		parts = append(parts, f.Path+" ("+f.Reason+")")
 	}
 	return "refusing to commit or push files that look like secrets or junk: " + strings.Join(parts, "; ") +
-		". Remove them from the worktree (or add them to .gitignore) and call pr again"
+		". Delete them or add them to .gitignore (a key or token inside a file: take it out of the file), then " +
+		"call pr again"
 }
 
 // Is makes errors.Is(err, ErrConflict) true.
@@ -51,7 +52,25 @@ func (e *ScanError) Is(target error) bool { return target == ErrConflict }
 
 // APIDetails are the error details of the HTTP API.
 func (e *ScanError) APIDetails() map[string]any {
-	return map[string]any{"reason": "unsafe_files", "findings": e.Findings}
+	return map[string]any{"reason": api.RefusalUnsafeFiles, "findings": e.Findings}
+}
+
+// refusalOf is the refusal err records on a ticket (a scan finding or a PushError), or nil for any other error.
+func refusalOf(err error, msg, at string) *api.TicketRefusal {
+	var se *ScanError
+	if errors.As(err, &se) {
+		return &api.TicketRefusal{Reason: api.RefusalUnsafeFiles, Findings: se.Findings, Message: msg, At: at}
+	}
+	var pe *PushError
+	if !errors.As(err, &pe) || pe.Reason == api.RefusalHistoryUnsafe {
+		return nil
+	}
+	rf := &api.TicketRefusal{Reason: pe.Reason, Findings: api.NonNil(pe.Findings), Message: msg, At: at}
+	rf.Branch, _ = pe.Details["branch"].(string)
+	rf.Commits, _ = pe.Details["commits"].(int)
+	rf.Cause, _ = pe.Details["cause"].(string)
+	rf.Detail, _ = pe.Details["detail"].(string)
+	return rf
 }
 
 // Name rules.
@@ -64,50 +83,69 @@ var (
 	reserved    = regexp.MustCompile(`(?i)^(nul|con|prn|aux|com[1-9]|lpt[1-9])(\..*)?$`)
 )
 
-// Content rules: tokens and private keys.
+// Content rules: tokens and private keys. id is the finding's detail (api.ScanFinding).
 var secretPatterns = []struct {
-	re   *regexp.Regexp
-	what string
+	re       *regexp.Regexp
+	id, what string
 }{
-	{regexp.MustCompile(`github_pat_[A-Za-z0-9_]{20,}`), "a GitHub token (github_pat_)"},
-	{regexp.MustCompile(`\bgh[pousr]_[A-Za-z0-9]{30,}`), "a GitHub token (gh*_)"},
-	{regexp.MustCompile(`\bAKIA[0-9A-Z]{16}\b`), "an AWS access key (AKIA…)"},
-	{regexp.MustCompile(`-{5}BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-{5}`), "a private key"},
-	{regexp.MustCompile(`\bxox[abposr]-[A-Za-z0-9-]{10,}`), "a Slack token"},
-	{regexp.MustCompile(`\bAIza[0-9A-Za-z_-]{35}\b`), "a Google API key"},
-	{regexp.MustCompile(`\bsk-ant-[A-Za-z0-9_-]{20,}`), "an Anthropic API key"},
+	{regexp.MustCompile(`github_pat_[A-Za-z0-9_]{20,}`), "github_token", "a GitHub token (github_pat_)"},
+	{regexp.MustCompile(`\bgh[pousr]_[A-Za-z0-9]{30,}`), "github_token", "a GitHub token (gh*_)"},
+	{regexp.MustCompile(`\bAKIA[0-9A-Z]{16}\b`), "aws_key", "an AWS access key (AKIA…)"},
+	{regexp.MustCompile(`-{5}BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-{5}`), "private_key", "a private key"},
+	{regexp.MustCompile(`\bxox[abposr]-[A-Za-z0-9-]{10,}`), "slack_token", "a Slack token"},
+	{regexp.MustCompile(`\bAIza[0-9A-Za-z_-]{35}\b`), "google_key", "a Google API key"},
+	{regexp.MustCompile(`\bsk-ant-[A-Za-z0-9_-]{20,}`), "anthropic_key", "an Anthropic API key"},
+}
+
+// why is why a file is refused: its kind and detail (api.ScanFinding) and the English text for the lead. The zero
+// value means the file may go.
+type why struct {
+	kind, detail, text string
+}
+
+func (w why) at(p string) api.ScanFinding {
+	return api.ScanFinding{Path: p, Kind: w.kind, Detail: w.detail, Reason: w.text}
+}
+
+// nameCheck says why a path may not be committed by its name alone.
+func nameCheck(rel string) why {
+	base := path.Base(rel)
+	lower := strings.ToLower(base)
+	ext := strings.ToLower(path.Ext(lower))
+	switch {
+	case reserved.MatchString(base):
+		return why{"device", "", "reserved Windows device name (junk)"}
+	case lower == ".env" || strings.HasPrefix(lower, ".env.") && !envExamples[lower]:
+		return why{"env", "", "environment file (.env)"}
+	case keyNames[lower]:
+		return why{"private_key", "", "private key file"}
+	case keyExts[ext]:
+		return why{"key_store", ext, "key or certificate store (" + ext + ")"}
+	case credNames[lower]:
+		return why{"credentials", "", "credentials file"}
+	}
+	return why{}
 }
 
 // nameReason says why a path may not be committed by its name alone ("" when it may).
-func nameReason(rel string) string {
-	base := path.Base(rel)
-	lower := strings.ToLower(base)
-	switch {
-	case reserved.MatchString(base):
-		return "reserved Windows device name (junk)"
-	case lower == ".env" || strings.HasPrefix(lower, ".env.") && !envExamples[lower]:
-		return "environment file (.env)"
-	case keyNames[lower]:
-		return "private key file"
-	case keyExts[strings.ToLower(path.Ext(lower))]:
-		return "key or certificate store (" + strings.ToLower(path.Ext(lower)) + ")"
-	case credNames[lower]:
-		return "credentials file"
-	}
-	return ""
-}
+func nameReason(rel string) string { return nameCheck(rel).text }
 
-// scanBytes says what secret data holds ("" when none). hasToken finds the stored GitHub token (may be nil).
-func scanBytes(data []byte, hasToken func([]byte) bool) string {
+// contentCheck says what secret data holds. hasToken finds the stored GitHub token (may be nil).
+func contentCheck(data []byte, hasToken func([]byte) bool) why {
 	for _, p := range secretPatterns {
 		if p.re.Match(data) {
-			return "contains " + p.what
+			return why{"secret", p.id, "contains " + p.what}
 		}
 	}
 	if hasToken != nil && hasToken(data) {
-		return "contains the stored GitHub token"
+		return why{"secret", "stored_token", "contains the stored GitHub token"}
 	}
-	return ""
+	return why{}
+}
+
+// scanBytes says what secret data holds ("" when none).
+func scanBytes(data []byte, hasToken func([]byte) bool) string {
+	return contentCheck(data, hasToken).text
 }
 
 // uncommitted returns the uncommitted files of the worktree that git does not ignore: what the commit step stages.
@@ -161,8 +199,9 @@ func (e *PushError) APIDetails() map[string]any {
 
 // scanErr is a scan that could not run (a git failure, redacted).
 func (s *Service) scanErr(err error) error {
-	return &PushError{Reason: "scan_failed", Message: "could not scan the changes, so nothing was committed or " +
-		"pushed: " + s.redactErr(err, 400)}
+	reason := s.redactErr(err, 400)
+	return &PushError{Reason: api.RefusalScanFailed, Details: map[string]any{"cause": "git", "detail": reason},
+		Message: "could not scan the changes, so nothing was committed or pushed: " + reason}
 }
 
 // object is a blob the push would send: its path and its tree entry mode.
@@ -242,8 +281,8 @@ func (s *Service) scanObjects(ctx context.Context, dir string, objs []object) ([
 	findings := []api.ScanFinding{}
 	var check []object
 	for _, o := range objs {
-		if why := nameReason(o.path); why != "" {
-			findings = append(findings, api.ScanFinding{Path: o.path, Reason: why})
+		if w := nameCheck(o.path); w.kind != "" {
+			findings = append(findings, w.at(o.path))
 			continue
 		}
 		check = append(check, o)
@@ -281,8 +320,8 @@ func (s *Service) scanObjects(ctx context.Context, dir string, objs []object) ([
 			return nil, s.scanErr(err)
 		}
 		if n > MaxFileBytes && o.mode != modeLink {
-			findings = append(findings, api.ScanFinding{Path: o.path,
-				Reason: fmt.Sprintf("larger than %d MB (%d bytes)", MaxFileBytes>>20, n)})
+			findings = append(findings, why{"large", strconv.FormatInt(n, 10),
+				fmt.Sprintf("larger than %d MB (%d bytes)", MaxFileBytes>>20, n)}.at(o.path))
 			continue
 		}
 		size[o.sha] = n
@@ -336,12 +375,12 @@ func (s *Service) scanBatch(ctx context.Context, dir string, objs []object) ([]a
 			if path.IsAbs(target) || filepath.IsAbs(target) || strings.HasPrefix(
 				path.Clean(path.Join(path.Dir(o.path), filepath.ToSlash(target))), "../") ||
 				path.Clean(path.Join(path.Dir(o.path), filepath.ToSlash(target))) == ".." {
-				findings = append(findings, api.ScanFinding{Path: o.path, Reason: "link to a place outside the worktree"})
+				findings = append(findings, why{"link", "", "link to a place outside the worktree"}.at(o.path))
 			}
 			continue
 		}
-		if why := scanBytes(data, s.o.GitHub.HasToken); why != "" {
-			findings = append(findings, api.ScanFinding{Path: o.path, Reason: why})
+		if w := contentCheck(data, s.o.GitHub.HasToken); w.kind != "" {
+			findings = append(findings, w.at(o.path))
 		}
 	}
 	return findings, nil

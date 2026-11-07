@@ -412,6 +412,27 @@ func issueTicketCommands(d deps) []*cobra.Command {
 		})
 	f.add(addTask.Flags())
 	addTask.Flags().IntVar(&addWait, "wait", 0, "seconds to wait for the report (default 0)")
+	var rf workFlags
+	var retryWait int
+	retry := leaf(d, "retry <ticket> [flags] [prompt|@file]", "Start the task of a failed ticket again", "issues",
+		"retry", minArgs("seelegent issues retry <ticket> [flags] [prompt|@file]"),
+		func(cmd *cobra.Command, c *client.Client, args []string) error {
+			opt, err := rf.options(cmd.Flags())
+			if err != nil {
+				return err
+			}
+			brief, err := fileArg(strings.Join(args[1:], " "), "")
+			if err != nil {
+				return err
+			}
+			res, err := c.RetryTicket(cmd.Context(), args[0], api.TicketTaskRequest{Prompt: brief, TicketTaskOptions: opt})
+			if err != nil {
+				return err
+			}
+			return waitTicketTask(cmd, d, res.TaskID, retryWait, res, "Task "+res.TaskID+" started.")
+		})
+	rf.add(retry.Flags())
+	retry.Flags().IntVar(&retryWait, "wait", 0, "seconds to wait for the report (default 0)")
 	var prTitle, prBody, commitMsg string
 	var ready bool
 	pr := ticketLeaf(d, "pr", "Commit, push and open a draft pull request", "pr",
@@ -463,7 +484,7 @@ func issueTicketCommands(d deps) []*cobra.Command {
 		"cleanup", func(cmd *cobra.Command, c *client.Client, id string, _ []string) (api.Ticket, error) {
 			return c.CleanupTicket(cmd.Context(), id)
 		})
-	return []*cobra.Command{tickets, show, addTask, pr, link, comment, drop, cleanup, newFixChecksCommand(d)}
+	return []*cobra.Command{tickets, show, addTask, retry, pr, link, comment, drop, cleanup, newFixChecksCommand(d)}
 }
 
 // ticketLeaf is a ticket action that takes the ticket id and prints the ticket.

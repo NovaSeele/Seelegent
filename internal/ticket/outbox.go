@@ -161,7 +161,7 @@ func recoverRunning(ctx context.Context, tx *sql.Tx) (tickets, repos []string, e
 }
 
 // runStep runs one outward action of a ticket write-ahead: the entry is saved running first, then done with the
-// action's result or failed with its (redacted) error, which also becomes the ticket's error.
+// action's result or failed with its (redacted) error, which also becomes the ticket's error (or its refusal).
 func (s *Service) runStep(ctx context.Context, ticketID, kind string, args map[string]any,
 	fn func() (map[string]any, error)) error {
 	return s.runStepWith(ctx, ticketID, kind, args, func(stepEntry) (map[string]any, error) { return fn() })
@@ -210,7 +210,11 @@ func (s *Service) runStepWith(ctx context.Context, ticketID, kind string, args m
 		e.DoneAt = api.FormatTime(s.o.Now())
 		if runErr != nil {
 			e.Status, e.Error, e.DoneAt = api.OutboxFailed, s.redactErr(runErr, 600), ""
-			t.Error = e.Error
+			if rf := refusalOf(runErr, e.Error, e.At); rf != nil {
+				t.Refusal = rf // the remote's state refused it (branch_diverged): explained, not an error
+			} else {
+				t.Error = e.Error
+			}
 		} else {
 			e.Status, e.Result = api.OutboxDone, result
 		}

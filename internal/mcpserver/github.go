@@ -95,6 +95,8 @@ type slimTicket struct {
 	PR             *api.TicketPR   `json:"pr,omitempty"`
 	UpdatedAt      string          `json:"updatedAt"`
 	Error          string          `json:"error,omitempty"`
+	// Refused is why the last pr stopped before pushing (needsAttention push_refused).
+	Refused        string          `json:"refused,omitempty"`
 	Checks         *slimChecks     `json:"checks,omitempty"`
 	NeedsAttention string          `json:"needsAttention,omitempty"`
 }
@@ -115,6 +117,9 @@ func slimTicketOf(t *api.TicketSummary) *slimTicket {
 	out := &slimTicket{ID: t.ID, RepoID: t.RepoID, IssueKey: t.IssueKey, Issue: t.Issue, Branch: t.Branch,
 		Worktree: t.Worktree, Status: t.Status, TaskIDs: api.NonNil(t.TaskIDs), MeetingID: t.MeetingID, PR: t.PR,
 		UpdatedAt: t.UpdatedAt, Error: t.Error, NeedsAttention: t.NeedsAttention}
+	if t.Refusal != nil {
+		out.Refused = t.Refusal.Message
+	}
 	if c := t.Checks; c != nil {
 		sc := &slimChecks{State: c.State, HeadSha: strOrNil(c.HeadSha), Failing: []string{}}
 		for ix := range c.Runs {
@@ -167,7 +172,8 @@ func issueKey(raw json.RawMessage) string {
 
 // issueActions are the actions of issues.
 var issueActions = []string{"repos", "connect", "init", "create_remote", "sync", "list", "add", "suggest", "triage",
-	"tickets", "ticket", "add_task", "pr", "link_pr", "comment", "drop", "cleanup", "repo_settings", "fix_checks"}
+	"tickets", "ticket", "add_task", "retry", "pr", "link_pr", "comment", "drop", "cleanup", "repo_settings",
+	"fix_checks"}
 
 func (s *Server) issues(ctx context.Context, k *call) (result, error) {
 	var a issuesArgs
@@ -482,14 +488,17 @@ func (s *Server) issueTickets(ctx context.Context, k *call, c *client.Client, a 
 			return result{}, err
 		}
 		return result{value: t, summary: ticketSummary(&t)}, nil
-	case "add_task", "fix_checks":
+	case "add_task", "retry", "fix_checks":
 		var res api.TicketTaskResult
-		if a.Action == "add_task" {
+		switch a.Action {
+		case "add_task":
 			if strings.TrimSpace(a.Prompt) == "" {
 				return result{}, errors.New("prompt is required for add_task")
 			}
 			res, err = c.TicketTask(ctx, id, api.TicketTaskRequest{Prompt: a.Prompt, TicketTaskOptions: a.taskOptions()})
-		} else {
+		case "retry":
+			res, err = c.RetryTicket(ctx, id, api.TicketTaskRequest{Prompt: a.Prompt, TicketTaskOptions: a.taskOptions()})
+		default:
 			res, err = c.FixChecks(ctx, id, api.FixChecksRequest{Member: a.Member, Extra: a.Extra, Backend: a.Backend,
 				Model: a.Model})
 		}

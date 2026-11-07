@@ -31,15 +31,32 @@ func (s *Service) dirty(ctx context.Context, wt string) (bool, error) {
 	return out != "", err
 }
 
-// refused records why a pull request was refused before anything was committed or pushed, and returns err.
+// refused records why a pull request was refused before anything was committed or pushed, and returns err. A
+// refusal (unsafe files, a scan that could not run, the remote's state) is kept structured for the dashboard; any
+// other failure is the ticket's error.
 func (s *Service) refused(ctx context.Context, id string, err error) error {
 	msg := s.redactErr(err, 600)
 	_, _ = s.updateTicket(context.WithoutCancel(ctx), id, func(tx *sql.Tx, t *ticketRec) error {
-		t.Error = msg
-		s.logStep(ctx, tx, id, "pr_refused", map[string]any{"error": msg})
+		s.setRefusal(ctx, tx, t, err, msg)
 		return nil
 	})
 	return err
+}
+
+// setRefusal records err on t: as its refusal when it is one, else as its error.
+func (s *Service) setRefusal(ctx context.Context, tx *sql.Tx, t *ticketRec, err error, msg string) {
+	rf := refusalOf(err, msg, api.FormatTime(s.o.Now()))
+	if rf == nil {
+		t.Error = msg
+		s.logStep(ctx, tx, t.ID, "pr_refused", map[string]any{"error": msg})
+		return
+	}
+	t.Refusal, t.Error = rf, ""
+	data := map[string]any{"reason": rf.Reason}
+	if len(rf.Findings) > 0 {
+		data["findings"] = len(rf.Findings)
+	}
+	s.logStep(ctx, tx, t.ID, "pr_refused", data)
 }
 
 // client returns the GitHub client of a ticket's repository, or nil when it is not on GitHub.
@@ -220,10 +237,10 @@ func (s *Service) PR(ctx context.Context, id string, req api.PRRequest) (api.Tic
 	}
 	issue := s.issueOf(ctx, t)
 	if _, err := s.updateTicket(ctx, id, func(_ *sql.Tx, t *ticketRec) error {
-		if t.Error == "" {
+		if t.Error == "" && t.Refusal == nil {
 			return errUnchanged
 		}
-		t.Error = ""
+		t.Error, t.Refusal = "", nil
 		return nil
 	}); err != nil {
 		return api.Ticket{}, err
@@ -281,7 +298,8 @@ func (s *Service) PR(ctx context.Context, id string, req api.PRRequest) (api.Tic
 			sort.Slice(findings, func(i, j int) bool { return findings[i].Path < findings[j].Path })
 			serr := &ScanError{Findings: findings}
 			_, _ = s.updateTicket(ctx, id, func(tx *sql.Tx, t *ticketRec) error {
-				t.Error = clip(serr.Error(), 600)
+				t.Refusal = refusalOf(serr, clip(serr.Error(), 600), api.FormatTime(s.o.Now()))
+				t.Error = ""
 				s.logStep(ctx, tx, id, "scan_refused", map[string]any{"findings": findings})
 				return nil
 			})
@@ -326,7 +344,8 @@ func (s *Service) PR(ctx context.Context, id string, req api.PRRequest) (api.Tic
 	}
 	if plan != nil {
 		if headTree, err := s.treeOf(ctx, t.Worktree, "HEAD"); err != nil || headTree != plan.tree {
-			return api.Ticket{}, s.refused(ctx, id, &PushError{Reason: "scan_failed",
+			return api.Ticket{}, s.refused(ctx, id, &PushError{Reason: api.RefusalScanFailed,
+				Details: map[string]any{"cause": "changed"},
 				Message: "the worktree changed while Seelegent scanned it; nothing was pushed, call pr again"})
 		}
 		title := oneLine(req.Title, 250)

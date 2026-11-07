@@ -32,6 +32,7 @@ type Tickets interface {
 	Tickets(ctx context.Context, repoID string, statuses []string) ([]api.TicketSummary, error)
 	Ticket(ctx context.Context, id string) (api.Ticket, error)
 	AddTask(ctx context.Context, id string, req api.TicketTaskRequest) (api.TicketTaskResult, error)
+	Retry(ctx context.Context, id string, req api.TicketTaskRequest) (api.TicketTaskResult, error)
 	PR(ctx context.Context, id string, req api.PRRequest) (api.Ticket, error)
 	LinkPR(ctx context.Context, id string, req api.LinkPRRequest) (api.Ticket, error)
 	Comment(ctx context.Context, id string, req api.CommentRequest) (api.Ticket, error)
@@ -231,6 +232,14 @@ func (s *Server) ticketRoutes(t Tickets) {
 			return 0, nil, err
 		}
 		res, err := t.AddTask(r.Context(), r.PathValue("id"), req)
+		return http.StatusCreated, res, err
+	})
+	s.handle("POST /github/tickets/{id}/retry", func(w http.ResponseWriter, r *http.Request) (int, any, error) {
+		var req api.TicketTaskRequest
+		if err := decode(w, r, &req); err != nil {
+			return 0, nil, err
+		}
+		res, err := t.Retry(r.Context(), r.PathValue("id"), req)
 		return http.StatusCreated, res, err
 	})
 	s.handle("POST /github/tickets/{id}/pr", func(w http.ResponseWriter, r *http.Request) (int, any, error) {

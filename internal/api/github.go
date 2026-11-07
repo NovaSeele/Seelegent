@@ -292,11 +292,43 @@ type ChecksFix struct {
 	At      string   `json:"at"`
 }
 
-// Needs-attention reasons of a ticket.
+// Needs-attention reasons of a ticket: the lead (or the user) has to act.
 const (
 	// TicketChecksFailed: the open pull request's checks failed (fix_checks starts a task for them).
 	TicketChecksFailed = "checks_failed"
+	// TicketPushRefused: the last pr was refused before anything was pushed (Refusal says why).
+	TicketPushRefused = "push_refused"
+	// TicketOpenPR: the branch is pushed but no pull request exists yet (manual tier): open it with pr.manualUrl, then
+	// link_pr.
+	TicketOpenPR = "open_pr"
 )
+
+// Push refusal reasons (TicketRefusal.Reason and the details.reason of a 409 of pr or remote).
+const (
+	RefusalUnsafeFiles    = "unsafe_files"
+	RefusalScanFailed     = "scan_failed"
+	RefusalBaseNotPushed  = "base_not_pushed"
+	RefusalBranchDiverged = "branch_diverged"
+	RefusalHistoryUnsafe  = "history_unsafe"
+)
+
+// TicketRefusal is why the last pr of a ticket stopped before its branch was pushed, kept on the ticket so the
+// dashboard explains it in the reader's language. Message is the daemon's English text for the lead (MCP, CLI); the
+// dashboard never shows it.
+type TicketRefusal struct {
+	Reason   string        `json:"reason" ts:"'unsafe_files' | 'scan_failed' | 'base_not_pushed' | 'branch_diverged'"`
+	Findings []ScanFinding `json:"findings"`
+	// Branch is the ticket branch (branch_diverged) or the base branch (base_not_pushed).
+	Branch string `json:"branch,omitempty"`
+	// Commits is how many commits of the base the remote lacks (base_not_pushed; 0: the base branch is missing).
+	Commits int `json:"commits,omitempty"`
+	// Cause of a scan that could not run (scan_failed): "changed" (the worktree changed while it was read) or "git"
+	// (git failed; Detail is git's redacted reason).
+	Cause   string `json:"cause,omitempty" ts:"'changed' | 'git'"`
+	Detail  string `json:"detail,omitempty"`
+	Message string `json:"message"`
+	At      string `json:"at"`
+}
 
 // TicketSummary is a ticket as lists and the SSE stream show it.
 type TicketSummary struct {
@@ -312,11 +344,16 @@ type TicketSummary struct {
 	MeetingID string        `json:"meetingId,omitempty"`
 	PR        *TicketPR     `json:"pr"`
 	Checks    *TicketChecks `json:"checks"`
-	// NeedsAttention is checks_failed while the open pull request's checks failed.
-	NeedsAttention string `json:"needsAttention,omitempty" ts:"'checks_failed'"`
-	Error          string `json:"error,omitempty"`
-	CreatedAt      string `json:"createdAt"`
-	UpdatedAt      string `json:"updatedAt"`
+	// NeedsAttention says what the lead has to do next: checks_failed while the open pull request's checks failed,
+	// push_refused while Refusal stands (ready or pr_open), open_pr while a pushed branch waits for its pull request
+	// to be opened by hand.
+	NeedsAttention string `json:"needsAttention,omitempty" ts:"'checks_failed' | 'push_refused' | 'open_pr'"`
+	// Refusal is why the last pr stopped before pushing (cleared by the next pr or a new task).
+	Refusal *TicketRefusal `json:"refusal,omitempty"`
+	// Error is a failure (a task or meeting that could not start, a GitHub or git call that failed).
+	Error     string `json:"error,omitempty"`
+	CreatedAt string `json:"createdAt"`
+	UpdatedAt string `json:"updatedAt"`
 }
 
 // TicketTask is a task of a ticket as its detail shows it.
@@ -417,9 +454,17 @@ type FixChecksRequest struct {
 	Model   string `json:"model,omitempty"`
 }
 
-// ScanFinding is a file the pull request scan refused (secret, key, junk or too large), with why.
+// ScanFinding is a file the pull request scan refused (secret, key, junk or too large), with why: Kind and Detail
+// for the dashboard, Reason in English for the lead.
 type ScanFinding struct {
-	Path   string `json:"path"`
+	Path string `json:"path"`
+	// Kind is env (.env file), private_key (id_rsa ...), key_store (.pem, .p12 ...), credentials (.netrc ...), device
+	// (a Windows device name such as nul), secret (the content holds a key or token), large (over 5 MB) or link (a
+	// link to a place outside the worktree).
+	Kind string `json:"kind" ts:"'env' | 'private_key' | 'key_store' | 'credentials' | 'device' | 'secret' | 'large' | 'link'"`
+	// Detail is the extension of a key store, what a secret is (github_token, aws_key, private_key, slack_token,
+	// google_key, anthropic_key, stored_token) or the size in bytes of a large file.
+	Detail string `json:"detail,omitempty"`
 	Reason string `json:"reason"`
 }
 

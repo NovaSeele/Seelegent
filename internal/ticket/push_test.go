@@ -137,6 +137,30 @@ func TestPushScanRefusesCommittedSecret(t *testing.T) {
 	if e.gh.originSha(tk.Branch) != "" {
 		t.Fatal("pushed after a refused scan")
 	}
+	// The refusal stays on the ticket, structured: each file's kind for the dashboard, never the English text as
+	// the ticket's error.
+	got, _ := e.s.Ticket(t.Context(), tk.ID)
+	rf := got.Refusal
+	if rf == nil || rf.Reason != api.RefusalUnsafeFiles || len(rf.Findings) != 2 || got.Error != "" ||
+		got.NeedsAttention != api.TicketPushRefused || rf.Message == "" {
+		t.Fatalf("refusal = %+v, error %q, attention %q", rf, got.Error, got.NeedsAttention)
+	}
+	kinds := map[string]string{}
+	for _, f := range rf.Findings {
+		kinds[f.Path] = f.Kind + "/" + f.Detail
+	}
+	if kinds["deploy.key"] != "key_store/.key" || kinds["src/cfg.go"] != "secret/github_token" {
+		t.Fatalf("findings = %v", kinds)
+	}
+	// Taking the key out and deleting the key file: the next pr goes and clears the refusal.
+	if err := os.Remove(filepath.Join(tk.Worktree, "deploy.key")); err != nil {
+		t.Fatal(err)
+	}
+	write(t, filepath.Join(tk.Worktree, "src", "cfg.go"), "package src\n\nconst k = \"\"\n")
+	if got, err = e.s.PR(t.Context(), tk.ID, api.PRRequest{}); err != nil || got.Refusal != nil ||
+		got.NeedsAttention != "" {
+		t.Fatalf("pr after the fix = %v, refusal %+v, attention %q", err, got.Refusal, got.NeedsAttention)
+	}
 }
 
 // brokenCatFile is git with a cat-file that fails: the scan cannot read what it must check.
@@ -166,6 +190,10 @@ func TestPushRefusedWhenScanFails(t *testing.T) {
 	}
 	if e.gh.originSha(tk.Branch) != "" || run(t, tk.Worktree, "status", "--porcelain") == "" {
 		t.Fatal("committed or pushed without a scan")
+	}
+	if got, _ := e.s.Ticket(t.Context(), tk.ID); got.Refusal == nil || got.Refusal.Reason != api.RefusalScanFailed ||
+		got.Refusal.Cause != "git" || !strings.Contains(got.Refusal.Detail, "unable to read") {
+		t.Fatalf("scan refusal = %+v", got.Refusal)
 	}
 }
 
@@ -201,6 +229,10 @@ func TestPushRemoteRules(t *testing.T) {
 	if last.Kind != api.OutboxPush || last.Status != api.OutboxFailed {
 		t.Fatalf("last outbox entry = %+v", last)
 	}
+	if rf := got.Refusal; rf == nil || rf.Reason != api.RefusalBranchDiverged || rf.Branch != tk.Branch ||
+		got.Error != "" || got.NeedsAttention != api.TicketPushRefused {
+		t.Fatalf("diverged refusal = %+v, error %q", rf, got.Error)
+	}
 
 	// A base the remote does not have: the user's main has a commit that was never pushed.
 	write(t, filepath.Join(e.repo, "local.txt"), "not pushed\n")
@@ -216,6 +248,10 @@ func TestPushRemoteRules(t *testing.T) {
 	}
 	if e.gh.originSha(tk2.Branch) != "" {
 		t.Fatal("pushed on an unpushed base")
+	}
+	if got, _ := e.s.Ticket(ctx, tk2.ID); got.Refusal == nil || got.Refusal.Reason != api.RefusalBaseNotPushed ||
+		got.Refusal.Commits != 1 || got.Refusal.Branch != "main" {
+		t.Fatalf("base refusal = %+v", got.Refusal)
 	}
 	// Once main is pushed, the pull request goes.
 	run(t, e.repo, "push", "-q", e.origin, "main")

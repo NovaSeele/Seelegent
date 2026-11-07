@@ -792,6 +792,7 @@
             "tickets",
             "ticket",
             "add_task",
+            "retry",
             "pr",
             "link_pr",
             "comment",
@@ -800,7 +801,7 @@
             "repo_settings",
             "fix_checks"
           ],
-          "description": "repos: connected repos + access tier; connect/init: by path; create_remote: create the GitHub repo (gh/token tier only); sync: refresh the inbox; list: inbox; add: local issue; suggest: record your suggestion (no side effects); triage: decide (creates the ticket); tickets/ticket: read; add_task: another task in a ticket's worktree; pr: commit + push + draft PR; link_pr: record a PR opened by hand; comment: comment on the issue; drop: end a ticket without a PR; cleanup: remove a done/dropped ticket's clean worktree (branch kept); repo_settings: set shared_dirs (gitignored folders such as node_modules linked into new ticket worktrees; gitignored files listed in the repo's .worktreeinclude are copied); fix_checks: when an open PR's CI checks failed (ticket needsAttention checks_failed), start a task in the ticket worktree with the failing checks and their log tails, then review it and call pr again."
+          "description": "repos: connected repos + access tier; connect/init: by path; create_remote: create the GitHub repo (gh/token tier only); sync: refresh the inbox; list: inbox; add: local issue; suggest: record your suggestion (no side effects); triage: decide (creates the ticket); tickets/ticket: read; add_task: another task in a ticket's worktree; retry: start the task again in a failed ticket (status failed, e.g. an unknown member), optionally with another member/backend/model and prompt; pr: commit + push + draft PR; link_pr: record a PR opened by hand; comment: comment on the issue; drop: end a ticket without a PR; cleanup: remove a done/dropped ticket's clean worktree (branch kept); repo_settings: set shared_dirs (gitignored folders such as node_modules linked into new ticket worktrees; gitignored files listed in the repo's .worktreeinclude are copied); fix_checks: when an open PR's CI checks failed (ticket needsAttention checks_failed), start a task in the ticket worktree with the failing checks and their log tails, then review it and call pr again."
         },
         "repo": {
           "type": "string",
@@ -858,7 +859,7 @@
         },
         "member": {
           "type": "string",
-          "description": "suggest/triage/add_task: member id for assign (see members)."
+          "description": "suggest/triage/add_task/retry: member id for assign (see members)."
         },
         "backend": {
           "type": "string",
@@ -867,7 +868,7 @@
             "codex",
             "claude"
           ],
-          "description": "triage/add_task: worker backend."
+          "description": "triage/add_task/retry: worker backend."
         },
         "model": {
           "type": "string",
@@ -875,7 +876,7 @@
         },
         "prompt": {
           "type": "string",
-          "description": "triage assign / add_task: your brief. Seelegent appends the issue as fenced untrusted text and the worktree rules."
+          "description": "triage assign / add_task / retry: your brief (retry: optional). Seelegent appends the issue as fenced untrusted text and the worktree rules."
         },
         "gate": {
           "oneOf": [
@@ -964,7 +965,7 @@
         },
         "ticket_id": {
           "type": "string",
-          "description": "Ticket id (ticket, add_task, pr, link_pr, comment, drop, cleanup)."
+          "description": "Ticket id (ticket, add_task, retry, pr, link_pr, comment, drop, cleanup, fix_checks)."
         },
         "status": {
           "type": "string",
