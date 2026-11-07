@@ -77,11 +77,13 @@
     "state": {
       "starting": "Đang bắt đầu đăng nhập…",
       "open_url": "Hoàn tất đăng nhập trong trình duyệt",
+      "in_terminal": "Hoàn tất đăng nhập trong cửa sổ terminal vừa mở",
       "waiting_code": "Dán mã từ trang đăng nhập",
       "done": "Đã đăng nhập",
       "failed": "Đăng nhập thất bại"
     },
     "openHint": "Mở trang đăng nhập, đăng nhập bằng tài khoản bạn muốn dùng ở đây rồi quay lại. Trang này tự cập nhật.",
+    "terminalHint": "Đăng nhập ở đó bằng tài khoản bạn muốn dùng ở đây. Trang này tự cập nhật khi cửa sổ kết thúc.",
     "codeHint": "Sau khi đăng nhập, trang sẽ hiện một mã. Dán mã đó vào đây.",
     "deviceCode": "Nhập mã này trên trang:",
     "open": "Mở trang đăng nhập",

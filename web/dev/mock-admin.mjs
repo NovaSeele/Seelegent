@@ -5,8 +5,9 @@
  * 501 not_implemented, as the daemon does until its hook runner lands) and roles. Imported by mock-daemon.mjs,
  * which owns the shared data (accounts, settings, projects) and the HTTP plumbing.
  *
- * Sign-in simulation: agy opens a link and finishes by itself after 6 s; claude opens a link and then waits for a
- * code (the code "fail" fails the sign-in); codex shows a device code and finishes after 8 s.
+ * Sign-in simulation, as the daemon does it (internal/signin): starting, then in_terminal once the sign-in window
+ * is "open" (with the daemon's message), then done after 6 s (codex: 8 s). No backend reaches open_url or
+ * waiting_code, so POST /accounts/{id}/login/code answers 409 bad_state like the daemon.
  */
 
 const MIN = 60_000
@@ -131,7 +132,6 @@ export function createAdminRoutes(ctx) {
 
   function startLogin(account) {
     if (account.kind === 'api-key') throw invalid('API-key accounts do not sign in; set a key')
-    const id = `${account.id}-${Date.now().toString(36)}`
     account.signingIn = true
     changed(account)
     setLogin(account, { accountId: account.id, state: 'starting' })
@@ -140,24 +140,14 @@ export function createAdminRoutes(ctx) {
         const current = logins.get(account.id)
         if (current && current.state !== 'done' && current.state !== 'failed') fn()
       }, ms)
-    const url = `https://accounts.example.test/oauth/authorize?session=${id}`
-    if (account.backend === 'codex') {
-      later(700, () =>
-        setLogin(account, {
-          accountId: account.id,
-          state: 'open_url',
-          url: 'https://auth.example.test/device',
-          userCode: 'WXYZ-4821',
-        }),
-      )
-      later(8000, () => finishLogin(account, true))
-    } else if (account.backend === 'claude') {
-      later(700, () => setLogin(account, { accountId: account.id, state: 'open_url', url }))
-      later(2500, () => setLogin(account, { accountId: account.id, state: 'waiting_code', url }))
-    } else {
-      later(700, () => setLogin(account, { accountId: account.id, state: 'open_url', url }))
-      later(6000, () => finishLogin(account, true))
-    }
+    later(700, () =>
+      setLogin(account, {
+        accountId: account.id,
+        state: 'in_terminal',
+        message: 'Finish signing in in the terminal window that opened.',
+      }),
+    )
+    later(account.backend === 'codex' ? 8000 : 6000, () => finishLogin(account, true))
     return logins.get(account.id)
   }
 

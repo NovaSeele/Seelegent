@@ -14,8 +14,10 @@ import { useActions } from './accountView'
 
 /**
  * A running sign-in, driven by account.login frames: starting → open_url (open or copy the link; a device code
- * when the backend shows one) → waiting_code (paste the code the page shows) → done or failed. The typed code is
- * kept while the panel is on screen, so a frame that re-renders the card does not wipe it.
+ * when the backend shows one) → waiting_code (paste the code the page shows) → done or failed. in_terminal means
+ * the sign-in goes on in the terminal window the daemon opened: there is nothing to post, so no code box (only
+ * waiting_code shows one). The typed code is kept while the panel is on screen, so a frame that re-renders the
+ * card does not wipe it.
  */
 const props = defineProps<{ account: Account; session: LoginSession }>()
 
@@ -114,7 +116,14 @@ async function submit() {
       </form>
     </template>
 
-    <p v-if="session.message" class="login__text">{{ session.message }}</p>
+    <p v-else-if="session.state === 'in_terminal'" class="login__text">
+      {{ t('accounts.login.terminalHint') }}
+    </p>
+
+    <!-- In the terminal the daemon's message repeats the title in English; the title and hint say it already. -->
+    <p v-if="session.message && session.state !== 'in_terminal'" class="login__text">
+      {{ session.message }}
+    </p>
 
     <div v-if="finished" class="login__row">
       <Button

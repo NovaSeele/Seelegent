@@ -7,9 +7,24 @@ import { makeAccount } from '@/test/fixtures'
 
 import LoginPanel from './LoginPanel.vue'
 
-async function render(url: string) {
+type LoginState = LoginSession['state']
+
+/**
+ * Every state of the generated LoginState union. `satisfies` makes this exhaustive: a state the daemon adds to
+ * the union fails the typecheck until it is listed here, and then the test below fails until it has a label.
+ */
+const STATES = Object.keys({
+  starting: true,
+  open_url: true,
+  in_terminal: true,
+  waiting_code: true,
+  done: true,
+  failed: true,
+} satisfies Record<LoginState, true>) as LoginState[]
+
+async function render(url: string, state: LoginState = 'open_url', message?: string) {
   const { plugins } = await setupApp()
-  const session: LoginSession = { accountId: 'a1', state: 'open_url', url }
+  const session: LoginSession = { accountId: 'a1', state, url, ...(message ? { message } : {}) }
   return mount(LoginPanel, { props: { account: makeAccount(), session }, global: { plugins } })
 }
 
@@ -37,4 +52,28 @@ describe('LoginPanel', () => {
       expect(labels).not.toContain('Copy link')
     },
   )
+
+  // Review N1: in_terminal had no label, so the panel showed the raw key accounts.login.state.in_terminal.
+  it.each(STATES)(
+    'labels the %s state and shows a code box only for waiting_code',
+    async (state) => {
+      const wrapper = await render('https://accounts.example.test/sign-in', state)
+      expect(wrapper.text()).not.toContain('accounts.login.')
+      expect(wrapper.find('h4').text()).not.toBe('')
+      expect(wrapper.find('input').exists()).toBe(state === 'waiting_code')
+    },
+  )
+
+  it('says to finish in the terminal, without a code box or the English daemon message', async () => {
+    const wrapper = await render(
+      '',
+      'in_terminal',
+      'Finish signing in in the terminal window that opened.',
+    )
+    expect(wrapper.find('h4').text()).toBe('Finish signing in in the terminal window that opened')
+    expect(wrapper.text()).toContain('This updates by itself when the window is done.')
+    expect(wrapper.text()).not.toContain('that opened.')
+    expect(wrapper.find('input').exists()).toBe(false)
+    expect(wrapper.find('form').exists()).toBe(false)
+  })
 })

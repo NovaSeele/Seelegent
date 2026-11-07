@@ -77,11 +77,13 @@
     "state": {
       "starting": "Empezando el inicio de sesión…",
       "open_url": "Termina de iniciar sesión en el navegador",
+      "in_terminal": "Termina de iniciar sesión en la ventana de terminal que se abrió",
       "waiting_code": "Pega el código de la página de inicio de sesión",
       "done": "Sesión iniciada",
       "failed": "El inicio de sesión falló"
     },
     "openHint": "Abre la página de inicio de sesión, entra con la cuenta que quieres usar aquí y vuelve. Esto se actualiza solo.",
+    "terminalHint": "Inicia sesión allí con la cuenta que quieres usar aquí. Esto se actualiza solo cuando la ventana termina.",
     "codeHint": "Tras iniciar sesión, la página muestra un código. Pégalo aquí.",
     "deviceCode": "Escribe este código en la página:",
     "open": "Abrir página de inicio de sesión",
