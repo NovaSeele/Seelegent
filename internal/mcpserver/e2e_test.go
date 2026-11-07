@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/netip"
 	"os"
@@ -12,6 +13,7 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -376,6 +378,11 @@ func TestStatusMemoryProfiles(t *testing.T) {
 	ok(t, d.cs, "memory", map[string]any{"cwd": d.cwd, "action": "replace", "text": "Only this."}, &m)
 	if strings.TrimSpace(m.Text) != "Only this." {
 		t.Fatalf("replaced memory = %q", m.Text)
+	}
+	// The summary counts characters, not bytes.
+	sum = ok(t, d.cs, "memory", map[string]any{"cwd": d.cwd, "action": "replace", "text": "Ghi chú tiếng Việt"}, &m)
+	if n := utf8.RuneCountInString(m.Text); n == len(m.Text) || !strings.HasSuffix(sum, fmt.Sprintf(": %d characters.", n)) {
+		t.Fatalf("summary %q for %q", sum, m.Text)
 	}
 	if msg := fails(t, d.cs, "memory", map[string]any{"cwd": d.cwd, "action": "delete", "text": "x"}); !strings.Contains(msg, "must be read, append or replace") {
 		t.Fatalf("bad action = %s", msg)

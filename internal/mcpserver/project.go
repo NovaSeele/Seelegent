@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/NovaSeele/Seelegent/internal/api"
 	"github.com/NovaSeele/Seelegent/internal/client"
@@ -52,7 +53,8 @@ func (s *Server) memory(ctx context.Context, k *call) (result, error) {
 	if err != nil {
 		return result{}, err
 	}
-	return result{value: m, summary: fmt.Sprintf("Project memory of %s: %d characters.", m.Cwd, len(m.Text))}, nil
+	return result{value: m, summary: fmt.Sprintf("Project memory of %s: %d characters.", m.Cwd,
+		utf8.RuneCountInString(m.Text))}, nil
 }
 
 // profilesArgs are the arguments of profiles.
