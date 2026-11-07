@@ -114,3 +114,42 @@ thead th {
   outline-offset: 2px;
   border-radius: var(--radius-xs);
 }
+
+/*
+ * Phones: each row takes two lines, the name across the top and the four numbers in a grid under it (the header
+ * row the same way, so every number sits under its column name). Nothing scrolls sideways.
+ */
+@media (width < 600px) {
+  .usage-table {
+    padding: var(--space-3);
+  }
+
+  table,
+  thead,
+  tbody {
+    display: block;
+    min-width: 0;
+  }
+
+  tr {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    border-bottom: var(--border-width) solid var(--border-subtle);
+  }
+
+  th,
+  td {
+    display: block;
+    min-width: 0;
+    border-bottom: 0;
+  }
+
+  tr > :first-child {
+    grid-column: 1 / -1;
+    max-width: none;
+  }
+
+  td {
+    padding-top: 0;
+  }
+}
