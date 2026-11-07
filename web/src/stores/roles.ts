@@ -31,15 +31,17 @@ export const samePlace = (a: RolePlace, b: RolePlace): boolean =>
   a.scope === b.scope &&
   (a.scope === 'global' || pathKey(a.cwd ?? '') === pathKey(b.cwd ?? ''))
 
-/** A project a role can be placed in: its folder and name. */
+/** A project a role can be placed in: its daemon key (fsutil.ProjectKey), folder and name. */
 export interface ProjectChoice {
+  key: string
   cwd: string
   name: string
 }
 
 /**
  * Projects to offer for a project role: every project the daemon knows (/state) plus those that already have
- * roles (GET /roles lists only those), once per folder.
+ * roles (GET /roles lists only those), once per project. Both lists carry the daemon's project key (the path
+ * normalised, case-insensitive on Windows), so that key decides what is the same project, never the cwd text.
  */
 export function projectChoices(
   known: readonly ProjectChoice[],
@@ -48,10 +50,11 @@ export function projectChoices(
   const seen = new Set<string>()
   const out: ProjectChoice[] = []
   for (const p of [...known, ...withRoles]) {
-    const key = pathKey(p.cwd)
-    if (!p.cwd || seen.has(key)) continue
+    if (!p.cwd) continue
+    const key = p.key || pathKey(p.cwd)
+    if (seen.has(key)) continue
     seen.add(key)
-    out.push({ cwd: p.cwd, name: p.name })
+    out.push({ key, cwd: p.cwd, name: p.name })
   }
   return out
 }

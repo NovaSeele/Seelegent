@@ -124,22 +124,23 @@ describe('loader', () => {
 })
 
 describe('roles store', () => {
-  it('offers every known project for a project role, once per folder', () => {
+  it('offers every known project for a project role, once per project key', () => {
     const known = [
-      { cwd: 'D:/Work/shop', name: 'shop' },
-      { cwd: 'D:/Work/new', name: 'new' },
+      { key: 'shop-1a2b', cwd: 'D:\\Work\\Shop', name: 'shop' },
+      { key: 'new-3c4d', cwd: 'D:/Work/new', name: 'new' },
     ]
     const withRoles = [
-      { cwd: 'd:\\work\\shop\\', name: 'shop' },
-      { cwd: '/srv/old', name: 'old' },
+      // Same project as the first, spelled differently: the key says so.
+      { key: 'shop-1a2b', cwd: 'd:/work/shop', name: 'shop' },
+      { key: 'old-5e6f', cwd: '/srv/old', name: 'old' },
     ]
     expect(projectChoices(known, withRoles)).toEqual([
-      { cwd: 'D:/Work/shop', name: 'shop' },
-      { cwd: 'D:/Work/new', name: 'new' },
-      { cwd: '/srv/old', name: 'old' },
+      { key: 'shop-1a2b', cwd: 'D:\\Work\\Shop', name: 'shop' },
+      { key: 'new-3c4d', cwd: 'D:/Work/new', name: 'new' },
+      { key: 'old-5e6f', cwd: '/srv/old', name: 'old' },
     ])
     // The first project role: GET /roles lists no project yet.
-    expect(projectChoices(known, []).map((p) => p.cwd)).toEqual(['D:/Work/shop', 'D:/Work/new'])
+    expect(projectChoices(known, []).map((p) => p.key)).toEqual(['shop-1a2b', 'new-3c4d'])
   })
 
   it('treats project folders that differ only in case or separators as one place on Windows', () => {
