@@ -225,7 +225,13 @@ export interface AutomationRun {
   at: string
   trigger: 'schedule' | 'missed' | 'manual' | 'before_reset'
   outcome:
-    'started' | 'skipped_precheck' | 'skipped_quota' | 'skipped_overlap' | 'skipped_late' | 'error'
+    | 'started'
+    | 'skipped_precheck'
+    | 'skipped_quota'
+    | 'skipped_overlap'
+    | 'skipped_late'
+    | 'error'
+    | 'pending'
   taskId?: string
   /** Detail says why a run was skipped or failed (the precheck's output tail, the quota left, ...). */
   detail?: string

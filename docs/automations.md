@@ -57,6 +57,12 @@ seen). A run missed while the daemon was off still starts if it is at most `grac
 otherwise it is recorded as `skipped_late`, once. The master switch `automationsEnabled` (settings, System) stops
 every scheduled run; *run now* still works.
 
+A due run is written as `pending` in the same transaction that moves the automation to its next run time, and the
+run's outcome later replaces that row. A stop between the two (the daemon closed while the quota or the precheck was
+being checked) leaves the row `pending`; the next start turns it into `error` with a detail that says the daemon
+stopped before the run started. It is not started again on its own: the stop may have come after the task was made,
+and an unattended run must never happen twice. *Run now* runs it if it is still needed.
+
 ## A run
 
 Every run, scheduled or *run now*, goes through the same checks, and every outcome is recorded (the newest 500 per
@@ -68,6 +74,7 @@ automation are kept):
 | `skipped_quota` | the best usable account of the backend has less than `quota.minRemaining` % left (default 20) in the bucket that limits it; with no quota known for the backend the run starts |
 | `skipped_precheck` | the precheck command (run in the folder through the shell, 60 s at most, its process tree killed after) exited non-zero, timed out or did not start; the detail carries the end of its output |
 | `error` | the delegation itself failed (no folder, no account, a lane conflict) |
+| `pending` | the scheduler decided on the run and it has not started yet (see above) |
 | `started` | a task was delegated; `taskId` names it (the task's `automationId` links back) |
 
 **Use quota before it resets** (`quota.useBeforeReset`): when a weekly bucket of the backend resets within 24 hours

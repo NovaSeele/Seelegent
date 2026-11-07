@@ -754,7 +754,8 @@ func (s *Service) Runs(ctx context.Context, id string, limit int) ([]api.Automat
 	return out, err
 }
 
-// record stores a run and makes it the automation's last run.
+// record stores a run and makes it the automation's last run. A run with an ID resolves that row (the pending
+// row the scheduler wrote); without one, or when that row is gone, it is a new row.
 func (s *Service) record(ctx context.Context, id string, run api.AutomationRun) (api.AutomationRun, error) {
 	run.At = api.FormatTime(s.now())
 	run.Detail = clip(s.redact.String(run.Detail), maxDetail)
@@ -764,20 +765,7 @@ func (s *Service) record(ctx context.Context, id string, run api.AutomationRun) 
 		if r, err = loadRec(ctx, tx, id); err != nil {
 			return err
 		}
-		raw, err := json.Marshal(run)
-		if err != nil {
-			return err
-		}
-		res, err := tx.ExecContext(ctx, `INSERT INTO automation_runs (automation_id, at, data) VALUES (?, ?, ?)`,
-			id, run.At, string(raw))
-		if err != nil {
-			return err
-		}
-		if run.ID, err = res.LastInsertId(); err != nil {
-			return err
-		}
-		if _, err := tx.ExecContext(ctx, `DELETE FROM automation_runs WHERE automation_id = ? AND id <= ?`, id,
-			run.ID-maxRunsKept); err != nil {
+		if run, err = saveRun(ctx, tx, id, run); err != nil {
 			return err
 		}
 		last := run
@@ -792,6 +780,36 @@ func (s *Service) record(ctx context.Context, id string, run api.AutomationRun) 
 	}
 	s.o.Changed(s.view(ctx, r))
 	return run, nil
+}
+
+// saveRun writes run: over its row when it has an ID and the row is still there, else as a new row (the oldest
+// beyond maxRunsKept go).
+func saveRun(ctx context.Context, tx *sql.Tx, id string, run api.AutomationRun) (api.AutomationRun, error) {
+	raw, err := json.Marshal(run)
+	if err != nil {
+		return run, err
+	}
+	if run.ID != 0 {
+		res, err := tx.ExecContext(ctx, `UPDATE automation_runs SET at = ?, data = ? WHERE id = ? AND automation_id = ?`,
+			run.At, string(raw), run.ID, id)
+		if err != nil {
+			return run, err
+		}
+		if n, err := res.RowsAffected(); err != nil || n == 1 {
+			return run, err
+		}
+	}
+	res, err := tx.ExecContext(ctx, `INSERT INTO automation_runs (automation_id, at, data) VALUES (?, ?, ?)`,
+		id, run.At, string(raw))
+	if err != nil {
+		return run, err
+	}
+	if run.ID, err = res.LastInsertId(); err != nil {
+		return run, err
+	}
+	_, err = tx.ExecContext(ctx, `DELETE FROM automation_runs WHERE automation_id = ? AND id <= ?`, id,
+		run.ID-maxRunsKept)
+	return run, err
 }
 
 // targetBackend is the backend a run of r uses.
@@ -859,20 +877,26 @@ func beforeResetCandidate(rows []AccountQuota, now time.Time) *resetCandidate {
 	return best
 }
 
-// fire runs r once: overlap guard, quota, precheck, then the task. The outcome is always recorded. reset is the
-// bucket of a before-reset run: its own remaining share is judged against minRemaining (old bug D9).
-func (s *Service) fire(ctx context.Context, id, trigger string, reset *resetCandidate) (api.AutomationRun, error) {
+// fire runs r once: overlap guard, quota, precheck, then the task. The outcome is always recorded, over the
+// scheduler's pending row when row is not 0. reset is the bucket of a before-reset run: its own remaining share is
+// judged against minRemaining (old bug D9).
+func (s *Service) fire(ctx context.Context, id, trigger string, reset *resetCandidate, row int64) (api.AutomationRun,
+	error) {
+	record := func(ctx context.Context, id string, run api.AutomationRun) (api.AutomationRun, error) {
+		run.ID = row
+		return s.record(ctx, id, run)
+	}
 	r, err := s.get(ctx, id)
 	if err != nil {
 		return api.AutomationRun{}, err
 	}
 	if busy, why := s.running(ctx, r); busy {
-		return s.record(ctx, id, api.AutomationRun{Trigger: trigger, Outcome: api.AutoSkippedOverlap, Detail: why})
+		return record(ctx, id, api.AutomationRun{Trigger: trigger, Outcome: api.AutoSkippedOverlap, Detail: why})
 	}
 	s.mu.Lock()
 	if s.firing[id] {
 		s.mu.Unlock()
-		return s.record(ctx, id, api.AutomationRun{Trigger: trigger, Outcome: api.AutoSkippedOverlap,
+		return record(ctx, id, api.AutomationRun{Trigger: trigger, Outcome: api.AutoSkippedOverlap,
 			Detail: "a run is already starting"})
 	}
 	s.firing[id] = true
@@ -886,14 +910,14 @@ func (s *Service) fire(ctx context.Context, id, trigger string, reset *resetCand
 	minLeft := r.Quota.MinRemaining
 	if reset != nil {
 		if reset.remaining*100 < minLeft {
-			return s.record(ctx, id, api.AutomationRun{Trigger: trigger, Outcome: api.AutoSkippedQuota,
+			return record(ctx, id, api.AutomationRun{Trigger: trigger, Outcome: api.AutoSkippedQuota,
 				Detail: fmt.Sprintf("the weekly bucket of %s has %.0f%% left (< %g%%)", reset.accountID,
 					reset.remaining*100, minLeft)})
 		}
 	} else {
 		b, rows := s.quotaRows(ctx, r)
 		if best, ok := bestRemaining(rows, s.now()); ok && best*100 < minLeft {
-			return s.record(ctx, id, api.AutomationRun{Trigger: trigger, Outcome: api.AutoSkippedQuota,
+			return record(ctx, id, api.AutomationRun{Trigger: trigger, Outcome: api.AutoSkippedQuota,
 				Detail: fmt.Sprintf("the best %s account has %.0f%% left (< %g%%)", b, best*100, minLeft)})
 		}
 	}
@@ -912,7 +936,7 @@ func (s *Service) fire(ctx context.Context, id, trigger string, reset *resetCand
 			if tail := strings.TrimSpace(res.Tail); tail != "" && tail != res.Err {
 				why += ": " + tailOf(tail, 400)
 			}
-			return s.record(ctx, id, api.AutomationRun{Trigger: trigger, Outcome: api.AutoSkippedPrecheck,
+			return record(ctx, id, api.AutomationRun{Trigger: trigger, Outcome: api.AutoSkippedPrecheck,
 				Detail: why})
 		}
 	}
@@ -923,16 +947,16 @@ func (s *Service) fire(ctx context.Context, id, trigger string, reset *resetCand
 		Model: r.Model, Gate: r.Gate, GateCommands: r.GateCommands, Lane: r.Lane, NoLane: r.NoLane}
 	sum, err := s.o.Tasks.DelegateWith(ctx, req, task.Spawn{AutomationID: id})
 	if err != nil {
-		return s.record(ctx, id, api.AutomationRun{Trigger: trigger, Outcome: api.AutoError,
+		return record(ctx, id, api.AutomationRun{Trigger: trigger, Outcome: api.AutoError,
 			Detail: oneLine(err.Error(), maxDetail)})
 	}
-	return s.record(ctx, id, api.AutomationRun{Trigger: trigger, Outcome: api.AutoStarted, TaskID: sum.ID})
+	return record(ctx, id, api.AutomationRun{Trigger: trigger, Outcome: api.AutoStarted, TaskID: sum.ID})
 }
 
 // RunNow runs an automation at once, with the same rules as a scheduled run, also when it is disabled or the
 // master switch is off.
 func (s *Service) RunNow(ctx context.Context, id string) (api.AutomationRun, error) {
-	return s.fire(ctx, id, api.TriggerManual, nil)
+	return s.fire(ctx, id, api.TriggerManual, nil, 0)
 }
 
 // Preview returns the next run times of a schedule.

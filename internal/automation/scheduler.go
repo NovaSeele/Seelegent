@@ -3,6 +3,8 @@ package automation
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"slices"
 	"time"
@@ -26,6 +28,9 @@ func (s *Service) Start(ctx context.Context) error {
 	s.mu.Unlock()
 	now := s.now()
 	err := s.o.DB.Write(ctx, func(tx *sql.Tx) error {
+		if err := s.resolvePending(ctx, tx); err != nil {
+			return err
+		}
 		recs, err := listRecs(ctx, tx)
 		if err != nil {
 			return err
@@ -99,11 +104,68 @@ func (s *Service) delay() time.Duration {
 	return max(d, minTick)
 }
 
-// pending is a run the tick decided on.
+// pending is a run the tick decided on; row is its pending run row (0 for a before-reset run).
 type pending struct {
 	id      string
 	trigger string
 	reset   *resetCandidate
+	row     int64
+}
+
+// interruptedRun is the detail of a run the daemon stopped before it started.
+const interruptedRun = "Seelegent stopped before this run started. It is not run again on its own, so it never " +
+	"runs twice; use Run now if it is still needed"
+
+// resolvePending resolves the pending run rows a stop left behind (the next run time had already moved on): they
+// become errors that say so, never silently lost runs.
+func (s *Service) resolvePending(ctx context.Context, tx *sql.Tx) error {
+	rows, err := tx.QueryContext(ctx, `SELECT id, automation_id, data FROM automation_runs
+		WHERE json_extract(data, '$.outcome') = ?`, api.AutoPending)
+	if err != nil {
+		return err
+	}
+	type left struct {
+		auto string
+		run  api.AutomationRun
+	}
+	var found []left
+	for rows.Next() {
+		var rid int64
+		var auto, raw string
+		if err := rows.Scan(&rid, &auto, &raw); err != nil {
+			_ = rows.Close()
+			return err
+		}
+		var run api.AutomationRun
+		if err := json.Unmarshal([]byte(raw), &run); err != nil {
+			_ = rows.Close()
+			return fmt.Errorf("automation run %d is unreadable: %w", rid, err)
+		}
+		run.ID = rid
+		found = append(found, left{auto, run})
+	}
+	if err := errors.Join(rows.Err(), rows.Close()); err != nil {
+		return err
+	}
+	for _, l := range found {
+		run := l.run
+		run.Outcome, run.Detail = api.AutoError, interruptedRun
+		if _, err := saveRun(ctx, tx, l.auto, run); err != nil {
+			return err
+		}
+		r, err := loadRec(ctx, tx, l.auto)
+		if err != nil {
+			return err
+		}
+		if r.LastRun != nil && r.LastRun.ID == run.ID {
+			r.LastRun = &run
+			if err := saveRec(ctx, tx, r); err != nil {
+				return err
+			}
+		}
+		s.log.Warn("automation: run interrupted by a stop", "automation", l.auto, "run", run.ID)
+	}
+	return nil
 }
 
 // tick advances due automations (running those within their grace window) and checks the before-reset rule,
@@ -137,16 +199,28 @@ func (s *Service) tick(ctx context.Context) error {
 				continue
 			}
 			behind := now.Sub(due)
+			trigger := api.TriggerSchedule
 			switch {
 			case behind > time.Duration(r.GraceMinutes)*time.Minute:
 				late = append(late, api.AutomationRun{Trigger: api.TriggerMissed, Outcome: api.AutoSkippedLate,
 					Detail: fmt.Sprintf("missed by %s (grace %d min)", behind.Round(time.Minute), r.GraceMinutes)})
 				lateIDs = append(lateIDs, r.ID)
+				continue
 			case behind > MaxTick:
-				runs = append(runs, pending{id: r.ID, trigger: api.TriggerMissed})
-			default:
-				runs = append(runs, pending{id: r.ID, trigger: api.TriggerSchedule})
+				trigger = api.TriggerMissed
 			}
+			// The pending row goes in with the new next run time (G3): a stop before the run starts leaves it,
+			// and the next start says so instead of losing the run silently.
+			run, err := saveRun(ctx, tx, r.ID, api.AutomationRun{At: api.FormatTime(now), Trigger: trigger,
+				Outcome: api.AutoPending, Detail: "due " + api.FormatTime(due)})
+			if err != nil {
+				return err
+			}
+			r.LastRun = &run
+			if err := saveRec(ctx, tx, r); err != nil {
+				return err
+			}
+			runs = append(runs, pending{id: r.ID, trigger: trigger, row: run.ID})
 		}
 		return nil
 	})
@@ -211,7 +285,7 @@ func (s *Service) beforeReset(ctx context.Context, now time.Time, scheduled []pe
 // runOne fires a run; a before-reset run marks its bucket used only when the task actually started (old bug D9:
 // the bucket was marked before, so a skipped run used it up), else it waits a while before trying again.
 func (s *Service) runOne(p pending) {
-	run, err := s.fire(s.ctx, p.id, p.trigger, p.reset)
+	run, err := s.fire(s.ctx, p.id, p.trigger, p.reset, p.row)
 	if err != nil {
 		if s.ctx.Err() == nil {
 			s.log.Warn("automation: run", "automation", p.id, "err", err)

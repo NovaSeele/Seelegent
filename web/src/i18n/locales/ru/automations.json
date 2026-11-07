@@ -19,7 +19,8 @@
     "skipped_quota": "Пропуск: квота",
     "skipped_overlap": "Пропуск: ещё идёт",
     "skipped_late": "Пропуск: слишком поздно",
-    "error": "Ошибка"
+    "error": "Ошибка",
+    "pending": "Запускается"
   },
   "trigger": {
     "schedule": "По расписанию",

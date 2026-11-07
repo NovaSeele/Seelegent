@@ -19,7 +19,8 @@
     "skipped_quota": "跳过：配额",
     "skipped_overlap": "跳过：仍在运行",
     "skipped_late": "跳过：太晚",
-    "error": "错误"
+    "error": "错误",
+    "pending": "正在启动"
   },
   "trigger": {
     "schedule": "按计划",

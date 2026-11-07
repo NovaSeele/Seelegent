@@ -2,6 +2,7 @@ package automation
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -408,6 +409,52 @@ func TestScheduleTicks(t *testing.T) {
 	f.tickAndWait(t)
 	if n := len(f.runs(t, a.ID)); n != 3 || f.tasks.count() != 2 {
 		t.Fatalf("ran with the master switch off: %d runs", n)
+	}
+}
+
+// TestPendingRunSurvivesStop is the review's G3: the tick moves the next run time and writes a pending run in one
+// transaction, so a stop before the run starts leaves a trace the next start resolves, not a silently lost run.
+func TestPendingRunSurvivesStop(t *testing.T) {
+	f := newFixture(t)
+	a := f.create(t, api.AutomationInput{Precheck: "wait"})
+	f.enable(t, a.ID)
+	release := make(chan struct{})
+	started := make(chan struct{})
+	f.mu.Lock()
+	f.pre = func(string) gate.ExecResult {
+		close(started)
+		<-release
+		code := 1
+		return gate.ExecResult{Exit: &code}
+	}
+	f.mu.Unlock()
+	f.clock.Advance(40 * time.Second)
+	if err := f.s.tick(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	<-started
+	// The run is starting: the history and the last run say pending, and the next run time has moved on.
+	got, _ := f.s.Get(t.Context(), a.ID)
+	runs := f.runs(t, a.ID)
+	if len(runs) != 1 || runs[0].Outcome != api.AutoPending || got.LastRun == nil ||
+		got.LastRun.Outcome != api.AutoPending || got.NextRun != "2026-11-08T09:00:00.000Z" {
+		t.Fatalf("while starting: runs %+v, automation %+v", runs, got)
+	}
+	// The daemon stops here; the next start resolves the row.
+	if err := f.s.o.DB.Write(t.Context(), func(tx *sql.Tx) error { return f.s.resolvePending(t.Context(), tx) }); err != nil {
+		t.Fatal(err)
+	}
+	got, _ = f.s.Get(t.Context(), a.ID)
+	runs = f.runs(t, a.ID)
+	if len(runs) != 1 || runs[0].Outcome != api.AutoError || runs[0].Detail != interruptedRun ||
+		got.LastRun.Outcome != api.AutoError {
+		t.Fatalf("after a stop: runs %+v, last %+v", runs, got.LastRun)
+	}
+	close(release)
+	f.s.wg.Wait()
+	// The same row ends with the run's own outcome: one row per run.
+	if runs = f.runs(t, a.ID); len(runs) != 1 || runs[0].Outcome != api.AutoSkippedPrecheck {
+		t.Fatalf("runs = %+v", runs)
 	}
 }
 

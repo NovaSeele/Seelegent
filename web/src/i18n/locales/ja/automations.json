@@ -19,7 +19,8 @@
     "skipped_quota": "スキップ: クォータ",
     "skipped_overlap": "スキップ: 実行中",
     "skipped_late": "スキップ: 遅すぎ",
-    "error": "エラー"
+    "error": "エラー",
+    "pending": "開始中"
   },
   "trigger": {
     "schedule": "スケジュール",

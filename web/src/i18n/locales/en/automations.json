@@ -19,7 +19,8 @@
     "skipped_quota": "Skipped: quota",
     "skipped_overlap": "Skipped: still running",
     "skipped_late": "Skipped: too late",
-    "error": "Error"
+    "error": "Error",
+    "pending": "Starting"
   },
   "trigger": {
     "schedule": "On schedule",

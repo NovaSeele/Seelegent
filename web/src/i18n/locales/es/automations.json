@@ -19,7 +19,8 @@
     "skipped_quota": "Omitida: cuota",
     "skipped_overlap": "Omitida: aún en curso",
     "skipped_late": "Omitida: demasiado tarde",
-    "error": "Error"
+    "error": "Error",
+    "pending": "Iniciando"
   },
   "trigger": {
     "schedule": "Según el horario",

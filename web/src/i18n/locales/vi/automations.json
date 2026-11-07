@@ -19,7 +19,8 @@
     "skipped_quota": "Bỏ qua: quota",
     "skipped_overlap": "Bỏ qua: vẫn đang chạy",
     "skipped_late": "Bỏ qua: quá muộn",
-    "error": "Lỗi"
+    "error": "Lỗi",
+    "pending": "Đang bắt đầu"
   },
   "trigger": {
     "schedule": "Theo lịch",

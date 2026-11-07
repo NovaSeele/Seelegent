@@ -250,4 +250,5 @@ export const OUTCOME_LOOK: Readonly<
   skipped_overlap: { tone: 'muted', icon: 'statusWaiting' },
   skipped_late: { tone: 'muted', icon: 'statusCancelled' },
   error: { tone: 'danger', icon: 'statusFailed' },
+  pending: { tone: 'running', icon: 'statusRunning' },
 }

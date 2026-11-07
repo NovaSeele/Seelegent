@@ -48,6 +48,9 @@ const (
 	AutoSkippedOverlap  = "skipped_overlap"
 	AutoSkippedLate     = "skipped_late"
 	AutoError           = "error"
+	// AutoPending is a scheduled run the scheduler decided on that has not started yet. It is written together with
+	// the automation's next run time, so a stop in between leaves a trace (resolved at the next start).
+	AutoPending = "pending"
 )
 
 // AutomationRun is one attempt to run an automation.
@@ -55,7 +58,7 @@ type AutomationRun struct {
 	ID      int64  `json:"id"`
 	At      string `json:"at"`
 	Trigger string `json:"trigger" ts:"'schedule' | 'missed' | 'manual' | 'before_reset'"`
-	Outcome string `json:"outcome" ts:"'started' | 'skipped_precheck' | 'skipped_quota' | 'skipped_overlap' | 'skipped_late' | 'error'"`
+	Outcome string `json:"outcome" ts:"'started' | 'skipped_precheck' | 'skipped_quota' | 'skipped_overlap' | 'skipped_late' | 'error' | 'pending'"`
 	TaskID  string `json:"taskId,omitempty"`
 	// Detail says why a run was skipped or failed (the precheck's output tail, the quota left, ...).
 	Detail string `json:"detail,omitempty"`

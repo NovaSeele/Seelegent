@@ -19,7 +19,8 @@
     "skipped_quota": "건너뜀: 할당량",
     "skipped_overlap": "건너뜀: 아직 실행 중",
     "skipped_late": "건너뜀: 너무 늦음",
-    "error": "오류"
+    "error": "오류",
+    "pending": "시작 중"
   },
   "trigger": {
     "schedule": "일정",
