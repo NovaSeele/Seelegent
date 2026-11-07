@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -46,6 +48,16 @@ func newDaemonCommand(info buildinfo.Info) *cobra.Command {
 	return cmd
 }
 
+// warnDevOrigins logs one Warn line naming the extra origins of --dev-origin: they widen the Host and same-origin
+// checks, so a daemon started with them must be easy to spot in the log.
+func warnDevOrigins(log *slog.Logger, origins []string) {
+	if len(origins) == 0 {
+		return
+	}
+	log.Warn("daemon: --dev-origin accepts extra browser origins; use it for development only",
+		"origins", strings.Join(origins, ", "))
+}
+
 // runDaemon runs the daemon until ctx ends.
 func runDaemon(ctx context.Context, info buildinfo.Info, f daemonFlags, stderr io.Writer) error {
 	paths, err := config.DefaultPaths()
@@ -60,6 +72,7 @@ func runDaemon(ctx context.Context, info buildinfo.Info, f daemonFlags, stderr i
 		return err
 	}
 	defer func() { _ = closer.Close() }()
+	warnDevOrigins(log, f.devOrigins)
 	a, err := app.New(ctx, app.Options{Paths: paths, Logger: log, Info: info, Web: web.FS(), DevOrigins: f.devOrigins})
 	if err != nil {
 		return err
