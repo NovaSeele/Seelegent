@@ -5,7 +5,10 @@ stdin and stdout and forwards every tool to the daemon's HTTP API v1 (see [api.m
 its own: tasks, accounts and memory live in the daemon, so a host restart loses nothing.
 
 Code: `internal/mcpserver` (tools), `internal/client` (typed API client, discovery and autostart),
-`internal/cli/mcp.go` (the command). The tool list is `internal/mcpserver/tools.json`, embedded in the binary.
+`internal/ops` (what the tools share with the command line: the worker guard table, the lead session, the tasks
+that need the lead, recent steps, the wait that survives a restart, the `not_available` refusal),
+`internal/cli/mcp.go` (the command). The tool list is `internal/mcpserver/tools.json`, embedded in the binary. The
+command line ([cli.md](cli.md)) offers the same operations as commands.
 
 ## Starting it from a host
 
@@ -34,7 +37,9 @@ available tool answers with "the settings cannot be read: ..." so the host sees 
 `seelegent daemon` takes `<home>/run/daemon.lock` before it opens anything else (log, store, recovery) and holds it
 until it exits. A second daemon on the same home waits up to 3 s (a restarting daemon releases the lock once it has
 closed), then exits with code 3 and "another Seelegent daemon is already running for <home> (port N)". While it
-listens, the daemon records its port in `<home>/run/daemon.port`; it removes the file when it stops cleanly.
+listens, the daemon records its port (and, on a second line, its pid) in `<home>/run/daemon.port`; it removes the
+file when it stops cleanly. The pid is only shown in messages (`seelegent stop`, `doctor`); nothing kills a process
+by it. `seelegent stop` asks the daemon to shut down through `POST /api/v1/daemon/stop`.
 
 ## Finding and starting the daemon
 
@@ -123,7 +128,7 @@ structured content is `{error: {code, message, status, details}}`:
 
 Two layers (contract §1.3). The daemon is the authority: it recognises a caller inside a worker's process tree and
 answers 403 with `details.caller: "worker"`, which the server shows as the old refusal text. The server also keeps
-the old local guard (`internal/mcpserver/guard.go`): when `SEELEGENT_WORKER=1` is in its environment (the daemon
+the old local guard (`ops.Mutating`, called from `internal/mcpserver/guard.go`): when `SEELEGENT_WORKER=1` is in its environment (the daemon
 sets it for every worker, so an MCP server a worker starts inherits it), it refuses mutating calls before talking to
 the daemon, with the same text and `{error: {code: "forbidden", details: {caller: "worker"}}}`:
 
@@ -149,4 +154,5 @@ against a stub API, the locally refused options, the task id announcement and th
 against a real daemon built through `internal/app` with the fake worker CLI and a temp data directory.
 `internal/client` tests discovery and start against fake daemons: several servers racing to start one daemon, the
 port file, stale port files, waiting for a daemon that holds the lock, and a started daemon that exits for the lock.
-`internal/cli` runs the mcp command (autostart off, and inside a worker) and two daemons on one data directory.
+`internal/cli` runs the mcp command (autostart off, and inside a worker), two daemons on one data directory, and
+every command of [cli.md](cli.md).

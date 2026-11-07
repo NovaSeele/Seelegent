@@ -69,9 +69,11 @@ seen as the lead. See the `platform` package documentation.
   `SEELEGENT_HOME=$(mktemp -d) go run ./cmd/seelegent daemon --port 47831 --dev-origin http://localhost:5173`, or
   `make dev-daemon`. On Windows (PowerShell): `$env:SEELEGENT_HOME = (New-Item -ItemType Directory
   "$env:TEMP\sg-dev-$(Get-Random)").FullName; go run ./cmd/seelegent daemon --port 47831`.
-- `seelegent daemon` runs in the foreground until Ctrl+C (graceful shutdown: open SSE streams end, requests get
-  5 s, the task engine stops). `--port` defaults to `SEELEGENT_PORT`, then the settings' `port`. It listens on
-  127.0.0.1 only. Autostart, the lock file and the pid file come in a later milestone.
+- `seelegent daemon` (old name `serve`) runs in the foreground until Ctrl+C or `seelegent stop` (graceful
+  shutdown: open SSE streams end, requests get 5 s, the task engine stops). `--port` defaults to
+  `SEELEGENT_PORT`, then the settings' `port`. It listens on 127.0.0.1 only, holds `run/daemon.lock` for its whole
+  life and records its port and pid in `run/daemon.port`. With a temp home, `SEELEGENT_HOME=... SEELEGENT_PORT=47831
+  seelegent status|stop|doctor` talk to the development daemon; see [cli.md](cli.md).
 - `cd web; pnpm dev` starts Vite on http://localhost:5173 with hot reload. It proxies `/api` to
   `http://127.0.0.1:47831`, so the dashboard talks to the development daemon. The proxy keeps the browser's
   `Host` and `Origin` (`localhost:5173`), which the daemon's Host check (421) and same-origin check (403) refuse
