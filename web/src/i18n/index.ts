@@ -5,8 +5,10 @@
 import { createI18n } from 'vue-i18n'
 
 import type accounts from './locales/en/accounts.json'
+import type automations from './locales/en/automations.json'
 import type common from './locales/en/common.json'
 import type git from './locales/en/git.json'
+import type issues from './locales/en/issues.json'
 import type locale from './locales/en/locale.json'
 import type nav from './locales/en/nav.json'
 import type pages from './locales/en/pages.json'
@@ -43,6 +45,8 @@ export const NAMESPACES = [
   'roles',
   'proof',
   'team',
+  'issues',
+  'automations',
 ] as const
 export type Namespace = (typeof NAMESPACES)[number]
 
@@ -64,6 +68,8 @@ export interface MessageSchema {
   roles: typeof roles
   proof: typeof proof
   team: typeof team
+  issues: typeof issues
+  automations: typeof automations
 }
 
 declare module 'vue-i18n' {

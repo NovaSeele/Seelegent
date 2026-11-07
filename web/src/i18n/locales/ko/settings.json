@@ -390,6 +390,12 @@
       "desc": "추적 중인 저장소에 새 이슈가 있는지 확인하는 주기. 0이면 끕니다.",
       "keywords": "github 이슈 폴링"
     },
+    "githubHosts": {
+      "label": "GitHub Enterprise 호스트",
+      "desc": "github.com 외에 GitHub로 취급할 호스트를 한 줄에 하나씩 적습니다. GitHub 토큰은 이 호스트에만 전송됩니다.",
+      "keywords": "github enterprise 호스트 ghe 서버",
+      "placeholder": "github.example.com"
+    },
     "automations": {
       "label": "자동화 실행",
       "desc": "예약된 자동화를 실행합니다.",

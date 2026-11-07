@@ -390,6 +390,12 @@
       "desc": "追跡中のリポジトリに新しい Issue がないか確認する間隔。0 でオフ。",
       "keywords": "github issue ポーリング"
     },
+    "githubHosts": {
+      "label": "GitHub Enterprise のホスト",
+      "desc": "github.com 以外で GitHub として扱うホストを 1 行に 1 つ。GitHub のトークンはこれらのホストにだけ送られます。",
+      "keywords": "github enterprise ホスト ghe サーバー",
+      "placeholder": "github.example.com"
+    },
     "automations": {
       "label": "自動化の実行",
       "desc": "スケジュールされた自動化を実行します。",

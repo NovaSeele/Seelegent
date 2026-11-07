@@ -390,6 +390,12 @@
       "desc": "多久检查一次所跟踪仓库的新 issue；0 表示关闭。",
       "keywords": "github issue 轮询"
     },
+    "githubHosts": {
+      "label": "GitHub Enterprise 主机",
+      "desc": "除 github.com 外视为 GitHub 的主机，每行一个。GitHub 令牌只会发送到这些主机。",
+      "keywords": "github enterprise 主机 ghe 服务器",
+      "placeholder": "github.example.com"
+    },
     "automations": {
       "label": "自动化作业",
       "desc": "运行定时的自动化。",

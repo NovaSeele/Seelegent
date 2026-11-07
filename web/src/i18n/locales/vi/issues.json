@@ -1,0 +1,226 @@
+{
+  "access": {
+    "title": "Truy cập GitHub",
+    "check": "Kiểm tra lại",
+    "tier": {
+      "gh": "GitHub CLI",
+      "token": "Token",
+      "manual": "Thủ công"
+    },
+    "tierDesc": {
+      "gh": "Seelegent dùng GitHub CLI (gh) đã đăng nhập để đọc issue, mở pull request và đọc kết quả kiểm tra.",
+      "token": "Seelegent dùng token đã lưu để đọc issue, mở pull request và đọc kết quả kiểm tra.",
+      "manual": "Chưa đăng nhập GitHub: Seelegent đẩy nhánh lên và đưa bạn đường dẫn để tự mở từng pull request."
+    },
+    "ghUser": "Đã đăng nhập là {user} (gh {version})",
+    "hosts": "Các máy chủ được coi là GitHub: {hosts}.",
+    "hostsEdit": "Đổi trong cài đặt",
+    "token": "Token truy cập cá nhân",
+    "replace": "Thay token",
+    "stored": "Đã lưu một token kết thúc bằng {hint}.",
+    "tokenHint": "Chỉ gửi một lần và không bao giờ hiện lại. Chỉ dùng cho các máy chủ ở trên.",
+    "save": "Lưu token",
+    "saved": "Đã lưu token",
+    "remove": "Xóa token",
+    "removeTitle": "Xóa token GitHub?",
+    "removeDesc": "Seelegent quay về dùng GitHub CLI, hoặc pull request thủ công."
+  },
+  "connect": {
+    "open": "Kết nối kho",
+    "title": "Kết nối một kho",
+    "desc": "Một kho Git trên máy này. Issue của kho lấy từ GitHub khi origin của nó nằm trên máy chủ GitHub.",
+    "path": "Thư mục",
+    "pathHint": "Đường dẫn tuyệt đối của thư mục kho.",
+    "pathError": "Hãy nhập đường dẫn thư mục tuyệt đối.",
+    "init": "Biến nó thành kho",
+    "initDesc": "Chạy git init ở đó trước nếu thư mục chưa phải là kho.",
+    "submit": "Kết nối"
+  },
+  "repo": {
+    "label": "Kho",
+    "choose": "Kho",
+    "loading": "Đang tải các kho…",
+    "loadFailed": "Không tải được các kho: {error}",
+    "empty": "Chưa kết nối kho nào",
+    "emptyDesc": "Kết nối một kho để xem issue của nó và biến chúng thành ticket.",
+    "sync": "Đồng bộ",
+    "synced": "Đã đồng bộ: {added} mới, {updated} cập nhật, {closed} đã đóng.",
+    "syncSkipped": "Không đồng bộ gì: {reason}",
+    "github": "GitHub ({host})",
+    "notGithub": "Không ở trên GitHub",
+    "lastSync": "Đồng bộ {when}",
+    "counts": "{inbox} trong hộp thư · {working} đang làm · {waitingPr} chờ PR · {sent} đã gửi · {skipped} bỏ qua",
+    "disconnect": "Ngắt kết nối",
+    "disconnectTitle": "Ngắt kết nối {name}?",
+    "disconnectDesc": "Seelegent quên kho này và hộp thư của nó. Thư mục, các nhánh và worktree vẫn giữ nguyên."
+  },
+  "tabs": {
+    "label": "Chế độ xem issue",
+    "inbox": "Hộp thư",
+    "tickets": "Ticket"
+  },
+  "inbox": {
+    "state": {
+      "open": "Đang mở",
+      "closed": "Đã đóng",
+      "all": "Tất cả"
+    },
+    "stateLabel": "Issue nào",
+    "add": "Thêm issue cục bộ",
+    "loading": "Đang tải issue…",
+    "loadFailed": "Không tải được issue: {error}",
+    "empty": "Không có issue nào",
+    "emptyDesc": "Đồng bộ để lấy issue của kho từ GitHub, hoặc thêm một issue cục bộ.",
+    "closed": "Đã đóng",
+    "by": "của {author}",
+    "suggested": "Gợi ý: {action}",
+    "decided": "{action}, do {by} quyết định",
+    "who": {
+      "lead": "lead",
+      "user": "bạn"
+    },
+    "body": "Nội dung issue",
+    "ticket": "Ticket: {status}",
+    "decide": "Quyết định"
+  },
+  "add": {
+    "title": "Thêm issue cục bộ",
+    "desc": "Issue cục bộ chỉ ở trên máy này; nó không bao giờ lên GitHub.",
+    "titleField": "Tiêu đề",
+    "titleError": "Hãy nhập tiêu đề.",
+    "body": "Mô tả",
+    "submit": "Thêm issue"
+  },
+  "triage": {
+    "title": "Quyết định {key}",
+    "decision": "Quyết định",
+    "action": {
+      "assign": "Giao việc",
+      "meeting": "Họp",
+      "skip": "Bỏ qua"
+    },
+    "actionDesc": {
+      "assign": "Tạo ticket: nhánh và worktree riêng, cùng một tác vụ cho worker.",
+      "meeting": "Mở cuộc họp về issue trong worktree của một ticket mới.",
+      "skip": "Để issue lại; lý do được lưu."
+    },
+    "anyWorker": "Worker bất kỳ",
+    "prompt": "Hướng dẫn",
+    "promptHint": "Yêu cầu của bạn cho worker. Nội dung issue được thêm vào như dữ liệu không tin cậy.",
+    "member": "Thành viên",
+    "model": "Mô hình",
+    "modelHint": "Để trống: mặc định của thành viên hoặc backend.",
+    "question": "Câu hỏi",
+    "attendees": "Người dự",
+    "noMembers": "Chưa có thành viên nào. Hãy thêm ở trang Thành viên.",
+    "reason": "Lý do",
+    "reasonRequired": "Bắt buộc khi bỏ qua.",
+    "reasonError": "Hãy nhập lý do bỏ qua issue.",
+    "attendeesError": "Chọn ít nhất một người dự.",
+    "submit": {
+      "assign": "Giao việc",
+      "meeting": "Mở cuộc họp",
+      "skip": "Bỏ qua issue"
+    }
+  },
+  "tickets": {
+    "loading": "Đang tải ticket…",
+    "empty": "Chưa có ticket",
+    "emptyDesc": "Giao một issue trong hộp thư để tạo ticket.",
+    "pr": "PR #{n}"
+  },
+  "ticket": {
+    "back": "Tất cả issue",
+    "loading": "Đang tải ticket…",
+    "notFound": "Không tải được ticket: {error}",
+    "status": {
+      "working": "Đang làm",
+      "review": "Đang duyệt",
+      "ready": "Sẵn sàng tạo PR",
+      "pr_open": "PR đang mở",
+      "done": "Xong",
+      "dropped": "Đã bỏ",
+      "failed": "Thất bại"
+    },
+    "checksState": {
+      "pending": "Đang kiểm tra",
+      "success": "Kiểm tra đạt",
+      "failure": "Kiểm tra không đạt",
+      "unknown": "Chưa rõ kết quả kiểm tra"
+    },
+    "checksFailed": "Kiểm tra không đạt",
+    "issueLink": "Issue {key}",
+    "prLink": "Pull request #{n}",
+    "draft": "bản nháp",
+    "compareLink": "Mở pull request trên GitHub",
+    "manualHint": "Nhánh đã được đẩy lên. Mở pull request bằng đường dẫn ở trên rồi ghi lại số của nó bằng Liên kết PR.",
+    "meeting": "Cuộc họp",
+    "dropReason": "Đã bỏ: {reason}",
+    "worktree": "Worktree",
+    "removed": "đã xóa",
+    "base": "Gốc",
+    "tasks": "Tác vụ",
+    "noTasks": "Chưa có tác vụ nào.",
+    "turns": "{n} lượt",
+    "checks": "Kiểm tra",
+    "noChecks": "Chưa có kết quả kiểm tra nào.",
+    "checksFix": "Đang sửa {runs} trong tác vụ",
+    "files": "Tệp đã thay đổi",
+    "noFiles": "Chưa có thay đổi nào so với gốc.",
+    "fileStatus": "Trạng thái Git",
+    "envSkipped": "Không đưa vào worktree",
+    "outbox": "Đã gửi từ máy này",
+    "outboxKind": {
+      "commit": "Commit",
+      "push": "Push",
+      "open_pr": "Mở pull request",
+      "comment": "Bình luận",
+      "create_remote": "Tạo kho GitHub"
+    },
+    "outboxStatus": {
+      "pending": "Đang chờ",
+      "running": "Đang chạy",
+      "done": "Xong",
+      "failed": "Thất bại",
+      "unknown": "Không rõ: hãy xem trên GitHub"
+    },
+    "log": "Nhật ký"
+  },
+  "actions": {
+    "pr": "Mở pull request",
+    "push": "Đẩy thay đổi",
+    "link": "Liên kết PR",
+    "task": "Tác vụ mới",
+    "comment": "Bình luận",
+    "drop": "Bỏ",
+    "fixChecks": "Sửa kiểm tra",
+    "cleanup": "Xóa worktree",
+    "desc": {
+      "pr": "Commit worktree, đẩy nhánh của ticket và mở pull request. Bí mật, khóa và tệp rác sẽ chặn việc này.",
+      "link": "Ghi lại pull request bạn tự mở cho nhánh này.",
+      "task": "Thêm một tác vụ trong worktree của ticket này.",
+      "comment": "Đăng bình luận lên issue trên GitHub.",
+      "drop": "Dừng ticket và hủy các tác vụ đang chạy của nó. Worktree vẫn còn cho tới khi bạn xóa."
+    },
+    "prTitle": "Tiêu đề",
+    "prTitleHint": "Để trống: tiêu đề của issue.",
+    "prBody": "Mô tả",
+    "prBodyHint": "Để trống: bản tóm tắt có liên kết tới issue.",
+    "draft": "Mở dưới dạng bản nháp",
+    "number": "Số của pull request",
+    "numberError": "Hãy nhập số của pull request.",
+    "textError": "Hãy nhập nội dung.",
+    "field": {
+      "task": "Hướng dẫn",
+      "comment": "Bình luận",
+      "drop": "Lý do (không bắt buộc)"
+    },
+    "submit": {
+      "pr": "Đẩy và mở",
+      "link": "Liên kết",
+      "task": "Bắt đầu tác vụ",
+      "comment": "Đăng bình luận",
+      "drop": "Bỏ ticket"
+    }
+  }
+}

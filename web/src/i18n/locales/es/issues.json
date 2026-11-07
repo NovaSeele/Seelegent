@@ -1,0 +1,226 @@
+{
+  "access": {
+    "title": "Acceso a GitHub",
+    "check": "Comprobar de nuevo",
+    "tier": {
+      "gh": "GitHub CLI",
+      "token": "Token",
+      "manual": "Manual"
+    },
+    "tierDesc": {
+      "gh": "Seelegent usa la GitHub CLI (gh) con sesión iniciada para leer issues, abrir pull requests y leer los checks.",
+      "token": "Seelegent usa el token guardado para leer issues, abrir pull requests y leer los checks.",
+      "manual": "Sin sesión en GitHub: Seelegent sube las ramas y te da un enlace para abrir cada pull request tú mismo."
+    },
+    "ghUser": "Sesión iniciada como {user} (gh {version})",
+    "hosts": "Hosts tratados como GitHub: {hosts}.",
+    "hostsEdit": "Cambiar en los ajustes",
+    "token": "Token de acceso personal",
+    "replace": "Reemplazar el token",
+    "stored": "Hay guardado un token que termina en {hint}.",
+    "tokenHint": "Se envía una vez y no se vuelve a mostrar. Solo se usa con los hosts de arriba.",
+    "save": "Guardar token",
+    "saved": "Token guardado",
+    "remove": "Quitar token",
+    "removeTitle": "¿Quitar el token de GitHub?",
+    "removeDesc": "Seelegent vuelve a la GitHub CLI o a las pull requests manuales."
+  },
+  "connect": {
+    "open": "Conectar repositorio",
+    "title": "Conectar un repositorio",
+    "desc": "Un repositorio Git de este equipo. Sus issues vienen de GitHub cuando su origin está en un host de GitHub.",
+    "path": "Carpeta",
+    "pathHint": "La ruta absoluta de la carpeta del repositorio.",
+    "pathError": "Escribe una ruta de carpeta absoluta.",
+    "init": "Convertirla en repositorio",
+    "initDesc": "Ejecuta git init allí primero si la carpeta aún no es un repositorio.",
+    "submit": "Conectar"
+  },
+  "repo": {
+    "label": "Repositorio",
+    "choose": "Repositorio",
+    "loading": "Cargando repositorios…",
+    "loadFailed": "No se pudieron cargar los repositorios: {error}",
+    "empty": "Ningún repositorio conectado",
+    "emptyDesc": "Conecta un repositorio para ver sus issues y convertirlos en tickets.",
+    "sync": "Sincronizar",
+    "synced": "Sincronizado: {added} nuevos, {updated} actualizados, {closed} cerrados.",
+    "syncSkipped": "Nada sincronizado: {reason}",
+    "github": "GitHub ({host})",
+    "notGithub": "No está en GitHub",
+    "lastSync": "Sincronizado {when}",
+    "counts": "{inbox} en la bandeja · {working} en curso · {waitingPr} esperando PR · {sent} enviados · {skipped} omitidos",
+    "disconnect": "Desconectar",
+    "disconnectTitle": "¿Desconectar {name}?",
+    "disconnectDesc": "Seelegent olvida este repositorio y su bandeja. La carpeta, sus ramas y sus worktrees quedan como están."
+  },
+  "tabs": {
+    "label": "Vista de issues",
+    "inbox": "Bandeja",
+    "tickets": "Tickets"
+  },
+  "inbox": {
+    "state": {
+      "open": "Abiertos",
+      "closed": "Cerrados",
+      "all": "Todos"
+    },
+    "stateLabel": "Qué issues",
+    "add": "Añadir issue local",
+    "loading": "Cargando issues…",
+    "loadFailed": "No se pudieron cargar los issues: {error}",
+    "empty": "No hay issues aquí",
+    "emptyDesc": "Sincroniza para traer los issues del repositorio desde GitHub, o añade un issue local.",
+    "closed": "Cerrado",
+    "by": "de {author}",
+    "suggested": "Sugerencia: {action}",
+    "decided": "{action}, decidido por {by}",
+    "who": {
+      "lead": "el lead",
+      "user": "ti"
+    },
+    "body": "Texto del issue",
+    "ticket": "Ticket: {status}",
+    "decide": "Decidir"
+  },
+  "add": {
+    "title": "Añadir un issue local",
+    "desc": "Un issue local se queda en este equipo; nunca llega a GitHub.",
+    "titleField": "Título",
+    "titleError": "Escribe un título.",
+    "body": "Descripción",
+    "submit": "Añadir issue"
+  },
+  "triage": {
+    "title": "Decidir {key}",
+    "decision": "Decisión",
+    "action": {
+      "assign": "Asignar",
+      "meeting": "Reunión",
+      "skip": "Omitir"
+    },
+    "actionDesc": {
+      "assign": "Crea un ticket: su propia rama y worktree, y una tarea para un worker.",
+      "meeting": "Abre una reunión sobre el issue en el worktree de un ticket nuevo.",
+      "skip": "Deja el issue; se guarda el motivo."
+    },
+    "anyWorker": "Cualquier worker",
+    "prompt": "Instrucciones",
+    "promptHint": "Tu encargo para el worker. El texto del issue se añade como datos no confiables.",
+    "member": "Miembro",
+    "model": "Modelo",
+    "modelHint": "Vacío: el del miembro o el del backend.",
+    "question": "Pregunta",
+    "attendees": "Asistentes",
+    "noMembers": "Aún no hay miembros del equipo. Añádelos en la página Miembros.",
+    "reason": "Motivo",
+    "reasonRequired": "Obligatorio para omitir.",
+    "reasonError": "Escribe por qué se omite el issue.",
+    "attendeesError": "Elige al menos un asistente.",
+    "submit": {
+      "assign": "Asignar",
+      "meeting": "Abrir reunión",
+      "skip": "Omitir issue"
+    }
+  },
+  "tickets": {
+    "loading": "Cargando tickets…",
+    "empty": "No hay tickets",
+    "emptyDesc": "Asigna un issue de la bandeja para crear un ticket.",
+    "pr": "PR #{n}"
+  },
+  "ticket": {
+    "back": "Todos los issues",
+    "loading": "Cargando el ticket…",
+    "notFound": "No se pudo cargar el ticket: {error}",
+    "status": {
+      "working": "En curso",
+      "review": "En revisión",
+      "ready": "Listo para PR",
+      "pr_open": "PR abierta",
+      "done": "Hecho",
+      "dropped": "Descartado",
+      "failed": "Fallido"
+    },
+    "checksState": {
+      "pending": "Checks en curso",
+      "success": "Checks superados",
+      "failure": "Checks fallidos",
+      "unknown": "Checks desconocidos"
+    },
+    "checksFailed": "Checks fallidos",
+    "issueLink": "Issue {key}",
+    "prLink": "Pull request #{n}",
+    "draft": "borrador",
+    "compareLink": "Abrir la pull request en GitHub",
+    "manualHint": "La rama está subida. Abre la pull request con el enlace de arriba y luego registra su número con Vincular PR.",
+    "meeting": "Reunión",
+    "dropReason": "Descartado: {reason}",
+    "worktree": "Worktree",
+    "removed": "eliminado",
+    "base": "Base",
+    "tasks": "Tareas",
+    "noTasks": "Aún no hay tareas.",
+    "turns": "{n} turno | {n} turnos",
+    "checks": "Checks",
+    "noChecks": "Aún no hay checks.",
+    "checksFix": "Corrigiendo {runs} en la tarea",
+    "files": "Archivos cambiados",
+    "noFiles": "Aún no hay cambios respecto a la base.",
+    "fileStatus": "Estado en Git",
+    "envSkipped": "Fuera del worktree",
+    "outbox": "Enviado desde este equipo",
+    "outboxKind": {
+      "commit": "Commit",
+      "push": "Push",
+      "open_pr": "Abrir pull request",
+      "comment": "Comentario",
+      "create_remote": "Crear repositorio en GitHub"
+    },
+    "outboxStatus": {
+      "pending": "Pendiente",
+      "running": "En curso",
+      "done": "Hecho",
+      "failed": "Fallido",
+      "unknown": "Desconocido: revisa GitHub"
+    },
+    "log": "Registro"
+  },
+  "actions": {
+    "pr": "Abrir pull request",
+    "push": "Subir cambios",
+    "link": "Vincular PR",
+    "task": "Nueva tarea",
+    "comment": "Comentar",
+    "drop": "Descartar",
+    "fixChecks": "Corregir checks",
+    "cleanup": "Quitar worktree",
+    "desc": {
+      "pr": "Hace commit del worktree, sube la rama del ticket y abre una pull request. Los secretos, claves y archivos basura lo detienen.",
+      "link": "Registra una pull request que abriste a mano para esta rama.",
+      "task": "Otra tarea en el worktree de este ticket.",
+      "comment": "Publica un comentario en el issue de GitHub.",
+      "drop": "Detiene el ticket y cancela sus tareas en curso. El worktree se queda hasta que lo quites."
+    },
+    "prTitle": "Título",
+    "prTitleHint": "Vacío: el título del issue.",
+    "prBody": "Descripción",
+    "prBodyHint": "Vacío: un resumen que enlaza el issue.",
+    "draft": "Abrir como borrador",
+    "number": "Número de la pull request",
+    "numberError": "Escribe el número de la pull request.",
+    "textError": "Escribe algo de texto.",
+    "field": {
+      "task": "Instrucciones",
+      "comment": "Comentario",
+      "drop": "Motivo (opcional)"
+    },
+    "submit": {
+      "pr": "Subir y abrir",
+      "link": "Vincular",
+      "task": "Iniciar tarea",
+      "comment": "Publicar comentario",
+      "drop": "Descartar ticket"
+    }
+  }
+}

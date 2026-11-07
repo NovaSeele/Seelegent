@@ -1,0 +1,226 @@
+{
+  "access": {
+    "title": "GitHub へのアクセス",
+    "check": "再確認",
+    "tier": {
+      "gh": "GitHub CLI",
+      "token": "トークン",
+      "manual": "手動"
+    },
+    "tierDesc": {
+      "gh": "サインイン済みの GitHub CLI (gh) で issue を読み、pull request を作成し、チェックを読みます。",
+      "token": "保存したトークンで issue を読み、pull request を作成し、チェックを読みます。",
+      "manual": "GitHub にサインインしていません。ブランチを push し、各 pull request を自分で作成するためのリンクを表示します。"
+    },
+    "ghUser": "{user} としてサインイン中 (gh {version})",
+    "hosts": "GitHub として扱うホスト: {hosts}",
+    "hostsEdit": "設定で変更",
+    "token": "個人用アクセストークン",
+    "replace": "トークンを置き換える",
+    "stored": "末尾が {hint} のトークンを保存済みです。",
+    "tokenHint": "一度だけ送信され、二度と表示されません。上のホストにだけ使われます。",
+    "save": "トークンを保存",
+    "saved": "トークンを保存しました",
+    "remove": "トークンを削除",
+    "removeTitle": "GitHub のトークンを削除しますか?",
+    "removeDesc": "GitHub CLI、または手動の pull request に戻ります。"
+  },
+  "connect": {
+    "open": "リポジトリを接続",
+    "title": "リポジトリを接続",
+    "desc": "このコンピューター上の Git リポジトリです。origin が GitHub のホストにあれば、issue は GitHub から取得します。",
+    "path": "フォルダー",
+    "pathHint": "リポジトリのフォルダーの絶対パス。",
+    "pathError": "フォルダーの絶対パスを入力してください。",
+    "init": "リポジトリにする",
+    "initDesc": "フォルダーがまだリポジトリでなければ、先に git init を実行します。",
+    "submit": "接続"
+  },
+  "repo": {
+    "label": "リポジトリ",
+    "choose": "リポジトリ",
+    "loading": "リポジトリを読み込み中…",
+    "loadFailed": "リポジトリを読み込めませんでした: {error}",
+    "empty": "接続済みのリポジトリはありません",
+    "emptyDesc": "リポジトリを接続すると、その issue を確認してチケットにできます。",
+    "sync": "同期",
+    "synced": "同期しました: 新規 {added}、更新 {updated}、クローズ {closed}。",
+    "syncSkipped": "同期しませんでした: {reason}",
+    "github": "GitHub ({host})",
+    "notGithub": "GitHub 上にありません",
+    "lastSync": "{when}に同期",
+    "counts": "受信箱 {inbox} · 作業中 {working} · PR 待ち {waitingPr} · 送信済み {sent} · スキップ {skipped}",
+    "disconnect": "接続を解除",
+    "disconnectTitle": "{name} の接続を解除しますか?",
+    "disconnectDesc": "このリポジトリと受信箱の情報を忘れます。フォルダー、ブランチ、worktree はそのまま残ります。"
+  },
+  "tabs": {
+    "label": "Issue の表示",
+    "inbox": "受信箱",
+    "tickets": "チケット"
+  },
+  "inbox": {
+    "state": {
+      "open": "オープン",
+      "closed": "クローズ",
+      "all": "すべて"
+    },
+    "stateLabel": "表示する issue",
+    "add": "ローカル issue を追加",
+    "loading": "issue を読み込み中…",
+    "loadFailed": "issue を読み込めませんでした: {error}",
+    "empty": "issue はありません",
+    "emptyDesc": "同期して GitHub からリポジトリの issue を取得するか、ローカル issue を追加してください。",
+    "closed": "クローズ",
+    "by": "作成者: {author}",
+    "suggested": "提案: {action}",
+    "decided": "{action} ({by}が決定)",
+    "who": {
+      "lead": "リード",
+      "user": "あなた"
+    },
+    "body": "issue の本文",
+    "ticket": "チケット: {status}",
+    "decide": "判断する"
+  },
+  "add": {
+    "title": "ローカル issue を追加",
+    "desc": "ローカル issue はこのコンピューターに残り、GitHub には送られません。",
+    "titleField": "タイトル",
+    "titleError": "タイトルを入力してください。",
+    "body": "説明",
+    "submit": "issue を追加"
+  },
+  "triage": {
+    "title": "{key} を判断",
+    "decision": "判断",
+    "action": {
+      "assign": "割り当て",
+      "meeting": "会議",
+      "skip": "スキップ"
+    },
+    "actionDesc": {
+      "assign": "チケットを作ります。専用のブランチと worktree、ワーカー用のタスクを用意します。",
+      "meeting": "新しいチケットの worktree で、この issue についての会議を開きます。",
+      "skip": "issue をそのままにします。理由は記録されます。"
+    },
+    "anyWorker": "任意のワーカー",
+    "prompt": "指示",
+    "promptHint": "ワーカーへの指示です。issue の本文は信頼できないデータとして添えられます。",
+    "member": "メンバー",
+    "model": "モデル",
+    "modelHint": "空欄: メンバーまたはバックエンドの既定。",
+    "question": "問い",
+    "attendees": "参加者",
+    "noMembers": "チームメンバーがまだいません。メンバーのページで追加してください。",
+    "reason": "理由",
+    "reasonRequired": "スキップには必須です。",
+    "reasonError": "スキップする理由を入力してください。",
+    "attendeesError": "参加者を 1 人以上選んでください。",
+    "submit": {
+      "assign": "割り当てる",
+      "meeting": "会議を開く",
+      "skip": "issue をスキップ"
+    }
+  },
+  "tickets": {
+    "loading": "チケットを読み込み中…",
+    "empty": "チケットはありません",
+    "emptyDesc": "受信箱の issue を割り当てるとチケットができます。",
+    "pr": "PR #{n}"
+  },
+  "ticket": {
+    "back": "すべての issue",
+    "loading": "チケットを読み込み中…",
+    "notFound": "チケットを読み込めませんでした: {error}",
+    "status": {
+      "working": "作業中",
+      "review": "レビュー中",
+      "ready": "PR の準備完了",
+      "pr_open": "PR オープン",
+      "done": "完了",
+      "dropped": "取り下げ",
+      "failed": "失敗"
+    },
+    "checksState": {
+      "pending": "チェック実行中",
+      "success": "チェック成功",
+      "failure": "チェック失敗",
+      "unknown": "チェック不明"
+    },
+    "checksFailed": "チェック失敗",
+    "issueLink": "Issue {key}",
+    "prLink": "Pull request #{n}",
+    "draft": "ドラフト",
+    "compareLink": "GitHub で pull request を作成",
+    "manualHint": "ブランチは push 済みです。上のリンクから pull request を作成し、「PR を紐付け」で番号を記録してください。",
+    "meeting": "会議",
+    "dropReason": "取り下げ: {reason}",
+    "worktree": "Worktree",
+    "removed": "削除済み",
+    "base": "ベース",
+    "tasks": "タスク",
+    "noTasks": "タスクはまだありません。",
+    "turns": "{n} ターン",
+    "checks": "チェック",
+    "noChecks": "報告されたチェックはまだありません。",
+    "checksFix": "{runs} をタスクで修正中",
+    "files": "変更されたファイル",
+    "noFiles": "ベースからの変更はまだありません。",
+    "fileStatus": "Git の状態",
+    "envSkipped": "worktree に含めなかったもの",
+    "outbox": "このコンピューターから送信したもの",
+    "outboxKind": {
+      "commit": "コミット",
+      "push": "Push",
+      "open_pr": "Pull request の作成",
+      "comment": "コメント",
+      "create_remote": "GitHub リポジトリの作成"
+    },
+    "outboxStatus": {
+      "pending": "待機中",
+      "running": "実行中",
+      "done": "完了",
+      "failed": "失敗",
+      "unknown": "不明: GitHub を確認してください"
+    },
+    "log": "ログ"
+  },
+  "actions": {
+    "pr": "Pull request を作成",
+    "push": "変更を push",
+    "link": "PR を紐付け",
+    "task": "新しいタスク",
+    "comment": "コメント",
+    "drop": "取り下げ",
+    "fixChecks": "チェックを修正",
+    "cleanup": "worktree を削除",
+    "desc": {
+      "pr": "worktree をコミットし、チケットのブランチを push して pull request を作成します。秘密情報、鍵、不要ファイルがあれば中止します。",
+      "link": "このブランチに手動で作成した pull request を記録します。",
+      "task": "このチケットの worktree で別のタスクを実行します。",
+      "comment": "GitHub の issue にコメントを投稿します。",
+      "drop": "チケットを止め、実行中のタスクを取り消します。worktree は削除するまで残ります。"
+    },
+    "prTitle": "タイトル",
+    "prTitleHint": "空欄: issue のタイトル。",
+    "prBody": "説明",
+    "prBodyHint": "空欄: issue へのリンクを含む要約。",
+    "draft": "ドラフトとして作成",
+    "number": "Pull request の番号",
+    "numberError": "Pull request の番号を入力してください。",
+    "textError": "テキストを入力してください。",
+    "field": {
+      "task": "指示",
+      "comment": "コメント",
+      "drop": "理由 (任意)"
+    },
+    "submit": {
+      "pr": "Push して作成",
+      "link": "紐付け",
+      "task": "タスクを開始",
+      "comment": "コメントを投稿",
+      "drop": "チケットを取り下げ"
+    }
+  }
+}

@@ -1,0 +1,226 @@
+{
+  "access": {
+    "title": "Доступ к GitHub",
+    "check": "Проверить снова",
+    "tier": {
+      "gh": "GitHub CLI",
+      "token": "Токен",
+      "manual": "Вручную"
+    },
+    "tierDesc": {
+      "gh": "Seelegent читает issue, открывает pull request и читает проверки через GitHub CLI (gh), в котором выполнен вход.",
+      "token": "Seelegent читает issue, открывает pull request и читает проверки с сохранённым токеном.",
+      "manual": "Вход в GitHub не выполнен: Seelegent отправляет ветки и даёт ссылку, по которой вы сами открываете каждый pull request."
+    },
+    "ghUser": "Вход выполнен как {user} (gh {version})",
+    "hosts": "Хосты, которые считаются GitHub: {hosts}.",
+    "hostsEdit": "Изменить в настройках",
+    "token": "Персональный токен доступа",
+    "replace": "Заменить токен",
+    "stored": "Сохранён токен, который заканчивается на {hint}.",
+    "tokenHint": "Отправляется один раз и больше не показывается. Используется только для хостов выше.",
+    "save": "Сохранить токен",
+    "saved": "Токен сохранён",
+    "remove": "Удалить токен",
+    "removeTitle": "Удалить токен GitHub?",
+    "removeDesc": "Seelegent вернётся к GitHub CLI или к ручным pull request."
+  },
+  "connect": {
+    "open": "Подключить репозиторий",
+    "title": "Подключить репозиторий",
+    "desc": "Репозиторий Git на этом компьютере. Его issue берутся из GitHub, если его origin на хосте GitHub.",
+    "path": "Папка",
+    "pathHint": "Абсолютный путь к папке репозитория.",
+    "pathError": "Введите абсолютный путь к папке.",
+    "init": "Сделать репозиторием",
+    "initDesc": "Сначала выполнить там git init, если папка ещё не репозиторий.",
+    "submit": "Подключить"
+  },
+  "repo": {
+    "label": "Репозиторий",
+    "choose": "Репозиторий",
+    "loading": "Загрузка репозиториев…",
+    "loadFailed": "Не удалось загрузить репозитории: {error}",
+    "empty": "Нет подключённых репозиториев",
+    "emptyDesc": "Подключите репозиторий, чтобы видеть его issue и превращать их в тикеты.",
+    "sync": "Синхронизировать",
+    "synced": "Синхронизировано: новых {added}, обновлено {updated}, закрыто {closed}.",
+    "syncSkipped": "Ничего не синхронизировано: {reason}",
+    "github": "GitHub ({host})",
+    "notGithub": "Не на GitHub",
+    "lastSync": "Синхронизировано {when}",
+    "counts": "Входящие: {inbox} · в работе: {working} · ждут PR: {waitingPr} · отправлено: {sent} · пропущено: {skipped}",
+    "disconnect": "Отключить",
+    "disconnectTitle": "Отключить {name}?",
+    "disconnectDesc": "Seelegent забудет этот репозиторий и его входящие. Папка, её ветки и worktree останутся как есть."
+  },
+  "tabs": {
+    "label": "Вид issue",
+    "inbox": "Входящие",
+    "tickets": "Тикеты"
+  },
+  "inbox": {
+    "state": {
+      "open": "Открытые",
+      "closed": "Закрытые",
+      "all": "Все"
+    },
+    "stateLabel": "Какие issue",
+    "add": "Добавить локальный issue",
+    "loading": "Загрузка issue…",
+    "loadFailed": "Не удалось загрузить issue: {error}",
+    "empty": "Здесь нет issue",
+    "emptyDesc": "Синхронизируйте, чтобы получить issue репозитория из GitHub, или добавьте локальный issue.",
+    "closed": "Закрыт",
+    "by": "автор: {author}",
+    "suggested": "Предложено: {action}",
+    "decided": "{action}, решение: {by}",
+    "who": {
+      "lead": "лид",
+      "user": "вы"
+    },
+    "body": "Текст issue",
+    "ticket": "Тикет: {status}",
+    "decide": "Решить"
+  },
+  "add": {
+    "title": "Добавить локальный issue",
+    "desc": "Локальный issue остаётся на этом компьютере и не попадает в GitHub.",
+    "titleField": "Заголовок",
+    "titleError": "Введите заголовок.",
+    "body": "Описание",
+    "submit": "Добавить issue"
+  },
+  "triage": {
+    "title": "Решение по {key}",
+    "decision": "Решение",
+    "action": {
+      "assign": "Назначить",
+      "meeting": "Совещание",
+      "skip": "Пропустить"
+    },
+    "actionDesc": {
+      "assign": "Создать тикет: своя ветка и worktree и задача для исполнителя.",
+      "meeting": "Открыть совещание по issue в worktree нового тикета.",
+      "skip": "Оставить issue; причина сохранится."
+    },
+    "anyWorker": "Любой исполнитель",
+    "prompt": "Инструкции",
+    "promptHint": "Ваше задание исполнителю. Текст issue добавляется как недоверенные данные.",
+    "member": "Участник",
+    "model": "Модель",
+    "modelHint": "Пусто: по умолчанию участника или бэкенда.",
+    "question": "Вопрос",
+    "attendees": "Участники совещания",
+    "noMembers": "Участников команды пока нет. Добавьте их на странице участников.",
+    "reason": "Причина",
+    "reasonRequired": "Нужна, чтобы пропустить.",
+    "reasonError": "Укажите, почему issue пропускается.",
+    "attendeesError": "Выберите хотя бы одного участника.",
+    "submit": {
+      "assign": "Назначить",
+      "meeting": "Открыть совещание",
+      "skip": "Пропустить issue"
+    }
+  },
+  "tickets": {
+    "loading": "Загрузка тикетов…",
+    "empty": "Нет тикетов",
+    "emptyDesc": "Назначьте issue из входящих, чтобы создать тикет.",
+    "pr": "PR #{n}"
+  },
+  "ticket": {
+    "back": "Все issue",
+    "loading": "Загрузка тикета…",
+    "notFound": "Не удалось загрузить тикет: {error}",
+    "status": {
+      "working": "В работе",
+      "review": "На проверке",
+      "ready": "Готов к PR",
+      "pr_open": "PR открыт",
+      "done": "Готово",
+      "dropped": "Отброшен",
+      "failed": "Сбой"
+    },
+    "checksState": {
+      "pending": "Проверки идут",
+      "success": "Проверки пройдены",
+      "failure": "Проверки не пройдены",
+      "unknown": "Проверки неизвестны"
+    },
+    "checksFailed": "Проверки не пройдены",
+    "issueLink": "Issue {key}",
+    "prLink": "Pull request #{n}",
+    "draft": "черновик",
+    "compareLink": "Открыть pull request на GitHub",
+    "manualHint": "Ветка отправлена. Откройте pull request по ссылке выше, затем сохраните его номер через «Связать PR».",
+    "meeting": "Совещание",
+    "dropReason": "Отброшен: {reason}",
+    "worktree": "Worktree",
+    "removed": "удалён",
+    "base": "База",
+    "tasks": "Задачи",
+    "noTasks": "Задач пока нет.",
+    "turns": "{n} ход | {n} хода | {n} ходов | {n} хода",
+    "checks": "Проверки",
+    "noChecks": "Проверок пока нет.",
+    "checksFix": "Исправление {runs} в задаче",
+    "files": "Изменённые файлы",
+    "noFiles": "Изменений относительно базы пока нет.",
+    "fileStatus": "Статус в Git",
+    "envSkipped": "Не вошло в worktree",
+    "outbox": "Отправлено с этого компьютера",
+    "outboxKind": {
+      "commit": "Коммит",
+      "push": "Push",
+      "open_pr": "Открыть pull request",
+      "comment": "Комментарий",
+      "create_remote": "Создать репозиторий GitHub"
+    },
+    "outboxStatus": {
+      "pending": "Ожидает",
+      "running": "Выполняется",
+      "done": "Готово",
+      "failed": "Сбой",
+      "unknown": "Неизвестно: проверьте GitHub"
+    },
+    "log": "Журнал"
+  },
+  "actions": {
+    "pr": "Открыть pull request",
+    "push": "Отправить изменения",
+    "link": "Связать PR",
+    "task": "Новая задача",
+    "comment": "Комментировать",
+    "drop": "Отбросить",
+    "fixChecks": "Исправить проверки",
+    "cleanup": "Удалить worktree",
+    "desc": {
+      "pr": "Фиксирует worktree, отправляет ветку тикета и открывает pull request. Секреты, ключи и мусорные файлы его останавливают.",
+      "link": "Сохранить pull request, который вы открыли вручную для этой ветки.",
+      "task": "Ещё одна задача в worktree этого тикета.",
+      "comment": "Публикует комментарий в issue на GitHub.",
+      "drop": "Останавливает тикет и отменяет его выполняемые задачи. Worktree остаётся, пока вы его не удалите."
+    },
+    "prTitle": "Заголовок",
+    "prTitleHint": "Пусто: заголовок issue.",
+    "prBody": "Описание",
+    "prBodyHint": "Пусто: сводка со ссылкой на issue.",
+    "draft": "Открыть как черновик",
+    "number": "Номер pull request",
+    "numberError": "Введите номер pull request.",
+    "textError": "Введите текст.",
+    "field": {
+      "task": "Инструкции",
+      "comment": "Комментарий",
+      "drop": "Причина (необязательно)"
+    },
+    "submit": {
+      "pr": "Отправить и открыть",
+      "link": "Связать",
+      "task": "Запустить задачу",
+      "comment": "Опубликовать",
+      "drop": "Отбросить тикет"
+    }
+  }
+}

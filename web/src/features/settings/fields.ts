@@ -163,6 +163,7 @@ export const FIELDS = {
       min: 0,
       max: 10080,
     },
+    { item: 'githubHosts', path: 'githubEnterpriseHosts', kind: 'lines' },
     { item: 'automations', path: 'automationsEnabled', kind: 'bool' },
   ],
 } as const satisfies Record<string, readonly FieldDef[]>

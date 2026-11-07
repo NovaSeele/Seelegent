@@ -1,0 +1,226 @@
+{
+  "access": {
+    "title": "GitHub access",
+    "check": "Check again",
+    "tier": {
+      "gh": "GitHub CLI",
+      "token": "Token",
+      "manual": "Manual"
+    },
+    "tierDesc": {
+      "gh": "Seelegent uses the signed-in GitHub CLI (gh) to read issues, open pull requests and read checks.",
+      "token": "Seelegent uses the stored token to read issues, open pull requests and read checks.",
+      "manual": "No GitHub sign-in: Seelegent pushes branches and gives you a link to open each pull request yourself."
+    },
+    "ghUser": "Signed in as {user} (gh {version})",
+    "hosts": "Hosts treated as GitHub: {hosts}.",
+    "hostsEdit": "Change in settings",
+    "token": "Personal access token",
+    "replace": "Replace the token",
+    "stored": "A token ending in {hint} is stored.",
+    "tokenHint": "Sent once and never shown again. It is used only for the hosts above.",
+    "save": "Save token",
+    "saved": "Token saved",
+    "remove": "Remove token",
+    "removeTitle": "Remove the GitHub token?",
+    "removeDesc": "Seelegent falls back to the GitHub CLI, or to manual pull requests."
+  },
+  "connect": {
+    "open": "Connect repository",
+    "title": "Connect a repository",
+    "desc": "A Git repository on this computer. Its issues come from GitHub when its origin is on a GitHub host.",
+    "path": "Folder",
+    "pathHint": "The absolute path of the repository folder.",
+    "pathError": "Enter an absolute folder path.",
+    "init": "Make it a repository",
+    "initDesc": "Run git init there first if the folder is not a repository yet.",
+    "submit": "Connect"
+  },
+  "repo": {
+    "label": "Repository",
+    "choose": "Repository",
+    "loading": "Loading repositories…",
+    "loadFailed": "Could not load the repositories: {error}",
+    "empty": "No repository connected",
+    "emptyDesc": "Connect a repository to see its issues and turn them into tickets.",
+    "sync": "Sync",
+    "synced": "Synced: {added} new, {updated} updated, {closed} closed.",
+    "syncSkipped": "Nothing synced: {reason}",
+    "github": "GitHub ({host})",
+    "notGithub": "Not on GitHub",
+    "lastSync": "Synced {when}",
+    "counts": "{inbox} in the inbox · {working} working · {waitingPr} waiting for a PR · {sent} sent · {skipped} skipped",
+    "disconnect": "Disconnect",
+    "disconnectTitle": "Disconnect {name}?",
+    "disconnectDesc": "Seelegent forgets this repository and its inbox. The folder, its branches and its worktrees stay as they are."
+  },
+  "tabs": {
+    "label": "Issues view",
+    "inbox": "Inbox",
+    "tickets": "Tickets"
+  },
+  "inbox": {
+    "state": {
+      "open": "Open",
+      "closed": "Closed",
+      "all": "All"
+    },
+    "stateLabel": "Which issues",
+    "add": "Add local issue",
+    "loading": "Loading issues…",
+    "loadFailed": "Could not load the issues: {error}",
+    "empty": "No issues here",
+    "emptyDesc": "Sync to fetch the repository's issues from GitHub, or add a local issue.",
+    "closed": "Closed",
+    "by": "by {author}",
+    "suggested": "Suggested: {action}",
+    "decided": "{action}, decided by {by}",
+    "who": {
+      "lead": "the lead",
+      "user": "you"
+    },
+    "body": "Issue text",
+    "ticket": "Ticket: {status}",
+    "decide": "Decide"
+  },
+  "add": {
+    "title": "Add a local issue",
+    "desc": "A local issue stays on this computer; it never reaches GitHub.",
+    "titleField": "Title",
+    "titleError": "Enter a title.",
+    "body": "Description",
+    "submit": "Add issue"
+  },
+  "triage": {
+    "title": "Decide {key}",
+    "decision": "Decision",
+    "action": {
+      "assign": "Assign",
+      "meeting": "Meeting",
+      "skip": "Skip"
+    },
+    "actionDesc": {
+      "assign": "Make a ticket: its own branch and worktree, and a task for a worker.",
+      "meeting": "Open a meeting about the issue in a new ticket's worktree.",
+      "skip": "Leave the issue; the reason is kept."
+    },
+    "anyWorker": "Any worker",
+    "prompt": "Instructions",
+    "promptHint": "Your brief for the worker. The issue text is added as untrusted data.",
+    "member": "Member",
+    "model": "Model",
+    "modelHint": "Empty: the member's or the backend's default.",
+    "question": "Question",
+    "attendees": "Attendees",
+    "noMembers": "No team members yet. Add some on the Members page.",
+    "reason": "Reason",
+    "reasonRequired": "Required to skip.",
+    "reasonError": "Enter why the issue is skipped.",
+    "attendeesError": "Pick at least one attendee.",
+    "submit": {
+      "assign": "Assign",
+      "meeting": "Open meeting",
+      "skip": "Skip issue"
+    }
+  },
+  "tickets": {
+    "loading": "Loading tickets…",
+    "empty": "No tickets",
+    "emptyDesc": "Assign an issue from the inbox to make a ticket.",
+    "pr": "PR #{n}"
+  },
+  "ticket": {
+    "back": "All issues",
+    "loading": "Loading the ticket…",
+    "notFound": "Could not load the ticket: {error}",
+    "status": {
+      "working": "Working",
+      "review": "In review",
+      "ready": "Ready for a PR",
+      "pr_open": "PR open",
+      "done": "Done",
+      "dropped": "Dropped",
+      "failed": "Failed"
+    },
+    "checksState": {
+      "pending": "Checks running",
+      "success": "Checks passed",
+      "failure": "Checks failed",
+      "unknown": "Checks unknown"
+    },
+    "checksFailed": "Checks failed",
+    "issueLink": "Issue {key}",
+    "prLink": "Pull request #{n}",
+    "draft": "draft",
+    "compareLink": "Open the pull request on GitHub",
+    "manualHint": "The branch is pushed. Open the pull request with the link above, then record its number with Link PR.",
+    "meeting": "Meeting",
+    "dropReason": "Dropped: {reason}",
+    "worktree": "Worktree",
+    "removed": "removed",
+    "base": "Base",
+    "tasks": "Tasks",
+    "noTasks": "No tasks yet.",
+    "turns": "{n} turn | {n} turns",
+    "checks": "Checks",
+    "noChecks": "No checks reported yet.",
+    "checksFix": "Fixing {runs} in task",
+    "files": "Changed files",
+    "noFiles": "No changes against the base yet.",
+    "fileStatus": "Git status",
+    "envSkipped": "Left out of the worktree",
+    "outbox": "Sent from this computer",
+    "outboxKind": {
+      "commit": "Commit",
+      "push": "Push",
+      "open_pr": "Open pull request",
+      "comment": "Comment",
+      "create_remote": "Create GitHub repository"
+    },
+    "outboxStatus": {
+      "pending": "Pending",
+      "running": "Running",
+      "done": "Done",
+      "failed": "Failed",
+      "unknown": "Unknown: check GitHub"
+    },
+    "log": "Log"
+  },
+  "actions": {
+    "pr": "Open pull request",
+    "push": "Push changes",
+    "link": "Link PR",
+    "task": "New task",
+    "comment": "Comment",
+    "drop": "Drop",
+    "fixChecks": "Fix checks",
+    "cleanup": "Remove worktree",
+    "desc": {
+      "pr": "Commits the worktree, pushes the ticket's branch and opens a pull request. Secrets, keys and junk files stop it.",
+      "link": "Record a pull request you opened by hand for this branch.",
+      "task": "Another task in this ticket's worktree.",
+      "comment": "Posts a comment on the GitHub issue.",
+      "drop": "Stops the ticket and cancels its running tasks. The worktree stays until you remove it."
+    },
+    "prTitle": "Title",
+    "prTitleHint": "Empty: the issue's title.",
+    "prBody": "Description",
+    "prBodyHint": "Empty: a summary that links the issue.",
+    "draft": "Open as a draft",
+    "number": "Pull request number",
+    "numberError": "Enter the pull request's number.",
+    "textError": "Enter some text.",
+    "field": {
+      "task": "Instructions",
+      "comment": "Comment",
+      "drop": "Reason (optional)"
+    },
+    "submit": {
+      "pr": "Push and open",
+      "link": "Link",
+      "task": "Start task",
+      "comment": "Post comment",
+      "drop": "Drop ticket"
+    }
+  }
+}

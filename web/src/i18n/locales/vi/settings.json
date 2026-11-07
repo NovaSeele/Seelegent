@@ -390,6 +390,12 @@
       "desc": "Bao lâu thì xem các repo đang theo dõi có issue mới không; 0 là tắt.",
       "keywords": "github issue kiểm tra định kỳ"
     },
+    "githubHosts": {
+      "label": "Máy chủ GitHub Enterprise",
+      "desc": "Các máy chủ ngoài github.com được coi là GitHub, mỗi dòng một máy chủ. Token GitHub chỉ được gửi tới các máy chủ này.",
+      "keywords": "github enterprise máy chủ ghe host",
+      "placeholder": "github.example.com"
+    },
     "automations": {
       "label": "Tự động hóa",
       "desc": "Chạy các việc tự động theo lịch.",
