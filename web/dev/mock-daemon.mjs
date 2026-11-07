@@ -12,13 +12,19 @@
  * mock-admin.mjs. Writes (followup, answer, review, cancel, takeover, commit, suggest-message, attention
  * dismiss) change the data and broadcast SSE frames.
  *
- * Contract behaviour it honours: Host / X-Seelegent / Origin checks, the error shape, unknown body fields rejected,
- * Cache-Control: no-store, SSE ids `<instance>.<seq>` with resume from a ring of 2048 frames (`reset` restart for
- * another instance's id, too_old outside the ring), hello first, ping every 25 s, git paths relative to the repo
- * root (Turn.files relative to the cwd).
+ * Contract behaviour it honours, the way the real daemon does it (internal/httpapi): the Host check (only
+ * 127.0.0.1, localhost or [::1] with the mock's own port, else 421, on every path), X-Seelegent and same-origin
+ * checks on writes (403), the error shape, unknown body fields rejected, Cache-Control: no-store, SSE ids
+ * `<instance>.<seq>` on every frame with resume from a ring of 2048 frames (`reset` restart for another
+ * instance's id, too_old outside the ring), hello first (its id is the current one, or the client's on a resume;
+ * a reset carries the current id), ping every 25 s, events read with after/limit or tail (never both), prompt
+ * without attempt = the latest attempt, cancel of a finished task = 200 and no change, a git timeout as
+ * 502 upstream with details.source "git", git paths relative to the repo root (Turn.files relative to the cwd).
  *
  * Env: MOCK_PORT (47831), MOCK_TICK_MS (250), MOCK_OLD_TASKS (140 finished tasks for paging), MOCK_NO_HOOKS=1
- * (every /hooks route answers 501 not_implemented, like a daemon without hooks).
+ * (every /hooks route answers 501 not_implemented, like the daemon until hooks land), MOCK_DEV_ORIGIN (default
+ * http://localhost:5173; empty turns it off): one extra loopback http origin accepted by the Host and Origin
+ * checks, like `seelegent daemon --dev-origin`, because the Vite proxy keeps the browser's Host and Origin.
  */
 import { randomBytes } from 'node:crypto'
 import { createServer } from 'node:http'
@@ -29,6 +35,7 @@ const PORT = Number(process.env.MOCK_PORT ?? 47831)
 const TICK_MS = Number(process.env.MOCK_TICK_MS ?? 250)
 const OLD_TASKS = Number(process.env.MOCK_OLD_TASKS ?? 140)
 const RING = 2048
+const DEV_ORIGIN = devOrigin(process.env.MOCK_DEV_ORIGIN ?? 'http://localhost:5173')
 const INSTANCE = randomBytes(4).toString('hex')
 const BUILD = 'mock-build'
 const STARTED = new Date()
@@ -1206,7 +1213,23 @@ function openStream(req, res, url) {
     Connection: 'keep-alive',
   })
   res.write('retry: 2000\n\n')
+  // Every frame has an id, like the daemon's (contract §7, docs/api.md): hello carries the current id on a fresh
+  // connect and the client's id on a resume that replays; a reset carries the current id, so a reconnect after
+  // it resumes from there.
+  const current = frameId(frameSeq)
+  const resume = req.headers['last-event-id'] ?? url.searchParams.get('lastEventId')
+  let reset = ''
+  let replay = []
+  if (resume) {
+    const match = /^([0-9a-f]{8})\.(\d+)$/.exec(resume)
+    const seq = match ? Number(match[2]) : NaN
+    const oldest = ring[0]?.seq ?? frameSeq + 1
+    if (!match || match[1] !== INSTANCE) reset = 'restart'
+    else if (seq > frameSeq || seq < oldest - 1) reset = 'too_old'
+    else replay = ring.filter((frame) => frame.seq > seq)
+  }
   write(res, {
+    id: resume && !reset ? resume : current,
     event: 'hello',
     data: JSON.stringify({
       instance: INSTANCE,
@@ -1216,19 +1239,8 @@ function openStream(req, res, url) {
       serverTime: now(),
     }),
   })
-  const resume = req.headers['last-event-id'] ?? url.searchParams.get('lastEventId')
-  if (resume) {
-    const match = /^([0-9a-f]{8})\.(\d+)$/.exec(resume)
-    const seq = match ? Number(match[2]) : NaN
-    const oldest = ring[0]?.seq ?? frameSeq + 1
-    if (!match || match[1] !== INSTANCE) {
-      write(res, { event: 'reset', data: JSON.stringify({ reason: 'restart' }) })
-    } else if (seq > frameSeq || seq < oldest - 1) {
-      write(res, { event: 'reset', data: JSON.stringify({ reason: 'too_old' }) })
-    } else {
-      for (const frame of ring) if (frame.seq > seq) write(res, frame)
-    }
-  }
+  if (reset) write(res, { id: current, event: 'reset', data: JSON.stringify({ reason: reset }) })
+  for (const frame of replay) write(res, frame)
   clients.add(res)
   const ping = setInterval(() => res.write(': ping\n\n'), 25_000)
   req.on('close', () => {
@@ -1268,8 +1280,30 @@ function send(res, status, body) {
   res.end(text)
 }
 
-// The contract wants the daemon's own port; the mock also accepts the Vite dev server's host and origin.
-const LOOPBACK = /^(127\.0\.0\.1|localhost|\[::1\])(:\d+)?$/i
+/** MOCK_DEV_ORIGIN, checked like the daemon's --dev-origin: a loopback http origin with a port, or none. */
+function devOrigin(raw) {
+  if (!raw) return null
+  const url = new URL(raw)
+  const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)
+  if (url.protocol !== 'http:' || !url.port || !loopback || url.pathname !== '/') {
+    throw new Error(`MOCK_DEV_ORIGIN ${raw}: must be http://localhost|127.0.0.1|[::1]:<port>`)
+  }
+  return { host: url.host.toLowerCase(), origin: url.origin.toLowerCase() }
+}
+
+/** The Host check (contract §1): 127.0.0.1, localhost or [::1] with the mock's own port, or the dev origin's. */
+function hostAllowed(host) {
+  const h = (host ?? '').toLowerCase()
+  const own = [`127.0.0.1:${PORT}`, `localhost:${PORT}`, `[::1]:${PORT}`]
+  return own.includes(h) || h === DEV_ORIGIN?.host
+}
+
+/** The same-origin check of writes: the mock's own origin, or the dev origin. */
+function ownOrigin(origin) {
+  const o = origin.toLowerCase().replace(/\/$/, '')
+  const own = [`http://127.0.0.1:${PORT}`, `http://localhost:${PORT}`, `http://[::1]:${PORT}`]
+  return own.includes(o) || o === DEV_ORIGIN?.origin
+}
 
 async function readBody(req, allowed) {
   const chunks_ = []
@@ -1489,8 +1523,9 @@ async function taskWrite(req, res, task, sub) {
     if (wait !== undefined && (!Number.isInteger(wait) || wait < 0 || wait > 60)) {
       throw invalid('waitSeconds must be 0..60', 'waitSeconds')
     }
-    if (!PENDING.includes(s.status) && s.status !== 'blocked_deps') {
-      throw badState(`task ${s.id} is already ${s.status}`, s.status)
+    // Like the daemon: cancelling a finished task changes nothing and answers 200 with the summary.
+    if (!PENDING.includes(s.status) && s.status !== 'blocked_deps' && !s.manual) {
+      return send(res, 200, s)
     }
     task.sim = null
     if (task.turns.at(-1)?.status === 'running') endTurn(task, 'cancelled', '', true)
@@ -1559,13 +1594,17 @@ async function route(req, res, url) {
   const path = url.pathname.replace(/^\/api\/v1/, '') || '/'
   const parts = path.split('/').filter(Boolean).map(decodeURIComponent)
 
-  if (!LOOPBACK.test(req.headers.host ?? '')) {
-    throw new HttpError(421, 'misdirected_request', 'unexpected Host header')
-  }
-  if (method !== 'GET' && method !== 'HEAD') {
+  if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
+    if (req.headers['x-seelegent'] !== '1') {
+      throw new HttpError(
+        403,
+        'forbidden',
+        'a request that changes something needs the header X-Seelegent: 1',
+      )
+    }
     const origin = req.headers.origin
-    if (req.headers['x-seelegent'] !== '1' || (origin && !LOOPBACK.test(new URL(origin).host))) {
-      throw new HttpError(403, 'forbidden', 'missing X-Seelegent header or foreign Origin')
+    if (origin && !ownOrigin(origin)) {
+      throw new HttpError(403, 'forbidden', 'requests from another origin are refused')
     }
   }
 
@@ -1611,8 +1650,8 @@ async function route(req, res, url) {
     if (method === 'GET' && sub === '') return send(res, 200, detail(task))
     if (method === 'GET' && sub === 'events') {
       const hasTail = url.searchParams.has('tail')
-      if (hasTail && url.searchParams.has('after'))
-        throw invalid('use after or tail, not both', 'tail')
+      if (hasTail && (url.searchParams.has('after') || url.searchParams.has('limit')))
+        throw invalid('tail cannot be combined with after or limit', 'tail')
       const lastSeq = task.events.length
       if (hasTail) {
         const tail = intParam(url, 'tail', 1, 2000, 500)
@@ -1625,7 +1664,11 @@ async function route(req, res, url) {
     if (method === 'GET' && sub === 'prompt') {
       const turn = intParam(url, 'turn', 1, 10_000, 0)
       if (!turn) throw invalid('turn is required', 'turn')
-      const attempt = intParam(url, 'attempt', 1, 100, 1)
+      // No attempt (or 0) means the latest attempt of the turn, as in the daemon.
+      const tried = [...task.prompts.keys()]
+        .filter((key) => key.startsWith(`${turn}.`))
+        .map((key) => Number(key.slice(key.indexOf('.') + 1)))
+      const attempt = intParam(url, 'attempt', 0, 100, 0) || Math.max(0, ...tried)
       const prompt = task.prompts.get(`${turn}.${attempt}`)
       if (prompt === undefined) throw notFound(`brief of turn ${turn} attempt ${attempt}`)
       return send(res, 200, { prompt })
@@ -1633,7 +1676,8 @@ async function route(req, res, url) {
     if (method === 'GET' && sub === 'git') {
       if (task.statusFailures > 0) {
         task.statusFailures--
-        throw new HttpError(502, 'upstream', 'reading the repository timed out after 20 s')
+        // A git timeout as the daemon reports it (contract §1.1, §3.3): upstream with details.source git.
+        throw new HttpError(502, 'upstream', 'git status: timed out', { source: 'git' })
       }
       return send(res, 200, taskGit(task))
     }
@@ -1662,7 +1706,17 @@ const adminRoute = createAdminRoutes({
 })
 
 const server = createServer((req, res) => {
-  const url = new URL(req.url ?? '/', `http://${req.headers.host ?? '127.0.0.1'}`)
+  const url = new URL(req.url ?? '/', `http://127.0.0.1:${PORT}`)
+  if (!hostAllowed(req.headers.host)) {
+    // Every path (API, stream and the rest), like the daemon: the DNS-rebinding defence.
+    send(res, 421, {
+      error: {
+        code: 'misdirected_request',
+        message: 'this daemon answers only on 127.0.0.1, localhost or [::1] with its own port',
+      },
+    })
+    return
+  }
   if (!url.pathname.startsWith('/api/v1/')) {
     send(res, 404, {
       error: {

@@ -345,48 +345,52 @@ export function createAdminRoutes(ctx) {
   }
 
   // -------------------------------------------------------------------------------------------------------------
-  // Providers
+  // Providers: the shapes of internal/api (Provider, ProviderPreset, ProviderInput), checked roughly like
+  // account.Provider.Validate and the daemon's applyProvider.
 
-  const providers = [
-    provider('anthropic', 'Anthropic', 'claude', 'https://api.anthropic.com', [
-      'claude-sonnet-5',
-      'claude-opus-5',
-    ]),
-    provider('deepseek', 'DeepSeek', 'claude', 'https://api.deepseek.com/anthropic', [
-      'deepseek-v4',
-    ]),
-    provider('openai', 'OpenAI', 'codex', 'https://api.openai.com/v1', [
-      'gpt-5.5-codex',
-      'gpt-5.5-mini',
-    ]),
-  ]
+  const NO_TIERS = { fast: '', standard: '', strong: '', max: '' }
   const presets = [
-    ...providers.map(({ id, name, backend, baseUrl, models }) => ({
-      id,
-      name,
-      backend,
-      baseUrl,
-      enabled: true,
-      models,
-    })),
-    provider('moonshot', 'Moonshot', 'claude', 'https://api.moonshot.ai/anthropic', ['kimi-k3']),
-    provider('zai', 'Z.ai', 'claude', 'https://api.z.ai/api/anthropic', ['glm-5']),
-    provider('openrouter', 'OpenRouter', 'claude', 'https://openrouter.ai/api', []),
-    provider('custom-anthropic', 'Custom (Anthropic API)', 'claude', '', []),
-    provider('groq', 'Groq', 'codex', 'https://api.groq.com/openai/v1', ['llama-5-70b']),
-    provider('ollama', 'Ollama', 'codex', 'http://127.0.0.1:11434/v1', []),
-    provider('custom-openai', 'Custom (OpenAI API)', 'codex', '', []),
-  ].map(({ id, name, backend, baseUrl, enabled, models }) => ({
-    id,
-    name,
-    backend,
-    baseUrl,
-    enabled,
-    models,
-  }))
+    preset('anthropic', 'Anthropic', 'claude', '', { official: true }),
+    preset('deepseek', 'DeepSeek', 'claude', 'https://api.deepseek.com/anthropic'),
+    preset('moonshot', 'Moonshot Kimi', 'claude', 'https://api.moonshot.ai/anthropic'),
+    preset('zai', 'Z.ai GLM', 'claude', 'https://api.z.ai/api/anthropic'),
+    preset('openrouter', 'OpenRouter', 'claude', 'https://openrouter.ai/api'),
+    preset('custom-anthropic', 'Custom (Anthropic API)', 'claude', ''),
+    preset('openai', 'OpenAI', 'codex', 'https://api.openai.com/v1', { wireApi: 'responses' }),
+    preset('groq', 'Groq', 'codex', 'https://api.groq.com/openai/v1', { wireApi: 'chat' }),
+    preset('ollama', 'Ollama (local)', 'codex', 'http://localhost:11434/v1', { wireApi: 'chat' }),
+    preset('custom-openai', 'Custom (OpenAI API)', 'codex', '', { wireApi: 'chat' }),
+  ]
+  const providers = [
+    fromPreset('anthropic', 'anthropic', ['claude-sonnet-5', 'claude-opus-5']),
+    fromPreset('deepseek', 'deepseek', ['deepseek-v4']),
+    fromPreset('openai', 'openai', ['gpt-5.5-codex', 'gpt-5.5-mini']),
+  ]
 
-  function provider(id, name, backend, baseUrl, models) {
-    return { id, name, backend, baseUrl, enabled: true, models, accounts: 0 }
+  function preset(id, name, backend, baseUrl, extra = {}) {
+    return { id, name, backend, baseUrl, enabled: true, models: [], official: false, ...extra }
+  }
+
+  function fromPreset(id, presetId, models) {
+    const p = presets.find((x) => x.id === presetId)
+    const at = now()
+    return {
+      ...p,
+      id,
+      preset: presetId,
+      models,
+      accounts: 0,
+      allowedModels: exactPattern(models),
+      tiers: { ...NO_TIERS },
+      createdAt: at,
+      updatedAt: at,
+    }
+  }
+
+  /** Like the daemon's exactPattern: an anchored pattern of exactly these models ('' for none). */
+  function exactPattern(models) {
+    if (!models.length) return ''
+    return `^(?:${models.map((m) => m.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})$`
   }
 
   const providerView = (p) => ({
@@ -394,23 +398,25 @@ export function createAdminRoutes(ctx) {
     accounts: accounts.filter((a) => a.provider === p.id).length,
   })
 
-  function checkProvider(body, partial) {
-    if (!partial || body.name !== undefined) {
-      if (typeof body.name !== 'string' || !body.name.trim() || body.name.length > 60) {
-        throw invalid('name is required (at most 60 characters)', 'name')
-      }
-    }
-    if (!partial && !['claude', 'codex'].includes(body.backend))
-      throw invalid('unknown backend', 'backend')
-    if (!partial || body.baseUrl !== undefined) {
-      let ok
-      try {
-        ok = ['http:', 'https:'].includes(new URL(body.baseUrl).protocol)
-      } catch {
-        ok = false
-      }
-      if (!ok) throw invalid('the base URL must start with http:// or https://', 'baseUrl')
-    }
+  const PROVIDER_FIELDS = [
+    'id',
+    'name',
+    'backend',
+    'baseUrl',
+    'enabled',
+    'models',
+    'preset',
+    'wireApi',
+    'allowedModels',
+    'tiers',
+    'accounts',
+  ]
+
+  /** Applies a ProviderInput to p (applyProvider in the daemon), then validates the result. */
+  function applyProvider(p, body) {
+    for (const key of ['name', 'baseUrl', 'enabled', 'wireApi'])
+      if (body[key] !== undefined) p[key] = body[key]
+    if (body.tiers !== undefined) p.tiers = { ...NO_TIERS, ...body.tiers }
     if (body.models !== undefined) {
       if (
         !Array.isArray(body.models) ||
@@ -418,42 +424,68 @@ export function createAdminRoutes(ctx) {
       ) {
         throw invalid('models are names without spaces', 'models')
       }
+      p.models = body.models
     }
-    if (body.enabled !== undefined && typeof body.enabled !== 'boolean')
-      throw invalid('enabled must be true or false', 'enabled')
+    if (body.allowedModels !== undefined) p.allowedModels = body.allowedModels
+    else if (body.models !== undefined) p.allowedModels = exactPattern(body.models)
+    if (typeof p.name !== 'string' || p.name.length > 60) {
+      throw invalid('name is at most 60 characters', 'name')
+    }
+    p.name = p.name.trim() || p.id
+    if (typeof p.enabled !== 'boolean') throw invalid('enabled must be true or false', 'enabled')
+    if (p.backend === 'claude' && p.wireApi) {
+      throw invalid('wireApi is only for codex providers', 'wireApi')
+    }
+    if (p.backend === 'codex') {
+      p.wireApi ||= 'chat'
+      if (!['chat', 'responses'].includes(p.wireApi)) {
+        throw invalid(`wireApi ${String(p.wireApi)} (want chat or responses)`, 'wireApi')
+      }
+    }
+    if (p.official) {
+      p.baseUrl = ''
+    } else {
+      let url
+      try {
+        url = new URL(p.baseUrl)
+      } catch {
+        throw invalid('baseUrl is required for a provider that is not official', 'baseUrl')
+      }
+      const local = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)
+      if (url.protocol !== 'https:' && !(url.protocol === 'http:' && local)) {
+        throw invalid('baseUrl must use https (or http for localhost)', 'baseUrl')
+      }
+    }
+    p.updatedAt = now()
   }
 
   async function providerRoutes(req, res, method, parts) {
     if (parts.length === 1) {
       if (method === 'GET') return send(res, 200, { items: providers.map(providerView), presets })
       if (method !== 'POST') return false
-      const body = await readBody(req, [
-        'id',
-        'name',
-        'backend',
-        'baseUrl',
-        'enabled',
-        'models',
-        'preset',
-      ])
-      if (body.preset !== undefined && !presets.some((p) => p.id === body.preset)) {
-        throw invalid(`unknown preset ${String(body.preset)}`, 'preset')
+      const body = await readBody(req, PROVIDER_FIELDS)
+      const id = typeof body.id === 'string' ? body.id.trim() : ''
+      if (!ID.test(id)) throw invalid('the id uses a-z, 0-9 and -, at most 40 characters', 'id')
+      if (providers.some((p) => p.id === id)) throw conflict(`provider ${id} exists already`)
+      let created = { ...preset(id, id, '', ''), allowedModels: '', tiers: { ...NO_TIERS } }
+      if (body.preset) {
+        if (!presets.some((p) => p.id === body.preset)) {
+          throw invalid(`unknown provider preset "${String(body.preset)}"`, 'preset')
+        }
+        created = fromPreset(id, body.preset, [])
       }
-      if (typeof body.id !== 'string' || !ID.test(body.id)) {
-        throw invalid('the id uses a-z, 0-9 and -, at most 40 characters', 'id')
+      if (body.backend !== undefined) {
+        if (created.backend && created.backend !== body.backend) {
+          const why = `preset ${created.preset} serves ${created.backend}, not ${body.backend}`
+          throw invalid(why, 'backend')
+        }
+        created.backend = body.backend
       }
-      if (providers.some((p) => p.id === body.id))
-        throw conflict(`provider ${body.id} exists already`)
-      checkProvider(body, false)
-      const created = provider(
-        body.id,
-        body.name.trim(),
-        body.backend,
-        body.baseUrl,
-        body.models ?? [],
-      )
-      created.enabled = body.enabled ?? true
-      if (body.preset) created.preset = body.preset
+      if (!['claude', 'codex'].includes(created.backend)) {
+        throw invalid('backend is required (claude or codex)', 'backend')
+      }
+      applyProvider(created, body)
+      created.createdAt = created.updatedAt
       providers.push(created)
       broadcast('providers.changed', { changedAt: now() })
       return send(res, 201, providerView(created))
@@ -461,13 +493,19 @@ export function createAdminRoutes(ctx) {
     const found = providers.find((p) => p.id === parts[1])
     if (!found) throw notFound(`provider ${parts[1]}`)
     if (method === 'PATCH') {
-      const body = await readBody(req, ['name', 'baseUrl', 'enabled', 'models', 'backend'])
-      if (body.backend !== undefined && body.backend !== found.backend) {
-        throw invalid('the backend of a provider cannot change', 'backend')
+      const body = await readBody(req, PROVIDER_FIELDS)
+      if (body.id !== undefined && body.id !== found.id) {
+        throw invalid("a provider's id cannot change", 'id')
       }
-      checkProvider(body, true)
-      for (const key of ['name', 'baseUrl', 'enabled', 'models'])
-        if (body[key] !== undefined) found[key] = body[key]
+      if (body.backend !== undefined && body.backend !== found.backend) {
+        throw invalid("a provider's backend cannot change", 'backend')
+      }
+      if (body.preset !== undefined && body.preset !== (found.preset ?? '')) {
+        throw invalid("a provider's preset cannot change", 'preset')
+      }
+      const next = structuredClone(found)
+      applyProvider(next, body)
+      Object.assign(found, next)
       broadcast('providers.changed', { changedAt: now() })
       return send(res, 200, providerView(found))
     }
