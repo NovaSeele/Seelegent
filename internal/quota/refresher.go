@@ -321,9 +321,9 @@ func (r *Refresher) refresh(ctx context.Context, a account.Account, fresh bool) 
 		if join && !c.aborted {
 			return c.res
 		}
-		if join && ctx.Err() != nil {
-			// The shared read was aborted by its starter and this caller is done too: answer with this caller's
-			// own context error, never the other one's.
+		if ctx.Err() != nil {
+			// This caller is done (its context ended while the read it waited on finished): answer with its own
+			// context error, never another caller's, and never start a new read on a dead context.
 			return Result{AccountID: a.ID, Err: ctx.Err()}
 		}
 		if r.o.onWoken != nil {
