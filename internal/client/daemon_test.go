@@ -288,6 +288,31 @@ func TestStartWaitsForLockHolder(t *testing.T) {
 	})
 }
 
+// TestStartOneDeadline: a start that first waits for another process holding the start lock, and then for a
+// daemon that holds its lock without answering, stays within one StartTimeout instead of adding the two waits.
+func TestStartOneDeadline(t *testing.T) {
+	paths := testPaths(t)
+	holdLock(t, paths)
+	other, err := fsutil.TryLock(filepath.Join(paths.Run, startLockName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	time.AfterFunc(500*time.Millisecond, func() { _ = other.Unlock() })
+	var starts atomic.Int32
+	d := NewDaemon(DaemonOptions{Paths: paths, Port: freePort(t), ProbeTimeout: 200 * time.Millisecond,
+		StartTimeout: time.Second, PollInterval: 20 * time.Millisecond,
+		Start: func(context.Context) (<-chan error, error) { starts.Add(1); return make(chan error), nil }})
+	begun := time.Now()
+	_, err = d.Ensure(t.Context())
+	took := time.Since(begun)
+	if !errors.Is(err, ErrNotRunning) || starts.Load() != 0 || !strings.Contains(err.Error(), "holds its lock") {
+		t.Fatalf("ensure = %v (starts %d)", err, starts.Load())
+	}
+	if took < 900*time.Millisecond || took > 1400*time.Millisecond {
+		t.Fatalf("the start took %s, want about the 1s StartTimeout", took)
+	}
+}
+
 // TestProbeTimeout: a port that accepts but never answers is reported as busy or hung, and nothing is started.
 func TestProbeTimeout(t *testing.T) {
 	port := freePort(t)
