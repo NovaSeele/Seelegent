@@ -38,6 +38,11 @@ const repo = (files: GitFile[], extra: Partial<TaskGit> = {}): TaskGit => ({
   files,
   preexisting: [],
   suggestion: null,
+  startState: 'unknown',
+  branchChanged: false,
+  commits: [],
+  commitsMore: 0,
+  committedFiles: [],
   ...extra,
 })
 
@@ -134,6 +139,11 @@ describe('useGit', () => {
         files: [],
         preexisting: [],
         suggestion: null,
+        startState: 'unknown',
+        branchChanged: false,
+        commits: [],
+        commitsMore: 0,
+        committedFiles: [],
       })
     await setup(fakeGitApi({ status }))
     expect(model.state.value).toEqual({ status: 'error', error: 'git status timed out' })

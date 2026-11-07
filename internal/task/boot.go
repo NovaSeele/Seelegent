@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/NovaSeele/Seelegent/internal/api"
+	"github.com/NovaSeele/Seelegent/internal/gitx"
 )
 
 // bootNewest is how many of the newest tasks GET /state includes besides the ones that need attention.
@@ -117,6 +118,11 @@ type GitScope struct {
 	Title        string
 	LastResponse string
 	UpdatedAt    time.Time
+	// Start is where the task started: GitStart, or for a task from before it was recorded the HEAD of its first
+	// turn's start snapshot (branch unknown); nil when neither exists.
+	Start *gitx.TaskStart
+	// Turns are when the turns ran (End zero while running).
+	Turns []gitx.TurnSpan
 }
 
 // GitScope returns the git view of task id.
@@ -135,6 +141,20 @@ func (s *Service) GitScope(ctx context.Context, id string) (GitScope, error) {
 		if tu.Response != "" {
 			g.LastResponse = tu.Response
 		}
+		g.Turns = append(g.Turns, gitx.TurnSpan{N: tu.N, Start: tu.StartedAt, End: tu.EndedAt})
 	}
+	g.Start = taskStart(t)
 	return g, nil
+}
+
+// taskStart is where task t started: its recorded GitStart, else the HEAD of its first turn's start snapshot
+// (tasks from before the start was recorded; the branch is then unknown), else nil.
+func taskStart(t *Task) *gitx.TaskStart {
+	if t.GitStart != nil {
+		return &gitx.TaskStart{Head: t.GitStart.Head, Branch: t.GitStart.Branch}
+	}
+	if first := t.TurnN(1); first != nil && first.Snap != nil {
+		return &gitx.TaskStart{Head: first.Snap.Head}
+	}
+	return nil
 }

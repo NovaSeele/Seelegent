@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/NovaSeele/Seelegent/internal/api"
 	"github.com/NovaSeele/Seelegent/internal/fsutil"
@@ -21,13 +22,32 @@ type TaskFiles struct {
 	// Files are the files the task's turns touched, relative to Cwd with '/' separators, with the last turn that
 	// touched each.
 	Files map[string]int
+	// Start is where the task started; nil when it is not known (see api.GitStartUnknown).
+	Start *TaskStart
+	// Turns are when the task's turns ran, to tell which turn made a commit.
+	Turns []TurnSpan
 }
 
-// TaskGit returns the repository of a task and the task's uncommitted changes in it: the dirty files the task's
-// turns touched, plus dirty files under the task's folder that were not dirty when the task started (a worker's
-// shell commands change files the stream never names). Suggestion is left nil for the caller.
+// TaskStart is where a task started: the HEAD commit ("" when the repository had no commit yet) and the branch
+// ("" when HEAD was detached or the branch is not known).
+type TaskStart struct {
+	Head   string
+	Branch string
+}
+
+// TurnSpan is when one turn of a task ran; End is zero while it runs.
+type TurnSpan struct {
+	N          int
+	Start, End time.Time
+}
+
+// TaskGit returns the repository of a task, the task's uncommitted changes in it, and what the task committed
+// since it started. The uncommitted changes are the dirty files the task's turns touched, plus dirty files under
+// the task's folder that were not dirty when the task started (a worker's shell commands change files the stream
+// never names). Suggestion is left nil for the caller.
 func (r *Repos) TaskGit(ctx context.Context, tf TaskFiles) (api.TaskGit, error) {
-	out := api.TaskGit{Files: []api.GitFile{}, Preexisting: []string{}}
+	out := api.TaskGit{Files: []api.GitFile{}, Preexisting: []string{}, StartState: api.GitStartUnknown,
+		Commits: []api.GitCommit{}, CommittedFiles: []api.GitFile{}}
 	root, err := r.Root(ctx, tf.Cwd)
 	if errors.Is(err, ErrNotRepo) {
 		return out, nil
@@ -48,12 +68,7 @@ func (r *Repos) TaskGit(ctx context.Context, tf TaskFiles) (api.TaskGit, error) 
 		}
 	}
 	sort.Strings(out.Preexisting)
-	touched := map[string]int{}
-	for f, turn := range tf.Files {
-		if rel, ok := relTo(root, filepath.Join(tf.Cwd, filepath.FromSlash(f))); ok {
-			touched[rel] = turn
-		}
-	}
+	touched := touchedFiles(root, tf)
 	cwdRel, _ := relTo(root, tf.Cwd)
 	for _, f := range st.files {
 		turn, hit := touched[f.Path]
@@ -66,7 +81,22 @@ func (r *Repos) TaskGit(ctx context.Context, tf TaskFiles) (api.TaskGit, error) 
 		f.Turn = turn
 		out.Files = append(out.Files, f)
 	}
+	out.Head = st.oid
+	if err := r.history(ctx, root, tf, st, touched, &out); err != nil {
+		return out, err
+	}
 	return out, nil
+}
+
+// touchedFiles maps the files the task's turns touched to repository-relative paths, with the last turn of each.
+func touchedFiles(root string, tf TaskFiles) map[string]int {
+	touched := map[string]int{}
+	for f, turn := range tf.Files {
+		if rel, ok := relTo(root, filepath.Join(tf.Cwd, filepath.FromSlash(f))); ok {
+			touched[rel] = turn
+		}
+	}
+	return touched
 }
 
 // Commit commits exactly files (repository-relative, each one of the task's changed files) with message: new

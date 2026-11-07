@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+	"time"
 
 	"github.com/NovaSeele/Seelegent/internal/gitx"
 )
@@ -46,8 +47,9 @@ func TestBaselineFindsMovedGit(t *testing.T) {
 	if err := os.WriteFile(file, []byte("x\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	root, files := captureBaseline(t.Context(), bin, repo)
-	if root == "" || len(files) != 1 || filepath.Base(files[0]) != "a.txt" {
-		t.Fatalf("baseline = %q, %q", root, files)
+	root, files, start := captureBaseline(t.Context(), bin, repo, time.Now())
+	if root == "" || len(files) != 1 || filepath.Base(files[0]) != "a.txt" || start == nil || start.Head != "" ||
+		start.Branch == "" {
+		t.Fatalf("baseline = %q, %q, start %+v (want no head: no commit yet)", root, files, start)
 	}
 }
