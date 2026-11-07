@@ -69,3 +69,28 @@ func TestResolveCommand(t *testing.T) {
 		}
 	}
 }
+
+// TestResolveCommandSkipsRelativePath: a command in the working folder, reached through an empty or relative PATH
+// entry, is never found; an absolute entry after them still is.
+func TestResolveCommandSkipsRelativePath(t *testing.T) {
+	cwd := t.TempDir()
+	name := "tool"
+	if runtime.GOOS == "windows" {
+		name = "tool.exe"
+	}
+	writeFile(t, filepath.Join(cwd, name), 0o700)
+	writeFile(t, filepath.Join(cwd, "bin", name), 0o700)
+	t.Chdir(cwd)
+	sep := string(os.PathListSeparator)
+	for _, p := range []string{".", "", sep, "bin", "." + sep + "bin", `"."`, `".\bin"`, "./bin"} {
+		if got := ResolveCommand("tool", []string{"PATH=" + p}); got != "" {
+			t.Errorf("PATH=%q: ResolveCommand = %q; want nothing", p, got)
+		}
+	}
+	abs := t.TempDir()
+	bin := filepath.Join(abs, name)
+	writeFile(t, bin, 0o700)
+	if got := ResolveCommand("tool", []string{"PATH=." + sep + "bin" + sep + abs}); got != bin {
+		t.Errorf("ResolveCommand = %q, want %q", got, bin)
+	}
+}

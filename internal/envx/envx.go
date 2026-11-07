@@ -33,6 +33,9 @@ func Lookup(env []string, name string) (string, bool) {
 
 // ResolveCommand finds name the way the shell would with the PATH (and on Windows PATHEXT) of env: PATH folders in
 // order, and on Windows each PATHEXT extension in order. It returns "" when nothing matches.
+//
+// Empty and relative PATH entries (".", "bin") are skipped, so a command is never taken from the daemon's working
+// folder (the policy of Go's exec.ErrDot); the result is always an absolute path.
 func ResolveCommand(name string, env []string) string {
 	pathVar, _ := Lookup(env, "PATH")
 	exts := []string{""}
@@ -50,7 +53,7 @@ func ResolveCommand(name string, env []string) string {
 	}
 	for _, dir := range filepath.SplitList(pathVar) {
 		dir = strings.Trim(strings.TrimSpace(dir), `"`)
-		if dir == "" {
+		if dir == "" || !filepath.IsAbs(dir) {
 			continue
 		}
 		for _, ext := range exts {
