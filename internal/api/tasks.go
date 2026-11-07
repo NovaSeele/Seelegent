@@ -82,6 +82,9 @@ type TaskSummary struct {
 
 	// LastEventSeq is the highest event seq of the task.
 	LastEventSeq int64 `json:"lastEventSeq"`
+
+	// Warnings are set only by a review: accepting over a senior member's objection names it and its first finding.
+	Warnings []string `json:"warnings,omitempty"`
 }
 
 // ProfileRef names the role profile of a task.

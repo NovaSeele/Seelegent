@@ -218,7 +218,12 @@ func newReviewCommand(d deps) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return emit(cmd, sum, func(w io.Writer) { _, _ = fmt.Fprintf(w, "Task %s reviewed: %s\n", id, verdict) })
+			return emit(cmd, sum, func(w io.Writer) {
+				_, _ = fmt.Fprintf(w, "Task %s reviewed: %s\n", id, verdict)
+				for _, warn := range sum.Warnings {
+					_, _ = fmt.Fprintf(w, "Warning: %s\n", warn)
+				}
+			})
 		},
 	}
 	cmd.Flags().StringVar(&notes, "notes", "", "review notes")

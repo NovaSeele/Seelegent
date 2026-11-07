@@ -38,7 +38,9 @@ func (s *Service) ReviewWith(ctx context.Context, id string, req api.ReviewReque
 	}
 	notes := strings.TrimSpace(req.Notes)
 	answerText := strings.TrimSpace(req.AnswerObjection)
+	var warnings []string
 	t, err := s.mutate(ctx, id, func(t *Task) ([]NewEvent, error) {
+		warnings = nil
 		if Hidden(t.Kind) {
 			return nil, ErrNotFound
 		}
@@ -58,6 +60,9 @@ func (s *Service) ReviewWith(ctx context.Context, id string, req api.ReviewReque
 			}
 			notes = strings.TrimSpace(notes + "\n\nAnswer to peer objection: " + answerText)
 		}
+		if verdict == api.VerdictAccepted {
+			warnings = seniorObjections(t.Consults)
+		}
 		t.Review = &api.Review{Verdict: verdict, Notes: notes, At: api.FormatTime(s.now())}
 		turn := 0
 		if tu := t.LastTurn(); tu != nil {
@@ -75,7 +80,36 @@ func (s *Service) ReviewWith(ctx context.Context, id string, req api.ReviewReque
 		}
 	}
 	s.checkDeps(s.background())
-	return s.Summary(ctx, id)
+	sum, err := s.Summary(ctx, id)
+	sum.Warnings = warnings
+	return sum, err
+}
+
+// seniorObjections are the warnings of accepting a task: a senior's objection does not block, but is named with
+// its first finding (or required change).
+func seniorObjections(cs []api.Consult) []string {
+	var out []string
+	for i := range cs {
+		c := &cs[i]
+		if c.Rank != api.RankSenior || c.Verdict != api.ConsultObject {
+			continue
+		}
+		w := "senior " + c.Member + " objected"
+		first := ""
+		if len(c.Findings) > 0 {
+			first = c.Findings[0].Text
+		} else if len(c.Required) > 0 {
+			first = c.Required[0]
+		}
+		if first = strings.TrimSpace(first); first != "" {
+			if r := []rune(first); len(r) > 300 {
+				first = string(r[:300])
+			}
+			w += ": " + first
+		}
+		out = append(out, w)
+	}
+	return out
 }
 
 // Cancel stops a task. A task without a running worker is cancelled at once; a running worker is asked to stop

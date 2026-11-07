@@ -1567,6 +1567,8 @@ export interface TaskSummary {
   variant?: string
   /** LastEventSeq is the highest event seq of the task. */
   lastEventSeq: number
+  /** Warnings are set only by a review: accepting over a senior member's objection names it and its first finding. */
+  warnings?: string[]
 }
 
 /** ProfileRef names the role profile of a task. */

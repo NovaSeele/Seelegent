@@ -295,15 +295,20 @@ func (s *Server) review(ctx context.Context, k *call) (result, error) {
 	if err != nil {
 		return result{}, err
 	}
-	return result{value: taskStatus{TaskID: sum.ID, Status: string(sum.Status)},
-		summary: fmt.Sprintf("Task %s reviewed: %s.", sum.ID, a.Verdict)}, nil
+	text := fmt.Sprintf("Task %s reviewed: %s.", sum.ID, a.Verdict)
+	for _, w := range sum.Warnings {
+		text += "\nWarning: " + w
+	}
+	return result{value: taskStatus{TaskID: sum.ID, Status: string(sum.Status), Warnings: sum.Warnings},
+		summary: text}, nil
 }
 
 // taskStatus is the answer of review and cancel.
 type taskStatus struct {
-	TaskID string `json:"task_id"`
-	Status string `json:"status"`
-	Note   string `json:"note,omitempty"`
+	TaskID   string   `json:"task_id"`
+	Status   string   `json:"status"`
+	Note     string   `json:"note,omitempty"`
+	Warnings []string `json:"warnings,omitempty"`
 }
 
 // cancelArgs are the arguments of cancel.
