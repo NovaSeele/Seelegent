@@ -4,12 +4,14 @@
  *
  * Moving a role to another scope (or renaming its id) is a write to the new place and then a delete of the old
  * one; the contract has no single route for it. When the delete fails, the new copy is deleted again, so the
- * role is never left in both places (old bug B26).
+ * role is never left in both places (old bug B26). A 404 on that delete means the old copy is already gone: the
+ * move is done, nothing is rolled back.
  */
 import { defineStore } from 'pinia'
 import { shallowRef } from 'vue'
 
 import { rolesApi as defaultApi } from '@/api'
+import { ApiError } from '@/api/client'
 import type { RoleFields, RolesApi, RoleWrite } from '@/api/roles'
 import type { Role, RoleProject, Skill } from '@/api/types'
 import { pathKey } from '@/lib/paths'
@@ -124,7 +126,7 @@ export const useRolesStore = defineStore('roles', () => {
     const saved = await client.save(write)
     if (from && !samePlace(from, to)) {
       try {
-        await client.remove(from.id, from.scope, from.cwd)
+        await removeIfThere(from)
       } catch (cause) {
         await client.remove(to.id, to.scope, to.cwd).catch(() => undefined)
         await load()
@@ -135,8 +137,17 @@ export const useRolesStore = defineStore('roles', () => {
     return saved
   }
 
+  /** DELETE that counts a 404 (someone deleted it already) as done. */
+  async function removeIfThere(place: RolePlace): Promise<void> {
+    try {
+      await client.remove(place.id, place.scope, place.cwd)
+    } catch (cause) {
+      if (!(cause instanceof ApiError && cause.status === 404)) throw cause
+    }
+  }
+
   async function remove(place: RolePlace): Promise<void> {
-    await client.remove(place.id, place.scope, place.cwd)
+    await removeIfThere(place)
     items.value = items.value.filter((role) => !samePlace(role, place))
     void load()
   }

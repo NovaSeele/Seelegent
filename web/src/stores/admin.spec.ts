@@ -182,6 +182,38 @@ describe('roles store', () => {
     await expect(move).rejects.toBeInstanceOf(ApiError)
     expect(calls).toContain('DELETE /api/v1/roles/qa?scope=project&cwd=D%3A%2Fapp')
   })
+
+  it('finishes a move when the old copy is already gone (404), without deleting the new one', async () => {
+    const { client, calls } = fakeClient((method, url) => {
+      if (method === 'GET') return { body: { items: [], projects: [] } }
+      if (method === 'POST') return { body: role() }
+      if (url.endsWith('scope=global')) return error(404, 'not_found')
+      return { status: 204 }
+    })
+    const store = useRolesStore()
+    store.setApi(createRolesApi(client))
+    await store.save(
+      { role: { ...role(), id: 'qa' }, scope: 'project', cwd: 'D:/app' },
+      { id: 'qa', scope: 'global' },
+    )
+    expect(calls.filter((c) => c.startsWith('DELETE'))).toEqual([
+      'DELETE /api/v1/roles/qa?scope=global',
+    ])
+  })
+
+  it('counts deleting a role that is already gone as done', async () => {
+    const { client } = fakeClient((method) =>
+      method === 'GET' ? { body: { items: [], projects: [] } } : error(404, 'not_found'),
+    )
+    const store = useRolesStore()
+    store.setApi(createRolesApi(client))
+    await expect(store.remove({ id: 'qa', scope: 'global' })).resolves.toBeUndefined()
+    const { client: failing } = fakeClient((method) =>
+      method === 'GET' ? { body: { items: [], projects: [] } } : error(500, 'internal'),
+    )
+    store.setApi(createRolesApi(failing))
+    await expect(store.remove({ id: 'qa', scope: 'global' })).rejects.toBeInstanceOf(ApiError)
+  })
 })
 
 describe('usage store', () => {
