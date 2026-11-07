@@ -10,7 +10,7 @@
   },
   "comingSoon": {
     "title": "Not available yet",
-    "desc": "The Seelegent service keeps these settings. They appear here once the new dashboard can read them.",
+    "desc": "The Seelegent service does not keep these settings yet. They appear here once it does.",
     "planned": "Settings in this section"
   },
   "sections": {
@@ -20,15 +20,35 @@
     },
     "workers": {
       "label": "Workers",
-      "desc": "How many workers run at once and which models they may use."
+      "desc": "How many tasks an account runs at once, time limits and when a worker counts as stuck."
+    },
+    "backends": {
+      "label": "Backends",
+      "desc": "Which command-line tools take work, and the model behind each tier."
     },
     "quota": {
       "label": "Quota",
-      "desc": "How much quota to keep in reserve and how accounts take turns."
+      "desc": "How much quota to keep in reserve and how often it is read."
+    },
+    "providers": {
+      "label": "API providers",
+      "desc": "Services that API-key accounts send requests to."
     },
     "gates": {
       "label": "Gates",
-      "desc": "Commands that must pass before work counts as done."
+      "desc": "Checks that must pass before work counts as done."
+    },
+    "workspace": {
+      "label": "Workspace safety",
+      "desc": "Guards that keep workers from stepping on each other’s files and on your repository."
+    },
+    "hooks": {
+      "label": "Hooks",
+      "desc": "Commands the service runs when tasks or accounts change."
+    },
+    "memory": {
+      "label": "Memory",
+      "desc": "Project facts given to every worker."
     },
     "notifications": {
       "label": "Notifications",
@@ -38,13 +58,9 @@
       "label": "Keyboard shortcuts",
       "desc": "Keys for pages and commands."
     },
-    "hooks": {
-      "label": "Hooks",
-      "desc": "Calls to other services when tasks change."
-    },
-    "memory": {
-      "label": "Memory",
-      "desc": "Project facts given to every worker."
+    "system": {
+      "label": "Service",
+      "desc": "The Seelegent service itself: its port and background jobs."
     },
     "experiments": {
       "label": "Experiments",
@@ -54,6 +70,97 @@
       "label": "Language",
       "desc": "Language of the dashboard. Changes apply at once."
     }
+  },
+  "daemon": {
+    "offline": "The settings load when the dashboard is connected to the Seelegent service.",
+    "saving": "Saving…",
+    "saved": "Saved",
+    "failed": "Not saved: {error}",
+    "reset": "Default",
+    "resetOf": "Reset {name} to its default",
+    "range": "{min} to {max}",
+    "lines": "One per line; saved when you leave the field.",
+    "readonly": "Set when the service starts (seelegent config); it cannot change here."
+  },
+  "units": {
+    "min": "min",
+    "h": "h",
+    "s": "s",
+    "ms": "ms",
+    "days": "days",
+    "bytes": "bytes",
+    "times": "times",
+    "pct": "%"
+  },
+  "options": {
+    "tier": {
+      "fast": "Fast",
+      "standard": "Standard",
+      "strong": "Strong",
+      "max": "Max"
+    },
+    "lanes": {
+      "off": "Off",
+      "warn": "Warn",
+      "enforce": "Enforce"
+    },
+    "sandbox": {
+      "readOnly": "Read only",
+      "workspaceWrite": "Write in the workspace",
+      "dangerFullAccess": "Full access (dangerous)"
+    }
+  },
+  "backends": {
+    "enabled": "Takes work",
+    "allowedModels": "Allowed models",
+    "allowedModelsHint": "A regular expression; tier models must match it.",
+    "anyModel": "Any model",
+    "tierDefault": "The tool’s default",
+    "sandbox": "Sandbox",
+    "sandboxHint": "What Codex may touch on this computer."
+  },
+  "hooks": {
+    "loading": "Loading hooks…",
+    "loadFailed": "Hooks could not be loaded: {error}",
+    "empty": "No hooks yet.",
+    "hookN": "Hook {n}",
+    "enabled": "On",
+    "run": "Command",
+    "runHint": "Runs in a shell; the event arrives as SEELEGENT_* environment variables.",
+    "on": "Runs on",
+    "project": "Only for project folder",
+    "projectHint": "Leave empty for every project.",
+    "timeout": "Time limit",
+    "add": "Add hook",
+    "remove": "Remove",
+    "save": "Save hooks",
+    "discard": "Discard changes",
+    "saved": "Hooks saved",
+    "invalid": "Some hooks need fixing; see the marked fields.",
+    "unsaved": "Not saved yet; save to test it.",
+    "neverRan": "Has not run yet.",
+    "lastRun": "Last ran {time} on {event}: {outcome}",
+    "exit": "exit code {code}",
+    "timedOut": "stopped at the time limit",
+    "test": "Test",
+    "testUnsupported": "This version of the Seelegent service cannot test hooks yet (501 not implemented). The hook still runs on its events.",
+    "testFailed": "The test did not run: {error}"
+  },
+  "memory": {
+    "project": "Project",
+    "noProjects": "No projects yet. Memory belongs to a project folder, which appears here once a task ran there.",
+    "loading": "Loading memory…",
+    "loadFailed": "Memory could not be loaded: {error}",
+    "text": "Memory",
+    "placeholder": "Conventions, commands to run, pitfalls…",
+    "updated": "Saved {time}",
+    "none": "Nothing saved for this project yet.",
+    "changed": "Someone else saved this project’s memory meanwhile.",
+    "reload": "Load theirs",
+    "discard": "Discard changes",
+    "save": "Save memory",
+    "saved": "Memory saved",
+    "saveFailed": "Memory was not saved: {error}"
   },
   "items": {
     "theme": {
@@ -107,39 +214,180 @@
       "keywords": "language locale translation"
     },
     "concurrency": {
-      "label": "Workers at once",
-      "desc": "How many workers may run at the same time.",
-      "keywords": "parallel concurrent limit"
+      "label": "Tasks per account",
+      "desc": "How many tasks one account may run at the same time.",
+      "keywords": "parallel concurrent limit workers"
     },
     "defaultTier": {
       "label": "Default tier",
       "desc": "Model tier used when a brief does not name one.",
       "keywords": "model fast standard strong"
     },
-    "modelCap": {
-      "label": "Model cap",
-      "desc": "The strongest model workers may use.",
-      "keywords": "limit model"
+    "taskTimeout": {
+      "label": "Turn time limit",
+      "desc": "A turn that runs longer than this is stopped.",
+      "keywords": "timeout limit duration"
+    },
+    "stall": {
+      "label": "Stuck after",
+      "desc": "A worker with no output for this long is marked as stalled.",
+      "keywords": "stall idle hang silent"
+    },
+    "stallTool": {
+      "label": "Stuck in a tool after",
+      "desc": "The same, while a tool or command is running (builds take longer).",
+      "keywords": "stall tool command build"
+    },
+    "loopRepeat": {
+      "label": "Loop detection",
+      "desc": "The same step repeated this many times counts as a loop.",
+      "keywords": "loop repeat stuck"
+    },
+    "attentionDecay": {
+      "label": "Attention fades after",
+      "desc": "A task that needed you and was left alone drops out of “Needs you” after this long.",
+      "keywords": "attention needs you decay"
+    },
+    "linkIntoProfiles": {
+      "label": "Shared into account profiles",
+      "desc": "Folders and files in your home folder that every isolated account profile also sees (skills, configs).",
+      "keywords": "profile link symlink skills home",
+      "placeholder": ".agents/skills"
+    },
+    "backendAgy": {
+      "label": "Antigravity",
+      "desc": "Gemini models through the Antigravity CLI.",
+      "keywords": "agy gemini antigravity model tier"
+    },
+    "backendClaude": {
+      "label": "Claude Code",
+      "desc": "Claude models through Claude Code.",
+      "keywords": "claude anthropic model tier"
+    },
+    "backendCodex": {
+      "label": "Codex",
+      "desc": "OpenAI models through Codex, with its sandbox.",
+      "keywords": "codex openai gpt sandbox model tier"
     },
     "quotaReserve": {
       "label": "Quota reserve",
-      "desc": "Share of each account’s quota kept free for urgent work.",
-      "keywords": "limit buffer"
+      "desc": "An account rests when a quota window has less than this left.",
+      "keywords": "limit buffer minimum remaining"
     },
-    "rotation": {
-      "label": "Account rotation",
-      "desc": "Move work to another account when one runs out of quota.",
-      "keywords": "accounts switch handoff"
+    "quotaRefresh": {
+      "label": "Read quota every",
+      "desc": "How often each account’s quota is read.",
+      "keywords": "refresh interval poll"
     },
-    "gateCommands": {
-      "label": "Gate commands",
-      "desc": "Build and test commands that prove a task works.",
-      "keywords": "test build verify check"
+    "passiveCooldown": {
+      "label": "API-key rest",
+      "desc": "How long an API-key account rests after it hits a limit (its quota cannot be read).",
+      "keywords": "cooldown passive api key rate limit"
     },
-    "gateBeforeReview": {
-      "label": "Run gates before review",
-      "desc": "Run the gates before a task is handed to you for review.",
-      "keywords": "test review verify"
+    "usageHistory": {
+      "label": "Keep usage history",
+      "desc": "Record each account’s quota every hour for the Usage page.",
+      "keywords": "history usage snapshot record"
+    },
+    "providers": {
+      "label": "API providers",
+      "desc": "Anthropic-compatible services for Claude Code and OpenAI-compatible ones for Codex.",
+      "keywords": "provider api key base url deepseek openrouter openai"
+    },
+    "gates": {
+      "label": "Run gates",
+      "desc": "Run the task’s gate commands before it is handed to you for review.",
+      "keywords": "test build verify check review"
+    },
+    "gateAutoChecks": {
+      "label": "Find checks automatically",
+      "desc": "When a task names no gate, use the project’s build and test commands.",
+      "keywords": "auto detect test build"
+    },
+    "gateTimeout": {
+      "label": "Gate time limit",
+      "desc": "A gate command that runs longer than this fails.",
+      "keywords": "timeout limit"
+    },
+    "gateMaxAutoFixes": {
+      "label": "Automatic fix rounds",
+      "desc": "How many times a failed gate is sent back to the worker before you are asked.",
+      "keywords": "retry fix loop"
+    },
+    "gateSettle": {
+      "label": "Wait for files to settle",
+      "desc": "Wait this long without file changes before running the gates.",
+      "keywords": "settle debounce wait"
+    },
+    "gateSettlePoll": {
+      "label": "Settle check interval",
+      "desc": "How often files are checked while waiting for them to settle.",
+      "keywords": "poll interval"
+    },
+    "gateOutputTail": {
+      "label": "Gate output kept",
+      "desc": "How much of the end of a gate’s output is kept and shown to the worker.",
+      "keywords": "output log tail bytes"
+    },
+    "verifier": {
+      "label": "Second-opinion review",
+      "desc": "Another worker reviews the change before it reaches you.",
+      "keywords": "verify review second opinion"
+    },
+    "verifierTier": {
+      "label": "Reviewer tier",
+      "desc": "Model tier of that second worker.",
+      "keywords": "verify model tier"
+    },
+    "hygiene": {
+      "label": "Clean-up checks",
+      "desc": "Flag stray files, debug output and leftovers in a worker’s change.",
+      "keywords": "hygiene clean leftovers"
+    },
+    "gitGuard": {
+      "label": "Git guard",
+      "desc": "Stop workers from committing, pushing or rewriting history.",
+      "keywords": "git commit push protect"
+    },
+    "lanes": {
+      "label": "File lanes",
+      "desc": "When two tasks would edit the same files: off, warn, or keep the second one waiting.",
+      "keywords": "lanes conflict files parallel"
+    },
+    "laneHold": {
+      "label": "Lane hold",
+      "desc": "How long a finished task keeps its files reserved.",
+      "keywords": "lanes hold reserve"
+    },
+    "contentionWindow": {
+      "label": "Conflict window",
+      "desc": "How far back edits count when looking for tasks touching the same files.",
+      "keywords": "contention conflict window"
+    },
+    "snapshotRetention": {
+      "label": "Keep snapshots for",
+      "desc": "Snapshots of the working folder taken before each turn are deleted after this long.",
+      "keywords": "snapshot backup retention undo"
+    },
+    "codeGraph": {
+      "label": "Code graph",
+      "desc": "Give workers a map of the code’s symbols and calls.",
+      "keywords": "code graph symbols index"
+    },
+    "port": {
+      "label": "Port",
+      "desc": "The port the service and this dashboard listen on.",
+      "keywords": "port http address"
+    },
+    "githubPoll": {
+      "label": "Check GitHub every",
+      "desc": "How often tracked repositories are checked for new issues; 0 turns it off.",
+      "keywords": "github issues poll"
+    },
+    "automations": {
+      "label": "Automations",
+      "desc": "Run scheduled automations.",
+      "keywords": "schedule automation cron"
     },
     "desktopNotify": {
       "label": "Desktop notifications",
@@ -157,9 +405,9 @@
       "keywords": "hotkey keybinding keyboard"
     },
     "webhooks": {
-      "label": "Webhooks",
-      "desc": "Addresses called when a task starts, finishes or fails.",
-      "keywords": "hook http integration"
+      "label": "Hooks",
+      "desc": "Shell commands run when a task starts, finishes or fails, or an account needs you.",
+      "keywords": "hook webhook command integration notify"
     },
     "projectMemory": {
       "label": "Project memory",

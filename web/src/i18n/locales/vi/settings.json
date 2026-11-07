@@ -20,15 +20,35 @@
     },
     "workers": {
       "label": "Worker",
-      "desc": "Số worker chạy cùng lúc và các mô hình được dùng."
+      "desc": "Mỗi tài khoản chạy bao nhiêu tác vụ cùng lúc, giới hạn thời gian và khi nào worker bị coi là kẹt."
+    },
+    "backends": {
+      "label": "Backend",
+      "desc": "Công cụ dòng lệnh nào nhận việc, và mô hình đứng sau mỗi bậc."
     },
     "quota": {
       "label": "Hạn mức",
-      "desc": "Giữ lại bao nhiêu hạn mức và các tài khoản thay phiên ra sao."
+      "desc": "Giữ lại bao nhiêu hạn mức và bao lâu đọc lại một lần."
+    },
+    "providers": {
+      "label": "Nhà cung cấp API",
+      "desc": "Dịch vụ mà các tài khoản dùng khóa API gửi yêu cầu tới."
     },
     "gates": {
       "label": "Cổng kiểm tra",
-      "desc": "Lệnh phải chạy đạt thì việc mới tính là xong."
+      "desc": "Các bước kiểm tra phải đạt thì việc mới tính là xong."
+    },
+    "workspace": {
+      "label": "An toàn thư mục",
+      "desc": "Các lớp bảo vệ để worker không giẫm lên tệp của nhau và không làm hỏng repo của bạn."
+    },
+    "hooks": {
+      "label": "Hook",
+      "desc": "Lệnh mà dịch vụ chạy khi tác vụ hoặc tài khoản thay đổi."
+    },
+    "memory": {
+      "label": "Bộ nhớ",
+      "desc": "Thông tin dự án gửi kèm cho mọi worker."
     },
     "notifications": {
       "label": "Thông báo",
@@ -38,13 +58,9 @@
       "label": "Phím tắt",
       "desc": "Phím cho các trang và lệnh."
     },
-    "hooks": {
-      "label": "Hook",
-      "desc": "Gọi sang dịch vụ khác khi tác vụ thay đổi."
-    },
-    "memory": {
-      "label": "Bộ nhớ",
-      "desc": "Thông tin dự án gửi kèm cho mọi worker."
+    "system": {
+      "label": "Dịch vụ",
+      "desc": "Bản thân dịch vụ Seelegent: cổng và các việc chạy nền."
     },
     "experiments": {
       "label": "Thử nghiệm",
@@ -54,6 +70,97 @@
       "label": "Ngôn ngữ",
       "desc": "Ngôn ngữ của bảng điều khiển. Đổi là áp dụng ngay."
     }
+  },
+  "daemon": {
+    "offline": "Cài đặt sẽ tải khi bảng điều khiển kết nối được với dịch vụ Seelegent.",
+    "saving": "Đang lưu…",
+    "saved": "Đã lưu",
+    "failed": "Chưa lưu được: {error}",
+    "reset": "Mặc định",
+    "resetOf": "Đặt {name} về mặc định",
+    "range": "Từ {min} đến {max}",
+    "lines": "Mỗi dòng một mục; lưu khi bạn rời ô.",
+    "readonly": "Đặt khi dịch vụ khởi động (seelegent config); không đổi được ở đây."
+  },
+  "units": {
+    "min": "phút",
+    "h": "giờ",
+    "s": "giây",
+    "ms": "ms",
+    "days": "ngày",
+    "bytes": "byte",
+    "times": "lần",
+    "pct": "%"
+  },
+  "options": {
+    "tier": {
+      "fast": "Nhanh",
+      "standard": "Chuẩn",
+      "strong": "Mạnh",
+      "max": "Tối đa"
+    },
+    "lanes": {
+      "off": "Tắt",
+      "warn": "Cảnh báo",
+      "enforce": "Bắt buộc"
+    },
+    "sandbox": {
+      "readOnly": "Chỉ đọc",
+      "workspaceWrite": "Được ghi trong thư mục làm việc",
+      "dangerFullAccess": "Toàn quyền (nguy hiểm)"
+    }
+  },
+  "backends": {
+    "enabled": "Nhận việc",
+    "allowedModels": "Mô hình được dùng",
+    "allowedModelsHint": "Một biểu thức chính quy; mô hình của các bậc phải khớp với nó.",
+    "anyModel": "Mọi mô hình",
+    "tierDefault": "Mặc định của công cụ",
+    "sandbox": "Sandbox",
+    "sandboxHint": "Codex được đụng tới những gì trên máy này."
+  },
+  "hooks": {
+    "loading": "Đang tải hook…",
+    "loadFailed": "Không tải được hook: {error}",
+    "empty": "Chưa có hook nào.",
+    "hookN": "Hook {n}",
+    "enabled": "Bật",
+    "run": "Lệnh",
+    "runHint": "Chạy trong shell; sự kiện được truyền qua các biến môi trường SEELEGENT_*.",
+    "on": "Chạy khi",
+    "project": "Chỉ cho thư mục dự án",
+    "projectHint": "Để trống để áp dụng cho mọi dự án.",
+    "timeout": "Giới hạn thời gian",
+    "add": "Thêm hook",
+    "remove": "Xóa",
+    "save": "Lưu hook",
+    "discard": "Bỏ thay đổi",
+    "saved": "Đã lưu hook",
+    "invalid": "Vài hook cần sửa; xem các ô được đánh dấu.",
+    "unsaved": "Chưa lưu; hãy lưu rồi mới thử được.",
+    "neverRan": "Chưa chạy lần nào.",
+    "lastRun": "Chạy lần cuối {time} khi {event}: {outcome}",
+    "exit": "mã thoát {code}",
+    "timedOut": "bị dừng vì quá giờ",
+    "test": "Chạy thử",
+    "testUnsupported": "Phiên bản dịch vụ Seelegent này chưa chạy thử hook được (501 not implemented). Hook vẫn chạy bình thường khi có sự kiện.",
+    "testFailed": "Không chạy thử được: {error}"
+  },
+  "memory": {
+    "project": "Dự án",
+    "noProjects": "Chưa có dự án nào. Bộ nhớ thuộc về một thư mục dự án, thư mục sẽ hiện ở đây sau khi có tác vụ chạy trong đó.",
+    "loading": "Đang tải bộ nhớ…",
+    "loadFailed": "Không tải được bộ nhớ: {error}",
+    "text": "Bộ nhớ",
+    "placeholder": "Quy ước, lệnh cần chạy, lỗi hay gặp…",
+    "updated": "Đã lưu {time}",
+    "none": "Dự án này chưa lưu gì.",
+    "changed": "Trong lúc bạn sửa, có người khác đã lưu bộ nhớ của dự án này.",
+    "reload": "Tải bản của họ",
+    "discard": "Bỏ thay đổi",
+    "save": "Lưu bộ nhớ",
+    "saved": "Đã lưu bộ nhớ",
+    "saveFailed": "Chưa lưu được bộ nhớ: {error}"
   },
   "items": {
     "theme": {
@@ -107,39 +214,180 @@
       "keywords": "ngôn ngữ dịch tiếng"
     },
     "concurrency": {
-      "label": "Số worker cùng lúc",
-      "desc": "Tối đa bao nhiêu worker được chạy cùng một lúc.",
-      "keywords": "song song đồng thời giới hạn"
+      "label": "Số tác vụ mỗi tài khoản",
+      "desc": "Một tài khoản được chạy tối đa bao nhiêu tác vụ cùng lúc.",
+      "keywords": "song song đồng thời giới hạn worker"
     },
     "defaultTier": {
       "label": "Bậc mặc định",
       "desc": "Bậc mô hình dùng khi brief không ghi rõ.",
       "keywords": "mô hình nhanh chuẩn mạnh tier"
     },
-    "modelCap": {
-      "label": "Trần mô hình",
-      "desc": "Mô hình mạnh nhất mà worker được dùng.",
-      "keywords": "giới hạn mô hình"
+    "taskTimeout": {
+      "label": "Giới hạn thời gian mỗi lượt",
+      "desc": "Lượt chạy lâu hơn mức này sẽ bị dừng.",
+      "keywords": "quá giờ thời gian giới hạn timeout"
+    },
+    "stall": {
+      "label": "Coi là kẹt sau",
+      "desc": "Worker không in ra gì trong khoảng này sẽ bị đánh dấu là kẹt.",
+      "keywords": "kẹt treo im lặng đứng"
+    },
+    "stallTool": {
+      "label": "Kẹt trong công cụ sau",
+      "desc": "Như trên, nhưng khi đang chạy công cụ hoặc lệnh (build lâu hơn).",
+      "keywords": "kẹt công cụ lệnh build"
+    },
+    "loopRepeat": {
+      "label": "Phát hiện vòng lặp",
+      "desc": "Một bước lặp lại ngần này lần thì bị coi là vòng lặp.",
+      "keywords": "vòng lặp lặp lại kẹt"
+    },
+    "attentionDecay": {
+      "label": "Hết cần chú ý sau",
+      "desc": "Tác vụ cần bạn mà bị để yên sẽ rời mục “Cần bạn” sau khoảng này.",
+      "keywords": "chú ý cần bạn"
+    },
+    "linkIntoProfiles": {
+      "label": "Dùng chung cho hồ sơ tài khoản",
+      "desc": "Thư mục và tệp trong thư mục nhà mà mọi hồ sơ tài khoản riêng cũng thấy (skill, cấu hình).",
+      "keywords": "hồ sơ liên kết symlink skill thư mục nhà",
+      "placeholder": ".agents/skills"
+    },
+    "backendAgy": {
+      "label": "Antigravity",
+      "desc": "Mô hình Gemini qua Antigravity CLI.",
+      "keywords": "agy gemini antigravity mô hình bậc"
+    },
+    "backendClaude": {
+      "label": "Claude Code",
+      "desc": "Mô hình Claude qua Claude Code.",
+      "keywords": "claude anthropic mô hình bậc"
+    },
+    "backendCodex": {
+      "label": "Codex",
+      "desc": "Mô hình OpenAI qua Codex, kèm sandbox của nó.",
+      "keywords": "codex openai gpt sandbox mô hình bậc"
     },
     "quotaReserve": {
       "label": "Hạn mức dự phòng",
-      "desc": "Phần hạn mức của mỗi tài khoản giữ lại cho việc gấp.",
-      "keywords": "giới hạn dự trữ"
+      "desc": "Tài khoản sẽ nghỉ khi một khung hạn mức còn ít hơn mức này.",
+      "keywords": "giới hạn dự trữ còn lại tối thiểu"
     },
-    "rotation": {
-      "label": "Xoay vòng tài khoản",
-      "desc": "Chuyển việc sang tài khoản khác khi một tài khoản hết hạn mức.",
-      "keywords": "tài khoản chuyển giao đổi"
+    "quotaRefresh": {
+      "label": "Đọc hạn mức mỗi",
+      "desc": "Bao lâu thì đọc lại hạn mức của mỗi tài khoản.",
+      "keywords": "làm mới chu kỳ đọc lại"
     },
-    "gateCommands": {
-      "label": "Lệnh cổng kiểm tra",
-      "desc": "Lệnh build và test chứng minh tác vụ chạy đúng.",
-      "keywords": "test build kiểm tra xác minh"
+    "passiveCooldown": {
+      "label": "Nghỉ cho khóa API",
+      "desc": "Tài khoản dùng khóa API nghỉ bao lâu sau khi chạm giới hạn (không đọc được hạn mức của nó).",
+      "keywords": "nghỉ khóa api giới hạn tốc độ cooldown"
     },
-    "gateBeforeReview": {
-      "label": "Chạy cổng trước khi duyệt",
-      "desc": "Chạy các cổng trước khi giao tác vụ cho bạn duyệt.",
-      "keywords": "test duyệt kiểm tra"
+    "usageHistory": {
+      "label": "Lưu lịch sử sử dụng",
+      "desc": "Ghi lại hạn mức của mỗi tài khoản mỗi giờ cho trang Sử dụng.",
+      "keywords": "lịch sử sử dụng ghi lại"
+    },
+    "providers": {
+      "label": "Nhà cung cấp API",
+      "desc": "Dịch vụ tương thích Anthropic cho Claude Code và tương thích OpenAI cho Codex.",
+      "keywords": "nhà cung cấp khóa api địa chỉ deepseek openrouter openai provider"
+    },
+    "gates": {
+      "label": "Chạy cổng kiểm tra",
+      "desc": "Chạy các lệnh kiểm tra của tác vụ trước khi giao cho bạn duyệt.",
+      "keywords": "test build kiểm tra xác minh duyệt"
+    },
+    "gateAutoChecks": {
+      "label": "Tự tìm lệnh kiểm tra",
+      "desc": "Khi tác vụ không ghi cổng nào, dùng lệnh build và test của dự án.",
+      "keywords": "tự động phát hiện test build"
+    },
+    "gateTimeout": {
+      "label": "Giới hạn thời gian của cổng",
+      "desc": "Lệnh kiểm tra chạy lâu hơn mức này bị tính là trượt.",
+      "keywords": "quá giờ giới hạn timeout"
+    },
+    "gateMaxAutoFixes": {
+      "label": "Số vòng tự sửa",
+      "desc": "Cổng trượt được gửi lại cho worker tối đa bao nhiêu lần trước khi hỏi bạn.",
+      "keywords": "thử lại sửa vòng"
+    },
+    "gateSettle": {
+      "label": "Chờ tệp ổn định",
+      "desc": "Chờ ngần này mà không có tệp nào đổi rồi mới chạy cổng.",
+      "keywords": "ổn định chờ debounce"
+    },
+    "gateSettlePoll": {
+      "label": "Chu kỳ kiểm tra ổn định",
+      "desc": "Bao lâu thì xem lại tệp trong lúc chờ chúng ổn định.",
+      "keywords": "chu kỳ kiểm tra"
+    },
+    "gateOutputTail": {
+      "label": "Giữ lại kết quả cổng",
+      "desc": "Giữ bao nhiêu phần cuối kết quả của cổng để hiện cho worker.",
+      "keywords": "kết quả nhật ký phần cuối byte"
+    },
+    "verifier": {
+      "label": "Duyệt lần hai",
+      "desc": "Một worker khác xem lại thay đổi trước khi tới tay bạn.",
+      "keywords": "xác minh duyệt ý kiến thứ hai"
+    },
+    "verifierTier": {
+      "label": "Bậc của người duyệt",
+      "desc": "Bậc mô hình của worker duyệt lần hai.",
+      "keywords": "xác minh mô hình bậc"
+    },
+    "hygiene": {
+      "label": "Kiểm tra dọn dẹp",
+      "desc": "Đánh dấu tệp thừa, đoạn in gỡ lỗi và thứ bỏ quên trong thay đổi của worker.",
+      "keywords": "dọn dẹp tệp thừa sót lại"
+    },
+    "gitGuard": {
+      "label": "Bảo vệ Git",
+      "desc": "Không cho worker commit, push hay viết lại lịch sử.",
+      "keywords": "git commit push bảo vệ"
+    },
+    "lanes": {
+      "label": "Làn tệp",
+      "desc": "Khi hai tác vụ sắp sửa cùng tệp: tắt, cảnh báo, hoặc bắt tác vụ thứ hai chờ.",
+      "keywords": "làn xung đột tệp song song"
+    },
+    "laneHold": {
+      "label": "Giữ làn",
+      "desc": "Tác vụ đã xong còn giữ chỗ các tệp của nó trong bao lâu.",
+      "keywords": "làn giữ chỗ"
+    },
+    "contentionWindow": {
+      "label": "Khung xung đột",
+      "desc": "Tính các lần sửa trong bao lâu trở lại khi tìm tác vụ đụng cùng tệp.",
+      "keywords": "xung đột khung thời gian"
+    },
+    "snapshotRetention": {
+      "label": "Giữ ảnh chụp trong",
+      "desc": "Ảnh chụp thư mục làm việc trước mỗi lượt bị xóa sau khoảng này.",
+      "keywords": "ảnh chụp sao lưu hoàn tác snapshot"
+    },
+    "codeGraph": {
+      "label": "Đồ thị mã",
+      "desc": "Cho worker một bản đồ các ký hiệu và lời gọi trong mã.",
+      "keywords": "đồ thị mã ký hiệu chỉ mục"
+    },
+    "port": {
+      "label": "Cổng mạng",
+      "desc": "Cổng mà dịch vụ và bảng điều khiển này lắng nghe.",
+      "keywords": "port http địa chỉ"
+    },
+    "githubPoll": {
+      "label": "Kiểm tra GitHub mỗi",
+      "desc": "Bao lâu thì xem các repo đang theo dõi có issue mới không; 0 là tắt.",
+      "keywords": "github issue kiểm tra định kỳ"
+    },
+    "automations": {
+      "label": "Tự động hóa",
+      "desc": "Chạy các việc tự động theo lịch.",
+      "keywords": "lịch tự động cron"
     },
     "desktopNotify": {
       "label": "Thông báo trên máy",
@@ -157,9 +405,9 @@
       "keywords": "phím tắt bàn phím hotkey"
     },
     "webhooks": {
-      "label": "Webhook",
-      "desc": "Địa chỉ được gọi khi tác vụ bắt đầu, xong hoặc lỗi.",
-      "keywords": "hook http tích hợp"
+      "label": "Hook",
+      "desc": "Lệnh shell chạy khi tác vụ bắt đầu, xong hoặc lỗi, hoặc khi tài khoản cần bạn.",
+      "keywords": "webhook hook lệnh tích hợp thông báo"
     },
     "projectMemory": {
       "label": "Bộ nhớ dự án",

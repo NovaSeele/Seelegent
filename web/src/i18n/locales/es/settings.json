@@ -20,15 +20,35 @@
     },
     "workers": {
       "label": "Workers",
-      "desc": "Cuántos workers trabajan a la vez y qué modelos pueden usar."
+      "desc": "Cuántas tareas ejecuta una cuenta a la vez, límites de tiempo y cuándo un worker se da por atascado."
+    },
+    "backends": {
+      "label": "Backends",
+      "desc": "Qué herramientas de línea de comandos reciben trabajo y qué modelo hay detrás de cada nivel."
     },
     "quota": {
       "label": "Cuota",
-      "desc": "Cuánta cuota reservar y cómo se turnan las cuentas."
+      "desc": "Cuánta cuota reservar y cada cuánto se lee."
+    },
+    "providers": {
+      "label": "Proveedores de API",
+      "desc": "Servicios a los que envían peticiones las cuentas con clave de API."
     },
     "gates": {
       "label": "Controles",
-      "desc": "Comandos que deben pasar para dar el trabajo por terminado."
+      "desc": "Comprobaciones que deben pasar para dar el trabajo por terminado."
+    },
+    "workspace": {
+      "label": "Seguridad del espacio",
+      "desc": "Protecciones para que los workers no pisen los archivos de otros ni tu repositorio."
+    },
+    "hooks": {
+      "label": "Hooks",
+      "desc": "Comandos que ejecuta el servicio cuando cambian tareas o cuentas."
+    },
+    "memory": {
+      "label": "Memoria",
+      "desc": "Datos del proyecto que recibe cada worker."
     },
     "notifications": {
       "label": "Notificaciones",
@@ -38,13 +58,9 @@
       "label": "Atajos de teclado",
       "desc": "Teclas para páginas y comandos."
     },
-    "hooks": {
-      "label": "Hooks",
-      "desc": "Llamadas a otros servicios cuando cambian las tareas."
-    },
-    "memory": {
-      "label": "Memoria",
-      "desc": "Datos del proyecto que recibe cada worker."
+    "system": {
+      "label": "Servicio",
+      "desc": "El propio servicio de Seelegent: su puerto y sus trabajos en segundo plano."
     },
     "experiments": {
       "label": "Experimentos",
@@ -54,6 +70,97 @@
       "label": "Idioma",
       "desc": "Idioma del panel. Los cambios se aplican al instante."
     }
+  },
+  "daemon": {
+    "offline": "Los ajustes se cargan cuando el panel está conectado al servicio de Seelegent.",
+    "saving": "Guardando…",
+    "saved": "Guardado",
+    "failed": "No se guardó: {error}",
+    "reset": "Predeterminado",
+    "resetOf": "Restablecer {name} al valor predeterminado",
+    "range": "De {min} a {max}",
+    "lines": "Uno por línea; se guarda al salir del campo.",
+    "readonly": "Se fija al iniciar el servicio (seelegent config); aquí no se puede cambiar."
+  },
+  "units": {
+    "min": "min",
+    "h": "h",
+    "s": "s",
+    "ms": "ms",
+    "days": "días",
+    "bytes": "bytes",
+    "times": "veces",
+    "pct": "%"
+  },
+  "options": {
+    "tier": {
+      "fast": "Rápido",
+      "standard": "Estándar",
+      "strong": "Potente",
+      "max": "Máximo"
+    },
+    "lanes": {
+      "off": "Desactivado",
+      "warn": "Avisar",
+      "enforce": "Imponer"
+    },
+    "sandbox": {
+      "readOnly": "Solo lectura",
+      "workspaceWrite": "Escritura en el espacio de trabajo",
+      "dangerFullAccess": "Acceso total (peligroso)"
+    }
+  },
+  "backends": {
+    "enabled": "Recibe trabajo",
+    "allowedModels": "Modelos permitidos",
+    "allowedModelsHint": "Una expresión regular; los modelos de cada nivel deben coincidir con ella.",
+    "anyModel": "Cualquier modelo",
+    "tierDefault": "El predeterminado de la herramienta",
+    "sandbox": "Sandbox",
+    "sandboxHint": "Lo que Codex puede tocar en este equipo."
+  },
+  "hooks": {
+    "loading": "Cargando hooks…",
+    "loadFailed": "No se pudieron cargar los hooks: {error}",
+    "empty": "Aún no hay hooks.",
+    "hookN": "Hook {n}",
+    "enabled": "Activo",
+    "run": "Comando",
+    "runHint": "Se ejecuta en una shell; el evento llega como variables de entorno SEELEGENT_*.",
+    "on": "Se ejecuta con",
+    "project": "Solo para la carpeta del proyecto",
+    "projectHint": "Déjalo vacío para todos los proyectos.",
+    "timeout": "Límite de tiempo",
+    "add": "Añadir hook",
+    "remove": "Quitar",
+    "save": "Guardar hooks",
+    "discard": "Descartar cambios",
+    "saved": "Hooks guardados",
+    "invalid": "Algunos hooks necesitan correcciones; mira los campos marcados.",
+    "unsaved": "Aún no guardado; guárdalo para poder probarlo.",
+    "neverRan": "Aún no se ha ejecutado.",
+    "lastRun": "Última ejecución {time} con {event}: {outcome}",
+    "exit": "código de salida {code}",
+    "timedOut": "detenido al alcanzar el límite de tiempo",
+    "test": "Probar",
+    "testUnsupported": "Esta versión del servicio de Seelegent aún no puede probar hooks (501 not implemented). El hook se sigue ejecutando con sus eventos.",
+    "testFailed": "La prueba no se ejecutó: {error}"
+  },
+  "memory": {
+    "project": "Proyecto",
+    "noProjects": "Aún no hay proyectos. La memoria pertenece a una carpeta de proyecto, que aparece aquí cuando una tarea se ha ejecutado en ella.",
+    "loading": "Cargando memoria…",
+    "loadFailed": "No se pudo cargar la memoria: {error}",
+    "text": "Memoria",
+    "placeholder": "Convenciones, comandos que ejecutar, trampas…",
+    "updated": "Guardado {time}",
+    "none": "Aún no hay nada guardado para este proyecto.",
+    "changed": "Mientras tanto, otra persona guardó la memoria de este proyecto.",
+    "reload": "Cargar su versión",
+    "discard": "Descartar cambios",
+    "save": "Guardar memoria",
+    "saved": "Memoria guardada",
+    "saveFailed": "No se guardó la memoria: {error}"
   },
   "items": {
     "theme": {
@@ -107,39 +214,180 @@
       "keywords": "idioma traducción lengua"
     },
     "concurrency": {
-      "label": "Workers simultáneos",
-      "desc": "Cuántos workers pueden trabajar al mismo tiempo.",
-      "keywords": "paralelo concurrente límite"
+      "label": "Tareas por cuenta",
+      "desc": "Cuántas tareas puede ejecutar una cuenta al mismo tiempo.",
+      "keywords": "paralelo concurrente límite workers"
     },
     "defaultTier": {
       "label": "Nivel predeterminado",
       "desc": "Nivel de modelo cuando el encargo no indica ninguno.",
       "keywords": "modelo rápido estándar potente"
     },
-    "modelCap": {
-      "label": "Modelo máximo",
-      "desc": "El modelo más potente que pueden usar los workers.",
-      "keywords": "límite modelo"
+    "taskTimeout": {
+      "label": "Límite de tiempo por turno",
+      "desc": "Un turno que dure más que esto se detiene.",
+      "keywords": "tiempo límite duración timeout"
+    },
+    "stall": {
+      "label": "Atascado tras",
+      "desc": "Un worker sin salida durante este tiempo se marca como atascado.",
+      "keywords": "atasco inactivo colgado silencio"
+    },
+    "stallTool": {
+      "label": "Atascado en una herramienta tras",
+      "desc": "Lo mismo, mientras corre una herramienta o un comando (las compilaciones tardan más).",
+      "keywords": "atasco herramienta comando compilación"
+    },
+    "loopRepeat": {
+      "label": "Detección de bucles",
+      "desc": "El mismo paso repetido estas veces cuenta como un bucle.",
+      "keywords": "bucle repetir atasco"
+    },
+    "attentionDecay": {
+      "label": "La atención caduca tras",
+      "desc": "Una tarea que te necesitaba y quedó sin atender sale de “Te necesita” tras este tiempo.",
+      "keywords": "atención te necesita caducar"
+    },
+    "linkIntoProfiles": {
+      "label": "Compartido con los perfiles",
+      "desc": "Carpetas y archivos de tu carpeta personal que también ve cada perfil de cuenta aislado (skills, configuraciones).",
+      "keywords": "perfil enlace symlink skills carpeta personal",
+      "placeholder": ".agents/skills"
+    },
+    "backendAgy": {
+      "label": "Antigravity",
+      "desc": "Modelos Gemini a través de la CLI de Antigravity.",
+      "keywords": "agy gemini antigravity modelo nivel"
+    },
+    "backendClaude": {
+      "label": "Claude Code",
+      "desc": "Modelos Claude a través de Claude Code.",
+      "keywords": "claude anthropic modelo nivel"
+    },
+    "backendCodex": {
+      "label": "Codex",
+      "desc": "Modelos de OpenAI a través de Codex, con su sandbox.",
+      "keywords": "codex openai gpt sandbox modelo nivel"
     },
     "quotaReserve": {
       "label": "Reserva de cuota",
-      "desc": "Parte de la cuota de cada cuenta guardada para trabajo urgente.",
-      "keywords": "límite margen"
+      "desc": "Una cuenta descansa cuando a una ventana de cuota le queda menos que esto.",
+      "keywords": "límite margen mínimo restante"
     },
-    "rotation": {
-      "label": "Rotación de cuentas",
-      "desc": "Pasa el trabajo a otra cuenta cuando una agota su cuota.",
-      "keywords": "cuentas cambiar relevo"
+    "quotaRefresh": {
+      "label": "Leer la cuota cada",
+      "desc": "Cada cuánto se lee la cuota de cada cuenta.",
+      "keywords": "actualizar intervalo sondeo"
     },
-    "gateCommands": {
-      "label": "Comandos de control",
-      "desc": "Comandos de build y test que demuestran que una tarea funciona.",
-      "keywords": "test build verificar comprobar"
+    "passiveCooldown": {
+      "label": "Descanso de clave de API",
+      "desc": "Cuánto descansa una cuenta con clave de API tras alcanzar un límite (su cuota no se puede leer).",
+      "keywords": "enfriamiento pasivo clave api límite de uso"
     },
-    "gateBeforeReview": {
-      "label": "Controles antes de revisar",
-      "desc": "Ejecuta los controles antes de pasarte una tarea para revisión.",
-      "keywords": "test revisión verificar"
+    "usageHistory": {
+      "label": "Guardar historial de uso",
+      "desc": "Registrar cada hora la cuota de cada cuenta para la página Uso.",
+      "keywords": "historial uso instantánea registro"
+    },
+    "providers": {
+      "label": "Proveedores de API",
+      "desc": "Servicios compatibles con Anthropic para Claude Code y compatibles con OpenAI para Codex.",
+      "keywords": "proveedor api clave url base deepseek openrouter openai provider"
+    },
+    "gates": {
+      "label": "Ejecutar controles",
+      "desc": "Ejecutar los comandos de control de la tarea antes de pasártela para revisión.",
+      "keywords": "test compilación verificar comprobar revisión"
+    },
+    "gateAutoChecks": {
+      "label": "Buscar controles automáticamente",
+      "desc": "Si una tarea no indica controles, usar los comandos de compilación y prueba del proyecto.",
+      "keywords": "auto detectar test compilación"
+    },
+    "gateTimeout": {
+      "label": "Límite de tiempo del control",
+      "desc": "Un comando de control que dure más que esto falla.",
+      "keywords": "tiempo límite timeout"
+    },
+    "gateMaxAutoFixes": {
+      "label": "Rondas de corrección automática",
+      "desc": "Cuántas veces se devuelve un control fallido al worker antes de preguntarte.",
+      "keywords": "reintentar corregir bucle"
+    },
+    "gateSettle": {
+      "label": "Esperar a que los archivos se asienten",
+      "desc": "Esperar este tiempo sin cambios en los archivos antes de ejecutar los controles.",
+      "keywords": "asentar debounce esperar"
+    },
+    "gateSettlePoll": {
+      "label": "Intervalo de comprobación",
+      "desc": "Cada cuánto se revisan los archivos mientras se espera a que se asienten.",
+      "keywords": "sondeo intervalo"
+    },
+    "gateOutputTail": {
+      "label": "Salida del control conservada",
+      "desc": "Cuánto del final de la salida de un control se conserva y se muestra al worker.",
+      "keywords": "salida registro final bytes"
+    },
+    "verifier": {
+      "label": "Segunda revisión",
+      "desc": "Otro worker revisa el cambio antes de que te llegue.",
+      "keywords": "verificar revisión segunda opinión"
+    },
+    "verifierTier": {
+      "label": "Nivel del revisor",
+      "desc": "Nivel de modelo de ese segundo worker.",
+      "keywords": "verificar modelo nivel"
+    },
+    "hygiene": {
+      "label": "Comprobaciones de limpieza",
+      "desc": "Señalar archivos sueltos, salida de depuración y restos en el cambio de un worker.",
+      "keywords": "higiene limpieza restos"
+    },
+    "gitGuard": {
+      "label": "Protección de Git",
+      "desc": "Impedir que los workers hagan commit, push o reescriban el historial.",
+      "keywords": "git commit push proteger"
+    },
+    "lanes": {
+      "label": "Carriles de archivos",
+      "desc": "Cuando dos tareas editarían los mismos archivos: desactivado, avisar o hacer esperar a la segunda.",
+      "keywords": "carriles conflicto archivos paralelo"
+    },
+    "laneHold": {
+      "label": "Retención de carril",
+      "desc": "Cuánto tiempo una tarea terminada mantiene reservados sus archivos.",
+      "keywords": "carriles retener reservar"
+    },
+    "contentionWindow": {
+      "label": "Ventana de conflicto",
+      "desc": "Hasta cuándo atrás cuentan las ediciones al buscar tareas que tocan los mismos archivos.",
+      "keywords": "contención conflicto ventana"
+    },
+    "snapshotRetention": {
+      "label": "Conservar instantáneas",
+      "desc": "Las instantáneas de la carpeta de trabajo tomadas antes de cada turno se borran tras este tiempo.",
+      "keywords": "instantánea copia retención deshacer"
+    },
+    "codeGraph": {
+      "label": "Grafo de código",
+      "desc": "Dar a los workers un mapa de los símbolos y llamadas del código.",
+      "keywords": "grafo código símbolos índice"
+    },
+    "port": {
+      "label": "Puerto",
+      "desc": "El puerto en el que escuchan el servicio y este panel.",
+      "keywords": "puerto http dirección"
+    },
+    "githubPoll": {
+      "label": "Revisar GitHub cada",
+      "desc": "Cada cuánto se buscan issues nuevas en los repositorios seguidos; 0 lo desactiva.",
+      "keywords": "github issues sondeo"
+    },
+    "automations": {
+      "label": "Automatizaciones",
+      "desc": "Ejecutar las automatizaciones programadas.",
+      "keywords": "programar automatización cron"
     },
     "desktopNotify": {
       "label": "Notificaciones de escritorio",
@@ -157,9 +405,9 @@
       "keywords": "atajo teclado combinación"
     },
     "webhooks": {
-      "label": "Webhooks",
-      "desc": "Direcciones a las que se llama cuando una tarea empieza, termina o falla.",
-      "keywords": "hook http integración"
+      "label": "Hooks",
+      "desc": "Comandos de shell que se ejecutan cuando una tarea empieza, termina o falla, o una cuenta te necesita.",
+      "keywords": "hook webhook comando integración aviso"
     },
     "projectMemory": {
       "label": "Memoria del proyecto",
