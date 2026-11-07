@@ -18,7 +18,8 @@ endpoint tables.
 | §3 tasks, wait, task git, repo git | `tasks.go`, `git.go` |
 | §4 accounts, quota, sign-in, keys, providers, usage | `accounts.go`, `convert.go` |
 | §5 settings, memory, roles | `settings.go` |
-| §6 and `/members*`, `/hooks*` | `501 not_implemented` until their milestones (`server.go`, `reservedRoutes`) |
+| §6 M13: `/lanes`, `/contention`, `/proof/*` | `proof.go` (over `httpapi.Proof`, the proof service, and `httpapi.Gates`, the task engine); behaviour in [gates.md](gates.md) |
+| §6 the rest, `/members*`, `/hooks*` | `501 not_implemented` until their milestones (`server.go`, `reservedRoutes`) |
 | §7 SSE | `hub.go` (ids, ring, client queues), `stream.go` (the response), `feeds.go` (task bus and account watcher) |
 | §8 static dashboard | `web.go` |
 | DTOs | `internal/api`; `go generate ./internal/api` writes `web/src/api/types.gen.ts` (`internal/api/tsgen`), and a test fails when the file is stale |
@@ -53,6 +54,13 @@ as its target, the way git stores it. Git diffs run with `--no-textconv`, so no 
 in the daemon.
 
 ## Decisions where the contract left room
+
+- A domain error that carries details (`APIDetails()`) keeps them in the error body: a lane conflict is `409` with
+  `{reason: "lane_conflict", conflicts}`, a refused regression run `409` with `{reason: "active_tasks",
+  activeTaskIds}` or `{reason: "run_in_progress", runId}`.
+- `GET /proof/stats` without `cwd` counts every project; the other proof routes need an absolute `cwd`. A
+  regression run answers `202` at once and reports its progress as `proof.run` frames, whose `ProofRun.repoRoot`
+  says which repository it belongs to.
 
 - `GET /git/branches` answers `null` for a folder that does not exist, keyed by the cwd as given. A batch of 50 cwds
   should not fail because one project folder was deleted. A relative cwd is still `400`.

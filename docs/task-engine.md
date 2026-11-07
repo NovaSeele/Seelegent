@@ -77,7 +77,7 @@ append the events in **one transaction**, then publish on the bus. The log and t
 
 | Outcome | What happens |
 |---|---|
-| ok | turn `ok`, task `done` (a hand-back turn also logs `handback`) |
+| ok | turn `ok`, task `done` (a hand-back turn also logs `handback`); a gated task stays `running` in its gate phase first (below) |
 | quota | the account rests for that quota group (`pool.MarkExhausted`), next attempt |
 | auth | the account is marked signed out (`pool.MarkAuthFailed`), next attempt on another account |
 | transient | `retry` event, wait 15 s then 45 s on the same account (only its own timer wakes it), then another account |
@@ -88,6 +88,13 @@ append the events in **one transaction**, then publish on the bus. The log and t
 A turn makes at most one attempt per account of the backend plus three. After every attempt the usage is recorded
 and a background quota read of the account is requested.
 
+6. **Gate.** An edit task whose turn ended `ok` keeps its run: the task stays `running` with `gatePhase` set while
+   the gate runs, settles, or the verifier child works ([gates.md](gates.md)). A red gate or a verifier reject with
+   budget left opens an automatic fix turn (`by: "gate"` or `"verifier"`) on the same run; otherwise the task ends
+   `done` with the gate result on the turn. `endRun` starts the run again while `gatePhase` is set, so a phase left
+   by a stopped daemon is picked up by the next one. Takeover is refused during the phase; a cancel ends it
+   (`not_run` steps, verdict `error`) and cancels the verifier child.
+
 ## Attention
 
 `computeAttention` maps the task and what the run knows about its worker onto the contract's states:
@@ -95,7 +102,9 @@ and a background quota read of the account is requested.
 - `blocked`: prerequisites failed (`deps_blocked`), no account can run it (`no_accounts`, for the user), every
   account needs a sign-in (`auth`, for the user), the worker repeats itself (`looping`), a done turn with no answer
   (`no_response`), red hygiene findings (`hygiene`), files at risk not restored (`work_at_risk`), a failed task
-  (`failed`). The last three come from the post-turn checks ([safety.md](safety.md)).
+  (`failed`), a red gate with no fix budget left (`gate_red`; `hygiene` when hygiene is its only red step), a
+  verifier reject with no budget left (`verifier_rejected`). `hygiene` and `work_at_risk` come from the post-turn
+  checks ([safety.md](safety.md)), the gate reasons from [gates.md](gates.md).
 - `question`: the answer has a `## Blocked` section (its text and list items become the report's question).
 - `stalled`: no output for `stallMinutes`, one tool call open for `stallToolMinutes`, or no conversation 3 min after
   launch.
@@ -159,6 +168,7 @@ exits with an error within 3 s is reported at once as no terminal.
   brief.
 - A cancel the earlier daemon recorded is carried out; takeover consoles are watched again; dependents are
   re-evaluated.
+- A task in its gate phase runs its gate again from the start (a verifier child already running is awaited).
 - An active task whose record cannot be read is logged and skipped, so the others still recover;
   `Service.Unreadable` lists it for doctor.
 

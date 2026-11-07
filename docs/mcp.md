@@ -84,12 +84,13 @@ again; from then on the usual rules apply again (a later crash is ridden out, a 
 ## Tools
 
 `tools/list` returns 17 tools, the same names and input schemas as the old Node server (sorted by name, as the SDK
-does). Tools that are not built yet are listed with a description starting "Not available in this version of
+does), with two additions: `gate` of `delegate` and `followup` also takes `true`, and `proof` has the actions
+`cancel_run` and `contention`. Tools that are not built yet are listed with a description starting "Not available in this version of
 Seelegent yet." and answer with a tool error that says nothing was done.
 
 | Tool | Routes | Now |
 |---|---|---|
-| `delegate` | `POST /tasks`, then `POST /wait?cwd=` | yes, except `variants`/`variant_specs` (contests), gate commands or `gate: true`, lane paths, `verify: true`, `force_lane: true` and `member`: refused before any call (`not_available`) |
+| `delegate` | `POST /tasks`, then `POST /wait?cwd=` | yes, except `variants`/`variant_specs` (contests) and `member`: refused before any call (`not_available`). `gate` (a command, a list, `true` for the detected commands, `false`), `lane` (paths, or `false` for `noLane`), `force_lane` and `verify` map onto `gate`/`gateCommands`/`lane`/`noLane`/`forceLane`/`verify` ([gates.md](gates.md)) |
 | `followup` | `GET /tasks/{id}` (only to check `provider`), `POST /tasks/{id}/followup`, `POST /wait` | yes, same limits as `delegate` (`member` aside) |
 | `wait` | `POST /wait` (`reports: true`) | yes |
 | `review` | `POST /tasks/{id}/review` | yes; `answer_objection` is appended to the notes |
@@ -99,7 +100,7 @@ Seelegent yet." and answer with a tool error that says nothing was done.
 | `memory` | `GET`, `POST` (append), `PUT` (replace) `/memory` | yes |
 | `profiles` | `GET /roles`, `POST /roles`, `DELETE /roles/{id}`, `GET /roles/skills` | yes |
 | `members` | `/members*` (501) | not yet |
-| `proof` | proof gate | not yet |
+| `proof` | `GET /proof/index`, `GET /proof/matrix`, `POST /proof/run` (then `GET /proof/runs/{id}` every 500 ms while `wait_seconds` lasts, at most 3000 s), `GET /proof/runs/{id}`, `POST /proof/runs/{id}/cancel`, `GET /proof/stats`, `GET /lanes`, `GET /contention` | yes: actions `matrix` (needs `feature`), `index`, `run` (`feature?`, `force?`, `wait_seconds?`, default 0), `run_status` and `cancel_run` (need `run_id`), `stats` (`since?`), `lanes`, `contention`; `cwd` defaults to the server's folder. `run` and `cancel_run` are mutating for the worker guard |
 | `meeting` | meetings | not yet |
 | `consult` | consult | not yet |
 | `notes` | lead notes | not yet |
@@ -147,7 +148,7 @@ the daemon, with the same text and `{error: {code: "forbidden", details: {caller
 - `meeting` unless the action is `status`, `list` or `wait`; `issues` unless `repos`, `list`, `tickets` or
   `ticket`; `memory` unless `read`; `notes` unless `list`; `automations` unless `list` or `runs`; `contest` unless
   `status` or `wait`;
-- `profiles` with `upsert` or `delete`; `proof` with `run`.
+- `profiles` with `upsert` or `delete`; `proof` with `run` or `cancel_run`.
 
 `wait`, `task`, `status`, `members` and the read actions go on to the daemon, which decides what a worker may see.
 
