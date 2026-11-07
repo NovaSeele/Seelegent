@@ -40,7 +40,9 @@ func Mutating(name, action string) bool {
 	case "notes":
 		return action != "list"
 	case "automations":
-		return notIn("list", "runs")
+		// The command line's show and preview only read: they are guarded as list. The daemon refuses every
+		// automation and GitHub endpoint to a worker all the same (its allow-list), so they answer forbidden there.
+		return notIn("list", "runs", "show", "preview")
 	case "contest":
 		return notIn("status", "wait", "list", "diff")
 	case "members":

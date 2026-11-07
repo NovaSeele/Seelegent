@@ -13,6 +13,9 @@ func TestGuardAndHelpers(t *testing.T) {
 		{"delegate", "", true}, {"daemon", "", true}, {"memory", "read", false}, {"memory", "append", true},
 		{"setup", "", true}, {"migrate", "", true}, {"update", "", true},
 		{"status", "", false}, {"task", "", false}, {"wait", "", false}, {"profiles", "list", false},
+		{"automations", "show", false}, {"automations", "preview", false}, {"automations", "runs", false},
+		{"automations", "run", true}, {"automations", "enable", true}, {"issues", "ticket", false},
+		{"issues", "pr", true}, {"issues", "retry", true},
 	} {
 		if got := Mutating(c.name, c.action); got != c.want {
 			t.Errorf("Mutating(%s, %s) = %v", c.name, c.action, got)
