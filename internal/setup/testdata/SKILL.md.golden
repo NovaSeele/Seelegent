@@ -1,0 +1,70 @@
+---
+name: seelegent
+description: "Use when the user asks for code to be written or changed and Seelegent is available (MCP tools named delegate/wait/followup/review, or the `seelegent` command); you act as the lead who designs, briefs, reviews and tests while Seelegent workers write the code. Do not use for pure questions, one-line edits, or when running as a Seelegent worker."
+metadata:
+  generator: seelegent
+  version: "v1.2.3"
+---
+
+# Seelegent
+
+Seelegent runs coding tasks on worker CLIs signed in to the user's own accounts: the Antigravity CLI (`agy`, Gemini models) by default, and Claude Code (`claude`) or Codex (`codex`) when the user enables them, also on API-key providers. It spreads the work over the accounts and their quota. You are the lead: you design, write the brief, review and test; the workers write the code.
+
+## First check
+
+If the environment variable `SEELEGENT_WORKER` is `1`, you are a Seelegent worker: never call Seelegent tools or the `seelegent` command; just do your task.
+
+## Tools
+
+- `delegate` starts a task. Required: `prompt` (the brief) and `cwd` (the absolute project folder). Optional: `title`; `model` (a tier `fast`, `standard`, `strong` or `max`, or a model id the settings allow); `effort`; `mode` (`full`, the default, or `plan` for read-only investigation); `backend` (`agy`, `claude`, `codex`); `provider` (an API-key provider id; its harness sets the backend); `profile` (a worker role id); `spec` and `task_ids` (Spec Kit); `after` and `after_mode` (dependencies); `allow_git`; `gate: false`; `wait_seconds` (default 600, at most 3000; 0 returns at once with the task id; the default is 0 with `after`); `wake_on_blocked` (default true).
+- `wait` waits for `task_ids` up to `wait_seconds`; `any: true` wakes when the first one finishes. It also wakes early when a task needs you.
+- `task` shows a task's report; `steps: N` adds its last N tool steps, `full: true` the whole record.
+- `followup` sends the next instruction to a task (`task_id`, `message`), with the same `model`, `effort`, `profile`, `task_ids`, `allow_git`, `wait_seconds` and `wake_on_blocked` options as `delegate`. `force: true` starts a task held in `blocked_deps`. A followup cannot change the provider.
+- `review` closes a task: `verdict` `accepted` or `rejected`, with short `notes`. Verdicts go into the project's history, which later briefs show.
+- `cancel` stops a task (`task_id`). It waits up to `wait_seconds` (default 15, at most 60) and answers `cancelled`, or `cancelling` while the worker is still stopping.
+- `status` lists the accounts with their quota, the active tasks and the backends (`full: true` for everything).
+- `memory` keeps the project notes every brief of that project includes: `cwd`, `action` (`read`, `append` or `replace`), `text`.
+- `profiles` manages worker roles (`list`, `get`, `upsert`, `delete`, with `scope` `global` or `project` and `cwd`) and lists the skills a role can name (`skills`).
+
+Not available in this version yet: the tools `proof`, `members`, `meeting`, `consult`, `notes`, `contest`, `issues` and `automations`, and the `delegate`/`followup` options `lane`, `force_lane`, `verify: true`, gate commands (`gate: true` or a list of commands), `member` and `variants`. They answer with the error code `not_available` and do nothing; leave them out.
+
+## The loop
+
+1. `delegate` with a brief written like a ticket. The call waits up to `wait_seconds` and returns the worker's report, or returns earlier with the task id; then `wait` for it.
+2. Read the report: the status, the worker's answer, the changed files, and the attention reason when the task needs you. A worker that ends its answer with a `## Blocked` question waits for your decision: answer it with `followup`.
+3. Check the work yourself: read the diff and run the tests or the build. Do not accept on the report alone.
+4. Send concrete fixes with `followup` (the worker keeps its conversation), or close the task with `review`. Repeat until it is right.
+
+## How to write a brief
+
+Workers never saw your conversation. Write the brief like a ticket for a capable engineer:
+
+- **Goal**: one or two sentences on what to build or fix.
+- **Files**: the exact files or folders to create or change, and what is off-limits.
+- **Constraints**: conventions, naming, architecture rules; no new dependencies or unrequested refactors.
+- **Acceptance criteria**: a checklist of what must work.
+- **Verify**: the exact commands to run (tests, build, lint).
+
+Pick the tier by difficulty: `fast` for mechanical edits and lookups, `standard` by default, `strong` or `max` for tricky or multi-file work.
+
+## Parallel work
+
+Split the work into pieces on disjoint files, `delegate` each with `wait_seconds: 0`, then `wait` with `any: true` on the ids still running, and review each piece as it finishes. Never give two workers the same files at once: this version does not check that for you. Run the full build and tests once every piece is accepted.
+
+## Dependencies
+
+`after: ["<task id>", ...]` holds a task in `waiting_deps` until every prerequisite is `accepted` (or only `done`, with `after_mode: "done"`); it then starts with their last reports quoted in its brief. If a prerequisite fails, is rejected or is cancelled, the task goes to `blocked_deps` and `wait` wakes: fix the prerequisite, `followup` with `force: true` to start anyway, or `cancel` it.
+
+## Project memory and roles
+
+Keep durable project facts for workers (conventions, commands, pitfalls) with `memory`; every brief of that project includes them, together with your recent review verdicts. Keep the notes short: they are capped at 64 KB. A role (`profiles`) adds standing rules, an output style and skills to the brief of every task that names it with `profile`.
+
+## Spec Kit
+
+For a Spec Kit feature, pass `spec` (the feature folder, absolute) and `task_ids` (for example `["T001", "T002"]`). The brief points the worker at the spec, plan, tasks and contracts, and the project constitution is included. Workers implement only the named tasks and never edit `tasks.md`; you tick the tasks after review. Use `mode: "full"` when the spec folder is outside the project.
+
+## Without MCP
+
+If your host shows no Seelegent tools, run `seelegent --help` in a shell and use the matching commands.
+
+Dashboard: http://127.0.0.1:47821/
