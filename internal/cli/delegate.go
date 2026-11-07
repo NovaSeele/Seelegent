@@ -76,12 +76,7 @@ type delegateFlags struct {
 	allowGit bool
 	gates    gateFlags
 	wait     int
-	// Contest options: refused.
-	variants int
-	variant  []string
-	judge    string
-	noJudge  bool
-	deadline int
+	contest  contestFlags
 }
 
 func (f *delegateFlags) add(fs *pflag.FlagSet, withWait bool) {
@@ -98,30 +93,16 @@ func (f *delegateFlags) add(fs *pflag.FlagSet, withWait bool) {
 	fs.StringSliceVar(&f.after, "after", nil, "start after these tasks (comma separated)")
 	fs.StringVar(&f.afterMode, "after-mode", "", "accepted (default) or done")
 	fs.BoolVar(&f.allowGit, "allow-git", false, "let the worker commit")
-	fs.StringVar(&f.member, "member", "", "department member (not available in this version)")
+	fs.StringVar(&f.member, "member", "", "department member (its backend, model or tier and role)")
 	f.gates.add(fs)
 	if withWait {
 		fs.IntVar(&f.wait, "wait", defaultWait, "seconds to wait for the report (0: return at once)")
 	}
-	fs.IntVar(&f.variants, "variants", 0, "contest variants (not available in this version)")
-	fs.StringArrayVar(&f.variant, "variant", nil, "contest variant (not available in this version)")
-	fs.StringVar(&f.judge, "judge", "", "contest judge (not available in this version)")
-	fs.BoolVar(&f.noJudge, "no-judge", false, "contest without judge (not available in this version)")
-	fs.IntVar(&f.deadline, "deadline", 0, "contest deadline in minutes (not available in this version)")
+	f.contest.add(fs)
 }
 
-// request builds the delegate request from the flags and the prompt words, refusing what is not available first.
+// request builds the delegate request from the flags and the prompt words.
 func (f *delegateFlags) request(fs *pflag.FlagSet, words []string) (api.DelegateRequest, error) {
-	for _, name := range []string{"variants", "variant", "judge", "no-judge", "deadline"} {
-		if fs.Changed(name) {
-			return api.DelegateRequest{}, &ops.UnavailableError{What: "contests (--" + name + ")",
-				Detail: "delegate one task per variant instead"}
-		}
-	}
-	if f.member != "" {
-		return api.DelegateRequest{}, &ops.UnavailableError{What: "department members (--member)",
-			Detail: "leave --member out and pass --backend and --model instead"}
-	}
 	g, err := f.gates.options(fs)
 	if err != nil {
 		return api.DelegateRequest{}, err
@@ -147,8 +128,9 @@ func (f *delegateFlags) request(fs *pflag.FlagSet, words []string) (api.Delegate
 		return api.DelegateRequest{}, usagef("the prompt is empty")
 	}
 	req := api.DelegateRequest{Prompt: prompt, Title: f.title, Cwd: cwd, Mode: mode, Model: f.model, Effort: f.effort,
-		Backend: f.backend, Provider: f.provider, Profile: f.profile, After: splitList(f.after), AfterMode: f.afterMode,
-		AllowGit: f.allowGit, Gate: g.gate, GateCommands: g.commands, Lane: g.lane, NoLane: g.noLane,
+		Backend: f.backend, Provider: f.provider, Member: f.member, Profile: f.profile, After: splitList(f.after),
+		AfterMode: f.afterMode,
+		AllowGit:  f.allowGit, Gate: g.gate, GateCommands: g.commands, Lane: g.lane, NoLane: g.noLane,
 		ForceLane: g.forceLane, Verify: g.verify, Session: session()}
 	ids := splitList([]string{f.task})
 	switch {
@@ -188,6 +170,20 @@ func newDelegateCommand(d deps) *cobra.Command {
 			req, err := f.request(cmd.Flags(), args)
 			if err != nil {
 				return err
+			}
+			if f.contest.set(cmd.Flags()) {
+				creq, err := f.contest.request(req)
+				if err != nil {
+					return err
+				}
+				if f.wait < 0 {
+					return usagef("--wait must be 0 or more")
+				}
+				v, err := runContest(cmd, d, creq, f.wait)
+				if err != nil {
+					return err
+				}
+				return emitContest(cmd, &v)
 			}
 			wait := f.wait
 			if len(req.After) > 0 && !cmd.Flags().Changed("wait") {
@@ -248,6 +244,17 @@ func newRunCommand(d deps) *cobra.Command {
 			req, err := f.request(cmd.Flags(), args)
 			if err != nil {
 				return err
+			}
+			if f.contest.set(cmd.Flags()) {
+				creq, err := f.contest.request(req)
+				if err != nil {
+					return err
+				}
+				v, err := runContest(cmd, d, creq, runWait)
+				if err != nil {
+					return err
+				}
+				return printJSON(cmd.OutOrStdout(), v)
 			}
 			r, _, err := delegate(cmd, d, req, runWait)
 			if err != nil {

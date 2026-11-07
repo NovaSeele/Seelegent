@@ -232,7 +232,9 @@ func TestHookCommand(t *testing.T) {
 		t.Errorf("garbage: %q", out)
 	}
 	help, _, _ := execute(t, "--help")
-	if strings.Contains(help, "hook") {
-		t.Error("the hook command is listed in help")
+	for _, line := range strings.Split(help, "\n") {
+		if f := strings.Fields(line); len(f) > 0 && f[0] == "hook" {
+			t.Error("the hook command is listed in help")
+		}
 	}
 }

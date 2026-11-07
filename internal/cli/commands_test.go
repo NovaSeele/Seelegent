@@ -324,25 +324,22 @@ func TestTaskCommands(t *testing.T) {
 	}
 }
 
-// TestNotAvailable: options of later milestones are refused before anything is sent.
-func TestNotAvailable(t *testing.T) {
+// TestContestFlags: contest options that do not go together are usage errors before anything is sent.
+func TestContestFlags(t *testing.T) {
 	cliEnv(t)
 	t.Setenv(config.EnvHome, t.TempDir())
 	t.Setenv(config.EnvPort, strconv.Itoa(freeTestPort(t)))
 	td := testDeps(nil)
 	for _, args := range [][]string{
-		{"delegate", "--member", "alice", "x"},
-		{"delegate", "--variants", "2", "x"},
-		{"delegate", "--variant", "agy:m", "x"},
-		{"delegate", "--no-judge", "x"},
+		{"delegate", "--variants", "2", "--after", "t1", "x"},
+		{"delegate", "--variant", "color=red", "x"},
+		{"delegate", "--judge", "ana", "--no-judge", "x"},
+		{"members", "set", "ana"},
+		{"meeting", "post", "m1", "--answer", "no-equals"},
+		{"notes", "add", "t1", "body"},
+		{"consult", "t1"},
 	} {
-		r := wantErr(t, td, ExitError, codeNotAvailable, append(args, "--json")...)
-		if !strings.Contains(r.stdout, "not available in this version") {
-			t.Errorf("%v: %s", args, r.stdout)
-		}
-		if r := wantErr(t, td, ExitError, "", args...); !strings.Contains(r.stderr, "not available") {
-			t.Errorf("%v text: %s", args, r.stderr)
-		}
+		wantErr(t, td, ExitUsage, codeUsage, append(args, "--json")...)
 	}
 	// Nothing runs: the daemon is not started and not needed for the refusal; without one the command fails.
 	wantErr(t, td, ExitError, codeDaemon, "ls", "--json")
@@ -362,6 +359,9 @@ func TestWorkerGuard(t *testing.T) {
 		{"review", "t-1", "accepted"}, {"cancel", "t-1"}, {"memory", "append", "--cwd", d.cwd, "x"},
 		{"memory", "replace", "--cwd", d.cwd, "x"}, {"memory", "--cwd", d.cwd}, {"stop"}, {"restart"}, {"ui"},
 		{"daemon"}, {"serve", "--port", "1"}, {"proof", "run", "--cwd", d.cwd}, {"proof", "cancel-run", "r1"},
+		{"members", "add", "--name", "x"}, {"members", "remove", "x"}, {"consult", "t-1", "--member", "x"},
+		{"notes", "send", "t-1"}, {"meeting", "open", "q"}, {"meeting", "decide", "m1", "x"},
+		{"contest", "pick", "k1"}, {"hooks", "test", "h1"}, {"hooks", "set", "x.json"},
 	} {
 		r := runCLI(t, td, args...)
 		if r.code != ExitError || r.stderr != ops.WorkerMessage+"\n" || r.stdout != "" {
@@ -380,6 +380,62 @@ func TestWorkerGuard(t *testing.T) {
 	must(t, td, "memory", "read", "--cwd", d.cwd)
 	must(t, td, "proof", "lanes", "--cwd", d.cwd)
 	must(t, td, "version")
+	// The team reads are allowed here; the daemon itself still refuses a real worker (contract §1.3).
+	must(t, td, "members", "list")
+	must(t, td, "meeting", "list")
+	must(t, td, "contest", "list")
+	must(t, td, "hooks", "list")
+}
+
+// TestTeamCommands: members, hooks, meetings, contests and notes through the command line.
+func TestTeamCommands(t *testing.T) {
+	d := newTestDaemon(t)
+	td := testDeps(nil)
+	var m api.Member
+	must(t, td, "members", "add", "--id", "ana", "--name", "Ana", "--backend", "agy", "--rank", "peer", "--json").
+		json(t, &m)
+	if m.ID != "ana" || m.Rank != api.RankPeer || !m.Enabled {
+		t.Fatalf("added %+v", m)
+	}
+	must(t, td, "members", "set", "ana", "--enabled=false", "--json").json(t, &m)
+	if m.Enabled || m.Name != "Ana" {
+		t.Fatalf("set %+v", m)
+	}
+	if out := must(t, td, "members", "list").stdout; !strings.Contains(out, "ana") || !strings.Contains(out, "off") {
+		t.Fatalf("list:\n%s", out)
+	}
+	r := wantErr(t, td, ExitError, string(api.CodeConflict), "delegate", "--cwd", d.cwd, "--member", "ana", "x",
+		"--json")
+	if !strings.Contains(r.stdout, "member_disabled") {
+		t.Errorf("disabled member: %s", r.stdout)
+	}
+	must(t, td, "members", "remove", "ana")
+	wantErr(t, td, ExitError, string(api.CodeNotFound), "members", "remove", "ana", "--json")
+
+	hooks := filepath.Join(t.TempDir(), "hooks.json")
+	if err := os.WriteFile(hooks, []byte(`{"hooks":[{"on":["task.done"],"run":"echo hi","enabled":true}]}`),
+		0o600); err != nil {
+		t.Fatal(err)
+	}
+	var hs []api.Hook
+	must(t, td, "hooks", "set", hooks, "--json").json(t, &hs)
+	if len(hs) != 1 || hs[0].ID == "" {
+		t.Fatalf("hooks = %+v", hs)
+	}
+	var run api.HookRun
+	must(t, td, "hooks", "test", hs[0].ID, "--json").json(t, &run)
+	if run.ExitCode == nil || *run.ExitCode != 0 || !strings.Contains(run.Output, "hi") {
+		t.Errorf("run = %+v", run)
+	}
+	if out := must(t, td, "meeting", "list").stdout; out != "No meetings.\n" {
+		t.Errorf("meetings: %q", out)
+	}
+	if out := must(t, td, "contest", "list").stdout; out != "No contests.\n" {
+		t.Errorf("contests: %q", out)
+	}
+	wantErr(t, td, ExitError, string(api.CodeNotFound), "notes", "list", "t-nope", "--json")
+	wantErr(t, td, ExitError, string(api.CodeInvalidArgument), "delegate", "--cwd", d.cwd, "--variants", "2", "x",
+		"--json")
 }
 
 func TestStatusAndUI(t *testing.T) {

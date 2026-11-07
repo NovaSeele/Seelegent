@@ -217,6 +217,13 @@ func (c *Client) Hooks(ctx context.Context) ([]api.Hook, error) {
 	return v, err
 }
 
+// ReplaceHooks is PUT /hooks.
+func (c *Client) ReplaceHooks(ctx context.Context, hooks []api.Hook) ([]api.Hook, error) {
+	var v []api.Hook
+	_, err := c.Do(ctx, http.MethodPut, "/hooks", api.HooksRequest{Hooks: hooks}, &v)
+	return v, err
+}
+
 // TestHook is POST /hooks/{id}/test.
 func (c *Client) TestHook(ctx context.Context, id string) (api.HookRun, error) {
 	var v api.HookRun
