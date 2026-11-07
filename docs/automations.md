@@ -23,13 +23,15 @@ lead could create one already enabled. Now:
    rules and the schedule. *Turn on* asks for a one-time token (`POST /automations/{id}/confirm-token {revision}`)
    and spends it at once (`POST /automations/{id}/confirm {token}`).
 3. **The token enables exactly what was shown.** `revision` is the automation's `Revision` as the dialog shows it
-   (a hash of the prompt, folder, worker, gate, lane, precheck and schedule). The daemon refuses a token for a
+   (a hash of the prompt, folder, worker, gate, lane, precheck, schedule, `quota.useBeforeReset` and
+   `graceMinutes`). The daemon refuses a token for a
    revision that is not the current one, and refuses the confirmation when the automation changed after the token
    was issued (`409 bad_state`); the dialog then shows the new content to confirm again. A token works once, for
    five minutes, for one automation.
-4. **A change of what a run does turns it off again.** Editing the prompt, folder, worker, gate, lane, precheck or
-   schedule of an enabled automation turns it off and records an enable request; renaming it or changing the quota
-   rules does not. Turning it off (`PATCH enabled: false`) works from anywhere.
+4. **A change of what a run does, or when, turns it off again.** Editing the prompt, folder, worker, gate, lane,
+   precheck, schedule, `quota.useBeforeReset` (it adds a run outside the schedule) or `graceMinutes` (how late a
+   missed run may start) of an enabled automation turns it off and records an enable request; renaming it or
+   changing `quota.minRemaining` does not (that floor can only skip a run the confirmed schedule allows). Turning it off (`PATCH enabled: false`) works from anywhere.
 
 The confirm routes answer only the dashboard's own requests (`dashboardOnly`): the `Origin` is the daemon's own,
 `Sec-Fetch-Site` is `same-origin`, `Sec-Fetch-Mode` is `cors` or `same-origin`, and the request carries

