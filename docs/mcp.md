@@ -24,6 +24,7 @@ own lines, and only warnings and errors of the MCP SDK).
 | `SEELEGENT_WORKER=1` | Set by the daemon for its workers. The server never starts a daemon and refuses mutating tools (see the worker guard). |
 | `SEELEGENT_SESSION`, else `CLAUDE_CODE_SESSION_ID` | Lead session id sent with `delegate` (`session.id`). |
 | `CLAUDE_CODE_HOST_SESSION_ID` | Host session id sent with `delegate` (`session.hostId`). |
+| `SEELEGENT_LEAD` | Lead host sent with `delegate` (`session.lead`: `claude`, `codex`, `opencode`, `gemini`, `agy` or `cli`); the worker brief says "The lead for this task is Claude Code." and so on. Without it (or with another value) the host is detected: `CLAUDE_CODE_SESSION_ID` → `claude`, `CODEX_SESSION_ID`/`CODEX_THREAD_ID` → `codex`, `GEMINI_SESSION_ID`/`GEMINI_CLI_SESSION` → `gemini`, else `cli`. |
 
 The server reads `config.json` without writing it. If it cannot be read, the server still starts and every
 available tool answers with "the settings cannot be read: ..." so the host sees why.

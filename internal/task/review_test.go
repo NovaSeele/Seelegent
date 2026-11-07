@@ -2,6 +2,7 @@ package task
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -167,6 +168,31 @@ func TestBaselineInBrief(t *testing.T) {
 	}
 	if !strings.Contains(p, "- sub/wip [1].go") {
 		t.Fatalf("the brief does not list the baseline:\n%s", p)
+	}
+}
+
+// TestLeadInBrief (old F9): the session's lead is stored in lower case and the brief names it; an unknown lead is
+// refused before anything is created.
+func TestLeadInBrief(t *testing.T) {
+	h := newHarness(t)
+	h.agy("only", 0)
+	if _, err := h.s.Delegate(t.Context(), api.DelegateRequest{Prompt: "p", Cwd: h.cwd,
+		Session: &api.Session{ID: "s1", Lead: "copilot"}}); !errors.Is(err, ErrInvalid) ||
+		!strings.Contains(err.Error(), "session.lead") {
+		t.Fatalf("unknown lead = %v", err)
+	}
+	h.queue.Push(t, okScript("conv-l", "ok"))
+	sum := h.delegate(api.DelegateRequest{Session: &api.Session{ID: "s1", HostID: "host-uuid", Lead: "Codex"}})
+	if sum.Session == nil || sum.Session.Lead != api.LeadCodex || sum.Session.HostID != "host-uuid" {
+		t.Fatalf("session = %+v", sum.Session)
+	}
+	h.waitStatus(sum.ID, StatusDone)
+	p, err := h.s.Prompt(t.Context(), sum.ID, 1, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(p, "\nThe lead for this task is Codex.\n") {
+		t.Fatalf("the brief does not name the lead:\n%s", p)
 	}
 }
 

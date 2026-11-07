@@ -11,6 +11,7 @@ import (
 
 	"github.com/NovaSeele/Seelegent/internal/api"
 	"github.com/NovaSeele/Seelegent/internal/client"
+	"github.com/NovaSeele/Seelegent/internal/ops"
 )
 
 // Wait limits of the old server (seconds).
@@ -180,18 +181,9 @@ func unsupported(lane laneArg, verify, forceLane optBool) error {
 	return nil
 }
 
-// session is the lead session that delegates, from the host's environment (as the old server read it).
-func (s *Server) session() *api.Session {
-	id := s.o.Getenv("SEELEGENT_SESSION")
-	if id == "" {
-		id = s.o.Getenv("CLAUDE_CODE_SESSION_ID")
-	}
-	host := s.o.Getenv("CLAUDE_CODE_HOST_SESSION_ID")
-	if id == "" && host == "" {
-		return nil
-	}
-	return &api.Session{ID: id, HostID: host}
-}
+// session is the lead session that delegates, from the host's environment (as the old server read it), with the
+// lead host the worker brief names (old F9).
+func (s *Server) session() *api.Session { return ops.MCPSession(s.o.Getenv) }
 
 // followupArgs are the arguments of followup.
 type followupArgs struct {

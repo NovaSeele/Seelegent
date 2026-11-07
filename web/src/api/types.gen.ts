@@ -942,6 +942,8 @@ export interface Session {
   hostId?: string
   title?: string
   parentTitle?: string
+  /** Lead is the lead host (Leads); the worker brief names it. The daemon refuses other values. */
+  lead?: 'claude' | 'codex' | 'opencode' | 'gemini' | 'agy' | 'cli'
 }
 
 /** Attention says that a task needs someone to look at it. */

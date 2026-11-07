@@ -227,7 +227,7 @@ func TestDelegateRequest(t *testing.T) {
 	st.body(t, "POST /tasks", &req)
 	want := map[string]any{"prompt": "p", "cwd": filepath.Join(wd, "sub"), "mode": "edit", "model": "fast",
 		"gate": false, "allowGit": true, "spec": map[string]any{"dir": "specs/001", "taskIds": []any{"T1"}},
-		"after": []any{"t0"}, "afterMode": "done", "session": map[string]any{"id": "lead-1", "hostId": "host-1"}}
+		"after": []any{"t0"}, "afterMode": "done", "session": map[string]any{"id": "lead-1", "hostId": "host-1", "lead": "claude"}}
 	a, _ := json.Marshal(req)
 	b, _ := json.Marshal(want)
 	if !bytes.Equal(a, b) {
