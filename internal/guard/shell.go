@@ -52,6 +52,8 @@ type segment struct {
 // state is shared by a parser and the parsers of the substitutions it reads.
 type state struct {
 	out []*segment
+	// writes are the targets of output redirections (> file, >> file), when they are plain words.
+	writes []string
 }
 
 // parser reads one command line (or a part of it) in one dialect.
@@ -73,15 +75,24 @@ type heredoc struct {
 
 // parse splits line into simple commands, including the commands of every substitution, subshell and block.
 func parse(line string, sh Shell, depth int) ([]*segment, error) {
+	st, err := parseState(line, sh, depth)
+	if st == nil {
+		return nil, err
+	}
+	return st.out, err
+}
+
+// parseState is parse with the redirection targets.
+func parseState(line string, sh Shell, depth int) (*state, error) {
 	if depth > maxDepth {
 		return nil, errDepth
 	}
 	st := &state{}
 	p := &parser{sh: sh, s: line, depth: depth, st: st}
 	if err := p.list(0); err != nil {
-		return st.out, err
+		return st, err
 	}
-	return st.out, nil
+	return st, nil
 }
 
 // child returns a parser over s that adds its commands to the same state, one level deeper.
@@ -246,7 +257,7 @@ func (p *parser) fdRedirect() (bool, error) {
 	return true, p.redirect()
 }
 
-// redirect reads a redirection operator at p.i and drops its target.
+// redirect reads a redirection operator at p.i; the target of an output redirection goes to the state's writes.
 func (p *parser) redirect() error {
 	c := p.s[p.i]
 	p.i++
@@ -297,7 +308,10 @@ func (p *parser) redirect() error {
 	if p.i >= len(p.s) {
 		return nil
 	}
-	_, err := p.word()
+	w, err := p.word()
+	if err == nil && c == '>' && !w.dynamic && w.text != "" {
+		p.st.writes = append(p.st.writes, w.text)
+	}
 	return err
 }
 
@@ -440,7 +454,7 @@ func (p *parser) word() (word, error) {
 		case PowerShell:
 			err = p.pwshChar(&b, &w)
 		default:
-			err = p.cmdChar(&b, &w)
+			p.cmdChar(&b, &w)
 		}
 		if err != nil {
 			return w, err
@@ -786,7 +800,7 @@ func (p *parser) pwshExpansion(b *strings.Builder, w *word) error {
 }
 
 // cmdChar reads one unit of a cmd.exe word.
-func (p *parser) cmdChar(b *strings.Builder, w *word) error {
+func (p *parser) cmdChar(b *strings.Builder, w *word) {
 	c := p.s[p.i]
 	switch c {
 	case '^':
@@ -806,7 +820,7 @@ func (p *parser) cmdChar(b *strings.Builder, w *word) error {
 			// cmd runs a line with an unclosed quote: the rest is quoted.
 			p.cmdQuoted(b, w, p.s[p.i+1:])
 			p.i = len(p.s)
-			return nil
+			return
 		}
 		p.cmdQuoted(b, w, p.s[p.i+1:p.i+1+end])
 		p.i += end + 2
@@ -816,7 +830,7 @@ func (p *parser) cmdChar(b *strings.Builder, w *word) error {
 			w.dynamic = true
 			b.WriteString(p.s[p.i : p.i+end+2])
 			p.i += end + 2
-			return nil
+			return
 		}
 		if c == '%' && p.peek(1) == '%' || c == '%' && isNameChar(p.peek(1)) {
 			// %%i or %1: a loop or batch variable.
@@ -828,7 +842,6 @@ func (p *parser) cmdChar(b *strings.Builder, w *word) error {
 		b.WriteByte(c)
 		p.i++
 	}
-	return nil
 }
 
 // cmdQuoted adds the inside of a cmd.exe quoted string; %VAR% still expands there.
