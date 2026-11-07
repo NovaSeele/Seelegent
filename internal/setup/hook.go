@@ -71,14 +71,15 @@ func claudeSettings(e Env) string { return filepath.Join(claudeConfigDir(e), "se
 
 // hookSpot is the reminder hook located in settings.json.
 type hookSpot struct {
-	doc    *jsonDoc
-	file   hostFile
-	hooks  *jobject          // settings.hooks
-	groups []json.RawMessage // hooks.PreToolUse
-	group  int               // index of the group holding our hook, -1 when absent
-	inner  int               // index of our hook inside the group
-	cmd    string            // its command
+	doc   *jsonDoc
+	file  hostFile
+	group int    // index in hooks.PreToolUse of the group holding our hook, -1 when absent
+	inner int    // index of our hook in the group's hooks
+	cmd   string // its command
 }
+
+// preToolUse is where Claude Code keeps the PreToolUse hook groups.
+var preToolUse = jpath{"hooks", "PreToolUse"}
 
 // loadHooks reads settings.json and finds the reminder hook.
 func loadHooks(path string) (*hookSpot, error) {
@@ -94,13 +95,14 @@ func loadHooks(path string) (*hookSpot, error) {
 	if err != nil {
 		return nil, err
 	}
-	s := &hookSpot{doc: doc, file: f, hooks: hooks, group: -1}
+	s := &hookSpot{doc: doc, file: f, group: -1}
+	var groups []json.RawMessage
 	if raw, ok := hooks.get("PreToolUse"); ok && string(bytes.TrimSpace(raw)) != "null" {
-		if json.Unmarshal(raw, &s.groups) != nil {
+		if json.Unmarshal(raw, &groups) != nil {
 			return nil, errors.New("hooks.PreToolUse is not a list")
 		}
 	}
-	for gi, g := range s.groups {
+	for gi, g := range groups {
 		var group struct {
 			Hooks []struct {
 				Command string `json:"command"`
@@ -119,63 +121,29 @@ func loadHooks(path string) (*hookSpot, error) {
 	return s, nil
 }
 
-// save writes the PreToolUse list back (dropping empty containers) and returns the backup path.
-func (s *hookSpot) save() (string, error) {
-	if len(s.groups) == 0 {
-		s.hooks.del("PreToolUse")
-	} else {
-		s.hooks.set("PreToolUse", rawList(s.groups))
-	}
-	if len(s.hooks.members) == 0 {
-		s.doc.root.del("hooks")
-	} else {
-		raw, err := s.hooks.compact()
-		if err != nil {
-			return "", err
-		}
-		s.doc.root.set("hooks", raw)
-	}
-	data, err := s.doc.bytes()
-	if err != nil {
-		return "", err
-	}
-	return s.file.write(data)
-}
+// at extends preToolUse with more path elements.
+func at(elem ...any) jpath { return append(append(jpath{}, preToolUse...), elem...) }
 
-// rawList joins raw JSON values into a list.
-func rawList(items []json.RawMessage) json.RawMessage {
-	var b bytes.Buffer
-	b.WriteByte('[')
-	for i, it := range items {
-		if i > 0 {
-			b.WriteByte(',')
-		}
-		b.Write(it)
-	}
-	b.WriteByte(']')
-	return b.Bytes()
-}
-
-// editGroup changes the hooks of group gi with fn (which gets and returns the inner hook list).
-func (s *hookSpot) editGroup(gi int, fn func([]json.RawMessage) []json.RawMessage) error {
-	g, err := parseObject(s.groups[gi])
-	if err != nil {
+// removeOurHook deletes the reminder hook, then the containers that are left empty: the group's hook list (with
+// the group), PreToolUse and hooks.
+func (s *hookSpot) removeOurHook() error {
+	if _, err := s.doc.del(at(s.group, "hooks", s.inner)); err != nil {
 		return err
 	}
-	var inner []json.RawMessage
-	if raw, ok := g.get("hooks"); ok {
-		if err := json.Unmarshal(raw, &inner); err != nil {
+	steps := []struct{ ifEmpty, del jpath }{
+		{at(s.group, "hooks"), at(s.group)},
+		{preToolUse, preToolUse},
+		{jpath{"hooks"}, jpath{"hooks"}},
+	}
+	for _, st := range steps {
+		if !s.doc.isEmptyAt(st.ifEmpty) {
+			return nil
+		}
+		if _, err := s.doc.del(st.del); err != nil {
 			return err
 		}
 	}
-	inner = fn(inner)
-	if len(inner) == 0 {
-		s.groups = slices.Delete(s.groups, gi, gi+1)
-		return nil
-	}
-	g.set("hooks", rawList(inner))
-	s.groups[gi], err = g.compact()
-	return err
+	return nil
 }
 
 func (c claudeCode) installHook(o op) Item {
@@ -206,10 +174,7 @@ func (c claudeCode) installHook(o op) Item {
 		return it
 	case s.group >= 0:
 		it.Action, it.Detail = ActionUpdated, "updated the reminder hook"
-		err = s.editGroup(s.group, func(in []json.RawMessage) []json.RawMessage {
-			in[s.inner] = hook
-			return in
-		})
+		err = s.doc.set(at(s.group, "hooks", s.inner), hook)
 	default:
 		it.Action, it.Detail = ActionAdded, "installed the reminder hook (PreToolUse, Agent tool)"
 		var group json.RawMessage
@@ -217,7 +182,9 @@ func (c claudeCode) installHook(o op) Item {
 			Matcher string            `json:"matcher"`
 			Hooks   []json.RawMessage `json:"hooks"`
 		}{hookMatcher, []json.RawMessage{hook}})
-		s.groups = append(s.groups, group)
+		if err == nil {
+			err = s.doc.appendTo(preToolUse, group)
+		}
 	}
 	if err != nil {
 		return failItem(it, err)
@@ -225,7 +192,7 @@ func (c claudeCode) installHook(o op) Item {
 	if o.req.DryRun {
 		return planned(it)
 	}
-	if it.Backup, err = s.save(); err != nil {
+	if it.Backup, err = s.file.write(s.doc.bytes()); err != nil {
 		return failItem(it, err)
 	}
 	return it
@@ -251,12 +218,10 @@ func (c claudeCode) removeHook(o op) Item {
 	if o.req.DryRun {
 		return planned(it)
 	}
-	if err := s.editGroup(s.group, func(in []json.RawMessage) []json.RawMessage {
-		return slices.Delete(in, s.inner, s.inner+1)
-	}); err != nil {
+	if err := s.removeOurHook(); err != nil {
 		return failItem(it, err)
 	}
-	if it.Backup, err = s.save(); err != nil {
+	if it.Backup, err = s.file.write(s.doc.bytes()); err != nil {
 		return failItem(it, err)
 	}
 	return it

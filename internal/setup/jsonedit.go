@@ -10,10 +10,11 @@ import (
 	"strings"
 )
 
-// The JSON editor keeps a host's config file as the user wrote it as far as JSON allows: the order of keys, every
-// value it does not touch (numbers keep their exact spelling), a UTF-8 byte order mark, CRLF line ends, the
-// indentation unit and the final newline. Only the indentation of lines is normalised, because the file is
-// re-indented as a whole.
+// The JSON editor changes a host's config file by splicing (jsonsplice.go): it replaces, inserts or deletes the
+// bytes of one member or list element and leaves every other byte as it was, so other servers keep their layout
+// (one-line objects included), and the byte order mark, line ends and final newline stay. The lines it adds follow
+// the file's indentation unit and line ends. jobject below is the parsed, order-keeping view used to read values
+// and to build the new member's value.
 
 // errJSONC says a config file is valid only once comments or trailing commas are removed: setup cannot edit it
 // without losing them, so the user gets a snippet to paste instead.
@@ -149,14 +150,20 @@ func (o *jobject) childObject(key string) (*jobject, error) {
 	return c, nil
 }
 
-// jsonDoc is a host config file holding a JSON object, with what is needed to write it back in its own style.
+// jsonDoc is a host config file holding a JSON object. Edits are spliced into its text (see jsonsplice.go), so
+// every byte outside the changed member stays as it was; root is the parsed view of the current text.
 type jsonDoc struct {
-	root       *jobject
-	bom        bool
-	crlf       bool
-	indent     string
-	trailingNL bool
-	existed    bool
+	root *jobject
+	// text is the document without its byte order mark.
+	text []byte
+	bom  bool
+	// crlf: the file ends its lines with CRLF; the lines setup adds do too.
+	crlf bool
+	// indent is the file's indentation unit, used for the lines setup adds.
+	indent string
+	// blank: the file was missing or empty; it is written as a new pretty-printed document with a final newline.
+	blank   bool
+	existed bool
 }
 
 const utf8BOM = "\xef\xbb\xbf"
@@ -164,18 +171,17 @@ const utf8BOM = "\xef\xbb\xbf"
 // loadJSONDoc parses a config file's content. Empty content gives an empty object. A file that parses only without
 // comments or trailing commas fails with errJSONC.
 func loadJSONDoc(data []byte, existed bool) (*jsonDoc, error) {
-	d := &jsonDoc{indent: "  ", trailingNL: true, existed: existed}
+	d := &jsonDoc{indent: "  ", existed: existed}
 	text := string(data)
 	if strings.HasPrefix(text, utf8BOM) {
 		d.bom = true
 		text = text[len(utf8BOM):]
 	}
 	if strings.TrimSpace(text) == "" {
-		d.root = &jobject{}
+		d.root, d.text, d.blank = &jobject{}, []byte("{}"), true
 		return d, nil
 	}
 	d.crlf = strings.Contains(text, "\r\n")
-	d.trailingNL = strings.HasSuffix(text, "\n")
 	d.indent = detectIndent(text)
 	root, err := parseObject([]byte(text))
 	if err != nil {
@@ -184,31 +190,29 @@ func loadJSONDoc(data []byte, existed bool) (*jsonDoc, error) {
 		}
 		return nil, fmt.Errorf("malformed JSON: %w", err)
 	}
-	d.root = root
+	d.root, d.text = root, []byte(text)
 	return d, nil
 }
 
-// bytes renders the document in the file's style.
-func (d *jsonDoc) bytes() ([]byte, error) {
-	compact, err := d.root.compact()
-	if err != nil {
-		return nil, err
-	}
+// bytes is the document as it goes back to the file.
+func (d *jsonDoc) bytes() []byte {
 	var b bytes.Buffer
-	if err := json.Indent(&b, compact, "", d.indent); err != nil {
-		return nil, err
-	}
-	out := b.String()
-	if d.trailingNL {
-		out += "\n"
-	}
-	if d.crlf {
-		out = strings.ReplaceAll(out, "\n", "\r\n")
-	}
 	if d.bom {
-		out = utf8BOM + out
+		b.WriteString(utf8BOM)
 	}
-	return []byte(out), nil
+	b.Write(d.text)
+	if d.blank {
+		b.WriteString(d.nl())
+	}
+	return b.Bytes()
+}
+
+// nl is the file's line end.
+func (d *jsonDoc) nl() string {
+	if d.crlf {
+		return "\r\n"
+	}
+	return "\n"
 }
 
 // detectIndent returns the indentation unit of the first indented line, or two spaces.

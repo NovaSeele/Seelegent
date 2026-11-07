@@ -240,6 +240,33 @@ func TestJSONHostAddUnchangedRemove(t *testing.T) {
 	wantAction(t, rep, "cursor", KindMCP, ActionSkipped)
 }
 
+// A hand-written file keeps its layout: setup only inserts, replaces and deletes its own member.
+func TestJSONHostKeepsOneLineServers(t *testing.T) {
+	m := newMachine(t)
+	exe := m.exe()
+	const before = "{\n  \"mcpServers\": {\n    \"a\": { \"command\": \"a\", \"args\": [\"x\"] },\n" +
+		"    \"b\": {\"url\": \"http://h/\\\"q\\\"\"}\n  },\n  \"n\": 1.50e3\n}\n"
+	cfg := m.write(".cursor/mcp.json", before)
+	run(t, m, Request{Exe: exe, Hosts: []string{"cursor"}})
+	got := read(t, cfg)
+	head := strings.TrimSuffix(before[:strings.Index(before, "\n  },")], "\n")
+	if !strings.HasPrefix(got, head+",\n    \"seelegent\": {\n") ||
+		!strings.HasSuffix(got, "    }\n  },\n  \"n\": 1.50e3\n}\n") {
+		t.Errorf("other servers changed:\n%s", got)
+	}
+	// An update (another executable) replaces only the entry.
+	other := m.path("bin2", "seelegent.exe")
+	m.write("bin2/seelegent.exe", "")
+	wantAction(t, run(t, m, Request{Exe: other, Hosts: []string{"cursor"}}), "cursor", KindMCP, ActionUpdated)
+	if got2 := read(t, cfg); !strings.HasPrefix(got2, head+",\n") || !strings.Contains(got2, "seelegent.exe") {
+		t.Errorf("update changed other servers:\n%s", got2)
+	}
+	run(t, m, Request{Remove: true, Hosts: []string{"cursor"}})
+	if after := read(t, cfg); after != before {
+		t.Errorf("remove did not give back the file:\n%s", after)
+	}
+}
+
 func TestJSONHostKeepsCRLFAndBOM(t *testing.T) {
 	m := newMachine(t)
 	exe := m.exe()

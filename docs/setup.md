@@ -58,8 +58,11 @@ The exit code is 1 when any item is `conflict` or `error`. Other items still run
   `SEELEGENT_HOME`) are kept. A `"disabled": true` is turned off.
 - Every file is backed up to `<file>.seelegent.bak` before it changes. The suffix is not `.bak` because Codex keeps its
   own `config.toml.bak`. Writes are atomic. A config file that is a symbolic link is written through the link.
-- JSON files keep their key order, number spelling, indent, line endings, BOM and final newline. A file with comments
-  or trailing commas (JSONC) is never rewritten: the item is `manual`.
+- JSON files are edited by splicing: setup replaces, inserts or deletes only the bytes of the `seelegent` member (or
+  of the reminder hook in `settings.json`), so every other byte stays, including one-line objects of other servers,
+  key order, number spelling, the BOM, line endings and the final newline. New lines follow the file's indentation
+  and line ends; in a one-line file the entry is written on one line. A file with comments or trailing commas (JSONC)
+  is never rewritten: the item is `manual`.
 - Codex's `config.toml` is edited line by line. Only the lines of `[mcp_servers.seelegent]` change; comments, other
   tables, CRLF line ends, a BOM and a missing final newline stay. New tables go between the old version's markers
   (`# >>> seelegent …` / `# <<< seelegent <<<`). Setup refuses layouts it cannot edit safely: the table twice,

@@ -260,8 +260,10 @@ func (h jsonHost) install(_ context.Context, o op, want Entry) Item {
 	if err != nil {
 		return failItem(it, err)
 	}
-	cfg.container.set(ServerName, raw)
-	it.Backup, err = cfg.save(h.container)
+	if err := cfg.doc.set(jpath{h.container, ServerName}, raw); err != nil {
+		return failItem(it, err)
+	}
+	it.Backup, err = cfg.file.write(cfg.doc.bytes())
 	if err != nil {
 		return failItem(it, err)
 	}
@@ -296,26 +298,14 @@ func (h jsonHost) remove(_ context.Context, o op) Item {
 	if o.req.DryRun {
 		return planned(it)
 	}
-	cfg.container.del(ServerName)
-	it.Backup, err = cfg.save(h.container)
+	if _, err := cfg.doc.del(jpath{h.container, ServerName}); err != nil {
+		return failItem(it, err)
+	}
+	it.Backup, err = cfg.file.write(cfg.doc.bytes())
 	if err != nil {
 		return failItem(it, err)
 	}
 	return it
-}
-
-// save writes the changed container back into the file.
-func (c *jsonConfig) save(container string) (string, error) {
-	raw, err := c.container.compact()
-	if err != nil {
-		return "", err
-	}
-	c.doc.root.set(container, raw)
-	data, err := c.doc.bytes()
-	if err != nil {
-		return "", err
-	}
-	return c.file.write(data)
 }
 
 // failItem turns an error into an error item.
