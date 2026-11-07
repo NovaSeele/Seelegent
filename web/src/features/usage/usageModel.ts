@@ -88,8 +88,11 @@ export function quotaSeries(history: History | null, accountId: string): QuotaSe
   })
 }
 
-/** An SVG path through `points` scaled into a width × height box over [t0, t1] × [0, 1]. */
-export function linePath(
+/**
+ * A step line through `points` scaled into a width × height box over [t0, t1] × [0, 1]: each value holds until
+ * the next sample, so a reset shows as a vertical step rather than a slope between two readings.
+ */
+export function stepPath(
   points: readonly Point[],
   t0: number,
   t1: number,
@@ -97,11 +100,24 @@ export function linePath(
   height: number,
 ): string {
   const span = Math.max(1, t1 - t0)
+  const x = (t: number) => ((t - t0) / span) * width
+  const y = (v: number) => (1 - v) * height
   return points
-    .map((p, i) => {
-      const x = ((p.t - t0) / span) * width
-      const y = (1 - p.v) * height
-      return `${i ? 'L' : 'M'}${x.toFixed(1)} ${y.toFixed(1)}`
-    })
+    .map((p, i) =>
+      i === 0
+        ? `M${x(p.t).toFixed(1)} ${y(p.v).toFixed(1)}`
+        : `H${x(p.t).toFixed(1)} V${y(p.v).toFixed(1)}`,
+    )
     .join(' ')
+}
+
+/** Local midnights strictly after `t0` and up to `t1`: the day gridlines of a chart over that span. */
+export function dayStarts(t0: number, t1: number): number[] {
+  const out: number[] = []
+  const day = new Date(t0)
+  day.setHours(0, 0, 0, 0)
+  for (day.setDate(day.getDate() + 1); day.getTime() <= t1; day.setDate(day.getDate() + 1)) {
+    out.push(day.getTime())
+  }
+  return out
 }

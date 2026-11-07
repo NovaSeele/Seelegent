@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import type { History } from '@/api/types'
 
-import { change, historyAccounts, linePath, niceMax, quotaSeries } from './usageModel'
+import { change, dayStarts, historyAccounts, niceMax, quotaSeries, stepPath } from './usageModel'
 
 describe('usage model', () => {
   it('computes the change against the previous period', () => {
@@ -94,18 +94,29 @@ describe('usage model', () => {
     expect(quotaSeries(days, 'a1')[0]?.points[0]?.v).toBe(0.1)
   })
 
-  it('draws a path inside the box', () => {
+  it('draws a step line: each value holds until the next sample, a reset is a vertical step', () => {
     expect(
-      linePath(
+      stepPath(
         [
           { t: 0, v: 1 },
-          { t: 10, v: 0 },
+          { t: 5, v: 0.2 },
+          { t: 10, v: 1 },
         ],
         0,
         10,
         100,
         50,
       ),
-    ).toBe('M0.0 0.0 L100.0 50.0')
+    ).toBe('M0.0 0.0 H50.0 V40.0 H100.0 V0.0')
+  })
+
+  it('puts a day gridline at each local midnight inside the span', () => {
+    const t0 = new Date(2026, 10, 1, 15).getTime()
+    const t1 = new Date(2026, 10, 4, 0).getTime()
+    expect(dayStarts(t0, t1)).toEqual([
+      new Date(2026, 10, 2).getTime(),
+      new Date(2026, 10, 3).getTime(),
+      new Date(2026, 10, 4).getTime(),
+    ])
   })
 })
