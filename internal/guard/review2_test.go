@@ -108,3 +108,26 @@ func TestConfigReads(t *testing.T) {
 		"git config --global core.hooksPath /tmp/hooks": true,
 	}, POSIX)
 }
+
+// TestXargsShell (G-c): a shell xargs runs with the input as its script reads what is piped into xargs.
+func TestXargsShell(t *testing.T) {
+	expect(t, Checker{}, map[string]bool{
+		`echo git stash | xargs -I{} sh -c '{}'`:            true,
+		`echo git stash | xargs -I % bash -c 'cd x && %'`:   true,
+		`echo git stash | xargs -i sh -c '{}'`:              true,
+		`echo git stash | xargs --replace sh -c '{}'`:       true,
+		`echo git stash | xargs --replace=@ sh -c '@'`:      true,
+		`echo 'git stash' | xargs sh -c`:                    true,
+		`echo git stash | xargs -0 bash -lc`:                true,
+		`printf 'git stash\n' | xargs -I{} sh -c '{}'`:      true,
+		`echo git stash | xargs -I{} cmd /c {}`:             true,
+		`echo stash | xargs -I{} git {}`:                    true,
+		`echo stash | xargs git`:                            true,
+		`git ls-files | xargs -I{} sh -c 'wc -l "$1"' _ {}`: false,
+		`git ls-files | xargs -I{} sh -c 'wc -l {}'`:        false,
+		`git ls-files -z | xargs -0 wc -l`:                  false,
+		`echo a.go | xargs -I{} git add {}`:                 false,
+		`echo git status | xargs -I{} sh -c '{}'`:           false,
+		`echo git stash | xargs -I{} echo {}`:               false,
+	}, POSIX)
+}

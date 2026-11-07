@@ -235,7 +235,7 @@ var wrappers = map[string]wrapper{
 	"builtin":    {},
 	"exec":       {valued: set("-a")},
 	"time":       {valued: set("-f", "-o", "--format", "--output")},
-	"xargs":      {valued: set("-I", "-L", "-n", "-P", "-s", "-d", "-E", "-a", "--arg-file", "--delimiter", "--max-args", "--max-procs", "--max-lines", "--max-chars", "--replace", "--eof"), stdinArgs: true},
+	"xargs":      {valued: set("-I", "-L", "-n", "-P", "-s", "-d", "-E", "-a", "--arg-file", "--delimiter", "--max-args", "--max-procs", "--max-lines", "--max-chars"), stdinArgs: true}, // --replace[=R] and --eof[=E] take no next word
 	"watch":      {valued: set("-n", "--interval", "-d", "-x")},
 	"strace":     {valued: set("-o", "-e", "-p", "-s", "-u")},
 	"ltrace":     {valued: set("-o", "-e", "-p", "-s", "-u")},
@@ -343,7 +343,14 @@ func (c Checker) command(ws []word, s *segment, sh Shell, depth int) Result {
 			return allow
 		}
 		if wr.stdinArgs {
-			rest = append(rest, word{text: "$STDIN", dynamic: true})
+			var script Shell
+			var fromInput bool
+			rest, script, fromInput = xargsCommand(args[:len(args)-len(rest)], rest)
+			if fromInput { // echo git stash | xargs -I{} sh -c '{}': the input is the shell's script
+				if r := c.piped(s, script, depth); r.Deny {
+					return r
+				}
+			}
 		}
 		if name == "env" {
 			if r := c.envSplit(args, sh, depth); r.Deny {
