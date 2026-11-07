@@ -131,6 +131,7 @@ Gates, lanes, the verifier and the proof ledger are described in [gates.md](gate
 | Setting | Type | Default | Meaning |
 | --- | --- | --- | --- |
 | `githubPollMinutes` | integer ≥ 0 | `10` | How often pull request states and GitHub inboxes are polled; `0` turns polling off. |
+| `githubEnterpriseHosts` | list of strings | `[]` | GitHub Enterprise Server hosts whose remotes count as GitHub besides `github.com`: a host name (optionally with a port) or an `https` URL; `http` only for a loopback address. Any other host is never sent the token ([github.md](github.md)). |
 | `automationsEnabled` | boolean | `true` | Master switch of scheduled automations (each automation is still created disabled). |
 
 Upper limits not listed above (for example a week for minute settings) only catch typos.

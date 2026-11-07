@@ -167,6 +167,7 @@ What is imported:
 | `members.json` | Department members with the same ids. An OpenCode member is skipped and `opencode` is dropped from the fallback backends. A member whose id exists is `unchanged` when it is the same and `kept` otherwise. |
 | `hooks.json` | Lead hooks, added after the existing ones and given ids. `on` may be one event or a list; `enabled` defaults to true as before. A hook with the same command, events and project as an existing one is not added again. An unknown event is an error for that hook only. |
 | `meetings/<id>.json` | Meeting records: options, rounds, answers, questions, decision, dissents with their watched files and signals, and usage, so the dissent memory and the members' track records go on. A meeting that was still running is imported as `cancelled`. The minutes are written again in English from the record; the old `regression` signals are dropped (D19). The `.jsonl` event logs are not imported. |
+| `automations.json` | Automations with the same ids and creation times, **every one off** with no enable request, whatever it was before (old bug D8): turn each on from the dashboard after reading what it runs ([automations.md](automations.md)). `gate: false` becomes no gate, a gate command or list becomes the gate commands, `lane: false` becomes no lane. An automation whose folder no longer exists is an error for that automation only. One whose id exists is `unchanged` when it does the same and `kept` otherwise. The run history (`automations/<id>.jsonl`) is not imported. |
 
 Project keys (old F6): the old key is `<base name>-<8 hex digits of SHA-1>` of the lower-cased absolute path. This
 version keys projects differently, so migrate rebuilds the old key from every folder the old data records: the memory
@@ -176,7 +177,9 @@ folder only when the rebuilt key matches. Notes whose folder is not recorded any
 
 Not imported, reported as `skipped`: tasks (their worker conversations cannot continue here, and the old
 `tasks/<id>.json` files stay), the review notes of those tasks, contests (their variants ran in the old daemon's
-worktrees), automations, proof records, tickets, usage history and quota caches.
+worktrees), the run history of automations, the GitHub folder (connected repositories, issues, tickets and the
+token: connect the repositories again and store the token again on the Issues page), proof records, usage history
+and quota caches.
 
 Rules:
 

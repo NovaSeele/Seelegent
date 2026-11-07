@@ -20,7 +20,7 @@ endpoint tables.
 | §5 settings, memory, roles | `settings.go` |
 | §6 M13: `/lanes`, `/contention`, `/proof/*` | `proof.go` (over `httpapi.Proof`, the proof service, and `httpapi.Gates`, the task engine); behaviour in [gates.md](gates.md) |
 | §5 `/members*`, `/hooks*`; §6 M14: `/tasks/{id}/consult`, `/tasks/{id}/notes*`, `/meetings*`, `/contests*` | `team.go` (over `httpapi.Members`, `Consults`, `Notes`, `Meetings`, `Contests`, `Hooks`; each optional, its paths answer `501` without it); behaviour in [team.md](team.md) |
-| §6 M15: `/github/*`, `/automations*` | `501 not_implemented` until their milestone (`server.go`, `reservedRoutes`) |
+| §6 M15: `/github/*`, `/automations*` | `github.go` (over `httpapi.Tickets`, the ticket service, and `httpapi.Automations`, the automation service; each optional, its paths answer `501` without it); behaviour in [github.md](github.md) and [automations.md](automations.md) |
 | §7 SSE | `hub.go` (ids, ring, client queues), `stream.go` (the response), `feeds.go` (task bus and account watcher) |
 | §8 static dashboard | `web.go` |
 | DTOs | `internal/api`; `go generate ./internal/api` writes `web/src/api/types.gen.ts` (`internal/api/tsgen`), and a test fails when the file is stale |
@@ -110,6 +110,11 @@ in the daemon.
   so a client that sends the whole provider back can still clear the list). Neither touches `tiers`. The list is
   stored in `providers.models`; rows from before that column get it back from their pattern when the pattern was
   built from a list. `Account.models` of an API-key account is its provider's tier models followed by that list.
+- `POST /automations/{id}/confirm-token` takes `{revision}`, the `Automation.revision` the dashboard shows, and
+  answers `409 bad_state` when the automation changed since (`400` without it), so a token enables exactly what
+  the user read (F33). It and `POST /automations/{id}/confirm`, `PUT` and `DELETE /github/token` answer only
+  the dashboard's own requests: `403 forbidden` with `details.reason: "dashboard_only"` otherwise.
+- A `POST /tasks` body with `ticketId` is a `400` (C-B21): ticket tasks start only through the ticket routes.
 - `PATCH /settings` applies the JSON merge patch to the daemon's in-memory settings and writes `config.json`
   atomically. Unknown keys, type errors and validation errors are reported together in one `400`.
 - `/state` reads `lastEventId` before the snapshot. A frame newer than the id can repeat a change the snapshot holds

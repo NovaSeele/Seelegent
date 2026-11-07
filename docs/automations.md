@@ -1,0 +1,77 @@
+# Automations
+
+An automation is a saved delegation on a schedule: a prompt, the folder it runs in, the worker (a member, or a
+backend and model), the gate, the lane, an optional precheck command, quota rules and a schedule. Milestone 15,
+package `internal/automation` (`automation.go` the store and the rules, `scheduler.go` the timer, `cron.go` the
+schedules, `quota.go` the quota source). Automations and their runs are rows of `seelegent.db` (migration
+`0010_github_automations.sql`); `seelegent migrate` imports the old version's `automations.json` with every automation
+off ([setup.md](setup.md)).
+
+Routes: `/automations*` ([api.md](api.md)); MCP tool `automations` ([mcp.md](mcp.md)); `seelegent automations ...`
+([cli.md](cli.md)); the Automations page of the dashboard.
+
+## Turning one on (old bug D8)
+
+An automation runs a prompt with no one watching, on a schedule, as long as it stays on. In the old version the
+lead could create one already enabled. Now:
+
+1. **Every automation is created off.** `enabled: true` in a create or a `PATCH`, and `POST /automations/{id}/enable`,
+   only record a request (`enableRequested`) and answer a `confirmUrl` (`/automations?confirm=<id>` on the
+   dashboard). That is all the MCP tool and the CLI can do; their answer tells the lead to hand the link to the user.
+2. **Only the dashboard turns one on.** The confirm dialog reads the automation fresh and shows everything a run
+   does: the prompt in full, the folder, the worker, the gate and its commands, the lane, the precheck, the quota
+   rules and the schedule. *Turn on* asks for a one-time token (`POST /automations/{id}/confirm-token {revision}`)
+   and spends it at once (`POST /automations/{id}/confirm {token}`).
+3. **The token enables exactly what was shown.** `revision` is the automation's `Revision` as the dialog shows it
+   (a hash of the prompt, folder, worker, gate, lane, precheck and schedule). The daemon refuses a token for a
+   revision that is not the current one, and refuses the confirmation when the automation changed after the token
+   was issued (`409 bad_state`); the dialog then shows the new content to confirm again. A token works once, for
+   five minutes, for one automation.
+4. **A change of what a run does turns it off again.** Editing the prompt, folder, worker, gate, lane, precheck or
+   schedule of an enabled automation turns it off and records an enable request; renaming it or changing the quota
+   rules does not. Turning it off (`PATCH enabled: false`) works from anywhere.
+
+The confirm routes answer only the dashboard's own requests (`dashboardOnly`): the `Origin` is the daemon's own,
+`Sec-Fetch-Site` is `same-origin`, `Sec-Fetch-Mode` is `cors` or `same-origin`, and the request carries
+`X-Seelegent-UI: 1`; anything else is `403 forbidden` with `reason: "dashboard_only"`. A worker is refused by the
+worker guard before that. The same rule covers the GitHub token routes.
+
+**What this does not stop.** These headers keep the lead's tools, a worker and a web page in a browser away from
+the confirmation. A program running as the same user can still forge them, as it could edit the database itself;
+the daemon does not try to defend against the user's own account.
+
+## Schedules
+
+A preset (`every`: `hourly` at a minute, `daily` or `weekdays` at `HH:MM`, `weekly` on a weekday at `HH:MM`) or a
+5-field cron expression (`minute hour day-of-month month day-of-week`; `*`, lists, ranges and steps; day-of-month
+and day-of-week combine with OR as in cron). `timezone` is `local` or an IANA zone; a time that does not exist on a
+daylight-saving day runs as late as the gap is long (02:30 becomes 03:30), and a repeated hour runs once. `POST /automations/preview`
+answers the next run times as the scheduler computes them (the editor shows them as you type).
+
+The timer sleeps until the earliest next run (at most a minute, so the master switch and the before-reset rule are
+seen). A run missed while the daemon was off still starts if it is at most `graceMinutes` late (default 60);
+otherwise it is recorded as `skipped_late`, once. The master switch `automationsEnabled` (settings, System) stops
+every scheduled run; *run now* still works.
+
+## A run
+
+Every run, scheduled or *run now*, goes through the same checks, and every outcome is recorded (the newest 500 per
+automation are kept):
+
+| Outcome | When |
+|---|---|
+| `skipped_overlap` | the task of the previous run is still pending, or a run is starting |
+| `skipped_quota` | the best usable account of the backend has less than `quota.minRemaining` % left (default 20) in the bucket that limits it |
+| `skipped_precheck` | the precheck command (run in the folder through the shell, 60 s at most, its process tree killed after) exited non-zero, timed out or did not start; the detail carries the end of its output |
+| `error` | the delegation itself failed (no folder, no account, a lane conflict) |
+| `started` | a task was delegated; `taskId` names it (the task's `automationId` links back) |
+
+**Use quota before it resets** (`quota.useBeforeReset`): when a weekly bucket of the backend resets within 24 hours
+with at least 40 % left, one extra run starts for that bucket (trigger `before_reset`). The bucket counts as used
+only when the run started (old bug D9: it was marked before the run, so a skipped run used it up); after a skipped
+run the rule tries again 30 minutes later.
+
+## Events
+
+`automation.updated` carries the automation after every change (including `running` turning false when its task
+ends); `automation.deleted {id}` follows a delete.

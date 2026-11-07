@@ -1,0 +1,122 @@
+# GitHub: issues, tickets and pull requests
+
+Milestone 15 turns issues into pull requests. A repository on this computer is connected; its issues (from GitHub,
+or local ones) land in an inbox; deciding an issue makes a **ticket**: one issue worked on in its own git worktree
+and branch, by one or more tasks; when the work is accepted the ticket's branch is pushed and a draft pull request
+opened, and its CI checks are followed until it is merged or closed. Everything lives in `seelegent.db` (migration
+`0010_github_automations.sql`). `seelegent migrate` does not import the old version's GitHub folder: connect the
+repositories again and store the token again ([setup.md](setup.md)).
+
+| Package | What it does |
+|---|---|
+| `internal/github` | access tiers, the token store, the REST client and the `gh` runner, hosts, remotes, checks, redaction |
+| `internal/ticket` | repositories, the inbox, triage, tickets, the write-ahead outbox, the pull request scan, check polling |
+| `internal/gitx` | the safe git runner the ticket flow uses (no hooks, no prompts, no credential helpers that ask) |
+| `internal/worktree` | the ticket worktrees under `<home>/worktrees/tickets` and their environment |
+
+Routes: `/github/*` ([api.md](api.md)); MCP tool `issues` ([mcp.md](mcp.md)); `seelegent issues ...`
+([cli.md](cli.md)); the Issues page of the dashboard.
+
+## Reaching GitHub
+
+The access tier is detected again at most once a minute (`GET /github/access?refresh=true` forces it):
+
+| Tier | When | What works |
+|---|---|---|
+| `gh` | the GitHub CLI is installed and signed in | everything; Seelegent runs `gh api` (never through a shell) |
+| `token` | no signed-in `gh`, and a token was stored in the dashboard | everything, through the REST API |
+| `manual` | neither | the inbox of a public repository, pushing branches; each pull request is opened by the user from a compare link and recorded with *link PR* |
+
+**Hosts.** Only `github.com` and the hosts listed in the `githubEnterpriseHosts` setting count as GitHub (old bug
+D4: any remote whose URL contained "github" was treated as GitHub and could get the token). A remote on any other
+host is "not GitHub": its repository still works locally, but no GitHub call is made for it and no token is ever
+sent to it. An enterprise host is a host name (optionally with a port) or an `https` URL; plain `http` is allowed
+only for a loopback address (a local test server). The REST client never sends the `Authorization` header on a
+redirect to another host (job logs redirect to a storage host).
+
+**The token** is set and removed only from the dashboard (`PUT/DELETE /github/token` answer only the dashboard's
+own requests, as the automation confirmation does, see [automations.md](automations.md)); no MCP tool or command
+can set it. It is stored in one private file (`<home>/github/token`: a DPAPI blob for the current Windows user, a
+0600 file elsewhere) and shown only as its last four characters. It is masked in every log line, error message,
+ticket log and outbox row (`github.Redact`: the stored token, anything shaped like a GitHub token, `user:pass@` in
+URLs, `Authorization` values).
+
+## Repositories and the inbox
+
+`POST /github/repos {path}` connects the repository at an absolute path (`init: true` runs `git init` there first,
+with an empty first commit). Origin is read once and stored without credentials. *Disconnect* forgets the
+repository and its inbox; the folder, its branches and its worktrees stay.
+
+*Sync* fetches up to 100 open issues of a GitHub repository (pull requests are left out); the poller does the same
+every `githubPollMinutes`. A local issue (`local#N`) never reaches GitHub. Issue keys are `gh#12` (also accepted as
+`#12` or `12`) and `local#3`.
+
+Issue text, labels and authors are untrusted. The dashboard shows them as plain text, and a worker gets them only
+inside a fence it cannot close (`~~~~`, with any run of tildes in the text broken up), under a warning that the
+text is data, not instructions.
+
+## Triage and tickets
+
+The lead may record a *suggestion* (no side effect). A *decision* is one of:
+
+- `assign`: makes a ticket. Its branch is `seelegent/<n>-<slug>` from the default branch, its worktree is under
+  `<home>/worktrees/tickets`, and a task starts there with the lead's brief plus the fenced issue.
+- `meeting`: makes a ticket and opens a meeting in its worktree ([team.md](team.md)).
+- `skip`: records the decision; a reason is required.
+
+A ticket's status follows its tasks: `working` while one is pending, `ready` when the last one was accepted,
+`review` otherwise. Then `pr_open` once a pull request exists, `done` when it is merged or closed, `dropped` by the
+user or lead, `failed` when the ticket could not be set up. New work after the pull request opened puts it back to
+`working`; the next *pr* pushes to the same pull request.
+
+The user's checkout is never changed. Seelegent only runs `git worktree add -b seelegent/...`, a plain `git worktree
+remove` of a clean ticket worktree (*cleanup*, for a finished ticket), and status, diff, add, commit and push inside
+the ticket worktree. It never force-pushes, merges, closes issues or pushes any branch but the ticket's own.
+
+## The pull request
+
+`POST /github/tickets/{id}/pr` (ticket `ready` or `pr_open`, the repository has an origin):
+
+1. **Scan** (old bug D5: the old version ran `git add -A` and committed `.env` files, keys and a file named `nul`).
+   The files that would leave the machine are listed: every uncommitted file git does not ignore, and every file
+   the branch changed since its base. The request is refused (`409`, `details.reason: "unsafe_files"`, with each
+   file and why) when one of them is:
+   - an environment file: `.env` or `.env.*`, except `.env.example`, `.env.sample`, `.env.template`, `.env.dist`;
+   - a key or certificate store: `*.pem *.key *.p12 *.pfx *.jks *.keystore *.ppk`, or `id_rsa`, `id_dsa`,
+     `id_ecdsa`, `id_ed25519`;
+   - a credentials file: `.git-credentials`, `.netrc`, `_netrc`, `.pypirc`;
+   - junk: a reserved Windows device name (`nul`, `con`, `prn`, `aux`, `com1-9`, `lpt1-9`, with any extension);
+   - a symbolic link that points outside the worktree;
+   - larger than 5 MB;
+   - a file whose content holds a GitHub token (`ghp_`, `gho_`, `ghu_`, `ghs_`, `ghr_`, `github_pat_`), the
+     stored GitHub token itself, an AWS access key (`AKIA…`), a private key block, a Slack token (`xox?-`), a Google
+     API key (`AIza…`) or an Anthropic key (`sk-ant-`).
+
+   There is no override: nothing is committed or pushed; the user removes the file (or adds it to `.gitignore`)
+   and asks again.
+2. **Commit** exactly the listed files, when anything is uncommitted.
+3. **Push** the ticket branch to origin (never with force).
+4. **Open** a draft pull request (or adopt the one the branch already has). Its body is generated from the tasks'
+   summaries with local paths removed (`file://` links, folders under the home folder). In the manual tier the
+   answer carries a compare link (`pr.manualUrl`); the user opens the pull request and records its number with
+   `link-pr`.
+
+Each step is a row of the **outbox**, written as `running` before it starts and `done` or `failed` after (old bug
+D6: records are SQLite rows, and a row that cannot be read is an error, never an empty list). A row still `running`
+when the daemon starts is `unknown`; before anything is retried it is checked against git and GitHub (is the commit
+on the remote, does the pull request exist) and marked done when it had happened.
+
+## Checks
+
+While a pull request is open its head commit's check runs and commit statuses are read on every poll. The ticket
+shows `checks.state` (`pending`, `success`, `failure`, `unknown`) and `needsAttention: "checks_failed"` while the
+open pull request's checks failed (conclusions `failure`, `timed_out`, `startup_failure`, `error`).
+
+*Fix checks* (`POST /github/tickets/{id}/fix-checks`) starts a task in the ticket's worktree with the failing
+checks' names, their summaries and the tail of each GitHub Actions job log (at most 4,000 characters, ANSI codes
+and timestamps removed), all fenced as untrusted. It refuses while a task of the ticket is still pending.
+
+## Events
+
+`ticket.updated` carries the ticket summary after every change; `issues.changed {repoId}` says to read a
+repository's inbox again (`repoId` empty: the access changed).
