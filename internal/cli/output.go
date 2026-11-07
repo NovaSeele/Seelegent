@@ -51,7 +51,10 @@ func classify(err error) (int, errorOut) {
 	var apiErr *client.Error
 	var foreign *client.ForeignError
 	var stuck *client.StuckError
+	var coded *codedError
 	switch {
+	case errors.As(err, &coded):
+		out.Code = coded.code
 	case errors.As(err, new(*usageError)):
 		return ExitUsage, errorOut{Error: err.Error(), Code: codeUsage}
 	case errors.As(err, new(*daemonRunningError)), errors.As(err, new(*portTakenError)):

@@ -86,6 +86,7 @@ func newRoot(info buildinfo.Info, d deps) *cobra.Command {
 		},
 	}
 	root.SetVersionTemplate("{{.Version}}\n")
+	root.AddCommand(newUpdateCommand(info, d))
 	root.SetFlagErrorFunc(func(_ *cobra.Command, err error) error { return &usageError{err: err} })
 	root.PersistentFlags().Bool("json", false, "print the result (or the error) as JSON on stdout")
 	root.AddCommand(newVersionCommand(info), newDaemonCommand(info), newMCPCommand(info, d), newLaunchCommand(),

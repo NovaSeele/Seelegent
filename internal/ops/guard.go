@@ -43,6 +43,9 @@ func Mutating(name, action string) bool {
 		return notIn("list", "runs")
 	case "contest":
 		return notIn("status", "wait")
+	case "update":
+		// Command-line only, every mode: it replaces the executable and restarts the daemon (old C-B12).
+		return true
 	}
 	return false
 }
