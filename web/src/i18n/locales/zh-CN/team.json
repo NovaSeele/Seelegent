@@ -155,6 +155,10 @@
     },
     "vindicate": "认定正确",
     "dismiss": "驳回",
+    "outcomeDone": {
+      "vindicated": "{who} 的异议：被证明正确",
+      "dismissed": "{who} 的异议：已驳回"
+    },
     "adviceNotTaken": "未采纳的建议",
     "act": {
       "title": "把决定变成任务",

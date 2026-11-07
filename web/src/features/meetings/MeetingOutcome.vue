@@ -1,12 +1,13 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, nextTick, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { errorMessage } from '@/api/client'
-import type { Dissent, Meeting } from '@/api/types'
+import type { Dissent, DissentOutcomeRequest, Meeting } from '@/api/types'
 import Button from '@/components/ui/Button.vue'
 import StatusPill from '@/components/ui/StatusPill.vue'
 import { useTeamStore } from '@/stores/team'
+import { useToastStore } from '@/stores/toast'
 
 import ClaimList from './ClaimList.vue'
 import MeetingActForm from './MeetingActForm.vue'
@@ -21,22 +22,40 @@ const emit = defineEmits<{ updated: [meeting: Meeting] }>()
 
 const { t } = useI18n()
 const team = useTeamStore()
+const toasts = useToastStore()
 const busy = ref<string | null>(null)
 const failure = ref('')
 /** A closed meeting's decision can still become tasks: the form folds inside the Tasks block. */
 const acting = computed(() => props.meeting.status === 'closed' && !!props.meeting.decision)
 
-async function outcome(d: Dissent, value: 'vindicated' | 'dismissed') {
+/**
+ * Records the lead's call on a dissent at once, with an Undo in the toast (open takes it back). The focus moves to
+ * the dissent's heading, since the buttons that had it are gone (or come back, after an undo).
+ */
+async function outcome(d: Dissent, value: DissentOutcomeRequest['outcome']) {
   busy.value = d.id
   failure.value = ''
   try {
     emit('updated', await team.api().dissentOutcome(props.meeting.id, d.id, value))
+    await nextTick()
+    document.getElementById(headingId(d))?.focus()
+    if (value !== 'open') {
+      toasts.show({
+        message: t(`team.meetings.outcomeDone.${value}`, {
+          who: attendeeName(props.meeting, d.label),
+        }),
+        tone: 'success',
+        actions: [{ label: t('common.action.undo'), run: () => void outcome(d, 'open') }],
+      })
+    }
   } catch (error) {
     failure.value = errorMessage(error)
   } finally {
     busy.value = null
   }
 }
+
+const headingId = (d: Dissent) => `dissent-${props.meeting.id}-${d.id}`
 </script>
 
 <template>
@@ -55,7 +74,9 @@ async function outcome(d: Dissent, value: 'vindicated' | 'dismissed') {
     <h2 class="block__title">{{ t('team.meetings.dissents') }}</h2>
     <article v-for="d in meeting.dissents" :key="d.id" class="dissent">
       <header class="dissent__head">
-        <strong>{{ attendeeName(meeting, d.label) }}</strong>
+        <h3 :id="headingId(d)" class="dissent__who" tabindex="-1">
+          {{ attendeeName(meeting, d.label) }}
+        </h3>
         <StatusPill
           size="sm"
           :tone="d.kind === 'absent' ? 'muted' : 'neutral'"
@@ -85,8 +106,9 @@ async function outcome(d: Dissent, value: 'vindicated' | 'dismissed') {
       <ul v-if="d.signals.length" class="dissent__signals">
         <li v-for="s in d.signals" :key="s.taskId + s.reason">
           <RouterLink :to="{ name: 'tasks', params: { taskId: s.taskId } }">
-            {{ t(`team.meetings.signal.${s.reason}`, { task: s.taskId }) }}
+            {{ t(`team.meetings.signal.${s.reason}`, { task: s.title || s.taskId }) }}
           </RouterLink>
+          <span v-if="s.title" class="block__muted dissent__id">{{ s.taskId }}</span>
         </li>
       </ul>
       <div v-if="d.kind === 'dissent' && !d.outcome" class="dissent__actions">
@@ -186,6 +208,18 @@ async function outcome(d: Dissent, value: 'vindicated' | 'dismissed') {
   gap: var(--space-2);
 }
 
+/* The focus lands here after vindicate, dismiss or undo. */
+.dissent__who {
+  border-radius: var(--radius-xs);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+}
+
+.dissent__who:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
 .dissent__path {
   margin-right: var(--space-2);
   font-family: var(--font-mono);
@@ -197,7 +231,8 @@ async function outcome(d: Dissent, value: 'vindicated' | 'dismissed') {
   padding-left: var(--space-5);
 }
 
-.task__id {
+.task__id,
+.dissent__id {
   margin-left: var(--space-2);
   font-family: var(--font-mono);
   font-size: var(--fs-xs);

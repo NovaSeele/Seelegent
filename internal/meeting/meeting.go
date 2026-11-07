@@ -1156,15 +1156,20 @@ func (s *Service) Cancel(ctx context.Context, id string) (api.Meeting, error) {
 	return m, nil
 }
 
-// DissentOutcome records that a dissent turned out right (vindicated) or not (dismissed).
+// DissentOutcome records that a dissent turned out right (vindicated) or not (dismissed); open takes the call
+// back (the dashboard's undo).
 func (s *Service) DissentOutcome(ctx context.Context, id, dissentID, outcome string) (api.Meeting, error) {
-	if outcome != "vindicated" && outcome != "dismissed" {
-		return api.Meeting{}, invalidf("outcome must be vindicated or dismissed")
+	if outcome != "vindicated" && outcome != "dismissed" && outcome != api.DissentOpen {
+		return api.Meeting{}, invalidf("outcome must be vindicated, dismissed or open")
 	}
 	return s.update(ctx, id, func(m *api.Meeting) error {
 		for i := range m.Dissents {
 			if d := &m.Dissents[i]; d.ID == dissentID {
-				d.Outcome, d.OutcomeAt = outcome, s.now()
+				if outcome == api.DissentOpen {
+					d.Outcome, d.OutcomeAt = "", ""
+				} else {
+					d.Outcome, d.OutcomeAt = outcome, s.now()
+				}
 				s.logStep(ctx, id, "dissent_outcome", map[string]any{"dissentId": dissentID, "outcome": outcome})
 				return nil
 			}

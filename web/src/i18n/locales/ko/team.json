@@ -155,6 +155,10 @@
     },
     "vindicate": "옳다고 인정",
     "dismiss": "기각",
+    "outcomeDone": {
+      "vindicated": "{who}의 반대: 옳았음",
+      "dismissed": "{who}의 반대: 기각됨"
+    },
     "adviceNotTaken": "받아들이지 않은 조언",
     "act": {
       "title": "결정을 작업으로 만들기",

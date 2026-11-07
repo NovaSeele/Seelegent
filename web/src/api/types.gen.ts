@@ -2161,6 +2161,8 @@ export interface Dissent {
 /** DissentSignal is a later task on a watched file that went wrong. */
 export interface DissentSignal {
   taskId: string
+  /** Title is the task's title when the signal was recorded (signals recorded before it have none). */
+  title?: string
   reason: 'rejected' | 'gate_red'
   at: string
 }
@@ -2264,9 +2266,12 @@ export interface MeetingActResult {
   tasks: string[]
 }
 
-/** DissentOutcomeRequest is the body of POST /meetings/{id}/dissents/{dissentId}/outcome. */
+/**
+ * DissentOutcomeRequest is the body of POST /meetings/{id}/dissents/{dissentId}/outcome. DissentOpen clears an
+ * outcome recorded earlier (undo).
+ */
 export interface DissentOutcomeRequest {
-  outcome: 'vindicated' | 'dismissed'
+  outcome: 'vindicated' | 'dismissed' | 'open'
 }
 
 /** TeamLogEntry is one step of a meeting or contest (GET /meetings/{id}/events, /contests/{id}/events). */

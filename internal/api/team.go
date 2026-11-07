@@ -378,6 +378,8 @@ const (
 // DissentSignal is a later task on a watched file that went wrong.
 type DissentSignal struct {
 	TaskID string `json:"taskId"`
+	// Title is the task's title when the signal was recorded (signals recorded before it have none).
+	Title  string `json:"title,omitempty"`
 	Reason string `json:"reason" ts:"'rejected' | 'gate_red'"`
 	At     string `json:"at"`
 }
@@ -498,10 +500,14 @@ type MeetingActResult struct {
 	Tasks   []string `json:"tasks"`
 }
 
-// DissentOutcomeRequest is the body of POST /meetings/{id}/dissents/{dissentId}/outcome.
+// DissentOutcomeRequest is the body of POST /meetings/{id}/dissents/{dissentId}/outcome. DissentOpen clears an
+// outcome recorded earlier (undo).
 type DissentOutcomeRequest struct {
-	Outcome string `json:"outcome" ts:"'vindicated' | 'dismissed'"`
+	Outcome string `json:"outcome" ts:"'vindicated' | 'dismissed' | 'open'"`
 }
+
+// DissentOpen is the outcome that takes a vindicate or dismiss back.
+const DissentOpen = "open"
 
 // TeamLogEntry is one step of a meeting or contest (GET /meetings/{id}/events, /contests/{id}/events).
 type TeamLogEntry struct {

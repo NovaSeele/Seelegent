@@ -155,6 +155,10 @@
     },
     "vindicate": "Vindicate",
     "dismiss": "Dismiss",
+    "outcomeDone": {
+      "vindicated": "{who}'s dissent: vindicated",
+      "dismissed": "{who}'s dissent: dismissed"
+    },
     "adviceNotTaken": "Advice not taken",
     "act": {
       "title": "Turn the decision into tasks",

@@ -125,7 +125,7 @@
     "waitingDeps": "Chờ tác vụ trước",
     "hygiene": "Lỗi vệ sinh mã",
     "verifierRejected": "Bị duyệt lần hai từ chối",
-    "peerObjection": "Đồng cấp phản đối"
+    "peerObjection": "Thành viên ngang hàng phản đối"
   },
   "stage": {
     "explore": "Khám phá",

@@ -155,6 +155,10 @@
     },
     "vindicate": "Dar la razón",
     "dismiss": "Descartar",
+    "outcomeDone": {
+      "vindicated": "Disenso de {who}: con razón",
+      "dismissed": "Disenso de {who}: descartado"
+    },
     "adviceNotTaken": "Consejo no seguido",
     "act": {
       "title": "Convertir la decisión en tareas",

@@ -5,9 +5,9 @@
     "peer": "Ngang hàng"
   },
   "rankHint": {
-    "worker": "Nhân chứng: trả lời trong cuộc họp, không được hỏi ý kiến và không phản đối chính thức.",
+    "worker": "Nhân chứng: trả lời trong cuộc họp, không được hỏi ý kiến và không được bất đồng chính thức.",
     "senior": "Cố vấn: lời khuyên không được nghe sẽ được ghi lại; phản đối là một cảnh báo.",
-    "peer": "Có thể phản đối chính thức; phản đối chặn việc chấp nhận cho đến khi được trả lời."
+    "peer": "Thành viên ngang hàng: có thể bất đồng chính thức; phản đối của họ chặn việc chấp nhận cho đến khi được trả lời."
   },
   "members": {
     "new": "Thành viên mới",
@@ -30,11 +30,11 @@
       "title": "Thành tích",
       "none": "Chưa có cuộc họp hay lần hỏi ý kiến nào.",
       "meetings": "Cuộc họp",
-      "dissents": "Phản đối",
+      "dissents": "Bất đồng",
       "vindicated": "Được chứng minh đúng",
       "adviceNotTaken": "Lời khuyên không được nghe",
       "consults": "Lần hỏi ý kiến",
-      "objections": "Phản bác"
+      "objections": "Phản đối"
     },
     "editor": {
       "newTitle": "Thành viên mới",
@@ -76,7 +76,7 @@
       "round": "Đang trong vòng",
       "waiting_lead": "Cần bạn trả lời",
       "deciding": "Sẵn sàng quyết định",
-      "dissent": "Đang nghe phản đối",
+      "dissent": "Đang nghe ý kiến bất đồng",
       "closed": "Đã đóng",
       "cancelled": "Đã huỷ",
       "failed": "Thất bại"
@@ -84,7 +84,7 @@
     "roundOf": "Vòng {n}/{max}",
     "attendeesN": "{n} người dự",
     "pendingN": "{n} câu hỏi đang chờ",
-    "dissentsN": "{n} phản đối",
+    "dissentsN": "{n} ý kiến bất đồng",
     "usage": "Lượt chạy: {runs} · Token: {tokens}",
     "question": "Câu hỏi",
     "options": "Phương án",
@@ -144,7 +144,7 @@
       "done": "Đã ghi quyết định"
     },
     "decision": "Quyết định",
-    "dissents": "Phản đối",
+    "dissents": "Ý kiến bất đồng",
     "signal": {
       "rejected": "{task} bị từ chối",
       "gate_red": "{task} có cổng kiểm tra đỏ"
@@ -155,6 +155,10 @@
     },
     "vindicate": "Công nhận đúng",
     "dismiss": "Bác bỏ",
+    "outcomeDone": {
+      "vindicated": "Ý kiến bất đồng của {who}: được chứng minh đúng",
+      "dismissed": "Ý kiến bất đồng của {who}: đã bác bỏ"
+    },
     "adviceNotTaken": "Lời khuyên không được nghe",
     "act": {
       "title": "Biến quyết định thành tác vụ",
@@ -199,11 +203,11 @@
     },
     "optionLead": "Phương án {key}:",
     "kind": {
-      "dissent": "Phản đối chính thức",
+      "dissent": "Bất đồng chính thức",
       "concede": "Chấp nhận",
       "absent": "Không trả lời"
     },
-    "signalsN": "{n} vấn đề về sau",
+    "signalsN": "{n} vấn đề phát sinh sau đó",
     "watchingLead": "Đang theo dõi:",
     "speaker": "{who}:"
   },

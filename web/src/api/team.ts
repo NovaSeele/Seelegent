@@ -7,6 +7,7 @@ import type {
   ContestDiff,
   ContestPickRequest,
   ContestSummary,
+  DissentOutcomeRequest,
   Meeting,
   MeetingActRequest,
   MeetingActResult,
@@ -72,7 +73,7 @@ export function createTeamApi(client: ApiClient) {
       client.post<MeetingActResult>(`/meetings/${seg(id)}/act`, { body }),
     cancelMeeting: (id: string) =>
       client.post<Meeting>(`/meetings/${seg(id)}/cancel`, { body: {} }),
-    dissentOutcome: (id: string, dissentId: string, outcome: 'vindicated' | 'dismissed') =>
+    dissentOutcome: (id: string, dissentId: string, outcome: DissentOutcomeRequest['outcome']) =>
       client.post<Meeting>(`/meetings/${seg(id)}/dissents/${seg(dissentId)}/outcome`, {
         body: { outcome },
       }),

@@ -155,6 +155,10 @@
     },
     "vindicate": "正しいと認める",
     "dismiss": "退ける",
+    "outcomeDone": {
+      "vindicated": "{who} の異議: 正しかった",
+      "dismissed": "{who} の異議: 退けた"
+    },
     "adviceNotTaken": "採用されなかった助言",
     "act": {
       "title": "決定をタスクにする",

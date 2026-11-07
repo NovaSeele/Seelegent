@@ -288,8 +288,8 @@ func TestMeetingToOutcome(t *testing.T) {
 
 	// A later rejected task on the watched file is a signal for the dissent.
 	ft.mu.Lock()
-	ft.tasks["later"] = &api.TaskDetail{TaskSummary: api.TaskSummary{ID: "later", Status: api.StatusDone,
-		Kind: task.KindNormal, Cwd: repo, Review: &api.Review{Verdict: api.VerdictRejected},
+	ft.tasks["later"] = &api.TaskDetail{TaskSummary: api.TaskSummary{ID: "later", Title: "Drop the cache",
+		Status: api.StatusDone, Kind: task.KindNormal, Cwd: repo, Review: &api.Review{Verdict: api.VerdictRejected},
 		UpdatedAt: api.FormatTime(time.Now().Add(time.Minute))}, RepoRoot: repo,
 		Turns: []api.Turn{{N: 1, Status: task.TurnOK, Files: []string{"src/cache.go"}}}}
 	ft.mu.Unlock()
@@ -308,7 +308,8 @@ func TestMeetingToOutcome(t *testing.T) {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	if sg := m.Dissents[0].Signals[0]; sg.TaskID != "later" || sg.Reason != "rejected" {
+	if sg := m.Dissents[0].Signals[0]; sg.TaskID != "later" || sg.Title != "Drop the cache" ||
+		sg.Reason != "rejected" {
 		t.Errorf("signal = %+v", sg)
 	}
 	if _, err := s.DissentOutcome(ctx, m.ID, "d1", "vindicated"); err != nil {
@@ -327,6 +328,22 @@ func TestMeetingToOutcome(t *testing.T) {
 	}
 	if r := byMember["bob"]; r.AdviceNotTaken != 1 {
 		t.Errorf("bob's record = %+v", r)
+	}
+	// Undo: open takes the call back, and the track no longer counts it.
+	if m, err = s.DissentOutcome(ctx, m.ID, "d1", api.DissentOpen); err != nil ||
+		m.Dissents[0].Outcome != "" || m.Dissents[0].OutcomeAt != "" {
+		t.Fatalf("undo = %+v %v", m.Dissents, err)
+	}
+	if track, err = s.Track(ctx); err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range track {
+		if r.Member == "ada" && r.Vindicated != 0 {
+			t.Errorf("ada after undo = %+v", r)
+		}
+	}
+	if _, err := s.DissentOutcome(ctx, m.ID, "d1", "maybe"); err == nil {
+		t.Error("an unknown outcome was accepted")
 	}
 	evs, err := s.Events(ctx, m.ID)
 	if err != nil || len(evs) < 8 || evs[0].Type != "open" {

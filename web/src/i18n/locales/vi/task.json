@@ -274,7 +274,7 @@
     "line": "{who}: {text}",
     "answerAction": "Trả lời phản đối",
     "answerTitle": "Trả lời phản đối và chấp nhận",
-    "answerDesc": "Một thành viên đồng cấp phản đối phần việc này. Câu trả lời của bạn được lưu cùng phản đối và tác vụ được chấp nhận.",
+    "answerDesc": "Một thành viên ngang hàng phản đối phần việc này. Câu trả lời của bạn được lưu cùng phản đối và tác vụ được chấp nhận.",
     "answerLabel": "Câu trả lời"
   }
 }

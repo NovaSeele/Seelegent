@@ -176,7 +176,8 @@ func (s *Service) signal(ctx context.Context, taskID string) {
 					if hasSignal(ds.Signals, taskID, r) {
 						continue
 					}
-					ds.Signals = append(ds.Signals, api.DissentSignal{TaskID: taskID, Reason: r, At: s.now()})
+					ds.Signals = append(ds.Signals, api.DissentSignal{TaskID: taskID, Title: d.Title, Reason: r,
+						At: s.now()})
 					s.logStep(ctx, m.ID, "dissent_signal", map[string]any{"dissentId": ds.ID, "taskId": taskID,
 						"reason": r})
 					changed = true

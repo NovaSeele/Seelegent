@@ -290,7 +290,7 @@ func (s *Server) meetingRoutes() {
 		if err := decode(w, r, &req); err != nil {
 			return 0, nil, err
 		}
-		if err := oneOf("outcome", req.Outcome, false, "vindicated", "dismissed"); err != nil {
+		if err := oneOf("outcome", req.Outcome, false, "vindicated", "dismissed", api.DissentOpen); err != nil {
 			return 0, nil, err
 		}
 		v, err := m.DissentOutcome(r.Context(), r.PathValue("id"), r.PathValue("did"), req.Outcome)
