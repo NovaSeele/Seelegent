@@ -47,7 +47,10 @@ file exists.
 With `SEELEGENT_WORKER=1`, `delegate`, `run`, `followup`, `review`, `cancel`, `memory append|replace`, `stop`,
 `restart`, `ui`, `daemon` (`serve`), `setup` (a dry run too), `migrate`, `restore`, `proof run`, `proof cancel-run`,
 `consult`, `meeting` (all but `list`, `status` and `wait`), `notes` (all but `list`), `contest pick` and `contest
-cancel`, `members add|set|remove` and `hooks set|test` print exactly `Seelegent is not available inside a Seelegent worker.` and exit 1 (with `--json`:
+cancel`, `members add|set|remove`, `hooks set|test`, `issues` (all but `repos`, `list`, `tickets` and `ticket`:
+`connect`, `init`, `create-remote`, `sync`, `add`, `suggest`, `shared-dirs`, `triage`, `add-task`, `retry`, `pr`,
+`link-pr`, `comment`, `drop`, `cleanup`, `fix-checks`) and `automations` (all but `list`, `show`, `runs` and
+`preview`: `create`, `update`, `enable`, `disable`, `delete`, `run`) print exactly `Seelegent is not available inside a Seelegent worker.` and exit 1 (with `--json`:
 `{"error": that text, "code": "forbidden", "details": {"caller": "worker"}}`). The check runs before the flags are
 parsed and before any call. `status`, `wait`, `task`, `ls`, `memory read`, the other `proof` commands, `doctor`, `version`, `skill` and the
 hidden `hook claude-agent` (Claude Code's reminder hook, which may run inside a worker and only prints advice) stay
