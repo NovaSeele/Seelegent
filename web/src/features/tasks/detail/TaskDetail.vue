@@ -110,6 +110,7 @@ const loadingFirst = computed(() => !summary.value && !error.value)
         :show-back="showBack"
         :actions="actions"
         :objected="objected"
+        :turns="detail?.turns"
         @followup="composer?.focus()"
         @review="(verdict) => (dialog = { kind: 'review', verdict })"
         @confirm="(kind) => (dialog = { kind })"
