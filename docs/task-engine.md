@@ -100,7 +100,8 @@ and a background quota read of the account is requested.
 `computeAttention` maps the task and what the run knows about its worker onto the contract's states:
 
 - `blocked`: prerequisites failed (`deps_blocked`), no account can run it (`no_accounts`, for the user), every
-  account needs a sign-in (`auth`, for the user), the worker repeats itself (`looping`), a done turn with no answer
+  account needs a sign-in (`auth`, for the user), the worker repeats itself (`looping`: the same call `loopRepeat`
+  times in its last 12 without progress, or five failed calls in a row), a done turn with no answer
   (`no_response`), red hygiene findings (`hygiene`), files at risk not restored (`work_at_risk`), a failed task
   (`failed`), a red gate with no fix budget left (`gate_red`; `hygiene` when hygiene is its only red step), a
   verifier reject with no budget left (`verifier_rejected`), a peer member's objection the lead has not answered

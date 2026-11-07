@@ -426,8 +426,11 @@ func TestDetectLoop(t *testing.T) {
 		{"the same pair over and over", st("read", "edit1", "read", "edit1", "read", "edit1", "read"), true},
 		{"repeats with no progress", st("read", "ls", "read", "grep", "ls", "read", "x", "read"), true},
 		{"three repeats", st("read", "read", "read"), false},
+		// Each run of four is judged on its own: progress before the last four repeats does not excuse them.
+		{"progress only early on", st("read", "edit1", "read", "read", "ls", "read", "read"), true},
+		{"progress in every run", st("read", "edit1", "read", "read", "edit2", "read", "read"), false},
 	} {
-		if got, _ := detectLoop(tc.steps); got != tc.want {
+		if got, _ := detectLoop(tc.steps, 4); got != tc.want {
 			t.Errorf("%s: loop = %v", tc.name, got)
 		}
 	}
@@ -435,8 +438,44 @@ func TestDetectLoop(t *testing.T) {
 	for i := range failed {
 		failed[i].failed = true
 	}
-	if ok, detail := detectLoop(failed); !ok || !strings.Contains(detail, "5") {
+	if ok, detail := detectLoop(failed, 4); !ok || !strings.Contains(detail, "5") {
 		t.Errorf("failed calls: %v %q", ok, detail)
+	}
+}
+
+// TestLoopRepeatSetting: the loopRepeat setting decides how many repeats are a loop (old bug B3: it was ignored and
+// 4 was always used); a value outside 2..100 falls back to 4.
+func TestLoopRepeatSetting(t *testing.T) {
+	steps := func(n int) []loopStep {
+		var out []loopStep
+		for range n {
+			out = append(out, loopStep{key: "go test", name: "run_command"})
+		}
+		return out
+	}
+	for _, tc := range []struct {
+		repeat, calls int
+		want          bool
+	}{
+		{4, 4, true}, {4, 3, false}, {8, 4, false}, {8, 7, false}, {8, 8, true}, {2, 2, true}, {2, 1, false},
+		{0, 4, true}, {0, 3, false}, {1, 3, false}, {101, 4, true},
+	} {
+		if got, _ := detectLoop(steps(tc.calls), tc.repeat); got != tc.want {
+			t.Errorf("loopRepeat %d, %d calls: loop = %v, want %v", tc.repeat, tc.calls, got, tc.want)
+		}
+	}
+
+	// Through the attention rules, with the settings the engine reads.
+	tk := &Task{ID: "t1", Status: StatusRunning, ConversationID: "c"}
+	now := harnessEpoch
+	live := liveState{running: true, sawInit: true, started: now, lastEvent: now, steps: steps(5)}
+	set := config.Defaults()
+	if a := computeAttention(tk, live, accountHealth{}, now, set); a == nil || a.Reason != ReasonLooping {
+		t.Errorf("default loopRepeat: attention = %+v", a)
+	}
+	set.LoopRepeat = 8
+	if a := computeAttention(tk, live, accountHealth{}, now, set); a != nil && a.Reason == ReasonLooping {
+		t.Errorf("loopRepeat 8 flagged 5 repeats: %+v", a)
 	}
 }
 

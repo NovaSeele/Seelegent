@@ -1903,7 +1903,10 @@ export interface Settings {
   stallMinutes: number
   /** StallToolMinutes flags a single tool call that has been running for this long. */
   stallToolMinutes: number
-  /** LoopRepeat flags a worker that repeats the same tool call this many times in a row. */
+  /**
+   * LoopRepeat flags a worker that repeats the same tool call this many times within its last 12 tool calls
+   * without progress in between.
+   */
   loopRepeat: number
   /** AttentionDecayHours drops an unanswered attention flag after this long. */
   attentionDecayHours: number

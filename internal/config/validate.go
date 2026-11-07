@@ -107,7 +107,7 @@ func (s *Settings) Validate() error {
 
 	v.intRange("stallMinutes", s.StallMinutes, 1, maxMinutes)
 	v.intRange("stallToolMinutes", s.StallToolMinutes, 1, maxMinutes)
-	v.intRange("loopRepeat", s.LoopRepeat, 2, 100)
+	v.intRange("loopRepeat", s.LoopRepeat, LoopRepeatMin, LoopRepeatMax)
 	v.intRange("attentionDecayHours", s.AttentionDecayHours, 1, maxHours)
 
 	v.intRange("gateTimeoutSec", s.GateTimeoutSec, 1, 24*60*60)

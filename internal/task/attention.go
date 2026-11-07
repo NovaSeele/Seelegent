@@ -153,7 +153,7 @@ func computeAttention(t *Task, live liveState, acc accountHealth, now time.Time,
 			return att(api.AttentionStalled, ReasonStalled, WhoLead,
 				fmt.Sprintf("the worker has not started %d min after launch", int(now.Sub(live.started).Minutes())))
 		}
-		if loop, detail := detectLoop(live.steps); loop {
+		if loop, detail := detectLoop(live.steps, set.LoopRepeat); loop {
 			return att(api.AttentionBlocked, ReasonLooping, WhoLead, detail)
 		}
 		if acc.known && acc.total > 0 && acc.usable == 0 {
