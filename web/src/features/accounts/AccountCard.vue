@@ -152,7 +152,10 @@ function setPriority(priority: number) {
       </li>
     </ul>
 
-    <p v-if="account.status === 'error'" class="card__note">{{ t('accounts.errorNote') }}</p>
+    <!-- A failed read with a reason is said once, in the quota box below. -->
+    <p v-if="account.status === 'error' && !account.quota.error" class="card__note">
+      {{ t('accounts.errorNote') }}
+    </p>
     <p v-if="account.status === 'twin'" class="card__note">
       {{ t('accounts.twinNote', { name: twinLabel }) }}
     </p>

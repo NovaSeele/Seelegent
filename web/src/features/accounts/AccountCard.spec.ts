@@ -33,6 +33,18 @@ describe('AccountCard', () => {
     expect(wrapper.text()).toContain('the numbers below may be old')
   })
 
+  it('says a failed read with a reason once, in the quota box', async () => {
+    const base = makeAccount({ status: 'error' })
+    const error = {
+      kind: 'unavailable',
+      message: 'The quota service did not answer.',
+      at: base.quota.fetchedAt ?? new Date().toISOString(),
+    } as const
+    const wrapper = await render({ ...base, quota: { ...base.quota, error } })
+    expect(wrapper.text()).toContain('Last read failed: The quota service did not answer.')
+    expect(wrapper.text()).not.toContain('the numbers below may be old')
+  })
+
   it('shows out of quota in the pill instead of Ready, once', async () => {
     const base = makeAccount()
     const until = new Date(Date.now() + 3_600_000).toISOString()
