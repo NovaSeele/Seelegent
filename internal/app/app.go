@@ -2,16 +2,18 @@
 // wires the concrete types together and owns their lifecycle (Start, Close). Only this package knows every
 // concrete type; the domain packages declare the interfaces they need.
 //
-// So far it wires the task engine with everything it uses: the store, accounts, quota cache and refresher, the
-// account pool, usage history, project memory, roles, the worker backends and takeover consoles. The HTTP API,
-// MCP server and the other features join here as they are built.
+// It wires the task engine with everything it uses (the store, accounts, quota cache and refresher, the account
+// pool, usage history, project memory, roles, the worker backends and takeover consoles), git, account sign-in and
+// the HTTP API (ListenHTTP). The MCP server and the other features join here as they are built.
 package app
 
 import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"log/slog"
+	"net/http"
 	"os"
 	"sync"
 	"sync/atomic"
@@ -19,13 +21,18 @@ import (
 
 	"github.com/NovaSeele/Seelegent/internal/account"
 	"github.com/NovaSeele/Seelegent/internal/backend"
+	"github.com/NovaSeele/Seelegent/internal/buildinfo"
 	"github.com/NovaSeele/Seelegent/internal/clock"
 	"github.com/NovaSeele/Seelegent/internal/config"
+	"github.com/NovaSeele/Seelegent/internal/gitx"
+	"github.com/NovaSeele/Seelegent/internal/httpapi"
+	"github.com/NovaSeele/Seelegent/internal/logx"
 	"github.com/NovaSeele/Seelegent/internal/memory"
 	"github.com/NovaSeele/Seelegent/internal/platform"
 	"github.com/NovaSeele/Seelegent/internal/pool"
 	"github.com/NovaSeele/Seelegent/internal/quota"
 	"github.com/NovaSeele/Seelegent/internal/role"
+	"github.com/NovaSeele/Seelegent/internal/signin"
 	"github.com/NovaSeele/Seelegent/internal/store"
 	"github.com/NovaSeele/Seelegent/internal/task"
 	"github.com/NovaSeele/Seelegent/internal/usage"
@@ -56,6 +63,17 @@ type Options struct {
 	Clock clock.Clock
 	// Logger receives the logs (discarded when nil). Use a logx logger so secrets are masked.
 	Logger *slog.Logger
+
+	// Info identifies the build (Health, hello).
+	Info buildinfo.Info
+	// Web is the built dashboard the HTTP API serves (none when nil).
+	Web fs.FS
+	// SignInOpener opens sign-in windows (terminal windows when nil).
+	SignInOpener signin.Opener
+	// Classifier decides who calls the HTTP API (the worker process trees when nil).
+	Classifier httpapi.Classifier
+	// DevOrigins are extra loopback browser origins the HTTP API accepts (the Vite dev server); see httpapi.Options.
+	DevOrigins []string
 }
 
 // App holds the daemon's services.
@@ -71,12 +89,25 @@ type App struct {
 	Roles     *role.Store
 	Backends  map[string]backend.Backend
 	Tasks     *task.Service
+	Git       *gitx.Repos
+	SignIn    *signin.Service
 
 	settings atomic.Pointer[config.Settings]
 	log      *slog.Logger
 	env      []string
 
+	info       buildinfo.Info
+	web        fs.FS
+	classifier httpapi.Classifier
+	devOrigins []string
+	redact     func(string) string
+	started0   time.Time
+	pid        int
+	patchMu    sync.Mutex
+
 	mu      sync.Mutex
+	api     *httpapi.Server
+	httpSrv *http.Server
 	cancel  context.CancelFunc
 	wg      sync.WaitGroup
 	started bool
@@ -111,7 +142,9 @@ func New(ctx context.Context, o Options) (*App, error) {
 		}
 		o.Launcher = []string{exe, launchCommand}
 	}
-	a := &App{Paths: o.Paths, log: o.Logger, env: o.Env}
+	a := &App{Paths: o.Paths, log: o.Logger, env: o.Env, info: o.Info, web: o.Web, classifier: o.Classifier,
+		devOrigins: o.DevOrigins,
+		redact:     logx.NewRedactor().String, started0: o.Clock.Now(), pid: os.Getpid()}
 	if o.Settings != nil {
 		s := *o.Settings
 		a.settings.Store(&s)
@@ -216,7 +249,30 @@ func (a *App) build(o Options) error {
 		BaseEnv:   func() []string { return a.env },
 		Dashboard: a.dashboardLink,
 	})
-	return err
+	if err != nil {
+		return err
+	}
+	a.Git = gitx.New(now)
+	a.SignIn = signin.New(signin.Options{
+		Accounts: a.Accounts,
+		Backend: func(name string) (backend.Backend, bool) {
+			b, ok := a.Backends[name]
+			return b, ok
+		},
+		Links:   func() []string { return a.Settings().LinkIntoProfiles },
+		Busy:    func(id string) bool { return p.Busy(id) > 0 },
+		Opener:  o.SignInOpener,
+		BaseEnv: func() []string { return a.env },
+		Publish: a.publishLogin,
+		OnDone: func(id string, ok bool) {
+			p.Notify()
+			if ok {
+				a.Refresher.Request(id)
+			}
+		},
+		Logger: a.log,
+	})
+	return nil
 }
 
 // quotaReader returns the quota reader of a backend, or nil.
@@ -284,7 +340,9 @@ func (a *App) Close(ctx context.Context) error {
 	a.closed = true
 	cancel := a.cancel
 	a.mu.Unlock()
-	errs := []error{a.Tasks.Close(ctx)}
+	errs := []error{a.closeHTTP(ctx)}
+	a.SignIn.Close()
+	errs = append(errs, a.Tasks.Close(ctx))
 	if cancel != nil {
 		cancel()
 	}
