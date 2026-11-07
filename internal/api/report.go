@@ -35,11 +35,11 @@ type TaskReport struct {
 	DeniedActions []string        `json:"denied_actions,omitempty"`
 	// Gate is the gate of the latest instruction once it ended; LastGate shows a gate still running or an
 	// automatic fix turn at work. Lane, Bar and Verifier come with it (docs/gates.md).
-	Gate         *ReportGate     `json:"gate,omitempty"`
-	LastGate     *ReportLastGate `json:"last_gate,omitempty"`
-	Lane         *ReportLane     `json:"lane,omitempty"`
-	Bar          *ReportBar      `json:"bar,omitempty"`
-	Verifier     *ReportVerifier `json:"verifier,omitempty"`
+	Gate     *ReportGate     `json:"gate,omitempty"`
+	LastGate *ReportLastGate `json:"last_gate,omitempty"`
+	Lane     *ReportLane     `json:"lane,omitempty"`
+	Bar      *ReportBar      `json:"bar,omitempty"`
+	Verifier *ReportVerifier `json:"verifier,omitempty"`
 	// Consults are the second opinions asked on the task (old B15: the slim report dropped them).
 	Consults     []ReportConsult `json:"consults,omitempty"`
 	DepsReason   string          `json:"deps_reason,omitempty"`

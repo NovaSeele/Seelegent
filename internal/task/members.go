@@ -158,7 +158,7 @@ func (s *Service) memberFallback(ctx context.Context, t *Task, tu *Turn) (bool, 
 		cur.AccountID, cur.ConversationID = "", ""
 		ct.Model, ct.Tier, ct.Effort = model, tier, effort
 		return []NewEvent{{Type: api.EventHandoff, Turn: ct.N, Data: api.HandoffData{From: from, To: next,
-			Kind: api.HandoffBackend,
+			Kind:   api.HandoffBackend,
 			Reason: fmt.Sprintf("no %s account can run this task; member %s falls back to %s", from, m.ID, next)}}}, nil
 	})
 	if err != nil {
