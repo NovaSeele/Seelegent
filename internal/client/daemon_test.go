@@ -29,7 +29,8 @@ func healthHandler(version int) http.Handler {
 // listenOn serves h on 127.0.0.1:port until the test ends.
 func listenOn(t *testing.T, port int, h http.Handler) {
 	t.Helper()
-	ln, err := net.Listen("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(port)))
+	var lc net.ListenConfig
+	ln, err := lc.Listen(t.Context(), "tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(port)))
 	if err != nil {
 		t.Fatal(err)
 	}

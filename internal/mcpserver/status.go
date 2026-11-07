@@ -102,12 +102,13 @@ func (s *Server) status(ctx context.Context, k *call) (result, error) {
 			ActiveTasks: api.NonNil(tasks), Backends: backends}, summary: sum + " Dashboard: " + s.dashboard()}, nil
 	}
 	out := slimStatus{Accounts: make([]slimAccount, 0, len(accounts)), ActiveTasks: make([]slimTask, 0, len(tasks))}
-	for _, acc := range accounts {
-		out.Accounts = append(out.Accounts, slimAccountOf(acc))
+	for i := range accounts {
+		out.Accounts = append(out.Accounts, slimAccountOf(accounts[i]))
 	}
-	for _, t := range tasks {
+	for i := range tasks {
+		t := &tasks[i]
 		out.ActiveTasks = append(out.ActiveTasks, slimTask{ID: t.ID, Title: t.Title, Status: string(t.Status),
-			Reason: taskReason(t)})
+			Reason: taskReason(*t)})
 	}
 	for _, b := range backends {
 		out.Backends = append(out.Backends, slimBackend{ID: b.ID, Enabled: b.Enabled, Installed: b.Installed,
@@ -129,9 +130,10 @@ func activeTasks(ctx context.Context, c *client.Client) ([]api.TaskSummary, erro
 		return nil, err
 	}
 	out := pending.Items
-	for _, t := range recent.Items {
-		if blocked(t) && !slices.ContainsFunc(out, func(x api.TaskSummary) bool { return x.ID == t.ID }) {
-			out = append(out, t)
+	for i := range recent.Items {
+		t := &recent.Items[i]
+		if blocked(*t) && !slices.ContainsFunc(out, func(x api.TaskSummary) bool { return x.ID == t.ID }) {
+			out = append(out, *t)
 		}
 	}
 	slices.SortStableFunc(out, func(a, b api.TaskSummary) int {
@@ -203,14 +205,14 @@ func slimAccountOf(a api.Account) slimAccount {
 // statusSummary is the one-line summary of status.
 func statusSummary(accounts []api.Account, tasks []api.TaskSummary) string {
 	ready := 0
-	for _, a := range accounts {
-		if (a.Status == api.AccountOK || a.Status == api.AccountError) && !a.Resting {
+	for i := range accounts {
+		if a := &accounts[i]; (a.Status == api.AccountOK || a.Status == api.AccountError) && !a.Resting {
 			ready++
 		}
 	}
 	need := 0
-	for _, t := range tasks {
-		if blocked(t) {
+	for i := range tasks {
+		if blocked(tasks[i]) {
 			need++
 		}
 	}

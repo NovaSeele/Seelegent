@@ -216,7 +216,7 @@ func (d *Daemon) start(ctx context.Context) (*Client, error) {
 			return nil, ctx.Err()
 		case xerr, ok := <-exited:
 			if ok || xerr != nil {
-				return nil, fmt.Errorf("the Seelegent daemon exited before it answered (%v); see %s", xerr, logHint)
+				return nil, fmt.Errorf("the Seelegent daemon exited before it answered (%w); see %s", xerr, logHint)
 			}
 			exited = nil // not watchable; keep polling until the deadline
 		case <-deadline.C:
@@ -234,7 +234,8 @@ func (d *Daemon) start(ctx context.Context) (*Client, error) {
 func SpawnDaemon(exe string, paths config.Paths, port int, env []string) StartFunc {
 	return func(context.Context) (<-chan error, error) {
 		cmd, err := platform.StartDetached(func() *exec.Cmd {
-			cmd := exec.Command(exe, "daemon", "--port", strconv.Itoa(port)) //nolint:gosec // our own executable
+			//nolint:gosec,noctx // our own executable; the daemon outlives every context of this process
+			cmd := exec.Command(exe, "daemon", "--port", strconv.Itoa(port))
 			cmd.Dir = paths.Home
 			cmd.Env = withEnv(env, config.EnvHome, paths.Home)
 			return cmd

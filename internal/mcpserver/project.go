@@ -126,17 +126,19 @@ func listRoles(ctx context.Context, c *client.Client, cwd, id string) (result, e
 		return result{}, err
 	}
 	if id != "" {
-		for _, r := range l.Items {
-			if r.ID == id {
-				return result{value: r, summary: "Role " + r.ID + " (" + r.Scope + ")."}, nil
+		for i := range l.Items {
+			if r := &l.Items[i]; r.ID == id {
+				return result{value: *r, summary: "Role " + r.ID + " (" + r.Scope + ")."}, nil
 			}
 		}
 		return result{}, fmt.Errorf("role %q not found", id)
 	}
-	out := make([]api.Role, 0, len(l.Items))
-	for _, r := range l.Items {
-		r.CreatedAt, r.UpdatedAt = "", ""
-		out = append(out, r)
+	out := l.Items
+	for i := range out {
+		out[i].CreatedAt, out[i].UpdatedAt = "", ""
+	}
+	if out == nil {
+		out = []api.Role{}
 	}
 	return result{value: out, summary: fmt.Sprintf("%d role%s.", len(out), plural(len(out)))}, nil
 }

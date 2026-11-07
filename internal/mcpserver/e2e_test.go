@@ -1,6 +1,7 @@
 package mcpserver_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -124,7 +125,10 @@ func connect(t *testing.T, o mcpserver.Options) *mcp.ClientSession {
 		_ = cs.Close()
 		cancel()
 		select {
-		case <-done:
+		case err := <-done:
+			if err != nil {
+				t.Error(err)
+			}
 		case <-time.After(10 * time.Second):
 			t.Error("server did not stop")
 		}
@@ -176,7 +180,7 @@ func ok(t *testing.T, cs *mcp.ClientSession, name string, args, out any) string 
 	_ = json.Unmarshal(sdata, &structured)
 	a, _ := json.Marshal(first)
 	b, _ := json.Marshal(structured)
-	if string(a) != string(b) {
+	if !bytes.Equal(a, b) {
 		t.Fatalf("%s: structured content %s differs from text %s", name, b, a)
 	}
 	if len(res.Content) != 2 || text(res, 1) == "" {
@@ -303,7 +307,10 @@ func TestCancelledWaitKeepsTheWorker(t *testing.T) {
 	time.Sleep(300 * time.Millisecond)
 	cancel()
 	select {
-	case <-done:
+	case err := <-done:
+		if err == nil {
+			t.Fatal("the cancelled wait returned no error")
+		}
 	case <-time.After(10 * time.Second):
 		t.Fatal("the cancelled wait did not end")
 	}

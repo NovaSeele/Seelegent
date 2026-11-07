@@ -81,7 +81,7 @@ func TestUnreachableAndCancel(t *testing.T) {
 		t.Fatalf("closed port = %v", err)
 	}
 	block := make(chan struct{})
-	slow := serve(t, func(w http.ResponseWriter, r *http.Request) {
+	slow := serve(t, func(_ http.ResponseWriter, r *http.Request) {
 		select {
 		case <-block:
 		case <-r.Context().Done():
@@ -121,7 +121,8 @@ func TestQueryEscapes(t *testing.T) {
 // freePort returns a port nothing listens on (it was free a moment ago).
 func freePort(t *testing.T) int {
 	t.Helper()
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	var lc net.ListenConfig
+	ln, err := lc.Listen(t.Context(), "tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}

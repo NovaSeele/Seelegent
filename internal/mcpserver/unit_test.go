@@ -227,7 +227,7 @@ func TestDelegateRequest(t *testing.T) {
 		"after": []any{"t0"}, "afterMode": "done", "session": map[string]any{"id": "lead-1", "hostId": "host-1"}}
 	a, _ := json.Marshal(req)
 	b, _ := json.Marshal(want)
-	if string(a) != string(b) {
+	if !bytes.Equal(a, b) {
 		t.Fatalf("delegate body\n %s\nwant\n %s", a, b)
 	}
 	var wreq api.WaitRequest
@@ -341,7 +341,7 @@ func (f *flakyDaemon) Ensure(context.Context) (*client.Client, error) {
 	return f.live, nil
 }
 
-// TestWaitSurvivesRestart: a wait whose daemon goes away finds it again and waits on (old client.js behaviour).
+// TestWaitSurvivesRestart: a wait whose daemon goes away finds it again and waits on (as the old client.js did).
 func TestWaitSurvivesRestart(t *testing.T) {
 	_, live := newStub(t, map[string]http.HandlerFunc{"POST /wait": waitAnswer("done")})
 	deadSrv := httptest.NewServer(http.NotFoundHandler())

@@ -346,8 +346,8 @@ func reportSummary(r api.TaskReport) string {
 // waitSummary is the one-line summary of a wait for several tasks.
 func waitSummary(res api.WaitResult) string {
 	parts := make([]string, 0, len(res.Reports))
-	for _, r := range res.Reports {
-		parts = append(parts, r.TaskID+" "+r.Status)
+	for i := range res.Reports {
+		parts = append(parts, res.Reports[i].TaskID+" "+res.Reports[i].Status)
 	}
 	return fmt.Sprintf("Woke: %s. %s.", res.Woke, strings.Join(parts, ", "))
 }

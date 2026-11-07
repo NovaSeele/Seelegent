@@ -15,7 +15,8 @@ import (
 // TestMCPCommand runs the mcp command over an in-memory transport with a temp data directory, a port nothing
 // listens on and autostart off: every tool is listed and a call says that the daemon is not running.
 func TestMCPCommand(t *testing.T) {
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	var lc net.ListenConfig
+	ln, err := lc.Listen(t.Context(), "tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -31,7 +31,8 @@ func fakeDaemon(port string) int {
 	if err := os.WriteFile(filepath.Join(home, "started.txt"), []byte(wd+"\n"+home), 0o600); err != nil {
 		return 2
 	}
-	ln, err := net.Listen("tcp", net.JoinHostPort("127.0.0.1", port))
+	var lc net.ListenConfig
+	ln, err := lc.Listen(context.Background(), "tcp", net.JoinHostPort("127.0.0.1", port))
 	if err != nil {
 		return 3
 	}
@@ -74,7 +75,7 @@ func TestSpawnDaemon(t *testing.T) {
 		_ = os.WriteFile(filepath.Join(paths.Home, "stop"), nil, 0o600)
 		if exited != nil {
 			select {
-			case <-exited:
+			case <-exited: //nolint:errcheck // any exit will do; the folder only has to be released
 			case <-time.After(30 * time.Second):
 				t.Error("the fake daemon did not stop")
 			}
