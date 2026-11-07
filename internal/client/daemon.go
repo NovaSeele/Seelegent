@@ -250,6 +250,9 @@ func (d *Daemon) start(ctx context.Context) (*Client, error) {
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
+		if lctx.Err() != nil {
+			return d.otherStarter(ctx)
+		}
 		return nil, fmt.Errorf("wait for another process starting the daemon: %w", err)
 	}
 	defer func() { _ = lock.Unlock() }()
@@ -338,6 +341,24 @@ func (d *Daemon) awaitHolder(ctx context.Context, end time.Time) (*Client, error
 			return nil, err
 		}
 	}
+}
+
+// otherStarter handles another process that held the start lock for the whole StartTimeout: its daemon is used
+// when it answers by now, else the error (matching ErrNotRunning) says where the daemon is.
+func (d *Daemon) otherStarter(ctx context.Context) (*Client, error) {
+	where := fmt.Sprintf("nothing answers on port %d and no daemon holds the lock of %s yet: try again shortly",
+		d.o.Port, d.o.Paths.Home)
+	if d.lockHeld() {
+		c, err := d.locked(ctx)
+		if err == nil {
+			return c, nil
+		}
+		where = err.Error()
+	} else if c, err := d.Find(ctx); err == nil {
+		return c, nil
+	}
+	return nil, &notRunningError{msg: fmt.Sprintf("another process has been starting the Seelegent daemon for %s "+
+		"and it does not answer yet: %s", d.o.StartTimeout, where)}
 }
 
 // locked handles a started daemon that exited because another daemon of this home holds the lock: that daemon is

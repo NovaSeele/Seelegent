@@ -49,10 +49,11 @@ listens, the daemon records its port in `<home>/run/daemon.port`; it removes the
    probing and use it as soon as it answers; nothing is started while the lock is held, and a holder that never
    answers ends with an error that says where it is. Once the lock is free, start `seelegent daemon --port <port>`
    detached, hidden, in the data directory, and poll health. One 20 s deadline covers the whole step: waiting for
-   `start.lock`, for the lock holder and for the started daemon to answer. A daemon that exits first points at
-   `logs/daemon.log`. One that exits with code 3 (another daemon took the lock meanwhile) leads to the running
-   daemon when it answers, else to "the daemon for <home> runs on port X; this MCP looked on port Y", or "the
-   previous daemon was still shutting down; try again shortly".
+   `start.lock`, for the lock holder and for the started daemon to answer; a `start.lock` still held at the end
+   gives "another process has been starting the daemon for 20 s" and where the daemon is. A daemon that exits first
+   points at `logs/daemon.log`. One that exits with code 3 (another daemon took the lock meanwhile) leads to the
+   running daemon when it answers, else to "the daemon for <home> runs on port X; this MCP looked on port Y", or
+   "the previous daemon was still shutting down; try again shortly".
 
 Inside a worker (`SEELEGENT_WORKER=1`) step 3 never happens: a daemon started there would live in the worker's
 process tree, on the worker profile's data directory. The error says the daemon running the worker cannot be reached.

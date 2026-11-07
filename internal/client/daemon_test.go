@@ -313,6 +313,58 @@ func TestStartOneDeadline(t *testing.T) {
 	}
 }
 
+// TestStartLockHeldTooLong: another process that holds the start lock for the whole StartTimeout ends the start
+// with an error matching ErrNotRunning that says where the daemon is, and nothing is started; a cancelled caller
+// still gets its own context error.
+func TestStartLockHeldTooLong(t *testing.T) {
+	setup := func(t *testing.T, daemonLock bool, timeout time.Duration) (*Daemon, config.Paths, *atomic.Int32) {
+		paths := testPaths(t)
+		if daemonLock {
+			holdLock(t, paths)
+		}
+		if err := paths.EnsureDirs(); err != nil {
+			t.Fatal(err)
+		}
+		other, err := fsutil.TryLock(filepath.Join(paths.Run, startLockName))
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = other.Unlock() })
+		starts := &atomic.Int32{}
+		d := NewDaemon(DaemonOptions{Paths: paths, Port: freePort(t), ProbeTimeout: 200 * time.Millisecond,
+			StartTimeout: timeout, PollInterval: 20 * time.Millisecond,
+			Start: func(context.Context) (<-chan error, error) { starts.Add(1); return make(chan error), nil }})
+		return d, paths, starts
+	}
+	for _, c := range []struct {
+		name       string
+		daemonLock bool
+		want       string
+	}{
+		{"no daemon yet", false, "no daemon holds the lock"},
+		{"daemon holds its lock", true, "holds its lock"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			d, paths, starts := setup(t, c.daemonLock, 300*time.Millisecond)
+			_, err := d.Ensure(t.Context())
+			if !errors.Is(err, ErrNotRunning) || starts.Load() != 0 ||
+				!strings.Contains(err.Error(), "another process has been starting the Seelegent daemon for 300ms") ||
+				!strings.Contains(err.Error(), c.want) || !strings.Contains(err.Error(), paths.Home) {
+				t.Fatalf("ensure = %v (starts %d)", err, starts.Load())
+			}
+		})
+	}
+	t.Run("caller cancelled", func(t *testing.T) {
+		d, _, starts := setup(t, false, 5*time.Second)
+		ctx, cancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
+		defer cancel()
+		_, err := d.Ensure(ctx)
+		if !errors.Is(err, context.DeadlineExceeded) || errors.Is(err, ErrNotRunning) || starts.Load() != 0 {
+			t.Fatalf("ensure = %v (starts %d)", err, starts.Load())
+		}
+	})
+}
+
 // TestProbeTimeout: a port that accepts but never answers is reported as busy or hung, and nothing is started.
 func TestProbeTimeout(t *testing.T) {
 	port := freePort(t)
