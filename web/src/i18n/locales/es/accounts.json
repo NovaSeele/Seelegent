@@ -117,6 +117,7 @@
     "noProvider": "Este backend aún no tiene proveedor. Añade uno antes en Proveedores de API.",
     "keyHint": "Opcional; puedes añadirla después. Luego solo se muestran sus últimos caracteres.",
     "keyless": "Se añadió {name}, pero no tiene clave: la clave fue rechazada y la cuenta no se pudo quitar de nuevo. Introduce aquí una clave para ella.",
+    "systemTaken": "Ya añadida: {name}",
     "next": "Siguiente",
     "submit": "Añadir cuenta"
   },

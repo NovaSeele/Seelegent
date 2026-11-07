@@ -117,6 +117,7 @@
     "noProvider": "Backend này chưa có nhà cung cấp nào. Hãy thêm một nhà cung cấp ở mục Nhà cung cấp API trước.",
     "keyHint": "Không bắt buộc; bạn có thể thêm sau. Về sau chỉ hiện vài ký tự cuối.",
     "keyless": "Đã thêm {name} nhưng tài khoản chưa có khóa: khóa bị từ chối và không xóa lại được tài khoản. Hãy nhập khóa cho nó ở đây.",
+    "systemTaken": "Đã thêm: {name}",
     "next": "Tiếp",
     "submit": "Thêm tài khoản"
   },

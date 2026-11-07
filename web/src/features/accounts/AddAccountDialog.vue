@@ -42,7 +42,10 @@ const formEl = ref<HTMLFormElement | null>(null)
 /** Set when the account was created without its key; the dialog then only sets that account's key. */
 const keyless = ref<Account | null>(null)
 
-const hasSystem = computed(() => accounts.accounts.some((a) => a.kind === 'system'))
+/** This computer's sign-in is one account per backend: the one already added for the chosen backend. */
+const systemAccount = computed(() =>
+  accounts.accounts.find((a) => a.kind === 'system' && a.backend === backend.value),
+)
 
 const backendOptions = computed(() =>
   BACKENDS.map((value) => ({
@@ -55,12 +58,17 @@ const backendOptions = computed(() =>
 const kindOptions = computed(() => {
   const kinds: Account['kind'][] =
     backend.value === 'agy' ? ['isolated', 'system'] : ['isolated', 'api-key']
-  return kinds.map((value) => ({
-    value,
-    label: t(`accounts.kind.${kindKey(value)}`),
-    description: t(`accounts.add.kindDesc.${kindKey(value)}`),
-    disabled: value === 'system' && hasSystem.value,
-  }))
+  return kinds.map((value) => {
+    const taken = value === 'system' ? systemAccount.value : undefined
+    return {
+      value,
+      label: t(`accounts.kind.${kindKey(value)}`),
+      description: taken
+        ? t('accounts.add.systemTaken', { name: taken.label })
+        : t(`accounts.add.kindDesc.${kindKey(value)}`),
+      disabled: taken !== undefined,
+    }
+  })
 })
 
 const providerOptions = computed(() =>

@@ -73,6 +73,22 @@ afterEach(() => {
 })
 
 describe('AddAccountDialog', () => {
+  it('blocks this computer’s sign-in only for the backend that has it, and says why', async () => {
+    const wrapper = await mountDialog({})
+    useAccountsStore().replaceAll([
+      makeAccount({ id: 's1', label: 'Claude here', kind: 'system', backend: 'claude' }),
+    ])
+    await flushPromises()
+    expect(radio('system').disabled).toBe(false)
+    useAccountsStore().replaceAll([
+      makeAccount({ id: 's2', label: 'Gemini here', kind: 'system', backend: 'agy' }),
+    ])
+    await flushPromises()
+    expect(radio('system').disabled).toBe(true)
+    expect(body().textContent).toContain('Already added: Gemini here')
+    wrapper.unmount()
+  })
+
   it('turns into setting the key when the account stays without one', async () => {
     const api = {
       create: vi.fn(() => Promise.resolve(created)),
