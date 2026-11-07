@@ -19,7 +19,14 @@ func (s *Service) usableMember(ctx context.Context, id string) (api.Member, erro
 		// A turned-off member is a conflict with details (member_disabled); anything else is a bad argument of
 		// this request, not a missing task.
 		var detailed interface{ APIDetails() map[string]any }
-		if errors.As(err, &detailed) || ctx.Err() != nil {
+		if ctx.Err() != nil {
+			return api.Member{}, err
+		}
+		if errors.As(err, &detailed) {
+			if detailed.APIDetails()["reason"] == "member_missing" {
+				// A member that is gone: a bad argument of this request that keeps its details.
+				return api.Member{}, fmt.Errorf("%w: %w", ErrInvalid, err)
+			}
 			return api.Member{}, err
 		}
 		return api.Member{}, invalidf("%v", err)

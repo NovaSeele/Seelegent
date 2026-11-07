@@ -58,7 +58,7 @@ func (e *DisabledError) APIDetails() map[string]any {
 type MissingError struct{ ID string }
 
 func (e *MissingError) Error() string {
-	return fmt.Sprintf("invalid: no member %q; pick another member or a backend", e.ID)
+	return fmt.Sprintf("no member %q; pick another member or a backend", e.ID)
 }
 
 // Is makes errors.Is(err, ErrInvalid) true.
