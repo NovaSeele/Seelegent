@@ -104,10 +104,25 @@ are restored.
 
 `POST /tasks/{id}/turns/{n}/restore` (body `{"files": [...]}`, empty for every file at risk not restored yet) and
 `seelegent restore <id> --turn N [--file=<path>]...` write back the content the files had when turn `n` started.
-The current content is first kept in a `restore-<time>` snapshot, the repository is locked while it runs, and
-paths are cleaned with `gitx.CleanPath` (no `..`, no absolute paths). It is refused (`409 bad_state`) while the
-task is active or taken over. Restored files are marked `restored`, and a `restored` event (the files written) goes
-into the task's log. The report's `work_at_risk.restore` is the command line to paste (POSIX quoting),
+The repository is locked while it runs, and paths are cleaned with `gitx.CleanPath` (no `..`, no absolute paths).
+It is refused (`409 bad_state`) while the task is active or taken over.
+
+A file whose content differs from the turn's end state (the turn's end snapshot, or the next turn's start
+snapshot when the end one is missing; a file neither lists is compared with HEAD at that time) was changed by
+someone after the turn ended. Restore leaves it alone and reports it as skipped with `code: "changed_since_turn"`
+(`changed since the turn ended`); `{"force": true}` or `seelegent restore --force` overwrites it anyway. The report's
+restore command never forces. The dashboard asks before every restore, lists the skipped files, and offers
+"Restore anyway" after a second question.
+
+Before writing, the current content of the files it is about to write is kept in a backup snapshot,
+`t<turn>-restore-<time>`, which the result (`backup`), the CLI output and the dashboard name. Restored files are
+marked `restored`, and a `restored` event (the files written and the backup) goes into the task's log.
+
+To undo a restore, put the backup's content back by hand: the backup is
+`<data dir>/snapshots/tasks/<task id>/<backup>.json`, a manifest whose `files` list each file's `path` and the
+`hash` of the content it held (`missing: true` when it did not exist); that content is the blob
+`<data dir>/snapshots/blobs/<first two characters of hash>/<hash>`. Copy each blob back to its path (delete the
+file for a `missing` entry). The backup is kept as long as the task's other snapshots. The report's `work_at_risk.restore` is the command line to paste (POSIX quoting),
 `restore_argv` the same as arguments.
 
 ### Outside diff

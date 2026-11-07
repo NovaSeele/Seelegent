@@ -67,7 +67,7 @@ allowed; the daemon's own guard decides what a worker may read.
 | `cancel <id> [--wait N]` | Cancels and waits up to N s (default 15, max 60) for the worker to stop. | `TaskReport` read after the cancel (`cancelling: true` while it stops) |
 | `task <id> [--steps N] [--full]` | The report, with the last N worker tool steps; `--full` the whole task with its turns. | `TaskReport` + `recent_steps`, or `TaskDetail` + `recent_steps` |
 | `ls [--active] [--blocked] [--project P] [--limit N]` | Tasks, newest first (limit 1..200, default 50). | `TaskPage` |
-| `restore <id> --turn N [--file=<path>]...` | Puts back the content files had when turn N started, from its snapshot ([safety.md](safety.md)); without `--file`, every work-at-risk file of the turn not restored yet. Paths are relative to the repository root. Prints `restored`/`skipped` lines. Refused while the task is active. | `RestoreResult` |
+| `restore <id> --turn N [--file=<path>]... [--force]` | Puts back the content files had when turn N started, from its snapshot ([safety.md](safety.md)); without `--file`, every work-at-risk file of the turn not restored yet. Paths are relative to the repository root. A file changed after the turn ended is skipped (`changed since the turn ended`) unless `--force`. Prints `restored`/`skipped` lines and the `backup` snapshot that keeps what the files held before. Refused while the task is active. | `RestoreResult` |
 | `memory read\|append\|replace --cwd D [text\|@file]` | A project's notes for workers. | `Memory` |
 | `doctor` | Checks the installation (below); exit 1 when a check fails. | `[{name, status: ok\|warn\|fail, message, fix?}]` |
 | `version` | Version, commit and build date. | `buildinfo.Info` |

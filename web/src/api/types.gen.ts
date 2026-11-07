@@ -643,18 +643,27 @@ export interface FileOverlap {
 export interface RestoreRequest {
   /** Files are relative to the repository root; empty restores every work-at-risk file of the turn. */
   files?: string[]
+  /** Force also restores files that changed after the turn ended (skipped as RestoreChangedSinceTurn otherwise). */
+  force?: boolean
 }
 
 /** RestoreResult is the answer of a restore. */
 export interface RestoreResult {
   restored: string[]
   skipped: RestoreFailed[]
+  /**
+   * Backup names the snapshot that keeps what the restored files held before (t<turn>-restore-<time>, in the
+   * task's snapshot folder); empty when nothing was written.
+   */
+  backup?: string
 }
 
 /** RestoreFailed is a file a restore could not put back. */
 export interface RestoreFailed {
   path: string
   error: string
+  /** Code is a stable reason for the clients ("" for other failures). */
+  code?: 'changed_since_turn'
 }
 
 /**

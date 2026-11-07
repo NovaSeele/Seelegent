@@ -72,18 +72,29 @@ type FileOverlap struct {
 type RestoreRequest struct {
 	// Files are relative to the repository root; empty restores every work-at-risk file of the turn.
 	Files []string `json:"files,omitempty"`
+	// Force also restores files that changed after the turn ended (skipped as RestoreChangedSinceTurn otherwise).
+	Force bool `json:"force,omitempty"`
 }
 
 // RestoreResult is the answer of a restore.
 type RestoreResult struct {
 	Restored []string        `json:"restored"`
 	Skipped  []RestoreFailed `json:"skipped"`
+	// Backup names the snapshot that keeps what the restored files held before (t<turn>-restore-<time>, in the
+	// task's snapshot folder); empty when nothing was written.
+	Backup string `json:"backup,omitempty"`
 }
+
+// RestoreChangedSinceTurn is the code of a file a restore skipped because someone changed it after the turn
+// ended; restoring it anyway needs force.
+const RestoreChangedSinceTurn = "changed_since_turn"
 
 // RestoreFailed is a file a restore could not put back.
 type RestoreFailed struct {
 	Path  string `json:"path"`
 	Error string `json:"error"`
+	// Code is a stable reason for the clients ("" for other failures).
+	Code string `json:"code,omitempty" ts:"'changed_since_turn'"`
 }
 
 // ReportRisk is the work_at_risk field of a report: the files, the snapshot that holds their earlier content and

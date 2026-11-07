@@ -207,6 +207,75 @@ func TestWorkAtRiskRestoreAndChecks(t *testing.T) {
 	}
 }
 
+// A file someone changed after the turn ended is not overwritten unless forced; every restore names the backup
+// snapshot that keeps what it replaced.
+func TestRestoreSkipsFilesChangedAfterTheTurn(t *testing.T) {
+	h := newHarness(t)
+	h.initRepo(map[string]string{"a.txt": "one\n", "b.txt": "bee\n"})
+	h.write("a.txt", "one\nmine\n")
+	h.write("b.txt", "bee\nmine too\n")
+	h.agy("w", 1)
+	h.queue.Push(t, script(agyInit("conv-f"),
+		agyTool(1, "DONE", "git checkout -- a.txt b.txt"),
+		fakeWrite(filepath.Join(h.cwd, "a.txt"), "one\n"),
+		fakeWrite(filepath.Join(h.cwd, "b.txt"), "bee\n"),
+		agyResult("conv-f", "Reset the files.")))
+	sum := h.delegate(api.DelegateRequest{Title: "reset"})
+	tk := h.waitStatus(sum.ID, StatusDone)
+	if len(tk.LastTurn().WorkAtRisk) != 2 {
+		t.Fatalf("work at risk: %+v", tk.LastTurn().WorkAtRisk)
+	}
+	// The user goes on with a.txt after the turn.
+	h.write("a.txt", "one\nnewer work\n")
+
+	res, err := h.s.Restore(t.Context(), sum.ID, 1, api.RestoreRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(res.Restored, []string{"b.txt"}) || len(res.Skipped) != 1 ||
+		res.Skipped[0].Path != "a.txt" || res.Skipped[0].Code != api.RestoreChangedSinceTurn ||
+		res.Skipped[0].Error != "changed since the turn ended" {
+		t.Fatalf("restore: %+v", res)
+	}
+	if h.read("a.txt") != "one\nnewer work\n" || h.read("b.txt") != "bee\nmine too\n" {
+		t.Fatalf("a.txt %q, b.txt %q", h.read("a.txt"), h.read("b.txt"))
+	}
+	if !strings.HasPrefix(res.Backup, "t1-restore-") {
+		t.Fatalf("backup %q", res.Backup)
+	}
+	// The backup keeps what b.txt held before the restore.
+	m, err := h.s.o.Snapshots.Load(sum.ID, 1, strings.TrimPrefix(res.Backup, "t1-"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, ok := m.Find("b.txt")
+	if !ok || len(m.Files) != 1 {
+		t.Fatalf("backup files: %+v", m.Files)
+	}
+	if data, err := h.s.o.Snapshots.Content(b); err != nil || string(data) != "bee\n" {
+		t.Fatalf("backup of b.txt: %q, %v", data, err)
+	}
+	var ev api.RestoredData
+	decode(t, eventsOf(h.events(sum.ID), api.EventRestored)[0], &ev)
+	if ev.Backup != res.Backup {
+		t.Fatalf("event backup %q, result %q", ev.Backup, res.Backup)
+	}
+
+	// Forced, a.txt is put back too; the report's command never forces.
+	h.clk.Advance(time.Second)
+	res, err = h.s.Restore(t.Context(), sum.ID, 1, api.RestoreRequest{Force: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(res.Restored, []string{"a.txt"}) || len(res.Skipped) != 0 || h.read("a.txt") != "one\nmine\n" ||
+		res.Backup == "" {
+		t.Fatalf("forced restore: %+v, a.txt %q", res, h.read("a.txt"))
+	}
+	if atRisk(h.task(sum.ID)) != 0 {
+		t.Fatal("files still at risk after the forced restore")
+	}
+}
+
 func TestWorkAtRiskSkipsOwnEditsAndClean(t *testing.T) {
 	h := newHarness(t)
 	h.initRepo(map[string]string{"a.txt": "one\n"})

@@ -27,9 +27,10 @@ func errNoSnapshots() error {
 }
 
 // Restore writes back the content files had when turn n of task id started (default: the turn's work-at-risk
-// files not restored yet). The current content of each file is kept in a backup snapshot first. It is refused
-// while the task is active or taken over, and runs under the repository's git lock. A restore that wrote any file
-// logs a restored event.
+// files not restored yet). A file that changed after the turn ended is skipped unless req.Force. The current
+// content of the files it writes is kept in a backup snapshot first (named in the result). It is refused while
+// the task is active or taken over, and runs under the repository's git lock. A restore that wrote any file logs a
+// restored event.
 func (s *Service) Restore(ctx context.Context, id string, n int, req api.RestoreRequest) (api.RestoreResult, error) {
 	if s.o.Snapshots == nil {
 		return api.RestoreResult{}, errNoSnapshots()
@@ -64,18 +65,14 @@ func (s *Service) Restore(ctx context.Context, id string, n int, req api.Restore
 		if len(files) == 0 {
 			return nil, invalidf("turn %d of task %s has no files at risk left to restore; name the files", n, id)
 		}
-		unlock, err := s.o.Repos.Lock(ctx, tu.Snap.Root)
-		if err != nil {
-			return nil, err
-		}
-		out, err := s.o.Snapshots.Restore(id, n, files)
-		unlock()
+		out, skipped, backup, err := s.restoreFiles(ctx, t, tu, files, req.Force)
 		if err != nil {
 			if errors.Is(err, snapshot.ErrNotFound) {
 				return nil, fmt.Errorf("%w: the snapshot of turn %d of task %s is gone", ErrNotFound, n, id)
 			}
 			return nil, err
 		}
+		res.Skipped = append(res.Skipped, skipped...)
 		done := map[string]bool{}
 		for _, r := range out {
 			if r.Error != "" {
@@ -93,13 +90,15 @@ func (s *Service) Restore(ctx context.Context, id string, n int, req api.Restore
 		if len(res.Restored) == 0 {
 			return nil, errNoChange
 		}
-		return []NewEvent{{Type: api.EventRestored, Turn: n, Data: api.RestoredData{Files: res.Restored}}}, nil
+		res.Backup = backup
+		return []NewEvent{{Type: api.EventRestored, Turn: n,
+			Data: api.RestoredData{Files: res.Restored, Backup: backup}}}, nil
 	})
 	if err != nil {
 		return api.RestoreResult{}, err
 	}
 	s.log.Info("task: restored files", "task", id, "turn", n, "restored", len(res.Restored),
-		"skipped", len(res.Skipped))
+		"skipped", len(res.Skipped), "backup", res.Backup, "force", req.Force)
 	return res, nil
 }
 
