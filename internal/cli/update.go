@@ -24,6 +24,10 @@ const (
 	codeChecksum   = "checksum_mismatch"
 	codeDevBuild   = "dev_build"
 	codeNoPrevious = "no_previous"
+	// codeSchemaTooNew: the build to install (or `version --check-database`) knows fewer database migrations than
+	// the data folder's database has; codeSchemaUnknown: it does not say how many it knows.
+	codeSchemaTooNew  = "schema_too_new"
+	codeSchemaUnknown = "schema_unknown"
 )
 
 // codedError is an error with its own --json code (exit 1).

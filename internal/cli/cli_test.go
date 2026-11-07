@@ -11,6 +11,7 @@ import (
 
 	"github.com/NovaSeele/Seelegent/internal/buildinfo"
 	"github.com/NovaSeele/Seelegent/internal/launch"
+	"github.com/NovaSeele/Seelegent/internal/store"
 )
 
 var testInfo = buildinfo.Info{
@@ -64,7 +65,16 @@ func TestVersionCommandJSON(t *testing.T) {
 	if got != testInfo {
 		t.Errorf("version --json = %+v, want %+v", got, testInfo)
 	}
-	for _, key := range []string{`"version"`, `"commit"`, `"date"`, `"goVersion"`, `"platform"`} {
+	var schema struct {
+		SchemaVersion int  `json:"schemaVersion"`
+		Database      *int `json:"databaseSchemaVersion"`
+	}
+	_ = json.Unmarshal([]byte(out), &schema)
+	if known, _ := store.KnownSchemaVersion(); schema.SchemaVersion != known || known == 0 || schema.Database != nil {
+		t.Errorf("schemaVersion = %d (database %v), want %d without a database field", schema.SchemaVersion,
+			schema.Database, known)
+	}
+	for _, key := range []string{`"version"`, `"commit"`, `"date"`, `"goVersion"`, `"platform"`, `"schemaVersion"`} {
 		if !strings.Contains(out, key) {
 			t.Errorf("JSON output lacks key %s", key)
 		}

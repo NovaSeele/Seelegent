@@ -3,15 +3,19 @@ package cli
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/NovaSeele/Seelegent/internal/account"
 	"github.com/NovaSeele/Seelegent/internal/config"
 	"github.com/NovaSeele/Seelegent/internal/ops"
+	"github.com/NovaSeele/Seelegent/internal/store"
 	"github.com/NovaSeele/Seelegent/internal/update"
 )
 
@@ -68,6 +72,51 @@ func TestUpdateCommand(t *testing.T) {
 			e.Error != ops.WorkerMessage {
 			t.Errorf("update %v in a worker: exit %d %s", args, code, out)
 		}
+	}
+}
+
+func TestVersionCheckDatabase(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv(config.EnvHome, home)
+	var out, errOut bytes.Buffer
+	versionJSON := func() (int, map[string]any) {
+		out.Reset()
+		errOut.Reset()
+		code := Run(context.Background(), []string{"version", "--check-database", "--json"}, &out, &errOut)
+		var m map[string]any
+		_ = json.Unmarshal(out.Bytes(), &m)
+		return code, m
+	}
+	known, err := store.KnownSchemaVersion()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// No database yet: nothing to refuse, and nothing is created.
+	if code, m := versionJSON(); code != ExitOK || m["databaseSchemaVersion"] != float64(0) ||
+		m["schemaVersion"] != float64(known) {
+		t.Fatalf("no database: exit %d %s %s", code, out.String(), errOut.String())
+	}
+	if _, err := os.Stat(filepath.Join(home, "seelegent.db")); !os.IsNotExist(err) {
+		t.Fatalf("version --check-database created the database: %v", err)
+	}
+	ctx := t.Context()
+	db, err := store.Open(ctx, filepath.Join(home, "seelegent.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if code, m := versionJSON(); code != ExitOK || m["databaseSchemaVersion"] != float64(known) {
+		t.Fatalf("current database: exit %d %s", code, out.String())
+	}
+	if err := db.Write(ctx, func(tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, "INSERT INTO schema_version (version, name, applied_at) VALUES (?, 'future', 'x')",
+			known+1)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	_ = db.Close()
+	if code, m := versionJSON(); code != ExitError || m["code"] != codeSchemaTooNew {
+		t.Fatalf("newer database: exit %d %s", code, out.String())
 	}
 }
 
