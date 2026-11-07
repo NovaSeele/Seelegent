@@ -70,6 +70,7 @@
     "acceptedConfirm": "接受",
     "rejectedConfirm": "退回",
     "acceptedToast": "已接受",
+    "acceptedWarned": "已接受。警告：{warnings}",
     "rejectedToast": "已退回"
   },
   "confirm": {
@@ -252,5 +253,29 @@
     "usedUp": "自动修复已用完（{n}/{max}）",
     "nextStep": "关卡已无法自行修复：请发送后续指示，或接管该任务。",
     "causedBy": "可能由 {tasks} 引起"
+  },
+  "consults": {
+    "title": "成员意见",
+    "count": "{count} 条意见",
+    "open": "{count} 条异议待回复",
+    "verdict": {
+      "running": "思考中",
+      "failed": "失败",
+      "approve": "赞成",
+      "concerns": "有顾虑",
+      "object": "反对",
+      "answered": "异议已回复",
+      "done": "完成"
+    },
+    "focus": "询问内容：{focus}",
+    "required": "要求的修改",
+    "answer": "你的回复",
+    "acceptBlocked": "请先回复异议",
+    "objects": "{who} 提出异议；接受前请先回复",
+    "line": "{who}：{text}",
+    "answerAction": "回复异议",
+    "answerTitle": "回复异议并接受",
+    "answerDesc": "同级成员反对这项工作。你的回复会与异议一起保存，任务随即被接受。",
+    "answerLabel": "回复"
   }
 }

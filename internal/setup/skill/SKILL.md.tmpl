@@ -16,18 +16,24 @@ If the environment variable `SEELEGENT_WORKER` is `1`, you are a Seelegent worke
 
 ## Tools
 
-- `delegate` starts a task. Required: `prompt` (the brief) and `cwd` (the absolute project folder). Optional: `title`; `model` (a tier `fast`, `standard`, `strong` or `max`, or a model id the settings allow); `effort`; `mode` (`full`, the default, or `plan` for read-only investigation); `backend` (`agy`, `claude`, `codex`); `provider` (an API-key provider id; its harness sets the backend); `profile` (a worker role id); `spec` and `task_ids` (Spec Kit); `after` and `after_mode` (dependencies); `allow_git`; `gate`, `lane`, `force_lane` and `verify` (see Gates and lanes); `wait_seconds` (default 600, at most 3000; 0 returns at once with the task id; the default is 0 with `after`); `wake_on_blocked` (default true).
+- `delegate` starts a task. Required: `prompt` (the brief) and `cwd` (the absolute project folder). Optional: `title`; `member` (a department member: its backend, model or tier and role apply unless you pass them); `model` (a tier `fast`, `standard`, `strong` or `max`, or a model id the settings allow); `effort`; `mode` (`full`, the default, or `plan` for read-only investigation); `backend` (`agy`, `claude`, `codex`); `provider` (an API-key provider id; its harness sets the backend); `profile` (a worker role id); `spec` and `task_ids` (Spec Kit); `after` and `after_mode` (dependencies); `allow_git`; `gate`, `lane`, `force_lane` and `verify` (see Gates and lanes); `variants`, `variant_specs`, `judge` and `deadline_minutes` (see Contests); `wait_seconds` (default 600, at most 3000; 0 returns at once with the task id; the default is 0 with `after`); `wake_on_blocked` (default true).
 - `wait` waits for `task_ids` up to `wait_seconds`; `any: true` wakes when the first one finishes. It also wakes early when a task needs you.
 - `task` shows a task's report; `steps: N` adds its last N tool steps, `full: true` the whole record.
-- `followup` sends the next instruction to a task (`task_id`, `message`), with the same `model`, `effort`, `profile`, `task_ids`, `allow_git`, `gate`, `lane`, `force_lane`, `verify`, `wait_seconds` and `wake_on_blocked` options as `delegate`. `force: true` starts a task held in `blocked_deps`. A followup cannot change the provider.
-- `review` closes a task: `verdict` `accepted` or `rejected`, with short `notes`. Verdicts go into the project's history, which later briefs show.
+- `followup` sends the next instruction to a task (`task_id`, `message`), with the same `member`, `model`, `effort`, `profile`, `task_ids`, `allow_git`, `gate`, `lane`, `force_lane`, `verify`, `wait_seconds` and `wake_on_blocked` options as `delegate`. `force: true` starts a task held in `blocked_deps`. A followup cannot change the provider.
+- `review` closes a task: `verdict` `accepted` or `rejected`, with short `notes`. Verdicts go into the project's history, which later briefs show. After a peer's objection (see `consult`), `accepted` needs `answer_objection`.
 - `cancel` stops a task (`task_id`). It waits up to `wait_seconds` (default 15, at most 60) and answers `cancelled`, or `cancelling` while the worker is still stopping.
 - `status` lists the accounts with their quota, the active tasks and the backends (`full: true` for everything).
 - `memory` keeps the project notes every brief of that project includes: `cwd`, `action` (`read`, `append` or `replace`), `text`.
 - `profiles` manages worker roles (`list`, `get`, `upsert`, `delete`, with `scope` `global` or `project` and `cwd`) and lists the skills a role can name (`skills`).
 - `proof` shows what is proven in a repository (`cwd`): `index` (every Spec Kit feature), `matrix` (one `feature`: each requirement with its status and covering tasks), `run` (runs every gate command again; `wait_seconds` waits for the end; refused while other tasks of the repository run unless `force`), `run_status` and `cancel_run` (`run_id`), `stats` (`since`), `lanes` (the claims held) and `contention` (files several tasks changed).
 
-Not available in this version yet: the tools `members`, `meeting`, `consult`, `notes`, `contest`, `issues` and `automations`, and the `delegate` options `member` and `variants`. They answer with the error code `not_available` and do nothing; leave them out.
+- `members` lists the department members: named workers with a backend, a model or tier, a rank (`worker`, `senior` or `peer`) and a role. The user manages them in the dashboard or with `seelegent members`.
+- `consult` asks a `senior` or `peer` member (`member`) for a second opinion on a finished task (`task_id`, optional `focus`, `wait_seconds`): a read-only run reads the report and the diff and answers approve, concerns or object, citing `path:line`.
+- `notes` keeps line comments on a task's diff (`action` `add` with `file`, `line` and `body`; `list`, `resolve`, `reopen`, `delete`) and sends the open ones to the worker as one followup (`send`, which waits like `followup`).
+- `meeting` runs a structured meeting with members before a hard decision: `open` (`question`, `cwd`, `attendees`, optional `options`, `context`, `sealed`, `max_rounds`; `estimate_only` shows the cost first), `wait`, `post` (`answers` to the pending questions), `decide` (`decision`, `rationale`, `option`), `act` (`items` become delegated tasks), `status`, `list`, `cancel` and `dissent_outcome`.
+- `contest` follows a contest (see Contests): `status`, `wait`, `pick` (`winner`, default the proposal) and `cancel`.
+
+Not available in this version yet: the tools `issues` and `automations`. They answer with the error code `not_available` and do nothing; leave them out.
 
 ## The loop
 
@@ -43,6 +49,18 @@ After each worker report, Seelegent runs the task's gate in the task's repositor
 `lane` lists the files and globs (relative to the repository root) the worker may change. With the `lanes` setting at `enforce`, a lane that overlaps another active task's claim is refused (error `conflict`, reason `lane_conflict`, with the holding tasks) unless `force_lane: true`; at `warn` it is only reported. Files changed outside the lane fail the gate. A Spec Kit task's paths become its lane unless you pass `lane: false`.
 
 `verify: true` (or the `verifier` setting) has a second, read-only worker review the diff once the gate is green; a reject is sent back as an automatic fix turn, and the report's `verifier` field shows the verdict and reasons. Plan-mode tasks take none of these options.
+
+## Team
+
+Members are named workers the user set up. Pass `member` to `delegate` or `followup` to give a task to one; a disabled member is refused with `member_disabled`. Ranks decide how much a member's opinion weighs: a `worker` is a witness, a `senior` an adviser (advice you did not take is recorded) and a `peer` can formally dissent.
+
+- **Consult** before you accept risky work. A `senior` objection comes back as a warning; a `peer` objection blocks `review` `accepted` until you pass `answer_objection`. Both go into the member's track record.
+- **Notes**: while you read a diff, `add` a note per problem at its line, then `send` them all as one followup. Each note follows its line across turns; after the turn it shows `addressed` (the line changed: check it and `resolve` it) or `unaddressed` (sent again next time).
+- **Meetings** are for decisions worth several runs (a design choice, a risky refactor, a disputed diagnosis). Attendees answer blind in round 1, then see each other's answers under neutral labels and must answer the strongest opposing argument. Answer `waiting_lead` questions with `post`, `decide` when the status is `deciding`, then `act`. Every round costs one run per attendee: look at the estimate first.
+
+## Contests
+
+`delegate` with `variants` (2 to 5) runs the same brief several times, each in its own git worktree made from a snapshot of your working tree (your files and index stay as they are). `variant_specs` sets the backend, model, member or provider of each variant; `judge` names the member who compares the best three anonymously (`false` for machine scoring only); unfinished variants are cancelled after `deadline_minutes` (default 60). When all have ended, `contest` `wait` returns the scoreboard and a proposal. Read the proposed winner's diff, `followup` a variant if it needs a fix, then `contest` `pick` applies the winner to your working tree, accepts it and rejects the others; the worktrees are removed. A contest costs one run per variant plus the judge, and takes no `after` and no `plan` mode.
 
 ## How to write a brief
 

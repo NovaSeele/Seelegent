@@ -28,7 +28,10 @@ import type {
   LaneEventData,
   LeadMessageData,
   LoginSession,
+  ContestSummary,
+  MeetingSummary,
   MemoryChanged,
+  NotesChanged,
   ProofRun,
   ReattachData,
   Reset,
@@ -251,7 +254,7 @@ export type ResetFrame = Reset
 
 /**
  * Named SSE events and their payloads. Hand-written: the generator emits the names (StreamEvent) and the payload
- * types, but not which payload belongs to which name. hook.ran's HookRun is still hand-written (types.ts).
+ * types, but not which payload belongs to which name.
  */
 export interface ServerEvents {
   hello: HelloFrame
@@ -269,6 +272,9 @@ export interface ServerEvents {
   'members.changed': Changed
   'memory.changed': MemoryChanged
   'hook.ran': HookRun
+  'meeting.updated': MeetingSummary
+  'contest.updated': ContestSummary
+  'notes.changed': NotesChanged
   'proof.run': ProofRun
 }
 
@@ -294,5 +300,8 @@ export const SERVER_EVENT_NAMES: readonly ServerEventName[] = [
   'members.changed',
   'memory.changed',
   'hook.ran',
+  'meeting.updated',
+  'contest.updated',
+  'notes.changed',
   'proof.run',
 ]

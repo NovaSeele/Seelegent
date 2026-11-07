@@ -11,7 +11,8 @@
     "more": "더보기",
     "open": "열기",
     "remove": "제거",
-    "undo": "실행 취소"
+    "undo": "실행 취소",
+    "keepRunning": "계속 실행"
   },
   "toast": {
     "close": "알림 닫기",
@@ -124,7 +125,8 @@
     "depsBlocked": "선행 작업 실패",
     "waitingDeps": "선행 작업 대기",
     "hygiene": "위생 문제",
-    "verifierRejected": "2차 검토 거절"
+    "verifierRejected": "2차 검토 거절",
+    "peerObjection": "동료가 이의를 제기함"
   },
   "stage": {
     "explore": "탐색",

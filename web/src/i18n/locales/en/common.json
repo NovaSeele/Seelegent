@@ -11,7 +11,8 @@
     "more": "More",
     "open": "Open",
     "remove": "Remove",
-    "undo": "Undo"
+    "undo": "Undo",
+    "keepRunning": "Keep running"
   },
   "toast": {
     "close": "Dismiss notification",
@@ -124,7 +125,8 @@
     "depsBlocked": "Earlier task failed",
     "waitingDeps": "Waiting on earlier task",
     "hygiene": "Hygiene problem",
-    "verifierRejected": "Review rejected it"
+    "verifierRejected": "Review rejected it",
+    "peerObjection": "A peer objects"
   },
   "stage": {
     "explore": "Explore",

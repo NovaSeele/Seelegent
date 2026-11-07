@@ -3,7 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { errorMessage, fieldProblems } from '@/api/client'
-import type { HookConfig } from '@/api/types'
+import type { Hook } from '@/api/types'
 import Button from '@/components/ui/Button.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import Spinner from '@/components/ui/Spinner.vue'
@@ -24,15 +24,16 @@ const { t } = useI18n()
 const settings = useSettingsStore()
 const toast = useToastStore()
 
-const draft = ref<HookConfig[]>([])
+const draft = ref<Hook[]>([])
 const dirty = ref(false)
 const saving = ref(false)
 const errors = ref<Record<string, string>>({})
 const failure = ref('')
 
-const toConfig = (list: readonly HookConfig[]): HookConfig[] =>
-  list.map(({ id, on, run, project, timeoutSeconds, enabled }) => ({
-    id,
+const toConfig = (list: readonly Hook[]): Hook[] =>
+  list.map(({ id, name, on, run, project, timeoutSeconds, enabled }) => ({
+    ...(id ? { id } : {}),
+    ...(name ? { name } : {}),
     on: [...on],
     run,
     ...(project ? { project } : {}),
@@ -52,16 +53,13 @@ watch(
 
 const lastRuns = computed(() => new Map(settings.hooks.map((h) => [h.id, h.lastRun])))
 
-function change(index: number, hook: HookConfig) {
+function change(index: number, hook: Hook) {
   draft.value = draft.value.map((h, i) => (i === index ? hook : h))
   dirty.value = true
 }
 
 function add() {
-  draft.value = [
-    ...draft.value,
-    { id: '', on: ['task.done'], run: '', timeoutSeconds: 20, enabled: true },
-  ]
+  draft.value = [...draft.value, { on: ['task.done'], run: '', timeoutSeconds: 20, enabled: true }]
   dirty.value = true
 }
 
@@ -121,7 +119,7 @@ async function save() {
             :key="hook.id || `new-${index}`"
             :model-value="hook"
             :index="index"
-            :last-run="lastRuns.get(hook.id) ?? null"
+            :last-run="(hook.id && lastRuns.get(hook.id)) || null"
             :errors="errors"
             @update:model-value="change(index, $event)"
             @remove="remove(index)"

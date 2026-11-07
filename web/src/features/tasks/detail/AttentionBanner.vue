@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import type { TaskDetail, TaskSummary } from '@/api/types'
@@ -8,7 +8,9 @@ import Icon from '@/components/ui/Icon.vue'
 import { useFormat } from '@/composables/useFormat'
 import { useNow } from '@/composables/useNow'
 import { canCancel, canTakeOver, isFinished } from '@/lib/taskStatus'
+import { useTeamStore } from '@/stores/team'
 
+import { memberLabel, openObjections } from './consults'
 import { failedSteps, gateOf } from './gate'
 import { reasonKey } from './question'
 import QuestionCard from './QuestionCard.vue'
@@ -25,7 +27,7 @@ const props = defineProps<{
   /** The open task's detail: a failed gate is told from its steps, never from the daemon's English detail. */
   detail?: TaskDetail | null
 }>()
-const emit = defineEmits<{ confirm: [action: 'cancel' | 'takeover'] }>()
+const emit = defineEmits<{ confirm: [action: 'cancel' | 'takeover']; answer: [] }>()
 
 const { t, te } = useI18n()
 const fmt = useFormat()
@@ -51,6 +53,20 @@ const gateSteps = computed(() =>
 const tone = computed(() =>
   attention.value?.state === 'background_wait' ? 'neutral' : 'attention',
 )
+
+/** The peer objections that stand, named after their members ("Peri Okafor objects; answer before accepting"). */
+const team = useTeamStore()
+const objections = computed(() =>
+  attention.value?.reason === 'peer_objection' ? openObjections(props.detail) : [],
+)
+const objectionTitle = computed(() =>
+  t(
+    'task.consults.objects',
+    { who: objections.value.map((c) => memberLabel(team.members, c.member)).join(', ') },
+    objections.value.length,
+  ),
+)
+onMounted(() => team.ensureMembers())
 </script>
 
 <template>
@@ -68,7 +84,7 @@ const tone = computed(() =>
     <div class="banner__body">
       <div class="banner__head">
         <p class="banner__title">
-          <strong>{{ reason }}</strong>
+          <strong>{{ objections.length ? objectionTitle : reason }}</strong>
           <span class="banner__who">
             ·
             {{
@@ -80,6 +96,9 @@ const tone = computed(() =>
           </time>
         </p>
         <div class="banner__actions">
+          <Button v-if="objections.length" size="sm" variant="primary" @click="emit('answer')">
+            {{ t('task.consults.answerAction') }}
+          </Button>
           <Button
             size="sm"
             variant="ghost"
@@ -115,6 +134,16 @@ const tone = computed(() =>
           ><span v-if="s.causedBy" class="banner__cause">
             · {{ t('task.gate.causedBy', { tasks: s.causedBy }) }}</span
           >
+        </li>
+      </ul>
+      <ul v-else-if="objections.length" class="banner__detail banner__steps">
+        <li v-for="c in objections" :key="c.id">
+          {{
+            t('task.consults.line', {
+              who: memberLabel(team.members, c.member),
+              text: c.required[0] ?? c.findings[0]?.text ?? t('task.consults.verdict.object'),
+            })
+          }}
         </li>
       </ul>
       <p v-else-if="attention.detail" class="banner__detail">{{ attention.detail }}</p>

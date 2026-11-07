@@ -15,14 +15,27 @@ const props = withDefaults(
     placeholder?: string
     mono?: boolean
     disabled?: boolean
+    /** Ids of text elsewhere that describes the field (the question it answers). */
+    describedby?: string
   }>(),
-  { hint: undefined, error: undefined, rows: 4, maxlength: undefined, placeholder: undefined },
+  {
+    hint: undefined,
+    error: undefined,
+    rows: 4,
+    maxlength: undefined,
+    placeholder: undefined,
+    describedby: undefined,
+  },
 )
 
 const id = useId()
 const describedBy = computed(
   () =>
-    [props.error ? `${id}-error` : null, props.hint ? `${id}-hint` : null]
+    [
+      props.describedby ?? null,
+      props.error ? `${id}-error` : null,
+      props.hint ? `${id}-hint` : null,
+    ]
       .filter(Boolean)
       .join(' ') || undefined,
 )

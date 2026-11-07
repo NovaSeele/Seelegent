@@ -1,20 +1,73 @@
 <script setup lang="ts">
+import { computed, nextTick, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
+import { errorMessage } from '@/api/client'
 import type { GitFile } from '@/api/types'
 import DiffView from '@/components/diff/DiffView.vue'
 import Button from '@/components/ui/Button.vue'
 import Spinner from '@/components/ui/Spinner.vue'
 import Switch from '@/components/ui/Switch.vue'
+import TextArea from '@/components/ui/TextArea.vue'
 
+import NoteItem from './NoteItem.vue'
 import type { DiffState } from './useGit'
+import type { NotesModel } from './useNotes'
 
-/** The diff of the file selected in the Git view, with its path and the line-wrap switch. */
-defineProps<{ file: GitFile | null | undefined; diff: DiffState }>()
+/**
+ * The diff of the file selected in the Git view, with its path and the line-wrap switch. Choosing a new-side line
+ * number offers "Add a note on line N"; the composer then opens right under that line with the focus in it, and
+ * the focus goes back to the line number when it closes (Escape cancels). The file's notes show under their lines.
+ */
+const props = defineProps<{
+  file: GitFile | null | undefined
+  diff: DiffState
+  notes: NotesModel
+}>()
 const emit = defineEmits<{ retry: [] }>()
 const wrap = defineModel<boolean>('wrap', { required: true })
 
 const { t } = useI18n()
+const line = ref<number | null>(null)
+const body = ref('')
+const adding = ref(false)
+const failure = ref('')
+const composer = ref<HTMLFormElement | null>(null)
+
+const fileNotes = computed(() =>
+  props.file ? props.notes.notes.value.filter((n) => n.file === props.file?.path) : [],
+)
+watch(
+  () => props.file?.path,
+  () => (line.value = null),
+)
+
+async function pick(n: number) {
+  line.value = n
+  failure.value = ''
+  await nextTick()
+  composer.value?.querySelector('textarea')?.focus()
+}
+
+function close() {
+  if (!adding.value) line.value = null
+}
+
+async function add() {
+  const path = props.file?.path
+  if (!path || line.value === null || !body.value.trim()) return
+  adding.value = true
+  failure.value = ''
+  try {
+    await props.notes.add({ file: path, line: line.value, side: 'new', body: body.value.trim() })
+    body.value = ''
+    line.value = null
+  } catch (error) {
+    failure.value = errorMessage(error)
+  } finally {
+    adding.value = false
+  }
+}
 </script>
 
 <template>
@@ -33,7 +86,49 @@ const { t } = useI18n()
       <span>{{ t('git.diff.error', { error: diff.error }) }}</span>
       <Button size="sm" @click="emit('retry')">{{ t('common.action.retry') }}</Button>
     </div>
-    <DiffView v-else-if="diff.status === 'ready'" :diff="diff.diff" :wrap="wrap" />
+    <DiffView
+      v-if="diff.status === 'ready'"
+      :diff="diff.diff"
+      :wrap="wrap"
+      annotatable
+      :notes="fileNotes"
+      :composer-line="line"
+      @line="pick"
+    >
+      <template #note="{ note }">
+        <NoteItem :note="note" :notes="notes" />
+      </template>
+      <template #composer>
+        <form
+          v-if="file && line !== null"
+          ref="composer"
+          class="pane__composer"
+          @submit.prevent="add"
+          @keydown.esc.prevent="close"
+        >
+          <TextArea
+            v-model="body"
+            :label="t('team.notes.composer.title', { file: file.path, line })"
+            :rows="3"
+          />
+          <p v-if="failure" class="pane__error" role="alert">{{ failure }}</p>
+          <div class="pane__actions">
+            <Button size="sm" variant="ghost" :disabled="adding" @click="close">
+              {{ t('common.action.cancel') }}
+            </Button>
+            <Button
+              type="submit"
+              size="sm"
+              variant="primary"
+              :loading="adding"
+              :disabled="!body.trim()"
+            >
+              {{ t('team.notes.composer.add') }}
+            </Button>
+          </div>
+        </form>
+      </template>
+    </DiffView>
   </section>
 </template>
 
@@ -58,6 +153,27 @@ const { t } = useI18n()
   font-family: var(--font-mono);
   font-size: var(--fs-sm);
   overflow-wrap: anywhere;
+}
+
+.pane__composer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: var(--border-width) solid var(--accent-border);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+}
+
+.pane__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.pane__error {
+  color: var(--status-danger-fg);
+  font-size: var(--fs-sm);
 }
 
 .pane__state {

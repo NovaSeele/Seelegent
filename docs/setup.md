@@ -4,7 +4,8 @@ Two commands connect Seelegent to the machine and to the data of the old (Node) 
 
 - `seelegent setup` registers the `seelegent mcp` server with the lead hosts, installs the lead skill and, on
   request, the Claude Code reminder hook.
-- `seelegent migrate` imports the old version's settings, accounts, memory, history and roles.
+- `seelegent migrate` imports the old version's settings, accounts, memory, history, roles, members, hooks and
+  meetings.
 
 Both refuse to run inside a Seelegent worker (`SEELEGENT_WORKER=1`), with the command line's worker guard: exit 1,
 code `forbidden`, `details.caller: "worker"` ([cli.md](cli.md)). `seelegent skill` prints the lead skill and stays
@@ -163,6 +164,9 @@ What is imported:
 | `memory/<key>.md` | The project's notes, without the old header. Notes over the 64 KB cap are an error for that project. |
 | `memory/<key>.history.md` | Review history with the original minute. A verdict already recorded at the same time for the same task is not added twice. |
 | `roles.json`, `memory/<key>.roles.json` | Global and project roles. A role that does not validate is an error for that role only. |
+| `members.json` | Department members with the same ids. An OpenCode member is skipped and `opencode` is dropped from the fallback backends. A member whose id exists is `unchanged` when it is the same and `kept` otherwise. |
+| `hooks.json` | Lead hooks, added after the existing ones and given ids. `on` may be one event or a list; `enabled` defaults to true as before. A hook with the same command, events and project as an existing one is not added again. An unknown event is an error for that hook only. |
+| `meetings/<id>.json` | Meeting records: options, rounds, answers, questions, decision, dissents with their watched files and signals, and usage, so the dissent memory and the members' track records go on. A meeting that was still running is imported as `cancelled`. The minutes are written again in English from the record; the old `regression` signals are dropped (D19). The `.jsonl` event logs are not imported. |
 
 Project keys (old F6): the old key is `<base name>-<8 hex digits of SHA-1>` of the lower-cased absolute path. This
 version keys projects differently, so migrate rebuilds the old key from every folder the old data records: the memory
@@ -171,8 +175,8 @@ folder only when the rebuilt key matches. Notes whose folder is not recorded any
 `memory replace` has no header). So are notes whose folder no longer exists.
 
 Not imported, reported as `skipped`: tasks (their worker conversations cannot continue here, and the old
-`tasks/<id>.json` files stay), members, notes, meetings, contests, automations, lead hooks, proof records, tickets,
-usage history and quota caches.
+`tasks/<id>.json` files stay), the review notes of those tasks, contests (their variants ran in the old daemon's
+worktrees), automations, proof records, tickets, usage history and quota caches.
 
 Rules:
 

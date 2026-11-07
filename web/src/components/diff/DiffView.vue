@@ -2,25 +2,36 @@
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
-import type { FileDiff } from '@/api/types'
+import type { FileDiff, Note } from '@/api/types'
 import Button from '@/components/ui/Button.vue'
 import { useFormat } from '@/composables/useFormat'
 
+import DiffExtraRow from './DiffExtraRow.vue'
 import { diffLineCount, diffRows } from './diffRows'
+import { useLinePicker } from './useLinePicker'
 
 /**
  * A parsed diff as a unified table: old and new line numbers, a sign column (named for screen readers) and the
  * text, which keeps its spaces and tabs. Long lines scroll sideways unless `wrap` is on. Past `limit` lines the
  * rest waits behind "Show all"; binary and truncated diffs say so instead of guessing.
+ *
+ * With `annotatable`, the new-side line numbers are one keyboard group (useLinePicker): choosing one shows a
+ * large "Add a note on line N" button under it (`line`), and the `composer` slot takes its place for
+ * `composerLine`. `notes` show under the line they follow now; a note whose line is gone (currentLine 0) is not
+ * anchored here. Notes, the button and the composer keep to the visible width of the scroll box (a size container).
  */
 const props = withDefaults(
   defineProps<{
     diff: FileDiff
     limit?: number
     wrap?: boolean
+    annotatable?: boolean
+    notes?: readonly Note[]
+    composerLine?: number | null
   }>(),
-  { limit: 2000 },
+  { limit: 2000, notes: () => [], composerLine: null },
 )
+const emit = defineEmits<{ line: [line: number] }>()
 
 const { t } = useI18n()
 const format = useFormat()
@@ -33,6 +44,23 @@ watch(
 const model = computed(() => diffRows(props.diff, showAll.value ? Infinity : props.limit))
 const total = computed(() => diffLineCount(props.diff))
 const SIGN = { add: '+', del: '-', context: ' ' } as const
+
+/** Notes by the new-side line they sit under now. */
+const notesAt = computed(() => {
+  const out = new Map<number, Note[]>()
+  for (const n of props.notes) {
+    if (n.side !== 'new' || !n.currentLine) continue
+    out.set(n.currentLine, [...(out.get(n.currentLine) ?? []), n])
+  }
+  return out
+})
+
+const table = ref<HTMLElement | null>(null)
+const picker = useLinePicker(table, () => props.composerLine)
+const lines = computed(() =>
+  model.value.rows.flatMap((r) => (r.kind !== 'hunk' && r.newNo ? [r.newNo] : [])),
+)
+const stop = computed(() => picker.stopOf(lines.value))
 </script>
 
 <template>
@@ -51,23 +79,65 @@ const SIGN = { add: '+', del: '-', context: ' ' } as const
               })
             }}
           </caption>
-          <tbody>
-            <tr v-for="row in model.rows" :key="row.key" :class="`diff__row--${row.kind}`">
-              <template v-if="row.kind === 'hunk'">
-                <td colspan="4" class="diff__hunk">{{ row.text }}</td>
+          <tbody ref="table" @click="picker.onClick" @keydown="picker.onKeydown">
+            <template v-for="row in model.rows" :key="row.key">
+              <tr
+                :class="[
+                  `diff__row--${row.kind}`,
+                  {
+                    'is-selected':
+                      row.kind !== 'hunk' && row.newNo && row.newNo === picker.selected.value,
+                  },
+                ]"
+              >
+                <template v-if="row.kind === 'hunk'">
+                  <td colspan="4" class="diff__hunk">{{ row.text }}</td>
+                </template>
+                <template v-else>
+                  <td class="diff__no" aria-hidden="true">{{ row.oldNo ?? '' }}</td>
+                  <td v-if="annotatable && row.newNo" class="diff__no">
+                    <button
+                      type="button"
+                      class="diff__pick"
+                      :data-line="row.newNo"
+                      :tabindex="row.newNo === stop ? 0 : -1"
+                      :aria-pressed="row.newNo === picker.selected.value"
+                      :aria-label="t('team.notes.pickLine', { line: row.newNo })"
+                    >
+                      {{ row.newNo }}
+                    </button>
+                  </td>
+                  <td v-else class="diff__no" aria-hidden="true">{{ row.newNo ?? '' }}</td>
+                  <td class="diff__sign">
+                    <span aria-hidden="true">{{ SIGN[row.kind] }}</span>
+                    <span v-if="row.kind !== 'context'" class="sr-only">
+                      {{ t(`git.diff.${row.kind}`) }}
+                    </span>
+                  </td>
+                  <td class="diff__text">{{ row.text }}</td>
+                </template>
+              </tr>
+              <template v-if="row.kind !== 'hunk' && row.newNo">
+                <template v-if="row.kind !== 'del'">
+                  <DiffExtraRow v-for="n in notesAt.get(row.newNo) ?? []" :key="n.id">
+                    <slot name="note" :note="n">
+                      <p class="diff__notebody">{{ n.body }}</p>
+                    </slot>
+                  </DiffExtraRow>
+                </template>
+                <DiffExtraRow v-if="annotatable && row.newNo === composerLine">
+                  <slot name="composer" :line="row.newNo" />
+                </DiffExtraRow>
+                <DiffExtraRow
+                  v-else-if="annotatable && row.newNo === picker.selected.value"
+                  tone="action"
+                >
+                  <Button size="md" icon="plus" class="diff__add" @click="emit('line', row.newNo)">
+                    {{ t('team.notes.addOnLine', { line: row.newNo }) }}
+                  </Button>
+                </DiffExtraRow>
               </template>
-              <template v-else>
-                <td class="diff__no" aria-hidden="true">{{ row.oldNo ?? '' }}</td>
-                <td class="diff__no" aria-hidden="true">{{ row.newNo ?? '' }}</td>
-                <td class="diff__sign">
-                  <span aria-hidden="true">{{ SIGN[row.kind] }}</span>
-                  <span v-if="row.kind !== 'context'" class="sr-only">
-                    {{ t(`git.diff.${row.kind}`) }}
-                  </span>
-                </td>
-                <td class="diff__text">{{ row.text }}</td>
-              </template>
-            </tr>
+            </template>
           </tbody>
         </table>
       </div>
@@ -100,6 +170,10 @@ const SIGN = { add: '+', del: '-', context: ' ' } as const
 }
 
 .diff__scroll {
+  /* Positioned, so absolutely positioned sr-only text inside is clipped here and never widens the page. A size
+     container, so the rows under a line (DiffExtraRow) can be exactly as wide as the visible box (100cqi). */
+  position: relative;
+  container-type: inline-size;
   overflow-x: auto;
 }
 
@@ -136,6 +210,44 @@ const SIGN = { add: '+', del: '-', context: ' ' } as const
   padding-inline: 0;
   color: var(--term-dim);
   user-select: none;
+}
+
+/* A line number keeps the row's normal height; the large target is the add button it reveals. */
+.diff__pick {
+  min-width: 4ch;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: right;
+  cursor: pointer;
+}
+
+.diff__pick:hover,
+.diff__pick[aria-pressed='true'] {
+  background: var(--term-prompt-bg);
+  color: var(--term-fg);
+}
+
+.diff__pick:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.diff__row--context.is-selected,
+.diff__row--add.is-selected {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.diff__add {
+  min-height: var(--target-min);
+}
+
+.diff__notebody {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .diff__row--add {

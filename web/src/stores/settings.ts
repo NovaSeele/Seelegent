@@ -13,21 +13,26 @@ import { shallowRef } from 'vue'
 import { settingsApi as defaultApi } from '@/api'
 import { ApiError } from '@/api/client'
 import type { SettingsApi } from '@/api/settings'
-import type { Hook, HookConfig, HookRun, Memory, Settings, SettingsPatch } from '@/api/types'
+import type { Hook, HookRun, Memory, Settings, SettingsPatch } from '@/api/types'
 import { pathKey } from '@/lib/paths'
 
 import { useConnectionStore } from './connection'
 import { createLoader } from './loader'
 
+/** A saved hook with its last run (from hook.ran frames and tests since the list was read). */
+export interface HookView extends Hook {
+  lastRun: HookRun | null
+}
+
 export const useSettingsStore = defineStore('settings', () => {
   let client: SettingsApi = defaultApi
-  const hooks = shallowRef<readonly Hook[]>([])
+  const hooks = shallowRef<readonly HookView[]>([])
   /** GET /hooks answered 501: this daemon has no hooks yet, so there is nothing to retry or add. */
   const hooksUnsupported = shallowRef(false)
   const hooksLoader = createLoader(
-    async (signal): Promise<readonly Hook[] | null> => {
+    async (signal): Promise<readonly HookView[] | null> => {
       try {
-        return await client.hooks(signal)
+        return withRuns(await client.hooks(signal))
       } catch (cause) {
         if (cause instanceof ApiError && cause.status === 501) return null
         throw cause
@@ -77,8 +82,14 @@ export const useSettingsStore = defineStore('settings', () => {
     return hooksLoader.load()
   }
 
-  async function saveHooks(list: readonly HookConfig[]): Promise<void> {
-    hooks.value = await client.putHooks(list)
+  /** Keeps the last runs of the hooks that stay (by id). */
+  function withRuns(list: readonly Hook[]): HookView[] {
+    const runs = new Map(hooks.value.map((h) => [h.id, h.lastRun]))
+    return list.map((h) => ({ ...h, lastRun: runs.get(h.id) ?? null }))
+  }
+
+  async function saveHooks(list: readonly Hook[]): Promise<void> {
+    hooks.value = withRuns(await client.putHooks(list))
   }
 
   function applyRun(run: HookRun): void {
@@ -87,7 +98,7 @@ export const useSettingsStore = defineStore('settings', () => {
     )
   }
 
-  /** Runs one hook now; 501 not_implemented until the daemon's hook runner lands. */
+  /** Runs one hook now and keeps the run as its last one. */
   async function testHook(id: string): Promise<HookRun> {
     const run = await client.testHook(id)
     applyRun(run)

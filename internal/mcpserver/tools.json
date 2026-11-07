@@ -300,6 +300,10 @@
         "force": {
           "type": "boolean",
           "description": "Start a task that is waiting_deps or blocked_deps now, with its original brief plus this message (the message is optional then)."
+        },
+        "member": {
+          "type": "string",
+          "description": "Move the task to this department member from this turn on (its backend, model or tier, role and preferred accounts; another backend starts a new conversation)."
         }
       }
     }

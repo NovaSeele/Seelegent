@@ -5,7 +5,7 @@ import { useI18n } from 'vue-i18n'
 import Button from '@/components/ui/Button.vue'
 import Icon from '@/components/ui/Icon.vue'
 import { useFormat } from '@/composables/useFormat'
-import { NEED_WORD_KEY, type NeedKind } from '@/lib/taskStatus'
+import { NEED_WORD_KEY, type NeedKind, statusWordKey } from '@/lib/taskStatus'
 import { useTasksStore } from '@/stores/tasks'
 
 import { NEED_LOOK, nextStep, OVERDUE_MS } from './watchModel'
@@ -22,6 +22,10 @@ const look = computed(() => NEED_LOOK[props.kind])
 const waited = computed(() => Math.max(0, props.now - Date.parse(props.since)))
 const overdue = computed(() => waited.value >= OVERDUE_MS)
 const step = computed(() => nextStep(props.kind))
+/** A blocked task names why when the pill does (a peer's objection); other kinds keep the board's word. */
+const word = computed(() =>
+  props.kind === 'blocked' && task.value ? statusWordKey(task.value) : NEED_WORD_KEY[props.kind],
+)
 
 /** First line of the reason the daemon gave (the question, the stall, the failed dependency). */
 const detail = computed(() => {
@@ -48,7 +52,7 @@ const target = computed(() =>
     <header class="need__head">
       <span class="need__kind">
         <Icon :name="look.icon" class="need__icon" />
-        {{ t(NEED_WORD_KEY[kind]) }}
+        {{ t(word) }}
       </span>
       <span class="need__age" :class="{ 'need__age--overdue': overdue }">
         <time :datetime="since" :title="fmt.dateTime(since)">

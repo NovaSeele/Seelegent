@@ -72,9 +72,14 @@ export function createTasksApi(client: ApiClient) {
     followup: (id: string, body: FollowupRequest) =>
       client.post<TaskSummary>(`/tasks/${enc(id)}/followup`, { body }),
 
-    review: (id: string, verdict: Verdict, notes?: string) =>
+    /** answerObjection answers a peer's open objection (required to accept over one). */
+    review: (id: string, verdict: Verdict, notes?: string, answerObjection?: string) =>
       client.post<TaskSummary>(`/tasks/${enc(id)}/review`, {
-        body: notes?.trim() ? { verdict, notes: notes.trim() } : { verdict },
+        body: {
+          verdict,
+          ...(notes?.trim() ? { notes: notes.trim() } : {}),
+          ...(answerObjection?.trim() ? { answerObjection: answerObjection.trim() } : {}),
+        },
       }),
 
     /** 200 when it stopped within `waitSeconds`, 202 while it is still stopping; both return the summary. */

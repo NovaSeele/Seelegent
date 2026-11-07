@@ -187,21 +187,51 @@ func scripts(dir string) ([]string, error) {
 	return out, nil
 }
 
-// take claims the oldest script; the rename makes a script go to one run only.
+// take claims the oldest script that no other run claimed. The claim is a "<name>.claim" file created with O_EXCL:
+// a rename is no claim on Windows, where two runs that start together can both rename the same file and replay the
+// same script (bugs F23). The script is then read and renamed to "<name>.taken" (Left counts what is not).
 func take(dir string) (name string, data []byte, err error) {
 	names, err := scripts(dir)
 	if err != nil {
 		return "", nil, err
 	}
 	for _, n := range names {
-		taken := filepath.Join(dir, n+".taken")
-		if os.Rename(filepath.Join(dir, n), taken) != nil { //nolint:gosec // the test's own queue folder
-			continue // another run took it
+		//nolint:gosec // the test's own queue folder
+		claim, err := os.OpenFile(filepath.Join(dir, n+".claim"), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+		if err != nil {
+			continue // another run claimed it
 		}
-		data, err := os.ReadFile(taken) //nolint:gosec // a file of the test's own queue
-		return n, data, err
+		_ = claim.Close()
+		path := filepath.Join(dir, n)
+		var data []byte
+		err = retry(func() error {
+			var rerr error
+			data, rerr = os.ReadFile(path) //nolint:gosec // a file of the test's own queue
+			return rerr
+		})
+		if err != nil {
+			return n, nil, err
+		}
+		//nolint:gosec // the test's own queue folder
+		if err := retry(func() error { return os.Rename(path, path+".taken") }); err != nil {
+			return n, nil, err
+		}
+		return n, data, nil
 	}
 	return "", nil, nil
+}
+
+// retry runs fn until it succeeds, for up to two seconds: a fresh file can be held for a moment by a scanner on
+// Windows (a sharing violation).
+func retry(fn func() error) error {
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		err := fn()
+		if err == nil || time.Now().After(deadline) {
+			return err
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
 }
 
 func runCLI(dir string) int {

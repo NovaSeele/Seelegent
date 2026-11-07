@@ -11,7 +11,7 @@ with owner-only permissions when a command starts, never earlier.
 | Path               | What it holds                                                                          |
 | ------------------ | -------------------------------------------------------------------------------------- |
 | `config.json`      | the settings described below                                                           |
-| `seelegent.db`     | the SQLite database (WAL mode, so `seelegent.db-wal` and `seelegent.db-shm` sit beside it): accounts, quota cache, rest periods, usage history (hourly snapshots kept 30 days, attempt usage kept 60 days) |
+| `seelegent.db`     | the SQLite database (WAL mode, so `seelegent.db-wal` and `seelegent.db-shm` sit beside it): accounts, quota cache, rest periods, usage history (hourly snapshots kept 30 days, attempt usage kept 60 days), tasks, and the team: members, review notes, meetings, contests and event hooks (the old version kept these in `members.json`, `hooks.json`, `meetings/`, `contests/` and `notes/`) |
 | `profiles/<id>/`   | one isolated CLI profile per worker account (same place as the old version)            |
 | `profiles/<id>/home/` | the home directory the worker CLI sees, with links into your real home (`linkIntoProfiles`) |
 | `profiles/<id>/seelegent-key` | API key of an API-key account: a DPAPI blob on Windows, a 0600 file elsewhere; never inside `home/` |
@@ -21,6 +21,8 @@ with owner-only permissions when a command starts, never earlier.
 | `run/start.lock`   | held by an MCP server while it starts the daemon, so several start only one            |
 | `backups/`         | copies taken before migrations and imports                                             |
 | `tasks/<id>/t<turn>-a<attempt>/` | files of one worker attempt: `launch/` (launch spec, stream, stderr, exit record), the prompt of CLIs that read it on standard input, a long agy brief |
+| `contests/`        | the winners' patches (`<id>.<label>.patch`) and temporary indexes of contests ([team.md](team.md)) |
+| `worktrees/contests/<id>/<label>/` | the worktree of one contest variant. Once its task stops, its content is committed inside it and the folder removed (never forced); a removal that fails is retried at the next start |
 
 ## Environment variables
 

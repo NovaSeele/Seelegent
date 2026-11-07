@@ -1,13 +1,18 @@
 <script setup lang="ts">
-/** Page title row: the h1, an optional one-line description, and actions on the right. */
-defineProps<{ title: string; description?: string }>()
+/**
+ * Page title row: the h1, an optional one-line description, and actions on the right. `descriptionTitle` is the
+ * full text of a shortened description (a long path cut in the middle).
+ */
+defineProps<{ title: string; description?: string; descriptionTitle?: string }>()
 </script>
 
 <template>
   <header class="page-header">
     <div class="page-header__text">
       <h1 class="page-header__title">{{ title }}</h1>
-      <p v-if="description" class="page-header__desc">{{ description }}</p>
+      <p v-if="description" class="page-header__desc" :title="descriptionTitle">
+        {{ description }}
+      </p>
     </div>
     <div v-if="$slots.actions" class="page-header__actions"><slot name="actions" /></div>
   </header>
@@ -42,6 +47,8 @@ defineProps<{ title: string; description?: string }>()
   font-size: var(--fs-sm);
   line-height: var(--lh-prose);
   text-wrap: pretty;
+  /* A description can be a long folder path (meetings, contests): break it rather than widen the page. */
+  overflow-wrap: anywhere;
 }
 
 .page-header__actions {

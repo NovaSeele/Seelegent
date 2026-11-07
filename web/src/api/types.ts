@@ -5,7 +5,7 @@
  *
  * What stays hand-written here is only what the generator cannot express, each with its reason below: a
  * TypeScript-only mapped type (SettingsPatch), string unions the Go side keeps as plain strings (Effort,
- * RoleScope) with their narrowing helpers, and the hook shapes of a later milestone (not in internal/api yet).
+ * RoleScope) with their narrowing helpers.
  * The TaskEvent union and the SSE frame types live in events.ts for the same reason.
  */
 import type { Settings, Tier } from './types.gen'
@@ -54,33 +54,4 @@ export type RoleScope = 'global' | 'project'
 /** Narrows Role.scope; anything that is not 'project' is treated as a global role. */
 export function roleScope(value: string): RoleScope {
   return value === 'project' ? 'project' : 'global'
-}
-
-// Hooks (contract §5). Hand-written: the daemon answers every /hooks route with 501 until milestone 14, which pins
-// the shape in internal/api; until then this is the old hooks.json entry plus the stable id the contract requires.
-
-export interface HookConfig {
-  /** Stable id; '' for a hook not saved yet. */
-  id: string
-  /** Event names, e.g. task.done, account.exhausted. */
-  on: string[]
-  /** A shell command. */
-  run: string
-  /** Only tasks in this folder fire the hook. */
-  project?: string
-  timeoutSeconds: number
-  enabled: boolean
-}
-
-export interface HookRun {
-  hookId: string
-  event: string
-  at: string
-  exitCode?: number
-  durationMs: number
-  timedOut: boolean
-}
-
-export interface Hook extends HookConfig {
-  lastRun: HookRun | null
 }

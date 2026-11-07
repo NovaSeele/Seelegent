@@ -11,7 +11,8 @@
     "more": "Thêm",
     "open": "Mở",
     "remove": "Gỡ",
-    "undo": "Hoàn tác"
+    "undo": "Hoàn tác",
+    "keepRunning": "Giữ lại"
   },
   "toast": {
     "close": "Đóng thông báo",
@@ -118,13 +119,14 @@
     "quotaWait": "Chờ quota",
     "waitingWorker": "Chờ worker rảnh",
     "manual": "Bạn đang điều khiển",
-    "gate": "Kiểm cổng",
-    "gateRed": "Cổng không đạt",
+    "gate": "Cổng kiểm tra",
+    "gateRed": "Cổng kiểm tra không đạt",
     "workAtRisk": "Có thể mất công việc",
     "depsBlocked": "Tác vụ trước thất bại",
     "waitingDeps": "Chờ tác vụ trước",
     "hygiene": "Lỗi vệ sinh mã",
-    "verifierRejected": "Bị duyệt lần hai từ chối"
+    "verifierRejected": "Bị duyệt lần hai từ chối",
+    "peerObjection": "Thành viên ngang hàng phản đối"
   },
   "stage": {
     "explore": "Khám phá",

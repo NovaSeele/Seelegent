@@ -2,13 +2,14 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 
-import type { TaskSummary } from '@/api/types'
+import type { TaskSummary, Turn } from '@/api/types'
 import Button from '@/components/ui/Button.vue'
 import StatusPill from '@/components/ui/StatusPill.vue'
 import { useFormat } from '@/composables/useFormat'
 import { useNow } from '@/composables/useNow'
 import { displayStatus, isActive, isBlocked, statusWordKey } from '@/lib/taskStatus'
 
+import { runTime } from './runTime'
 import TaskHeaderActions from './TaskHeaderActions.vue'
 import type { TaskActions } from './useTaskActions'
 
@@ -21,6 +22,10 @@ const props = defineProps<{
   titleLevel: 1 | 2
   showBack: boolean
   actions: TaskActions
+  /** A peer objection stands: Accept is disabled until it is answered. */
+  objected?: boolean
+  /** The task's turns (from its detail), for the time the worker ran. */
+  turns?: readonly Turn[]
 }>()
 
 const emit = defineEmits<{
@@ -35,7 +40,11 @@ const now = useNow(1000)
 
 const status = computed(() => displayStatus(props.task))
 
+// How long the worker ran (its turns), not how long the task waited for a review afterwards. Before the detail
+// with its turns arrives, the task's age stands in.
 const age = computed(() => {
+  const ran = props.turns ? runTime(props.turns, now.value) : null
+  if (ran !== null) return fmt.value.duration(ran)
   const end = isActive(props.task) ? now.value : Date.parse(props.task.updatedAt)
   return fmt.value.duration(Math.max(0, end - Date.parse(props.task.createdAt)))
 })
@@ -59,6 +68,7 @@ const age = computed(() => {
       <TaskHeaderActions
         :task="task"
         :actions="actions"
+        :objected="objected"
         @followup="emit('followup')"
         @review="emit('review', $event)"
         @confirm="emit('confirm', $event)"

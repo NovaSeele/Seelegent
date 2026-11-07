@@ -131,17 +131,23 @@ func (r *Repos) Lock(ctx context.Context, root string) (func(), error) {
 // (Binary.Run).
 func (r *Repos) run(ctx context.Context, dir string, timeout time.Duration, limit int, args ...string) (stdout []byte,
 	truncated bool, err error) {
+	return r.runEnv(ctx, dir, nil, timeout, limit, args...)
+}
+
+// runEnv is run with extra environment variables.
+func (r *Repos) runEnv(ctx context.Context, dir string, env []string, timeout time.Duration, limit int,
+	args ...string) (stdout []byte, truncated bool, err error) {
 	err = r.git.Run(func(git string) error {
 		var runErr error
-		stdout, truncated, runErr = r.runGit(ctx, git, dir, timeout, limit, args...)
+		stdout, truncated, runErr = r.runGit(ctx, git, dir, env, timeout, limit, args...)
 		return runErr
 	})
 	return stdout, truncated, err
 }
 
 // runGit is one attempt of run, with the git executable git.
-func (r *Repos) runGit(ctx context.Context, git, dir string, timeout time.Duration, limit int, args ...string) (
-	stdout []byte, truncated bool, err error) {
+func (r *Repos) runGit(ctx context.Context, git, dir string, env []string, timeout time.Duration, limit int,
+	args ...string) (stdout []byte, truncated bool, err error) {
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	full := append([]string{"-c", "core.fsmonitor=false", "-c", "core.quotepath=off", "-c", "color.ui=false"},
@@ -150,6 +156,7 @@ func (r *Repos) runGit(ctx context.Context, git, dir string, timeout time.Durati
 	cmd.Dir = dir
 	cmd.Env = Env(cmd.Environ(), "GIT_TERMINAL_PROMPT=0", "GIT_LITERAL_PATHSPECS=1", "LC_ALL=C",
 		"GIT_OPTIONAL_LOCKS=0")
+	cmd.Env = append(cmd.Env, env...)
 	out := &limitedBuffer{limit: limit}
 	errBuf := &limitedBuffer{limit: 64 << 10}
 	cmd.Stdout = out

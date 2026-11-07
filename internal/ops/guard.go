@@ -42,7 +42,12 @@ func Mutating(name, action string) bool {
 	case "automations":
 		return notIn("list", "runs")
 	case "contest":
-		return notIn("status", "wait")
+		return notIn("status", "wait", "list", "diff")
+	case "members":
+		// The MCP tool only lists (the old table never refused it); the command line's add, set and remove change.
+		return slices.Contains([]string{"add", "set", "remove"}, action)
+	case "hooks":
+		return action != "list"
 	case "update":
 		// Command-line only, every mode: it replaces the executable and restarts the daemon (old C-B12).
 		return true

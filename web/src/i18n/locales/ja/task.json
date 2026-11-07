@@ -70,6 +70,7 @@
     "acceptedConfirm": "承認",
     "rejectedConfirm": "差し戻し",
     "acceptedToast": "承認しました",
+    "acceptedWarned": "承認しました。警告: {warnings}",
     "rejectedToast": "差し戻しました"
   },
   "confirm": {
@@ -252,5 +253,29 @@
     "usedUp": "自動修正を使い切りました ({n}/{max})",
     "nextStep": "ゲートはもう自分では直せません。フォローアップを送るか、タスクを引き継いでください。",
     "causedBy": "{tasks} が原因の可能性"
+  },
+  "consults": {
+    "title": "メンバーの意見",
+    "count": "{count} 件の意見",
+    "open": "回答が必要な異議 {count} 件",
+    "verdict": {
+      "running": "検討中",
+      "failed": "失敗",
+      "approve": "賛成",
+      "concerns": "懸念あり",
+      "object": "異議あり",
+      "answered": "異議に回答済み",
+      "done": "完了"
+    },
+    "focus": "確認事項: {focus}",
+    "required": "必要な変更",
+    "answer": "あなたの回答",
+    "acceptBlocked": "先に異議へ回答してください",
+    "objects": "{who} が異議を出しています。承認の前に回答してください",
+    "line": "{who}: {text}",
+    "answerAction": "異議に回答",
+    "answerTitle": "異議に回答して承認",
+    "answerDesc": "ピアがこの作業に異議を出しています。回答は異議と一緒に保存され、タスクは承認されます。",
+    "answerLabel": "回答"
   }
 }

@@ -368,13 +368,16 @@ func (m *migrator) notImported() {
 		m.add(KindData, "tasks", Skipped, "%d tasks of the old version are not imported: their worker "+
 			"conversations cannot continue in this version (the files stay in %s)", tasks, m.old("tasks"))
 	}
+	if notes, tasks := m.countNotes(); notes > 0 {
+		m.add(KindData, "notes", Skipped, "%d review notes on %d old tasks are not imported: their tasks are not "+
+			"imported", notes, tasks)
+	}
+	if exists(m.old("contests")) {
+		m.add(KindData, "contests", Skipped, "contests are not imported: their variants ran in worktrees of the "+
+			"old daemon (the records stay in %s)", m.old("contests"))
+	}
 	for _, d := range []struct{ name, what string }{
-		{"members.json", "department members"},
-		{"notes", "review notes"},
-		{"meetings", "meetings"},
-		{"contests", "contests"},
 		{"automations.json", "automations"},
-		{"hooks.json", "lead hooks"},
 		{"proof", "proof records"},
 		{"tickets", "tickets"},
 		{"usage-history", "usage history"},

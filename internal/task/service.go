@@ -72,6 +72,14 @@ type Roles interface {
 	Brief(r role.Role, cwd string) *brief.Role
 }
 
+// Members finds department members; *member.Store satisfies it.
+type Members interface {
+	// Get returns a member as it is (it may be turned off).
+	Get(ctx context.Context, id string) (api.Member, error)
+	// Usable returns a member for new work: it fails when the member is unknown, invalid or turned off.
+	Usable(ctx context.Context, id string) (api.Member, error)
+}
+
 // ConsoleSpec is a takeover console: the task's conversation resumed in a terminal window the user drives.
 type ConsoleSpec struct {
 	Title  string
@@ -138,6 +146,9 @@ type Options struct {
 	Memory       Memory
 	Roles        Roles
 	Consoles     Consoles
+	// Members are the department members (delegate and followup by member, consults, backend fallback); nil
+	// refuses member.
+	Members Members
 
 	// BaseEnv returns the environment workers inherit (os.Environ when nil).
 	BaseEnv func() []string
@@ -258,6 +269,12 @@ func (s *Service) Start(ctx context.Context) error {
 	}
 	if err := s.recoverTasks(ctx); err != nil {
 		return err
+	}
+	if err := s.resumeConsults(ctx); err != nil {
+		return err
+	}
+	if err := s.stopOrphanConsults(ctx); err != nil {
+		s.log.Warn("task: stop consult runs nobody reads", "err", err)
 	}
 	s.refreshHealth(ctx)
 	s.spawn("attention", "", s.watchAttention)

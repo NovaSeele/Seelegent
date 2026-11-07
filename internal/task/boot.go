@@ -15,17 +15,24 @@ const bootNewest = 100
 // Boot returns the tasks of the dashboard's first paint (GET /state): every pending task, every task with an
 // attention flag, every done task without a review, plus the newest 100 others, newest first.
 func (s *Service) Boot(ctx context.Context) ([]api.TaskSummary, error) {
-	pending := []any{string(StatusWaitingDeps), string(StatusQueued), string(StatusRunning),
-		string(StatusWaitingQuota)}
-	args := append(pending, string(StatusDone), bootNewest) //nolint:gocritic // a fresh slice is fine
+	// Hidden runs (verifier, consult, meeting, judge) are read through what started them, never listed.
+	var args []any
+	for _, k := range hiddenKinds() {
+		args = append(args, k)
+	}
+	args = append(args, string(StatusWaitingDeps), string(StatusQueued), string(StatusRunning),
+		string(StatusWaitingQuota), string(StatusDone), bootNewest)
+	shown := `coalesce(json_extract(data, '$.kind'), '') NOT IN (` + placeholders(len(hiddenKinds())) + `)`
 	var tasks []*Task
 	err := s.repo.db.Read(ctx, func(tx *sql.Tx) error {
 		tasks = nil
-		rows, err := tx.QueryContext(ctx, `SELECT `+taskColumns+` FROM tasks
+		//nolint:gosec // only constant text and placeholders are joined; the kinds are bound arguments
+		rows, err := tx.QueryContext(ctx, `WITH shown AS (SELECT * FROM tasks WHERE `+shown+`)
+			SELECT `+taskColumns+` FROM shown
 			WHERE status IN (?, ?, ?, ?)
 			   OR json_extract(data, '$.attention') IS NOT NULL
 			   OR (status = ? AND json_extract(data, '$.review') IS NULL)
-			   OR id IN (SELECT id FROM tasks ORDER BY created_at DESC, id DESC LIMIT ?)
+			   OR id IN (SELECT id FROM shown ORDER BY created_at DESC, id DESC LIMIT ?)
 			ORDER BY created_at DESC, id DESC`, args...)
 		if err != nil {
 			return err

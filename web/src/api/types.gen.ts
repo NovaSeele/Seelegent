@@ -293,11 +293,15 @@ export interface RetryData {
   error: string
 }
 
-/** HandoffData is the data of a handoff event. */
+/**
+ * HandoffData is the data of a handoff event: the task moved from one account to another, or (Kind backend) from
+ * one backend to the next fallback backend of its member.
+ */
 export interface HandoffData {
   from: string
   to: string
   reason: string
+  kind?: 'backend'
 }
 
 /** RecoveryData is the data of reattach and resumed events. */
@@ -962,6 +966,8 @@ export interface TaskReport {
   lane?: ReportLane
   bar?: ReportBar
   verifier?: ReportVerifier
+  /** Consults are the second opinions asked on the task (old B15: the slim report dropped them). */
+  consults?: ReportConsult[]
   deps_reason?: string
   cancelling?: boolean
   error?: string
@@ -971,6 +977,23 @@ export interface TaskReport {
   handback?: boolean
   /** Dashboard is the deep link to the task in the dashboard. */
   dashboard: string
+}
+
+/**
+ * ReportConsult is one consult of a report: the verdict, the findings with their citation checks folded into one
+ * line each, and what must change.
+ */
+export interface ReportConsult {
+  id: string
+  member: string
+  rank: string
+  status: string
+  verdict?: string
+  findings?: string[]
+  required?: string[]
+  /** Unanswered is true for a peer objection the lead has not answered (review accepted needs answer_objection). */
+  unanswered?: boolean
+  error?: string
 }
 
 /** ReportSpec is the Spec Kit feature of a report. */
@@ -1317,6 +1340,9 @@ export type StreamEvent =
   | 'members.changed'
   | 'memory.changed'
   | 'hook.ran'
+  | 'meeting.updated'
+  | 'contest.updated'
+  | 'notes.changed'
   | 'proof.run'
 
 /** Hello is the data of the hello frame. */
@@ -1537,8 +1563,12 @@ export interface TaskSummary {
   contestId?: string
   ticketId?: string
   meetingId?: string
+  /** Variant is the label (V1..) of a contest variant. */
+  variant?: string
   /** LastEventSeq is the highest event seq of the task. */
   lastEventSeq: number
+  /** Warnings are set only by a review: accepting over a senior member's objection names it and its first finding. */
+  warnings?: string[]
 }
 
 /** ProfileRef names the role profile of a task. */
@@ -1610,6 +1640,10 @@ export interface TaskDetail extends TaskSummary {
   fileOverlaps: FileOverlap[]
   /** Proof is what the task's gate checks (null for a task without gate, lane or verifier). */
   proof: TaskProof | null
+  /** Consults are the second opinions asked on the task, oldest first. */
+  consults: Consult[]
+  /** ProjectCwd is the user's folder a contest variant's worktree stands for. */
+  projectCwd?: string
 }
 
 /** Turn is one lead (or user) message and the worker's answer to it. */
@@ -1741,12 +1775,21 @@ export interface FollowupRequest {
   verify?: boolean
   /** Force starts a task that waits for (or is blocked by) its prerequisites anyway. */
   force?: boolean
+  /**
+   * Member moves the task to that department member from this turn on (its backend, provider, model or tier,
+   * role and preferred accounts; a new backend starts a new conversation).
+   */
+  member?: string
 }
 
-/** ReviewRequest records the lead's verdict. */
+/**
+ * ReviewRequest records the lead's verdict. AnswerObjection is the lead's written answer to a peer's objection
+ * (consult); review accepted is refused without it while the objection stands.
+ */
 export interface ReviewRequest {
   verdict: Verdict
   notes?: string
+  answerObjection?: string
 }
 
 /** CancelRequest stops a task; WaitSeconds (0..60) is how long the call waits for the worker to stop. */
@@ -1788,6 +1831,726 @@ export interface TaskPage {
 export interface EventPage {
   items: TaskEventBase[]
   lastSeq: number
+}
+
+/**
+ * Rank is the standing of a department member: a worker is a witness who cannot be consulted, a senior is an
+ * adviser (an objection is a warning, advice not taken is recorded), a peer stands level with the lead (an
+ * objection blocks review accepted, may dissent formally, may judge contests).
+ */
+export type Rank = 'worker' | 'senior' | 'peer'
+
+/** Member is a department member (GET /members). */
+export interface Member {
+  id: string
+  name: string
+  backend: 'agy' | 'claude' | 'codex'
+  provider?: string
+  rank: Rank
+  tier?: Tier
+  model?: string
+  /** Role is the id of the worker role (profile) the member's tasks use. */
+  role?: string
+  preferredAccounts: string[]
+  /** FallbackBackends are tried in order when no account of the member's backend can run its task. */
+  fallbackBackends: string[]
+  enabled: boolean
+  /** Invalid says why the member cannot be used now (its provider is gone); empty when it can. */
+  invalid?: string
+  createdAt?: string
+  updatedAt?: string
+}
+
+/**
+ * MemberInput is the body of POST /members (ID optional: made from the name when left out) and, merged onto the
+ * stored member, of PATCH /members/{id}. Enabled defaults to true.
+ */
+export interface MemberInput {
+  id?: string
+  name: string
+  backend?: 'agy' | 'claude' | 'codex'
+  provider?: string
+  rank: Rank
+  tier?: Tier
+  model?: string
+  role?: string
+  preferredAccounts?: string[]
+  fallbackBackends?: string[]
+  enabled?: boolean
+}
+
+/** MemberTrack is the track record of one member (GET /members/track): what its meetings and consults came to. */
+export interface MemberTrack {
+  member: string
+  meetings: number
+  dissents: number
+  concessions: number
+  signals: number
+  vindicated: number
+  dismissed: number
+  adviceNotTaken: number
+  consults: number
+  objections: number
+}
+
+/**
+ * Citation is a [path:line] reference in a member's answer, checked against the repository (proof.CheckCite).
+ * Variant is the contest variant (V1..) a judge's citation is about.
+ */
+export interface Citation {
+  path: string
+  line: number
+  endLine?: number
+  quote?: string
+  state: 'verified' | 'located' | 'quote_mismatch' | 'bad_range' | 'missing_file' | 'outside_repo'
+  detail?: string
+  variant?: string
+}
+
+/** Claim is one statement of a member with the citations that support it. */
+export interface Claim {
+  text: string
+  cites: Citation[]
+}
+
+/** Consult is a second opinion on a finished task from a senior or peer member (POST /tasks/{id}/consult). */
+export interface Consult {
+  id: string
+  member: string
+  rank: Rank
+  runTaskId: string
+  status: 'running' | 'done' | 'failed'
+  verdict?: 'approve' | 'concerns' | 'object'
+  findings: Claim[]
+  required: string[]
+  focus?: string
+  at: string
+  endedAt?: string
+  error?: string
+  /** AnsweredObjection is the lead's answer to a peer objection, given with review accepted. */
+  answeredObjection: ObjectionAnswer | null
+}
+
+/** ObjectionAnswer is the lead's written answer to a peer objection. */
+export interface ObjectionAnswer {
+  text: string
+  at: string
+}
+
+/** ConsultRequest is the body of POST /tasks/{id}/consult. */
+export interface ConsultRequest {
+  member: string
+  focus?: string
+}
+
+/** Note is a review note on a line of a task's diff (GET /tasks/{id}/notes). */
+export interface Note {
+  id: string
+  taskId: string
+  /** File is relative to the repository root, with '/'. */
+  file: string
+  line: number
+  endLine?: number
+  side: 'new' | 'old'
+  /** AnchorText is the text of the line when the note was written; the note follows it across turns. */
+  anchorText: string
+  body: string
+  by: 'user' | 'lead'
+  state: 'open' | 'sent' | 'resolved' | 'outdated'
+  /**
+   * Status is computed: draft (sent next time), outdated (its line changed before it was sent), sent (its turn
+   * runs), addressed (the turn ended and the line changed), unaddressed (the line is unchanged: sent again),
+   * resolved.
+   */
+  status: 'draft' | 'outdated' | 'sent' | 'addressed' | 'unaddressed' | 'resolved'
+  /**
+   * CurrentLine is where the note's line is now: 0 when its anchored text is gone; Line when it cannot be told
+   * (a removed line, no anchor text).
+   */
+  currentLine: number
+  anchorTurn: number
+  sentInTurn?: number
+  sentAt?: string
+  createdAt: string
+  resolvedAt?: string
+}
+
+/** NoteInput is the body of POST /tasks/{id}/notes. AnchorText is read from the file when left out. */
+export interface NoteInput {
+  file: string
+  line: number
+  endLine?: number
+  side?: 'new' | 'old'
+  anchorText?: string
+  body: string
+  by?: 'user' | 'lead'
+}
+
+/** NotePatch is the body of PATCH /tasks/{id}/notes/{noteId}: a new body, or state resolved / open (reopen). */
+export interface NotePatch {
+  body?: string
+  state?: 'resolved' | 'open'
+}
+
+/**
+ * NotesSendRequest is the body of POST /tasks/{id}/notes/send: the draft and unaddressed notes go to the worker
+ * as one followup, with Extra after them.
+ */
+export interface NotesSendRequest {
+  extra?: string
+  by?: 'user' | 'lead'
+}
+
+/** NotesSendResult is the answer of POST /tasks/{id}/notes/send. */
+export interface NotesSendResult {
+  sent: string[]
+  task: TaskSummary
+}
+
+/** NotesChanged is the data of notes.changed: refetch the notes of the task. */
+export interface NotesChanged {
+  taskId: string
+}
+
+/** Meeting is a structured discussion of department members before a decision (GET /meetings/{id}). */
+export interface Meeting {
+  id: string
+  title: string
+  question: string
+  options: MeetingOption[]
+  context: string[]
+  cwd: string
+  repoRoot: string
+  status: 'round' | 'waiting_lead' | 'deciding' | 'dissent' | 'closed' | 'cancelled' | 'failed'
+  maxRounds: number
+  round: number
+  /** Sealed is the lead's own position, hashed at open and shown to the attendees from round 2 under a label. */
+  sealed: SealedPosition | null
+  attendees: Attendee[]
+  rounds: MeetingRound[]
+  leadQa: LeadQuestion[]
+  leadNotes: LeadNote[]
+  decision: MeetingDecision | null
+  dissents: Dissent[]
+  adviceNotTaken: AdviceNotTaken[]
+  actions: MeetingAction[]
+  estimate: RunEstimate | null
+  usage: MeetingUsage
+  dissentRuns: MeetingRun[]
+  error?: string
+  createdAt: string
+  updatedAt: string
+  /**
+   * Minutes is the record in English markdown (the MCP tool shows it to the lead); the dashboard draws the
+   * structured fields instead.
+   */
+  minutes?: string
+}
+
+/** MeetingOption is one candidate answer, keyed A..F. */
+export interface MeetingOption {
+  key: string
+  text: string
+}
+
+/** SealedPosition is the lead's sealed position. */
+export interface SealedPosition {
+  label: string
+  text: string
+  hash: string
+  revealedRound: number
+}
+
+/** Attendee is a member at a meeting under its neutral label (P1..). */
+export interface Attendee {
+  label: string
+  member: string
+  name?: string
+  rank: Rank
+  backend: string
+  model?: string
+  tier?: string
+  provider?: string
+  /** TaskID is the attendee's hidden read-only run (kind meeting); each round is a turn of it. */
+  taskId?: string
+  present: boolean
+}
+
+/** MeetingRound is one round: the runs it started and the answers they gave. */
+export interface MeetingRound {
+  n: number
+  startedAt: string
+  endedAt?: string
+  runs: MeetingRun[]
+  answers: MeetingAnswer[]
+}
+
+/** MeetingRun is the turn of an attendee's run that answers a round (or the dissent question). */
+export interface MeetingRun {
+  label: string
+  taskId: string
+  turn: number
+  done?: boolean
+}
+
+/** MeetingAnswer is an attendee's parsed answer in one round; Absent when the run failed or gave no answer. */
+export interface MeetingAnswer {
+  label: string
+  absent?: boolean
+  /**
+   * AbsentReason says why an absent attendee gave no answer (AbsentFailed, AbsentCancelled, AbsentGone); Error
+   * is the detail. Answers recorded before it existed have none.
+   */
+  absentReason?: 'failed' | 'cancelled' | 'gone'
+  error?: string
+  option?: string
+  stance: string
+  confidence: number | null
+  arguments: string[]
+  claims: Claim[]
+  risks: string[]
+  actions: string[]
+  questions: string[]
+  rebuttal?: string
+  moved?: 'yes' | 'no'
+  /** EditedFiles are files the read-only run changed anyway (shown as a warning). */
+  editedFiles?: string[]
+}
+
+/** LeadQuestion is a question an attendee asked the lead, with the lead's answer. */
+export interface LeadQuestion {
+  id: string
+  round: number
+  label: string
+  question: string
+  answer?: string
+  answeredAt?: string
+}
+
+/** LeadNote is a note the lead shares with every attendee in a round. */
+export interface LeadNote {
+  round: number
+  text: string
+  at: string
+}
+
+/** MeetingDecision is the lead's decision. */
+export interface MeetingDecision {
+  text: string
+  rationale?: string
+  option?: string
+  at: string
+}
+
+/** Dissent is a peer's formal dissent from the decision, or its concession. */
+export interface Dissent {
+  id: string
+  label: string
+  member: string
+  kind: 'dissent' | 'concede' | 'absent'
+  text: string
+  claims: Claim[]
+  /** WatchPaths are the files the dissent cites; later rejected tasks or red gates on them are its signals. */
+  watchPaths: string[]
+  signals: DissentSignal[]
+  outcome?: 'vindicated' | 'dismissed'
+  outcomeAt?: string
+  error?: string
+}
+
+/** DissentSignal is a later task on a watched file that went wrong. */
+export interface DissentSignal {
+  taskId: string
+  /** Title is the task's title when the signal was recorded (signals recorded before it have none). */
+  title?: string
+  reason: 'rejected' | 'gate_red'
+  at: string
+}
+
+/** AdviceNotTaken is a senior's final stance that the decision went against. */
+export interface AdviceNotTaken {
+  label: string
+  member: string
+  stance: string
+}
+
+/** MeetingAction is a task created from the meeting's decision. */
+export interface MeetingAction {
+  text: string
+  taskId: string
+  member?: string
+}
+
+/** RunEstimate is how many worker runs a meeting takes at most, per backend. */
+export interface RunEstimate {
+  runs: number
+  byBackend: Record<string, number>
+}
+
+/** MeetingUsage is what a meeting used so far. */
+export interface MeetingUsage {
+  runs: number
+  byBackend: Record<string, number>
+  tokens: number
+}
+
+/** MeetingSummary is a meeting in lists and in meeting.updated. */
+export interface MeetingSummary {
+  id: string
+  title: string
+  status: 'round' | 'waiting_lead' | 'deciding' | 'dissent' | 'closed' | 'cancelled' | 'failed'
+  round: number
+  maxRounds: number
+  attendees: number
+  pendingQuestions: number
+  dissents: number
+  cwd: string
+  createdAt: string
+  updatedAt: string
+}
+
+/** AttendeeRef names an attendee in MeetingRequest: a member id, "id:rank", or {member, rank}. */
+export interface AttendeeRef {
+  member: string
+  rank?: Rank
+}
+
+/** MeetingRequest is the body of POST /meetings and POST /meetings/estimate. */
+export interface MeetingRequest {
+  question: string
+  title?: string
+  options?: string[]
+  context?: string[]
+  cwd: string
+  attendees: Array<string | AttendeeRef>
+  sealed?: string
+  maxRounds?: number
+}
+
+/** QuestionAnswer answers a lead question (POST /meetings/{id}/post). */
+export interface QuestionAnswer {
+  id: string
+  answer: string
+}
+
+/** MeetingPostRequest is the body of POST /meetings/{id}/post. */
+export interface MeetingPostRequest {
+  answers: QuestionAnswer[]
+  note?: string
+}
+
+/** MeetingDecideRequest is the body of POST /meetings/{id}/decide. */
+export interface MeetingDecideRequest {
+  decision: string
+  rationale?: string
+  option?: string
+}
+
+/** ActItem is one task to create from a decision. */
+export interface ActItem {
+  text: string
+  member?: string
+  backend?: string
+  model?: string
+  cwd?: string
+}
+
+/** MeetingActRequest is the body of POST /meetings/{id}/act. */
+export interface MeetingActRequest {
+  items: ActItem[]
+}
+
+/** MeetingActResult is the answer of POST /meetings/{id}/act. */
+export interface MeetingActResult {
+  meeting: Meeting
+  tasks: string[]
+}
+
+/**
+ * DissentOutcomeRequest is the body of POST /meetings/{id}/dissents/{dissentId}/outcome. DissentOpen clears an
+ * outcome recorded earlier (undo).
+ */
+export interface DissentOutcomeRequest {
+  outcome: 'vindicated' | 'dismissed' | 'open'
+}
+
+/** TeamLogEntry is one step of a meeting or contest (GET /meetings/{id}/events, /contests/{id}/events). */
+export interface TeamLogEntry {
+  id: number
+  at: string
+  type: string
+  data: Record<string, unknown>
+}
+
+/**
+ * VariantSpec is what one contest variant runs on; empty fields take the contest's (or a default that makes the
+ * variants differ).
+ */
+export interface VariantSpec {
+  backend?: 'agy' | 'claude' | 'codex'
+  model?: string
+  member?: string
+  provider?: string
+}
+
+/**
+ * ContestRequest is the body of POST /contests (and /contests/estimate): a delegate whose brief runs as 2..5
+ * variants, each in its own git worktree.
+ */
+export interface ContestRequest extends DelegateRequest {
+  variants?: number
+  variantSpecs?: VariantSpec[]
+  /** Judge is the member id of the judge (default: the first enabled peer); NoJudge turns the judge off. */
+  judge?: string
+  noJudge?: boolean
+  deadlineMinutes?: number
+}
+
+/** Contest is a contest (GET /contests/{id}). */
+export interface Contest {
+  id: string
+  title: string
+  status: 'starting' | 'running' | 'judging' | 'ready' | 'applied' | 'cancelled' | 'failed'
+  /** Cwd is the user's folder, Root its repository and Sub the folder relative to the root. */
+  cwd: string
+  root: string
+  sub?: string
+  prompt: string
+  judgeMember?: string
+  noJudge?: boolean
+  deadlineMinutes: number
+  deadlineAt?: string
+  deadlineHit?: boolean
+  estimate: ContestEstimate | null
+  /** BaseSha is the commit of the snapshot of the working tree every variant starts from. */
+  baseSha?: string
+  variants: ContestVariant[]
+  scoreboard: ScoreRow[]
+  machineRanking: string[]
+  judge: ContestJudge | null
+  proposal: ContestProposal | null
+  scorings: number
+  scoredAt?: string
+  winner?: string
+  applied: ContestApplied | null
+  lastPickError: ContestPickError | null
+  warnings: string[]
+  error?: string
+  cancelledAt?: string
+  cleanedAt?: string
+  createdAt: string
+  updatedAt: string
+}
+
+/** ContestEstimate is what the pool can run: the variants asked for, granted and dropped. */
+export interface ContestEstimate {
+  requested: number
+  granted: number
+  reduced: boolean
+  dropped: DroppedVariant[]
+  pools: Record<string, PoolCap>
+  /** Refused is why the contest cannot start (estimate only). */
+  refused?: string
+}
+
+/** PoolCap is the capacity of one account pool (a backend, or provider:<id>). */
+export interface PoolCap {
+  accounts: number
+  usable: number
+  slots: number
+  /** Best is the best remaining quota fraction of the pool's accounts (null when unknown). */
+  best: number | null
+}
+
+/** DroppedVariant is a variant the pool cannot run in parallel. */
+export interface DroppedVariant {
+  label: string
+  pool: string
+  reason: string
+}
+
+/** ContestVariant is one variant: its spec, task and worktree. */
+export interface ContestVariant {
+  label: string
+  spec: VariantSpec
+  taskId?: string
+  worktree?: string
+  /** Cwd is the variant's folder inside its worktree (the user's folder mirrored). */
+  cwd?: string
+  env: WorktreeEnv | null
+  removed: boolean
+  /**
+   * Commit is the variant's last commit, for information only: no ref points at it, so git may prune it. The
+   * views read a removed variant from Seelegent's stored copy.
+   */
+  commit?: string
+  deadlineCancelled?: boolean
+  cleanupError?: string
+  /** Status, Backend, Model and Member come from the variant's task. */
+  status?: string
+  backend?: string
+  model?: string
+  member?: string
+}
+
+/**
+ * WorktreeEnv is what a new worktree got from the main checkout: gitignored files copied from .worktreeinclude,
+ * shared folders linked, and what was skipped and why.
+ */
+export interface WorktreeEnv {
+  copied: string[]
+  linked: string[]
+  skipped: EnvSkip[]
+}
+
+/** EnvSkip is a path the worktree environment left out. */
+export interface EnvSkip {
+  path: string
+  reason: string
+}
+
+/** ScoreRow is the machine score of a variant. */
+export interface ScoreRow {
+  label: string
+  taskId: string
+  status: string
+  backend?: string
+  model?: string
+  member?: string
+  provider?: string
+  gate: string
+  autoFixTurns: number
+  files: number
+  fileList: string[]
+  added: number
+  removed: number
+  outOfLane: number
+  laneViolation: boolean
+  tokens: number
+  durationMs: number | null
+  verifier?: string
+  /**
+   * Disqualified says why the variant cannot win: task_missing, failed, deadline, cancelled, rejected,
+   * lane_violation, gate_red or no_changes.
+   */
+  disqualified?: string
+}
+
+/** ContestJudge is the judge's run and verdict. Letters maps the anonymous letters (A..C) to variant labels. */
+export interface ContestJudge {
+  status: 'running' | 'done' | 'failed'
+  member: string
+  runTaskId?: string
+  letters: Record<string, string>
+  winner?: string
+  winnerLabel?: string
+  ranking: string[]
+  rankingLabels: string[]
+  reasons: Claim[]
+  verified: number
+  error?: string
+  at: string
+  endedAt?: string
+}
+
+/**
+ * ContestProposal is the winner Seelegent proposes: the judge's pick when it is qualified and backed by a
+ * verified citation, else the machine's.
+ */
+export interface ContestProposal {
+  winner: string
+  source: 'judge' | 'machine'
+  machineWinner?: string
+  /** Reason says in English why the machine's winner is proposed; ReasonCode is the same for the dashboard. */
+  reason?: string
+  reasonCode?: 'unverified' | 'judge_failed' | 'judge_running'
+}
+
+/** ContestApplied records the winner's patch applied to the user's working tree. */
+export interface ContestApplied {
+  /**
+   * Commit holds the applied changes, for information only: no ref points at it, so git may prune it (the
+   * patch is kept in Seelegent's data folder).
+   */
+  commit: string
+  files: string[]
+  by: 'lead' | 'user'
+  at: string
+}
+
+/** ContestPickError is the last pick that did not apply. */
+export interface ContestPickError {
+  winner: string
+  detail: string
+  at: string
+}
+
+/** ContestSummary is a contest in lists and in contest.updated. */
+export interface ContestSummary {
+  id: string
+  title: string
+  status: 'starting' | 'running' | 'judging' | 'ready' | 'applied' | 'cancelled' | 'failed'
+  cwd: string
+  variants: number
+  proposal?: string
+  winner?: string
+  deadlineAt?: string
+  createdAt: string
+  updatedAt: string
+}
+
+/** ContestPickRequest is the body of POST /contests/{id}/pick (Winner defaults to the proposal). */
+export interface ContestPickRequest {
+  winner?: string
+  by?: 'lead' | 'user'
+}
+
+/** ContestDiff is GET /contests/{id}/variants/{label}/diff. */
+export interface ContestDiff {
+  id: string
+  label: string
+  base: string
+  diff: string
+  /** Files is the same diff parsed per file (contract §3.3: the dashboard never reads unified diff text). */
+  files: FileDiff[]
+  /** Truncated is true when the diff was cut at its size limit. */
+  truncated: boolean
+}
+
+/**
+ * Hook is a command the daemon runs on events (GET /hooks). It gets the event as JSON on stdin and
+ * SEELEGENT_EVENT, SEELEGENT_TASK_ID and SEELEGENT_PORT in its environment.
+ */
+export interface Hook {
+  /** ID is stable: PUT /hooks keeps the ids it gets and gives new hooks one. */
+  id?: string
+  name?: string
+  on: string[]
+  run: string
+  /** Project limits the hook to tasks of this folder (absolute; empty: every project). */
+  project?: string
+  timeoutSeconds?: number
+  enabled: boolean
+}
+
+/** HooksRequest is the body of PUT /hooks. */
+export interface HooksRequest {
+  hooks: Hook[]
+}
+
+/** HookRun is one run of a hook (POST /hooks/{id}/test, hook.ran). */
+export interface HookRun {
+  hookId: string
+  event: string
+  taskId?: string
+  startedAt: string
+  endedAt: string
+  exitCode: number | null
+  timedOut: boolean
+  /** Output is the start of stdout and stderr (at most 4 KiB, secrets masked). */
+  output: string
+  error?: string
+  test: boolean
 }
 
 /** Totals mirrors internal/usage.Totals. */

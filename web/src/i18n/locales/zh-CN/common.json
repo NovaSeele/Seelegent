@@ -11,7 +11,8 @@
     "more": "更多",
     "open": "打开",
     "remove": "移除",
-    "undo": "撤销"
+    "undo": "撤销",
+    "keepRunning": "继续运行"
   },
   "toast": {
     "close": "关闭通知",
@@ -124,7 +125,8 @@
     "depsBlocked": "前置任务失败",
     "waitingDeps": "等待前置任务",
     "hygiene": "卫生问题",
-    "verifierRejected": "二次审查拒绝"
+    "verifierRejected": "二次审查拒绝",
+    "peerObjection": "同级成员提出异议"
   },
   "stage": {
     "explore": "探索",

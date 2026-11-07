@@ -86,11 +86,24 @@ const (
 	AttemptCancelled      = "cancelled"
 )
 
-// Task kinds: a task the lead delegated, and the hidden task that reviews a green gate (verifier.go).
+// Task kinds: a task the lead delegated, and the hidden read-only runs of the engine: the review of a green gate
+// (verifier.go), a consult (consult.go), a meeting attendee (internal/meeting) and a contest judge
+// (internal/contest). Hidden runs are never listed; they are read through what started them.
 const (
-	KindNormal = "normal"
-	KindVerify = "verify"
+	KindNormal  = "normal"
+	KindVerify  = "verify"
+	KindConsult = "consult"
+	KindMeeting = "meeting"
+	KindJudge   = "judge"
 )
+
+// Hidden reports whether tasks of kind are hidden runs (not listed, no gate, no snapshots).
+func Hidden(kind string) bool {
+	return kind == KindVerify || kind == KindConsult || kind == KindMeeting || kind == KindJudge
+}
+
+// hiddenKinds lists the hidden kinds (for SQL filters).
+func hiddenKinds() []string { return []string{KindVerify, KindConsult, KindMeeting, KindJudge} }
 
 // Task is the stored record of a task. Turns are stored in their own rows and loaded with it.
 type Task struct {
@@ -164,6 +177,12 @@ type Task struct {
 	ContestID string `json:"contestId,omitempty"`
 	TicketID  string `json:"ticketId,omitempty"`
 	MeetingID string `json:"meetingId,omitempty"`
+	// Variant is the label (V1..) of a contest variant; ProjectCwd is the user's folder that the variant's worktree
+	// stands for (memory, roles and review history are the project's).
+	Variant    string `json:"variant,omitempty"`
+	ProjectCwd string `json:"projectCwd,omitempty"`
+	// Consults are the second opinions asked on this task (consult.go).
+	Consults []api.Consult `json:"consults,omitempty"`
 
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
@@ -324,6 +343,15 @@ func (t *Task) TokensUsed() int64 {
 		}
 	}
 	return n
+}
+
+// projectDir is the folder whose project memory, roles and review history the task uses: the user's folder for a
+// contest variant (which runs in a worktree), else the task's folder.
+func (t *Task) projectDir() string {
+	if t.ProjectCwd != "" {
+		return t.ProjectCwd
+	}
+	return t.Cwd
 }
 
 // FilesChanged returns the files edited in any turn, without duplicates, in first-seen order.

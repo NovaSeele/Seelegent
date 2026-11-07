@@ -167,6 +167,14 @@ type Options struct {
 	// Proof and Gates serve the proof ledger, lanes and contention (milestone 13); their routes answer 404 when nil.
 	Proof Proof
 	Gates Gates
+	// Members, Consults, Notes, Meetings, Contests and Hooks are the team services (milestone 14); the paths of one
+	// that is nil answer 501.
+	Members  Members
+	Consults Consults
+	Notes    Notes
+	Meetings Meetings
+	Contests Contests
+	Hooks    Hooks
 	// Backends are the worker CLIs by name.
 	Backends map[string]backend.Backend
 	// LogDir is the folder of daemon.log and hooks.log (GET /logs).
@@ -424,6 +432,7 @@ func (s *Server) routes() {
 	s.accountRoutes()
 	s.settingsRoutes()
 	s.proofRoutes()
+	s.teamRoutes()
 	s.reservedRoutes()
 	s.mux.HandleFunc("GET "+apiPrefix+"/events", s.serveEvents)
 	s.mux.HandleFunc(apiPrefix+"/", func(w http.ResponseWriter, r *http.Request) {
@@ -431,18 +440,9 @@ func (s *Server) routes() {
 	})
 }
 
-// reservedRoutes answer 501 for the paths later milestones fill (contract §5 members and hooks, §6).
+// reservedRoutes answer 501 for the paths milestone 15 fills (contract §6).
 func (s *Server) reservedRoutes() {
-	notImplemented := func(w http.ResponseWriter, r *http.Request) {
-		s.writeError(w, r, translated(api.CodeNotImplemented, "not_implemented"))
-	}
-	for _, p := range []string{"/members", "/members/", "/hooks", "/hooks/",
-		"/meetings", "/meetings/", "/contests", "/contests/", "/github/", "/automations", "/automations/"} {
-		s.mux.HandleFunc(apiPrefix+p, notImplemented)
-	}
-	for _, p := range []string{"/tasks/{id}/notes", "/tasks/{id}/notes/", "/tasks/{id}/consult"} {
-		s.mux.HandleFunc(apiPrefix+p, notImplemented)
-	}
+	s.reserve("/github/", "/automations", "/automations/")
 }
 
 // background runs fn until Close.

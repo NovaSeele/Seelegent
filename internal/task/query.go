@@ -52,6 +52,7 @@ func (s *Service) Get(ctx context.Context, id string) (api.TaskDetail, error) {
 	}
 	d.FileOverlaps = api.NonNil(s.fileOverlaps(ctx, t))
 	d.Proof = proofAPI(t.Proof)
+	d.Consults, d.ProjectCwd = consultsAPI(t.Consults), t.ProjectCwd
 	return d, nil
 }
 
@@ -171,7 +172,7 @@ func (s *Service) summary(t *Task) api.TaskSummary {
 		LastEventAt: api.FormatTime(t.LastEventAt), WaitingUntil: api.FormatTime(t.WaitingUntil),
 		NeedsSince: api.FormatTime(t.NeedsSince), Attention: t.Attention, Review: t.Review, Spec: t.Spec,
 		After: api.NonNil(t.After), AfterMode: t.AfterMode, DepsReason: t.DepsReason, Manual: t.Manual,
-		ParentID: t.ParentID, ContestID: t.ContestID, TicketID: t.TicketID, MeetingID: t.MeetingID,
+		ParentID: t.ParentID, ContestID: t.ContestID, TicketID: t.TicketID, MeetingID: t.MeetingID, Variant: t.Variant,
 		LastEventSeq: t.LastEventSeq, Gate: gateSummary(t),
 	}
 	if sum.AfterMode == "" { // tasks stored before afterMode was always set

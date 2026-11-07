@@ -18,7 +18,9 @@ import GitDiffPane from './GitDiffPane.vue'
 import GitFileList from './GitFileList.vue'
 import { useGit } from './useGit'
 import { useGitCommands } from './useGitCommands'
+import NotesPanel from './NotesPanel.vue'
 import OutsideDiffButton from './OutsideDiffButton.vue'
+import { useNotes } from './useNotes'
 
 /**
  * The Git view: the files this task changed (paths from the repository root), the selected file's diff, and a
@@ -60,6 +62,10 @@ watch(message, (value) =>
 )
 
 const committing = ref(false)
+const notes = useNotes(
+  () => props.task.id,
+  () => active.value,
+)
 
 function step(delta: number) {
   const next = stepFile(files.value, selected.value, delta)
@@ -140,9 +146,11 @@ useGitCommands(
           v-model:wrap="wrap"
           :file="selectedFile"
           :diff="diff"
+          :notes="notes"
           @retry="model.reloadDiff"
         />
       </div>
+      <NotesPanel v-if="files.length" :notes="notes" :busy="active" @open="selected = $event" />
 
       <details v-if="git.preexisting.length" class="git__pre">
         <summary>

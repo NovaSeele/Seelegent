@@ -10,13 +10,18 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/NovaSeele/Seelegent/internal/account"
+	"github.com/NovaSeele/Seelegent/internal/api"
 	"github.com/NovaSeele/Seelegent/internal/config"
+	"github.com/NovaSeele/Seelegent/internal/hook"
+	"github.com/NovaSeele/Seelegent/internal/meeting"
+	"github.com/NovaSeele/Seelegent/internal/member"
 	"github.com/NovaSeele/Seelegent/internal/memory"
 	"github.com/NovaSeele/Seelegent/internal/role"
 	"github.com/NovaSeele/Seelegent/internal/store"
@@ -128,7 +133,35 @@ func (f *fixture) realistic() {
 	f.write("memory/deadbeef-12345678.md", "Replaced notes without a header.\n")
 	f.write("tasks/t1.json", `{"id": "t1", "cwd": "`+js(f.project)+`", "status": "accepted"}`)
 	f.write("tasks/t2.json", `{"id": "t2", "cwd": "`+js(f.project)+`"}`)
-	f.write("members.json", `[]`)
+	f.write("members.json", `{"members": [
+  {"id": "ana", "name": " Ana ", "provider": null, "backend": "agy", "rank": "senior", "tier": null, "model": null, "role": null, "preferredAccounts": [], "fallbackBackends": ["opencode", "codex"], "enabled": true, "createdAt": "2026-10-01T10:00:00.000Z"},
+  {"id": "deep", "name": "Deep", "provider": "deepseek", "backend": "claude", "rank": "peer", "enabled": false},
+  {"id": "olda", "name": "Old", "backend": "opencode", "rank": "worker"},
+  {"id": "Bad", "name": "Bad", "backend": "agy", "rank": "worker"}
+]}`)
+	f.write("hooks.json", `{"hooks": [
+  {"on": "task.done", "run": "echo done", "timeoutSeconds": 30},
+  {"on": ["task.failed", "task.failed"], "run": "echo failed", "project": "`+js(f.project)+`", "enabled": false},
+  {"on": ["nope"], "run": "echo nope"}
+]}`)
+	f.write("meetings/m2610011000-ab12.json", `{"id": "m2610011000-ab12", "title": "Pick a store", "question": "Which?",
+  "options": [{"key": "A", "text": "SQLite"}], "context": [], "cwd": "`+js(f.project)+`", "repoRoot": "`+js(f.project)+`",
+  "status": "closed", "maxRounds": 2, "round": 1, "sealed": null,
+  "attendees": [{"label": "P1", "member": "ana", "rank": "senior", "backend": "agy", "taskId": "t9", "present": true}],
+  "rounds": [{"n": 1, "startedAt": "2026-10-01T10:00:00.000Z", "runs": [{"label": "P1", "taskId": "t9", "turn": 1, "done": true}],
+    "answers": [{"label": "P1", "option": "A", "stance": "SQLite is enough.", "confidence": 80, "arguments": [], "claims": [], "risks": [], "actions": [], "questions": [], "rebuttal": "", "moved": null, "raw": "x"}]}],
+  "leadQA": [{"id": "q1", "round": 1, "label": "P1", "question": "Size?", "answer": "Small"}], "leadNotes": [],
+  "decision": {"text": "SQLite", "option": "A", "at": "2026-10-01T10:05:00.000Z"},
+  "dissents": [{"id": "d1", "label": "P1", "member": "ana", "kind": "dissent", "text": "Too small", "claims": [], "watchPaths": ["store.go"],
+    "signals": [{"taskId": "t3", "reason": "regression", "at": "x"}, {"taskId": "t4", "reason": "rejected", "at": "2026-10-02T10:00:00.000Z"}]}],
+  "adviceNotTaken": [], "actions": [], "minutes": "Biên bản", "estimate": null, "usage": {"runs": 1, "byBackend": {"agy": 1}, "tokens": 10},
+  "createdAt": "2026-10-01T10:00:00.000Z", "updatedAt": "2026-10-01T10:06:00.000Z"}`)
+	f.write("meetings/m2610011000-ab12.jsonl", `{"type": "open"}`+"\n")
+	f.write("meetings/m2610021000-cd34.json", `{"id": "m2610021000-cd34", "title": "Still going", "status": "round", "round": 1, "maxRounds": 3,
+  "attendees": [], "rounds": [], "createdAt": "2026-10-02T10:00:00.000Z", "updatedAt": "2026-10-02T10:00:00.000Z"}`)
+	f.write("meetings/m2610031000-ef56.json", `{"id": "other"}`)
+	f.write("notes/t1.json", `[{"id": "n1", "file": "a.go", "line": 1, "body": "x"}, {"id": "n2", "file": "a.go", "line": 2, "body": "y"}]`)
+	f.write("contests/k1.json", `{}`)
 	f.write("quota/acc2.json", `{}`)
 }
 
@@ -306,7 +339,48 @@ func TestMigrate(t *testing.T) {
 	}
 
 	want(t, rep, KindData, "tasks", Skipped)
-	want(t, rep, KindData, "members.json", Skipped)
+	want(t, rep, KindMember, "ana", Imported)
+	want(t, rep, KindMember, "deep", Imported)
+	want(t, rep, KindMember, "olda", Skipped)
+	want(t, rep, KindMember, "Bad", Error)
+	members := member.New(member.Options{DB: db})
+	if ana, err := members.Get(context.Background(), "ana"); err != nil || ana.Name != "Ana" ||
+		ana.Rank != api.RankSenior || !slices.Equal(ana.FallbackBackends, []string{"codex"}) || !ana.Enabled {
+		t.Errorf("ana %+v, %v", ana, err)
+	}
+	if deep, err := members.Get(context.Background(), "deep"); err != nil || deep.Enabled || deep.Provider != "deepseek" {
+		t.Errorf("deep %+v, %v", deep, err)
+	}
+	if it := want(t, rep, KindHook, "hooks.json", Imported); !strings.Contains(it.Detail, "2 hooks added") {
+		t.Errorf("hooks detail %q", it.Detail)
+	}
+	hooks, err := hook.New(hook.Options{DB: db}).List(context.Background())
+	if err != nil || len(hooks) != 2 || !hooks[0].Enabled || hooks[0].On[0] != api.HookTaskDone ||
+		hooks[0].TimeoutSeconds != 30 || hooks[1].Enabled || len(hooks[1].On) != 1 || hooks[1].ID == "" {
+		t.Errorf("hooks %+v, %v", hooks, err)
+	}
+	want(t, rep, KindMeeting, "m2610011000-ab12", Imported)
+	if it := want(t, rep, KindMeeting, "m2610021000-cd34", Imported); !strings.Contains(it.Detail, "cancelled") {
+		t.Errorf("running meeting detail %q", it.Detail)
+	}
+	want(t, rep, KindMeeting, "m2610031000-ef56", Error)
+	meetings := meeting.New(meeting.Options{DB: db})
+	defer meetings.Close()
+	mt, err := meetings.Get(context.Background(), "m2610011000-ab12")
+	if err != nil || len(mt.LeadQA) != 1 || mt.Decision == nil || len(mt.Dissents) != 1 ||
+		len(mt.Dissents[0].Signals) != 1 || mt.Dissents[0].Signals[0].Reason != "rejected" ||
+		strings.Contains(mt.Minutes, "Biên") || !strings.Contains(mt.Minutes, "SQLite") ||
+		mt.CreatedAt != "2026-10-01T10:00:00.000Z" {
+		t.Errorf("meeting %+v, %v", mt, err)
+	}
+	if mt, err := meetings.Get(context.Background(), "m2610021000-cd34"); err != nil ||
+		mt.Status != api.MeetingStatusCancelled {
+		t.Errorf("running meeting %+v, %v", mt, err)
+	}
+	if it := want(t, rep, KindData, "notes", Skipped); !strings.Contains(it.Detail, "2 review notes on 1 old tasks") {
+		t.Errorf("notes detail %q", it.Detail)
+	}
+	want(t, rep, KindData, "contests", Skipped)
 	want(t, rep, KindData, "quota", Skipped)
 	if !rep.Failed() {
 		t.Error("errors not reported as failed")
@@ -353,6 +427,12 @@ func TestMigrate(t *testing.T) {
 	want(t, again, KindMemory, pk, Unchanged)
 	want(t, again, KindHistory, pk, Unchanged)
 	want(t, again, KindRole, "global:reviewer", Unchanged)
+	want(t, again, KindMember, "ana", Unchanged)
+	want(t, again, KindHook, "hooks.json", Unchanged)
+	want(t, again, KindMeeting, "m2610011000-ab12", Unchanged)
+	if hooks, _ := hook.New(hook.Options{DB: db}).List(context.Background()); len(hooks) != 2 {
+		t.Errorf("hooks doubled: %+v", hooks)
+	}
 	if lines, _ := mem.History(context.Background(), f.project, 8); len(lines) != 2 {
 		t.Errorf("history doubled: %q", lines)
 	}

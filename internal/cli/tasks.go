@@ -69,10 +69,10 @@ func waitReports(ctx context.Context, c *client.Client, cn *conn, w ops.Wait) (a
 
 func newFollowupCommand(d deps) *cobra.Command {
 	var (
-		by, model, effort, task, profile string
-		allowGit, force                  bool
-		gates                            gateFlags
-		wait                             int
+		by, model, effort, task, profile, member string
+		allowGit, force                          bool
+		gates                                    gateFlags
+		wait                                     int
 	)
 	cmd := &cobra.Command{
 		Use:         "followup <id> [flags] <message|@file>",
@@ -97,7 +97,7 @@ func newFollowupCommand(d deps) *cobra.Command {
 			}
 			req := api.FollowupRequest{Message: msg, By: by, Model: model, Effort: effort, TaskIDs: splitList([]string{task}),
 				Profile: profile, Gate: g.gate, GateCommands: g.commands, Lane: g.lane, NoLane: g.noLane,
-				ForceLane: g.forceLane, Verify: g.verify, Force: force}
+				ForceLane: g.forceLane, Verify: g.verify, Force: force, Member: member}
 			if cmd.Flags().Changed("allow-git") {
 				req.AllowGit = &allowGit
 			}
@@ -127,6 +127,7 @@ func newFollowupCommand(d deps) *cobra.Command {
 	fs.StringVar(&effort, "effort", "", "reasoning effort")
 	fs.StringVar(&task, "task", "", "Spec Kit task ids of this turn, comma separated")
 	fs.StringVar(&profile, "profile", "", "worker profile (role)")
+	fs.StringVar(&member, "member", "", "move the task to this department member from this turn on")
 	fs.BoolVar(&allowGit, "allow-git", false, "let the worker commit")
 	fs.BoolVar(&force, "force", false, "start a task that waits for its prerequisites anyway")
 	fs.IntVar(&wait, "wait", defaultWait, "seconds to wait for the report (0: return at once)")
@@ -201,28 +202,32 @@ func newReviewCommand(d deps) *cobra.Command {
 		Annotations: map[string]string{annOp: "review"},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			id, verdict := args[0], args[1]
+			answer := ""
 			if cmd.Flags().Changed("answer-objection") {
-				answer, err := fileArg(objection, "")
+				text, err := fileArg(objection, "")
 				if err != nil {
 					return err
 				}
-				if strings.TrimSpace(answer) != "" {
-					notes = strings.TrimSpace(notes + "\n\nAnswer to the objection: " + answer)
-				}
+				answer = strings.TrimSpace(text)
 			}
 			c, _, err := d.daemonClient(cmd)
 			if err != nil {
 				return err
 			}
-			sum, err := c.Review(cmd.Context(), id, api.ReviewRequest{Verdict: verdict, Notes: notes})
+			sum, err := c.Review(cmd.Context(), id, api.ReviewRequest{Verdict: verdict, Notes: notes, AnswerObjection: answer})
 			if err != nil {
 				return err
 			}
-			return emit(cmd, sum, func(w io.Writer) { _, _ = fmt.Fprintf(w, "Task %s reviewed: %s\n", id, verdict) })
+			return emit(cmd, sum, func(w io.Writer) {
+				_, _ = fmt.Fprintf(w, "Task %s reviewed: %s\n", id, verdict)
+				for _, warn := range sum.Warnings {
+					_, _ = fmt.Fprintf(w, "Warning: %s\n", warn)
+				}
+			})
 		},
 	}
 	cmd.Flags().StringVar(&notes, "notes", "", "review notes")
-	cmd.Flags().StringVar(&objection, "answer-objection", "", "answer to the worker's objection (text or @file)")
+	cmd.Flags().StringVar(&objection, "answer-objection", "", "answer to a peer member's objection (text or @file)")
 	return cmd
 }
 

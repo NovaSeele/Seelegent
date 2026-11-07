@@ -33,6 +33,10 @@ var ErrNotStarted = errors.New("process tree not started")
 // before cmd.Start for every helper command the daemon runs (quota readers, model lists, git, ...).
 func HideWindow(cmd *exec.Cmd) { hideWindow(cmd) }
 
+// SetCmdLine sets the raw command line of cmd on Windows, for programs such as cmd.exe that parse their own; it
+// does nothing elsewhere.
+func SetCmdLine(cmd *exec.Cmd, line string) { setCmdLine(cmd, line) }
+
 // StartDetached starts a process that must outlive the current one, such as the worker launcher that keeps a turn
 // running across a daemon restart. On Windows the process gets its own hidden console and process group and breaks
 // away from the job of the caller when that job allows it (a host that put the daemon in a kill-on-close job would

@@ -439,8 +439,33 @@ func TestNotYetAvailable(t *testing.T) {
 			t.Fatalf("%s = %s", name, msg)
 		}
 	}
+}
+
+// TestTeamTools: the milestone 14 tools reach the daemon (a contest needs a git repository, which d.cwd is not).
+func TestTeamTools(t *testing.T) {
+	d := newDaemon(t)
 	msg := fails(t, d.cs, "delegate", map[string]any{"prompt": "x", "cwd": d.cwd, "variants": 2})
-	if !strings.Contains(msg, "contests") || !strings.Contains(msg, "not available") {
+	if !strings.Contains(msg, "git repository") {
 		t.Fatalf("variants = %s", msg)
+	}
+	var members map[string][]any
+	ok(t, d.cs, "members", map[string]any{}, &members)
+	if len(members["members"]) != 0 {
+		t.Fatalf("members = %v", members)
+	}
+	var list []any
+	ok(t, d.cs, "meeting", map[string]any{"action": "list"}, &list)
+	ok(t, d.cs, "contest", map[string]any{"action": "status"}, &list)
+	if msg := fails(t, d.cs, "meeting", map[string]any{"action": "open", "question": "Which?", "cwd": d.cwd,
+		"attendees": []string{"ghost"}}); !strings.Contains(msg, "ghost") {
+		t.Fatalf("meeting open = %s", msg)
+	}
+	if msg := fails(t, d.cs, "consult", map[string]any{"task_id": "t-nope", "member": "ghost"}); !strings.Contains(msg,
+		"not found") && !strings.Contains(msg, "ghost") {
+		t.Fatalf("consult = %s", msg)
+	}
+	if msg := fails(t, d.cs, "notes", map[string]any{"action": "list", "task_id": "t-nope"}); !strings.Contains(msg,
+		"not found") {
+		t.Fatalf("notes = %s", msg)
 	}
 }

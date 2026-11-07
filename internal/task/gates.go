@@ -538,7 +538,7 @@ func (s *Service) ActiveIn(ctx context.Context, root string) ([]string, error) {
 	key := rootKey(root)
 	var out []string
 	for _, t := range tasks {
-		if Active(t.Status) && t.Kind != KindVerify && rootKey(claimRoot(t)) == key {
+		if Active(t.Status) && !Hidden(t.Kind) && rootKey(claimRoot(t)) == key {
 			out = append(out, t.ID)
 		}
 	}

@@ -72,6 +72,7 @@ export function statusWordKey(task: TaskSummary): string {
     const state = task.attention?.state
     if (state === 'question') return 'common.attention.question'
     if (state === 'stalled') return 'common.attention.stalled'
+    if (task.attention?.reason === 'peer_objection') return 'common.attention.peerObjection'
   }
   return `common.status.${status}.label`
 }

@@ -25,7 +25,12 @@ func TestSpecialFilesDoNotBlock(t *testing.T) {
 	if err := syscall.Mkfifo(filepath.Join(dir, "tasks.md"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := syscall.Mkfifo(filepath.Join(e.paths.Logs, "hooks.log"), 0o600); err != nil {
+	// The hook runner opens hooks.log when the daemon starts; put the FIFO in its place.
+	hooksLog := filepath.Join(e.paths.Logs, "hooks.log")
+	if err := os.Remove(hooksLog); err != nil && !os.IsNotExist(err) {
+		t.Fatal(err)
+	}
+	if err := syscall.Mkfifo(hooksLog, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	type answer struct{ r response }
