@@ -475,6 +475,12 @@ export interface TaskReport {
   attention?: ReportAttention
   question?: ReportQuestion
   blocked_commands?: string[]
+  /** WorkAtRisk names the latest turn's files whose uncommitted work may be lost, and how to restore them. */
+  work_at_risk?: ReportRisk
+  file_overlaps?: ReportOverlap[]
+  /** Hygiene and ScopeWarnings are the findings of the last turn's checks. */
+  hygiene?: ReportFinding[]
+  scope_warnings?: ReportFinding[]
   denied_actions?: string[]
   deps_reason?: string
   cancelling?: boolean
@@ -575,6 +581,103 @@ export interface Memory {
   cwd: string
   text: string
   updatedAt?: string
+}
+
+/** RiskFile is one file whose uncommitted work a turn may have lost. Path is relative to the repository root. */
+export interface RiskFile {
+  path: string
+  why: 'outside_tools' | 'large_removal'
+  /** LostLines counts the lines that were uncommitted before the turn and are gone after it. */
+  lostLines?: number
+  deleted?: boolean
+  binary?: boolean
+  /** Restored is set once the file was put back with POST /tasks/{id}/turns/{n}/restore. */
+  restored?: boolean
+}
+
+/** Finding is one result of the hygiene check or the scope warnings of a turn. */
+export interface Finding {
+  kind:
+    | 'eol_changed'
+    | 'bom_changed'
+    | 'bom_new_file'
+    | 'junk_file'
+    | 'unreported_file'
+    | 'outside_repo_write'
+    | 'unfetched_url'
+    | 'skipped'
+  severity: 'red' | 'warn'
+  /** Path is relative to the repository root (hygiene) or absolute (outside_repo_write); empty for URLs. */
+  path?: string
+  /** Detail is a short explanation (the command, the URLs). */
+  detail?: string
+}
+
+/** FileOverlap is a file this task and another task of the same repository changed in overlapping time. */
+export interface FileOverlap {
+  /** File is relative to the repository root. */
+  file: string
+  taskId: string
+  title: string
+  status: TaskStatus
+  /** Severity is active when both tasks are still working, recent otherwise. */
+  severity: 'active' | 'recent'
+}
+
+/** RestoreRequest is the body of POST /tasks/{id}/turns/{n}/restore. */
+export interface RestoreRequest {
+  /** Files are relative to the repository root; empty restores every work-at-risk file of the turn. */
+  files?: string[]
+}
+
+/** RestoreResult is the answer of a restore. */
+export interface RestoreResult {
+  restored: string[]
+  skipped: RestoreFailed[]
+}
+
+/** RestoreFailed is a file a restore could not put back. */
+export interface RestoreFailed {
+  path: string
+  error: string
+}
+
+/**
+ * ReportRisk is the work_at_risk field of a report: the files, the snapshot that holds their earlier content and
+ * the command that restores them (Restore for display, RestoreArgv as the exact argument list).
+ */
+export interface ReportRisk {
+  turn: number
+  snapshot: string
+  files: string[]
+  details: ReportRiskFile[]
+  restore: string
+  restore_argv: string[]
+}
+
+/** ReportRiskFile explains one work-at-risk file of a report. */
+export interface ReportRiskFile {
+  path: string
+  why: string
+  lost_lines?: number
+  deleted?: boolean
+}
+
+/** ReportOverlap is one entry of a report's file_overlaps. */
+export interface ReportOverlap {
+  file: string
+  task_id: string
+  title: string
+  status: string
+  severity: string
+}
+
+/** ReportFinding is one hygiene or scope finding of a report. */
+export interface ReportFinding {
+  kind: string
+  severity: string
+  path?: string
+  detail?: string
 }
 
 /** Settings is GET /settings: config.json as internal/config.Settings describes it (the source of truth). */
@@ -1005,6 +1108,8 @@ export interface TaskDetail extends TaskSummary {
   repoRoot?: string
   error?: string
   turns: Turn[]
+  /** FileOverlaps are the files this task and another task of the same repository changed in overlapping time. */
+  fileOverlaps: FileOverlap[]
 }
 
 /** Turn is one lead (or user) message and the worker's answer to it. */
@@ -1028,9 +1133,15 @@ export interface Turn {
   attempts: Attempt[]
   git: TurnGit | null
   handback?: string
+  /** WorkAtRisk, Hygiene and Scope are the post-turn checks (empty while the turn runs or without snapshots). */
+  workAtRisk: RiskFile[]
+  hygiene: Finding[]
+  scope: Finding[]
+  /** OutsideDiff is true when the turn has snapshots, so GET /tasks/{id}/turns/{n}/outside-diff can answer. */
+  outsideDiff: boolean
 }
 
-/** TurnGit lists the files a turn changed, relative to the repository root (filled by milestone 12). */
+/** TurnGit lists the files a turn changed, relative to the repository root (null for a turn without snapshots). */
 export interface TurnGit {
   changed: string[]
   preexisting: string[]

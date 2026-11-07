@@ -26,12 +26,18 @@ type TaskReport struct {
 	Attention       *ReportAttention `json:"attention,omitempty"`
 	Question        *ReportQuestion  `json:"question,omitempty"`
 	BlockedCommands []string         `json:"blocked_commands,omitempty"`
-	DeniedActions   []string         `json:"denied_actions,omitempty"`
-	DepsReason      string           `json:"deps_reason,omitempty"`
-	Cancelling      bool             `json:"cancelling,omitempty"`
-	Error           string           `json:"error,omitempty"`
-	WaitingUntil    string           `json:"waiting_until,omitempty"`
-	AnsweredBy      string           `json:"answered_by,omitempty"`
+	// WorkAtRisk names the latest turn's files whose uncommitted work may be lost, and how to restore them.
+	WorkAtRisk   *ReportRisk     `json:"work_at_risk,omitempty"`
+	FileOverlaps []ReportOverlap `json:"file_overlaps,omitempty"`
+	// Hygiene and ScopeWarnings are the findings of the last turn's checks.
+	Hygiene       []ReportFinding `json:"hygiene,omitempty"`
+	ScopeWarnings []ReportFinding `json:"scope_warnings,omitempty"`
+	DeniedActions []string        `json:"denied_actions,omitempty"`
+	DepsReason    string          `json:"deps_reason,omitempty"`
+	Cancelling    bool            `json:"cancelling,omitempty"`
+	Error         string          `json:"error,omitempty"`
+	WaitingUntil  string          `json:"waiting_until,omitempty"`
+	AnsweredBy    string          `json:"answered_by,omitempty"`
 	// Handback is true when the last turn summarized a takeover.
 	Handback bool `json:"handback,omitempty"`
 	// Dashboard is the deep link to the task in the dashboard.

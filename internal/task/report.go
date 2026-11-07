@@ -28,10 +28,10 @@ func (s *Service) Report(ctx context.Context, id, cwd string) (api.TaskReport, e
 	if err != nil {
 		return api.TaskReport{}, err
 	}
-	return s.report(t, cwd), nil
+	return s.report(ctx, t, cwd), nil
 }
 
-func (s *Service) report(t *Task, cwd string) api.TaskReport {
+func (s *Service) report(ctx context.Context, t *Task, cwd string) api.TaskReport {
 	if cwd == "" {
 		cwd = t.Cwd
 	}
@@ -103,6 +103,12 @@ func (s *Service) report(t *Task, cwd string) api.TaskReport {
 		}
 		rep.Handback = tu.Handback
 		rep.DeniedActions = tu.DeniedActions
+		rep.Hygiene, rep.ScopeWarnings = findingsReport(tu.Hygiene), findingsReport(tu.Scope)
+	}
+	rep.WorkAtRisk = riskReport(t)
+	for _, o := range s.fileOverlaps(ctx, t) {
+		rep.FileOverlaps = append(rep.FileOverlaps, api.ReportOverlap{File: o.File, TaskID: o.TaskID, Title: o.Title,
+			Status: string(o.Status), Severity: o.Severity})
 	}
 	var blocked []string
 	for _, x := range t.Turns {

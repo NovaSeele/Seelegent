@@ -17,11 +17,13 @@ import (
 	"github.com/NovaSeele/Seelegent/internal/backend"
 	"github.com/NovaSeele/Seelegent/internal/clock"
 	"github.com/NovaSeele/Seelegent/internal/config"
+	"github.com/NovaSeele/Seelegent/internal/gitx"
 	"github.com/NovaSeele/Seelegent/internal/launch"
 	"github.com/NovaSeele/Seelegent/internal/memory"
 	"github.com/NovaSeele/Seelegent/internal/pool"
 	"github.com/NovaSeele/Seelegent/internal/quota"
 	"github.com/NovaSeele/Seelegent/internal/role"
+	"github.com/NovaSeele/Seelegent/internal/snapshot"
 	"github.com/NovaSeele/Seelegent/internal/store"
 	"github.com/NovaSeele/Seelegent/internal/testutil/fakecli"
 	"github.com/NovaSeele/Seelegent/internal/usage"
@@ -129,6 +131,7 @@ func (h *harness) start() {
 	if err != nil {
 		t.Fatal(err)
 	}
+	repos := gitx.New(h.clk.Now, nil)
 	s, err := New(Options{
 		DB: h.db, Accounts: h.accounts, Pool: p, Backends: map[string]backend.Backend{config.BackendAgy: agy},
 		Settings: h.config, TasksDir: filepath.Join(h.dir, "tasks"), Launcher: fakecli.Launcher(t),
@@ -138,8 +141,11 @@ func (h *harness) start() {
 			h.refreshes = append(h.refreshes, id)
 			h.mu.Unlock()
 		},
-		BaseEnv:   func() []string { return h.queue.Env(os.Environ()) },
-		Dashboard: func(id string) string { return "http://127.0.0.1:47831/tasks/" + id },
+		BaseEnv:       func() []string { return h.queue.Env(os.Environ()) },
+		Dashboard:     func(id string) string { return "http://127.0.0.1:47831/tasks/" + id },
+		Snapshots:     snapshot.New(filepath.Join(h.dir, "snapshots"), repos, h.clk.Now),
+		Repos:         repos,
+		AccountStates: p.States,
 	})
 	if err != nil {
 		t.Fatal(err)

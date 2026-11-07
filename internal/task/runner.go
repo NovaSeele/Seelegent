@@ -128,9 +128,19 @@ func (r *run) note(ev event.Event, now time.Time) {
 		l.waiting = time.Time{}
 		if ev.Tool != nil {
 			l.tool, l.command, l.toolSince, l.step = ev.Tool.Name, ev.Tool.Command, now, ev.Tool.Name
+			l.pending = stepKey(ev.Tool)
 		}
 	case event.KindToolResult:
 		l.tool, l.command, l.toolSince = "", "", time.Time{}
+		if ev.Tool != nil {
+			l.steps = addStep(l.steps, ev.Tool, l.pending)
+			l.pending = ""
+		}
+	case event.KindFile:
+		if ev.File != nil && ev.File.Op == event.FileEdit && len(l.edited) < maxLiveEdited &&
+			!slices.Contains(l.edited, ev.File.Path) {
+			l.edited = append(l.edited, ev.File.Path)
+		}
 	case event.KindMessage:
 		l.waiting, l.step = time.Time{}, "writing"
 	case event.KindBackgroundWait:
@@ -149,7 +159,9 @@ func (s *Service) live(id string) liveState {
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.live
+	l := r.live
+	l.steps, l.edited = slices.Clone(l.steps), slices.Clone(l.edited)
+	return l
 }
 
 // startRun starts the run of task id unless one is going.
@@ -214,7 +226,7 @@ func (s *Service) endRun(r *run) {
 
 // runTask works on the task until its open turn ended, it was cancelled or taken over, or the daemon stops.
 func (s *Service) runTask(r *run) {
-	baselineTried := false
+	baselineTried, snapTried := false, false
 	for {
 		t, err := s.repo.Get(s.root, r.id)
 		if err != nil {
@@ -243,6 +255,10 @@ func (s *Service) runTask(r *run) {
 		case !t.BaselineTaken && !baselineTried && tu.N == 1 && len(tu.Attempts) == 0:
 			baselineTried = true
 			s.takeBaseline(r.ctx, t)
+			continue
+		case s.o.Snapshots != nil && t.RepoRoot != "" && tu.Snap == nil && len(tu.Attempts) == 0 && !snapTried:
+			snapTried = true
+			s.takeStartSnapshot(r.ctx, t, tu)
 			continue
 		default:
 			more, err = s.newAttempt(r, t, tu)
@@ -559,6 +575,7 @@ func (s *Service) finishAttempt(r *run, id string, turn, n int, accountID, model
 		}
 	}
 	maxAttempts := s.maxAttempts(ctx, b.Name())
+	check := s.preCheck(ctx, id, turn, status, &o, n, maxAttempts)
 	now := s.now()
 	var retry time.Duration
 	more := false
@@ -647,6 +664,9 @@ func (s *Service) finishAttempt(r *run, id string, turn, n int, accountID, model
 			evs = append(evs, s.endTurn(t, tu, TurnFailed, o))
 			t.Status, t.Error = StatusFailed, msg
 		}
+		if tu.Status != TurnRunning {
+			evs = append(evs, applyCheck(t, tu, check)...)
+		}
 		return evs, nil
 	})
 	if err != nil {
@@ -657,6 +677,7 @@ func (s *Service) finishAttempt(r *run, id string, turn, n int, accountID, model
 		s.o.QuotaRefresh(accountID)
 	}
 	if !more {
+		s.lateCheck(ctx, id, turn) // when the turn ended without its checks (they could not run before)
 		s.checkDeps(ctx)
 		return false, nil
 	}
@@ -704,6 +725,7 @@ func (s *Service) giveUp(id string, turn int, message string) (bool, error) {
 		return []NewEvent{ev}, nil
 	})
 	if err == nil {
+		s.lateCheck(s.background(), id, turn)
 		s.checkDeps(s.background())
 	}
 	return false, err
@@ -730,6 +752,9 @@ func (s *Service) finishCancel(id string) {
 	if err != nil {
 		s.log.Error("task: finish cancel", "task", id, "err", err)
 		return
+	}
+	if t, err := s.repo.Get(s.background(), id); err == nil && t.LastTurn() != nil {
+		s.lateCheck(s.background(), id, t.LastTurn().N)
 	}
 	s.checkDeps(s.background())
 }

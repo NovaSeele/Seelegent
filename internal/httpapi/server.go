@@ -58,6 +58,8 @@ type Tasks interface {
 	Boot(ctx context.Context) ([]api.TaskSummary, error)
 	Projects(ctx context.Context) ([]api.Project, error)
 	GitScope(ctx context.Context, id string) (task.GitScope, error)
+	OutsideDiff(ctx context.Context, id string, n int) ([]api.FileDiff, error)
+	Restore(ctx context.Context, id string, n int, req api.RestoreRequest) (api.RestoreResult, error)
 	Bus() *task.Bus
 }
 

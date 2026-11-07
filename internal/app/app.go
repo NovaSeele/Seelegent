@@ -36,6 +36,7 @@ import (
 	"github.com/NovaSeele/Seelegent/internal/quota"
 	"github.com/NovaSeele/Seelegent/internal/role"
 	"github.com/NovaSeele/Seelegent/internal/signin"
+	"github.com/NovaSeele/Seelegent/internal/snapshot"
 	"github.com/NovaSeele/Seelegent/internal/store"
 	"github.com/NovaSeele/Seelegent/internal/task"
 	"github.com/NovaSeele/Seelegent/internal/usage"
@@ -271,19 +272,23 @@ func (a *App) build(o Options) error {
 		a.log.Warn("app: install the git shim", "err", err)
 		shim = ""
 	}
+	a.Git = gitx.New(now, gitBin)
 	a.Tasks, err = task.New(task.Options{
 		DB: a.DB, Accounts: a.Accounts, Pool: p, Backends: a.Backends, Settings: a.Settings,
 		TasksDir: o.Paths.Tasks, Launcher: o.Launcher, Usage: a.Usage, QuotaRefresh: a.Refresher.Request,
 		Memory: a.Memory, Roles: a.Roles, Consoles: consoles, Clock: o.Clock, Logger: a.log,
-		BaseEnv:   func() []string { return a.env },
-		Dashboard: a.dashboardLink,
-		Git:       gitBin,
-		GitShim:   shim,
+		BaseEnv:       func() []string { return a.env },
+		Dashboard:     a.dashboardLink,
+		Git:           gitBin,
+		GitShim:       shim,
+		Snapshots:     snapshot.New(o.Paths.Snapshots, a.Git, now),
+		Repos:         a.Git,
+		ScopeAllowed:  scopeAllowed(o.Paths.Profiles, a.env),
+		AccountStates: p.States,
 	})
 	if err != nil {
 		return err
 	}
-	a.Git = gitx.New(now, gitBin)
 	a.SignIn = signin.New(signin.Options{
 		Accounts: a.Accounts,
 		Backend: func(name string) (backend.Backend, bool) {
@@ -321,6 +326,23 @@ func quotaReader(name, bin string, now func() time.Time) backend.QuotaReader {
 		return quota.NewClaudeReader(nil, "", now)
 	}
 	return nil
+}
+
+// scopeAllowed lists the folders outside a task's repository a worker may write to without a scope warning: the
+// temp folders, the worker profiles and the CLI homes of system accounts.
+func scopeAllowed(profiles string, env []string) []string {
+	out := []string{profiles, os.TempDir()}
+	for _, name := range []string{"TEMP", "TMP", "TMPDIR"} {
+		if v, ok := envx.Lookup(env, name); ok && v != "" {
+			out = append(out, v)
+		}
+	}
+	if home, err := os.UserHomeDir(); err == nil {
+		for _, d := range []string{".gemini", ".claude", ".codex"} {
+			out = append(out, filepath.Join(home, d))
+		}
+	}
+	return out
 }
 
 // Settings returns the current settings.

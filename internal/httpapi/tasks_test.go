@@ -152,8 +152,26 @@ func TestTaskLifecycle(t *testing.T) {
 	if len(cr.SHA) != 40 || !strings.Contains(gitIn(t, e.cwd, "log", "--oneline", "-1"), "Add new.txt") {
 		t.Fatalf("commit = %+v", cr)
 	}
-	e.wantError(e.get("/api/v1/tasks/"+sum.ID+"/turns/1/outside-diff"), http.StatusServiceUnavailable,
-		api.CodeUnavailable, "")
+	// The worker created new.txt with a shell command, not an edit tool: it is an outside edit.
+	var outside []api.FileDiff
+	e.must(e.get("/api/v1/tasks/"+sum.ID+"/turns/1/outside-diff"), http.StatusOK).json(t, &outside)
+	if len(outside) != 1 || outside[0].Path != "new.txt" {
+		t.Fatalf("outside diff = %+v", outside)
+	}
+	e.wantError(e.get("/api/v1/tasks/"+sum.ID+"/turns/x/outside-diff"), http.StatusBadRequest,
+		api.CodeInvalidArgument, "n")
+	e.wantError(e.get("/api/v1/tasks/"+sum.ID+"/turns/9/outside-diff"), http.StatusNotFound, api.CodeNotFound, "")
+	// Nothing was at risk: a restore must name its files, and a file the turn started without is skipped.
+	e.wantError(e.post("/api/v1/tasks/"+sum.ID+"/turns/1/restore", map[string]any{}), http.StatusBadRequest,
+		api.CodeInvalidArgument, "")
+	var rr api.RestoreResult
+	e.must(e.post("/api/v1/tasks/"+sum.ID+"/turns/1/restore", map[string]any{"files": []string{"new.txt"}}),
+		http.StatusOK).json(t, &rr)
+	if len(rr.Restored) != 0 || len(rr.Skipped) != 1 {
+		t.Fatalf("restore = %+v", rr)
+	}
+	e.wantError(e.post("/api/v1/tasks/"+sum.ID+"/turns/1/restore", map[string]any{"files": []string{"../x"}}),
+		http.StatusBadRequest, api.CodeInvalidArgument, "")
 
 	var rs api.RepoStatus
 	e.must(e.get("/api/v1/git/status?cwd="+url.QueryEscape(e.cwd)), http.StatusOK).json(t, &rs)

@@ -64,7 +64,7 @@ func TestComputeAttention(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			got := computeAttention(c.t, c.live, now, set)
+			got := computeAttention(c.t, c.live, accountHealth{}, now, set)
 			switch {
 			case c.state == "" && got != nil:
 				t.Fatalf("got %+v, want none", got)
@@ -76,11 +76,11 @@ func TestComputeAttention(t *testing.T) {
 	// An unchanged flag keeps its Since.
 	x := done("ok")
 	x.Attention = &api.Attention{State: api.AttentionInfo, Reason: ReasonReview, Since: "2026-11-07T08:00:00.000Z"}
-	if got := computeAttention(x, liveState{}, now, set); got.Since != "2026-11-07T08:00:00.000Z" {
+	if got := computeAttention(x, liveState{}, accountHealth{}, now, set); got.Since != "2026-11-07T08:00:00.000Z" {
 		t.Fatalf("since = %s", got.Since)
 	}
 	if !strings.Contains(computeAttention(running, liveState{running: true, sawInit: true, tool: "run_command",
-		command: "npm test", lastEvent: now.Add(-21 * time.Minute)}, now, set).Detail, `"npm test"`) {
+		command: "npm test", lastEvent: now.Add(-21 * time.Minute)}, accountHealth{}, now, set).Detail, `"npm test"`) {
 		t.Fatal("the stall detail does not name the command")
 	}
 }
@@ -214,7 +214,7 @@ func TestReportShapes(t *testing.T) {
 		},
 		Attention: &api.Attention{State: api.AttentionInfo, Reason: ReasonReview},
 	}
-	rep := s.report(tk, "")
+	rep := s.report(t.Context(), tk, "")
 	if rep.Response != "See handler now." {
 		t.Errorf("response = %q", rep.Response)
 	}

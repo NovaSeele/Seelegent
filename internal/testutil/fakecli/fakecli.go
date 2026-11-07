@@ -21,6 +21,8 @@
 //	#!hang               sleep for five minutes (until cancelled)
 //	#!wait-file <path>   wait (up to five minutes) until path exists
 //	#!touch <path>       create path (tells the test the script got here)
+//	#!write <path>\t<q> write the Go-quoted string q to path (a change no edit tool reports)
+//	#!remove <path>      remove path
 //
 // An empty queue makes the fake CLI fail with exit code 97 and "fakecli: no script" on standard error.
 package fakecli
@@ -256,6 +258,15 @@ func runCLI(dir string) int {
 		case "touch":
 			_ = out.Flush()
 			_ = os.WriteFile(arg, nil, 0o600) //nolint:gosec // a path the test's own script names
+		case "write":
+			_ = out.Flush()
+			p, q, _ := strings.Cut(arg, "\t")
+			if text, err := strconv.Unquote(q); err == nil {
+				_ = os.WriteFile(p, []byte(text), 0o600) //nolint:gosec // a path the test's own script names
+			}
+		case "remove":
+			_ = out.Flush()
+			_ = os.Remove(arg) //nolint:gosec // a path the test's own script names
 		}
 	}
 	return 0
