@@ -17,13 +17,21 @@ with owner-only permissions when a command starts, never earlier.
 | `profiles/<id>/seelegent-key` | API key of an API-key account: a DPAPI blob on Windows, a 0600 file elsewhere; never inside `home/` |
 | `github/token`     | the GitHub token set from the dashboard ([github.md](github.md)): a DPAPI blob for the current Windows user on Windows; elsewhere **plain text** in a 0600 file, readable by any program running as you (see below) |
 | `logs/`            | `daemon.log` and its rotated copies `daemon.log.1` … (JSON lines, secrets masked)      |
+| `logs/hooks.log`   | output of the lead's event hooks, rotated like the daemon log ([team.md](team.md))     |
 | `run/daemon.lock`  | single-instance lock of the daemon                                                     |
 | `run/daemon.port`  | port of the running daemon (removed when it stops cleanly; see [mcp.md](mcp.md))       |
 | `run/start.lock`   | held by an MCP server while it starts the daemon, so several start only one            |
 | `backups/`         | copies taken before migrations and imports                                             |
 | `tasks/<id>/t<turn>-a<attempt>/` | files of one worker attempt: `launch/` (launch spec, stream, stderr, exit record), the prompt of CLIs that read it on standard input, a long agy brief |
-| `contests/`        | the winners' patches (`<id>.<label>.patch`) and temporary indexes of contests ([team.md](team.md)) |
+| `snapshots/`       | turn snapshots of the work at risk: content-addressed file copies (`blobs/`) and one manifest per task turn (`tasks/<id>/`), never anything inside your repository ([safety.md](safety.md)) |
+| `guard/bin/`       | the git shim workers without a pre-tool hook get first on `PATH` ([safety.md](safety.md)) |
+| `contests/<id>/<label>.json` | the stored copy of a contest variant's changes, written once its task stops ([team.md](team.md)) |
+| `contests/<id>/<label>.patch` | the patch of the variant that was picked and applied, kept as the record of what was applied |
+| `contests/tmp/`    | temporary indexes of contests                                                          |
 | `worktrees/contests/<id>/<label>/` | the worktree of one contest variant. Once its task stops, its content is committed inside it and the folder removed (never forced); a removal that fails is retried at the next start |
+| `worktrees/tickets/<repo>/` | the worktrees of a connected repository's tickets ([github.md](github.md))    |
+| `update/`          | downloads and the lock of `seelegent update` ([release.md](release.md))                |
+| `setup-created.json` | the host files and folders `seelegent setup` created, so `setup --remove` deletes them only when they are empty again ([setup.md](setup.md)) |
 
 Outside Windows, `profiles/<id>/seelegent-key` and `github/token` are plain text protected only by their 0600 mode:
 there is no OS key store Seelegent uses there. Anyone who can read your files (a program running as you, root, a
@@ -151,5 +159,5 @@ The old Node daemon kept its settings in `settings.json`. `seelegent migrate` im
 | --- | --- |
 | `tiers`, `allowedModels` (top level) | legacy mirrors of `backends.agy.tiers` and `backends.agy.allowedModels` |
 | `updates` | never read by the old daemon |
-| `providers` | API-key provider profiles are deferred to the accounts milestone, which decides where they live |
+| `providers` | API-key provider profiles live in the `providers` table of `seelegent.db`; `seelegent migrate` imports them there ([setup.md](setup.md)) |
 | `backends.opencode` | the opencode backend was removed |
