@@ -309,12 +309,13 @@ func (s *Service) Replace(ctx context.Context, hooks []api.Hook) ([]api.Hook, er
 	return out, nil
 }
 
-// Import adds hooks kept by the old version (seelegent migrate) after the existing ones; an invalid hook is
-// returned as skipped with its reason.
-func (s *Service) Import(ctx context.Context, hooks []api.Hook) (added int, skipped []string, err error) {
+// Import adds hooks kept by the old version (seelegent migrate) after the existing ones. A hook that is already
+// there (same command, events and project) is counted as unchanged, so a second migrate adds nothing; an invalid
+// hook is returned as skipped with its reason.
+func (s *Service) Import(ctx context.Context, hooks []api.Hook) (added, unchanged int, skipped []string, err error) {
 	cur, err := s.List(ctx)
 	if err != nil {
-		return 0, nil, err
+		return 0, 0, nil, err
 	}
 	for i, h := range hooks {
 		h.ID = ""
@@ -323,16 +324,44 @@ func (s *Service) Import(ctx context.Context, hooks []api.Hook) (added int, skip
 			skipped = append(skipped, fmt.Sprintf("hook %d: %v", i, err))
 			continue
 		}
+		if slices.ContainsFunc(cur, func(c api.Hook) bool { return Same(c, v) }) {
+			unchanged++
+			continue
+		}
+		if len(cur) >= MaxHooks {
+			skipped = append(skipped, fmt.Sprintf("hook %d: at most %d hooks", i, MaxHooks))
+			continue
+		}
 		cur = append(cur, v)
 		added++
 	}
 	if added == 0 {
-		return 0, skipped, nil
+		return 0, unchanged, skipped, nil
 	}
 	if _, err := s.Replace(ctx, cur); err != nil {
-		return 0, skipped, err
+		return 0, unchanged, skipped, err
 	}
-	return added, skipped, nil
+	return added, unchanged, skipped, nil
+}
+
+// Same reports whether two valid hooks run the same command on the same events for the same project.
+func Same(a, b api.Hook) bool {
+	if a.Run != b.Run || len(a.On) != len(b.On) || (a.Project == "") != (b.Project == "") {
+		return false
+	}
+	if a.Project != "" {
+		ka, errA := fsutil.Key(a.Project)
+		kb, errB := fsutil.Key(b.Project)
+		if errA != nil || errB != nil || ka != kb {
+			return false
+		}
+	}
+	for _, e := range a.On {
+		if !slices.Contains(b.On, e) {
+			return false
+		}
+	}
+	return true
 }
 
 // ---- events -----------------------------------------------------------------------------------------------------

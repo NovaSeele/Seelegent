@@ -15,10 +15,11 @@ func newMigrateCommand() *cobra.Command {
 		Use:   "migrate",
 		Short: "Import the data of the old (Node) Seelegent",
 		Long: "Import settings, providers, accounts (with their profile folders and API keys), project memory,\n" +
-			"review history and worker roles of the old Seelegent into this version. The old folder is never\n" +
-			"changed. Running it again reports \"unchanged\" for what was imported before; data this version\n" +
-			"already holds under the same name is kept. Tasks, members, notes, meetings, contests,\n" +
-			"automations, hooks and proof records are not imported. Stop the daemon first.",
+			"review history, worker roles, department members, lead hooks and meeting records of the old\n" +
+			"Seelegent into this version. The old folder is never changed. Running it again reports\n" +
+			"\"unchanged\" for what was imported before; data this version already holds under the same name\n" +
+			"is kept. Tasks (and their review notes), contests, automations and proof records are not\n" +
+			"imported. Stop the daemon first.",
 		Args:        noArgs,
 		Annotations: map[string]string{annOp: "migrate"},
 		RunE: func(cmd *cobra.Command, _ []string) error {

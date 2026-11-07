@@ -19,6 +19,7 @@ import (
 	mrand "math/rand/v2"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -1400,9 +1401,23 @@ func readLog(ctx context.Context, db DB, scope, ref string) ([]api.TeamLogEntry,
 // Import adds a meeting kept by the old version (seelegent migrate); a meeting whose id exists is kept. A meeting
 // that was still running is imported as cancelled: its runs belonged to the old daemon.
 func (s *Service) Import(ctx context.Context, m api.Meeting) (bool, error) {
-	if !waitable(m.Status) || m.Status == api.MeetingStatusWaitingLead || m.Status == api.MeetingStatusDeciding {
+	if m.ID == "" {
+		return false, fmt.Errorf("%w: the meeting has no id", ErrInvalid)
+	}
+	switch m.Status {
+	case api.MeetingStatusClosed, api.MeetingStatusCancelled, api.MeetingStatusFailed:
+	default:
 		m.Status = api.MeetingStatusCancelled
 	}
+	// The minutes are written again from the record (the old ones were in Vietnamese); the old regression signal
+	// is gone (D19).
+	m.Minutes = ""
+	for i := range m.Dissents {
+		m.Dissents[i].Signals = slices.DeleteFunc(m.Dissents[i].Signals, func(g api.DissentSignal) bool {
+			return g.Reason != "rejected" && g.Reason != "gate_red"
+		})
+	}
+	m.CreatedAt, m.UpdatedAt = importTime(m.CreatedAt, s.o.Now()), importTime(m.UpdatedAt, s.o.Now())
 	data, err := json.Marshal(m)
 	if err != nil {
 		return false, err
@@ -1419,4 +1434,14 @@ func (s *Service) Import(ctx context.Context, m api.Meeting) (bool, error) {
 		return err
 	})
 	return added, err
+}
+
+// importTime brings an old timestamp (ISO 8601 with milliseconds) to the stored format, so lists sort right; a
+// missing or unreadable one becomes now.
+func importTime(v string, now time.Time) string {
+	t, err := time.Parse(time.RFC3339Nano, v)
+	if err != nil {
+		t = now
+	}
+	return api.FormatTime(t)
 }

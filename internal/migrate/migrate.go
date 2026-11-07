@@ -1,10 +1,11 @@
 // Package migrate imports the data of the old (Node) Seelegent into this version: settings, providers, accounts
-// with their profile folders and API keys, project memory, review history and worker roles. It never changes or
-// deletes anything in the old data folder, a dry run writes nothing, and a second run reports "unchanged" for
-// everything it imported before. Each piece is reported on its own, so one unreadable file does not stop the rest.
+// with their profile folders and API keys, project memory, review history, worker roles, department members, lead
+// hooks and meeting records. It never changes or deletes anything in the old data folder, a dry run writes
+// nothing, and a second run reports "unchanged" for everything it imported before. Each piece is reported on its
+// own, so one unreadable file does not stop the rest.
 //
-// Tasks, members, notes, meetings, contests, automations, hooks, proof records, usage history and quota caches are
-// not imported (see docs/setup.md).
+// Tasks (and with them their review notes), contests, automations, proof records, usage history and quota caches
+// are not imported (see docs/setup.md).
 package migrate
 
 import (
@@ -20,6 +21,9 @@ import (
 	"github.com/NovaSeele/Seelegent/internal/account"
 	"github.com/NovaSeele/Seelegent/internal/config"
 	"github.com/NovaSeele/Seelegent/internal/fsutil"
+	"github.com/NovaSeele/Seelegent/internal/hook"
+	"github.com/NovaSeele/Seelegent/internal/meeting"
+	"github.com/NovaSeele/Seelegent/internal/member"
 	"github.com/NovaSeele/Seelegent/internal/memory"
 	"github.com/NovaSeele/Seelegent/internal/role"
 	"github.com/NovaSeele/Seelegent/internal/store"
@@ -53,6 +57,9 @@ const (
 	KindHistory  = "history"
 	KindRole     = "role"
 	KindData     = "data"
+	KindMember   = "member"
+	KindHook     = "hook"
+	KindMeeting  = "meeting"
 )
 
 // Item is the outcome for one piece of old data.
@@ -153,6 +160,10 @@ func Run(ctx context.Context, o Options) (Report, error) {
 	m := &migrator{o: o, rep: &rep, accounts: account.NewRepo(db, o.Now), profiles: profiles,
 		keys: account.NewKeys(profiles), memory: memory.New(db, o.Now),
 		roles: role.New(role.Options{DB: db, Home: o.RealHome, Now: o.Now})}
+	m.team = team{members: member.New(member.Options{DB: db, Providers: m.accounts, Now: o.Now}),
+		meetings: meeting.New(meeting.Options{DB: db, Now: o.Now}), hooks: hook.New(hook.Options{DB: db, Now: o.Now})}
+	defer m.team.meetings.Close()
+	defer m.team.hooks.Close()
 	settings, providers := m.importSettings()
 	m.importProviders(ctx, providers, settings)
 	m.importAccounts(ctx, settings)
@@ -160,6 +171,9 @@ func Run(ctx context.Context, o Options) (Report, error) {
 	m.importMemory(ctx, projects)
 	m.importHistory(ctx, projects)
 	m.importRoles(ctx, projects)
+	m.importMembers(ctx)
+	m.importHooks(ctx)
+	m.importMeetings(ctx)
 	m.notImported()
 	return rep, ctx.Err()
 }
@@ -173,6 +187,7 @@ type migrator struct {
 	keys     account.Keys
 	memory   *memory.Store
 	roles    *role.Store
+	team     team
 }
 
 func (m *migrator) add(kind, id string, a Action, format string, args ...any) {

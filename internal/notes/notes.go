@@ -540,30 +540,6 @@ func Message(notes []api.Note, extra string) string {
 	return strings.Join(parts, "\n\n")
 }
 
-// Import adds notes kept by the old version (seelegent migrate); a note whose id exists is skipped.
-func (s *Store) Import(ctx context.Context, notes []api.Note) (added int, err error) {
-	err = s.o.DB.Write(ctx, func(tx *sql.Tx) error {
-		added = 0
-		for i := range notes {
-			n := notes[i]
-			var one int
-			err := tx.QueryRowContext(ctx, `SELECT 1 FROM review_notes WHERE id = ?`, n.ID).Scan(&one)
-			if err == nil {
-				continue
-			}
-			if !errors.Is(err, sql.ErrNoRows) {
-				return err
-			}
-			if err := put(ctx, tx, n); err != nil {
-				return err
-			}
-			added++
-		}
-		return nil
-	})
-	return added, err
-}
-
 func (s *Store) load(ctx context.Context, id string) ([]api.Note, error) {
 	var out []api.Note
 	err := s.o.DB.Read(ctx, func(tx *sql.Tx) error {

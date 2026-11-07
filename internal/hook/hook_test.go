@@ -116,6 +116,32 @@ func TestReplaceKeepsIDs(t *testing.T) {
 	}
 }
 
+// TestImportOnce: an imported hook that is already there (same command, events, project) is not added again.
+func TestImportOnce(t *testing.T) {
+	s, _, _, _ := setup(t)
+	ctx := t.Context()
+	if _, err := s.Replace(ctx, []api.Hook{{On: []string{api.HookTaskDone}, Run: "echo 1", Enabled: true}}); err != nil {
+		t.Fatal(err)
+	}
+	old := []api.Hook{
+		{On: []string{api.HookTaskDone, api.HookTaskDone}, Run: " echo 1 "},
+		{On: []string{api.HookTaskFailed, api.HookTaskDone}, Run: "echo 2"},
+		{On: []string{"nope"}, Run: "echo 3"},
+	}
+	added, unchanged, skipped, err := s.Import(ctx, old)
+	if err != nil || added != 1 || unchanged != 1 || len(skipped) != 1 {
+		t.Fatalf("import = %d %d %v %v", added, unchanged, skipped, err)
+	}
+	added, unchanged, _, err = s.Import(ctx, []api.Hook{{On: []string{api.HookTaskDone, api.HookTaskFailed},
+		Run: "echo 2"}})
+	if err != nil || added != 0 || unchanged != 1 {
+		t.Fatalf("second import = %d %d %v", added, unchanged, err)
+	}
+	if list, _ := s.List(ctx); len(list) != 2 {
+		t.Errorf("list = %+v", list)
+	}
+}
+
 func TestTestRunsByIDWithStdinAndEnv(t *testing.T) {
 	s, _, ran, log := setup(t)
 	ctx := t.Context()
