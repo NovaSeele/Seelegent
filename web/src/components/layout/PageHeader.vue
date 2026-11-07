@@ -42,6 +42,8 @@ defineProps<{ title: string; description?: string }>()
   font-size: var(--fs-sm);
   line-height: var(--lh-prose);
   text-wrap: pretty;
+  /* A description can be a long folder path (meetings, contests): break it rather than widen the page. */
+  overflow-wrap: anywhere;
 }
 
 .page-header__actions {

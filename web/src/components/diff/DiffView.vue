@@ -177,6 +177,10 @@ const notesAt = computed(() => {
 }
 
 .diff__pick {
+  /* The number sits at the top, level with the old line number, also when a touch screen makes the target 44px. */
+  display: inline-flex;
+  align-items: flex-start;
+  justify-content: flex-end;
   min-width: max(4ch, var(--target-min));
   min-height: var(--target-min);
   padding: 0;
