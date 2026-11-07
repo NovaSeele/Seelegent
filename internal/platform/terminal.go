@@ -67,31 +67,49 @@ type Terminal struct {
 // Identity returns the process that runs the terminal's command and its start time (ProcessStartTime), so a
 // daemon that restarted can tell with ProcessRunning whether the console still runs. On Unix it is the shell that
 // runs the script, known once the script has started (ok is false before that); on Windows the hidden cmd.exe that
-// lives until the window closes.
+// lives until the window closes, which OpenTerminal records in the pid file at once (old F7: a daemon that
+// restarted never knew it and reverted a console that was really open).
 func (t *Terminal) Identity() (pid int, start uint64, ok bool) {
 	pid = t.pid
 	if pid == 0 && t.pidFile != "" {
-		data, err := os.ReadFile(t.pidFile)
-		if err != nil {
-			return 0, 0, false
-		}
-		if pid, err = strconv.Atoi(strings.TrimSpace(string(data))); err != nil || pid <= 0 {
+		if pid, start, ok = readPIDFile(t.pidFile); !ok {
 			return 0, 0, false
 		}
 	}
 	if pid <= 0 {
 		return 0, 0, false
 	}
-	start, err := ProcessStartTime(pid)
+	if start == 0 {
+		var err error
+		if start, err = ProcessStartTime(pid); err != nil {
+			start = 0 // unknown: ProcessRunning then checks the id only
+		}
+	}
+	return pid, start, true
+}
+
+// readPIDFile reads a terminal's pid file: the process id, and on Windows its start time (ProcessStartTime) as a
+// second field, recorded when the window opened, so a reused id is not mistaken for the console.
+func readPIDFile(path string) (pid int, start uint64, ok bool) {
+	data, err := os.ReadFile(path)
 	if err != nil {
-		start = 0 // unknown: ProcessRunning then checks the id only
+		return 0, 0, false
+	}
+	fields := strings.Fields(string(data))
+	if len(fields) == 0 {
+		return 0, 0, false
+	}
+	if pid, err = strconv.Atoi(fields[0]); err != nil || pid <= 0 {
+		return 0, 0, false
+	}
+	if len(fields) > 1 {
+		start, _ = strconv.ParseUint(fields[1], 10, 64) // 0 when not a number: unknown
 	}
 	return pid, start, true
 }
 
 // AttachTerminal returns the terminal whose script writes exitFile, opened earlier (by an earlier daemon), so its
-// Identity and Wait can be followed again. On Windows, where the window's process is not recorded in a file,
-// Identity never knows it.
+// Identity and Wait can be followed again. Its process comes from the pid file next to exitFile.
 func AttachTerminal(exitFile string) *Terminal {
 	return &Terminal{exitFile: exitFile, pidFile: pidFileFor(exitFile)}
 }
@@ -205,7 +223,8 @@ func safeTitle(s string) string {
 	return out
 }
 
-// pidFileFor is where a Unix terminal script writes its process id: next to the exit file, as <name>.pid.
+// pidFileFor is where a terminal's process id is recorded (by the Unix script itself, by OpenTerminal on
+// Windows): next to the exit file, as <name>.pid.
 func pidFileFor(exitFile string) string { return strings.TrimSuffix(exitFile, ".exit") + ".pid" }
 
 // shQuote quotes s for a POSIX shell.
