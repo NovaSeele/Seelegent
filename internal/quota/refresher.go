@@ -87,8 +87,9 @@ type Refresher struct {
 
 	mu       sync.Mutex
 	inflight map[string]*refreshCall
-	gen      uint64          // number of reads started so far
-	pending  map[string]bool // accounts asked for with Request, not yet read
+	last     map[string]*refreshCall // the last finished read per account
+	gen      uint64                  // number of reads started so far
+	pending  map[string]bool         // accounts asked for with Request, not yet read
 }
 
 type refreshCall struct {
@@ -118,7 +119,8 @@ func NewRefresher(o RefresherOptions) (*Refresher, error) {
 		o.Logger = slog.New(slog.DiscardHandler)
 	}
 	return &Refresher{o: o, kick: make(chan struct{}, 1), request: make(chan struct{}, 1),
-		sem: make(chan struct{}, o.Parallel), inflight: map[string]*refreshCall{}, pending: map[string]bool{}}, nil
+		sem: make(chan struct{}, o.Parallel), inflight: map[string]*refreshCall{}, last: map[string]*refreshCall{},
+		pending: map[string]bool{}}, nil
 }
 
 // Run refreshes every account at once and then once per interval (±10 % jitter) until ctx ends, and serves
@@ -291,6 +293,12 @@ func (r *Refresher) refresh(ctx context.Context, a account.Account, fresh bool) 
 	r.mu.Lock()
 	after := r.gen
 	for {
+		// A read that started after this call and has already finished answers it too: a fresh request woken
+		// together with another one must not read a third time just because the other's read ended first.
+		if l := r.last[a.ID]; fresh && l != nil && l.gen > after {
+			r.mu.Unlock()
+			return l.res
+		}
 		c, ok := r.inflight[a.ID]
 		if !ok {
 			break
@@ -319,6 +327,7 @@ func (r *Refresher) refresh(ctx context.Context, a account.Account, fresh bool) 
 
 	r.mu.Lock()
 	delete(r.inflight, a.ID)
+	r.last[a.ID] = c
 	r.mu.Unlock()
 	close(c.done)
 	return c.res
