@@ -184,10 +184,11 @@ func cutDiff(text string, limit int) string {
 	if i := strings.LastIndexByte(cut, '\n'); i >= 0 {
 		return cut[:i+1]
 	}
-	for len(cut) > 0 && !utf8.RuneStart(text[len(cut)]) {
-		cut = cut[:len(cut)-1]
+	i := limit
+	for i > 0 && !utf8.RuneStart(text[i]) {
+		i--
 	}
-	return cut
+	return text[:i]
 }
 
 // live reports whether the variant's worktree is still there to be read with git.

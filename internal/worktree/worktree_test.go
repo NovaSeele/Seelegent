@@ -163,6 +163,15 @@ func TestDiscardScope(t *testing.T) {
 	if _, err := trees.CommitAll(ctx, wt, "x"); err == nil {
 		t.Error("commit in a folder that is not a worktree succeeded")
 	}
+	// A read-only folder and file (what stops `git worktree remove` on Linux) are deleted too.
+	ro := filepath.Join(wt, "ro")
+	write(t, filepath.Join(ro, "f.txt"), "x\n")
+	if err := os.Chmod(filepath.Join(ro, "f.txt"), 0o400); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(ro, 0o500); err != nil {
+		t.Fatal(err)
+	}
 	if err := trees.Discard(ctx, root, wt, scope, nil); err != nil {
 		t.Fatal(err)
 	}

@@ -542,6 +542,10 @@ func removeTree(p string) error {
 			return err
 		}
 		if fi.IsDir() {
+			if fi.Mode().Perm()&0o700 != 0o700 {
+				// A read-only folder (what stops `git worktree remove`) cannot lose its entries.
+				_ = os.Chmod(p, 0o700) //nolint:gosec // owner-only, on a folder about to be deleted
+			}
 			entries, err := os.ReadDir(p)
 			if err != nil {
 				return err
@@ -553,7 +557,7 @@ func removeTree(p string) error {
 			}
 		}
 		if err := os.Remove(p); err != nil {
-			if cerr := os.Chmod(p, 0o700); cerr != nil {
+			if cerr := os.Chmod(p, 0o600); cerr != nil {
 				return err
 			}
 			return os.Remove(p)
