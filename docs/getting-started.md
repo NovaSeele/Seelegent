@@ -77,8 +77,8 @@ On the **Accounts** page choose **Add account**. Step 1 asks for the backend and
 | Kind | What it means |
 |---|---|
 | Own sign-in | A profile folder of its own under `~/.seelegent/profiles/<id>/`. You sign in once; the CLI keeps its tokens there. Add several to use several subscriptions of the same backend. |
-| This computer's sign-in | Uses the sign-in the CLI already has in your home folder. One per backend. |
-| API key | Pays per token through an API provider. Set the provider up first under **Settings › API providers** (presets: Anthropic, DeepSeek, Moonshot Kimi, Z.ai GLM, OpenRouter, OpenAI, Groq, a local Ollama, or a custom Anthropic- or OpenAI-compatible endpoint). |
+| This computer's sign-in | Uses the sign-in `agy` already has in your home folder. Only for `agy`, and at most one such account (its id is `system`). |
+| API key | Pays per token through an API provider. Only for `claude` and `codex`. Set the provider up first under **Settings › API providers** (presets: Anthropic, DeepSeek, Moonshot Kimi, Z.ai GLM, OpenRouter, OpenAI, Groq, a local Ollama, or a custom Anthropic- or OpenAI-compatible endpoint). |
 
 Step 2 asks for a name, a priority (higher numbers are used first, −1000 to 1000) and, for an API key, the key. The
 key can also be added later; afterwards only its last characters are shown.
@@ -91,9 +91,11 @@ and a link to copy), in a terminal window that opened, or to paste a code the si
 by itself when the sign-in is done. Seelegent never sees your password.
 
 After a sign-in the account's quota is read (every 10 minutes after that). The account card shows its quota windows,
-when they reset, and its state: **Ready**, **Busy**, **Resting** (out of quota until a window resets), **Sign-in
-required**, **Duplicate** (signed in to the same identity as an older account), and so on. Turn **Use for work**
-off for an account you want to keep but not use for now.
+when they reset, a chip such as "1 of 2 slots busy", and its state: **Ready**, **Checking quota**, **Sign-in
+required**, **No API key**, **Off**, "Same sign-in as …" (signed in to the same identity as an older account, which
+gets the work), and **Resting** or "Out of quota, back …" until a window resets. The account strip on the **Watch**
+page uses shorter labels, such as **Busy** and **Duplicate**. Turn **Use for work** off for an account you want to
+keep but not use for now.
 
 ## 3. Connect your lead hosts
 
@@ -127,8 +129,8 @@ through Seelegent instead of starting its own coding subagents.
 **Restart each host** afterwards so it starts the MCP server. In the host, the `seelegent` server should list 17
 tools (`delegate`, `wait`, `followup`, `review`, ...). The details of every host are in [setup.md](setup.md).
 
-A host without MCP can drive Seelegent through the command line: every tool has a `seelegent` command
-([cli.md](cli.md)).
+A host without MCP can drive Seelegent through the command line: every tool except `profiles` has a `seelegent`
+command ([cli.md](cli.md)); worker roles are edited on the **Roles** page.
 
 ## 4. A tour of the dashboard
 
@@ -156,8 +158,10 @@ palette, `Ctrl+,` the settings; each rail item's tooltip shows its own shortcut.
   the top projects and accounts, and each account's quota over time.
 - **Roles** are worker roles (rules, output style, skills, default tier) per project or global; **Members** are the
   department's named workers.
-- **Settings** is a dialog with search. Appearance (26 themes, fonts, sizes, motion) and language are kept in this
-  browser; everything else is the daemon's `config.json`, saved as you change it.
+- **Settings** is a dialog with search. Appearance (26 themes, fonts, sizes, motion) and Language are kept in this
+  browser. Workers, Backends, Quota, Gates, Workspace safety and Service edit the daemon's `config.json` and save as
+  you change them. API providers, Hooks and Memory are kept in the daemon's database; Hooks and Memory have their own
+  **Save** button. Notifications, Keyboard shortcuts and Experiments show "Not available yet".
 
 The dashboard speaks English, Tiếng Việt, 简体中文, Español, 한국어, 日本語 and Русский (**Settings › Language**).
 
@@ -240,8 +244,9 @@ More places to look:
 - `seelegent task <id> --steps 30` prints the last worker steps; `--full` the whole task.
 - The daemon's log is `~/.seelegent/logs/daemon.log` (JSON lines, secrets masked). `seelegent restart` restarts the
   daemon; running workers keep running and are picked up again.
-- `seelegent doctor` after any change to your setup. If the lead says the daemon cannot be reached, `doctor` names
-  what holds the port.
+- `seelegent doctor` after any change to your setup. If the lead says the daemon cannot be reached, `doctor` says
+  what kind of thing holds the port (another program, a Seelegent daemon of another data folder, or an older
+  Seelegent build), with its pid when it is a Seelegent daemon.
 - A lead whose `wait` times out loses nothing: the task keeps running, and `wait` picks it up again.
 - `seelegent cancel <id>` stops a task and its worker.
 
@@ -257,8 +262,8 @@ store the GitHub token again there.
 
 `seelegent migrate --dry-run` shows what would be imported, and running `migrate` again is safe: it reports
 `unchanged` for what it imported before and never overwrites data the new version already has. The old folder's
-files are never changed. On Windows the old launcher stays available as `seelegent-node`. See
-[setup.md](setup.md#seelegent-migrate).
+files are never changed. On Windows, if the old launcher is in the install folder, it is kept as `seelegent-node`.
+See [setup.md](setup.md#seelegent-migrate).
 
 ## Next
 
