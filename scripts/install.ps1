@@ -317,7 +317,9 @@ function Install-Seelegent {
         $InstallDir = Join-Path $env:LOCALAPPDATA 'Programs\seelegent\bin'
     }
     $InstallDir = [System.IO.Path]::GetFullPath($InstallDir)
-    if ($InstallDir -match '[;"]') { throw "The install folder may not contain ; or a double quote: $InstallDir" }
+    # The folder goes into the user PATH as written (a REG_EXPAND_SZ value, never a junction's target): refuse what
+    # would split the list or be expanded there.
+    if ($InstallDir -match '[;"%]') { throw "The install folder may not contain ;, % or a double quote: $InstallDir" }
     $exe = Join-Path $InstallDir 'seelegent.exe'
     $dataDir = if ($env:SEELEGENT_HOME) { $env:SEELEGENT_HOME } else { Join-Path $env:USERPROFILE '.seelegent' }
 
@@ -347,13 +349,21 @@ function Install-Seelegent {
         }
         # A release that knows fewer database migrations than the database has could not open it (migrations are
         # never undone). The downloaded executable checks the database itself, read-only.
+        # Only a build from before the check (it answers --check-database with code "usage") is "unknown"; any other
+        # failure (a database that cannot be read, say) refuses, -Force or not, with the executable's own error.
         if (Test-Path -LiteralPath (Join-Path $dataDir 'seelegent.db')) {
             $check = Invoke-Quiet $newExe @('version', '--check-database', '--json')
-            if ($LASTEXITCODE -ne 0) {
-                $code = $null
-                try { $code = ($check | ConvertFrom-Json).code } catch { $code = $null }
+            $checkExit = $LASTEXITCODE
+            if ($checkExit -ne 0) {
+                $answer = $null
+                try { $answer = $check | ConvertFrom-Json } catch { $answer = $null }
+                $code = if ($answer -and $answer.PSObject.Properties['code']) { [string] $answer.code } else { '' }
                 if ($code -eq 'schema_too_new') {
                     throw "The database in $dataDir is newer than $relTag can open (migrations are never undone); install a newer release. Nothing was installed."
+                }
+                if ($code -ne 'usage') {
+                    $why = if ($answer -and $answer.PSObject.Properties['error']) { [string] $answer.error } else { $check.Trim() }
+                    throw "$relTag could not check the database in $dataDir (exit $checkExit): $why. Nothing was installed."
                 }
                 if (-not $Force) {
                     throw "$relTag does not report which database schema it knows, so it may not open the database in $dataDir; -Force installs it anyway. Nothing was installed."

@@ -159,6 +159,16 @@ json_strings() {
 		sed -n "s/^[[:space:]]*\"$1\"[[:space:]]*:[[:space:]]*\"\([^\"]*\)\".*/\1/p"
 }
 
+# check_install_dir DIR stops when DIR holds a character the shell would expand inside the double quotes of the PATH
+# line written to a shell profile. It runs on the folder as given and again once links are resolved (pwd -P).
+check_install_dir() {
+	case "$1" in
+	*'"'* | *'$'* | *'`'* | *\\* | *"$NL"*)
+		die "the install folder may not contain \", \$, \`, a backslash or a line break: $1"
+		;;
+	esac
+}
+
 # url_ending NAME prints the first line of stdin that ends with /NAME (an exact file name, so seelegent_x.tar.gz
 # never picks seelegent_x.tar.gz.sig).
 url_ending() {
@@ -322,12 +332,7 @@ main() {
 	[ "${SEELEGENT_WORKER:-}" != 1 ] || die "Seelegent is not available inside a Seelegent worker."
 
 	install_dir=${install_dir:-$HOME/.local/bin}
-	# The folder goes into a shell profile inside double quotes: refuse what the shell would expand there.
-	case "$install_dir" in
-	*'"'* | *'$'* | *'`'* | *\\* | *"$NL"*)
-		die "the install folder may not contain \", \$, \`, a backslash or a line break: $install_dir"
-		;;
-	esac
+	check_install_dir "$install_dir"
 	data_dir=${SEELEGENT_HOME:-$HOME/.seelegent}
 
 	detect_platform
@@ -392,20 +397,40 @@ main() {
 	fi
 	# A release that knows fewer database migrations than the database has could not open it (migrations are never
 	# undone). The downloaded binary checks the database itself, read-only.
+	# Only a build from before the check (it answers --check-database with code "usage") is "unknown"; any other
+	# failure (a database that cannot be read, say) refuses, --force or not, with the binary's own error.
 	if [ -e "$data_dir/seelegent.db" ]; then
-		if schema_out=$("$new_bin" version --check-database --json 2>/dev/null); then
-			:
-		elif printf '%s\n' "$schema_out" | grep -q '"schema_too_new"'; then
-			die "the database in $data_dir is newer than $rel_tag can open (migrations are never undone); install a newer release. Nothing was installed"
-		elif [ "$force" = 1 ]; then
-			warn "$rel_tag does not report which database schema it knows; installing it anyway (--force)"
-		else
-			die "$rel_tag does not report which database schema it knows, so it may not open the database in $data_dir; --force installs it anyway. Nothing was installed"
+		schema_status=0
+		schema_out=$("$new_bin" version --check-database --json 2>&1) || schema_status=$?
+		if [ "$schema_status" -ne 0 ]; then
+			schema_code=$(printf '%s\n' "$schema_out" | sed -n 's/^[[:space:]]*"code"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1)
+			case "$schema_code" in
+			schema_too_new)
+				die "the database in $data_dir is newer than $rel_tag can open (migrations are never undone); install a newer release. Nothing was installed"
+				;;
+			usage)
+				if [ "$force" = 1 ]; then
+					warn "$rel_tag does not report which database schema it knows; installing it anyway (--force)"
+				else
+					die "$rel_tag does not report which database schema it knows, so it may not open the database in $data_dir; --force installs it anyway. Nothing was installed"
+				fi
+				;;
+			*)
+				schema_err=$(printf '%s\n' "$schema_out" | sed -n 's/^[[:space:]]*"error"[[:space:]]*:[[:space:]]*"\(.*\)",\{0,1\}[[:space:]]*$/\1/p' | head -n 1)
+				[ -n "$schema_err" ] || schema_err=$(printf '%s' "$schema_out" | tr '\n' ' ')
+				die "$rel_tag could not check the database in $data_dir (exit $schema_status): $schema_err. Nothing was installed"
+				;;
+			esac
 		fi
 	fi
 
 	mkdir -p "$install_dir"
-	install_dir=$(cd "$install_dir" && pwd -P)
+	# The trailing "." keeps a resolved name that ends in a line break intact (command substitution strips them).
+	install_dir=$(cd "$install_dir" && pwd -P && echo .) || die "cannot enter the install folder $install_dir"
+	install_dir=${install_dir%.}
+	install_dir=${install_dir%"$NL"}
+	# The resolved folder is what goes into the profile: a link may point at a name the first check never saw.
+	check_install_dir "$install_dir"
 	exe="$install_dir/seelegent"
 	was_running=0
 	previous=""
