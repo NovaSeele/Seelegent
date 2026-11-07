@@ -10,7 +10,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/NovaSeele/Seelegent/internal/account"
 	"github.com/NovaSeele/Seelegent/internal/api"
+	"github.com/NovaSeele/Seelegent/internal/brief"
 	"github.com/NovaSeele/Seelegent/internal/event"
 	"github.com/NovaSeele/Seelegent/internal/launch"
 )
@@ -187,6 +189,39 @@ func TestTakeoverAndHandback(t *testing.T) {
 	d, err := h.s.Get(t.Context(), sum.ID)
 	if err != nil || d.Turns[1].Handback != "The user renamed the handler." {
 		t.Fatalf("detail handback = %q, %v", d.Turns[1].Handback, err)
+	}
+}
+
+// TestHandbackOwnerUnusable runs the hand-back turn on another account when the conversation's account was
+// disabled during the takeover, instead of waiting for it forever; the new conversation is told that the console's
+// context is not available.
+func TestHandbackOwnerUnusable(t *testing.T) {
+	h := newHarness(t)
+	first := h.agy("first", 10)
+	second := h.agy("second", 0)
+	h.queue.Push(t, okScript("conv-o", "First turn."))
+	sum := h.delegate(api.DelegateRequest{})
+	if tk := h.waitStatus(sum.ID, StatusDone); tk.AccountID != first.ID {
+		t.Fatalf("first turn on %s", tk.AccountID)
+	}
+	if _, err := h.s.Takeover(t.Context(), sum.ID); err != nil {
+		t.Fatal(err)
+	}
+	off := false
+	if _, err := h.accounts.Update(t.Context(), first.ID, account.Patch{Enabled: &off}); err != nil {
+		t.Fatal(err)
+	}
+	h.queue.Push(t, okScript("conv-p", "Looked at the files."))
+	h.consoles.exit(0, 0)
+	tk := h.waitStatus(sum.ID, StatusDone)
+	tu := tk.LastTurn()
+	if len(tk.Turns) != 2 || !tu.Handback || tu.HandbackText != "Looked at the files." || len(tu.Attempts) != 1 ||
+		tu.Attempts[0].AccountID != second.ID || tu.Attempts[0].Continuing {
+		t.Fatalf("hand-back turn = %+v, attempts %+v", tu, tu.Attempts)
+	}
+	prompt, err := h.s.repo.Prompt(t.Context(), sum.ID, tu.N, 1)
+	if err != nil || !strings.Contains(prompt, brief.HandbackElsewhere) {
+		t.Fatalf("hand-back brief (%v): %s", err, prompt)
 	}
 }
 

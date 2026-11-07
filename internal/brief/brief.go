@@ -52,6 +52,13 @@ const BackgroundWait = "Your turn ended while the worker CLI was still waiting f
 const Handback = "## Hand-back: summarize what the user did while steering, list changed files, run tests if any, " +
 	"and state next steps"
 
+// HandbackElsewhere replaces Handback when the hand-back turn runs in a new conversation (the console's account
+// could not run it): that worker never saw the console.
+const HandbackElsewhere = "## Hand-back: the user steered this task in a terminal console, in another worker " +
+	"conversation that is NOT available to you: you cannot see what they did or said there. Find out from the " +
+	"files instead (git status, git diff, recently changed files, compared with the earlier turns), summarize what " +
+	"changed while the user steered, list changed files, run tests if any, and state next steps"
+
 // Caps on the text taken from inputs.
 const (
 	// ConstitutionChars caps the project constitution.

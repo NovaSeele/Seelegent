@@ -47,7 +47,10 @@ append the events in **one transaction**, then publish on the bus. The log and t
    accounts that needed a sign-in this turn or failed transiently more than twice). No account at all: the task is
    `waiting_quota` with `waiting: no_account` and a blocked flag for the user, and looks again when the pool changes or
    after a minute.
-   A hand-back turn always waits for the conversation's own account instead of moving.
+   A hand-back turn waits for the conversation's own account while it rests or is busy instead of moving. When that
+   account cannot run at all any more (signed out, disabled, removed, its models no longer allowed), the hand-back
+   runs on another account in a new conversation, whose brief says plainly that the console's context is not
+   available and that it must find out from the files what changed.
 2. **Brief.** The same conversation gets a short continuation; a fresh conversation (first attempt, another account,
    or a retry that never got a conversation) gets the full brief from `internal/brief`, with role, project memory,
    review history, constitution, the git baseline, earlier turns, prerequisite context, and the "you continue an

@@ -293,11 +293,14 @@ func (s *Service) newAttempt(r *run, t *Task, tu *Turn) (bool, error) {
 		Allowed: func(m string) bool { return policy.Allowed(m) == nil },
 	}
 	reason := "best free account"
+	excludedBefore := len(req.Exclude) > 0
+	pinned := false
 	switch owner := t.AccountID; {
 	case owner == "" || slices.Contains(req.Exclude, owner):
 	case tu.Handback:
 		// Only the owner's conversation saw what the user did in the console: wait for it rather than move.
 		req.Account, reason = owner, "the hand-back summary needs the conversation's account"
+		pinned = true
 	default:
 		h, err := s.o.Pool.Handover(ctx, pool.HandoverInput{Current: owner, Class: classOf(tu.LastAttempt()),
 			Request: req})
@@ -317,13 +320,22 @@ func (s *Service) newAttempt(r *run, t *Task, tu *Turn) (bool, error) {
 		case pool.ActionWait:
 		}
 	}
-	lease, choice, err := s.o.Pool.Wait(ctx, req, func(u *pool.Unavailable) { s.setWaiting(t.ID, u) })
+	onWait := func(u *pool.Unavailable) { s.setWaiting(t.ID, u) }
+	lease, choice, err := s.o.Pool.Wait(ctx, req, onWait)
+	if pinned && errors.Is(err, pool.ErrNoAccount) && ctx.Err() == nil {
+		// The conversation's account can no longer run at all (signed out, disabled, removed, or its models are
+		// no longer allowed); resting or busy would have waited. Run the hand-back on another account rather than
+		// wait forever; the next attempt tries the owner again first.
+		req.Exclude = append(req.Exclude, req.Account)
+		req.Account, reason = "", "the conversation's account cannot run: best free account"
+		lease, choice, err = s.o.Pool.Wait(ctx, req, onWait)
+	}
 	if err != nil {
 		if ctx.Err() != nil {
 			return true, nil
 		}
 		if errors.Is(err, pool.ErrNoAccount) {
-			if len(req.Exclude) > 0 {
+			if excludedBefore {
 				return s.giveUp(t.ID, tu.N, "no other account can run this task: "+lastError(tu))
 			}
 			s.setWaiting(t.ID, &pool.Unavailable{Reason: pool.ReasonNoAccount, Backend: t.Backend, Group: req.Group})
@@ -834,6 +846,9 @@ func (s *Service) prompt(ctx context.Context, t *Task, tu *Turn, continuing bool
 	}
 	in := brief.Input{Cwd: t.Cwd, Plan: t.Mode == ModePlan, Spec: spec, Deps: t.DepsContext,
 		Interrupted: len(tu.Attempts) > 0, Message: tu.Message, Baseline: displayPaths(t.Cwd, t.Baseline)}
+	if tu.Handback {
+		in.Message = brief.HandbackElsewhere // a new conversation: the console's context is not available
+	}
 	if t.Session != nil {
 		in.Lead = brief.LeadName(t.Session.HostID)
 	}

@@ -120,7 +120,8 @@ func TestSmallHelpers(t *testing.T) {
 	if cut("héllo", 3, "…") != "hél…" || cut("hi", 3, "…") != "hi" {
 		t.Error("cut")
 	}
-	if Retry == "" || BackgroundWait == "" || !strings.HasPrefix(Handback, "## Hand-back") {
+	if Retry == "" || BackgroundWait == "" || !strings.HasPrefix(Handback, "## Hand-back") ||
+		!strings.HasPrefix(HandbackElsewhere, "## Hand-back") {
 		t.Error("fixed prompts")
 	}
 }
