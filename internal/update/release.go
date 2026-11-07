@@ -88,6 +88,9 @@ func checkURL(raw string) error {
 	if err != nil {
 		return fmt.Errorf("address %q: %w", raw, err)
 	}
+	if u.User != nil { // user@host: never needed for a release, and easy to misread as host
+		return fmt.Errorf("%w: %s", ErrInsecureURL, u.Redacted())
+	}
 	switch u.Scheme {
 	case "https":
 		return nil

@@ -66,7 +66,9 @@ func TestCheckURL(t *testing.T) {
 	for raw, ok := range map[string]bool{
 		"https://github.com/x": true, "http://127.0.0.1:8080/x": true, "http://localhost/x": true,
 		"http://[::1]:9/x": true, "http://example.com/x": false, "ftp://127.0.0.1/x": false,
-		"file:///etc/passwd": false,
+		"file:///etc/passwd": false, "http://127.0.0.1@example.invalid/x": false,
+		"http://localhost:80@example.invalid/x": false, "http://127.evil.example/x": false,
+		"https://user@example.com/x": false,
 	} {
 		if err := checkURL(raw); (err == nil) != ok {
 			t.Errorf("checkURL(%q) err = %v, want ok=%v", raw, err, ok)
