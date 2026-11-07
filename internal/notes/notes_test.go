@@ -268,6 +268,31 @@ func TestDraftOutdated(t *testing.T) {
 	}
 }
 
+// A line longer than the anchor keeps (maxAnchor) is still the note's line: the anchor is its clipped start.
+func TestLongLineAnchor(t *testing.T) {
+	s, _, repo := setup(t)
+	ctx := t.Context()
+	long := "var rules = []string{" + strings.Repeat(`"rule-with-a-long-name", `, 40) + "}"
+	write(t, filepath.Join(repo, "src", "a.go"), "package a\n\n"+long+"\n")
+	n, err := s.Add(ctx, "t1", api.NoteInput{File: "src/a.go", Line: 3, Body: "split this list"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := []rune(n.AnchorText); len(got) != maxAnchor {
+		t.Fatalf("anchor is %d characters", len(got))
+	}
+	list, err := s.List(ctx, "t1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if list[0].Status != api.NoteStatusDraft || list[0].CurrentLine != 3 {
+		t.Errorf("note on a long line = %s at %d", list[0].Status, list[0].CurrentLine)
+	}
+	if l, _, ok := Reanchor(n, []string{"package a", "", "", long}); !ok || l != 4 {
+		t.Errorf("moved to %d %v", l, ok)
+	}
+}
+
 func TestReanchorWindow(t *testing.T) {
 	lines := make([]string, 120)
 	lines[99] = "target"

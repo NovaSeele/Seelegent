@@ -182,8 +182,21 @@ func (f *fileLines) get(rel string) []string {
 	return lines
 }
 
-func sameLine(a, b string) bool {
-	return strings.TrimRight(a, " \t\r\n") == strings.TrimRight(b, " \t\r\n")
+// sameLine reports whether a line of the file is the note's anchor. The anchor keeps only the first maxAnchor
+// characters of a line, so the line is cut the same way first: a note on a longer line would never match otherwise.
+func sameLine(line, anchor string) bool {
+	return strings.TrimRight(clipAnchor(line), " \t\r\n") == strings.TrimRight(anchor, " \t\r\n")
+}
+
+// clipAnchor is the start of s that an anchor keeps: up to the first line break, at most maxAnchor characters.
+func clipAnchor(s string) string {
+	if i := strings.IndexAny(s, "\r\n"); i >= 0 {
+		s = s[:i]
+	}
+	if r := []rune(s); len(r) > maxAnchor {
+		s = string(r[:maxAnchor])
+	}
+	return s
 }
 
 // Reanchor finds the note's anchored text in lines (the file now; nil when it is gone), at its line or within
@@ -391,12 +404,7 @@ func (s *Store) Add(ctx context.Context, id string, in api.NoteInput) (api.Note,
 			anchor = lines[in.Line-1]
 		}
 	}
-	if i := strings.IndexAny(anchor, "\r\n"); i >= 0 {
-		anchor = anchor[:i]
-	}
-	if r := []rune(anchor); len(r) > maxAnchor {
-		anchor = string(r[:maxAnchor])
-	}
+	anchor = clipAnchor(anchor)
 	endLine := in.EndLine
 	if endLine == in.Line {
 		endLine = 0
