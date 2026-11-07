@@ -58,6 +58,12 @@ const weekdays = computed<SelectOption<number>[]>(() =>
 // key after it (never an error about text that is no longer there). Once Save has refused the field, it is checked
 // at every key until it is right.
 const checked = shallowRef(form.value.cron)
+/** The checked expression in words under the field, as the card says it (none while it has an error). */
+const cronSentence = computed(() =>
+  mode.value === 'cron' && !cronError.value && form.value.cron === checked.value
+    ? words.cronWords(form.value.cron.trim())
+    : null,
+)
 const cronError = computed(() => {
   if (mode.value !== 'cron') return undefined
   if (!props.problems.includes('cron') && form.value.cron !== checked.value) return undefined
@@ -161,7 +167,7 @@ onBeforeUnmount(() => {
         v-model="cron"
         class="sched__cron"
         :label="t('automations.editor.cronLabel')"
-        :hint="t('automations.editor.cronHint')"
+        :hint="cronSentence ?? t('automations.editor.cronHint')"
         :error="cronError"
       />
       <TextField

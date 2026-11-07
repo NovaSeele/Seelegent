@@ -36,22 +36,23 @@ export function useScheduleText() {
       new Date(Date.UTC(2024, m - 1, 1)),
     )
 
+  /** A cron expression as a sentence, or null when it is not valid or has no common shape. */
+  function cronWords(expr: string): string | null {
+    const parsed = parseCron(expr)
+    return 'cron' in parsed
+      ? describeCron(parsed.cron, {
+          t: (key, params, n) => (n === undefined ? t(key, params) : t(key, params, n)),
+          list,
+          weekday: (d) => weekdayName(d, locale.value),
+          month: monthName,
+          time: (h, m) => clockTime(h, m, locale.value),
+        })
+      : null
+  }
+
   /** The schedule as a sentence; a cron expression it cannot put in words stays as it is. */
   function schedule(s: Schedule): string {
-    if (s.cron) {
-      const parsed = parseCron(s.cron)
-      const words =
-        'cron' in parsed
-          ? describeCron(parsed.cron, {
-              t: (key, params, n) => (n === undefined ? t(key, params) : t(key, params, n)),
-              list,
-              weekday: (d) => weekdayName(d, locale.value),
-              month: monthName,
-              time: (h, m) => clockTime(h, m, locale.value),
-            })
-          : null
-      return words ?? t('automations.schedule.cron', { expr: s.cron })
-    }
+    if (s.cron) return cronWords(s.cron) ?? t('automations.schedule.cron', { expr: s.cron })
     const w = scheduleWords(s, locale.value)
     return t(w.key, w.params)
   }
@@ -92,5 +93,5 @@ export function useScheduleText() {
     return t('automations.time.withLocal', { when: there, local: fmt.value.date(iso, opts) })
   }
 
-  return { schedule, cronProblem, runTime }
+  return { schedule, cronWords, cronProblem, runTime }
 }

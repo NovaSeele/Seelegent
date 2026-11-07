@@ -91,4 +91,18 @@ describe('ScheduleFields', () => {
     expect(wrapper.text()).toContain('This schedule never runs')
     expect(fetch).not.toHaveBeenCalled()
   })
+
+  it('says a checked expression in words under the field', async () => {
+    vi.useFakeTimers()
+    const fetch = vi.fn<typeof globalThis.fetch>(async () =>
+      json({ runs: [], local: [], timezone: 'UTC' }),
+    )
+    const { wrapper, form } = await mountFields(fetch, '0 6 1 * *')
+    expect(wrapper.text()).toContain('6:00 AM on day 1 of every month')
+    form.value = { ...form.value, cron: '30 9 * * 1-5' }
+    await vi.advanceTimersByTimeAsync(10)
+    expect(wrapper.text()).not.toContain('6:00 AM on day 1')
+    await vi.advanceTimersByTimeAsync(450)
+    expect(wrapper.text()).toContain('9:30 AM Monday to Friday')
+  })
 })

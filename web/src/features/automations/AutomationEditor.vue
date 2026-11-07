@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { errorMessage } from '@/api/client'
@@ -41,6 +41,13 @@ const form = ref<AutomationForm>(toForm(null))
 const shown = ref<readonly FormProblem[]>([])
 const busy = ref(false)
 const error = ref('')
+const formEl = ref<HTMLFormElement | null>(null)
+
+/** After a refused save, the first field marked invalid takes the focus (in the form's order). */
+async function focusProblem() {
+  await nextTick()
+  formEl.value?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus()
+}
 
 watch(open, (now) => {
   if (!now) return
@@ -73,6 +80,7 @@ async function submit() {
   shown.value = findProblems(form.value)
   if (shown.value.length) {
     error.value = t('automations.editor.fix')
+    await focusProblem()
     return
   }
   busy.value = true
@@ -89,6 +97,7 @@ async function submit() {
     emit('saved', saved)
   } catch (cause) {
     error.value = errorMessage(cause)
+    await focusProblem()
   } finally {
     busy.value = false
   }
@@ -105,7 +114,7 @@ async function submit() {
     initial-focus="input"
     @update:open="open = $event"
   >
-    <form id="automation-editor" class="form" novalidate @submit.prevent="submit">
+    <form id="automation-editor" ref="formEl" class="form" novalidate @submit.prevent="submit">
       <TextField
         v-model="name"
         :label="t('automations.editor.name')"
