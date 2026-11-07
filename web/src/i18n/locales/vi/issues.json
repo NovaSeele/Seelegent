@@ -185,7 +185,8 @@
       "failed": "Thất bại",
       "unknown": "Không rõ: hãy xem trên GitHub",
       "linkReady": "Đã có liên kết",
-      "skipped": "Bỏ qua: không ở trên GitHub"
+      "skipped": "Bỏ qua: không ở trên GitHub",
+      "refused": "Bị từ chối"
     },
     "log": "Nhật ký",
     "phase": {
@@ -242,7 +243,8 @@
       "scan_failed": "kiểm tra lỗi",
       "base_not_pushed": "nhánh gốc chưa lên GitHub",
       "branch_diverged": "nhánh đã đổi trên GitHub"
-    }
+    },
+    "outboxRefused": "Seelegent đã từ chối bước này: lý do và việc cần làm ở đầu trang."
   },
   "actions": {
     "pr": "Mở pull request",

@@ -185,7 +185,8 @@
       "failed": "失败",
       "unknown": "未知：请查看 GitHub",
       "linkReady": "链接已就绪",
-      "skipped": "已跳过：不在 GitHub 上"
+      "skipped": "已跳过：不在 GitHub 上",
+      "refused": "已拒绝"
     },
     "log": "日志",
     "phase": {
@@ -242,7 +243,8 @@
       "scan_failed": "检查失败",
       "base_not_pushed": "基础分支不在 GitHub 上",
       "branch_diverged": "分支在 GitHub 上被更改"
-    }
+    },
+    "outboxRefused": "Seelegent 拒绝了这一步：原因和处理办法在页面顶部。"
   },
   "actions": {
     "pr": "创建 pull request",

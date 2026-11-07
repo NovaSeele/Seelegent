@@ -185,7 +185,8 @@
       "failed": "Failed",
       "unknown": "Unknown: check GitHub",
       "linkReady": "Link ready",
-      "skipped": "Skipped: not on GitHub"
+      "skipped": "Skipped: not on GitHub",
+      "refused": "Refused"
     },
     "log": "Log",
     "phase": {
@@ -242,7 +243,8 @@
       "scan_failed": "check failed",
       "base_not_pushed": "base not on GitHub",
       "branch_diverged": "branch changed on GitHub"
-    }
+    },
+    "outboxRefused": "Seelegent refused this step: why, and what to do, is at the top of the page."
   },
   "actions": {
     "pr": "Open pull request",

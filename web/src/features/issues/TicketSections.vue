@@ -36,8 +36,22 @@ const refused = computed(
     ),
 )
 
+/**
+ * The failed step of the refused push, if the refusal stands: its reason is in the banner above, in the page's
+ * language, so the step does not repeat the daemon's English text.
+ */
+const refusedStep = computed(() => {
+  const at = props.ticket.refusal?.at
+  if (!at) return undefined
+  const when = Date.parse(at)
+  return props.ticket.outbox
+    .filter((o) => o.status === 'failed' && Math.abs(Date.parse(o.doneAt ?? o.at) - when) < 60_000)
+    .at(-1)?.id
+})
+
 /** An outbox step's state: a compare link made for the manual tier is "link ready", not "done". */
 function outboxState(o: OutboxEntry): string {
+  if (o.id === refusedStep.value) return 'refused'
   if (o.status === 'done' && o.kind === 'open_pr' && o.result.manualUrl) return 'linkReady'
   if (o.status === 'done' && o.result.skipped) return 'skipped'
   return o.status
@@ -142,7 +156,8 @@ function outboxState(o: OutboxEntry): string {
           </span>
           <span>{{ fmt.dateTime(o.at) }}</span>
         </span>
-        <p v-if="o.error" class="item__text item__bad">{{ o.error }}</p>
+        <p v-if="o.id === refusedStep" class="item__text">{{ t('issues.ticket.outboxRefused') }}</p>
+        <p v-else-if="o.error" class="item__text item__bad">{{ o.error }}</p>
       </li>
     </ul>
   </section>

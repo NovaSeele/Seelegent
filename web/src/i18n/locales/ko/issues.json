@@ -185,7 +185,8 @@
       "failed": "실패",
       "unknown": "알 수 없음: GitHub를 확인하세요",
       "linkReady": "링크 준비됨",
-      "skipped": "건너뜀: GitHub에 없음"
+      "skipped": "건너뜀: GitHub에 없음",
+      "refused": "거부됨"
     },
     "log": "기록",
     "phase": {
@@ -242,7 +243,8 @@
       "scan_failed": "확인 실패",
       "base_not_pushed": "기준이 GitHub에 없음",
       "branch_diverged": "GitHub에서 브랜치 변경"
-    }
+    },
+    "outboxRefused": "Seelegent가 이 단계를 거부했습니다. 이유와 할 일은 페이지 맨 위에 있습니다."
   },
   "actions": {
     "pr": "Pull request 열기",

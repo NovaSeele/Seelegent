@@ -185,7 +185,8 @@
       "failed": "Сбой",
       "unknown": "Неизвестно: проверьте GitHub",
       "linkReady": "Ссылка готова",
-      "skipped": "Пропущено: не на GitHub"
+      "skipped": "Пропущено: не на GitHub",
+      "refused": "Отклонено"
     },
     "log": "Журнал",
     "phase": {
@@ -242,7 +243,8 @@
       "scan_failed": "сбой проверки",
       "base_not_pushed": "базы нет на GitHub",
       "branch_diverged": "ветка изменена на GitHub"
-    }
+    },
+    "outboxRefused": "Seelegent отклонил этот шаг: причина и что делать — в начале страницы."
   },
   "actions": {
     "pr": "Открыть pull request",

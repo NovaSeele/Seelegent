@@ -185,7 +185,8 @@
       "failed": "失敗",
       "unknown": "不明: GitHub を確認してください",
       "linkReady": "リンク準備完了",
-      "skipped": "スキップ：GitHub にありません"
+      "skipped": "スキップ：GitHub にありません",
+      "refused": "拒否"
     },
     "log": "ログ",
     "phase": {
@@ -242,7 +243,8 @@
       "scan_failed": "確認失敗",
       "base_not_pushed": "ベースが GitHub にない",
       "branch_diverged": "GitHub でブランチが変更"
-    }
+    },
+    "outboxRefused": "Seelegent はこの手順を拒否しました。理由と対処はページ上部にあります。"
   },
   "actions": {
     "pr": "Pull request を作成",

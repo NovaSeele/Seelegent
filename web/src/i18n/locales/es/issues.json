@@ -185,7 +185,8 @@
       "failed": "Fallido",
       "unknown": "Desconocido: revisa GitHub",
       "linkReady": "Enlace listo",
-      "skipped": "Omitido: no está en GitHub"
+      "skipped": "Omitido: no está en GitHub",
+      "refused": "Rechazado"
     },
     "log": "Registro",
     "phase": {
@@ -242,7 +243,8 @@
       "scan_failed": "falló la comprobación",
       "base_not_pushed": "base no está en GitHub",
       "branch_diverged": "la rama cambió en GitHub"
-    }
+    },
+    "outboxRefused": "Seelegent rechazó este paso: el motivo y qué hacer están al principio de la página."
   },
   "actions": {
     "pr": "Abrir pull request",
