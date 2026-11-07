@@ -44,7 +44,7 @@
     },
     "hooks": {
       "label": "Hooks",
-      "desc": "Comandos que ejecuta el servicio cuando cambian tareas o cuentas."
+      "desc": "Comandos de shell que el servicio ejecuta cuando una tarea empieza, termina o falla, o una cuenta te necesita."
     },
     "memory": {
       "label": "Memoria",

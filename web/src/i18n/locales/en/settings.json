@@ -44,7 +44,7 @@
     },
     "hooks": {
       "label": "Hooks",
-      "desc": "Commands the service runs when tasks or accounts change."
+      "desc": "Shell commands the service runs when a task starts, finishes or fails, or an account needs you."
     },
     "memory": {
       "label": "Memory",

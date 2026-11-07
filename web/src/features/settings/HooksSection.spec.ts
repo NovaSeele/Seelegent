@@ -37,6 +37,12 @@ describe('HooksSection', () => {
     expect(buttons(wrapper)).toContain('Retry')
   })
 
+  it('has no heading of its own under the section’s Hooks heading', async () => {
+    const wrapper = await mountSection(vi.fn(() => Promise.resolve([])))
+    expect(wrapper.find('h3').exists()).toBe(false)
+    expect(wrapper.find('[data-setting="webhooks"]').exists()).toBe(true)
+  })
+
   it('lists the hooks and offers Add when the daemon has them', async () => {
     const wrapper = await mountSection(vi.fn(() => Promise.resolve([])))
     expect(wrapper.text()).toContain('No hooks yet.')

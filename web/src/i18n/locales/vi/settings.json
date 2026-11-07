@@ -44,7 +44,7 @@
     },
     "hooks": {
       "label": "Hook",
-      "desc": "Lệnh mà dịch vụ chạy khi tác vụ hoặc tài khoản thay đổi."
+      "desc": "Lệnh shell mà dịch vụ chạy khi tác vụ bắt đầu, xong hoặc lỗi, hoặc khi tài khoản cần bạn."
     },
     "memory": {
       "label": "Bộ nhớ",

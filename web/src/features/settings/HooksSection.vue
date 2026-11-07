@@ -97,7 +97,7 @@ async function save() {
 </script>
 
 <template>
-  <SettingRow item="webhooks" stacked :highlighted="highlight === 'webhooks'">
+  <SettingRow item="webhooks" stacked bare :highlighted="highlight === 'webhooks'">
     <div class="hooks">
       <Spinner v-if="settings.hooksStatus === 'loading'" :label="t('settings.hooks.loading')" />
       <EmptyState
