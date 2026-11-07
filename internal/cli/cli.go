@@ -92,6 +92,7 @@ func newRoot(info buildinfo.Info, d deps) *cobra.Command {
 		newUICommand(d), newStopCommand(d), newRestartCommand(d), newStatusCommand(d), newDoctorCommand(info, d),
 		newDelegateCommand(d), newRunCommand(d), newFollowupCommand(d), newWaitCommand(d), newReviewCommand(d),
 		newCancelCommand(d), newTaskCommand(d), newLsCommand(d), newMemoryCommand(d))
+	root.AddCommand(newSetupCommand(info), newSkillCommand(info), newHookCommand())
 	return root
 }
 
