@@ -24,7 +24,8 @@ import (
 // setupHookInputLimit bounds what the hook command reads from Claude Code.
 const setupHookInputLimit = 4 << 20
 
-// errSetupInWorker refuses commands that change the machine when run inside a Seelegent worker.
+// errSetupInWorker refuses the commands that change the machine or the data folder (setup, migrate) when run
+// inside a Seelegent worker.
 var errSetupInWorker = errors.New("this command does not run inside a Seelegent worker (" + account.EnvWorker + "=1)")
 
 func newSetupCommand(info buildinfo.Info) *cobra.Command {
