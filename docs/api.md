@@ -39,7 +39,18 @@ foreground `seelegent daemon` command.
 
 `seelegent daemon --dev-origin http://localhost:5173` adds one loopback `http` origin to checks 1 and 2, so the Vite
 dev server (whose proxy keeps the browser's Host and Origin) can reach a development daemon. Without the flag nothing
-extra passes. The flag refuses anything that is not `http://localhost|127.0.0.1|[::1]:<port>`.
+extra passes. The flag refuses anything that is not `http://localhost|127.0.0.1|[::1]:<port>`, and the daemon logs a
+Warn line naming the extra origins at start-up.
+
+Every answer, refusals included, carries `X-Frame-Options: DENY`, `Content-Security-Policy: frame-ancestors 'none'`
+and `Referrer-Policy: no-referrer`. A request whose client went away gets nothing written (logged at Debug), never a
+500.
+
+Files a worker can plant are read with `fsutil.ReadRegular`/`OpenRegular`, which never block on a FIFO and never
+follow a symbolic link: `GET /spec` answers 400 for a `tasks.md` that is not a regular file or is over 4 MiB, `GET
+/logs` answers 503 for a log that is not a regular file, and the git views count a FIFO as 0 lines and show a link
+as its target, the way git stores it. Git diffs run with `--no-textconv`, so no diff driver from the repository runs
+in the daemon.
 
 ## Decisions where the contract left room
 
