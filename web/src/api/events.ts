@@ -254,7 +254,7 @@ export type ResetFrame = Reset
 
 /**
  * Named SSE events and their payloads. Hand-written: the generator emits the names (StreamEvent) and the payload
- * types, but not which payload belongs to which name. hook.ran's HookRun is still hand-written (types.ts).
+ * types, but not which payload belongs to which name.
  */
 export interface ServerEvents {
   hello: HelloFrame

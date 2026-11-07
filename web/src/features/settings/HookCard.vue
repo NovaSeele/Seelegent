@@ -3,7 +3,7 @@ import { computed, ref, useId } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { ApiError, errorMessage } from '@/api/client'
-import type { HookConfig, HookRun } from '@/api/types'
+import type { Hook, HookRun } from '@/api/types'
 import Button from '@/components/ui/Button.vue'
 import Chip from '@/components/ui/Chip.vue'
 import NumberField from '@/components/ui/NumberField.vue'
@@ -24,7 +24,7 @@ const props = defineProps<{
   lastRun: HookRun | null
   errors: Record<string, string>
 }>()
-const hook = defineModel<HookConfig>({ required: true })
+const hook = defineModel<Hook>({ required: true })
 const emit = defineEmits<{ remove: [] }>()
 
 const { t } = useI18n()
@@ -33,10 +33,11 @@ const settings = useSettingsStore()
 const id = useId()
 const testing = ref(false)
 const testResult = ref('')
+const testOutput = ref('')
 
 const err = (field: string) => props.errors[`hooks[${props.index}].${field}`]
 
-function update(patch: Partial<HookConfig>) {
+function update(patch: Partial<Hook>) {
   hook.value = { ...hook.value, ...patch }
 }
 
@@ -52,20 +53,26 @@ const lastRunText = computed(() => {
     ? t('settings.hooks.timedOut')
     : t('settings.hooks.exit', { code: run.exitCode ?? '?' })
   return t('settings.hooks.lastRun', {
-    time: fmt.value.dateTime(run.at),
+    time: fmt.value.dateTime(run.startedAt),
     event: run.event,
     outcome,
   })
 })
 
 async function test() {
+  const id = hook.value.id
+  if (!id) return
   testing.value = true
   testResult.value = ''
+  testOutput.value = ''
   try {
-    const run = await settings.testHook(hook.value.id)
+    const run = await settings.testHook(id)
     testResult.value = run.timedOut
       ? t('settings.hooks.timedOut')
-      : t('settings.hooks.exit', { code: run.exitCode ?? '?' })
+      : run.error
+        ? t('settings.hooks.testFailed', { error: run.error })
+        : t('settings.hooks.exit', { code: run.exitCode ?? '?' })
+    testOutput.value = run.output.trim()
   } catch (error) {
     testResult.value =
       error instanceof ApiError && error.status === 501
@@ -121,7 +128,7 @@ async function test() {
         @update:model-value="update({ project: $event || undefined })"
       />
       <NumberField
-        :model-value="hook.timeoutSeconds"
+        :model-value="hook.timeoutSeconds ?? 20"
         :label="t('settings.hooks.timeout')"
         :unit="t('settings.units.s')"
         :error="err('timeoutSeconds')"
@@ -139,7 +146,10 @@ async function test() {
         {{ t('settings.hooks.remove') }}
       </Button>
     </div>
-    <p v-if="testResult" class="hook__result tone-neutral" role="status">{{ testResult }}</p>
+    <div v-if="testResult" class="hook__result tone-neutral" role="status">
+      <p>{{ testResult }}</p>
+      <pre v-if="testOutput" class="hook__output">{{ testOutput }}</pre>
+    </div>
   </li>
 </template>
 
@@ -204,6 +214,15 @@ async function test() {
 .hook__error {
   color: var(--status-danger-fg);
   font-size: var(--fs-xs);
+}
+
+.hook__output {
+  max-height: 160px;
+  margin-top: var(--space-1);
+  overflow: auto;
+  font-family: var(--font-mono);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .hook__result {
