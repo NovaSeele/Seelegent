@@ -276,6 +276,38 @@ func TestRestoreSkipsFilesChangedAfterTheTurn(t *testing.T) {
 	}
 }
 
+// A file the task changed in an earlier turn is still checked: only the task's own lines count as committed, so
+// lines the user added between the turns are reported when a later turn resets the file.
+func TestWorkAtRiskKeepsTheUsersLinesInTheTasksFiles(t *testing.T) {
+	h := newHarness(t)
+	h.initRepo(map[string]string{"a.txt": "one\n", "b.txt": "bee\n"})
+	h.agy("w", 1)
+	a, b := filepath.Join(h.cwd, "a.txt"), filepath.Join(h.cwd, "b.txt")
+	h.queue.Push(t, script(agyInit("conv-p"),
+		agyEdit(1, a), fakeWrite(a, "one\ntask line\n"),
+		agyEdit(2, b), fakeWrite(b, "bee\ntask bee\n"),
+		agyResult("conv-p", "Added a line to each file.")))
+	sum := h.delegate(api.DelegateRequest{Title: "two turns"})
+	h.waitStatus(sum.ID, StatusDone)
+	// Between the turns the user adds a line to a.txt; b.txt holds only the task's own line.
+	h.write("a.txt", "one\ntask line\nuser line\n")
+	h.queue.Push(t, script(agyInit("conv-p"),
+		agyTool(1, "DONE", "git checkout -- a.txt b.txt"),
+		fakeWrite(a, "one\n"), fakeWrite(b, "bee\n"),
+		agyResult("conv-p", "Reset both files.")))
+	if _, err := h.s.Followup(t.Context(), sum.ID, api.FollowupRequest{Message: "reset them"}); err != nil {
+		t.Fatal(err)
+	}
+	h.waitFor("turn 2's checks", func() bool {
+		tu := h.task(sum.ID).LastTurn()
+		return tu.N == 2 && tu.Snap != nil && tu.Snap.Checked
+	})
+	risk := h.task(sum.ID).LastTurn().WorkAtRisk
+	if len(risk) != 1 || risk[0].Path != "a.txt" || risk[0].Why != api.RiskOutsideTools || risk[0].LostLines != 1 {
+		t.Fatalf("work at risk: %+v", risk)
+	}
+}
+
 func TestWorkAtRiskSkipsOwnEditsAndClean(t *testing.T) {
 	h := newHarness(t)
 	h.initRepo(map[string]string{"a.txt": "one\n"})

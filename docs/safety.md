@@ -95,10 +95,13 @@ Compares the start and end snapshots. A file is at risk when it was dirty before
   edit tools did not touch it (a shell command, a formatter or another program did); or
 - `large_removal`: the edit tools touched it and it lost at least 5 lines that were uncommitted before the turn.
 
-Not at risk: files other tasks of the same repository changed while the turn ran, files of the task's own earlier
-turns, scratch and junk files, and lock files that still exist. A turn with files at risk emits a `work_at_risk`
-event, and when the task is done its attention is `work_at_risk` (unless `hygiene` comes first) until the files
-are restored.
+Not at risk: files other tasks of the same repository changed while the turn ran, scratch and junk files, lock
+files that still exist, and the task's own lines. In a file the task's edit tools changed in an earlier turn, the
+lines each earlier turn added (its end snapshot minus its start snapshot) count as committed, so only lines someone
+else added (the user, between the turns) can be reported lost; such a file that lost none of them, or a binary one,
+is not reported. When an earlier turn's snapshots or content cannot be read, its files are left out of the check as
+a whole. A turn with files at risk emits a `work_at_risk` event, and when the task is done its attention is
+`work_at_risk` (unless `hygiene` comes first) until the files are restored.
 
 ### Restore
 

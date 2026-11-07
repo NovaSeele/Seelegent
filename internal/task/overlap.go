@@ -219,19 +219,6 @@ func (s *Service) fileOverlaps(ctx context.Context, t *Task) []api.FileOverlap {
 	return out
 }
 
-// priorFiles returns the files (by snapshot.Key) the task's edit tools changed in the turns before tu.
-func priorFiles(t *Task, tu *Turn) map[string]bool {
-	out := map[string]bool{}
-	for _, p := range t.Turns {
-		if p.N < tu.N {
-			for _, rel := range turnFiles(t, p, liveState{}) {
-				out[snapshot.Key(rel)] = true
-			}
-		}
-	}
-	return out
-}
-
 // othersDuring returns the files (by snapshot.Key) other tasks of the repository changed while turn tu ran.
 func (s *Service) othersDuring(ctx context.Context, t *Task, tu *Turn, end time.Time) map[string]bool {
 	out := map[string]bool{}

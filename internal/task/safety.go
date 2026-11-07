@@ -24,6 +24,8 @@ import (
 const (
 	snapTimeout  = 2 * time.Minute
 	checkTimeout = 3 * time.Minute
+	// slowCheck is how long the checks before a turn's end may take before the log warns.
+	slowCheck = 10 * time.Second
 )
 
 // takeStartSnapshot records the repository before the first attempt of turn tu.
@@ -120,16 +122,28 @@ func (s *Service) checkTurn(ctx context.Context, t *Task, tu *Turn, last *backen
 	}
 	s.forgetOverlaps()
 	// Files other tasks changed meanwhile are theirs: not lost work, not this turn's change. The task's own
-	// earlier changes are not someone else's work either.
+	// earlier lines are not someone else's work either: they count as committed, so only the lines someone else
+	// added to those files can be reported lost.
 	others := s.othersDuring(ctx, t, tu, s.clk.Now())
-	skip := priorFiles(t, tu)
-	maps.Copy(skip, others)
+	prior := s.priorWorkOf(ctx, t, tu)
+	skip := maps.Clone(others)
+	maps.Copy(skip, prior.skip)
 	head := func(rel string) ([]byte, bool) {
 		data, ok, err := s.o.Repos.Blob(ctx, root, start.Head, rel, snapshot.MaxFileBytes, false)
-		return data, ok && err == nil
+		ok = ok && err == nil
+		if own := prior.own[snapshot.Key(rel)]; len(own) > 0 {
+			if !ok {
+				data = nil
+			}
+			return headWithOwn(data, own), true
+		}
+		return data, ok
 	}
 	for _, r := range snapshot.Analyze(snapshot.Input{Start: start, End: end, Edited: editedKeys,
 		Head: head, Content: s.o.Snapshots.Content, Others: skip}) {
+		if prior.mine(r.Path, r.Lost, r.Binary) {
+			continue
+		}
 		c.risks = append(c.risks, api.RiskFile{Path: r.Path, Why: r.Why, LostLines: r.Lost, Deleted: r.Deleted,
 			Binary: r.Binary})
 	}
@@ -206,7 +220,16 @@ func (s *Service) preCheck(ctx context.Context, id string, turn int, status stri
 	if err != nil {
 		return nil
 	}
-	return s.checkTurn(ctx, t, t.TurnN(turn), o)
+	// The turn's end is announced only after this: a slow check delays the lead.
+	began := s.clk.Now()
+	c := s.checkTurn(ctx, t, t.TurnN(turn), o)
+	took := s.clk.Now().Sub(began)
+	if took > slowCheck {
+		s.log.Warn("task: post-turn checks were slow", "task", id, "turn", turn, "took", took)
+	} else {
+		s.log.Debug("task: post-turn checks", "task", id, "turn", turn, "took", took)
+	}
+	return c
 }
 
 // lateCheck runs the post-turn checks of a turn that ended without them (a cancel, a failure) and saves them.
