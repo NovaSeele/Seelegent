@@ -159,6 +159,9 @@
     "changed": "그사이 다른 사람이 이 프로젝트의 메모리를 저장했습니다.",
     "reload": "그 내용 불러오기",
     "discard": "변경 취소",
+    "switchTitle": "메모리 편집 내용을 버릴까요?",
+    "switchDesc": "{project}의 메모리 변경 내용이 저장되지 않았습니다. 다른 프로젝트로 바꾸면 사라집니다.",
+    "switchConfirm": "버리고 전환",
     "save": "메모리 저장",
     "saved": "메모리를 저장했습니다",
     "saveFailed": "메모리를 저장하지 못했습니다: {error}"

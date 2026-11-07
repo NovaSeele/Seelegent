@@ -10,7 +10,8 @@ import {
   createSettingsApi,
   createUsageApi,
 } from '@/api'
-import type { Role } from '@/api/types'
+import type { SettingsApi } from '@/api/settings'
+import type { Memory, Role } from '@/api/types'
 import { setupApp } from '@/test/app'
 import { makeAccount, T0 } from '@/test/fixtures'
 
@@ -257,6 +258,65 @@ describe('settings store', () => {
     reject = true
     await expect(store.save({ loopRepeat: 1 })).rejects.toBeInstanceOf(ApiError)
     expect(useConnectionStore().settings?.loopRepeat).toBe(9)
+  })
+
+  it('keeps the memory of the project picked last when an older read answers late', async () => {
+    const answers = new Map<string, (memory: Memory) => void>()
+    const store = useSettingsStore()
+    store.setApi({
+      memory: (cwd: string) => new Promise<Memory>((resolve) => answers.set(cwd, resolve)),
+    } as unknown as SettingsApi)
+    const first = store.loadMemory('D:/a')
+    const second = store.loadMemory('D:/b')
+    answers.get('D:/b')?.({ cwd: 'D:/b', text: 'B' })
+    answers.get('D:/a')?.({ cwd: 'D:/a', text: 'A' })
+    expect(await second).toMatchObject({ text: 'B' })
+    expect(await first).toBeNull()
+    expect(store.memory).toMatchObject({ cwd: 'D:/b', text: 'B' })
+  })
+
+  it('warns about memory changed elsewhere only when it really differs', async () => {
+    const frames = new Map<string, (data: unknown) => void>()
+    const resyncs: (() => void)[] = []
+    const connection = useConnectionStore()
+    vi.spyOn(connection, 'subscribe').mockImplementation((name, handler) => {
+      frames.set(name, handler as (data: unknown) => void)
+      return () => undefined
+    })
+    vi.spyOn(connection, 'onResync').mockImplementation((handler) => {
+      resyncs.push(handler)
+      return () => undefined
+    })
+    let onDisk: Memory = { cwd: 'D:/a', text: 'old', updatedAt: '2026-11-01T00:00:00Z' }
+    const store = useSettingsStore()
+    store.setApi({
+      memory: () => Promise.resolve(onDisk),
+      putMemory: (cwd: string, text: string) => {
+        onDisk = { cwd, text, updatedAt: '2026-11-02T00:00:00Z' }
+        return Promise.resolve(onDisk)
+      },
+    } as unknown as SettingsApi)
+    await store.loadMemory('D:/a')
+    await store.saveMemory('D:/a', 'mine')
+    // The frame of our own save: same text and time as held.
+    frames.get('memory.changed')?.({ cwd: 'd:\\a' })
+    await flushPromises()
+    expect(store.memoryChanged).toBe(false)
+    // Another project's frame is ignored; someone else's save to this one warns.
+    onDisk = { cwd: 'D:/a', text: 'theirs', updatedAt: '2026-11-03T00:00:00Z' }
+    frames.get('memory.changed')?.({ cwd: 'D:/other' })
+    await flushPromises()
+    expect(store.memoryChanged).toBe(false)
+    frames.get('memory.changed')?.({ cwd: 'D:/a' })
+    await flushPromises()
+    expect(store.memoryChanged).toBe(true)
+    // After a resync the memory is checked again as well.
+    await store.loadMemory('D:/a')
+    expect(store.memoryChanged).toBe(false)
+    onDisk = { cwd: 'D:/a', text: 'later', updatedAt: '2026-11-04T00:00:00Z' }
+    resyncs.forEach((handler) => handler())
+    await flushPromises()
+    expect(store.memoryChanged).toBe(true)
   })
 
   it('shows a hook test the daemon does not support as a 501', async () => {

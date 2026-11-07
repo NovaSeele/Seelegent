@@ -159,6 +159,9 @@
     "changed": "在此期间有人保存了此项目的记忆。",
     "reload": "加载对方的版本",
     "discard": "放弃更改",
+    "switchTitle": "放弃对记忆的修改？",
+    "switchDesc": "你对 {project} 记忆的修改尚未保存。切换到其他项目会丢失这些修改。",
+    "switchConfirm": "放弃并切换",
     "save": "保存记忆",
     "saved": "记忆已保存",
     "saveFailed": "记忆未保存：{error}"

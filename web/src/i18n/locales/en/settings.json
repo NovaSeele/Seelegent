@@ -159,6 +159,9 @@
     "changed": "Someone else saved this project’s memory meanwhile.",
     "reload": "Load theirs",
     "discard": "Discard changes",
+    "switchTitle": "Drop your memory edits?",
+    "switchDesc": "Your changes to {project}’s memory are not saved. Switching to another project drops them.",
+    "switchConfirm": "Drop and switch",
     "save": "Save memory",
     "saved": "Memory saved",
     "saveFailed": "Memory was not saved: {error}"

@@ -159,6 +159,9 @@
     "changed": "Mientras tanto, otra persona guardó la memoria de este proyecto.",
     "reload": "Cargar su versión",
     "discard": "Descartar cambios",
+    "switchTitle": "¿Descartar tus cambios en la memoria?",
+    "switchDesc": "Tus cambios en la memoria de {project} no están guardados. Si cambias de proyecto, se pierden.",
+    "switchConfirm": "Descartar y cambiar",
     "save": "Guardar memoria",
     "saved": "Memoria guardada",
     "saveFailed": "No se guardó la memoria: {error}"

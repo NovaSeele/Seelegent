@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 
 import { errorMessage } from '@/api/client'
 import Button from '@/components/ui/Button.vue'
+import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import Select from '@/components/ui/Select.vue'
 import Spinner from '@/components/ui/Spinner.vue'
 import TextArea from '@/components/ui/TextArea.vue'
@@ -17,7 +18,7 @@ import SettingRow from './SettingRow.vue'
 /**
  * Project memory: conventions, commands and pitfalls the daemon adds to every brief for that folder. Pick a
  * project, edit, save. When someone else saves the same project's memory meanwhile, a notice offers to load theirs
- * (your text stays until you choose).
+ * (your text stays until you choose). Picking another project with unsaved edits asks before dropping them.
  */
 defineProps<{ highlight?: string }>()
 
@@ -35,18 +36,42 @@ const status = ref<'idle' | 'loading' | 'ready' | 'error'>('idle')
 const error = ref('')
 const saving = ref(false)
 
+/** A project picked while the text has unsaved edits: the switch waits for a yes. */
+const pending = ref<string | null>(null)
+
 const options = computed(() =>
   connection.projects.map((p) => ({ value: p.cwd, label: `${p.name} — ${p.cwd}` })),
 )
 const dirty = computed(() => status.value === 'ready' && text.value !== settings.memory?.text)
 
+const chosen = computed({
+  get: () => cwd.value,
+  set: (folder: string) => {
+    if (folder === cwd.value) return
+    if (dirty.value) pending.value = folder
+    else cwd.value = folder
+  },
+})
+const currentName = computed(
+  () => connection.projects.find((p) => p.cwd === cwd.value)?.name ?? cwd.value,
+)
+
+function confirmSwitch() {
+  if (pending.value !== null) cwd.value = pending.value
+  pending.value = null
+}
+
 async function load(folder: string) {
   if (!folder) return
   status.value = 'loading'
   try {
-    text.value = (await settings.loadMemory(folder)).text
+    const got = await settings.loadMemory(folder)
+    // A newer read (another project picked meanwhile) owns the text.
+    if (!got || folder !== cwd.value) return
+    text.value = got.text
     status.value = 'ready'
   } catch (cause) {
+    if (folder !== cwd.value) return
     error.value = errorMessage(cause)
     status.value = 'error'
   }
@@ -84,7 +109,12 @@ async function save() {
     <div class="memory">
       <p v-if="!options.length" class="memory__note">{{ t('settings.memory.noProjects') }}</p>
       <template v-else>
-        <Select v-model="cwd" :label="t('settings.memory.project')" size="sm" :options="options" />
+        <Select
+          v-model="chosen"
+          :label="t('settings.memory.project')"
+          size="sm"
+          :options="options"
+        />
         <Spinner v-if="status === 'loading'" :label="t('settings.memory.loading')" />
         <p v-else-if="status === 'error'" class="memory__note" role="alert">
           {{ t('settings.memory.loadFailed', { error }) }}
@@ -127,6 +157,15 @@ async function save() {
         </template>
       </template>
     </div>
+    <ConfirmDialog
+      :open="pending !== null"
+      :title="t('settings.memory.switchTitle')"
+      :description="t('settings.memory.switchDesc', { project: currentName })"
+      :confirm-label="t('settings.memory.switchConfirm')"
+      danger
+      @update:open="pending = null"
+      @confirm="confirmSwitch"
+    />
   </SettingRow>
 </template>
 

@@ -159,6 +159,9 @@
     "changed": "Trong lúc bạn sửa, có người khác đã lưu bộ nhớ của dự án này.",
     "reload": "Tải bản của họ",
     "discard": "Bỏ thay đổi",
+    "switchTitle": "Bỏ các chỉnh sửa bộ nhớ?",
+    "switchDesc": "Thay đổi bộ nhớ của {project} chưa được lưu. Chuyển sang dự án khác sẽ làm mất chúng.",
+    "switchConfirm": "Bỏ và chuyển",
     "save": "Lưu bộ nhớ",
     "saved": "Đã lưu bộ nhớ",
     "saveFailed": "Chưa lưu được bộ nhớ: {error}"
