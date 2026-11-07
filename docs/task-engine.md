@@ -103,7 +103,8 @@ and a background quota read of the account is requested.
   account needs a sign-in (`auth`, for the user), the worker repeats itself (`looping`), a done turn with no answer
   (`no_response`), red hygiene findings (`hygiene`), files at risk not restored (`work_at_risk`), a failed task
   (`failed`), a red gate with no fix budget left (`gate_red`; `hygiene` when hygiene is its only red step), a
-  verifier reject with no budget left (`verifier_rejected`). `hygiene` and `work_at_risk` come from the post-turn
+  verifier reject with no budget left (`verifier_rejected`), a peer member's objection the lead has not answered
+  (`peer_objection`, detail: who objects and the first required change). `hygiene` and `work_at_risk` come from the post-turn
   checks ([safety.md](safety.md)), the gate reasons from [gates.md](gates.md).
 - `question`: the answer has a `## Blocked` section (its text and list items become the report's question).
 - `stalled`: no output for `stallMinutes`, one tool call open for `stallToolMinutes`, or no conversation 3 min after

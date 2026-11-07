@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -30,7 +31,32 @@ const (
 	ReasonGateRed = "gate_red"
 	// ReasonVerifierRejected: the verifier rejected the work and no fix turn is left.
 	ReasonVerifierRejected = "verifier_rejected"
+	// ReasonPeerObjection: a peer member objected in a consult; the lead answers it before accepting.
+	ReasonPeerObjection = "peer_objection"
 )
+
+// objectionDetail names the peers who object and the first change each requires (or finding).
+func objectionDetail(t *Task, open []string) string {
+	var parts []string
+	for i := range t.Consults {
+		c := &t.Consults[i]
+		if !slices.Contains(open, c.ID) {
+			continue
+		}
+		p := c.Member + " objects"
+		first := ""
+		if len(c.Required) > 0 {
+			first = c.Required[0]
+		} else if len(c.Findings) > 0 {
+			first = c.Findings[0].Text
+		}
+		if first = strings.TrimSpace(first); first != "" {
+			p += ": " + first
+		}
+		parts = append(parts, p)
+	}
+	return strings.Join(parts, "; ")
+}
 
 // Who needs to act.
 const (
@@ -189,6 +215,9 @@ func computeAttention(t *Task, live liveState, acc accountHealth, now time.Time,
 				detail = v.Reasons[0]
 			}
 			return att(api.AttentionBlocked, ReasonVerifierRejected, WhoLead, detail)
+		}
+		if open := unansweredObjections(t); len(open) > 0 {
+			return att(api.AttentionBlocked, ReasonPeerObjection, WhoLead, objectionDetail(t, open))
 		}
 		red := redFindings(tu.Hygiene)
 		if g := tu.Gate; g != nil && hygieneOnly(g) {

@@ -1963,8 +1963,11 @@ export interface Note {
    * resolved.
    */
   status: 'draft' | 'outdated' | 'sent' | 'addressed' | 'unaddressed' | 'resolved'
-  /** CurrentLine is where the anchor text is now (0 when it is gone). */
-  currentLine?: number
+  /**
+   * CurrentLine is where the note's line is now: 0 when its anchored text is gone; Line when it cannot be told
+   * (a removed line, no anchor text).
+   */
+  currentLine: number
   anchorTurn: number
   sentInTurn?: number
   sentAt?: string
@@ -2444,7 +2447,9 @@ export interface ContestProposal {
   winner: string
   source: 'judge' | 'machine'
   machineWinner?: string
+  /** Reason says in English why the machine's winner is proposed; ReasonCode is the same for the dashboard. */
   reason?: string
+  reasonCode?: 'unverified' | 'judge_failed' | 'judge_running'
 }
 
 /** ContestApplied records the winner's patch applied to the user's working tree. */

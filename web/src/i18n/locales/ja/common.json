@@ -124,7 +124,8 @@
     "depsBlocked": "前のタスクが失敗",
     "waitingDeps": "前のタスク待ち",
     "hygiene": "衛生上の問題",
-    "verifierRejected": "レビューで却下"
+    "verifierRejected": "レビューで却下",
+    "peerObjection": "ピアが異議を出しています"
   },
   "stage": {
     "explore": "調査",

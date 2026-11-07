@@ -124,7 +124,8 @@
     "depsBlocked": "Предыдущая задача упала",
     "waitingDeps": "Ждёт предыдущую задачу",
     "hygiene": "Проблема гигиены",
-    "verifierRejected": "Отклонено вторым мнением"
+    "verifierRejected": "Отклонено вторым мнением",
+    "peerObjection": "Коллега возражает"
   },
   "stage": {
     "explore": "Поиск",

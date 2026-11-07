@@ -163,8 +163,9 @@ type Note struct {
 	// runs), addressed (the turn ended and the line changed), unaddressed (the line is unchanged: sent again),
 	// resolved.
 	Status string `json:"status" ts:"'draft' | 'outdated' | 'sent' | 'addressed' | 'unaddressed' | 'resolved'"`
-	// CurrentLine is where the anchor text is now (0 when it is gone).
-	CurrentLine int    `json:"currentLine,omitempty"`
+	// CurrentLine is where the note's line is now: 0 when its anchored text is gone; Line when it cannot be told
+	// (a removed line, no anchor text).
+	CurrentLine int    `json:"currentLine"`
 	AnchorTurn  int    `json:"anchorTurn"`
 	SentInTurn  int    `json:"sentInTurn,omitempty"`
 	SentAt      string `json:"sentAt,omitempty"`
@@ -677,7 +678,9 @@ type ContestProposal struct {
 	Winner        string `json:"winner"`
 	Source        string `json:"source" ts:"'judge' | 'machine'"`
 	MachineWinner string `json:"machineWinner,omitempty"`
-	Reason        string `json:"reason,omitempty"`
+	// Reason says in English why the machine's winner is proposed; ReasonCode is the same for the dashboard.
+	Reason     string `json:"reason,omitempty"`
+	ReasonCode string `json:"reasonCode,omitempty" ts:"'unverified' | 'judge_failed' | 'judge_running'"`
 }
 
 // ContestApplied records the winner's patch applied to the user's working tree.

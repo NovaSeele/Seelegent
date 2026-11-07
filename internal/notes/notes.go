@@ -236,7 +236,9 @@ func status(n api.Note, found *bool, turnEnded bool) string {
 // view fills the computed fields of a note.
 func view(n api.Note, d api.TaskDetail, files *fileLines) api.Note {
 	var found *bool
+	n.CurrentLine = n.Line // nothing to look for: it stays where it is
 	if n.AnchorText != "" && n.Side != "old" {
+		n.CurrentLine = 0
 		line, _, ok := Reanchor(n, files.get(n.File))
 		found = &ok
 		if ok {

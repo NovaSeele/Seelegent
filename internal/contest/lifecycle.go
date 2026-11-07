@@ -382,9 +382,9 @@ func ready(c *api.Contest) {
 		p := &api.ContestProposal{Winner: machine, Source: "machine", MachineWinner: machine}
 		if j != nil {
 			if j.Status == "done" {
-				p.Reason = "the judge gave no verified citation for a qualified winner"
+				p.Reason, p.ReasonCode = "the judge gave no verified citation for a qualified winner", "unverified"
 			} else {
-				p.Reason = "judge " + j.Status
+				p.Reason, p.ReasonCode = "judge "+j.Status, "judge_"+j.Status
 			}
 		}
 		c.Proposal = p

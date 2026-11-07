@@ -124,7 +124,8 @@
     "depsBlocked": "Falló la tarea previa",
     "waitingDeps": "Esperando tarea previa",
     "hygiene": "Problema de higiene",
-    "verifierRejected": "Rechazado en la revisión"
+    "verifierRejected": "Rechazado en la revisión",
+    "peerObjection": "Un par se opone"
   },
   "stage": {
     "explore": "Explorar",

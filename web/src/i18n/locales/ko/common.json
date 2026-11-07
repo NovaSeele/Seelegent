@@ -124,7 +124,8 @@
     "depsBlocked": "선행 작업 실패",
     "waitingDeps": "선행 작업 대기",
     "hygiene": "위생 문제",
-    "verifierRejected": "2차 검토 거절"
+    "verifierRejected": "2차 검토 거절",
+    "peerObjection": "동료가 이의를 제기함"
   },
   "stage": {
     "explore": "탐색",

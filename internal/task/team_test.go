@@ -86,6 +86,10 @@ func TestConsultPeerObjection(t *testing.T) {
 		len(c.Required) != 1 || c.Required[0] != "set it to three" {
 		t.Fatalf("consult = %+v", c)
 	}
+	if a := h.task(sum.ID).Attention; a == nil || a.Reason != ReasonPeerObjection || a.Who != WhoLead ||
+		a.Detail != "rev objects: set it to three" {
+		t.Errorf("attention with an open objection = %+v", a)
+	}
 	if st := c.Findings[0].Cites[0].State; st != proof.CiteVerified {
 		t.Errorf("first cite = %s", st)
 	}

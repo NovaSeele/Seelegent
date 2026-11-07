@@ -124,7 +124,8 @@
     "depsBlocked": "Tác vụ trước thất bại",
     "waitingDeps": "Chờ tác vụ trước",
     "hygiene": "Lỗi vệ sinh mã",
-    "verifierRejected": "Bị duyệt lần hai từ chối"
+    "verifierRejected": "Bị duyệt lần hai từ chối",
+    "peerObjection": "Đồng cấp phản đối"
   },
   "stage": {
     "explore": "Khám phá",
