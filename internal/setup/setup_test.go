@@ -209,7 +209,8 @@ func TestJSONHostAddUnchangedRemove(t *testing.T) {
 	if err := json.Unmarshal(doc.MCPServers["seelegent"], &e); err != nil {
 		t.Fatal(err)
 	}
-	if e.Command != exe || len(e.Args) != 1 || e.Args[0] != "mcp" || e.Env[EnvLead] != "cursor" {
+	if e.Command != exe || len(e.Args) != 1 || e.Args[0] != "mcp" || e.Env != nil {
+		// Cursor has no SEELEGENT_LEAD value the MCP server knows, so none is written.
 		t.Errorf("entry %+v", e)
 	}
 	for _, keep := range []string{`"ratio": 1.50e3`, `"GITHUB_TOKEN": "ghp_example"`, `"aFirstKeyAfter": true`} {
@@ -474,6 +475,27 @@ func TestIsOurs(t *testing.T) {
 		if got := isOurs(tt.e); got != tt.want {
 			t.Errorf("isOurs(%+v) = %v", tt.e, got)
 		}
+	}
+}
+
+func TestLeadValues(t *testing.T) {
+	want := map[string]string{"claude": "claude", "codex": "codex", "opencode": "opencode", "agy": "agy",
+		"antigravity": "agy", "gemini": "gemini", "claude-desktop": "", "cursor": "", "windsurf": ""}
+	for _, id := range HostIDs() {
+		w, ok := want[id]
+		if !ok {
+			t.Errorf("host %s has no expected lead value", id)
+		}
+		if got := LeadValue(id); got != w {
+			t.Errorf("LeadValue(%s) = %q, want %q", id, got, w)
+		}
+	}
+	m := newMachine(t)
+	exe := m.exe()
+	cfg := m.write(".gemini/antigravity/mcp_config.json", `{"mcpServers": {}}`)
+	run(t, m, Request{Exe: exe, Hosts: []string{"antigravity"}})
+	if got := read(t, cfg); !strings.Contains(got, `"SEELEGENT_LEAD": "agy"`) {
+		t.Errorf("antigravity entry:\n%s", got)
 	}
 }
 

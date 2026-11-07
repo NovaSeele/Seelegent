@@ -25,8 +25,13 @@ seelegent setup [--host a,b] [--dry-run] [--remove] [--no-skill] [--hooks] [--fo
 | `--exe` | The executable the hosts start. Default: the running `seelegent`, with symbolic links resolved. |
 | `--json` | Print the report as JSON (`setup.Report`). |
 
-Each host gets the entry `<exe> mcp` with the environment `SEELEGENT_LEAD=<host id>`, under the name `seelegent`. The
-executable must be a stable path that updates replace in place. Setup warns when it is a `go run` build or sits in a
+Each host gets the entry `<exe> mcp` under the name `seelegent`. The entry's environment carries
+`SEELEGENT_LEAD`, which tells the MCP server which lead host started it. Its value is one the server knows: `claude`
+(Claude Code), `codex`, `opencode`, `agy` (Antigravity CLI and the Antigravity app) and `gemini` (Gemini CLI). Claude
+Desktop, Cursor and Windsurf have no value of their own, so their entries get no `SEELEGENT_LEAD`. The server then
+detects the host from its session environment or reports the lead as `cli`. Every host's format has a per-server
+environment (`env`, or `environment` for OpenCode). The values must match the server's list of leads (`api.Leads()`
+after M7). The executable must be a stable path that updates replace in place. Setup warns when it is a `go run` build or sits in a
 `versions/` folder (old C-B1: entries that pointed at a versioned `cli.js` broke after the second update).
 
 ### Report

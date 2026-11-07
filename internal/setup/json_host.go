@@ -185,12 +185,16 @@ func (h jsonHost) render(base *jobject, want Entry, haveEnv map[string]string) (
 		err = errors.Join(set("type", "local"), set("command", append([]string{want.Command}, want.Args...)))
 		obj.del("args")
 		obj.del("env")
-		obj.set("environment", envRaw)
+		if len(env) > 0 {
+			obj.set("environment", envRaw)
+		}
 		err = errors.Join(err, set("enabled", true))
 	default:
 		err = errors.Join(set("command", want.Command), set("args", want.Args))
 		obj.del("environment")
-		obj.set("env", envRaw)
+		if len(env) > 0 {
+			obj.set("env", envRaw)
+		}
 		if raw, ok := obj.get("disabled"); ok && string(bytes.TrimSpace(raw)) == "true" {
 			err = errors.Join(err, set("disabled", false))
 		}

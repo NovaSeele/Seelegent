@@ -22,8 +22,32 @@ type Entry struct {
 
 // desired is the entry setup registers for a host: the stable executable, the single argument "mcp", and
 // SEELEGENT_LEAD naming the host.
+// leadValues maps a host id to the SEELEGENT_LEAD value the MCP server knows for it. Hosts without one get no
+// SEELEGENT_LEAD: an unknown value would be ignored anyway, and the server then detects the host from its session
+// environment or falls back to "cli".
+//
+// TODO(M7 merge): these values must match api.Leads() (claude, codex, opencode, gemini, agy, cli) once
+// feat/cli-daemon is merged; replace the literals with those constants then.
+var leadValues = map[string]string{
+	"claude":      "claude",
+	"codex":       "codex",
+	"opencode":    "opencode",
+	"agy":         "agy",
+	"antigravity": "agy",
+	"gemini":      "gemini",
+}
+
+// LeadValue returns the SEELEGENT_LEAD value setup writes for a host ("" for none).
+func LeadValue(hostID string) string { return leadValues[hostID] }
+
+// desired is the entry setup registers for a host: the executable with the argument "mcp" and, when the MCP server
+// knows the host, SEELEGENT_LEAD.
 func desired(exe, hostID string) Entry {
-	return Entry{Command: exe, Args: []string{"mcp"}, Env: map[string]string{EnvLead: hostID}}
+	e := Entry{Command: exe, Args: []string{"mcp"}}
+	if v := LeadValue(hostID); v != "" {
+		e.Env = map[string]string{EnvLead: v}
+	}
+	return e
 }
 
 // isOurs reports whether e is a Seelegent entry: the Go executable (or the old seelegent.cmd shim) with the single
