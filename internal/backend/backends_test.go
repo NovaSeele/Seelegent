@@ -523,7 +523,7 @@ func TestModelPolicy(t *testing.T) {
 	if m, err := claude.Resolve("CLAUDE-SONNET-5", "", ""); err != nil || m != "CLAUDE-SONNET-5" {
 		t.Errorf("tier model by id = %q, %v", m, err)
 	}
-	// An empty allowedModels allows any model (as in the old version), not only the tier models.
+	// An empty allowedModels allows any model, not only the tier models (the old version allowed none).
 	if m, err := claude.Resolve("claude-opus-5", "", ""); err != nil || m != "claude-opus-5" {
 		t.Errorf("empty allowedModels refused another model: %q, %v", m, err)
 	}
