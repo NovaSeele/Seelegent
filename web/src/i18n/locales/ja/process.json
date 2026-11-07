@@ -1,0 +1,56 @@
+{
+  "stage": {
+    "explore": "調査",
+    "edit": "編集",
+    "verify": "検証",
+    "run": "実行",
+    "report": "報告"
+  },
+  "state": {
+    "running": "実行中",
+    "ok": "完了",
+    "failed": "失敗"
+  },
+  "partial": "最新のステップだけを読み込んでいます。",
+  "loadEarlier": "以前のステップを読み込む",
+  "loading": "ステップを読み込み中…",
+  "empty": "ステップはまだありません",
+  "emptyDesc": "ワーカーがファイルを読み、編集し、コマンドを実行するとここに表示されます。",
+  "reveal": "ターミナルで表示",
+  "turn": "ターン {n}",
+  "attempt": "試行 {n}",
+  "steps": "{count} ステップ",
+  "tree": {
+    "label": "ターンごとのステップ",
+    "expandAll": "すべて展開",
+    "collapseAll": "すべて折りたたむ",
+    "noSteps": "このターンにステップはありません。",
+    "notLoaded": "未読み込み",
+    "notLoadedDesc": "このターンのステップは読み込んだ範囲より前です。"
+  },
+  "graph": {
+    "label": "時間順のステップ（段階ごとのレーン）",
+    "zoom": "ズーム",
+    "fit": "全体",
+    "summary": "{time} で {count} ステップ",
+    "gap": "待ち時間を省略",
+    "pick": "バーを選ぶとステップを表示します。",
+    "selected": "選択中のステップ"
+  },
+  "files": {
+    "label": "ワーカーが扱ったファイル",
+    "total": "ファイル",
+    "read": "読み込み",
+    "edited": "編集",
+    "outside": "プロジェクト外",
+    "root": "プロジェクトフォルダー",
+    "file": "ファイル",
+    "reads": "読み込み",
+    "edits": "編集",
+    "turns": "ターン",
+    "outsideTag": "プロジェクト外",
+    "openGit": "Git で開く",
+    "empty": "ファイルはまだありません",
+    "emptyDesc": "ワーカーがファイルを読むか編集するとここに表示されます。"
+  }
+}

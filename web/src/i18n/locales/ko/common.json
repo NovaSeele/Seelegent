@@ -109,7 +109,7 @@
   "attention": {
     "stalled": "멈춤",
     "looping": "반복 중",
-    "question": "리드에게 질문",
+    "question": "질문이 있음",
     "noResponse": "작업자 응답 없음",
     "auth": "로그인 필요",
     "noAccounts": "사용 가능한 계정 없음",

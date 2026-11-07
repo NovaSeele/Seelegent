@@ -11,6 +11,8 @@
   },
   "group": {
     "navigation": "前往",
+    "task": "当前任务",
+    "tasks": "任务",
     "general": "常规",
     "settings": "设置",
     "appearance": "外观",

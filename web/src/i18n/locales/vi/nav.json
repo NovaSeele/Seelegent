@@ -26,7 +26,7 @@
   },
   "automations": {
     "label": "Tự động",
-    "desc": "Việc giao cho thợ theo lịch. Chỉ chạy khi lệnh kiểm tra trước cho phép và quota còn đủ."
+    "desc": "Việc giao cho worker theo lịch. Chỉ chạy khi lệnh kiểm tra trước cho phép và quota còn đủ."
   },
   "proof": {
     "label": "Bằng chứng",
@@ -34,7 +34,7 @@
   },
   "accounts": {
     "label": "Tài khoản",
-    "desc": "Tài khoản và khoá API mà thợ dùng để chạy việc."
+    "desc": "Tài khoản và khoá API mà worker dùng để chạy việc."
   },
   "usage": {
     "label": "Sử dụng",
@@ -42,12 +42,12 @@
   },
   "roles": {
     "label": "Vai trò",
-    "keywords": "Vai trò thợ",
-    "desc": "Định nghĩa năng lực chuyên môn, quy tắc bắt buộc, phong cách báo cáo và bộ kỹ năng cho thợ thi công."
+    "keywords": "Vai trò worker",
+    "desc": "Định nghĩa năng lực chuyên môn, quy tắc bắt buộc, phong cách báo cáo và bộ kỹ năng cho worker."
   },
   "members": {
     "label": "Thành viên",
-    "desc": "Ai trong phòng ban nhận việc, với nguồn thợ và model nào."
+    "desc": "Ai trong phòng ban nhận việc, với nguồn worker và model nào."
   },
   "settings": {
     "label": "Cài đặt",
@@ -79,7 +79,7 @@
   "statusBar": {
     "summary": "Tổng quan trạng thái",
     "idle": "Rảnh",
-    "idleTitle": "Tài khoản không chạy task nào / Tổng số tài khoản",
+    "idleTitle": "Tài khoản không chạy tác vụ nào / Tổng số tài khoản",
     "running": "Chạy",
     "runningTitle": "Số tác vụ đang chạy",
     "waiting": "Chờ",

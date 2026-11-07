@@ -5,16 +5,35 @@
 import { createI18n } from 'vue-i18n'
 
 import type common from './locales/en/common.json'
+import type git from './locales/en/git.json'
 import type locale from './locales/en/locale.json'
 import type nav from './locales/en/nav.json'
 import type pages from './locales/en/pages.json'
 import type palette from './locales/en/palette.json'
+import type process from './locales/en/process.json'
 import type settings from './locales/en/settings.json'
+import type task from './locales/en/task.json'
+import type tasks from './locales/en/tasks.json'
+import type terminal from './locales/en/terminal.json'
+import type watch from './locales/en/watch.json'
 import { FALLBACK_LOCALE, PLURAL_FORMS, SUPPORTED_LOCALES, type Locale } from './locales'
 
 export * from './locales'
 
-export const NAMESPACES = ['common', 'nav', 'locale', 'settings', 'palette', 'pages'] as const
+export const NAMESPACES = [
+  'common',
+  'nav',
+  'locale',
+  'settings',
+  'palette',
+  'pages',
+  'watch',
+  'tasks',
+  'task',
+  'terminal',
+  'process',
+  'git',
+] as const
 export type Namespace = (typeof NAMESPACES)[number]
 
 export interface MessageSchema {
@@ -24,6 +43,12 @@ export interface MessageSchema {
   settings: typeof settings
   palette: typeof palette
   pages: typeof pages
+  watch: typeof watch
+  tasks: typeof tasks
+  task: typeof task
+  terminal: typeof terminal
+  process: typeof process
+  git: typeof git
 }
 
 declare module 'vue-i18n' {

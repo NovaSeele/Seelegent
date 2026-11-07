@@ -9,6 +9,7 @@ import { useBreakpoint } from '@/composables/useMediaQuery'
 import { useShortcutDispatcher } from '@/composables/useShortcuts'
 import CommandPalette from '@/features/palette/CommandPalette.vue'
 import SettingsDialog from '@/features/settings/SettingsDialog.vue'
+import { useTasksCommands } from '@/features/tasks/useTasksCommands'
 
 import BottomNav from './BottomNav.vue'
 import ConnectionBanner from './ConnectionBanner.vue'
@@ -47,6 +48,7 @@ provide(PAGE_WIDTH_KEY, pageWidth)
 
 useShortcutDispatcher()
 useAppCommands()
+useTasksCommands()
 
 watchEffect(() => {
   const key = route.meta.titleKey

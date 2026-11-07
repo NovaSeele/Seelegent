@@ -1,0 +1,56 @@
+{
+  "stage": {
+    "explore": "Tìm hiểu",
+    "edit": "Sửa",
+    "verify": "Kiểm tra",
+    "run": "Chạy",
+    "report": "Báo cáo"
+  },
+  "state": {
+    "running": "Đang chạy",
+    "ok": "Xong",
+    "failed": "Thất bại"
+  },
+  "partial": "Mới tải các bước gần nhất.",
+  "loadEarlier": "Tải các bước cũ hơn",
+  "loading": "Đang tải các bước…",
+  "empty": "Chưa có bước nào",
+  "emptyDesc": "Các bước sẽ hiện ở đây khi worker đọc, sửa tệp và chạy lệnh.",
+  "reveal": "Xem trong Terminal",
+  "turn": "Lượt {n}",
+  "attempt": "Lần chạy {n}",
+  "steps": "{count} bước",
+  "tree": {
+    "label": "Các bước theo lượt",
+    "expandAll": "Mở hết",
+    "collapseAll": "Thu hết",
+    "noSteps": "Lượt này không có bước nào.",
+    "notLoaded": "Chưa tải",
+    "notLoadedDesc": "Các bước của lượt này cũ hơn phần đã tải."
+  },
+  "graph": {
+    "label": "Các bước theo thời gian, mỗi giai đoạn một làn",
+    "zoom": "Thu phóng",
+    "fit": "Vừa khung",
+    "summary": "{count} bước trong {time}",
+    "gap": "Đã lược bớt thời gian chờ",
+    "pick": "Chọn một thanh để xem bước đó.",
+    "selected": "Bước đang chọn"
+  },
+  "files": {
+    "label": "Các tệp worker đã đụng tới",
+    "total": "Tệp",
+    "read": "Đã đọc",
+    "edited": "Đã sửa",
+    "outside": "Ngoài dự án",
+    "root": "Thư mục dự án",
+    "file": "Tệp",
+    "reads": "Lần đọc",
+    "edits": "Lần sửa",
+    "turns": "Lượt",
+    "outsideTag": "ngoài dự án",
+    "openGit": "Mở trong Git",
+    "empty": "Chưa có tệp nào",
+    "emptyDesc": "Tệp sẽ hiện ở đây khi worker đọc hoặc sửa."
+  }
+}

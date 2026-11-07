@@ -1,0 +1,105 @@
+{
+  "actions": {
+    "followup": "Follow up",
+    "accept": "Accept",
+    "reject": "Reject",
+    "takeover": "Take over",
+    "cancel": "Cancel task",
+    "copyId": "Copy task ID",
+    "more": "More actions",
+    "failed": "That did not work: {error}",
+    "cancelled": "Task cancelled",
+    "tookOver": "A console is opening on the worker's conversation",
+    "copied": "Task ID copied",
+    "copyFailed": "Could not copy: the browser refused clipboard access"
+  },
+  "header": {
+    "driving": "You are driving",
+    "turn": "turn {n}",
+    "tokens": "{n} tokens",
+    "started": "started {time}",
+    "after": "Runs after"
+  },
+  "attention": {
+    "driving": "You are driving · {account}",
+    "drivingDesc": "The worker's conversation is open in a console. When you close it, the worker writes a hand-back report.",
+    "needsYou": "needs you",
+    "needsLead": "needs the lead",
+    "dismiss": "Dismiss"
+  },
+  "question": {
+    "title": "The worker asks",
+    "own": "Or write your own answer",
+    "hint": "1–9 pick a choice · Ctrl+Enter sends",
+    "send": "Send answer",
+    "sent": "Answer sent; the worker continues"
+  },
+  "followup": {
+    "label": "Follow up",
+    "placeholder": "Ask the worker for more, in the same conversation…",
+    "busy": "The worker is busy. Follow up when it has finished, or cancel it first.",
+    "hint": "Ctrl+Enter sends",
+    "send": "Send",
+    "sent": "Follow-up sent",
+    "tierLabel": "Tier",
+    "modelLabel": "Model",
+    "sameTier": "Same tier",
+    "sameModel": "Same model",
+    "tier": {
+      "fast": "Fast",
+      "standard": "Standard",
+      "strong": "Strong",
+      "max": "Max"
+    },
+    "driving": "You are driving this task. Hand it back to follow up.",
+    "waitingAnswer": "The worker is waiting for your answer above."
+  },
+  "review": {
+    "verdict": {
+      "accepted": "Accepted",
+      "rejected": "Rejected"
+    },
+    "acceptedTitle": "Accept this work?",
+    "rejectedTitle": "Reject this work?",
+    "acceptedDesc": "The task is marked as reviewed. Tasks that wait for it can start.",
+    "rejectedDesc": "The task is marked for redo. Say what to change; the notes are kept with the review.",
+    "notes": "Notes (optional)",
+    "notesReject": "What should change?",
+    "notesPlaceholder": "Short notes for the record…",
+    "acceptedConfirm": "Accept",
+    "rejectedConfirm": "Reject",
+    "acceptedToast": "Accepted",
+    "rejectedToast": "Rejected"
+  },
+  "confirm": {
+    "cancelTitle": "Cancel this task?",
+    "cancelDesc": "The worker stops now. Files it already changed stay as they are.",
+    "cancelConfirm": "Cancel task",
+    "takeoverTitle": "Take over this task?",
+    "takeoverDesc": "A console opens on the worker's conversation so you can continue it yourself.",
+    "takeoverActiveDesc": "The running attempt stops, then a console opens on the worker's conversation so you can continue it yourself.",
+    "takeoverConfirm": "Take over"
+  },
+  "detail": {
+    "loading": "Loading the task…",
+    "notFound": "This task could not be opened",
+    "error": "What went wrong"
+  },
+  "views": {
+    "label": "Task views",
+    "terminal": "Terminal",
+    "tree": "Tree",
+    "graph": "Graph",
+    "files": "Files",
+    "git": "Git"
+  },
+  "cmd": {
+    "followup": "Follow up on this task",
+    "accept": "Accept this task",
+    "reject": "Reject this task",
+    "cancel": "Cancel this task",
+    "takeover": "Take over this task",
+    "copyId": "Copy task ID",
+    "view": "Show {name}"
+  }
+}

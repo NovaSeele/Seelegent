@@ -26,6 +26,22 @@ export default defineConfig(
     },
   },
   {
+    // Plain Node scripts for development (the mock daemon); Vite never bundles them.
+    files: ['dev/**/*.mjs'],
+    languageOptions: {
+      globals: {
+        process: 'readonly',
+        console: 'readonly',
+        Buffer: 'readonly',
+        URL: 'readonly',
+        setTimeout: 'readonly',
+        clearTimeout: 'readonly',
+        setInterval: 'readonly',
+        clearInterval: 'readonly',
+      },
+    },
+  },
+  {
     files: ['**/*.vue'],
     rules: {
       'vue/block-lang': ['error', { script: { lang: 'ts' } }],

@@ -1,0 +1,111 @@
+{
+  "label": "Transcripción del worker",
+  "loading": "Cargando la transcripción…",
+  "loadError": "No se pudo cargar la transcripción: {error}",
+  "earlier": "Cargar eventos anteriores",
+  "earlierError": "No se pudieron cargar los eventos anteriores: {error}",
+  "empty": "Aún no hay nada. La transcripción se llena mientras el worker trabaja.",
+  "jump": "Ir a lo último",
+  "jumpCmd": "Ir al final de la transcripción",
+  "by": {
+    "lead": "Lead",
+    "user": "Tú",
+    "gate": "Control",
+    "verifier": "Verificador"
+  },
+  "turn": "Turno {n}",
+  "route": {
+    "first": "Se ejecuta en {account} · {model}",
+    "continuing": "Sigue en {account} · {model}",
+    "left": "quedan {percent}"
+  },
+  "prompt": {
+    "title": "Encargo para el worker",
+    "size": "{n} caracteres",
+    "show": "Ver el encargo completo",
+    "hide": "Ver menos",
+    "loading": "Cargando el encargo…",
+    "error": "No se pudo cargar el encargo: {error}"
+  },
+  "tool": {
+    "running": "en curso",
+    "failed": "falló",
+    "blocked": "bloqueado",
+    "show": "Ver salida",
+    "hide": "Ocultar salida",
+    "noOutput": "Sin salida"
+  },
+  "file": {
+    "read": "Leído",
+    "edit": "Editado"
+  },
+  "report": {
+    "success": "Informe del worker",
+    "error": "El worker informó de un error",
+    "synthesized": "Redactado por Seelegent a partir de la transcripción"
+  },
+  "turnEnd": {
+    "ok": "Turno {n} terminado",
+    "failed": "Turno {n} fallido",
+    "cancelled": "Turno {n} cancelado",
+    "running": "Turno {n} en curso",
+    "tokens": "{n} tokens",
+    "files": "{count} archivo cambiado | {count} archivos cambiados"
+  },
+  "status": {
+    "working": "Trabajando",
+    "queued": "Esperando para empezar"
+  },
+  "until": "hasta las {time}",
+  "ev": {
+    "attempt": {
+      "running": "El intento sigue en curso",
+      "quota": "La cuenta se quedó sin cuota",
+      "auth": "La cuenta debe volver a iniciar sesión",
+      "transient": "El intento tuvo un error temporal",
+      "background_wait": "El worker espera un trabajo en segundo plano",
+      "error": "El intento falló"
+    },
+    "quotaExhausted": "La cuenta se quedó sin cuota",
+    "authFailed": "La cuenta debe volver a iniciar sesión",
+    "waitingQuota": "Esperando cuota",
+    "retry": "Reintento en {seconds} s",
+    "handoff": "Pasó de {from} a {to}",
+    "reattach": "Reconectado al worker en curso",
+    "resumed": "Reanudado tras reiniciar el daemon",
+    "attentionCleared": "Ya no espera",
+    "attention": {
+      "blocked": "El worker está bloqueado",
+      "question": "El worker hace una pregunta",
+      "stalled": "El worker parece atascado",
+      "background_wait": "El worker espera un trabajo en segundo plano",
+      "info": "Nota de Seelegent"
+    },
+    "deps": {
+      "waiting": "Esperando a {after}",
+      "ready": "Las tareas que esperaba han terminado",
+      "blocked": "Falló una tarea que esperaba: {after}"
+    },
+    "takeover": {
+      "start": "Tomaste el control de esta tarea",
+      "end": "Devolviste la tarea"
+    },
+    "handback": "Informe de traspaso",
+    "review": {
+      "accepted": "Aceptada",
+      "rejected": "Rechazada"
+    },
+    "cancel": "Cancelada",
+    "workAtRisk": "{count} archivo cambiado podría perderse | {count} archivos cambiados podrían perderse",
+    "error": "Error",
+    "worker": {
+      "quota_exhausted": "El worker se quedó sin cuota",
+      "auth_required": "El worker debe iniciar sesión",
+      "transient": "El worker tuvo un error temporal",
+      "fatal": "El worker falló"
+    },
+    "backgroundWait": "Esperando trabajo en segundo plano",
+    "log": "Registro del worker",
+    "session": "Conversación iniciada · {model}"
+  }
+}

@@ -1,0 +1,111 @@
+{
+  "label": "Worker transcript",
+  "loading": "Loading the transcript…",
+  "loadError": "Could not load the transcript: {error}",
+  "earlier": "Load earlier events",
+  "earlierError": "Could not load earlier events: {error}",
+  "empty": "Nothing here yet. The transcript fills in as the worker runs.",
+  "jump": "Jump to latest",
+  "jumpCmd": "Jump to the end of the transcript",
+  "by": {
+    "lead": "Lead",
+    "user": "You",
+    "gate": "Gate",
+    "verifier": "Verifier"
+  },
+  "turn": "Turn {n}",
+  "route": {
+    "first": "Runs on {account} · {model}",
+    "continuing": "Continues on {account} · {model}",
+    "left": "{percent} left"
+  },
+  "prompt": {
+    "title": "Worker brief",
+    "size": "{n} characters",
+    "show": "Show the whole brief",
+    "hide": "Show less",
+    "loading": "Loading the brief…",
+    "error": "Could not load the brief: {error}"
+  },
+  "tool": {
+    "running": "running",
+    "failed": "failed",
+    "blocked": "blocked",
+    "show": "Show output",
+    "hide": "Hide output",
+    "noOutput": "No output"
+  },
+  "file": {
+    "read": "Read",
+    "edit": "Edited"
+  },
+  "report": {
+    "success": "Worker report",
+    "error": "The worker reported an error",
+    "synthesized": "Written by Seelegent from the transcript"
+  },
+  "turnEnd": {
+    "ok": "Turn {n} finished",
+    "failed": "Turn {n} failed",
+    "cancelled": "Turn {n} cancelled",
+    "running": "Turn {n} is running",
+    "tokens": "{n} tokens",
+    "files": "{count} file changed | {count} files changed"
+  },
+  "status": {
+    "working": "Working",
+    "queued": "Waiting to start"
+  },
+  "until": "until {time}",
+  "ev": {
+    "attempt": {
+      "running": "The attempt is still running",
+      "quota": "The account ran out of quota",
+      "auth": "The account needs to sign in again",
+      "transient": "The attempt hit a temporary error",
+      "background_wait": "The worker is waiting on background work",
+      "error": "The attempt failed"
+    },
+    "quotaExhausted": "The account ran out of quota",
+    "authFailed": "The account needs to sign in again",
+    "waitingQuota": "Waiting for quota",
+    "retry": "Trying again in {seconds} s",
+    "handoff": "Moved from {from} to {to}",
+    "reattach": "Reconnected to the running worker",
+    "resumed": "Resumed after the daemon restarted",
+    "attentionCleared": "No longer waiting",
+    "attention": {
+      "blocked": "The worker is blocked",
+      "question": "The worker asks a question",
+      "stalled": "The worker seems stuck",
+      "background_wait": "The worker waits on background work",
+      "info": "Note from Seelegent"
+    },
+    "deps": {
+      "waiting": "Waiting for {after}",
+      "ready": "The tasks it waited for are done",
+      "blocked": "A task it waits for failed: {after}"
+    },
+    "takeover": {
+      "start": "You took over this task",
+      "end": "You handed the task back"
+    },
+    "handback": "Hand-back report",
+    "review": {
+      "accepted": "Accepted",
+      "rejected": "Rejected"
+    },
+    "cancel": "Cancelled",
+    "workAtRisk": "{count} changed file may be lost | {count} changed files may be lost",
+    "error": "Error",
+    "worker": {
+      "quota_exhausted": "The worker ran out of quota",
+      "auth_required": "The worker needs to sign in",
+      "transient": "The worker hit a temporary error",
+      "fatal": "The worker failed"
+    },
+    "backgroundWait": "Waiting on background work",
+    "log": "Worker log",
+    "session": "Conversation started · {model}"
+  }
+}

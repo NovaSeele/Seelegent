@@ -1,0 +1,66 @@
+{
+  "list": {
+    "label": "Lista de tareas",
+    "search": "Buscar tareas",
+    "searchPlaceholder": "Título, id o proyecto",
+    "filters": "Filtros",
+    "status": "Estado",
+    "project": "Proyecto",
+    "allProjects": "Todos los proyectos",
+    "grouping": "Agrupar",
+    "groupProject": "Por proyecto",
+    "groupFlat": "Sin grupos",
+    "clearFilters": "Quitar filtros",
+    "needsGroup": "Te necesitan",
+    "loadMore": "Cargar tareas anteriores",
+    "loadError": "No se pudieron cargar las tareas anteriores: {error}",
+    "empty": "Aún no hay tareas",
+    "emptyDesc": "Las tareas aparecen aquí cuando Claude delega trabajo.",
+    "noMatch": "Ninguna tarea coincide",
+    "noMatchDesc": "Prueba con otras palabras o quita los filtros."
+  },
+  "filter": {
+    "needs": "Te necesitan",
+    "active": "En curso",
+    "review": "Por revisar",
+    "done": "Revisadas",
+    "failed": "Fallidas",
+    "cancelled": "Canceladas"
+  },
+  "select": {
+    "start": "Seleccionar tareas",
+    "stop": "Dejar de seleccionar",
+    "on": "seleccionada",
+    "off": "sin seleccionar",
+    "toolbar": "Tareas seleccionadas",
+    "count": "{count} seleccionada | {count} seleccionadas"
+  },
+  "bulk": {
+    "cancel": "Cancelar ({count})",
+    "accept": "Aceptar ({count})",
+    "cancelTitle": "¿Cancelar estas tareas?",
+    "acceptTitle": "¿Aceptar estas tareas?",
+    "cancelDesc": "Sus workers se detienen ahora. Los archivos que ya cambiaron quedan como están.",
+    "acceptDesc": "El trabajo queda marcado como revisado y las tareas que lo esperan pueden empezar.",
+    "cancelConfirm": "Cancelar {count} tarea | Cancelar {count} tareas",
+    "acceptConfirm": "Aceptar {count} tarea | Aceptar {count} tareas",
+    "keep": "Volver",
+    "cancelDone": "Canceladas {ok} de {total}",
+    "acceptDone": "Aceptadas {ok} de {total}",
+    "failed": "{count} fallaron: {error}"
+  },
+  "row": {
+    "manual": "La controlas tú"
+  },
+  "detail": {
+    "pick": "Elige una tarea",
+    "pickDesc": "Elige una tarea de la lista para ver qué hizo el worker, sus cambios y su revisión."
+  },
+  "cmd": {
+    "open": "Tarea: {title}",
+    "nextNeed": "Abrir la siguiente tarea que te necesita",
+    "noNeeds": "Ahora mismo nada te necesita",
+    "search": "Buscar en la lista de tareas",
+    "select": "Seleccionar tareas"
+  }
+}

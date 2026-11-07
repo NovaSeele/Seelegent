@@ -1,0 +1,56 @@
+{
+  "stage": {
+    "explore": "탐색",
+    "edit": "수정",
+    "verify": "검증",
+    "run": "실행",
+    "report": "보고"
+  },
+  "state": {
+    "running": "실행 중",
+    "ok": "완료",
+    "failed": "실패"
+  },
+  "partial": "최근 단계만 불러왔습니다.",
+  "loadEarlier": "이전 단계 불러오기",
+  "loading": "단계를 불러오는 중…",
+  "empty": "아직 단계가 없습니다",
+  "emptyDesc": "워커가 파일을 읽고 고치고 명령을 실행하면 단계가 여기에 표시됩니다.",
+  "reveal": "터미널에서 보기",
+  "turn": "{n}번째 턴",
+  "attempt": "{n}번째 시도",
+  "steps": "단계 {count}개",
+  "tree": {
+    "label": "턴별 단계",
+    "expandAll": "모두 펼치기",
+    "collapseAll": "모두 접기",
+    "noSteps": "이 턴에는 단계가 없습니다.",
+    "notLoaded": "불러오지 않음",
+    "notLoadedDesc": "이 턴의 단계는 불러온 부분보다 이전입니다."
+  },
+  "graph": {
+    "label": "시간순 단계, 단계 유형마다 한 줄",
+    "zoom": "확대/축소",
+    "fit": "맞춤",
+    "summary": "{time} 동안 단계 {count}개",
+    "gap": "대기 시간 생략",
+    "pick": "막대를 골라 단계를 확인하세요.",
+    "selected": "선택한 단계"
+  },
+  "files": {
+    "label": "워커가 다룬 파일",
+    "total": "파일",
+    "read": "읽음",
+    "edited": "수정함",
+    "outside": "프로젝트 밖",
+    "root": "프로젝트 폴더",
+    "file": "파일",
+    "reads": "읽기",
+    "edits": "수정",
+    "turns": "턴",
+    "outsideTag": "프로젝트 밖",
+    "openGit": "Git에서 열기",
+    "empty": "아직 파일이 없습니다",
+    "emptyDesc": "워커가 파일을 읽거나 고치면 여기에 표시됩니다."
+  }
+}

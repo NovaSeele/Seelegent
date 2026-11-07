@@ -1,0 +1,63 @@
+{
+  "loading": "Leyendo el repositorio…",
+  "loadError": "No se pudo leer el repositorio: {error}",
+  "notRepo": "No es un repositorio git",
+  "notRepoDesc": "{cwd} no está dentro de un repositorio git, así que no hay nada que confirmar.",
+  "noBranch": "desacoplado",
+  "files": "{n} archivo | {n} archivos",
+  "refresh": "Volver a leer",
+  "empty": "Esta tarea no tiene cambios",
+  "emptyDesc": "Los archivos que cambie el worker aparecen aquí, listos para revisar y confirmar.",
+  "listLabel": "Archivos cambiados",
+  "diffLabel": "Cambios del archivo seleccionado",
+  "wrap": "Ajustar líneas",
+  "preexisting": "{n} archivo ya estaba cambiado antes de esta tarea | {n} archivos ya estaban cambiados antes de esta tarea",
+  "preexistingDesc": "No son trabajo de esta tarea, así que no se ofrecen para confirmar aquí.",
+  "failed": "Git: {error}",
+  "binary": "binario",
+  "renamedFrom": "desde {path}",
+  "status": {
+    "added": "Añadido",
+    "modified": "Modificado",
+    "deleted": "Eliminado",
+    "renamed": "Renombrado",
+    "untracked": "Nuevo, sin seguimiento"
+  },
+  "diff": {
+    "binary": "Archivo binario: sin diff de texto.",
+    "empty": "Sin cambios de líneas (solo permisos o nombre).",
+    "caption": "Cambios en {path}: {additions} añadidas, {deletions} quitadas",
+    "add": "añadida",
+    "del": "quitada",
+    "hidden": "{n} línea más oculta. | {n} líneas más ocultas.",
+    "showAll": "Mostrar las {n} líneas",
+    "truncated": "Este diff es demasiado grande y se ha recortado.",
+    "loading": "Cargando el diff…",
+    "error": "No se pudo cargar el diff: {error}"
+  },
+  "commit": {
+    "open": "Confirmar…",
+    "title": "Confirmar los archivos de esta tarea",
+    "desc": "Solo se confirman los archivos marcados; lo demás que tengas preparado queda igual.",
+    "message": "Mensaje del commit",
+    "placeholder": "feat(ámbito): qué cambió",
+    "files": "Archivos",
+    "all": "Todos los archivos ({n}) | Todos los archivos ({n})",
+    "renameNote": "Un archivo renombrado se confirma junto con la eliminación de su ruta anterior.",
+    "active": "El worker sigue en marcha. Confirma cuando la tarea haya terminado.",
+    "confirm": "Confirmar {n} archivo | Confirmar {n} archivos",
+    "done": "Commit {sha}: {summary}",
+    "busy": "Otra acción de git sigue en curso."
+  },
+  "suggest": {
+    "ask": "Sugerir un mensaje",
+    "failed": "No se pudo sugerir un mensaje.",
+    "use": "Usar",
+    "dismiss": "Descartar"
+  },
+  "cmd": {
+    "next": "Git: archivo siguiente",
+    "prev": "Git: archivo anterior",
+    "commit": "Git: confirmar los archivos de esta tarea…"
+  }
+}

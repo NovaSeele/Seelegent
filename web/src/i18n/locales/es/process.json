@@ -1,0 +1,56 @@
+{
+  "stage": {
+    "explore": "Explorar",
+    "edit": "Editar",
+    "verify": "Verificar",
+    "run": "Ejecutar",
+    "report": "Informe"
+  },
+  "state": {
+    "running": "En curso",
+    "ok": "Hecho",
+    "failed": "Falló"
+  },
+  "partial": "Solo están cargados los pasos más recientes.",
+  "loadEarlier": "Cargar pasos anteriores",
+  "loading": "Cargando pasos…",
+  "empty": "Aún no hay pasos",
+  "emptyDesc": "Los pasos aparecen aquí cuando el worker lee, edita y ejecuta comandos.",
+  "reveal": "Ver en la terminal",
+  "turn": "Turno {n}",
+  "attempt": "Intento {n}",
+  "steps": "{count} paso | {count} pasos",
+  "tree": {
+    "label": "Pasos por turno",
+    "expandAll": "Expandir todo",
+    "collapseAll": "Contraer todo",
+    "noSteps": "Este turno no tiene pasos.",
+    "notLoaded": "Sin cargar",
+    "notLoadedDesc": "Los pasos de este turno son anteriores a la parte cargada."
+  },
+  "graph": {
+    "label": "Pasos en el tiempo, un carril por etapa",
+    "zoom": "Zoom",
+    "fit": "Ajustar",
+    "summary": "{count} pasos en {time}",
+    "gap": "Tiempo inactivo omitido",
+    "pick": "Elige una barra para ver ese paso.",
+    "selected": "Paso seleccionado"
+  },
+  "files": {
+    "label": "Archivos que tocó el worker",
+    "total": "Archivos",
+    "read": "Leídos",
+    "edited": "Editados",
+    "outside": "Fuera del proyecto",
+    "root": "Carpeta del proyecto",
+    "file": "Archivo",
+    "reads": "Lecturas",
+    "edits": "Ediciones",
+    "turns": "Turnos",
+    "outsideTag": "fuera",
+    "openGit": "Abrir en Git",
+    "empty": "Aún no hay archivos",
+    "emptyDesc": "Los archivos aparecen aquí cuando el worker los lee o edita."
+  }
+}

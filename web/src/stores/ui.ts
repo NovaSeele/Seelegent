@@ -101,6 +101,17 @@ export const useUiStore = defineStore('ui', () => {
     sidebarCollapsed.value = force ?? !sidebarCollapsed.value
   }
 
+  /** "/" asks the Tasks sidebar to focus its search; the list takes the request once it is on screen. */
+  const taskSearchRequested = ref(false)
+  function requestTaskSearch() {
+    taskSearchRequested.value = true
+  }
+  function takeTaskSearchRequest(): boolean {
+    const requested = taskSearchRequested.value
+    taskSearchRequested.value = false
+    return requested
+  }
+
   function resetAppearance() {
     theme.value = PREFS.theme.fallback
     fontUi.value = PREFS.fontUi.fallback
@@ -128,6 +139,9 @@ export const useUiStore = defineStore('ui', () => {
     motionOff,
     locale,
     sidebarHidden,
+    taskSearchRequested,
+    requestTaskSearch,
+    takeTaskSearchRequest,
     setTheme,
     setMotion,
     setFontUi,

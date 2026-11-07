@@ -1,0 +1,63 @@
+{
+  "loading": "Reading the repository…",
+  "loadError": "Could not read the repository: {error}",
+  "notRepo": "Not a git repository",
+  "notRepoDesc": "{cwd} is not inside a git repository, so there is nothing to commit.",
+  "noBranch": "detached",
+  "files": "{n} file | {n} files",
+  "refresh": "Read again",
+  "empty": "No changes from this task",
+  "emptyDesc": "Files the worker changes show up here, ready to review and commit.",
+  "listLabel": "Changed files",
+  "diffLabel": "Changes in the selected file",
+  "wrap": "Wrap lines",
+  "preexisting": "{n} file was already changed before this task | {n} files were already changed before this task",
+  "preexistingDesc": "They are not this task's work, so they are not offered for commit here.",
+  "failed": "Git: {error}",
+  "binary": "binary",
+  "renamedFrom": "from {path}",
+  "status": {
+    "added": "Added",
+    "modified": "Modified",
+    "deleted": "Deleted",
+    "renamed": "Renamed",
+    "untracked": "New, not tracked"
+  },
+  "diff": {
+    "binary": "Binary file: no text diff.",
+    "empty": "No line changes (mode or rename only).",
+    "caption": "Changes in {path}: {additions} added, {deletions} removed",
+    "add": "added",
+    "del": "removed",
+    "hidden": "{n} more line hidden. | {n} more lines hidden.",
+    "showAll": "Show all {n} lines",
+    "truncated": "This diff is too large and was cut short.",
+    "loading": "Loading the diff…",
+    "error": "Could not load the diff: {error}"
+  },
+  "commit": {
+    "open": "Commit…",
+    "title": "Commit this task's files",
+    "desc": "Only the files you tick are committed; anything else you staged stays as it is.",
+    "message": "Commit message",
+    "placeholder": "feat(scope): what changed",
+    "files": "Files",
+    "all": "All files ({n}) | All files ({n})",
+    "renameNote": "A renamed file is committed together with the removal of its old path.",
+    "active": "The worker is still running. Commit when the task has finished.",
+    "confirm": "Commit {n} file | Commit {n} files",
+    "done": "Committed {sha}: {summary}",
+    "busy": "Another git action is still running."
+  },
+  "suggest": {
+    "ask": "Suggest a message",
+    "failed": "Could not suggest a message.",
+    "use": "Use",
+    "dismiss": "Dismiss"
+  },
+  "cmd": {
+    "next": "Git: next file",
+    "prev": "Git: previous file",
+    "commit": "Git: commit this task's files…"
+  }
+}

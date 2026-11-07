@@ -1,0 +1,111 @@
+{
+  "label": "Nhật ký của worker",
+  "loading": "Đang tải nhật ký…",
+  "loadError": "Không tải được nhật ký: {error}",
+  "earlier": "Tải các sự kiện cũ hơn",
+  "earlierError": "Không tải được sự kiện cũ hơn: {error}",
+  "empty": "Chưa có gì. Nhật ký sẽ hiện dần khi worker chạy.",
+  "jump": "Tới mới nhất",
+  "jumpCmd": "Cuộn tới cuối nhật ký",
+  "by": {
+    "lead": "Lead",
+    "user": "Bạn",
+    "gate": "Cổng kiểm tra",
+    "verifier": "Người kiểm chứng"
+  },
+  "turn": "Lượt {n}",
+  "route": {
+    "first": "Chạy trên {account} · {model}",
+    "continuing": "Tiếp tục trên {account} · {model}",
+    "left": "còn {percent}"
+  },
+  "prompt": {
+    "title": "Bản giao việc cho worker",
+    "size": "{n} ký tự",
+    "show": "Xem toàn bộ",
+    "hide": "Thu gọn",
+    "loading": "Đang tải bản giao việc…",
+    "error": "Không tải được bản giao việc: {error}"
+  },
+  "tool": {
+    "running": "đang chạy",
+    "failed": "thất bại",
+    "blocked": "bị chặn",
+    "show": "Xem kết quả",
+    "hide": "Ẩn kết quả",
+    "noOutput": "Không có kết quả"
+  },
+  "file": {
+    "read": "Đã đọc",
+    "edit": "Đã sửa"
+  },
+  "report": {
+    "success": "Báo cáo của worker",
+    "error": "Worker báo lỗi",
+    "synthesized": "Seelegent viết lại từ nhật ký"
+  },
+  "turnEnd": {
+    "ok": "Lượt {n} xong",
+    "failed": "Lượt {n} thất bại",
+    "cancelled": "Lượt {n} đã huỷ",
+    "running": "Lượt {n} đang chạy",
+    "tokens": "{n} token",
+    "files": "{count} tệp đã đổi"
+  },
+  "status": {
+    "working": "Đang làm",
+    "queued": "Đang chờ bắt đầu"
+  },
+  "until": "đến {time}",
+  "ev": {
+    "attempt": {
+      "running": "Lần chạy vẫn đang tiếp diễn",
+      "quota": "Tài khoản đã hết quota",
+      "auth": "Tài khoản cần đăng nhập lại",
+      "transient": "Lần chạy gặp lỗi tạm thời",
+      "background_wait": "Worker đang chờ việc chạy nền",
+      "error": "Lần chạy thất bại"
+    },
+    "quotaExhausted": "Tài khoản đã hết quota",
+    "authFailed": "Tài khoản cần đăng nhập lại",
+    "waitingQuota": "Đang chờ quota",
+    "retry": "Thử lại sau {seconds} giây",
+    "handoff": "Chuyển từ {from} sang {to}",
+    "reattach": "Đã kết nối lại với worker đang chạy",
+    "resumed": "Chạy tiếp sau khi daemon khởi động lại",
+    "attentionCleared": "Không còn chờ nữa",
+    "attention": {
+      "blocked": "Worker bị chặn",
+      "question": "Worker có câu hỏi",
+      "stalled": "Worker có vẻ bị kẹt",
+      "background_wait": "Worker đang chờ việc chạy nền",
+      "info": "Ghi chú từ Seelegent"
+    },
+    "deps": {
+      "waiting": "Đang chờ {after}",
+      "ready": "Các tác vụ cần chờ đã xong",
+      "blocked": "Một tác vụ cần chờ bị lỗi: {after}"
+    },
+    "takeover": {
+      "start": "Bạn đã tự làm tiếp tác vụ này",
+      "end": "Bạn đã trả lại tác vụ"
+    },
+    "handback": "Báo cáo bàn giao",
+    "review": {
+      "accepted": "Đã chấp nhận",
+      "rejected": "Đã từ chối"
+    },
+    "cancel": "Đã huỷ",
+    "workAtRisk": "{count} tệp đã đổi có thể bị mất",
+    "error": "Lỗi",
+    "worker": {
+      "quota_exhausted": "Worker đã hết quota",
+      "auth_required": "Worker cần đăng nhập",
+      "transient": "Worker gặp lỗi tạm thời",
+      "fatal": "Worker thất bại"
+    },
+    "backgroundWait": "Đang chờ việc chạy nền",
+    "log": "Log của worker",
+    "session": "Bắt đầu hội thoại · {model}"
+  }
+}

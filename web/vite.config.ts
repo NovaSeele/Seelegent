@@ -6,7 +6,8 @@ import vue from '@vitejs/plugin-vue'
 import { defineConfig, type Plugin } from 'vite'
 
 // Development daemon (see docs/development.md); the installed daemon on 47821 is never touched.
-const devDaemon = 'http://127.0.0.1:47831'
+// SEELEGENT_DEV_DAEMON points the proxy elsewhere, e.g. at a mock daemon on another port.
+const devDaemon = process.env.SEELEGENT_DEV_DAEMON || 'http://127.0.0.1:47831'
 
 const themesDir = fileURLToPath(new URL('./src/styles/themes', import.meta.url))
 

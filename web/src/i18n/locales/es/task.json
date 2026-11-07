@@ -1,0 +1,105 @@
+{
+  "actions": {
+    "followup": "Pedir más",
+    "accept": "Aceptar",
+    "reject": "Rechazar",
+    "takeover": "Tomar el control",
+    "cancel": "Cancelar tarea",
+    "copyId": "Copiar ID de la tarea",
+    "more": "Más acciones",
+    "failed": "No funcionó: {error}",
+    "cancelled": "Tarea cancelada",
+    "tookOver": "Se está abriendo una consola con la conversación del worker",
+    "copied": "ID de la tarea copiado",
+    "copyFailed": "No se pudo copiar: el navegador denegó el acceso al portapapeles"
+  },
+  "header": {
+    "driving": "La controlas tú",
+    "turn": "turno {n}",
+    "tokens": "{n} tokens",
+    "started": "empezó {time}",
+    "after": "Se ejecuta después de"
+  },
+  "attention": {
+    "driving": "La controlas tú · {account}",
+    "drivingDesc": "La conversación del worker está abierta en una consola. Al cerrarla, el worker escribe un informe de traspaso.",
+    "needsYou": "te necesita",
+    "needsLead": "necesita al lead",
+    "dismiss": "Descartar"
+  },
+  "question": {
+    "title": "El worker pregunta",
+    "own": "O escribe tu propia respuesta",
+    "hint": "1–9 elige una opción · Ctrl+Enter envía",
+    "send": "Enviar respuesta",
+    "sent": "Respuesta enviada; el worker continúa"
+  },
+  "followup": {
+    "label": "Pedir más",
+    "placeholder": "Pide más al worker, en la misma conversación…",
+    "busy": "El worker está ocupado. Pide más cuando termine, o cancélalo primero.",
+    "hint": "Ctrl+Enter envía",
+    "send": "Enviar",
+    "sent": "Petición enviada",
+    "tierLabel": "Nivel",
+    "modelLabel": "Modelo",
+    "sameTier": "Mismo nivel",
+    "sameModel": "Mismo modelo",
+    "tier": {
+      "fast": "Rápido",
+      "standard": "Estándar",
+      "strong": "Potente",
+      "max": "Máximo"
+    },
+    "driving": "Estás manejando esta tarea. Devuélvela para enviar un seguimiento.",
+    "waitingAnswer": "El worker espera tu respuesta a la pregunta de arriba."
+  },
+  "review": {
+    "verdict": {
+      "accepted": "Aceptada",
+      "rejected": "Rechazada"
+    },
+    "acceptedTitle": "¿Aceptar este trabajo?",
+    "rejectedTitle": "¿Rechazar este trabajo?",
+    "acceptedDesc": "La tarea queda marcada como revisada. Las tareas que la esperan pueden empezar.",
+    "rejectedDesc": "La tarea queda marcada para rehacer. Di qué cambiar; las notas se guardan con la revisión.",
+    "notes": "Notas (opcional)",
+    "notesReject": "¿Qué debe cambiar?",
+    "notesPlaceholder": "Notas breves para el registro…",
+    "acceptedConfirm": "Aceptar",
+    "rejectedConfirm": "Rechazar",
+    "acceptedToast": "Aceptada",
+    "rejectedToast": "Rechazada"
+  },
+  "confirm": {
+    "cancelTitle": "¿Cancelar esta tarea?",
+    "cancelDesc": "El worker se detiene ahora. Los archivos que ya cambió quedan como están.",
+    "cancelConfirm": "Cancelar tarea",
+    "takeoverTitle": "¿Tomar el control de esta tarea?",
+    "takeoverDesc": "Se abre una consola con la conversación del worker para que la continúes tú.",
+    "takeoverActiveDesc": "El intento en curso se detiene y luego se abre una consola con la conversación del worker para que la continúes tú.",
+    "takeoverConfirm": "Tomar el control"
+  },
+  "detail": {
+    "loading": "Cargando la tarea…",
+    "notFound": "No se pudo abrir esta tarea",
+    "error": "Qué salió mal"
+  },
+  "views": {
+    "label": "Vistas de la tarea",
+    "terminal": "Terminal",
+    "tree": "Árbol",
+    "graph": "Grafo",
+    "files": "Archivos",
+    "git": "Git"
+  },
+  "cmd": {
+    "followup": "Pedir más en esta tarea",
+    "accept": "Aceptar esta tarea",
+    "reject": "Rechazar esta tarea",
+    "cancel": "Cancelar esta tarea",
+    "takeover": "Tomar el control de esta tarea",
+    "copyId": "Copiar ID de la tarea",
+    "view": "Mostrar {name}"
+  }
+}

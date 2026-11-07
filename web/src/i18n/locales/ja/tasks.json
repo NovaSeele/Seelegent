@@ -1,0 +1,66 @@
+{
+  "list": {
+    "label": "タスク一覧",
+    "search": "タスクを検索",
+    "searchPlaceholder": "タイトル、ID、プロジェクト",
+    "filters": "フィルター",
+    "status": "状態",
+    "project": "プロジェクト",
+    "allProjects": "すべてのプロジェクト",
+    "grouping": "グループ",
+    "groupProject": "プロジェクト別",
+    "groupFlat": "グループなし",
+    "clearFilters": "フィルターを解除",
+    "needsGroup": "要対応",
+    "loadMore": "以前のタスクを読み込む",
+    "loadError": "以前のタスクを読み込めませんでした: {error}",
+    "empty": "タスクはまだありません",
+    "emptyDesc": "Claude が作業を任せると、ここにタスクが表示されます。",
+    "noMatch": "一致するタスクはありません",
+    "noMatchDesc": "別の言葉で探すか、フィルターを解除してください。"
+  },
+  "filter": {
+    "needs": "要対応",
+    "active": "実行中",
+    "review": "レビュー待ち",
+    "done": "レビュー済み",
+    "failed": "失敗",
+    "cancelled": "キャンセル済み"
+  },
+  "select": {
+    "start": "タスクを選択",
+    "stop": "選択をやめる",
+    "on": "選択済み",
+    "off": "未選択",
+    "toolbar": "選択したタスク",
+    "count": "{count} 件選択中"
+  },
+  "bulk": {
+    "cancel": "キャンセル（{count}）",
+    "accept": "承認（{count}）",
+    "cancelTitle": "これらのタスクをキャンセルしますか？",
+    "acceptTitle": "これらのタスクを承認しますか？",
+    "cancelDesc": "ワーカーはすぐに停止します。変更済みのファイルはそのまま残ります。",
+    "acceptDesc": "作業はレビュー済みになり、これを待っているタスクが開始できます。",
+    "cancelConfirm": "{count} 件のタスクをキャンセル",
+    "acceptConfirm": "{count} 件のタスクを承認",
+    "keep": "戻る",
+    "cancelDone": "{total} 件中 {ok} 件をキャンセルしました",
+    "acceptDone": "{total} 件中 {ok} 件を承認しました",
+    "failed": "{count} 件失敗: {error}"
+  },
+  "row": {
+    "manual": "あなたが操作中"
+  },
+  "detail": {
+    "pick": "タスクを選んでください",
+    "pickDesc": "一覧からタスクを選ぶと、ワーカーの作業内容、変更、レビューを確認できます。"
+  },
+  "cmd": {
+    "open": "タスク: {title}",
+    "nextNeed": "次の要対応タスクを開く",
+    "noNeeds": "いま対応が必要なものはありません",
+    "search": "タスク一覧を検索",
+    "select": "タスクを選択"
+  }
+}

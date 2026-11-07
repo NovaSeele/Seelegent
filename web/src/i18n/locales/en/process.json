@@ -1,0 +1,56 @@
+{
+  "stage": {
+    "explore": "Explore",
+    "edit": "Edit",
+    "verify": "Verify",
+    "run": "Run",
+    "report": "Report"
+  },
+  "state": {
+    "running": "Running",
+    "ok": "Done",
+    "failed": "Failed"
+  },
+  "partial": "Only the newest steps are loaded.",
+  "loadEarlier": "Load earlier steps",
+  "loading": "Loading steps…",
+  "empty": "No steps yet",
+  "emptyDesc": "Steps show up here as the worker reads, edits and runs commands.",
+  "reveal": "Show in Terminal",
+  "turn": "Turn {n}",
+  "attempt": "Attempt {n}",
+  "steps": "{count} step | {count} steps",
+  "tree": {
+    "label": "Steps by turn",
+    "expandAll": "Expand all",
+    "collapseAll": "Collapse all",
+    "noSteps": "No steps in this turn.",
+    "notLoaded": "Not loaded",
+    "notLoadedDesc": "This turn's steps are older than the loaded part."
+  },
+  "graph": {
+    "label": "Steps over time, one lane per stage",
+    "zoom": "Zoom",
+    "fit": "Fit",
+    "summary": "{count} steps over {time}",
+    "gap": "Idle time left out",
+    "pick": "Pick a bar to see that step.",
+    "selected": "Selected step"
+  },
+  "files": {
+    "label": "Files the worker touched",
+    "total": "Files",
+    "read": "Read",
+    "edited": "Edited",
+    "outside": "Outside the project",
+    "root": "Project folder",
+    "file": "File",
+    "reads": "Reads",
+    "edits": "Edits",
+    "turns": "Turns",
+    "outsideTag": "outside",
+    "openGit": "Open in Git",
+    "empty": "No files yet",
+    "emptyDesc": "Files show up here when the worker reads or edits them."
+  }
+}

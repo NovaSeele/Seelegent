@@ -1,0 +1,66 @@
+{
+  "list": {
+    "label": "任务列表",
+    "search": "搜索任务",
+    "searchPlaceholder": "标题、ID 或项目",
+    "filters": "筛选",
+    "status": "状态",
+    "project": "项目",
+    "allProjects": "全部项目",
+    "grouping": "分组",
+    "groupProject": "按项目",
+    "groupFlat": "不分组",
+    "clearFilters": "清除筛选",
+    "needsGroup": "需要你处理",
+    "loadMore": "加载更早的任务",
+    "loadError": "无法加载更早的任务：{error}",
+    "empty": "还没有任务",
+    "emptyDesc": "Claude 分派工作后，任务会显示在这里。",
+    "noMatch": "没有匹配的任务",
+    "noMatchDesc": "换个关键词，或清除筛选。"
+  },
+  "filter": {
+    "needs": "需要你处理",
+    "active": "运行中",
+    "review": "待审核",
+    "done": "已审核",
+    "failed": "失败",
+    "cancelled": "已取消"
+  },
+  "select": {
+    "start": "选择任务",
+    "stop": "退出选择",
+    "on": "已选",
+    "off": "未选",
+    "toolbar": "已选任务",
+    "count": "已选 {count} 个"
+  },
+  "bulk": {
+    "cancel": "取消（{count}）",
+    "accept": "接受（{count}）",
+    "cancelTitle": "取消这些任务？",
+    "acceptTitle": "接受这些任务？",
+    "cancelDesc": "它们的 worker 会立即停止。已经改动的文件保持原样。",
+    "acceptDesc": "这些工作会被标记为已审核，等待它们的任务可以开始。",
+    "cancelConfirm": "取消 {count} 个任务",
+    "acceptConfirm": "接受 {count} 个任务",
+    "keep": "返回",
+    "cancelDone": "已取消 {ok}/{total}",
+    "acceptDone": "已接受 {ok}/{total}",
+    "failed": "{count} 个失败：{error}"
+  },
+  "row": {
+    "manual": "由你接管中"
+  },
+  "detail": {
+    "pick": "选择一个任务",
+    "pickDesc": "在列表中选择任务，查看 worker 做了什么、改了哪些内容以及审核情况。"
+  },
+  "cmd": {
+    "open": "任务：{title}",
+    "nextNeed": "打开下一个需要你处理的任务",
+    "noNeeds": "目前没有需要你处理的事",
+    "search": "搜索任务列表",
+    "select": "选择任务"
+  }
+}

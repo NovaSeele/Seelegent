@@ -1,0 +1,56 @@
+{
+  "stage": {
+    "explore": "探索",
+    "edit": "修改",
+    "verify": "验证",
+    "run": "运行",
+    "report": "报告"
+  },
+  "state": {
+    "running": "运行中",
+    "ok": "完成",
+    "failed": "失败"
+  },
+  "partial": "只加载了最新的步骤。",
+  "loadEarlier": "加载更早的步骤",
+  "loading": "正在加载步骤…",
+  "empty": "还没有步骤",
+  "emptyDesc": "worker 读取、修改文件或运行命令时，步骤会显示在这里。",
+  "reveal": "在终端中查看",
+  "turn": "第 {n} 轮",
+  "attempt": "第 {n} 次尝试",
+  "steps": "{count} 个步骤",
+  "tree": {
+    "label": "按轮次的步骤",
+    "expandAll": "全部展开",
+    "collapseAll": "全部收起",
+    "noSteps": "这一轮没有步骤。",
+    "notLoaded": "未加载",
+    "notLoadedDesc": "这一轮的步骤早于已加载的部分。"
+  },
+  "graph": {
+    "label": "按时间排列的步骤，每个阶段一条泳道",
+    "zoom": "缩放",
+    "fit": "适应宽度",
+    "summary": "{time} 内 {count} 个步骤",
+    "gap": "已省略空闲时间",
+    "pick": "点选一个色条查看该步骤。",
+    "selected": "选中的步骤"
+  },
+  "files": {
+    "label": "worker 涉及的文件",
+    "total": "文件",
+    "read": "读取",
+    "edited": "修改",
+    "outside": "项目之外",
+    "root": "项目文件夹",
+    "file": "文件",
+    "reads": "读取次数",
+    "edits": "修改次数",
+    "turns": "轮次",
+    "outsideTag": "项目外",
+    "openGit": "在 Git 中打开",
+    "empty": "还没有文件",
+    "emptyDesc": "worker 读取或修改文件后会显示在这里。"
+  }
+}

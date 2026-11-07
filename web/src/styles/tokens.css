@@ -208,6 +208,10 @@
  * Derived colour layer: written only in terms of the base palette every theme defines, so every theme agrees on
  * what a colour means. Declared on [data-theme-preview] as well so preview cards resolve against their own theme.
  * Themes may still override any of these (Seelegent Ink/Paper tune the stage hues and the cancelled tone).
+ *
+ * Stages (Graph lanes, stage dots) are categories, not states, so they never borrow a role colour: by default they
+ * are steps of the neutral text scale (each lane is labelled anyway); a theme may give them hues of their own that
+ * stay clear of its accent, running, attention, success and danger colours.
  */
 :root,
 [data-theme-preview] {
@@ -230,6 +234,8 @@
 
   --diff-add: var(--status-accepted-fg);
   --diff-del: var(--status-danger-fg);
+  /* A modified file is neither good nor bad news: no hue (amber would read as "needs you"). */
+  --diff-mod: var(--text-secondary);
   --diff-add-bg: var(--term-diff-add-bg);
   --diff-del-bg: var(--term-diff-del-bg);
 
@@ -238,11 +244,11 @@
   --role-worker: var(--text-secondary);
   --role-worker-soft: var(--bg-surface-2);
 
-  --stage-explore: var(--term-path);
-  --stage-edit: var(--attention-fg);
-  --stage-verify: var(--status-accepted-fg);
-  --stage-run: var(--text-muted);
-  --stage-report: var(--text-secondary);
+  --stage-explore: var(--text-muted);
+  --stage-edit: var(--text-primary);
+  --stage-verify: var(--text-secondary);
+  --stage-run: color-mix(in srgb, var(--text-muted) 55%, var(--bg-surface));
+  --stage-report: color-mix(in srgb, var(--text-primary) 50%, var(--text-muted));
 
   --link: var(--accent);
   --scrollbar-thumb: var(--border-strong);

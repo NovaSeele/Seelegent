@@ -1,0 +1,63 @@
+{
+  "loading": "正在读取仓库…",
+  "loadError": "无法读取仓库：{error}",
+  "notRepo": "不是 git 仓库",
+  "notRepoDesc": "{cwd} 不在任何 git 仓库中，没有可提交的内容。",
+  "noBranch": "分离头指针",
+  "files": "{n} 个文件",
+  "refresh": "重新读取",
+  "empty": "此任务没有改动",
+  "emptyDesc": "worker 修改的文件会显示在这里，可供审阅和提交。",
+  "listLabel": "已改动的文件",
+  "diffLabel": "所选文件的改动",
+  "wrap": "自动换行",
+  "preexisting": "{n} 个文件在此任务之前就已改动",
+  "preexistingDesc": "它们不是此任务的工作，因此不在这里提供提交。",
+  "failed": "Git：{error}",
+  "binary": "二进制",
+  "renamedFrom": "原为 {path}",
+  "status": {
+    "added": "新增",
+    "modified": "已修改",
+    "deleted": "已删除",
+    "renamed": "已重命名",
+    "untracked": "新文件，未跟踪"
+  },
+  "diff": {
+    "binary": "二进制文件：没有文本差异。",
+    "empty": "没有行改动（仅权限或重命名）。",
+    "caption": "{path} 的改动：新增 {additions} 行，删除 {deletions} 行",
+    "add": "新增",
+    "del": "删除",
+    "hidden": "还有 {n} 行未显示。",
+    "showAll": "显示全部 {n} 行",
+    "truncated": "差异过大，已被截断。",
+    "loading": "正在加载差异…",
+    "error": "无法加载差异：{error}"
+  },
+  "commit": {
+    "open": "提交…",
+    "title": "提交此任务的文件",
+    "desc": "只提交你勾选的文件；你另外暂存的内容保持不变。",
+    "message": "提交信息",
+    "placeholder": "feat(范围): 改了什么",
+    "files": "文件",
+    "all": "全部文件（{n}）",
+    "renameNote": "重命名的文件会连同旧路径的删除一起提交。",
+    "active": "worker 仍在运行。请在任务完成后提交。",
+    "confirm": "提交 {n} 个文件",
+    "done": "已提交 {sha}：{summary}",
+    "busy": "另一个 git 操作仍在进行。"
+  },
+  "suggest": {
+    "ask": "建议提交信息",
+    "failed": "无法生成建议。",
+    "use": "使用",
+    "dismiss": "忽略"
+  },
+  "cmd": {
+    "next": "Git：下一个文件",
+    "prev": "Git：上一个文件",
+    "commit": "Git：提交此任务的文件…"
+  }
+}

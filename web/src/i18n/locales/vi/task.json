@@ -1,0 +1,105 @@
+{
+  "actions": {
+    "followup": "Giao thêm",
+    "accept": "Chấp nhận",
+    "reject": "Từ chối",
+    "takeover": "Tự làm tiếp",
+    "cancel": "Huỷ tác vụ",
+    "copyId": "Chép mã tác vụ",
+    "more": "Thêm thao tác",
+    "failed": "Không thực hiện được: {error}",
+    "cancelled": "Đã huỷ tác vụ",
+    "tookOver": "Đang mở console trên cuộc hội thoại của worker",
+    "copied": "Đã chép mã tác vụ",
+    "copyFailed": "Không chép được: trình duyệt từ chối quyền clipboard"
+  },
+  "header": {
+    "driving": "Bạn đang điều khiển",
+    "turn": "lượt {n}",
+    "tokens": "{n} token",
+    "started": "bắt đầu {time}",
+    "after": "Chạy sau"
+  },
+  "attention": {
+    "driving": "Bạn đang điều khiển · {account}",
+    "drivingDesc": "Cuộc hội thoại của worker đang mở trong một console. Khi bạn đóng nó, worker sẽ viết báo cáo bàn giao.",
+    "needsYou": "cần bạn",
+    "needsLead": "cần lead",
+    "dismiss": "Bỏ qua"
+  },
+  "question": {
+    "title": "Worker hỏi",
+    "own": "Hoặc tự viết câu trả lời",
+    "hint": "1–9 chọn đáp án · Ctrl+Enter để gửi",
+    "send": "Gửi câu trả lời",
+    "sent": "Đã gửi câu trả lời; worker làm tiếp"
+  },
+  "followup": {
+    "label": "Giao thêm",
+    "placeholder": "Nhờ worker làm thêm, trong cùng cuộc hội thoại…",
+    "busy": "Worker đang bận. Hãy giao thêm khi nó xong, hoặc huỷ nó trước.",
+    "hint": "Ctrl+Enter để gửi",
+    "send": "Gửi",
+    "sent": "Đã gửi yêu cầu giao thêm",
+    "tierLabel": "Mức",
+    "modelLabel": "Model",
+    "sameTier": "Giữ mức cũ",
+    "sameModel": "Giữ model cũ",
+    "tier": {
+      "fast": "Nhanh",
+      "standard": "Tiêu chuẩn",
+      "strong": "Mạnh",
+      "max": "Tối đa"
+    },
+    "driving": "Bạn đang điều khiển tác vụ này. Trả lại cho worker rồi mới gửi tiếp được.",
+    "waitingAnswer": "Worker đang chờ bạn trả lời câu hỏi ở trên."
+  },
+  "review": {
+    "verdict": {
+      "accepted": "Đã chấp nhận",
+      "rejected": "Đã từ chối"
+    },
+    "acceptedTitle": "Chấp nhận phần việc này?",
+    "rejectedTitle": "Từ chối phần việc này?",
+    "acceptedDesc": "Tác vụ được đánh dấu đã duyệt. Các tác vụ chờ nó có thể bắt đầu.",
+    "rejectedDesc": "Tác vụ được đánh dấu cần làm lại. Hãy nói cần sửa gì; ghi chú được lưu cùng phần duyệt.",
+    "notes": "Ghi chú (không bắt buộc)",
+    "notesReject": "Cần sửa gì?",
+    "notesPlaceholder": "Ghi chú ngắn để lưu lại…",
+    "acceptedConfirm": "Chấp nhận",
+    "rejectedConfirm": "Từ chối",
+    "acceptedToast": "Đã chấp nhận",
+    "rejectedToast": "Đã từ chối"
+  },
+  "confirm": {
+    "cancelTitle": "Huỷ tác vụ này?",
+    "cancelDesc": "Worker dừng ngay. Các tệp đã sửa vẫn giữ nguyên.",
+    "cancelConfirm": "Huỷ tác vụ",
+    "takeoverTitle": "Tự làm tiếp tác vụ này?",
+    "takeoverDesc": "Một console sẽ mở trên cuộc hội thoại của worker để bạn tự làm tiếp.",
+    "takeoverActiveDesc": "Lượt đang chạy sẽ dừng, rồi một console mở trên cuộc hội thoại của worker để bạn tự làm tiếp.",
+    "takeoverConfirm": "Tự làm tiếp"
+  },
+  "detail": {
+    "loading": "Đang tải tác vụ…",
+    "notFound": "Không mở được tác vụ này",
+    "error": "Đã xảy ra lỗi"
+  },
+  "views": {
+    "label": "Các chế độ xem tác vụ",
+    "terminal": "Terminal",
+    "tree": "Cây",
+    "graph": "Đồ thị",
+    "files": "Tệp",
+    "git": "Git"
+  },
+  "cmd": {
+    "followup": "Giao thêm cho tác vụ này",
+    "accept": "Chấp nhận tác vụ này",
+    "reject": "Từ chối tác vụ này",
+    "cancel": "Huỷ tác vụ này",
+    "takeover": "Tự làm tiếp tác vụ này",
+    "copyId": "Chép mã tác vụ",
+    "view": "Xem {name}"
+  }
+}

@@ -131,6 +131,7 @@ function onKeydown(event: KeyboardEvent) {
 }
 
 .split__sidebar {
+  position: relative;
   display: flex;
   flex-direction: column;
   flex: 1;
@@ -151,6 +152,9 @@ function onKeydown(event: KeyboardEvent) {
 }
 
 .split__main {
+  /* Contains absolutely positioned descendants (e.g. .sr-only labels), which would otherwise overflow the
+     workspace and make it scroll. */
+  position: relative;
   flex: 1;
   min-width: 0;
   min-height: 0;

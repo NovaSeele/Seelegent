@@ -19,6 +19,8 @@ const props = withDefaults(
     size?: 'sm' | 'md'
     disabled?: boolean
     autocomplete?: string
+    /** Keyboard shortcut that focuses the field (aria-keyshortcuts). */
+    keyshortcuts?: string
   }>(),
   {
     hint: undefined,
@@ -28,6 +30,7 @@ const props = withDefaults(
     icon: undefined,
     size: 'md',
     autocomplete: 'off',
+    keyshortcuts: undefined,
   },
 )
 
@@ -59,6 +62,7 @@ defineExpose({ focus: () => input.value?.focus(), select: () => input.value?.sel
         :autocomplete="autocomplete"
         :aria-invalid="error ? 'true' : undefined"
         :aria-describedby="describedBy"
+        :aria-keyshortcuts="keyshortcuts"
         spellcheck="false"
       />
       <slot name="end" />

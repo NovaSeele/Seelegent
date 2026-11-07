@@ -11,6 +11,8 @@
   },
   "group": {
     "navigation": "Go to",
+    "task": "This task",
+    "tasks": "Tasks",
     "general": "General",
     "settings": "Settings",
     "appearance": "Appearance",

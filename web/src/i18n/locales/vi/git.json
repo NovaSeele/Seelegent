@@ -1,0 +1,63 @@
+{
+  "loading": "Đang đọc kho git…",
+  "loadError": "Không đọc được kho git: {error}",
+  "notRepo": "Không phải kho git",
+  "notRepoDesc": "{cwd} không nằm trong kho git nào nên không có gì để commit.",
+  "noBranch": "detached",
+  "files": "{n} tệp",
+  "refresh": "Đọc lại",
+  "empty": "Tác vụ này chưa đổi tệp nào",
+  "emptyDesc": "Tệp worker sửa sẽ hiện ở đây để xem lại và commit.",
+  "listLabel": "Các tệp đã đổi",
+  "diffLabel": "Thay đổi trong tệp đang chọn",
+  "wrap": "Xuống dòng",
+  "preexisting": "{n} tệp đã đổi từ trước tác vụ này",
+  "preexistingDesc": "Đó không phải việc của tác vụ này nên không có trong danh sách commit.",
+  "failed": "Git: {error}",
+  "binary": "nhị phân",
+  "renamedFrom": "từ {path}",
+  "status": {
+    "added": "Thêm mới",
+    "modified": "Đã sửa",
+    "deleted": "Đã xoá",
+    "renamed": "Đổi tên",
+    "untracked": "Mới, chưa theo dõi"
+  },
+  "diff": {
+    "binary": "Tệp nhị phân: không có diff dạng chữ.",
+    "empty": "Không đổi dòng nào (chỉ đổi quyền hoặc tên).",
+    "caption": "Thay đổi trong {path}: thêm {additions}, bớt {deletions}",
+    "add": "thêm",
+    "del": "bớt",
+    "hidden": "Còn {n} dòng đang ẩn.",
+    "showAll": "Hiện cả {n} dòng",
+    "truncated": "Diff quá lớn nên đã bị cắt bớt.",
+    "loading": "Đang tải diff…",
+    "error": "Không tải được diff: {error}"
+  },
+  "commit": {
+    "open": "Commit…",
+    "title": "Commit các tệp của tác vụ",
+    "desc": "Chỉ commit các tệp bạn đánh dấu; những gì bạn đã stage khác vẫn giữ nguyên.",
+    "message": "Nội dung commit",
+    "placeholder": "feat(phạm vi): thay đổi gì",
+    "files": "Tệp",
+    "all": "Tất cả ({n})",
+    "renameNote": "Tệp đổi tên được commit cùng việc xoá đường dẫn cũ.",
+    "active": "Worker vẫn đang chạy. Hãy commit khi tác vụ xong.",
+    "confirm": "Commit {n} tệp",
+    "done": "Đã commit {sha}: {summary}",
+    "busy": "Một thao tác git khác đang chạy."
+  },
+  "suggest": {
+    "ask": "Gợi ý nội dung",
+    "failed": "Không gợi ý được nội dung.",
+    "use": "Dùng",
+    "dismiss": "Bỏ qua"
+  },
+  "cmd": {
+    "next": "Git: tệp kế tiếp",
+    "prev": "Git: tệp trước",
+    "commit": "Git: commit các tệp của tác vụ…"
+  }
+}

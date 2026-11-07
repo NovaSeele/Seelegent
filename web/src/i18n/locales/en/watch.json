@@ -1,0 +1,67 @@
+{
+  "loading": "Loading tasks…",
+  "summary": {
+    "allClear": "Nothing needs you right now.",
+    "needs": "{count} task needs you | {count} tasks need you",
+    "running": "{count} running | {count} running",
+    "queued": "{count} queued | {count} queued"
+  },
+  "tabs": {
+    "label": "Show",
+    "all": "All",
+    "needs": "Needs you ({count})",
+    "running": "Running ({count})"
+  },
+  "needs": {
+    "title": "Needs you",
+    "empty": "Nothing is waiting for you.",
+    "waiting": "waiting {time}"
+  },
+  "next": {
+    "answer": "Answer",
+    "review": "Review changes",
+    "open": "Open task"
+  },
+  "running": {
+    "title": "Running",
+    "empty": "No task is running.",
+    "elapsed": "for {time}",
+    "noStep": "Starting…",
+    "until": "Quota back {time}",
+    "turn": "turn {n}",
+    "tokens": "{n} tokens",
+    "files": "{count} file | {count} files"
+  },
+  "recent": {
+    "title": "Recently finished",
+    "empty": "No task has finished yet.",
+    "all": "All tasks"
+  },
+  "accounts": {
+    "title": "Accounts",
+    "manage": "Manage accounts",
+    "empty": "No accounts yet. Add one to start delegating work.",
+    "noQuota": "No quota data yet",
+    "busy": "{busy} of {max} slots busy",
+    "resets": "resets {time}",
+    "state": {
+      "ready": "Ready",
+      "busy": "Busy",
+      "resting": "Resting",
+      "exhausted": "Out of quota",
+      "checking": "Checking quota",
+      "signingIn": "Signing in",
+      "needsLogin": "Sign-in required",
+      "noKey": "No API key",
+      "noPlan": "Plan not supported",
+      "twin": "Duplicate",
+      "disabled": "Off"
+    },
+    "twin": "Same sign-in as {name}; that account gets the work.",
+    "readFailed": "Last quota read failed; numbers may be old."
+  },
+  "empty": {
+    "title": "Nothing to watch yet",
+    "desc": "When Claude delegates work, the tasks show up here: what needs you first, then what is running."
+  }
+}

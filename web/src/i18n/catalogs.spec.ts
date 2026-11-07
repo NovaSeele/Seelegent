@@ -143,4 +143,41 @@ describe('catalogs', () => {
       }
     }
   })
+
+  it('names each task state once: the pill, the banner and the Watch board share one word', () => {
+    for (const loc of SUPPORTED_LOCALES) {
+      const flat = catalog(loc)
+      expect(flat['common.attention.failed'], loc).toBe(flat['common.status.failed.label'])
+      expect(flat['process.state.failed'], loc).toBe(flat['common.status.failed.label'])
+      expect(flat['common.attention.review'], loc).toBe(flat['common.status.review.label'])
+      expect(flat['common.attention.depsBlocked'], loc).toBe(
+        flat['common.status.blockedDeps.label'],
+      )
+    }
+  })
+
+  /** Vietnamese glossary: one word per concept (design review M10). */
+  it('keeps the Vietnamese wording to the glossary', () => {
+    const dropped: [RegExp, string][] = [
+      [/(^|[^\p{L}])task([^\p{L}]|$)/iu, 'tác vụ'],
+      [/(^|[^\p{L}])thợ([^\p{L}]|$)/iu, 'worker'],
+      [/(^|[^\p{L}])lái([^\p{L}]|$)/iu, 'điều khiển'],
+      [/đứng im/iu, 'bị kẹt'],
+      [/lỗi gì/iu, 'đã xảy ra lỗi'],
+    ]
+    const vi = catalog('vi')
+    const found = Object.entries(vi).flatMap(([key, message]) =>
+      dropped
+        .filter(([pattern]) => pattern.test(message.replace(/\{\w+\}/g, '')))
+        .map(([, word]) => `${key}: "${message}" (use "${word}")`),
+    )
+    expect(found).toEqual([])
+    for (const key of [
+      'common.status.failed.label',
+      'common.attention.failed',
+      'process.state.failed',
+    ]) {
+      expect(vi[key], key).toBe('Thất bại')
+    }
+  })
 })
