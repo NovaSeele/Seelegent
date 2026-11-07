@@ -4,6 +4,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -12,12 +13,15 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/NovaSeele/Seelegent/internal/buildinfo"
+	"github.com/NovaSeele/Seelegent/internal/client"
 )
 
 // Exit codes returned by Run.
 const (
 	ExitOK    = 0
 	ExitError = 1
+	// ExitDaemonLocked: `seelegent daemon` found another daemon holding the data directory's lock.
+	ExitDaemonLocked = client.ExitDaemonLocked
 )
 
 // Execute runs the command line with the process arguments and exits with its status code.
@@ -36,6 +40,9 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	root.SetErr(stderr)
 	if err := root.ExecuteContext(ctx); err != nil {
 		_, _ = fmt.Fprintf(stderr, "Error: %v\n", err)
+		if _, running := errors.AsType[*daemonRunningError](err); running {
+			return ExitDaemonLocked
+		}
 		return ExitError
 	}
 	return ExitOK

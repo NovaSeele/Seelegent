@@ -2,16 +2,19 @@ package client
 
 import (
 	"context"
+	"errors"
 	"net"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/NovaSeele/Seelegent/internal/api"
 	"github.com/NovaSeele/Seelegent/internal/config"
+	"github.com/NovaSeele/Seelegent/internal/fsutil"
 )
 
 // envFakeDaemon makes the test binary, started as "<exe> daemon --port <n>", a fake daemon: it answers the health
@@ -19,8 +22,13 @@ import (
 const envFakeDaemon = "CLIENT_TEST_FAKE_DAEMON"
 
 func TestMain(m *testing.M) {
-	if len(os.Args) == 4 && os.Args[1] == "daemon" && os.Args[2] == "--port" && os.Getenv(envFakeDaemon) == "1" {
-		os.Exit(fakeDaemon(os.Args[3]))
+	if len(os.Args) == 4 && os.Args[1] == "daemon" && os.Args[2] == "--port" {
+		switch os.Getenv(envFakeDaemon) {
+		case "1":
+			os.Exit(fakeDaemon(os.Args[3]))
+		case "locked": // another daemon holds the data directory's lock
+			os.Exit(ExitDaemonLocked)
+		}
 	}
 	os.Exit(m.Run())
 }
@@ -47,6 +55,56 @@ func fakeDaemon(port string) int {
 	}
 	_ = srv.Close()
 	return 0
+}
+
+// TestSpawnedDaemonLocked: a started daemon that exits for the lock is reported by where the running daemon is,
+// not as a failed start.
+func TestSpawnedDaemonLocked(t *testing.T) {
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cases := []struct {
+		name      string
+		hold      bool
+		portFile  int
+		wantParts []string
+	}{
+		{"still shutting down", false, 0, []string{"previous Seelegent daemon", "still shutting down"}},
+		{"starting", true, 0, []string{"holds its lock", "try again shortly"}},
+		{"on another port", true, 1, []string{"runs on port", "this MCP looked on port"}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			paths := testPaths(t)
+			if err := paths.EnsureDirs(); err != nil {
+				t.Fatal(err)
+			}
+			if c.hold {
+				l, err := fsutil.TryLock(paths.LockFile)
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer func() { _ = l.Unlock() }()
+			}
+			if c.portFile != 0 {
+				writePortFile(t, paths, freePort(t))
+			}
+			port := freePort(t)
+			start := SpawnDaemon(exe, paths, port, append(os.Environ(), envFakeDaemon+"=locked"))
+			d := NewDaemon(DaemonOptions{Paths: paths, Port: port, Start: start, StartTimeout: 20 * time.Second,
+				ProbeTimeout: 500 * time.Millisecond, PollInterval: 50 * time.Millisecond})
+			_, err := d.Ensure(t.Context())
+			if !errors.Is(err, ErrNotRunning) {
+				t.Fatalf("err = %v", err)
+			}
+			for _, p := range append(c.wantParts, paths.Home) {
+				if !strings.Contains(err.Error(), p) {
+					t.Errorf("err = %v, want %q", err, p)
+				}
+			}
+		})
+	}
 }
 
 // TestSpawnDaemon starts the test binary as a detached daemon through SpawnDaemon and finds it.

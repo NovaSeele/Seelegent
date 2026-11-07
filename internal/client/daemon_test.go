@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/NovaSeele/Seelegent/internal/api"
 	"github.com/NovaSeele/Seelegent/internal/config"
+	"github.com/NovaSeele/Seelegent/internal/fsutil"
 )
 
 // healthHandler answers GET /api/v1/health like a daemon of the given API version.
@@ -150,6 +152,115 @@ func TestEnsureStartFails(t *testing.T) {
 	broken := newTestDaemon(t, port, func(context.Context) (<-chan error, error) { return nil, errors.New("no exe") })
 	if _, err := broken.Ensure(t.Context()); err == nil || !strings.Contains(err.Error(), "no exe") {
 		t.Fatalf("start error = %v", err)
+	}
+}
+
+// writePortFile records port in the data directory's port file, as a running daemon does.
+func writePortFile(t *testing.T, paths config.Paths, port int) {
+	t.Helper()
+	if err := paths.EnsureDirs(); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(paths.PortFile, []byte(strconv.Itoa(port)+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// holdLock holds the data directory's daemon lock until the test ends, as a running daemon does.
+func holdLock(t *testing.T, paths config.Paths) {
+	t.Helper()
+	l, err := fsutil.TryLock(paths.LockFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = l.Unlock() })
+}
+
+// TestFindThroughPortFile: a daemon of this home that runs on another port than the configured one (port changed
+// in the settings, started with --port) is found through its port file, and no second daemon is started.
+func TestFindThroughPortFile(t *testing.T) {
+	paths := testPaths(t)
+	running, configured := freePort(t), freePort(t)
+	listenOn(t, running, healthHandler(api.APIVersion))
+	writePortFile(t, paths, running)
+	holdLock(t, paths)
+	started := false
+	d := NewDaemon(DaemonOptions{Paths: paths, Port: configured, ProbeTimeout: 500 * time.Millisecond,
+		Start: func(context.Context) (<-chan error, error) { started = true; return nil, nil }})
+	c, err := d.Ensure(t.Context())
+	if err != nil || started || c.BaseURL() != "http://127.0.0.1:"+strconv.Itoa(running) {
+		t.Fatalf("ensure = %v, %v (started %v)", c, err, started)
+	}
+}
+
+// TestStalePortFile: a port file left by a daemon that crashed never blocks a start, whether its port is free or
+// taken by another program, and whether or not something holds the lock.
+func TestStalePortFile(t *testing.T) {
+	foreign := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+	})
+	cases := []struct {
+		name          string
+		other, locked bool
+	}{
+		{"nobody listens", false, false},
+		{"another program", true, false},
+		{"another program, lock held", true, true},
+		{"nobody listens, lock held", false, true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			paths := testPaths(t)
+			stale, configured := freePort(t), freePort(t)
+			if c.other {
+				listenOn(t, stale, foreign)
+			}
+			writePortFile(t, paths, stale)
+			if c.locked {
+				holdLock(t, paths)
+			}
+			var starts atomic.Int32
+			d := NewDaemon(DaemonOptions{Paths: paths, Port: configured, ProbeTimeout: 500 * time.Millisecond,
+				StartTimeout: 5 * time.Second, PollInterval: 20 * time.Millisecond,
+				Start: func(context.Context) (<-chan error, error) {
+					starts.Add(1)
+					listenOn(t, configured, healthHandler(api.APIVersion))
+					return make(chan error), nil
+				}})
+			c2, err := d.Ensure(t.Context())
+			if err != nil || starts.Load() != 1 || c2.BaseURL() != "http://127.0.0.1:"+strconv.Itoa(configured) {
+				t.Fatalf("ensure = %v, %v (starts %d)", c2, err, starts.Load())
+			}
+		})
+	}
+}
+
+// TestProbeTimeout: a port that accepts but never answers is reported as busy or hung, and nothing is started.
+func TestProbeTimeout(t *testing.T) {
+	port := freePort(t)
+	block := make(chan struct{})
+	listenOn(t, port, http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		select {
+		case <-block:
+		case <-r.Context().Done():
+		}
+	}))
+	defer close(block)
+	started := false
+	d := NewDaemon(DaemonOptions{Paths: testPaths(t), Port: port, ProbeTimeout: 200 * time.Millisecond,
+		Start: func(context.Context) (<-chan error, error) { started = true; return nil, nil }})
+	_, err := d.Ensure(t.Context())
+	if !TimedOut(err) || started || !strings.Contains(err.Error(), "did not answer within 200ms (a busy or hung") {
+		t.Fatalf("ensure = %v (started %v)", err, started)
+	}
+}
+
+func TestNoStartMessage(t *testing.T) {
+	d := NewDaemon(DaemonOptions{Paths: testPaths(t), Port: freePort(t), NoStart: "the daemon running this worker " +
+		"cannot be reached"})
+	if _, err := d.Ensure(t.Context()); !errors.Is(err, ErrNotRunning) || err.Error() != "the daemon running this "+
+		"worker cannot be reached" {
+		t.Fatalf("err = %v", err)
 	}
 }
 
