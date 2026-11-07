@@ -55,6 +55,13 @@ describe('tasks store: summaries', () => {
     scope.stop()
   })
 
+  it('never lists a verifier review task (kind verify) on its own', () => {
+    const store = useTasksStore()
+    store.upsert(makeTask({ id: 'v', kind: 'verify' }))
+    store.applySnapshot([makeTask({ id: 'p' }), makeTask({ id: 'v2', kind: 'verify' })])
+    expect(store.all().map((task) => task.id)).toEqual(['p'])
+  })
+
   it('removes tasks missing from a snapshot but keeps older ones outside its window', () => {
     const store = useTasksStore()
     const review = { verdict: 'accepted' as const, at: iso() }

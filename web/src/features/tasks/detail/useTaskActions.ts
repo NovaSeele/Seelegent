@@ -6,8 +6,8 @@
 import { shallowRef } from 'vue'
 import { useI18n } from 'vue-i18n'
 
-import { tasksApi, type TasksApi } from '@/api'
-import type { FollowupRequest, TaskSummary, Verdict } from '@/api/types'
+import { ApiError, tasksApi, type TasksApi } from '@/api'
+import type { FollowupRequest, LaneConflict, TaskSummary, Verdict } from '@/api/types'
 import { useTasksStore } from '@/stores/tasks'
 import { useToastStore } from '@/stores/toast'
 
@@ -19,6 +19,17 @@ export function useTaskActions(taskId: () => string, api: TasksApi = tasksApi) {
   const tasks = useTasksStore()
   const toast = useToastStore()
   const busy = shallowRef<TaskActionName | null>(null)
+
+  /** The toast text of a failed write; a lane conflict names the tasks that hold the files. */
+  function failure(error: unknown): string {
+    if (error instanceof ApiError && error.details.reason === 'lane_conflict') {
+      const conflicts = (error.details.conflicts ?? []) as readonly LaneConflict[]
+      const tasks = conflicts.map((c) => c.title || c.taskId).join(', ')
+      return t('task.actions.laneConflict', { tasks })
+    }
+    const message = error instanceof Error ? error.message : String(error)
+    return t('task.actions.failed', { error: message })
+  }
 
   async function run(
     name: TaskActionName,
@@ -32,8 +43,7 @@ export function useTaskActions(taskId: () => string, api: TasksApi = tasksApi) {
       if (success) toast.show({ message: success, tone: 'success' })
       return true
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      toast.show({ message: t('task.actions.failed', { error: message }), tone: 'error' })
+      toast.show({ message: failure(error), tone: 'error' })
       return false
     } finally {
       busy.value = null

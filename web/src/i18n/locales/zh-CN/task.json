@@ -11,7 +11,8 @@
     "cancelled": "任务已取消",
     "tookOver": "正在打开 worker 对话的控制台",
     "copied": "已复制任务 ID",
-    "copyFailed": "无法复制：浏览器拒绝了剪贴板权限"
+    "copyFailed": "无法复制：浏览器拒绝了剪贴板权限",
+    "laneConflict": "已拒绝：这些文件在 {tasks} 的通道内。"
   },
   "header": {
     "driving": "由你接管中",
@@ -166,5 +167,88 @@
       "forceDesc": "这些文件在本轮结束后被修改过。它们较新的内容将被替换为第 {n} 轮之前的内容；替换前会先备份。",
       "forceConfirm": "覆盖 ({n})"
     }
+  },
+  "gate": {
+    "title": "关卡",
+    "chip": "关卡：{state}",
+    "state": {
+      "none": "尚未运行",
+      "running": "运行中",
+      "green": "已通过",
+      "red": "未通过",
+      "error": "无法运行",
+      "skipped": "已停止"
+    },
+    "phase": {
+      "running": "运行中",
+      "settling": "等待其他任务",
+      "verifying": "二次审查中"
+    },
+    "turn": "第 {n} 轮",
+    "fixTurns": "{count} 次自动修复",
+    "barShort": "完成标准已变化",
+    "notYet": "worker 汇报后关卡就会运行。",
+    "steps": "步骤",
+    "stepsOfTurn": "第 {n} 轮之后的步骤",
+    "stepState": {
+      "pending": "等待中",
+      "running": "运行中",
+      "green": "通过",
+      "red": "未通过",
+      "error": "出错",
+      "warn": "警告",
+      "not_run": "未运行"
+    },
+    "kind": {
+      "lane": "通道",
+      "hygiene": "卫生检查",
+      "auto": "语法检查",
+      "doctrine": "项目准则",
+      "task": "命令",
+      "detect": "自动发现的命令"
+    },
+    "exit": "退出码 {n}",
+    "timedOut": "已超时",
+    "foreign": "只在其他任务的文件中失败，不计入。",
+    "output": "输出",
+    "notRun": "未运行：{steps}",
+    "settled": "仓库中的其他任务停止后重新运行。",
+    "verifier": {
+      "title": "二次审查",
+      "verdict": {
+        "running": "审查中",
+        "accept": "已接受",
+        "reject": "已拒绝",
+        "error": "没有结论"
+      },
+      "short": {
+        "running": "二次审查中",
+        "accept": "二次审查已接受",
+        "reject": "二次审查已拒绝",
+        "error": "二次审查没有结论"
+      },
+      "unverified": "{n} 处引用的行与仓库不符：",
+      "on": "开",
+      "off": "关"
+    },
+    "checks": "关卡检查的内容",
+    "lane": {
+      "title": "通道",
+      "none": "没有通道：可以改动任何文件",
+      "source": {
+        "lead": "由 lead 设定",
+        "spec": "来自 spec 任务"
+      },
+      "forced": "已强占 {tasks} 的通道"
+    },
+    "commands": "命令",
+    "off": "已关闭（仍检查通道和卫生）",
+    "noCommands": "没有命令",
+    "detected": "自动发现",
+    "doctrine": "项目准则",
+    "budget": "自动修复",
+    "fixes": "已用 {n}/{max}",
+    "feature": "Spec 功能",
+    "bar": "开始后有变化"
   }
 }
