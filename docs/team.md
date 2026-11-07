@@ -115,7 +115,9 @@ After a round:
   and starts the next round (or goes to `deciding` after the last one);
 - otherwise the meeting goes to `deciding` after the last round, or earlier once every attendee present held its
   position for a round (same option, confidence within 10 points);
-- a round 1 in which every attendee was absent fails the meeting.
+- a round 1 in which every attendee was absent fails the meeting. An absent answer says why in `absentReason`
+  (`failed`: the run failed or could not start; `cancelled`; `gone`: the run or its turn no longer exists) with the
+  detail in `error`; the dashboard shows a failed run as a failure.
 
 `POST /meetings/{id}/decide {decision, rationale?, option?}` records the decision. A senior whose final stance
 differs is recorded as advice not taken; a peer whose stance differs gets one more turn to dissent formally or
@@ -123,8 +125,9 @@ concede (`dissent`), and the meeting closes when those are in; a peer whose turn
 recorded as `absent` (neither a dissent nor a concession). Without options free-text stances cannot be
 compared, so every senior counts as advice not taken and every peer gets that turn, where it can concede (as in the
 old version); give options when the record matters. For 30 days a dissent watches the files it cites:
-a later task that changed one of them and was rejected, or ended with a red gate, is added to it as a signal. The
-lead settles a dissent with `POST /meetings/{id}/dissents/{did}/outcome {outcome: vindicated|dismissed}`. The old
+a later task that changed one of them and was rejected, or ended with a red gate, is added to it as a signal (with
+the task's title). The lead settles a dissent with `POST /meetings/{id}/dissents/{did}/outcome {outcome:
+vindicated|dismissed}`; `open` takes the outcome back (the dashboard's Undo). The old
 `regression` signal could never fire and is gone (old bug D19).
 
 `POST /meetings/{id}/act {items}` turns the decision into up to 20 delegated tasks linked to the meeting
