@@ -437,6 +437,11 @@ func TestIssuesAndAutomations(t *testing.T) {
 	if len(mcpserver.Unavailable()) != 0 {
 		t.Fatalf("unavailable tools: %v", mcpserver.Unavailable())
 	}
+	// The first commit of a new repository is the user's: give git an author where none is configured.
+	for k, v := range map[string]string{"GIT_AUTHOR_NAME": "Test", "GIT_COMMITTER_NAME": "Test",
+		"GIT_AUTHOR_EMAIL": "test@example.invalid", "GIT_COMMITTER_EMAIL": "test@example.invalid"} {
+		t.Setenv(k, v)
+	}
 	d := newDaemon(t)
 	repoDir := filepath.Join(d.home, "repo")
 	if err := os.MkdirAll(repoDir, 0o700); err != nil {
