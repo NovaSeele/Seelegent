@@ -3,7 +3,6 @@ package cli
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -15,7 +14,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/NovaSeele/Seelegent/internal/account"
 	"github.com/NovaSeele/Seelegent/internal/buildinfo"
 	"github.com/NovaSeele/Seelegent/internal/config"
 	"github.com/NovaSeele/Seelegent/internal/setup"
@@ -24,15 +22,8 @@ import (
 // setupHookInputLimit bounds what the hook command reads from Claude Code.
 const setupHookInputLimit = 4 << 20
 
-// errSetupInWorker refuses the commands that change the machine or the data folder (setup, migrate) when run
-// inside a Seelegent worker.
-var errSetupInWorker = errors.New("this command does not run inside a Seelegent worker (" + account.EnvWorker + "=1)")
-
 func newSetupCommand(info buildinfo.Info) *cobra.Command {
-	var (
-		req    setup.Request
-		asJSON bool
-	)
+	var req setup.Request
 	cmd := &cobra.Command{
 		Use:   "setup",
 		Short: "Register Seelegent with the lead hosts on this machine",
@@ -42,11 +33,9 @@ func newSetupCommand(info buildinfo.Info) *cobra.Command {
 			"The hosts start the executable given with --exe (default: this seelegent, with links resolved) with\n" +
 			"the argument \"mcp\". An entry named seelegent that another program wrote is a conflict (exit code 1,\n" +
 			"nothing written) unless --force. --remove removes only what Seelegent added.",
-		Args: cobra.NoArgs,
+		Args:        noArgs,
+		Annotations: map[string]string{annOp: "setup"},
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			if os.Getenv(account.EnvWorker) == "1" {
-				return errSetupInWorker
-			}
 			if req.Exe == "" && !req.Remove {
 				exe, err := setupExecutable()
 				if err != nil {
@@ -74,13 +63,7 @@ func newSetupCommand(info buildinfo.Info) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if err := printSetupReport(cmd.OutOrStdout(), asJSON, rep, rep.WriteText); err != nil {
-				return err
-			}
-			if rep.Failed() {
-				return errors.New("some items failed or conflict")
-			}
-			return nil
+			return printSetupReport(cmd, rep, rep.WriteText, rep.Failed(), "some items failed or conflict")
 		},
 	}
 	f := cmd.Flags()
@@ -91,32 +74,23 @@ func newSetupCommand(info buildinfo.Info) *cobra.Command {
 	f.BoolVar(&req.Hooks, "hooks", false, "also install the Claude Code reminder hook (delegate instead of subagents)")
 	f.BoolVar(&req.Force, "force", false, "replace an entry or skill named seelegent that another program wrote")
 	f.StringVar(&req.Exe, "exe", "", "the seelegent executable the hosts start (default: this one)")
-	f.BoolVar(&asJSON, "json", false, "print the report as JSON")
 	return cmd
 }
 
 func newSkillCommand(info buildinfo.Info) *cobra.Command {
-	var asJSON bool
-	cmd := &cobra.Command{
+	return &cobra.Command{
 		Use:   "skill",
 		Short: "Print the lead skill (the guide `seelegent setup` installs)",
-		Args:  cobra.NoArgs,
+		Args:  noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			text, err := setup.RenderSkill(info.Version, setupSkillPort())
 			if err != nil {
 				return err
 			}
-			out := cmd.OutOrStdout()
-			if asJSON {
-				return writeSetupJSON(out, map[string]string{"name": setup.ServerName, "version": info.Version,
-					"file": setup.SkillFile, "content": text})
-			}
-			_, err = io.WriteString(out, text)
-			return err
+			return emit(cmd, map[string]string{"name": setup.ServerName, "version": info.Version,
+				"file": setup.SkillFile, "content": text}, func(w io.Writer) { _, _ = io.WriteString(w, text) })
 		},
 	}
-	cmd.Flags().BoolVar(&asJSON, "json", false, "print as JSON")
-	return cmd
 }
 
 // newHookCommand is the hidden `seelegent hook claude-agent` that Claude Code runs before its Agent tool (installed
@@ -126,7 +100,7 @@ func newHookCommand() *cobra.Command {
 	hook.AddCommand(&cobra.Command{
 		Use:   setup.HookCommand,
 		Short: "Claude Code PreToolUse hook for the Agent tool: reminds the lead to delegate",
-		Args:  cobra.NoArgs,
+		Args:  noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			// Input that cannot be read is not valid JSON either, so the hook stays silent.
 			in, _ := io.ReadAll(io.LimitReader(cmd.InOrStdin(), setupHookInputLimit))
@@ -189,17 +163,21 @@ func setupSkillPort() int {
 	return settings.Port
 }
 
-// printSetupReport prints a report as indented JSON or as text.
-func printSetupReport(out io.Writer, asJSON bool, v any, text func(io.Writer) error) error {
-	if asJSON {
-		return writeSetupJSON(out, v)
+// printSetupReport prints a report of setup or migrate (as JSON with --json, else as text). When the report holds
+// failed items it ends with exit 1 and prints no second document: the report already says what failed.
+func printSetupReport(cmd *cobra.Command, rep any, text func(io.Writer) error, failed bool, msg string) error {
+	out := cmd.OutOrStdout()
+	var err error
+	if jsonFlag(cmd) {
+		err = printJSON(out, rep)
+	} else {
+		err = text(out)
 	}
-	return text(out)
-}
-
-func writeSetupJSON(out io.Writer, v any) error {
-	enc := json.NewEncoder(out)
-	enc.SetIndent("", "  ")
-	enc.SetEscapeHTML(false)
-	return enc.Encode(v)
+	if err != nil {
+		return err
+	}
+	if failed {
+		return &quietError{msg: msg}
+	}
+	return nil
 }

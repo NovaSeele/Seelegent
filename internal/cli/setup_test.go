@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/NovaSeele/Seelegent/internal/account"
+	"github.com/NovaSeele/Seelegent/internal/ops"
 	"github.com/NovaSeele/Seelegent/internal/setup"
 )
 
@@ -104,9 +105,55 @@ func TestSetupCommandFails(t *testing.T) {
 		!strings.Contains(err.Error(), "unknown host") {
 		t.Errorf("unknown host: %v", err)
 	}
+	// With --json a report with a conflict is the only document on stdout: exit 1 and no error document after it.
+	out.Reset()
+	errOut.Reset()
+	if code := Run(context.Background(), []string{"setup", "--dry-run", "--json", "--exe", exe}, &out, &errOut); code != ExitError {
+		t.Errorf("conflict --json: exit %d", code)
+	}
+	dec := json.NewDecoder(&out)
+	var rep setup.Report
+	if err := dec.Decode(&rep); err != nil || !rep.Failed() {
+		t.Fatalf("report (%v): %+v", err, rep)
+	}
+	if dec.More() {
+		t.Errorf("a second JSON document follows the report: %s", out.String())
+	}
+	if errOut.Len() != 0 {
+		t.Errorf("stderr: %s", errOut.String())
+	}
+
+	// Usage errors exit 2.
+	for _, args := range [][]string{{"setup", "extra"}, {"migrate", "extra"}, {"skill", "extra"}} {
+		out.Reset()
+		errOut.Reset()
+		if code := Run(context.Background(), args, &out, &errOut); code != ExitUsage {
+			t.Errorf("%v: exit %d (%s)", args, code, errOut.String())
+		}
+	}
+
+	// Inside a worker setup and migrate are refused the M7 way; skill and the hook stay allowed.
 	t.Setenv(account.EnvWorker, "1")
-	if _, _, err := execute(t, "setup", "--dry-run", "--exe", exe); err == nil {
-		t.Error("setup ran inside a worker")
+	for _, args := range [][]string{{"setup", "--dry-run", "--json", "--exe", exe}, {"migrate", "--dry-run", "--json"}} {
+		out.Reset()
+		errOut.Reset()
+		if code := Run(context.Background(), args, &out, &errOut); code != ExitError {
+			t.Errorf("%v in a worker: exit %d", args, code)
+		}
+		var e errorOut
+		if err := json.Unmarshal(out.Bytes(), &e); err != nil || e.Code != "forbidden" || e.Error != ops.WorkerMessage ||
+			e.Details["caller"] != "worker" {
+			t.Errorf("%v in a worker (%v): %s", args, err, out.String())
+		}
+	}
+	for _, args := range [][]string{{"skill"}, {"hook", setup.HookCommand}} {
+		out.Reset()
+		if code := Run(context.Background(), args, &out, &errOut); code != ExitOK {
+			t.Errorf("%v in a worker: exit %d", args, code)
+		}
+	}
+	if setup.EnvLead != ops.EnvLead {
+		t.Error("setup and ops name the lead variable differently")
 	}
 }
 
