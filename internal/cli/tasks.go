@@ -42,19 +42,28 @@ func (d deps) daemonClient(cmd *cobra.Command) (*client.Client, *conn, error) {
 	return c, cn, nil
 }
 
-// waitReports waits for ids with ops.WaitReports, finding the daemon again if it restarts during the wait.
+// waitReports waits for ids with ops.WaitReports, finding the daemon again if it restarts during the wait (and
+// starting it again only when it went away without saying it was stopping).
 func waitReports(ctx context.Context, c *client.Client, cn *conn, w ops.Wait) (api.WaitResult, error) {
-	connect := func(ctx context.Context, fresh bool) (*client.Client, error) {
-		if fresh {
-			found, err := cn.daemon.Ensure(ctx)
-			if err != nil {
-				return nil, err
-			}
-			c = found
+	connect := func(ctx context.Context, how ops.Lookup) (*client.Client, error) {
+		var found *client.Client
+		var err error
+		switch how {
+		case ops.Reuse:
+			return c, nil
+		case ops.FindOnly:
+			found, err = cn.daemon.Find(ctx)
+		default:
+			found, err = cn.daemon.Ensure(ctx)
 		}
+		if err != nil {
+			return nil, err
+		}
+		c = found
 		return c, nil
 	}
 	w.Logger = cn.log
+	w.StopGrace = cn.stopGrace
 	return ops.WaitReports(ctx, connect, w)
 }
 

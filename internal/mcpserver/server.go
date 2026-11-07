@@ -54,6 +54,8 @@ func Unavailable() map[string]bool {
 // Daemon finds (and starts) the daemon (client.Daemon).
 type Daemon interface {
 	Ensure(ctx context.Context) (*client.Client, error)
+	// Find only looks for the running daemon (a wait whose daemon said it was stopping never starts one).
+	Find(ctx context.Context) (*client.Client, error)
 }
 
 // Options configure a Server. Daemon is required.
@@ -74,7 +76,10 @@ type Options struct {
 	Getwd func() (string, error)
 	// RetryPause is the pause before a wait reconnects after the daemon went away (1 s when 0).
 	RetryPause time.Duration
-	Logger     *slog.Logger
+	// StopGrace is how long a wait whose daemon said it was stopping looks for one that comes back
+	// (ops.DefaultStopGrace when 0).
+	StopGrace time.Duration
+	Logger    *slog.Logger
 }
 
 // Server is the MCP server.
@@ -322,6 +327,8 @@ func (s *Server) fail(name string, err error) *mcp.CallToolResult {
 			Details: apiErr.Details}
 	case errors.As(err, &notYetErr):
 		info.Code = "not_available"
+	case errors.Is(err, ops.StoppedError{}):
+		info.Code = ops.CodeDaemonStopped
 	case errors.As(err, &foreign), errors.Is(err, client.ErrNotRunning), errors.Is(err, client.ErrUnreachable):
 		info.Code = "daemon_unavailable"
 	}

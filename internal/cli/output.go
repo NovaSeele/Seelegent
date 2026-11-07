@@ -68,6 +68,8 @@ func classify(err error) (int, errorOut) {
 		return ExitError, errorOut{Error: apiErr.Message, Code: string(apiErr.Code), Details: apiErr.Details}
 	case errors.As(err, new(*ops.UnavailableError)):
 		out.Code = codeNotAvailable
+	case errors.Is(err, ops.StoppedError{}):
+		out.Code = ops.CodeDaemonStopped
 	case errors.As(err, &foreign), errors.As(err, &stuck), errors.Is(err, client.ErrNotRunning),
 		errors.Is(err, client.ErrUnreachable):
 		out.Code = codeDaemon

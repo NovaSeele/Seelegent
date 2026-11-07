@@ -263,17 +263,26 @@ func (s *Server) wait(ctx context.Context, k *call) (result, error) {
 }
 
 // waitReports waits for ids (ops.WaitReports over the call's client): reports relative to cwd when given, else to
-// each task's folder, and a daemon that goes away during the wait is found or started again within the wait.
+// each task's folder, and a daemon that goes away during the wait is found or started again within the wait (found
+// only, never started, after it said it was stopping).
 func (s *Server) waitReports(ctx context.Context, k *call, ids []string, seconds int, anyDone, wake bool,
 	cwd string) (api.WaitResult, error) {
-	connect := func(ctx context.Context, fresh bool) (*client.Client, error) {
-		if fresh {
+	connect := func(ctx context.Context, how ops.Lookup) (*client.Client, error) {
+		switch how {
+		case ops.Reuse:
+		case ops.FindOnly:
+			c, err := s.o.Daemon.Find(ctx)
+			if err != nil {
+				return nil, err
+			}
+			k.c = c
+		default:
 			k.c = nil
 		}
 		return k.client(ctx)
 	}
 	return ops.WaitReports(ctx, connect, ops.Wait{IDs: ids, Seconds: seconds, Any: anyDone, WakeOnBlocked: wake,
-		Cwd: cwd, RetryPause: s.o.RetryPause, Logger: s.o.Logger.With("from", "mcp")})
+		Cwd: cwd, RetryPause: s.o.RetryPause, StopGrace: s.o.StopGrace, Logger: s.o.Logger.With("from", "mcp")})
 }
 
 // reportResult is the result of a call that returns one task's report.

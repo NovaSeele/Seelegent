@@ -689,6 +689,7 @@ export type ErrorCode =
   | 'misdirected_request'
   | 'upstream'
   | 'unavailable'
+  | 'daemon_stopping'
   | 'internal'
   | 'not_implemented'
 

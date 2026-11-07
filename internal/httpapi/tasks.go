@@ -1,6 +1,8 @@
 package httpapi
 
 import (
+	"context"
+	"errors"
 	"net/http"
 	"slices"
 	"strconv"
@@ -213,9 +215,21 @@ func (s *Server) wait(w http.ResponseWriter, r *http.Request) (code int, body an
 	if err != nil {
 		return 0, nil, err
 	}
-	res, err := s.o.Tasks.Wait(r.Context(), req, cwd)
-	if err != nil && r.Context().Err() != nil {
+	// The daemon shutting down (Close: POST /daemon/stop or Ctrl+C) ends the wait at once with daemon_stopping, so
+	// the shutdown does not wait out open waits and the caller knows not to start the daemon again.
+	wctx, cancel := context.WithCancelCause(r.Context())
+	defer cancel(nil)
+	defer context.AfterFunc(s.ctx, func() { cancel(errStopping) })()
+	res, err := s.o.Tasks.Wait(wctx, req, cwd)
+	switch {
+	case r.Context().Err() != nil:
 		return 0, nil, nil // the client left; nobody reads an answer
+	case errors.Is(context.Cause(wctx), errStopping) && (err != nil || res.Woke == api.WokeCancelled):
+		// (A wait that ended on its own just before is answered normally.)
+		return 0, nil, translated(api.CodeDaemonStopping, "stopping")
 	}
 	return http.StatusOK, res, err
 }
+
+// errStopping is the cause that ends a wait when the server closes.
+var errStopping = errors.New("the daemon is stopping")

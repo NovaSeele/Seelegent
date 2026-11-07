@@ -90,6 +90,10 @@ var messages = map[string]map[string]string{
 		"en": "this endpoint arrives with a later version",
 		"vi": "endpoint này sẽ có ở phiên bản sau",
 	},
+	"stopping": {
+		"en": "the daemon is stopping; the tasks keep running",
+		"vi": "daemon đang dừng; các task vẫn tiếp tục chạy",
+	},
 	"shutting_down": {
 		"en": "the daemon is shutting down",
 		"vi": "daemon đang tắt",

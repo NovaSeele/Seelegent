@@ -107,6 +107,7 @@ func newDaemon(t *testing.T) *daemon {
 type fixedDaemon struct{ c *client.Client }
 
 func (f fixedDaemon) Ensure(context.Context) (*client.Client, error) { return f.c, nil }
+func (f fixedDaemon) Find(context.Context) (*client.Client, error)   { return f.c, nil }
 
 // connect runs a server with o over an in-memory transport and returns the client session.
 func connect(t *testing.T, o mcpserver.Options) *mcp.ClientSession {

@@ -26,6 +26,9 @@ type deps struct {
 	openURL func(ctx context.Context, url string) error
 	// stopTimeout bounds `seelegent stop` (client.DefaultStopTimeout when 0).
 	stopTimeout time.Duration
+	// stopGrace is how long a wait whose daemon said it was stopping looks for one that comes back
+	// (ops.DefaultStopGrace when 0).
+	stopGrace time.Duration
 }
 
 // defaultDeps are the real ones.
@@ -63,6 +66,8 @@ type conn struct {
 	port      int
 	daemon    *client.Daemon
 	log       *slog.Logger
+	// stopGrace is deps.stopGrace (for the waits).
+	stopGrace time.Duration
 }
 
 // connect reads the settings without creating or writing anything (the daemon owns the data directory) and builds
@@ -72,7 +77,7 @@ func (d deps) connect(mode startMode, log *slog.Logger) (*conn, error) {
 	if err != nil {
 		return nil, err
 	}
-	c := &conn{paths: paths, settings: config.Defaults(), log: log}
+	c := &conn{paths: paths, settings: config.Defaults(), log: log, stopGrace: d.stopGrace}
 	if cfg, err := config.Load(paths.Config); err != nil {
 		c.configErr = err
 	} else {

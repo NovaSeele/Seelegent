@@ -509,6 +509,77 @@ func TestStopRestart(t *testing.T) {
 	_ = os.Remove(paths.PortFile)
 }
 
+// TestStopDuringWait: a daemon stopped while a wait is open answers the wait with daemon_stopping at once (so the
+// stop is quick), and the wait never starts the daemon again: after a plain stop it ends with daemon_stopped; after
+// a restart it goes on against the new daemon and returns the result.
+func TestStopDuringWait(t *testing.T) {
+	cliEnv(t)
+	testHome(t)
+	t.Setenv(config.EnvPort, strconv.Itoa(freeTestPort(t)))
+	t.Setenv(envNoAutoStart, "") // a wait could start the daemon: it must not
+	td := inProcessDeps(t)
+	td.stopGrace = 2 * time.Second
+	var spawns atomic.Int32
+	spawn := td.spawn
+	td.spawn = func(p config.Paths, port int) (client.StartFunc, error) {
+		start, err := spawn(p, port)
+		return func(ctx context.Context) (<-chan error, error) { spawns.Add(1); return start(ctx) }, err
+	}
+	t.Cleanup(func() { // t.Context() has ended by now
+		ctx, cancel := context.WithTimeout(context.Background(), limit)
+		defer cancel()
+		_ = run(ctx, td, []string{"stop"}, io.Discard, io.Discard)
+	})
+
+	must(t, td, "ui", "--no-open")
+	// No account: the task stays pending (waiting for one) until it is cancelled.
+	var rep api.TaskReport
+	must(t, td, "delegate", "--wait", "0", "--cwd", t.TempDir(), "--json", "Wait for me.").json(t, &rep)
+	id := rep.TaskID
+	waitInBackground := func() <-chan result {
+		ch := make(chan result, 1)
+		go func() { ch <- runCLI(t, td, "wait", id, "--seconds", "60", "--no-wake", "--json") }()
+		time.Sleep(500 * time.Millisecond) // the wait is open on the daemon
+		return ch
+	}
+
+	// stop: quick, and the wait ends with daemon_stopped without starting a daemon.
+	waited := waitInBackground()
+	begun := time.Now()
+	must(t, td, "stop")
+	if took := time.Since(begun); took > 2500*time.Millisecond {
+		t.Fatalf("stop with an open wait took %s", took)
+	}
+	r := <-waited
+	var e errorOut
+	r.json(t, &e)
+	if r.code != ExitError || e.Code != ops.CodeDaemonStopped || !strings.Contains(e.Error, "keep running") {
+		t.Fatalf("wait after stop: exit %d %+v", r.code, e)
+	}
+	if n := spawns.Load(); n != 1 {
+		t.Fatalf("%d daemon starts, want only the first", n)
+	}
+	if out := must(t, td, "status").stdout; out != "not running\n" {
+		t.Fatalf("status after stop = %q", out)
+	}
+
+	// restart: the wait carries on against the new daemon and returns once the task ends.
+	must(t, td, "ui", "--no-open")
+	waited = waitInBackground()
+	must(t, td, "restart")
+	time.Sleep(300 * time.Millisecond) // the wait finds the new daemon
+	must(t, td, "cancel", id)
+	r = <-waited
+	var res api.WaitResult
+	r.json(t, &res)
+	if r.code != ExitOK || len(res.Reports) != 1 || res.Reports[0].Status != string(api.StatusCancelled) {
+		t.Fatalf("wait across a restart: exit %d %+v\nstderr: %s", r.code, res, r.stderr)
+	}
+	if n := spawns.Load(); n != 3 { // ui, ui, restart: none by the waits
+		t.Fatalf("%d daemon starts, want 3", n)
+	}
+}
+
 // TestOtherHomesDaemon: home B pointed at the port of home A's daemon never uses, adopts or stops it: status, stop
 // and doctor report the conflict, a task command does not start a daemon, and A's daemon keeps running.
 func TestOtherHomesDaemon(t *testing.T) {
