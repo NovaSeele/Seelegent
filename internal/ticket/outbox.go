@@ -178,8 +178,10 @@ func (s *Service) runStep(ctx context.Context, ticketID, kind string, args map[s
 		return err
 	}
 	result, runErr := fn()
-	_, err := s.updateTicket(context.WithoutCancel(ctx), ticketID, func(tx *sql.Tx, t *ticketRec) error {
-		e, err := getEntry(ctx, tx, id)
+	// The action happened (or failed): its outcome is recorded even when the caller went away meanwhile (N1).
+	wctx := context.WithoutCancel(ctx)
+	_, err := s.updateTicket(wctx, ticketID, func(tx *sql.Tx, t *ticketRec) error {
+		e, err := getEntry(wctx, tx, id)
 		if err != nil {
 			return err
 		}
@@ -193,14 +195,14 @@ func (s *Service) runStep(ctx context.Context, ticketID, kind string, args map[s
 		if e.Result == nil {
 			e.Result = map[string]any{}
 		}
-		if _, err := saveEntry(ctx, tx, scopeTicket, ticketID, e); err != nil {
+		if _, err := saveEntry(wctx, tx, scopeTicket, ticketID, e); err != nil {
 			return err
 		}
 		data := map[string]any{"id": id, "kind": kind, "status": e.Status}
 		if e.Error != "" {
 			data["error"] = e.Error
 		}
-		s.logStep(ctx, tx, ticketID, "outbox", data)
+		s.logStep(wctx, tx, ticketID, "outbox", data)
 		return nil
 	})
 	if runErr != nil {
