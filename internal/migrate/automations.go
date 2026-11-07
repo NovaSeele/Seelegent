@@ -51,9 +51,9 @@ func (a oldAutomation) input() (api.AutomationInput, error) {
 	if a.Schedule.Cron != "" {
 		in.Schedule = api.Schedule{Cron: a.Schedule.Cron}
 	}
-	switch g := string(a.Gate); {
-	case g == "" || g == "null" || g == "true":
-	case g == "false":
+	switch string(a.Gate) {
+	case "", "null", "true":
+	case "false":
 		off := false
 		in.Gate = &off
 	default:
