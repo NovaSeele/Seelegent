@@ -35,7 +35,7 @@ func TestUsageOf(t *testing.T) {
 
 // The mappers that build these shapes are tested where they live (task, role, memory): lists never null.
 func TestEventTypes(t *testing.T) {
-	if len(EventTypes()) != 21 {
+	if len(EventTypes()) != 22 {
 		t.Errorf("%d event types", len(EventTypes()))
 	}
 }
