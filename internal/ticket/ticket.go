@@ -54,6 +54,28 @@ func notFoundf(format string, args ...any) error {
 	return fmt.Errorf("%w: %s", ErrNotFound, fmt.Sprintf(format, args...))
 }
 
+// FailureError refuses a retry "as before" of a ticket whose task could not start because its member is gone or
+// turned off (F69): the same choice would fail again at once. The lead retries with another member or backend, or
+// names the member again once it is back.
+type FailureError struct{ Failure api.TicketFailure }
+
+func (e *FailureError) Error() string {
+	why := "no longer exists"
+	if e.Failure.Reason == api.FailureMemberDisabled {
+		why = "is turned off"
+	}
+	return fmt.Sprintf("the ticket failed because member %q %s, so a retry as before would fail again; retry with "+
+		"another member or backend, or name the member again once it can work", e.Failure.Member, why)
+}
+
+// Is makes errors.Is(err, ErrBadState) true.
+func (e *FailureError) Is(target error) bool { return target == ErrBadState }
+
+// APIDetails are the details of the API error (reason member_missing or member_disabled).
+func (e *FailureError) APIDetails() map[string]any {
+	return map[string]any{"reason": e.Failure.Reason, "member": e.Failure.Member}
+}
+
 // GitError is a git command of the ticket flow that failed; Message is redacted.
 type GitError struct {
 	Op      string

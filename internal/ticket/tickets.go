@@ -435,6 +435,10 @@ func (s *Service) Retry(ctx context.Context, id string, req api.TicketTaskReques
 	if !t.worktreeOK() {
 		return api.TicketTaskResult{}, badStatef("the ticket's worktree is missing; drop it and decide the issue again")
 	}
+	// "As before" asks the member that is gone or turned off again: refused before anything changes (F69).
+	if f := t.Failure; f != nil && f.Member != "" && req.Member == "" && req.Backend == "" {
+		return api.TicketTaskResult{}, &FailureError{Failure: *f}
+	}
 	if _, err := s.updateTicket(ctx, id, func(tx *sql.Tx, t *ticketRec) error {
 		t.Status, t.Error, t.Failure = api.TicketWorking, "", nil
 		s.logStep(ctx, tx, id, "retry", map[string]any{"member": req.Member, "backend": req.Backend})

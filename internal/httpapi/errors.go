@@ -177,8 +177,9 @@ func toAPIError(err error) *apiError {
 	if errors.As(err, &withDetails) && (errors.Is(err, member.ErrInvalid) || errors.Is(err, task.ErrInvalid)) {
 		return &apiError{code: api.CodeInvalidArgument, message: msg, details: withDetails.APIDetails()}
 	}
-	// An automation run now refused because the user has not confirmed it as it is (details.reason not_confirmed).
-	if errors.As(err, &withDetails) && errors.Is(err, automation.ErrBadState) {
+	// An automation run now refused because the user has not confirmed it as it is (details.reason not_confirmed);
+	// a ticket retried as before whose member is gone or off (details.reason member_missing or member_disabled).
+	if errors.As(err, &withDetails) && (errors.Is(err, automation.ErrBadState) || errors.Is(err, ticket.ErrBadState)) {
 		return &apiError{code: api.CodeBadState, message: msg, details: withDetails.APIDetails()}
 	}
 	switch {

@@ -126,6 +126,23 @@ func TestGitHubRoutes(t *testing.T) {
 	if tickets == nil {
 		t.Fatal("tickets is null")
 	}
+	// A ticket whose member does not exist fails; retrying it as before is refused early with the failure's code
+	// (F69), while naming another choice is still allowed to try.
+	e.wantError(e.post("/api/v1/github/repos/"+rp.ID+"/issues/local%231/triage",
+		map[string]any{"action": "assign", "member": "ghost"}), http.StatusBadRequest, api.CodeInvalidArgument, "")
+	e.must(e.get("/api/v1/github/tickets?status=failed"), http.StatusOK).json(t, &tickets)
+	if len(tickets) != 1 || tickets[0].Failure == nil || tickets[0].Failure.Reason != api.FailureMemberMissing {
+		t.Fatalf("failed tickets = %+v", tickets)
+	}
+	got := e.wantError(e.post("/api/v1/github/tickets/"+tickets[0].ID+"/retry", map[string]any{}),
+		http.StatusConflict, api.CodeBadState, "")
+	if got.Details["reason"] != api.FailureMemberMissing || got.Details["member"] != "ghost" {
+		t.Fatalf("retry as before = %+v", got)
+	}
+	e.wantError(e.post("/api/v1/github/tickets/"+tickets[0].ID+"/retry", map[string]any{"member": "ghost"}),
+		http.StatusBadRequest, api.CodeInvalidArgument, "")
+	e.must(e.post("/api/v1/github/tickets/"+tickets[0].ID+"/drop", map[string]any{"reason": "test"}), http.StatusOK)
+	e.must(e.post("/api/v1/github/tickets/"+tickets[0].ID+"/cleanup", nil), http.StatusOK)
 
 	// ticketId is set by the daemon only (C-B21).
 	e.wantError(e.post("/api/v1/tasks", map[string]any{"prompt": "x", "cwd": e.cwd, "ticketId": "tk1"}),

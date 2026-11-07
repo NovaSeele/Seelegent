@@ -185,8 +185,10 @@ leaves it `failed` with the new error. A cause with a code is kept as `failure {
 the member was deleted; `member_disabled`: it is turned off) for the dashboard to explain; `error` stays the
 English text. A ticket remembers who its last task was asked for (`asked {member, backend, model}`): a retry or a
 new task without a member or backend goes to them again ("as before"), so a ticket whose member is gone needs
-another member or a backend, and the dashboard makes the lead pick one. A ticket whose worktree could not be made cannot be retried: drop it and
-decide the issue again.
+another member or a backend. A retry as before of a ticket with such a `failure` is refused before anything
+changes: `409 bad_state` with `details` `{reason: member_missing | member_disabled, member}` (the lead names the
+member again once it is back, or picks another); the dashboard makes the lead pick one. A ticket whose worktree
+could not be made cannot be retried: drop it and decide the issue again.
 
 *Fix checks* (`POST /github/tickets/{id}/fix-checks`) starts a task in the ticket's worktree with the failing
 checks' names, their summaries and the tail of each GitHub Actions job log (at most 4,000 characters, ANSI codes
