@@ -54,6 +54,45 @@ func TestDelegateAndFollowupByMember(t *testing.T) {
 	}
 }
 
+// TestFollowupRefusedOnEndedContestVariant: a variant task takes followups while its contest runs or is ready (a
+// followup reopens a ready contest), and none once the contest was applied, cancelled or failed, whose stored copy
+// of the variant's changes would go stale (F46).
+func TestFollowupRefusedOnEndedContestVariant(t *testing.T) {
+	h := newHarness(t)
+	h.agy("w", 1)
+	h.mu.Lock()
+	h.contestStatus = map[string]string{"k1": api.ContestStatusReady}
+	h.mu.Unlock()
+	h.queue.Push(t, okScript("conv-v", "Variant done."))
+	sum, err := h.s.DelegateWith(t.Context(), api.DelegateRequest{Prompt: "x", Cwd: h.cwd, Title: "V1"},
+		Spawn{ContestID: "k1", Variant: "V1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.waitStatus(sum.ID, StatusDone)
+	h.queue.Push(t, okScript("conv-v", "Again."))
+	if _, err := h.s.Followup(t.Context(), sum.ID, api.FollowupRequest{Message: "once more"}); err != nil {
+		t.Fatalf("followup while the contest is ready: %v", err)
+	}
+	tk := h.waitStatus(sum.ID, StatusDone)
+	turns := len(tk.Turns)
+
+	for _, st := range []string{api.ContestStatusApplied, api.ContestStatusCancelled, api.ContestStatusFailed} {
+		h.mu.Lock()
+		h.contestStatus["k1"] = st
+		h.mu.Unlock()
+		_, err := h.s.Followup(t.Context(), sum.ID, api.FollowupRequest{Message: "after the end"})
+		var ce *ContestEndedError
+		if !errors.Is(err, ErrBadState) || !errors.As(err, &ce) || ce.APIDetails()["reason"] != "contest_ended" ||
+			ce.APIDetails()["contest"] != "k1" || ce.APIDetails()["status"] != st {
+			t.Fatalf("followup once the contest is %s: %v", st, err)
+		}
+	}
+	if tk = h.waitStatus(sum.ID, StatusDone); len(tk.Turns) != turns {
+		t.Fatalf("a refused followup added a turn: %d -> %d", turns, len(tk.Turns))
+	}
+}
+
 func TestConsultPeerObjection(t *testing.T) {
 	h := newHarness(t)
 	h.initRepo(map[string]string{"a.txt": "one\n"})

@@ -681,6 +681,24 @@ func Summary(c *api.Contest) api.ContestSummary {
 	return sum
 }
 
+// Ended reports whether contest id was applied, cancelled or failed, and its status (task.Options.ContestEnded: a
+// variant of such a contest takes no followup, since its changes were stored once at cleanup). It reads the stored
+// contest without taking its lock. A contest that no longer exists has ended.
+func (s *Service) Ended(ctx context.Context, id string) (status string, ended bool, err error) {
+	c, err := s.load(ctx, id)
+	if errors.Is(err, ErrNotFound) {
+		return "missing", true, nil
+	}
+	if err != nil {
+		return "", false, err
+	}
+	switch c.Status {
+	case api.ContestStatusApplied, api.ContestStatusCancelled, api.ContestStatusFailed:
+		return c.Status, true, nil
+	}
+	return c.Status, false, nil
+}
+
 // Get returns a contest with each variant's task status, backend, model and member.
 func (s *Service) Get(ctx context.Context, id string) (api.Contest, error) {
 	c, err := s.load(ctx, id)

@@ -182,7 +182,10 @@ publishes `meeting.updated` with the meeting's summary.
    The dashboard applies the proposal unless another qualified variant is chosen; when none qualifies it offers
    "Apply a variant anyway" for a disqualified one that still has work (red gate, lane, rejected).
 
-A followup on a variant while the contest is ready reopens it; it is scored again when the variant ends.
+A followup on a variant while the contest is ready reopens it; it is scored again when the variant ends. Once the
+contest is applied, cancelled or failed its variants take no followup (`409 bad_state` with `details` `{reason:
+"contest_ended", contest, status}`): their changes were stored once when the contest ended, and a later turn would
+never show in the contest; delegate a new task instead.
 
 Cleanup: once a variant's task stops running, its changes are stored in Seelegent's data folder
 (`contests/<id>/<label>.json`: the diff against the base cut at 400 000 bytes, the files and line counts, and a

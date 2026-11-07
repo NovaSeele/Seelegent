@@ -179,7 +179,9 @@ func toAPIError(err error) *apiError {
 	}
 	// An automation run now refused because the user has not confirmed it as it is (details.reason not_confirmed);
 	// a ticket retried as before whose member is gone or off (details.reason member_missing or member_disabled).
-	if errors.As(err, &withDetails) && (errors.Is(err, automation.ErrBadState) || errors.Is(err, ticket.ErrBadState)) {
+	// A followup on a variant of a contest that ended (details.reason contest_ended).
+	if errors.As(err, &withDetails) && (errors.Is(err, automation.ErrBadState) || errors.Is(err, ticket.ErrBadState) ||
+		errors.Is(err, task.ErrBadState)) {
 		return &apiError{code: api.CodeBadState, message: msg, details: withDetails.APIDetails()}
 	}
 	switch {

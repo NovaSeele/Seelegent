@@ -36,6 +36,40 @@ func (s *Service) usableMember(ctx context.Context, id string) (api.Member, erro
 	return m, nil
 }
 
+// ContestEndedError refuses a followup on a variant task of a contest that was applied, cancelled or failed (F46):
+// the variant's changes were stored once when the contest ended, so a new turn would never show in the contest.
+type ContestEndedError struct {
+	Task, Contest, Status string
+}
+
+func (e *ContestEndedError) Error() string {
+	return fmt.Sprintf("task %s is a variant of contest %s, which is %s: its changes were kept when the contest "+
+		"ended, so it takes no more turns; delegate a new task instead", e.Task, e.Contest, e.Status)
+}
+
+// Is makes errors.Is(err, ErrBadState) true.
+func (e *ContestEndedError) Is(target error) bool { return target == ErrBadState }
+
+// APIDetails are the details of the API error (reason contest_ended).
+func (e *ContestEndedError) APIDetails() map[string]any {
+	return map[string]any{"reason": "contest_ended", "contest": e.Contest, "status": e.Status}
+}
+
+// checkContest refuses a followup on t when it is a variant of a contest that ended.
+func (s *Service) checkContest(ctx context.Context, t *Task) error {
+	if t.ContestID == "" || t.Kind != KindNormal || s.o.ContestEnded == nil {
+		return nil
+	}
+	status, ended, err := s.o.ContestEnded(ctx, t.ContestID)
+	if err != nil {
+		return fmt.Errorf("read contest %s: %w", t.ContestID, err)
+	}
+	if ended {
+		return &ContestEndedError{Task: t.ID, Contest: t.ContestID, Status: status}
+	}
+	return nil
+}
+
 // invalidError is a bad argument (ErrInvalid) that keeps the message and the API details of the error it wraps.
 type invalidError struct{ err error }
 

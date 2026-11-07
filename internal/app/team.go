@@ -103,6 +103,14 @@ func (a *App) withAPI(fn func(s *httpapi.Server)) {
 // contestAccounts lists the accounts for a contest's quota plan: usable when enabled and in a state the pool runs
 // work on (an error state keeps its last numbers and still runs, pool.Status.Usable) or about to (new), with the
 // lowest fraction left over their quota windows.
+// contestEnded is task.Options.ContestEnded; the contests are built after the task engine.
+func (a *App) contestEnded(ctx context.Context, id string) (string, bool, error) {
+	if a.Contests == nil {
+		return "", false, nil
+	}
+	return a.Contests.Ended(ctx, id)
+}
+
 func (a *App) contestAccounts(ctx context.Context) ([]contest.PoolAccount, error) {
 	states, err := a.Pool.States(ctx)
 	if err != nil {

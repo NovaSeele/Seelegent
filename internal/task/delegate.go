@@ -287,6 +287,9 @@ func (s *Service) Followup(ctx context.Context, id string, req api.FollowupReque
 		if Active(t.Status) {
 			return nil, badStatef("task %s is %s; wait for it or cancel it first", id, t.Status)
 		}
+		if err := s.checkContest(ctx, t); err != nil {
+			return nil, err
+		}
 		if t.AllowGit = derefOr(req.AllowGit, t.AllowGit); req.Profile != "" {
 			if err := s.setProfile(ctx, t, req.Profile); err != nil {
 				return nil, err
