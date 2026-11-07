@@ -51,10 +51,11 @@ func AgentHookOutput(input []byte) []byte {
 }
 
 // hookCommandLine is the command Claude Code runs: the executable in double quotes (forward slashes on Windows, so
-// both cmd and a POSIX shell read it the same way) and the hook subcommand.
+// both cmd and a POSIX shell read it the same way) and the hook subcommand. The slashes are swapped by hand, not
+// with filepath.ToSlash, because goos may differ from the OS this binary was built for.
 func hookCommandLine(exe, goos string) string {
 	if goos == "windows" {
-		exe = filepath.ToSlash(exe)
+		exe = strings.ReplaceAll(exe, `\`, "/")
 	}
 	return `"` + exe + `" hook ` + HookCommand
 }

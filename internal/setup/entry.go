@@ -2,7 +2,7 @@ package setup
 
 import (
 	"maps"
-	"path/filepath"
+	"path"
 	"slices"
 	"strings"
 )
@@ -54,7 +54,7 @@ func desired(exe, hostID string) Entry {
 // argument "mcp", or an entry of the Node version, `node <...seelegent...>/cli.js mcp`. Anything else under the name
 // "seelegent" belongs to someone else and is never changed without --force.
 func isOurs(e Entry) bool {
-	base := strings.ToLower(filepath.Base(strings.ReplaceAll(e.Command, `\`, "/")))
+	base := strings.ToLower(path.Base(strings.ReplaceAll(e.Command, `\`, "/")))
 	for _, ext := range []string{".exe", ".cmd", ".bat"} {
 		base = strings.TrimSuffix(base, ext)
 	}
