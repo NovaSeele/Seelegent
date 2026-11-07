@@ -5,12 +5,13 @@ import (
 	"testing"
 
 	"github.com/NovaSeele/Seelegent/internal/account"
+	"github.com/NovaSeele/Seelegent/internal/ops"
 )
 
 // TestMutating pins the old isMutating table (inventory §1.3).
 func TestMutating(t *testing.T) {
-	if envWorker != account.EnvWorker {
-		t.Fatalf("worker marker %s, the daemon sets %s", envWorker, account.EnvWorker)
+	if ops.EnvWorker != account.EnvWorker {
+		t.Fatalf("worker marker %s, the daemon sets %s", ops.EnvWorker, account.EnvWorker)
 	}
 	cases := []struct {
 		name, args string

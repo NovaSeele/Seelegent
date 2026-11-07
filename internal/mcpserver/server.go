@@ -39,13 +39,11 @@ import (
 	"github.com/NovaSeele/Seelegent/internal/api"
 	"github.com/NovaSeele/Seelegent/internal/client"
 	"github.com/NovaSeele/Seelegent/internal/config"
+	"github.com/NovaSeele/Seelegent/internal/ops"
 )
 
 // serverName is the MCP server name hosts register.
 const serverName = "seelegent"
-
-// workerMessage is the refusal a worker gets (the old worker guard's text).
-const workerMessage = "Seelegent is not available inside a Seelegent worker."
 
 // Unavailable lists the tools whose daemon side comes with a later milestone.
 func Unavailable() map[string]bool {
@@ -240,7 +238,7 @@ func (s *Server) wrap(name string, fn toolFunc) mcp.ToolHandler {
 		// The worker guard runs first, as in the old server: a worker learns nothing else.
 		if s.isWorker() && mutating(name, req.Params.Arguments) {
 			s.o.Logger.Info("mcp: refused inside a worker", "tool", name)
-			return s.fail(name, workerError{}), nil
+			return s.fail(name, ops.WorkerError{}), nil
 		}
 		if s.o.ConfigErr != nil && !s.unavailable[name] {
 			return s.fail(name, fmt.Errorf("the settings cannot be read: %w", s.o.ConfigErr)), nil
@@ -262,19 +260,8 @@ func (s *Server) wrap(name string, fn toolFunc) mcp.ToolHandler {
 // notAvailable is the handler of a tool a later milestone builds.
 func (s *Server) notAvailable(name string) toolFunc {
 	return func(context.Context, *call) (result, error) {
-		return result{}, &unavailableError{what: "the " + name + " tool"}
+		return result{}, &ops.UnavailableError{What: "the " + name + " tool"}
 	}
-}
-
-// unavailableError is a feature this version does not have yet.
-type unavailableError struct{ what, detail string }
-
-func (e *unavailableError) Error() string {
-	msg := e.what + " is not available in this version of Seelegent yet; nothing was done"
-	if e.detail != "" {
-		msg += " (" + e.detail + ")"
-	}
-	return msg
 }
 
 // ok builds a successful result.
@@ -317,17 +304,17 @@ func (s *Server) fail(name string, err error) *mcp.CallToolResult {
 	text := "Seelegent error: " + err.Error()
 	var apiErr *client.Error
 	var foreign *client.ForeignError
-	var notYetErr *unavailableError
+	var notYetErr *ops.UnavailableError
 	switch {
-	case errors.Is(err, workerError{}):
-		text = workerMessage
-		info = errorInfo{Code: string(api.CodeForbidden), Message: workerMessage,
+	case errors.Is(err, ops.WorkerError{}):
+		text = ops.WorkerMessage
+		info = errorInfo{Code: string(api.CodeForbidden), Message: ops.WorkerMessage,
 			Details: map[string]any{"caller": "worker"}}
 	case errors.As(err, &apiErr) && apiErr.Worker():
-		text = workerMessage
-		info = errorInfo{Code: string(apiErr.Code), Message: workerMessage, Status: apiErr.Status, Details: apiErr.Details}
+		text = ops.WorkerMessage
+		info = errorInfo{Code: string(apiErr.Code), Message: ops.WorkerMessage, Status: apiErr.Status, Details: apiErr.Details}
 	case errors.As(err, &apiErr) && (apiErr.Code == api.CodeNotImplemented || apiErr.Status == 501):
-		u := &unavailableError{what: "this part of the " + name + " tool", detail: apiErr.Message}
+		u := &ops.UnavailableError{What: "this part of the " + name + " tool", Detail: apiErr.Message}
 		text = "Seelegent error: " + u.Error()
 		info = errorInfo{Code: "not_available", Message: u.Error(), Status: apiErr.Status}
 	case errors.As(err, &apiErr):

@@ -4,17 +4,13 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"slices"
 
 	"github.com/NovaSeele/Seelegent/internal/api"
-	"github.com/NovaSeele/Seelegent/internal/client"
+	"github.com/NovaSeele/Seelegent/internal/ops"
 )
 
 // geminiGroup is the agy quota group the old slim status read gemini5h and geminiWeekly from.
 const geminiGroup = "Gemini Models"
-
-// recentTasks is how many of the newest tasks status looks through for tasks that need the lead.
-const recentTasks = 50
 
 // statusArgs are the arguments of status.
 type statusArgs struct {
@@ -85,7 +81,7 @@ func (s *Server) status(ctx context.Context, k *call) (result, error) {
 	if err != nil {
 		return result{}, err
 	}
-	tasks, err := activeTasks(ctx, c)
+	tasks, err := ops.ActiveTasks(ctx, c)
 	if err != nil {
 		return result{}, err
 	}
@@ -108,63 +104,13 @@ func (s *Server) status(ctx context.Context, k *call) (result, error) {
 	for i := range tasks {
 		t := &tasks[i]
 		out.ActiveTasks = append(out.ActiveTasks, slimTask{ID: t.ID, Title: t.Title, Status: string(t.Status),
-			Reason: taskReason(*t)})
+			Reason: ops.TaskReason(*t)})
 	}
 	for _, b := range backends {
 		out.Backends = append(out.Backends, slimBackend{ID: b.ID, Enabled: b.Enabled, Installed: b.Installed,
 			Accounts: b.Accounts, Active: b.Active})
 	}
 	return result{value: out, summary: sum}, nil
-}
-
-// activeTasks are the pending tasks (and those blocked on prerequisites) plus recent tasks that need the lead,
-// those first.
-func activeTasks(ctx context.Context, c *client.Client) ([]api.TaskSummary, error) {
-	pending, err := c.Tasks(ctx, client.TaskQuery{Statuses: []api.TaskStatus{api.StatusQueued, api.StatusRunning,
-		api.StatusWaitingQuota, api.StatusWaitingDeps, api.StatusBlockedDeps}, Limit: 200})
-	if err != nil {
-		return nil, err
-	}
-	recent, err := c.Tasks(ctx, client.TaskQuery{Limit: recentTasks})
-	if err != nil {
-		return nil, err
-	}
-	out := pending.Items
-	for i := range recent.Items {
-		t := &recent.Items[i]
-		if blocked(*t) && !slices.ContainsFunc(out, func(x api.TaskSummary) bool { return x.ID == t.ID }) {
-			out = append(out, *t)
-		}
-	}
-	slices.SortStableFunc(out, func(a, b api.TaskSummary) int {
-		switch {
-		case blocked(a) && !blocked(b):
-			return -1
-		case blocked(b) && !blocked(a):
-			return 1
-		}
-		return 0
-	})
-	return out, nil
-}
-
-// blocked reports whether a task waits for the lead.
-func blocked(t api.TaskSummary) bool {
-	return t.Attention != nil && t.Attention.State == api.AttentionBlocked
-}
-
-// taskReason says why a task needs attention, or nil.
-func taskReason(t api.TaskSummary) *string {
-	var r string
-	switch {
-	case t.Attention != nil && t.Attention.State != api.AttentionInfo:
-		r = t.Attention.Reason
-	case t.Status == api.StatusBlockedDeps && t.DepsReason != "":
-		r = t.DepsReason
-	default:
-		return nil
-	}
-	return &r
 }
 
 // slimAccountOf builds the slim view of an account.
@@ -212,7 +158,7 @@ func statusSummary(accounts []api.Account, tasks []api.TaskSummary) string {
 	}
 	need := 0
 	for i := range tasks {
-		if blocked(tasks[i]) {
+		if ops.Blocked(tasks[i]) {
 			need++
 		}
 	}
