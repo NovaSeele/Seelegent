@@ -177,7 +177,6 @@
     "modelsPattern": "Allowed by pattern {pattern}; entering a list replaces this pattern.",
     "allowAny": "Allow any model",
     "anyOnSave": "Any model is allowed once you save; the pattern is removed.",
-    "keepPattern": "Keep the pattern",
     "tierModels": "Always allowed (tier models): {models}",
     "enabled": "Accounts can use it",
     "save": "Save provider"

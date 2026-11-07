@@ -177,7 +177,6 @@
     "modelsPattern": "Đang cho phép theo mẫu {pattern}; nhập một danh sách sẽ thay mẫu này.",
     "allowAny": "Cho phép mọi mô hình",
     "anyOnSave": "Khi lưu, mẫu sẽ bị xoá và mọi mô hình đều được phép.",
-    "keepPattern": "Giữ mẫu",
     "tierModels": "Luôn được dùng (mô hình theo cấp): {models}",
     "enabled": "Tài khoản được dùng",
     "save": "Lưu nhà cung cấp"

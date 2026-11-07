@@ -178,14 +178,15 @@ async function submit() {
         :error="errors.models"
       >
         <template v-if="canClear" #hint-action>
-          <!-- One toggle whose label flips, so keyboard focus stays on it. -->
+          <!-- A toggle with a fixed label: aria-pressed says its state (WAI-ARIA APG), and the hint above says what
+               saving will do. -->
           <button
             type="button"
             class="pform__link"
             :aria-pressed="allowAny"
             @click="allowAny = !allowAny"
           >
-            {{ allowAny ? t('accounts.providers.keepPattern') : t('accounts.providers.allowAny') }}
+            {{ t('accounts.providers.allowAny') }}
           </button>
         </template>
       </TextField>
