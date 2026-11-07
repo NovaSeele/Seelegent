@@ -1,0 +1,108 @@
+{
+  "repo": "Kho mã",
+  "overview": "Tổng quan",
+  "loading": "Đang tải bằng chứng",
+  "loadFailed": "Không tải được bằng chứng",
+  "empty": {
+    "title": "Chưa có kho mã",
+    "desc": "Bằng chứng sẽ hiện khi đã có tác vụ chạy trong một kho git."
+  },
+  "counts": {
+    "none": "Không có yêu cầu"
+  },
+  "status": {
+    "proven": "Đã chứng minh",
+    "unproven": "Chưa chứng minh",
+    "in_progress": "Đang làm",
+    "unmapped": "Chưa có tác vụ",
+    "failing": "Đang lỗi",
+    "regressed": "Bị hồi quy"
+  },
+  "features": {
+    "title": "Tính năng",
+    "empty": "Kho mã này không có tính năng Spec Kit nào.",
+    "tasks": "Xong {done}/{total} tác vụ"
+  },
+  "matrix": {
+    "loading": "Đang tải ma trận",
+    "pick": "Chọn một tính năng.",
+    "featureGate": "Cổng của tính năng:",
+    "done": "xong",
+    "open": "chưa xong",
+    "result": {
+      "green": "Cổng đạt",
+      "red": "Cổng lỗi",
+      "error": "Cổng không chạy được"
+    },
+    "noResult": "Chưa có kết quả cổng",
+    "noGate": "Không có lệnh cổng",
+    "byRun": "lượt chạy hồi quy {id}",
+    "stories": "User story",
+    "uncovered": "Tác vụ thiếu dòng Covers: {tasks}"
+  },
+  "runs": {
+    "title": "Chạy hồi quy",
+    "empty": "Chưa chạy hồi quy lần nào.",
+    "all": "Mọi tính năng",
+    "counts": "{green} đạt, {red} lỗi, {error} không chạy được, trên tổng {total}",
+    "state": {
+      "running": "Đang chạy",
+      "green": "Đạt",
+      "red": "Lỗi",
+      "error": "Không chạy được",
+      "cancelled": "Đã hủy"
+    },
+    "kind": {
+      "task": "cổng tác vụ",
+      "feature": "cổng tính năng",
+      "doctrine": "nguyên tắc dự án"
+    },
+    "noisy": "Lúc chạy có tác vụ khác đang làm, kết quả có thể gồm cả phần việc dang dở của chúng.",
+    "dirty": "Kho mã có thay đổi chưa commit.",
+    "cancel": "Dừng lượt chạy",
+    "force": "Chạy cả khi còn tác vụ đang làm",
+    "start": "Chạy lại mọi cổng",
+    "refused": "Chưa chạy: vẫn còn tác vụ đang làm ({tasks}). Hãy chờ hoặc vẫn chạy.",
+    "failed": "Lượt chạy lỗi: {error}"
+  },
+  "lanes": {
+    "title": "Làn",
+    "mode": {
+      "off": "tắt",
+      "warn": "chỉ cảnh báo",
+      "enforce": "bắt buộc"
+    },
+    "empty": "Không tác vụ nào giữ làn.",
+    "status": {
+      "waiting_deps": "Chờ phụ thuộc",
+      "blocked_deps": "Bị chặn bởi phụ thuộc",
+      "queued": "Đang xếp hàng",
+      "running": "Đang chạy",
+      "waiting_quota": "Chờ hạn mức",
+      "done": "Xong",
+      "failed": "Lỗi",
+      "cancelled": "Đã hủy"
+    },
+    "source": {
+      "lead": "do lead đặt",
+      "spec": "lấy từ tác vụ spec"
+    },
+    "heldUntil": "giữ đến {time}"
+  },
+  "stats": {
+    "title": "Cổng đã làm được gì",
+    "tasks": "Tác vụ có cổng",
+    "tasksValue": "{gated}/{total}",
+    "gateRuns": "Số lần chạy cổng",
+    "firstRunRed": "Lỗi ngay lần chạy đầu",
+    "caught": "Bắt được trước khi duyệt",
+    "autoFix": "Tự sửa",
+    "autoFixValue": "{n} lượt, {out} tác vụ hết lượt",
+    "lanes": "Làn",
+    "lanesValue": "{refused} bị từ chối, {forced} giành chỗ, {caught} vi phạm bị bắt",
+    "followups": "Số lần lead yêu cầu sửa mỗi tác vụ",
+    "followupsValue": "có cổng {gated}, không cổng {ungated}",
+    "verifier": "Duyệt lần hai",
+    "verifierValue": "{runs} lần: {accepts} chấp nhận, {rejects} từ chối, {slipped} lọt qua"
+  }
+}

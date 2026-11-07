@@ -1,0 +1,108 @@
+{
+  "repo": "저장소",
+  "overview": "개요",
+  "loading": "증거를 불러오는 중",
+  "loadFailed": "증거를 불러올 수 없습니다",
+  "empty": {
+    "title": "아직 저장소가 없습니다",
+    "desc": "git 저장소에서 작업이 실행되면 여기에 증거가 나타납니다."
+  },
+  "counts": {
+    "none": "요구 사항 없음"
+  },
+  "status": {
+    "proven": "증명됨",
+    "unproven": "증명 안 됨",
+    "in_progress": "진행 중",
+    "unmapped": "작업 없음",
+    "failing": "실패 중",
+    "regressed": "회귀"
+  },
+  "features": {
+    "title": "기능",
+    "empty": "이 저장소에는 Spec Kit 기능이 없습니다.",
+    "tasks": "작업 {total}개 중 {done}개 완료"
+  },
+  "matrix": {
+    "loading": "매트릭스를 불러오는 중",
+    "pick": "기능을 선택하세요.",
+    "featureGate": "기능 게이트:",
+    "done": "완료",
+    "open": "미완료",
+    "result": {
+      "green": "게이트 통과",
+      "red": "게이트 실패",
+      "error": "게이트를 실행할 수 없음"
+    },
+    "noResult": "아직 게이트 결과 없음",
+    "noGate": "게이트 명령 없음",
+    "byRun": "회귀 실행 {id}",
+    "stories": "사용자 스토리",
+    "uncovered": "Covers: 줄이 없는 작업: {tasks}"
+  },
+  "runs": {
+    "title": "회귀 실행",
+    "empty": "아직 회귀 실행이 없습니다.",
+    "all": "모든 기능",
+    "counts": "{total}개 중 통과 {green}, 실패 {red}, 실행 불가 {error}",
+    "state": {
+      "running": "실행 중",
+      "green": "통과",
+      "red": "실패",
+      "error": "실행할 수 없음",
+      "cancelled": "취소됨"
+    },
+    "kind": {
+      "task": "작업 게이트",
+      "feature": "기능 게이트",
+      "doctrine": "프로젝트 원칙"
+    },
+    "noisy": "다른 작업이 진행 중이었으므로 결과에 그 작업의 미완성 변경이 섞였을 수 있습니다.",
+    "dirty": "저장소에 커밋되지 않은 변경이 있었습니다.",
+    "cancel": "실행 중지",
+    "force": "진행 중인 작업이 있어도 실행",
+    "start": "모든 게이트 다시 실행",
+    "refused": "시작하지 않음: 아직 진행 중인 작업이 있습니다({tasks}). 기다리거나 그래도 실행하세요.",
+    "failed": "실행 실패: {error}"
+  },
+  "lanes": {
+    "title": "레인",
+    "mode": {
+      "off": "꺼짐",
+      "warn": "경고만",
+      "enforce": "강제"
+    },
+    "empty": "레인을 가진 작업이 없습니다.",
+    "status": {
+      "waiting_deps": "의존 작업 대기 중",
+      "blocked_deps": "의존 작업 때문에 막힘",
+      "queued": "대기열",
+      "running": "실행 중",
+      "waiting_quota": "할당량 대기 중",
+      "done": "완료",
+      "failed": "실패",
+      "cancelled": "취소됨"
+    },
+    "source": {
+      "lead": "리드가 지정",
+      "spec": "spec 작업에서 가져옴"
+    },
+    "heldUntil": "{time}까지 유지"
+  },
+  "stats": {
+    "title": "게이트가 한 일",
+    "tasks": "게이트가 있는 작업",
+    "tasksValue": "{total}개 중 {gated}개",
+    "gateRuns": "게이트 실행",
+    "firstRunRed": "첫 실행에서 실패",
+    "caught": "검토 전에 발견",
+    "autoFix": "자동 수정",
+    "autoFixValue": "{n}턴, 한도 소진 {out}개",
+    "lanes": "레인",
+    "lanesValue": "거절 {refused}, 강제 {forced}, 위반 발견 {caught}",
+    "followups": "작업당 리드 후속 요청",
+    "followupsValue": "게이트 있음 {gated}, 게이트 없음 {ungated}",
+    "verifier": "2차 검토",
+    "verifierValue": "{runs}회: 승인 {accepts}, 거절 {rejects}, 놓침 {slipped}"
+  }
+}
