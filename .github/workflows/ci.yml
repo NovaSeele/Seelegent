@@ -80,6 +80,12 @@ jobs:
           distribution: goreleaser
           version: v2.20.0
           args: release --snapshot --clean
+      - name: Installer scripts parse
+        run: |
+          sh -n scripts/install.sh
+          dash -n scripts/install.sh
+          shellcheck -s sh scripts/install.sh
+          pwsh -NoProfile -Command '$e = $null; [void][System.Management.Automation.Language.Parser]::ParseFile("scripts/install.ps1", [ref]$null, [ref]$e); if ($e) { $e; exit 1 }'
 
   web:
     runs-on: ubuntu-latest
