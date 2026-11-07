@@ -113,12 +113,12 @@ func TestRefreshWaitsForOlderReadAndSharesNewer(t *testing.T) {
 		defer close(cycle)
 		f.r.RefreshAll(ctx)
 	}()
-	// The cycle stores its snapshot after release: wait for it before the store's temp dir is removed (also when
-	// the test fails before releasing it).
+	// The cycle and the refreshes store their snapshots after release: wait for them before the store's temp dir
+	// is removed, also when the test fails before releasing them (release first, or wg.Wait hangs).
 	releaseOnce := sync.OnceFunc(func() { close(release) })
-	defer func() { releaseOnce(); <-cycle }()
-	waitFor(t, "the first read", func() bool { return f.reader.count(a.ID) == 1 })
 	var wg sync.WaitGroup
+	defer func() { releaseOnce(); wg.Wait(); <-cycle }()
+	waitFor(t, "the first read", func() bool { return f.reader.count(a.ID) == 1 })
 	for range 2 {
 		wg.Add(1)
 		go func() {
