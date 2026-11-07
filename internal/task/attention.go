@@ -98,6 +98,8 @@ type liveState struct {
 	steps []loopStep
 	// pending is the key of the tool call still open.
 	pending string
+	// edits numbers the path-only edits whose file could not be read (each is its own loop step).
+	edits int
 	// edited are the files the worker's edit tools changed so far in this attempt (as reported).
 	edited []string
 }

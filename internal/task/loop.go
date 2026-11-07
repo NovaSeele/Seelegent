@@ -6,7 +6,10 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"regexp"
+	"slices"
 
 	"github.com/NovaSeele/Seelegent/internal/config"
 	"github.com/NovaSeele/Seelegent/internal/event"
@@ -38,6 +41,58 @@ var (
 	readToolName = regexp.MustCompile(`(?i)read|view|list|search|grep|find|glob`)
 )
 
+// editPathKeys are the parameters that name an edit's file (old EDIT_PATH_KEYS).
+var editPathKeys = []string{"Path", "TargetFile", "AbsolutePath", "File", "path", "file"}
+
+// pathEditToolName matches the edit tools whose path-only calls get a file mark (old isPathOnlySuccessfulEdit).
+var pathEditToolName = regexp.MustCompile(`(?i)write|replace|edit|sed`)
+
+// fileMarkMax is the largest file the loop check hashes.
+const fileMarkMax = 2 << 20
+
+// pathOnlyEdit returns the file of a successful edit call whose parameters name only its file (agy often reports
+// edits this way), or "".
+func pathOnlyEdit(t *event.Tool) string {
+	if t.State == event.ToolFailed || !pathEditToolName.MatchString(t.Name) || len(t.Input) == 0 {
+		return ""
+	}
+	var params map[string]any
+	if json.Unmarshal(t.Input, &params) != nil || len(params) == 0 {
+		return ""
+	}
+	file := ""
+	for k, v := range params {
+		if !slices.Contains(editPathKeys, k) {
+			return ""
+		}
+		if s, ok := v.(string); ok && s != "" && file == "" {
+			file = s
+		}
+	}
+	return file
+}
+
+// fileMark is the content hash of file (relative to cwd), or "" when it cannot be read or is larger than
+// fileMarkMax.
+func fileMark(cwd, file string) string {
+	if !filepath.IsAbs(file) {
+		if cwd == "" {
+			return ""
+		}
+		file = filepath.Join(cwd, file)
+	}
+	st, err := os.Stat(file)
+	if err != nil || !st.Mode().IsRegular() || st.Size() > fileMarkMax {
+		return ""
+	}
+	data, err := os.ReadFile(file) //nolint:gosec // a file the worker reported editing, only hashed
+	if err != nil {
+		return ""
+	}
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:12])
+}
+
 // stepKey is the identity of a tool call: its name and its parameters with sorted keys (or its command line).
 func stepKey(t *event.Tool) string {
 	params := t.Command
@@ -59,14 +114,18 @@ func stepKey(t *event.Tool) string {
 }
 
 // addStep appends the finished call t (pending is the key of its call event, used when the result carries no
-// parameters) and keeps the last loopWindow steps.
-func addStep(steps []loopStep, t *event.Tool, pending string) []loopStep {
+// parameters) and keeps the last loopWindow steps. mark, when set, is part of the call's identity: the content
+// hash of the file a path-only edit changed, or a number unique to that edit.
+func addStep(steps []loopStep, t *event.Tool, pending, mark string) []loopStep {
 	key := stepKey(t)
 	if key == "" {
 		key = pending
 	}
 	if key == "" {
 		key = t.Name
+	}
+	if mark != "" {
+		key += "\x00" + mark
 	}
 	steps = append(steps, loopStep{key: key, name: t.Name, failed: t.State == event.ToolFailed,
 		edit: editToolName.MatchString(t.Name) && !readToolName.MatchString(t.Name)})

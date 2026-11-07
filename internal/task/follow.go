@@ -113,7 +113,7 @@ func (f *follower) line(stderr bool, line []byte, next int64) error {
 	now := f.s.clk.Now()
 	for _, ev := range evs {
 		f.coll.Add(ev)
-		f.r.note(ev, now)
+		f.r.note(ev, now, replay)
 	}
 	if replay || len(evs) == 0 {
 		return nil

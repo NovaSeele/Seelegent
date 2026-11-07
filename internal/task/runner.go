@@ -59,6 +59,8 @@ type run struct {
 	starting *launch.Handle
 	account  string
 	live     liveState
+	// cwd is the task's folder, against which the loop check resolves the relative paths of edits.
+	cwd string
 }
 
 // setStarting records a launch whose worker is about to run, until setHandle or clearHandle.
@@ -112,8 +114,23 @@ func (r *run) requestStop() {
 	}
 }
 
-// note updates what is known about the worker from one of its events.
-func (r *run) note(ev event.Event, now time.Time) {
+// note updates what is known about the worker from one of its events. replay marks an event read again after a
+// daemon restart (the files it touched may have changed since).
+func (r *run) note(ev event.Event, now time.Time, replay bool) {
+	// An edit that reports only its file is told apart by the file's content (read outside the lock), so repeated
+	// real edits of one file count as progress, not as a repeated call (old fix 492493d, bugs.md A1).
+	pathOnly, mark := false, ""
+	if ev.Kind == event.KindToolResult && ev.Tool != nil {
+		if p := pathOnlyEdit(ev.Tool); p != "" {
+			pathOnly = true
+			if !replay {
+				r.mu.Lock()
+				cwd := r.cwd
+				r.mu.Unlock()
+				mark = fileMark(cwd, p)
+			}
+		}
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	l := &r.live
@@ -133,7 +150,12 @@ func (r *run) note(ev event.Event, now time.Time) {
 	case event.KindToolResult:
 		l.tool, l.command, l.toolSince = "", "", time.Time{}
 		if ev.Tool != nil {
-			l.steps = addStep(l.steps, ev.Tool, l.pending)
+			if pathOnly && mark == "" {
+				// Content unknown: each such edit is its own step.
+				l.edits++
+				mark = fmt.Sprintf("#%d", l.edits)
+			}
+			l.steps = addStep(l.steps, ev.Tool, l.pending, mark)
 			l.pending = ""
 		}
 	case event.KindFile:
@@ -238,6 +260,9 @@ func (s *Service) runTask(r *run) {
 		if !Active(t.Status) || t.Manual {
 			return
 		}
+		r.mu.Lock()
+		r.cwd = t.Cwd
+		r.mu.Unlock()
 		if t.GatePhase != nil {
 			switch {
 			case t.CancelRequested:

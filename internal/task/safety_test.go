@@ -1,6 +1,8 @@
 package task
 
 import (
+	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -12,6 +14,7 @@ import (
 
 	"github.com/NovaSeele/Seelegent/internal/api"
 	"github.com/NovaSeele/Seelegent/internal/config"
+	"github.com/NovaSeele/Seelegent/internal/event"
 	"github.com/NovaSeele/Seelegent/internal/gitx"
 )
 
@@ -429,6 +432,10 @@ func TestDetectLoop(t *testing.T) {
 		// Each run of four is judged on its own: progress before the last four repeats does not excuse them.
 		{"progress only early on", st("read", "edit1", "read", "read", "ls", "read", "read"), true},
 		{"progress in every run", st("read", "edit1", "read", "read", "edit2", "read", "read"), false},
+		{"test runs between path-only edits marked by content (A1)", st("test", "edit\x00h1", "test", "edit\x00h2",
+			"test", "edit\x00h3", "test"), false},
+		{"test runs between path-only edits that change nothing", st("test", "edit\x00h1", "test", "edit\x00h1",
+			"test", "edit\x00h1", "test"), true},
 	} {
 		if got, _ := detectLoop(tc.steps, 4); got != tc.want {
 			t.Errorf("%s: loop = %v", tc.name, got)
@@ -440,6 +447,125 @@ func TestDetectLoop(t *testing.T) {
 	}
 	if ok, detail := detectLoop(failed, 4); !ok || !strings.Contains(detail, "5") {
 		t.Errorf("failed calls: %v %q", ok, detail)
+	}
+}
+
+// TestLoopPathOnlyEdits: an edit that reports only its file is keyed by the file's content, or by a number of its
+// own when the file cannot be read, so a test run between real edits of one file is not a loop (bugs.md A1, old fix
+// 492493d); an edit that leaves the file as it was still counts as a repeat.
+func TestLoopPathOnlyEdits(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "handler.go")
+	run := &event.Tool{Name: "run_command", State: event.ToolDone, Command: "go test ./..."}
+	edit := func(path string) *event.Tool {
+		in, _ := json.Marshal(map[string]any{"TargetFile": path})
+		return &event.Tool{Name: "replace_file_content", State: event.ToolDone, Input: in}
+	}
+	tdd := func(contents []string, path string) []loopStep {
+		var steps []loopStep
+		for i, c := range contents {
+			steps = addStep(steps, run, "", "")
+			mark := ""
+			if c != "" {
+				if err := os.WriteFile(file, []byte(c), 0o600); err != nil {
+					t.Fatal(err)
+				}
+				mark = fileMark(dir, path)
+			} else {
+				mark = fmt.Sprintf("#%d", i)
+			}
+			if pathOnlyEdit(edit(path)) == "" {
+				t.Fatalf("%s is not a path-only edit", path)
+			}
+			steps = addStep(steps, edit(path), "", mark)
+		}
+		return addStep(steps, run, "", "")
+	}
+	if loop, detail := detectLoop(tdd([]string{"v1", "v2", "v3"}, file), 4); loop {
+		t.Errorf("real edits (absolute path) flagged: %s", detail)
+	}
+	if loop, detail := detectLoop(tdd([]string{"v1", "v2", "v3"}, "handler.go"), 4); loop {
+		t.Errorf("real edits (relative path) flagged: %s", detail)
+	}
+	if loop, detail := detectLoop(tdd([]string{"", "", ""}, filepath.Join(dir, "gone.go")), 4); loop {
+		t.Errorf("unreadable edits flagged: %s", detail)
+	}
+	if loop, _ := detectLoop(tdd([]string{"same", "same", "same"}, file), 4); !loop {
+		t.Error("edits that change nothing between the same test runs are a loop")
+	}
+	// Without a mark the old behaviour: the same key each time, a loop.
+	var bare []loopStep
+	for range 3 {
+		bare = addStep(addStep(bare, run, "", ""), edit(file), "", "")
+	}
+	if loop, _ := detectLoop(addStep(bare, run, "", ""), 4); !loop {
+		t.Error("unmarked path-only edits should look the same")
+	}
+
+	// Only successful edit tools whose parameters name nothing but the file are path-only.
+	withContent, _ := json.Marshal(map[string]any{"TargetFile": file, "ReplacementContent": "x"})
+	failed := edit(file)
+	failed.State = event.ToolFailed
+	for _, tl := range []*event.Tool{run, failed, {Name: "replace_file_content", Input: withContent},
+		{Name: "view_file", State: event.ToolDone, Input: edit(file).Input}} {
+		if got := pathOnlyEdit(tl); got != "" {
+			t.Errorf("pathOnlyEdit(%s %s) = %q", tl.Name, tl.Input, got)
+		}
+	}
+	if fileMark("", "rel.go") != "" || fileMark(dir, "missing.go") != "" || fileMark(dir, ".") != "" {
+		t.Error("fileMark of an unreadable file")
+	}
+}
+
+// TestLoopFalseAlarmPathOnlyEdits: four test runs between three path-only edits of the same file, as agy streams
+// them, are not flagged as looping (the regression probe of bugs.md A1).
+func TestLoopFalseAlarmPathOnlyEdits(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		file func(h *harness) string
+	}{
+		{"file not readable", func(*harness) string { return filepath.Join(t.TempDir(), "gone", "handler.go") }},
+		{"file in the project", func(h *harness) string { return filepath.Join(h.cwd, "handler.go") }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h := newHarness(t)
+			h.agy("only", 0)
+			file := tc.file(h)
+			test := func(i int) []string {
+				return []string{agyTool(i, "CALLING", "go test ./..."), agyTool(i, "DONE", "go test ./...")}
+			}
+			// The worker goes on only once the daemon has seen its edit (as a live stream would be read).
+			seen := func(i int) string { return filepath.Join(h.dir, fmt.Sprintf("seen-%d", i)) }
+			lines := []string{agyInit("conv-l")}
+			lines = append(lines, test(1)...)
+			for i, v := range []string{"v1", "v2", "v3"} {
+				lines = append(lines, "#!write "+file+"\t"+strconv.Quote(v), agyEdit(2*i+2, file),
+					"#!wait-file "+seen(i))
+				lines = append(lines, test(2*i+3)...)
+			}
+			lines = append(lines, "#!hang")
+			h.queue.Push(t, script(lines...))
+			sum := h.delegate(api.DelegateRequest{})
+			for i := range 3 {
+				h.waitFor("edit seen", func() bool { return len(h.s.live(sum.ID).steps) >= 2+2*i })
+				if err := os.WriteFile(seen(i), nil, 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			h.waitFor("7 tool results", func() bool { return len(h.s.live(sum.ID).steps) >= 7 })
+			live := h.s.live(sum.ID)
+			if loop, detail := detectLoop(live.steps, h.config().LoopRepeat); loop {
+				t.Errorf("a TDD loop with path-only edits is flagged as looping: %s", detail)
+			}
+			tk := h.task(sum.ID)
+			if a := computeAttention(tk, live, accountHealth{}, h.clk.Now(), h.config()); a != nil &&
+				a.Reason == ReasonLooping {
+				t.Errorf("attention = %+v", a)
+			}
+			if _, _, err := h.s.Cancel(t.Context(), sum.ID, api.CancelRequest{WaitSeconds: 30}); err != nil {
+				t.Fatal(err)
+			}
+		})
 	}
 }
 
