@@ -47,7 +47,7 @@ func TestTerminalCommand(t *testing.T) {
 func fakeTerminal(t *testing.T, body string) {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "fake-terminal")
-	if err := os.WriteFile(path, []byte("#!/bin/sh\n"+body+"\n"), 0o700); err != nil { //nolint:gosec // must be executable
+	if err := os.WriteFile(path, []byte("#!/bin/sh\n"+body+"\n"), 0o700); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("DISPLAY", ":0")

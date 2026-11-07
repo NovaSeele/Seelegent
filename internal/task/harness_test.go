@@ -337,8 +337,8 @@ func (f *fakeConsoles) identity(pid int) (ConsoleProcess, bool) {
 func (f *fakeConsoles) Find(exitFile string) (ConsoleProcess, bool) {
 	f.mu.Lock()
 	var pid int
-	for i, spec := range f.specs {
-		if samePath(filepath.Join(spec.ScriptDir, spec.Name+".exit"), exitFile) {
+	for i := range f.specs {
+		if samePath(filepath.Join(f.specs[i].ScriptDir, f.specs[i].Name+".exit"), exitFile) {
 			pid = 1000 + i
 		}
 	}
