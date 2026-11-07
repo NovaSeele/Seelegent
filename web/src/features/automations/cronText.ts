@@ -140,6 +140,8 @@ export interface Namers {
   list(items: string[]): string
   weekday(d: number): string
   month(m: number): string
+  /** A time of day in the page's clock. */
+  time(h: number, m: number): string
 }
 
 const pad = (n: number) => String(n).padStart(2, '0')
@@ -161,7 +163,7 @@ export function describeCron(c: Cron, n: Namers): string | null {
   const hourly = isAll(c.hour)
   if (hourly) time = n.t(`${P}hourly`, { minute: pad(minute) })
   else if (!c.hour.star && c.hour.values.length <= 4)
-    time = n.list(c.hour.values.map((h) => `${pad(h)}:${pad(minute)}`))
+    time = n.list(c.hour.values.map((h) => n.time(h, minute)))
   else return null
 
   let days: string

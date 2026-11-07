@@ -52,7 +52,7 @@ describe('ScheduleFields', () => {
     const runs = () => wrapper.findAll('li').map((li) => li.text())
     const busy = () => wrapper.find('ul').attributes('aria-busy')
     await vi.advanceTimersByTimeAsync(450)
-    expect(runs()[0]).toContain('05:00')
+    expect(runs()[0]).toContain('5:00 AM')
     form.value = { ...form.value, cron: '0 6 * * *' }
     await vi.advanceTimersByTimeAsync(450)
     expect(fetch).toHaveBeenCalledTimes(2)
@@ -61,11 +61,11 @@ describe('ScheduleFields', () => {
     await vi.advanceTimersByTimeAsync(100)
     release(json({ runs: ['2026-11-09T06:00:00Z'], local: [], timezone: 'UTC' }))
     await vi.advanceTimersByTimeAsync(10)
-    expect(runs()[0]).toContain('05:00')
+    expect(runs()[0]).toContain('5:00 AM')
     expect(busy()).toBe('true')
     await vi.advanceTimersByTimeAsync(400)
     expect(runs()).toHaveLength(1)
-    expect(runs()[0]).toContain('07:00')
+    expect(runs()[0]).toContain('7:00 AM')
     expect(busy()).toBe('false')
   })
 

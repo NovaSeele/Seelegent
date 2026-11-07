@@ -227,16 +227,35 @@ export function weekdayName(d: number, locale: string): string {
   )
 }
 
+/**
+ * A time of day in `locale`'s own clock ("6:00 AM", "06:00"): the one format of every schedule sentence and run
+ * time on the page.
+ */
+export function clockTime(h: number, m: number, locale: string): string {
+  return new Intl.DateTimeFormat(locale, {
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZone: 'UTC',
+  }).format(new Date(Date.UTC(2024, 0, 1, h, m)))
+}
+
+/** "HH:MM" in the locale's clock; text that is not a time stays as it is. */
+function atWords(at: string, locale: string): string {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(at)
+  return m ? clockTime(Number(m[1]), Number(m[2]), locale) : at
+}
+
 /** The i18n key and parameters that describe a schedule in words. */
 export function scheduleWords(
   s: Schedule,
   locale: string,
 ): { key: string; params: Record<string, string> } {
   if (s.cron) return { key: 'automations.schedule.cron', params: { expr: s.cron } }
-  const at = s.at ?? '09:00'
+  const raw = s.at ?? '09:00'
+  const at = atWords(raw, locale)
   switch (s.every) {
     case 'hourly':
-      return { key: 'automations.schedule.hourly', params: { minute: at.slice(3) || '00' } }
+      return { key: 'automations.schedule.hourly', params: { minute: raw.slice(3) || '00' } }
     case 'weekdays':
       return { key: 'automations.schedule.weekdays', params: { at } }
     case 'weekly':

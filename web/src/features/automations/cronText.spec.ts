@@ -25,6 +25,7 @@ const namers: Namers = {
   list: (items) => items.join(' and '),
   weekday: (d) => DAYS[d] ?? '',
   month: (m) => ['', 'January', 'February', 'March', 'April', 'May', 'June', 'July'][m] ?? '',
+  time: (h, m) => `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`,
 }
 const words = (expr: string) => describeCron(cron(expr), namers)
 

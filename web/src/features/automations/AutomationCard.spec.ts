@@ -48,7 +48,21 @@ describe('AutomationCard', () => {
     await review?.trigger('click')
     expect(w.emitted('confirm')).toHaveLength(1)
     // The cron expression in words, the expression itself on hover.
-    expect(w.text()).toContain('06:00 on day 1 of every month')
+    expect(w.text()).toContain('6:00 AM on day 1 of every month')
+  })
+
+  it('says the next run in the same clock as the schedule', async () => {
+    const w = await card(
+      automation({
+        enabled: true,
+        confirmed: true,
+        timezone: 'UTC',
+        nextRun: '2026-12-01T06:00:00.000Z',
+      }),
+    )
+    expect(w.text()).toContain('6:00 AM on day 1 of every month')
+    expect(w.text()).toMatch(/Dec 1, 6:00\sAM/)
+    expect(w.text()).not.toContain('06:00')
   })
 
   it('offers Run now once the user confirmed it', async () => {

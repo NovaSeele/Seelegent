@@ -3,7 +3,7 @@ import { useI18n } from 'vue-i18n'
 import type { Schedule } from '@/api/types'
 import { useFormat } from '@/composables/useFormat'
 
-import { scheduleWords, weekdayName } from './automationModel'
+import { clockTime, scheduleWords, weekdayName } from './automationModel'
 import { describeCron, parseCron, type CronProblem } from './cronText'
 
 /** The browser's own zone ("Asia/Bangkok"), or "" when Intl does not say. */
@@ -47,6 +47,7 @@ export function useScheduleText() {
               list,
               weekday: (d) => weekdayName(d, locale.value),
               month: monthName,
+              time: (h, m) => clockTime(h, m, locale.value),
             })
           : null
       return words ?? t('automations.schedule.cron', { expr: s.cron })
@@ -76,7 +77,8 @@ export function useScheduleText() {
       weekday: 'short',
       month: 'short',
       day: 'numeric',
-      hour: '2-digit',
+      // The locale's own clock, as in the schedule sentence (clockTime).
+      hour: 'numeric',
       minute: '2-digit',
     }
     let there: string
