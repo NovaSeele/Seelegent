@@ -7,6 +7,7 @@ import type { Automation } from '@/api/types'
 import Button from '@/components/ui/Button.vue'
 import Dialog from '@/components/ui/Dialog.vue'
 import Spinner from '@/components/ui/Spinner.vue'
+import { useFormat } from '@/composables/useFormat'
 import { useAutomationsStore } from '@/stores/automations'
 import { useToastStore } from '@/stores/toast'
 
@@ -24,6 +25,7 @@ const open = defineModel<boolean>('open', { required: true })
 
 const { t } = useI18n()
 const words = useScheduleText()
+const fmt = useFormat()
 const store = useAutomationsStore()
 const toast = useToastStore()
 
@@ -159,7 +161,9 @@ async function turnOn() {
         </dd>
         <dt>{{ t('automations.confirm.quota') }}</dt>
         <dd>
-          {{ t('automations.confirm.quotaText', { n: shown.quota.minRemaining }) }}
+          {{
+            t('automations.confirm.quotaText', { pct: fmt.percent(shown.quota.minRemaining / 100) })
+          }}
           <template v-if="shown.quota.useBeforeReset"
             >· {{ t('automations.editor.beforeReset') }}</template
           >

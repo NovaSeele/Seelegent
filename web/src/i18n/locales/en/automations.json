@@ -145,7 +145,7 @@
     "laneDefault": "As the settings say",
     "none": "None",
     "quota": "Quota",
-    "quotaText": "Skips when less than {n} % is left",
+    "quotaText": "Skips when less than {pct} is left",
     "graceText": "Starts up to {n} min late",
     "warn": "The prompt above is exactly what each run sends. If anything here is not what you expect, cancel and edit it.",
     "submit": "Turn on",

@@ -61,6 +61,7 @@ describe('ConfirmEnableDialog', () => {
     const dialog = document.querySelector('[role=dialog]') as HTMLElement
     await vi.waitFor(() => expect(dialog.textContent).toContain('Tidy the changelog'))
     expect(dialog.textContent).toContain('/srv/app')
+    expect(dialog.textContent).toContain('Skips when less than 20% is left')
     // Its next three runs come from the daemon's preview of exactly this schedule and zone.
     await vi.waitFor(() => expect(dialog.querySelectorAll('li')).toHaveLength(3))
     const urls = fetch.mock.calls.map(([input]) => String(input))

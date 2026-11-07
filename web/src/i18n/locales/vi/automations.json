@@ -145,7 +145,7 @@
     "laneDefault": "Theo cài đặt",
     "none": "Không có",
     "quota": "Hạn mức",
-    "quotaText": "Bỏ qua khi còn dưới {n} %",
+    "quotaText": "Bỏ qua khi còn dưới {pct}",
     "graceText": "Bắt đầu trễ tối đa {n} phút",
     "warn": "Prompt ở trên chính là nội dung mỗi lần chạy gửi đi. Nếu có gì không như bạn nghĩ, hãy hủy và sửa lại.",
     "submit": "Bật",
