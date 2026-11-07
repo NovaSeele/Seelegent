@@ -188,12 +188,13 @@ Rules:
 ## Bugs of the old version covered here
 
 - C-B1: setup registers the stable executable, never a versioned path or `node cli.js`, and warns about unstable
-  paths. Updating the entries after an update belongs to the updater (M16).
+  paths. `seelegent update` replaces that executable in place and reruns setup for the hosts that have an entry
+  ([release.md](release.md)).
 - C-B2: the hook is installed in the shape Claude Code accepts.
 - C-B5: `tool_timeout_sec = 3600` for Codex and `timeout: 3600000` for Gemini CLI. The other hosts have no known key.
 - C-B12: setup and migrate refuse to run inside a worker.
 - C-B14: inline-table and dotted forms of `mcp_servers.seelegent` are detected and refused. Every write is atomic with a
   backup.
-- C-B7 (BOM in `current.txt`) belongs to the installer (M16). Setup itself keeps a BOM it finds in a host config and
-  never adds one.
+- C-B7 (BOM in `current.txt`): the installer writes no version file at all and is plain ASCII
+  ([release.md](release.md)). Setup itself keeps a BOM it finds in a host config and never adds one.
 - F6 and F10: see above.

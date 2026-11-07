@@ -3,8 +3,9 @@
 `seelegent <command> [flags]`. The commands are thin: they talk to the daemon through `internal/client` and share
 their logic with the MCP tools through `internal/ops` (see [mcp.md](mcp.md)). Code: `internal/cli`, one file per
 group (`delegate.go`, `tasks.go`, `memory.go`, `system.go`, `doctor.go`, `daemon.go`, `mcp.go`, `setup.go`,
-`migrate.go`); the checks of `doctor` are `internal/doctor`, the work of `setup` and `migrate` is `internal/setup`
-and `internal/migrate` ([setup.md](setup.md)).
+`migrate.go`, `update.go`); the checks of `doctor` are `internal/doctor`, the work of `setup` and `migrate` is
+`internal/setup` and `internal/migrate` ([setup.md](setup.md)), the work of `update` is `internal/update`
+([release.md](release.md)).
 
 ## Common rules
 
@@ -12,7 +13,7 @@ and `internal/migrate` ([setup.md](setup.md)).
 |---|---|
 | `--json` | Prints the result as JSON on stdout, one shape per command (below). Errors then go to stdout too, as `{"error": "...", "code": "...", "details": {...}}`. Without `--json`, results go to stdout and errors to stderr as `Error: ...`. |
 | Exit codes | `0` ok; `1` runtime or API error, refusal inside a worker, `doctor` with a failed check; `2` usage error (unknown command or flag, missing or wrong arguments); `3` `seelegent daemon` found the data directory locked by another daemon or its port taken. |
-| Error codes | the API's code (`not_found`, `invalid_argument`, `bad_state`, ...), `not_available` (an option or feature of a later version), `forbidden` with `details.caller: "worker"`, `daemon_unavailable` (no daemon, another program on the port, a Seelegent daemon of another data directory on the port, a daemon that holds its lock without answering), `daemon_stopped` (the daemon was stopped during a wait and did not come back; the tasks keep running), `daemon_locked` (exit 3), `usage` (exit 2), `error`. |
+| Error codes | the API's code (`not_found`, `invalid_argument`, `bad_state`, ...), `not_available` (an option or feature of a later version), `forbidden` with `details.caller: "worker"`, `daemon_unavailable` (no daemon, another program on the port, a Seelegent daemon of another data directory on the port, a daemon that holds its lock without answering), `daemon_stopped` (the daemon was stopped during a wait and did not come back; the tasks keep running), `daemon_locked` (exit 3), `usage` (exit 2), `checksum_mismatch`, `dev_build` and `no_previous` (`update`), `error`. |
 | `@file` | A prompt, message, memory text or objection that starts with `@` is read from that file, relative to `--cwd` when the command has it, else to the current folder. |
 | Flags | Normal flags (`--name value` or `--name=value`) after or between the arguments; `--` ends the flags. Unknown flags are an error, `run` included. |
 
@@ -47,7 +48,8 @@ With `SEELEGENT_WORKER=1`, `delegate`, `run`, `followup`, `review`, `cancel`, `m
 `{"error": that text, "code": "forbidden", "details": {"caller": "worker"}}`). The check runs before the flags are
 parsed and before any call. `status`, `wait`, `task`, `ls`, `memory read`, `doctor`, `version`, `skill` and the
 hidden `hook claude-agent` (Claude Code's reminder hook, which may run inside a worker and only prints advice) stay
-allowed; the daemon's own guard decides what a worker may read.
+allowed; the daemon's own guard decides what a worker may read. `update` is refused the same way in every mode,
+`--check` included (it replaces the executable and restarts the daemon that runs the worker).
 
 ## Commands
 
@@ -73,6 +75,23 @@ allowed; the daemon's own guard decides what a worker may read.
 | `setup [--host a,b] [--dry-run] [--remove] [--no-skill] [--hooks] [--force] [--exe path]` | Registers Seelegent with the lead hosts on this machine ([setup.md](setup.md)). Exit 1 when an item is `conflict` or `error`; with `--json` the report is then the only document printed. | `setup.Report` |
 | `skill` | Prints the lead skill `setup` installs. | `{name, version, file, content}` |
 | `migrate [--from dir] [--dry-run]` | Imports the old (Node) Seelegent's data ([setup.md](setup.md)). Exit 1 when an item is `error`; with `--json` the report is then the only document printed. | `migrate.Report` |
+| `update [--check\|--apply\|--rollback] [--version vX.Y.Z]` | `--check` (the default) compares this build with the latest release (or `--version`). `--apply` installs it in place of this executable, verified against the release's `checksums.txt`, restarting the daemon and refreshing the hosts that have an entry; `--version` picks any release, older ones too. `--rollback` puts back the executable the last update replaced, once. Progress lines go to stderr. See below and [release.md](release.md). | `update.CheckResult`, `update.ApplyResult`, `update.RollbackResult` |
+
+`update` (old `src/update.js`, inventory 6.1):
+
+- Releases come from `https://api.github.com/repos/NovaSeele/Seelegent/releases/latest` (`/releases/tags/<tag>` with
+  `--version`), or from `SEELEGENT_UPDATE_URL`. Only `https`, or `http` on a loopback host, redirects included.
+- `--check` prints `{currentVersion, latestVersion, updateAvailable, devBuild?, releaseUrl?, asset?, message}`. A
+  development build (`dev`, a version between tags, `-dirty`, a snapshot) sets `devBuild` and never
+  `updateAvailable`; `--apply` then fails with `dev_build` unless `--version` names the release to install.
+- `--apply` prints `{applied, updateAvailable, version, previousVersion, exe, previous?, daemonRestarted, hosts,
+  warnings?, message}`; with nothing newer it prints `applied: false` and "already up to date", exit 0. A download
+  whose SHA-256 does not match `checksums.txt` (or is not listed) is `checksum_mismatch`, and nothing changed. The
+  executable must be an installed `seelegent` (`seelegent.exe`); a `go run` or test build is refused.
+- `--rollback` prints `{ok, previousVersion, currentVersion, exe, daemonRestarted, hosts, warnings?, message}`, where
+  `previousVersion` is the version rolled back from (it is discarded). Without a kept executable: `no_previous`.
+- Versions are printed as the binaries report them, with the `v` (`v1.2.3`); the old updater printed `1.2.3`. The
+  old `method` and `installRoot` fields are gone: there is one install layout.
 
 Waits (`wait`, `delegate`, `followup`, `run`; the same code as the MCP tools, `ops.WaitReports`):
 
@@ -87,7 +106,7 @@ Waits (`wait`, `delegate`, `followup`, `run`; the same code as the MCP tools, `o
 
 ### Not in this version
 
-There are no `meeting`, `consult`, `issues`, `notes`, `automations`, `contest`, `proof` or `update` commands.
+There are no `meeting`, `consult`, `issues`, `notes`, `automations`, `contest` or `proof` commands.
 Options of later milestones keep their old names but are
 refused before anything is sent, with exit 1 and code `not_available`: `--gate <cmd>` (`--no-gate` is accepted),
 `--lane <paths>` (`--no-lane` is accepted), `--force-lane`, `--verify`, `--member`, and the contest options

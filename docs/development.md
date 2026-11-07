@@ -32,6 +32,11 @@ pwsh -File scripts/build.ps1            # -SkipWeb reuses the current web/dist
 .\bin\seelegent.exe version
 ```
 
+Release builds: `make cross` builds every release target (windows, linux, darwin × amd64, arm64) into `dist/cross/`;
+`make snapshot` builds the release archives and `checksums.txt` into `dist/` with the pinned GoReleaser, and `make
+release-check` validates `.goreleaser.yaml`. How releases, the installers and `seelegent update` work:
+[release.md](release.md).
+
 `go build ./...` also works on a fresh clone: `web/dist/.gitkeep` keeps the embedded directory present, and the
 binary then serves no dashboard. Version, commit and date come from `-ldflags -X
 github.com/NovaSeele/Seelegent/internal/buildinfo.{version,commit,date}`; without them the binary reports `dev`
@@ -101,6 +106,8 @@ Every branch passes these before it is merged (CI runs them on Linux, Windows an
 - Go: `gofmt` / `goimports` (through golangci-lint), `go vet`, `golangci-lint run`, `go test ./...` with `-race`
   on Linux and macOS, coverage of domain packages at least 70%.
 - Web: `pnpm lint` (ESLint + Prettier check), `pnpm typecheck` (vue-tsc), `pnpm test` (Vitest), `pnpm build`.
+- Release: `goreleaser check`, a snapshot build of every archive, and the installers parse (`sh -n`, `dash -n`,
+  `shellcheck`, the PowerShell parser).
 - Backends are tested against a fake CLI that replays recorded streams; tests never use real accounts, and they
   use temp data dirs and random ports.
 - The repository stays clean: no scratch files and no generated output except `web/src/api/types.gen.ts`

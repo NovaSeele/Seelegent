@@ -1,0 +1,143 @@
+# Releases, installation and updates
+
+Seelegent ships as one binary per platform, built by [GoReleaser](https://goreleaser.com) from a `v*` tag. The
+installers (`scripts/install.ps1`, `scripts/install.sh`) and `seelegent update` download those release archives,
+check them against the release's `checksums.txt`, and put the binary at a stable path that the lead hosts' MCP
+entries keep pointing at.
+
+## Release files
+
+| File | Content |
+|---|---|
+| `seelegent_<version>_windows_<arch>.zip` | `seelegent.exe`, `LICENSE`, `README.md`, `THIRD_PARTY_NOTICES.md` |
+| `seelegent_<version>_<linux\|darwin>_<arch>.tar.gz` | `seelegent` and the same files |
+| `checksums.txt` | `<sha256>  <file name>` for every archive |
+
+`<version>` has no `v` (`seelegent_1.2.0_linux_arm64.tar.gz`), `<arch>` is `amd64` or `arm64`. The binaries are
+built with `CGO_ENABLED=0` and `-trimpath`, with the dashboard embedded, and report `v<version>`, the short commit
+and the commit date (`seelegent version`). The installers and the updater rely on these names: change
+`.goreleaser.yaml`, both scripts and `internal/update` together.
+
+## Cutting a release
+
+1. `main` is green in CI. CI also runs `goreleaser check` and a snapshot build (`goreleaser release --snapshot
+   --clean`) of every archive, so a broken config shows up before the tag.
+2. Tag the commit and push the tag (the lead asks the user first; agents never push or tag):
+   `git tag -a v1.2.0 -m "Seelegent v1.2.0" && git push origin v1.2.0`. A tag with a pre-release part
+   (`v1.2.0-rc.1`) becomes a GitHub pre-release; `releases/latest`, which the installers and `update` read, never
+   points at a pre-release.
+3. `.github/workflows/release.yml` runs on the tag: Go from `go.mod`, pnpm and Node 24, `go test ./...`, then
+   GoReleaser (version pinned in the workflow and the Makefile) with only `contents: write`. The before hooks build
+   the dashboard (`pnpm --dir web install --frozen-lockfile`, `pnpm --dir web build`), then GoReleaser builds the six
+   targets, writes the archives and `checksums.txt`, and publishes the GitHub release with a changelog from the
+   commits (docs, test, chore and ci commits left out).
+
+Locally: `make cross` builds the six binaries into `dist/cross/` without GoReleaser; `make snapshot` and `make
+release-check` run the pinned GoReleaser through `go run` (the first run downloads it).
+
+## Installing
+
+Windows (Windows PowerShell 5.1 or PowerShell 7):
+
+```powershell
+irm https://raw.githubusercontent.com/NovaSeele/Seelegent/main/scripts/install.ps1 | iex
+```
+
+Linux and macOS:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/NovaSeele/Seelegent/main/scripts/install.sh | sh
+```
+
+What the installers do, in order:
+
+1. Read the release information: `https://api.github.com/repos/NovaSeele/Seelegent/releases/latest`, or the tag
+   given with `-Version` / `--version` / `SEELEGENT_VERSION` (`v1.2.3` or `1.2.3`).
+2. Download the archive for this OS and processor and `checksums.txt` into a temporary folder, and refuse to go on
+   unless the archive's SHA-256 matches its line. Then run the extracted binary's `version --json`: it must run here
+   and report the release's version.
+3. Stop a running daemon of an earlier install (`seelegent stop`), then put the binary in place with renames in its
+   folder only, so even a running `seelegent.exe` is replaced safely: the replaced binary is kept as
+   `seelegent.exe.previous` (`seelegent.previous`) for `seelegent update --rollback`.
+   - Windows: `%LOCALAPPDATA%\Programs\seelegent\bin\seelegent.exe`, the old version's install root.
+   - Linux and macOS: `~/.local/bin/seelegent`.
+   - `-InstallDir` / `--install-dir` / `SEELEGENT_INSTALL_DIR` choose another folder.
+4. Windows only: the old (Node) installer wrote `bin\seelegent.cmd`, a launcher for `node ...\src\cli.js`. It is
+   renamed to `seelegent-node.cmd`, so `seelegent` always runs the new binary (also for programs that look for
+   `seelegent.cmd`) while the old version stays runnable as `seelegent-node`. A `seelegent.cmd` that is not the old
+   launcher is left alone with a warning. The rest of the old version's files stay where they are.
+5. Add the folder to PATH when it is missing: on Windows the user `Path` in the registry (kept `REG_EXPAND_SZ`, its
+   `%VARIABLES%` unexpanded, then a settings-change broadcast so new terminals see it); elsewhere one `export
+   PATH=...` line in the shell's profile (`~/.zshrc`, `~/.bashrc`, `~/.bash_profile` on macOS, a fish `conf.d` file,
+   else `~/.profile`). `-NoPath` / `--no-modify-path` / `SEELEGENT_NO_MODIFY_PATH=1` leave PATH alone. A warning
+   names another `seelegent` that comes first on PATH.
+6. Run `seelegent migrate` when the data folder (`SEELEGENT_HOME`, else `~/.seelegent`) holds the old version's data
+   (`settings.json`, `accounts.json`, `roles.json` or `memory/`) and no `seelegent.db` yet: the first install
+   imports it, a later one never imports it again (run `seelegent migrate` yourself for that).
+7. Run `seelegent setup` (every detected lead host), unless `-NoSetup` / `--no-setup` / `SEELEGENT_NO_SETUP=1`.
+8. Start the daemon again when step 3 stopped one, and print the next steps. When the daemon cannot start (for
+   example the old version's daemon still holds the port), a warning says so.
+
+Both scripts end with an error (exit code 1, or a terminating error under `irm | iex`, which keeps the window open)
+on any failure. A failed `migrate` or `setup` does not undo the install; the error names the step to run again. Both
+refuse to run inside a Seelegent worker. `install.ps1` is plain ASCII without a BOM, which Windows PowerShell 5.1
+reads correctly, and it writes no text file (old C-B7: a BOM in `current.txt` broke every call); everything runs
+inside one function, so `irm | iex` leaves no settings behind in the session.
+
+## Updating
+
+```text
+seelegent update [--check | --apply | --rollback] [--version vX.Y.Z] [--json]
+```
+
+See [cli.md](cli.md) for the output. The steps of `--apply`:
+
+1. Read the release information (latest, or `--version`) and compare it with this build. A development build
+   (`dev`, a version between tags such as `v1.2.3-4-gabcdef`, `-dirty`, a GoReleaser snapshot) cannot tell what is
+   newer: `--check` says so and `--apply` needs `--version`. With `--version`, that release is installed even when
+   it is older.
+2. Under `<data folder>/update/` (with a lock, so two updates never run at once): download the archive, verify its
+   SHA-256 against `checksums.txt` (no line, or another hash: refused, code `checksum_mismatch`), extract the binary
+   and run its `version --json`.
+3. Copy it next to the installed binary as `<exe>.new`. Stop the daemon if it runs (`POST /api/v1/daemon/stop`, the
+   same graceful stop as `seelegent stop`: open waits are answered with `daemon_stopping` and a lead's wait goes on
+   against the new daemon).
+4. Rename the installed binary to `<exe>.previous` (an older kept binary is removed first) and `<exe>.new` to
+   `<exe>`. Windows allows renaming a running executable, so this works from the running `seelegent update` itself
+   and while lead hosts run `seelegent mcp`. A failed rename puts everything back.
+5. Start the daemon again from the new binary when it ran before. If it does not start, the old binary is put back
+   and its daemon started: the update fails, nothing is lost.
+6. Refresh the lead hosts (old C-B1): run the new binary's `setup --dry-run --json`, then `setup --host <ids>` for
+   the hosts whose MCP entry already exists (action `unchanged` or `updated`). The entry's path did not change, so
+   this mostly brings the lead skill to the new version. Hosts without an entry are not added, the reminder hook is
+   not touched. Problems here are warnings; the update itself is done.
+7. Delete leftovers: `<exe>.old-*` files that could not be deleted while they ran (an MCP server of the old version
+   keeps its file in use until its host restarts it) are removed by a later update or rollback.
+
+`--rollback` puts `<exe>.previous` back the same way (stop, rename, start, refresh) and discards the version it
+rolls back from, so a second rollback reports `no_previous` instead of rolling forward again (old C-B15). To go
+forward again, run `seelegent update --apply`.
+
+Lead hosts keep running the MCP server they started until they restart it; the daemon runs the new version at once.
+
+## Overrides
+
+| Variable | Used by | Effect |
+|---|---|---|
+| `SEELEGENT_INSTALL_URL` | installers | Release information address (first choice). |
+| `SEELEGENT_UPDATE_URL` | installers, `update` | Release information address (the installers' second choice), as in the old version. |
+| `SEELEGENT_VERSION` | installers | Release to install. |
+| `SEELEGENT_INSTALL_DIR` | installers | Folder of the binary. `update` always replaces the running binary. |
+| `SEELEGENT_NO_MODIFY_PATH=1` | installers | Leave PATH alone. |
+| `SEELEGENT_NO_SETUP=1` | installers | Do not run `seelegent setup`. |
+
+An address ending in `/releases/latest` is turned into `/releases/tags/<tag>` when a version is asked for; any other
+address is used as it is and must name that version. Addresses must be `https`, or `http` on a loopback host (a local
+test server); downloads follow at most five redirects and never to plain `http` elsewhere (old C-B15). The integrity
+check is the release's own `checksums.txt`, fetched from the same release; there is no signature yet.
+
+Testing the installers against a local server: serve a folder with GitHub-like JSON (`tag_name`, and `assets` with
+`name` and `browser_download_url`) next to the archives and `checksums.txt`, then run the scripts with temporary
+`USERPROFILE`/`HOME`, `LOCALAPPDATA`, `APPDATA`, `SEELEGENT_HOME`, a free `SEELEGENT_PORT`,
+`SEELEGENT_NO_MODIFY_PATH=1` and `SEELEGENT_INSTALL_URL=http://127.0.0.1:<port>/releases/latest`, and a PATH
+without real host CLIs (setup would otherwise run `claude mcp add`).
