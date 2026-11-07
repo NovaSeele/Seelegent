@@ -265,6 +265,10 @@ func TestFoldText(t *testing.T) {
 	if got := foldText("Sửa lỗi ĐĂNG NHẬP – Tiếng Việt, Ångström Çà"); got != "sua loi dang nhap – tieng viet, angstrom ca" {
 		t.Fatalf("foldText = %q", got)
 	}
+	// Decomposed (NFD) text folds like the precomposed form.
+	if got := foldText("Tiếng Việt İstanbul İzmir"); got != "tieng viet istanbul izmir" {
+		t.Fatalf("foldText NFD = %q", got)
+	}
 }
 
 // TestRepoSearchFolds finds Vietnamese titles whatever the case and accents of the search, also for rows written
@@ -277,7 +281,9 @@ func TestRepoSearchFolds(t *testing.T) {
 	a.Title = "Sửa lỗi Đăng nhập"
 	b := newTestTask("t2", testEpoch.Add(time.Second))
 	b.Title = "Thêm trang cài đặt"
-	for _, tk := range []*Task{a, b} {
+	c := newTestTask("t3", testEpoch.Add(2*time.Second))
+	c.Title = "Sửa bản Tiếng Việt" // decomposed (NFD), as Unikey's "Unicode tổ hợp" types it
+	for _, tk := range []*Task{a, b, c} {
 		if _, err := r.Create(ctx, tk, nil); err != nil {
 			t.Fatal(err)
 		}
@@ -294,7 +300,8 @@ func TestRepoSearchFolds(t *testing.T) {
 		}
 		return ids
 	}
-	for text, want := range map[string]string{"dang nhap": "t1", "ĐĂNG": "t1", "SỬA LỖI": "t1", "cai dat": "t2"} {
+	for text, want := range map[string]string{"dang nhap": "t1", "ĐĂNG": "t1", "SỬA LỖI": "t1", "cai dat": "t2",
+		"tiếng việt": "t3", "Đăng nhập": "t1"} {
 		if got := search(text); len(got) != 1 || got[0] != want {
 			t.Errorf("search %q = %v", text, got)
 		}

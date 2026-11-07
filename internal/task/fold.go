@@ -36,6 +36,17 @@ var foldBase = func() *strings.Replacer {
 }()
 
 // foldText lower-cases s and removes the diacritics of Latin letters, for case- and accent-insensitive search.
+// Combining marks (Unicode category Mn) are dropped, so decomposed text (NFD: macOS file names, Unikey's
+// "Unicode tổ hợp", "İ" as I + U+0307) folds like its precomposed form.
+//
+// The result is stored in tasks.title_fold, and BackfillFold fills only rows whose title_fold is empty. Changing
+// what foldText returns later therefore needs a migration that resets title_fold to the empty string, so the
+// rows are recomputed.
 func foldText(s string) string {
-	return foldBase.Replace(strings.Map(unicode.ToLower, s))
+	return foldBase.Replace(strings.Map(func(r rune) rune {
+		if unicode.Is(unicode.Mn, r) {
+			return -1
+		}
+		return unicode.ToLower(r)
+	}, s))
 }

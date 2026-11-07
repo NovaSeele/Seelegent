@@ -34,6 +34,10 @@ SQLite, migration `0004_tasks.sql` (and `0005_memory_roles.sql` for memory, revi
   the JSON of the rest of the record.
 - `turns`, `attempts`: one row each; an attempt keeps its full brief in `prompt` (read only on request) and its
   launch directory and committed stream offsets in `data`.
+- `tasks.title_fold` (migration `0006_task_search.sql`): the title lower-cased with its diacritics and combining
+  marks removed (`foldText`), which the title search matches, so "tieng viet" finds "Tiếng Việt" in NFC or NFD. It is
+  written on every save; at start `BackfillFold` fills only the rows where it is empty. A later change to `foldText`
+  needs a migration that empties `title_fold` so those rows are recomputed.
 - `task_events`: the append-only log. `seq` starts at 1 per task and grows by one, assigned in the transaction that
   writes the event.
 
