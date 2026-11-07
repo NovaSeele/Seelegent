@@ -553,8 +553,8 @@ func (s *Service) readJudge(ctx context.Context, c *api.Contest, j *api.ContestJ
 			} else {
 				cite = answer.Checked(v.Worktree, ci.Cite, lbl)
 			}
-			if cite.State == proof.CiteVerified {
-				j.Verified++
+			if cite.State == proof.CiteVerified && lbl != "" && lbl == j.Letters[p.Winner] {
+				j.Verified++ // only the winner's: a true remark about a loser does not back the pick
 			}
 			cl.Cites = append(cl.Cites, cite)
 		}

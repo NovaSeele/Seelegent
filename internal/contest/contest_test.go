@@ -259,14 +259,18 @@ func TestContestToWinner(t *testing.T) {
 	if strings.Contains(jd.Prompt, "Judy") || !strings.Contains(jd.Prompt, "greet.txt") {
 		t.Errorf("judge brief:\n%s", jd.Prompt)
 	}
-	l2 := ""
+	l1, l2 := "", ""
 	for l, lbl := range j.Letters {
 		if lbl == "V2" {
 			l2 = l
+		} else {
+			l1 = l
 		}
 	}
+	// A verified citation about the loser does not count for the winner: Verified stays 1.
 	e.tasks.finish(j.RunTaskID, fmt.Sprintf("## Winner\n%s\n## Ranking\n%s\n## Reasons\n"+
-		"- It edits the existing file [%s a.txt:2] \"hello\"\n", l2, l2, l2))
+		"- It edits the existing file [%s a.txt:2] \"hello\"\n- The other adds a file [%s greet.txt:1] \"hello\"\n",
+		l2, l2, l2, l1))
 	c = waitFor(t, e.s, c.ID, status(api.ContestStatusReady))
 	if c.Proposal == nil || c.Proposal.Winner != "V2" || c.Proposal.Source != "judge" || c.JudgeRun.Verified != 1 {
 		t.Fatalf("proposal = %+v judge %+v", c.Proposal, c.JudgeRun)
