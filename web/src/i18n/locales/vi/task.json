@@ -130,7 +130,7 @@
     },
     "findings": "Kiểm tra của lượt {n}",
     "severity": {
-      "red": "Lỗi",
+      "red": "Vấn đề",
       "warn": "Cảnh báo"
     },
     "finding": {

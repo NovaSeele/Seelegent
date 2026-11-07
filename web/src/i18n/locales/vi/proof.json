@@ -101,7 +101,7 @@
     "tasks": "Tác vụ có cổng",
     "tasksValue": "{gated}/{total}",
     "gateRuns": "Số lần chạy cổng",
-    "firstRunRed": "Lỗi ngay lần chạy đầu",
+    "firstRunRed": "Không đạt ngay lần chạy đầu",
     "caught": "Bắt được trước khi duyệt",
     "autoFix": "Tự sửa",
     "autoFixValue": "{n} lượt, {out} tác vụ hết lượt",

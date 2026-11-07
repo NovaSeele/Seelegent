@@ -190,9 +190,12 @@ describe('catalogs', () => {
       'terminal.ev.gate.red',
       'proof.matrix.result.red',
       'proof.runs.part.red',
+      'proof.stats.firstRunRed',
     ]) {
-      expect(vi[key], key).toMatch(/không đạt/)
+      expect(vi[key], key).toMatch(/không đạt/i)
       expect(vi[key], key).not.toMatch(/lỗi/i)
     }
+    // A red safety finding is a problem to look at, not an error of the system.
+    expect(vi['task.safety.severity.red']).toBe('Vấn đề')
   })
 })
