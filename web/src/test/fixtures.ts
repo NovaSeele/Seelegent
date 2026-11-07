@@ -48,6 +48,7 @@ export function makeDetail(overrides: Partial<TaskDetail> = {}): TaskDetail {
     prompt: 'Fix the login form validation.',
     turns: [],
     fileOverlaps: [],
+    proof: null,
     ...overrides,
   }
 }

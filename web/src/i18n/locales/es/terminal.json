@@ -108,6 +108,27 @@
     "log": "Registro del worker",
     "session": "Conversación iniciada · {model}",
     "restored": "Se restauró {count} archivo (turno {n}) | Se restauraron {count} archivos (turno {n})",
-    "atRisk": "{count} archivo sigue en riesgo | {count} archivos siguen en riesgo"
+    "atRisk": "{count} archivo sigue en riesgo | {count} archivos siguen en riesgo",
+    "gate": {
+      "start": "Gate iniciado: {count} paso | Gate iniciado: {count} pasos",
+      "settling": "El gate falló mientras otras tareas trabajaban; espera a que terminen y vuelve a ejecutarse",
+      "running": "Gate en curso",
+      "green": "Gate superado",
+      "red": "Gate fallido",
+      "error": "No se pudo ejecutar el gate",
+      "skipped": "Gate detenido",
+      "autoFix": "corrección automática en el turno {n}"
+    },
+    "lane": {
+      "forced": "Carril tomado sobre la reserva de {count} tarea | Carril tomado sobre las reservas de {count} tareas",
+      "warning": "El carril se solapa con {count} tarea | El carril se solapa con {count} tareas",
+      "violation": "Se cambió {count} archivo fuera del carril | Se cambiaron {count} archivos fuera del carril"
+    },
+    "verify": {
+      "start": "Empezó la segunda revisión",
+      "accept": "La segunda revisión aceptó el cambio",
+      "reject": "La segunda revisión rechazó el cambio",
+      "error": "La segunda revisión no pudo terminar"
+    }
   }
 }

@@ -47,6 +47,9 @@ const FIXTURES: Record<TaskEventType, Record<string, unknown>> = {
   cancel: {},
   work_at_risk: { files: ['a.go'] },
   restored: { files: ['a.go'], backup: 't1-restore-1' },
+  gate: { phase: 'start', steps: ['lane', 'go test ./...'] },
+  lane: { kind: 'violation', paths: ['src/'], files: ['README.md'] },
+  verify: { phase: 'start', childId: 't2' },
   error: { message: 'boom' },
 }
 
@@ -88,7 +91,7 @@ describe('TaskEvent guard', () => {
     expect(taskEventProblem({ ...base, type: 'attention', data: { state: 'blocked' } })).toBe(
       'data.reason',
     )
-    expect(taskEventProblem({ ...base, type: 'gate', data: {} })).toBe('unknown type gate')
+    expect(taskEventProblem({ ...base, type: 'meeting', data: {} })).toBe('unknown type meeting')
   })
 
   it('drops unknown types and logs each one once', () => {

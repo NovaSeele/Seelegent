@@ -26,6 +26,10 @@ const (
 	ReasonLooping        = "looping"
 	ReasonWorkAtRisk     = "work_at_risk"
 	ReasonHygiene        = "hygiene"
+	// ReasonGateRed: the gate is still red (or error) after the automatic fix turns.
+	ReasonGateRed = "gate_red"
+	// ReasonVerifierRejected: the verifier rejected the work and no fix turn is left.
+	ReasonVerifierRejected = "verifier_rejected"
 )
 
 // Who needs to act.
@@ -176,7 +180,26 @@ func computeAttention(t *Task, live liveState, acc accountHealth, now time.Time,
 		if q := parseBlocked(tu.Response); q != nil {
 			return att(api.AttentionQuestion, ReasonQuestion, WhoLead, q.Text)
 		}
-		if red := redFindings(tu.Hygiene); red > 0 {
+		if g := tu.Gate; g != nil && (g.State == api.GateRed || g.State == api.GateError) && !hygieneOnly(g) {
+			return att(api.AttentionBlocked, ReasonGateRed, WhoLead, gateDetail(g))
+		}
+		if v := tu.Verifier; v != nil && v.Verdict == api.VerdictReject {
+			detail := ""
+			if len(v.Reasons) > 0 {
+				detail = v.Reasons[0]
+			}
+			return att(api.AttentionBlocked, ReasonVerifierRejected, WhoLead, detail)
+		}
+		red := redFindings(tu.Hygiene)
+		if g := tu.Gate; g != nil && hygieneOnly(g) {
+			// The gate carries the findings of earlier turns that are still open.
+			for _, s := range g.Steps {
+				if s.Kind == api.StepHygiene {
+					red = max(red, len(s.Files))
+				}
+			}
+		}
+		if red > 0 {
 			return att(api.AttentionBlocked, ReasonHygiene, WhoLead, fmt.Sprintf("%d hygiene finding(s)", red))
 		}
 		if n := atRisk(t); n > 0 {
@@ -187,6 +210,33 @@ func computeAttention(t *Task, live liveState, acc accountHealth, now time.Time,
 		return att(api.AttentionBlocked, ReasonFailed, WhoLead, t.Error)
 	}
 	return nil
+}
+
+// gateDetail names the failing step of a gate.
+func gateDetail(g *api.GateResult) string {
+	for _, s := range g.Steps {
+		if (s.State == api.StepRed || s.State == api.StepError) && !s.Foreign {
+			if s.Cmd != "" && s.Cmd != s.Label {
+				return s.Label + ": " + s.Cmd
+			}
+			return s.Label
+		}
+	}
+	return ""
+}
+
+// hygieneOnly reports whether the hygiene step is the gate's only failure (the hygiene flag says more).
+func hygieneOnly(g *api.GateResult) bool {
+	found := false
+	for _, s := range g.Steps {
+		if (s.State == api.StepRed || s.State == api.StepError) && !s.Foreign {
+			if s.Kind != api.StepHygiene {
+				return false
+			}
+			found = true
+		}
+	}
+	return found
 }
 
 // noAccountDetail explains a no_accounts flag.

@@ -89,6 +89,9 @@ type GateResult struct {
 	EndedAt   string   `json:"endedAt,omitempty"`
 	// AutoFix is set when this run's failure started an automatic fix turn (its number).
 	AutoFix int `json:"autoFix,omitempty"`
+	// Settled: the first run failed while other tasks of the repository were running; this is the run after they
+	// finished (or after gateSettleMinutes).
+	Settled bool `json:"settled,omitempty"`
 }
 
 // Verifier verdicts.
@@ -117,6 +120,51 @@ type CiteCheck struct {
 	EndLine int    `json:"endLine,omitempty"`
 	State   string `json:"state" ts:"'verified' | 'located' | 'quote_mismatch' | 'bad_range' | 'missing_file' | 'outside_repo'"`
 	Detail  string `json:"detail,omitempty"`
+}
+
+// Gate event phases.
+const (
+	GateEventStart    = "start"
+	GateEventStep     = "step"
+	GateEventResult   = "result"
+	GateEventSettling = "settling"
+)
+
+// GateEventData is the data of a gate event; the event's turn is the turn the gate is about.
+type GateEventData struct {
+	Phase string `json:"phase" ts:"'start' | 'step' | 'result' | 'settling'"`
+	// Steps are the step labels (start).
+	Steps []string `json:"steps,omitempty"`
+	// Index (from 0) and Step are the step that started or ended (step).
+	Index int       `json:"index,omitempty"`
+	Step  *GateStep `json:"step,omitempty"`
+	// Result is the finished run (result); its AutoFix names the fix turn it started.
+	Result *GateResult `json:"result,omitempty"`
+	// BarChanged lists what defines "done" that changed since the task started (result).
+	BarChanged []string `json:"barChanged,omitempty"`
+}
+
+// Lane event kinds.
+const (
+	LaneForced    = "forced"
+	LaneWarning   = "warning"
+	LaneViolation = "violation"
+)
+
+// LaneEventData is the data of a lane event: a claim the lead forced (forceLane), an overlap only warned about
+// (lanes: warn), or files a turn changed outside the lane.
+type LaneEventData struct {
+	Kind      string         `json:"kind" ts:"'forced' | 'warning' | 'violation'"`
+	Paths     []string       `json:"paths"`
+	Conflicts []LaneConflict `json:"conflicts,omitempty"`
+	Files     []string       `json:"files,omitempty"`
+}
+
+// VerifyEventData is the data of a verify event.
+type VerifyEventData struct {
+	Phase   string          `json:"phase" ts:"'start' | 'result'"`
+	ChildID string          `json:"childId,omitempty"`
+	Result  *VerifierResult `json:"result,omitempty"`
 }
 
 // Lane modes (setting lanes).

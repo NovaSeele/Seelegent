@@ -20,10 +20,12 @@ import type {
   DepsData,
   ErrorData,
   EventType,
+  GateEventData,
   HandbackData,
   HandoffData,
   Hello,
   HookRun,
+  LaneEventData,
   LeadMessageData,
   LoginSession,
   MemoryChanged,
@@ -39,6 +41,7 @@ import type {
   TaskEventBase,
   TaskSummary,
   TurnEndData,
+  VerifyEventData,
   WaitingQuotaData,
   WorkAtRiskData,
   WorkerEvent,
@@ -69,6 +72,9 @@ export type TaskEvent =
   | Ev<'cancel', CancelData>
   | Ev<'work_at_risk', WorkAtRiskData>
   | Ev<'restored', RestoredData>
+  | Ev<'gate', GateEventData>
+  | Ev<'lane', LaneEventData>
+  | Ev<'verify', VerifyEventData>
   | Ev<'error', ErrorData>
 
 export type TaskEventType = TaskEvent['type']
@@ -147,6 +153,12 @@ export const EVENT_REQUIRED: Readonly<Record<TaskEventType, readonly (readonly [
     cancel: [],
     work_at_risk: [['files', 'array']],
     restored: [['files', 'array']],
+    gate: [['phase', 'string']],
+    lane: [
+      ['kind', 'string'],
+      ['paths', 'array'],
+    ],
+    verify: [['phase', 'string']],
     error: [['message', 'string']],
   }
 

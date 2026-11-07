@@ -123,7 +123,8 @@
     "workAtRisk": "Có thể mất công việc",
     "depsBlocked": "Tác vụ trước thất bại",
     "waitingDeps": "Chờ tác vụ trước",
-    "hygiene": "Lỗi vệ sinh mã"
+    "hygiene": "Lỗi vệ sinh mã",
+    "verifierRejected": "Bị duyệt lần hai từ chối"
   },
   "stage": {
     "explore": "Khám phá",

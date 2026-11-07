@@ -17,6 +17,7 @@ import type {
 import type { IconName } from '@/components/ui/icons'
 
 import { reasonKey } from '../../detail/question'
+import { gateNotice, laneNotice, verifyNotice } from './gateNotices'
 
 interface Base {
   key: string
@@ -228,6 +229,22 @@ function fold(f: Fold, event: TaskEvent): Draft | null {
             { count: files.length, n: event.turn ?? '' },
             { detail: files.join('\n') },
           )
+        : null
+    }
+    case 'gate':
+    case 'lane':
+    case 'verify': {
+      const n =
+        event.type === 'gate'
+          ? gateNotice(event)
+          : event.type === 'lane'
+            ? laneNotice(event)
+            : verifyNotice(event)
+      return n
+        ? notice(n.tone, n.icon, n.message.key, n.message.params, {
+            note: n.note,
+            detail: n.detail,
+          })
         : null
     }
     case 'error':

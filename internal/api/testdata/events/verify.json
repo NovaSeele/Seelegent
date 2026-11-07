@@ -1,0 +1,26 @@
+{
+  "seq": 7,
+  "ts": "2026-11-07T09:00:00.000Z",
+  "taskId": "t261107090000-ab12",
+  "turn": 1,
+  "attempt": 1,
+  "type": "verify",
+  "data": {
+    "phase": "result",
+    "childId": "t3",
+    "result": {
+      "verdict": "reject",
+      "childId": "t3",
+      "reasons": [
+        "main.go:3 - nil map"
+      ],
+      "cites": [
+        {
+          "path": "main.go",
+          "line": 3,
+          "state": "located"
+        }
+      ]
+    }
+  }
+}

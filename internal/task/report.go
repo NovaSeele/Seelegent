@@ -105,6 +105,7 @@ func (s *Service) report(ctx context.Context, t *Task, cwd string) api.TaskRepor
 		rep.DeniedActions = tu.DeniedActions
 		rep.Hygiene, rep.ScopeWarnings = findingsReport(tu.Hygiene), findingsReport(tu.Scope)
 	}
+	gateReport(t, &rep)
 	rep.WorkAtRisk = riskReport(t)
 	for _, o := range s.fileOverlaps(ctx, t) {
 		rep.FileOverlaps = append(rep.FileOverlaps, api.ReportOverlap{File: o.File, TaskID: o.TaskID, Title: o.Title,

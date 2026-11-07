@@ -380,7 +380,8 @@ func (r *Repo) List(ctx context.Context, q Query) ([]*Task, string, error) {
 	if limit > 200 {
 		return nil, "", invalidf("limit %d is over 200", limit)
 	}
-	var where []string
+	// Verify tasks belong to their parent's gate: they are read through the parent, never listed.
+	where := []string{`json_extract(data, '$.kind') IS NOT '` + KindVerify + `'`}
 	var args []any
 	if len(q.Statuses) > 0 {
 		for _, s := range q.Statuses {
@@ -409,11 +410,8 @@ func (r *Repo) List(ctx context.Context, q Query) ([]*Task, string, error) {
 		where = append(where, `(created_at < ? OR (created_at = ? AND id < ?))`)
 		args = append(args, at, at, id)
 	}
-	sqlText := `SELECT ` + taskColumns + ` FROM tasks`
-	if len(where) > 0 {
-		sqlText += ` WHERE ` + strings.Join(where, " AND ") //nolint:gosec // fixed filters with placeholders
-	}
-	sqlText += ` ORDER BY created_at DESC, id DESC LIMIT ?`
+	sqlText := `SELECT ` + taskColumns + ` FROM tasks WHERE ` +
+		strings.Join(where, " AND ") + ` ORDER BY created_at DESC, id DESC LIMIT ?` //nolint:gosec // fixed filters with placeholders
 	args = append(args, limit+1)
 	var tasks []*Task
 	more := false

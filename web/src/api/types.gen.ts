@@ -220,6 +220,9 @@ export type EventType =
   | 'cancel'
   | 'work_at_risk'
   | 'restored'
+  | 'gate'
+  | 'lane'
+  | 'verify'
   | 'error'
 
 /** TaskEvent is one entry of a task's append-only event log. Seq starts at 1 and grows by one per task. */
@@ -411,6 +414,11 @@ export interface GateResult {
   endedAt?: string
   /** AutoFix is set when this run's failure started an automatic fix turn (its number). */
   autoFix?: number
+  /**
+   * Settled: the first run failed while other tasks of the repository were running; this is the run after they
+   * finished (or after gateSettleMinutes).
+   */
+  settled?: boolean
 }
 
 /** VerifierResult is the optional LLM review of a green gate. */
@@ -432,6 +440,38 @@ export interface CiteCheck {
   endLine?: number
   state: 'verified' | 'located' | 'quote_mismatch' | 'bad_range' | 'missing_file' | 'outside_repo'
   detail?: string
+}
+
+/** GateEventData is the data of a gate event; the event's turn is the turn the gate is about. */
+export interface GateEventData {
+  phase: 'start' | 'step' | 'result' | 'settling'
+  /** Steps are the step labels (start). */
+  steps?: string[]
+  /** Index (from 0) and Step are the step that started or ended (step). */
+  index?: number
+  step?: GateStep
+  /** Result is the finished run (result); its AutoFix names the fix turn it started. */
+  result?: GateResult
+  /** BarChanged lists what defines "done" that changed since the task started (result). */
+  barChanged?: string[]
+}
+
+/**
+ * LaneEventData is the data of a lane event: a claim the lead forced (forceLane), an overlap only warned about
+ * (lanes: warn), or files a turn changed outside the lane.
+ */
+export interface LaneEventData {
+  kind: 'forced' | 'warning' | 'violation'
+  paths: string[]
+  conflicts?: LaneConflict[]
+  files?: string[]
+}
+
+/** VerifyEventData is the data of a verify event. */
+export interface VerifyEventData {
+  phase: 'start' | 'result'
+  childId?: string
+  result?: VerifierResult
 }
 
 /** TaskLane is the file lane of a task: the files it may change. */
@@ -888,6 +928,15 @@ export interface TaskReport {
   hygiene?: ReportFinding[]
   scope_warnings?: ReportFinding[]
   denied_actions?: string[]
+  /**
+   * Gate is the gate of the latest instruction once it ended; LastGate shows a gate still running or an
+   * automatic fix turn at work. Lane, Bar and Verifier come with it (docs/gates.md).
+   */
+  gate?: ReportGate
+  last_gate?: ReportLastGate
+  lane?: ReportLane
+  bar?: ReportBar
+  verifier?: ReportVerifier
   deps_reason?: string
   cancelling?: boolean
   error?: string
@@ -1499,11 +1548,16 @@ export interface Review {
   at: string
 }
 
-/** Gate is the state of a task's proof gate (filled by milestone 13). */
+/**
+ * Gate is the state of a task's gate: the last gate run, or running while it runs (Phase running, settling or
+ * verifying).
+ */
 export interface Gate {
   state: 'running' | 'green' | 'red' | 'error' | 'skipped'
-  phase?: string
+  phase?: 'running' | 'settling' | 'verifying'
   autoFixes: number
+  /** Turn is the turn the gate is about. */
+  turn?: number
 }
 
 /** SpecRef is the Spec Kit feature a task works on. */
@@ -1528,6 +1582,8 @@ export interface TaskDetail extends TaskSummary {
   turns: Turn[]
   /** FileOverlaps are the files this task and another task of the same repository changed in overlapping time. */
   fileOverlaps: FileOverlap[]
+  /** Proof is what the task's gate checks (null for a task without gate, lane or verifier). */
+  proof: TaskProof | null
 }
 
 /** Turn is one lead (or user) message and the worker's answer to it. */
@@ -1557,6 +1613,9 @@ export interface Turn {
   scope: Finding[]
   /** OutsideDiff is true when the turn has snapshots, so GET /tasks/{id}/turns/{n}/outside-diff can answer. */
   outsideDiff: boolean
+  /** Gate is the gate run after the turn (null when none ran); Verifier the review of its green gate. */
+  gate: GateResult | null
+  verifier: VerifierResult | null
 }
 
 /** TurnGit lists the files a turn changed, relative to the repository root (null for a turn without snapshots). */
@@ -1614,8 +1673,20 @@ export interface DelegateRequest {
   after?: string[]
   afterMode?: 'accepted' | 'done'
   allowGit?: boolean
+  /**
+   * Gate: true adds the test, lint and build commands found in the repository; false turns the gate's commands
+   * off (lane and hygiene still run). GateCommands are the lead's own gate commands.
+   */
   gate?: boolean
+  gateCommands?: string[]
+  /**
+   * Lane lists the files and globs (relative to cwd) the worker may change; NoLane drops the lane a spec would
+   * give. ForceLane overrides the lane claims of other tasks.
+   */
   lane?: string[]
+  noLane?: boolean
+  forceLane?: boolean
+  /** Verify asks for an LLM review of a green gate (default: the verifier setting). */
   verify?: boolean
   session?: Session
 }
@@ -1631,8 +1702,14 @@ export interface FollowupRequest {
   taskIds?: string[]
   profile?: string
   allowGit?: boolean
+  /**
+   * Gate, GateCommands, Lane, NoLane, ForceLane and Verify change the task's gate from this turn on (see
+   * DelegateRequest); left out, the task keeps what it had.
+   */
   gate?: boolean
+  gateCommands?: string[]
   lane?: string[]
+  noLane?: boolean
   forceLane?: boolean
   verify?: boolean
   /** Force starts a task that waits for (or is blocked by) its prerequisites anyway. */

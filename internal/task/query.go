@@ -38,7 +38,8 @@ func (s *Service) Get(ctx context.Context, id string) (api.TaskDetail, error) {
 			Commands: api.NonNil(tu.Commands), BlockedCommands: api.NonNil(tu.BlockedCommands),
 			DeniedActions: api.NonNil(tu.DeniedActions), Usage: api.UsageOf(tu.Usage), Handback: tu.HandbackText,
 			Attempts: make([]api.Attempt, 0, len(tu.Attempts)), WorkAtRisk: api.NonNil(tu.WorkAtRisk),
-			Hygiene: api.NonNil(tu.Hygiene), Scope: api.NonNil(tu.Scope), OutsideDiff: tu.Snap != nil}
+			Hygiene: api.NonNil(tu.Hygiene), Scope: api.NonNil(tu.Scope), OutsideDiff: tu.Snap != nil,
+			Gate: tu.Gate, Verifier: tu.Verifier}
 		if tu.Snap != nil && tu.Snap.Checked {
 			at.Git = &api.TurnGit{Changed: api.NonNil(tu.Changed), Preexisting: api.NonNil(tu.Preexisting)}
 		}
@@ -50,6 +51,7 @@ func (s *Service) Get(ctx context.Context, id string) (api.TaskDetail, error) {
 		d.Turns = append(d.Turns, at)
 	}
 	d.FileOverlaps = api.NonNil(s.fileOverlaps(ctx, t))
+	d.Proof = proofAPI(t.Proof)
 	return d, nil
 }
 
@@ -170,7 +172,7 @@ func (s *Service) summary(t *Task) api.TaskSummary {
 		NeedsSince: api.FormatTime(t.NeedsSince), Attention: t.Attention, Review: t.Review, Spec: t.Spec,
 		After: api.NonNil(t.After), AfterMode: t.AfterMode, DepsReason: t.DepsReason, Manual: t.Manual,
 		ParentID: t.ParentID, ContestID: t.ContestID, TicketID: t.TicketID, MeetingID: t.MeetingID,
-		LastEventSeq: t.LastEventSeq,
+		LastEventSeq: t.LastEventSeq, Gate: gateSummary(t),
 	}
 	if sum.AfterMode == "" { // tasks stored before afterMode was always set
 		sum.AfterMode = AfterAccepted

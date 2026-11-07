@@ -33,11 +33,18 @@ type TaskReport struct {
 	Hygiene       []ReportFinding `json:"hygiene,omitempty"`
 	ScopeWarnings []ReportFinding `json:"scope_warnings,omitempty"`
 	DeniedActions []string        `json:"denied_actions,omitempty"`
-	DepsReason    string          `json:"deps_reason,omitempty"`
-	Cancelling    bool            `json:"cancelling,omitempty"`
-	Error         string          `json:"error,omitempty"`
-	WaitingUntil  string          `json:"waiting_until,omitempty"`
-	AnsweredBy    string          `json:"answered_by,omitempty"`
+	// Gate is the gate of the latest instruction once it ended; LastGate shows a gate still running or an
+	// automatic fix turn at work. Lane, Bar and Verifier come with it (docs/gates.md).
+	Gate         *ReportGate     `json:"gate,omitempty"`
+	LastGate     *ReportLastGate `json:"last_gate,omitempty"`
+	Lane         *ReportLane     `json:"lane,omitempty"`
+	Bar          *ReportBar      `json:"bar,omitempty"`
+	Verifier     *ReportVerifier `json:"verifier,omitempty"`
+	DepsReason   string          `json:"deps_reason,omitempty"`
+	Cancelling   bool            `json:"cancelling,omitempty"`
+	Error        string          `json:"error,omitempty"`
+	WaitingUntil string          `json:"waiting_until,omitempty"`
+	AnsweredBy   string          `json:"answered_by,omitempty"`
 	// Handback is true when the last turn summarized a takeover.
 	Handback bool `json:"handback,omitempty"`
 	// Dashboard is the deep link to the task in the dashboard.

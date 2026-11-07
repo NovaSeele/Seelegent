@@ -95,6 +95,10 @@ type Input struct {
 	Baseline []string
 	// Deps is the context from prerequisite tasks (DepsContext).
 	Deps string
+	// Lane lists the files and globs (relative to the repository root) the worker may change; nil: no lane.
+	Lane []string
+	// Gate lists the commands Seelegent runs after the worker reports.
+	Gate []string
 	// Earlier are the turns before this one (the handoff section).
 	Earlier []Turn
 	// Interrupted is true when an earlier attempt of this turn ran on another account (or conversation) and did not
@@ -175,6 +179,9 @@ func Worker(in Input) string {
 	if s := baselineSection(in.Baseline); s != "" {
 		parts = append(parts, s)
 	}
+	if s := GateSection(in.Lane, in.Gate); s != "" {
+		parts = append(parts, s)
+	}
 	if d := strings.TrimSpace(in.Deps); d != "" {
 		parts = append(parts, d)
 	}
@@ -200,6 +207,28 @@ func Worker(in Input) string {
 		parts = append(parts, "## Task\n"+in.Message)
 	}
 	return strings.Join(parts, "\n\n")
+}
+
+// GateSection tells the worker its file lane and the gate commands that run after its report ("" when it has
+// neither).
+func GateSection(lane, gate []string) string {
+	var lines []string
+	if lane != nil {
+		lines = append(lines, "## Your lane", "Change only these files (paths relative to the repository root; a "+
+			"trailing / covers the folder): "+strings.Join(lane, ", ")+". Seelegent checks this after your report; if "+
+			"the task needs another file, stop and explain it under ## Blocked.")
+	}
+	if len(gate) > 0 {
+		if len(lines) > 0 {
+			lines = append(lines, "")
+		}
+		lines = append(lines, "## Gate", "After your report Seelegent runs these commands from the repository root; "+
+			"run them yourself before you report and make them pass:")
+		for _, c := range gate {
+			lines = append(lines, "- `"+c+"`")
+		}
+	}
+	return strings.Join(lines, "\n")
 }
 
 // Continue returns the prompt of a turn that continues the worker's conversation: the message, preceded by the

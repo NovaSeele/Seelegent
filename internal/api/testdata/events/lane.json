@@ -1,0 +1,27 @@
+{
+  "seq": 7,
+  "ts": "2026-11-07T09:00:00.000Z",
+  "taskId": "t261107090000-ab12",
+  "turn": 1,
+  "attempt": 1,
+  "type": "lane",
+  "data": {
+    "kind": "forced",
+    "paths": [
+      "src/"
+    ],
+    "conflicts": [
+      {
+        "taskId": "t2",
+        "title": "Other",
+        "status": "running",
+        "paths": [
+          {
+            "mine": "src/",
+            "theirs": "src/a.go"
+          }
+        ]
+      }
+    ]
+  }
+}

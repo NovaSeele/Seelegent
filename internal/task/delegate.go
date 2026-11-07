@@ -44,8 +44,10 @@ func (s *Service) Delegate(ctx context.Context, req api.DelegateRequest) (api.Ta
 	if req.Member != "" {
 		return api.TaskSummary{}, invalidf("department members are not available yet")
 	}
-	if err := unsupported(req.Gate, req.Verify, req.Lane, false); err != nil {
-		return api.TaskSummary{}, err
+	preq := proofRequest{gate: req.Gate, gateCommands: req.GateCommands, lane: req.Lane, noLane: req.NoLane,
+		forceLane: req.ForceLane, verify: req.Verify}
+	if mode == ModePlan && preq.asksGate() {
+		return api.TaskSummary{}, invalidf("a plan task has no gate, lane or verifier")
 	}
 	session, err := checkSession(req.Session)
 	if err != nil {
@@ -113,6 +115,12 @@ func (s *Service) Delegate(ctx context.Context, req api.DelegateRequest) (api.Ta
 		return api.TaskSummary{}, invalidf("afterMode %q must be accepted or done", req.AfterMode)
 	}
 	t.AfterMode = afterMode
+	if gated(t) {
+		t.RepoRoot = s.gitRoot(ctx, cwd)
+		if t.Proof, err = s.resolveProof(t, preq, nil); err != nil {
+			return api.TaskSummary{}, err
+		}
+	}
 	if len(req.After) > 0 {
 		seen := map[string]bool{}
 		for _, id := range req.After {
@@ -141,6 +149,17 @@ func (s *Service) Delegate(ctx context.Context, req api.DelegateRequest) (api.Ta
 		evs = append(evs, NewEvent{Type: api.EventDeps, Turn: 1,
 			Data: api.DepsData{State: api.DepsWaiting, After: t.After, Reason: t.DepsReason}})
 	}
+	// The lane check and the create are one step: two delegates cannot both claim the same files (old D25a).
+	s.claimMu.Lock()
+	laneEvs, err := s.checkLane(ctx, t, t.Proof, req.ForceLane)
+	if err != nil {
+		s.claimMu.Unlock()
+		return api.TaskSummary{}, err
+	}
+	for i := range laneEvs {
+		laneEvs[i].Turn = 1
+	}
+	evs = append(evs, laneEvs...)
 	var out []api.TaskEvent
 	for try := 0; ; try++ {
 		t.ID = s.newID()
@@ -150,12 +169,16 @@ func (s *Service) Delegate(ctx context.Context, req api.DelegateRequest) (api.Ta
 			break
 		}
 		if try >= maxCreateTries {
+			s.claimMu.Unlock()
 			return api.TaskSummary{}, err
 		}
 		if _, getErr := s.repo.Get(ctx, t.ID); getErr != nil {
+			s.claimMu.Unlock()
 			return api.TaskSummary{}, err // not an id collision
 		}
 	}
+	s.claimMu.Unlock()
+	s.forgetOverlaps()
 	s.publishNotices(t.ID, true, out)
 	if t.Status == StatusQueued {
 		s.startRun(t.ID)
@@ -179,9 +202,8 @@ func (s *Service) Followup(ctx context.Context, id string, req api.FollowupReque
 	if by != ByLead && by != ByUser {
 		return api.TaskSummary{}, invalidf("by %q must be lead or user", req.By)
 	}
-	if err := unsupported(req.Gate, req.Verify, req.Lane, req.ForceLane); err != nil {
-		return api.TaskSummary{}, err
-	}
+	preq := proofRequest{gate: req.Gate, gateCommands: req.GateCommands, lane: req.Lane, noLane: req.NoLane,
+		forceLane: req.ForceLane, verify: req.Verify}
 	start := false
 	_, err := s.mutate(ctx, id, func(t *Task) ([]NewEvent, error) {
 		start = false
@@ -215,12 +237,16 @@ func (s *Service) Followup(ctx context.Context, id string, req api.FollowupReque
 				tu.Message += "\n\n## Additional instructions from the " + who + "\n\n" + msg
 				evs = append(evs, NewEvent{Type: api.EventLeadMessage, Turn: 1, Data: api.LeadMessageData{Message: msg, By: by}})
 			}
+			laneEvs, _, err := s.followupProof(ctx, t, preq, false)
+			if err != nil {
+				return nil, err
+			}
 			more, err := s.startFromDeps(ctx, t, true)
 			if err != nil {
 				return nil, err
 			}
 			start = true
-			return append(evs, more...), nil
+			return append(append(evs, laneEvs...), more...), nil
 		}
 		if msg == "" {
 			return nil, invalidf("message is required")
@@ -229,8 +255,13 @@ func (s *Service) Followup(ctx context.Context, id string, req api.FollowupReque
 		if err != nil {
 			return nil, err
 		}
+		laneEvs, changed, err := s.followupProof(ctx, t, preq, len(req.TaskIDs) > 0)
+		if err != nil {
+			return nil, err
+		}
+		t.LastTurn().ProofChanged = changed
 		start = true
-		return []NewEvent{ev}, nil
+		return append([]NewEvent{ev}, laneEvs...), nil
 	})
 	if err != nil {
 		return api.TaskSummary{}, err
@@ -335,20 +366,6 @@ func (s *Service) setProfile(ctx context.Context, t *Task, id string) error {
 	}
 	t.Profile = &api.ProfileRef{ID: r.ID, Name: r.Name}
 	t.Prefer = slices.Clone(r.PreferredAccounts)
-	return nil
-}
-
-// unsupported refuses the options of later milestones (gates, verification, lanes) instead of ignoring them.
-// Turning gates or verification off is accepted: nothing runs them yet.
-func unsupported(gate, verify *bool, lane []string, forceLane bool) error {
-	switch {
-	case gate != nil && *gate:
-		return invalidf("gate is not supported yet")
-	case verify != nil && *verify:
-		return invalidf("verify is not supported yet")
-	case len(lane) > 0 || forceLane:
-		return invalidf("lane is not supported yet")
-	}
 	return nil
 }
 

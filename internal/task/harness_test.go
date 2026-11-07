@@ -21,6 +21,7 @@ import (
 	"github.com/NovaSeele/Seelegent/internal/launch"
 	"github.com/NovaSeele/Seelegent/internal/memory"
 	"github.com/NovaSeele/Seelegent/internal/pool"
+	"github.com/NovaSeele/Seelegent/internal/proof"
 	"github.com/NovaSeele/Seelegent/internal/quota"
 	"github.com/NovaSeele/Seelegent/internal/role"
 	"github.com/NovaSeele/Seelegent/internal/snapshot"
@@ -29,7 +30,13 @@ import (
 	"github.com/NovaSeele/Seelegent/internal/usage"
 )
 
-func TestMain(m *testing.M) { fakecli.Main(m) }
+// TestMain runs the tests, the fake worker CLI, or the fake gate command (gate-check, gate_test.go).
+func TestMain(m *testing.M) {
+	if len(os.Args) > 1 && os.Args[1] == "gate-check" {
+		os.Exit(gateCheck(os.Args[2:]))
+	}
+	fakecli.Main(m)
+}
 
 // waitLimit bounds every wait on real processes.
 const waitLimit = 60 * time.Second
@@ -79,6 +86,9 @@ func newHarness(t *testing.T) *harness {
 		consoles: &fakeConsoles{}}
 	h.accounts = account.NewManager(db, account.NewProfiles(profiles, filepath.Join(dir, "real")), h.clk.Now)
 	set := config.Defaults()
+	// No automatic fix turns unless a test asks for them: each would need a scripted worker.
+	set.GateMaxAutoFixes = 0
+	set.GateSettleMinutes = 0 // the fake clock never moves on its own
 	h.settings.Store(&set)
 	h.usage = usage.NewStore(db, h.clk, time.UTC)
 	h.memory = memory.New(db, h.clk.Now)
@@ -146,6 +156,7 @@ func (h *harness) start() {
 		Snapshots:     snapshot.New(filepath.Join(h.dir, "snapshots"), repos, h.clk.Now),
 		Repos:         repos,
 		AccountStates: p.States,
+		Ledger:        proof.NewLedger(h.db, h.clk.Now),
 	})
 	if err != nil {
 		t.Fatal(err)

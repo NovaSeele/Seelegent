@@ -158,6 +158,8 @@ type Options struct {
 	// AccountStates returns the pool's view of every account, for the attention rules that depend on accounts
 	// (pool.Pool.States); nil leaves those rules out.
 	AccountStates func(ctx context.Context) ([]pool.AccountState, error)
+	// Ledger records the gate results of spec tasks and counts lane decisions (milestone 13); nil leaves them out.
+	Ledger Ledger
 	// Clock is the time source (the system clock when nil).
 	Clock clock.Clock
 	// Logger receives engine logs (discarded when nil). Use a logx logger so secrets are masked.
@@ -185,6 +187,8 @@ type Service struct {
 	wg         sync.WaitGroup
 
 	depsMu sync.Mutex
+	// claimMu makes a lane claim check and the task's save one step (old bug D25a).
+	claimMu sync.Mutex
 
 	// health is the accounts' state the attention rules read, refreshed by the attention watcher.
 	healthMu sync.Mutex
