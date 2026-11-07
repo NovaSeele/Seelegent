@@ -84,7 +84,7 @@ func TestPlanAndRun(t *testing.T) {
 	in.Files = []string{"ok.json", "bad.json", "tsconfig.json", "x.go", "gone.json"}
 	in.Lane = []string{"*.json"}
 	var seen []string
-	res, ok = r.Run(context.Background(), Plan(in), func(i int, s api.GateStep) { seen = append(seen, s.Label+":"+s.State) })
+	res, ok = r.Run(context.Background(), Plan(in), func(_ int, s api.GateStep) { seen = append(seen, s.Label+":"+s.State) })
 	if !ok || res.State != api.GateRed || len(res.Warnings) != 1 {
 		t.Fatalf("warn run = %+v", res)
 	}

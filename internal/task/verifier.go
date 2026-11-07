@@ -85,7 +85,8 @@ func (s *Service) verifierPrompt(ctx context.Context, t *Task, turn int, res *ap
 	}
 	if res != nil {
 		var cmds []string
-		for _, st := range res.Steps {
+		for i := range res.Steps {
+			st := &res.Steps[i]
 			if st.Cmd != "" && st.State == api.StepGreen {
 				cmds = append(cmds, st.Cmd)
 			}
@@ -130,7 +131,7 @@ func (s *Service) turnDiff(ctx context.Context, t *Task, files []string) string 
 }
 
 // startVerifier creates the verify task for the gate of turn and moves the parent to the verifying phase.
-func (s *Service) startVerifier(r *run, t *Task, turn int, res *api.GateResult, files, barChanged []string) (
+func (s *Service) startVerifier(t *Task, turn int, res *api.GateResult, files, barChanged []string) (
 	bool, error) {
 	ctx := s.background()
 	set := s.settings()
@@ -147,7 +148,8 @@ func (s *Service) startVerifier(r *run, t *Task, turn int, res *api.GateResult, 
 	}
 	var prefer []string
 	if accs, err := s.o.Accounts.List(ctx); err == nil {
-		for _, a := range accs {
+		for i := range accs {
+			a := &accs[i]
 			if a.Backend == t.Backend && a.ID != t.AccountID {
 				prefer = append(prefer, a.ID)
 			}

@@ -182,7 +182,7 @@ func (s *Service) gatePhase(r *run, t *Task) (bool, error) {
 	}
 	steps := gate.Plan(in)
 	if len(steps) == 0 {
-		return s.afterGreen(r, t, ph.Turn, nil, files)
+		return s.afterGreen(t, ph.Turn, nil, files)
 	}
 	root := claimRoot(t)
 	runner := gate.Runner{Root: root, Env: s.gateEnv(t, files),
@@ -192,15 +192,15 @@ func (s *Service) gatePhase(r *run, t *Task) (bool, error) {
 		Checker:   gate.Checker{Env: s.o.BaseEnv(), Head: s.headBlob(t)}}
 	res, ok := s.runGate(r, t.ID, ph.Turn, runner, steps)
 	if !ok {
-		return s.gateStopped(r, t.ID, ph.Turn)
+		return s.gateStopped(t.ID)
 	}
 	if failedGate(res) && s.othersWorking(r.ctx, t) {
 		// Another worker may be half way through a change the gate trips over: wait for it, then run again.
 		if !s.settle(r, t) {
-			return s.gateStopped(r, t.ID, ph.Turn)
+			return s.gateStopped(t.ID)
 		}
 		if res, ok = s.runGate(r, t.ID, ph.Turn, runner, steps); !ok {
-			return s.gateStopped(r, t.ID, ph.Turn)
+			return s.gateStopped(t.ID)
 		}
 		res.Settled = true
 	}
@@ -217,7 +217,7 @@ func (s *Service) gatePhase(r *run, t *Task) (bool, error) {
 	s.recordLedger(t, tu, res)
 	barChanged := s.barChanges(t)
 	if !failedGate(res) {
-		return s.afterGreen(r, t, ph.Turn, &res, files, barChanged...)
+		return s.afterGreen(t, ph.Turn, &res, files, barChanged...)
 	}
 	if p.AutoFixes < p.Budget {
 		return s.fixTurn(t.ID, ph.Turn, res, barChanged, gate.FixPrompt(res, p.AutoFixes+1, p.Budget, others), ByGate)
@@ -254,8 +254,8 @@ func (s *Service) headBlob(t *Task) func(ctx context.Context, rel string) ([]byt
 func (s *Service) runGate(r *run, id string, turn int, runner gate.Runner, steps []api.GateStep) (api.GateResult, bool) {
 	started := api.FormatTime(s.now())
 	labels := make([]string, len(steps))
-	for i, st := range steps {
-		labels[i] = st.Label
+	for i := range steps {
+		labels[i] = steps[i].Label
 	}
 	live := api.GateResult{State: api.GateRunning, Steps: slices.Clone(steps), NotRun: []string{}, Warnings: []string{},
 		StartedAt: started}
@@ -318,7 +318,7 @@ func (s *Service) settle(r *run, t *Task) bool {
 
 // gateStopped handles a gate cut short: a cancel ends the task, anything else (shutdown, takeover) leaves the
 // phase for the next run.
-func (s *Service) gateStopped(r *run, id string, turn int) (bool, error) {
+func (s *Service) gateStopped(id string) (bool, error) {
 	t, err := s.repo.Get(s.background(), id)
 	if err != nil {
 		return false, err
@@ -335,9 +335,10 @@ func (s *Service) recordLedger(t *Task, tu *Turn, res api.GateResult) {
 	if s.o.Ledger == nil || p.FeatureKey == "" || p.Project == "" {
 		return
 	}
-	byTask := map[string][]api.GateStep{}
+	byTask := map[string][]*api.GateStep{}
 	var order []string
-	for _, st := range res.Steps {
+	for i := range res.Steps {
+		st := &res.Steps[i]
 		if st.Kind != api.StepTask {
 			continue
 		}
@@ -374,7 +375,7 @@ func (s *Service) recordLedger(t *Task, tu *Turn, res api.GateResult) {
 				}
 			}
 		}
-		if !ran || (state == api.GateGreen && slices.ContainsFunc(steps, func(st api.GateStep) bool {
+		if !ran || (state == api.GateGreen && slices.ContainsFunc(steps, func(st *api.GateStep) bool {
 			return st.State != api.StepGreen
 		})) {
 			continue
@@ -422,10 +423,10 @@ func (s *Service) barChanges(t *Task) []string {
 
 // afterGreen ends a gate that passed (or had nothing to run): the verifier when the task asks for one and the
 // turns changed files, else the task is done.
-func (s *Service) afterGreen(r *run, t *Task, turn int, res *api.GateResult, files []string, barChanged ...string) (
+func (s *Service) afterGreen(t *Task, turn int, res *api.GateResult, files []string, barChanged ...string) (
 	bool, error) {
 	if t.Proof != nil && t.Proof.Verify && len(files) > 0 {
-		return s.startVerifier(r, t, turn, res, files, barChanged)
+		return s.startVerifier(t, turn, res, files, barChanged)
 	}
 	return false, s.endGate(t.ID, turn, res, barChanged)
 }

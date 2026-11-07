@@ -31,9 +31,10 @@ type Tasks struct {
 
 // Find returns the task with id, if any.
 func (ts Tasks) Find(id string) (TaskLine, bool) {
-	for _, t := range ts.Tasks {
+	for i := range ts.Tasks {
+		t := &ts.Tasks[i]
 		if t.ID == id {
-			return t, true
+			return *t, true
 		}
 	}
 	return TaskLine{}, false

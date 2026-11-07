@@ -16,7 +16,7 @@ func shellCommand(cmdline string) *exec.Cmd {
 	if comspec == "" || !filepath.IsAbs(comspec) {
 		comspec = filepath.Join(os.Getenv("SystemRoot"), "System32", "cmd.exe")
 	}
-	cmd := exec.Command(comspec)
+	cmd := exec.Command(comspec) //nolint:gosec,noctx // Exec kills the tree on ctx end; the gate command is the lead's or the repository's, run by design
 	cmd.SysProcAttr = &syscall.SysProcAttr{CmdLine: `"` + comspec + `" /d /s /c "` + cmdline + `"`}
 	return cmd
 }

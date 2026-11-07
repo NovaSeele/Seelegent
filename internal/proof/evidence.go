@@ -99,7 +99,7 @@ func CheckCite(root string, c Cite) CiteResult {
 		return r.with(CiteBadRange, "end line before start line")
 	case r.EndLine > n:
 		return r.with(CiteBadRange, fmt.Sprintf("file has %d lines", n))
-	case r.EndLine-r.Line+1 > maxSpan:
+	case r.EndLine-r.Line >= maxSpan:
 		return r.with(CiteBadRange, fmt.Sprintf("span over %d lines", maxSpan))
 	}
 	q := collapse(c.Quote)

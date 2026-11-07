@@ -171,7 +171,8 @@ func (r Runner) Run(ctx context.Context, steps []api.GateStep, progress func(i i
 // Overall is the state of a gate from its steps: red when a step is red, else error when one is, else green.
 func Overall(steps []api.GateStep) string {
 	state := api.GateGreen
-	for _, s := range steps {
+	for i := range steps {
+		s := &steps[i]
 		switch {
 		case s.State == api.StepRed && !s.Foreign:
 			return api.GateRed

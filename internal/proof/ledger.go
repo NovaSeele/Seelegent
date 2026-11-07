@@ -252,7 +252,7 @@ func (l *Ledger) SaveRun(ctx context.Context, project string, r api.ProofRun) er
 	})
 }
 
-// ErrNoRun: no regression run with that id in the project.
+// ErrNoRun is returned when the project has no regression run with that id.
 var ErrNoRun = errors.New("no such regression run")
 
 // Run returns a regression run.

@@ -193,7 +193,8 @@ func computeAttention(t *Task, live liveState, acc accountHealth, now time.Time,
 		red := redFindings(tu.Hygiene)
 		if g := tu.Gate; g != nil && hygieneOnly(g) {
 			// The gate carries the findings of earlier turns that are still open.
-			for _, s := range g.Steps {
+			for i := range g.Steps {
+				s := &g.Steps[i]
 				if s.Kind == api.StepHygiene {
 					red = max(red, len(s.Files))
 				}
@@ -214,7 +215,8 @@ func computeAttention(t *Task, live liveState, acc accountHealth, now time.Time,
 
 // gateDetail names the failing step of a gate.
 func gateDetail(g *api.GateResult) string {
-	for _, s := range g.Steps {
+	for i := range g.Steps {
+		s := &g.Steps[i]
 		if (s.State == api.StepRed || s.State == api.StepError) && !s.Foreign {
 			if s.Cmd != "" && s.Cmd != s.Label {
 				return s.Label + ": " + s.Cmd
@@ -228,7 +230,8 @@ func gateDetail(g *api.GateResult) string {
 // hygieneOnly reports whether the hygiene step is the gate's only failure (the hygiene flag says more).
 func hygieneOnly(g *api.GateResult) bool {
 	found := false
-	for _, s := range g.Steps {
+	for i := range g.Steps {
+		s := &g.Steps[i]
 		if (s.State == api.StepRed || s.State == api.StepError) && !s.Foreign {
 			if s.Kind != api.StepHygiene {
 				return false

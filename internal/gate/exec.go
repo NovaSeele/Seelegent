@@ -172,7 +172,7 @@ func Tail(s string, n int) string {
 		return s
 	}
 	s = s[len(s)-n:]
-	for len(s) > 0 && !utf8.RuneStart(s[0]) {
+	for s != "" && !utf8.RuneStart(s[0]) {
 		s = s[1:]
 	}
 	return s

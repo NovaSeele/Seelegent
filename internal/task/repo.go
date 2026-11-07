@@ -410,8 +410,8 @@ func (r *Repo) List(ctx context.Context, q Query) ([]*Task, string, error) {
 		where = append(where, `(created_at < ? OR (created_at = ? AND id < ?))`)
 		args = append(args, at, at, id)
 	}
-	sqlText := `SELECT ` + taskColumns + ` FROM tasks WHERE ` +
-		strings.Join(where, " AND ") + ` ORDER BY created_at DESC, id DESC LIMIT ?` //nolint:gosec // fixed filters with placeholders
+	sqlText := `SELECT ` + taskColumns + ` FROM tasks WHERE ` + //nolint:gosec // fixed filters with placeholders
+		strings.Join(where, " AND ") + ` ORDER BY created_at DESC, id DESC LIMIT ?`
 	args = append(args, limit+1)
 	var tasks []*Task
 	more := false

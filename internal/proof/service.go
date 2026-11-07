@@ -184,7 +184,7 @@ func exists(p string) bool {
 	return err == nil && st.Mode().IsRegular()
 }
 
-func readDoc(p string) (string, bool, error) {
+func readDoc(p string) (text string, found bool, err error) {
 	data, _, err := fsutil.ReadRegular(p, maxDocBytes)
 	if errors.Is(err, os.ErrNotExist) {
 		return "", false, nil
@@ -355,7 +355,8 @@ func (s *Service) plan(p Project, dirs []string) ([]runCmd, error) {
 		}
 		f := FeatureOf(p.Root, d)
 		var ticked []string
-		for _, t := range tasks.Tasks {
+		for i := range tasks.Tasks {
+			t := &tasks.Tasks[i]
 			key := f.Display + "#" + t.ID
 			for _, g := range t.Gates {
 				add(g, "task", []string{key}, f)

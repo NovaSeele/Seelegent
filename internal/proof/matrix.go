@@ -69,7 +69,8 @@ func BuildMatrix(feature string, spec Spec, tasks Tasks, entries map[string]Entr
 	m := api.ProofMatrix{Feature: feature, Title: spec.Title, Rows: []api.ProofRow{}, Stories: []api.ProofStory{},
 		UncoveredTasks: []string{}, FeatureGate: api.NonNil(tasks.FeatureGate)}
 	featureGate := len(tasks.FeatureGate) > 0
-	for _, t := range tasks.Tasks {
+	for i := range tasks.Tasks {
+		t := &tasks.Tasks[i]
 		m.Tasks.Total++
 		if t.Done {
 			m.Tasks.Done++
@@ -81,7 +82,8 @@ func BuildMatrix(feature string, spec Spec, tasks Tasks, entries map[string]Entr
 	for _, r := range spec.Requirements {
 		row := api.ProofRow{ID: r.ID, Kind: r.Kind, Text: r.Text, Stories: []string{}, Tasks: []api.ProofRowTask{}}
 		var cov []covering
-		for _, t := range tasks.Tasks {
+		for i := range tasks.Tasks {
+			t := &tasks.Tasks[i]
 			if !slices.Contains(t.Covers, r.ID) {
 				continue
 			}

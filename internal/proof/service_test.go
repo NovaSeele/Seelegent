@@ -30,7 +30,7 @@ func newService(t *testing.T, root string, exec func(cmd string) CmdResult, acti
 	var mu sync.Mutex
 	var published []api.ProofRun
 	s := New(Options{Ledger: NewLedger(st, nil), Git: fakeGit{root: root},
-		Exec: func(ctx context.Context, cmd, dir, log string) CmdResult {
+		Exec: func(_ context.Context, cmd, dir, _ string) CmdResult {
 			if same, _ := fsutil.SamePath(dir, root); !same {
 				t.Errorf("dir = %s", dir)
 			}
@@ -160,7 +160,7 @@ func TestCancelRun(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = st.Close() })
 	s := New(Options{Ledger: NewLedger(st, nil), Git: fakeGit{root: root}, LogDir: t.TempDir(),
-		Exec: func(ctx context.Context, cmd, dir, log string) CmdResult {
+		Exec: func(ctx context.Context, _, _, _ string) CmdResult {
 			started <- struct{}{}
 			<-ctx.Done()
 			return CmdResult{}

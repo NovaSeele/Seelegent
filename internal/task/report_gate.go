@@ -38,7 +38,8 @@ func gateReport(t *Task, rep *api.TaskReport) {
 		rep.LastGate = &api.ReportLastGate{Turn: gateTurn, State: g.State, Fixing: true}
 	case g != nil:
 		rg := &api.ReportGate{State: g.State, AutoFixTurns: p.AutoFixes, NotRun: g.NotRun, Warnings: g.Warnings}
-		for _, st := range g.Steps {
+		for i := range g.Steps {
+			st := &g.Steps[i]
 			if st.Foreign || (st.State != api.StepRed && st.State != api.StepError) {
 				continue
 			}
