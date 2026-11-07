@@ -8,7 +8,7 @@ import StatusPill from '@/components/ui/StatusPill.vue'
 import type { Tone } from '@/components/ui/tone'
 import { useFormat } from '@/composables/useFormat'
 
-import { gateCell, runsOn, variantStatus, verifierCell } from './contestModel'
+import { gateCell, outTone, runsOn, variantStatus, verifierCell } from './contestModel'
 
 /**
  * The machine score of each variant, in the machine's ranking order: gate, auto-fix turns, files, lines, lane,
@@ -44,6 +44,7 @@ const rows = computed(() => {
         out: r.disqualified
           ? t('team.contests.out', { reason: t(`team.contests.disqualified.${r.disqualified}`) })
           : '',
+        outTone: outTone(r.disqualified ?? ''),
         status: 'status' in status ? status.status : undefined,
         statusTone: 'tone' in status ? status.tone : undefined,
         statusWord: 'key' in status ? t(status.key) : undefined,
@@ -94,7 +95,7 @@ const rows = computed(() => {
           </th>
           <td>{{ row.runsOn }}</td>
           <td>
-            <StatusPill v-if="row.out" size="sm" tone="danger" :label="row.out" />
+            <StatusPill v-if="row.out" size="sm" :tone="row.outTone" :label="row.out" />
             <StatusPill v-else-if="row.status" size="sm" :status="row.status" />
             <StatusPill v-else size="sm" :tone="row.statusTone" :label="row.statusWord" />
           </td>

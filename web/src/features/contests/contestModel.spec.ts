@@ -6,6 +6,7 @@ import {
   defaultWinner,
   gateCell,
   letterLegend,
+  outTone,
   pickableOut,
   qualifiedLabels,
   variantStatus,
@@ -39,6 +40,13 @@ describe('contestModel', () => {
       row('V4', 'rejected'),
     ]
     expect(pickableOut(contest(rows)).map((r) => r.label)).toEqual(['V1', 'V4'])
+  })
+
+  it('draws a disqualification in danger only when something failed', () => {
+    for (const r of ['failed', 'gate_red', 'lane_violation', 'task_missing'])
+      expect(outTone(r)).toBe('danger')
+    for (const r of ['no_changes', 'cancelled', 'deadline', 'rejected'])
+      expect(outTone(r)).toBe('muted')
   })
 
   it('reads statuses, gates and verdicts in the words of the task views', () => {

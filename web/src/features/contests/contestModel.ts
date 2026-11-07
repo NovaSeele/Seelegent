@@ -29,6 +29,19 @@ export function pickableOut(c: Contest): ScoreRow[] {
   return c.scoreboard.filter((r) => r.disqualified && PICKABLE_OUT.has(r.disqualified))
 }
 
+/** Reasons that mean the variant's run or checks failed; the others (no changes, cancelled, deadline, rejected) are outcomes. */
+const FAILED_OUT: ReadonlySet<string> = new Set([
+  'failed',
+  'gate_red',
+  'lane_violation',
+  'task_missing',
+])
+
+/** The tone of a disqualification: danger only for a failure, muted otherwise. */
+export function outTone(reason: string): 'danger' | 'muted' {
+  return FAILED_OUT.has(reason) ? 'danger' : 'muted'
+}
+
 /** A task status as the daemon names it, to the display status of the task views (null: unknown). */
 const RAW_STATUS: Readonly<Record<string, DisplayStatus>> = {
   queued: 'queued',
