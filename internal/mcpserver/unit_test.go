@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"maps"
@@ -330,12 +331,12 @@ type failingDaemon struct{ err error }
 
 func (f failingDaemon) Ensure(context.Context) (*client.Client, error) { return nil, f.err }
 
-// flakyDaemon hands out a client of a dead daemon first (it went away), then the working one.
 // flakyDaemon hands out the live daemon `skip` times (the server's own lookup at start), then a daemon that is gone,
-// then answers busy probes `busy` times (-1: forever), then the live daemon.
+// then fails `busy` times (-1: forever) with downErr (default: a busy probe), then hands out the live daemon.
 type flakyDaemon struct {
 	dead, live *client.Client
 	skip, busy int32
+	downErr    error
 	calls      atomic.Int32
 }
 
@@ -347,6 +348,9 @@ func (f *flakyDaemon) Ensure(context.Context) (*client.Client, error) {
 	case n == 1:
 		return f.dead, nil
 	case f.busy < 0 || n <= 1+f.busy:
+		if f.downErr != nil {
+			return nil, f.downErr
+		}
 		return nil, &client.ForeignError{Port: 1, Timeout: 1500 * time.Millisecond}
 	}
 	return f.live, nil
@@ -382,6 +386,42 @@ func TestWaitRetriesBusyDaemon(t *testing.T) {
 	msg := fails(t, cs, "wait", map[string]any{"task_ids": []string{"t1"}, "wait_seconds": 1})
 	if d := time.Since(start); d < time.Second || d > 5*time.Second || !strings.Contains(msg, "busy or hung") {
 		t.Fatalf("hung daemon: %s after %v", msg, d)
+	}
+}
+
+// TestWaitRetriesNotRunning: while reconnecting, a daemon that is not running yet (being restarted) is looked for
+// again until it is back, within the wait's deadline, and no longer.
+func TestWaitRetriesNotRunning(t *testing.T) {
+	_, live := newStub(t, map[string]http.HandlerFunc{"POST /wait": waitAnswer("done")})
+	deadSrv := httptest.NewServer(http.NotFoundHandler())
+	dead := client.New(deadSrv.URL, nil)
+	deadSrv.Close()
+	session := func(fd *flakyDaemon, pause time.Duration) *mcp.ClientSession {
+		cs := stubSession(t, live, func(o *mcpserver.Options) {
+			o.Daemon = fd
+			o.RetryPause = pause
+		})
+		for fd.calls.Load() < fd.skip { // the server's own lookup at start
+			time.Sleep(5 * time.Millisecond)
+		}
+		return cs
+	}
+	notRunning := fmt.Errorf("%w (nothing answers on 127.0.0.1:1)", client.ErrNotRunning)
+	fd := &flakyDaemon{dead: dead, live: live, skip: 1, busy: 2, downErr: notRunning}
+	cs := session(fd, 10*time.Millisecond)
+	var rep api.TaskReport
+	ok(t, cs, "wait", map[string]any{"task_ids": []string{"t1"}, "wait_seconds": 30}, &rep)
+	if rep.Status != "done" || fd.calls.Load() != 5 {
+		t.Fatalf("wait = %+v after %d ensures", rep, fd.calls.Load())
+	}
+
+	cs = session(&flakyDaemon{dead: dead, live: live, skip: 1, busy: -1, downErr: notRunning}, 50*time.Millisecond)
+	start := time.Now()
+	res := callTool(t, cs, "wait", map[string]any{"task_ids": []string{"t1"}, "wait_seconds": 1})
+	data, _ := json.Marshal(res.StructuredContent)
+	if d := time.Since(start); !res.IsError || d < time.Second || d > 5*time.Second ||
+		!strings.Contains(string(data), "daemon_unavailable") {
+		t.Fatalf("daemon never back: %s %s after %v", text(res, 0), data, d)
 	}
 }
 

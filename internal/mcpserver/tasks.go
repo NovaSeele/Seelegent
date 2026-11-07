@@ -312,9 +312,9 @@ func (s *Server) waitReports(ctx context.Context, k *call, ids []string, seconds
 				return res, nil
 			}
 		}
-		// A restarting daemon is unreachable for a moment, or slow to answer its first probe: wait for it until
-		// the wait's own deadline.
-		retry := errors.Is(err, client.ErrUnreachable) || client.TimedOut(err)
+		// A restarting daemon is unreachable for a moment, not running yet, or slow to answer its first probe:
+		// wait for it until the wait's own deadline.
+		retry := errors.Is(err, client.ErrUnreachable) || errors.Is(err, client.ErrNotRunning) || client.TimedOut(err)
 		if !retry || !time.Now().Before(deadline) {
 			return api.WaitResult{}, err
 		}

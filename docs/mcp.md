@@ -58,7 +58,7 @@ process tree, on the worker profile's data directory. The error says the daemon 
 
 Discovery starts in the background when the server starts and is retried on each tool call, so a daemon that was
 stopped or restarted is found again. `wait`, `delegate` and `followup` also ride out a daemon restart in the middle
-of a wait: an unreachable or slow daemon is retried until the wait's own deadline.
+of a wait: an unreachable, not yet running or slow daemon is retried until the wait's own deadline.
 
 ## Tools
 
