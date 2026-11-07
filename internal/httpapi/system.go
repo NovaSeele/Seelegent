@@ -222,6 +222,9 @@ func (s *Server) getLogs(_ http.ResponseWriter, r *http.Request) (code int, body
 		return http.StatusOK, out, nil
 	}
 	lines, err := tailLines(filepath.Join(s.o.LogDir, name+".log"), n)
+	if errors.Is(err, fsutil.ErrNotRegular) {
+		return 0, nil, newError(api.CodeUnavailable, "%s.log is not a regular file", name)
+	}
 	if err != nil {
 		return 0, nil, err
 	}
@@ -233,7 +236,8 @@ func (s *Server) getLogs(_ http.ResponseWriter, r *http.Request) (code int, body
 
 // tailLines returns the last n lines of a file (none when it does not exist), reading at most logTailBytes.
 func tailLines(path string, n int) ([]string, error) {
-	f, err := os.Open(path) //nolint:gosec // a fixed name under the log folder
+	// OpenRegular: a FIFO or link put in place of a log cannot hang or redirect the read.
+	f, err := fsutil.OpenRegular(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, nil
 	}
@@ -276,6 +280,9 @@ var (
 	specTask  = regexp.MustCompile(`^\s*-\s*\[( |x|X)\]\s*(T\d+)\s*(\[P\])?\s*(?:\[US\d+\])?\s*(.*)$`)
 )
 
+// maxSpecBytes is the largest tasks.md GET /spec reads.
+const maxSpecBytes = 4 << 20
+
 // getSpec is GET /spec: the parsed tasks.md of a feature folder; a relative dir must stay inside cwd.
 func (s *Server) getSpec(_ http.ResponseWriter, r *http.Request) (code int, body any, err error) {
 	q := r.URL.Query()
@@ -305,12 +312,18 @@ func (s *Server) getSpec(_ http.ResponseWriter, r *http.Request) (code int, body
 	if !filepath.IsAbs(raw) && !inside {
 		return 0, nil, invalid("dir %q leaves cwd", raw).withField("dir")
 	}
-	data, err := os.ReadFile(filepath.Join(dir, "tasks.md")) //nolint:gosec // a checked folder
-	if errors.Is(err, os.ErrNotExist) {
+	// A worker can reach /spec and can leave a FIFO or a huge file as tasks.md: read it without blocking and with a
+	// limit.
+	data, truncated, err := fsutil.ReadRegular(filepath.Join(dir, "tasks.md"), maxSpecBytes)
+	switch {
+	case errors.Is(err, os.ErrNotExist):
 		return 0, nil, newError(api.CodeNotFound, "%s has no tasks.md", filepath.ToSlash(dir))
-	}
-	if err != nil {
+	case errors.Is(err, fsutil.ErrNotRegular):
+		return 0, nil, invalid("tasks.md in %q is not a regular file", raw).withField("dir")
+	case err != nil:
 		return 0, nil, err
+	case truncated:
+		return 0, nil, invalid("tasks.md in %q is larger than %d MiB", raw, maxSpecBytes>>20).withField("dir")
 	}
 	view := api.SpecView{Dir: filepath.ToSlash(dir), Feature: filepath.Base(dir), Tasks: parseTasks(string(data))}
 	if inside {

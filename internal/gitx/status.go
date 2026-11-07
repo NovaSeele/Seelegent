@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -12,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/NovaSeele/Seelegent/internal/api"
+	"github.com/NovaSeele/Seelegent/internal/fsutil"
 )
 
 // emptyTree is git's id of the empty tree, the base of a diff in a repository without commits.
@@ -187,7 +187,8 @@ func parseNumstat(out []byte) map[string]lineStat {
 	return stats
 }
 
-// countLines counts the lines of an untracked file (up to 1 MiB); a file with a NUL byte is binary.
+// countLines counts the lines of an untracked file (up to 1 MiB); a file with a NUL byte is binary, and a file
+// that is neither regular nor a symbolic link (a FIFO, a socket, a device) has 0 lines.
 func countLines(path string) (lines int, binary bool) {
 	data, err := readHead(path, maxDiffBytes)
 	if err != nil {
@@ -206,26 +207,24 @@ func countLines(path string) (lines int, binary bool) {
 	return n, false
 }
 
-// readHead reads at most limit bytes of a regular file.
+// readHead reads at most limit bytes of an untracked file the way git stores it: a regular file's content or a
+// symbolic link's target (never the file the link points to). Anything else, such as a FIFO, a socket or a device,
+// is fsutil.ErrNotRegular; nothing here can block on a special file (a FIFO without a writer would hang a plain
+// open forever).
 func readHead(path string, limit int) ([]byte, error) {
-	f, err := os.Open(path) // a path inside the repository, checked by the caller
+	st, err := os.Lstat(path)
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = f.Close() }()
-	st, err := f.Stat()
-	if err != nil {
-		return nil, err
+	if st.Mode()&os.ModeSymlink != 0 {
+		target, err := os.Readlink(path)
+		if err != nil {
+			return nil, err
+		}
+		return []byte(target[:min(len(target), limit)]), nil
 	}
-	if !st.Mode().IsRegular() {
-		return nil, errors.New("not a regular file")
-	}
-	buf := make([]byte, min(int64(limit), st.Size()))
-	n, err := io.ReadFull(f, buf)
-	if err != nil && !errors.Is(err, io.ErrUnexpectedEOF) && !errors.Is(err, io.EOF) {
-		return nil, err
-	}
-	return buf[:n], nil
+	data, _, err := fsutil.ReadRegular(path, int64(limit))
+	return data, err
 }
 
 // isBinary reports a NUL byte in the first 8000 bytes, as git does.

@@ -2,6 +2,7 @@ package gitx
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path"
 	"path/filepath"
@@ -88,13 +89,16 @@ func (r *Repos) Diff(ctx context.Context, root, rel, base string, untracked bool
 	return d, nil
 }
 
-// untrackedDiff shows a new file as one hunk of added lines.
+// untrackedDiff shows a new file as one hunk of added lines (a symbolic link: its target, as git shows it).
 func untrackedDiff(root, rel string) (api.FileDiff, error) {
+	d := api.FileDiff{Path: rel, Hunks: []api.DiffHunk{}}
 	data, err := readHead(filepath.Join(root, filepath.FromSlash(rel)), maxDiffBytes+1)
+	if errors.Is(err, fsutil.ErrNotRegular) {
+		return d, nil // a FIFO, socket or device has no content git would show
+	}
 	if err != nil {
 		return api.FileDiff{}, fmt.Errorf("%w: %s: %w", ErrInvalid, rel, err)
 	}
-	d := api.FileDiff{Path: rel, Hunks: []api.DiffHunk{}}
 	if isBinary(data) {
 		d.Binary = true
 		return d, nil

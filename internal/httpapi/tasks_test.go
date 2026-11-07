@@ -250,6 +250,22 @@ func TestSpecAndLogs(t *testing.T) {
 	e.wantError(e.get("/api/v1/spec?cwd="+url.QueryEscape(dir)+"&dir=../.."), http.StatusBadRequest,
 		api.CodeInvalidArgument, "dir")
 	e.wantError(e.get("/api/v1/spec?cwd="+url.QueryEscape(e.cwd)+"&dir=."), http.StatusNotFound, api.CodeNotFound, "")
+	// A tasks.md that is not a regular file, or is over 4 MiB, is refused.
+	if err := os.MkdirAll(filepath.Join(e.cwd, "specs", "002-folder", "tasks.md"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	e.wantError(e.get("/api/v1/spec?cwd="+url.QueryEscape(e.cwd)+"&dir=specs/002-folder"), http.StatusBadRequest,
+		api.CodeInvalidArgument, "dir")
+	big := filepath.Join(e.cwd, "specs", "003-big")
+	if err := os.MkdirAll(big, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(big, "tasks.md"), []byte(strings.Repeat("- [ ] T001 x\n", 4<<20/13+1)),
+		0o600); err != nil {
+		t.Fatal(err)
+	}
+	e.wantError(e.get("/api/v1/spec?cwd="+url.QueryEscape(e.cwd)+"&dir=specs/003-big"), http.StatusBadRequest,
+		api.CodeInvalidArgument, "dir")
 
 	if err := os.WriteFile(filepath.Join(e.paths.Logs, "hooks.log"), []byte("one\r\ntwo\nkey sk-ant-api03-"+
 		strings.Repeat("a", 40)+"\n"), 0o600); err != nil {
