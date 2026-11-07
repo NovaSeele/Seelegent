@@ -127,7 +127,7 @@ func TestKeyOf(t *testing.T) {
 	tests := []struct {
 		canonical, goos, want string
 	}{
-		{`C:\Users\NovaSeele\Repo`, "windows", "c:/users/novaseele/repo"},
+		{`C:\Users\JohnSmith\Repo`, "windows", "c:/users/johnsmith/repo"},
 		{"/Users/Nova/Repo", "darwin", "/users/nova/repo"},
 		{"/home/Nova/Repo", "linux", "/home/Nova/Repo"},
 	}

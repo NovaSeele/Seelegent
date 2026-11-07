@@ -149,7 +149,7 @@ func scrubLocal(text string, roots []string, home string) string {
 		}
 		return path.Base(strings.ReplaceAll(p, `\`, "/"))
 	})
-	// Every spelling of a folder (G4): as given, canonical, 8.3 short (C:\Users\NOVASE~1), with either slash, and
+	// Every spelling of a folder (G4): as given, canonical, 8.3 short (C:\Users\JOHNSM~1), with either slash, and
 	// as WSL writes a Windows drive (/mnt/c/Users/...).
 	variants := func(p string) []string {
 		var out []string

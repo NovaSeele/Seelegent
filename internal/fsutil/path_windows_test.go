@@ -25,7 +25,7 @@ func shortPath(t *testing.T, p string) string {
 	return windows.UTF16ToString(buf[:n])
 }
 
-// Bug B11 of the old version: project memory keyed on C:\Users\NOVASE~1\... never matched the long path of the
+// Bug B11 of the old version: project memory keyed on C:\Users\JOHNSM~1\... never matched the long path of the
 // task cwd, so the notes were never injected into briefs.
 func TestKeyExpandsShortNames(t *testing.T) {
 	long := filepath.Join(t.TempDir(), "Long Directory Name")

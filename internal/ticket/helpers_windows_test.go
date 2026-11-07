@@ -14,10 +14,10 @@ import (
 )
 
 // TestScrubLocalShortNames is the review's G4: a tool that prints the 8.3 short form of the home folder or the
-// worktree (C:\Users\NOVASE~1) is scrubbed like the long form.
+// worktree (C:\Users\JOHNSM~1) is scrubbed like the long form.
 func TestScrubLocalShortNames(t *testing.T) {
 	// New folders often get no short name (creation is off on many volumes), but a parent of the temp folder may
-	// have one (C:\Users\NOVASE~1\AppData\Local\Temp).
+	// have one (C:\Users\JOHNSM~1\AppData\Local\Temp).
 	home, err := fsutil.Canonical(t.TempDir())
 	if err != nil {
 		t.Fatal(err)

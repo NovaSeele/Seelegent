@@ -153,7 +153,7 @@ the repository has none). The worker's commits stay in the local worktree.
    recorded on the ticket (`pushedSha`, `pushedBase`) in the same transaction that marks its outbox row `done`.
 5. **Open** a draft pull request (or adopt the one the branch already has). Its body is generated from the tasks'
    summaries with local paths removed (`file://` links, the worktree, the repository and the home folder in every
-   spelling: either slash, the 8.3 short form such as `C:\Users\NOVASE~1`, and WSL's `/mnt/c/...`). In the manual tier the
+   spelling: either slash, the 8.3 short form such as `C:\Users\JOHNSM~1`, and WSL's `/mnt/c/...`). In the manual tier the
    answer carries a compare link (`pr.manualUrl`) and the ticket shows `needsAttention: "open_pr"` (the branch is
    pushed, no pull request exists yet); the user opens the pull request and records its number with `link-pr`. No
    tier opens a pull request on its own: a ready ticket waits for the lead or the user to ask.

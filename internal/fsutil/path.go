@@ -12,7 +12,7 @@ import (
 )
 
 // Spellings lists the ways an existing path may be written in text: as given, its canonical form and, on Windows,
-// the 8.3 short form of either (C:\Users\NOVASE~1 for C:\Users\NovaSeele). Duplicates are left out.
+// the 8.3 short form of either (C:\Users\JOHNSM~1 for C:\Users\JohnSmith). Duplicates are left out.
 func Spellings(p string) []string {
 	out := []string{}
 	add := func(s string) {
@@ -30,7 +30,7 @@ func Spellings(p string) []string {
 }
 
 // Canonical returns the absolute, cleaned form of p with links resolved, so that two spellings of the same location
-// give the same string. On Windows it also expands 8.3 short names (C:\Users\NOVASE~1 becomes C:\Users\NovaSeele),
+// give the same string. On Windows it also expands 8.3 short names (C:\Users\JOHNSM~1 becomes C:\Users\JohnSmith),
 // resolves junctions and restores the on-disk letter case. Trailing components that do not exist yet are kept as
 // given, appended to the canonical form of the longest existing prefix.
 func Canonical(p string) (string, error) {
