@@ -293,24 +293,30 @@ func (s *Server) waitReports(ctx context.Context, k *call, ids []string, seconds
 	cwd string) (api.WaitResult, error) {
 	deadline := time.Now().Add(time.Duration(seconds) * time.Second)
 	left := seconds
-	for {
+	for reconnecting := false; ; reconnecting = true {
 		c, err := k.client(ctx)
-		if err != nil {
+		if err != nil && !reconnecting {
 			return api.WaitResult{}, err
 		}
-		res, err := c.Wait(ctx, api.WaitRequest{IDs: ids, TimeoutSeconds: left, Any: anyDone,
-			WakeOnBlocked: &wake, Reports: true}, cwd)
 		if err == nil {
-			if len(res.Reports) != len(ids) {
-				return api.WaitResult{}, fmt.Errorf("the daemon returned %d reports for %d tasks", len(res.Reports),
-					len(ids))
+			var res api.WaitResult
+			res, err = c.Wait(ctx, api.WaitRequest{IDs: ids, TimeoutSeconds: left, Any: anyDone,
+				WakeOnBlocked: &wake, Reports: true}, cwd)
+			if err == nil {
+				if len(res.Reports) != len(ids) {
+					return api.WaitResult{}, fmt.Errorf("the daemon returned %d reports for %d tasks",
+						len(res.Reports), len(ids))
+				}
+				return res, nil
 			}
-			return res, nil
 		}
-		if !errors.Is(err, client.ErrUnreachable) || !time.Now().Before(deadline) {
+		// A restarting daemon is unreachable for a moment, or slow to answer its first probe: wait for it until
+		// the wait's own deadline.
+		retry := errors.Is(err, client.ErrUnreachable) || client.TimedOut(err)
+		if !retry || !time.Now().Before(deadline) {
 			return api.WaitResult{}, err
 		}
-		s.o.Logger.Info("mcp: the daemon went away during a wait; reconnecting", "err", err)
+		s.o.Logger.Info("mcp: the daemon is gone or not answering during a wait; reconnecting", "err", err)
 		select {
 		case <-ctx.Done():
 			return api.WaitResult{}, ctx.Err()

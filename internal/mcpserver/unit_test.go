@@ -330,16 +330,58 @@ type failingDaemon struct{ err error }
 func (f failingDaemon) Ensure(context.Context) (*client.Client, error) { return nil, f.err }
 
 // flakyDaemon hands out a client of a dead daemon first (it went away), then the working one.
+// flakyDaemon hands out the live daemon `skip` times (the server's own lookup at start), then a daemon that is gone,
+// then answers busy probes `busy` times (-1: forever), then the live daemon.
 type flakyDaemon struct {
 	dead, live *client.Client
+	skip, busy int32
 	calls      atomic.Int32
 }
 
 func (f *flakyDaemon) Ensure(context.Context) (*client.Client, error) {
-	if f.calls.Add(1) == 1 {
+	n := f.calls.Add(1) - f.skip
+	switch {
+	case n <= 0:
+		return f.live, nil
+	case n == 1:
 		return f.dead, nil
+	case f.busy < 0 || n <= 1+f.busy:
+		return nil, &client.ForeignError{Port: 1, Timeout: 1500 * time.Millisecond}
 	}
 	return f.live, nil
+}
+
+// TestWaitRetriesBusyDaemon: while reconnecting, a daemon that does not answer its probe in time is retried until
+// the wait's deadline, and no longer.
+func TestWaitRetriesBusyDaemon(t *testing.T) {
+	_, live := newStub(t, map[string]http.HandlerFunc{"POST /wait": waitAnswer("done")})
+	deadSrv := httptest.NewServer(http.NotFoundHandler())
+	dead := client.New(deadSrv.URL, nil)
+	deadSrv.Close()
+	session := func(fd *flakyDaemon, pause time.Duration) *mcp.ClientSession {
+		cs := stubSession(t, live, func(o *mcpserver.Options) {
+			o.Daemon = fd
+			o.RetryPause = pause
+		})
+		for fd.calls.Load() < fd.skip { // the server's own lookup at start
+			time.Sleep(5 * time.Millisecond)
+		}
+		return cs
+	}
+	fd := &flakyDaemon{dead: dead, live: live, skip: 1, busy: 3}
+	cs := session(fd, 10*time.Millisecond)
+	var rep api.TaskReport
+	ok(t, cs, "wait", map[string]any{"task_ids": []string{"t1"}, "wait_seconds": 30}, &rep)
+	if rep.Status != "done" || fd.calls.Load() != 6 {
+		t.Fatalf("wait = %+v after %d ensures", rep, fd.calls.Load())
+	}
+
+	cs = session(&flakyDaemon{dead: dead, live: live, skip: 1, busy: -1}, 50*time.Millisecond)
+	start := time.Now()
+	msg := fails(t, cs, "wait", map[string]any{"task_ids": []string{"t1"}, "wait_seconds": 1})
+	if d := time.Since(start); d < time.Second || d > 5*time.Second || !strings.Contains(msg, "busy or hung") {
+		t.Fatalf("hung daemon: %s after %v", msg, d)
+	}
 }
 
 // TestWaitSurvivesRestart: a wait whose daemon goes away finds it again and waits on (as the old client.js did).
@@ -348,14 +390,17 @@ func TestWaitSurvivesRestart(t *testing.T) {
 	deadSrv := httptest.NewServer(http.NotFoundHandler())
 	dead := client.New(deadSrv.URL, nil)
 	deadSrv.Close()
-	fd := &flakyDaemon{dead: dead, live: live}
+	fd := &flakyDaemon{dead: dead, live: live, skip: 1}
 	cs := stubSession(t, live, func(o *mcpserver.Options) {
 		o.Daemon = fd
 		o.RetryPause = 10 * time.Millisecond
 	})
+	for fd.calls.Load() < fd.skip { // the server's own lookup at start
+		time.Sleep(5 * time.Millisecond)
+	}
 	var rep api.TaskReport
 	ok(t, cs, "wait", map[string]any{"task_ids": []string{"t1"}, "wait_seconds": 30}, &rep)
-	if rep.Status != "done" || fd.calls.Load() < 2 {
+	if rep.Status != "done" || fd.calls.Load() != 3 {
 		t.Fatalf("wait = %+v after %d ensures", rep, fd.calls.Load())
 	}
 }
