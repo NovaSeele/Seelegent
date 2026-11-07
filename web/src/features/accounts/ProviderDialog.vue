@@ -25,7 +25,7 @@ import {
  * Adds a provider (from a preset, or blank) or edits one. The id and backend are fixed once the provider exists.
  * The models field edits the allow-list, a comma-separated list (empty: any model). A provider allowed by a
  * hand-written pattern shows that pattern in the hint, and a list typed over it replaces it. An empty field leaves
- * the pattern alone, so the hint has a button that turns it into "any model" on save (models: []). The tier
+ * the pattern alone, so a toggle under the hint turns it into "any model" on save (models: []). The tier
  * models are shown read-only, since they are always allowed. Field errors from the daemon show next to their field.
  */
 const props = defineProps<{ provider: Provider | null }>()
@@ -177,10 +177,14 @@ async function submit() {
         :hint="modelsHint"
         :error="errors.models"
       >
-        <template v-if="canClear" #hint>
-          {{ modelsHint }}
-          <!-- One button whose label flips, so keyboard focus stays on it. -->
-          <button type="button" class="pform__link" @click="allowAny = !allowAny">
+        <template v-if="canClear" #hint-action>
+          <!-- One toggle whose label flips, so keyboard focus stays on it. -->
+          <button
+            type="button"
+            class="pform__link"
+            :aria-pressed="allowAny"
+            @click="allowAny = !allowAny"
+          >
             {{ allowAny ? t('accounts.providers.keepPattern') : t('accounts.providers.allowAny') }}
           </button>
         </template>
@@ -221,11 +225,13 @@ async function submit() {
 }
 
 .pform__link {
+  align-self: flex-start;
   padding: 0;
   border: 0;
   background: none;
   color: var(--link);
   font: inherit;
+  font-size: var(--fs-xs);
   text-decoration: underline;
   cursor: pointer;
 }

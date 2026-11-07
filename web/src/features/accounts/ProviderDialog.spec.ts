@@ -150,6 +150,7 @@ describe('ProviderDialog', () => {
     const allow = button()
     expect(allow?.textContent?.trim()).toBe('Allow any model')
     expect(allow?.type).toBe('button')
+    expect(allow?.getAttribute('aria-pressed')).toBe('false')
 
     allow?.focus()
     allow?.click()
@@ -157,12 +158,39 @@ describe('ProviderDialog', () => {
     // The same button flips its label, so keyboard focus stays on it.
     expect(document.activeElement).toBe(allow)
     expect(allow?.textContent?.trim()).toBe('Keep the pattern')
+    expect(allow?.getAttribute('aria-pressed')).toBe('true')
     expect(document.body.textContent).toContain('Any model is allowed once you save')
     expect((field('Models') as HTMLInputElement).placeholder).toBe('any model')
 
     document.body.querySelector<HTMLFormElement>('#provider-form')?.requestSubmit()
     await flushPromises()
     expect(update).toHaveBeenCalledWith('zai', { models: [] })
+    wrapper.unmount()
+  })
+
+  // Review: the button sat inside the hint the input points to, so screen readers read its label as part of the
+  // field's description.
+  it('keeps the button out of the text the models field is described by', async () => {
+    const zai = makeProvider({ id: 'zai', name: 'Z.ai', allowedModels: '^glm-' })
+    const wrapper = await mountDialog(zai)
+    const ids = (field('Models') as HTMLInputElement).getAttribute('aria-describedby') ?? ''
+    const described = ids
+      .split(' ')
+      .filter(Boolean)
+      .map((id) => document.getElementById(id))
+    expect(described.length).toBeGreaterThan(0)
+    for (const el of described) {
+      expect(el).not.toBeNull()
+      expect(el?.querySelector('button')).toBeNull()
+      expect(el?.textContent).not.toContain('Allow any model')
+    }
+    expect(described.map((el) => el?.textContent?.trim())).toContain(
+      'Allowed by pattern ^glm-; entering a list replaces this pattern.',
+    )
+    const toggle = [...document.body.querySelectorAll('button')].find(
+      (b) => b.textContent?.trim() === 'Allow any model',
+    )
+    expect(toggle).toBeDefined()
     wrapper.unmount()
   })
 
@@ -178,6 +206,7 @@ describe('ProviderDialog', () => {
     await flushPromises()
     find('Keep the pattern')?.click()
     await flushPromises()
+    expect(find('Allow any model')?.getAttribute('aria-pressed')).toBe('false')
     expect(document.body.textContent).toContain('Allowed by pattern ^glm-')
 
     const models = field('Models') as HTMLInputElement
