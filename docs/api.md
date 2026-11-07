@@ -82,7 +82,12 @@ in the daemon.
   them), whichever of the handler and that watcher sees the change first. Accounts cannot change provider through
   the API today; the watcher covers it if they ever do.
 - `POST /tasks/wait` takes the cwd for its report from an optional `cwd` query parameter. A wait whose client went
-  away writes nothing.
+  away writes nothing. When the daemon shuts down (`Server.Close`, on `POST /daemon/stop` and on Ctrl+C) every open
+  wait ends at once with `503 daemon_stopping` (a wait that ended on its own just before is answered normally), so
+  `http.Server.Shutdown` does not sit out the waits; the clients take that code to mean "do not start the daemon
+  again" (see [cli.md](cli.md) and [mcp.md](mcp.md)).
+- `GET /health` carries `homeId` (`config.HomeID`: 16 hex digits of the SHA-256 of `fsutil.Key(home)`), so a client
+  of another data directory refuses this daemon instead of using or stopping it.
 - `capabilities.takeover` is true for backends that can resume a session; `apiKey` for every backend but agy;
   `listModels` for codex.
 - Sign-in runs in a terminal window. Once the window is open the session is `in_terminal` ("finish signing in in the

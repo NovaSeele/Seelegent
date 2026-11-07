@@ -46,9 +46,10 @@ by it. `seelegent stop` asks the daemon to shut down through `POST /api/v1/daemo
 1. If `run/daemon.port` exists and a daemon holds `run/daemon.lock`, probe that port first. A port file whose lock
    is free (the daemon crashed) is ignored, and a port that does not answer, or answers as something else, falls
    back to step 2. So a daemon started with `--port`, or before the port setting changed, is found.
-2. Probe `GET /api/v1/health` on the configured port. A daemon that answers `ok` with `apiVersion: 1` is used.
-   Anything else that answers (another program, an older Seelegent, another API version) is reported and nothing is
-   started. A port that accepts but does not answer within 1.5 s is reported as a busy or hung daemon (or another
+2. Probe `GET /api/v1/health` on the configured port. A daemon that answers `ok` with `apiVersion: 1` and this data
+   directory's `homeId` is used. Anything else that answers (another program, an older Seelegent, another API
+   version, or a Seelegent daemon of another data directory: "port N is served by a Seelegent daemon of another data
+   directory (pid X)") is reported, never used or stopped, and nothing is started. A port that accepts but does not answer within 1.5 s is reported as a busy or hung daemon (or another
    program), and nothing is started either.
 3. When nothing answers, take `<home>/run/start.lock`, probe again (another MCP server may have just started it).
    While another daemon holds `run/daemon.lock` without answering yet (still starting, or shutting down), keep
@@ -70,6 +71,12 @@ of a wait: an unreachable, not yet running or slow daemon is retried until the w
 starting the daemon again counts against that time and is cut off at the deadline, and the daemon found is asked
 to wait only for what is left, so a restart never stretches the wait past `wait_seconds`; a daemon that is not
 back by then ends the call with `daemon_unavailable`.
+
+That holds for a connection lost without a word (a crash). A daemon that is shutting down (`seelegent stop`,
+`restart`, Ctrl+C) answers the open wait with `503 daemon_stopping` instead; the wait then only looks for a daemon
+that comes back (never starts one) for up to 40 s within its own time. After a restart it goes on against the new
+daemon; after a plain stop the call ends with code `daemon_stopped` ("the Seelegent daemon was stopped during the
+wait; the tasks keep running: wait again later"), and nothing in that wait starts the daemon again.
 
 ## Tools
 
@@ -122,7 +129,8 @@ structured content is `{error: {code, message, status, details}}`:
 | Called from inside a worker (local guard, or the daemon answers 403 with `caller: worker`) | exactly "Seelegent is not available inside a Seelegent worker." (no prefix) |
 | Route, tool or option not built yet (501, or refused locally) | "Seelegent error: ... is not available in this version of Seelegent yet; nothing was done (...)" (code `not_available`) |
 | Other API error | "Seelegent error: <message>" with the API's code and details |
-| No daemon, foreign program on the port, busy daemon, start failed | the reason and what to do (code `daemon_unavailable`) |
+| No daemon, foreign program (or another data directory's daemon) on the port, busy daemon, start failed | the reason and what to do (code `daemon_unavailable`) |
+| The daemon was stopped during a wait and did not come back | "Seelegent error: the Seelegent daemon was stopped during the wait; ..." (code `daemon_stopped`) |
 
 ## Worker guard
 
