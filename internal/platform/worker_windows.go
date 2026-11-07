@@ -9,6 +9,7 @@ import (
 	"net/netip"
 	"os"
 	"slices"
+	"time"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -146,6 +147,8 @@ type lookupOptions struct {
 	beforeRecheck func()
 	// sessionOf replaces the session lookup of WorkerTree.PIDs (nil: ProcessIdToSessionId).
 	sessionOf func(pid uint32) (uint32, error)
+	// accepted is when the connection was accepted (SocketOwnerInTreesSince); zero skips the start time check.
+	accepted time.Time
 }
 
 // socketOwnerInTrees finds the owner of the client socket in the TCP tables and looks for it in the trees' jobs
@@ -157,6 +160,9 @@ func socketOwnerInTrees(local, remote netip.AddrPort, trees []*WorkerTree, opt l
 	}
 	if owner == os.Getpid() {
 		return "", false, nil
+	}
+	if staleOwner(owner, opt.accepted) {
+		return "", true, fmt.Errorf("%w: the process that created the client socket has ended", ErrSocketOwnerUnknown)
 	}
 	sessionOf := opt.sessionOf
 	if sessionOf == nil {
@@ -185,6 +191,26 @@ func socketOwnerInTrees(local, remote netip.AddrPort, trees []*WorkerTree, opt l
 		return "", true, fmt.Errorf("%w: the client socket changed while it was looked up", ErrSocketOwnerUnknown)
 	}
 	return "", false, nil
+}
+
+// staleOwner reports whether owner cannot be the client of a connection accepted at accepted: it no longer runs,
+// or it started after the connection was accepted (a reused process id). A process that inherited the socket
+// handle may be the real client then.
+func staleOwner(owner int, accepted time.Time) bool {
+	start, err := procStart(owner)
+	if err != nil {
+		return true
+	}
+	return startedAfter(start, accepted)
+}
+
+// startedAfter reports whether a process creation FILETIME lies after accepted (false for a zero accepted).
+func startedAfter(start uint64, accepted time.Time) bool {
+	if accepted.IsZero() {
+		return false
+	}
+	ft := windows.NsecToFiletime(accepted.UnixNano())
+	return start > uint64(ft.HighDateTime)<<32|uint64(ft.LowDateTime)
 }
 
 // clientSocketOwner returns the process that owns the TCP socket bound to remote and connected to local. A

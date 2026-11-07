@@ -6,12 +6,15 @@ import (
 	"errors"
 	"fmt"
 	"net/netip"
+	"time"
 )
 
 // lookupOptions lets tests step into a socket owner lookup.
 type lookupOptions struct {
 	// beforeRecheck runs after the first look found no worker, before that answer is checked again.
 	beforeRecheck func()
+	// accepted is when the connection was accepted (SocketOwnerInTreesSince); unused here.
+	accepted time.Time
 }
 
 // socketOwnerInTrees is not supported on macOS and the BSDs: callers treat every caller as the lead.

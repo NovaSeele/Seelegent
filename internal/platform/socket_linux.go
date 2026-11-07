@@ -12,6 +12,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // recheckRounds bounds how often a "lead" answer is checked again while new processes keep appearing in the trees.
@@ -21,6 +22,9 @@ const recheckRounds = 4
 type lookupOptions struct {
 	// beforeRecheck runs after the first look found no worker, before that answer is checked again.
 	beforeRecheck func()
+	// accepted is when the connection was accepted (SocketOwnerInTreesSince). Linux finds the socket among the
+	// open files of the processes themselves, so an inherited handle is found where it is: unused.
+	accepted time.Time
 }
 
 // tcpSocket is a client socket found in /proc/net/tcp{,6}.
