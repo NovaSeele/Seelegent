@@ -218,6 +218,130 @@ func TestGitArgs(t *testing.T) {
 	}
 }
 
+// TestStdinScripts: a here-document, here-string or pipe that feeds a shell its script is read as that script; fed
+// to any other command it is data.
+func TestStdinScripts(t *testing.T) {
+	deny := []string{
+		"bash <<'EOF'\ngit reset --hard\nEOF", "bash <<EOF\ngit stash\nEOF", "cat <<'EOF' | sh\ngit stash\nEOF",
+		"bash -s <<EOF\ngit stash\nEOF", "bash -s -- a b <<'EOF'\ngit stash\nEOF", "sh -s <<< 'git stash'",
+		"bash <<< 'git stash'", "bash -x <<-EOF\n\tgit stash\n\tEOF",
+		"cat <<'EOF' | tr -d '\\r' | bash\ngit stash\nEOF", "sudo bash <<'EOF'\ngit stash\nEOF",
+		"env FOO=1 bash -e <<'EOF'\necho ok\ngit checkout -- .\nEOF", "bash /dev/stdin <<< 'git stash'",
+		"source /dev/stdin <<< 'git stash'", ". /dev/stdin <<'EOF'\ngit stash\nEOF",
+		"(bash <<'EOF'\ngit stash\nEOF\n)", "echo start && bash <<'EOF' && echo done\ncd x\ngit stash\nEOF",
+		"bash <<'A' <<'B'\necho a\nA\ngit stash\nB", "bash - <<'EOF'\ngit stash\nEOF",
+		"cmd <<'EOF'\ngit stash\nEOF", "pwsh -Command - <<'EOF'\ngit stash\nEOF", "pwsh -NoProfile <<< 'git stash'",
+		"python3 <<'EOF'\nimport os\nos.system('git stash')\nEOF",
+		"python3 - <<'EOF'\nimport subprocess\nsubprocess.run(['git', 'reset', '--hard'])\nEOF",
+		"node <<< \"require('child_process').execSync('git stash')\"",
+	}
+	for _, line := range deny {
+		if r := (Checker{}).Command(line, POSIX); !r.Deny {
+			t.Errorf("Command(%q) allowed, want deny", line)
+		}
+	}
+	allowLines := []string{
+		// Claude Code's commit messages: the heredoc is fed to cat, and its text is data.
+		"git commit -m \"$(cat <<'EOF'\nfix: x\n\ngit stash and git reset --hard are refused now\nEOF\n)\"",
+		"cat <<'EOF'\ngit reset --hard\nEOF", "cat <<'EOF' > notes.md\ngit stash\nEOF",
+		"tee out.txt <<'EOF'\ngit reset --hard\nEOF", "grep -c stash <<< 'git stash'",
+		"bash script.sh <<'EOF'\ngit stash\nEOF", "bash -c 'read x; echo $x' <<< 'git stash'",
+		"bash <<'EOF'\ngo test ./...\ngit status\nEOF", "sh -s <<< 'git log --oneline -3'",
+		"python3 - <<'EOF'\nprint('ok')\nEOF", "python3 script.py <<'EOF'\ngit stash\nEOF",
+		"cat <<'EOF' | sh\necho hi\nEOF", "git log --oneline | head -5",
+	}
+	for _, line := range allowLines {
+		if r := (Checker{}).Command(line, POSIX); r.Deny {
+			t.Errorf("Command(%q) denied (%s), want allow", line, r.Reason)
+		}
+	}
+}
+
+// TestMoreWrappers: wrappers and dialect forms the reviewer found passing.
+func TestMoreWrappers(t *testing.T) {
+	deny := map[Shell][]string{
+		POSIX: {
+			"chrt 10 git stash", "chrt -f 10 git reset --hard", "chrt -T 100 -D 200 -d 0 git stash",
+			"taskset 0x1 git stash", "taskset -c 0,1 git stash", "unshare git stash", "unshare -r -w /x git stash",
+			"parallel git {} ::: stash", "parallel 'git {}' ::: stash", "parallel -j 2 git ::: stash",
+			"parallel ::: 'git stash' 'echo hi'", "echo stash | parallel git", "script -c 'git stash' /dev/null",
+			"script -qc 'git reset --hard' /dev/null", "script --command='git stash'", "script -q /dev/null git stash",
+			"su -c 'git stash' bob", "su bob -c 'git stash'", "su - bob -c 'git reset --hard'", "su -lc 'git stash'",
+			"sudo su -c 'git stash'", "runuser -u bob -- git stash", "runuser -u bob git stash",
+			"su bob <<'EOF'\ngit stash\nEOF",
+		},
+		PowerShell: {
+			"Start-Process git 'reset','--hard'", "Start-Process git reset,--hard", "saps git 'stash'",
+			"Start-Process -FilePath git 'reset --hard'", "[Diagnostics.Process]::Start('git','stash')",
+			"[System.Diagnostics.Process]::Start(\"git\", \"reset --hard\")",
+			"$p = [Diagnostics.Process]::Start('git', 'stash')",
+			"([Diagnostics.Process]::Start('git','stash')).WaitForExit()",
+		},
+		Cmd: {
+			"if exist a git stash", "if not exist a git reset --hard", "if /i \"%x%\"==\"y\" git stash",
+			"if errorlevel 1 git stash", "if defined X git stash", "if a == b git stash", "if 1 EQU 1 git stash",
+			"if exist a if exist b git stash",
+		},
+	}
+	for sh, lines := range deny {
+		for _, line := range lines {
+			if r := (Checker{}).Command(line, sh); !r.Deny {
+				t.Errorf("shell %d: Command(%q) allowed, want deny", sh, line)
+			}
+		}
+	}
+	allowed := map[Shell][]string{
+		POSIX: {
+			"chrt 10 make", "taskset -c 0 go test ./...", "unshare -r id", "parallel gzip ::: a.log b.log",
+			"parallel git log -1 {} ::: a b", "script -c 'git status' /dev/null", "script out.txt",
+			"su -c 'id' bob", "runuser -u bob -- git status",
+		},
+		PowerShell: {
+			"Start-Process git 'status'", "Start-Process notepad a.txt", "[Diagnostics.Process]::Start('git','status')",
+			"Start-Process git -ArgumentList \"commit -m $msg\"",
+		},
+		Cmd: {"if exist a git status", "if not exist out mkdir out", "if \"%x%\"==\"y\" echo git stash"},
+	}
+	for sh, lines := range allowed {
+		for _, line := range lines {
+			if r := (Checker{}).Command(line, sh); r.Deny {
+				t.Errorf("shell %d: Command(%q) denied (%s), want allow", sh, line, r.Reason)
+			}
+		}
+	}
+}
+
+// TestAbbreviatedOptions: git accepts any unambiguous prefix of a long option, so a prefix of a refused option is
+// refused too.
+func TestAbbreviatedOptions(t *testing.T) {
+	for line, deny := range map[string]bool{
+		// Probed with git 2.53/2.55: each of these really acts.
+		"git commit --amen --no-edit": true, "git commit --am --no-edit": true, "git branch --del merged": true,
+		"git branch --d merged": true, "git checkout -b x --forc": true, "git checkout -b x --f": true,
+		"git branch --forc main HEAD~1": true, "git tag --del v1": true, "git tag --d v1": true,
+		"git checkout -b x --merg": true, "git checkout -b x --ove": true, "git checkout -b x --orph=y": true,
+		"git commit --al -m x": true, "git commit --amend=x": true, "git branch --mov a b": true,
+		"git branch --cop a b": true, "git apply --appl x.patch": true, "git apply --check --app x.patch": true,
+		"git symbolic-ref --del HEAD": true, "git commit -m x --ame": true, "git commit --amen=$X": true,
+		"git gc --prune=now": true, "git gc --prun=now": true, "git gc --pr=all": true,
+		"git gc --prune=\"$WHEN\"": true, "git -c gc.pruneExpire=now gc": true,
+		"git config gc.pruneExpire now": true,
+		// Prefixes of harmless options still pass.
+		"git log --onel": false, "git log --oneline": false, "git commit -m x --no-ver": false,
+		"git commit -m x --allow-empt": false, "git commit -m x --autho='A <a@b>'": false,
+		"git commit -m x --sig": false, "git branch --lis": false, "git branch --no-forc z": false,
+		"git branch --contains HEAD": false, "git branch --sor=-committerdate": false,
+		"git tag -l --sor=v:refname": false, "git tag v2 --mess=x": false, "git checkout -b x --tr origin/x": false,
+		"git checkout -b x --qui": false, "git apply --check --verb x.patch": false, "git gc": false,
+		"git gc --prune": false, "git gc --auto --quiet": false, "git gc --no-prune": false,
+		"git commit --dry-run": false,
+	} {
+		if r := (Checker{}).Command(line, POSIX); r.Deny != deny {
+			t.Errorf("Command(%q) deny = %v, want %v (%s)", line, r.Deny, deny, r.Reason)
+		}
+	}
+}
+
 func TestAliases(t *testing.T) {
 	aliases := map[string]string{
 		"co":      "checkout",

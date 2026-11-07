@@ -3,7 +3,11 @@ package cli
 import (
 	"bytes"
 	"context"
+	"encoding/json"
+	"io"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -34,6 +38,33 @@ func TestHookDecision(t *testing.T) {
 	}
 }
 
+// TestHookStdinScripts runs Claude Code's Bash hook (read in the POSIX dialect only) on scripts fed to a shell
+// through a here-document, a here-string or a pipe.
+func TestHookStdinScripts(t *testing.T) {
+	ctx := context.Background()
+	input := func(command string) io.Reader {
+		data, err := json.Marshal(map[string]any{"tool_name": "Bash", "tool_input": map[string]string{"command": command}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return bytes.NewReader(data)
+	}
+	for command, deny := range map[string]bool{
+		"bash <<'EOF'\ngit reset --hard\nEOF":                                     true,
+		"cat <<'EOF' | sh\ngit stash\nEOF":                                        true,
+		"bash -s <<EOF\ngit stash\nEOF":                                           true,
+		"sh -s <<< 'git stash'":                                                   true,
+		"git commit --amen --no-edit":                                             true,
+		"bash <<'EOF'\ngo test ./...\nEOF":                                        false,
+		"cat <<'EOF'\ngit reset --hard\nEOF":                                      false,
+		"git commit -m \"$(cat <<'EOF'\nfix: x\n\nnever git stash here\nEOF\n)\"": false,
+	} {
+		if r := hookDecision(ctx, guard.HookClaude, input(command)); r.Deny != deny {
+			t.Errorf("claude hook %q: deny = %v, want %v (%s)", command, r.Deny, deny, r.Reason)
+		}
+	}
+}
+
 func TestGitShim(t *testing.T) {
 	ctx := context.Background()
 	var out, errOut bytes.Buffer
@@ -53,6 +84,60 @@ func TestGitShim(t *testing.T) {
 	// git's own exit code comes back.
 	if code := runGitShim(ctx, "", []string{"no-such-command-x"}, strings.NewReader(""), &out, &errOut); code == 0 {
 		t.Fatal("a failing git exited 0")
+	}
+}
+
+// TestGitShimIgnoresGuardVariable: the worker's shell can set SEELEGENT_GIT_GUARD (env SEELEGENT_GIT_GUARD=off git
+// stash); the shim must not obey it. The daemon leaves the shim off PATH when the guard is off for a turn.
+func TestGitShimIgnoresGuardVariable(t *testing.T) {
+	t.Setenv(account.EnvGitGuard, "off")
+	var out, errOut bytes.Buffer
+	for _, args := range [][]string{{"stash"}, {"reset", "--hard"}, {"commit", "--amen", "--no-edit"}} {
+		errOut.Reset()
+		if code := runGitShim(t.Context(), "", args, strings.NewReader(""), &out, &errOut); code != 1 ||
+			!strings.HasPrefix(errOut.String(), guard.Marker) {
+			t.Errorf("%q with %s=off: code %d, stderr %q", args, account.EnvGitGuard, code, errOut.String())
+		}
+	}
+}
+
+// TestGitShimNoAutocorrect: with help.autocorrect=immediate git runs the command it guesses from a typo; the shim
+// turns that off, so git stsh does not stash.
+func TestGitShimNoAutocorrect(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not installed")
+	}
+	repo := t.TempDir()
+	t.Setenv("GIT_CONFIG_GLOBAL", filepath.Join(repo, "no-global"))
+	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
+	run := func(args ...string) {
+		t.Helper()
+		c := exec.CommandContext(t.Context(), "git", append([]string{"-C", repo}, args...)...)
+		if b, err := c.CombinedOutput(); err != nil {
+			t.Fatalf("git %q: %v\n%s", args, err, b)
+		}
+	}
+	run("init", "-q", "-b", "main")
+	run("config", "user.name", "T")
+	run("config", "user.email", "t@example.invalid")
+	run("config", "commit.gpgsign", "false")
+	run("config", "help.autocorrect", "immediate")
+	file := filepath.Join(repo, "a.txt")
+	if err := os.WriteFile(file, []byte("one\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	run("add", "a.txt")
+	run("commit", "-q", "-m", "init")
+	if err := os.WriteFile(file, []byte("one\nthe user's line\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var out, errOut bytes.Buffer
+	if code := runGitShim(t.Context(), "", []string{"-C", repo, "stsh"}, strings.NewReader(""), &out,
+		&errOut); code == 0 {
+		t.Errorf("git stsh exited 0: %s %s", out.String(), errOut.String())
+	}
+	if data, err := os.ReadFile(file); err != nil || string(data) != "one\nthe user's line\n" {
+		t.Fatalf("a.txt = %q %v (stderr %q)", data, err, errOut.String())
 	}
 }
 

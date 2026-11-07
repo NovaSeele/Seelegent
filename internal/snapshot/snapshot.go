@@ -24,6 +24,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/NovaSeele/Seelegent/internal/api"
@@ -46,6 +47,13 @@ const (
 	KindStart = "start"
 	KindEnd   = "end"
 )
+
+// blobGrace is how long a blob that no manifest names is kept after it was last written or reused. Take stores
+// the blobs of a snapshot before Save writes the manifest that names them (Restore keeps its backup the same way),
+// and a sweep in between must not delete them. Both steps run within the task engine's limits for snapshots and
+// checks (snapTimeout, 2 minutes; checkTimeout, 3 minutes), so an hour leaves ample room, and a blob untouched for
+// longer than that is no longer part of a snapshot in progress.
+const blobGrace = time.Hour
 
 // ErrNotFound means there is no such snapshot.
 var ErrNotFound = errors.New("snapshot not found")
@@ -105,6 +113,9 @@ type Store struct {
 	dir string
 	git Git
 	now func() time.Time
+	// blobs orders put (shared) against the sweep's check-and-remove of one blob (exclusive): a blob reused while
+	// the sweep looks at it is either touched first, and kept, or removed first, and written again.
+	blobs sync.RWMutex
 }
 
 // New returns a store in dir.
@@ -237,16 +248,31 @@ func (s *Store) blobPath(hash string) string {
 	return filepath.Join(s.dir, "blobs", hash[:2], hash)
 }
 
-// put stores data under its hash unless it is there already, and returns the bytes written.
+// put stores data under its hash unless it is there already, and returns the bytes written. Either way the blob's
+// modification time becomes now: a snapshot that is taken but not saved yet names its blobs nowhere, and the sweep
+// keeps the blobs touched within blobGrace.
 func (s *Store) put(hash string, data []byte) (int64, error) {
+	s.blobs.RLock()
+	defer s.blobs.RUnlock()
 	p := s.blobPath(hash)
+	now := s.now()
 	if _, err := os.Stat(p); err == nil {
-		return 0, nil
+		err := os.Chtimes(p, now, now)
+		if err == nil {
+			return 0, nil
+		}
+		if !errors.Is(err, fs.ErrNotExist) {
+			return 0, fmt.Errorf("snapshot: %w", err)
+		}
 	}
 	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
 		return 0, fmt.Errorf("snapshot: %w", err)
 	}
 	if err := fsutil.WriteFileAtomic(p, data, 0o600); err != nil {
+		return 0, fmt.Errorf("snapshot: %w", err)
+	}
+	// The store's clock, not the file system's, dates every blob, so the sweep compares like with like.
+	if err := os.Chtimes(p, now, now); err != nil {
 		return 0, fmt.Errorf("snapshot: %w", err)
 	}
 	return int64(len(data)), nil
@@ -323,9 +349,11 @@ func (s *Store) Load(taskID string, turn int, kind string) (Manifest, error) {
 	return m, nil
 }
 
-// Sweep deletes the snapshots of every task keep refuses, then every blob that no remaining manifest names. It
-// returns the number of task folders removed.
+// Sweep deletes the snapshots of every task keep refuses, then every blob that no remaining manifest names and that
+// was not written or reused within blobGrace before the sweep started (a snapshot being taken names its blobs only
+// once it is saved). It returns the number of task folders removed.
 func (s *Store) Sweep(ctx context.Context, keep func(taskID string) bool) (int, error) {
+	cutoff := s.now().Add(-blobGrace)
 	tasksDir := filepath.Join(s.dir, "tasks")
 	entries, err := os.ReadDir(tasksDir)
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
@@ -386,9 +414,26 @@ func (s *Store) Sweep(ctx context.Context, keep func(taskID string) bool) (int, 
 		if d.IsDir() || !hashRe.MatchString(d.Name()) || used[d.Name()] {
 			return nil
 		}
-		return os.Remove(p) //nolint:gosec // a blob of the store's own folder, named by its hash
+		return s.removeStale(p, cutoff)
 	})
 	return removed, err
+}
+
+// removeStale removes the blob at p unless it was written or reused after cutoff.
+func (s *Store) removeStale(p string, cutoff time.Time) error {
+	s.blobs.Lock()
+	defer s.blobs.Unlock()
+	st, err := os.Stat(p)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if st.ModTime().After(cutoff) {
+		return nil
+	}
+	return os.Remove(p)
 }
 
 // Key is how two repository-relative paths are compared: '/' separators, and case-folded where the file system

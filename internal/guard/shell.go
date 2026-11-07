@@ -47,6 +47,9 @@ type segment struct {
 	piped bool
 	// prev is the command before a pipe, when piped.
 	prev *segment
+	// stdin holds the bodies of the here-documents and here-strings (POSIX <<, <<-, <<<) the command reads: data
+	// for most commands, a script for a shell that reads its script from standard input.
+	stdin []string
 }
 
 // state is shared by a parser and the parsers of the substitutions it reads.
@@ -71,6 +74,8 @@ type heredoc struct {
 	delim  string
 	quoted bool
 	strip  bool
+	// seg is the command that reads the body.
+	seg *segment
 }
 
 // parse splits line into simple commands, including the commands of every substitution, subshell and block.
@@ -186,7 +191,7 @@ func (p *parser) list(term byte) error {
 				p.i++
 			} else if p.sh == POSIX && p.peek(0) == '>' {
 				// &>file: both streams to a file.
-				if err := p.redirect(); err != nil {
+				if err := p.redirect(cur); err != nil {
 					return err
 				}
 				continue
@@ -207,12 +212,12 @@ func (p *parser) list(term byte) error {
 			}
 			continue
 		case c == '<' || c == '>':
-			if err := p.redirect(); err != nil {
+			if err := p.redirect(cur); err != nil {
 				return err
 			}
 			continue
 		case c >= '0' && c <= '9':
-			if ok, err := p.fdRedirect(); err != nil {
+			if ok, err := p.fdRedirect(cur); err != nil {
 				return err
 			} else if ok {
 				continue
@@ -245,7 +250,7 @@ func (p *parser) list(term byte) error {
 }
 
 // fdRedirect handles a redirection with a file descriptor (2>&1, 2>file) at p.i and reports whether there was one.
-func (p *parser) fdRedirect() (bool, error) {
+func (p *parser) fdRedirect(seg *segment) (bool, error) {
 	j := p.i
 	for j < len(p.s) && p.s[j] >= '0' && p.s[j] <= '9' {
 		j++
@@ -254,21 +259,25 @@ func (p *parser) fdRedirect() (bool, error) {
 		return false, nil
 	}
 	p.i = j
-	return true, p.redirect()
+	return true, p.redirect(seg)
 }
 
-// redirect reads a redirection operator at p.i; the target of an output redirection goes to the state's writes.
-func (p *parser) redirect() error {
+// redirect reads a redirection operator at p.i of command seg; the target of an output redirection goes to the
+// state's writes, the body of a here-document or here-string to seg's stdin.
+func (p *parser) redirect(seg *segment) error {
 	c := p.s[p.i]
 	p.i++
 	if p.sh == POSIX && c == '<' {
 		switch p.peek(0) {
 		case '<':
 			p.i++
-			if p.peek(0) == '<' { // here-string: the next word is data
+			if p.peek(0) == '<' { // here-string: the next word is the command's input
 				p.i++
 				p.skipBlanks()
-				_, err := p.word()
+				w, err := p.word()
+				if err == nil {
+					seg.stdin = append(seg.stdin, w.text)
+				}
 				return err
 			}
 			strip := false
@@ -283,7 +292,7 @@ func (p *parser) redirect() error {
 				return err
 			}
 			quoted := strings.ContainsAny(p.s[start:p.i], `'"\`)
-			p.heredocs = append(p.heredocs, heredoc{delim: w.text, quoted: quoted, strip: strip})
+			p.heredocs = append(p.heredocs, heredoc{delim: w.text, quoted: quoted, strip: strip, seg: seg})
 			return nil
 		case '(':
 			p.i++
@@ -336,8 +345,8 @@ func (p *parser) skipBlockComment() error {
 	return nil
 }
 
-// readHeredocs reads the bodies of the here-documents opened on the line that just ended. An unquoted body expands
-// $(...) and `...`, so those are read as commands.
+// readHeredocs reads the bodies of the here-documents opened on the line that just ended and gives each to the
+// command that reads it. An unquoted body expands $(...) and `...`, so those are read as commands.
 func (p *parser) readHeredocs() error {
 	docs := p.heredocs
 	p.heredocs = nil
@@ -369,6 +378,9 @@ func (p *parser) readHeredocs() error {
 			j = lineEnd + 1
 		}
 		p.i = next
+		if h.seg != nil {
+			h.seg.stdin = append(h.seg.stdin, p.s[start:bodyEnd])
+		}
 		if !h.quoted {
 			if err := p.expansions(p.s[start:bodyEnd]); err != nil {
 				return err

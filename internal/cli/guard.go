@@ -45,7 +45,9 @@ func newGuardCommand() *cobra.Command {
 	}
 }
 
-// hookDecision reads a hook input and decides.
+// hookDecision reads a hook input and decides. SEELEGENT_GIT_GUARD=off (--allow-git) turns it off: the hook
+// inherits the environment of the worker CLI, which the daemon set and the worker's shell commands cannot change
+// (they run as children of the CLI). The git shim, which runs inside the worker's shell, ignores the variable.
 func hookDecision(ctx context.Context, kind string, stdin io.Reader) guard.Result {
 	if os.Getenv(account.EnvGitGuard) == "off" {
 		return guard.Result{}
@@ -103,25 +105,30 @@ func gitShimArgs(args []string) (dir string, rest []string) {
 
 // runGitShim checks a git command line and runs the real git (found on PATH without shimDir). It returns the
 // exit code: git's own, or 1 for a refusal (printed on stderr, starting with the guard's marker).
+//
+// The shim never reads SEELEGENT_GIT_GUARD: a worker's own shell can set it (env SEELEGENT_GIT_GUARD=off git
+// stash). Whether a worker is guarded is decided by the daemon, which puts the shim on PATH only when the guard is
+// on for the turn (gitGuard set, no --allow-git).
 func runGitShim(ctx context.Context, shimDir string, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	env := os.Environ()
 	search := env
 	if shimDir != "" {
 		search = guard.WithoutDir(env, shimDir)
 	}
-	if os.Getenv(account.EnvGitGuard) != "off" {
-		if r := (guard.Checker{Alias: gitAlias(ctx, search, "")}).Git(args); r.Deny {
-			_, _ = fmt.Fprintln(stderr, r.Reason)
-			return 1
-		}
+	if r := (guard.Checker{Alias: gitAlias(ctx, search, "")}).Git(args); r.Deny {
+		_, _ = fmt.Fprintln(stderr, r.Reason)
+		return 1
 	}
 	git, err := gitx.NewBinary(func() []string { return search }, nil).Path()
 	if err != nil {
 		_, _ = fmt.Fprintln(stderr, "seelegent git shim:", err)
 		return 1
 	}
+	// With help.autocorrect set, git would run the subcommand it guesses from a typo (git stsh: stash), which the
+	// guard read as an unknown command and allowed.
+	full := append([]string{"-c", "help.autocorrect=0"}, args...)
 	//nolint:gosec // the shim runs the real git with the worker's own arguments, after the guard allowed them
-	c := exec.CommandContext(ctx, git, args...)
+	c := exec.CommandContext(ctx, git, full...)
 	c.Stdin, c.Stdout, c.Stderr = stdin, stdout, stderr
 	c.Env = env // nested git calls (aliases, hooks) go through the shim again
 	if err := c.Run(); err != nil {

@@ -104,38 +104,46 @@ func (c Checker) git(args []word, depth int) Result {
 			return deny()
 		}
 	case "checkout":
-		p := scan(rest, opts{short: "bB", long: set("--orphan", "--conflict", "--pathspec-from-file")})
+		danger := []string{"-f", "--force", "-m", "--merge", "--ours", "--theirs", "-p", "--patch", "--overlay",
+			"--pathspec-from-file", "--orphan"}
+		p := scan(rest, opts{short: "bB", long: set("--orphan", "--conflict", "--pathspec-from-file"),
+			danger: danger})
 		create := p.has("-b", "-B")
-		if p.unknown || !create || p.dashdash || len(p.pos) > 1 ||
-			p.has("-f", "--force", "-m", "--merge", "--ours", "--theirs", "-p", "--patch", "--overlay",
-				"--pathspec-from-file", "--orphan") {
+		if p.unknown || !create || p.dashdash || len(p.pos) > 1 || p.has(danger...) {
 			return deny()
 		}
 	case "branch":
-		p := scan(rest, opts{short: "u", long: set("--set-upstream-to", "--sort", "--format")})
-		if p.unknown || p.has("-d", "-D", "-m", "-M", "-C", "-f", "--delete", "--move", "--force", "--copy") &&
-			!p.has("-l", "--list") {
-			return deny()
-		}
-		if p.unknown {
+		danger := []string{"-d", "-D", "-m", "-M", "-C", "-f", "--delete", "--move", "--force", "--copy"}
+		p := scan(rest, opts{short: "u", long: set("--set-upstream-to", "--sort", "--format"), danger: danger})
+		if p.unknown || p.has(danger...) && !p.has("-l", "--list") {
 			return deny()
 		}
 	case "tag":
+		danger := []string{"-d", "--delete", "-f", "--force"}
 		p := scan(rest, opts{short: "mFu", long: set("--message", "--file", "--local-user", "--cleanup", "--sort",
-			"--format", "--trailer")})
-		if p.unknown || p.has("-d", "--delete", "-f", "--force") {
+			"--format", "--trailer"), danger: danger})
+		if p.unknown || p.has(danger...) {
 			return deny()
 		}
 	case "commit":
+		danger := []string{"-a", "--all", "--amend"}
 		p := scan(rest, opts{short: "mFcCt", long: set("--message", "--file", "--reuse-message",
 			"--reedit-message", "--template", "--author", "--date", "--cleanup", "--fixup", "--squash", "--trailer",
-			"--pathspec-from-file")})
-		if p.unknown || p.has("-a", "--all", "--amend") {
+			"--pathspec-from-file"), danger: danger})
+		if p.unknown || p.has(danger...) {
 			return deny()
 		}
 	case "apply":
-		p := scan(rest, opts{short: "pC", long: set("--exclude", "--include", "--directory", "--whitespace")})
+		p := scan(rest, opts{short: "pC", long: set("--exclude", "--include", "--directory", "--whitespace"),
+			danger: []string{"--apply"}})
 		if p.unknown || p.has("--apply") || !p.has("--check", "--stat", "--numstat", "--summary") {
+			return deny()
+		}
+	case "gc":
+		// gc --prune=<date> (now, all, ...) deletes the unreachable objects that still hold lost work at once;
+		// plain gc and gc --prune keep them for gc.pruneExpire (two weeks by default).
+		p := scan(rest, opts{danger: []string{"--prune"}})
+		if p.unknown || p.valued("--prune") {
 			return deny()
 		}
 	case "reflog":
@@ -169,7 +177,7 @@ func (c Checker) git(args []word, depth int) Result {
 			return deny()
 		}
 	case "symbolic-ref":
-		p := scan(rest, opts{short: "m"})
+		p := scan(rest, opts{short: "m", danger: []string{"--delete"}})
 		if p.unknown || p.has("-d", "--delete") || len(p.pos) > 1 {
 			return deny()
 		}
@@ -256,7 +264,9 @@ func riskyConfigKey(k string) bool {
 	switch k {
 	case "core.hookspath", "core.fsmonitor", "core.sshcommand", "core.editor", "core.pager", "core.askpass",
 		"core.gitproxy", "core.worktree", "sequence.editor", "diff.external", "gpg.program", "credential.helper",
-		"uploadpack.packobjectshook", "include.path", "alias":
+		"uploadpack.packobjectshook", "include.path", "alias",
+		// Not a program, but the same as gc --prune=now for every later gc, including git's automatic one.
+		"gc.pruneexpire":
 		return true
 	}
 	for _, prefix := range []string{"alias.", "includeif.", "include.", "pager."} {
@@ -298,13 +308,19 @@ type opts struct {
 	short string
 	// long lists the long options that take the next word as their value (without =).
 	long map[string]bool
+	// danger lists the options the caller refuses. git accepts any unambiguous prefix of a long option
+	// (git branch --del x deletes), so a long option that is a prefix of one of these counts as it too. An
+	// ambiguous prefix counts as well: git refuses it, so refusing it first costs nothing.
+	danger []string
 }
 
 // parsed is a scanned argument list.
 type parsed struct {
 	// flags holds "-x" for every short option and "--name" for every long one.
 	flags []string
-	pos   []word
+	// withValue holds the long options given with "=value".
+	withValue []string
+	pos       []word
 	// dashdash is set when "--" separated paths.
 	dashdash bool
 	// unknown is set when an expansion stands where an option could be.
@@ -318,6 +334,26 @@ func (p parsed) has(names ...string) bool {
 		}
 	}
 	return false
+}
+
+// valued reports whether the long option name was given a value with "=".
+func (p parsed) valued(name string) bool { return setHas(name, p.withValue...) }
+
+// long records the long option name ("--x"), with the dangerous options it abbreviates (git takes a prefix of
+// one letter as well: git branch --d x deletes).
+func (p *parsed) long(name string, value bool, o opts) {
+	names := []string{name}
+	if len(name) > 2 && !setHas(name, o.danger...) {
+		for _, d := range o.danger {
+			if strings.HasPrefix(d, "--") && strings.HasPrefix(d, name) {
+				names = append(names, d)
+			}
+		}
+	}
+	p.flags = append(p.flags, names...)
+	if value {
+		p.withValue = append(p.withValue, names...)
+	}
 }
 
 // scan splits git subcommand arguments into options and positional arguments.
@@ -335,7 +371,7 @@ func scan(args []word, o opts) parsed {
 			eq := strings.IndexByte(t, '=')
 			dyn := strings.IndexAny(t, "$%`(@")
 			if strings.HasPrefix(t, "--") && eq > 2 && (dyn < 0 || eq < dyn) {
-				p.flags = append(p.flags, t[:eq])
+				p.long(t[:eq], true, o)
 				continue
 			}
 			p.unknown = true
@@ -344,13 +380,14 @@ func scan(args []word, o opts) parsed {
 		}
 		switch {
 		case strings.HasPrefix(t, "--"):
-			name := t
 			if eq := strings.IndexByte(t, '='); eq > 0 {
-				name = t[:eq]
-			} else if o.long[t] {
+				p.long(t[:eq], true, o)
+				continue
+			}
+			if o.long[t] {
 				i++
 			}
-			p.flags = append(p.flags, name)
+			p.long(t, false, o)
 		case strings.HasPrefix(t, "-") && len(t) > 1:
 			for j := 1; j < len(t); j++ {
 				p.flags = append(p.flags, "-"+string(t[j]))

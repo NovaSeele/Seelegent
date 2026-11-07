@@ -267,11 +267,7 @@ func (a *App) build(o Options) error {
 	gitBin := gitx.NewBinary(func() []string { return a.env }, a.log)
 	// The git shim guards workers whose CLI has no pre-tool hook (codex, system accounts). Without it they keep
 	// only their sandbox and the work-at-risk check.
-	shim := o.Paths.GuardBin
-	if err := guard.InstallShim(shim, o.GuardExe); err != nil {
-		a.log.Warn("app: install the git shim", "err", err)
-		shim = ""
-	}
+	shim := installShim(a.log, o.Paths.GuardBin, o.GuardExe)
 	a.Git = gitx.New(now, gitBin)
 	a.Tasks, err = task.New(task.Options{
 		DB: a.DB, Accounts: a.Accounts, Pool: p, Backends: a.Backends, Settings: a.Settings,
@@ -326,6 +322,22 @@ func quotaReader(name, bin string, now func() time.Time) backend.QuotaReader {
 		return quota.NewClaudeReader(nil, "", now)
 	}
 	return nil
+}
+
+// installShim installs the git shim into dir and returns dir, or "" when workers without a pre-tool hook get no
+// shim. When installing fails but the shim of an earlier run is still there (a reattached worker running the old
+// git.exe blocks the rename over it), that one keeps guarding them: an older build's guard beats none.
+func installShim(log *slog.Logger, dir, exe string) string {
+	err := guard.InstallShim(dir, exe)
+	if err == nil {
+		return dir
+	}
+	if rerr := guard.ShimReady(dir); rerr == nil {
+		log.Warn("app: install the git shim; keeping the one already installed", "err", err)
+		return dir
+	}
+	log.Warn("app: install the git shim; workers without a pre-tool hook run unguarded", "err", err)
+	return ""
 }
 
 // scopeAllowed lists the folders outside a task's repository a worker may write to without a scope warning: the

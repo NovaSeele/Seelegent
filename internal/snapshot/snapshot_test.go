@@ -153,9 +153,15 @@ func TestWorkAtRiskAndRestore(t *testing.T) {
 	}
 }
 
+// clock is a settable store clock.
+type clock struct{ t time.Time }
+
+func (c *clock) now() time.Time { return c.t }
+
 func TestSweep(t *testing.T) {
 	root := newRepo(t)
-	s := New(t.TempDir(), gitx.New(nil, nil), nil)
+	clk := &clock{t: time.Unix(1700000000, 0)}
+	s := New(t.TempDir(), gitx.New(nil, nil), clk.now)
 	write(t, filepath.Join(root, "a.txt"), "changed\n")
 	m, err := s.Take(t.Context(), root, nil)
 	if err != nil {
@@ -174,8 +180,16 @@ func TestSweep(t *testing.T) {
 	if err := s.Save("drop", 1, KindEnd, m2); err != nil {
 		t.Fatal(err)
 	}
+	// Within the grace, a blob no manifest names is kept: it may belong to a snapshot not saved yet.
+	if n, err := s.Sweep(t.Context(), func(id string) bool { return id == "keep" }); err != nil || n != 1 {
+		t.Fatalf("sweep: %d %v", n, err)
+	}
+	if _, err := s.Content(m2.Files[0]); err != nil {
+		t.Fatalf("a fresh blob was swept: %v", err)
+	}
+	clk.t = clk.t.Add(blobGrace + time.Minute)
 	n, err := s.Sweep(t.Context(), func(id string) bool { return id == "keep" })
-	if err != nil || n != 1 {
+	if err != nil || n != 0 {
 		t.Fatalf("sweep: %d %v", n, err)
 	}
 	if _, err := s.Content(m.Files[0]); err != nil {
@@ -186,6 +200,54 @@ func TestSweep(t *testing.T) {
 	}
 	if _, err := s.Load("drop", 1, KindStart); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("dropped manifest: %v", err)
+	}
+}
+
+// TestSweepKeepsSnapshotInProgress: a sweep that runs between Take and Save of a running task must not delete the
+// blobs that snapshot reuses from an expired task.
+func TestSweepKeepsSnapshotInProgress(t *testing.T) {
+	root := newRepo(t)
+	ctx := t.Context()
+	clk := &clock{t: time.Unix(1700000000, 0)}
+	s := New(t.TempDir(), gitx.New(nil, nil), clk.now)
+	userWork := "one\ntwo\nthree\nthe user's line\n"
+	write(t, filepath.Join(root, "a.txt"), userWork)
+	// 1. An old task snapshots a.txt; it has long expired by the time of the sweep.
+	old, err := s.Take(ctx, root, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Save("old", 1, KindStart, old); err != nil {
+		t.Fatal(err)
+	}
+	clk.t = clk.t.Add(30 * 24 * time.Hour)
+	// 2. A running task takes its start snapshot, reusing the old task's blob.
+	m, err := s.Take(ctx, root, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(m.Files) != 1 || m.Files[0].Hash != old.Files[0].Hash {
+		t.Fatalf("snapshot: %+v", m)
+	}
+	// 3. The sweep runs before the snapshot is saved: the running task has no manifest yet.
+	if n, err := s.Sweep(ctx, func(id string) bool { return id != "old" }); err != nil || n != 1 {
+		t.Fatalf("sweep: %d %v", n, err)
+	}
+	// 4. The snapshot is saved.
+	if err := s.Save("run", 1, KindStart, m); err != nil {
+		t.Fatal(err)
+	}
+	// 5. The worker throws the user's lines away; restore brings them back.
+	gitRun(t, root, "checkout", "--", "a.txt")
+	res, err := s.Restore("run", 1, []string{"a.txt"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res) != 1 || res[0].Error != "" {
+		t.Fatalf("restore: %+v", res)
+	}
+	if got := read(t, filepath.Join(root, "a.txt")); got != userWork {
+		t.Fatalf("a.txt = %q", got)
 	}
 }
 

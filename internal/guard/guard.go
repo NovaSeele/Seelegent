@@ -16,6 +16,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"regexp"
+	"slices"
 	"strings"
 	"unicode/utf16"
 )
@@ -26,7 +27,8 @@ const Marker = "Blocked by Seelegent"
 // reasonText is the refusal of a risky git command (the old guard's wording, which workers already know).
 const reasonText = Marker + ": this git command can discard or move uncommitted work that belongs to other people " +
 	"in this folder. Files with changes you did not make are expected: leave them. Undo your own edit with your " +
-	"edit tool. If you truly need this, say so under ## Blocked."
+	"edit tool, and do not rewrite a file from git either (git show HEAD:path > path throws away the same " +
+	"lines). If you truly need this, say so under ## Blocked."
 
 // unreadableText is the refusal of a line the guard could not read.
 const unreadableText = Marker + ": this command mentions git but could not be read safely (an unclosed quote, " +
@@ -153,6 +155,10 @@ func cmdName(w word) string {
 
 var assignment = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*\+?=`)
 
+// dotnetStart matches a .NET call that starts a process from PowerShell ([Diagnostics.Process]::Start(...),
+// [Diagnostics.ProcessStartInfo]::new(...)).
+var dotnetStart = regexp.MustCompile(`(?i)process(startinfo)?\]::(start|new)\b`)
+
 // keywords are shell words that come before a command without changing it.
 var keywords = map[string]bool{
 	"!": true, "{": true, "}": true, "if": true, "then": true, "else": true, "elif": true, "do": true,
@@ -206,6 +212,10 @@ var wrappers = map[string]wrapper{
 	"runas":      {},
 	"busybox":    {},
 	"winpty":     {},
+	"chrt":       {valued: set("-T", "-P", "-D", "--sched-runtime", "--sched-period", "--sched-deadline"), positional: 1},
+	"taskset":    {positional: 1},
+	"unshare": {valued: set("-S", "-G", "-R", "-w", "--setuid", "--setgid", "--root", "--wd", "--propagation",
+		"--map-user", "--map-group", "--map-users", "--map-groups")},
 }
 
 // segment checks one simple command.
@@ -233,6 +243,9 @@ func (c Checker) command(ws []word, s *segment, sh Shell, depth int) Result {
 	if depth > maxDepth {
 		return denyUnreadable()
 	}
+	for sh == Cmd && len(ws) > 0 && !ws[0].quoted && strings.EqualFold(ws[0].text, "if") {
+		ws = cmdIf(ws[1:])
+	}
 	for len(ws) > 0 && !ws[0].quoted && keywords[strings.ToLower(ws[0].text)] {
 		ws = ws[1:]
 		if len(ws) > 0 && ws[0].text == "-p" {
@@ -244,6 +257,19 @@ func (c Checker) command(ws []word, s *segment, sh Shell, depth int) Result {
 	}
 	head := ws[0]
 	args := ws[1:]
+	if sh == PowerShell && dotnetStart.MatchString(head.text) {
+		// [Diagnostics.Process]::Start('git', 'reset --hard'): the second argument is a command line of its own.
+		text := joinWords(ws)
+		lits := literals(text)
+		for i, l := range lits {
+			if cmdName(word{text: l}) == "git" && i+1 < len(lits) {
+				if r := c.line("git "+lits[i+1], POSIX, depth+1); r.Deny {
+					return r
+				}
+			}
+		}
+		return c.code(text, depth)
+	}
 	if head.dynamic {
 		// An unknown program: if its arguments read as a risky git command, the program may well be git.
 		if r := c.git(args, depth+1); r.Deny {
@@ -278,14 +304,18 @@ func (c Checker) command(ws []word, s *segment, sh Shell, depth int) Result {
 	}
 	switch name {
 	case "bash", "sh", "zsh", "dash", "ksh", "mksh", "ash", "fish", "yash", "tcsh", "csh":
-		return c.posixShell(args, s, sh, depth)
+		return c.posixShell(args, s, depth)
+	case "source", ".":
+		if len(args) > 0 && isStdinFile(args[0].text) {
+			return c.stdinScript(s, POSIX, depth)
+		}
 	case "cmd":
 		return c.cmdShell(args, s, depth)
 	case "powershell", "pwsh", "powershell_ise":
 		return c.pwshShell(args, s, depth)
 	case "node", "nodejs", "deno", "bun", "python", "python3", "python2", "py", "pythonw", "perl", "ruby", "php",
 		"osascript":
-		return c.interpreter(name, args, depth)
+		return c.interpreter(name, args, s, depth)
 	case "eval":
 		return c.line(joinWords(args), POSIX, depth+1)
 	case "iex", "invoke-expression":
@@ -297,8 +327,173 @@ func (c Checker) command(ws []word, s *segment, sh Shell, depth int) Result {
 		return c.findExec(args, s, sh, depth)
 	case "start-process", "saps", "start":
 		return c.startProcess(args, sh, depth)
+	case "parallel":
+		return c.parallel(args, depth)
+	case "script":
+		return c.scriptCommand(args, sh, depth)
+	case "su", "runuser":
+		return c.su(name, args, s, sh, depth)
 	}
 	return allow
+}
+
+// parallelOpts are GNU parallel's options that take the next word as their value.
+var parallelOpts = wrapper{valued: set("-j", "--jobs", "-P", "--max-procs", "-S", "--sshlogin", "-a", "--arg-file",
+	"-d", "--delimiter", "-I", "--colsep", "-C", "-N", "-n", "--max-args", "-L", "--max-lines", "--joblog",
+	"--results", "--res", "--tmpdir", "--workdir", "--wd", "-E", "--eof", "--timeout", "--delay", "--tag-string",
+	"--basefile", "--bf", "--transferfile", "--tf", "--return", "--env", "--memfree", "--load", "--nice")}
+
+// placeholder matches GNU parallel's replacement strings ({}, {.}, {/}, {1}, ...).
+var placeholder = regexp.MustCompile(`\{[^{}\s]*\}`)
+
+// parallel checks GNU parallel: its command, with every replacement string (or the appended argument) read as a
+// value only known when it runs, and, without a command, each input after ::: as a command line.
+func (c Checker) parallel(args []word, depth int) Result {
+	rest, ok := unwrap(parallelOpts, args)
+	if !ok {
+		return allow
+	}
+	cmd, inputs := rest, []word(nil)
+	for i, w := range rest {
+		if strings.HasPrefix(w.text, ":::") {
+			cmd, inputs = rest[:i], rest[i+1:]
+			break
+		}
+	}
+	if len(cmd) == 0 {
+		for _, w := range inputs {
+			if strings.HasPrefix(w.text, ":::") {
+				continue
+			}
+			if r := c.line(w.text, POSIX, depth+1); r.Deny {
+				return r
+			}
+		}
+		return allow
+	}
+	parts := make([]string, 0, len(cmd)+1)
+	replaced := false
+	for _, w := range cmd {
+		t := w.text
+		if placeholder.MatchString(t) {
+			t = placeholder.ReplaceAllLiteralString(t, "$PARALLEL_ARG")
+			replaced = true
+		}
+		parts = append(parts, t)
+	}
+	if !replaced {
+		parts = append(parts, "$PARALLEL_ARG")
+	}
+	return c.line(strings.Join(parts, " "), POSIX, depth+1)
+}
+
+// scriptValued are the options of script (util-linux) that take the next word as their value.
+var scriptValued = set("-T", "-B", "-I", "-O", "-E", "--log-in", "--log-out", "--log-io", "--log-timing",
+	"--logging-format", "--echo", "--output-limit")
+
+// scriptCommand checks script -c 'command' [file] (util-linux) and script [file [command ...]] (BSD, macOS).
+func (c Checker) scriptCommand(args []word, sh Shell, depth int) Result {
+	var pos []word
+	for i := 0; i < len(args); i++ {
+		t := args[i].text
+		switch {
+		case t == "-c" || t == "--command":
+			if i+1 >= len(args) {
+				return allow
+			}
+			return c.line(args[i+1].text, POSIX, depth+1)
+		case strings.HasPrefix(t, "--command="):
+			return c.line(strings.TrimPrefix(t, "--command="), POSIX, depth+1)
+		case scriptValued[t]:
+			i++
+		case strings.HasPrefix(t, "--"):
+		case strings.HasPrefix(t, "-") && len(t) > 1:
+			if j := strings.IndexByte(t, 'c'); j > 0 { // -qc 'command'
+				value := t[j+1:]
+				if value == "" && i+1 < len(args) {
+					value = args[i+1].text
+				}
+				return c.line(value, POSIX, depth+1)
+			}
+		default:
+			pos = append(pos, args[i])
+		}
+	}
+	if len(pos) > 1 {
+		return c.command(pos[1:], nil, sh, depth+1)
+	}
+	return allow
+}
+
+// suValued are the options of su and runuser that take the next word as their value.
+var suValued = set("-s", "--shell", "-g", "--group", "-G", "--supp-group", "-w", "--whitelist-environment")
+
+// su checks su/runuser -c 'command', runuser -u user command, and the script a shell started by su reads from
+// standard input.
+func (c Checker) su(name string, args []word, s *segment, sh Shell, depth int) Result {
+	user := false
+	for i := 0; i < len(args); i++ {
+		t := args[i].text
+		switch {
+		case t == "-c" || t == "--command" || t == "--session-command":
+			if i+1 >= len(args) {
+				return allow
+			}
+			return c.line(args[i+1].text, POSIX, depth+1)
+		case strings.HasPrefix(t, "--command=") || strings.HasPrefix(t, "--session-command="):
+			return c.line(t[strings.IndexByte(t, '=')+1:], POSIX, depth+1)
+		case name == "runuser" && (t == "-u" || t == "--user"):
+			user = true
+			i++
+		case suValued[t]:
+			i++
+		case user && t == "--":
+			return c.command(args[i+1:], s, sh, depth+1)
+		case strings.HasPrefix(t, "--") || t == "-":
+		case strings.HasPrefix(t, "-") && len(t) > 1:
+			if j := strings.IndexByte(t, 'c'); j > 0 { // -lc 'command'
+				value := t[j+1:]
+				if value == "" && i+1 < len(args) {
+					value = args[i+1].text
+				}
+				return c.line(value, POSIX, depth+1)
+			}
+		case user:
+			return c.command(args[i:], s, sh, depth+1)
+		}
+	}
+	return c.stdinScript(s, POSIX, depth)
+}
+
+// cmdCompare are the comparison operators of cmd's if.
+var cmdCompare = set("equ", "neq", "lss", "leq", "gtr", "geq")
+
+// cmdIf returns the command of cmd's "if [/i] [not] <condition> command" (the words after "if"): the condition is
+// exist <file>, errorlevel <n>, defined <var>, cmdextversion <n>, a==b or a <op> b.
+func cmdIf(ws []word) []word {
+	for len(ws) > 0 && !ws[0].quoted && setHas(strings.ToLower(ws[0].text), "/i", "not") {
+		ws = ws[1:]
+	}
+	switch {
+	case len(ws) == 0:
+		return ws
+	case !ws[0].quoted && setHas(strings.ToLower(ws[0].text), "exist", "errorlevel", "defined", "cmdextversion"):
+		if len(ws) < 2 {
+			return nil
+		}
+		return ws[2:]
+	case strings.Contains(ws[0].text, "=="):
+		if strings.HasSuffix(ws[0].text, "==") && len(ws) > 1 { // a== b
+			return ws[2:]
+		}
+		return ws[1:]
+	case len(ws) > 1 && (ws[1].text == "==" || cmdCompare[strings.ToLower(ws[1].text)]):
+		if len(ws) < 3 {
+			return nil
+		}
+		return ws[3:]
+	}
+	return ws
 }
 
 // unwrap skips a wrapper's own options and arguments and returns the command it runs (ok false: none).
@@ -371,41 +566,91 @@ func stripNamed(args []word, name string) []word {
 	return out
 }
 
-// posixShell checks bash -c 'script' (and a script piped into a shell).
-func (c Checker) posixShell(args []word, s *segment, sh Shell, depth int) Result {
+// posixShell checks bash -c 'script' and a script the shell reads from standard input (no script file, -s, or the
+// file /dev/stdin): its here-documents, here-strings and what is piped into it.
+func (c Checker) posixShell(args []word, s *segment, depth int) Result {
+	fromStdin, options := false, true
 	for i := 0; i < len(args); i++ {
 		t := args[i].text
+		short := options && strings.HasPrefix(t, "-") && !strings.HasPrefix(t, "--")
 		switch {
-		case t == "--rcfile" || t == "--init-file" || t == "-o" || t == "+o" || t == "-O" || t == "+O":
+		case options && (t == "-" || t == "--"):
+			options = false
+		case options && (t == "--rcfile" || t == "--init-file" || t == "-o" || t == "+o" || t == "-O" || t == "+O"):
 			i++
-		case t == "-c" || (strings.HasPrefix(t, "-") && !strings.HasPrefix(t, "--") && strings.Contains(t, "c")):
+		case short && strings.Contains(t, "c"):
 			if i+1 >= len(args) {
 				return allow
 			}
 			return c.line(args[i+1].text, POSIX, depth+1)
-		case strings.HasPrefix(t, "-") || strings.HasPrefix(t, "+"):
+		case short && strings.Contains(t, "s"):
+			fromStdin = true // -s: the script comes from standard input, the words after it are its arguments
+		case options && (strings.HasPrefix(t, "-") || strings.HasPrefix(t, "+")):
+		case fromStdin || isStdinFile(t):
+			return c.stdinScript(s, POSIX, depth)
 		default:
 			return allow // a script file
 		}
 	}
-	return c.piped(s, sh, depth)
+	return c.stdinScript(s, POSIX, depth)
 }
 
-// piped checks what is piped into an interpreter that reads its script from standard input.
-func (c Checker) piped(s *segment, sh Shell, depth int) Result {
-	if s == nil || !s.piped || s.prev == nil {
+// isStdinFile reports a file name that is standard input.
+func isStdinFile(t string) bool {
+	return t == "/dev/stdin" || t == "/proc/self/fd/0" || t == "/dev/fd/0"
+}
+
+// stdinScript checks the script a shell reads from standard input, read in its dialect: the here-documents and
+// here-strings of its command, and what is piped into it.
+func (c Checker) stdinScript(s *segment, script Shell, depth int) Result {
+	if s == nil {
 		return allow
 	}
-	ws := s.prev.words
-	if len(ws) > 0 {
-		ws = ws[1:]
-	}
-	for _, w := range ws {
-		if r := c.Command(w.text); r.Deny {
+	res := allow
+	for _, body := range s.stdin {
+		r := c.line(body, script, depth+1)
+		if r.Deny {
 			return r
 		}
+		res = res.merge(r)
 	}
-	return c.line(joinWords(ws), sh, depth+1)
+	r := c.piped(s, script, depth)
+	if r.Deny {
+		return r
+	}
+	return res.merge(r)
+}
+
+// piped checks what is piped into an interpreter that reads its script from standard input: the arguments and the
+// here-documents of every command up the pipeline (cat <<'EOF' | sh, echo 'git stash' | tr -d '\r' | sh).
+func (c Checker) piped(s *segment, sh Shell, depth int) Result {
+	if s == nil || !s.piped {
+		return allow
+	}
+	res := allow
+	for u := s.prev; u != nil; u = u.prev {
+		ws := u.words
+		if len(ws) > 0 {
+			ws = ws[1:]
+		}
+		for _, w := range ws {
+			if r := c.Command(w.text); r.Deny {
+				return r
+			}
+		}
+		texts := append([]string{joinWords(ws)}, u.stdin...)
+		for _, text := range texts {
+			r := c.line(text, sh, depth+1)
+			if r.Deny {
+				return r
+			}
+			res = res.merge(r)
+		}
+		if !u.piped {
+			break
+		}
+	}
+	return res
 }
 
 // cmdShell checks cmd /c ... and cmd /k ....
@@ -424,7 +669,7 @@ func (c Checker) cmdShell(args []word, s *segment, depth int) Result {
 			return allow
 		}
 	}
-	return c.piped(s, Cmd, depth)
+	return c.stdinScript(s, Cmd, depth)
 }
 
 // pwshValued are powershell.exe/pwsh options that take a value.
@@ -439,7 +684,11 @@ func (c Checker) pwshShell(args []word, s *segment, depth int) Result {
 		if strings.HasPrefix(t, "/") {
 			t = "-" + t[1:]
 		}
+		stdinNext := i+1 < len(args) && args[i+1].text == "-"
 		switch {
+		case stdinNext && (t == "-c" || t == "-f" || len(t) >= 3 && (isAbbrev(t, "-command") || isAbbrev(t, "-file"))):
+			// -Command - and -File - read the script from standard input.
+			return c.stdinScript(s, PowerShell, depth)
 		case t == "-c" || len(t) >= 3 && isAbbrev(t, "-command") && t != "-co":
 			return c.line(joinWords(args[i+1:]), PowerShell, depth+1)
 		case t == "-co":
@@ -464,7 +713,7 @@ func (c Checker) pwshShell(args []word, s *segment, depth int) Result {
 			return c.line(joinWords(args[i:]), PowerShell, depth+1)
 		}
 	}
-	return c.piped(s, PowerShell, depth)
+	return c.stdinScript(s, PowerShell, depth)
 }
 
 // decodeUTF16Base64 decodes powershell -EncodedCommand (base64 of UTF-16LE text).
@@ -481,12 +730,15 @@ func decodeUTF16Base64(s string) (string, bool) {
 }
 
 // interpreter checks the inline code of a scripting language (node -e, python -c, ...): every string literal is
-// read as a command line, and a literal "git" followed by more literals as a git argument list.
-func (c Checker) interpreter(name string, args []word, depth int) Result {
+// read as a command line, and a literal "git" followed by more literals as a git argument list. Without inline
+// code or a script file (no file, or "-"), the code comes from standard input: its here-documents and here-strings,
+// and the words piped into it, are read the same way.
+func (c Checker) interpreter(name string, args []word, s *segment, depth int) Result {
 	flags := map[string]string{
 		"node": "e", "nodejs": "e", "bun": "e", "deno": "", "python": "c", "python3": "c", "python2": "c", "py": "c",
 		"pythonw": "c", "perl": "eE", "ruby": "e", "php": "r", "osascript": "e",
 	}[name]
+	file, stdin := false, false
 	for i := 0; i < len(args); i++ {
 		t := args[i].text
 		code := ""
@@ -505,9 +757,43 @@ func (c Checker) interpreter(name string, args []word, depth int) Result {
 				code = args[i+1].text
 			}
 		default:
+			if !file && (t == "-" || isStdinFile(t)) {
+				stdin = true
+			}
+			if !strings.HasPrefix(t, "-") || t == "-" {
+				file = true // the script (or "-"); later words are its arguments
+			}
 			continue
 		}
 		return c.code(code, depth)
+	}
+	if name != "deno" && (stdin || !file) {
+		return c.stdinCode(s, depth)
+	}
+	return allow
+}
+
+// stdinCode checks the code an interpreter reads from standard input.
+func (c Checker) stdinCode(s *segment, depth int) Result {
+	if s == nil {
+		return allow
+	}
+	texts := slices.Clone(s.stdin)
+	if s.piped {
+		for u := s.prev; u != nil; u = u.prev {
+			if len(u.words) > 1 {
+				texts = append(texts, joinWords(u.words[1:]))
+			}
+			texts = append(texts, u.stdin...)
+			if !u.piped {
+				break
+			}
+		}
+	}
+	for _, text := range texts {
+		if r := c.code(text, depth); r.Deny {
+			return r
+		}
 	}
 	return allow
 }
@@ -572,6 +858,16 @@ func (c Checker) findExec(args []word, s *segment, sh Shell, depth int) Result {
 	return allow
 }
 
+// argumentList splits a PowerShell argument list ('reset','--hard' or "reset --hard"; Start-Process joins the
+// elements with spaces) into arguments.
+func argumentList(w word) []word {
+	var out []word
+	for _, part := range strings.FieldsFunc(w.text, func(r rune) bool { return r == ',' || r == ' ' }) {
+		out = append(out, word{text: strings.Trim(part, `'"`), dynamic: w.dynamic && strings.ContainsAny(part, "$(")})
+	}
+	return out
+}
+
 // startProcess checks Start-Process git -ArgumentList ... (PowerShell) and start git ... (cmd).
 func (c Checker) startProcess(args []word, sh Shell, depth int) Result {
 	var file string
@@ -586,9 +882,7 @@ func (c Checker) startProcess(args []word, sh Shell, depth int) Result {
 			}
 		case t == "-argumentlist" || t == "-args" || t == "-arguments":
 			if i+1 < len(args) {
-				for _, part := range strings.FieldsFunc(args[i+1].text, func(r rune) bool { return r == ',' || r == ' ' }) {
-					rest = append(rest, word{text: strings.Trim(part, `'"`)})
-				}
+				rest = append(rest, argumentList(args[i+1])...)
 				i++
 			}
 		case strings.HasPrefix(t, "-") || strings.HasPrefix(t, "/"):
@@ -598,6 +892,9 @@ func (c Checker) startProcess(args []word, sh Shell, depth int) Result {
 			i++ // other parameters take a value
 		case file == "":
 			file = args[i].text
+		case sh == PowerShell:
+			// The second positional parameter of Start-Process is -ArgumentList: git 'reset','--hard'.
+			rest = append(rest, argumentList(args[i])...)
 		default:
 			rest = append(rest, args[i])
 		}
