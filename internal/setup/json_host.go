@@ -298,7 +298,7 @@ func (h jsonHost) remove(_ context.Context, o op) Item {
 	if o.req.DryRun {
 		return planned(it)
 	}
-	if _, err := cfg.doc.del(jpath{h.container, ServerName}); err != nil {
+	if err := cfg.doc.del(jpath{h.container, ServerName}); err != nil {
 		return failItem(it, err)
 	}
 	var note string
@@ -328,7 +328,7 @@ func (h jsonHost) bare(data []byte) bool {
 		if e, ok := readEntry(obj); !ok || !isOurs(e) {
 			return false
 		}
-		if _, err := d.del(jpath{h.container, ServerName}); err != nil {
+		if err := d.del(jpath{h.container, ServerName}); err != nil {
 			return false
 		}
 	}

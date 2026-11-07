@@ -12,10 +12,7 @@ const entryV = `{"command":"/x/seelegent","args":["mcp"]}`
 var seelegentPath = jpath{"mcpServers", ServerName}
 
 func setEntry(d *jsonDoc) error { return d.set(seelegentPath, json.RawMessage(entryV)) }
-func delEntry(d *jsonDoc) error {
-	_, err := d.del(seelegentPath)
-	return err
-}
+func delEntry(d *jsonDoc) error { return d.del(seelegentPath) }
 
 // lines joins lines with \n (the files of the tests end with a newline unless they say otherwise).
 func lines(l ...string) string { return strings.Join(l, "\n") + "\n" }

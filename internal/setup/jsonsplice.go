@@ -243,20 +243,18 @@ func (d *jsonDoc) set(p jpath, v json.RawMessage) error {
 	}
 }
 
-// del removes the member or element at p (every repeat of the key) and reports whether there was one.
-func (d *jsonDoc) del(p jpath) (bool, error) {
-	removed := false
+// del removes the member or element at p (every repeat of the key); a missing one is no error.
+func (d *jsonDoc) del(p jpath) error {
 	for {
 		c, n, idx, err := d.locate(p)
 		if err != nil || idx < 0 || n < len(p)-1 {
-			return removed, err
+			return err
 		}
 		if err := d.deleteKid(c, idx); err != nil {
-			return removed, err
+			return err
 		}
-		removed = true
 		if _, isIndex := p[n].(int); isIndex {
-			return true, nil
+			return nil
 		}
 	}
 }

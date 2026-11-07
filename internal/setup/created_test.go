@@ -1,6 +1,7 @@
 package setup
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -145,7 +146,7 @@ func TestDryRunRemoveKeepsRecord(t *testing.T) {
 	}
 	run(t, m, Request{Remove: true, DryRun: true, Created: rec})
 	after, err := os.ReadFile(rec)
-	if err != nil || string(after) != string(before) || !exists(m.path(".cursor", "mcp.json")) {
+	if err != nil || !bytes.Equal(after, before) || !exists(m.path(".cursor", "mcp.json")) {
 		t.Error("a dry run changed something")
 	}
 }

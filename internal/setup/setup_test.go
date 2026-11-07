@@ -249,7 +249,7 @@ func TestJSONHostKeepsOneLineServers(t *testing.T) {
 	cfg := m.write(".cursor/mcp.json", before)
 	run(t, m, Request{Exe: exe, Hosts: []string{"cursor"}})
 	got := read(t, cfg)
-	head := strings.TrimSuffix(before[:strings.Index(before, "\n  },")], "\n")
+	head, _, _ := strings.Cut(before, "\n  },")
 	if !strings.HasPrefix(got, head+",\n    \"seelegent\": {\n") ||
 		!strings.HasSuffix(got, "    }\n  },\n  \"n\": 1.50e3\n}\n") {
 		t.Errorf("other servers changed:\n%s", got)

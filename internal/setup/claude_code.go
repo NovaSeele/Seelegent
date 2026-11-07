@@ -203,17 +203,17 @@ func (c claudeCode) putBack(ctx context.Context, e Env, bin string, cfg *jsonCon
 	now, err := fsutil.ReadFile(cfg.file.real)
 	switch {
 	case err != nil:
-		return fmt.Errorf("%w; adding the previous entry back failed too (%v), and %s cannot be read (%v); the "+
+		return fmt.Errorf("%w; adding the previous entry back failed too (%w), and %s cannot be read (%w); the "+
 			"file before setup is at %s", addErr, readdErr, cfg.file.path, err, backup)
 	case afterRemove == nil || !bytes.Equal(now, afterRemove):
-		return fmt.Errorf("%w; adding the previous entry back failed too (%v), and %s changed since, so it was not "+
+		return fmt.Errorf("%w; adding the previous entry back failed too (%w), and %s changed since, so it was not "+
 			"overwritten; the file before setup is at %s", addErr, readdErr, cfg.file.path, backup)
 	}
 	if err := fsutil.WriteFileAtomic(cfg.file.real, cfg.file.data, cfg.file.perm); err != nil {
-		return fmt.Errorf("%w; adding the previous entry back failed too (%v), and restoring %s failed (%v); the "+
+		return fmt.Errorf("%w; adding the previous entry back failed too (%w), and restoring %s failed (%w); the "+
 			"file before setup is at %s", addErr, readdErr, cfg.file.path, err, backup)
 	}
-	return fmt.Errorf("%w; adding the previous entry back failed too (%v), so %s was restored from %s",
+	return fmt.Errorf("%w; adding the previous entry back failed too (%w), so %s was restored from %s",
 		addErr, readdErr, cfg.file.path, backup)
 }
 

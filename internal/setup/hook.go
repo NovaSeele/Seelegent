@@ -132,7 +132,7 @@ func at(elem ...any) jpath { return append(append(jpath{}, preToolUse...), elem.
 // removeOurHook deletes the reminder hook, then the containers that are left empty: the group's hook list (with
 // the group), PreToolUse and hooks.
 func (s *hookSpot) removeOurHook() error {
-	if _, err := s.doc.del(at(s.group, "hooks", s.inner)); err != nil {
+	if err := s.doc.del(at(s.group, "hooks", s.inner)); err != nil {
 		return err
 	}
 	steps := []struct{ ifEmpty, del jpath }{
@@ -144,7 +144,7 @@ func (s *hookSpot) removeOurHook() error {
 		if !s.doc.isEmptyAt(st.ifEmpty) {
 			return nil
 		}
-		if _, err := s.doc.del(st.del); err != nil {
+		if err := s.doc.del(st.del); err != nil {
 			return err
 		}
 	}
