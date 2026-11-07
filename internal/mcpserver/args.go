@@ -1,0 +1,202 @@
+package mcpserver
+
+import (
+	"bytes"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"math"
+	"strconv"
+	"strings"
+)
+
+// Tool arguments are decoded leniently, as the old server read them: unknown fields are ignored (hosts and leads
+// add their own), numbers and booleans may come as strings ("600", "true"), and null means "not given". The input
+// schemas tell the lead what to send; they are not enforced beyond what each handler needs.
+
+// decodeArgs decodes the raw arguments of a call into dst. Missing or null arguments are {}.
+func decodeArgs(raw json.RawMessage, dst any) error {
+	raw = bytes.TrimSpace(raw)
+	if len(raw) == 0 || bytes.Equal(raw, []byte("null")) {
+		raw = []byte("{}")
+	}
+	if err := json.Unmarshal(raw, dst); err != nil {
+		var te *json.UnmarshalTypeError
+		if errors.As(err, &te) && te.Field != "" {
+			return fmt.Errorf("invalid argument %s: expected %s", te.Field, jsonKind(te.Type.Kind().String()))
+		}
+		return fmt.Errorf("invalid arguments: %w", err)
+	}
+	return nil
+}
+
+func jsonKind(goKind string) string {
+	switch goKind {
+	case "slice", "array":
+		return "an array"
+	case "string":
+		return "a string"
+	case "map", "struct":
+		return "an object"
+	}
+	return goKind
+}
+
+// optNum is an optional number; a numeric string is accepted too.
+type optNum struct {
+	set bool
+	v   float64
+}
+
+func (n *optNum) UnmarshalJSON(b []byte) error {
+	s := strings.TrimSpace(string(b))
+	if s == "null" {
+		*n = optNum{}
+		return nil
+	}
+	if strings.HasPrefix(s, `"`) {
+		var str string
+		if err := json.Unmarshal(b, &str); err != nil {
+			return err
+		}
+		s = strings.TrimSpace(str)
+		if s == "" {
+			*n = optNum{}
+			return nil
+		}
+	}
+	v, err := strconv.ParseFloat(s, 64)
+	if err != nil || math.IsNaN(v) || math.IsInf(v, 0) {
+		return fmt.Errorf("%q is not a number", s)
+	}
+	*n = optNum{set: true, v: v}
+	return nil
+}
+
+// or returns the number, or def when it was not given.
+func (n optNum) or(def float64) float64 {
+	if !n.set {
+		return def
+	}
+	return n.v
+}
+
+// optBool is an optional boolean; "true" and "false" strings are accepted too.
+type optBool struct {
+	set bool
+	v   bool
+}
+
+func (b *optBool) UnmarshalJSON(data []byte) error {
+	s := strings.TrimSpace(string(data))
+	switch strings.ToLower(strings.Trim(s, `"`)) {
+	case "null", "":
+		*b = optBool{}
+	case "true", "1":
+		*b = optBool{set: true, v: true}
+	case "false", "0":
+		*b = optBool{set: true, v: false}
+	default:
+		return fmt.Errorf("%s is not a boolean", s)
+	}
+	return nil
+}
+
+// or returns the value, or def when it was not given.
+func (b optBool) or(def bool) bool {
+	if !b.set {
+		return def
+	}
+	return b.v
+}
+
+// ptr returns nil when the value was not given.
+func (b optBool) ptr() *bool {
+	if !b.set {
+		return nil
+	}
+	v := b.v
+	return &v
+}
+
+// strList is a list of strings; a single string is accepted as a list of one.
+type strList []string
+
+func (l *strList) UnmarshalJSON(b []byte) error {
+	s := bytes.TrimSpace(b)
+	switch {
+	case bytes.Equal(s, []byte("null")):
+		*l = nil
+		return nil
+	case len(s) > 0 && s[0] == '"':
+		var one string
+		if err := json.Unmarshal(s, &one); err != nil {
+			return err
+		}
+		*l = strList{one}
+		return nil
+	}
+	var many []string
+	if err := json.Unmarshal(s, &many); err != nil {
+		return errors.New("expected a list of strings")
+	}
+	*l = many
+	return nil
+}
+
+// gateArg is the gate argument: a command, a list of commands, or false.
+type gateArg struct {
+	set  bool
+	off  bool
+	cmds []string
+}
+
+func (g *gateArg) UnmarshalJSON(b []byte) error {
+	s := bytes.TrimSpace(b)
+	switch {
+	case bytes.Equal(s, []byte("null")):
+		*g = gateArg{}
+	case bytes.Equal(s, []byte("false")):
+		*g = gateArg{set: true, off: true}
+	case bytes.Equal(s, []byte("true")):
+		return errors.New("gate is a command, a list of commands, or false")
+	default:
+		var l strList
+		if err := l.UnmarshalJSON(s); err != nil {
+			return errors.New("gate is a command, a list of commands, or false")
+		}
+		*g = gateArg{set: true, cmds: l}
+	}
+	return nil
+}
+
+// laneArg is the lane argument: a list of paths or globs, or false.
+type laneArg struct {
+	set   bool
+	off   bool
+	paths []string
+}
+
+func (a *laneArg) UnmarshalJSON(b []byte) error {
+	s := bytes.TrimSpace(b)
+	switch {
+	case bytes.Equal(s, []byte("null")):
+		*a = laneArg{}
+	case bytes.Equal(s, []byte("false")):
+		*a = laneArg{set: true, off: true}
+	default:
+		var l strList
+		if err := l.UnmarshalJSON(s); err != nil {
+			return errors.New("lane is a list of paths or false")
+		}
+		*a = laneArg{set: true, paths: l}
+	}
+	return nil
+}
+
+// clampWait is the old wait clamp: default def, then 0..max whole seconds.
+func clampWait(n optNum, def, maxSeconds int) int {
+	v := n.or(float64(def))
+	v = math.Min(math.Max(v, 0), float64(maxSeconds))
+	return int(math.Round(v))
+}

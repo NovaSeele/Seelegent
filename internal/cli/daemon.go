@@ -2,9 +2,13 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"log/slog"
+	"net"
+	"os"
 	"strings"
 	"time"
 
@@ -12,7 +16,9 @@ import (
 
 	"github.com/NovaSeele/Seelegent/internal/app"
 	"github.com/NovaSeele/Seelegent/internal/buildinfo"
+	"github.com/NovaSeele/Seelegent/internal/client"
 	"github.com/NovaSeele/Seelegent/internal/config"
+	"github.com/NovaSeele/Seelegent/internal/fsutil"
 	"github.com/NovaSeele/Seelegent/internal/logx"
 	"github.com/NovaSeele/Seelegent/web"
 )
@@ -58,7 +64,55 @@ func warnDevOrigins(log *slog.Logger, origins []string) {
 		"origins", strings.Join(origins, ", "))
 }
 
-// runDaemon runs the daemon until ctx ends.
+// daemonLockWait bounds the wait for the single-instance lock: a daemon that is restarting releases it once it has
+// closed. A starter that sees this daemon exit for the lock (client.ExitDaemonLocked) finds the running daemon or
+// says the previous one is still shutting down.
+const daemonLockWait = 3 * time.Second
+
+// daemonRunningError says another daemon holds the data directory's lock.
+type daemonRunningError struct {
+	home string
+	port int
+}
+
+func (e *daemonRunningError) Error() string {
+	s := "another Seelegent daemon is already running for " + e.home
+	if e.port > 0 {
+		s += fmt.Sprintf(" (port %d)", e.port)
+	}
+	return s
+}
+
+// lockDaemon takes the single-instance lock of the data directory, waiting up to daemonLockWait. Nothing else (log
+// file, store, recovery) is opened before it is held, so a second daemon touches nothing.
+func lockDaemon(ctx context.Context, paths config.Paths) (*fsutil.FileLock, error) {
+	lctx, cancel := context.WithTimeout(ctx, daemonLockWait)
+	defer cancel()
+	lock, err := fsutil.Lock(lctx, paths.LockFile)
+	if err == nil {
+		return lock, nil
+	}
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+	if lctx.Err() != nil {
+		port, _ := client.ReadPortFile(paths)
+		return nil, &daemonRunningError{home: paths.Home, port: port}
+	}
+	return nil, err
+}
+
+// writePortFile records the listening address's port in run/daemon.port for discovery (client.Daemon.Find).
+func writePortFile(paths config.Paths, addr string) error {
+	_, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return err
+	}
+	return fsutil.WriteFileAtomic(paths.PortFile, []byte(port+"\n"), 0o600)
+}
+
+// runDaemon runs the daemon until ctx ends. It holds run/daemon.lock for its whole life, so one data directory
+// never has two daemons, and records its port in run/daemon.port while it listens.
 func runDaemon(ctx context.Context, info buildinfo.Info, f daemonFlags, stderr io.Writer) error {
 	paths, err := config.DefaultPaths()
 	if err != nil {
@@ -67,6 +121,11 @@ func runDaemon(ctx context.Context, info buildinfo.Info, f daemonFlags, stderr i
 	if err := paths.EnsureDirs(); err != nil {
 		return err
 	}
+	lock, err := lockDaemon(ctx, paths)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = lock.Unlock() }()
 	log, closer, err := logx.NewFileLogger(logx.FileOptions{Dir: paths.Logs, Console: stderr})
 	if err != nil {
 		return err
@@ -98,9 +157,17 @@ func runDaemon(ctx context.Context, info buildinfo.Info, f daemonFlags, stderr i
 		_ = closeApp()
 		return err
 	}
+	if err := writePortFile(paths, addr); err != nil {
+		_ = closeApp()
+		return fmt.Errorf("record the daemon port: %w", err)
+	}
 	log.Info("daemon: running", "version", info.Version, "home", paths.Home, "addr", addr)
 	_, _ = fmt.Fprintf(stderr, "Seelegent %s listening on http://%s/ (Ctrl+C stops it)\n", info.Version, addr)
 	<-ctx.Done()
 	log.Info("daemon: stopping")
+	// The port file goes first, so discovery stops sending callers here; the lock is released after the close.
+	if err := os.Remove(paths.PortFile); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		log.Warn("daemon: remove the port file", "err", err)
+	}
 	return closeApp()
 }
