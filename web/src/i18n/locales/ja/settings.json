@@ -20,15 +20,35 @@
     },
     "workers": {
       "label": "ワーカー",
-      "desc": "同時に動くワーカーの数と、使えるモデル。"
+      "desc": "1 アカウントが同時に実行するタスク数、時間制限、ワーカーが止まったとみなすタイミング。"
+    },
+    "backends": {
+      "label": "バックエンド",
+      "desc": "どのコマンドラインツールが作業を受けるか、各ティアの裏にあるモデル。"
     },
     "quota": {
       "label": "クォータ",
-      "desc": "どれだけクォータを残すか、アカウントをどう交代させるか。"
+      "desc": "どれだけクォータを残すか、どのくらいの間隔で読むか。"
+    },
+    "providers": {
+      "label": "API プロバイダー",
+      "desc": "API キーのアカウントがリクエストを送るサービス。"
     },
     "gates": {
       "label": "ゲート",
-      "desc": "作業を完了とみなす前に通る必要があるコマンド。"
+      "desc": "作業を完了とみなす前に通る必要があるチェック。"
+    },
+    "workspace": {
+      "label": "作業フォルダーの保護",
+      "desc": "ワーカー同士がファイルを踏み合ったり、リポジトリを壊したりしないための保護。"
+    },
+    "hooks": {
+      "label": "フック",
+      "desc": "タスクの開始、完了、失敗時や、アカウントに対応が必要なときにサービスが実行するシェルコマンド。"
+    },
+    "memory": {
+      "label": "メモリー",
+      "desc": "すべてのワーカーに渡すプロジェクト情報。"
     },
     "notifications": {
       "label": "通知",
@@ -38,13 +58,9 @@
       "label": "キーボードショートカット",
       "desc": "ページとコマンドのキー。"
     },
-    "hooks": {
-      "label": "フック",
-      "desc": "タスクが変わったときに他のサービスを呼び出します。"
-    },
-    "memory": {
-      "label": "メモリー",
-      "desc": "すべてのワーカーに渡すプロジェクト情報。"
+    "system": {
+      "label": "サービス",
+      "desc": "Seelegent サービス自体：ポートとバックグラウンドジョブ。"
     },
     "experiments": {
       "label": "実験",
@@ -54,6 +70,103 @@
       "label": "言語",
       "desc": "ダッシュボードの言語です。変更はすぐに反映されます。"
     }
+  },
+  "daemon": {
+    "offline": "ダッシュボードが Seelegent サービスに接続すると設定が読み込まれます。",
+    "saving": "保存中…",
+    "saved": "保存しました",
+    "failed": "保存できませんでした：{error}",
+    "reset": "既定",
+    "resetOf": "{name}を既定値に戻す",
+    "range": "{min}～{max}",
+    "rangeWhole": "{min} から {max} までの整数を入力してください。",
+    "rangePercent": "{min} から {max} までのパーセンテージを入力してください。",
+    "lines": "1 行に 1 つ。入力欄を離れると保存されます。",
+    "readonly": "サービスの起動時に決まります（seelegent config）。ここでは変更できません。"
+  },
+  "units": {
+    "min": "分",
+    "h": "時間",
+    "s": "秒",
+    "ms": "ミリ秒",
+    "days": "日",
+    "bytes": "バイト",
+    "times": "回",
+    "pct": "%"
+  },
+  "options": {
+    "tier": {
+      "fast": "高速",
+      "standard": "標準",
+      "strong": "強力",
+      "max": "最大"
+    },
+    "lanes": {
+      "off": "オフ",
+      "warn": "警告",
+      "enforce": "強制"
+    },
+    "sandbox": {
+      "readOnly": "読み取り専用",
+      "workspaceWrite": "作業フォルダーに書き込み可",
+      "dangerFullAccess": "フルアクセス（危険）"
+    }
+  },
+  "backends": {
+    "enabled": "作業を受ける",
+    "allowedModels": "使えるモデル",
+    "allowedModelsHint": "正規表現です。各ティアのモデルはこれに一致する必要があります。",
+    "anyModel": "どのモデルでも",
+    "tierDefault": "ツールの既定",
+    "sandbox": "サンドボックス",
+    "sandboxHint": "Codex がこのコンピューターで触れられる範囲。"
+  },
+  "hooks": {
+    "loading": "フックを読み込み中…",
+    "loadFailed": "フックを読み込めませんでした：{error}",
+    "unsupported": "このバージョンの Seelegent サービスはまだフックに対応していません。対応すると、ここに表示されます。",
+    "empty": "フックはまだありません。",
+    "hookN": "フック {n}",
+    "enabled": "有効",
+    "run": "コマンド",
+    "runHint": "シェルで実行されます。イベントは SEELEGENT_* 環境変数で渡されます。",
+    "on": "実行するイベント",
+    "project": "このプロジェクトフォルダーのみ",
+    "projectHint": "空にするとすべてのプロジェクトが対象です。",
+    "timeout": "時間制限",
+    "add": "フックを追加",
+    "remove": "削除",
+    "save": "フックを保存",
+    "discard": "変更を破棄",
+    "saved": "フックを保存しました",
+    "invalid": "修正が必要なフックがあります。印の付いた欄を確認してください。",
+    "unsaved": "未保存です。保存するとテストできます。",
+    "neverRan": "まだ実行されていません。",
+    "lastRun": "前回の実行 {time}（{event}）：{outcome}",
+    "exit": "終了コード {code}",
+    "timedOut": "時間制限で停止",
+    "test": "テスト",
+    "testUnsupported": "このバージョンの Seelegent サービスはまだフックをテストできません（501 not implemented）。フックはイベントが起きれば通常どおり実行されます。",
+    "testFailed": "テストを実行できませんでした：{error}"
+  },
+  "memory": {
+    "project": "プロジェクト",
+    "noProjects": "プロジェクトはまだありません。メモリーはプロジェクトフォルダーに属し、そのフォルダーでタスクが実行されるとここに表示されます。",
+    "loading": "メモリーを読み込み中…",
+    "loadFailed": "メモリーを読み込めませんでした：{error}",
+    "text": "メモリー",
+    "placeholder": "規約、実行するコマンド、注意点…",
+    "updated": "{time}に保存",
+    "none": "このプロジェクトにはまだ何も保存されていません。",
+    "changed": "その間に別の人がこのプロジェクトのメモリーを保存しました。",
+    "reload": "そちらを読み込む",
+    "discard": "変更を破棄",
+    "switchTitle": "メモリの編集を破棄しますか？",
+    "switchDesc": "{project} のメモリへの変更は保存されていません。別のプロジェクトに切り替えると失われます。",
+    "switchConfirm": "破棄して切り替え",
+    "save": "メモリーを保存",
+    "saved": "メモリーを保存しました",
+    "saveFailed": "メモリーを保存できませんでした：{error}"
   },
   "items": {
     "theme": {
@@ -107,39 +220,180 @@
       "keywords": "言語 翻訳 ローカライズ"
     },
     "concurrency": {
-      "label": "同時ワーカー数",
-      "desc": "同時に動けるワーカーの上限。",
-      "keywords": "並列 同時 上限"
+      "label": "アカウントごとのタスク数",
+      "desc": "1 アカウントが同時に実行できるタスク数。",
+      "keywords": "並列 同時 上限 ワーカー"
     },
     "defaultTier": {
       "label": "既定のティア",
       "desc": "ブリーフで指定がないときに使うモデルのティア。",
       "keywords": "モデル 高速 標準 強力"
     },
-    "modelCap": {
-      "label": "モデルの上限",
-      "desc": "ワーカーが使える最も強いモデル。",
-      "keywords": "上限 モデル"
+    "taskTimeout": {
+      "label": "ターンの時間制限",
+      "desc": "これより長く続くターンは停止されます。",
+      "keywords": "タイムアウト 制限 時間"
+    },
+    "stall": {
+      "label": "停止とみなすまで",
+      "desc": "この間出力がないワーカーは停止中として扱われます。",
+      "keywords": "停止 アイドル ハング 無応答"
+    },
+    "stallTool": {
+      "label": "ツール実行中の停止判定",
+      "desc": "ツールやコマンドの実行中の基準（ビルドは長くかかります）。",
+      "keywords": "停止 ツール コマンド ビルド"
+    },
+    "loopRepeat": {
+      "label": "ループ検出",
+      "desc": "同じ手順がこの回数繰り返されるとループとみなします。",
+      "keywords": "ループ 繰り返し 停止"
+    },
+    "attentionDecay": {
+      "label": "要対応の表示期限",
+      "desc": "対応が必要なまま放置されたタスクは、この時間が過ぎると「要対応」から外れます。",
+      "keywords": "注意 要対応 期限"
+    },
+    "linkIntoProfiles": {
+      "label": "アカウントプロファイルと共有",
+      "desc": "分離されたすべてのアカウントプロファイルからも見える、ホームフォルダーのフォルダーとファイル（スキル、設定）。",
+      "keywords": "プロファイル リンク シンボリックリンク スキル ホーム",
+      "placeholder": ".agents/skills"
+    },
+    "backendAgy": {
+      "label": "Antigravity",
+      "desc": "Antigravity CLI 経由の Gemini モデル。",
+      "keywords": "agy gemini antigravity モデル ティア"
+    },
+    "backendClaude": {
+      "label": "Claude Code",
+      "desc": "Claude Code 経由の Claude モデル。",
+      "keywords": "claude anthropic モデル ティア"
+    },
+    "backendCodex": {
+      "label": "Codex",
+      "desc": "Codex 経由の OpenAI モデルとそのサンドボックス。",
+      "keywords": "codex openai gpt サンドボックス モデル ティア"
     },
     "quotaReserve": {
       "label": "クォータの予備",
-      "desc": "急ぎの作業のために各アカウントで残しておくクォータの割合。",
-      "keywords": "上限 余裕"
+      "desc": "クォータのウィンドウの残りがこれを下回ると、アカウントは休みます。",
+      "keywords": "上限 余裕 最小 残り"
     },
-    "rotation": {
-      "label": "アカウントの交代",
-      "desc": "クォータが尽きたら作業を別のアカウントへ移します。",
-      "keywords": "アカウント 切り替え 引き継ぎ"
+    "quotaRefresh": {
+      "label": "クォータを読む間隔",
+      "desc": "各アカウントのクォータをどのくらいの頻度で読むか。",
+      "keywords": "更新 間隔 ポーリング"
     },
-    "gateCommands": {
-      "label": "ゲートコマンド",
-      "desc": "タスクが動くことを証明するビルドとテストのコマンド。",
-      "keywords": "テスト ビルド 検証 チェック"
+    "passiveCooldown": {
+      "label": "API キーの休み",
+      "desc": "API キーのアカウントが上限に達した後に休む時間（クォータは読めません）。",
+      "keywords": "クールダウン パッシブ api キー レート制限"
     },
-    "gateBeforeReview": {
-      "label": "レビュー前にゲートを実行",
-      "desc": "タスクをレビューに回す前にゲートを実行します。",
-      "keywords": "テスト レビュー 検証"
+    "usageHistory": {
+      "label": "使用履歴を残す",
+      "desc": "使用量ページのために、各アカウントのクォータを 1 時間ごとに記録します。",
+      "keywords": "履歴 使用量 スナップショット 記録"
+    },
+    "providers": {
+      "label": "API プロバイダー",
+      "desc": "Claude Code 用の Anthropic 互換サービスと Codex 用の OpenAI 互換サービス。",
+      "keywords": "プロバイダー api キー ベース url deepseek openrouter openai provider"
+    },
+    "gates": {
+      "label": "ゲートを実行",
+      "desc": "レビューに回す前に、タスクのゲートコマンドを実行します。",
+      "keywords": "テスト ビルド 検証 チェック レビュー"
+    },
+    "gateAutoChecks": {
+      "label": "チェックを自動で探す",
+      "desc": "タスクにゲートの指定がなければ、プロジェクトのビルドとテストのコマンドを使います。",
+      "keywords": "自動 検出 テスト ビルド"
+    },
+    "gateTimeout": {
+      "label": "ゲートの時間制限",
+      "desc": "これより長くかかるゲートコマンドは失敗になります。",
+      "keywords": "タイムアウト 制限"
+    },
+    "gateMaxAutoFixes": {
+      "label": "自動修正の回数",
+      "desc": "失敗したゲートを、あなたに聞く前に何回までワーカーへ戻すか。",
+      "keywords": "再試行 修正 ループ"
+    },
+    "gateSettle": {
+      "label": "ファイルが落ち着くまで待つ",
+      "desc": "ファイルの変更がこの時間なくなってからゲートを実行します。",
+      "keywords": "安定 デバウンス 待機"
+    },
+    "gateSettlePoll": {
+      "label": "安定チェックの間隔",
+      "desc": "ファイルが落ち着くのを待つ間、どのくらいの頻度で確認するか。",
+      "keywords": "ポーリング 間隔"
+    },
+    "gateOutputTail": {
+      "label": "残すゲート出力",
+      "desc": "ゲート出力の末尾をどれだけ残してワーカーに見せるか。",
+      "keywords": "出力 ログ 末尾 バイト"
+    },
+    "verifier": {
+      "label": "セカンドオピニオンのレビュー",
+      "desc": "変更があなたに届く前に、別のワーカーがレビューします。",
+      "keywords": "検証 レビュー セカンドオピニオン"
+    },
+    "verifierTier": {
+      "label": "レビュー担当のティア",
+      "desc": "その 2 人目のワーカーのモデルティア。",
+      "keywords": "検証 モデル ティア"
+    },
+    "hygiene": {
+      "label": "後片付けチェック",
+      "desc": "ワーカーの変更に残った余分なファイル、デバッグ出力、消し忘れを指摘します。",
+      "keywords": "後片付け 消し忘れ 余分"
+    },
+    "gitGuard": {
+      "label": "Git ガード",
+      "desc": "ワーカーのコミット、プッシュ、履歴の書き換えを止めます。",
+      "keywords": "git コミット プッシュ 保護"
+    },
+    "lanes": {
+      "label": "ファイルレーン",
+      "desc": "2 つのタスクが同じファイルを編集しそうなとき：オフ、警告、または 2 つ目を待たせる。",
+      "keywords": "レーン 競合 ファイル 並列"
+    },
+    "laneHold": {
+      "label": "レーンの保持",
+      "desc": "終わったタスクが自分のファイルを予約したままにする時間。",
+      "keywords": "レーン 保持 予約"
+    },
+    "contentionWindow": {
+      "label": "競合の確認範囲",
+      "desc": "同じファイルに触れるタスクを探すとき、どこまでさかのぼって編集を数えるか。",
+      "keywords": "競合 衝突 範囲"
+    },
+    "snapshotRetention": {
+      "label": "スナップショットの保存期間",
+      "desc": "各ターンの前に撮った作業フォルダーのスナップショットは、この期間の後に削除されます。",
+      "keywords": "スナップショット バックアップ 保存 元に戻す"
+    },
+    "codeGraph": {
+      "label": "コードグラフ",
+      "desc": "コードのシンボルと呼び出しの地図をワーカーに渡します。",
+      "keywords": "コード グラフ シンボル インデックス"
+    },
+    "port": {
+      "label": "ポート",
+      "desc": "サービスとこのダッシュボードが待ち受けるポート。",
+      "keywords": "ポート http アドレス"
+    },
+    "githubPoll": {
+      "label": "GitHub を確認する間隔",
+      "desc": "追跡中のリポジトリに新しい Issue がないか確認する間隔。0 でオフ。",
+      "keywords": "github issue ポーリング"
+    },
+    "automations": {
+      "label": "自動化の実行",
+      "desc": "スケジュールされた自動化を実行します。",
+      "keywords": "スケジュール 自動化 cron"
     },
     "desktopNotify": {
       "label": "デスクトップ通知",
@@ -157,9 +411,9 @@
       "keywords": "ホットキー キー割り当て キーボード"
     },
     "webhooks": {
-      "label": "Webhook",
-      "desc": "タスクの開始、完了、失敗時に呼び出すアドレス。",
-      "keywords": "フック http 連携"
+      "label": "フック",
+      "desc": "タスクの開始、完了、失敗時や、アカウントに対応が必要なときに実行するシェルコマンド。",
+      "keywords": "フック webhook コマンド 連携 通知"
     },
     "projectMemory": {
       "label": "プロジェクトメモリー",

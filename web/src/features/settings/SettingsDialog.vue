@@ -10,8 +10,14 @@ import TextField from '@/components/ui/TextField.vue'
 import { useBreakpoint } from '@/composables/useMediaQuery'
 
 import AppearanceSection from './AppearanceSection.vue'
+import BackendsSection from './BackendsSection.vue'
+import DaemonSection from './DaemonSection.vue'
+import { isFieldSection } from './fields'
+import HooksSection from './HooksSection.vue'
 import LanguageSection from './LanguageSection.vue'
+import MemorySection from './MemorySection.vue'
 import PlaceholderSection from './PlaceholderSection.vue'
+import ProvidersSection from './ProvidersSection.vue'
 import { searchSettings, type SettingHit } from './search'
 import { DEFAULT_SECTION, isSectionId, SECTIONS, type SectionId } from './sections'
 
@@ -37,8 +43,13 @@ const section = computed<SectionId | null>(
 const showList = computed(() => !isMobile.value || section.value === null)
 const showContent = computed(() => section.value !== null)
 
+/** Sections with their own view; plain daemon settings (fields.ts) render through DaemonSection. */
 const VIEWS: Partial<Record<SectionId, Component>> = {
   appearance: AppearanceSection,
+  backends: BackendsSection,
+  providers: ProvidersSection,
+  hooks: HooksSection,
+  memory: MemorySection,
   language: LanguageSection,
 }
 
@@ -158,6 +169,12 @@ function close() {
         <div ref="body" class="settings__body">
           <p class="settings__section-desc">{{ t(`settings.sections.${section}.desc`) }}</p>
           <component :is="VIEWS[section]" v-if="VIEWS[section]" :highlight="highlight" />
+          <DaemonSection
+            v-else-if="isFieldSection(section)"
+            :key="section"
+            :section="section"
+            :highlight="highlight"
+          />
           <PlaceholderSection v-else :key="section" :section="section" :highlight="highlight" />
         </div>
       </section>
@@ -165,172 +182,4 @@ function close() {
   </Dialog>
 </template>
 
-<style scoped>
-.settings {
-  display: flex;
-  flex: 1;
-  min-height: 0;
-}
-
-.settings__nav {
-  display: flex;
-  flex-direction: column;
-  flex: none;
-  width: 248px;
-  min-height: 0;
-  border-right: var(--border-width) solid var(--border-subtle);
-  background: var(--bg-surface);
-}
-
-.settings--mobile .settings__nav {
-  flex: 1;
-  width: auto;
-  border-right: 0;
-}
-
-.settings__nav-head {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-4) var(--space-3) var(--space-2) var(--space-4);
-}
-
-.settings__title {
-  flex: 1;
-  font-size: var(--fs-lg);
-  font-weight: var(--fw-semibold);
-}
-
-.settings__search {
-  padding: 0 var(--space-3) var(--space-2);
-}
-
-.settings__list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-0);
-  margin: 0;
-  padding: var(--space-1) var(--space-2) var(--space-3);
-  overflow-y: auto;
-  list-style: none;
-}
-
-.settings__link {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  width: 100%;
-  min-height: max(var(--control-md), var(--target-min));
-  padding: var(--space-1) var(--space-2);
-  border: 0;
-  border-radius: var(--radius-md);
-  background: none;
-  color: var(--text-secondary);
-  font: inherit;
-  text-align: start;
-  text-decoration: none;
-  cursor: pointer;
-}
-
-.settings__link:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
-}
-
-.settings__link--active,
-.settings__link--active:hover {
-  background: var(--accent-soft);
-  color: var(--text-primary);
-  font-weight: var(--fw-medium);
-}
-
-.settings__link-icon {
-  flex: none;
-  font-size: var(--icon-md);
-}
-
-.settings__link--active .settings__link-icon {
-  color: var(--accent);
-}
-
-.settings__link-label {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.settings__link-chevron {
-  color: var(--text-muted);
-}
-
-.settings__hit {
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0;
-  padding: var(--space-1) var(--space-2);
-}
-
-.settings__hit .settings__link-label {
-  width: 100%;
-  color: var(--text-primary);
-}
-
-.settings__hit-section {
-  color: var(--text-muted);
-  font-size: var(--fs-xs);
-}
-
-.settings__empty {
-  padding: var(--space-3) var(--space-2);
-  color: var(--text-secondary);
-  font-size: var(--fs-sm);
-}
-
-.settings__content {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  min-width: 0;
-  min-height: 0;
-}
-
-.settings__head {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-3) var(--space-3) var(--space-3) var(--space-6);
-  border-bottom: var(--border-width) solid var(--border-subtle);
-}
-
-.settings--mobile .settings__head {
-  padding-left: var(--space-2);
-}
-
-.settings__section-title {
-  flex: 1;
-  min-width: 0;
-  font-size: var(--fs-lg);
-  font-weight: var(--fw-semibold);
-}
-
-.settings__body {
-  flex: 1;
-  min-height: 0;
-  padding: var(--space-4) var(--space-6) var(--space-6);
-  overflow-y: auto;
-  overscroll-behavior: contain;
-}
-
-.settings--mobile .settings__body {
-  padding: var(--space-3) var(--space-4) var(--space-6);
-}
-
-.settings__section-desc {
-  max-width: var(--measure-prose);
-  color: var(--text-secondary);
-  font-size: var(--fs-sm);
-  line-height: var(--lh-prose);
-}
-</style>
+<style scoped src="./settingsDialog.css"></style>

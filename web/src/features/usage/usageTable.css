@@ -1,0 +1,155 @@
+/* Shared look of the Usage page's tables (projects, accounts): nested rows indent, numbers align right. */
+.usage-table {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+  padding: var(--space-4);
+  border: var(--border-width) solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--bg-surface);
+}
+
+.usage-table__title {
+  font-size: var(--fs-md);
+  font-weight: var(--fw-semibold);
+}
+
+.usage-table__empty,
+.usage-table__more {
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+
+.usage-table__scroll {
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  min-width: 520px;
+  border-collapse: collapse;
+  font-size: var(--fs-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+th,
+td {
+  padding: var(--space-1) var(--space-2);
+  border-bottom: var(--border-width) solid var(--border-subtle);
+  text-align: right;
+  white-space: nowrap;
+}
+
+th[scope='row'],
+thead th:first-child,
+.more td {
+  max-width: 340px;
+  overflow: hidden;
+  font-weight: var(--fw-regular);
+  text-align: left;
+  text-overflow: ellipsis;
+}
+
+thead th {
+  color: var(--text-secondary);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+}
+
+.lvl-0 th[scope='row'] {
+  font-weight: var(--fw-medium);
+}
+
+.lvl-1 th[scope='row'],
+.lvl-1.more td {
+  padding-left: var(--space-6);
+}
+
+.lvl-2 th[scope='row'],
+.lvl-2.more td {
+  padding-left: calc(var(--space-6) * 2);
+  color: var(--text-secondary);
+}
+
+.lvl-2 td {
+  color: var(--text-secondary);
+}
+
+.more td {
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+}
+
+.disclose {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  max-width: 100%;
+  min-height: var(--target-min);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.cell {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  max-width: 100%;
+}
+
+.cell__link {
+  overflow: hidden;
+  color: var(--link);
+  text-overflow: ellipsis;
+}
+
+.disclose:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+  border-radius: var(--radius-xs);
+}
+
+/*
+ * Phones: each row takes two lines, the name across the top and the four numbers in a grid under it (the header
+ * row the same way, so every number sits under its column name). Nothing scrolls sideways.
+ */
+@media (width < 600px) {
+  .usage-table {
+    padding: var(--space-3);
+  }
+
+  table,
+  thead,
+  tbody {
+    display: block;
+    min-width: 0;
+  }
+
+  tr {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    border-bottom: var(--border-width) solid var(--border-subtle);
+  }
+
+  th,
+  td {
+    display: block;
+    min-width: 0;
+    border-bottom: 0;
+  }
+
+  tr > :first-child {
+    grid-column: 1 / -1;
+    max-width: none;
+  }
+
+  td {
+    padding-top: 0;
+  }
+}

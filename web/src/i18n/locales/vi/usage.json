@@ -1,0 +1,66 @@
+{
+  "range": "{n} ngày",
+  "rangeLabel": "Khoảng thời gian",
+  "period": "{from} đến {to}",
+  "refresh": "Làm mới số liệu sử dụng",
+  "loading": "Đang tải số liệu sử dụng…",
+  "loadFailed": "Không tải được số liệu sử dụng",
+  "stale": "Đang hiện số liệu cũ; lần làm mới bị lỗi: {error}",
+  "historyFailed": "Không tải được lịch sử hạn mức: {error}",
+  "dataSince": "Số liệu sử dụng được lưu từ {date}.",
+  "noCost": "Không có số liệu",
+  "showTable": "Xem dạng bảng",
+  "showChart": "Xem dạng biểu đồ",
+  "totals": {
+    "tokens": "Token",
+    "costUsd": "Chi phí",
+    "tasks": "Tác vụ",
+    "turns": "Lượt"
+  },
+  "delta": {
+    "up": "Nhiều hơn {pct} so với kỳ trước ({previous})",
+    "down": "Ít hơn {pct} so với kỳ trước ({previous})",
+    "same": "Bằng kỳ trước ({previous})",
+    "new": "Không có gì để so (kỳ trước: {previous})"
+  },
+  "col": {
+    "date": "Ngày",
+    "tokens": "Token",
+    "cost": "Chi phí",
+    "tasks": "Tác vụ",
+    "time": "Thời điểm",
+    "project": "Dự án",
+    "account": "Tài khoản",
+    "attempts": "Lần chạy"
+  },
+  "daily": {
+    "title": "Token mỗi ngày",
+    "empty": "Không có số liệu sử dụng trong khoảng này.",
+    "summary": "Token mỗi ngày từ {from} đến {to}; ngày nhiều nhất là {day} với {top} token."
+  },
+  "projects": {
+    "title": "Dự án dùng nhiều nhất",
+    "empty": "Không dự án nào dùng token trong khoảng này."
+  },
+  "accounts": {
+    "title": "Tài khoản dùng nhiều nhất",
+    "empty": "Không tài khoản nào dùng token trong khoảng này."
+  },
+  "turn": "Lượt {n}",
+  "turns": "{n} lượt",
+  "attempts": "{n} lần chạy",
+  "showTurns": "Xem các lượt của {title}",
+  "moreTurns": "và {n} lượt khác",
+  "moreTasks": "và {n} tác vụ khác",
+  "moreProjects": "và {n} dự án khác",
+  "moreAccounts": "và {n} tài khoản khác",
+  "moreModels": "và {n} mô hình khác",
+  "quota": {
+    "title": "Hạn mức theo thời gian",
+    "account": "Tài khoản",
+    "empty": "Tài khoản này chưa có lịch sử hạn mức.",
+    "low": "{key}: thấp nhất {pct}",
+    "threshold": "Nghỉ khi dưới {pct}",
+    "summary": "Hạn mức còn lại trong khoảng này. {lines}."
+  }
+}

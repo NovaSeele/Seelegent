@@ -1,0 +1,66 @@
+{
+  "range": "{n}일",
+  "rangeLabel": "기간",
+  "period": "{from}~{to}",
+  "refresh": "사용량 새로 고침",
+  "loading": "사용량을 불러오는 중…",
+  "loadFailed": "사용량을 불러오지 못했습니다",
+  "stale": "마지막 숫자를 보여 줍니다. 새로 고침 실패: {error}",
+  "historyFailed": "할당량 기록을 불러오지 못했습니다: {error}",
+  "dataSince": "사용량은 {date}부터 저장되어 있습니다.",
+  "noCost": "보고되지 않음",
+  "showTable": "표로 보기",
+  "showChart": "차트로 보기",
+  "totals": {
+    "tokens": "토큰",
+    "costUsd": "비용",
+    "tasks": "작업",
+    "turns": "턴"
+  },
+  "delta": {
+    "up": "이전보다 {pct} 많음({previous})",
+    "down": "이전보다 {pct} 적음({previous})",
+    "same": "이전과 같음({previous})",
+    "new": "비교할 값 없음(이전: {previous})"
+  },
+  "col": {
+    "date": "날짜",
+    "tokens": "토큰",
+    "cost": "비용",
+    "tasks": "작업",
+    "time": "시각",
+    "project": "프로젝트",
+    "account": "계정",
+    "attempts": "시도"
+  },
+  "daily": {
+    "title": "일별 토큰",
+    "empty": "이 기간에는 사용량이 없습니다.",
+    "summary": "{from}~{to}의 일별 토큰. 가장 많은 날은 {day}로 {top} 토큰입니다."
+  },
+  "projects": {
+    "title": "사용량 상위 프로젝트",
+    "empty": "이 기간에 토큰을 쓴 프로젝트가 없습니다."
+  },
+  "accounts": {
+    "title": "사용량 상위 계정",
+    "empty": "이 기간에 토큰을 쓴 계정이 없습니다."
+  },
+  "turn": "턴 {n}",
+  "turns": "{n}턴",
+  "attempts": "{n}회 시도",
+  "showTurns": "{title}의 턴 보기",
+  "moreTurns": "외 {n}턴",
+  "moreTasks": "외 작업 {n}개",
+  "moreProjects": "외 프로젝트 {n}개",
+  "moreAccounts": "외 계정 {n}개",
+  "moreModels": "외 모델 {n}개",
+  "quota": {
+    "title": "시간에 따른 할당량",
+    "account": "계정",
+    "empty": "이 계정에는 아직 할당량 기록이 없습니다.",
+    "low": "{key}: 최저 {pct}",
+    "threshold": "{pct} 미만이면 휴식",
+    "summary": "기간 동안 남은 할당량. {lines}."
+  }
+}

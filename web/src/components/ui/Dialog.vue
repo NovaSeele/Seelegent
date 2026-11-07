@@ -177,6 +177,11 @@ defineExpose({ close })
   padding: var(--space-5);
 }
 
+/* A question whose description says it all (a confirm without an error yet) has no body: no empty band. */
+.dialog__body:empty {
+  display: none;
+}
+
 .dialog--bare .dialog__body {
   display: flex;
   flex-direction: column;

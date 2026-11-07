@@ -4,8 +4,8 @@
   color-scheme: dark;
   --bg-app: #1e1e1e;
   --bg-surface: #252526;
-  --bg-surface-2: #2d2d30;
-  --bg-elevated: #2d2d30;
+  --bg-surface-2: #28282a;
+  --bg-elevated: #28282a;
   --bg-hover: #37373d;
   --bg-active: #3e3e44;
   --bg-code: #171717;
@@ -15,7 +15,7 @@
   --border-focus: #007acc;
   --text-primary: #d4d4d4;
   --text-secondary: #a8a8a8;
-  --text-muted: #808080;
+  --text-muted: #8f8f8f;
   --text-on-accent: #1e1e1e;
   --accent: #4da2db;
   --accent-hover: #1a8ccc;
@@ -40,7 +40,7 @@
   --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.4);
   --term-bg: #181818;
   --term-fg: #d4d4d4;
-  --term-dim: #808080;
+  --term-dim: #818181;
   --term-prompt-bg: #2d2d30;
   --term-prompt-fg: #ffffff;
   --term-accent: #007acc;

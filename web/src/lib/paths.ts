@@ -9,6 +9,15 @@ const slashes = (path: string) => path.replace(/\\/g, '/')
 /** A Windows path (drive letter or UNC, either separator): those compare without case, others as they are. */
 export const looksWindows = (path: string) => /^[a-z]:[\\/]/i.test(path) || /^[\\/]{2}/.test(path)
 
+/**
+ * A key for comparing two folders (as the daemon's fsutil.Key does): '/' separators, no trailing slash, and
+ * without case for Windows paths.
+ */
+export function pathKey(path: string): string {
+  const p = slashes(path).replace(/(.)\/+$/, '$1')
+  return looksWindows(p) ? p.toLowerCase() : p
+}
+
 /** `path` relative to `base` when it lies inside it, otherwise the path with '/' separators. */
 export function relativeTo(path: string, base: string | undefined): string {
   const p = slashes(path)

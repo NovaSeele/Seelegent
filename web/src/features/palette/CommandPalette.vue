@@ -7,8 +7,10 @@ import Kbd from '@/components/ui/Kbd.vue'
 import { PALETTE_ALT_SHORTCUT, PALETTE_SHORTCUT } from '@/config/nav'
 import { useOverlay } from '@/composables/useOverlay'
 import { matchesChord, parseKeySpec } from '@/lib/keys'
-import { COMMAND_GROUPS, useCommandsStore, type CommandMatch } from '@/stores/commands'
+import { useCommandsStore, type CommandMatch } from '@/stores/commands'
 import { usePaletteStore } from '@/stores/palette'
+
+import PaletteList, { type PaletteRow } from './PaletteList.vue'
 
 /**
  * Command palette (Mod+K, Mod+Shift+P): a combobox over the command registry. An empty query lists every command
@@ -22,7 +24,6 @@ const id = useId()
 
 const panel = ref<HTMLElement | null>(null)
 const input = ref<HTMLInputElement | null>(null)
-const list = ref<HTMLElement | null>(null)
 const query = ref('')
 const active = ref(0)
 
@@ -45,7 +46,7 @@ const matches = computed<CommandMatch[]>(() => (palette.isOpen ? commands.search
 watch(query, () => (active.value = 0))
 
 /** Rows with group headings when browsing (empty query); a flat ranked list when searching. */
-const rows = computed(() => {
+const rows = computed<PaletteRow[]>(() => {
   const browsing = !query.value.trim()
   return matches.value.map((match, index) => ({
     match,
@@ -63,11 +64,6 @@ function move(delta: number) {
   const count = matches.value.length
   if (count === 0) return
   active.value = (active.value + delta + count) % count
-  void nextTick(() =>
-    list.value?.querySelector(`#${CSS.escape(optionId(active.value))}`)?.scrollIntoView({
-      block: 'nearest',
-    }),
-  )
 }
 
 async function runAt(index: number) {
@@ -100,12 +96,6 @@ function onKeydown(event: KeyboardEvent) {
   if (!action) return
   event.preventDefault()
   action()
-}
-
-function groupLabel(match: CommandMatch) {
-  return COMMAND_GROUPS.includes(match.command.group)
-    ? t(`palette.group.${match.command.group}`)
-    : ''
 }
 
 function onBackdrop(event: MouseEvent) {
@@ -143,37 +133,15 @@ function onBackdrop(event: MouseEvent) {
               @keydown="onKeydown"
             />
           </div>
-          <ul
+          <PaletteList
             :id="`${id}-list`"
-            ref="list"
-            class="palette__list"
-            role="listbox"
-            :aria-label="t('palette.results')"
-          >
-            <template v-for="row in rows" :key="row.match.command.id">
-              <li v-if="row.heading" class="palette__heading" role="presentation">
-                {{ row.heading }}
-              </li>
-              <li
-                :id="optionId(row.index)"
-                class="palette__option"
-                :class="{ 'palette__option--active': row.index === active }"
-                role="option"
-                :aria-selected="row.index === active"
-                @mousemove="active = row.index"
-                @click="runAt(row.index)"
-              >
-                <Icon :name="row.match.command.icon ?? 'command'" class="palette__icon" />
-                <span class="palette__title">{{ row.match.title }}</span>
-                <span v-if="query.trim()" class="palette__group">{{ groupLabel(row.match) }}</span>
-                <Kbd
-                  v-if="commands.shortcutFor(row.match.command)"
-                  :keys="commands.shortcutFor(row.match.command) ?? ''"
-                  size="sm"
-                />
-              </li>
-            </template>
-          </ul>
+            :rows="rows"
+            :active="active"
+            :searching="!!query.trim()"
+            :option-id="optionId"
+            @hover="active = $event"
+            @run="runAt"
+          />
           <p v-if="matches.length === 0" class="palette__empty" role="status">
             {{ t('palette.empty', { query: query.trim() }) }}
           </p>
@@ -243,73 +211,6 @@ function onBackdrop(event: MouseEvent) {
 
 .palette__input::placeholder {
   color: var(--text-muted);
-}
-
-.palette__list {
-  flex: 1;
-  min-height: 0;
-  margin: 0;
-  padding: var(--space-2);
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  list-style: none;
-}
-
-.palette__list:empty {
-  display: none;
-}
-
-.palette__heading {
-  padding: var(--space-3) var(--space-3) var(--space-1);
-  color: var(--text-muted);
-  font-size: var(--fs-2xs);
-  font-weight: var(--fw-semibold);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.palette__heading:first-child {
-  padding-top: var(--space-1);
-}
-
-/* Concentric: options sit 8px inside a 16px panel, so they take radius-md (16 - 8). */
-.palette__option {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  min-height: max(var(--control-lg), var(--target-min));
-  padding: var(--space-1) var(--space-3);
-  border-radius: var(--radius-md);
-  color: var(--text-primary);
-  cursor: pointer;
-}
-
-.palette__option--active {
-  background: var(--accent-soft);
-}
-
-.palette__icon {
-  flex: none;
-  color: var(--text-secondary);
-  font-size: var(--icon-md);
-}
-
-.palette__option--active .palette__icon {
-  color: var(--accent);
-}
-
-.palette__title {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.palette__group {
-  flex: none;
-  color: var(--text-muted);
-  font-size: var(--fs-xs);
 }
 
 .palette__empty {

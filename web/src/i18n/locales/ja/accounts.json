@@ -1,0 +1,177 @@
+{
+  "failed": "うまくいきませんでした：{error}",
+  "backend": {
+    "agy": "Antigravity",
+    "claude": "Claude Code",
+    "codex": "Codex"
+  },
+  "status": {
+    "ok": "準備完了",
+    "new": "クォータを確認中",
+    "error": "準備完了",
+    "needs_login": "サインインが必要",
+    "no_key": "API キーなし",
+    "no_plan": "プランがこのバックエンドに非対応",
+    "twin": "{name} と同じサインイン",
+    "disabled": "オフ"
+  },
+  "kind": {
+    "isolated": "専用のサインイン",
+    "system": "このコンピューターのサインイン",
+    "apiKey": "API キー",
+    "apiKeyOf": "API キー · {provider}"
+  },
+  "keyHint": "キー {hint}",
+  "busy": "{max} 枠中 {busy} 枠使用中",
+  "exhausted": "クォータ切れ、{time}に復帰",
+  "resting": "休止中",
+  "restingUntil": "{time}まで休止",
+  "signingIn": "サインイン中…",
+  "errorNote": "前回のクォータ取得に失敗しました。下の数値は古い可能性があります。",
+  "twinNote": "{name} と同じサインインのため、作業はそのアカウントに回ります。",
+  "enabled": "作業に使う",
+  "priority": "優先度",
+  "summary": {
+    "ready": "作業可能",
+    "busy": "ターン実行中",
+    "resting": "休止中またはクォータ切れ",
+    "needsYou": "要対応"
+  },
+  "empty": {
+    "title": "アカウントはまだありません",
+    "desc": "アカウントを追加すると、Seelegent がタスクを任せるワーカーができます。"
+  },
+  "action": {
+    "add": "アカウントを追加",
+    "refreshAll": "すべてのクォータを更新",
+    "refresh": "クォータを更新",
+    "rename": "名前を変更",
+    "login": "サインイン",
+    "logout": "サインアウト",
+    "key": "API キーを設定",
+    "delete": "アカウントを削除",
+    "more": "{name} のその他の操作"
+  },
+  "done": {
+    "added": "{name} を追加しました",
+    "renamed": "{name} に名前を変更しました",
+    "keySet": "{name} の API キーを保存しました",
+    "keyCleared": "{name} から API キーを削除しました",
+    "deleted": "{name} を削除しました",
+    "logout": "サインアウトしました",
+    "refreshedAll": "クォータを更新しました"
+  },
+  "quota": {
+    "window": "{window} ウィンドウ",
+    "resets": "{time}にリセット",
+    "fetched": "{time}に取得",
+    "seen": "{time}の実行で最後に確認",
+    "passive": "API キーには読み取れるクォータがありません。実行が上限に当たったときだけ表示されます。",
+    "checking": "初めてクォータを取得しています…",
+    "none": "まだクォータを取得していません。",
+    "noPlan": "このプランではこのバックエンドを使えません。",
+    "readFailed": "前回の取得に失敗：{error}"
+  },
+  "login": {
+    "title": "サインイン",
+    "state": {
+      "starting": "サインインを開始しています…",
+      "open_url": "ブラウザーでサインインを完了してください",
+      "waiting_code": "サインインページのコードを貼り付けてください",
+      "done": "サインインしました",
+      "failed": "サインインに失敗しました"
+    },
+    "openHint": "サインインページを開き、ここで使うアカウントでサインインしてから戻ってください。この画面は自動で更新されます。",
+    "codeHint": "サインインするとページにコードが表示されます。ここに貼り付けてください。",
+    "deviceCode": "ページでこのコードを入力してください：",
+    "open": "サインインページを開く",
+    "copyLink": "リンクをコピー",
+    "copy": "コピー",
+    "linkCopied": "リンクをコピーしました",
+    "codeCopied": "コードをコピーしました",
+    "copyFailed": "コピーできませんでした。テキストを選択して自分でコピーしてください。",
+    "codeLabel": "コード",
+    "send": "コードを送信",
+    "retry": "再試行"
+  },
+  "add": {
+    "title": "アカウントを追加",
+    "step1": "ステップ 1/2：アカウントの種類。",
+    "step2": "ステップ 2/2：詳細。",
+    "backend": "バックエンド",
+    "kind": "種類",
+    "backendDesc": {
+      "agy": "Antigravity CLI 経由の Gemini モデル。",
+      "claude": "Claude Code 経由の Claude モデル。",
+      "codex": "Codex 経由の OpenAI モデル。"
+    },
+    "kindDesc": {
+      "isolated": "専用のプロファイル。ブラウザーで一度サインインします。",
+      "system": "このコンピューターにある既存のサインインを使います。",
+      "apiKey": "API プロバイダー経由でトークン単位で支払います。"
+    },
+    "defaultLabel": "{backend} {n}",
+    "label": "名前",
+    "priorityHint": "数値が大きいほど先に使われます（−1000～1000）。",
+    "provider": "プロバイダー",
+    "noProvider": "このバックエンドにはまだプロバイダーがありません。先に「API プロバイダー」で追加してください。",
+    "keyHint": "任意です。後から追加できます。以降は末尾の数文字だけが表示されます。",
+    "keyless": "{name} は追加されましたが、キーがありません。キーが拒否され、アカウントを削除し直すこともできませんでした。ここでキーを入力してください。",
+    "systemTaken": "追加済み: {name}",
+    "next": "次へ",
+    "submit": "アカウントを追加"
+  },
+  "key": {
+    "title": "{name} の API キー",
+    "current": "保存済みのキーは {hint} で終わります。新しいキーで置き換わります。",
+    "none": "キーはまだ保存されていません。",
+    "label": "API キー",
+    "hint": "サービスが保管し、ダッシュボードには二度と表示されません。",
+    "save": "キーを保存",
+    "clear": "キーを削除"
+  },
+  "rename": {
+    "title": "アカウント名を変更",
+    "submit": "名前を変更"
+  },
+  "delete": {
+    "title": "{name} を削除しますか？",
+    "desc": "プロファイルとサインインが Seelegent から削除されます。実行したタスクの履歴は残ります。",
+    "confirm": "アカウントを削除",
+    "running": "タスクを実行中のため、今は削除できません。{error}"
+  },
+  "providers": {
+    "title": "API プロバイダー",
+    "desc": "API キーのアカウントがリクエストを送る先：Claude Code は Anthropic 互換、Codex は OpenAI 互換。",
+    "add": "プロバイダーを追加",
+    "search": "プロバイダーを検索",
+    "loading": "プロバイダーを読み込み中…",
+    "loadFailed": "プロバイダーを読み込めませんでした：{error}",
+    "empty": "プロバイダーはまだありません。",
+    "noMatch": "一致するプロバイダーはありません。",
+    "usedBy": "{n} 個のアカウントが使用中",
+    "anyModel": "どのモデルでも",
+    "enabledOf": "{name} を使う",
+    "editOf": "{name} を編集",
+    "deleteOf": "{name} を削除",
+    "deleteTitle": "{name} を削除しますか？",
+    "deleteDesc": "アカウントはこれを使えなくなります。アカウントがまだ使っているプロバイダーは削除できません。",
+    "deleteConfirm": "プロバイダーを削除",
+    "inUse": "まだ使っているアカウントがあります。先に移すか削除してください。{error}",
+    "deleted": "{name} を削除しました",
+    "saved": "{name} を保存しました",
+    "addTitle": "API プロバイダーを追加",
+    "editTitle": "API プロバイダーを編集",
+    "preset": "元にする設定",
+    "blank": "空白",
+    "id": "ID",
+    "idHint": "a-z、0-9、- のみ。後から変更できません。",
+    "backend": "バックエンド",
+    "name": "名前",
+    "baseUrl": "ベース URL",
+    "models": "モデル",
+    "modelsHint": "カンマ区切り。空ならどのモデルでも可。",
+    "enabled": "アカウントが使える",
+    "save": "プロバイダーを保存"
+  }
+}

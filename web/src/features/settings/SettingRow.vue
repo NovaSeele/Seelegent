@@ -4,12 +4,13 @@ import { useI18n } from 'vue-i18n'
 /**
  * One setting: its name and description (settings.items.<item>) and the control. `stacked` puts the control under
  * the text (wide controls such as the theme grid); otherwise it sits on the right and wraps under on narrow
- * screens. `data-setting` lets search results scroll to and highlight the row.
+ * screens. `data-setting` lets search results scroll to and highlight the row. `bare` leaves out the name and
+ * description, for a section that is only this one setting (its section heading already says it).
  */
-withDefaults(defineProps<{ item: string; stacked?: boolean; highlighted?: boolean }>(), {
-  stacked: false,
-  highlighted: false,
-})
+withDefaults(
+  defineProps<{ item: string; stacked?: boolean; highlighted?: boolean; bare?: boolean }>(),
+  { stacked: false, highlighted: false, bare: false },
+)
 
 const { t } = useI18n()
 </script>
@@ -20,7 +21,7 @@ const { t } = useI18n()
     :class="{ 'setting--stacked': stacked, 'setting--highlighted': highlighted }"
     :data-setting="item"
   >
-    <div class="setting__text">
+    <div v-if="!bare" class="setting__text">
       <h3 :id="`setting-${item}`" class="setting__label">
         {{ t(`settings.items.${item}.label`) }}
       </h3>
@@ -64,12 +65,22 @@ const { t } = useI18n()
   text-wrap: pretty;
 }
 
+/* One fixed-width control column, so the controls of a section line up and each fills it. */
 .setting__control {
   display: flex;
-  flex: 0 1 auto;
+  flex: 0 0 var(--setting-control-width);
   align-items: center;
   gap: var(--space-2);
+  width: var(--setting-control-width);
   min-width: 0;
+  --setting-control-width: 300px;
+}
+
+@media (width < 600px) {
+  .setting__control {
+    flex-basis: 100%;
+    width: 100%;
+  }
 }
 
 .setting--stacked {
@@ -81,6 +92,7 @@ const { t } = useI18n()
 .setting--stacked .setting__text,
 .setting--stacked .setting__control {
   flex: none;
+  width: auto;
 }
 
 /* Wide controls (grids) take the full row; a flex parent would shrink them to their content. */

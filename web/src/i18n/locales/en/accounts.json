@@ -1,0 +1,177 @@
+{
+  "failed": "That did not work: {error}",
+  "backend": {
+    "agy": "Antigravity",
+    "claude": "Claude Code",
+    "codex": "Codex"
+  },
+  "status": {
+    "ok": "Ready",
+    "new": "Checking quota",
+    "error": "Ready",
+    "needs_login": "Sign-in required",
+    "no_key": "No API key",
+    "no_plan": "Plan cannot use this backend",
+    "twin": "Same sign-in as {name}",
+    "disabled": "Off"
+  },
+  "kind": {
+    "isolated": "Own sign-in",
+    "system": "This computer's sign-in",
+    "apiKey": "API key",
+    "apiKeyOf": "API key · {provider}"
+  },
+  "keyHint": "key {hint}",
+  "busy": "{busy} of {max} slots busy",
+  "exhausted": "Out of quota, back {time}",
+  "resting": "Resting",
+  "restingUntil": "Resting until {time}",
+  "signingIn": "Signing in…",
+  "errorNote": "The last quota read failed; the numbers below may be old.",
+  "twinNote": "This is the same sign-in as {name}, so that account gets the work.",
+  "enabled": "Use for work",
+  "priority": "Priority",
+  "summary": {
+    "ready": "Ready for work",
+    "busy": "Running turns",
+    "resting": "Resting or out of quota",
+    "needsYou": "Need you"
+  },
+  "empty": {
+    "title": "No accounts yet",
+    "desc": "Add an account so Seelegent has a worker to give tasks to."
+  },
+  "action": {
+    "add": "Add account",
+    "refreshAll": "Refresh all quota",
+    "refresh": "Refresh quota",
+    "rename": "Rename",
+    "login": "Sign in",
+    "logout": "Sign out",
+    "key": "Set API key",
+    "delete": "Delete account",
+    "more": "More actions for {name}"
+  },
+  "done": {
+    "added": "Added {name}",
+    "renamed": "Renamed to {name}",
+    "keySet": "API key saved for {name}",
+    "keyCleared": "API key removed from {name}",
+    "deleted": "Deleted {name}",
+    "logout": "Signed out",
+    "refreshedAll": "Quota refreshed"
+  },
+  "quota": {
+    "window": "{window} window",
+    "resets": "resets {time}",
+    "fetched": "read {time}",
+    "seen": "last seen in a run {time}",
+    "passive": "API keys have no quota to read; limits show up only when a run hits one.",
+    "checking": "Reading the quota for the first time…",
+    "none": "No quota read yet.",
+    "noPlan": "This plan cannot use this backend.",
+    "readFailed": "Last read failed: {error}"
+  },
+  "login": {
+    "title": "Sign-in",
+    "state": {
+      "starting": "Starting the sign-in…",
+      "open_url": "Finish signing in in your browser",
+      "waiting_code": "Paste the code from the sign-in page",
+      "done": "Signed in",
+      "failed": "Sign-in failed"
+    },
+    "openHint": "Open the sign-in page, sign in with the account you want here, then come back. This updates by itself.",
+    "codeHint": "After signing in, the page shows a code. Paste it here.",
+    "deviceCode": "Enter this code on the page:",
+    "open": "Open sign-in page",
+    "copyLink": "Copy link",
+    "copy": "Copy",
+    "linkCopied": "Link copied",
+    "codeCopied": "Code copied",
+    "copyFailed": "Could not copy; select the text and copy it yourself.",
+    "codeLabel": "Code",
+    "send": "Send code",
+    "retry": "Try again"
+  },
+  "add": {
+    "title": "Add account",
+    "step1": "Step 1 of 2: what kind of account.",
+    "step2": "Step 2 of 2: its details.",
+    "backend": "Backend",
+    "kind": "Kind",
+    "backendDesc": {
+      "agy": "Gemini models through the Antigravity CLI.",
+      "claude": "Claude models through Claude Code.",
+      "codex": "OpenAI models through Codex."
+    },
+    "kindDesc": {
+      "isolated": "Its own profile; you sign in once in the browser.",
+      "system": "Uses the sign-in already on this computer.",
+      "apiKey": "Pays per token through an API provider."
+    },
+    "defaultLabel": "{backend} {n}",
+    "label": "Name",
+    "priorityHint": "Higher numbers are used first (−1000 to 1000).",
+    "provider": "Provider",
+    "noProvider": "No provider is set up for this backend yet. Add one under API providers first.",
+    "keyHint": "Optional; you can add it later. Only its last characters are shown afterwards.",
+    "keyless": "{name} was added, but it has no key: the key was refused and the account could not be removed again. Enter a key for it here.",
+    "systemTaken": "Already added: {name}",
+    "next": "Next",
+    "submit": "Add account"
+  },
+  "key": {
+    "title": "API key of {name}",
+    "current": "Saved key ends in {hint}. A new key replaces it.",
+    "none": "No key saved yet.",
+    "label": "API key",
+    "hint": "Stored by the daemon; the dashboard never shows it again.",
+    "save": "Save key",
+    "clear": "Remove key"
+  },
+  "rename": {
+    "title": "Rename account",
+    "submit": "Rename"
+  },
+  "delete": {
+    "title": "Delete {name}?",
+    "desc": "Its profile and sign-in are removed from Seelegent. Tasks it ran keep their history.",
+    "confirm": "Delete account",
+    "running": "It is running a task, so it cannot be deleted now. {error}"
+  },
+  "providers": {
+    "title": "API providers",
+    "desc": "Where API-key accounts send their requests: Anthropic-compatible for Claude Code, OpenAI-compatible for Codex.",
+    "add": "Add provider",
+    "search": "Search providers",
+    "loading": "Loading providers…",
+    "loadFailed": "Could not load providers: {error}",
+    "empty": "No providers yet.",
+    "noMatch": "No provider matches.",
+    "usedBy": "used by {n} account | used by {n} accounts",
+    "anyModel": "any model",
+    "enabledOf": "Use {name}",
+    "editOf": "Edit {name}",
+    "deleteOf": "Delete {name}",
+    "deleteTitle": "Delete {name}?",
+    "deleteDesc": "Accounts can no longer use it. A provider that accounts still use cannot be deleted.",
+    "deleteConfirm": "Delete provider",
+    "inUse": "Accounts still use it; move or delete them first. {error}",
+    "deleted": "Deleted {name}",
+    "saved": "Saved {name}",
+    "addTitle": "Add API provider",
+    "editTitle": "Edit API provider",
+    "preset": "Start from",
+    "blank": "Blank",
+    "id": "ID",
+    "idHint": "a-z, 0-9 and -; cannot change later.",
+    "backend": "Backend",
+    "name": "Name",
+    "baseUrl": "Base URL",
+    "models": "Models",
+    "modelsHint": "Separated by commas; empty allows any model.",
+    "enabled": "Accounts can use it",
+    "save": "Save provider"
+  }
+}

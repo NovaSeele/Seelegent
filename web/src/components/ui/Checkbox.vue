@@ -67,7 +67,7 @@ watchEffect(() => {
   width: 100%;
   height: 100%;
   margin: 0;
-  border: var(--border-width) solid var(--border-strong);
+  border: var(--border-width) solid var(--border-control);
   border-radius: var(--radius-xs);
   background: var(--bg-surface);
   appearance: none;
@@ -78,7 +78,7 @@ watchEffect(() => {
 }
 
 .check__input:hover {
-  border-color: var(--text-muted);
+  border-color: var(--text-secondary);
 }
 
 .check__input:checked,

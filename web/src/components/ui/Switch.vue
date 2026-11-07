@@ -63,10 +63,12 @@ const id = useId()
 }
 
 .switch__track::before {
-  /* Touch: a 44px hit area around the visible track. */
+  /* A 44×44 hit area centred on the 34×20 track (insets count from inside its border); invisible, so the switch
+     looks the same. */
   content: '';
   position: absolute;
-  inset: calc((min(var(--target-min), 44px) - 20px) / -2) 0;
+  inset: calc((44px - 20px) / -2 - var(--border-width))
+    calc((44px - 34px) / -2 - var(--border-width));
 }
 
 .switch__thumb {

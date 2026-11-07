@@ -1,5 +1,5 @@
 <script setup lang="ts" generic="T extends string | number">
-import { useId } from 'vue'
+import { nextTick, useId } from 'vue'
 
 import Icon from './Icon.vue'
 
@@ -26,10 +26,14 @@ withDefaults(
 
 const id = useId()
 
-function onChange(event: Event, options: readonly SelectOption<T>[]) {
-  const index = (event.target as HTMLSelectElement).selectedIndex
-  const option = options[index]
+async function onChange(event: Event, options: readonly SelectOption<T>[]) {
+  const el = event.target as HTMLSelectElement
+  const option = options[el.selectedIndex]
   if (option) model.value = option.value
+  // A parent that refused the change (it asks first, say) keeps its value: show that option again.
+  await nextTick()
+  const kept = options.findIndex((o) => o.value === model.value)
+  if (kept >= 0 && el.selectedIndex !== kept) el.selectedIndex = kept
 }
 </script>
 
@@ -61,7 +65,9 @@ function onChange(event: Event, options: readonly SelectOption<T>[]) {
 </template>
 
 <style scoped>
+/* Positioned so the hidden label and the chevron stay inside a scrolling page (they would stretch the document). */
 .select {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: var(--space-1);

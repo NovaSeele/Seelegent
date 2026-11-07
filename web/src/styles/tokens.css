@@ -251,5 +251,7 @@
   --stage-report: color-mix(in srgb, var(--text-primary) 50%, var(--text-muted));
 
   --link: var(--accent);
+  /* Outline of a control with no fill of its own (checkbox): its only sign, so it keeps 3:1 (contrast.spec.ts). */
+  --border-control: var(--text-muted);
   --scrollbar-thumb: var(--border-strong);
 }

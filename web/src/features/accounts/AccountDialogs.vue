@@ -1,0 +1,165 @@
+<script setup lang="ts">
+import { computed, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
+
+import { ApiError, errorMessage, fieldProblems } from '@/api/client'
+import type { Account } from '@/api/types'
+import Button from '@/components/ui/Button.vue'
+import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
+import Dialog from '@/components/ui/Dialog.vue'
+import TextField from '@/components/ui/TextField.vue'
+import { useAccountsStore } from '@/stores/accounts'
+import { useToastStore } from '@/stores/toast'
+
+import type { AccountDialog } from './AccountCard.vue'
+
+/**
+ * The account dialogs the cards ask for: rename, the API key (set or clear; only its hint is ever shown, and the
+ * typed key is cleared when the dialog closes) and delete (409 while the account runs a task, said in the dialog).
+ */
+const props = defineProps<{ account: Account | undefined }>()
+const dialog = defineModel<AccountDialog | null>({ required: true })
+
+const { t } = useI18n()
+const accounts = useAccountsStore()
+const toast = useToastStore()
+
+const label = ref('')
+const key = ref('')
+const busy = ref(false)
+const error = ref('')
+
+watch(dialog, (value) => {
+  key.value = ''
+  error.value = ''
+  label.value = value === 'rename' ? (props.account?.label ?? '') : ''
+})
+
+// The account went away (deleted elsewhere): nothing left to edit.
+watch(
+  () => props.account,
+  (account) => {
+    if (!account && !busy.value) dialog.value = null
+  },
+)
+
+const name = computed(() => props.account?.label ?? '')
+
+async function run(action: (account: Account) => Promise<unknown>, done: string) {
+  const account = props.account
+  if (!account || busy.value) return
+  busy.value = true
+  error.value = ''
+  try {
+    await action(account)
+    dialog.value = null
+    toast.show({ message: done, tone: 'success' })
+  } catch (cause) {
+    const field = fieldProblems(cause)[0]
+    error.value =
+      cause instanceof ApiError && cause.status === 409 && dialog.value === 'delete'
+        ? t('accounts.delete.running', { error: cause.message })
+        : (field?.message ?? errorMessage(cause))
+  } finally {
+    busy.value = false
+  }
+}
+
+const rename = () =>
+  run(
+    (a) => accounts.update(a.id, { label: label.value.trim() }),
+    t('accounts.done.renamed', { name: label.value.trim() }),
+  )
+const saveKey = () =>
+  run(
+    (a) => accounts.setKey(a.id, key.value.trim()),
+    t('accounts.done.keySet', { name: name.value }),
+  )
+const clearKey = () =>
+  run((a) => accounts.clearKey(a.id), t('accounts.done.keyCleared', { name: name.value }))
+const remove = () =>
+  run((a) => accounts.removeAccount(a.id), t('accounts.done.deleted', { name: name.value }))
+</script>
+
+<template>
+  <Dialog
+    :open="dialog === 'rename'"
+    size="sm"
+    :title="t('accounts.rename.title')"
+    :dismissible="!busy"
+    initial-focus="input"
+    @update:open="dialog = null"
+  >
+    <form id="account-rename" @submit.prevent="rename">
+      <TextField v-model="label" :label="t('accounts.add.label')" :error="error || undefined" />
+    </form>
+    <template #footer>
+      <Button variant="ghost" :disabled="busy" @click="dialog = null">
+        {{ t('common.action.cancel') }}
+      </Button>
+      <Button
+        type="submit"
+        form="account-rename"
+        variant="primary"
+        :loading="busy"
+        :disabled="!label.trim()"
+      >
+        {{ t('accounts.rename.submit') }}
+      </Button>
+    </template>
+  </Dialog>
+
+  <Dialog
+    :open="dialog === 'key'"
+    size="sm"
+    :title="t('accounts.key.title', { name })"
+    :description="
+      account?.keyHint
+        ? t('accounts.key.current', { hint: account.keyHint })
+        : t('accounts.key.none')
+    "
+    :dismissible="!busy"
+    initial-focus="input"
+    @update:open="dialog = null"
+  >
+    <form id="account-key" @submit.prevent="saveKey">
+      <TextField
+        v-model="key"
+        type="password"
+        autocomplete="new-password"
+        :label="t('accounts.key.label')"
+        :hint="t('accounts.key.hint')"
+        :error="error || undefined"
+      />
+    </form>
+    <template #footer>
+      <Button v-if="account?.keyHint" variant="danger" :disabled="busy" @click="clearKey">
+        {{ t('accounts.key.clear') }}
+      </Button>
+      <Button variant="ghost" :disabled="busy" @click="dialog = null">
+        {{ t('common.action.cancel') }}
+      </Button>
+      <Button
+        type="submit"
+        form="account-key"
+        variant="primary"
+        :loading="busy"
+        :disabled="!key.trim()"
+      >
+        {{ t('accounts.key.save') }}
+      </Button>
+    </template>
+  </Dialog>
+
+  <ConfirmDialog
+    :open="dialog === 'delete'"
+    :title="t('accounts.delete.title', { name })"
+    :description="t('accounts.delete.desc')"
+    :confirm-label="t('accounts.delete.confirm')"
+    danger
+    :busy="busy"
+    :error="error"
+    @update:open="dialog = null"
+    @confirm="remove"
+  />
+</template>

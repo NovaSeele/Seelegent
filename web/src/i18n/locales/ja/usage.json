@@ -1,0 +1,66 @@
+{
+  "range": "{n} 日間",
+  "rangeLabel": "期間",
+  "period": "{from}～{to}",
+  "refresh": "使用量を更新",
+  "loading": "使用量を読み込み中…",
+  "loadFailed": "使用量を読み込めませんでした",
+  "stale": "前回の数値を表示しています。更新に失敗：{error}",
+  "historyFailed": "クォータの履歴を読み込めませんでした：{error}",
+  "dataSince": "使用量は {date} から保存されています。",
+  "noCost": "報告なし",
+  "showTable": "表で表示",
+  "showChart": "グラフで表示",
+  "totals": {
+    "tokens": "トークン",
+    "costUsd": "コスト",
+    "tasks": "タスク",
+    "turns": "ターン"
+  },
+  "delta": {
+    "up": "前の期間より {pct} 多い（{previous}）",
+    "down": "前の期間より {pct} 少ない（{previous}）",
+    "same": "前の期間と同じ（{previous}）",
+    "new": "比較対象なし（前の期間：{previous}）"
+  },
+  "col": {
+    "date": "日付",
+    "tokens": "トークン",
+    "cost": "コスト",
+    "tasks": "タスク",
+    "time": "時刻",
+    "project": "プロジェクト",
+    "account": "アカウント",
+    "attempts": "試行"
+  },
+  "daily": {
+    "title": "1 日あたりのトークン",
+    "empty": "この期間の使用はありません。",
+    "summary": "{from}～{to} の 1 日あたりのトークン。最も多かったのは {day} で {top} トークンです。"
+  },
+  "projects": {
+    "title": "使用量の多いプロジェクト",
+    "empty": "この期間にトークンを使ったプロジェクトはありません。"
+  },
+  "accounts": {
+    "title": "使用量の多いアカウント",
+    "empty": "この期間にトークンを使ったアカウントはありません。"
+  },
+  "turn": "ターン {n}",
+  "turns": "{n} ターン",
+  "attempts": "{n} 回の試行",
+  "showTurns": "{title} のターンを表示",
+  "moreTurns": "ほか {n} ターン",
+  "moreTasks": "ほか {n} 件のタスク",
+  "moreProjects": "ほか {n} 件のプロジェクト",
+  "moreAccounts": "ほか {n} 個のアカウント",
+  "moreModels": "ほか {n} 個のモデル",
+  "quota": {
+    "title": "クォータの推移",
+    "account": "アカウント",
+    "empty": "このアカウントにはまだクォータの履歴がありません。",
+    "low": "{key}：最低 {pct}",
+    "threshold": "{pct} を下回ると休止",
+    "summary": "期間中の残りクォータ。{lines}。"
+  }
+}

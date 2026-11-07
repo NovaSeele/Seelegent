@@ -10,7 +10,12 @@
  *   and the ones newer than the snapshot are applied after it. A reset during that read runs one more pass.
  * - `hello` with another `build` than the page was loaded with: the dashboard reloads to the new bundle.
  *   Another `instance` (daemon restart) also resyncs, in case the daemon's own reset was missed.
- * - task.* frames go to the tasks store, account.* to the accounts store, settings.updated here.
+ * - task.* frames go to the tasks store, account.* (sign-in progress included) to the accounts store,
+ *   settings.updated here. Other frames (providers.changed, roles.changed, memory.changed, hook.ran) go to the
+ *   stores that `subscribe` to them, through the same hold-and-replay path, so none is lost during a resync.
+ * - After every snapshot but the first, `onResync` listeners run: data that is not in /state (providers, roles,
+ *   usage) is read again, since frames about it may have fallen between the old stream and the new one (old
+ *   bug B9: pages stayed stale after a reconnect).
  */
 import { defineStore } from 'pinia'
 import { ref, shallowRef } from 'vue'
@@ -43,6 +48,21 @@ export interface ConnectionDeps {
 /** Frames held while a resync reads /state; beyond this the oldest are dropped (the snapshot covers them). */
 export const MAX_HELD_FRAMES = 5000
 
+/** Frames other stores subscribe to (everything the connection does not apply itself). */
+export type NoticeName = Exclude<
+  keyof ServerEvents,
+  | 'hello'
+  | 'reset'
+  | 'task.created'
+  | 'task.updated'
+  | 'task.deleted'
+  | 'task.event'
+  | 'account.updated'
+  | 'account.deleted'
+  | 'account.login'
+  | 'settings.updated'
+>
+
 interface HeldFrame {
   name: keyof ServerEvents
   data: unknown
@@ -74,6 +94,9 @@ export const useConnectionStore = defineStore('connection', () => {
   /** A resync was asked for while one was reading /state: run one more pass when it ends. */
   let again = false
   let held: HeldFrame[] = []
+  let snapshots = 0
+  const listeners = new Map<string, Set<(data: unknown) => void>>()
+  const resyncListeners = new Set<() => void>()
   let attempt = 0
   let retryTimer: ReturnType<typeof setTimeout> | undefined
   let stopped = false
@@ -101,6 +124,7 @@ export const useConnectionStore = defineStore('connection', () => {
     projects.value = state.projects
     useAccountsStore().replaceAll(state.accounts)
     useTasksStore().applySnapshot(state.tasks)
+    if (snapshots++ > 0) for (const listener of [...resyncListeners]) listener()
   }
 
   /**
@@ -219,13 +243,37 @@ export const useConnectionStore = defineStore('connection', () => {
       case 'account.deleted':
         accounts.remove((data as ServerEvents['account.deleted']).id)
         break
+      case 'account.login':
+        accounts.applyLogin(data as ServerEvents['account.login'])
+        break
       case 'settings.updated':
+        // A careful replay skips settings on purpose: a settings frame carries no time, so it cannot be ordered
+        // against the snapshot just applied, and an older frame would undo a newer value. The snapshot wins; a
+        // change that raced it shows with the next settings.updated or resync. Live frames always apply.
         if (!careful) settings.value = data as Settings
         break
       default:
-        // Other frames are read by the pages that need them (stream.on).
+        for (const listener of [...(listeners.get(name) ?? [])]) listener(data)
         break
     }
+  }
+
+  /** Calls `handler` with every frame of `name`; returns the unsubscribe function. */
+  function subscribe<K extends NoticeName>(
+    name: K,
+    handler: (data: ServerEvents[K]) => void,
+  ): () => void {
+    const set = listeners.get(name) ?? new Set<(data: unknown) => void>()
+    const fn = handler as (data: unknown) => void
+    set.add(fn)
+    listeners.set(name, set)
+    return () => set.delete(fn)
+  }
+
+  /** Calls `handler` after each resync (every /state snapshot after the first); returns the unsubscribe. */
+  function onResync(handler: () => void): () => void {
+    resyncListeners.add(handler)
+    return () => resyncListeners.delete(handler)
   }
 
   function onFrame(name: keyof ServerEvents, data: unknown, meta: EventMeta): void {
@@ -313,6 +361,7 @@ export const useConnectionStore = defineStore('connection', () => {
     attempt = 0
     pageBuild = ''
     instance = ''
+    snapshots = 0
   }
 
   /** The server's idea of now (epoch ms). */
@@ -336,5 +385,7 @@ export const useConnectionStore = defineStore('connection', () => {
     stop,
     sync,
     serverNow,
+    subscribe,
+    onResync,
   }
 })

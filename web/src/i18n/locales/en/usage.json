@@ -1,0 +1,66 @@
+{
+  "range": "{n} days",
+  "rangeLabel": "Period",
+  "period": "{from} to {to}",
+  "refresh": "Refresh usage",
+  "loading": "Loading usage…",
+  "loadFailed": "Usage could not be loaded",
+  "stale": "Showing the last numbers; the refresh failed: {error}",
+  "historyFailed": "Quota history could not be loaded: {error}",
+  "dataSince": "Usage is kept since {date}.",
+  "noCost": "Not reported",
+  "showTable": "Show as table",
+  "showChart": "Show as chart",
+  "totals": {
+    "tokens": "Tokens",
+    "costUsd": "Cost",
+    "tasks": "Tasks",
+    "turns": "Turns"
+  },
+  "delta": {
+    "up": "{pct} more than before ({previous})",
+    "down": "{pct} less than before ({previous})",
+    "same": "Same as before ({previous})",
+    "new": "Nothing to compare with (before: {previous})"
+  },
+  "col": {
+    "date": "Day",
+    "tokens": "Tokens",
+    "cost": "Cost",
+    "tasks": "Tasks",
+    "time": "Time",
+    "project": "Project",
+    "account": "Account",
+    "attempts": "Attempts"
+  },
+  "daily": {
+    "title": "Tokens per day",
+    "empty": "No usage in this period.",
+    "summary": "Tokens per day from {from} to {to}; the busiest day was {day} with {top} tokens."
+  },
+  "projects": {
+    "title": "Top projects",
+    "empty": "No project used tokens in this period."
+  },
+  "accounts": {
+    "title": "Top accounts",
+    "empty": "No account used tokens in this period."
+  },
+  "turn": "Turn {n}",
+  "turns": "{n} turn | {n} turns",
+  "attempts": "{n} attempt | {n} attempts",
+  "showTurns": "Show the turns of {title}",
+  "moreTurns": "and {n} more turn | and {n} more turns",
+  "moreTasks": "and {n} more task | and {n} more tasks",
+  "moreProjects": "and {n} more project | and {n} more projects",
+  "moreAccounts": "and {n} more account | and {n} more accounts",
+  "moreModels": "and {n} more model | and {n} more models",
+  "quota": {
+    "title": "Quota over time",
+    "account": "Account",
+    "empty": "No quota history for this account yet.",
+    "low": "{key}: lowest {pct}",
+    "threshold": "Rests below {pct}",
+    "summary": "Quota left over the period. {lines}."
+  }
+}

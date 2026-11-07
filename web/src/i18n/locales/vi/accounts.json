@@ -1,0 +1,177 @@
+{
+  "failed": "Không làm được: {error}",
+  "backend": {
+    "agy": "Antigravity",
+    "claude": "Claude Code",
+    "codex": "Codex"
+  },
+  "status": {
+    "ok": "Sẵn sàng",
+    "new": "Đang kiểm tra hạn mức",
+    "error": "Sẵn sàng",
+    "needs_login": "Cần đăng nhập",
+    "no_key": "Chưa có khóa API",
+    "no_plan": "Gói không dùng được backend này",
+    "twin": "Cùng đăng nhập với {name}",
+    "disabled": "Tắt"
+  },
+  "kind": {
+    "isolated": "Đăng nhập riêng",
+    "system": "Đăng nhập của máy này",
+    "apiKey": "Khóa API",
+    "apiKeyOf": "Khóa API · {provider}"
+  },
+  "keyHint": "khóa {hint}",
+  "busy": "Đang dùng {busy}/{max} chỗ",
+  "exhausted": "Hết hạn mức, có lại {time}",
+  "resting": "Đang nghỉ",
+  "restingUntil": "Nghỉ tới {time}",
+  "signingIn": "Đang đăng nhập…",
+  "errorNote": "Lần đọc hạn mức gần nhất bị lỗi; số liệu bên dưới có thể đã cũ.",
+  "twinNote": "Đây là cùng một lượt đăng nhập với {name}, nên việc sẽ giao cho tài khoản đó.",
+  "enabled": "Dùng để làm việc",
+  "priority": "Ưu tiên",
+  "summary": {
+    "ready": "Sẵn sàng nhận việc",
+    "busy": "Đang chạy lượt",
+    "resting": "Đang nghỉ hoặc hết hạn mức",
+    "needsYou": "Cần bạn"
+  },
+  "empty": {
+    "title": "Chưa có tài khoản nào",
+    "desc": "Thêm một tài khoản để Seelegent có worker nhận việc."
+  },
+  "action": {
+    "add": "Thêm tài khoản",
+    "refreshAll": "Làm mới mọi hạn mức",
+    "refresh": "Làm mới hạn mức",
+    "rename": "Đổi tên",
+    "login": "Đăng nhập",
+    "logout": "Đăng xuất",
+    "key": "Đặt khóa API",
+    "delete": "Xóa tài khoản",
+    "more": "Thêm thao tác cho {name}"
+  },
+  "done": {
+    "added": "Đã thêm {name}",
+    "renamed": "Đã đổi tên thành {name}",
+    "keySet": "Đã lưu khóa API cho {name}",
+    "keyCleared": "Đã gỡ khóa API khỏi {name}",
+    "deleted": "Đã xóa {name}",
+    "logout": "Đã đăng xuất",
+    "refreshedAll": "Đã làm mới hạn mức"
+  },
+  "quota": {
+    "window": "Khung {window}",
+    "resets": "đặt lại {time}",
+    "fetched": "đọc {time}",
+    "seen": "thấy lần cuối khi chạy {time}",
+    "passive": "Khóa API không có hạn mức để đọc; giới hạn chỉ lộ ra khi một lượt chạm phải.",
+    "checking": "Đang đọc hạn mức lần đầu…",
+    "none": "Chưa đọc hạn mức lần nào.",
+    "noPlan": "Gói này không dùng được backend này.",
+    "readFailed": "Lần đọc gần nhất bị lỗi: {error}"
+  },
+  "login": {
+    "title": "Đăng nhập",
+    "state": {
+      "starting": "Đang bắt đầu đăng nhập…",
+      "open_url": "Hoàn tất đăng nhập trong trình duyệt",
+      "waiting_code": "Dán mã từ trang đăng nhập",
+      "done": "Đã đăng nhập",
+      "failed": "Đăng nhập thất bại"
+    },
+    "openHint": "Mở trang đăng nhập, đăng nhập bằng tài khoản bạn muốn dùng ở đây rồi quay lại. Trang này tự cập nhật.",
+    "codeHint": "Sau khi đăng nhập, trang sẽ hiện một mã. Dán mã đó vào đây.",
+    "deviceCode": "Nhập mã này trên trang:",
+    "open": "Mở trang đăng nhập",
+    "copyLink": "Chép liên kết",
+    "copy": "Chép",
+    "linkCopied": "Đã chép liên kết",
+    "codeCopied": "Đã chép mã",
+    "copyFailed": "Không chép được; hãy tự chọn và chép đoạn chữ.",
+    "codeLabel": "Mã",
+    "send": "Gửi mã",
+    "retry": "Thử lại"
+  },
+  "add": {
+    "title": "Thêm tài khoản",
+    "step1": "Bước 1/2: loại tài khoản.",
+    "step2": "Bước 2/2: thông tin chi tiết.",
+    "backend": "Backend",
+    "kind": "Loại",
+    "backendDesc": {
+      "agy": "Mô hình Gemini qua Antigravity CLI.",
+      "claude": "Mô hình Claude qua Claude Code.",
+      "codex": "Mô hình OpenAI qua Codex."
+    },
+    "kindDesc": {
+      "isolated": "Hồ sơ riêng; bạn đăng nhập một lần trong trình duyệt.",
+      "system": "Dùng lượt đăng nhập đã có sẵn trên máy này.",
+      "apiKey": "Trả theo token qua một nhà cung cấp API."
+    },
+    "defaultLabel": "{backend} {n}",
+    "label": "Tên",
+    "priorityHint": "Số lớn hơn được dùng trước (−1000 đến 1000).",
+    "provider": "Nhà cung cấp",
+    "noProvider": "Backend này chưa có nhà cung cấp nào. Hãy thêm một nhà cung cấp ở mục Nhà cung cấp API trước.",
+    "keyHint": "Không bắt buộc; bạn có thể thêm sau. Về sau chỉ hiện vài ký tự cuối.",
+    "keyless": "Đã thêm {name} nhưng tài khoản chưa có khóa: khóa bị từ chối và không xóa lại được tài khoản. Hãy nhập khóa cho nó ở đây.",
+    "systemTaken": "Đã thêm: {name}",
+    "next": "Tiếp",
+    "submit": "Thêm tài khoản"
+  },
+  "key": {
+    "title": "Khóa API của {name}",
+    "current": "Khóa đã lưu kết thúc bằng {hint}. Khóa mới sẽ thay thế nó.",
+    "none": "Chưa lưu khóa nào.",
+    "label": "Khóa API",
+    "hint": "Dịch vụ giữ khóa; bảng điều khiển sẽ không hiện lại nó.",
+    "save": "Lưu khóa",
+    "clear": "Gỡ khóa"
+  },
+  "rename": {
+    "title": "Đổi tên tài khoản",
+    "submit": "Đổi tên"
+  },
+  "delete": {
+    "title": "Xóa {name}?",
+    "desc": "Hồ sơ và lượt đăng nhập của nó bị gỡ khỏi Seelegent. Các tác vụ nó đã chạy vẫn giữ lịch sử.",
+    "confirm": "Xóa tài khoản",
+    "running": "Tài khoản đang chạy một tác vụ nên chưa xóa được. {error}"
+  },
+  "providers": {
+    "title": "Nhà cung cấp API",
+    "desc": "Nơi các tài khoản dùng khóa API gửi yêu cầu: tương thích Anthropic cho Claude Code, tương thích OpenAI cho Codex.",
+    "add": "Thêm nhà cung cấp",
+    "search": "Tìm nhà cung cấp",
+    "loading": "Đang tải nhà cung cấp…",
+    "loadFailed": "Không tải được nhà cung cấp: {error}",
+    "empty": "Chưa có nhà cung cấp nào.",
+    "noMatch": "Không có nhà cung cấp nào khớp.",
+    "usedBy": "{n} tài khoản đang dùng",
+    "anyModel": "mọi mô hình",
+    "enabledOf": "Dùng {name}",
+    "editOf": "Sửa {name}",
+    "deleteOf": "Xóa {name}",
+    "deleteTitle": "Xóa {name}?",
+    "deleteDesc": "Các tài khoản sẽ không dùng được nó nữa. Không xóa được nhà cung cấp còn tài khoản đang dùng.",
+    "deleteConfirm": "Xóa nhà cung cấp",
+    "inUse": "Vẫn còn tài khoản dùng nó; hãy chuyển hoặc xóa các tài khoản đó trước. {error}",
+    "deleted": "Đã xóa {name}",
+    "saved": "Đã lưu {name}",
+    "addTitle": "Thêm nhà cung cấp API",
+    "editTitle": "Sửa nhà cung cấp API",
+    "preset": "Bắt đầu từ",
+    "blank": "Trống",
+    "id": "ID",
+    "idHint": "a-z, 0-9 và -; không đổi được về sau.",
+    "backend": "Backend",
+    "name": "Tên",
+    "baseUrl": "Địa chỉ gốc",
+    "models": "Mô hình",
+    "modelsHint": "Cách nhau bằng dấu phẩy; để trống là cho mọi mô hình.",
+    "enabled": "Tài khoản được dùng",
+    "save": "Lưu nhà cung cấp"
+  }
+}

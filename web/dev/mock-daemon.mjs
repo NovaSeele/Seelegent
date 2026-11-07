@@ -8,18 +8,22 @@
  * Serves the /api/v1 endpoints the Watch and Tasks views use (contracts/api-v1.md) from in-memory sample data:
  * several projects (one a monorepo package), every task status, a running task that streams worker events (text
  * every 250 ms, a tool step every second), a task asking a question, a failed one with an error, tasks with git
- * changes and parsed diffs, and a new task every 90 s. Writes (followup, answer, review, cancel, takeover, commit,
- * suggest-message, attention dismiss) change the data and broadcast SSE frames.
+ * changes and parsed diffs, and a new task every 90 s; the Accounts, Usage, Settings and Roles routes live in
+ * mock-admin.mjs. Writes (followup, answer, review, cancel, takeover, commit, suggest-message, attention
+ * dismiss) change the data and broadcast SSE frames.
  *
  * Contract behaviour it honours: Host / X-Seelegent / Origin checks, the error shape, unknown body fields rejected,
  * Cache-Control: no-store, SSE ids `<instance>.<seq>` with resume from a ring of 2048 frames (`reset` restart for
  * another instance's id, too_old outside the ring), hello first, ping every 25 s, git paths relative to the repo
  * root (Turn.files relative to the cwd).
  *
- * Env: MOCK_PORT (47831), MOCK_TICK_MS (250), MOCK_OLD_TASKS (140 finished tasks for paging).
+ * Env: MOCK_PORT (47831), MOCK_TICK_MS (250), MOCK_OLD_TASKS (140 finished tasks for paging), MOCK_NO_HOOKS=1
+ * (every /hooks route answers 501 not_implemented, like a daemon without hooks).
  */
 import { randomBytes } from 'node:crypto'
 import { createServer } from 'node:http'
+
+import { createAdminRoutes } from './mock-admin.mjs'
 
 const PORT = Number(process.env.MOCK_PORT ?? 47831)
 const TICK_MS = Number(process.env.MOCK_TICK_MS ?? 250)
@@ -108,14 +112,41 @@ const accounts = [
     'api-key',
     'Codex API',
     1,
-    'needs_login',
+    'ok',
+    0,
+    { source: 'passive', fetchedAt: ago(25 * MIN) },
+    { keyHint: '…9f2c', provider: 'openai' },
+  ),
+  account(
+    'acc-deepseek',
+    'claude',
+    'api-key',
+    'DeepSeek',
+    0,
+    'no_key',
     0,
     { source: 'passive' },
     {
-      keyHint: '…9f2c',
+      provider: 'deepseek',
     },
   ),
+  account('acc-team', 'claude', 'isolated', 'Team seat', 4, 'needs_login', 0, {
+    error: { kind: 'token_expired', message: 'The sign-in expired.', at: ago(2 * HOUR) },
+  }),
+  account('acc-free', 'claude', 'isolated', 'Free plan', 0, 'no_plan', 0, {
+    plan: 'Free',
+    noPlan: true,
+    noPlanReason: 'The Free plan cannot use Claude Code.',
+  }),
+  account('acc-twin', 'agy', 'isolated', 'Work (copy)', 1, 'twin', 0, {}, { twinOf: 'acc-work' }),
+  account('acc-fresh', 'agy', 'isolated', 'New laptop', 0, 'new', 0, { fetchedAt: undefined }),
+  account('acc-old', 'codex', 'isolated', 'Old seat', -5, 'disabled', 0, {
+    plan: 'Plus',
+    groups: [group('codex', [win('5h', 0.4, 4 * HOUR), win('weekly', 0.7, 3 * 24 * HOUR)])],
+  }),
 ]
+accounts[0].email = 'work.pro@example.test'
+accounts[1].email = 'me@example.test'
 
 /** Account per contract §4: the pool status and runtime, and a quota snapshot. */
 function account(id, backend, kind, label, priority, status, busy, quotaSnapshot, extra = {}) {
@@ -148,9 +179,9 @@ function win(window, remaining, resetsIn) {
 }
 
 const backends = [
-  backend('agy', 'Antigravity', 2, 1),
-  backend('claude', 'Claude Code', 1, 0),
-  backend('codex', 'Codex', 1, 0),
+  backend('agy', 'Antigravity', 5, 1),
+  backend('claude', 'Claude Code', 4, 0),
+  backend('codex', 'Codex', 2, 0),
 ]
 
 function backend(id, name, count, active) {
@@ -1543,7 +1574,6 @@ async function route(req, res, url) {
     if (path === '/events') return openStream(req, res, url)
     if (path === '/backends') return send(res, 200, backends)
     if (path === '/projects') return send(res, 200, projectList())
-    if (path === '/accounts') return send(res, 200, accounts)
     if (path === '/models') {
       return send(res, 200, [
         {
@@ -1571,6 +1601,8 @@ async function route(req, res, url) {
     }
     if (path === '/tasks') return send(res, 200, listTasks(url))
   }
+
+  if ((await adminRoute(req, res, method, path, parts, url)) !== false) return
 
   if (parts[0] === 'tasks' && parts[1]) {
     const task = taskOr404(parts[1])
@@ -1618,6 +1650,17 @@ async function route(req, res, url) {
   throw notFound(`route ${method} ${url.pathname}`)
 }
 
+const adminRoute = createAdminRoutes({
+  accounts,
+  settings,
+  projects,
+  broadcast,
+  readBody,
+  send,
+  HttpError,
+  noHooks: process.env.MOCK_NO_HOOKS === '1',
+})
+
 const server = createServer((req, res) => {
   const url = new URL(req.url ?? '/', `http://${req.headers.host ?? '127.0.0.1'}`)
   if (!url.pathname.startsWith('/api/v1/')) {
@@ -1632,8 +1675,8 @@ const server = createServer((req, res) => {
   route(req, res, url).catch((error) => {
     if (error instanceof HttpError) {
       const body = { error: { code: error.code, message: error.message } }
-      if (error.details && error.details.field !== undefined) body.error.details = error.details
-      else if (error.details?.status) body.error.details = error.details
+      const details = Object.entries(error.details ?? {}).filter(([, v]) => v !== undefined)
+      if (details.length) body.error.details = Object.fromEntries(details)
       send(res, error.status, body)
     } else {
       console.error(error)

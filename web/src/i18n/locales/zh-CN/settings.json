@@ -20,15 +20,35 @@
     },
     "workers": {
       "label": "工人",
-      "desc": "同时运行多少个工人，以及可用的模型。"
+      "desc": "每个账号同时运行多少任务、时间限制，以及工人何时算作卡住。"
+    },
+    "backends": {
+      "label": "后端",
+      "desc": "哪些命令行工具接收工作，以及每个档位背后的模型。"
     },
     "quota": {
       "label": "配额",
-      "desc": "保留多少配额，以及账号如何轮换。"
+      "desc": "预留多少配额，以及多久读取一次。"
+    },
+    "providers": {
+      "label": "API 提供方",
+      "desc": "API 密钥账号发送请求的服务。"
     },
     "gates": {
       "label": "关卡",
-      "desc": "工作算作完成前必须通过的命令。"
+      "desc": "工作算作完成前必须通过的检查。"
+    },
+    "workspace": {
+      "label": "工作区安全",
+      "desc": "防止工人互相覆盖文件、防止破坏你的仓库的保护措施。"
+    },
+    "hooks": {
+      "label": "钩子",
+      "desc": "任务开始、完成或失败，或账号需要你时，服务运行的 shell 命令。"
+    },
+    "memory": {
+      "label": "记忆",
+      "desc": "提供给每个工人的项目信息。"
     },
     "notifications": {
       "label": "通知",
@@ -38,13 +58,9 @@
       "label": "键盘快捷键",
       "desc": "页面和命令的按键。"
     },
-    "hooks": {
-      "label": "钩子",
-      "desc": "任务变化时调用其他服务。"
-    },
-    "memory": {
-      "label": "记忆",
-      "desc": "提供给每个工人的项目信息。"
+    "system": {
+      "label": "服务",
+      "desc": "Seelegent 服务本身：端口和后台作业。"
     },
     "experiments": {
       "label": "实验",
@@ -54,6 +70,103 @@
       "label": "语言",
       "desc": "控制面板的语言。更改立即生效。"
     }
+  },
+  "daemon": {
+    "offline": "控制面板连接到 Seelegent 服务后才会加载这些设置。",
+    "saving": "正在保存…",
+    "saved": "已保存",
+    "failed": "未保存：{error}",
+    "reset": "默认",
+    "resetOf": "将{name}恢复为默认值",
+    "range": "{min} 到 {max}",
+    "rangeWhole": "请输入 {min} 到 {max} 之间的整数。",
+    "rangePercent": "请输入 {min} 到 {max} 之间的百分比。",
+    "lines": "每行一项；离开输入框时保存。",
+    "readonly": "在服务启动时设置（seelegent config），无法在此更改。"
+  },
+  "units": {
+    "min": "分钟",
+    "h": "小时",
+    "s": "秒",
+    "ms": "毫秒",
+    "days": "天",
+    "bytes": "字节",
+    "times": "次",
+    "pct": "%"
+  },
+  "options": {
+    "tier": {
+      "fast": "快速",
+      "standard": "标准",
+      "strong": "强",
+      "max": "最强"
+    },
+    "lanes": {
+      "off": "关闭",
+      "warn": "警告",
+      "enforce": "强制"
+    },
+    "sandbox": {
+      "readOnly": "只读",
+      "workspaceWrite": "可写工作区",
+      "dangerFullAccess": "完全访问（危险）"
+    }
+  },
+  "backends": {
+    "enabled": "接收工作",
+    "allowedModels": "允许的模型",
+    "allowedModelsHint": "一个正则表达式；各档位的模型必须与之匹配。",
+    "anyModel": "任意模型",
+    "tierDefault": "工具默认值",
+    "sandbox": "沙箱",
+    "sandboxHint": "Codex 在这台电脑上可以访问的范围。"
+  },
+  "hooks": {
+    "loading": "正在加载钩子…",
+    "loadFailed": "无法加载钩子：{error}",
+    "unsupported": "此版本的 Seelegent 服务尚不支持钩子。支持后会显示在这里。",
+    "empty": "还没有钩子。",
+    "hookN": "钩子 {n}",
+    "enabled": "启用",
+    "run": "命令",
+    "runHint": "在 shell 中运行；事件通过 SEELEGENT_* 环境变量传入。",
+    "on": "触发事件",
+    "project": "仅限项目文件夹",
+    "projectHint": "留空则适用于所有项目。",
+    "timeout": "时间限制",
+    "add": "添加钩子",
+    "remove": "移除",
+    "save": "保存钩子",
+    "discard": "放弃更改",
+    "saved": "钩子已保存",
+    "invalid": "有些钩子需要修改，请查看标出的字段。",
+    "unsaved": "尚未保存；保存后才能测试。",
+    "neverRan": "尚未运行过。",
+    "lastRun": "上次运行于 {time}，事件 {event}：{outcome}",
+    "exit": "退出码 {code}",
+    "timedOut": "超时被停止",
+    "test": "测试",
+    "testUnsupported": "此版本的 Seelegent 服务还不能测试钩子（501 not implemented）。钩子仍会在其事件发生时运行。",
+    "testFailed": "测试未能运行：{error}"
+  },
+  "memory": {
+    "project": "项目",
+    "noProjects": "还没有项目。记忆属于某个项目文件夹，文件夹中运行过任务后会出现在这里。",
+    "loading": "正在加载记忆…",
+    "loadFailed": "无法加载记忆：{error}",
+    "text": "记忆",
+    "placeholder": "约定、要运行的命令、常见陷阱…",
+    "updated": "保存于 {time}",
+    "none": "此项目还没有保存任何内容。",
+    "changed": "在此期间有人保存了此项目的记忆。",
+    "reload": "加载对方的版本",
+    "discard": "放弃更改",
+    "switchTitle": "放弃对记忆的修改？",
+    "switchDesc": "你对 {project} 记忆的修改尚未保存。切换到其他项目会丢失这些修改。",
+    "switchConfirm": "放弃并切换",
+    "save": "保存记忆",
+    "saved": "记忆已保存",
+    "saveFailed": "记忆未保存：{error}"
   },
   "items": {
     "theme": {
@@ -107,39 +220,180 @@
       "keywords": "语言 翻译 本地化"
     },
     "concurrency": {
-      "label": "同时运行的工人",
-      "desc": "最多可同时运行多少个工人。",
-      "keywords": "并行 并发 上限"
+      "label": "每个账号的任务数",
+      "desc": "一个账号最多可同时运行多少任务。",
+      "keywords": "并行 并发 上限 工人"
     },
     "defaultTier": {
       "label": "默认档位",
       "desc": "简报未指定时使用的模型档位。",
       "keywords": "模型 快速 标准 强"
     },
-    "modelCap": {
-      "label": "模型上限",
-      "desc": "工人可使用的最强模型。",
-      "keywords": "上限 模型"
+    "taskTimeout": {
+      "label": "每轮时间限制",
+      "desc": "运行超过此时长的一轮会被停止。",
+      "keywords": "超时 限制 时长"
+    },
+    "stall": {
+      "label": "判定卡住时间",
+      "desc": "工人在这段时间内没有输出就会被标记为卡住。",
+      "keywords": "卡住 空闲 挂起 无响应"
+    },
+    "stallTool": {
+      "label": "工具中卡住时间",
+      "desc": "同上，但用于工具或命令运行期间（构建耗时更长）。",
+      "keywords": "卡住 工具 命令 构建"
+    },
+    "loopRepeat": {
+      "label": "循环检测",
+      "desc": "同一步骤重复这么多次即视为循环。",
+      "keywords": "循环 重复 卡住"
+    },
+    "attentionDecay": {
+      "label": "关注失效时间",
+      "desc": "需要你处理但一直未处理的任务，过了这段时间会移出“需要你”。",
+      "keywords": "关注 需要你 失效"
+    },
+    "linkIntoProfiles": {
+      "label": "共享到账号配置",
+      "desc": "主文件夹中每个独立账号配置也能看到的文件夹和文件（技能、配置）。",
+      "keywords": "配置 链接 符号链接 技能 主目录",
+      "placeholder": ".agents/skills"
+    },
+    "backendAgy": {
+      "label": "Antigravity",
+      "desc": "通过 Antigravity CLI 使用 Gemini 模型。",
+      "keywords": "agy gemini antigravity 模型 档位"
+    },
+    "backendClaude": {
+      "label": "Claude Code",
+      "desc": "通过 Claude Code 使用 Claude 模型。",
+      "keywords": "claude anthropic 模型 档位"
+    },
+    "backendCodex": {
+      "label": "Codex",
+      "desc": "通过 Codex 使用 OpenAI 模型，含其沙箱。",
+      "keywords": "codex openai gpt 沙箱 模型 档位"
     },
     "quotaReserve": {
       "label": "配额预留",
-      "desc": "每个账号为紧急工作保留的配额比例。",
-      "keywords": "上限 余量"
+      "desc": "某个配额窗口剩余少于此值时，账号会进入休息。",
+      "keywords": "上限 余量 最低 剩余"
     },
-    "rotation": {
-      "label": "账号轮换",
-      "desc": "某个账号配额用完时，把工作转给其他账号。",
-      "keywords": "账号 切换 交接"
+    "quotaRefresh": {
+      "label": "配额读取间隔",
+      "desc": "多久读取一次每个账号的配额。",
+      "keywords": "刷新 间隔 轮询"
     },
-    "gateCommands": {
-      "label": "关卡命令",
-      "desc": "证明任务可用的构建和测试命令。",
-      "keywords": "测试 构建 验证 检查"
+    "passiveCooldown": {
+      "label": "API 密钥休息时间",
+      "desc": "API 密钥账号触及限制后休息多久（其配额无法读取）。",
+      "keywords": "冷却 被动 api 密钥 速率限制"
     },
-    "gateBeforeReview": {
-      "label": "审查前运行关卡",
-      "desc": "把任务交给你审查前先运行关卡。",
-      "keywords": "测试 审查 验证"
+    "usageHistory": {
+      "label": "保留用量历史",
+      "desc": "每小时记录一次各账号的配额，供用量页面使用。",
+      "keywords": "历史 用量 快照 记录"
+    },
+    "providers": {
+      "label": "API 提供方",
+      "desc": "供 Claude Code 使用的 Anthropic 兼容服务，以及供 Codex 使用的 OpenAI 兼容服务。",
+      "keywords": "提供方 api 密钥 地址 deepseek openrouter openai provider"
+    },
+    "gates": {
+      "label": "运行关卡",
+      "desc": "在任务交给你审查前运行其关卡命令。",
+      "keywords": "测试 构建 验证 检查 审查"
+    },
+    "gateAutoChecks": {
+      "label": "自动查找检查",
+      "desc": "任务未指定关卡时，使用项目的构建和测试命令。",
+      "keywords": "自动 检测 测试 构建"
+    },
+    "gateTimeout": {
+      "label": "关卡时间限制",
+      "desc": "运行超过此时长的关卡命令判为失败。",
+      "keywords": "超时 限制"
+    },
+    "gateMaxAutoFixes": {
+      "label": "自动修复轮数",
+      "desc": "关卡失败后最多退回给工人几次，然后再询问你。",
+      "keywords": "重试 修复 循环"
+    },
+    "gateSettle": {
+      "label": "等待文件稳定",
+      "desc": "文件在这段时间内没有变化后才运行关卡。",
+      "keywords": "稳定 防抖 等待"
+    },
+    "gateSettlePoll": {
+      "label": "稳定检查间隔",
+      "desc": "等待文件稳定时多久检查一次。",
+      "keywords": "轮询 间隔"
+    },
+    "gateOutputTail": {
+      "label": "保留的关卡输出",
+      "desc": "保留关卡输出末尾多少内容并展示给工人。",
+      "keywords": "输出 日志 末尾 字节"
+    },
+    "verifier": {
+      "label": "二次审查",
+      "desc": "在改动交给你之前由另一个工人审查。",
+      "keywords": "验证 审查 第二意见"
+    },
+    "verifierTier": {
+      "label": "审查者档位",
+      "desc": "第二个工人的模型档位。",
+      "keywords": "验证 模型 档位"
+    },
+    "hygiene": {
+      "label": "清理检查",
+      "desc": "标出工人改动中的多余文件、调试输出和遗留内容。",
+      "keywords": "清理 遗留 多余"
+    },
+    "gitGuard": {
+      "label": "Git 保护",
+      "desc": "禁止工人提交、推送或改写历史。",
+      "keywords": "git commit push 保护"
+    },
+    "lanes": {
+      "label": "文件通道",
+      "desc": "两个任务要改同一批文件时：关闭、警告，或让第二个任务等待。",
+      "keywords": "通道 冲突 文件 并行"
+    },
+    "laneHold": {
+      "label": "通道保留",
+      "desc": "已完成的任务继续保留其文件多久。",
+      "keywords": "通道 保留 占用"
+    },
+    "contentionWindow": {
+      "label": "冲突窗口",
+      "desc": "查找改动相同文件的任务时，往前统计多长时间内的编辑。",
+      "keywords": "争用 冲突 窗口"
+    },
+    "snapshotRetention": {
+      "label": "快照保留时间",
+      "desc": "每轮前拍下的工作文件夹快照在这段时间后删除。",
+      "keywords": "快照 备份 保留 撤销"
+    },
+    "codeGraph": {
+      "label": "代码图",
+      "desc": "为工人提供代码符号和调用关系的地图。",
+      "keywords": "代码 图 符号 索引"
+    },
+    "port": {
+      "label": "端口",
+      "desc": "服务和此控制面板监听的端口。",
+      "keywords": "端口 http 地址"
+    },
+    "githubPoll": {
+      "label": "GitHub 检查间隔",
+      "desc": "多久检查一次所跟踪仓库的新 issue；0 表示关闭。",
+      "keywords": "github issue 轮询"
+    },
+    "automations": {
+      "label": "自动化作业",
+      "desc": "运行定时的自动化。",
+      "keywords": "计划 自动化 cron"
     },
     "desktopNotify": {
       "label": "桌面通知",
@@ -157,9 +411,9 @@
       "keywords": "热键 键位 键盘"
     },
     "webhooks": {
-      "label": "Webhook",
-      "desc": "任务开始、完成或失败时调用的地址。",
-      "keywords": "钩子 http 集成"
+      "label": "钩子",
+      "desc": "任务开始、完成或失败，或账号需要你时运行的 shell 命令。",
+      "keywords": "钩子 webhook 命令 集成 通知"
     },
     "projectMemory": {
       "label": "项目记忆",
