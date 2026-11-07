@@ -1,8 +1,8 @@
 <script setup lang="ts">
 /**
  * A full-width row under a diff line (a note, the "add a note" button, the note composer). Its content stays in
- * view: it sticks to the left edge of the scroll box and is as wide as the box (--diff-box, set by DiffView), so
- * a long line that widens the table never pushes a note off screen.
+ * view: it sticks to the left edge of the scroll box and is as wide as the visible box (100cqi of DiffView's
+ * .diff__scroll, a size container), so a long line that widens the table never pushes a note off screen.
  */
 defineProps<{ tone?: 'note' | 'action' }>()
 </script>
@@ -32,8 +32,7 @@ defineProps<{ tone?: 'note' | 'action' }>()
   position: sticky;
   left: 0;
   box-sizing: border-box;
-  width: var(--diff-box, 100%);
-  max-width: 100%;
+  width: 100cqi;
   padding: var(--space-2) var(--space-3);
 }
 </style>

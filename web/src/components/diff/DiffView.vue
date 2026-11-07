@@ -4,7 +4,6 @@ import { useI18n } from 'vue-i18n'
 
 import type { FileDiff, Note } from '@/api/types'
 import Button from '@/components/ui/Button.vue'
-import { useClientWidth } from '@/composables/useClientWidth'
 import { useFormat } from '@/composables/useFormat'
 
 import DiffExtraRow from './DiffExtraRow.vue'
@@ -19,7 +18,7 @@ import { useLinePicker } from './useLinePicker'
  * With `annotatable`, the new-side line numbers are one keyboard group (useLinePicker): choosing one shows a
  * large "Add a note on line N" button under it (`line`), and the `composer` slot takes its place for
  * `composerLine`. `notes` show under the line they follow now; a note whose line is gone (currentLine 0) is not
- * anchored here. Notes, the button and the composer keep to the visible width of the scroll box.
+ * anchored here. Notes, the button and the composer keep to the visible width of the scroll box (a size container).
  */
 const props = withDefaults(
   defineProps<{
@@ -62,10 +61,6 @@ const lines = computed(() =>
   model.value.rows.flatMap((r) => (r.kind !== 'hunk' && r.newNo ? [r.newNo] : [])),
 )
 const stop = computed(() => picker.stopOf(lines.value))
-
-// The visible width of the scroll box, for the rows under a line (DiffExtraRow).
-const scroller = ref<HTMLElement | null>(null)
-const boxWidth = useClientWidth(scroller)
 </script>
 
 <template>
@@ -73,11 +68,7 @@ const boxWidth = useClientWidth(scroller)
     <p v-if="diff.binary" class="diff__note">{{ t('git.diff.binary') }}</p>
     <p v-else-if="!diff.hunks.length" class="diff__note">{{ t('git.diff.empty') }}</p>
     <template v-else>
-      <div
-        ref="scroller"
-        class="diff__scroll"
-        :style="boxWidth ? { '--diff-box': `${boxWidth}px` } : undefined"
-      >
+      <div class="diff__scroll">
         <table class="diff__table">
           <caption class="sr-only">
             {{
@@ -179,8 +170,10 @@ const boxWidth = useClientWidth(scroller)
 }
 
 .diff__scroll {
-  /* Positioned, so absolutely positioned sr-only text inside is clipped here and never widens the page. */
+  /* Positioned, so absolutely positioned sr-only text inside is clipped here and never widens the page. A size
+     container, so the rows under a line (DiffExtraRow) can be exactly as wide as the visible box (100cqi). */
   position: relative;
+  container-type: inline-size;
   overflow-x: auto;
 }
 
