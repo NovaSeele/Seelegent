@@ -177,7 +177,10 @@ func daemon(ctx context.Context, o Options) (Check, *client.Client) {
 	default:
 		c.Status, c.Message = Fail, err.Error()
 		var foreign *client.ForeignError
-		if errors.As(err, &foreign) && !client.TimedOut(err) {
+		switch {
+		case errors.As(err, &foreign) && foreign.OtherHome:
+			c.Fix = "give each data directory its own port (SEELEGENT_PORT or the settings' port)"
+		case errors.As(err, &foreign) && !client.TimedOut(err):
 			c.Fix = "stop that program, or set another port with SEELEGENT_PORT or the settings' port"
 		}
 	}

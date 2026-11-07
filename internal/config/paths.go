@@ -4,12 +4,16 @@
 package config
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/NovaSeele/Seelegent/internal/fsutil"
 )
 
 // Environment variables that override the defaults.
@@ -119,4 +123,16 @@ func ResolvePort(s Settings, getenv func(string) string) (int, error) {
 		return 0, fmt.Errorf("%s=%q: %w: must be a number between %d and %d", EnvPort, raw, ErrInvalid, minPort, maxPort)
 	}
 	return port, nil
+}
+
+// HomeID identifies the data directory home in the daemon's health answer (api.Health.HomeID): the first 16 hex
+// digits of the SHA-256 of fsutil.Key(home), so every spelling of one folder gives the same id and the path itself
+// is never shown. A client compares it with its own home's id and refuses a daemon of another data directory.
+func HomeID(home string) string {
+	key, err := fsutil.Key(home)
+	if err != nil {
+		key = filepath.Clean(home)
+	}
+	sum := sha256.Sum256([]byte(key))
+	return hex.EncodeToString(sum[:8])
 }

@@ -9,17 +9,21 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/NovaSeele/Seelegent/internal/api"
+	"github.com/NovaSeele/Seelegent/internal/config"
 	"github.com/NovaSeele/Seelegent/internal/fsutil"
 )
 
 // stoppableDaemon serves health and POST /daemon/stop on port while holding the lock of paths, like a running daemon.
-// With obey, a stop closes the server and releases the lock shortly after answering 202.
-func stoppableDaemon(t *testing.T, d *Daemon, port, pid int, obey bool) {
+// With obey, a stop closes the server and releases the lock shortly after answering 202. It returns the count of
+// stop requests it got.
+func stoppableDaemon(t *testing.T, d *Daemon, port, pid int, obey bool) *atomic.Int32 {
 	t.Helper()
+	stops := &atomic.Int32{}
 	paths := d.o.Paths
 	if err := paths.EnsureDirs(); err != nil {
 		t.Fatal(err)
@@ -39,9 +43,11 @@ func stoppableDaemon(t *testing.T, d *Daemon, port, pid int, obey bool) {
 	srv := &http.Server{ReadHeaderTimeout: time.Second}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/v1/health", func(w http.ResponseWriter, _ *http.Request) {
-		writeJSON(w, http.StatusOK, api.Health{OK: true, Version: "test", APIVersion: api.APIVersion})
+		writeJSON(w, http.StatusOK, api.Health{OK: true, Version: "test", APIVersion: api.APIVersion, PID: pid,
+			HomeID: config.HomeID(paths.Home)})
 	})
 	mux.HandleFunc("POST /api/v1/daemon/stop", func(w http.ResponseWriter, r *http.Request) {
+		stops.Add(1)
 		if r.Header.Get("X-Seelegent") == "" {
 			writeJSON(w, http.StatusForbidden, map[string]string{"error": "no header", "code": "forbidden"})
 			return
@@ -58,6 +64,7 @@ func stoppableDaemon(t *testing.T, d *Daemon, port, pid int, obey bool) {
 	srv.Handler = mux
 	go func() { _ = srv.Serve(ln) }()
 	t.Cleanup(func() { _ = srv.Close(); _ = lock.Unlock() })
+	return stops
 }
 
 func TestStop(t *testing.T) {
@@ -132,9 +139,38 @@ func TestStop(t *testing.T) {
 		}
 	})
 
+	// Home B's stop on the port of home A's daemon (B's configured port) refuses it and never asks it to stop.
+	t.Run("another home's daemon", func(t *testing.T) {
+		a := newTestDaemon(t, freePort(t), noStart)
+		stops := stoppableDaemon(t, a, a.o.Port, 779, true)
+		b := newTestDaemon(t, a.o.Port, noStart)
+		_, err := b.Stop(t.Context(), time.Second)
+		var fe *ForeignError
+		if !errors.As(err, &fe) || !fe.OtherHome || fe.PID != 779 || stops.Load() != 0 {
+			t.Fatalf("stop from another home = %v (stops %d)", err, stops.Load())
+		}
+		if _, err := a.Find(t.Context()); err != nil || !a.LockHeld() {
+			t.Fatalf("home A's daemon after B's stop: %v", err)
+		}
+	})
+
+	// A daemon that names this home but has neither this home's lock nor its port file is not stopped.
+	t.Run("no evidence of this home", func(t *testing.T) {
+		d := newTestDaemon(t, freePort(t), noStart)
+		var stops atomic.Int32
+		mux := http.NewServeMux()
+		mux.Handle("GET /api/v1/health", healthHandler(api.APIVersion, d.o.Paths.Home))
+		mux.HandleFunc("POST /api/v1/daemon/stop", func(http.ResponseWriter, *http.Request) { stops.Add(1) })
+		listenOn(t, d.o.Port, mux)
+		if _, err := d.Stop(t.Context(), time.Second); err == nil || !strings.Contains(err.Error(),
+			"nothing was stopped") || stops.Load() != 0 {
+			t.Fatalf("stop = %v (stops %d)", err, stops.Load())
+		}
+	})
+
 	t.Run("foreign", func(t *testing.T) {
 		port := freePort(t)
-		listenOn(t, port, healthHandler(2))
+		listenOn(t, port, healthHandler(2, ""))
 		d := newTestDaemon(t, port, noStart)
 		_, err := d.Stop(t.Context(), time.Second)
 		var fe *ForeignError

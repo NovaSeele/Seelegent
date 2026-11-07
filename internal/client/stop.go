@@ -76,6 +76,12 @@ func (d *Daemon) Stop(ctx context.Context, timeout time.Duration) (StopResult, e
 		return StopResult{}, err
 	}
 	port := clientPort(c)
+	// Find only returns a daemon whose health names this home; stopping also needs this home's own evidence of it
+	// (the lock held, or its port file), so a daemon is never stopped on its word alone.
+	if _, err := os.Stat(d.o.Paths.PortFile); err != nil && !d.held() {
+		return StopResult{}, fmt.Errorf("the daemon on port %d says it serves %s, but no daemon holds that data "+
+			"directory's lock and it has no port file: nothing was stopped", port, d.o.Paths.Home)
+	}
 	res := StopResult{Stopped: true, Port: port, PID: d.holderPID()}
 	var ans api.DaemonStop
 	if _, err := c.Do(ctx, http.MethodPost, "/daemon/stop", struct{}{}, &ans); err != nil {

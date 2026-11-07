@@ -25,6 +25,9 @@ type Health struct {
 	PID        int    `json:"pid"`
 	Port       int    `json:"port"`
 	StartedAt  string `json:"startedAt"`
+	// HomeID identifies the data directory the daemon serves (config.HomeID: a hash, never the path). A client of
+	// another data directory refuses this daemon instead of using or stopping it.
+	HomeID string `json:"homeId"`
 }
 
 // DaemonStop is the answer (202) of POST /daemon/stop: the daemon accepted the request and shuts down right after

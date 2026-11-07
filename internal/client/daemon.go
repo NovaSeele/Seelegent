@@ -56,6 +56,10 @@ type ForeignError struct {
 	APIVersion int
 	Detail     string
 	Timeout    time.Duration
+	// OtherHome is set when a Seelegent daemon of this API version answers but serves another data directory
+	// (its health homeId differs); PID is that daemon's process id. It is never used, and never stopped.
+	OtherHome bool
+	PID       int
 }
 
 // TimedOut reports whether err is a probe that got no answer in time.
@@ -65,6 +69,10 @@ func TimedOut(err error) bool {
 }
 
 func (e *ForeignError) Error() string {
+	if e.OtherHome {
+		return fmt.Sprintf("port %d is served by a Seelegent daemon of another data directory (pid %d): give this "+
+			"data directory its own port with SEELEGENT_PORT or the port setting", e.Port, e.PID)
+	}
 	if e.Timeout > 0 {
 		return fmt.Sprintf("port %d did not answer within %s (a busy or hung Seelegent daemon, or another program): "+
 			"try again shortly, or check logs/daemon.log", e.Port, e.Timeout)
@@ -110,6 +118,8 @@ type DaemonOptions struct {
 // not answer, or answers as something else, falls back to the configured port.
 type Daemon struct {
 	o DaemonOptions
+	// homeID is config.HomeID of o.Paths.Home: a daemon whose health names another id serves another home.
+	homeID string
 	// sem serializes starts within this process (the lock file does it across processes).
 	sem chan struct{}
 }
@@ -128,7 +138,7 @@ func NewDaemon(o DaemonOptions) *Daemon {
 	if o.Logger == nil {
 		o.Logger = slog.New(slog.DiscardHandler)
 	}
-	return &Daemon{o: o, sem: make(chan struct{}, 1)}
+	return &Daemon{o: o, homeID: config.HomeID(o.Paths.Home), sem: make(chan struct{}, 1)}
 }
 
 // Port is the configured port the daemon is looked for on (after the port file's).
@@ -194,7 +204,8 @@ func (d *Daemon) filePort() (int, bool) {
 }
 
 // Find returns a client of the running daemon, or an error matching ErrNotRunning when nothing answers, or a
-// *ForeignError when something else answers on the configured port.
+// *ForeignError when something else answers on the configured port: another program, another API version, or a
+// Seelegent daemon of another data directory (its health homeId is not this home's).
 func (d *Daemon) Find(ctx context.Context) (*Client, error) {
 	if port, ok := d.filePort(); ok && port != d.o.Port {
 		c, err := d.probe(ctx, port)
@@ -217,8 +228,11 @@ func (d *Daemon) probe(ctx context.Context, port int) (*Client, error) {
 	defer cancel()
 	h, err := c.Health(pctx)
 	switch {
-	case err == nil && h.OK && h.APIVersion == api.APIVersion:
+	case err == nil && h.OK && h.APIVersion == api.APIVersion && h.HomeID == d.homeID:
 		return c, nil
+	case err == nil && h.OK && h.APIVersion == api.APIVersion:
+		// Another data directory's daemon (or a build before homeId): never ours to use or stop.
+		return nil, &ForeignError{Port: port, OtherHome: true, PID: h.PID}
 	case err == nil && h.APIVersion != 0:
 		return nil, &ForeignError{Port: port, APIVersion: h.APIVersion}
 	case err == nil:

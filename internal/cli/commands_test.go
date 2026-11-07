@@ -4,13 +4,17 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/netip"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -503,6 +507,45 @@ func TestStopRestart(t *testing.T) {
 	}
 	_ = held.Unlock()
 	_ = os.Remove(paths.PortFile)
+}
+
+// TestOtherHomesDaemon: home B pointed at the port of home A's daemon never uses, adopts or stops it: status, stop
+// and doctor report the conflict, a task command does not start a daemon, and A's daemon keeps running.
+func TestOtherHomesDaemon(t *testing.T) {
+	newTestDaemon(t) // home A, its port in SEELEGENT_PORT
+	homeA := os.Getenv(config.EnvHome)
+	td := testDeps(nil)
+	var spawns atomic.Int32
+	td.spawn = func(config.Paths, int) (client.StartFunc, error) {
+		return func(context.Context) (<-chan error, error) { spawns.Add(1); return nil, errors.New("no start") }, nil
+	}
+	t.Setenv(config.EnvHome, t.TempDir()) // home B, same port
+	t.Setenv(envNoAutoStart, "")
+	const conflict = "another data directory"
+	for _, args := range [][]string{{"status"}, {"stop"}, {"ls"}, {"memory", "read", "--cwd", t.TempDir()}} {
+		r := wantErr(t, td, ExitError, "", args...)
+		if !strings.Contains(r.stderr, conflict) || !strings.Contains(r.stderr, fmt.Sprintf("(pid %d)", os.Getpid())) {
+			t.Fatalf("%v from home B: %s", args, r.stderr)
+		}
+		wantErr(t, td, ExitError, codeDaemon, append(args, "--json")...)
+	}
+	var checks []doctor.Check
+	r := runCLI(t, td, "doctor", "--json")
+	r.json(t, &checks)
+	if r.code != ExitError || !slices.ContainsFunc(checks, func(c doctor.Check) bool {
+		return c.Name == "daemon" && c.Status == doctor.Fail && strings.Contains(c.Message, conflict)
+	}) {
+		t.Fatalf("doctor from home B: exit %d %+v", r.code, checks)
+	}
+	if n := spawns.Load(); n != 0 {
+		t.Fatalf("home B started %d daemons", n)
+	}
+	t.Setenv(config.EnvHome, homeA)
+	var st statusOut
+	must(t, td, "status", "--json").json(t, &st)
+	if !st.Running {
+		t.Fatal("home A's daemon was stopped by home B")
+	}
 }
 
 // listenOn holds 127.0.0.1:port until the test ends, as another program would.

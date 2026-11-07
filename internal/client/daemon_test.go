@@ -20,10 +20,11 @@ import (
 )
 
 // healthHandler answers GET /api/v1/health like a daemon of the given API version.
-func healthHandler(version int) http.Handler {
+func healthHandler(version int, home string) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/v1/health", func(w http.ResponseWriter, _ *http.Request) {
-		writeJSON(w, http.StatusOK, api.Health{OK: true, Version: "test", APIVersion: version})
+		writeJSON(w, http.StatusOK, api.Health{OK: true, Version: "test", APIVersion: version,
+			HomeID: config.HomeID(home)})
 	})
 	return mux
 }
@@ -65,10 +66,51 @@ func TestFind(t *testing.T) {
 		!strings.Contains(err.Error(), "SEELEGENT_NO_AUTO_START") {
 		t.Fatalf("no autostart = %v", err)
 	}
-	listenOn(t, port, healthHandler(api.APIVersion))
+	listenOn(t, port, healthHandler(api.APIVersion, d.o.Paths.Home))
 	c, err := d.Find(t.Context())
 	if err != nil || c.BaseURL() != "http://127.0.0.1:"+strconv.Itoa(port) {
 		t.Fatalf("running = %v, %v", c, err)
+	}
+}
+
+// TestFindOtherHome: a Seelegent daemon of another data directory on this home's port (or one that names no home)
+// is refused, never adopted: Find and Ensure report the conflict with its pid and start nothing.
+func TestFindOtherHome(t *testing.T) {
+	for name, home := range map[string]string{"other home": filepath.Join(t.TempDir(), "a"), "no home id": ""} {
+		t.Run(name, func(t *testing.T) {
+			port := freePort(t)
+			mux := http.NewServeMux()
+			mux.HandleFunc("GET /api/v1/health", func(w http.ResponseWriter, _ *http.Request) {
+				h := api.Health{OK: true, Version: "test", APIVersion: api.APIVersion, PID: 4321}
+				if home != "" {
+					h.HomeID = config.HomeID(home)
+				}
+				writeJSON(w, http.StatusOK, h)
+			})
+			listenOn(t, port, mux)
+			started := false
+			d := newTestDaemon(t, port, func(context.Context) (<-chan error, error) { started = true; return nil, nil })
+			for _, look := range []func(context.Context) (*Client, error){d.Find, d.Ensure} {
+				_, err := look(t.Context())
+				var fe *ForeignError
+				if !errors.As(err, &fe) || !fe.OtherHome || fe.PID != 4321 || started ||
+					!strings.Contains(err.Error(), "another data directory (pid 4321)") {
+					t.Fatalf("other home = %v (started %v)", err, started)
+				}
+			}
+		})
+	}
+}
+
+// TestHomeID: every spelling of one folder has one id; another folder another id; the id never shows the path.
+func TestHomeID(t *testing.T) {
+	dir := t.TempDir()
+	a := config.HomeID(dir)
+	if b := config.HomeID(dir + string(filepath.Separator) + "."); a != b {
+		t.Fatalf("ids %s and %s for one folder", a, b)
+	}
+	if c := config.HomeID(filepath.Join(dir, "other")); c == a || len(a) != 16 || strings.Contains(a, "Temp") {
+		t.Fatalf("ids %s and %s", a, c)
 	}
 }
 
@@ -77,7 +119,7 @@ func TestFindForeign(t *testing.T) {
 		"old daemon": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 		}),
-		"api v2":     healthHandler(2),
+		"api v2":     healthHandler(2, ""),
 		"not health": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { writeJSON(w, 200, map[string]int{}) }),
 	}
 	for name, h := range cases {
@@ -105,7 +147,7 @@ func TestEnsureStartsOnce(t *testing.T) {
 		starts.Add(1)
 		go func() {
 			time.Sleep(100 * time.Millisecond) // a daemon takes a moment to listen
-			listenOn(t, port, healthHandler(api.APIVersion))
+			listenOn(t, port, healthHandler(api.APIVersion, paths.Home))
 		}()
 		return make(chan error), nil
 	}
@@ -184,7 +226,7 @@ func holdLock(t *testing.T, paths config.Paths) {
 func TestFindThroughPortFile(t *testing.T) {
 	paths := testPaths(t)
 	running, configured := freePort(t), freePort(t)
-	listenOn(t, running, healthHandler(api.APIVersion))
+	listenOn(t, running, healthHandler(api.APIVersion, paths.Home))
 	writePortFile(t, paths, running)
 	holdLock(t, paths)
 	started := false
@@ -237,7 +279,7 @@ func TestStalePortFile(t *testing.T) {
 				Start: func(context.Context) (<-chan error, error) {
 					starts.Add(1)
 					early.Store(c.locked && !released.Load())
-					listenOn(t, configured, healthHandler(api.APIVersion))
+					listenOn(t, configured, healthHandler(api.APIVersion, paths.Home))
 					return make(chan error), nil
 				}})
 			c2, err := d.Ensure(t.Context())
@@ -261,7 +303,7 @@ func TestStartWaitsForLockHolder(t *testing.T) {
 		d := NewDaemon(DaemonOptions{Paths: paths, Port: port, ProbeTimeout: 500 * time.Millisecond,
 			StartTimeout: 5 * time.Second, PollInterval: 20 * time.Millisecond,
 			Start: func(context.Context) (<-chan error, error) { starts.Add(1); return make(chan error), nil }})
-		time.AfterFunc(300*time.Millisecond, func() { listenOn(t, port, healthHandler(api.APIVersion)) })
+		time.AfterFunc(300*time.Millisecond, func() { listenOn(t, port, healthHandler(api.APIVersion, paths.Home)) })
 		begun := time.Now()
 		c, err := d.Ensure(t.Context())
 		if err != nil || starts.Load() != 0 || c.BaseURL() != "http://127.0.0.1:"+strconv.Itoa(port) {
@@ -453,7 +495,7 @@ func TestSpawnNearDeadline(t *testing.T) {
 			StartTimeout: time.Second, PollInterval: 50 * time.Millisecond,
 			Start: func(context.Context) (<-chan error, error) {
 				starts.Add(1)
-				time.AfterFunc(250*time.Millisecond, func() { listenOn(t, port, healthHandler(api.APIVersion)) })
+				time.AfterFunc(250*time.Millisecond, func() { listenOn(t, port, healthHandler(api.APIVersion, paths.Home)) })
 				return make(chan error), nil
 			}})
 		c, err := d.Ensure(t.Context())

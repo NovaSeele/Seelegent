@@ -766,6 +766,11 @@ export interface Health {
   pid: number
   port: number
   startedAt: string
+  /**
+   * HomeID identifies the data directory the daemon serves (config.HomeID: a hash, never the path). A client of
+   * another data directory refuses this daemon instead of using or stopping it.
+   */
+  homeId: string
 }
 
 /**

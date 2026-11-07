@@ -64,7 +64,7 @@ func (s *Server) systemRoutes() {
 
 func (s *Server) health() api.Health {
 	return api.Health{OK: true, Version: s.o.Version, Commit: s.o.Commit, Build: s.build(), APIVersion: api.APIVersion,
-		PID: s.o.PID, Port: s.o.Port, StartedAt: api.FormatTime(s.o.StartedAt)}
+		PID: s.o.PID, Port: s.o.Port, StartedAt: api.FormatTime(s.o.StartedAt), HomeID: s.o.HomeID}
 }
 
 // getState is GET /state. lastEventId is read before the snapshot: every frame is published after its change is

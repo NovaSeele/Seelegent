@@ -149,6 +149,8 @@ type Options struct {
 	Version, Commit string
 	StartedAt       time.Time
 	PID             int
+	// HomeID identifies the data directory (config.HomeID) in GET /health.
+	HomeID string
 
 	Tasks    Tasks
 	Accounts Accounts
