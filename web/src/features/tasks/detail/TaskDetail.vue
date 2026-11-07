@@ -37,7 +37,8 @@ const router = useRouter()
 const { summary, detail, error, reload } = useTaskDetail(() => props.taskId)
 const actions = useTaskActions(() => props.taskId)
 /** A peer objection the lead has not answered: Accept waits for an answer (the review dialog asks for it). */
-const objected = computed(() => openObjections(detail.value).length > 0)
+const objections = computed(() => openObjections(detail.value))
+const objected = computed(() => objections.value.length > 0)
 
 // The view comes from ?view= (links such as "Review changes" open Git) or the last one used.
 const isView = (value: unknown): value is TaskView =>
@@ -154,7 +155,7 @@ const loadingFirst = computed(() => !summary.value && !error.value)
       />
     </div>
     <FollowupComposer ref="composer" :task="summary" :actions="actions" />
-    <TaskDialogs v-model="dialog" :task="summary" :actions="actions" :objected="objected" />
+    <TaskDialogs v-model="dialog" :task="summary" :actions="actions" :objections="objections" />
   </article>
 </template>
 

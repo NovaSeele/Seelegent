@@ -184,6 +184,7 @@ async function cancel() {
       :title="t('team.contests.cancelTitle')"
       :description="t('team.contests.cancelDesc')"
       :confirm-label="t('team.contests.cancel')"
+      :cancel-label="t('common.action.keepRunning')"
       danger
       :busy="busy"
       :error="actionError"

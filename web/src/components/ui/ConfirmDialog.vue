@@ -15,13 +15,15 @@ withDefaults(
     title: string
     description?: string
     confirmLabel: string
+    /** The safe button; say what it keeps when the confirm verb is itself "Cancel …". */
+    cancelLabel?: string
     danger?: boolean
     busy?: boolean
     error?: string | null
     /** The confirm button waits for a choice inside the dialog. */
     confirmDisabled?: boolean
   }>(),
-  { description: undefined, error: null },
+  { description: undefined, cancelLabel: undefined, error: null },
 )
 
 const emit = defineEmits<{ 'update:open': [value: boolean]; confirm: [] }>()
@@ -41,7 +43,7 @@ const { t } = useI18n()
     <p v-if="error" class="confirm__error" role="alert">{{ error }}</p>
     <template #footer>
       <Button variant="ghost" :disabled="busy" @click="emit('update:open', false)">
-        {{ t('common.action.cancel') }}
+        {{ cancelLabel ?? t('common.action.cancel') }}
       </Button>
       <Button
         :variant="danger ? 'danger' : 'primary'"

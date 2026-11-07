@@ -11,7 +11,8 @@
     "more": "更多",
     "open": "打开",
     "remove": "移除",
-    "undo": "撤销"
+    "undo": "撤销",
+    "keepRunning": "继续运行"
   },
   "toast": {
     "close": "关闭通知",

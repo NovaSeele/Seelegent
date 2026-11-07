@@ -11,7 +11,8 @@
     "more": "Thêm",
     "open": "Mở",
     "remove": "Gỡ",
-    "undo": "Hoàn tác"
+    "undo": "Hoàn tác",
+    "keepRunning": "Giữ lại"
   },
   "toast": {
     "close": "Đóng thông báo",

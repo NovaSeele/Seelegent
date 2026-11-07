@@ -167,6 +167,7 @@ async function cancel() {
       :title="t('team.meetings.cancelTitle')"
       :description="t('team.meetings.cancelDesc')"
       :confirm-label="t('team.meetings.cancel')"
+      :cancel-label="t('common.action.keepRunning')"
       danger
       :busy="cancelBusy"
       :error="cancelError"

@@ -11,7 +11,8 @@
     "more": "その他",
     "open": "開く",
     "remove": "削除",
-    "undo": "元に戻す"
+    "undo": "元に戻す",
+    "keepRunning": "続ける"
   },
   "toast": {
     "close": "通知を閉じる",

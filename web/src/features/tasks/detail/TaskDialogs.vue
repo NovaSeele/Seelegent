@@ -2,11 +2,13 @@
 import { computed, ref, useId, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
-import type { TaskSummary, Verdict } from '@/api/types'
+import type { Consult, TaskSummary, Verdict } from '@/api/types'
 import Button from '@/components/ui/Button.vue'
 import Dialog from '@/components/ui/Dialog.vue'
 import { isActive } from '@/lib/taskStatus'
+import { useTeamStore } from '@/stores/team'
 
+import { memberLabel } from './consults'
 import type { TaskActions } from './useTaskActions'
 
 export type TaskDialog =
@@ -14,31 +16,44 @@ export type TaskDialog =
 
 /**
  * The confirmations of the task actions that change the work: review (with notes, which a rejection sends back
- * to the worker), cancel and take over. Each says what will happen before anything is sent.
+ * to the worker), cancel and take over. Each says what will happen before anything is sent. Accepting over a
+ * peer objection quotes what each objecting peer requires, since the dialog covers the panel that says it.
+ *
+ * What was typed is a draft: closing the dialog (Esc, the backdrop, Cancel) keeps it for the same dialog on the
+ * same task, and only a sent review, or another dialog, starts empty.
  */
 const props = defineProps<{
   task: TaskSummary
   actions: TaskActions
-  /** A peer objection stands: accepting needs a written answer to it (sent as answerObjection). */
-  objected?: boolean
+  /** Peer objections that stand: accepting needs a written answer to them (sent as answerObjection). */
+  objections?: readonly Consult[]
 }>()
 const dialog = defineModel<TaskDialog>({ required: true })
 
 const { t } = useI18n()
+const team = useTeamStore()
 const id = useId()
 const notes = ref('')
 const answer = ref('')
 
+const keyOf = (value: TaskDialog) =>
+  value ? `${props.task.id}:${value.kind}:${value.kind === 'review' ? value.verdict : ''}` : null
+let draftKey: string | null = null
 watch(
-  () => dialog.value?.kind,
-  () => {
+  () => keyOf(dialog.value),
+  (key) => {
+    if (!key || key === draftKey) return
+    draftKey = key
     notes.value = ''
     answer.value = ''
   },
 )
 
 const answering = computed(
-  () => !!props.objected && dialog.value?.kind === 'review' && dialog.value.verdict === 'accepted',
+  () =>
+    !!props.objections?.length &&
+    dialog.value?.kind === 'review' &&
+    dialog.value.verdict === 'accepted',
 )
 
 const title = computed(() => {
@@ -76,7 +91,10 @@ async function confirm() {
       : value.kind === 'cancel'
         ? await props.actions.cancel()
         : await props.actions.takeover()
-  if (ok) dialog.value = null
+  if (ok) {
+    draftKey = null // sent: the next dialog starts empty
+    dialog.value = null
+  }
 }
 
 function onKeydown(event: KeyboardEvent) {
@@ -99,6 +117,19 @@ function onKeydown(event: KeyboardEvent) {
   >
     <div v-if="dialog?.kind === 'review'" class="td">
       <template v-if="answering">
+        <ul class="td__objections">
+          <li v-for="c in objections" :key="c.id">
+            <strong>{{ memberLabel(team.members, c.member) }}</strong>
+            <ul class="td__required">
+              <li
+                v-for="(r, i) in c.required.length ? c.required : c.findings.map((f) => f.text)"
+                :key="i"
+              >
+                {{ r }}
+              </li>
+            </ul>
+          </li>
+        </ul>
         <label :for="`${id}-answer`" class="td__label">{{ t('task.consults.answerLabel') }}</label>
         <textarea
           :id="`${id}-answer`"
@@ -153,6 +184,25 @@ function onKeydown(event: KeyboardEvent) {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
+}
+
+/* What the objecting peers require, quoted (the dialog covers the opinions panel). */
+.td__objections {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border-left: 3px solid var(--border-strong);
+  background: var(--bg-surface-2);
+  font-size: var(--fs-sm);
+  list-style: none;
+}
+
+.td__required {
+  margin: var(--space-1) 0 0;
+  padding-left: var(--space-5);
+  overflow-wrap: anywhere;
 }
 
 .td__label {
