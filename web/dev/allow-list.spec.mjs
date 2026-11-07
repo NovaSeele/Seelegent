@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { applyAllowList } from './allow-list.mjs'
+import { applyAllowList, listOf } from './allow-list.mjs'
 
 const listed = () => ({ models: ['a', 'b'], allowedModels: '^(?:a|b)$' })
 const anyModel = () => ({ models: [], allowedModels: '' })
@@ -53,6 +53,21 @@ describe('mock applyAllowList', () => {
     expect(apply(listed(), { models: [] })).toEqual(anyModel())
     expect(apply(pattern(), { models: ['', ' '] })).toEqual(anyModel())
     expect(apply(pattern(), {})).toEqual(pattern())
+  })
+
+  // The daemon's ModelsOf: only an exact round trip is a list, and a part with a space or a control character
+  // is no model id, so such a pattern is hand-written and comes with models [].
+  it.each(['^(?:a b|c)$', '^(?:a\tb|c)$', '^(?:a\\-b)$', '^(?:a||b)$', '^(?:a.b)$'])(
+    'keeps %s as a hand-written pattern',
+    (allowedModels) => {
+      expect(listOf(allowedModels)).toBeNull()
+      expect(apply(anyModel(), { allowedModels })).toEqual({ models: [], allowedModels })
+    },
+  )
+
+  it('reads a quoted list back exactly, and a dangling escape as no list', () => {
+    expect(listOf('^(?:a\\)$')).toBeNull()
+    expect(listOf('^(?:gpt-5\\.5|o\\+1|a\\|b)$')).toEqual(['gpt-5.5', 'o+1', 'a|b'])
   })
 
   it('refuses a model id with a space and a pattern that does not compile', () => {

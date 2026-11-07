@@ -26,14 +26,37 @@ const quote = (model: string) => model.replace(/[\\.+*?()|[\]{}^$]/g, '\\$&')
 export const exactPattern = (models: readonly string[]): string =>
   models.length ? `^(?:${models.map(quote).join('|')})$` : ''
 
-/** The models an exact pattern names, or null for any other pattern. */
+/** A space, a tab or a control character: no model id has one. */
+const hasSpace = (model: string) => [...model].some((ch) => (ch.codePointAt(0) ?? 0) <= 32)
+
+/**
+ * The models an exact pattern names, or null for any other pattern: the daemon's ModelsOf. Only an exact round
+ * trip counts ("^(?:a.b)$" is a hand-written pattern, not the list [a.b]), and a part with a space or a control
+ * character is no model id, so "^(?:a b|c)$" is hand-written too.
+ */
 function listOf(pattern: string): string[] | null {
-  const exact = /^\^\(\?:(.+)\)\$$/.exec(pattern)
-  if (!exact?.[1]) return null
-  const parts = exact[1].split(/(?<!\\)\|/)
-  // Every regexp metacharacter of a quoted model is escaped; an unescaped one means a real pattern.
-  if (parts.some((part) => /(^|[^\\])[.*+?^${}()|[\]]/.test(part))) return null
-  return parts.map((part) => part.replace(/\\(.)/g, '$1'))
+  const prefix = '^(?:'
+  const suffix = ')$'
+  if (!pattern.startsWith(prefix) || !pattern.endsWith(suffix)) return null
+  const inner = pattern.slice(prefix.length, pattern.length - suffix.length)
+  if (!inner) return null
+  const parts: string[] = []
+  let current = ''
+  let escaped = false
+  for (const ch of inner) {
+    if (escaped) {
+      current += ch
+      escaped = false
+    } else if (ch === '\\') escaped = true
+    else if (ch === '|') {
+      parts.push(current)
+      current = ''
+    } else current += ch
+  }
+  parts.push(current)
+  if (escaped || parts.some((m) => !m || hasSpace(m)) || exactPattern(parts) !== pattern)
+    return null
+  return parts
 }
 
 /**

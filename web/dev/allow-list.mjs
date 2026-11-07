@@ -13,13 +13,37 @@ export function exactPattern(models) {
   return `^(?:${models.map((m) => m.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})$`
 }
 
-/** The models an exact pattern names, or null for a hand-written pattern. */
+/** A space, a tab or a control character: no model id has one. */
+const hasSpace = (model) => [...model].some((ch) => ch.codePointAt(0) <= 32)
+
+/**
+ * The models an exact pattern names, or null for a hand-written pattern: the daemon's ModelsOf. Only an exact
+ * round trip counts ("^(?:a.b)$" is hand-written), and a part with a space or a control character is no model
+ * id, so "^(?:a b|c)$" is hand-written too.
+ */
 export function listOf(pattern) {
-  const exact = /^\^\(\?:(.+)\)\$$/.exec(pattern)
-  if (!exact) return null
-  const parts = exact[1].split(/(?<!\\)\|/)
-  if (parts.some((part) => /(^|[^\\])[.*+?^${}()|[\]]/.test(part))) return null
-  return parts.map((part) => part.replace(/\\(.)/g, '$1'))
+  const prefix = '^(?:'
+  const suffix = ')$'
+  if (!pattern.startsWith(prefix) || !pattern.endsWith(suffix)) return null
+  const inner = pattern.slice(prefix.length, pattern.length - suffix.length)
+  if (!inner) return null
+  const parts = []
+  let current = ''
+  let escaped = false
+  for (const ch of inner) {
+    if (escaped) {
+      current += ch
+      escaped = false
+    } else if (ch === '\\') escaped = true
+    else if (ch === '|') {
+      parts.push(current)
+      current = ''
+    } else current += ch
+  }
+  parts.push(current)
+  if (escaped || parts.some((m) => !m || hasSpace(m)) || exactPattern(parts) !== pattern)
+    return null
+  return parts
 }
 
 const invalid = (message) => Object.assign(new Error(message), { field: 'models' })

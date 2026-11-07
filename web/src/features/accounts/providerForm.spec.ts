@@ -74,6 +74,20 @@ describe('provider form', () => {
       expect(allowList(p('^(?:glm-.*)$'))).toEqual({ kind: 'pattern', pattern: '^(?:glm-.*)$' })
     })
 
+    // The daemon's ModelsOf: a list-shaped pattern counts as a list only on an exact round trip, and a part with
+    // a space or a control character is no model id, so the pattern is hand-written (models []).
+    it.each([
+      '^(?:a b|c)$',
+      '^(?:a\tb|c)$',
+      '^(?:c|a\u0001)$',
+      '^(?:a\\-b)$',
+      '^(?:a||b)$',
+      '^(?:a\\)$',
+      '^(?:)$',
+    ])('reads %s as a hand-written pattern, as the daemon does', (pattern) => {
+      expect(allowList(p(pattern))).toEqual({ kind: 'pattern', pattern })
+    })
+
     // Review S1: a daemon that answers models with the tier models must not put a tier model in the field.
     it('never takes tier models answered in models as the list', () => {
       const tiered = p('^(?:deepseek-v4|deepseek-r2)$', ['deepseek-chat'])
