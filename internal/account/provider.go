@@ -200,9 +200,16 @@ func ModelsOf(pattern string) []string {
 		}
 	}
 	out = append(out, cur.String())
-	// Only an exact round trip counts: "^(?:a.b)$" is a hand-written pattern, not the list [a.b].
+	// Only an exact round trip counts: "^(?:a.b)$" is a hand-written pattern, not the list [a.b]. A part with a space
+	// or control character is no valid model id, so such a pattern stays hand-written too (else every later update
+	// of the provider would fail validation of a list its user never sent).
 	if esc || ModelsPattern(out) != pattern {
 		return []string{}
+	}
+	for _, m := range out {
+		if strings.ContainsFunc(m, func(r rune) bool { return r <= ' ' }) {
+			return []string{}
+		}
 	}
 	return out
 }

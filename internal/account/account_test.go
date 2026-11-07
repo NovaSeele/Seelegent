@@ -211,7 +211,7 @@ func TestModelsPatternRoundTrip(t *testing.T) {
 		}
 	}
 	// Hand-written patterns are not lists.
-	for _, pat := range []string{"", "^glm-", "^(?:a.b)$", "^(?:a)$x", `^(?:a\)$`, "^(?:)$"} {
+	for _, pat := range []string{"", "^glm-", "^(?:a.b)$", "^(?:a)$x", `^(?:a\)$`, "^(?:)$", "^(?:a b|c)$", "^(?:a\tb)$"} {
 		if got := ModelsOf(pat); got == nil || len(got) != 0 {
 			t.Errorf("ModelsOf(%q) = %q, want []", pat, got)
 		}
