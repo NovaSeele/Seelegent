@@ -113,7 +113,9 @@ After a round:
 
 `POST /meetings/{id}/decide {decision, rationale?, option?}` records the decision. A senior whose final stance
 differs is recorded as advice not taken; a peer whose stance differs gets one more turn to dissent formally or
-concede (`dissent`), and the meeting closes when those are in. For 30 days a dissent watches the files it cites:
+concede (`dissent`), and the meeting closes when those are in. Without options free-text stances cannot be
+compared, so every senior counts as advice not taken and every peer gets that turn, where it can concede (as in the
+old version); give options when the record matters. For 30 days a dissent watches the files it cites:
 a later task that changed one of them and was rejected, or ended with a red gate, is added to it as a signal. The
 lead settles a dissent with `POST /meetings/{id}/dissents/{did}/outcome {outcome: vindicated|dismissed}`. The old
 `regression` signal could never fire and is gone (old bug D19).
