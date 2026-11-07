@@ -164,10 +164,16 @@ func runDaemon(ctx context.Context, info buildinfo.Info, f daemonFlags, stderr i
 		return err
 	}
 	defer func() { _ = closer.Close() }()
+	// A daemon started in the background has no terminal: every reason it stops before it listens goes to
+	// logs/daemon.log, which the starters' errors point at (a database newer than this build, a broken config).
+	failed := func(err error) error {
+		log.Error("daemon: could not start", "version", info.Version, "err", err)
+		return err
+	}
 	warnDevOrigins(log, f.devOrigins)
 	a, err := app.New(ctx, app.Options{Paths: paths, Logger: log, Info: info, Web: web.FS(), DevOrigins: f.devOrigins})
 	if err != nil {
-		return err
+		return failed(err)
 	}
 	closeApp := func() error {
 		cctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), daemonCloseTimeout)
@@ -176,26 +182,26 @@ func runDaemon(ctx context.Context, info buildinfo.Info, f daemonFlags, stderr i
 	}
 	if err := a.Start(ctx); err != nil {
 		_ = closeApp()
-		return err
+		return failed(err)
 	}
 	port := f.port
 	if port == 0 {
 		if port, err = a.Port(); err != nil {
 			_ = closeApp()
-			return err
+			return failed(err)
 		}
 	}
 	addr, err := a.ListenHTTP(ctx, port)
 	if err != nil {
 		_ = closeApp()
 		if addrInUse(err) {
-			return &portTakenError{port: port, err: err}
+			return failed(&portTakenError{port: port, err: err})
 		}
-		return err
+		return failed(err)
 	}
 	if err := writePortFile(paths, addr); err != nil {
 		_ = closeApp()
-		return fmt.Errorf("record the daemon port: %w", err)
+		return failed(fmt.Errorf("record the daemon port: %w", err))
 	}
 	log.Info("daemon: running", "version", info.Version, "home", paths.Home, "addr", addr)
 	_, _ = fmt.Fprintf(stderr, "Seelegent %s listening on http://%s/ (Ctrl+C or `seelegent stop` stops it)\n",
