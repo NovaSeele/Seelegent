@@ -10,6 +10,8 @@
  * waiting_code, so POST /accounts/{id}/login/code answers 409 bad_state like the daemon.
  */
 
+import { applyAllowList } from './allow-list.mjs'
+
 const MIN = 60_000
 const HOUR = 60 * MIN
 const DAY = 24 * HOUR
@@ -336,13 +338,8 @@ export function createAdminRoutes(ctx) {
 
   // -------------------------------------------------------------------------------------------------------------
   // Providers: the shapes of internal/api (Provider, ProviderPreset, ProviderInput), checked roughly like
-  // account.Provider.Validate and the daemon's applyProvider. The allow-list follows the contract:
-  // - `models` is the allow-list exactly as last set, never the tier models;
-  // - `allowedModels` is the pattern enforced for it (exactPattern of the list); a hand-written pattern that is
-  //   not such a list comes with `models: []`;
-  // - both empty means any model, and tier models are always allowed on top;
-  // - `models` in a body replaces the list (`[]` clears it); `allowedModels` sets a pattern (models wins when a
-  //   body has both, the mock's choice).
+  // account.Provider.Validate and the daemon's applyProvider. The allow-list (models, allowedModels) follows the
+  // daemon exactly: see allow-list.mjs.
 
   const NO_TIERS = { fast: '', standard: '', strong: '', max: '' }
   const presets = [
@@ -390,34 +387,8 @@ export function createAdminRoutes(ctx) {
       createdAt: at,
       updatedAt: at,
     }
-    setAllowList(created, models, allowedModels)
+    applyAllowList(created, models, allowedModels)
     return created
-  }
-
-  /** Like the daemon's exactPattern: an anchored pattern of exactly these models ('' for none). */
-  function exactPattern(models) {
-    if (!models.length) return ''
-    return `^(?:${models.map((m) => m.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})$`
-  }
-
-  /** The models an exact pattern names, or null for a hand-written pattern. */
-  function listOf(pattern) {
-    const exact = /^\^\(\?:(.+)\)\$$/.exec(pattern)
-    if (!exact) return null
-    const parts = exact[1].split(/(?<!\\)\|/)
-    if (parts.some((part) => /(^|[^\\])[.*+?^${}()|[\]]/.test(part))) return null
-    return parts.map((part) => part.replace(/\\(.)/g, '$1'))
-  }
-
-  /** Sets the allow-list from a list (models) or a pattern (allowedModels); both undefined leaves it. */
-  function setAllowList(p, models, allowedModels) {
-    if (models !== undefined) {
-      p.models = [...models]
-      p.allowedModels = exactPattern(models)
-    } else if (allowedModels !== undefined) {
-      p.allowedModels = allowedModels
-      p.models = listOf(allowedModels) ?? []
-    }
   }
 
   const providerView = (p) => ({
@@ -444,24 +415,11 @@ export function createAdminRoutes(ctx) {
     for (const key of ['name', 'baseUrl', 'enabled', 'wireApi'])
       if (body[key] !== undefined) p[key] = body[key]
     if (body.tiers !== undefined) p.tiers = { ...NO_TIERS, ...body.tiers }
-    if (body.models !== undefined) {
-      if (
-        !Array.isArray(body.models) ||
-        body.models.some((m) => typeof m !== 'string' || !m.trim() || /\s/.test(m))
-      ) {
-        throw invalid('models are names without spaces', 'models')
-      }
+    try {
+      applyAllowList(p, body.models, body.allowedModels)
+    } catch (error) {
+      throw invalid(error.message, error.field)
     }
-    if (body.allowedModels !== undefined && body.models === undefined) {
-      if (typeof body.allowedModels !== 'string')
-        throw invalid('allowedModels must be text', 'allowedModels')
-      try {
-        new RegExp(body.allowedModels)
-      } catch {
-        throw invalid('allowedModels is not a valid regular expression', 'allowedModels')
-      }
-    }
-    setAllowList(p, body.models, body.allowedModels)
     if (typeof p.name !== 'string' || p.name.length > 60) {
       throw invalid('name is at most 60 characters', 'name')
     }
