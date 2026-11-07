@@ -474,7 +474,8 @@ func TestInterruptedLeadActions(t *testing.T) {
 }
 
 // Open starts round 1 before it stores the meeting: a daemon that stopped in between leaves attendee runs whose
-// meeting does not exist. The next start stops and closes them, and leaves the runs of stored meetings alone.
+// meeting does not exist; a cancel that raced the daemon's shutdown leaves open runs of a cancelled meeting. The
+// next start stops and closes both, and leaves the runs of meetings still going alone.
 func TestStartStopsRunsOfUnstoredMeetings(t *testing.T) {
 	s, ft, repo := setup(t)
 	ctx := t.Context()
@@ -487,12 +488,14 @@ func TestStartStopsRunsOfUnstoredMeetings(t *testing.T) {
 		return sum.ID
 	}
 	now := api.FormatTime(time.Now())
-	kept := api.Meeting{ID: "m-kept", Title: "x", Question: "x", Status: api.MeetingStatusDeciding, Cwd: repo,
-		MaxRounds: 2, Rounds: []api.MeetingRound{}, CreatedAt: now, UpdatedAt: now}
-	if err := s.insert(ctx, &kept); err != nil {
-		t.Fatal(err)
+	for id, st := range map[string]string{"m-kept": api.MeetingStatusDeciding, "m-ended": api.MeetingStatusCancelled} {
+		m := api.Meeting{ID: id, Title: "x", Question: "x", Status: st, Cwd: repo, MaxRounds: 2,
+			Rounds: []api.MeetingRound{}, CreatedAt: now, UpdatedAt: now}
+		if err := s.insert(ctx, &m); err != nil {
+			t.Fatal(err)
+		}
 	}
-	keptRun, orphan := spawn("m-kept"), spawn("m-never-stored")
+	keptRun, orphan, ended := spawn("m-kept"), spawn("m-never-stored"), spawn("m-ended")
 	normal, err := ft.DelegateWith(ctx, api.DelegateRequest{Prompt: "x", Cwd: repo},
 		task.Spawn{MeetingID: "m-never-stored"})
 	if err != nil {
@@ -506,6 +509,10 @@ func TestStartStopsRunsOfUnstoredMeetings(t *testing.T) {
 	}
 	if d, _ := ft.Get(ctx, orphan); d.Status != api.StatusCancelled || !ft.isClosed(orphan) {
 		t.Errorf("orphan run = %s, closed %v", d.Status, ft.isClosed(orphan))
+	}
+	// A cancel that raced the daemon's shutdown: the meeting is cancelled, its run still open.
+	if d, _ := ft.Get(ctx, ended); d.Status != api.StatusCancelled || !ft.isClosed(ended) {
+		t.Errorf("run of a cancelled meeting = %s, closed %v", d.Status, ft.isClosed(ended))
 	}
 	if d, _ := ft.Get(ctx, keptRun); d.Status != api.StatusRunning || ft.isClosed(keptRun) {
 		t.Errorf("run of a stored meeting = %s, closed %v", d.Status, ft.isClosed(keptRun))

@@ -184,6 +184,50 @@ func TestStopHiddenRunClosesItOnceStopped(t *testing.T) {
 	}
 }
 
+// A daemon that stopped between creating a consult run and storing its record leaves a run nobody reads: the next
+// start stops and closes it, and leaves alone a consult run its parent records.
+func TestStartStopsOrphanConsultRuns(t *testing.T) {
+	h := newHarness(t)
+	h.initRepo(map[string]string{"a.txt": "one\n"})
+	h.agy("w", 3)
+	h.queue.Push(t, okScript("conv-p", "Done."))
+	parent := h.delegate(api.DelegateRequest{Title: "parent"})
+	h.waitStatus(parent.ID, StatusDone)
+	consult := func(conv string) string {
+		h.queue.Push(t, hangScript(conv))
+		run, err := h.s.DelegateWith(t.Context(), api.DelegateRequest{Prompt: "review", Cwd: h.cwd,
+			Title: "Consult: parent", Mode: ModePlan}, Spawn{Kind: KindConsult, ParentID: parent.ID})
+		if err != nil {
+			t.Fatal(err)
+		}
+		h.runningWorker(run.ID)
+		return run.ID
+	}
+	orphan, recorded := consult("conv-o"), consult("conv-r")
+	if _, err := h.s.mutate(t.Context(), parent.ID, func(tk *Task) ([]NewEvent, error) {
+		tk.Consults = append(tk.Consults, api.Consult{ID: "c1", Member: "rev", Rank: api.RankPeer, RunTaskID: recorded,
+			Status: consultRunning, Findings: []api.Claim{}, Required: []string{}, At: api.FormatTime(h.clk.Now())})
+		return nil, nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	h.stop()
+	h.start()
+	h.waitFor("the orphan consult run to be closed", func() bool {
+		r := h.task(orphan)
+		return r.Status == StatusCancelled && r.Review != nil
+	})
+	if r := h.task(orphan); r.Review.Notes != "consult not stored" {
+		t.Errorf("orphan review = %+v", r.Review)
+	}
+	if r := h.task(recorded); r.Status != StatusRunning || r.Review != nil {
+		t.Errorf("recorded consult run = %s, review %+v", r.Status, r.Review)
+	}
+	if _, _, err := h.s.Cancel(t.Context(), recorded, api.CancelRequest{WaitSeconds: 10}); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // TestConsultDuringFollowup creates a consult run while a followup on the parent is saved: the child task is
 // created outside the parent's lock, so neither call waits on the other (lock order: claimMu, then the task).
 func TestConsultDuringFollowup(t *testing.T) {

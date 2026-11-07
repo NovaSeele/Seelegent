@@ -163,50 +163,60 @@ func (s *Service) Start(ctx context.Context) error {
 		s.watch(id)
 	}
 	if err := s.stopOrphanRuns(ctx); err != nil {
-		s.log.Warn("meeting: stop runs of meetings that were never stored", "err", err)
+		s.log.Warn("meeting: stop runs nobody reads", "err", err)
 	}
 	s.spawn(s.memory)
 	return nil
 }
 
-// stopOrphanRuns stops and closes the attendee runs whose meeting does not exist: Open starts round 1 before it
-// stores the meeting, so a daemon that stopped in between (or a failed insert whose clean-up did not finish) leaves
-// runs nobody reads. The check holds s.mu, which Open holds from the first run to the insert.
+// stopOrphanRuns stops and closes the attendee runs nobody will read:
+//   - runs whose meeting does not exist: Open starts round 1 before it stores the meeting, so a daemon that stopped
+//     in between (or a failed insert whose clean-up did not finish) leaves them;
+//   - open runs of a meeting that has ended (cancelled, closed, failed): a Cancel racing the daemon's shutdown
+//     stops following them before they stop, and the watchers only follow meetings in round or dissent.
+//
+// The check holds s.mu, which Open holds from the first run to the insert; the runs are stopped after it.
 func (s *Service) stopOrphanRuns(ctx context.Context) error {
 	orphans, err := s.orphanRuns(ctx)
 	if err != nil {
 		return err
 	}
-	for _, id := range orphans {
-		s.log.Info("meeting: stop a run whose meeting was never stored", "task", id)
-		s.o.Tasks.StopHiddenRun(id, "meeting not stored")
+	for _, o := range orphans {
+		s.log.Info("meeting: stop a run nobody reads", "task", o.task, "why", o.notes)
+		s.o.Tasks.StopHiddenRun(o.task, o.notes)
 	}
 	return nil
 }
 
-// orphanRuns lists the open meeting runs whose meeting does not exist.
-func (s *Service) orphanRuns(ctx context.Context) ([]string, error) {
+// orphanRun is an attendee run to stop and the note it is closed with.
+type orphanRun struct{ task, notes string }
+
+// orphanRuns lists the open meeting runs whose meeting does not exist or has ended.
+func (s *Service) orphanRuns(ctx context.Context) ([]orphanRun, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	runs, err := s.o.Tasks.OpenHiddenRuns(ctx, task.KindMeeting)
 	if err != nil {
 		return nil, err
 	}
-	var orphans []string
+	var orphans []orphanRun
 	for _, r := range runs {
 		id := r.MeetingID
 		if id == "" {
 			id = r.ParentID
 		}
-		var n int
+		var status string
 		err := s.o.DB.Read(ctx, func(tx *sql.Tx) error {
-			return tx.QueryRowContext(ctx, `SELECT count(*) FROM meetings WHERE id = ?`, id).Scan(&n)
+			return tx.QueryRowContext(ctx, `SELECT status FROM meetings WHERE id = ?`, id).Scan(&status)
 		})
-		if err != nil {
+		switch {
+		case errors.Is(err, sql.ErrNoRows):
+			orphans = append(orphans, orphanRun{task: r.ID, notes: "meeting not stored"})
+		case err != nil:
 			return nil, fmt.Errorf("meeting %s: %w", id, err)
-		}
-		if n == 0 {
-			orphans = append(orphans, r.ID)
+		case status == api.MeetingStatusCancelled || status == api.MeetingStatusClosed ||
+			status == api.MeetingStatusFailed:
+			orphans = append(orphans, orphanRun{task: r.ID, notes: "meeting " + status})
 		}
 	}
 	return orphans, nil

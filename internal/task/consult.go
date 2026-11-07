@@ -361,6 +361,28 @@ func (s *Service) OpenHiddenRuns(ctx context.Context, kind string) ([]HiddenRun,
 	return out, nil
 }
 
+// stopOrphanConsults stops and closes the consult runs nobody reads: a run whose parent task has no consult that
+// names it (the daemon stopped between creating the run and storing its record). It runs at start, before the API
+// serves, and outside any task lock (StopHiddenRun takes its own).
+func (s *Service) stopOrphanConsults(ctx context.Context) error {
+	runs, err := s.OpenHiddenRuns(ctx, KindConsult)
+	if err != nil {
+		return err
+	}
+	for _, r := range runs {
+		parent, err := s.repo.Get(ctx, r.ParentID)
+		if err != nil && !errors.Is(err, ErrNotFound) {
+			return err
+		}
+		if err == nil && slices.ContainsFunc(parent.Consults, func(c api.Consult) bool { return c.RunTaskID == r.ID }) {
+			continue
+		}
+		s.log.Info("task: stop a consult run nobody reads", "task", r.ID, "parent", r.ParentID)
+		s.StopHiddenRun(r.ID, "consult not stored")
+	}
+	return nil
+}
+
 // StopHiddenRun stops a hidden run whose record was never stored (nothing will read its answer) and closes it once
 // it has stopped, so it never waits for the lead's review. A running worker takes a moment to stop, which a
 // close right after Cancel would miss.

@@ -273,6 +273,9 @@ func (s *Service) Start(ctx context.Context) error {
 	if err := s.resumeConsults(ctx); err != nil {
 		return err
 	}
+	if err := s.stopOrphanConsults(ctx); err != nil {
+		s.log.Warn("task: stop consult runs nobody reads", "err", err)
+	}
 	s.refreshHealth(ctx)
 	s.spawn("attention", "", s.watchAttention)
 	s.spawn("sweep", "", s.watchSweep)
