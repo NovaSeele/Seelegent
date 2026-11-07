@@ -257,6 +257,60 @@ func TestStdinScripts(t *testing.T) {
 	}
 }
 
+// TestMoreWrappers: wrappers and dialect forms the reviewer found passing.
+func TestMoreWrappers(t *testing.T) {
+	deny := map[Shell][]string{
+		POSIX: {
+			"chrt 10 git stash", "chrt -f 10 git reset --hard", "chrt -T 100 -D 200 -d 0 git stash",
+			"taskset 0x1 git stash", "taskset -c 0,1 git stash", "unshare git stash", "unshare -r -w /x git stash",
+			"parallel git {} ::: stash", "parallel 'git {}' ::: stash", "parallel -j 2 git ::: stash",
+			"parallel ::: 'git stash' 'echo hi'", "echo stash | parallel git", "script -c 'git stash' /dev/null",
+			"script -qc 'git reset --hard' /dev/null", "script --command='git stash'", "script -q /dev/null git stash",
+			"su -c 'git stash' bob", "su bob -c 'git stash'", "su - bob -c 'git reset --hard'", "su -lc 'git stash'",
+			"sudo su -c 'git stash'", "runuser -u bob -- git stash", "runuser -u bob git stash",
+			"su bob <<'EOF'\ngit stash\nEOF",
+		},
+		PowerShell: {
+			"Start-Process git 'reset','--hard'", "Start-Process git reset,--hard", "saps git 'stash'",
+			"Start-Process -FilePath git 'reset --hard'", "[Diagnostics.Process]::Start('git','stash')",
+			"[System.Diagnostics.Process]::Start(\"git\", \"reset --hard\")",
+			"$p = [Diagnostics.Process]::Start('git', 'stash')",
+			"([Diagnostics.Process]::Start('git','stash')).WaitForExit()",
+		},
+		Cmd: {
+			"if exist a git stash", "if not exist a git reset --hard", "if /i \"%x%\"==\"y\" git stash",
+			"if errorlevel 1 git stash", "if defined X git stash", "if a == b git stash", "if 1 EQU 1 git stash",
+			"if exist a if exist b git stash",
+		},
+	}
+	for sh, lines := range deny {
+		for _, line := range lines {
+			if r := (Checker{}).Command(line, sh); !r.Deny {
+				t.Errorf("shell %d: Command(%q) allowed, want deny", sh, line)
+			}
+		}
+	}
+	allowed := map[Shell][]string{
+		POSIX: {
+			"chrt 10 make", "taskset -c 0 go test ./...", "unshare -r id", "parallel gzip ::: a.log b.log",
+			"parallel git log -1 {} ::: a b", "script -c 'git status' /dev/null", "script out.txt",
+			"su -c 'id' bob", "runuser -u bob -- git status",
+		},
+		PowerShell: {
+			"Start-Process git 'status'", "Start-Process notepad a.txt", "[Diagnostics.Process]::Start('git','status')",
+			"Start-Process git -ArgumentList \"commit -m $msg\"",
+		},
+		Cmd: {"if exist a git status", "if not exist out mkdir out", "if \"%x%\"==\"y\" echo git stash"},
+	}
+	for sh, lines := range allowed {
+		for _, line := range lines {
+			if r := (Checker{}).Command(line, sh); r.Deny {
+				t.Errorf("shell %d: Command(%q) denied (%s), want allow", sh, line, r.Reason)
+			}
+		}
+	}
+}
+
 // TestAbbreviatedOptions: git accepts any unambiguous prefix of a long option, so a prefix of a refused option is
 // refused too.
 func TestAbbreviatedOptions(t *testing.T) {
