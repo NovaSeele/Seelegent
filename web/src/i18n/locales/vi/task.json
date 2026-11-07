@@ -107,7 +107,6 @@
     "count": "{n} mục",
     "turn": "Lượt {n}",
     "risk": {
-      "title": "Có thể mất công việc",
       "desc": "Những thay đổi chưa commit có từ trước lượt đã biến mất. Khôi phục sẽ lấy lại các tệp từ bản chụp trước lượt.",
       "restore": "Khôi phục tệp ({n})",
       "waitStop": "Có thể khôi phục khi worker đã dừng.",
@@ -120,12 +119,15 @@
       "binary": "tệp nhị phân",
       "restored": "Đã khôi phục",
       "done": "Đã khôi phục tệp: {n}",
-      "skipped": "Không khôi phục được: {files}"
+      "skipped": "Không khôi phục được: {files}",
+      "restoredTitle": "Đã khôi phục công việc",
+      "restoredDesc": "Các tệp đã được lấy lại từ bản chụp trước lượt {n}.",
+      "restoredDescMany": "Các tệp đã được lấy lại từ bản chụp trước mỗi lượt."
     },
     "overlaps": {
       "title": "Cũng bị tác vụ khác thay đổi",
       "active": "cả hai đang chạy",
-      "recent": "gần đây"
+      "recent": "vừa đổi gần đây"
     },
     "findings": "Kiểm tra của lượt {n}",
     "severity": {
@@ -142,6 +144,14 @@
       "unfetchedUrl": "URL worker chưa từng mở",
       "skipped": "Bỏ qua kiểm tra"
     },
-    "blocked": "Lệnh bị chốt chặn git từ chối"
+    "blocked": "Lệnh git đã bị chặn",
+    "blockedNote": "Các lệnh này bị chặn trước khi chạy; không có gì bị thay đổi.",
+    "parts": {
+      "risk": "{count} tệp có nguy cơ mất",
+      "overlaps": "{count} tệp dùng chung",
+      "findings": "{count} phát hiện",
+      "blocked": "{count} lệnh bị chặn",
+      "restored": "đã khôi phục {count}"
+    }
   }
 }

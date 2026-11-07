@@ -107,7 +107,6 @@
     "count": "{n} found",
     "turn": "Turn {n}",
     "risk": {
-      "title": "Work may be lost",
       "desc": "Uncommitted changes that were there before the turn are gone. Restore puts the files back from the snapshot taken before the turn.",
       "restore": "Restore files ({n})",
       "waitStop": "Restore is possible once the worker has stopped.",
@@ -120,12 +119,15 @@
       "binary": "binary file",
       "restored": "Restored",
       "done": "Files restored: {n}",
-      "skipped": "Not restored: {files}"
+      "skipped": "Not restored: {files}",
+      "restoredTitle": "Work restored",
+      "restoredDesc": "Files were put back from the snapshot taken before turn {n}.",
+      "restoredDescMany": "Files were put back from the snapshots taken before their turns."
     },
     "overlaps": {
       "title": "Also changed by other tasks",
       "active": "both working",
-      "recent": "recently"
+      "recent": "changed recently"
     },
     "findings": "Checks of turn {n}",
     "severity": {
@@ -142,6 +144,14 @@
       "unfetchedUrl": "URL the worker never opened",
       "skipped": "Check skipped"
     },
-    "blocked": "Commands the git guard refused"
+    "blocked": "Commands the git guard refused",
+    "blockedNote": "The guard stopped these before they ran; nothing was changed.",
+    "parts": {
+      "risk": "{count} file at risk | {count} files at risk",
+      "overlaps": "{count} shared file | {count} shared files",
+      "findings": "{count} finding | {count} findings",
+      "blocked": "{count} command refused | {count} commands refused",
+      "restored": "{count} restored | {count} restored"
+    }
   }
 }

@@ -107,7 +107,6 @@
     "count": "{n} 项",
     "turn": "第 {n} 轮",
     "risk": {
-      "title": "工作可能丢失",
       "desc": "本轮之前未提交的修改不见了。恢复会从本轮开始前的快照中取回这些文件。",
       "restore": "恢复文件 ({n})",
       "waitStop": "工作者停止后才能恢复。",
@@ -120,12 +119,15 @@
       "binary": "二进制文件",
       "restored": "已恢复",
       "done": "已恢复文件: {n}",
-      "skipped": "未能恢复: {files}"
+      "skipped": "未能恢复: {files}",
+      "restoredTitle": "工作已恢复",
+      "restoredDesc": "已从第 {n} 轮开始前的快照中取回文件。",
+      "restoredDescMany": "已从各轮开始前的快照中取回文件。"
     },
     "overlaps": {
       "title": "其他任务也修改了",
       "active": "都在运行",
-      "recent": "最近"
+      "recent": "最近修改过"
     },
     "findings": "第 {n} 轮的检查",
     "severity": {
@@ -142,6 +144,14 @@
       "unfetchedUrl": "工作者从未打开的 URL",
       "skipped": "已跳过检查"
     },
-    "blocked": "被 git 防护拒绝的命令"
+    "blocked": "被 git 防护拒绝的命令",
+    "blockedNote": "防护在这些命令运行前就拦下了它们，没有任何改动。",
+    "parts": {
+      "risk": "{count} 个文件有风险",
+      "overlaps": "{count} 个共享文件",
+      "findings": "{count} 项发现",
+      "blocked": "{count} 条命令被拒绝",
+      "restored": "已恢复 {count} 个"
+    }
   }
 }

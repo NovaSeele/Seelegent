@@ -107,7 +107,6 @@
     "count": "{n} encontrados",
     "turn": "Turno {n}",
     "risk": {
-      "title": "Puede perderse trabajo",
       "desc": "Los cambios sin confirmar que existían antes del turno han desaparecido. Restaurar recupera los archivos de la instantánea tomada antes del turno.",
       "restore": "Restaurar archivos ({n})",
       "waitStop": "Se puede restaurar cuando el worker se haya detenido.",
@@ -120,12 +119,15 @@
       "binary": "archivo binario",
       "restored": "Restaurado",
       "done": "Archivos restaurados: {n}",
-      "skipped": "No restaurados: {files}"
+      "skipped": "No restaurados: {files}",
+      "restoredTitle": "Trabajo restaurado",
+      "restoredDesc": "Los archivos se recuperaron de la instantánea tomada antes del turno {n}.",
+      "restoredDescMany": "Los archivos se recuperaron de las instantáneas tomadas antes de sus turnos."
     },
     "overlaps": {
       "title": "También cambiados por otras tareas",
       "active": "ambas trabajando",
-      "recent": "recientemente"
+      "recent": "cambiado hace poco"
     },
     "findings": "Comprobaciones del turno {n}",
     "severity": {
@@ -142,6 +144,14 @@
       "unfetchedUrl": "URL que el worker nunca abrió",
       "skipped": "Comprobación omitida"
     },
-    "blocked": "Comandos que rechazó la protección de git"
+    "blocked": "Comandos que rechazó la protección de git",
+    "blockedNote": "La protección los detuvo antes de ejecutarse; no se cambió nada.",
+    "parts": {
+      "risk": "{count} archivo en riesgo | {count} archivos en riesgo",
+      "overlaps": "{count} archivo compartido | {count} archivos compartidos",
+      "findings": "{count} hallazgo | {count} hallazgos",
+      "blocked": "{count} comando rechazado | {count} comandos rechazados",
+      "restored": "{count} restaurado | {count} restaurados"
+    }
   }
 }

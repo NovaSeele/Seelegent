@@ -1,17 +1,23 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { RouterLink } from 'vue-router'
 
 import { gitApi, type GitApi } from '@/api'
 import type { TaskDetail, TaskSummary } from '@/api/types'
-import Chip from '@/components/ui/Chip.vue'
 import Icon from '@/components/ui/Icon.vue'
 import { isActive } from '@/lib/taskStatus'
 import { useToastStore } from '@/stores/toast'
 
 import OutsideDiffDialog from '../views/git/OutsideDiffDialog.vue'
-import { findingKey, safetyCount, safetyOf, safetyUrgent } from './safety'
+import {
+  outsideTurns,
+  restoredByTurn,
+  safetyCount,
+  safetyOf,
+  safetyParts,
+  safetyUrgent,
+} from './safety'
+import SafetyChecks from './SafetyChecks.vue'
 import SafetyRisk from './SafetyRisk.vue'
 
 /**
@@ -30,9 +36,23 @@ const { t } = useI18n()
 const toast = useToastStore()
 
 const safety = computed(() => safetyOf(props.detail))
+const parts = computed(() => safetyParts(safety.value))
 const count = computed(() => safetyCount(safety.value))
 const urgent = computed(() => safetyUrgent(safety.value))
 const active = computed(() => isActive(props.task))
+
+/** The collapsed line after the count: one short phrase per kind, restored work last and muted. */
+const summary = computed(() => {
+  const p = parts.value
+  const phrase = (kind: keyof typeof p) => ({
+    kind,
+    text: t(`task.safety.parts.${kind}`, { count: p[kind] }, p[kind]),
+    muted: kind === 'restored',
+  })
+  return (['risk', 'overlaps', 'findings', 'blocked', 'restored'] as const)
+    .filter((kind) => p[kind] > 0)
+    .map(phrase)
+})
 
 // Opens by itself when something becomes urgent; the user's own toggle wins otherwise.
 const expanded = ref(urgent.value)
@@ -74,12 +94,8 @@ async function restore(turn: number) {
 
 const outsideOpen = ref(false)
 const outsideTurn = ref<number | undefined>(undefined)
-const outsideTurns = computed(() =>
-  (props.detail?.turns ?? [])
-    .filter((turn) => turn.outsideDiff)
-    .map((turn) => turn.n)
-    .sort((a, b) => b - a),
-)
+const turns = computed(() => outsideTurns(props.detail))
+const restored = computed(() => restoredByTurn(props.detail))
 function showOutside(turn: number) {
   outsideTurn.value = turn
   outsideOpen.value = true
@@ -88,16 +104,26 @@ function showOutside(turn: number) {
 
 <template>
   <details
-    v-if="count"
+    v-if="count || parts.restored"
     class="safety"
     :class="urgent ? 'tone-danger' : 'tone-neutral'"
     :open="expanded"
     @toggle="expanded = ($event.target as HTMLDetailsElement).open"
   >
     <summary class="safety__summary">
-      <Icon name="warning" class="safety__icon" />
+      <Icon :name="urgent ? 'warning' : 'info'" class="safety__icon" />
       <strong>{{ t('task.safety.title') }}</strong>
-      <span class="safety__count">{{ t('task.safety.count', { n: count }) }}</span>
+      <span v-if="count" class="safety__count">{{ t('task.safety.count', { n: count }) }}</span>
+      <span class="safety__parts">
+        <span
+          v-for="part in summary"
+          :key="part.kind"
+          class="safety__phrase"
+          :class="{ 'safety__phrase--muted': part.muted }"
+        >
+          {{ part.text }}
+        </span>
+      </span>
     </summary>
     <div class="safety__body">
       <SafetyRisk
@@ -108,52 +134,16 @@ function showOutside(turn: number) {
         @restore="restore"
         @outside="showOutside"
       />
-      <section v-if="safety.overlaps.length" class="safety__part">
-        <h3 class="safety__title">{{ t('task.safety.overlaps.title') }}</h3>
-        <ul class="safety__list">
-          <li v-for="o in safety.overlaps" :key="`${o.taskId}:${o.file}`" class="safety__item">
-            <code class="safety__path">{{ o.file }}</code>
-            <RouterLink :to="{ name: 'tasks', params: { taskId: o.taskId } }" class="safety__link">
-              {{ o.title || o.taskId }}
-            </RouterLink>
-            <Chip :tone="o.severity === 'active' ? 'danger' : 'neutral'">
-              {{ t(`task.safety.overlaps.${o.severity}`) }}
-            </Chip>
-          </li>
-        </ul>
-      </section>
-      <section v-if="safety.findings.length" class="safety__part">
-        <h3 class="safety__title">
-          {{ t('task.safety.findings', { n: safety.findingsTurn ?? 0 }) }}
-        </h3>
-        <ul class="safety__list">
-          <li v-for="(f, i) in safety.findings" :key="i" class="safety__item">
-            <Chip :tone="f.severity === 'red' ? 'danger' : 'attention'">
-              {{ t(`task.safety.severity.${f.severity}`) }}
-            </Chip>
-            <span>{{ t(findingKey(f.kind)) }}</span>
-            <code v-if="f.path" class="safety__path">{{ f.path }}</code>
-            <span v-if="f.detail" class="safety__detail">{{ f.detail }}</span>
-          </li>
-        </ul>
-      </section>
-      <section v-if="safety.blocked.length" class="safety__part">
-        <h3 class="safety__title">{{ t('task.safety.blocked') }}</h3>
-        <ul class="safety__list">
-          <li v-for="(b, i) in safety.blocked" :key="i" class="safety__item">
-            <span class="safety__detail">{{ t('task.safety.turn', { n: b.turn }) }}</span>
-            <code class="safety__path">{{ b.command }}</code>
-          </li>
-        </ul>
-      </section>
+      <SafetyChecks :safety="safety" />
     </div>
   </details>
   <OutsideDiffDialog
     v-if="outsideOpen"
     v-model:open="outsideOpen"
     :task-id="task.id"
-    :turns="outsideTurns"
+    :turns="turns"
     :turn="outsideTurn"
+    :restored="restored"
     :api="api"
   />
 </template>
@@ -168,8 +158,10 @@ function showOutside(turn: number) {
 
 .safety__summary {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--space-1) var(--space-2);
+  min-height: var(--target-min);
   padding: var(--space-2) var(--space-4);
   cursor: pointer;
   font-size: var(--fs-sm);
@@ -189,6 +181,25 @@ function showOutside(turn: number) {
   color: var(--text-secondary);
 }
 
+.safety__parts {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0 var(--space-1);
+  min-width: 0;
+  color: var(--text-secondary);
+  font-size: var(--fs-xs);
+}
+
+/* "1 shared file · 1 command refused": a middle dot between phrases, none before the first. */
+.safety__phrase + .safety__phrase::before {
+  margin-right: var(--space-1);
+  content: '·';
+}
+
+.safety__phrase--muted {
+  color: var(--text-muted);
+}
+
 .safety__body {
   display: flex;
   flex-direction: column;
@@ -198,49 +209,10 @@ function showOutside(turn: number) {
   overflow-y: auto;
 }
 
-.safety__part {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-}
-
-.safety__title {
-  font-size: var(--fs-sm);
-  font-weight: var(--fw-semibold);
-}
-
-.safety__list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.safety__item {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: var(--space-1) var(--space-2);
-  font-size: var(--fs-sm);
-}
-
-.safety__path {
-  min-width: 0;
-  font-family: var(--font-mono);
-  font-size: var(--fs-xs);
-  overflow-wrap: anywhere;
-}
-
-.safety__link {
-  color: var(--accent);
-}
-
-.safety__detail {
-  color: var(--text-secondary);
-  font-size: var(--fs-xs);
-  overflow-wrap: anywhere;
+@media (height < 760px) {
+  .safety__body {
+    max-height: 28vh;
+  }
 }
 
 @media (width < 600px) {

@@ -107,7 +107,6 @@
     "count": "{n}건",
     "turn": "턴 {n}",
     "risk": {
-      "title": "작업이 손실되었을 수 있음",
       "desc": "턴 이전에 있던 커밋되지 않은 변경이 사라졌습니다. 복원하면 턴 전에 찍은 스냅샷에서 파일을 되돌립니다.",
       "restore": "파일 복원 ({n})",
       "waitStop": "워커가 멈춘 뒤에 복원할 수 있습니다.",
@@ -120,12 +119,15 @@
       "binary": "바이너리 파일",
       "restored": "복원됨",
       "done": "복원된 파일: {n}",
-      "skipped": "복원되지 않음: {files}"
+      "skipped": "복원되지 않음: {files}",
+      "restoredTitle": "작업 복원됨",
+      "restoredDesc": "턴 {n} 전에 찍은 스냅샷에서 파일을 되돌렸습니다.",
+      "restoredDescMany": "각 턴 전에 찍은 스냅샷에서 파일을 되돌렸습니다."
     },
     "overlaps": {
       "title": "다른 작업도 변경한 파일",
       "active": "둘 다 작업 중",
-      "recent": "최근"
+      "recent": "최근 변경됨"
     },
     "findings": "턴 {n} 검사",
     "severity": {
@@ -142,6 +144,14 @@
       "unfetchedUrl": "워커가 열지 않은 URL",
       "skipped": "검사 건너뜀"
     },
-    "blocked": "git 보호가 거부한 명령"
+    "blocked": "git 보호가 거부한 명령",
+    "blockedNote": "보호 장치가 실행 전에 막았으므로 아무것도 바뀌지 않았습니다.",
+    "parts": {
+      "risk": "위험한 파일 {count}개",
+      "overlaps": "공유 파일 {count}개",
+      "findings": "검사 결과 {count}건",
+      "blocked": "거부된 명령 {count}개",
+      "restored": "복원됨 {count}개"
+    }
   }
 }

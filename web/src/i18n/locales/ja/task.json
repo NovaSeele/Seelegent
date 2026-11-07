@@ -107,7 +107,6 @@
     "count": "{n} 件",
     "turn": "ターン {n}",
     "risk": {
-      "title": "作業が失われた可能性があります",
       "desc": "ターン前にあった未コミットの変更が消えています。復元すると、ターン前に取ったスナップショットからファイルを戻します。",
       "restore": "ファイルを復元 ({n})",
       "waitStop": "ワーカーが停止すると復元できます。",
@@ -120,12 +119,15 @@
       "binary": "バイナリファイル",
       "restored": "復元済み",
       "done": "復元したファイル: {n}",
-      "skipped": "復元できませんでした: {files}"
+      "skipped": "復元できませんでした: {files}",
+      "restoredTitle": "作業を復元しました",
+      "restoredDesc": "ターン {n} の前に取ったスナップショットからファイルを戻しました。",
+      "restoredDescMany": "各ターンの前に取ったスナップショットからファイルを戻しました。"
     },
     "overlaps": {
       "title": "他のタスクも変更したファイル",
       "active": "両方作業中",
-      "recent": "最近"
+      "recent": "最近変更"
     },
     "findings": "ターン {n} のチェック",
     "severity": {
@@ -142,6 +144,14 @@
       "unfetchedUrl": "ワーカーが開いていない URL",
       "skipped": "チェックをスキップ"
     },
-    "blocked": "git ガードが拒否したコマンド"
+    "blocked": "git ガードが拒否したコマンド",
+    "blockedNote": "ガードが実行前に止めたため、何も変更されていません。",
+    "parts": {
+      "risk": "リスクのあるファイル {count} 件",
+      "overlaps": "共有ファイル {count} 件",
+      "findings": "指摘 {count} 件",
+      "blocked": "拒否したコマンド {count} 件",
+      "restored": "復元済み {count} 件"
+    }
   }
 }

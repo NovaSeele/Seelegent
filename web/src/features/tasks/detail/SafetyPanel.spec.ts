@@ -6,8 +6,11 @@ import type { RestoreResult, Turn } from '@/api/types'
 import { flush, setupApp } from '@/test/app'
 import { iso, makeDetail, makeTask } from '@/test/fixtures'
 
+import Icon from '@/components/ui/Icon.vue'
+
+import OutsideDiffButton from '../views/git/OutsideDiffButton.vue'
 import OutsideDiffDialog from '../views/git/OutsideDiffDialog.vue'
-import { safetyCount, safetyOf, safetyUrgent } from './safety'
+import { safetyCount, safetyOf, safetyParts, safetyRestored, safetyUrgent } from './safety'
 import SafetyPanel from './SafetyPanel.vue'
 
 const turn = (n: number, extra: Partial<Turn> = {}): Turn => ({
@@ -72,15 +75,18 @@ afterEach(() => {
 describe('safety model', () => {
   it('groups risk per turn newest first and takes findings from the latest finished turn only', () => {
     const s = safetyOf(risky)
-    expect(s.risk.map((g) => [g.turn, g.open])).toEqual([
-      [2, 2],
-      [1, 0],
+    expect(s.risk.map((g) => [g.turn, g.open, g.outsideDiff])).toEqual([
+      [2, 2, true],
+      [1, 0, true],
     ])
     expect(s.findings.map((f) => f.kind)).toEqual(['unfetched_url'])
     expect(s.findingsTurn).toBe(2)
     expect(s.blocked).toEqual([{ turn: 2, command: 'git reset --hard' }])
-    expect(safetyCount(s)).toBe(3 + 1 + 1 + 1)
+    // Restored work is not counted: 2 open files, 1 overlap, 1 finding, 1 refused command.
+    expect(safetyCount(s)).toBe(2 + 1 + 1 + 1)
+    expect(safetyParts(s)).toEqual({ risk: 2, overlaps: 1, findings: 1, blocked: 1, restored: 1 })
     expect(safetyUrgent(s)).toBe(true)
+    expect(safetyRestored(s)).toBe(false)
   })
 
   it('is empty and calm for a clean task, and skips a running turn for findings', () => {
@@ -95,6 +101,21 @@ describe('safety model', () => {
     expect(safetyOf(makeDetail()).risk).toEqual([])
     expect(safetyCount(safetyOf(null))).toBe(0)
     expect(safetyUrgent(safetyOf(makeDetail({ turns: [turn(1)] })))).toBe(false)
+  })
+
+  it('offers no outside diff for a turn that only lost lines to an edit tool, or has no snapshots', () => {
+    const s = safetyOf(
+      makeDetail({
+        turns: [
+          turn(1, { workAtRisk: [{ path: 'a.go', why: 'outside_tools' }], outsideDiff: false }),
+          turn(2, { workAtRisk: [{ path: 'b.go', why: 'large_removal', lostLines: 9 }] }),
+        ],
+      }),
+    )
+    expect(s.risk.map((g) => [g.turn, g.outsideDiff])).toEqual([
+      [2, false],
+      [1, false],
+    ])
   })
 })
 
@@ -119,6 +140,12 @@ describe('SafetyPanel', () => {
     expect(details.attributes('open')).toBeDefined()
     const text = wrapper.text()
     expect(text).toContain('Work may be lost')
+    expect(wrapper.find('summary').text()).toBe(
+      'Safety checks5 found2 files at risk1 shared file1 finding1 command refused1 restored',
+    )
+    expect(wrapper.find('.safety__phrase--muted').text()).toBe('1 restored')
+    expect(wrapper.find('summary').findComponent(Icon).props('name')).toBe('warning')
+    expect(text).toContain('nothing was changed')
     expect(text).toContain('notes.md')
     expect(text).toContain('uncommitted lines lost: 3')
     expect(text).toContain('Restored')
@@ -159,19 +186,132 @@ describe('SafetyPanel', () => {
       ),
     })
     const wrapper = await mountPanel(api)
-    const button = wrapper
-      .findAll('button')
-      .find((b) => b.text() === 'Changes outside the edit tools')
-    await button?.trigger('click')
+    const buttons = wrapper.findAll('button').filter((b) => b.text() === 'Outside changes')
+    expect(buttons).toHaveLength(2)
+    await buttons[0]?.trigger('click')
     await flush()
     const dialog = wrapper.findComponent(OutsideDiffDialog)
     expect(dialog.props('turn')).toBe(2)
+    expect(dialog.props('turns')).toEqual([2, 1])
+    expect(dialog.props('restored')).toEqual({ 1: ['old.txt'] })
     expect(api.outsideDiff).toHaveBeenCalledWith('t1', 2, expect.any(AbortSignal))
     expect(document.body.textContent).toContain('notes.md')
   })
 })
 
+describe('SafetyPanel when every file is back', () => {
+  const restoredOnly = makeDetail({
+    status: 'done',
+    turns: [
+      turn(3, {
+        workAtRisk: [{ path: 'notes.md', why: 'outside_tools', lostLines: 3, restored: true }],
+      }),
+    ],
+    fileOverlaps: [
+      { file: 'a.go', taskId: 't8', title: 'Old task', status: 'done', severity: 'recent' },
+    ],
+  })
+
+  it('reads as done: past tense, a success chip, a muted count and a calm icon', async () => {
+    const { plugins } = await setupApp()
+    const wrapper = mount(SafetyPanel, {
+      props: { task: makeTask({ id: 't1', status: 'done' }), detail: restoredOnly, api: fakeApi() },
+      global: { plugins, stubs: { RouterLink: RouterLinkStub } },
+    })
+    const details = wrapper.find('details')
+    expect(details.attributes('open')).toBeUndefined()
+    expect(details.classes()).toContain('tone-neutral')
+    expect(wrapper.find('summary').text()).toBe('Safety checks1 found1 shared file1 restored')
+    expect(wrapper.find('summary').findComponent(Icon).props('name')).toBe('info')
+    const title = wrapper.find('.risk__title')
+    expect(title.text()).toBe('Work restored')
+    expect(title.classes()).toContain('risk__title--done')
+    expect(wrapper.text()).toContain('Files were put back from the snapshot taken before turn 3.')
+    expect(wrapper.find('.risk .chip.tone-success').text()).toBe('Restored')
+    expect(wrapper.text()).toContain('changed recently')
+    expect(wrapper.findAll('button').map((b) => b.text())).toEqual(['Outside changes'])
+  })
+
+  it('still shows a task whose only finding was restored', async () => {
+    const { plugins } = await setupApp()
+    const wrapper = mount(SafetyPanel, {
+      props: {
+        task: makeTask({ id: 't1', status: 'done' }),
+        detail: { ...restoredOnly, fileOverlaps: [] },
+        api: fakeApi(),
+      },
+      global: { plugins },
+    })
+    expect(wrapper.find('summary').text()).toBe('Safety checks1 restored')
+  })
+})
+
+describe('OutsideDiffButton', () => {
+  it('is hidden without snapshots and opens on the newest turn that has them', async () => {
+    const { plugins } = await setupApp()
+    const outsideDiff = vi.fn<GitApi['outsideDiff']>(() => Promise.resolve([]))
+    const none = mount(OutsideDiffButton, {
+      props: {
+        taskId: 't1',
+        detail: makeDetail({ turns: [turn(1, { outsideDiff: false })] }),
+        api: fakeApi(),
+      },
+      global: { plugins },
+    })
+    expect(none.find('button').exists()).toBe(false)
+
+    const wrapper = mount(OutsideDiffButton, {
+      props: {
+        taskId: 't1',
+        detail: makeDetail({ turns: [turn(1), turn(2), turn(3, { outsideDiff: false })] }),
+        api: fakeApi({ outsideDiff }),
+      },
+      global: { plugins },
+      attachTo: document.body,
+    })
+    await wrapper.find('button').trigger('click')
+    await flush()
+    expect(wrapper.findComponent(OutsideDiffDialog).props('turns')).toEqual([2, 1])
+    expect(outsideDiff).toHaveBeenCalledWith('t1', 2, expect.any(AbortSignal))
+  })
+})
+
 describe('OutsideDiffDialog', () => {
+  it('keeps the selected turn among its options, labels them, and marks restored files', async () => {
+    const { plugins } = await setupApp()
+    const outsideDiff = vi.fn<GitApi['outsideDiff']>(() =>
+      Promise.resolve([
+        { path: 'notes.md', binary: false, truncated: false, hunks: [] },
+        { path: 'x.orig', binary: false, truncated: false, hunks: [] },
+      ]),
+    )
+    mount(OutsideDiffDialog, {
+      props: {
+        open: true,
+        taskId: 't1',
+        turns: [4, 2],
+        turn: 3,
+        restored: { 4: ['notes.md'] },
+        api: fakeApi({ outsideDiff }),
+      },
+      global: { plugins },
+      attachTo: document.body,
+    })
+    await flush()
+    expect(outsideDiff).toHaveBeenCalledWith('t1', 4, expect.any(AbortSignal))
+    const select = document.body.querySelector('select')
+    expect(select?.value).toBe('4')
+    expect([...(select?.options ?? [])].map((o) => o.textContent?.trim())).toEqual([
+      'Turn 4',
+      'Turn 2',
+    ])
+    expect(document.body.querySelector('.select__label')?.textContent?.trim()).toBe('Turn')
+    const heads = [...document.body.querySelectorAll('.outside__head')].map((h) =>
+      h.textContent?.replace(/\s+/g, ' ').trim(),
+    )
+    expect(heads).toEqual(['notes.mdRestored', 'x.orig'])
+  })
+
   it('says when nothing changed and shows a failed read with a retry', async () => {
     const { plugins } = await setupApp()
     const outsideDiff = vi

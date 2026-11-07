@@ -61,7 +61,7 @@
     "commit": "Git: commit các tệp của tác vụ…"
   },
   "outside": {
-    "open": "Ngoài công cụ sửa",
+    "open": "Thay đổi ngoài công cụ sửa",
     "title": "Thay đổi ngoài công cụ sửa",
     "desc": "Những gì lượt này đổi qua lệnh shell và chương trình khác, so với bản chụp trước lượt.",
     "turn": "Lượt",

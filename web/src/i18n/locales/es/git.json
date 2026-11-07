@@ -61,7 +61,7 @@
     "commit": "Git: confirmar los archivos de esta tarea…"
   },
   "outside": {
-    "open": "Fuera de las herramientas de edición",
+    "open": "Cambios externos",
     "title": "Cambios fuera de las herramientas de edición",
     "desc": "Lo que el turno cambió con comandos de shell y otros programas, comparado con la instantánea tomada antes.",
     "turn": "Turno",

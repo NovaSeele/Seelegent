@@ -1,15 +1,19 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import Button from '@/components/ui/Button.vue'
+import Chip from '@/components/ui/Chip.vue'
+import Icon from '@/components/ui/Icon.vue'
 
 import type { RiskGroup } from './safety'
 
 /**
  * Work at risk, per turn: the files whose uncommitted work the turn lost and why, with Restore (puts the files
  * not restored yet back from the snapshot taken before the turn) and the turn's changes outside the edit tools.
+ * Once every file is back, the part reads as done: "Work restored", in the past tense.
  */
-defineProps<{
+const props = defineProps<{
   groups: readonly RiskGroup[]
   /** The turn being restored. */
   busy: number | null
@@ -19,18 +23,38 @@ defineProps<{
 const emit = defineEmits<{ restore: [turn: number]; outside: [turn: number] }>()
 
 const { t } = useI18n()
+
+const done = computed(() => props.groups.every((g) => !g.open))
+const title = computed(() =>
+  done.value ? t('task.safety.risk.restoredTitle') : t('common.attention.workAtRisk'),
+)
+const desc = computed(() => {
+  if (!done.value) return t('task.safety.risk.desc')
+  const only = props.groups.length === 1 ? props.groups[0] : undefined
+  return only
+    ? t('task.safety.risk.restoredDesc', { n: only.turn })
+    : t('task.safety.risk.restoredDescMany')
+})
 </script>
 
 <template>
-  <section class="risk" :aria-label="t('task.safety.risk.title')">
-    <h3 class="risk__title">{{ t('task.safety.risk.title') }}</h3>
-    <p class="risk__desc">{{ t('task.safety.risk.desc') }}</p>
+  <section class="risk" :aria-label="title">
+    <h3 class="risk__title" :class="{ 'risk__title--done': done }">
+      <Icon v-if="done" name="check" class="risk__check" />
+      {{ title }}
+    </h3>
+    <p class="risk__desc">{{ desc }}</p>
     <div v-for="group in groups" :key="group.turn" class="risk__group">
       <div class="risk__head">
         <strong>{{ t('task.safety.turn', { n: group.turn }) }}</strong>
         <span class="risk__actions">
-          <Button size="sm" variant="ghost" @click="emit('outside', group.turn)">
-            {{ t('git.outside.title') }}
+          <Button
+            v-if="group.outsideDiff"
+            size="sm"
+            variant="ghost"
+            @click="emit('outside', group.turn)"
+          >
+            {{ t('git.outside.open') }}
           </Button>
           <Button
             v-if="group.open"
@@ -56,9 +80,9 @@ const { t } = useI18n()
               · {{ t('task.safety.risk.lost', { n: file.lostLines }) }}
             </template>
           </span>
-          <span v-if="file.restored" class="risk__restored">{{
-            t('task.safety.risk.restored')
-          }}</span>
+          <Chip v-if="file.restored" tone="success" icon="check">
+            {{ t('task.safety.risk.restored') }}
+          </Chip>
         </li>
       </ul>
     </div>
@@ -73,9 +97,21 @@ const { t } = useI18n()
 }
 
 .risk__title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
   color: var(--status-danger-fg);
   font-size: var(--fs-sm);
   font-weight: var(--fw-semibold);
+}
+
+.risk__title--done {
+  color: var(--text-primary);
+}
+
+.risk__check {
+  color: var(--status-accepted-fg);
+  font-size: var(--icon-sm);
 }
 
 .risk__desc {
@@ -116,7 +152,7 @@ const { t } = useI18n()
 .risk__file {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
+  align-items: center;
   gap: var(--space-1) var(--space-2);
   font-size: var(--fs-sm);
 }
@@ -131,11 +167,5 @@ const { t } = useI18n()
 .risk__why {
   color: var(--text-secondary);
   font-size: var(--fs-xs);
-}
-
-.risk__restored {
-  color: var(--status-accepted-fg);
-  font-size: var(--fs-xs);
-  font-weight: var(--fw-semibold);
 }
 </style>

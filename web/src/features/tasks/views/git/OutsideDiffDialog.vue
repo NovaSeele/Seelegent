@@ -6,17 +6,25 @@ import { gitApi, isAbortError, type GitApi } from '@/api'
 import type { FileDiff } from '@/api/types'
 import DiffView from '@/components/diff/DiffView.vue'
 import Button from '@/components/ui/Button.vue'
+import Chip from '@/components/ui/Chip.vue'
 import Dialog from '@/components/ui/Dialog.vue'
 import Select from '@/components/ui/Select.vue'
 import Spinner from '@/components/ui/Spinner.vue'
 
 /**
  * What a turn changed outside the worker's edit tools (shell commands, formatters, other programs), read from
- * the turn's snapshots: one diff per file. `turns` are the turns to choose from, newest first.
+ * the turn's snapshots: one diff per file. `turns` are the turns to choose from, newest first; `turn` the one to
+ * show first (the newest when it is not one of them). `restored` marks the files Restore put back, per turn.
  */
 const props = withDefaults(
-  defineProps<{ taskId: string; turns: readonly number[]; turn?: number; api?: GitApi }>(),
-  { turn: undefined, api: () => gitApi },
+  defineProps<{
+    taskId: string
+    turns: readonly number[]
+    turn?: number
+    restored?: Readonly<Record<number, readonly string[]>>
+    api?: GitApi
+  }>(),
+  { turn: undefined, restored: () => ({}), api: () => gitApi },
 )
 const open = defineModel<boolean>('open', { required: true })
 
@@ -27,19 +35,31 @@ type State =
   | { status: 'error'; error: string }
   | { status: 'ready'; diffs: FileDiff[] }
 
-const selected = ref(props.turn ?? props.turns[0] ?? 1)
+const chosen = ref(props.turn)
+/** Always one of `turns`: the chosen turn while it is offered, else the newest. */
+const selected = computed(() => {
+  const want = chosen.value
+  return want !== undefined && props.turns.includes(want) ? want : props.turns[0]
+})
 const state = shallowRef<State>({ status: 'loading' })
 const options = computed(() =>
-  props.turns.map((n) => ({ value: n, label: t('task.header.turn', { n }) })),
+  props.turns.map((n) => ({ value: n, label: t('task.safety.turn', { n }) })),
 )
+const isRestored = (path: string) =>
+  selected.value !== undefined && (props.restored[selected.value] ?? []).includes(path)
 
 let call: AbortController | null = null
 async function load() {
   call?.abort()
   const mine = (call = new AbortController())
+  const turn = selected.value
+  if (turn === undefined) {
+    state.value = { status: 'ready', diffs: [] }
+    return
+  }
   state.value = { status: 'loading' }
   try {
-    const diffs = await props.api.outsideDiff(props.taskId, selected.value, mine.signal)
+    const diffs = await props.api.outsideDiff(props.taskId, turn, mine.signal)
     if (mine === call) state.value = { status: 'ready', diffs }
   } catch (err) {
     if (mine !== call || isAbortError(err)) return
@@ -50,7 +70,7 @@ async function load() {
 watch(
   () => props.turn,
   (value) => {
-    if (value !== undefined) selected.value = value
+    if (value !== undefined) chosen.value = value
   },
 )
 watch(
@@ -73,11 +93,12 @@ onBeforeUnmount(() => call?.abort())
   >
     <div class="outside">
       <Select
-        v-if="turns.length > 1"
-        v-model="selected"
+        v-if="turns.length > 1 && selected !== undefined"
+        :model-value="selected"
         size="sm"
         :label="t('git.outside.turn')"
         :options="options"
+        @update:model-value="chosen = $event"
       />
       <p v-if="state.status === 'loading'" class="outside__state">
         <Spinner size="sm" decorative />
@@ -94,7 +115,12 @@ onBeforeUnmount(() => call?.abort())
         class="outside__file"
         :aria-label="diff.path"
       >
-        <code class="outside__path">{{ diff.path }}</code>
+        <p class="outside__head">
+          <code class="outside__path">{{ diff.path }}</code>
+          <Chip v-if="isRestored(diff.path)" tone="success" icon="check">
+            {{ t('task.safety.risk.restored') }}
+          </Chip>
+        </p>
         <DiffView :diff="diff" :limit="400" />
       </section>
     </div>
@@ -125,6 +151,13 @@ onBeforeUnmount(() => call?.abort())
   flex-direction: column;
   gap: var(--space-2);
   min-width: 0;
+}
+
+.outside__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-2);
 }
 
 .outside__path {
