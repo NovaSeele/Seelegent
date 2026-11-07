@@ -26,6 +26,7 @@ type procOpener struct {
 	env   func([]string) []string
 	mu    sync.Mutex
 	specs []platform.TerminalSpec
+	terms []*procTerminal
 }
 
 type procTerminal struct {
@@ -53,6 +54,9 @@ func (o *procOpener) Open(_ context.Context, spec platform.TerminalSpec) (Termin
 		return nil, err
 	}
 	t := &procTerminal{cmd: cmd, done: make(chan struct{})}
+	o.mu.Lock()
+	o.terms = append(o.terms, t)
+	o.mu.Unlock()
 	go func() {
 		_ = cmd.Wait()
 		t.code = cmd.ProcessState.ExitCode()
@@ -249,5 +253,92 @@ func TestSignInRefusals(t *testing.T) {
 	}
 	if _, err := f.s.SubmitCode("nope", "1"); !errors.Is(err, ErrNotFound) {
 		t.Errorf("code without sign-in: %v", err)
+	}
+}
+
+// openWindows counts the sign-in windows (test processes) still running.
+func (o *procOpener) openWindows() int {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	alive := 0
+	for _, term := range o.terms {
+		select {
+		case <-term.done:
+		default:
+			alive++
+		}
+	}
+	return alive
+}
+
+// TestConcurrentStartsLeaveNoWindow: of several Starts for one account at once, only the last one's window stays
+// open; every other window is closed (none is orphaned without a session), and Cancel closes the last one.
+func TestConcurrentStartsLeaveNoWindow(t *testing.T) {
+	f := newFixture(t, time.Hour)
+	a := f.add(t, account.KindIsolated, true)
+	const n = 6
+	for range n {
+		f.queue.Push(t, "#!hang\n")
+	}
+	var wg sync.WaitGroup
+	for range n {
+		wg.Go(func() {
+			if _, err := f.s.Start(t.Context(), a.ID); err != nil {
+				t.Error(err)
+			}
+		})
+	}
+	wg.Wait()
+	f.waitState(t, a.ID, api.LoginWaitingCode)
+	deadline := time.Now().Add(20 * time.Second)
+	for f.opener.openWindows() > 1 {
+		if time.Now().After(deadline) {
+			t.Fatalf("%d sign-in windows open, want 1", f.opener.openWindows())
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if got := f.opener.openWindows(); got != 1 {
+		t.Fatalf("%d sign-in windows open, want 1", got)
+	}
+	f.s.Cancel(a.ID)
+	for f.opener.openWindows() > 0 {
+		if time.Now().After(deadline) {
+			t.Fatal("Cancel left the last window open")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// TestLogoutHoldsTheAccount: sign-out holds the account in the pool for the whole profile replacement and refuses
+// an account that runs a turn.
+func TestLogoutHoldsTheAccount(t *testing.T) {
+	f := newFixture(t, time.Hour)
+	a := f.add(t, account.KindIsolated, true)
+	var mu sync.Mutex
+	busy, held, released := false, 0, 0
+	f.s.o.Hold = func(string) (func(), bool) {
+		mu.Lock()
+		defer mu.Unlock()
+		if busy {
+			return func() {}, false
+		}
+		held++
+		return func() {
+			mu.Lock()
+			released++
+			mu.Unlock()
+		}, true
+	}
+	if _, err := f.s.Logout(t.Context(), a.ID); err != nil {
+		t.Fatal(err)
+	}
+	mu.Lock()
+	if held != 1 || released != 1 {
+		t.Fatalf("held %d, released %d", held, released)
+	}
+	busy = true
+	mu.Unlock()
+	if _, err := f.s.Logout(t.Context(), a.ID); !errors.Is(err, ErrBadState) {
+		t.Fatalf("logout of a busy account: %v", err)
 	}
 }

@@ -76,8 +76,9 @@ type Options struct {
 	Backend func(name string) (backend.Backend, bool)
 	// Links returns the entries of the real home linked into profiles (settings.linkIntoProfiles).
 	Links func() []string
-	// Busy reports whether the account runs a turn right now (no sign-out then).
-	Busy func(id string) bool
+	// Hold keeps the account from starting turns while it is signed out (pool.Pool.Hold). ok is false when it
+	// runs a turn now; release ends the hold. Nil: no hold (tests).
+	Hold func(id string) (release func(), ok bool)
 	// Opener opens the windows (PlatformOpener when nil).
 	Opener Opener
 	// BaseEnv is the environment the CLI inherits (os.Environ when nil).
@@ -100,6 +101,7 @@ type Service struct {
 
 	mu       sync.Mutex
 	sessions map[string]*session
+	closed   bool
 }
 
 type session struct {
@@ -120,8 +122,8 @@ func New(o Options) *Service {
 	if o.Links == nil {
 		o.Links = func() []string { return nil }
 	}
-	if o.Busy == nil {
-		o.Busy = func(string) bool { return false }
+	if o.Hold == nil {
+		o.Hold = func(string) (func(), bool) { return func() {}, true }
 	}
 	if o.Publish == nil {
 		o.Publish = func(api.LoginSession) {}
@@ -160,19 +162,28 @@ func (s *Service) Start(ctx context.Context, id string) (api.LoginSession, error
 	if !ok {
 		return api.LoginSession{}, fmt.Errorf("%w: unknown backend %s", ErrInvalid, a.Backend)
 	}
-	s.Cancel(id)
-	if s.ctx.Err() != nil {
-		return api.LoginSession{}, errors.New("the daemon is shutting down")
-	}
 	runCtx, cancel := context.WithCancel(s.ctx)
 	sess := &session{info: api.LoginSession{AccountID: id, State: api.LoginStarting}, cancel: cancel,
 		done: make(chan struct{})}
+	// Replacing the running sign-in and registering this one is one critical section: of two concurrent Starts,
+	// the second always finds the first and stops it, so no window is left without a session that can close it.
 	s.mu.Lock()
+	if s.closed {
+		s.mu.Unlock()
+		cancel()
+		return api.LoginSession{}, errors.New("the daemon is shutting down")
+	}
+	old := s.sessions[id]
 	s.sessions[id] = sess
 	info := sess.info
-	s.mu.Unlock()
-	s.o.Publish(info)
 	s.wg.Add(1)
+	s.mu.Unlock()
+	// The old window closes before this one opens (outside the lock: its goroutine takes the lock to report).
+	if old != nil {
+		old.cancel()
+		<-old.done
+	}
+	s.o.Publish(info)
 	go func() {
 		defer s.wg.Done()
 		defer close(sess.done)
@@ -203,6 +214,9 @@ func (s *Service) run(ctx context.Context, sess *session, a account.Account, b b
 	env, err := s.o.Accounts.Env(ctx, a, b, account.EnvOptions{Base: s.o.BaseEnv()})
 	if err != nil {
 		return fail(err.Error())
+	}
+	if ctx.Err() != nil { // replaced or cancelled before its window opened
+		return fail("sign-in cancelled")
 	}
 	term, err := s.o.Opener.Open(ctx, platform.TerminalSpec{Title: si.Title, Banner: si.Banner, Argv: si.Argv,
 		Dir: prof.Home, Env: env.Vars, StdoutPath: si.StdoutPath, ScriptDir: prof.Dir, Name: scriptName})
@@ -330,9 +344,13 @@ func (s *Service) Logout(ctx context.Context, id string) (account.Account, error
 		return account.Account{}, fmt.Errorf("%w: only accounts with their own profile can be signed out here",
 			ErrInvalid)
 	}
-	if s.o.Busy(id) {
+	// The hold is taken only when no turn runs and keeps new turns off the account until the fresh profile is in
+	// place (checking "busy" and then removing the profile let a turn start in between).
+	release, ok := s.o.Hold(id)
+	if !ok {
 		return account.Account{}, fmt.Errorf("%w: account %s is running a task", ErrBadState, id)
 	}
+	defer release()
 	s.Cancel(id)
 	if err := s.o.Accounts.Profiles().Remove(id); err != nil {
 		return account.Account{}, fmt.Errorf("sign out %s: %w", id, err)
@@ -346,6 +364,9 @@ func (s *Service) Logout(ctx context.Context, id string) (account.Account, error
 
 // Close cancels every sign-in and waits for them.
 func (s *Service) Close() {
+	s.mu.Lock()
+	s.closed = true // no Start adds to wg once Wait may run
+	s.mu.Unlock()
 	s.cancel()
 	s.wg.Wait()
 	s.mu.Lock()

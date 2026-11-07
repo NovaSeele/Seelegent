@@ -260,7 +260,7 @@ func (a *App) build(o Options) error {
 			return b, ok
 		},
 		Links:   func() []string { return a.Settings().LinkIntoProfiles },
-		Busy:    func(id string) bool { return p.Busy(id) > 0 },
+		Hold:    p.Hold,
 		Opener:  o.SignInOpener,
 		BaseEnv: func() []string { return a.env },
 		Publish: a.publishLogin,
