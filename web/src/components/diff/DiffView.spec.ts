@@ -1,7 +1,7 @@
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 
-import type { FileDiff } from '@/api/types'
+import type { FileDiff, Note } from '@/api/types'
 import { flush, setupApp } from '@/test/app'
 
 import { diffRows } from './diffRows'
@@ -97,5 +97,40 @@ describe('DiffView', () => {
     expect(binary.text()).toContain('Binary file')
     const cut = mount(DiffView, { props: { diff: diff({ truncated: true }) }, global: { plugins } })
     expect(cut.text()).toContain('cut short')
+  })
+
+  it('offers new-side line numbers for notes and shows the notes under their lines', async () => {
+    const { plugins } = await setupApp()
+    const note: Note = {
+      id: 'n1',
+      taskId: 't1',
+      file: 'packages/web/pages/[id].vue',
+      line: 2,
+      currentLine: 11,
+      side: 'new',
+      anchorText: 'y',
+      body: 'Rename y',
+      by: 'user',
+      state: 'open',
+      status: 'draft',
+      anchorTurn: 1,
+      createdAt: '2026-11-07T10:00:00.000Z',
+    }
+    const plain = mount(DiffView, { props: { diff: diff() }, global: { plugins } })
+    expect(plain.find('.diff__pick').exists()).toBe(false)
+    const wrapper = mount(DiffView, {
+      props: { diff: diff(), annotatable: true, notes: [note] },
+      global: { plugins },
+    })
+    const picks = wrapper.findAll('.diff__pick')
+    // Every row with a new-side number: the deleted line has none.
+    expect(picks.map((b) => b.text())).toEqual(['1', '2', '3', '10', '11'])
+    expect(picks[1]?.attributes('aria-label')).toBe('Add a note on line 2')
+    await picks[1]?.trigger('click')
+    expect(wrapper.emitted('line')).toEqual([[2]])
+    // The note follows its anchor to line 11, the last row.
+    const rows = wrapper.findAll('tr')
+    expect(rows.at(-1)?.classes()).toContain('diff__row--note')
+    expect(rows.at(-1)?.text()).toBe('Rename y')
   })
 })
