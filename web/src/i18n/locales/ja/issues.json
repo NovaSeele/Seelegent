@@ -290,7 +290,13 @@
     "retrySame": "前回と同じ",
     "backend": "バックエンド",
     "backendHint": "別のバックエンドはそれぞれのアカウントを使います。",
-    "numberHint": "番号、または pull request のアドレス。"
+    "numberHint": "番号、または pull request のアドレス。",
+    "retrySameWho": "前回と同じ（{who}）",
+    "retrySameMissing": "前回と同じ（{member}、存在しません）",
+    "retrySameDisabled": "前回と同じ（{member}、オフ）",
+    "retryPickOther": "別のメンバーかバックエンドを選んでください。",
+    "retryNoMembers": "選べるメンバーがほかにいません。バックエンドを選んでください。",
+    "retryNoMembersSame": "選べるメンバーがほかにいません。前回と同じか、選んだバックエンドで実行します。"
   },
   "refusal": {
     "title": {
@@ -342,7 +348,9 @@
     "failed": {
       "title": "チケットのタスクを開始できませんでした",
       "why": "同じワーカー、または別のメンバーやバックエンドでもう一度開始してください。",
-      "action": "再試行または担当変更"
+      "action": "再試行または担当変更",
+      "memberMissing": "メンバー「{member}」はもう存在しません。別のメンバーかバックエンドにタスクを割り当ててください。",
+      "memberDisabled": "メンバー「{member}」はオフになっています。メンバーページでオンにするか、別のメンバーかバックエンドにタスクを割り当ててください。"
     },
     "exposed": {
       "title": "公開済み：以前のバージョンが秘密情報らしきファイルを {count} 件プッシュしています",

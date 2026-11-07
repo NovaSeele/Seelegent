@@ -28,8 +28,19 @@ func TestRetryFailedTicket(t *testing.T) {
 	if err != nil || len(list) != 1 || list[0].Status != api.TicketFailed || list[0].Error == "" {
 		t.Fatalf("tickets = %+v, %v", list, err)
 	}
+	// The cause has a code the dashboard explains in its own words.
+	if f := list[0].Failure; f == nil || f.Reason != api.FailureMemberMissing || f.Member != unknownMember {
+		t.Fatalf("failure = %+v", list[0].Failure)
+	}
+	if a := list[0].Asked; a == nil || a.Member != unknownMember {
+		t.Fatalf("asked = %+v", list[0].Asked)
+	}
 	id := list[0].ID
 
+	// "As before" (no member, no backend) is the same unknown member: failed again.
+	if _, err := e.s.Retry(ctx, id, api.TicketTaskRequest{}); err == nil {
+		t.Fatal("retry as before started a task with the unknown member")
+	}
 	// Again with the same unknown member: failed again, with the new error.
 	if _, err := e.s.Retry(ctx, id, api.TicketTaskRequest{TicketTaskOptions: api.TicketTaskOptions{
 		Member: unknownMember}}); err == nil {
@@ -43,8 +54,8 @@ func TestRetryFailedTicket(t *testing.T) {
 		t.Fatalf("retry = %+v, %v", res, err)
 	}
 	got, err := e.s.Ticket(ctx, id)
-	if err != nil || got.Status != api.TicketWorking || got.Error != "" || len(got.Tasks) != 1 ||
-		got.Tasks[0].Member != "ada" {
+	if err != nil || got.Status != api.TicketWorking || got.Error != "" || got.Failure != nil || len(got.Tasks) != 1 ||
+		got.Tasks[0].Member != "ada" || got.Asked == nil || got.Asked.Member != "ada" {
 		t.Fatalf("after retry = %+v, %v", got.TicketSummary, err)
 	}
 	if _, err := e.s.Retry(ctx, id, api.TicketTaskRequest{}); !errors.Is(err, ErrBadState) {

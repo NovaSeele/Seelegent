@@ -290,7 +290,13 @@
     "retrySame": "Como antes",
     "backend": "Backend",
     "backendHint": "Otro backend usa sus propias cuentas.",
-    "numberHint": "El número o la dirección de la pull request."
+    "numberHint": "El número o la dirección de la pull request.",
+    "retrySameWho": "Como antes ({who})",
+    "retrySameMissing": "Como antes ({member}, ya no existe)",
+    "retrySameDisabled": "Como antes ({member}, desactivado)",
+    "retryPickOther": "Elige otro miembro o un backend.",
+    "retryNoMembers": "No hay otros miembros para elegir. Elige un backend.",
+    "retryNoMembersSame": "No hay otros miembros para elegir: se ejecuta como antes o en el backend que elijas."
   },
   "refusal": {
     "title": {
@@ -342,7 +348,9 @@
     "failed": {
       "title": "La tarea del ticket no pudo empezar",
       "why": "Vuelve a iniciarla, con el mismo worker u otro miembro o backend.",
-      "action": "Reintentar o reasignar"
+      "action": "Reintentar o reasignar",
+      "memberMissing": "El miembro «{member}» ya no existe. Asigna la tarea a otro miembro o a un backend.",
+      "memberDisabled": "El miembro «{member}» está desactivado. Actívalo en la página Miembros o asigna la tarea a otro miembro o a un backend."
     },
     "exposed": {
       "title": "Ya es público: la versión anterior envió {count} archivo que parece un secreto | Ya es público: la versión anterior envió {count} archivos que parecen secretos",

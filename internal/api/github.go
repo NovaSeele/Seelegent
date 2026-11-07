@@ -351,9 +351,36 @@ type TicketSummary struct {
 	// Refusal is why the last pr stopped before pushing (cleared by the next pr or a new task).
 	Refusal *TicketRefusal `json:"refusal,omitempty"`
 	// Error is a failure (a task or meeting that could not start, a GitHub or git call that failed).
-	Error     string `json:"error,omitempty"`
-	CreatedAt string `json:"createdAt"`
-	UpdatedAt string `json:"updatedAt"`
+	Error string `json:"error,omitempty"`
+	// Failure is the known cause of a failed ticket, for the dashboard to explain in its own words (Error stays
+	// the text for the lead's tools and for causes without a code).
+	Failure *TicketFailure `json:"failure,omitempty"`
+	// Asked is who the ticket's last task was given to: what a retry or a new task without a member or backend
+	// gets ("as before"). Absent before the first task.
+	Asked     *TicketAsk `json:"asked,omitempty"`
+	CreatedAt string     `json:"createdAt"`
+	UpdatedAt string     `json:"updatedAt"`
+}
+
+// TicketAsk is the member, backend and model a ticket's last task was asked for.
+type TicketAsk struct {
+	Member  string `json:"member,omitempty"`
+	Backend string `json:"backend,omitempty"`
+	Model   string `json:"model,omitempty"`
+}
+
+// Ticket failure reasons with a code.
+const (
+	// FailureMemberMissing: the member the task was given to does not exist (deleted).
+	FailureMemberMissing = "member_missing"
+	// FailureMemberDisabled: the member the task was given to is turned off.
+	FailureMemberDisabled = "member_disabled"
+)
+
+// TicketFailure is the known cause of a failed ticket.
+type TicketFailure struct {
+	Reason string `json:"reason" ts:"'member_missing' | 'member_disabled'"`
+	Member string `json:"member,omitempty"`
 }
 
 // TicketTask is a task of a ticket as its detail shows it.

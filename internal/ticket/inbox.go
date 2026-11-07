@@ -471,11 +471,27 @@ func (s *Service) Triage(ctx context.Context, id, key string, req api.TriageRequ
 	return res, nil
 }
 
+// failureOf is the known cause of err (a member that is missing or turned off), or nil.
+func failureOf(err error) *api.TicketFailure {
+	var detailed interface{ APIDetails() map[string]any }
+	if !errors.As(err, &detailed) {
+		return nil
+	}
+	d := detailed.APIDetails()
+	reason, _ := d["reason"].(string)
+	member, _ := d["member"].(string)
+	switch reason {
+	case api.FailureMemberMissing, api.FailureMemberDisabled:
+		return &api.TicketFailure{Reason: reason, Member: member}
+	}
+	return nil
+}
+
 // failTicket marks a ticket failed with a redacted error.
 func (s *Service) failTicket(ctx context.Context, id, step string, cause error) {
 	msg := s.redactErr(cause, 600)
 	_, err := s.updateTicket(context.WithoutCancel(ctx), id, func(tx *sql.Tx, t *ticketRec) error {
-		t.Status, t.Error = api.TicketFailed, msg
+		t.Status, t.Error, t.Failure = api.TicketFailed, msg, failureOf(cause)
 		s.logStep(ctx, tx, id, step, map[string]any{"error": msg})
 		return nil
 	})

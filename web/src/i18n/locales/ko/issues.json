@@ -290,7 +290,13 @@
     "retrySame": "이전과 같음",
     "backend": "백엔드",
     "backendHint": "다른 백엔드는 자체 계정을 사용합니다.",
-    "numberHint": "번호 또는 pull request 주소."
+    "numberHint": "번호 또는 pull request 주소.",
+    "retrySameWho": "이전과 같음({who})",
+    "retrySameMissing": "이전과 같음({member}, 더 이상 없음)",
+    "retrySameDisabled": "이전과 같음({member}, 꺼짐)",
+    "retryPickOther": "다른 멤버나 백엔드를 고르세요.",
+    "retryNoMembers": "고를 수 있는 다른 멤버가 없습니다. 백엔드를 고르세요.",
+    "retryNoMembersSame": "고를 수 있는 다른 멤버가 없습니다. 이전과 같이, 또는 고른 백엔드에서 실행합니다."
   },
   "refusal": {
     "title": {
@@ -342,7 +348,9 @@
     "failed": {
       "title": "티켓 작업을 시작할 수 없었습니다",
       "why": "같은 워커 또는 다른 멤버나 백엔드로 다시 시작하세요.",
-      "action": "다시 시도 또는 재배정"
+      "action": "다시 시도 또는 재배정",
+      "memberMissing": "멤버 \"{member}\"이(가) 더 이상 없습니다. 다른 멤버나 백엔드에 작업을 맡기세요.",
+      "memberDisabled": "멤버 \"{member}\"이(가) 꺼져 있습니다. 멤버 페이지에서 켜거나, 다른 멤버나 백엔드에 작업을 맡기세요."
     },
     "exposed": {
       "title": "이미 공개됨: 이전 버전이 비밀로 보이는 파일 {count}개를 푸시했습니다",

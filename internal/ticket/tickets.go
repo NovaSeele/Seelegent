@@ -335,9 +335,24 @@ func laneFor(o api.TicketTaskOptions) []string {
 	return []string{"**"}
 }
 
-// startTask delegates a task in the ticket's worktree and links it.
+// startTask delegates a task in the ticket's worktree and links it. Without a member or a backend it goes to whoever
+// the ticket's last task was asked for ("as before"); who it is asked for is kept for the next one.
 func (s *Service) startTask(ctx context.Context, t *ticketRec, issue api.Issue, prompt string,
 	o api.TicketTaskOptions, title string) (string, error) {
+	if o.Member == "" && o.Backend == "" && t.Asked != nil {
+		o.Member, o.Backend = t.Asked.Member, t.Asked.Backend
+		if o.Model == "" {
+			o.Model = t.Asked.Model
+		}
+	}
+	ask := &api.TicketAsk{Member: o.Member, Backend: o.Backend, Model: o.Model}
+	if _, err := s.updateTicket(ctx, t.ID, func(_ *sql.Tx, r *ticketRec) error {
+		r.Asked = ask
+		return nil
+	}); err != nil {
+		return "", err
+	}
+	t.Asked = ask
 	req := api.DelegateRequest{Prompt: ticketBrief(issue, t.Branch, prompt), Cwd: t.Worktree, Title: title,
 		Member: o.Member, Backend: o.Backend, Model: o.Model, Gate: o.Gate, GateCommands: o.GateCommands,
 		Lane: laneFor(o), NoLane: o.NoLane}
@@ -421,7 +436,7 @@ func (s *Service) Retry(ctx context.Context, id string, req api.TicketTaskReques
 		return api.TicketTaskResult{}, badStatef("the ticket's worktree is missing; drop it and decide the issue again")
 	}
 	if _, err := s.updateTicket(ctx, id, func(tx *sql.Tx, t *ticketRec) error {
-		t.Status, t.Error = api.TicketWorking, ""
+		t.Status, t.Error, t.Failure = api.TicketWorking, "", nil
 		s.logStep(ctx, tx, id, "retry", map[string]any{"member": req.Member, "backend": req.Backend})
 		return nil
 	}); err != nil {

@@ -290,7 +290,13 @@
     "retrySame": "与之前相同",
     "backend": "后端",
     "backendHint": "其他后端使用各自的账号。",
-    "numberHint": "编号或 pull request 的地址。"
+    "numberHint": "编号或 pull request 的地址。",
+    "retrySameWho": "与之前相同（{who}）",
+    "retrySameMissing": "与之前相同（{member}，已不存在）",
+    "retrySameDisabled": "与之前相同（{member}，已关闭）",
+    "retryPickOther": "请选择其他成员或某个后端。",
+    "retryNoMembers": "没有其他成员可选。请选择一个后端。",
+    "retryNoMembersSame": "没有其他成员可选：将按之前的方式运行，或在你选择的后端上运行。"
   },
   "refusal": {
     "title": {
@@ -342,7 +348,9 @@
     "failed": {
       "title": "工单的任务无法启动",
       "why": "请重新启动，可使用同一 worker，或换一个成员或后端。",
-      "action": "重试或改派"
+      "action": "重试或改派",
+      "memberMissing": "成员“{member}”已不存在。请把任务交给其他成员或某个后端。",
+      "memberDisabled": "成员“{member}”已关闭。请在成员页面中开启它，或把任务交给其他成员或某个后端。"
     },
     "exposed": {
       "title": "已公开：旧版本推送了 {count} 个看起来像机密的文件",

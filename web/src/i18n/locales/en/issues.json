@@ -290,7 +290,13 @@
     "retrySame": "As before",
     "backend": "Backend",
     "backendHint": "Another backend uses its own accounts.",
-    "numberHint": "The number, or the pull request's address."
+    "numberHint": "The number, or the pull request's address.",
+    "retrySameWho": "As before ({who})",
+    "retrySameMissing": "As before ({member}, no longer exists)",
+    "retrySameDisabled": "As before ({member}, turned off)",
+    "retryPickOther": "Pick another member or a backend.",
+    "retryNoMembers": "There are no other members to pick. Choose a backend.",
+    "retryNoMembersSame": "There are no other members to pick: it runs as before, or on the backend you choose."
   },
   "refusal": {
     "title": {
@@ -342,7 +348,9 @@
     "failed": {
       "title": "The ticket's task could not start",
       "why": "Start it again, with the same worker or another member or backend.",
-      "action": "Try again or reassign"
+      "action": "Try again or reassign",
+      "memberMissing": "The member \"{member}\" no longer exists. Assign the task to another member or a backend.",
+      "memberDisabled": "The member \"{member}\" is turned off. Turn it on on the Members page, or assign the task to another member or a backend."
     },
     "exposed": {
       "title": "Already public: {count} file that looks like a secret was pushed by the earlier version | Already public: {count} files that look like secrets were pushed by the earlier version",

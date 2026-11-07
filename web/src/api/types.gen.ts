@@ -1221,8 +1221,31 @@ export interface TicketSummary {
   refusal?: TicketRefusal
   /** Error is a failure (a task or meeting that could not start, a GitHub or git call that failed). */
   error?: string
+  /**
+   * Failure is the known cause of a failed ticket, for the dashboard to explain in its own words (Error stays
+   * the text for the lead's tools and for causes without a code).
+   */
+  failure?: TicketFailure
+  /**
+   * Asked is who the ticket's last task was given to: what a retry or a new task without a member or backend
+   * gets ("as before"). Absent before the first task.
+   */
+  asked?: TicketAsk
   createdAt: string
   updatedAt: string
+}
+
+/** TicketAsk is the member, backend and model a ticket's last task was asked for. */
+export interface TicketAsk {
+  member?: string
+  backend?: string
+  model?: string
+}
+
+/** TicketFailure is the known cause of a failed ticket. */
+export interface TicketFailure {
+  reason: 'member_missing' | 'member_disabled'
+  member?: string
 }
 
 /** TicketTask is a task of a ticket as its detail shows it. */

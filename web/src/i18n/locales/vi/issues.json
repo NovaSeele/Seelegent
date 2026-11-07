@@ -290,7 +290,13 @@
     "retrySame": "Như trước",
     "backend": "Backend",
     "backendHint": "Backend khác dùng tài khoản riêng của nó.",
-    "numberHint": "Số, hoặc địa chỉ của pull request."
+    "numberHint": "Số, hoặc địa chỉ của pull request.",
+    "retrySameWho": "Như trước ({who})",
+    "retrySameMissing": "Như trước ({member}, không còn tồn tại)",
+    "retrySameDisabled": "Như trước ({member}, đang tắt)",
+    "retryPickOther": "Hãy chọn thành viên khác hoặc một backend.",
+    "retryNoMembers": "Không có thành viên nào khác để chọn. Hãy chọn một backend.",
+    "retryNoMembersSame": "Không có thành viên nào khác để chọn: việc sẽ chạy như trước, hoặc trên backend bạn chọn."
   },
   "refusal": {
     "title": {
@@ -342,7 +348,9 @@
     "failed": {
       "title": "Không thể bắt đầu tác vụ của ticket",
       "why": "Hãy chạy lại, với cùng worker hoặc thành viên hay backend khác.",
-      "action": "Thử lại hoặc giao lại"
+      "action": "Thử lại hoặc giao lại",
+      "memberMissing": "Thành viên \"{member}\" không còn tồn tại. Hãy giao việc cho thành viên khác hoặc một backend.",
+      "memberDisabled": "Thành viên \"{member}\" đang tắt. Hãy bật lại ở trang Thành viên, hoặc giao việc cho thành viên khác hoặc một backend."
     },
     "exposed": {
       "title": "Đã công khai: phiên bản trước đã đẩy {count} tệp trông như bí mật",

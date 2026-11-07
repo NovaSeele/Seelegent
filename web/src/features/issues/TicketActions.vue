@@ -51,6 +51,10 @@ const phase = computed(() => ticketPhase(props.ticket))
 const finished = computed(() => ticketFinished(props.ticket.status))
 const pushable = computed(() => ticketPushable(props.ticket.status) && !!props.repo?.remote)
 const onGitHub = computed(() => !!props.repo?.github)
+/** A ticket whose member is gone needs another member or a backend: "as before" would fail again. */
+const retryPicked = computed(
+  () => !props.ticket.failure || !!retry.value.member || !!retry.value.backend,
+)
 const fixable = computed(() => !finished.value && props.ticket.checks?.state === 'failure')
 /** The banner offers these as the next step; a second button here would compete with it. */
 const inBanner = computed(() => ({
@@ -106,6 +110,8 @@ async function run(next: Mode): Promise<Ticket | null> {
     case 'task':
     case 'retry': {
       if (next === 'task' && !value) throw new Error(t('issues.actions.textError'))
+      if (next === 'retry' && !retryPicked.value)
+        throw new Error(t('issues.actions.retryPickOther'))
       const req = { prompt: value, ...pick(retry.value) }
       const res = next === 'task' ? await api.addTask(id, req) : await api.retry(id, req)
       mode.value = null
@@ -247,7 +253,12 @@ defineExpose({ act })
             :hint="mode === 'retry' ? t('issues.actions.retryPromptHint') : undefined"
             :rows="mode === 'retry' ? 3 : 5"
           />
-          <RetryFields v-if="mode === 'retry'" v-model="retry" />
+          <RetryFields
+            v-if="mode === 'retry'"
+            v-model="retry"
+            :asked="ticket.asked"
+            :failure="ticket.failure"
+          />
         </template>
         <TextField
           v-else-if="mode === 'drop'"
@@ -265,6 +276,7 @@ defineExpose({ act })
           form="ticket-action"
           :variant="mode === 'drop' ? 'danger' : 'primary'"
           :loading="busy"
+          :disabled="mode === 'retry' && !retryPicked"
         >
           {{ mode ? t(`issues.actions.submit.${mode}`) : '' }}
         </Button>

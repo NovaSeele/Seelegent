@@ -281,6 +281,8 @@ type ticketRec struct {
 	ChecksFix  *api.ChecksFix     `json:"checksFix,omitempty"`
 	Env        *api.WorktreeEnv   `json:"env,omitempty"`
 	Error      string             `json:"error,omitempty"`
+	Failure    *api.TicketFailure `json:"failure,omitempty"`
+	Asked      *api.TicketAsk     `json:"asked,omitempty"`
 	Refusal    *api.TicketRefusal `json:"refusal,omitempty"`
 	// Exposed is what the branch the previous version pushed already held on GitHub when Seelegent adopted it.
 	Exposed         []api.ScanFinding `json:"exposed,omitempty"`
@@ -323,7 +325,7 @@ func (t *ticketRec) needsAttention() string {
 func (t *ticketRec) summary() api.TicketSummary {
 	sum := api.TicketSummary{ID: t.ID, RepoID: t.RepoID, IssueKey: t.IssueKey, Issue: t.Issue, Branch: t.Branch,
 		Worktree: t.Worktree, Status: t.Status, TaskIDs: api.NonNil(t.TaskIDs), MeetingID: t.MeetingID, PR: t.PR,
-		NeedsAttention: t.needsAttention(), Error: t.Error, CreatedAt: api.FormatTime(t.CreatedAt),
+		NeedsAttention: t.needsAttention(), Error: t.Error, Asked: t.Asked, CreatedAt: api.FormatTime(t.CreatedAt),
 		UpdatedAt: api.FormatTime(t.UpdatedAt)}
 	if t.Refusal != nil && (t.Status == api.TicketReady || t.Status == api.TicketPROpen) {
 		rf := *t.Refusal
@@ -334,6 +336,9 @@ func (t *ticketRec) summary() api.TicketSummary {
 		c := *t.Checks
 		c.Runs = api.NonNil(c.Runs)
 		sum.Checks = &c
+	}
+	if t.Status == api.TicketFailed {
+		sum.Failure = t.Failure
 	}
 	return sum
 }

@@ -20,6 +20,7 @@ import (
 	"github.com/NovaSeele/Seelegent/internal/api"
 	"github.com/NovaSeele/Seelegent/internal/github"
 	"github.com/NovaSeele/Seelegent/internal/gitx"
+	"github.com/NovaSeele/Seelegent/internal/member"
 	"github.com/NovaSeele/Seelegent/internal/store"
 	"github.com/NovaSeele/Seelegent/internal/task"
 )
@@ -48,13 +49,13 @@ func (f *fakeTasks) DelegateWith(_ context.Context, req api.DelegateRequest, sp 
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if req.Member == unknownMember {
-		return api.TaskSummary{}, fmt.Errorf("%w: not found: no member %q", task.ErrInvalid, req.Member)
+		return api.TaskSummary{}, &member.MissingError{ID: req.Member}
 	}
 	f.n++
 	id := fmt.Sprintf("t%d", f.n)
-	member := req.Member
+	who := req.Member
 	d := &api.TaskDetail{TaskSummary: api.TaskSummary{ID: id, Status: api.StatusRunning, Kind: task.KindNormal,
-		Cwd: req.Cwd, Member: member, Backend: "agy", TurnCount: 1, TicketID: sp.TicketID},
+		Cwd: req.Cwd, Member: who, Backend: "agy", TurnCount: 1, TicketID: sp.TicketID},
 		Prompt: req.Prompt, Turns: []api.Turn{{N: 1, Message: req.Prompt, Status: task.TurnRunning}}}
 	f.tasks[id] = d
 	f.spawns[id] = sp

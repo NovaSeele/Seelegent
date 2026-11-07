@@ -44,6 +44,15 @@ const fixing = computed(() => props.ticket.checksFix?.taskId ?? '')
 const toReview = computed(
   () => [...props.ticket.tasks].reverse().find((x) => x.status === 'done' && !x.verdict)?.id ?? '',
 )
+/** Why the task could not start: a known cause in the lead's language, the daemon's text otherwise. */
+const failedWhy = computed(() => {
+  const f = props.ticket.failure
+  if (f?.member) {
+    const key = f.reason === 'member_disabled' ? 'memberDisabled' : 'memberMissing'
+    return t(`issues.next.failed.${key}`, { member: f.member })
+  }
+  return props.ticket.error || t('issues.next.failed.why')
+})
 const shown = computed(() =>
   ['push_refused', 'open_pr', 'checks_failed', 'review', 'ready', 'failed'].includes(phase.value),
 )
@@ -160,7 +169,7 @@ const shown = computed(() =>
         <p class="banner__title">
           <strong>{{ t('issues.next.failed.title') }}</strong>
         </p>
-        <p class="banner__text">{{ ticket.error || t('issues.next.failed.why') }}</p>
+        <p class="banner__text">{{ failedWhy }}</p>
         <div class="banner__actions">
           <Button size="sm" variant="primary" icon="refresh" @click="emit('act', 'retry')">
             {{ t('issues.next.failed.action') }}
