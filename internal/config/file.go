@@ -64,6 +64,9 @@ func Parse(data []byte) (*Config, error) {
 	if s.LinkIntoProfiles == nil { // "linkIntoProfiles": null; write [] to link nothing
 		s.LinkIntoProfiles = Defaults().LinkIntoProfiles
 	}
+	if s.GithubEnterpriseHosts == nil {
+		s.GithubEnterpriseHosts = []string{}
+	}
 	doc, err := parseObject(data)
 	if err != nil {
 		return nil, parseError(data, err)

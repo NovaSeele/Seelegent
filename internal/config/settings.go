@@ -114,6 +114,10 @@ type Settings struct {
 	ContentionWindowHours int `json:"contentionWindowHours"`
 	// GithubPollMinutes is how often pull request states and GitHub inboxes are polled; 0 turns polling off.
 	GithubPollMinutes int `json:"githubPollMinutes"`
+	// GithubEnterpriseHosts are the GitHub Enterprise Server hosts (besides github.com) whose remotes count as
+	// GitHub: a host name ("ghe.example.com", optionally with a port) or an https URL; a plain http URL only for a
+	// loopback address (a local test server). The GitHub token is sent only to github.com and these hosts.
+	GithubEnterpriseHosts []string `json:"githubEnterpriseHosts"`
 	// AutomationsEnabled is the master switch of scheduled automations (each one is still created disabled).
 	AutomationsEnabled bool `json:"automationsEnabled"`
 }
@@ -238,6 +242,7 @@ func Defaults() Settings {
 		SnapshotRetentionDays: 14,
 		ContentionWindowHours: 24,
 		GithubPollMinutes:     10,
+		GithubEnterpriseHosts: []string{},
 		AutomationsEnabled:    true,
 	}
 }

@@ -3,9 +3,12 @@ package config
 import (
 	"errors"
 	"fmt"
+	"net"
+	"net/url"
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"unicode"
 )
@@ -119,6 +122,7 @@ func (s *Settings) Validate() error {
 	v.intRange("snapshotRetentionDays", s.SnapshotRetentionDays, 1, maxDays)
 	v.intRange("contentionWindowHours", s.ContentionWindowHours, 1, maxHours)
 	v.intRange("githubPollMinutes", s.GithubPollMinutes, 0, maxMinutes)
+	validateGitHubHosts(v, s.GithubEnterpriseHosts)
 	return v.err()
 }
 
@@ -166,4 +170,88 @@ func validateLinks(v *validator, links []string) {
 		}
 		seen[clean] = true
 	}
+}
+
+// maxGitHubHosts caps githubEnterpriseHosts.
+const maxGitHubHosts = 20
+
+// validateGitHubHosts checks the GitHub Enterprise hosts: a host name with an optional port, or an http(s) URL
+// with nothing but a scheme and a host; plain http only for a loopback address.
+func validateGitHubHosts(v *validator, hosts []string) {
+	if len(hosts) > maxGitHubHosts {
+		v.add("githubEnterpriseHosts", "lists more than %d hosts", maxGitHubHosts)
+	}
+	seen := map[string]bool{}
+	for i, h := range hosts {
+		f := fmt.Sprintf("githubEnterpriseHosts[%d]", i)
+		norm, err := NormalizeGitHubHost(h)
+		switch {
+		case err != nil:
+			v.add(f, "%v (got %q)", err, h)
+		case norm.Host == "github.com":
+			v.add(f, "github.com is always a GitHub host; list only enterprise hosts")
+		case seen[norm.Host]:
+			v.add(f, "is listed twice (%q)", h)
+		}
+		seen[norm.Host] = true
+	}
+}
+
+// GitHubHost is a normalized entry of githubEnterpriseHosts.
+type GitHubHost struct {
+	// Host is the lower-case host name with its port, if any ("ghe.example.com", "127.0.0.1:8080").
+	Host string
+	// Scheme is https, or http for a loopback test server.
+	Scheme string
+}
+
+// NormalizeGitHubHost reads one entry of githubEnterpriseHosts.
+func NormalizeGitHubHost(entry string) (GitHubHost, error) {
+	e := strings.TrimSpace(entry)
+	if e == "" {
+		return GitHubHost{}, errors.New("must not be empty")
+	}
+	if strings.IndexFunc(e, func(r rune) bool { return unicode.IsSpace(r) || unicode.IsControl(r) }) >= 0 {
+		return GitHubHost{}, errors.New("must not contain spaces")
+	}
+	scheme := "https"
+	if strings.Contains(e, "://") {
+		u, err := url.Parse(e)
+		if err != nil {
+			return GitHubHost{}, errors.New("is not a valid URL")
+		}
+		if u.Scheme != "https" && u.Scheme != "http" {
+			return GitHubHost{}, errors.New("must be an https URL or a host name")
+		}
+		if u.User != nil || (u.Path != "" && u.Path != "/") || u.RawQuery != "" || u.Fragment != "" {
+			return GitHubHost{}, errors.New("must hold only a scheme and a host")
+		}
+		scheme, e = u.Scheme, u.Host
+	}
+	h := strings.ToLower(e)
+	name, port := h, ""
+	if host, p, err := net.SplitHostPort(h); err == nil {
+		name, port = host, p
+	}
+	if name == "" || strings.ContainsAny(name, "/@?#\\") {
+		return GitHubHost{}, errors.New("is not a host name")
+	}
+	if port != "" {
+		if n, err := strconv.Atoi(port); err != nil || n < 1 || n > 65535 {
+			return GitHubHost{}, errors.New("has an invalid port")
+		}
+	}
+	if scheme == "http" && !isLoopback(name) {
+		return GitHubHost{}, errors.New("plain http is allowed only for a loopback address")
+	}
+	return GitHubHost{Host: h, Scheme: scheme}, nil
+}
+
+// isLoopback reports whether name is localhost or a loopback IP address.
+func isLoopback(name string) bool {
+	if name == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(strings.Trim(name, "[]"))
+	return ip != nil && ip.IsLoopback()
 }
