@@ -7,7 +7,7 @@ import { citeText, citeTone } from './meetingModel'
 
 /**
  * Claims with their citations. Each citation shows its path:line and how Seelegent's check found it (verified,
- * located, quote differs…), in words as well as colour.
+ * located, quote differs…), in words as well as colour; a citation that did not verify also says why.
  */
 defineProps<{ claims: readonly Claim[] }>()
 
@@ -28,6 +28,9 @@ const { t } = useI18n()
         >
           <code>{{ cite.variant ? `${cite.variant} ` : '' }}{{ citeText(cite) }}</code>
           <span class="cite__state">{{ t(`team.meetings.cite.${cite.state}`) }}</span>
+          <span v-if="cite.state !== 'verified' && cite.detail" class="cite__detail">{{
+            cite.detail
+          }}</span>
         </li>
       </ul>
     </li>
@@ -77,5 +80,15 @@ const { t } = useI18n()
 
 .cite__state {
   white-space: nowrap;
+}
+
+.cite__detail {
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.cite:has(.cite__detail) {
+  flex-wrap: wrap;
+  border-radius: var(--radius-md);
 }
 </style>

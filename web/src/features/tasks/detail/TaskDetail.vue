@@ -10,6 +10,8 @@ import Tabs from '@/components/ui/Tabs.vue'
 import { readStored, writeStored } from '@/lib/storage'
 
 import AttentionBanner from './AttentionBanner.vue'
+import ConsultPanel from './ConsultPanel.vue'
+import { openObjections } from './consults'
 import FollowupComposer from './FollowupComposer.vue'
 import GatePanel from './GatePanel.vue'
 import SafetyPanel from './SafetyPanel.vue'
@@ -34,6 +36,8 @@ const router = useRouter()
 
 const { summary, detail, error, reload } = useTaskDetail(() => props.taskId)
 const actions = useTaskActions(() => props.taskId)
+/** A peer objection the lead has not answered: Accept waits for an answer (the review dialog asks for it). */
+const objected = computed(() => openObjections(detail.value).length > 0)
 
 // The view comes from ?view= (links such as "Review changes" open Git) or the last one used.
 const isView = (value: unknown): value is TaskView =>
@@ -105,6 +109,7 @@ const loadingFirst = computed(() => !summary.value && !error.value)
         :title-level="titleLevel"
         :show-back="showBack"
         :actions="actions"
+        :objected="objected"
         @followup="composer?.focus()"
         @review="(verdict) => (dialog = { kind: 'review', verdict })"
         @confirm="(kind) => (dialog = { kind })"
@@ -114,8 +119,10 @@ const loadingFirst = computed(() => !summary.value && !error.value)
         :detail="detail"
         :actions="actions"
         @confirm="(kind) => (dialog = { kind })"
+        @answer="dialog = { kind: 'review', verdict: 'accepted' }"
       />
       <GatePanel :task="summary" :detail="detail" />
+      <ConsultPanel :detail="detail" />
       <SafetyPanel :task="summary" :detail="detail" @changed="reload" />
       <section v-if="detail?.error" class="td__error" role="alert">
         <strong>{{ t('task.detail.error') }}</strong>
@@ -146,7 +153,7 @@ const loadingFirst = computed(() => !summary.value && !error.value)
       />
     </div>
     <FollowupComposer ref="composer" :task="summary" :actions="actions" />
-    <TaskDialogs v-model="dialog" :task="summary" :actions="actions" />
+    <TaskDialogs v-model="dialog" :task="summary" :actions="actions" :objected="objected" />
   </article>
 </template>
 

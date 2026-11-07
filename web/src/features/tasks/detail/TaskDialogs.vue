@@ -16,21 +16,35 @@ export type TaskDialog =
  * The confirmations of the task actions that change the work: review (with notes, which a rejection sends back
  * to the worker), cancel and take over. Each says what will happen before anything is sent.
  */
-const props = defineProps<{ task: TaskSummary; actions: TaskActions }>()
+const props = defineProps<{
+  task: TaskSummary
+  actions: TaskActions
+  /** A peer objection stands: accepting needs a written answer to it (sent as answerObjection). */
+  objected?: boolean
+}>()
 const dialog = defineModel<TaskDialog>({ required: true })
 
 const { t } = useI18n()
 const id = useId()
 const notes = ref('')
+const answer = ref('')
 
 watch(
   () => dialog.value?.kind,
-  () => (notes.value = ''),
+  () => {
+    notes.value = ''
+    answer.value = ''
+  },
+)
+
+const answering = computed(
+  () => !!props.objected && dialog.value?.kind === 'review' && dialog.value.verdict === 'accepted',
 )
 
 const title = computed(() => {
   const value = dialog.value
   if (!value) return ''
+  if (answering.value) return t('task.consults.answerTitle')
   if (value.kind === 'review') return t(`task.review.${value.verdict}Title`)
   return t(`task.confirm.${value.kind}Title`)
 })
@@ -38,6 +52,7 @@ const title = computed(() => {
 const description = computed(() => {
   const value = dialog.value
   if (!value) return ''
+  if (answering.value) return t('task.consults.answerDesc')
   if (value.kind === 'review') return t(`task.review.${value.verdict}Desc`)
   if (value.kind === 'takeover') {
     return t(isActive(props.task) ? 'task.confirm.takeoverActiveDesc' : 'task.confirm.takeoverDesc')
@@ -46,13 +61,18 @@ const description = computed(() => {
 })
 
 const busy = computed(() => props.actions.busy.value !== null)
+const missingAnswer = computed(() => answering.value && !answer.value.trim())
 
 async function confirm() {
   const value = dialog.value
-  if (!value) return
+  if (!value || missingAnswer.value) return
   const ok =
     value.kind === 'review'
-      ? await props.actions.review(value.verdict, notes.value)
+      ? await props.actions.review(
+          value.verdict,
+          notes.value,
+          answering.value ? answer.value : undefined,
+        )
       : value.kind === 'cancel'
         ? await props.actions.cancel()
         : await props.actions.takeover()
@@ -78,6 +98,18 @@ function onKeydown(event: KeyboardEvent) {
     @update:open="(open) => !open && (dialog = null)"
   >
     <div v-if="dialog?.kind === 'review'" class="td">
+      <template v-if="answering">
+        <label :for="`${id}-answer`" class="td__label">{{ t('task.consults.answerLabel') }}</label>
+        <textarea
+          :id="`${id}-answer`"
+          v-model="answer"
+          class="td__input"
+          rows="3"
+          required
+          aria-required="true"
+          @keydown="onKeydown"
+        />
+      </template>
       <label :for="`${id}-notes`" class="td__label">
         {{ t(dialog.verdict === 'rejected' ? 'task.review.notesReject' : 'task.review.notes') }}
       </label>
@@ -101,6 +133,7 @@ function onKeydown(event: KeyboardEvent) {
             : 'primary'
         "
         :loading="busy"
+        :disabled="missingAnswer"
         @click="confirm"
       >
         {{

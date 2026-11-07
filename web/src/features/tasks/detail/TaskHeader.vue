@@ -21,6 +21,8 @@ const props = defineProps<{
   titleLevel: 1 | 2
   showBack: boolean
   actions: TaskActions
+  /** A peer objection stands: Accept is disabled until it is answered. */
+  objected?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -59,6 +61,7 @@ const age = computed(() => {
       <TaskHeaderActions
         :task="task"
         :actions="actions"
+        :objected="objected"
         @followup="emit('followup')"
         @review="emit('review', $event)"
         @confirm="emit('confirm', $event)"

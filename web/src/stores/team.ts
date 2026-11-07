@@ -21,6 +21,12 @@ export function upsertById<T extends { id: string }>(list: readonly T[], item: T
   return list.map((x, i) => (i === at ? item : x))
 }
 
+const MEETING_ENDED: ReadonlySet<MeetingSummary['status']> = new Set([
+  'closed',
+  'cancelled',
+  'failed',
+])
+
 export const useTeamStore = defineStore('team', () => {
   let client: TeamApi = defaultApi
   const members = shallowRef<readonly Member[]>([])
@@ -64,8 +70,9 @@ export const useTeamStore = defineStore('team', () => {
       watching.add('members')
       const connection = useConnectionStore()
       connection.subscribe('members.changed', () => void membersLoader.load())
-      // A meeting or consult that ends changes the track records.
-      connection.subscribe('meeting.updated', () => {
+      // A meeting that ends changes the track records; its progress frames do not.
+      connection.subscribe('meeting.updated', (m) => {
+        if (!MEETING_ENDED.has(m.status)) return
         if (membersLoader.status.value !== 'idle') void membersLoader.load()
       })
       connection.onResync(() => void membersLoader.load())

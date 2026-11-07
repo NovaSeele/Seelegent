@@ -252,5 +252,29 @@
     "usedUp": "đã hết lượt tự sửa ({n}/{max})",
     "nextStep": "Cổng không thể tự sửa thêm: hãy gửi chỉ dẫn tiếp hoặc tiếp quản tác vụ.",
     "causedBy": "có thể do {tasks}"
+  },
+  "consults": {
+    "title": "Ý kiến thành viên",
+    "count": "{count} ý kiến",
+    "open": "{count} phản đối cần trả lời",
+    "verdict": {
+      "running": "Đang xem xét",
+      "failed": "Thất bại",
+      "approve": "Tán thành",
+      "concerns": "Có băn khoăn",
+      "object": "Phản đối",
+      "answered": "Đã trả lời phản đối",
+      "done": "Xong"
+    },
+    "focus": "Được hỏi về: {focus}",
+    "required": "Thay đổi bắt buộc",
+    "answer": "Câu trả lời của bạn",
+    "acceptBlocked": "Hãy trả lời phản đối trước",
+    "objects": "{who} phản đối; hãy trả lời trước khi chấp nhận",
+    "line": "{who}: {text}",
+    "answerAction": "Trả lời phản đối",
+    "answerTitle": "Trả lời phản đối và chấp nhận",
+    "answerDesc": "Một thành viên đồng cấp phản đối phần việc này. Câu trả lời của bạn được lưu cùng phản đối và tác vụ được chấp nhận.",
+    "answerLabel": "Câu trả lời"
   }
 }

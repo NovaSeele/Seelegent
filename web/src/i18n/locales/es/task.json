@@ -252,5 +252,29 @@
     "usedUp": "correcciones automáticas agotadas ({n}/{max})",
     "nextStep": "El gate ya no puede corregirlo solo: envía un seguimiento o toma el control de la tarea.",
     "causedBy": "puede deberse a {tasks}"
+  },
+  "consults": {
+    "title": "Opiniones de miembros",
+    "count": "{count} opinión | {count} opiniones",
+    "open": "{count} objeción por responder | {count} objeciones por responder",
+    "verdict": {
+      "running": "Pensando",
+      "failed": "Falló",
+      "approve": "Aprueba",
+      "concerns": "Tiene reservas",
+      "object": "Se opone",
+      "answered": "Objeción respondida",
+      "done": "Terminado"
+    },
+    "focus": "Pregunta sobre: {focus}",
+    "required": "Cambios exigidos",
+    "answer": "Tu respuesta",
+    "acceptBlocked": "Responde primero a la objeción",
+    "objects": "{who} se opone; responde antes de aceptar | {who} se oponen; responde antes de aceptar",
+    "line": "{who}: {text}",
+    "answerAction": "Responder a la objeción",
+    "answerTitle": "Responder a la objeción y aceptar",
+    "answerDesc": "Un par se opone a este trabajo. Tu respuesta queda junto a la objeción y la tarea se acepta.",
+    "answerLabel": "Respuesta"
   }
 }

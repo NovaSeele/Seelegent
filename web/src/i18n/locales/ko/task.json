@@ -252,5 +252,29 @@
     "usedUp": "자동 수정을 모두 사용함 ({n}/{max})",
     "nextStep": "게이트가 더 이상 스스로 고칠 수 없습니다. 후속 지시를 보내거나 작업을 직접 이어받으세요.",
     "causedBy": "{tasks} 때문일 수 있음"
+  },
+  "consults": {
+    "title": "구성원 의견",
+    "count": "의견 {count}개",
+    "open": "답해야 할 이의 {count}건",
+    "verdict": {
+      "running": "검토 중",
+      "failed": "실패",
+      "approve": "승인",
+      "concerns": "우려 있음",
+      "object": "이의 제기",
+      "answered": "이의에 답변함",
+      "done": "완료"
+    },
+    "focus": "질문 내용: {focus}",
+    "required": "필요한 변경",
+    "answer": "내 답변",
+    "acceptBlocked": "먼저 이의에 답하세요",
+    "objects": "{who} 님이 이의를 제기했습니다. 승인 전에 답하세요",
+    "line": "{who}: {text}",
+    "answerAction": "이의에 답하기",
+    "answerTitle": "이의에 답하고 승인",
+    "answerDesc": "동료가 이 작업에 이의를 제기했습니다. 답변은 이의와 함께 저장되고 작업은 승인됩니다.",
+    "answerLabel": "답변"
   }
 }

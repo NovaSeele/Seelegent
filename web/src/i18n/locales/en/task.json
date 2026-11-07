@@ -252,5 +252,29 @@
     "usedUp": "automatic fixes used up ({n}/{max})",
     "nextStep": "The gate cannot fix this by itself any more: send a follow-up or take over the task.",
     "causedBy": "may be caused by {tasks}"
+  },
+  "consults": {
+    "title": "Member opinions",
+    "count": "{count} opinion | {count} opinions",
+    "open": "{count} objection to answer | {count} objections to answer",
+    "verdict": {
+      "running": "Thinking",
+      "failed": "Failed",
+      "approve": "Approves",
+      "concerns": "Has concerns",
+      "object": "Objects",
+      "answered": "Objection answered",
+      "done": "Done"
+    },
+    "focus": "Asked about: {focus}",
+    "required": "Required changes",
+    "answer": "Your answer",
+    "acceptBlocked": "Answer the objection first",
+    "objects": "{who} objects; answer before accepting | {who} object; answer before accepting",
+    "line": "{who}: {text}",
+    "answerAction": "Answer objection",
+    "answerTitle": "Answer the objection and accept",
+    "answerDesc": "A peer objects to this work. Your answer is kept with the objection and the task is accepted.",
+    "answerLabel": "Answer"
   }
 }

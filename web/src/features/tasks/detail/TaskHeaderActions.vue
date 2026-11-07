@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, useId } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import type { TaskSummary } from '@/api/types'
@@ -16,7 +16,12 @@ import type { TaskActions } from './useTaskActions'
  * The task header's actions: accept / reject while it awaits review, then follow up, take over, cancel and copy
  * the id. Each shows only when it applies; on phones the secondary ones fold into a menu.
  */
-const props = defineProps<{ task: TaskSummary; actions: TaskActions }>()
+const props = defineProps<{
+  task: TaskSummary
+  actions: TaskActions
+  /** A peer objection stands: Accept is disabled, with the reason beside it (the banner answers it). */
+  objected?: boolean
+}>()
 
 const emit = defineEmits<{
   followup: []
@@ -28,6 +33,7 @@ const { t } = useI18n()
 const { isMobile } = useBreakpoint()
 
 const reviewable = computed(() => awaitsReview(props.task))
+const hintId = useId()
 
 const menuItems = computed<MenuItem[]>(() => {
   const items: MenuItem[] = []
@@ -55,10 +61,15 @@ function onMenu(id: string) {
 <template>
   <div class="th__actions">
     <template v-if="reviewable">
+      <span v-if="objected" :id="hintId" class="th__hint">{{
+        t('task.consults.acceptBlocked')
+      }}</span>
       <Button
         size="sm"
         variant="primary"
         icon="check"
+        :disabled="objected"
+        :aria-describedby="objected ? hintId : undefined"
         :loading="actions.busy.value === 'review'"
         :aria-keyshortcuts="TASK_KEYS.accept"
         @click="emit('review', 'accepted')"
@@ -131,5 +142,11 @@ function onMenu(id: string) {
   flex-wrap: wrap;
   gap: var(--space-1);
   margin-left: auto;
+}
+
+.th__hint {
+  align-self: center;
+  color: var(--attention-fg);
+  font-size: var(--fs-xs);
 }
 </style>

@@ -59,10 +59,10 @@ export function useTaskActions(taskId: () => string, api: TasksApi = tasksApi) {
       run('answer', () => api.answer(taskId(), text), t('task.question.sent')),
     cancel: () => run('cancel', () => api.cancel(taskId()), t('task.actions.cancelled')),
     takeover: () => run('takeover', () => api.takeover(taskId()), t('task.actions.tookOver')),
-    review: (verdict: Verdict, notes?: string) =>
+    review: (verdict: Verdict, notes?: string, answerObjection?: string) =>
       run(
         'review',
-        () => api.review(taskId(), verdict, notes),
+        () => api.review(taskId(), verdict, notes, answerObjection),
         t(verdict === 'accepted' ? 'task.review.acceptedToast' : 'task.review.rejectedToast'),
       ),
     dismiss: () => run('dismiss', () => api.dismissAttention(taskId())),

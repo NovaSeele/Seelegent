@@ -22,6 +22,7 @@ const note = (overrides: Partial<Note>): Note => ({
   anchorTurn: 1,
   createdAt: '2026-11-07T10:00:00.000Z',
   ...overrides,
+  currentLine: overrides.currentLine ?? overrides.line ?? 3,
 })
 
 function model(list: Note[], send = vi.fn(async () => 2)): NotesModel {
