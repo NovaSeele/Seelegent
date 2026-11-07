@@ -174,7 +174,7 @@ describe('gate model', () => {
       { kindKey: 'task.gate.kind.lane', what: 'a.go, b.go' },
       { kindKey: 'task.gate.kind.auto', what: 'c.json' },
       { kindKey: 'task.gate.kind.task', what: 'npm test · T001' },
-      { kindKey: 'task.gate.kind.doctrine', what: 'make' },
+      { kindKey: 'task.gate.kind.doctrine', what: 'make', causedBy: ['t9'] },
     ])
     const view = gateOf(makeTask(), makeDetail({ turns: [turn(1, { by: 'gate' })], proof }))
     expect(budgetUsedUp(view)).toBe(true)

@@ -112,6 +112,8 @@ const tone = computed(() =>
           {{ t(s.kindKey)
           }}<template v-if="s.what"
             >: <code>{{ s.what }}</code></template
+          ><span v-if="s.causedBy" class="banner__cause">
+            · {{ t('task.gate.causedBy', { tasks: s.causedBy.join(', ') }) }}</span
           >
         </li>
       </ul>
@@ -188,6 +190,10 @@ const tone = computed(() =>
 .banner__steps code {
   font-family: var(--font-mono);
   font-size: var(--fs-xs);
+}
+
+.banner__cause {
+  color: var(--text-muted);
 }
 
 .banner__actions {

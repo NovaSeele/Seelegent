@@ -211,7 +211,7 @@
     "foreign": "May be caused by {tasks}: it failed only in files they changed. No automatic fix was started for it.",
     "output": "Output",
     "notRun": "Not run: {steps}",
-    "settled": "Ran again after the other tasks of the repository stopped.",
+    "settled": "Ran again after waiting for the other tasks of the repository.",
     "verifier": {
       "title": "Second-opinion review",
       "verdict": {
@@ -250,6 +250,7 @@
     "feature": "Spec feature",
     "bar": "Changed since start",
     "usedUp": "automatic fixes used up ({n}/{max})",
-    "nextStep": "The gate cannot fix this by itself any more: send a follow-up or take over the task."
+    "nextStep": "The gate cannot fix this by itself any more: send a follow-up or take over the task.",
+    "causedBy": "may be caused by {tasks}"
   }
 }

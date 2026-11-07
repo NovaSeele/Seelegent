@@ -169,8 +169,11 @@ export function fixesUsed(view: GateView): number {
  * A readable, translatable account of a failed gate for the attention banner: the kind of each failing step with
  * what it ran or checked. A foreign step is listed too: it keeps the gate red.
  */
-export function failedSteps(result: GateResult | null): { kindKey: string; what: string }[] {
+export function failedSteps(
+  result: GateResult | null,
+): { kindKey: string; what: string; causedBy?: string[] }[] {
   return failingSteps(result).map((s) => ({
+    ...(s.foreign && s.causedBy?.length ? { causedBy: s.causedBy } : {}),
     kindKey: stepKindKey(s) ?? 'task.gate.kind.task',
     what:
       s.kind === 'auto' && s.failures?.length

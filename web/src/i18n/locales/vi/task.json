@@ -211,7 +211,7 @@
     "foreign": "Có thể do {tasks}: chỉ không đạt ở các tệp mà tác vụ đó đã sửa. Không bắt đầu lượt tự sửa nào.",
     "output": "Kết quả in ra",
     "notRun": "Không chạy: {steps}",
-    "settled": "Đã chạy lại sau khi các tác vụ khác trong kho mã dừng.",
+    "settled": "Đã chạy lại sau khi chờ các tác vụ khác trong kho mã.",
     "verifier": {
       "title": "Duyệt lần hai",
       "verdict": {
@@ -250,6 +250,7 @@
     "feature": "Tính năng spec",
     "bar": "Đã đổi từ lúc bắt đầu",
     "usedUp": "đã hết lượt tự sửa ({n}/{max})",
-    "nextStep": "Cổng không thể tự sửa thêm: hãy gửi chỉ dẫn tiếp hoặc tiếp quản tác vụ."
+    "nextStep": "Cổng không thể tự sửa thêm: hãy gửi chỉ dẫn tiếp hoặc tiếp quản tác vụ.",
+    "causedBy": "có thể do {tasks}"
   }
 }

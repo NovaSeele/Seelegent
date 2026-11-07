@@ -89,8 +89,8 @@ gate phase), the failure may be that worker's half-done change. The task waits (
 the others stop, `gateSettleMinutes` at most, polling every `gateSettlePollMs`, then runs the gate once more
 (`settled: true`). A failing doctrine check whose output names only files other active tasks changed (their real
 changes, not their lanes) is marked `foreign` with `causedBy`. It still counts: the gate stays red, so the lead sees
-it. It only spares the task an automatic fix turn it could do nothing with; the result carries a warning and the
-attention detail and report name the tasks it may be caused by.
+it. It only spares the task an automatic fix turn it could do nothing with; the step, the attention detail and the
+report name the tasks it may be caused by.
 
 **Red.** While `autoFixes < budget`, the daemon opens an automatic fix turn (`by: "gate"`) whose message lists the
 failing steps with their output tails and the files other tasks are changing. The worker fixes, the gate runs

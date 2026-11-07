@@ -211,7 +211,7 @@
     "foreign": "Puede deberse a {tasks}: falló solo en archivos que cambiaron. No se inició ninguna corrección automática.",
     "output": "Salida",
     "notRun": "Sin ejecutar: {steps}",
-    "settled": "Se ejecutó de nuevo cuando las otras tareas del repositorio terminaron.",
+    "settled": "Se ejecutó de nuevo tras esperar a las otras tareas del repositorio.",
     "verifier": {
       "title": "Segunda revisión",
       "verdict": {
@@ -250,6 +250,7 @@
     "feature": "Funcionalidad de la spec",
     "bar": "Cambiado desde el inicio",
     "usedUp": "correcciones automáticas agotadas ({n}/{max})",
-    "nextStep": "El gate ya no puede corregirlo solo: envía un seguimiento o toma el control de la tarea."
+    "nextStep": "El gate ya no puede corregirlo solo: envía un seguimiento o toma el control de la tarea.",
+    "causedBy": "puede deberse a {tasks}"
   }
 }

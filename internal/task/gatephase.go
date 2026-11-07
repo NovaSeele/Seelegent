@@ -216,10 +216,9 @@ func (s *Service) gatePhase(r *run, t *Task) (bool, error) {
 	others := s.others(r.ctx, t)
 	for i := range res.Steps {
 		st := &res.Steps[i]
+		// The step says it itself (causedBy): the views, the report and the attention detail name the tasks.
 		if by := gate.ForeignCause(*st, files, others); len(by) > 0 {
 			st.Foreign, st.CausedBy = true, by
-			res.Warnings = append(res.Warnings, fmt.Sprintf("%s failed only in files that %s changed: it may be caused "+
-				"by that work, so no automatic fix turn was started for it", st.Label, strings.Join(by, ", ")))
 		}
 	}
 	// A foreign step keeps the gate red: the lead sees it and decides.
