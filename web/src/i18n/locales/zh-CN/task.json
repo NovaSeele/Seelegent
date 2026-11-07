@@ -12,7 +12,7 @@
     "tookOver": "正在打开 worker 对话的控制台",
     "copied": "已复制任务 ID",
     "copyFailed": "无法复制：浏览器拒绝了剪贴板权限",
-    "laneConflict": "已拒绝：这些文件在 {tasks} 的通道内。"
+    "laneConflict": "已拒绝：{files} 在 {tasks} 的通道内。请等这些任务完成或被审阅。"
   },
   "header": {
     "driving": "由你接管中",
@@ -170,7 +170,6 @@
   },
   "gate": {
     "title": "关卡",
-    "chip": "关卡：{state}",
     "state": {
       "none": "尚未运行",
       "running": "运行中",
@@ -249,6 +248,8 @@
     "budget": "自动修复",
     "fixes": "已用 {n}/{max}",
     "feature": "Spec 功能",
-    "bar": "开始后有变化"
+    "bar": "开始后有变化",
+    "usedUp": "自动修复已用完（{n}/{max}）",
+    "nextStep": "关卡已无法自行修复：请发送后续指示，或接管该任务。"
   }
 }

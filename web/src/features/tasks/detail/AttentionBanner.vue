@@ -2,13 +2,14 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 
-import type { TaskSummary } from '@/api/types'
+import type { TaskDetail, TaskSummary } from '@/api/types'
 import Button from '@/components/ui/Button.vue'
 import Icon from '@/components/ui/Icon.vue'
 import { useFormat } from '@/composables/useFormat'
 import { useNow } from '@/composables/useNow'
 import { canCancel, canTakeOver, isFinished } from '@/lib/taskStatus'
 
+import { failedSteps, gateOf } from './gate'
 import { reasonKey } from './question'
 import QuestionCard from './QuestionCard.vue'
 import type { TaskActions } from './useTaskActions'
@@ -18,7 +19,12 @@ import type { TaskActions } from './useTaskActions'
  * and the actions (dismiss, take over, cancel). A question gets its answer card; take-over shows "you are
  * driving". Shown only while there is something to say.
  */
-const props = defineProps<{ task: TaskSummary; actions: TaskActions }>()
+const props = defineProps<{
+  task: TaskSummary
+  actions: TaskActions
+  /** The open task's detail: a failed gate is told from its steps, never from the daemon's English detail. */
+  detail?: TaskDetail | null
+}>()
 const emit = defineEmits<{ confirm: [action: 'cancel' | 'takeover'] }>()
 
 const { t, te } = useI18n()
@@ -36,6 +42,12 @@ const reason = computed(() => {
   const key = `common.attention.${reasonKey(value.reason)}`
   return te(key) ? t(key) : value.reason
 })
+/** For a red gate: its failing steps, named by kind in the reader's language (null for other reasons). */
+const gateSteps = computed(() =>
+  attention.value?.reason === 'gate_red'
+    ? failedSteps(gateOf(props.task, props.detail ?? null).result)
+    : null,
+)
 const tone = computed(() =>
   attention.value?.state === 'background_wait' ? 'neutral' : 'attention',
 )
@@ -95,6 +107,14 @@ const tone = computed(() =>
         </div>
       </div>
       <QuestionCard v-if="question" :detail="attention.detail" :actions="actions" />
+      <ul v-else-if="gateSteps" class="banner__detail banner__steps">
+        <li v-for="(s, i) in gateSteps" :key="i">
+          {{ t(s.kindKey)
+          }}<template v-if="s.what"
+            >: <code>{{ s.what }}</code></template
+          >
+        </li>
+      </ul>
       <p v-else-if="attention.detail" class="banner__detail">{{ attention.detail }}</p>
     </div>
   </section>
@@ -154,6 +174,20 @@ const tone = computed(() =>
   font-size: var(--fs-sm);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+.banner__steps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.banner__steps code {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
 }
 
 .banner__actions {

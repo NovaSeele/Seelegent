@@ -9,7 +9,6 @@ import { useFormat } from '@/composables/useFormat'
 import { useNow } from '@/composables/useNow'
 import { displayStatus, isActive, isBlocked, statusWordKey } from '@/lib/taskStatus'
 
-import { gateTone } from './gate'
 import TaskHeaderActions from './TaskHeaderActions.vue'
 import type { TaskActions } from './useTaskActions'
 
@@ -36,13 +35,6 @@ const now = useNow(1000)
 
 const status = computed(() => displayStatus(props.task))
 
-/** The gate chip, from the summary the daemon keeps current (never from replayed events). */
-const gate = computed(() => {
-  const g = props.task.gate
-  if (!g) return null
-  const text = g.phase ? t(`task.gate.phase.${g.phase}`) : t(`task.gate.state.${g.state}`)
-  return { text, tone: gateTone(g.state, g.phase ?? null), fixes: g.autoFixes }
-})
 const age = computed(() => {
   const end = isActive(props.task) ? now.value : Date.parse(props.task.updatedAt)
   return fmt.value.duration(Math.max(0, end - Date.parse(props.task.createdAt)))
@@ -76,12 +68,6 @@ const age = computed(() => {
     <p class="th__meta">
       <span :title="task.cwd">{{ task.projectName }}</span>
       <span v-if="task.role" class="th__chip">{{ task.role }}</span>
-      <span v-if="gate" class="th__chip th__gate" :class="`tone-${gate.tone}`">
-        {{ t('task.gate.chip', { state: gate.text }) }}
-        <template v-if="gate.fixes">
-          · {{ t('task.gate.fixTurns', { count: gate.fixes }, gate.fixes) }}</template
-        >
-      </span>
       <span
         >{{ task.model }}<template v-if="task.tier"> · {{ task.tier }}</template></span
       >
@@ -179,12 +165,6 @@ const age = computed(() => {
   border-radius: var(--radius-pill);
   background: var(--neutral-bg);
   color: var(--neutral-fg);
-}
-
-/* The gate chip takes its tone's colours (state also in its text, never colour alone). */
-.th__gate {
-  background: var(--tone-bg);
-  color: var(--tone-fg);
 }
 
 .th__id {

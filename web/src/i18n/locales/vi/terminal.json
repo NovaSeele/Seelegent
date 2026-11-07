@@ -111,10 +111,10 @@
     "atRisk": "{count} tệp vẫn có nguy cơ mất",
     "gate": {
       "start": "Bắt đầu cổng kiểm tra: {count} bước",
-      "settling": "Cổng lỗi trong lúc các tác vụ khác đang chạy; chờ chúng xong rồi chạy lại",
+      "settling": "Cổng không đạt trong lúc các tác vụ khác đang chạy; chờ chúng xong rồi chạy lại",
       "running": "Cổng đang chạy",
       "green": "Cổng đạt",
-      "red": "Cổng lỗi",
+      "red": "Cổng không đạt",
       "error": "Không chạy được cổng",
       "skipped": "Cổng đã dừng",
       "autoFix": "tự sửa ở lượt {n}"

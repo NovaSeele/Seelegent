@@ -111,6 +111,7 @@ const loadingFirst = computed(() => !summary.value && !error.value)
       />
       <AttentionBanner
         :task="summary"
+        :detail="detail"
         :actions="actions"
         @confirm="(kind) => (dialog = { kind })"
       />

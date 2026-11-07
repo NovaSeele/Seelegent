@@ -12,7 +12,7 @@
     "tookOver": "Đang mở console trên cuộc hội thoại của worker",
     "copied": "Đã chép mã tác vụ",
     "copyFailed": "Không chép được: trình duyệt từ chối quyền clipboard",
-    "laneConflict": "Bị từ chối: các tệp này nằm trong làn của {tasks}."
+    "laneConflict": "Bị từ chối: {files} nằm trong làn của {tasks}. Hãy chờ các tác vụ đó xong hoặc được duyệt."
   },
   "header": {
     "driving": "Bạn đang điều khiển",
@@ -170,12 +170,11 @@
   },
   "gate": {
     "title": "Cổng kiểm tra",
-    "chip": "Cổng: {state}",
     "state": {
       "none": "chưa chạy",
       "running": "đang chạy",
       "green": "đạt",
-      "red": "lỗi",
+      "red": "không đạt",
       "error": "không chạy được",
       "skipped": "đã dừng"
     },
@@ -194,7 +193,7 @@
       "pending": "Đang chờ",
       "running": "Đang chạy",
       "green": "Đạt",
-      "red": "Lỗi",
+      "red": "Không đạt",
       "error": "Không chạy được",
       "warn": "Cảnh báo",
       "not_run": "Không chạy"
@@ -249,6 +248,8 @@
     "budget": "Tự sửa",
     "fixes": "đã dùng {n}/{max}",
     "feature": "Tính năng spec",
-    "bar": "Đã đổi từ lúc bắt đầu"
+    "bar": "Đã đổi từ lúc bắt đầu",
+    "usedUp": "đã hết lượt tự sửa ({n}/{max})",
+    "nextStep": "Cổng không thể tự sửa thêm: hãy gửi chỉ dẫn tiếp hoặc tiếp quản tác vụ."
   }
 }

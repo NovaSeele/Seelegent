@@ -121,13 +121,64 @@ export function failingSteps(result: GateResult | null): GateStep[] {
 /** Step labels the kind's name already says ('lane', 'hygiene', 'syntax'): not repeated next to it. */
 const PLAIN_LABELS = new Set(['lane', 'hygiene', 'syntax'])
 
+/** The step kind a bare label names, for gate events from before the plan was sent. */
+const LABEL_KIND: Record<string, GateStep['kind']> = {
+  lane: 'lane',
+  hygiene: 'hygiene',
+  syntax: 'auto',
+}
+
+type StepLike = Pick<GateStep, 'label' | 'cmd' | 'dir' | 'taskIds'> & { kind?: GateStep['kind'] }
+
 /** What a step without a command says besides its kind (a doctrine check's id), or ''. */
-export function stepNote(step: GateStep): string {
+export function stepNote(step: Pick<GateStep, 'label'>): string {
   return PLAIN_LABELS.has(step.label) ? '' : step.label
 }
 
 /** The command line a step ran, with its folder when not the repository root. */
-export function stepCommand(step: GateStep): string {
+export function stepCommand(step: Pick<GateStep, 'cmd' | 'dir'>): string {
   if (!step.cmd) return ''
   return step.dir ? `cd ${step.dir} && ${step.cmd}` : step.cmd
+}
+
+/** The i18n key of a step's kind (`task.gate.kind.*`), guessed from the label when the kind is unknown. */
+export function stepKindKey(step: StepLike): string | null {
+  const kind = step.kind ?? LABEL_KIND[step.label]
+  return kind ? `task.gate.kind.${kind}` : null
+}
+
+/** What names one step besides its kind: the command (with its folder and spec tasks) or the check's id. */
+export function stepWhat(step: StepLike): string {
+  const cmd = stepCommand(step)
+  if (!cmd) return stepNote(step)
+  return step.taskIds?.length ? `${cmd} · ${step.taskIds.join(', ')}` : cmd
+}
+
+/** Whether the automatic fixes are used up: the gate cannot fix itself any more. */
+export function budgetUsedUp(view: GateView): boolean {
+  const budget = view.proof?.budget ?? 0
+  return budget > 0 && fixesUsed(view) >= budget
+}
+
+/** The automatic fixes used since the lead's last instruction (the turns, or the daemon's count). */
+export function fixesUsed(view: GateView): number {
+  return Math.max(view.fixTurns, view.proof?.autoFixes ?? 0)
+}
+
+/**
+ * A readable, translatable account of a failed gate for the attention banner: the kind of each failing step with
+ * what it ran or checked (empty when nothing of the task's own failed).
+ */
+export function failedSteps(result: GateResult | null): { kindKey: string; what: string }[] {
+  return failingSteps(result)
+    .filter((s) => !s.foreign)
+    .map((s) => ({
+      kindKey: stepKindKey(s) ?? 'task.gate.kind.task',
+      what:
+        s.kind === 'auto' && s.failures?.length
+          ? s.failures.map((f) => f.file).join(', ')
+          : s.kind === 'lane'
+            ? (s.files ?? []).join(', ')
+            : stepWhat(s),
+    }))
 }

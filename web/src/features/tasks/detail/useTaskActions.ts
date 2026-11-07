@@ -20,12 +20,13 @@ export function useTaskActions(taskId: () => string, api: TasksApi = tasksApi) {
   const toast = useToastStore()
   const busy = shallowRef<TaskActionName | null>(null)
 
-  /** The toast text of a failed write; a lane conflict names the tasks that hold the files. */
+  /** The toast text of a failed write; a lane conflict names the files, the tasks that hold them and what to do. */
   function failure(error: unknown): string {
     if (error instanceof ApiError && error.details.reason === 'lane_conflict') {
       const conflicts = (error.details.conflicts ?? []) as readonly LaneConflict[]
       const tasks = conflicts.map((c) => c.title || c.taskId).join(', ')
-      return t('task.actions.laneConflict', { tasks })
+      const files = [...new Set(conflicts.flatMap((c) => c.paths.map((p) => p.mine)))].join(', ')
+      return t('task.actions.laneConflict', { tasks, files })
     }
     const message = error instanceof Error ? error.message : String(error)
     return t('task.actions.failed', { error: message })

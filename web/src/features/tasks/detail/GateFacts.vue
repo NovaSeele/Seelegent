@@ -70,12 +70,12 @@ const unverified = computed(
           {{ t('task.gate.noCommands') }}
         </span>
         <ul v-else class="facts__list">
-          <li v-for="(c, i) in proof.commands" :key="i">
+          <li v-for="(c, i) in proof.commands" :key="i" class="facts__command">
             <code class="facts__code">{{ c.dir ? `cd ${c.dir} && ${c.cmd}` : c.cmd }}</code>
             <span v-if="c.kind === 'detect'" class="facts__muted">{{
               t('task.gate.detected')
             }}</span>
-            <span v-if="c.taskIds?.length" class="facts__muted">{{ c.taskIds.join(', ') }}</span>
+            <span v-if="c.taskIds?.length" class="facts__muted"> · {{ c.taskIds.join(', ') }}</span>
           </li>
         </ul>
       </dd>
@@ -150,6 +150,13 @@ const unverified = computed(
   margin: 0;
   padding: 0;
   list-style: none;
+}
+
+.facts__command {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 var(--space-2);
 }
 
 .facts__list--bullets {

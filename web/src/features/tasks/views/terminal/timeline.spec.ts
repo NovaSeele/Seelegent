@@ -179,6 +179,96 @@ describe('terminal timeline', () => {
     expect(notices[2]).not.toHaveProperty('detail')
   })
 
+  it('names gate steps by kind and says a failed gate once', () => {
+    seq = 0
+    const at = (e: TaskEvent, turn: number) => ({ ...e, turn })
+    const items = buildTimeline([
+      at(
+        ev('gate', {
+          phase: 'start',
+          steps: ['lane', 'syntax', 'T001', 'T001'],
+          plan: [
+            { kind: 'lane', label: 'lane' },
+            { kind: 'auto', label: 'syntax' },
+            { kind: 'task', label: 'T001', cmd: 'findstr /b a a.txt', taskIds: ['T001'] },
+            { kind: 'task', label: 'T001', cmd: 'make', dir: 'web', taskIds: ['T001'] },
+          ],
+        }),
+        3,
+      ),
+      at(
+        ev('gate', {
+          phase: 'result',
+          result: {
+            state: 'red',
+            steps: [
+              { kind: 'lane', label: 'lane', state: 'green' },
+              {
+                kind: 'auto',
+                label: 'syntax',
+                state: 'red',
+                files: ['a.json', 'b.go'],
+                failures: [{ file: 'a.json', message: 'unexpected end' }],
+                tail: 'a.json: unexpected end',
+              },
+            ],
+            notRun: [],
+            warnings: [],
+            startedAt: '2026-11-06T12:00:00Z',
+          },
+        }),
+        3,
+      ),
+      at(
+        ev('attention', {
+          state: 'blocked',
+          reason: 'gate_red',
+          who: 'lead',
+          since: '2026-11-06T12:00:00Z',
+          detail: 'syntax check failed: a.json',
+        }),
+        3,
+      ),
+    ])
+    const notices = items.flatMap((i) => (i.kind === 'notice' ? [i] : []))
+    // The gate_red flag right after the red gate line of its turn adds nothing: it is left out.
+    expect(notices.map((i) => i.message.key)).toEqual([
+      'terminal.ev.gate.start',
+      'terminal.ev.gate.red',
+    ])
+    expect(notices[0]?.lines).toEqual([
+      { label: { key: 'task.gate.kind.lane' }, text: undefined },
+      { label: { key: 'task.gate.kind.auto' }, text: undefined },
+      { label: { key: 'task.gate.kind.task' }, text: 'findstr /b a a.txt · T001' },
+      { label: { key: 'task.gate.kind.task' }, text: 'cd web && make · T001' },
+    ])
+    expect(notices[1]?.lines).toEqual([
+      { label: { key: 'task.gate.kind.auto' }, text: undefined },
+      { text: 'a.json: unexpected end' },
+    ])
+  })
+
+  it('keeps a gate_red flag of another turn', () => {
+    seq = 0
+    const items = buildTimeline([
+      {
+        ...ev('gate', {
+          phase: 'result',
+          result: { state: 'red', steps: [], notRun: [], warnings: [], startedAt: '' },
+        }),
+        turn: 1,
+      },
+      {
+        ...ev('attention', { state: 'blocked', reason: 'gate_red', who: 'lead', since: '' }),
+        turn: 2,
+      },
+    ])
+    expect(items.flatMap((i) => (i.kind === 'notice' ? [i.message.key] : []))).toEqual([
+      'terminal.ev.gate.red',
+      'common.attention.gateRed',
+    ])
+  })
+
   it('reuses unchanged items so only the item an event touched re-renders', () => {
     seq = 0
     const events = [

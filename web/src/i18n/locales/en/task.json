@@ -12,7 +12,7 @@
     "tookOver": "A console is opening on the worker's conversation",
     "copied": "Task ID copied",
     "copyFailed": "Could not copy: the browser refused clipboard access",
-    "laneConflict": "Refused: those files are in the lane of {tasks}."
+    "laneConflict": "Refused: {files} are in the lane of {tasks}. Wait until those tasks finish or are reviewed."
   },
   "header": {
     "driving": "You are driving",
@@ -170,7 +170,6 @@
   },
   "gate": {
     "title": "Gate",
-    "chip": "Gate: {state}",
     "state": {
       "none": "not run yet",
       "running": "running",
@@ -249,6 +248,8 @@
     "budget": "Automatic fixes",
     "fixes": "{n} of {max} used",
     "feature": "Spec feature",
-    "bar": "Changed since start"
+    "bar": "Changed since start",
+    "usedUp": "automatic fixes used up ({n}/{max})",
+    "nextStep": "The gate cannot fix this by itself any more: send a follow-up or take over the task."
   }
 }

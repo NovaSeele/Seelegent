@@ -5,7 +5,20 @@ import type { GateResult, GateStep, TaskProof, Turn, VerifierResult } from '@/ap
 import { setupApp } from '@/test/app'
 import { iso, makeDetail, makeTask } from '@/test/fixtures'
 
-import { fixTurnsOf, gateOf, gateTone, gateUrgent, hasGate, stepCommand, stepNote } from './gate'
+import {
+  budgetUsedUp,
+  failedSteps,
+  fixTurnsOf,
+  gateOf,
+  gateTone,
+  gateUrgent,
+  hasGate,
+  stepCommand,
+  stepKindKey,
+  stepNote,
+  stepWhat,
+} from './gate'
+import GateSteps from './GateSteps.vue'
 import GatePanel from './GatePanel.vue'
 
 const turn = (n: number, extra: Partial<Turn> = {}): Turn => ({
@@ -53,7 +66,7 @@ const proof: TaskProof = {
   verify: true,
   doctrine: [],
   barChanged: [],
-  autoFixes: 1,
+  autoFixes: 2,
   budget: 2,
   feature: 'specs/001-x',
 }
@@ -129,6 +142,35 @@ describe('gate model', () => {
     // The kind already names lane, hygiene and syntax steps; a doctrine check keeps its id.
     expect(stepNote(step({ kind: 'lane', label: 'lane' }))).toBe('')
     expect(stepNote(step({ kind: 'doctrine', label: 'vet' }))).toBe('vet')
+    expect(stepWhat(step({ cmd: 'make', taskIds: ['T001', 'T002'] }))).toBe('make · T001, T002')
+    // Gate events from before the plan name their steps by label only.
+    expect(stepKindKey({ label: 'syntax' })).toBe('task.gate.kind.auto')
+    expect(stepKindKey({ label: 'npm test' })).toBeNull()
+  })
+
+  it('tells a failed gate by kind and what each step ran or checked, without the foreign ones', () => {
+    const g = result({
+      state: 'red',
+      steps: [
+        step({ kind: 'lane', label: 'lane', state: 'red', files: ['a.go', 'b.go'] }),
+        step({
+          kind: 'auto',
+          label: 'syntax',
+          state: 'red',
+          failures: [{ file: 'c.json', message: 'x' }],
+        }),
+        step({ cmd: 'npm test', state: 'error', taskIds: ['T001'] }),
+        step({ cmd: 'make', state: 'red', foreign: true }),
+      ],
+    })
+    expect(failedSteps(g)).toEqual([
+      { kindKey: 'task.gate.kind.lane', what: 'a.go, b.go' },
+      { kindKey: 'task.gate.kind.auto', what: 'c.json' },
+      { kindKey: 'task.gate.kind.task', what: 'npm test · T001' },
+    ])
+    const view = gateOf(makeTask(), makeDetail({ turns: [turn(1, { by: 'gate' })], proof }))
+    expect(budgetUsedUp(view)).toBe(true)
+    expect(budgetUsedUp({ ...view, proof: { ...proof, autoFixes: 0 }, fixTurns: 0 })).toBe(false)
   })
 })
 
@@ -157,8 +199,10 @@ describe('GatePanel', () => {
     const details = wrapper.find('details')
     expect(details.attributes('open')).toBeDefined()
     expect(details.classes()).toContain('tone-danger')
-    expect(wrapper.find('summary').text()).toBe('Gatefailedturn 32 automatic fixes')
+    // Both fixes are spent: the summary says so and the body says what is left to do.
+    expect(wrapper.find('summary').text()).toBe('Gatefailedturn 3automatic fixes used up (2/2)')
     const text = wrapper.text()
+    expect(text).toContain('send a follow-up or take over the task')
     expect(text).toContain('Steps after turn 3')
     expect(text).toContain('cd web && npm test')
     expect(text).toContain('exit 1')
@@ -168,7 +212,9 @@ describe('GatePanel', () => {
     expect(wrapper.find('pre b').exists()).toBe(false)
     expect(text).toContain('src/')
     expect(text).toContain('claimed over t7')
-    expect(text).toContain('1 of 2 used')
+    expect(text).toContain('2 of 2 used')
+    // The spec task of a command reads apart from it.
+    expect(wrapper.find('.facts__command').text()).toBe('npm test · T001')
     expect(wrapper.findComponent(RouterLinkStub).props('to')).toEqual({ name: 'proof' })
   })
 
@@ -197,5 +243,34 @@ describe('GatePanel', () => {
     expect(text).toContain('1 cited lines do not match the repository:')
     expect(text).toContain('b.go:9')
     expect(text).not.toContain('a.go:3')
+  })
+})
+
+describe('GateSteps', () => {
+  async function mountSteps(r: GateResult) {
+    const { plugins } = await setupApp()
+    return mount(GateSteps, { props: { result: r, turn: 2 }, global: { plugins } })
+  }
+
+  it('leaves the output closed when the failures are listed, and says not run only once', async () => {
+    const wrapper = await mountSteps(
+      result({
+        state: 'red',
+        steps: [
+          step({
+            kind: 'auto',
+            label: 'syntax',
+            state: 'red',
+            failures: [{ file: 'a.json', message: 'bad json' }],
+            tail: 'a.json: bad json',
+          }),
+          step({ cmd: 'make', state: 'not_run' }),
+        ],
+        notRun: ['make'],
+      }),
+    )
+    expect(wrapper.text()).toContain('bad json')
+    expect(wrapper.find('details').attributes('open')).toBeUndefined()
+    expect(wrapper.text()).not.toContain('Not run: make')
   })
 })

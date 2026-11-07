@@ -12,7 +12,7 @@
     "tookOver": "Se está abriendo una consola con la conversación del worker",
     "copied": "ID de la tarea copiado",
     "copyFailed": "No se pudo copiar: el navegador denegó el acceso al portapapeles",
-    "laneConflict": "Rechazado: esos archivos están en el carril de {tasks}."
+    "laneConflict": "Rechazado: {files} están en el carril de {tasks}. Espera a que esas tareas terminen o se revisen."
   },
   "header": {
     "driving": "La controlas tú",
@@ -170,7 +170,6 @@
   },
   "gate": {
     "title": "Gate",
-    "chip": "Gate: {state}",
     "state": {
       "none": "aún sin ejecutar",
       "running": "en marcha",
@@ -249,6 +248,8 @@
     "budget": "Correcciones automáticas",
     "fixes": "{n} de {max} usadas",
     "feature": "Funcionalidad de la spec",
-    "bar": "Cambiado desde el inicio"
+    "bar": "Cambiado desde el inicio",
+    "usedUp": "correcciones automáticas agotadas ({n}/{max})",
+    "nextStep": "El gate ya no puede corregirlo solo: envía un seguimiento o toma el control de la tarea."
   }
 }

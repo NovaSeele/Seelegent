@@ -119,7 +119,7 @@
     "waitingWorker": "Chờ worker rảnh",
     "manual": "Bạn đang điều khiển",
     "gate": "Kiểm cổng",
-    "gateRed": "Cổng lỗi",
+    "gateRed": "Cổng không đạt",
     "workAtRisk": "Có thể mất công việc",
     "depsBlocked": "Tác vụ trước thất bại",
     "waitingDeps": "Chờ tác vụ trước",

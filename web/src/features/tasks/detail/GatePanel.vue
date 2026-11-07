@@ -6,7 +6,7 @@ import type { TaskDetail, TaskSummary } from '@/api/types'
 import Icon from '@/components/ui/Icon.vue'
 import Spinner from '@/components/ui/Spinner.vue'
 
-import { gateOf, gateTone, gateUrgent, hasGate } from './gate'
+import { budgetUsedUp, fixesUsed, gateOf, gateTone, gateUrgent, hasGate } from './gate'
 import GateFacts from './GateFacts.vue'
 import GateSteps from './GateSteps.vue'
 
@@ -23,6 +23,13 @@ const { t } = useI18n()
 const view = computed(() => gateOf(props.task, props.detail))
 const tone = computed(() => gateTone(view.value.state, view.value.phase))
 const urgent = computed(() => gateUrgent(view.value))
+/** The fixes are used up and the gate still fails: only the lead or the user can move it now. */
+const usedUp = computed(
+  () =>
+    budgetUsedUp(view.value) &&
+    !view.value.phase &&
+    (view.value.state === 'red' || view.value.state === 'error'),
+)
 
 const stateText = computed(() => {
   const v = view.value
@@ -54,7 +61,10 @@ watch(urgent, (value) => {
         <span v-if="view.turn" class="gate__phrase">{{
           t('task.gate.turn', { n: view.turn })
         }}</span>
-        <span v-if="view.fixTurns" class="gate__phrase">
+        <span v-if="usedUp" class="gate__phrase">
+          {{ t('task.gate.usedUp', { n: fixesUsed(view), max: view.proof?.budget ?? 0 }) }}
+        </span>
+        <span v-else-if="view.fixTurns" class="gate__phrase">
           {{ t('task.gate.fixTurns', { count: view.fixTurns }, view.fixTurns) }}
         </span>
         <span v-if="view.verifier" class="gate__phrase">
@@ -66,6 +76,7 @@ watch(urgent, (value) => {
       </span>
     </summary>
     <div class="gate__body">
+      <p v-if="usedUp" class="gate__muted">{{ t('task.gate.nextStep') }}</p>
       <GateSteps v-if="view.result" :result="view.result" :turn="view.turn" />
       <p v-else class="gate__muted">{{ t('task.gate.notYet') }}</p>
       <GateFacts :proof="view.proof" :verifier="view.verifier" />
@@ -140,6 +151,11 @@ watch(urgent, (value) => {
 @media (width < 600px) {
   .gate {
     margin: 0 var(--space-4) var(--space-3);
+  }
+
+  /* The page scrolls on phones: no scroll box inside it. */
+  .gate__body {
+    max-height: none;
   }
 }
 </style>

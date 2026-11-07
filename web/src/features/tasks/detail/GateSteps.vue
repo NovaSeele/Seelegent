@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import type { GateResult } from '@/api/types'
@@ -11,10 +12,13 @@ import { stepCommand, stepNote, stepTone } from './gate'
  * The steps of one gate run: each with its state, command, exit code and time, the files it is about, and the end
  * of its output (open for a failing step). Worker and command output is shown as text, never as HTML.
  */
-defineProps<{ result: GateResult; turn: number | null }>()
+const props = defineProps<{ result: GateResult; turn: number | null }>()
 
 const { t } = useI18n()
 const fmt = useFormat()
+
+/** The step rows already say which steps did not run: the extra line is only for runs that list none. */
+const notRunShown = computed(() => props.result.steps.some((s) => s.state === 'not_run'))
 </script>
 
 <template>
@@ -55,14 +59,14 @@ const fmt = useFormat()
         <details
           v-if="step.tail && step.kind !== 'lane'"
           class="steps__tail"
-          :open="step.state === 'red' || step.state === 'error'"
+          :open="(step.state === 'red' || step.state === 'error') && !step.failures?.length"
         >
           <summary class="steps__tail-summary">{{ t('task.gate.output') }}</summary>
           <pre class="steps__pre">{{ step.tail }}</pre>
         </details>
       </li>
     </ol>
-    <p v-if="result.notRun.length" class="steps__muted">
+    <p v-if="result.notRun.length && !notRunShown" class="steps__muted">
       {{ t('task.gate.notRun', { steps: result.notRun.join(', ') }) }}
     </p>
     <p v-if="result.settled" class="steps__muted">{{ t('task.gate.settled') }}</p>
