@@ -42,6 +42,17 @@ func embeddedMigrations() ([]migration, error) {
 	return loadMigrations(sub)
 }
 
+// KnownSchemaVersion is the number of migrations compiled into this binary: the highest database schema version it
+// can open (`seelegent version --json` reports it as schemaVersion, so an update never installs a binary that knows
+// fewer migrations than the database has).
+func KnownSchemaVersion() (int, error) {
+	ms, err := embeddedMigrations()
+	if err != nil {
+		return 0, err
+	}
+	return len(ms), nil
+}
+
 // loadMigrations reads every .sql file at the root of fsys and checks the numbering.
 func loadMigrations(fsys fs.FS) ([]migration, error) {
 	names, err := fs.Glob(fsys, "*.sql")

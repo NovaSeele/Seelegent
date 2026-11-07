@@ -1,0 +1,70 @@
+# GoReleaser v2 configuration: release archives for Windows, Linux and macOS (docs/release.md).
+# The release workflow (.github/workflows/release.yml) runs it on a v* tag; CI runs `goreleaser check` and a
+# snapshot build. The installers (scripts/install.ps1, scripts/install.sh) and `seelegent update` rely on the
+# archive names and checksums.txt below: change them together.
+version: 2
+
+project_name: seelegent
+
+before:
+  hooks:
+    # The dashboard is embedded from web/dist, so it is built first (local and CI snapshots). The release workflow
+    # builds it in a job without the write token and runs `goreleaser release --skip=before`, so npm code never
+    # runs next to that token.
+    - pnpm --dir web install --frozen-lockfile
+    - pnpm --dir web build
+
+builds:
+  - id: seelegent
+    main: ./cmd/seelegent
+    binary: seelegent
+    env:
+      - CGO_ENABLED=0
+    goos: [windows, linux, darwin]
+    goarch: [amd64, arm64]
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+      - -X github.com/NovaSeele/Seelegent/internal/buildinfo.version=v{{ .Version }}
+      - -X github.com/NovaSeele/Seelegent/internal/buildinfo.commit={{ .ShortCommit }}
+      - -X github.com/NovaSeele/Seelegent/internal/buildinfo.date={{ .CommitDate }}
+    # Reproducible: the binaries carry the commit's time, not the build's.
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+archives:
+  - id: seelegent
+    ids: [seelegent]
+    # seelegent_<version>_<os>_<arch>.tar.gz (.zip on Windows), the binary at the archive's root.
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - LICENSE
+      - README.md
+      - THIRD_PARTY_NOTICES.md
+
+checksum:
+  name_template: checksums.txt
+  algorithm: sha256
+
+snapshot:
+  # A snapshot reports a version the updater treats as a development build.
+  version_template: "{{ incpatch .Version }}-snapshot"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs"
+      - "^test"
+      - "^chore"
+      - "^ci"
+
+release:
+  github:
+    owner: NovaSeele
+    name: Seelegent
+  prerelease: auto

@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/NovaSeele/Seelegent/internal/api"
@@ -469,6 +470,31 @@ func exitCode(err error) int {
 // with this process's environment plus SEELEGENT_HOME=<home>, in the data directory (so it never holds the host's
 // folder open).
 func SpawnDaemon(exe string, paths config.Paths, port int, env []string) StartFunc {
+	start, _ := SpawnDaemonTracked(exe, paths, port, env)
+	return start
+}
+
+// Spawned is the process the StartFunc of SpawnDaemonTracked started last, so a caller that gives up on it (an
+// update whose new daemon does not answer in time) can stop exactly that process instead of one found by a pid.
+type Spawned struct {
+	mu   sync.Mutex
+	proc *os.Process
+	done chan struct{}
+}
+
+// Process returns the started process and a channel that is closed when it has exited (nil, nil before a start).
+func (s *Spawned) Process() (proc *os.Process, exited <-chan struct{}) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.proc == nil {
+		return nil, nil
+	}
+	return s.proc, s.done
+}
+
+// SpawnDaemonTracked is SpawnDaemon that also records the process it starts.
+func SpawnDaemonTracked(exe string, paths config.Paths, port int, env []string) (StartFunc, *Spawned) {
+	sp := &Spawned{}
 	return func(context.Context) (<-chan error, error) {
 		cmd, err := platform.StartDetached(func() *exec.Cmd {
 			//nolint:gosec,noctx // our own executable; the daemon outlives every context of this process
@@ -480,16 +506,20 @@ func SpawnDaemon(exe string, paths config.Paths, port int, env []string) StartFu
 		if err != nil {
 			return nil, err
 		}
-		exited := make(chan error, 1)
+		exited, done := make(chan error, 1), make(chan struct{})
+		sp.mu.Lock()
+		sp.proc, sp.done = cmd.Process, done
+		sp.mu.Unlock()
 		go func() {
 			err := cmd.Wait()
 			if err == nil {
 				err = errors.New("exit status 0")
 			}
+			close(done)
 			exited <- err
 		}()
 		return exited, nil
-	}
+	}, sp
 }
 
 // withEnv returns env with key set to value (replacing every earlier entry for key, case-insensitively on

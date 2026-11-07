@@ -27,7 +27,8 @@ Seelegent is a Go daemon + CLI + MCP server in one binary, with a Vue 3 + TypeSc
   [docs/mcp.md](docs/mcp.md)), `app`
   (composition root: builds and starts the services), `testutil/fakecli` (the test binary as launcher and fake
   worker CLI), `setup` (registers Seelegent with the lead hosts: MCP entries, lead skill, reminder hook; see
-  [docs/setup.md](docs/setup.md)), `migrate` (imports the old Node version's data folder).
+  [docs/setup.md](docs/setup.md)), `migrate` (imports the old Node version's data folder), `update` (`seelegent
+  update`: release check, verified download, in-place replacement and rollback; see [docs/release.md](docs/release.md)).
 - `web/` — Vue app with its own `package.json`; `web/embed.go` embeds `web/dist`.
   `web/src/`: `main.ts`, `App.vue`, `router/`, `api/`, `stores/` (Pinia), `i18n/` (`locales/<lang>/<ns>.json`),
   `styles/` (tokens), `components/ui/`, `components/`, `features/<area>/`, `composables/`.

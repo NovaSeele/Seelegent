@@ -3,11 +3,13 @@ package cli
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"errors"
 	"io"
 	"io/fs"
 	"net"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -15,6 +17,7 @@ import (
 
 	"github.com/NovaSeele/Seelegent/internal/config"
 	"github.com/NovaSeele/Seelegent/internal/fsutil"
+	"github.com/NovaSeele/Seelegent/internal/store"
 )
 
 // freeTestPort returns a port nothing listens on (it was free a moment ago).
@@ -73,6 +76,38 @@ func TestDaemonLockedOpensNothing(t *testing.T) {
 		if _, err := os.Stat(p); !errors.Is(err, fs.ErrNotExist) {
 			t.Errorf("%s exists (err %v): the second daemon opened it", p, err)
 		}
+	}
+}
+
+// TestDaemonStartFailureIsLogged: a daemon that cannot open its database (made by a newer build) says why in
+// logs/daemon.log, where the starters' errors point, not only on its standard error.
+func TestDaemonStartFailureIsLogged(t *testing.T) {
+	paths := testHome(t)
+	if err := paths.EnsureDirs(); err != nil {
+		t.Fatal(err)
+	}
+	ctx := t.Context()
+	db, err := store.Open(ctx, paths.DB)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Write(ctx, func(tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, "INSERT INTO schema_version (version, name, applied_at) VALUES (9999, 'f', 'x')")
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	_ = db.Close()
+	err = runDaemon(ctx, testInfo, daemonFlags{port: freeTestPort(t)}, io.Discard)
+	if !errors.Is(err, store.ErrSchemaTooNew) {
+		t.Fatalf("runDaemon = %v, want ErrSchemaTooNew", err)
+	}
+	data, err := os.ReadFile(filepath.Join(paths.Logs, "daemon.log"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "could not start") || !strings.Contains(string(data), "version 9999") {
+		t.Errorf("daemon.log does not say why:\n%s", data)
 	}
 }
 

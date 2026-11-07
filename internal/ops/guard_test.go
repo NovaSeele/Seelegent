@@ -11,7 +11,7 @@ func TestGuardAndHelpers(t *testing.T) {
 		want         bool
 	}{
 		{"delegate", "", true}, {"daemon", "", true}, {"memory", "read", false}, {"memory", "append", true},
-		{"setup", "", true}, {"migrate", "", true},
+		{"setup", "", true}, {"migrate", "", true}, {"update", "", true},
 		{"status", "", false}, {"task", "", false}, {"wait", "", false}, {"profiles", "list", false},
 	} {
 		if got := Mutating(c.name, c.action); got != c.want {
