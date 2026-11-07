@@ -13,8 +13,12 @@ None of them ever fails a task. They inform the lead and the dashboard; the lead
 ## Git guard
 
 Package `internal/guard` is pure: it reads a command line (POSIX shells, PowerShell, cmd.exe; substitutions,
-subshells, wrappers such as `env`, `xargs`, `timeout`, `find -exec`; interpreters such as `bash -c`,
-`powershell -EncodedCommand`, `node -e`, `python -c`) and decides. It refuses:
+subshells, wrappers such as `env`, `xargs`, `timeout`, `chrt`, `parallel`, `script -c`, `su -c`, `find -exec`,
+cmd's `if`; interpreters such as `bash -c`, `powershell -EncodedCommand`, `node -e`, `python -c`; a script a
+shell or an interpreter reads from standard input: `bash <<'EOF'`, `cat <<'EOF' | sh`, `sh -s <<< '...'`,
+`pwsh -Command -`, `python3 - <<'EOF'`) and decides. A here-document fed to any other command (`cat` building a
+commit message, `tee`) is data. Long options count by any prefix git accepts (`commit --amen`, `branch --d`). It
+refuses:
 
 - always: `reset`, `restore`, `switch`, `revert`, `rebase`, `merge`, `pull`, `push`, `cherry-pick`, `am`, `rm`,
   `mv`, `prune`, `filter-branch`, `filter-repo`, `update-ref`, `update-index`, `read-tree`, `checkout-index`,
@@ -23,8 +27,9 @@ subshells, wrappers such as `env`, `xargs`, `timeout`, `find -exec`; interpreter
   `commit -a|--all|--amend`; `branch` and `tag` deletes, moves and forced writes; `apply` unless it only checks;
   `reflog expire|delete`; `worktree remove|prune|move`; `submodule deinit|update|absorbgitdirs`; `config` writes
   of keys that run programs or redirect git (aliases, includes, `core.hooksPath`, `core.editor`, filters and
-  drivers, ...); `sparse-checkout` writes; `bisect` steps; `rerere forget|clear|gc`; `notes remove|prune`;
-  `refs migrate`; `symbolic-ref -d`;
+  drivers, ...) and of `gc.pruneExpire`; `sparse-checkout` writes; `bisect` steps; `rerere forget|clear|gc`;
+  `notes remove|prune`; `refs migrate`; `symbolic-ref -d`; `gc --prune=<date>` (plain `gc` and `gc --prune` keep
+  the default expiry);
 - an alias that expands to any of the above (read with `git config --get alias.<name>` in the command's folder);
 - fail closed: a line that mentions git and cannot be read (an unclosed quote, a variable used as the git
   subcommand or an option, nesting deeper than the limit).
@@ -66,6 +71,17 @@ subcommand (`git stsh`) is not run as the command git guesses.
 - codex has no pre-tool hook. Its own sandbox (`backends.codex.sandbox`, default `workspace-write`; plan mode is
   `read-only`) limits where it can write; the shim covers the git commands it runs through `PATH`. With
   `danger-full-access` only the shim remains.
+- The hooks do not run git, so they cannot turn off `help.autocorrect`: when the user's git config sets it, a
+  misspelled subcommand (`git stsh`) passes the hook as an unknown command and git runs the command it guesses.
+  The shim is not affected.
+- The hooks live in files of the worker's own profile (`settings.json`, `hooks.json`). A worker that edits those
+  files, with its edit tools or a shell command, can remove the hook or (Claude Code's `env` setting) set
+  `SEELEGENT_GIT_GUARD`; writes into the profile folders raise no scope warning.
+- Forms the guard does not read: GNU `parallel` reading its commands from standard input or a file (`parallel <
+  cmds`, `--arg-file`); a `ProcessStartInfo` whose `Arguments` are set as a property before
+  `[Diagnostics.Process]::Start($psi)`; programs started through other language runtimes or APIs than the inline
+  code of the interpreters above (a compiled helper, `Invoke-CimMethod Win32_Process`, `wmic process call create`,
+  `schtasks`). Wrappers not in the list (any program that runs its arguments as a command) are not followed.
 - The snapshots below are the safety net for everything the guard cannot see.
 
 ## Snapshots
@@ -88,7 +104,10 @@ A failed snapshot is logged and the turn runs anyway; its checks are then skippe
 Every 6 hours (first run 2 minutes after the daemon starts) the sweep removes, for tasks that are no longer in the
 database or that finished and were not updated for `snapshotRetentionDays` (default 14), their attempt folders
 (`tasks/<id>/`) and their snapshot manifests, then every blob no manifest names any more (bugs.md F5). Tasks that
-are not finished, and tasks with a running attempt or a watch, are never swept.
+are not finished, and tasks with a running attempt or a watch, are never swept. A snapshot names its blobs only
+once it is saved, after they were written or reused, so every blob is dated with the store's clock when it is
+written or reused, and the sweep keeps unnamed blobs dated within an hour before it started (`blobGrace`, well
+above the 2- and 3-minute limits of a snapshot and of the post-turn checks).
 
 ## Post-turn checks
 
@@ -142,8 +161,8 @@ A red finding makes a done task's attention `hygiene`.
 
 ### Scope warnings
 
-- `outside_repo_write` (warn): an edit tool, or a shell command's redirection, copy or move target
-  (`guard.Writes`), wrote outside the task's folder, the repository, the temp folder and the worker's profile
+- `outside_repo_write` (warn): an edit tool, or a shell command's redirection, copy or move target or a file
+  `sed -i`/`perl -i` edits in place (`guard.Writes`), wrote outside the task's folder, the repository, the temp folder and the worker's profile
   folders. Git Bash paths (`/c/...`) are mapped on Windows; dynamic words and `~` are skipped. At most 20.
 - `unfetched_url` (warn): a URL in the report that appears nowhere in the prompt, the messages, the commands or the
   tool events of the turn (local hosts ignored). At most 10.
