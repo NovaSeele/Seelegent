@@ -66,7 +66,9 @@ What the installers do, in order:
    unless the archive's SHA-256 matches its line. Then run the extracted binary's `version --json`: it must run here
    and report the release's version. When the data folder has a database, the binary's `version --check-database`
    must accept it (see [Database schema](#database-schema-and-going-back)): a release that knows fewer migrations is
-   refused, one that cannot tell is refused unless `-Force` / `--force` / `SEELEGENT_FORCE=1`.
+   refused, one that cannot tell (a build from before the check, which answers with code `usage`) is refused unless
+   `-Force` / `--force` / `SEELEGENT_FORCE=1`, and any other failure of the check (a database that cannot be read,
+   say) is refused with the binary's own error, `--force` or not.
 3. Stop a running daemon of an earlier install (`seelegent stop`), then put the binary in place with renames in its
    folder only, so even a running `seelegent.exe` is replaced safely: the replaced binary is kept as
    `seelegent.exe.previous` (`seelegent.previous`) for `seelegent update --rollback`. An older kept binary is deleted
@@ -74,7 +76,9 @@ What the installers do, in order:
    again.
    - Windows: `%LOCALAPPDATA%\Programs\seelegent\bin\seelegent.exe`, the old version's install root.
    - Linux and macOS: `~/.local/bin/seelegent`.
-   - `-InstallDir` / `--install-dir` / `SEELEGENT_INSTALL_DIR` choose another folder.
+   - `-InstallDir` / `--install-dir` / `SEELEGENT_INSTALL_DIR` choose another folder. Its path goes into PATH as
+     text, so `install.sh` refuses `"`, `$`, a backquote, a backslash or a line break in it, both as given and once
+     links are resolved, and `install.ps1` refuses `;`, `%` and `"`.
 4. Windows only: the old (Node) installer wrote `bin\seelegent.cmd`, a launcher for `node ...\src\cli.js`. It is
    renamed to `seelegent-node.cmd`, so `seelegent` always runs the new binary (also for programs that look for
    `seelegent.cmd`) while the old version stays runnable as `seelegent-node`. A `seelegent.cmd` that is not the old
