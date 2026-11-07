@@ -60,6 +60,9 @@ func (f *fakeTasks) Followup(_ context.Context, id string, req api.FollowupReque
 	if d == nil {
 		return api.TaskSummary{}, task.ErrNotFound
 	}
+	if task.Pending(d.Status) {
+		return api.TaskSummary{}, fmt.Errorf("%w: task %s is %s", task.ErrBadState, id, d.Status)
+	}
 	d.Turns = append(d.Turns, api.Turn{N: len(d.Turns) + 1, Message: req.Message, Status: task.TurnRunning})
 	d.Status, d.TurnCount = api.StatusRunning, len(d.Turns)
 	return d.TaskSummary, nil
@@ -332,6 +335,119 @@ func TestMeetingToOutcome(t *testing.T) {
 	list, err := s.List(ctx, 0)
 	if err != nil || len(list) != 1 || list[0].Dissents != 1 {
 		t.Errorf("list = %+v %v", list, err)
+	}
+}
+
+// A request that was cut off after its side effects (or is retried) neither loses nor doubles them.
+func TestInterruptedLeadActions(t *testing.T) {
+	s, ft, repo := setup(t)
+	ctx := t.Context()
+	gone, cancel := context.WithCancel(ctx)
+	cancel() // the client has disconnected: nothing may stop halfway because of it
+	m, err := s.Open(gone, api.MeetingRequest{Question: "Cache?", Options: []string{"Keep", "Drop"}, Cwd: repo,
+		MaxRounds: 2, Attendees: []api.AttendeeRef{{Member: "ada"}, {Member: "bob"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ada, bob := taskOf(m, "ada"), taskOf(m, "bob")
+	ft.answer(ada, "## Stance\nOption: B\nDrop.\n## Questions for the lead\n- Is it used?\n")
+	ft.answer(bob, "## Stance\nOption: B\nDrop.\n")
+	m = waitStatus(t, s, m.ID, api.MeetingStatusWaitingLead)
+
+	// A Post whose save never happened started ada's round-2 turn; the retry takes that turn over.
+	if _, err := ft.Followup(ctx, ada, api.FollowupRequest{Message: "round 2 (first attempt)"}); err != nil {
+		t.Fatal(err)
+	}
+	m, err = s.Post(gone, m.ID, api.MeetingPostRequest{Answers: []api.QuestionAnswer{{ID: "q1", Answer: "No."}}})
+	if err != nil || m.Round != 2 || len(m.Rounds[1].Runs) != 2 || len(m.Rounds[1].Answers) != 0 {
+		t.Fatalf("retried post = %+v %v", m, err)
+	}
+	ft.answer(ada, "## Stance\nOption: B\nDrop.\n")
+	ft.answer(bob, "## Stance\nOption: B\nDrop.\n")
+	m = waitStatus(t, s, m.ID, api.MeetingStatusDeciding)
+	if a := answerOf(&m.Rounds[1], labelOf(m, "ada")); a == nil || a.Absent {
+		t.Fatalf("ada in round 2 = %+v", a)
+	}
+
+	// The same for Decide: the dissent turn already runs.
+	if _, err := ft.Followup(ctx, ada, api.FollowupRequest{Message: "dissent (first attempt)"}); err != nil {
+		t.Fatal(err)
+	}
+	m, err = s.Decide(gone, m.ID, api.MeetingDecideRequest{Decision: "Keep.", Option: "A"})
+	if err != nil || m.Status != api.MeetingStatusDissent || len(m.DissentRuns) != 1 || len(m.Dissents) != 0 {
+		t.Fatalf("retried decide = %+v %v", m, err)
+	}
+	// The dissent turn ends without an answer: the peer is absent, not a dissenter.
+	if _, _, err := ft.Cancel(ctx, ada, api.CancelRequest{}); err != nil {
+		t.Fatal(err)
+	}
+	m = waitStatus(t, s, m.ID, api.MeetingStatusClosed)
+	if len(m.Dissents) != 1 || m.Dissents[0].Kind != api.DissentAbsent || Summary(&m).Dissents != 0 {
+		t.Fatalf("dissents = %+v", m.Dissents)
+	}
+	track, err := s.Track(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range track {
+		if r.Member == "ada" && r.Dissents != 0 {
+			t.Errorf("ada's record = %+v", r)
+		}
+	}
+
+	// Act fails midway: the first task stays; the retry creates only the missing one.
+	_, err = s.Act(gone, m.ID, api.MeetingActRequest{Items: []api.ActItem{{Text: "Write docs."},
+		{Text: "Add a test.", Member: "broken"}}})
+	if err == nil {
+		t.Fatal("act with a broken member succeeded")
+	}
+	m, _ = s.Get(ctx, m.ID)
+	if len(m.Actions) != 1 {
+		t.Fatalf("actions after the failure = %+v", m.Actions)
+	}
+	first := m.Actions[0].TaskID
+	res, err := s.Act(ctx, m.ID, api.MeetingActRequest{Items: []api.ActItem{{Text: "Write docs."}, {Text: "Add a test."}}})
+	if err != nil || len(res.Tasks) != 2 || res.Tasks[0] != first || len(res.Meeting.Actions) != 2 {
+		t.Fatalf("retried act = %+v %v", res, err)
+	}
+	// And once more: nothing new.
+	res, err = s.Act(ctx, m.ID, api.MeetingActRequest{Items: []api.ActItem{{Text: "Add a test."}}})
+	if err != nil || len(res.Tasks) != 1 || len(res.Meeting.Actions) != 2 {
+		t.Fatalf("repeated act = %+v %v", res, err)
+	}
+}
+
+// A meeting left in round without a round (a daemon that stopped while opening it) fails at the next start
+// instead of panicking; a poll that finds nothing new stores nothing.
+func TestReattachAndQuietPolls(t *testing.T) {
+	s, ft, repo := setup(t)
+	ctx := t.Context()
+	now := api.FormatTime(time.Now())
+	broken := api.Meeting{ID: "m-broken", Title: "x", Question: "x", Status: api.MeetingStatusRound, Cwd: repo,
+		MaxRounds: 2, Rounds: []api.MeetingRound{}, CreatedAt: now, UpdatedAt: now}
+	if err := s.insert(ctx, &broken); err != nil {
+		t.Fatal(err)
+	}
+	s2 := New(Options{DB: s.o.DB, Tasks: ft, Members: fakeMembers{}})
+	if err := s2.Start(ctx); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(s2.Close)
+	if m := waitStatus(t, s2, "m-broken", api.MeetingStatusFailed); m.Error == "" {
+		t.Errorf("failed without a reason: %+v", m)
+	}
+
+	m, err := s.Open(ctx, api.MeetingRequest{Question: "Cache?", Cwd: repo, Attendees: []api.AttendeeRef{{Member: "ada"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(20 * time.Millisecond)
+	for range 3 {
+		ft.bus.Publish(task.Notice{Kind: task.NoticeTask, TaskID: taskOf(m, "ada")})
+		time.Sleep(50 * time.Millisecond)
+	}
+	if got, _ := s.Get(ctx, m.ID); got.UpdatedAt != m.UpdatedAt {
+		t.Errorf("polls without news stored the meeting: %s -> %s", m.UpdatedAt, got.UpdatedAt)
 	}
 }
 

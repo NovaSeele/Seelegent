@@ -346,7 +346,7 @@ type Dissent struct {
 	ID     string  `json:"id"`
 	Label  string  `json:"label"`
 	Member string  `json:"member"`
-	Kind   string  `json:"kind" ts:"'dissent' | 'concede'"`
+	Kind   string  `json:"kind" ts:"'dissent' | 'concede' | 'absent'"`
 	Text   string  `json:"text"`
 	Claims []Claim `json:"claims"`
 	// WatchPaths are the files the dissent cites; later rejected tasks or red gates on them are its signals.
@@ -356,6 +356,13 @@ type Dissent struct {
 	OutcomeAt  string          `json:"outcomeAt,omitempty"`
 	Error      string          `json:"error,omitempty"`
 }
+
+// Dissent kinds: a formal dissent, a concession, or a dissent turn that gave no answer (the peer was absent).
+const (
+	DissentFormal  = "dissent"
+	DissentConcede = "concede"
+	DissentAbsent  = "absent"
+)
 
 // DissentSignal is a later task on a watched file that went wrong.
 type DissentSignal struct {

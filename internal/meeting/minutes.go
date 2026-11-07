@@ -158,8 +158,11 @@ func minutes(m *api.Meeting) string {
 	for di := range m.Dissents {
 		d := &m.Dissents[di]
 		kind := "formal dissent"
-		if d.Kind == "concede" {
+		switch d.Kind {
+		case api.DissentConcede:
 			kind = "concedes"
+		case api.DissentAbsent:
+			kind = "absent (no answer to the decision)"
 		}
 		w("- **%s** · %s (%s) · %s: %s", d.ID, d.Label, d.Member, kind, orText(answer.Collapse(d.Text), "(empty)"))
 		for _, c := range d.Claims {

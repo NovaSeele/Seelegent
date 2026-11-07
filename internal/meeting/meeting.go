@@ -381,23 +381,30 @@ func (s *Service) Open(ctx context.Context, req api.MeetingRequest) (api.Meeting
 		m.Sealed = &api.SealedPosition{Label: labels[n-1], Text: sealed, Hash: hex.EncodeToString(sum[:]),
 			RevealedRound: 2}
 	}
+	// Round 1 is built before the meeting is stored, so a stored meeting in round always has a round; from the
+	// first run on, a cancelled request no longer stops anything.
+	ctx = context.WithoutCancel(ctx)
 	s.mu.Lock()
-	if err := s.insert(ctx, &m); err != nil {
-		s.mu.Unlock()
-		return api.Meeting{}, err
-	}
 	var who []map[string]any
-	for i := range attendees {
-		a := &attendees[i]
+	for i := range m.Attendees {
+		a := &m.Attendees[i]
 		who = append(who, map[string]any{"member": a.Member, "rank": a.Rank, "label": a.Label})
 	}
 	s.logStep(ctx, m.ID, "open", map[string]any{"title": title, "attendees": who, "sealed": m.Sealed != nil})
 	s.startRound(ctx, &m, 1)
-	err = s.save(ctx, &m)
-	s.mu.Unlock()
-	if err != nil {
+	m.UpdatedAt = s.now()
+	if err := s.insert(ctx, &m); err != nil {
+		s.mu.Unlock()
+		for i := range m.Attendees {
+			if a := &m.Attendees[i]; a.TaskID != "" {
+				_, _, _ = s.o.Tasks.Cancel(ctx, a.TaskID, api.CancelRequest{})
+				s.o.Tasks.CloseHiddenRun(a.TaskID, "meeting not stored")
+			}
+		}
 		return api.Meeting{}, err
 	}
+	s.notify(&m)
+	s.mu.Unlock()
 	s.watch(m.ID)
 	return m, nil
 }
@@ -468,6 +475,13 @@ func (s *Service) startRound(ctx context.Context, m *api.Meeting, n int) {
 			}
 		} else {
 			sum, err = s.o.Tasks.Followup(ctx, a.TaskID, api.FollowupRequest{Message: roundMessage(m, a, n)})
+			if err != nil {
+				// The record can lag the run (a save that never happened): a turn newer than every turn on record
+				// is this round's, started by an earlier attempt. Take it instead of marking the attendee absent.
+				if turn := s.newerTurn(ctx, m, a); turn > 0 {
+					sum, err = api.TaskSummary{ID: a.TaskID, TurnCount: turn}, nil
+				}
+			}
 		}
 		if err != nil {
 			cur.Answers = append(cur.Answers, absent(a.Label, err.Error()))
@@ -482,6 +496,32 @@ func (s *Service) startRound(ctx context.Context, m *api.Meeting, n int) {
 		runs[x.Label] = x.TaskID
 	}
 	s.logStep(ctx, m.ID, "round_start", map[string]any{"round": n, "runs": runs})
+}
+
+// newerTurn returns the newest turn of a's run when it is newer than every turn the meeting has on record for a,
+// else 0.
+func (s *Service) newerTurn(ctx context.Context, m *api.Meeting, a *api.Attendee) int {
+	d, err := s.o.Tasks.Get(ctx, a.TaskID)
+	if err != nil || len(d.Turns) == 0 {
+		return 0
+	}
+	last := 0
+	for ri := range m.Rounds {
+		for _, run := range m.Rounds[ri].Runs {
+			if run.Label == a.Label {
+				last = max(last, run.Turn)
+			}
+		}
+	}
+	for _, run := range m.DissentRuns {
+		if run.Label == a.Label {
+			last = max(last, run.Turn)
+		}
+	}
+	if len(d.Turns) > last {
+		return len(d.Turns)
+	}
+	return 0
 }
 
 func absent(label, why string) api.MeetingAnswer {
@@ -514,10 +554,10 @@ type runState struct {
 func (s *Service) readRun(ctx context.Context, run api.MeetingRun) runState {
 	d, err := s.o.Tasks.Get(ctx, run.TaskID)
 	if err != nil {
-		if ctx.Err() != nil {
-			return runState{pending: true}
+		if errors.Is(err, task.ErrNotFound) {
+			return runState{err: "the run is gone"}
 		}
-		return runState{err: "the run is gone"}
+		return runState{pending: true} // a passing error (a busy database): look again at the next poll
 	}
 	if task.Pending(d.Status) {
 		return runState{pending: true}
@@ -542,14 +582,16 @@ func (s *Service) readRun(ctx context.Context, run api.MeetingRun) runState {
 }
 
 // collectRound reads the answers of the finished runs of the current round. It reports whether every run has
-// answered.
-func (s *Service) collectRound(ctx context.Context, m *api.Meeting) bool {
+// answered and whether it added an answer.
+func (s *Service) collectRound(ctx context.Context, m *api.Meeting) (done, changed bool) {
 	r := &m.Rounds[len(m.Rounds)-1]
+	before := len(r.Answers)
+	defer func() { changed = len(r.Answers) != before }()
 	keys := make([]string, 0, len(m.Options))
 	for _, o := range m.Options {
 		keys = append(keys, o.Key)
 	}
-	done := true
+	done = true
 	for _, run := range r.Runs {
 		if answerOf(r, run.Label) != nil {
 			continue
@@ -571,7 +613,7 @@ func (s *Service) collectRound(ctx context.Context, m *api.Meeting) bool {
 			r.Answers = append(r.Answers, a.MeetingAnswer)
 		}
 	}
-	return done
+	return done, false // changed is set by the deferred count
 }
 
 // stable reports whether label held its position from the round before: the same option (or "moved: no" without
@@ -722,10 +764,14 @@ func (s *Service) watch(id string) {
 }
 
 // step advances a meeting as far as its runs allow. It returns the runs still going and whether to keep watching.
+// Once it began it finishes without regard to Close: it may start runs, which must be on record.
 func (s *Service) step(id string) (pending []string, more bool) {
-	ctx := s.ctx
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.ctx.Err() != nil {
+		return nil, false
+	}
+	ctx := context.WithoutCancel(s.ctx)
 	m, err := s.load(ctx, id)
 	if err != nil {
 		if !errors.Is(err, ErrNotFound) && ctx.Err() == nil {
@@ -736,15 +782,25 @@ func (s *Service) step(id string) (pending []string, more bool) {
 	}
 	switch m.Status {
 	case api.MeetingStatusRound:
-		if !s.collectRound(ctx, &m) {
+		if len(m.Rounds) == 0 {
+			// Left by a daemon that stopped while opening it (before round 1 was on record).
+			m.Status, m.Error = api.MeetingStatusFailed, "the meeting stopped before its first round started"
+			s.logStep(ctx, m.ID, "failed", map[string]any{"message": m.Error})
+			s.closeRuns(&m)
+			break
+		}
+		done, changed := s.collectRound(ctx, &m)
+		if !done {
 			r := m.Rounds[len(m.Rounds)-1]
 			for _, run := range r.Runs {
 				if answerOf(&r, run.Label) == nil {
 					pending = append(pending, run.TaskID)
 				}
 			}
-			if err := s.save(ctx, &m); err != nil {
-				s.log.Warn("meeting: save", "meeting", id, "err", err)
+			if changed { // a poll that found nothing new writes nothing
+				if err := s.save(ctx, &m); err != nil {
+					s.log.Warn("meeting: save", "meeting", id, "err", err)
+				}
 			}
 			return pending, true
 		}
@@ -771,7 +827,9 @@ func (s *Service) step(id string) (pending []string, more bool) {
 
 // ---- lead actions -----------------------------------------------------------------------------------------------
 
-// update loads a meeting, applies fn and saves it, under mu.
+// update loads a meeting, applies fn and saves it, under mu. fn may start runs, so the save never stops at a
+// cancelled request: a run started must be on record. Callers whose fn starts runs pass a context without
+// cancellation (context.WithoutCancel) for the same reason.
 func (s *Service) update(ctx context.Context, id string, fn func(m *api.Meeting) error) (api.Meeting, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -782,7 +840,7 @@ func (s *Service) update(ctx context.Context, id string, fn func(m *api.Meeting)
 	if err := fn(&m); err != nil {
 		return api.Meeting{}, err
 	}
-	if err := s.save(ctx, &m); err != nil {
+	if err := s.save(context.WithoutCancel(ctx), &m); err != nil {
 		return api.Meeting{}, err
 	}
 	return m, nil
@@ -795,6 +853,7 @@ func (s *Service) Post(ctx context.Context, id string, req api.MeetingPostReques
 	if utf8.RuneCountInString(note) > maxText {
 		return api.Meeting{}, invalidf("note is longer than %d characters", maxText)
 	}
+	ctx = context.WithoutCancel(ctx) // the next round's turns start here
 	m, err := s.update(ctx, id, func(m *api.Meeting) error {
 		if m.Status != api.MeetingStatusWaitingLead {
 			return badStatef("meeting %s is %s, not waiting for the lead", id, m.Status)
@@ -858,6 +917,7 @@ func (s *Service) Decide(ctx context.Context, id string, req api.MeetingDecideRe
 	if utf8.RuneCountInString(text) > maxText {
 		return api.Meeting{}, invalidf("decision is longer than %d characters", maxText)
 	}
+	ctx = context.WithoutCancel(ctx) // the dissent turns start here
 	m, err := s.update(ctx, id, func(m *api.Meeting) error {
 		if m.Status != api.MeetingStatusDeciding {
 			return badStatef("meeting %s is %s, not deciding", id, m.Status)
@@ -889,6 +949,11 @@ func (s *Service) Decide(ctx context.Context, id string, req api.MeetingDecideRe
 			}
 			sum, err := s.o.Tasks.Followup(ctx, a.TaskID, api.FollowupRequest{Message: dissentMessage(m, final)})
 			if err != nil {
+				// A retried Decide finds the turn the first attempt started: take it.
+				if turn := s.newerTurn(ctx, m, &a); turn > 0 {
+					m.DissentRuns = append(m.DissentRuns, api.MeetingRun{Label: a.Label, TaskID: a.TaskID, Turn: turn})
+					continue
+				}
 				s.recordDissent(m, a, "", err.Error())
 				continue
 			}
@@ -951,11 +1016,12 @@ func (s *Service) collectDissents(ctx context.Context, m *api.Meeting) bool {
 	return done
 }
 
-// recordDissent stores a peer's dissent (or concession) with the files it watches.
+// recordDissent stores a peer's dissent (or concession) with the files it watches. A turn that gave no answer is
+// recorded as absent: no dissent on record, no track count, nothing for later briefs.
 func (s *Service) recordDissent(m *api.Meeting, a api.Attendee, response, errText string) {
-	d := api.Dissent{ID: fmt.Sprintf("d%d", len(m.Dissents)+1), Label: a.Label, Member: a.Member, Kind: "dissent",
-		Text: "(no response)", Claims: []api.Claim{}, WatchPaths: []string{}, Signals: []api.DissentSignal{},
-		Error: answer.Clip(errText, 500)}
+	d := api.Dissent{ID: fmt.Sprintf("d%d", len(m.Dissents)+1), Label: a.Label, Member: a.Member,
+		Kind: api.DissentAbsent, Text: "(no response)", Claims: []api.Claim{}, WatchPaths: []string{},
+		Signals: []api.DissentSignal{}, Error: answer.Clip(errText, 500)}
 	if response != "" {
 		p := parseDissent(response)
 		d.Kind, d.Claims = p.kind, answer.CheckClaims(m.RepoRoot, p.claims)
@@ -1005,46 +1071,50 @@ func (s *Service) Act(ctx context.Context, id string, req api.MeetingActRequest)
 			return api.MeetingActResult{}, invalidf("item %d has no text", i+1)
 		}
 	}
-	var created []string
-	var actErr error
-	m, err := s.update(ctx, id, func(m *api.Meeting) error {
-		if m.Status != api.MeetingStatusClosed {
-			return badStatef("meeting %s is %s; act needs a closed meeting", id, m.Status)
-		}
-		for _, it := range req.Items {
+	// Each task is saved as soon as it exists, and an item whose text already has a task gets that task back: a
+	// retried Act (a lost response, or a failure midway) creates only what is missing.
+	ctx = context.WithoutCancel(ctx)
+	var tasks, created []string
+	var m api.Meeting
+	for _, it := range req.Items {
+		text := strings.TrimSpace(it.Text)
+		var err error
+		m, err = s.update(ctx, id, func(m *api.Meeting) error {
+			if m.Status != api.MeetingStatusClosed {
+				return badStatef("meeting %s is %s; act needs a closed meeting", id, m.Status)
+			}
+			for _, a := range m.Actions {
+				if a.Text == text {
+					tasks = append(tasks, a.TaskID)
+					return nil
+				}
+			}
 			cwd := it.Cwd
 			if cwd == "" {
 				cwd = m.Cwd
 			}
-			text := strings.TrimSpace(it.Text)
 			first, _, _ := strings.Cut(text, "\n")
 			sum, err := s.o.Tasks.DelegateWith(ctx, api.DelegateRequest{Prompt: actionPrompt(m, text), Cwd: cwd,
 				Title: answer.Clip(first, 80), Member: it.Member, Backend: it.Backend, Model: it.Model},
 				task.Spawn{MeetingID: m.ID})
 			if err != nil {
-				actErr = err
-				break
+				return err
 			}
 			m.Actions = append(m.Actions, api.MeetingAction{Text: text, TaskID: sum.ID, Member: sum.Member})
-			created = append(created, sum.ID)
+			tasks, created = append(tasks, sum.ID), append(created, sum.ID)
+			return nil
+		})
+		if err != nil {
+			data := map[string]any{"tasks": created, "error": err.Error()}
+			s.logStep(ctx, id, "act", data)
+			if len(tasks) == 0 {
+				return api.MeetingActResult{}, err
+			}
+			return api.MeetingActResult{}, fmt.Errorf("created %v (kept; act again for the rest), then: %w", tasks, err)
 		}
-		if len(created) == 0 && actErr != nil {
-			return actErr
-		}
-		data := map[string]any{"tasks": created}
-		if actErr != nil {
-			data["error"] = actErr.Error()
-		}
-		s.logStep(ctx, id, "act", data)
-		return nil
-	})
-	if err != nil {
-		return api.MeetingActResult{}, err
 	}
-	if actErr != nil {
-		return api.MeetingActResult{}, fmt.Errorf("created %v, then: %w", created, actErr)
-	}
-	return api.MeetingActResult{Meeting: m, Tasks: created}, nil
+	s.logStep(ctx, id, "act", map[string]any{"tasks": created})
+	return api.MeetingActResult{Meeting: m, Tasks: tasks}, nil
 }
 
 // Cancel ends a meeting that has not ended and stops its running turns.
@@ -1239,9 +1309,12 @@ func (s *Service) Track(ctx context.Context) ([]api.MemberTrack, error) {
 			for di := range m.Dissents {
 				d := &m.Dissents[di]
 				r := rec(d.Member)
-				if d.Kind == "concede" {
+				if d.Kind == api.DissentConcede {
 					r.Concessions++
 					continue
+				}
+				if d.Kind == api.DissentAbsent {
+					continue // no answer is no dissent
 				}
 				r.Dissents++
 				r.Signals += len(d.Signals)
@@ -1343,11 +1416,16 @@ func (s *Service) save(ctx context.Context, m *api.Meeting) error {
 	}); err != nil {
 		return err
 	}
+	s.notify(m)
+	return nil
+}
+
+// notify tells waiters and the stream that m was stored. The caller holds mu.
+func (s *Service) notify(m *api.Meeting) {
 	close(s.changed)
 	s.changed = make(chan struct{})
 	s.dirty = true
 	s.o.Changed(Summary(m))
-	return nil
 }
 
 // logStep appends to the meeting's step log; the log is a record, so a failure is only logged.

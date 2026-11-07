@@ -2137,7 +2137,7 @@ export interface Dissent {
   id: string
   label: string
   member: string
-  kind: 'dissent' | 'concede'
+  kind: 'dissent' | 'concede' | 'absent'
   text: string
   claims: Claim[]
   /** WatchPaths are the files the dissent cites; later rejected tasks or red gates on them are its signals. */
