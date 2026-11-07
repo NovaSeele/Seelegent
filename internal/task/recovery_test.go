@@ -394,6 +394,8 @@ func TestTakeoverWindowClosed(t *testing.T) {
 	if end.ExitCode == nil || *end.ExitCode != consoleExitClosed || tk.LastTurn().HandbackText != "Handed back." {
 		t.Fatalf("takeover end = %+v, turn = %+v", end, tk.LastTurn())
 	}
+	// The console's wait ended with the watch instead of running until shutdown.
+	h.waitFor("the console wait to end", func() bool { return h.consoles.waiting.Load() == 0 })
 	routes := eventsOf(h.events(sum.ID), api.EventRoute)
 	var route api.RouteData
 	decode(t, routes[len(routes)-1], &route)

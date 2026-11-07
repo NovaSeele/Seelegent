@@ -288,6 +288,8 @@ type fakeConsoles struct {
 	silent map[int]bool
 	fail   error
 	quiet  bool
+	// waiting counts the Wait calls still running.
+	waiting atomic.Int32
 }
 
 func (f *fakeConsoles) Open(_ context.Context, spec ConsoleSpec) (OpenConsole, error) {
@@ -309,6 +311,8 @@ func (f *fakeConsoles) Open(_ context.Context, spec ConsoleSpec) (OpenConsole, e
 	identity := func() (ConsoleProcess, bool) { return f.identity(pid) }
 	return OpenConsole{
 		Wait: func(ctx context.Context) (int, error) {
+			f.waiting.Add(1)
+			defer f.waiting.Add(-1)
 			select {
 			case code := <-ch:
 				return code, nil

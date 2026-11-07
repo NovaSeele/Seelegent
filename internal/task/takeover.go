@@ -266,8 +266,12 @@ func (s *Service) watchConsole(id string, c *Console, open *OpenConsole) {
 		}()
 		waited := make(chan int, 1)
 		if open != nil && open.Wait != nil {
+			// The wait ends with the watch: a watch that ends on the process check or the start limit does not leave
+			// it polling until shutdown.
+			wctx, stop := context.WithCancel(s.root)
+			defer stop()
 			go func() {
-				code, err := open.Wait(s.root)
+				code, err := open.Wait(wctx)
 				if err != nil {
 					code = -1
 				}
