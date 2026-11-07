@@ -167,6 +167,39 @@ describe('connection store', () => {
     expect(FakeEventSource.instances).toHaveLength(1)
   })
 
+  it('routes sign-in frames to the accounts store and other frames to subscribers', async () => {
+    const store = start(vi.fn(async () => json(boot())))
+    await flushPromises()
+    const seen: string[] = []
+    const off = store.subscribe('roles.changed', (data) => seen.push(data.changedAt))
+    const source = FakeEventSource.last
+    source.open()
+    source.emit('roles.changed', JSON.stringify({ changedAt: 'x1' }), 'a1b2c3d4.42')
+    source.emit(
+      'account.login',
+      JSON.stringify({ accountId: 'a1', state: 'waiting_code', userCode: 'AB-12' }),
+      'a1b2c3d4.43',
+    )
+    off()
+    source.emit('roles.changed', JSON.stringify({ changedAt: 'x2' }), 'a1b2c3d4.44')
+    expect(seen).toEqual(['x1'])
+    expect(useAccountsStore().logins.a1?.state).toBe('waiting_code')
+  })
+
+  it('runs resync listeners after every snapshot but the first (old bug B9)', async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>(async () => json(boot()))
+    const store = start(fetch)
+    const resyncs = vi.fn()
+    store.onResync(resyncs)
+    await flushPromises()
+    expect(resyncs).not.toHaveBeenCalled()
+    const source = FakeEventSource.last
+    source.open()
+    source.emit('reset', '{"reason":"too_old"}', 'a1b2c3d4.50')
+    await flushPromises()
+    expect(resyncs).toHaveBeenCalledTimes(1)
+  })
+
   it('replays held frames by "newer wins" when the snapshot id was not among them', async () => {
     let resolveSecond: (value: Response) => void = () => {}
     const fetch = vi
