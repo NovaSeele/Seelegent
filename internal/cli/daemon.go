@@ -11,6 +11,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -36,15 +37,17 @@ type daemonFlags struct {
 func newDaemonCommand(info buildinfo.Info) *cobra.Command {
 	var f daemonFlags
 	cmd := &cobra.Command{
-		Use:   "daemon",
-		Short: "Run the daemon in the foreground until Ctrl+C",
+		Use:     "daemon",
+		Aliases: []string{"serve"},
+		Short:   "Run the daemon in the foreground until Ctrl+C or `seelegent stop`",
 		Long: "Run the daemon in the foreground: the task engine, the HTTP API and the dashboard on 127.0.0.1.\n" +
 			"The data directory is SEELEGENT_HOME (default ~/.seelegent); logs go to its logs/daemon.log and\n" +
-			"to this terminal.",
-		Args: cobra.NoArgs,
+			"to this terminal. `serve` is the old name. Exit code 3: another daemon holds the data directory or\n" +
+			"the port is taken.",
+		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if f.port < 0 || f.port > 65535 {
-				return fmt.Errorf("--port %d: must be 1..65535", f.port)
+				return usagef("--port %d: must be 1..65535", f.port)
 			}
 			return runDaemon(cmd.Context(), info, f, cmd.ErrOrStderr())
 		},
@@ -82,6 +85,31 @@ func (e *daemonRunningError) Error() string {
 		s += fmt.Sprintf(" (port %d)", e.port)
 	}
 	return s
+}
+
+// portTakenError says something else listens on the daemon's port (exit 3, like a held lock).
+type portTakenError struct {
+	port int
+	err  error
+}
+
+func (e *portTakenError) Error() string {
+	return fmt.Sprintf("port %d is taken by another program (%v); stop it, or set another port with "+
+		"SEELEGENT_PORT or the settings' port", e.port, e.err)
+}
+
+func (e *portTakenError) Unwrap() error { return e.err }
+
+// wsaeAddrInUse is Windows' WSAEADDRINUSE, which syscall.EADDRINUSE does not match there.
+const wsaeAddrInUse = 10048
+
+// addrInUse reports whether a listen failed because the address is in use.
+func addrInUse(err error) bool {
+	if errors.Is(err, syscall.EADDRINUSE) {
+		return true
+	}
+	var errno syscall.Errno
+	return errors.As(err, &errno) && errno == wsaeAddrInUse
 }
 
 // lockDaemon takes the single-instance lock of the data directory, waiting up to daemonLockWait. Nothing else (log
@@ -158,6 +186,9 @@ func runDaemon(ctx context.Context, info buildinfo.Info, f daemonFlags, stderr i
 	addr, err := a.ListenHTTP(ctx, port)
 	if err != nil {
 		_ = closeApp()
+		if addrInUse(err) {
+			return &portTakenError{port: port, err: err}
+		}
 		return err
 	}
 	if err := writePortFile(paths, addr); err != nil {

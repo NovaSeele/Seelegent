@@ -66,10 +66,7 @@ func (d *Daemon) Stop(ctx context.Context, timeout time.Duration) (StopResult, e
 		return StopResult{}, ctx.Err()
 	case errors.Is(err, ErrNotRunning), TimedOut(err):
 		if d.held() {
-			reason := fmt.Sprintf("holds its lock but does not answer on port %d (still starting or shutting down?)",
-				d.lockedPort())
-			return StopResult{}, &StuckError{Home: d.o.Paths.Home, Port: d.lockedPort(), PID: d.holderPID(),
-				Reason: reason}
+			return StopResult{}, d.NotAnswering()
 		}
 		if TimedOut(err) {
 			return StopResult{}, err // not ours: no daemon of this home holds the lock
@@ -110,6 +107,14 @@ func (d *Daemon) Stop(ctx context.Context, timeout time.Duration) (StopResult, e
 		case <-t.C:
 		}
 	}
+}
+
+// NotAnswering is the *StuckError for a daemon that holds the lock of this data directory but does not answer
+// (call it after Find failed with ErrNotRunning while LockHeld is true).
+func (d *Daemon) NotAnswering() *StuckError {
+	port := d.lockedPort()
+	return &StuckError{Home: d.o.Paths.Home, Port: port, PID: d.holderPID(),
+		Reason: fmt.Sprintf("holds its lock but does not answer on port %d (still starting or shutting down?)", port)}
 }
 
 // answers reports whether a daemon (or anything slow to answer) still serves port.

@@ -59,17 +59,8 @@ func WaitReports(ctx context.Context, connect Connect, w Wait) (api.WaitResult, 
 			return api.WaitResult{}, fmt.Errorf("the daemon did not come back before the wait ended: %w", err)
 		}
 		if err == nil {
-			// The rest of the time, after any reconnecting: 0 returns the current reports at once.
-			left := max(int(math.Ceil(time.Until(deadline).Seconds())), 0)
-			wake := w.WakeOnBlocked
 			var res api.WaitResult
-			res, err = c.Wait(ctx, api.WaitRequest{IDs: w.IDs, TimeoutSeconds: left, Any: w.Any,
-				WakeOnBlocked: &wake, Reports: true}, w.Cwd)
-			if err == nil {
-				if len(res.Reports) != len(w.IDs) {
-					return api.WaitResult{}, fmt.Errorf("the daemon returned %d reports for %d tasks",
-						len(res.Reports), len(w.IDs))
-				}
+			if res, err = waitOn(ctx, c, w, deadline); err == nil {
 				return res, nil
 			}
 		}
@@ -87,6 +78,31 @@ func WaitReports(ctx context.Context, connect Connect, w Wait) (api.WaitResult, 
 			pause.Stop()
 			return api.WaitResult{}, ctx.Err()
 		case <-pause.C:
+		}
+	}
+}
+
+// MaxWaitCall is the longest wait one POST /wait accepts (contract §3); longer waits are several calls.
+const MaxWaitCall = 3000
+
+// waitOn waits on c for the rest of the time (0 returns the current reports at once), in calls of at most
+// MaxWaitCall seconds.
+func waitOn(ctx context.Context, c *client.Client, w Wait, deadline time.Time) (api.WaitResult, error) {
+	wake := w.WakeOnBlocked
+	for {
+		left := max(int(math.Ceil(time.Until(deadline).Seconds())), 0)
+		call := min(left, MaxWaitCall)
+		res, err := c.Wait(ctx, api.WaitRequest{IDs: w.IDs, TimeoutSeconds: call, Any: w.Any,
+			WakeOnBlocked: &wake, Reports: true}, w.Cwd)
+		if err != nil {
+			return api.WaitResult{}, err
+		}
+		if len(res.Reports) != len(w.IDs) {
+			return api.WaitResult{}, fmt.Errorf("the daemon returned %d reports for %d tasks", len(res.Reports),
+				len(w.IDs))
+		}
+		if res.Woke != api.WokeTimeout || left <= call {
+			return res, nil
 		}
 	}
 }

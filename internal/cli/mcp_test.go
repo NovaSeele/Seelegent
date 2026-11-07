@@ -22,7 +22,7 @@ func startMCP(t *testing.T) *mcp.ClientSession {
 	ctx, cancel := context.WithCancel(t.Context())
 	var stderr bytes.Buffer
 	done := make(chan error, 1)
-	go func() { done <- runMCP(ctx, testInfo, st, &stderr) }()
+	go func() { done <- runMCP(ctx, testInfo, defaultDeps(), st, &stderr) }()
 	cs, err := mcp.NewClient(&mcp.Implementation{Name: "test", Version: "0"}, nil).Connect(t.Context(), ct, nil)
 	if err != nil {
 		cancel()

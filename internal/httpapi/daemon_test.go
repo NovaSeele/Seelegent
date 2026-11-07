@@ -47,7 +47,7 @@ func TestDaemonStop(t *testing.T) {
 	select {
 	case <-e.a.StopRequested():
 	case <-time.After(5 * time.Second):
-		t.Fatal("stop not signalled")
+		t.Fatal("stop not signaled")
 	}
 	// A second stop while shutting down is harmless.
 	e.must(e.post("/api/v1/daemon/stop", nil), http.StatusAccepted)
