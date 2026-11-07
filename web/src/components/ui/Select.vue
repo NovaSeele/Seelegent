@@ -61,7 +61,9 @@ function onChange(event: Event, options: readonly SelectOption<T>[]) {
 </template>
 
 <style scoped>
+/* Positioned so the hidden label and the chevron stay inside a scrolling page (they would stretch the document). */
 .select {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: var(--space-1);

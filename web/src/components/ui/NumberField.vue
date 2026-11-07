@@ -35,10 +35,13 @@ const id = useId()
 const text = ref(String(props.modelValue))
 let editing = false
 let timer: ReturnType<typeof setTimeout> | undefined
+/** The value last committed since the last keystroke: Enter then blur sends a refused value only once. */
+let sent: number | undefined
 
 watch(
   () => props.modelValue,
   (value) => {
+    sent = undefined
     if (!editing) text.value = String(value)
   },
 )
@@ -58,11 +61,15 @@ function commit() {
     text.value = String(props.modelValue)
     return
   }
-  if (value !== props.modelValue) emit('commit', value)
+  if (value !== props.modelValue && value !== sent) {
+    sent = value
+    emit('commit', value)
+  }
 }
 
 function onInput() {
   editing = true
+  sent = undefined
   clearTimeout(timer)
   if (props.debounce > 0) timer = setTimeout(commit, props.debounce)
 }

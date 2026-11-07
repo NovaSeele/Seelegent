@@ -39,8 +39,14 @@ const describedBy = computed(
       .join(' ') || undefined,
 )
 
+/** The text last committed since the last keystroke: Enter then blur sends a refused value only once. */
+let sent: string | undefined
+watch([text, () => props.modelValue], () => (sent = undefined))
+
 function commit() {
-  if (text.value !== props.modelValue) emit('commit', text.value)
+  if (text.value === props.modelValue || text.value === sent) return
+  sent = text.value
+  emit('commit', text.value)
 }
 
 function onBlur() {
