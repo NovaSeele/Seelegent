@@ -76,6 +76,7 @@ describe('AppShell', () => {
     expect(document.title).toBe('Automations · Seelegent')
   })
 
+  // Seven navigations, each loading a lazy page: on a busy machine this passed 5 s, so it gets 15 s.
   it('centres document pages and gives split views the full width, also under settings', async () => {
     const { wrapper, router } = await open('/usage')
     expect(wrapper.get('.page').attributes('data-page-width')).toBe('readable')
@@ -92,7 +93,7 @@ describe('AppShell', () => {
     await router.push('/settings/appearance')
     await flushPromises()
     expect(wrapper.get('main').attributes('data-page-width')).toBe('full')
-  })
+  }, 15_000)
 
   it('shows NotFound for unknown addresses', async () => {
     const { wrapper } = await open('/no/such/page')

@@ -1,6 +1,6 @@
 /**
- * The app's API client, typed endpoints and event types (contract: api-v1.md). Data shapes live in types.ts
- * (replaced by the tygo-generated types.gen.ts in milestone 5); SSE frames and event payloads in events.ts.
+ * The app's API client, typed endpoints and event types (contract: api-v1.md). Data shapes come from types.ts,
+ * which re-exports the generated types.gen.ts; SSE frames and the TaskEvent union live in events.ts.
  */
 import { i18n } from '@/i18n'
 
@@ -14,9 +14,12 @@ import { createTasksApi } from './tasks'
 import { createUsageApi } from './usage'
 
 export * from './client'
+// The generated error-body interface is also called ApiError (as ApiErrorBody.error); here the name means the
+// client's error class, and an explicit export wins over the star exports.
+export { ApiError } from './client'
 export type * from './types'
 export * from './events'
-export type { Page, TaskListQuery, TaskEventsPage, EventsQuery, TasksApi } from './tasks'
+export type { TaskListQuery, TaskEventsPage, EventsQuery, TasksApi } from './tasks'
 export type { CommitResult, GitApi } from './git'
 export type { AccountChanges, AccountsApi, NewAccount } from './accounts'
 export type { ProviderChanges, ProvidersApi } from './providers'

@@ -10,11 +10,13 @@ import IconButton from '@/components/ui/IconButton.vue'
 import Spinner from '@/components/ui/Spinner.vue'
 import Switch from '@/components/ui/Switch.vue'
 import TextField from '@/components/ui/TextField.vue'
+import { useAccountsStore } from '@/stores/accounts'
 import { useProvidersStore } from '@/stores/providers'
 import { useToastStore } from '@/stores/toast'
 
 import { useActions } from './accountView'
 import ProviderDialog from './ProviderDialog.vue'
+import { allowList } from './providerForm'
 
 /**
  * The API providers API-key accounts call (Anthropic-compatible for Claude Code, OpenAI-compatible for Codex):
@@ -25,6 +27,7 @@ withDefaults(defineProps<{ heading?: boolean }>(), { heading: true })
 
 const { t } = useI18n()
 const providers = useProvidersStore()
+const accounts = useAccountsStore()
 const toast = useToastStore()
 const actions = useActions()
 
@@ -42,9 +45,30 @@ const shown = computed(() => {
   const q = query.value.trim().toLowerCase()
   if (!q) return providers.items
   return providers.items.filter((p) =>
-    [p.id, p.name, p.baseUrl, p.backend, ...p.models].some((s) => s.toLowerCase().includes(q)),
+    [p.id, p.name, p.baseUrl, p.backend, modelsText(p)].some((s) => s.toLowerCase().includes(q)),
   )
 })
+
+/**
+ * Accounts using each provider, counted from the live account list, so the count follows an account write at
+ * once instead of waiting for the providers read that its providers.changed frame starts.
+ */
+const usage = computed(() => {
+  const counts = new Map<string, number>()
+  for (const a of accounts.accounts)
+    if (a.provider) counts.set(a.provider, (counts.get(a.provider) ?? 0) + 1)
+  return counts
+})
+const usedBy = (p: Provider) => usage.value.get(p.id) ?? 0
+
+/** The models a provider allows: its list, its hand-written pattern, or any model when neither is set. */
+function modelsText(p: Provider): string {
+  const allow = allowList(p)
+  if (allow.kind === 'list') return allow.models.join(', ')
+  if (allow.kind === 'pattern')
+    return t('accounts.providers.patternModels', { pattern: allow.pattern })
+  return t('accounts.providers.anyModel')
+}
 
 function edit(provider: Provider | null) {
   editing.value = provider
@@ -128,11 +152,9 @@ function setEnabled(provider: Provider, enabled: boolean) {
           </p>
           <p class="prov__url">{{ provider.baseUrl }}</p>
           <p class="prov__meta">
-            {{ t('accounts.providers.usedBy', { n: provider.accounts }, provider.accounts) }}
+            {{ t('accounts.providers.usedBy', { n: usedBy(provider) }, usedBy(provider)) }}
             ·
-            {{
-              provider.models.length ? provider.models.join(', ') : t('accounts.providers.anyModel')
-            }}
+            {{ modelsText(provider) }}
           </p>
         </div>
         <div class="prov__actions">

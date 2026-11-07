@@ -7,7 +7,7 @@ import type { ProvidersApi } from '@/api/providers'
 import { useAccountsStore } from '@/stores/accounts'
 import { useProvidersStore } from '@/stores/providers'
 import { setupApp } from '@/test/app'
-import { makeAccount } from '@/test/fixtures'
+import { makeAccount, makeProvider } from '@/test/fixtures'
 
 import AddAccountDialog from './AddAccountDialog.vue'
 
@@ -27,15 +27,13 @@ async function mountDialog(api: Partial<AccountsApi>) {
     list: () =>
       Promise.resolve({
         items: [
-          {
+          makeProvider({
             id: 'anthropic',
             name: 'Anthropic',
-            backend: 'claude',
             baseUrl: '',
-            enabled: true,
-            models: [],
-            accounts: 0,
-          },
+            preset: 'anthropic',
+            official: true,
+          }),
         ],
         presets: [],
       }),

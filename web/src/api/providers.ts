@@ -1,10 +1,11 @@
 /** Typed endpoints of API providers (contract §4). */
 import type { ApiClient } from './client'
-import type { Provider, ProviderInput, ProviderList, ProviderPreset } from './types'
+import type { Provider, ProviderInput, ProviderList } from './types'
 
 const enc = encodeURIComponent
 
-export type ProviderChanges = Partial<Omit<ProviderPreset, 'id'>>
+/** PATCH /providers/{id} (a ProviderInput): id, backend and preset cannot change, accounts is ignored. */
+export type ProviderChanges = Omit<ProviderInput, 'id' | 'backend' | 'preset' | 'accounts'>
 
 export function createProvidersApi(client: ApiClient) {
   return {

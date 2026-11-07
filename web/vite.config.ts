@@ -74,6 +74,7 @@ export default defineConfig({
   },
   test: {
     environment: 'jsdom',
-    include: ['src/**/*.spec.ts'],
+    // dev/*.spec.mjs test the mock daemon's pure helpers, so dev mode keeps matching the daemon.
+    include: ['src/**/*.spec.ts', 'dev/**/*.spec.mjs'],
   },
 })

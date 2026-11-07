@@ -1,18 +1,11 @@
 /** Typed endpoints of accounts, sign-in and quota (contract §4). Emails never go into a URL or a log. */
 import type { ApiClient } from './client'
-import type { Account, LoginSession } from './types'
+import type { Account, AccountPatch, LoginSession, NewAccount } from './types'
 
-export interface NewAccount {
-  backend: Account['backend']
-  kind: Account['kind']
-  label: string
-  /** Required for kind api-key, absent otherwise. */
-  provider?: string
-  enabled?: boolean
-  priority?: number
-}
+export type { NewAccount }
 
-export type AccountChanges = Partial<Pick<Account, 'label' | 'enabled' | 'priority'>>
+/** PATCH /accounts/{id}: absent fields stay as they are. */
+export type AccountChanges = AccountPatch
 
 const enc = encodeURIComponent
 

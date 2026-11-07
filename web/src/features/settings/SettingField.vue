@@ -130,6 +130,7 @@ function saveLines(text: string) {
             :hint="t('settings.daemon.lines')"
             :error="error"
             @commit="saveLines"
+            @unchanged="form.clear(def.path)"
           />
           <code v-else class="sf__readonly">{{ value }}</code>
         </div>

@@ -77,11 +77,13 @@
     "state": {
       "starting": "Starting the sign-in…",
       "open_url": "Finish signing in in your browser",
+      "in_terminal": "Finish signing in in the terminal window that opened",
       "waiting_code": "Paste the code from the sign-in page",
       "done": "Signed in",
       "failed": "Sign-in failed"
     },
     "openHint": "Open the sign-in page, sign in with the account you want here, then come back. This updates by itself.",
+    "terminalHint": "Sign in there with the account you want here. This updates by itself when the window is done.",
     "codeHint": "After signing in, the page shows a code. Paste it here.",
     "deviceCode": "Enter this code on the page:",
     "open": "Open sign-in page",
@@ -151,6 +153,7 @@
     "noMatch": "No provider matches.",
     "usedBy": "used by {n} account | used by {n} accounts",
     "anyModel": "any model",
+    "patternModels": "pattern {pattern}",
     "enabledOf": "Use {name}",
     "editOf": "Edit {name}",
     "deleteOf": "Delete {name}",
@@ -171,6 +174,11 @@
     "baseUrl": "Base URL",
     "models": "Models",
     "modelsHint": "Separated by commas; empty allows any model.",
+    "modelsPattern": "Allowed by pattern {pattern}; entering a list replaces this pattern.",
+    "allowAny": "Allow any model",
+    "anyOnSave": "Any model is allowed once you save; the pattern is removed.",
+    "keepPattern": "Keep the pattern",
+    "tierModels": "Always allowed (tier models): {models}",
     "enabled": "Accounts can use it",
     "save": "Save provider"
   }

@@ -69,6 +69,9 @@ defineExpose({ focus: () => input.value?.focus(), select: () => input.value?.sel
     </div>
     <p v-if="error" :id="`${id}-error`" class="field__error">{{ error }}</p>
     <p v-else-if="hint" :id="`${id}-hint`" class="field__hint">{{ hint }}</p>
+    <!-- A control that goes with the hint (e.g. a button that changes what it says): outside the described text,
+         so screen readers do not read its label as part of the field's description. -->
+    <slot name="hint-action" />
   </div>
 </template>
 

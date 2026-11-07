@@ -77,11 +77,13 @@
     "state": {
       "starting": "Empezando el inicio de sesión…",
       "open_url": "Termina de iniciar sesión en el navegador",
+      "in_terminal": "Termina de iniciar sesión en la ventana de terminal que se abrió",
       "waiting_code": "Pega el código de la página de inicio de sesión",
       "done": "Sesión iniciada",
       "failed": "El inicio de sesión falló"
     },
     "openHint": "Abre la página de inicio de sesión, entra con la cuenta que quieres usar aquí y vuelve. Esto se actualiza solo.",
+    "terminalHint": "Inicia sesión allí con la cuenta que quieres usar aquí. Esto se actualiza solo cuando la ventana termina.",
     "codeHint": "Tras iniciar sesión, la página muestra un código. Pégalo aquí.",
     "deviceCode": "Escribe este código en la página:",
     "open": "Abrir página de inicio de sesión",
@@ -151,6 +153,7 @@
     "noMatch": "Ningún proveedor coincide.",
     "usedBy": "lo usa {n} cuenta | lo usan {n} cuentas",
     "anyModel": "cualquier modelo",
+    "patternModels": "patrón {pattern}",
     "enabledOf": "Usar {name}",
     "editOf": "Editar {name}",
     "deleteOf": "Eliminar {name}",
@@ -171,6 +174,11 @@
     "baseUrl": "URL base",
     "models": "Modelos",
     "modelsHint": "Separados por comas; vacío permite cualquier modelo.",
+    "modelsPattern": "Permitidos por el patrón {pattern}; escribir una lista sustituye este patrón.",
+    "allowAny": "Permitir cualquier modelo",
+    "anyOnSave": "Al guardar se permite cualquier modelo y se quita el patrón.",
+    "keepPattern": "Mantener el patrón",
+    "tierModels": "Siempre permitidos (modelos de nivel): {models}",
     "enabled": "Las cuentas pueden usarlo",
     "save": "Guardar proveedor"
   }

@@ -5,9 +5,12 @@
  * 501 not_implemented, as the daemon does until its hook runner lands) and roles. Imported by mock-daemon.mjs,
  * which owns the shared data (accounts, settings, projects) and the HTTP plumbing.
  *
- * Sign-in simulation: agy opens a link and finishes by itself after 6 s; claude opens a link and then waits for a
- * code (the code "fail" fails the sign-in); codex shows a device code and finishes after 8 s.
+ * Sign-in simulation, as the daemon does it (internal/signin): starting, then in_terminal once the sign-in window
+ * is "open" (with the daemon's message), then done after 6 s (codex: 8 s). No backend reaches open_url or
+ * waiting_code, so POST /accounts/{id}/login/code answers 409 bad_state like the daemon.
  */
+
+import { applyAllowList } from './allow-list.mjs'
 
 const MIN = 60_000
 const HOUR = 60 * MIN
@@ -131,7 +134,6 @@ export function createAdminRoutes(ctx) {
 
   function startLogin(account) {
     if (account.kind === 'api-key') throw invalid('API-key accounts do not sign in; set a key')
-    const id = `${account.id}-${Date.now().toString(36)}`
     account.signingIn = true
     changed(account)
     setLogin(account, { accountId: account.id, state: 'starting' })
@@ -140,24 +142,14 @@ export function createAdminRoutes(ctx) {
         const current = logins.get(account.id)
         if (current && current.state !== 'done' && current.state !== 'failed') fn()
       }, ms)
-    const url = `https://accounts.example.test/oauth/authorize?session=${id}`
-    if (account.backend === 'codex') {
-      later(700, () =>
-        setLogin(account, {
-          accountId: account.id,
-          state: 'open_url',
-          url: 'https://auth.example.test/device',
-          userCode: 'WXYZ-4821',
-        }),
-      )
-      later(8000, () => finishLogin(account, true))
-    } else if (account.backend === 'claude') {
-      later(700, () => setLogin(account, { accountId: account.id, state: 'open_url', url }))
-      later(2500, () => setLogin(account, { accountId: account.id, state: 'waiting_code', url }))
-    } else {
-      later(700, () => setLogin(account, { accountId: account.id, state: 'open_url', url }))
-      later(6000, () => finishLogin(account, true))
-    }
+    later(700, () =>
+      setLogin(account, {
+        accountId: account.id,
+        state: 'in_terminal',
+        message: 'Finish signing in in the terminal window that opened.',
+      }),
+    )
+    later(account.backend === 'codex' ? 8000 : 6000, () => finishLogin(account, true))
     return logins.get(account.id)
   }
 
@@ -229,6 +221,8 @@ export function createAdminRoutes(ctx) {
       baseStatus.set(id, status)
       if (!account.enabled) account.status = 'disabled'
       broadcast('account.updated', account)
+      // Like the daemon: Provider.accounts changed, so clients hear providers.changed.
+      if (account.provider) broadcast('providers.changed', { changedAt: now() })
       if (body.kind === 'system') {
         setTimeout(() => {
           account.quota = freshQuota(account)
@@ -265,6 +259,7 @@ export function createAdminRoutes(ctx) {
       accounts.splice(accounts.indexOf(account), 1)
       logins.delete(account.id)
       broadcast('account.deleted', { id: account.id })
+      if (account.provider) broadcast('providers.changed', { changedAt: now() })
       return send(res, 204)
     }
     if (method === 'POST' && sub === 'refresh') {
@@ -345,48 +340,58 @@ export function createAdminRoutes(ctx) {
   }
 
   // -------------------------------------------------------------------------------------------------------------
-  // Providers
+  // Providers: the shapes of internal/api (Provider, ProviderPreset, ProviderInput), checked roughly like
+  // account.Provider.Validate and the daemon's applyProvider. The allow-list (models, allowedModels) follows the
+  // daemon exactly: see allow-list.mjs.
 
-  const providers = [
-    provider('anthropic', 'Anthropic', 'claude', 'https://api.anthropic.com', [
-      'claude-sonnet-5',
-      'claude-opus-5',
-    ]),
-    provider('deepseek', 'DeepSeek', 'claude', 'https://api.deepseek.com/anthropic', [
-      'deepseek-v4',
-    ]),
-    provider('openai', 'OpenAI', 'codex', 'https://api.openai.com/v1', [
-      'gpt-5.5-codex',
-      'gpt-5.5-mini',
-    ]),
-  ]
+  const NO_TIERS = { fast: '', standard: '', strong: '', max: '' }
   const presets = [
-    ...providers.map(({ id, name, backend, baseUrl, models }) => ({
-      id,
-      name,
-      backend,
-      baseUrl,
-      enabled: true,
-      models,
-    })),
-    provider('moonshot', 'Moonshot', 'claude', 'https://api.moonshot.ai/anthropic', ['kimi-k3']),
-    provider('zai', 'Z.ai', 'claude', 'https://api.z.ai/api/anthropic', ['glm-5']),
-    provider('openrouter', 'OpenRouter', 'claude', 'https://openrouter.ai/api', []),
-    provider('custom-anthropic', 'Custom (Anthropic API)', 'claude', '', []),
-    provider('groq', 'Groq', 'codex', 'https://api.groq.com/openai/v1', ['llama-5-70b']),
-    provider('ollama', 'Ollama', 'codex', 'http://127.0.0.1:11434/v1', []),
-    provider('custom-openai', 'Custom (OpenAI API)', 'codex', '', []),
-  ].map(({ id, name, backend, baseUrl, enabled, models }) => ({
-    id,
-    name,
-    backend,
-    baseUrl,
-    enabled,
-    models,
-  }))
+    preset('anthropic', 'Anthropic', 'claude', '', { official: true }),
+    preset('deepseek', 'DeepSeek', 'claude', 'https://api.deepseek.com/anthropic'),
+    preset('moonshot', 'Moonshot Kimi', 'claude', 'https://api.moonshot.ai/anthropic'),
+    preset('zai', 'Z.ai GLM', 'claude', 'https://api.z.ai/api/anthropic'),
+    preset('openrouter', 'OpenRouter', 'claude', 'https://openrouter.ai/api'),
+    preset('custom-anthropic', 'Custom (Anthropic API)', 'claude', ''),
+    preset('openai', 'OpenAI', 'codex', 'https://api.openai.com/v1', { wireApi: 'responses' }),
+    preset('groq', 'Groq', 'codex', 'https://api.groq.com/openai/v1', { wireApi: 'chat' }),
+    preset('ollama', 'Ollama (local)', 'codex', 'http://localhost:11434/v1', { wireApi: 'chat' }),
+    preset('custom-openai', 'Custom (OpenAI API)', 'codex', '', { wireApi: 'chat' }),
+  ]
+  const providers = [
+    fromPreset('anthropic', 'anthropic', { models: ['claude-sonnet-5', 'claude-opus-5'] }),
+    // A list plus a tier model outside it: the tier model is allowed on top, and stays out of `models`.
+    fromPreset('deepseek', 'deepseek', {
+      models: ['deepseek-v4', 'deepseek-r2'],
+      tiers: { fast: 'deepseek-chat' },
+    }),
+    // A hand-written pattern with tier models: `models` is [].
+    fromPreset('zai', 'zai', {
+      allowedModels: '^glm-',
+      tiers: { fast: 'glm-5-air', standard: 'glm-5', strong: 'glm-5', max: 'glm-5' },
+    }),
+    fromPreset('openai', 'openai', { models: ['gpt-5.5-codex', 'gpt-5.5-mini'] }),
+  ]
 
-  function provider(id, name, backend, baseUrl, models) {
-    return { id, name, backend, baseUrl, enabled: true, models, accounts: 0 }
+  function preset(id, name, backend, baseUrl, extra = {}) {
+    return { id, name, backend, baseUrl, enabled: true, models: [], official: false, ...extra }
+  }
+
+  function fromPreset(id, presetId, { models, allowedModels, tiers } = {}) {
+    const p = presets.find((x) => x.id === presetId)
+    const at = now()
+    const created = {
+      ...p,
+      id,
+      preset: presetId,
+      models: [],
+      accounts: 0,
+      allowedModels: '',
+      tiers: { ...NO_TIERS, ...tiers },
+      createdAt: at,
+      updatedAt: at,
+    }
+    applyAllowList(created, models, allowedModels)
+    return created
   }
 
   const providerView = (p) => ({
@@ -394,66 +399,88 @@ export function createAdminRoutes(ctx) {
     accounts: accounts.filter((a) => a.provider === p.id).length,
   })
 
-  function checkProvider(body, partial) {
-    if (!partial || body.name !== undefined) {
-      if (typeof body.name !== 'string' || !body.name.trim() || body.name.length > 60) {
-        throw invalid('name is required (at most 60 characters)', 'name')
+  const PROVIDER_FIELDS = [
+    'id',
+    'name',
+    'backend',
+    'baseUrl',
+    'enabled',
+    'models',
+    'preset',
+    'wireApi',
+    'allowedModels',
+    'tiers',
+    'accounts',
+  ]
+
+  /** Applies a ProviderInput to p (applyProvider in the daemon), then validates the result. */
+  function applyProvider(p, body) {
+    for (const key of ['name', 'baseUrl', 'enabled', 'wireApi'])
+      if (body[key] !== undefined) p[key] = body[key]
+    if (body.tiers !== undefined) p.tiers = { ...NO_TIERS, ...body.tiers }
+    try {
+      applyAllowList(p, body.models, body.allowedModels)
+    } catch (error) {
+      throw invalid(error.message, error.field)
+    }
+    if (typeof p.name !== 'string' || p.name.length > 60) {
+      throw invalid('name is at most 60 characters', 'name')
+    }
+    p.name = p.name.trim() || p.id
+    if (typeof p.enabled !== 'boolean') throw invalid('enabled must be true or false', 'enabled')
+    if (p.backend === 'claude' && p.wireApi) {
+      throw invalid('wireApi is only for codex providers', 'wireApi')
+    }
+    if (p.backend === 'codex') {
+      p.wireApi ||= 'chat'
+      if (!['chat', 'responses'].includes(p.wireApi)) {
+        throw invalid(`wireApi ${String(p.wireApi)} (want chat or responses)`, 'wireApi')
       }
     }
-    if (!partial && !['claude', 'codex'].includes(body.backend))
-      throw invalid('unknown backend', 'backend')
-    if (!partial || body.baseUrl !== undefined) {
-      let ok
+    if (p.official) {
+      p.baseUrl = ''
+    } else {
+      let url
       try {
-        ok = ['http:', 'https:'].includes(new URL(body.baseUrl).protocol)
+        url = new URL(p.baseUrl)
       } catch {
-        ok = false
+        throw invalid('baseUrl is required for a provider that is not official', 'baseUrl')
       }
-      if (!ok) throw invalid('the base URL must start with http:// or https://', 'baseUrl')
-    }
-    if (body.models !== undefined) {
-      if (
-        !Array.isArray(body.models) ||
-        body.models.some((m) => typeof m !== 'string' || !m.trim() || /\s/.test(m))
-      ) {
-        throw invalid('models are names without spaces', 'models')
+      const local = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)
+      if (url.protocol !== 'https:' && !(url.protocol === 'http:' && local)) {
+        throw invalid('baseUrl must use https (or http for localhost)', 'baseUrl')
       }
     }
-    if (body.enabled !== undefined && typeof body.enabled !== 'boolean')
-      throw invalid('enabled must be true or false', 'enabled')
+    p.updatedAt = now()
   }
 
   async function providerRoutes(req, res, method, parts) {
     if (parts.length === 1) {
       if (method === 'GET') return send(res, 200, { items: providers.map(providerView), presets })
       if (method !== 'POST') return false
-      const body = await readBody(req, [
-        'id',
-        'name',
-        'backend',
-        'baseUrl',
-        'enabled',
-        'models',
-        'preset',
-      ])
-      if (body.preset !== undefined && !presets.some((p) => p.id === body.preset)) {
-        throw invalid(`unknown preset ${String(body.preset)}`, 'preset')
+      const body = await readBody(req, PROVIDER_FIELDS)
+      const id = typeof body.id === 'string' ? body.id.trim() : ''
+      if (!ID.test(id)) throw invalid('the id uses a-z, 0-9 and -, at most 40 characters', 'id')
+      if (providers.some((p) => p.id === id)) throw conflict(`provider ${id} exists already`)
+      let created = { ...preset(id, id, '', ''), allowedModels: '', tiers: { ...NO_TIERS } }
+      if (body.preset) {
+        if (!presets.some((p) => p.id === body.preset)) {
+          throw invalid(`unknown provider preset "${String(body.preset)}"`, 'preset')
+        }
+        created = fromPreset(id, body.preset)
       }
-      if (typeof body.id !== 'string' || !ID.test(body.id)) {
-        throw invalid('the id uses a-z, 0-9 and -, at most 40 characters', 'id')
+      if (body.backend !== undefined) {
+        if (created.backend && created.backend !== body.backend) {
+          const why = `preset ${created.preset} serves ${created.backend}, not ${body.backend}`
+          throw invalid(why, 'backend')
+        }
+        created.backend = body.backend
       }
-      if (providers.some((p) => p.id === body.id))
-        throw conflict(`provider ${body.id} exists already`)
-      checkProvider(body, false)
-      const created = provider(
-        body.id,
-        body.name.trim(),
-        body.backend,
-        body.baseUrl,
-        body.models ?? [],
-      )
-      created.enabled = body.enabled ?? true
-      if (body.preset) created.preset = body.preset
+      if (!['claude', 'codex'].includes(created.backend)) {
+        throw invalid('backend is required (claude or codex)', 'backend')
+      }
+      applyProvider(created, body)
+      created.createdAt = created.updatedAt
       providers.push(created)
       broadcast('providers.changed', { changedAt: now() })
       return send(res, 201, providerView(created))
@@ -461,13 +488,19 @@ export function createAdminRoutes(ctx) {
     const found = providers.find((p) => p.id === parts[1])
     if (!found) throw notFound(`provider ${parts[1]}`)
     if (method === 'PATCH') {
-      const body = await readBody(req, ['name', 'baseUrl', 'enabled', 'models', 'backend'])
-      if (body.backend !== undefined && body.backend !== found.backend) {
-        throw invalid('the backend of a provider cannot change', 'backend')
+      const body = await readBody(req, PROVIDER_FIELDS)
+      if (body.id !== undefined && body.id !== found.id) {
+        throw invalid("a provider's id cannot change", 'id')
       }
-      checkProvider(body, true)
-      for (const key of ['name', 'baseUrl', 'enabled', 'models'])
-        if (body[key] !== undefined) found[key] = body[key]
+      if (body.backend !== undefined && body.backend !== found.backend) {
+        throw invalid("a provider's backend cannot change", 'backend')
+      }
+      if (body.preset !== undefined && body.preset !== (found.preset ?? '')) {
+        throw invalid("a provider's preset cannot change", 'preset')
+      }
+      const next = structuredClone(found)
+      applyProvider(next, body)
+      Object.assign(found, next)
       broadcast('providers.changed', { changedAt: now() })
       return send(res, 200, providerView(found))
     }

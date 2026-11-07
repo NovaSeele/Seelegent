@@ -6,19 +6,16 @@ import type { ApiClient } from './client'
 import type { TaskEvent } from './events'
 import type {
   BootState,
+  EventPage,
   FollowupRequest,
   Project,
+  PromptText,
   TaskDetail,
+  TaskPage,
   TaskStatus,
   TaskSummary,
   Verdict,
 } from './types'
-
-/** A paged list (§1.2); `nextCursor` is absent on the last page. */
-export interface Page<T> {
-  items: T[]
-  nextCursor?: string
-}
 
 export interface TaskListQuery {
   status?: readonly TaskStatus[]
@@ -29,10 +26,8 @@ export interface TaskListQuery {
   cursor?: string
 }
 
-export interface TaskEventsPage {
-  items: TaskEvent[]
-  lastSeq: number
-}
+/** EventPage with its items typed as the TaskEvent union (the generator only knows the envelope). */
+export type TaskEventsPage = Omit<EventPage, 'items'> & { items: TaskEvent[] }
 
 /** `after` + `limit` reads forward from a seq; `tail` reads the newest N. Never both. */
 export type EventsQuery = { after: number; limit?: number } | { tail: number }
@@ -48,7 +43,7 @@ export function createTasksApi(client: ApiClient) {
     projects: () => client.get<Project[]>('/projects'),
 
     list(query: TaskListQuery = {}, signal?: AbortSignal) {
-      return client.get<Page<TaskSummary>>('/tasks', {
+      return client.get<TaskPage>('/tasks', {
         signal,
         query: {
           status: query.status?.length ? query.status.join(',') : undefined,
@@ -72,7 +67,7 @@ export function createTasksApi(client: ApiClient) {
 
     /** The full worker brief of an attempt (latest when `attempt` is omitted); events carry a preview. */
     prompt: (id: string, turn: number, attempt?: number) =>
-      client.get<{ prompt: string }>(`/tasks/${enc(id)}/prompt`, { query: { turn, attempt } }),
+      client.get<PromptText>(`/tasks/${enc(id)}/prompt`, { query: { turn, attempt } }),
 
     followup: (id: string, body: FollowupRequest) =>
       client.post<TaskSummary>(`/tasks/${enc(id)}/followup`, { body }),

@@ -1,16 +1,15 @@
 /** Typed endpoints of worker roles (contract §5). */
 import type { ApiClient } from './client'
-import type { Role, RoleList, RoleScope, Skill } from './types'
+import type { Role, RoleList, RoleRequest, RoleScope, Skill } from './types'
 
 /** The role fields a write carries; scope and cwd travel next to it. */
 export type RoleFields = Omit<Role, 'scope' | 'cwd' | 'overridesGlobal' | 'createdAt' | 'updatedAt'>
 
-/** POST /roles stores a role in one scope: global, or the project of `cwd`. The same id replaces. */
-export interface RoleWrite {
-  role: RoleFields
-  scope: RoleScope
-  cwd?: string
-}
+/**
+ * POST /roles (RoleRequest) stores a role in one scope: global, or the project of `cwd`. The same id replaces.
+ * The role carries only the fields a write sets; the daemon ignores scope, cwd and overridesGlobal in it.
+ */
+export type RoleWrite = Omit<RoleRequest, 'role'> & { role: RoleFields }
 
 export function createRolesApi(client: ApiClient) {
   return {

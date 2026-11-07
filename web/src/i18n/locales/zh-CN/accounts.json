@@ -77,11 +77,13 @@
     "state": {
       "starting": "正在开始登录…",
       "open_url": "请在浏览器中完成登录",
+      "in_terminal": "请在打开的终端窗口中完成登录",
       "waiting_code": "粘贴登录页面上的代码",
       "done": "已登录",
       "failed": "登录失败"
     },
     "openHint": "打开登录页面，用你想在这里使用的账号登录，然后回来。此处会自动更新。",
+    "terminalHint": "在该窗口中用你想在这里使用的账号登录。窗口结束后，此处会自动更新。",
     "codeHint": "登录后页面会显示一个代码，请粘贴到这里。",
     "deviceCode": "在页面上输入此代码：",
     "open": "打开登录页面",
@@ -151,6 +153,7 @@
     "noMatch": "没有匹配的提供方。",
     "usedBy": "{n} 个账号在用",
     "anyModel": "任意模型",
+    "patternModels": "模式 {pattern}",
     "enabledOf": "使用 {name}",
     "editOf": "编辑 {name}",
     "deleteOf": "删除 {name}",
@@ -171,6 +174,11 @@
     "baseUrl": "基础 URL",
     "models": "模型",
     "modelsHint": "用逗号分隔；留空则允许任意模型。",
+    "modelsPattern": "由模式 {pattern} 允许；填写列表会替换此模式。",
+    "allowAny": "允许任意模型",
+    "anyOnSave": "保存后将移除该模式，允许任意模型。",
+    "keepPattern": "保留模式",
+    "tierModels": "始终允许（各档模型）：{models}",
     "enabled": "允许账号使用",
     "save": "保存提供方"
   }
