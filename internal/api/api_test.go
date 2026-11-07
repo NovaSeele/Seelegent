@@ -1,6 +1,8 @@
 package api
 
 import (
+	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -35,5 +37,20 @@ func TestUsageOf(t *testing.T) {
 func TestEventTypes(t *testing.T) {
 	if len(EventTypes()) != 21 {
 		t.Errorf("%d event types", len(EventTypes()))
+	}
+}
+
+// The TypeScript union of LoginSession.state is exactly the Go constants.
+func TestLoginStatesMatchTSUnion(t *testing.T) {
+	f, ok := reflect.TypeFor[LoginSession]().FieldByName("State")
+	if !ok {
+		t.Fatal("LoginSession has no State")
+	}
+	quoted := make([]string, 0, len(LoginStates()))
+	for _, s := range LoginStates() {
+		quoted = append(quoted, "'"+s+"'")
+	}
+	if got, want := f.Tag.Get("ts"), strings.Join(quoted, " | "); got != want {
+		t.Errorf("ts tag %q, want %q", got, want)
 	}
 }

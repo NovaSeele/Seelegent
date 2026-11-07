@@ -74,8 +74,10 @@ in the daemon.
   away writes nothing.
 - `capabilities.takeover` is true for backends that can resume a session; `apiKey` for every backend but agy;
   `listModels` for codex.
-- Sign-in runs in a terminal window, so `POST /accounts/{id}/login/code` answers `409 bad_state`. The user types the
-  code into that window. Logout recreates the account's profile folder empty.
+- Sign-in runs in a terminal window. Once the window is open the session is `in_terminal` ("finish signing in in the
+  terminal window that opened"); no backend reaches `waiting_code` or `open_url` today, because the window takes the
+  code itself and no URL is captured. `POST /accounts/{id}/login/code` therefore answers `409 bad_state` (`404` without
+  a sign-in). Logout recreates the account's profile folder empty.
 - A worker may call `GET /spec` with an absolute `dir`. The guard checks the task's cwd only, as the contract says,
   and `dir` must stay inside that cwd.
 

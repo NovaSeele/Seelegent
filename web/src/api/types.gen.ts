@@ -85,7 +85,7 @@ export interface QuotaError {
 /** LoginSession is the progress of an account's sign-in (POST/GET /accounts/{id}/login, SSE account.login). */
 export interface LoginSession {
   accountId: string
-  state: 'starting' | 'open_url' | 'waiting_code' | 'done' | 'failed'
+  state: 'starting' | 'open_url' | 'in_terminal' | 'waiting_code' | 'done' | 'failed'
   url?: string
   userCode?: string
   message?: string

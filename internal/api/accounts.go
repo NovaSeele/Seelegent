@@ -86,19 +86,27 @@ type QuotaError struct {
 	At      string `json:"at"`
 }
 
-// Sign-in states of a LoginSession.
+// Sign-in states of a LoginSession. in_terminal: the sign-in goes on in the terminal window that opened (there is
+// no code to post here); waiting_code only when POST /accounts/{id}/login/code can take a code; open_url when a
+// URL was captured.
 const (
 	LoginStarting    = "starting"
 	LoginOpenURL     = "open_url"
+	LoginInTerminal  = "in_terminal"
 	LoginWaitingCode = "waiting_code"
 	LoginDone        = "done"
 	LoginFailed      = "failed"
 )
 
+// LoginStates lists every LoginSession state, in the order a sign-in goes through them.
+func LoginStates() []string {
+	return []string{LoginStarting, LoginOpenURL, LoginInTerminal, LoginWaitingCode, LoginDone, LoginFailed}
+}
+
 // LoginSession is the progress of an account's sign-in (POST/GET /accounts/{id}/login, SSE account.login).
 type LoginSession struct {
 	AccountID string `json:"accountId"`
-	State     string `json:"state" ts:"'starting' | 'open_url' | 'waiting_code' | 'done' | 'failed'"`
+	State     string `json:"state" ts:"'starting' | 'open_url' | 'in_terminal' | 'waiting_code' | 'done' | 'failed'"`
 	URL       string `json:"url,omitempty"`
 	UserCode  string `json:"userCode,omitempty"`
 	Message   string `json:"message,omitempty"`

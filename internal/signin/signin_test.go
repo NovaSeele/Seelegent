@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -170,7 +171,7 @@ func TestSignInSucceedsAndEnables(t *testing.T) {
 	if len(f.done) != 1 || !f.done[0] {
 		t.Errorf("OnDone = %v", f.done)
 	}
-	if len(f.states) < 3 || f.states[1] != api.LoginWaitingCode {
+	if len(f.states) < 3 || f.states[1] != api.LoginInTerminal || slices.Contains(f.states, api.LoginWaitingCode) {
 		t.Errorf("states = %v", f.states)
 	}
 	spec := f.opener.specs[0]
@@ -209,7 +210,7 @@ func TestSignInFailsCancelsAndLogout(t *testing.T) {
 	if _, err := f.s.Start(t.Context(), a.ID); err != nil {
 		t.Fatal(err)
 	}
-	f.waitState(t, a.ID, api.LoginWaitingCode)
+	f.waitState(t, a.ID, api.LoginInTerminal)
 	if !f.s.Active(a.ID) {
 		t.Error("a running sign-in is not active")
 	}
@@ -289,7 +290,7 @@ func TestConcurrentStartsLeaveNoWindow(t *testing.T) {
 		})
 	}
 	wg.Wait()
-	f.waitState(t, a.ID, api.LoginWaitingCode)
+	f.waitState(t, a.ID, api.LoginInTerminal)
 	deadline := time.Now().Add(20 * time.Second)
 	for f.opener.openWindows() > 1 {
 		if time.Now().After(deadline) {

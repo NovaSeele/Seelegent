@@ -245,7 +245,9 @@ func (s *Service) run(ctx context.Context, sess *session, a account.Account, b b
 		}
 		return fail("could not open the sign-in window: " + err.Error())
 	}
-	s.update(sess, api.LoginWaitingCode, "Finish signing in in the terminal window that opened.")
+	// The window takes any code itself and no URL is captured here: in_terminal, never waiting_code (a UI would
+	// show a code box whose code could only be refused).
+	s.update(sess, api.LoginInTerminal, "Finish signing in in the terminal window that opened.")
 	limit := si.Expires + extraTime
 	if si.Expires <= 0 {
 		limit = 10 * time.Minute
@@ -343,15 +345,16 @@ func (s *Service) Active(id string) bool {
 	return ok && info.State != api.LoginDone && info.State != api.LoginFailed
 }
 
-// SubmitCode passes a code to a sign-in. Every backend signs in through its own terminal window, where the user
-// types any code, so this is ErrBadState for a running sign-in and ErrNotFound without one.
+// SubmitCode passes a code to a sign-in. Every backend signs in through its own terminal window (state
+// in_terminal), where the user types any code, so no session ever reaches waiting_code: this is ErrBadState for a
+// running sign-in and ErrNotFound without one.
 func (s *Service) SubmitCode(id, code string) (api.LoginSession, error) {
 	info, ok := s.Get(id)
 	if !ok {
 		return api.LoginSession{}, fmt.Errorf("%w: no sign-in runs for account %s; start one first", ErrNotFound, id)
 	}
 	_ = code
-	return info, fmt.Errorf("%w: this sign-in takes its code in the terminal window", ErrBadState)
+	return info, fmt.Errorf("%w: the sign-in is %s; type any code into its terminal window", ErrBadState, info.State)
 }
 
 // Cancel stops the sign-in of account id, if one runs, and waits until it ended.
