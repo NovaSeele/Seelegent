@@ -320,7 +320,8 @@ func (s *Service) watchConsole(id string, c *Console, open *OpenConsole) {
 		if never {
 			s.revertTakeover(id, from, since, fmt.Sprintf("the console did not start within %s; no terminal "+
 				"window could run it (on macOS, allow Seelegent to control Terminal; on Linux, check $TERMINAL "+
-				"or the desktop session)", consoleStartLimit))
+				"or the desktop session); if a console window still opens later, close it before the next followup",
+				consoleStartLimit))
 			return
 		}
 		s.handback(id, code)
