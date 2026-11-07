@@ -67,7 +67,8 @@ func (e *PeerObjectionError) APIDetails() map[string]any {
 // consultsAPI returns copies of the consult records with non-nil lists.
 func consultsAPI(cs []api.Consult) []api.Consult {
 	out := make([]api.Consult, 0, len(cs))
-	for _, c := range cs {
+	for i := range cs {
+		c := cs[i]
 		c.Findings = api.NonNil(c.Findings)
 		for i := range c.Findings {
 			c.Findings[i].Cites = api.NonNil(c.Findings[i].Cites)
@@ -115,7 +116,7 @@ func (s *Service) Consult(ctx context.Context, id string, req api.ConsultRequest
 	var rec api.Consult
 	_, err = s.mutate(ctx, id, func(cur *Task) ([]NewEvent, error) {
 		n := len(cur.Consults) + 1
-		rec = api.Consult{ID: "c" + strconv.Itoa(n), Member: m.ID, Rank: string(m.Rank), RunTaskID: sum.ID,
+		rec = api.Consult{ID: "c" + strconv.Itoa(n), Member: m.ID, Rank: m.Rank, RunTaskID: sum.ID,
 			Status: consultRunning, Findings: []api.Claim{}, Required: []string{}, Focus: focus,
 			At: api.FormatTime(s.now())}
 		cur.Consults = append(cur.Consults, rec)
@@ -327,11 +328,38 @@ func (s *Service) resumeConsults(ctx context.Context) error {
 	return nil
 }
 
+// ConsultStats counts the consults each member gave and how many of them objected (members' track records).
+func (s *Service) ConsultStats(ctx context.Context) (map[string]api.MemberTrack, error) {
+	out := map[string]api.MemberTrack{}
+	err := s.repo.db.Read(ctx, func(tx *sql.Tx) error {
+		clear(out)
+		rows, err := tx.QueryContext(ctx, `SELECT json_extract(c.value, '$.member'),
+			count(*), sum(json_extract(c.value, '$.verdict') = ?)
+			FROM tasks t, json_each(t.data, '$.consults') c
+			WHERE json_extract(c.value, '$.status') = ? GROUP BY 1`, api.ConsultObject, consultDone)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = rows.Close() }()
+		for rows.Next() {
+			var id string
+			var n, objections int
+			if err := rows.Scan(&id, &n, &objections); err != nil {
+				return err
+			}
+			out[id] = api.MemberTrack{Member: id, Consults: n, Objections: objections}
+		}
+		return rows.Err()
+	})
+	return out, err
+}
+
 // consultsReport is the consults part of the lead's report.
 func consultsReport(t *Task) []api.ReportConsult {
 	open := unansweredObjections(t)
 	var out []api.ReportConsult
-	for _, c := range t.Consults {
+	for i := range t.Consults {
+		c := &t.Consults[i]
 		rc := api.ReportConsult{ID: c.ID, Member: c.Member, Rank: c.Rank, Status: c.Status, Verdict: c.Verdict,
 			Required: c.Required, Unanswered: slices.Contains(open, c.ID), Error: c.Error}
 		for _, f := range c.Findings {
@@ -349,8 +377,8 @@ func consultsReport(t *Task) []api.ReportConsult {
 // unansweredObjections returns the ids of the peer objections on t without an answer.
 func unansweredObjections(t *Task) []string {
 	var ids []string
-	for _, c := range t.Consults {
-		if c.Rank == string(api.RankPeer) && c.Status == consultDone && c.Verdict == api.ConsultObject &&
+	for i := range t.Consults {
+		if c := &t.Consults[i]; c.Rank == api.RankPeer && c.Status == consultDone && c.Verdict == api.ConsultObject &&
 			c.AnsweredObjection == nil {
 			ids = append(ids, c.ID)
 		}
