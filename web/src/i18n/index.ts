@@ -17,6 +17,7 @@ import type roles from './locales/en/roles.json'
 import type settings from './locales/en/settings.json'
 import type task from './locales/en/task.json'
 import type tasks from './locales/en/tasks.json'
+import type team from './locales/en/team.json'
 import type terminal from './locales/en/terminal.json'
 import type usage from './locales/en/usage.json'
 import type watch from './locales/en/watch.json'
@@ -41,6 +42,7 @@ export const NAMESPACES = [
   'usage',
   'roles',
   'proof',
+  'team',
 ] as const
 export type Namespace = (typeof NAMESPACES)[number]
 
@@ -61,6 +63,7 @@ export interface MessageSchema {
   usage: typeof usage
   roles: typeof roles
   proof: typeof proof
+  team: typeof team
 }
 
 declare module 'vue-i18n' {

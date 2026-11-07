@@ -12,6 +12,7 @@ import { createProvidersApi } from './providers'
 import { createRolesApi } from './roles'
 import { createSettingsApi } from './settings'
 import { createTasksApi } from './tasks'
+import { createTeamApi } from './team'
 import { createUsageApi } from './usage'
 
 export * from './client'
@@ -28,6 +29,7 @@ export type { ProviderChanges, ProvidersApi } from './providers'
 export type { HistoryQuery, UsageApi } from './usage'
 export type { SettingsApi } from './settings'
 export type { RoleFields, RolesApi, RoleWrite } from './roles'
+export type { MemberWrite, TeamApi } from './team'
 export { EVENTS_PAGE_MAX } from './tasks'
 export {
   createAccountsApi,
@@ -37,6 +39,7 @@ export {
   createRolesApi,
   createSettingsApi,
   createTasksApi,
+  createTeamApi,
   createUsageApi,
 }
 
@@ -49,5 +52,6 @@ export const usageApi = createUsageApi(api)
 export const settingsApi = createSettingsApi(api)
 export const rolesApi = createRolesApi(api)
 export const proofApi = createProofApi(api)
+export const teamApi = createTeamApi(api)
 
 export const EVENTS_URL = '/api/v1/events'
