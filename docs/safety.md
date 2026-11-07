@@ -44,7 +44,16 @@ and the dashboard's terminal and safety panel show it.
 Hooks are written only into the worker's own profile (`Prepare` of the backend), never into the user's real
 `~/.claude`, `~/.gemini` or `~/.codex`: a system account's profile is the user's real home, so it gets the shim
 instead. Turning `gitGuard` off in the settings removes the hook at the next `Prepare`. `--allow-git` on
-`delegate`/`followup` sets `SEELEGENT_GIT_GUARD=off` for that turn, which the hook and the shim both honour.
+`delegate`/`followup` sets `SEELEGENT_GIT_GUARD=off` in the worker CLI's environment for that turn, and the daemon
+leaves the shim off `PATH` for such a turn (and whenever `gitGuard` is off).
+
+Only the hooks read `SEELEGENT_GIT_GUARD`. They inherit the environment of the worker CLI, which the daemon builds
+(the variable is never passed through from the daemon's own environment); the commands the worker runs are child
+processes of the CLI (Claude Code's `Bash`/`PowerShell` tools, agy's `run_command` terminals and the shells
+`send_command_input` writes to), and a child cannot change its parent's environment. The shim runs inside those
+commands, so `env SEELEGENT_GIT_GUARD=off git stash` would reach it: it ignores the variable, and `PATH` alone
+decides whether a worker is guarded. The shim also runs git with `-c help.autocorrect=0`, so a misspelled
+subcommand (`git stsh`) is not run as the command git guesses.
 
 ### Limits
 
