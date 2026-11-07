@@ -18,9 +18,10 @@ type Cron struct {
 	dom    uint32
 	month  uint16
 	dow    uint8
-	// domAny and dowAny: the field was "*". When both day fields are restricted, a day matching either one runs
-	// (classic cron).
-	domAny, dowAny bool
+	// dayAnd: the day-of-month or the day-of-week field starts with "*" ("*", "*/2"), and a day must match both.
+	// Otherwise a day matching either one runs. This is Vixie cron's rule (cronie and most crons follow it):
+	// "0 9 */2 * 1" runs on Mondays that are odd days, "0 9 1,15 * 1" on the 1st, the 15th and every Monday.
+	dayAnd bool
 }
 
 type cronField struct {
@@ -133,19 +134,14 @@ func ParseCron(expr string) (Cron, error) {
 	// Each field's bits stay below its maximum (23, 31, 12 and 6), so the narrower types hold them.
 	return Cron{minute: sets[0], hour: uint32(sets[1]), dom: uint32(sets[2]), //nolint:gosec // see above
 		month: uint16(sets[3]), dow: uint8(sets[4]), //nolint:gosec // see above
-		domAny: parts[2] == "*", dowAny: parts[4] == "*"}, nil
+		dayAnd: strings.HasPrefix(parts[2], "*") || strings.HasPrefix(parts[4], "*")}, nil
 }
 
 func (c Cron) dayMatches(t time.Time) bool {
 	dom := c.dom&(1<<t.Day()) != 0
 	dow := c.dow&(1<<int(t.Weekday())) != 0
-	switch {
-	case c.domAny && c.dowAny:
-		return true
-	case c.domAny:
-		return dow
-	case c.dowAny:
-		return dom
+	if c.dayAnd {
+		return dom && dow
 	}
 	return dom || dow
 }

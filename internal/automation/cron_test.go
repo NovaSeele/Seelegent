@@ -46,6 +46,22 @@ func TestCronNext(t *testing.T) {
 			t.Errorf("%s: %v %v, want %s", c.expr, got, ok, c.want)
 		}
 	}
+	// The day fields (G2, Vixie cron): ANDed when either starts with "*", ORed otherwise.
+	monday := time.Date(2026, 11, 9, 10, 0, 0, 0, utc)
+	for expr, want := range map[string]string{
+		"0 9 */2 * 1":  "2026-11-23T09:00:00Z", // Mondays on odd days: not the 16th
+		"0 9 1,15 * 1": "2026-11-15T09:00:00Z", // the 15th (a Sunday) or a Monday
+		"0 9 * * 1":    "2026-11-16T09:00:00Z", // Mondays only
+		"0 9 1 * */2":  "2026-12-01T09:00:00Z", // the 1st when it is a Sunday, Tuesday, Thursday or Saturday
+	} {
+		cr, err := ParseCron(expr)
+		if err != nil {
+			t.Fatalf("%s: %v", expr, err)
+		}
+		if got, ok := cr.Next(monday, utc); !ok || got.Format(time.RFC3339) != want {
+			t.Errorf("%s: %v %v, want %s", expr, got, ok, want)
+		}
+	}
 	never, _ := ParseCron("0 0 30 2 *")
 	if _, ok := never.Next(from, utc); ok {
 		t.Error("February 30 ran")

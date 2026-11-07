@@ -45,8 +45,10 @@ the daemon does not try to defend against the user's own account.
 ## Schedules
 
 A preset (`every`: `hourly` at a minute, `daily` or `weekdays` at `HH:MM`, `weekly` on a weekday at `HH:MM`) or a
-5-field cron expression (`minute hour day-of-month month day-of-week`; `*`, lists, ranges and steps; day-of-month
-and day-of-week combine with OR as in cron). `timezone` is `local` or an IANA zone; a time that does not exist on a
+5-field cron expression (`minute hour day-of-month month day-of-week`; `*`, lists, ranges and steps). The two day
+fields follow Vixie cron: when either one starts with `*` (`*`, `*/2`) a day must match both, otherwise a day
+matching either one runs. So `0 9 */2 * 1` runs on Mondays that fall on an odd day, `0 9 1,15 * 1` on the 1st, the
+15th and every Monday, and `0 9 * * 1` on Mondays only. `timezone` is `local` or an IANA zone; a time that does not exist on a
 daylight-saving day runs as late as the gap is long (02:30 becomes 03:30), and a repeated hour runs once. `POST /automations/preview`
 answers the next run times as the scheduler computes them (the editor shows them as you type).
 
