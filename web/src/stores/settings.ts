@@ -43,6 +43,8 @@ export const useSettingsStore = defineStore('settings', () => {
   const memoryChanged = shallowRef(false)
   /** Bumped by every memory read and write; an answer applies only while it is the newest. */
   let memorySeq = 0
+  /** The memory write in flight, so its own memory.changed frame is recognised before the PUT answers. */
+  let saving: { cwd: string; text: string } | null = null
   let watching = false
 
   function setApi(next: SettingsApi): void {
@@ -110,18 +112,25 @@ export const useSettingsStore = defineStore('settings', () => {
 
   async function saveMemory(cwd: string, text: string): Promise<Memory> {
     const mine = ++memorySeq
-    const next = await client.putMemory(cwd, text)
-    if (mine === memorySeq) {
-      memory.value = next
-      memoryChanged.value = false
+    const write = { cwd, text }
+    saving = write
+    try {
+      const next = await client.putMemory(cwd, text)
+      if (mine === memorySeq) {
+        memory.value = next
+        memoryChanged.value = false
+      }
+      return next
+    } finally {
+      if (saving === write) saving = null
     }
-    return next
   }
 
   /**
    * After a memory.changed frame (for `cwd`) or a resync: reads the held project's memory again and marks it
-   * changed elsewhere only when the text or the save time differ from what is held. Our own save's frame
-   * therefore never warns.
+   * changed elsewhere only when the text or the save time differ from what is held. Our own save never warns:
+   * the daemon publishes memory.changed while it handles the PUT, so the frame (and this read) can come before
+   * the PUT answers; a read that returns the text being saved is that save.
    */
   async function checkMemory(cwd?: string): Promise<void> {
     const held = memory.value
@@ -133,8 +142,13 @@ export const useSettingsStore = defineStore('settings', () => {
     } catch {
       return
     }
-    if (seq !== memorySeq || memory.value !== held) return
-    if (latest.text !== held.text || latest.updatedAt !== held.updatedAt) memoryChanged.value = true
+    const current = memory.value
+    if (seq !== memorySeq || !current || pathKey(current.cwd) !== pathKey(held.cwd)) return
+    if (saving && pathKey(saving.cwd) === pathKey(current.cwd) && latest.text === saving.text)
+      return
+    if (latest.text !== current.text || latest.updatedAt !== current.updatedAt) {
+      memoryChanged.value = true
+    }
   }
 
   return {

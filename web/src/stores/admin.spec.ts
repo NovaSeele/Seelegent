@@ -320,6 +320,35 @@ describe('settings store', () => {
     expect(store.memoryChanged).toBe(true)
   })
 
+  it('does not warn about our own save when its memory.changed frame comes before the PUT answers', async () => {
+    const frames = new Map<string, (data: unknown) => void>()
+    vi.spyOn(useConnectionStore(), 'subscribe').mockImplementation((name, handler) => {
+      frames.set(name, handler as (data: unknown) => void)
+      return () => undefined
+    })
+    let onDisk: Memory = { cwd: 'D:/a', text: 'old', updatedAt: '2026-11-01T00:00:00Z' }
+    let answerPut: (() => void) | undefined
+    const store = useSettingsStore()
+    store.setApi({
+      memory: () => Promise.resolve(onDisk),
+      putMemory: (cwd: string, text: string) => {
+        // The daemon writes and publishes memory.changed, then answers the PUT.
+        onDisk = { cwd, text, updatedAt: '2026-11-02T00:00:00Z' }
+        return new Promise<Memory>((resolve) => (answerPut = () => resolve(onDisk)))
+      },
+    } as unknown as SettingsApi)
+    await store.loadMemory('D:/a')
+    const save = store.saveMemory('D:/a', 'mine')
+    frames.get('memory.changed')?.({ cwd: 'D:/a' })
+    await flushPromises()
+    expect(store.memoryChanged).toBe(false)
+    answerPut?.()
+    await save
+    await flushPromises()
+    expect(store.memoryChanged).toBe(false)
+    expect(store.memory).toMatchObject({ text: 'mine' })
+  })
+
   it('shows a hook test the daemon does not support as a 501', async () => {
     const { client } = fakeClient(() => error(501, 'not_implemented'))
     const store = useSettingsStore()
