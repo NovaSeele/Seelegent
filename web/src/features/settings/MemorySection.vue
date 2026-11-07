@@ -90,8 +90,13 @@ watch(cwd, (folder) => void load(folder), { immediate: true })
 
 async function save() {
   saving.value = true
+  const folder = cwd.value
+  const sent = text.value
   try {
-    await settings.saveMemory(cwd.value, text.value)
+    const saved = await settings.saveMemory(folder, sent)
+    // The daemon normalises the text (a trailing newline, whitespace only becomes empty): take its version, so
+    // the editor is not left dirty, unless the user typed on while the save was going.
+    if (folder === cwd.value && text.value === sent) text.value = saved.text
     toast.show({ message: t('settings.memory.saved'), tone: 'success' })
   } catch (cause) {
     toast.show({

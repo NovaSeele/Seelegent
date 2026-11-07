@@ -66,6 +66,30 @@ describe('MemorySection', () => {
     wrapper.unmount()
   })
 
+  it('is no longer dirty after saving text the daemon stores with a trailing newline', async () => {
+    const { wrapper, memory } = await mountSection()
+    const putMemory = vi.fn((cwd: string, text: string) =>
+      Promise.resolve<Memory>({ cwd, text: `${text}\n`, updatedAt: '2026-11-02T00:00:00Z' }),
+    )
+    useSettingsStore().setApi({ memory, putMemory } as unknown as SettingsApi)
+    await wrapper.get('textarea').setValue('abc')
+    const buttons = () => wrapper.findAll('button').map((b) => b.text())
+    expect(buttons()).toContain('Discard changes')
+    await wrapper
+      .findAll('button')
+      .find((b) => b.text() === 'Save memory')
+      ?.trigger('click')
+    await flushPromises()
+    expect(putMemory).toHaveBeenCalledWith('D:/shop', 'abc')
+    expect((wrapper.get('textarea').element as HTMLTextAreaElement).value).toBe('abc\n')
+    expect(buttons()).not.toContain('Discard changes')
+    // Nothing to drop, so another project opens at once.
+    await wrapper.get('select').setValue('D:/blog')
+    await flushPromises()
+    expect(document.body.textContent).not.toContain('Drop your memory edits?')
+    wrapper.unmount()
+  })
+
   it('switches at once when nothing is edited', async () => {
     const { wrapper, memory } = await mountSection()
     await wrapper.get('select').setValue('D:/blog')

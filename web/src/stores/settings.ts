@@ -43,8 +43,11 @@ export const useSettingsStore = defineStore('settings', () => {
   const memoryChanged = shallowRef(false)
   /** Bumped by every memory read and write; an answer applies only while it is the newest. */
   let memorySeq = 0
-  /** The memory write in flight, so its own memory.changed frame is recognised before the PUT answers. */
-  let saving: { cwd: string; text: string } | null = null
+  /**
+   * The memory write in flight and its answer (null if it fails), so its own memory.changed frame, which can come
+   * before the PUT answers, is compared with what the daemon stored rather than with the text sent.
+   */
+  let saving: { cwd: string; done: Promise<Memory | null> } | null = null
   let watching = false
 
   function setApi(next: SettingsApi): void {
@@ -112,10 +115,17 @@ export const useSettingsStore = defineStore('settings', () => {
 
   async function saveMemory(cwd: string, text: string): Promise<Memory> {
     const mine = ++memorySeq
-    const write = { cwd, text }
+    const put = client.putMemory(cwd, text)
+    const write = {
+      cwd,
+      done: put.then(
+        (stored) => stored,
+        () => null,
+      ),
+    }
     saving = write
     try {
-      const next = await client.putMemory(cwd, text)
+      const next = await put
       if (mine === memorySeq) {
         memory.value = next
         memoryChanged.value = false
@@ -130,7 +140,8 @@ export const useSettingsStore = defineStore('settings', () => {
    * After a memory.changed frame (for `cwd`) or a resync: reads the held project's memory again and marks it
    * changed elsewhere only when the text or the save time differ from what is held. Our own save never warns:
    * the daemon publishes memory.changed while it handles the PUT, so the frame (and this read) can come before
-   * the PUT answers; a read that returns the text being saved is that save.
+   * the PUT answers. While a PUT for the project is in flight the text is not compared (the daemon normalises it,
+   * so it need not equal the text sent): the check waits for the PUT and compares with its answer.
    */
   async function checkMemory(cwd?: string): Promise<void> {
     const held = memory.value
@@ -142,10 +153,10 @@ export const useSettingsStore = defineStore('settings', () => {
     } catch {
       return
     }
+    if (seq !== memorySeq) return
+    if (saving && pathKey(saving.cwd) === pathKey(held.cwd)) await saving.done
     const current = memory.value
     if (seq !== memorySeq || !current || pathKey(current.cwd) !== pathKey(held.cwd)) return
-    if (saving && pathKey(saving.cwd) === pathKey(current.cwd) && latest.text === saving.text)
-      return
     if (latest.text !== current.text || latest.updatedAt !== current.updatedAt) {
       memoryChanged.value = true
     }

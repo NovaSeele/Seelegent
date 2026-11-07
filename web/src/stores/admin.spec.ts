@@ -338,33 +338,61 @@ describe('settings store', () => {
     expect(store.memoryChanged).toBe(true)
   })
 
-  it('does not warn about our own save when its memory.changed frame comes before the PUT answers', async () => {
+  /** A daemon whose PUT answers only when told, storing text the way Go's memory.Store.Replace does. */
+  function slowMemoryDaemon() {
     const frames = new Map<string, (data: unknown) => void>()
     vi.spyOn(useConnectionStore(), 'subscribe').mockImplementation((name, handler) => {
       frames.set(name, handler as (data: unknown) => void)
       return () => undefined
     })
-    let onDisk: Memory = { cwd: 'D:/a', text: 'old', updatedAt: '2026-11-01T00:00:00Z' }
+    const disk: { now: Memory } = {
+      now: { cwd: 'D:/a', text: 'old\n', updatedAt: '2026-11-01T00:00:00Z' },
+    }
     let answerPut: (() => void) | undefined
     const store = useSettingsStore()
     store.setApi({
-      memory: () => Promise.resolve(onDisk),
+      memory: () => Promise.resolve(disk.now),
       putMemory: (cwd: string, text: string) => {
         // The daemon writes and publishes memory.changed, then answers the PUT.
-        onDisk = { cwd, text, updatedAt: '2026-11-02T00:00:00Z' }
-        return new Promise<Memory>((resolve) => (answerPut = () => resolve(onDisk)))
+        const stored = text.trim() === '' ? '' : text.endsWith('\n') ? text : `${text}\n`
+        disk.now = { cwd, text: stored, updatedAt: '2026-11-02T00:00:00Z' }
+        const answer = disk.now
+        return new Promise<Memory>((resolve) => (answerPut = () => resolve(answer)))
       },
     } as unknown as SettingsApi)
+    return {
+      store,
+      disk,
+      frame: () => frames.get('memory.changed')?.({ cwd: 'D:/a' }),
+      answer: () => answerPut?.(),
+    }
+  }
+
+  it('does not warn about our own save when its frame, with normalised text, comes before the PUT answers', async () => {
+    const { store, frame, answer } = slowMemoryDaemon()
     await store.loadMemory('D:/a')
     const save = store.saveMemory('D:/a', 'mine')
-    frames.get('memory.changed')?.({ cwd: 'D:/a' })
+    frame()
     await flushPromises()
     expect(store.memoryChanged).toBe(false)
-    answerPut?.()
+    answer()
     await save
     await flushPromises()
     expect(store.memoryChanged).toBe(false)
-    expect(store.memory).toMatchObject({ text: 'mine' })
+    expect(store.memory).toMatchObject({ text: 'mine\n' })
+  })
+
+  it('still warns when someone else saves after our PUT, while it is answering', async () => {
+    const { store, disk, frame, answer } = slowMemoryDaemon()
+    await store.loadMemory('D:/a')
+    const save = store.saveMemory('D:/a', 'mine')
+    disk.now = { cwd: 'D:/a', text: 'theirs\n', updatedAt: '2026-11-03T00:00:00Z' }
+    frame()
+    await flushPromises()
+    answer()
+    await save
+    await flushPromises()
+    expect(store.memoryChanged).toBe(true)
   })
 
   it('shows a hook test the daemon does not support as a 501', async () => {
