@@ -144,6 +144,74 @@ func (f *fakeGh) Run(_ context.Context, args []string, input []byte, env []strin
 	return f.fn(args, input)
 }
 
+// TestDetectorSingleFlight is the review's G10: while gh is being asked, callers with a cached access get it at
+// once, and callers that need a fresh one share the one detection.
+func TestDetectorSingleFlight(t *testing.T) {
+	release := make(chan struct{})
+	slow := false
+	var mu sync.Mutex
+	gh := &fakeGh{fn: func(args []string, _ []byte) ([]byte, []byte, error) {
+		mu.Lock()
+		wait := slow
+		mu.Unlock()
+		if wait {
+			<-release
+		}
+		if args[0] == "--version" {
+			return []byte("gh version 2.60.0"), nil, nil
+		}
+		return []byte("octo\n"), nil, nil
+	}}
+	d := NewDetector(gh, nil, nil)
+	if a := d.Access(t.Context(), false); a.Tier != api.TierGh {
+		t.Fatalf("access = %+v", a)
+	}
+	mu.Lock()
+	slow = true
+	mu.Unlock()
+	results := make(chan Access, 3)
+	for range 3 {
+		go func() { results <- d.Access(t.Context(), true) }()
+	}
+	// A detection is running (blocked in gh): a caller that may use the cache is not held up.
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		d.mu.Lock()
+		running := d.flight != nil
+		d.mu.Unlock()
+		if running {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("no detection started")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	time.Sleep(100 * time.Millisecond) // the other forced callers reach the running detection
+	done := make(chan Access, 1)
+	go func() { done <- d.Access(t.Context(), false) }()
+	select {
+	case a := <-done:
+		if a.Tier != api.TierGh {
+			t.Fatalf("cached access = %+v", a)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("a cached caller waited for gh")
+	}
+	close(release)
+	for range 3 {
+		if a := <-results; a.GhUser != "octo" {
+			t.Fatalf("forced access = %+v", a)
+		}
+	}
+	gh.mu.Lock()
+	n := len(gh.calls)
+	gh.mu.Unlock()
+	if n != 4 { // two for the first detection, two for the one shared by the three forced callers
+		t.Fatalf("gh ran %d times", n)
+	}
+}
+
 func TestDetector(t *testing.T) {
 	now := time.Date(2026, 11, 7, 10, 0, 0, 0, time.UTC)
 	clock := func() time.Time { return now }

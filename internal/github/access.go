@@ -110,7 +110,9 @@ var ghEnv = []string{"GH_PROMPT_DISABLED=1", "NO_COLOR=1", "GH_NO_UPDATE_NOTIFIE
 var ghVersionRe = regexp.MustCompile(`(?i)gh version\s+(\S+)`)
 
 // Detector finds the access tier: gh when the gh CLI is installed and signed in, else token when one is stored,
-// else manual. The result is kept for a minute.
+// else manual. The result is kept for a minute. One detection runs at a time (G10: the lock was held while gh ran,
+// up to 25 s, so every GitHub call waited): callers that have a cached value get it meanwhile, the others wait for
+// that detection.
 type Detector struct {
 	gh     GhRunner
 	tokens *TokenStore
@@ -119,6 +121,15 @@ type Detector struct {
 	mu     sync.Mutex
 	cached Access
 	ok     bool
+	flight *detection
+	// gen changes on Forget: a detection started before it does not fill the cache.
+	gen int
+}
+
+// detection is a detection in progress; done closes when a holds its result.
+type detection struct {
+	done chan struct{}
+	a    Access
 }
 
 // NewDetector returns a Detector.
@@ -129,13 +140,48 @@ func NewDetector(gh GhRunner, tokens *TokenStore, now func() time.Time) *Detecto
 	return &Detector{gh: gh, tokens: tokens, now: now}
 }
 
-// Access returns the current access (force: detect again now).
+// Access returns the current access (force: detect again now, or wait for the detection already running).
 func (d *Detector) Access(ctx context.Context, force bool) Access {
 	d.mu.Lock()
-	defer d.mu.Unlock()
 	if d.ok && !force && d.now().Sub(d.cached.CheckedAt) < accessTTL {
-		return d.cached
+		a := d.cached
+		d.mu.Unlock()
+		return a
 	}
+	if f := d.flight; f != nil {
+		if d.ok && !force {
+			a := d.cached // stale by less than the detection takes
+			d.mu.Unlock()
+			return a
+		}
+		d.mu.Unlock()
+		select {
+		case <-f.done:
+			return f.a
+		case <-ctx.Done():
+			return Access{Tier: api.TierManual, CheckedAt: d.now()}
+		}
+	}
+	f := &detection{done: make(chan struct{})}
+	d.flight = f
+	gen := d.gen
+	d.mu.Unlock()
+	// Detached from the caller: the callers waiting for this detection must not get a cancelled one.
+	f.a = d.detect(context.WithoutCancel(ctx))
+	d.mu.Lock()
+	if d.gen == gen {
+		d.cached, d.ok = f.a, true
+	}
+	if d.flight == f {
+		d.flight = nil
+	}
+	d.mu.Unlock()
+	close(f.done)
+	return f.a
+}
+
+// detect asks gh and the token store.
+func (d *Detector) detect(ctx context.Context) Access {
 	a := Access{Tier: api.TierManual, CheckedAt: d.now()}
 	if d.gh != nil {
 		cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
@@ -163,14 +209,15 @@ func (d *Detector) Access(ctx context.Context, force bool) Access {
 			}
 		}
 	}
-	d.cached, d.ok = a, true
 	return a
 }
 
-// Forget drops the cached access (after the token changed).
+// Forget drops the cached access (after the token changed); a detection still running does not fill it again.
 func (d *Detector) Forget() {
 	d.mu.Lock()
 	d.ok = false
+	d.gen++
+	d.flight = nil
 	d.mu.Unlock()
 }
 
