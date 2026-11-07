@@ -118,8 +118,6 @@
       "deleted": "đã xóa",
       "binary": "tệp nhị phân",
       "restored": "Đã khôi phục",
-      "done": "Đã khôi phục tệp: {n}",
-      "skipped": "Không khôi phục được: {files}",
       "restoredTitle": "Đã khôi phục công việc",
       "restoredDesc": "Các tệp đã được lấy lại từ bản chụp trước lượt {n}.",
       "restoredDescMany": "Các tệp đã được lấy lại từ bản chụp trước mỗi lượt."
@@ -152,6 +150,21 @@
       "findings": "{count} phát hiện",
       "blocked": "{count} lệnh bị chặn",
       "restored": "đã khôi phục {count}"
+    },
+    "restore": {
+      "title": "Khôi phục các tệp về trước lượt {n}?",
+      "desc": "Nội dung hiện tại của các tệp này sẽ được thay bằng nội dung trước lượt {n}. Bản sao lưu nội dung hiện tại được giữ lại trước.",
+      "doneTitle": "Đã khôi phục xong",
+      "done": "Đã khôi phục {count} tệp.",
+      "nothing": "Không có tệp nào được khôi phục.",
+      "backup": "Nội dung trước đó được giữ trong bản chụp sao lưu",
+      "skippedTitle": "Chưa khôi phục",
+      "changed": "đã đổi sau khi lượt kết thúc",
+      "changedNote": "Các tệp này đã đổi sau khi lượt kết thúc nên được giữ nguyên.",
+      "anyway": "Vẫn khôi phục",
+      "forceTitle": "Ghi đè các thay đổi sau lượt {n}?",
+      "forceDesc": "Các tệp này đã đổi sau khi lượt kết thúc. Nội dung mới hơn sẽ được thay bằng nội dung trước lượt {n}; bản sao lưu được giữ lại trước.",
+      "forceConfirm": "Ghi đè ({n})"
     }
   }
 }

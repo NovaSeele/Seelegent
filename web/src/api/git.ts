@@ -31,10 +31,20 @@ export function createGitApi(client: ApiClient) {
     outsideDiff: (taskId: string, turn: number, signal?: AbortSignal) =>
       client.get<FileDiff[]>(`/tasks/${enc(taskId)}/turns/${turn}/outside-diff`, { signal }),
 
-    /** Puts work-at-risk files back from the turn's start snapshot (all of them without `files`). */
-    restore: (taskId: string, turn: number, files?: readonly string[]) =>
+    /**
+     * Puts work-at-risk files back from the turn's start snapshot (all of them without `files`). Files changed
+     * after the turn ended are skipped (code changed_since_turn) unless `force`.
+     */
+    restore: (
+      taskId: string,
+      turn: number,
+      opts: { files?: readonly string[]; force?: boolean } = {},
+    ) =>
       client.post<RestoreResult>(`/tasks/${enc(taskId)}/turns/${turn}/restore`, {
-        body: files?.length ? { files: [...files] } : {},
+        body: {
+          ...(opts.files?.length ? { files: [...opts.files] } : {}),
+          ...(opts.force ? { force: true } : {}),
+        },
       }),
   }
 }

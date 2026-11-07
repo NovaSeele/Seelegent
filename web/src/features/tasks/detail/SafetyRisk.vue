@@ -15,8 +15,6 @@ import type { RiskGroup } from './safety'
  */
 const props = defineProps<{
   groups: readonly RiskGroup[]
-  /** The turn being restored. */
-  busy: number | null
   /** Restore waits until the worker has stopped. */
   active: boolean
 }>()
@@ -61,7 +59,6 @@ const desc = computed(() => {
             size="sm"
             variant="primary"
             :disabled="active"
-            :loading="busy === group.turn"
             @click="emit('restore', group.turn)"
           >
             {{ t('task.safety.risk.restore', { n: group.open }) }}

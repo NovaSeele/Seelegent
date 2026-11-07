@@ -72,6 +72,12 @@ afterEach(() => {
   document.body.innerHTML = ''
 })
 
+/** A button of the open (teleported) dialog, by its text. */
+const bodyButton = (text: string) =>
+  [...(document.body.querySelector('[role="dialog"]')?.querySelectorAll('button') ?? [])].find(
+    (b) => b.textContent?.trim() === text,
+  )
+
 describe('safety model', () => {
   it('groups risk per turn newest first and takes findings from the latest finished turn only', () => {
     const s = safetyOf(risky)
@@ -161,15 +167,90 @@ describe('SafetyPanel', () => {
     expect(restore.map((b) => b.text())).toEqual(['Restore files (2)'])
   })
 
-  it('restores a turn and asks for a reload', async () => {
-    const result: RestoreResult = { restored: ['notes.md', 'big.go'], skipped: [] }
+  it('asks before it restores, then names the backup and asks for a reload', async () => {
+    const result: RestoreResult = {
+      restored: ['notes.md', 'big.go'],
+      skipped: [],
+      backup: 't2-restore-17',
+    }
     const api = fakeApi({ restore: vi.fn(() => Promise.resolve(result)) })
     const wrapper = await mountPanel(api)
     const button = wrapper.findAll('button').find((b) => b.text().startsWith('Restore files'))
     await button?.trigger('click')
     await flush()
-    expect(api.restore).toHaveBeenCalledWith('t1', 2)
+    expect(api.restore).not.toHaveBeenCalled()
+    const dialog = () => document.body.querySelector('[role="dialog"]')
+    expect(dialog()?.textContent).toContain('Restore files from before turn 2?')
+    expect(dialog()?.textContent).toContain('replaced with what they held before turn 2')
+    expect(dialog()?.textContent).toContain('A backup of the current content is kept first.')
+    expect([...(dialog()?.querySelectorAll('li code') ?? [])].map((c) => c.textContent)).toEqual([
+      'notes.md',
+      'big.go',
+    ])
+    bodyButton('Restore files (2)')?.click()
+    await flush()
+    expect(api.restore).toHaveBeenCalledWith('t1', 2, {
+      files: ['notes.md', 'big.go'],
+      force: false,
+    })
+    expect(dialog()?.textContent).toContain('2 files restored.')
+    expect(dialog()?.textContent).toContain('t2-restore-17')
+    expect(document.activeElement?.textContent?.trim()).toBe('Close')
     expect(wrapper.emitted('changed')).toHaveLength(1)
+  })
+
+  it('cancels without restoring', async () => {
+    const api = fakeApi()
+    const wrapper = await mountPanel(api)
+    await wrapper
+      .findAll('button')
+      .find((b) => b.text().startsWith('Restore files'))
+      ?.trigger('click')
+    await flush()
+    bodyButton('Cancel')?.click()
+    await flush()
+    expect(api.restore).not.toHaveBeenCalled()
+    expect(document.body.querySelector('[role="dialog"]')).toBeNull()
+  })
+
+  it('leaves files changed after the turn alone, and overwrites them only after a second question', async () => {
+    const first: RestoreResult = {
+      restored: ['big.go'],
+      skipped: [
+        { path: 'notes.md', error: 'changed since the turn ended', code: 'changed_since_turn' },
+      ],
+      backup: 't2-restore-1',
+    }
+    const second: RestoreResult = { restored: ['notes.md'], skipped: [], backup: 't2-restore-2' }
+    const restore = vi
+      .fn<GitApi['restore']>()
+      .mockResolvedValueOnce(first)
+      .mockResolvedValueOnce(second)
+    const wrapper = await mountPanel(fakeApi({ restore }))
+    await wrapper
+      .findAll('button')
+      .find((b) => b.text().startsWith('Restore files'))
+      ?.trigger('click')
+    await flush()
+    bodyButton('Restore files (2)')?.click()
+    await flush()
+    const text = () => document.body.querySelector('[role="dialog"]')?.textContent ?? ''
+    expect(text()).toContain('1 file restored.')
+    expect(text()).toContain('notes.md · changed since the turn ended')
+    expect(text()).toContain('left as they are')
+
+    bodyButton('Restore anyway')?.click()
+    await flush()
+    expect(text()).toContain('Overwrite changes made after turn 2?')
+    expect(restore).toHaveBeenCalledTimes(1)
+    bodyButton('Overwrite (1)')?.click()
+    await flush()
+    expect(restore).toHaveBeenLastCalledWith('t1', 2, { files: ['notes.md'], force: true })
+    expect(text()).toContain('2 files restored.')
+    expect(text()).toContain('t2-restore-1')
+    expect(text()).toContain('t2-restore-2')
+    expect(text()).not.toContain('Restore anyway')
+    expect(wrapper.emitted('changed')).toHaveLength(2)
   })
 
   it('waits for the worker to stop before it restores', async () => {

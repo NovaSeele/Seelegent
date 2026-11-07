@@ -118,8 +118,6 @@
       "deleted": "삭제됨",
       "binary": "바이너리 파일",
       "restored": "복원됨",
-      "done": "복원된 파일: {n}",
-      "skipped": "복원되지 않음: {files}",
       "restoredTitle": "작업 복원됨",
       "restoredDesc": "턴 {n} 전에 찍은 스냅샷에서 파일을 되돌렸습니다.",
       "restoredDescMany": "각 턴 전에 찍은 스냅샷에서 파일을 되돌렸습니다."
@@ -152,6 +150,21 @@
       "findings": "검사 결과 {count}건",
       "blocked": "거부된 명령 {count}개",
       "restored": "복원됨 {count}개"
+    },
+    "restore": {
+      "title": "턴 {n} 이전 상태로 파일을 복원할까요?",
+      "desc": "이 파일들의 현재 내용이 턴 {n} 이전의 내용으로 바뀝니다. 먼저 현재 내용의 백업을 남깁니다.",
+      "doneTitle": "복원 완료",
+      "done": "파일 {count}개를 복원했습니다.",
+      "nothing": "복원된 파일이 없습니다.",
+      "backup": "이전 내용은 백업 스냅샷에 보관됩니다:",
+      "skippedTitle": "복원하지 않은 파일",
+      "changed": "턴이 끝난 뒤 변경됨",
+      "changedNote": "이 파일들은 턴이 끝난 뒤 변경되어 그대로 두었습니다.",
+      "anyway": "그래도 복원",
+      "forceTitle": "턴 {n} 이후의 변경을 덮어쓸까요?",
+      "forceDesc": "이 파일들은 턴이 끝난 뒤 변경되었습니다. 새 내용이 턴 {n} 이전의 내용으로 바뀝니다. 먼저 백업을 남깁니다.",
+      "forceConfirm": "덮어쓰기 ({n})"
     }
   }
 }

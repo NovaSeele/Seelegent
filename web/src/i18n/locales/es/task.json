@@ -118,8 +118,6 @@
       "deleted": "eliminado",
       "binary": "archivo binario",
       "restored": "Restaurado",
-      "done": "Archivos restaurados: {n}",
-      "skipped": "No restaurados: {files}",
       "restoredTitle": "Trabajo restaurado",
       "restoredDesc": "Los archivos se recuperaron de la instantánea tomada antes del turno {n}.",
       "restoredDescMany": "Los archivos se recuperaron de las instantáneas tomadas antes de sus turnos."
@@ -152,6 +150,21 @@
       "findings": "{count} hallazgo | {count} hallazgos",
       "blocked": "{count} comando rechazado | {count} comandos rechazados",
       "restored": "{count} restaurado | {count} restaurados"
+    },
+    "restore": {
+      "title": "¿Restaurar los archivos de antes del turno {n}?",
+      "desc": "El contenido actual de estos archivos se reemplaza por el que tenían antes del turno {n}. Antes se guarda una copia de seguridad del contenido actual.",
+      "doneTitle": "Restauración terminada",
+      "done": "Se restauró {count} archivo. | Se restauraron {count} archivos.",
+      "nothing": "No se restauró ningún archivo.",
+      "backup": "Lo que contenían antes se guarda en la instantánea de respaldo",
+      "skippedTitle": "Sin restaurar",
+      "changed": "cambió después de terminar el turno",
+      "changedNote": "Estos archivos cambiaron después de terminar el turno, así que se dejaron como están.",
+      "anyway": "Restaurar de todos modos",
+      "forceTitle": "¿Sobrescribir los cambios hechos después del turno {n}?",
+      "forceDesc": "Estos archivos cambiaron después de terminar el turno. Su contenido más reciente se reemplaza por el que tenían antes del turno {n}; antes se guarda una copia de seguridad.",
+      "forceConfirm": "Sobrescribir ({n})"
     }
   }
 }

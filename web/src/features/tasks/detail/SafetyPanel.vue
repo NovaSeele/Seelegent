@@ -6,9 +6,9 @@ import { gitApi, type GitApi } from '@/api'
 import type { TaskDetail, TaskSummary } from '@/api/types'
 import Icon from '@/components/ui/Icon.vue'
 import { isActive } from '@/lib/taskStatus'
-import { useToastStore } from '@/stores/toast'
 
 import OutsideDiffDialog from '../views/git/OutsideDiffDialog.vue'
+import RestoreDialog from './RestoreDialog.vue'
 import {
   outsideTurns,
   restoredByTurn,
@@ -33,7 +33,6 @@ const props = withDefaults(
 const emit = defineEmits<{ changed: [] }>()
 
 const { t } = useI18n()
-const toast = useToastStore()
 
 const safety = computed(() => safetyOf(props.detail))
 const parts = computed(() => safetyParts(safety.value))
@@ -60,36 +59,14 @@ watch(urgent, (value) => {
   if (value) expanded.value = true
 })
 
-const restoring = ref<number | null>(null)
-async function restore(turn: number) {
-  restoring.value = turn
-  try {
-    const result = await props.api.restore(props.task.id, turn)
-    if (result.restored.length) {
-      toast.show({
-        message: t('task.safety.risk.done', { n: result.restored.length }),
-        tone: 'success',
-      })
-    }
-    if (result.skipped.length) {
-      toast.show({
-        message: t('task.safety.risk.skipped', {
-          files: result.skipped.map((s) => `${s.path}: ${s.error}`).join('; '),
-        }),
-        tone: 'error',
-      })
-    }
-    emit('changed')
-  } catch (err) {
-    toast.show({
-      message: t('task.actions.failed', {
-        error: err instanceof Error ? err.message : String(err),
-      }),
-      tone: 'error',
-    })
-  } finally {
-    restoring.value = null
-  }
+// Restore asks first; the files are fixed when the dialog opens, so a reload behind it changes nothing.
+const restoreOpen = ref(false)
+const restoreOf = ref<{ turn: number; files: string[] } | null>(null)
+function restore(turn: number) {
+  const group = safety.value.risk.find((g) => g.turn === turn)
+  if (!group) return
+  restoreOf.value = { turn, files: group.files.filter((f) => !f.restored).map((f) => f.path) }
+  restoreOpen.value = true
 }
 
 const outsideOpen = ref(false)
@@ -129,7 +106,6 @@ function showOutside(turn: number) {
       <SafetyRisk
         v-if="safety.risk.length"
         :groups="safety.risk"
-        :busy="restoring"
         :active="active"
         @restore="restore"
         @outside="showOutside"
@@ -137,6 +113,15 @@ function showOutside(turn: number) {
       <SafetyChecks :safety="safety" />
     </div>
   </details>
+  <RestoreDialog
+    v-if="restoreOpen && restoreOf"
+    v-model:open="restoreOpen"
+    :task-id="task.id"
+    :turn="restoreOf.turn"
+    :files="restoreOf.files"
+    :api="api"
+    @changed="emit('changed')"
+  />
   <OutsideDiffDialog
     v-if="outsideOpen"
     v-model:open="outsideOpen"

@@ -118,8 +118,6 @@
       "deleted": "已删除",
       "binary": "二进制文件",
       "restored": "已恢复",
-      "done": "已恢复文件: {n}",
-      "skipped": "未能恢复: {files}",
       "restoredTitle": "工作已恢复",
       "restoredDesc": "已从第 {n} 轮开始前的快照中取回文件。",
       "restoredDescMany": "已从各轮开始前的快照中取回文件。"
@@ -152,6 +150,21 @@
       "findings": "{count} 项发现",
       "blocked": "{count} 条命令被拒绝",
       "restored": "已恢复 {count} 个"
+    },
+    "restore": {
+      "title": "要把文件恢复到第 {n} 轮之前吗？",
+      "desc": "这些文件的当前内容将被替换为第 {n} 轮之前的内容。替换前会先备份当前内容。",
+      "doneTitle": "恢复完成",
+      "done": "已恢复 {count} 个文件。",
+      "nothing": "没有恢复任何文件。",
+      "backup": "之前的内容保存在备份快照中：",
+      "skippedTitle": "未恢复",
+      "changed": "本轮结束后已被修改",
+      "changedNote": "这些文件在本轮结束后被修改过，因此保持不变。",
+      "anyway": "仍然恢复",
+      "forceTitle": "要覆盖第 {n} 轮之后的修改吗？",
+      "forceDesc": "这些文件在本轮结束后被修改过。它们较新的内容将被替换为第 {n} 轮之前的内容；替换前会先备份。",
+      "forceConfirm": "覆盖 ({n})"
     }
   }
 }
