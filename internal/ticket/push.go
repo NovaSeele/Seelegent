@@ -140,10 +140,15 @@ func (s *Service) baseOnRemote(ctx context.Context, t *ticketRec, target, base s
 	}
 	if count, _ := strconv.Atoi(n); count > 0 {
 		d := map[string]any{"branch": t.Base, "commits": count}
-		// The newest few, by subject, so the lead knows which commits to push.
+		// The newest few, by subject, so the lead knows which commits to push. A subject is text anyone wrote (a
+		// pasted token or a URL with a password in it), so it is redacted like every other detail.
 		if out, err := s.git(ctx, t.Worktree, gitx.ExecOptions{Timeout: gitx.ReadTimeout}, "log",
 			"--format=%s", "-n", "3", base, "--not", tip); err == nil && strings.TrimSpace(out) != "" {
-			d["subjects"] = strings.Split(strings.TrimSpace(out), "\n")
+			subjects := strings.Split(strings.TrimSpace(out), "\n")
+			for i, subj := range subjects {
+				subjects[i] = oneLine(s.redact(subj), 200)
+			}
+			d["subjects"] = subjects
 		}
 		return &PushError{Reason: "base_not_pushed", Details: d,
 			Message: fmt.Sprintf("the base has %d commit(s) that are not on GitHub; push %s first", count, t.Base)}

@@ -245,7 +245,8 @@ func TestPushRemoteRules(t *testing.T) {
 	// A base the remote does not have: the user's main has a commit that was never pushed.
 	write(t, filepath.Join(e.repo, "local.txt"), "not pushed\n")
 	run(t, e.repo, "add", "local.txt")
-	run(t, e.repo, "commit", "-q", "-m", "local only")
+	// Its subject carries a token-like string: the refusal keeps it redacted (F68).
+	run(t, e.repo, "commit", "-q", "-m", "local only ghp_"+strings.Repeat("Ab1", 10))
 	tk2, task2 := readyTicket(t, e, "Second")
 	write(t, filepath.Join(tk2.Worktree, "src", "cache.go"), "package src\n\nvar ttl = 9\n")
 	e.tasks.accept(task2, "ok")
@@ -259,7 +260,7 @@ func TestPushRemoteRules(t *testing.T) {
 	}
 	if got, _ := e.s.Ticket(ctx, tk2.ID); got.Refusal == nil || got.Refusal.Reason != api.RefusalBaseNotPushed ||
 		got.Refusal.Commits != 1 || got.Refusal.Branch != "main" || len(got.Refusal.Subjects) != 1 ||
-		got.Refusal.Subjects[0] != "local only" {
+		got.Refusal.Subjects[0] != "local only [REDACTED]" {
 		t.Fatalf("base refusal = %+v", got.Refusal)
 	}
 	// Once main is pushed, the pull request goes.
