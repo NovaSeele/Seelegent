@@ -160,9 +160,9 @@ a time. A dirty worktree is marked `dirty`. Progress is published as the SSE eve
 a stopped daemon are marked abandoned (`error`) at the next start.
 
 `GET /proof/stats` counts gated tasks, gate runs, first runs that were red, red gates fixed before the lead's
-review, automatic fix turns, budgets used up, lane refusals, forced claims, lane violations, the mean lead followups
-per task with and without a gate, and the verifier's verdicts (with `slipped`: accepted turns the lead then followed
-up or rejected).
+review, automatic fix turns, budgets used up (a gate red only through foreign steps spent none), lane refusals,
+forced claims, lane violations, the mean lead followups per task with and without a gate, and the verifier's
+verdicts (with `slipped`: accepted turns the lead then followed up or rejected).
 
 ## Reports
 

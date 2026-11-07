@@ -555,3 +555,26 @@ func TestFollowupLaneClaimRace(t *testing.T) {
 		t.Fatalf("the delegate claimed the files the followup took: %v", delegateErr)
 	}
 }
+
+// TestStatsForeignRed: a gate that is red only through another task's failure spent no budget, so it is not
+// counted as a budget used up.
+func TestStatsForeignRed(t *testing.T) {
+	h := newHarness(t)
+	now := h.clk.Now()
+	red := &api.GateResult{State: api.GateRed, Steps: []api.GateStep{
+		{Kind: api.StepDoctrine, Label: "api-name", State: api.StepRed, Foreign: true, CausedBy: []string{"t-x"}}}}
+	tk := &Task{ID: "t-foreign", Title: "Caller", Status: StatusDone, Kind: KindNormal, Mode: ModeEdit, Cwd: h.cwd,
+		ProjectKey: "project-1", ProjectName: "project", Prompt: "p", Backend: "agy", CreatedAt: now, UpdatedAt: now,
+		Proof: &Proof{Budget: 2},
+		Turns: []*Turn{{N: 1, By: ByLead, Message: "p", Status: TurnOK, StartedAt: now, EndedAt: now, Gate: red}}}
+	if _, err := h.s.repo.Create(t.Context(), tk, nil); err != nil {
+		t.Fatal(err)
+	}
+	stats, err := h.s.ProofStats(t.Context(), "", time.Time{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stats.GateRuns != 1 || stats.FirstRunRed != 1 || stats.ExhaustedBudgets != 0 || stats.CaughtBeforeReview != 0 {
+		t.Errorf("stats = %+v", stats)
+	}
+}

@@ -6,6 +6,7 @@ import (
 
 	"github.com/NovaSeele/Seelegent/internal/api"
 	"github.com/NovaSeele/Seelegent/internal/fsutil"
+	"github.com/NovaSeele/Seelegent/internal/gate"
 	"github.com/NovaSeele/Seelegent/internal/proof"
 )
 
@@ -78,6 +79,8 @@ func (s *Service) ProofStats(ctx context.Context, cwd string, since time.Time) (
 				switch {
 				case failed && g.AutoFix > 0:
 					out.CaughtBeforeReview++
+				case failed && gate.Failing(*g) == nil:
+					// Only another task's failures (foreign): the task spent no budget on them.
 				case failed:
 					out.ExhaustedBudgets++
 				}
