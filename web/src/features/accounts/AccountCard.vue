@@ -17,6 +17,7 @@ import {
   isExhausted,
   PILL_TONE,
   pillState,
+  showsSlots,
   STATUS_TONE,
   useActions,
 } from './accountView'
@@ -138,7 +139,11 @@ function setPriority(priority: number) {
     </header>
 
     <ul class="card__facts">
-      <li :class="account.busy > 0 ? 'tone-running' : 'tone-neutral'" class="card__fact">
+      <li
+        v-if="showsSlots(account)"
+        :class="account.busy > 0 ? 'tone-running' : 'tone-neutral'"
+        class="card__fact"
+      >
         {{ t('accounts.busy', { busy: account.busy, max: account.maxConcurrent }) }}
       </li>
       <template v-if="pill.state === 'status'">
@@ -277,6 +282,11 @@ function setPriority(priority: number) {
   margin: 0;
   padding: 0;
   list-style: none;
+}
+
+/* No chips (an account that cannot run): no empty row and gap. */
+.card__facts:empty {
+  display: none;
 }
 
 .card__fact {

@@ -33,6 +33,23 @@ describe('AccountCard', () => {
     expect(wrapper.text()).toContain('the numbers below may be old')
   })
 
+  it.each(['disabled', 'no_key', 'no_plan', 'needs_login', 'twin'] as const)(
+    'leaves out the slots chip for an account that cannot run (%s)',
+    async (status) => {
+      const wrapper = await render(makeAccount({ status, busy: 0, maxConcurrent: 2 }))
+      expect(wrapper.text()).not.toContain('slots busy')
+    },
+  )
+
+  it('leaves out the slots chip for an account switched off, unless a run is still going', async () => {
+    const idle = await render(makeAccount({ enabled: false, busy: 0, maxConcurrent: 2 }))
+    expect(idle.text()).not.toContain('slots busy')
+    const running = await render(makeAccount({ enabled: false, busy: 1, maxConcurrent: 2 }))
+    expect(running.text()).toContain('1 of 2 slots busy')
+    const ready = await render(makeAccount({ busy: 0, maxConcurrent: 2 }))
+    expect(ready.text()).toContain('0 of 2 slots busy')
+  })
+
   it('says a failed read with a reason once, in the quota box', async () => {
     const base = makeAccount({ status: 'error' })
     const error = {

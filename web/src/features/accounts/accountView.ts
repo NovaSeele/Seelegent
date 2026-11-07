@@ -50,6 +50,21 @@ export function pillState(account: Account, now: number): PillState {
   return 'status'
 }
 
+const CANNOT_RUN: ReadonlySet<AccountStatus> = new Set([
+  'disabled',
+  'no_key',
+  'no_plan',
+  'needs_login',
+  'twin',
+])
+
+/**
+ * Is the "busy of max slots" chip worth showing? Not for an account that cannot take work (off, no key, no plan,
+ * signed out, or a second sign-in whose twin gets the work), unless a run is still going on it.
+ */
+export const showsSlots = (account: Account): boolean =>
+  account.busy > 0 || (account.enabled && !CANNOT_RUN.has(account.status))
+
 export const PILL_TONE: Readonly<Record<Exclude<PillState, 'status'>, Tone>> = {
   exhausted: 'attention',
   resting: 'neutral',
