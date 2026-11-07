@@ -169,11 +169,27 @@ func TestBaselineInBrief(t *testing.T) {
 
 func TestParsePorcelainZ(t *testing.T) {
 	root := filepath.FromSlash("/r")
-	out := []byte(" M a.go\x00R  new.go\x00old.go\x00?? dir/x y.txt\x00")
-	got := parsePorcelainZ(root, out)
-	want := []string{filepath.Join(root, "a.go"), filepath.Join(root, "new.go"), filepath.Join(root, "dir", "x y.txt")}
-	if !slices.Equal(got, want) {
-		t.Fatalf("got %q, want %q", got, want)
+	at := func(p ...string) []string {
+		out := make([]string, len(p))
+		for i, x := range p {
+			out[i] = filepath.Join(root, filepath.FromSlash(x))
+		}
+		return out
+	}
+	cases := []struct {
+		name, out string
+		want      []string
+	}{
+		{"index rename", " M a.go\x00R  new.go\x00old.go\x00?? dir/x y.txt\x00", at("a.go", "new.go", "dir/x y.txt")},
+		{"index copy", "C  copy.go\x00orig.go\x00 M b.go\x00", at("copy.go", "b.go")},
+		{"worktree rename", " R moved.go\x00added.go\x00 M c.go\x00", at("moved.go", "c.go")},
+		{"rename then edit", "RM n.go\x00o.go\x00", at("n.go")},
+		{"added then copied", "AC k.go\x00j.go\x00?? z\x00", at("k.go", "z")},
+	}
+	for _, c := range cases {
+		if got := parsePorcelainZ(root, []byte(c.out)); !slices.Equal(got, c.want) {
+			t.Errorf("%s: got %q, want %q", c.name, got, c.want)
+		}
 	}
 }
 

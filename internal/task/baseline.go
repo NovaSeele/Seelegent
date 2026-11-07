@@ -34,8 +34,9 @@ func captureBaseline(ctx context.Context, cwd string) (root string, files []stri
 	return root, parsePorcelainZ(root, out)
 }
 
-// parsePorcelainZ reads `git status --porcelain -z`: "XY path" entries, where a rename or copy is followed by its
-// source path, which is skipped. Paths are relative to the repository root.
+// parsePorcelainZ reads `git status --porcelain -z`: "XY path" entries, where a rename or copy, in the index (X)
+// or in the worktree (Y, an intent-to-add file renamed with status.renames), is followed by its source path, which
+// is skipped. Paths are relative to the repository root.
 func parsePorcelainZ(root string, out []byte) []string {
 	var files []string
 	fields := bytes.Split(out, []byte{0})
@@ -44,7 +45,7 @@ func parsePorcelainZ(root string, out []byte) []string {
 		if len(f) < 4 || f[2] != ' ' {
 			continue
 		}
-		if f[0] == 'R' || f[0] == 'C' {
+		if strings.ContainsAny(f[:2], "RC") {
 			i++ // the source path
 		}
 		if len(files) < baselineMax {
@@ -54,11 +55,12 @@ func parsePorcelainZ(root string, out []byte) []string {
 	return files
 }
 
-// runGit runs git without a shell in dir, with the baseline timeout and no console window.
+// runGit runs git without a shell in dir, with the baseline timeout and no console window. core.fsmonitor is
+// turned off: a worker could have planted a command there in .git/config, and git status would run it.
 func runGit(ctx context.Context, dir string, args ...string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(ctx, baselineTimeout)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "git", args...)
+	cmd := exec.CommandContext(ctx, "git", append([]string{"-c", "core.fsmonitor=false"}, args...)...)
 	cmd.Dir = dir
 	cmd.Env = append(cmd.Environ(), "GIT_OPTIONAL_LOCKS=0", "GIT_TERMINAL_PROMPT=0")
 	platform.HideWindow(cmd)

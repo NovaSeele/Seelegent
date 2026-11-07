@@ -55,8 +55,10 @@ append the events in **one transaction**, then publish on the bus. The log and t
    or a retry that never got a conversation) gets the full brief from `internal/brief`, with role, project memory,
    review history, constitution, the git baseline, earlier turns, prerequisite context, and the "you continue an
    interrupted task" section when an attempt came before. Before the first attempt of a task the baseline is taken:
-   `git status --porcelain` (literal pathspecs, no shell, 20 s timeout) lists the files under the task folder that
-   already have uncommitted changes, and the brief tells the worker not to revert them. A retry on the same
+   `git status --porcelain` (literal pathspecs, `core.fsmonitor` off, no shell, 20 s timeout) lists the files under
+   the task folder that already have uncommitted changes, and the brief tells the worker not to revert them. The
+   baseline is taken before the run waits for an account (`Pool.Wait`), so files changed while the task waits are
+   not in it. A retry on the same
    conversation resends the request itself when the failed attempt never reported a session, and otherwise the retry
    note together with the request, so a followup is never lost.
 3. **Launch.** `account.Manager.Env` builds the environment (an API key that is missing is an `auth` outcome, not an
