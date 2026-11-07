@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -515,6 +516,142 @@ func TestCleanupKeepsWorktreeWhenStoreFails(t *testing.T) {
 		d, err := e.s.Diff(ctx, c.ID, v.Label)
 		if !v.Removed || v.CleanupError != "" || err != nil || !strings.Contains(d.Diff, "+hello "+v.Label) {
 			t.Errorf("%s after the retry = %+v, diff %v", v.Label, v, err)
+		}
+	}
+}
+
+// readyWithStoredV2 makes a two-variant contest whose V2 changed a.txt, waits until it is ready and stores V2's
+// changes, as the first cleanup attempt does before its `git worktree remove` stops partway.
+func readyWithStoredV2(t *testing.T, e *env) api.Contest {
+	t.Helper()
+	ctx := t.Context()
+	c, err := e.s.Create(ctx, api.ContestRequest{DelegateRequest: api.DelegateRequest{Prompt: "Greet.", Cwd: e.root},
+		Variants: 2, NoJudge: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	write(t, filepath.Join(c.Variants[0].Worktree, "greet.txt"), "hello world\n")
+	write(t, filepath.Join(c.Variants[1].Worktree, "a.txt"), "alpha\nhello\n")
+	e.tasks.finish(c.Variants[0].TaskID, "Added greet.txt.")
+	e.tasks.finish(c.Variants[1].TaskID, "Changed a.txt.")
+	c = waitFor(t, e.s, c.ID, status(api.ContestStatusReady))
+	if err := e.s.storeVariant(ctx, &c, &c.Variants[1]); err != nil {
+		t.Fatal(err)
+	}
+	return c
+}
+
+func wantStoredV2(t *testing.T, e *env, id string) {
+	t.Helper()
+	d, err := e.s.Diff(t.Context(), id, "V2")
+	if err != nil {
+		t.Fatalf("V2 diff: %v", err)
+	}
+	if len(d.Files) != 1 || d.Files[0].Path != "a.txt" || !strings.Contains(d.Diff, "+hello") ||
+		strings.Contains(d.Diff, "deleted file") {
+		t.Errorf("V2 diff = %s", d.Diff)
+	}
+}
+
+// A `git worktree remove` that stopped partway with .git still there: the retry must not replace the stored copy
+// with the half-deleted tree.
+func TestStoredCopyOutlivesHalfRemovedWorktree(t *testing.T) {
+	e := setup(t)
+	ctx := t.Context()
+	c := readyWithStoredV2(t, e)
+	wt := c.Variants[1].Worktree
+	for _, f := range []string{"a.txt", "b.txt"} {
+		if err := os.Remove(filepath.Join(wt, f)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	c, err := e.s.Pick(ctx, c.ID, api.ContestPickRequest{Winner: "V1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v := c.Variants[1]; !v.Removed || v.CleanupError != "" {
+		t.Errorf("V2 after the pick = %+v", v)
+	}
+	wantStoredV2(t, e, c.ID)
+	if rows := e.s.scoreVariant(ctx, &c, &c.Variants[1]); rows.Files != 1 || rows.Added != 1 || rows.Removed != 0 {
+		t.Errorf("V2 row = %+v", rows)
+	}
+}
+
+// A `git worktree remove` that stopped partway after .git went (NTFS deletes it first): the views read the stored
+// copy instead of running git in a broken folder, and cleanup deletes the folder without git and without ever
+// following a link: the shared-folder link and a link the worker made into an outside folder leave their targets
+// intact.
+func TestCleanupDiscardsBrokenWorktree(t *testing.T) {
+	e := setup(t)
+	ctx := t.Context()
+	c := readyWithStoredV2(t, e)
+	wt := c.Variants[1].Worktree
+	outside := filepath.Join(t.TempDir(), "outside")
+	write(t, filepath.Join(outside, "keep", "data.txt"), "precious\n")
+	makeDirLink(t, outside, filepath.Join(wt, "ext"))
+	for _, f := range []string{".git", "a.txt"} {
+		if err := os.Remove(filepath.Join(wt, f)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	wantStoredV2(t, e, c.ID)
+	c, err := e.s.Pick(ctx, c.ID, api.ContestPickRequest{Winner: "V1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v := c.Variants[1]; !v.Removed || v.CleanupError != "" || c.CleanedAt == "" {
+		t.Errorf("V2 after the pick = %+v (cleaned %q)", v, c.CleanedAt)
+	}
+	if _, err := os.Lstat(wt); !os.IsNotExist(err) {
+		t.Errorf("the broken worktree is still there: %v", err)
+	}
+	if got := git(t, e.root, "worktree", "list", "--porcelain"); strings.Contains(got, "V2") {
+		t.Errorf("git still lists V2:\n%s", got)
+	}
+	if got := read(t, filepath.Join(outside, "keep", "data.txt")); got != "precious\n" {
+		t.Errorf("the outside folder lost its file: %q", got)
+	}
+	if got := read(t, filepath.Join(e.root, "deps", "lib.txt")); got != "lib\n" {
+		t.Errorf("the shared folder lost its file: %q", got)
+	}
+	wantStoredV2(t, e, c.ID)
+}
+
+// makeDirLink makes link point at the folder target: a junction on Windows (what a worker's tools make without
+// privileges), a symbolic link elsewhere.
+func makeDirLink(t *testing.T, target, link string) {
+	t.Helper()
+	if runtime.GOOS != "windows" {
+		if err := os.Symlink(target, link); err != nil {
+			t.Fatal(err)
+		}
+		return
+	}
+	out, err := exec.CommandContext(t.Context(), "cmd.exe", "/d", "/c", "mklink", "/J", link, target).CombinedOutput()
+	if err != nil {
+		t.Fatalf("mklink /J: %v\n%s", err, out)
+	}
+	if got := read(t, filepath.Join(link, "keep", "data.txt")); got != "precious\n" {
+		t.Fatalf("the junction does not reach its target: %q", got)
+	}
+}
+
+// A cut diff ends at a line end when one fits, else on a character boundary: never half a UTF-8 character.
+func TestCutDiff(t *testing.T) {
+	for _, c := range []struct {
+		text  string
+		limit int
+		want  string
+	}{
+		{"ab\ncd\n", 10, "ab\ncd\n"},
+		{"ab\ncdé\n", 6, "ab\n"},
+		{"aé", 2, "a"},
+		{"日本語", 7, "日本"},
+		{"日本語", 2, ""},
+	} {
+		if got := cutDiff(c.text, c.limit); got != c.want {
+			t.Errorf("cutDiff(%q, %d) = %q, want %q", c.text, c.limit, got, c.want)
 		}
 	}
 }

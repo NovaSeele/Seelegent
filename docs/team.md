@@ -190,11 +190,17 @@ link a worker made (removed as links, never followed), then everything left is c
 its own index, and only then plain `git worktree remove` runs, which refuses a dirty worktree. Committing after the
 links are gone means a worker that edited `.gitignore` can no longer get a linked folder committed and applied to
 the user's tree (old bug D21). A removal that fails is recorded on the variant (`cleanupError`) and retried at the
-next start. `POST /contests/{id}/cancel` stops the variants and the judge; the user's working tree is not touched.
+next start. The stored copy is written once and never replaced: `git worktree remove` deletes file by file and can
+stop partway (a locked file on Windows, a read-only folder), and a retry would otherwise store the half-deleted
+tree. No git command runs in a folder that is no longer a worktree of its own (its `.git` went first, as NTFS
+deletes it): with a stored copy, such a folder is deleted without git, entry by entry, removing every link or
+junction as itself and never walking into one, only strictly inside the contest's folder under the worktree base,
+and then `git worktree prune` drops git's record. `POST /contests/{id}/cancel` stops the variants and the judge; the user's working tree is not touched.
 
 Every change publishes `contest.updated` with the summary. `GET /contests/{id}/variants/{label}/diff` answers the
 variant's diff against the base (cut at 400 000 bytes, `truncated` then) as text and parsed per file (`files`, for
-the dashboard): from git while the worktree exists, from the stored copy after cleanup.
+the dashboard): from the stored copy as soon as one exists, from git while the worktree exists and nothing is
+stored yet. A cut diff ends at a line end.
 
 The commits a contest leaves in the user's repository (`applied.commit`, a variant's `commit`, the commit made
 before `git worktree remove`) are referenced by nothing: Seelegent adds no branch, tag or ref, so `git gc` may prune

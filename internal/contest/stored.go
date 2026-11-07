@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
+	"unicode/utf8"
 
 	"github.com/NovaSeele/Seelegent/internal/api"
 	"github.com/NovaSeele/Seelegent/internal/fsutil"
@@ -86,8 +88,17 @@ func (s *Service) recordPath(id, label string) string {
 	return filepath.Join(s.contestDir(id), label+".json")
 }
 
-// storeVariant writes the variant's changes against the base, from its worktree as it is now, to the data folder.
+// storeVariant writes the variant's changes against the base, from its worktree as it is now, to the data folder,
+// once: a valid stored copy is never replaced. Cleanup only runs once the variant's task has stopped, so the first
+// copy is the final content; a retry after a `git worktree remove` that stopped partway would only see a
+// half-deleted tree. A worktree git no longer knows as one (its .git went first) is never read.
 func (s *Service) storeVariant(ctx context.Context, c *api.Contest, v *api.ContestVariant) error {
+	if _, err := s.storedVariant(c.ID, v.Label); err == nil {
+		return nil
+	}
+	if !s.trees.Working(ctx, v.Worktree) {
+		return errors.New("the worktree is no longer a git worktree and no copy of its changes was stored")
+	}
 	tmp := filepath.Join(s.o.Dir, "tmp")
 	if err := os.MkdirAll(tmp, 0o700); err != nil {
 		return err
@@ -149,6 +160,34 @@ func (s *Service) storedVariant(id, label string) (variantRecord, error) {
 		rec.Files = []string{}
 	}
 	return rec, nil
+}
+
+// stored reads the variant's stored copy for the views. has is false when there is none; err is set when there is
+// one that cannot be read back (DataDamaged). A stored copy always wins over the worktree: once it exists the
+// worktree may be half removed.
+func (s *Service) stored(c *api.Contest, v *api.ContestVariant) (rec variantRecord, has bool, err error) {
+	rec, err = s.storedVariant(c.ID, v.Label)
+	var de *DataError
+	if errors.As(err, &de) && de.Reason == DataGone {
+		return variantRecord{}, false, nil
+	}
+	return rec, true, err
+}
+
+// cutDiff cuts a diff to at most limit bytes, at the end of a line when one fits (else at a character boundary),
+// so a cut never splits a UTF-8 character or leaves half a line.
+func cutDiff(text string, limit int) string {
+	if len(text) <= limit {
+		return text
+	}
+	cut := text[:limit]
+	if i := strings.LastIndexByte(cut, '\n'); i >= 0 {
+		return cut[:i+1]
+	}
+	for len(cut) > 0 && !utf8.RuneStart(text[len(cut)]) {
+		cut = cut[:len(cut)-1]
+	}
+	return cut
 }
 
 // live reports whether the variant's worktree is still there to be read with git.

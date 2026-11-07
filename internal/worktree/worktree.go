@@ -396,6 +396,9 @@ func (t *Trees) CommitAll(ctx context.Context, wt, message string) (string, erro
 	if err != nil {
 		return "", err
 	}
+	if !t.Working(ctx, w) {
+		return "", fmt.Errorf("worktree %s is no longer a git worktree", wt)
+	}
 	opt := gitx.ExecOptions{Owned: true}
 	if _, err := t.Git.Exec(ctx, w, opt, "add", "-A", "--", "."); err != nil {
 		return "", err
@@ -442,6 +445,10 @@ func (t *Trees) Remove(ctx context.Context, root, wt string, env *api.WorktreeEn
 	if _, _, err := RemoveLinks(wt, env); err != nil {
 		return "", fmt.Errorf("remove shared-folder links: %w", err)
 	}
+	// A removal that stopped partway may have taken .git: git would then run in whatever repository lies above.
+	if !t.Working(ctx, wt) {
+		return "", fmt.Errorf("worktree %s is no longer a git worktree (an earlier removal stopped partway)", wt)
+	}
 	// Links a worker made itself go too: removing the folder must never reach through one.
 	if err := removeStrayLinks(wt, t.trackedLinks(ctx, wt)); err != nil {
 		return "", err
@@ -454,6 +461,106 @@ func (t *Trees) Remove(ctx context.Context, root, wt string, env *api.WorktreeEn
 		return commit, err
 	}
 	return commit, nil
+}
+
+// Working reports whether wt is still a git worktree of its own: its .git entry is there and git, run inside it,
+// names wt itself as the top of the working tree (never a repository above it).
+func (t *Trees) Working(ctx context.Context, wt string) bool {
+	if _, err := os.Lstat(filepath.Join(wt, ".git")); err != nil {
+		return false
+	}
+	out, err := t.Git.Exec(ctx, wt, gitx.ExecOptions{Timeout: gitx.ReadTimeout}, "rev-parse", "--show-toplevel")
+	if err != nil {
+		return false
+	}
+	same, err := fsutil.SamePath(strings.TrimSpace(string(out)), wt)
+	return err == nil && same
+}
+
+// Discard deletes the folder of a worktree git no longer knows as one (a `git worktree remove` that stopped
+// partway), once its changes are kept elsewhere, then prunes git's record of it. wt must be owned and lie strictly
+// inside scope (the contest's folder under Base). The shared-folder links and every other link go first, as
+// themselves; the folder is then deleted entry by entry without ever following a link or junction (a linked
+// node_modules points into the user's real folder).
+func (t *Trees) Discard(ctx context.Context, root, wt, scope string, env *api.WorktreeEnv) error {
+	if _, err := t.owned(wt); err != nil {
+		return err
+	}
+	if _, err := t.owned(scope); err != nil {
+		return err
+	}
+	inScope, err := fsutil.Within(scope, wt)
+	if err != nil {
+		return err
+	}
+	if same, _ := fsutil.SamePath(scope, wt); !inScope || same {
+		return fmt.Errorf("worktree %s is not inside %s", wt, scope)
+	}
+	fi, err := os.Lstat(wt)
+	switch {
+	case errors.Is(err, os.ErrNotExist):
+	case err != nil:
+		return err
+	case platform.IsLink(fi):
+		if _, err := platform.RemoveLink(wt); err != nil {
+			return err
+		}
+	default:
+		if _, _, err := RemoveLinks(wt, env); err != nil {
+			return fmt.Errorf("remove shared-folder links: %w", err)
+		}
+		if err := removeStrayLinks(wt, nil); err != nil {
+			return err
+		}
+		if err := removeTree(wt); err != nil {
+			return err
+		}
+	}
+	_, err = t.Git.Exec(ctx, root, gitx.ExecOptions{}, "worktree", "prune")
+	return err
+}
+
+// removeTree deletes p and everything below it. A link or junction (any reparse point) is removed as itself and
+// never walked into; a read-only file is made writable first.
+func removeTree(p string) error {
+	n := 0
+	var walk func(p string) error
+	walk = func(p string) error {
+		n++
+		if n > maxWalk {
+			return fmt.Errorf("more than %d entries; remove it by hand", maxWalk)
+		}
+		fi, err := os.Lstat(p)
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if platform.IsLink(fi) {
+			_, err := platform.RemoveLink(p)
+			return err
+		}
+		if fi.IsDir() {
+			entries, err := os.ReadDir(p)
+			if err != nil {
+				return err
+			}
+			for _, e := range entries {
+				if err := walk(filepath.Join(p, e.Name())); err != nil {
+					return err
+				}
+			}
+		}
+		if err := os.Remove(p); err != nil {
+			if cerr := os.Chmod(p, 0o700); cerr != nil {
+				return err
+			}
+			return os.Remove(p)
+		}
+		return nil
+	}
+	return walk(p)
 }
 
 // maxWalk bounds the entries removeStrayLinks looks at.

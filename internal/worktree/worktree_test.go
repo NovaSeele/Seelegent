@@ -135,6 +135,42 @@ func TestWorktreeLifecycle(t *testing.T) {
 	}
 }
 
+// Discard deletes only a folder strictly inside its scope below Base, and Remove and CommitAll never run git in a
+// folder that is no longer a worktree of its own.
+func TestDiscardScope(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	trees := &Trees{Git: gitx.New(nil, nil), Base: filepath.Join(dir, "worktrees")}
+	scope := filepath.Join(trees.Base, "c1")
+	wt := filepath.Join(scope, "V1")
+	write(t, filepath.Join(wt, "f.txt"), "x\n")
+	other := filepath.Join(trees.Base, "c2", "V1")
+	write(t, filepath.Join(other, "f.txt"), "x\n")
+	root := filepath.Join(dir, "repo")
+	write(t, filepath.Join(root, "a.txt"), "a\n")
+	git(t, root, "init", "-q")
+	for _, bad := range [][2]string{{other, scope}, {scope, scope}, {filepath.Join(dir, "x"), dir}} {
+		if err := trees.Discard(ctx, root, bad[0], bad[1], nil); err == nil {
+			t.Errorf("discard %s in %s succeeded", bad[0], bad[1])
+		}
+	}
+	if _, err := os.Stat(filepath.Join(other, "f.txt")); err != nil {
+		t.Fatalf("a folder outside the scope was touched: %v", err)
+	}
+	if trees.Working(ctx, wt) {
+		t.Error("a plain folder counts as a worktree")
+	}
+	if _, err := trees.CommitAll(ctx, wt, "x"); err == nil {
+		t.Error("commit in a folder that is not a worktree succeeded")
+	}
+	if err := trees.Discard(ctx, root, wt, scope, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Lstat(wt); !os.IsNotExist(err) {
+		t.Errorf("worktree still there: %v", err)
+	}
+}
+
 // The repository's hooks never run for internal commands, and a symlink git tracks survives the final commit.
 func TestNoHooksAndTrackedLinks(t *testing.T) {
 	ctx := context.Background()
