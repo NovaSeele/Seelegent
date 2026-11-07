@@ -14,6 +14,7 @@ import (
 
 	"github.com/NovaSeele/Seelegent/internal/buildinfo"
 	"github.com/NovaSeele/Seelegent/internal/client"
+	"github.com/NovaSeele/Seelegent/internal/guard"
 	"github.com/NovaSeele/Seelegent/internal/ops"
 )
 
@@ -34,6 +35,10 @@ const annOp = "seelegent.op"
 // Execute runs the command line with the process arguments and exits with its status code.
 func Execute() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	if code, ok := shimMain(ctx); ok {
+		stop()
+		os.Exit(code)
+	}
 	code := Run(ctx, os.Args[1:], os.Stdout, os.Stderr)
 	stop()
 	os.Exit(code)
@@ -46,6 +51,11 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 
 // run is Run with the outside dependencies passed in (tests replace them).
 func run(ctx context.Context, d deps, args []string, stdout, stderr io.Writer) int {
+	if len(args) > 0 && args[0] == guard.ShimSubcommand {
+		// The git shim passes git's arguments untouched, so it never goes through cobra's flag parsing.
+		dir, rest := gitShimArgs(args[1:])
+		return runGitShim(ctx, dir, rest, os.Stdin, stdout, stderr)
+	}
 	root := newRoot(buildinfo.Get(), d)
 	root.SetArgs(args)
 	root.SetOut(stdout)
@@ -92,7 +102,8 @@ func newRoot(info buildinfo.Info, d deps) *cobra.Command {
 		newUICommand(d), newStopCommand(d), newRestartCommand(d), newStatusCommand(d), newDoctorCommand(info, d),
 		newDelegateCommand(d), newRunCommand(d), newFollowupCommand(d), newWaitCommand(d), newReviewCommand(d),
 		newCancelCommand(d), newTaskCommand(d), newLsCommand(d), newMemoryCommand(d))
-	root.AddCommand(newSetupCommand(info), newSkillCommand(info), newMigrateCommand(), newHookCommand())
+	root.AddCommand(newSetupCommand(info), newSkillCommand(info), newMigrateCommand(), newHookCommand(),
+		newGuardCommand())
 	return root
 }
 

@@ -135,6 +135,9 @@ type Options struct {
 	Dashboard func(taskID string) string
 	// Git is the daemon's git executable, for the baseline (gitx.NewBinary over BaseEnv when nil).
 	Git *gitx.Binary
+	// GitShim is the folder of the git shim (guard.InstallShim) put first on PATH for workers without a pre-tool
+	// hook while the gitGuard setting is on; "" leaves PATH alone.
+	GitShim string
 	// Clock is the time source (the system clock when nil).
 	Clock clock.Clock
 	// Logger receives engine logs (discarded when nil). Use a logx logger so secrets are masked.

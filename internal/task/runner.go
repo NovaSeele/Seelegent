@@ -472,6 +472,9 @@ func (s *Service) launchAndFollow(r *run, t *Task, turn, n int, acc account.Acco
 	if err := b.Prepare(env.Profile, prov); err != nil {
 		return failed(event.ClassFatal, fmt.Errorf("prepare the profile: %w", err))
 	}
+	if s.o.GitShim != "" && set.GitGuard && !t.AllowGit && backend.NeedsShim(b, env.Profile) {
+		env.Vars = prependPath(env.Vars, s.o.GitShim)
+	}
 	timeout := time.Duration(set.TaskTimeoutMinutes) * time.Minute
 	bt := backend.Turn{Prompt: prompt, Model: model, Plan: t.Mode == ModePlan, Timeout: timeout,
 		Profile: env.Profile, AttemptDir: dir, Sandbox: set.Backends.Codex.Sandbox}
@@ -974,4 +977,20 @@ func relInside(base, p string) (string, bool) {
 		return "", false
 	}
 	return rel, true
+}
+
+// prependPath puts dir first on the PATH of env (the variable is matched without case, as Windows spells it Path).
+func prependPath(env []string, dir string) []string {
+	out := append([]string(nil), env...)
+	for i, kv := range out {
+		if eq := strings.IndexByte(kv, '='); eq > 0 && strings.EqualFold(kv[:eq], "PATH") {
+			if kv[eq+1:] == "" {
+				out[i] = kv[:eq+1] + dir
+			} else {
+				out[i] = kv[:eq+1] + dir + string(os.PathListSeparator) + kv[eq+1:]
+			}
+			return out
+		}
+	}
+	return append(out, "PATH="+dir)
 }

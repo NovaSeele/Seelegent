@@ -1,0 +1,612 @@
+// Package guard is Seelegent's git guard: it reads a worker's shell command (or a git argument list) and refuses
+// the git operations that can discard, move or sweep up uncommitted work that belongs to other people in the same
+// folder (stash, reset, restore, checkout of paths, clean, commit -a/--amend, push, ...).
+//
+// The guard is pure: it never runs anything. The pre-tool hooks of the worker CLIs (`seelegent __guard`) and the
+// git shim (`seelegent __git`) call it; the only outside lookup, a git alias, goes through Checker.Alias. It reads
+// POSIX shells, PowerShell and cmd.exe, follows substitutions, subshells, blocks, wrappers (env, xargs, sudo,
+// nohup, time, timeout, find -exec, ...) and interpreters (bash -c, cmd /c, powershell -c and -EncodedCommand,
+// node -e, python -c, eval, Invoke-Expression), and fails closed: a line it cannot read that mentions git is
+// refused. What it cannot see (a command stored in a variable, a script file, a build tool) is listed in
+// docs/safety.md.
+package guard
+
+import (
+	"encoding/base64"
+	"encoding/binary"
+	"errors"
+	"regexp"
+	"strings"
+	"unicode/utf16"
+)
+
+// Marker starts every refusal; the backend parsers look for it to record blocked commands.
+const Marker = "Blocked by Seelegent"
+
+// reasonText is the refusal of a risky git command (the old guard's wording, which workers already know).
+const reasonText = Marker + ": this git command can discard or move uncommitted work that belongs to other people " +
+	"in this folder. Files with changes you did not make are expected: leave them. Undo your own edit with your " +
+	"edit tool. If you truly need this, say so under ## Blocked."
+
+// unreadableText is the refusal of a line the guard could not read.
+const unreadableText = Marker + ": this command mentions git but could not be read safely (an unclosed quote, " +
+	"a variable used as a git subcommand or option, or nesting that is too deep). Write the git command plainly, " +
+	"without variables or substitutions in the git part. If you truly need it, say so under ## Blocked."
+
+// Result is the guard's decision.
+type Result struct {
+	// Deny is true when the command must not run.
+	Deny bool
+	// Reason is the text shown to the worker (it starts with Marker).
+	Reason string
+	// Git is the refused git command, as words (empty for an unreadable line).
+	Git string
+	// bad marks an allowed result in which a part could not be read in the dialect tried: the line is refused
+	// only when no dialect could read it.
+	bad bool
+}
+
+// merge keeps the "could not read" mark of r in an allowed result.
+func (r Result) merge(o Result) Result {
+	if o.bad {
+		r.bad = true
+	}
+	return r
+}
+
+// allow is the decision to let a command run.
+var allow = Result{}
+
+func denyGit(args []word) Result {
+	parts := make([]string, 0, len(args)+1)
+	parts = append(parts, "git")
+	for _, a := range args {
+		parts = append(parts, a.text)
+	}
+	cmd := strings.Join(parts, " ")
+	if len(cmd) > 120 {
+		cmd = cmd[:117] + "..."
+	}
+	return Result{Deny: true, Reason: reasonText + " (refused: " + cmd + ")", Git: cmd}
+}
+
+func denyUnreadable() Result { return Result{Deny: true, Reason: unreadableText} }
+
+// Checker checks commands. The zero value works; Alias adds git alias resolution.
+type Checker struct {
+	// Alias returns the value of git alias name (alias.<name>), and whether it exists. nil: aliases are not
+	// resolved, and an unknown git subcommand is allowed.
+	Alias func(name string) (value string, ok bool)
+}
+
+// Check reads a command line in every dialect and refuses it when one of them runs a risky git command.
+func Check(line string) Result { return Checker{}.Command(line) }
+
+// Command reads line in the given shells (all of them when none is given).
+func (c Checker) Command(line string, shells ...Shell) Result {
+	if len(shells) == 0 {
+		shells = allShells
+	}
+	read := false
+	for _, sh := range shells {
+		r := c.line(line, sh, 0)
+		if r.Deny {
+			return r
+		}
+		read = read || !r.bad
+	}
+	if !read && mentionsGit.MatchString(line) {
+		return denyUnreadable()
+	}
+	return allow
+}
+
+// Git checks the arguments of a git command (without "git" itself), as the git shim receives them.
+func (c Checker) Git(args []string) Result {
+	ws := make([]word, len(args))
+	for i, a := range args {
+		ws[i] = word{text: a}
+	}
+	return c.git(ws, 0)
+}
+
+// mentionsGit is the fail-closed test for a line that could not be read.
+var mentionsGit = regexp.MustCompile(`(?i)git`)
+
+func (c Checker) line(line string, sh Shell, depth int) Result {
+	if depth > maxDepth {
+		return denyUnreadable()
+	}
+	if strings.TrimSpace(line) == "" {
+		return allow
+	}
+	segs, err := parse(line, sh, depth)
+	if errors.Is(err, errDepth) {
+		return denyUnreadable()
+	}
+	res := Result{bad: err != nil}
+	for _, s := range segs {
+		r := c.segment(s, sh, depth)
+		if r.Deny {
+			return r
+		}
+		res = res.merge(r)
+	}
+	return res
+}
+
+// cmdName is a command word reduced to its name: the last path element, lower case, without .exe/.cmd/.bat/.com.
+func cmdName(w word) string {
+	t := strings.Trim(w.text, `"'`)
+	if i := strings.LastIndexAny(t, `/\`); i >= 0 {
+		t = t[i+1:]
+	}
+	t = strings.ToLower(t)
+	for _, ext := range []string{".exe", ".cmd", ".bat", ".com"} {
+		t = strings.TrimSuffix(t, ext)
+	}
+	return t
+}
+
+var assignment = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*\+?=`)
+
+// keywords are shell words that come before a command without changing it.
+var keywords = map[string]bool{
+	"!": true, "{": true, "}": true, "if": true, "then": true, "else": true, "elif": true, "do": true,
+	"while": true, "until": true, "time": true, "&": true, ".": false,
+}
+
+// wrapper describes a command that runs another command given in its arguments.
+type wrapper struct {
+	// valued lists options that take the next word as their value.
+	valued map[string]bool
+	// positional is the number of arguments before the command (timeout's duration, flock's file).
+	positional int
+	// assigns: NAME=value words may come before the command (env).
+	assigns bool
+	// stdinArgs: the command gets more arguments from standard input (xargs).
+	stdinArgs bool
+}
+
+func set(names ...string) map[string]bool {
+	m := make(map[string]bool, len(names))
+	for _, n := range names {
+		m[n] = true
+	}
+	return m
+}
+
+var wrappers = map[string]wrapper{
+	"env":        {valued: set("-u", "--unset", "-C", "--chdir"), assigns: true},
+	"sudo":       {valued: set("-u", "-g", "-h", "-p", "-C", "-D", "-r", "-t", "-U", "-T", "--user", "--group", "--host", "--prompt", "--chdir")},
+	"doas":       {valued: set("-u", "-C")},
+	"nohup":      {},
+	"nice":       {valued: set("-n", "--adjustment")},
+	"ionice":     {valued: set("-c", "-n", "-p", "--class", "--classdata")},
+	"timeout":    {valued: set("-s", "-k", "--signal", "--kill-after"), positional: 1},
+	"stdbuf":     {valued: set("-i", "-o", "-e")},
+	"setsid":     {},
+	"command":    {},
+	"builtin":    {},
+	"exec":       {valued: set("-a")},
+	"time":       {valued: set("-f", "-o", "--format", "--output")},
+	"xargs":      {valued: set("-I", "-L", "-n", "-P", "-s", "-d", "-E", "-a", "--arg-file", "--delimiter", "--max-args", "--max-procs", "--max-lines", "--max-chars", "--replace", "--eof"), stdinArgs: true},
+	"watch":      {valued: set("-n", "--interval", "-d", "-x")},
+	"strace":     {valued: set("-o", "-e", "-p", "-s", "-u")},
+	"ltrace":     {valued: set("-o", "-e", "-p", "-s", "-u")},
+	"flock":      {valued: set("-w", "--timeout", "-E", "--conflict-exit-code"), positional: 1},
+	"chronic":    {},
+	"unbuffer":   {},
+	"caffeinate": {valued: set("-t", "-w")},
+	"call":       {},
+	"wsl":        {valued: set("-d", "--distribution", "-u", "--user", "--cd")},
+	"runas":      {},
+	"busybox":    {},
+	"winpty":     {},
+}
+
+// segment checks one simple command.
+func (c Checker) segment(s *segment, sh Shell, depth int) Result {
+	ws := s.words
+	// Leading assignments: NAME=value (POSIX, cmd's set is a command of its own) and $x = ... (PowerShell).
+	for len(ws) > 0 {
+		w := ws[0]
+		switch {
+		case !w.quoted && sh == POSIX && assignment.MatchString(w.text):
+			ws = ws[1:]
+			continue
+		case sh == PowerShell && strings.HasPrefix(w.text, "$") && len(ws) > 1 &&
+			(ws[1].text == "=" || ws[1].text == "+=") && !ws[1].quoted:
+			ws = ws[2:]
+			continue
+		}
+		break
+	}
+	return c.command(ws, s, sh, depth)
+}
+
+// command checks a command given as words (after assignments).
+func (c Checker) command(ws []word, s *segment, sh Shell, depth int) Result {
+	if depth > maxDepth {
+		return denyUnreadable()
+	}
+	for len(ws) > 0 && !ws[0].quoted && keywords[strings.ToLower(ws[0].text)] {
+		ws = ws[1:]
+		if len(ws) > 0 && ws[0].text == "-p" {
+			ws = ws[1:]
+		}
+	}
+	if len(ws) == 0 {
+		return allow
+	}
+	head := ws[0]
+	args := ws[1:]
+	if head.dynamic {
+		// An unknown program: if its arguments read as a risky git command, the program may well be git.
+		if r := c.git(args, depth+1); r.Deny {
+			return r
+		}
+		return allow
+	}
+	name := cmdName(head)
+	if name == "git" {
+		return c.git(args, depth+1)
+	}
+	if strings.HasPrefix(name, "git-") && builtins[name[4:]] {
+		return c.git(append([]word{{text: name[4:]}}, args...), depth+1)
+	}
+	if wr, ok := wrappers[name]; ok {
+		if name == "command" && len(args) > 0 && (args[0].text == "-v" || args[0].text == "-V") {
+			return allow
+		}
+		rest, ok := unwrap(wr, args)
+		if !ok {
+			return allow
+		}
+		if wr.stdinArgs {
+			rest = append(rest, word{text: "$STDIN", dynamic: true})
+		}
+		if name == "env" {
+			if r := c.envSplit(args, sh, depth); r.Deny {
+				return r
+			}
+		}
+		return c.command(rest, s, sh, depth+1)
+	}
+	switch name {
+	case "bash", "sh", "zsh", "dash", "ksh", "mksh", "ash", "fish", "yash", "tcsh", "csh":
+		return c.posixShell(args, s, sh, depth)
+	case "cmd":
+		return c.cmdShell(args, s, depth)
+	case "powershell", "pwsh", "powershell_ise":
+		return c.pwshShell(args, s, depth)
+	case "node", "nodejs", "deno", "bun", "python", "python3", "python2", "py", "pythonw", "perl", "ruby", "php",
+		"osascript":
+		return c.interpreter(name, args, depth)
+	case "eval":
+		return c.line(joinWords(args), POSIX, depth+1)
+	case "iex", "invoke-expression":
+		return c.line(joinWords(stripNamed(args, "-command")), PowerShell, depth+1)
+	case "invoke-command", "icm", "start-job", "sajb":
+		// Their -ScriptBlock {...} was parsed as nested commands already.
+		return allow
+	case "find":
+		return c.findExec(args, s, sh, depth)
+	case "start-process", "saps", "start":
+		return c.startProcess(args, sh, depth)
+	}
+	return allow
+}
+
+// unwrap skips a wrapper's own options and arguments and returns the command it runs (ok false: none).
+func unwrap(wr wrapper, args []word) ([]word, bool) {
+	i := 0
+	for i < len(args) {
+		a := args[i]
+		t := a.text
+		switch {
+		case t == "--":
+			i++
+			goto positional
+		case wr.assigns && !a.quoted && assignment.MatchString(t):
+			i++
+			continue
+		case strings.HasPrefix(t, "-") && len(t) > 1 && !a.dynamic:
+			if eq := strings.IndexByte(t, '='); eq > 0 {
+				i++
+				continue
+			}
+			if wr.valued[t] {
+				i += 2
+				continue
+			}
+			i++
+			continue
+		}
+		break
+	}
+positional:
+	i += wr.positional
+	if i >= len(args) {
+		return nil, false
+	}
+	return args[i:], true
+}
+
+// envSplit checks env -S/--split-string, whose value is a command line.
+func (c Checker) envSplit(args []word, sh Shell, depth int) Result {
+	for i, a := range args {
+		switch {
+		case (a.text == "-S" || a.text == "--split-string") && i+1 < len(args):
+			return c.line(args[i+1].text+" "+joinWords(args[i+2:]), sh, depth+1)
+		case strings.HasPrefix(a.text, "--split-string="):
+			return c.line(strings.TrimPrefix(a.text, "--split-string=")+" "+joinWords(args[i+1:]), sh, depth+1)
+		case strings.HasPrefix(a.text, "-S") && len(a.text) > 2:
+			return c.line(a.text[2:]+" "+joinWords(args[i+1:]), sh, depth+1)
+		}
+	}
+	return allow
+}
+
+func joinWords(ws []word) string {
+	parts := make([]string, len(ws))
+	for i, w := range ws {
+		parts[i] = w.text
+	}
+	return strings.Join(parts, " ")
+}
+
+// stripNamed removes a named PowerShell parameter (its name only) from args.
+func stripNamed(args []word, name string) []word {
+	out := make([]word, 0, len(args))
+	for _, a := range args {
+		if !a.quoted && strings.EqualFold(a.text, name) {
+			continue
+		}
+		out = append(out, a)
+	}
+	return out
+}
+
+// posixShell checks bash -c 'script' (and a script piped into a shell).
+func (c Checker) posixShell(args []word, s *segment, sh Shell, depth int) Result {
+	for i := 0; i < len(args); i++ {
+		t := args[i].text
+		switch {
+		case t == "--rcfile" || t == "--init-file" || t == "-o" || t == "+o" || t == "-O" || t == "+O":
+			i++
+		case t == "-c" || (strings.HasPrefix(t, "-") && !strings.HasPrefix(t, "--") && strings.Contains(t, "c")):
+			if i+1 >= len(args) {
+				return allow
+			}
+			return c.line(args[i+1].text, POSIX, depth+1)
+		case strings.HasPrefix(t, "-") || strings.HasPrefix(t, "+"):
+		default:
+			return allow // a script file
+		}
+	}
+	return c.piped(s, sh, depth)
+}
+
+// piped checks what is piped into an interpreter that reads its script from standard input.
+func (c Checker) piped(s *segment, sh Shell, depth int) Result {
+	if s == nil || !s.piped || s.prev == nil {
+		return allow
+	}
+	ws := s.prev.words
+	if len(ws) > 0 {
+		ws = ws[1:]
+	}
+	for _, w := range ws {
+		if r := c.Command(w.text); r.Deny {
+			return r
+		}
+	}
+	return c.line(joinWords(ws), sh, depth+1)
+}
+
+// cmdShell checks cmd /c ... and cmd /k ....
+func (c Checker) cmdShell(args []word, s *segment, depth int) Result {
+	for i, a := range args {
+		t := strings.ToLower(a.text)
+		if strings.HasPrefix(t, "/c") || strings.HasPrefix(t, "/k") || t == "-c" || t == "-k" {
+			first := a.text[2:]
+			if t == "-c" || t == "-k" {
+				first = ""
+			}
+			script := strings.TrimSpace(first + " " + joinWords(args[i+1:]))
+			return c.line(script, Cmd, depth+1)
+		}
+		if !strings.HasPrefix(t, "/") {
+			return allow
+		}
+	}
+	return c.piped(s, Cmd, depth)
+}
+
+// pwshValued are powershell.exe/pwsh options that take a value.
+var pwshValued = set("-executionpolicy", "-ep", "-ex", "-exec", "-windowstyle", "-w", "-workingdirectory", "-wd",
+	"-inputformat", "-if", "-inp", "-outputformat", "-of", "-o", "-configurationname", "-config", "-version", "-v",
+	"-settingsfile", "-psconsolefile", "-custompipename", "-configurationfile")
+
+// pwshShell checks powershell -Command ..., -EncodedCommand ... and a bare command.
+func (c Checker) pwshShell(args []word, s *segment, depth int) Result {
+	for i := 0; i < len(args); i++ {
+		t := strings.ToLower(args[i].text)
+		if strings.HasPrefix(t, "/") {
+			t = "-" + t[1:]
+		}
+		switch {
+		case t == "-c" || len(t) >= 3 && strings.HasPrefix("-command", t) && t != "-co":
+			return c.line(joinWords(args[i+1:]), PowerShell, depth+1)
+		case t == "-co":
+			// -co is ambiguous for pwsh (-Command, -ConfigurationName); refuse when what follows is git.
+			return c.line(joinWords(args[i+1:]), PowerShell, depth+1)
+		case t == "-e" || t == "-ec" || len(t) >= 3 && strings.HasPrefix("-encodedcommand", t):
+			if i+1 >= len(args) {
+				return allow
+			}
+			script, ok := decodeUTF16Base64(args[i+1].text)
+			if !ok {
+				return denyUnreadable()
+			}
+			return c.line(script, PowerShell, depth+1)
+		case t == "-f" || t == "-file":
+			return allow
+		case pwshValued[t]:
+			i++
+		case strings.HasPrefix(t, "-"):
+		default:
+			// powershell.exe runs the remaining words as a command (pwsh would treat the first as a file).
+			return c.line(joinWords(args[i:]), PowerShell, depth+1)
+		}
+	}
+	return c.piped(s, PowerShell, depth)
+}
+
+// decodeUTF16Base64 decodes powershell -EncodedCommand (base64 of UTF-16LE text).
+func decodeUTF16Base64(s string) (string, bool) {
+	raw, err := base64.StdEncoding.DecodeString(strings.TrimSpace(s))
+	if err != nil || len(raw)%2 != 0 {
+		return "", false
+	}
+	u := make([]uint16, len(raw)/2)
+	for i := range u {
+		u[i] = binary.LittleEndian.Uint16(raw[2*i:])
+	}
+	return string(utf16.Decode(u)), true
+}
+
+// interpreter checks the inline code of a scripting language (node -e, python -c, ...): every string literal is
+// read as a command line, and a literal "git" followed by more literals as a git argument list.
+func (c Checker) interpreter(name string, args []word, depth int) Result {
+	flags := map[string]string{
+		"node": "e", "nodejs": "e", "bun": "e", "deno": "", "python": "c", "python3": "c", "python2": "c", "py": "c",
+		"pythonw": "c", "perl": "eE", "ruby": "e", "php": "r", "osascript": "e",
+	}[name]
+	for i := 0; i < len(args); i++ {
+		t := args[i].text
+		code := ""
+		switch {
+		case name == "deno" && t == "eval" && i+1 < len(args):
+			code = args[i+1].text
+		case t == "--eval" || t == "--print" || (name == "node" || name == "bun") && t == "-p":
+			if i+1 < len(args) {
+				code = args[i+1].text
+			}
+		case strings.HasPrefix(t, "--eval=") || strings.HasPrefix(t, "--print="):
+			code = t[strings.IndexByte(t, '=')+1:]
+		case strings.HasPrefix(t, "-") && !strings.HasPrefix(t, "--") && len(t) > 1 && flags != "" &&
+			strings.ContainsAny(t[len(t)-1:], flags):
+			if i+1 < len(args) {
+				code = args[i+1].text
+			}
+		default:
+			continue
+		}
+		return c.code(code, depth)
+	}
+	return allow
+}
+
+// code checks the string literals of inline code.
+func (c Checker) code(code string, depth int) Result {
+	lits := literals(code)
+	for i, l := range lits {
+		if r := c.Command(l); r.Deny {
+			return r
+		}
+		if cmdName(word{text: l}) == "git" {
+			ws := make([]word, 0, len(lits)-i-1)
+			for _, a := range lits[i+1:] {
+				ws = append(ws, word{text: a})
+			}
+			if r := c.git(ws, depth+1); r.Deny {
+				return r
+			}
+		}
+	}
+	return allow
+}
+
+// literals returns the quoted string literals of code ('...', "...", `...`, with backslash escapes).
+func literals(code string) []string {
+	var out []string
+	for i := 0; i < len(code); i++ {
+		q := code[i]
+		if q != '\'' && q != '"' && q != '`' {
+			continue
+		}
+		var b strings.Builder
+		j := i + 1
+		for ; j < len(code) && code[j] != q; j++ {
+			if code[j] == '\\' && j+1 < len(code) {
+				j++
+			}
+			b.WriteByte(code[j])
+		}
+		out = append(out, b.String())
+		i = j
+	}
+	return out
+}
+
+// findExec checks the commands of find -exec/-execdir/-ok/-okdir.
+func (c Checker) findExec(args []word, s *segment, sh Shell, depth int) Result {
+	for i := 0; i < len(args); i++ {
+		switch args[i].text {
+		case "-exec", "-execdir", "-ok", "-okdir":
+			j := i + 1
+			for j < len(args) && args[j].text != ";" && args[j].text != "+" {
+				j++
+			}
+			if r := c.command(args[i+1:j], s, sh, depth+1); r.Deny || r.bad {
+				return r
+			}
+			i = j
+		}
+	}
+	return allow
+}
+
+// startProcess checks Start-Process git -ArgumentList ... (PowerShell) and start git ... (cmd).
+func (c Checker) startProcess(args []word, sh Shell, depth int) Result {
+	var file string
+	var rest []word
+	for i := 0; i < len(args); i++ {
+		t := strings.ToLower(args[i].text)
+		switch {
+		case t == "-filepath" || t == "-file" || t == "-path":
+			if i+1 < len(args) {
+				file = args[i+1].text
+				i++
+			}
+		case t == "-argumentlist" || t == "-args" || t == "-arguments":
+			if i+1 < len(args) {
+				for _, part := range strings.FieldsFunc(args[i+1].text, func(r rune) bool { return r == ',' || r == ' ' }) {
+					rest = append(rest, word{text: strings.Trim(part, `'"`)})
+				}
+				i++
+			}
+		case strings.HasPrefix(t, "-") || strings.HasPrefix(t, "/"):
+			if t == "-wait" || t == "-nonewwindow" || t == "-passthru" || strings.HasPrefix(t, "/") {
+				continue
+			}
+			i++ // other parameters take a value
+		case file == "":
+			file = args[i].text
+		default:
+			rest = append(rest, args[i])
+		}
+	}
+	if file == "" {
+		return allow
+	}
+	if cmdName(word{text: file}) == "git" {
+		return c.git(rest, depth+1)
+	}
+	if r := c.command(rest, nil, sh, depth+1); r.Deny {
+		return r // start "title" git ...: cmd's first quoted word can be a window title
+	}
+	return c.command(append([]word{{text: file}}, rest...), nil, sh, depth+1)
+}

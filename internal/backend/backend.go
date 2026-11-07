@@ -180,6 +180,29 @@ type Option func(*options)
 
 type options struct {
 	quota QuotaReader
+	guard *Guard
+}
+
+// Guard is how Prepare installs Seelegent's git guard (package guard) into a worker profile.
+type Guard struct {
+	// Exe is the seelegent executable the pre-tool hooks run (`<Exe> __guard <backend>`).
+	Exe string
+	// Enabled reports the gitGuard setting; it is read at every Prepare, so turning the setting off removes the
+	// hooks before the next turn.
+	Enabled func() bool
+}
+
+// WithGuard makes Prepare install the git guard hook into isolated agy and claude profiles (codex has no hook; the
+// task engine gives its workers the git shim instead).
+func WithGuard(g Guard) Option {
+	return func(o *options) { o.guard = &g }
+}
+
+// NeedsShim reports whether a worker of backend b with profile p gets the git shim on PATH because no pre-tool hook
+// can guard it: codex (no hook) and system accounts (their profile is the user's real home, which Seelegent never
+// writes to).
+func NeedsShim(b Backend, p account.Profile) bool {
+	return !b.Capabilities().NativePreToolGuard || !p.Isolated()
 }
 
 // WithQuotaReader gives the backend its quota reader. The readers live in internal/quota (which imports this
@@ -197,9 +220,9 @@ func New(name, bin string, opts ...Option) (Backend, error) {
 	}
 	switch name {
 	case config.BackendAgy:
-		return &Agy{bin: bin, quota: o.quota}, nil
+		return &Agy{bin: bin, quota: o.quota, guard: o.guard}, nil
 	case config.BackendClaude:
-		return &Claude{bin: bin, quota: o.quota}, nil
+		return &Claude{bin: bin, quota: o.quota, guard: o.guard}, nil
 	case config.BackendCodex:
 		return &Codex{bin: bin, quota: o.quota}, nil
 	}

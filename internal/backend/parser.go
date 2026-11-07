@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/NovaSeele/Seelegent/internal/event"
+	"github.com/NovaSeele/Seelegent/internal/guard"
 	"github.com/NovaSeele/Seelegent/internal/launch"
 )
 
@@ -19,7 +20,7 @@ const (
 	// redacted replaces secrets.
 	redacted = "[REDACTED]"
 	// blockedMarker is what Seelegent's guard prints when it refuses a command (claude and codex).
-	blockedMarker = "Blocked by Seelegent"
+	blockedMarker = guard.Marker
 )
 
 // base is the state every parser shares: secret masking, the accumulated answer, the report and the final

@@ -15,6 +15,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -26,6 +27,7 @@ import (
 	"github.com/NovaSeele/Seelegent/internal/config"
 	"github.com/NovaSeele/Seelegent/internal/envx"
 	"github.com/NovaSeele/Seelegent/internal/gitx"
+	"github.com/NovaSeele/Seelegent/internal/guard"
 	"github.com/NovaSeele/Seelegent/internal/httpapi"
 	"github.com/NovaSeele/Seelegent/internal/logx"
 	"github.com/NovaSeele/Seelegent/internal/memory"
@@ -54,6 +56,8 @@ type Options struct {
 	RealHome string
 	// Launcher runs the detached launcher ({os.Executable(), "__launch"} when nil).
 	Launcher []string
+	// GuardExe is the seelegent executable the git guard hooks and the git shim run (os.Executable() when empty).
+	GuardExe string
 	// Bins sets the CLI of a backend (tests); backends not listed are looked up with backend.Find.
 	Bins map[string]string
 	// NoQuotaReaders builds the backends without quota readers (tests): every account is then passive.
@@ -146,6 +150,16 @@ func New(ctx context.Context, o Options) (*App, error) {
 		}
 		o.Launcher = []string{exe, launchCommand}
 	}
+	if o.GuardExe == "" {
+		exe, err := os.Executable()
+		if err != nil {
+			return nil, fmt.Errorf("app: own executable: %w", err)
+		}
+		if resolved, err := filepath.EvalSymlinks(exe); err == nil {
+			exe = resolved
+		}
+		o.GuardExe = exe
+	}
 	a := &App{Paths: o.Paths, log: o.Logger, env: o.Env, info: o.Info, web: o.Web, classifier: o.Classifier,
 		devOrigins: o.DevOrigins,
 		redact:     logx.NewRedactor().String, started0: o.Clock.Now(), pid: os.Getpid(), stopCh: make(chan struct{})}
@@ -194,7 +208,8 @@ func (a *App) build(o Options) error {
 			}
 			bin = found
 		}
-		var opts []backend.Option
+		opts := []backend.Option{backend.WithGuard(backend.Guard{Exe: o.GuardExe,
+			Enabled: func() bool { return a.Settings().GitGuard }})}
 		if !o.NoQuotaReaders {
 			if r := quotaReader(name, bin, now); r != nil {
 				opts = append(opts, backend.WithQuotaReader(r))
@@ -249,6 +264,13 @@ func (a *App) build(o Options) error {
 	// One git executable for the daemon, found through its PATH (never a Windows batch shim), shared by the task
 	// engine's baseline and the git views.
 	gitBin := gitx.NewBinary(func() []string { return a.env }, a.log)
+	// The git shim guards workers whose CLI has no pre-tool hook (codex, system accounts). Without it they keep
+	// only their sandbox and the work-at-risk check.
+	shim := o.Paths.GuardBin
+	if err := guard.InstallShim(shim, o.GuardExe); err != nil {
+		a.log.Warn("app: install the git shim", "err", err)
+		shim = ""
+	}
 	a.Tasks, err = task.New(task.Options{
 		DB: a.DB, Accounts: a.Accounts, Pool: p, Backends: a.Backends, Settings: a.Settings,
 		TasksDir: o.Paths.Tasks, Launcher: o.Launcher, Usage: a.Usage, QuotaRefresh: a.Refresher.Request,
@@ -256,6 +278,7 @@ func (a *App) build(o Options) error {
 		BaseEnv:   func() []string { return a.env },
 		Dashboard: a.dashboardLink,
 		Git:       gitBin,
+		GitShim:   shim,
 	})
 	if err != nil {
 		return err
