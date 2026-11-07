@@ -16,7 +16,7 @@ import { useToastStore } from '@/stores/toast'
 
 import { useActions } from './accountView'
 import ProviderDialog from './ProviderDialog.vue'
-import { providerModels } from './providerForm'
+import { allowList } from './providerForm'
 
 /**
  * The API providers API-key accounts call (Anthropic-compatible for Claude Code, OpenAI-compatible for Codex):
@@ -61,11 +61,13 @@ const usage = computed(() => {
 })
 const usedBy = (p: Provider) => usage.value.get(p.id) ?? 0
 
-/** The models a provider allows: its list, read back from allowedModels, or the pattern itself. */
+/** The models a provider allows: its list, its hand-written pattern, or any model when neither is set. */
 function modelsText(p: Provider): string {
-  const list = providerModels(p)
-  if (list === null) return p.allowedModels
-  return list.length ? list.join(', ') : t('accounts.providers.anyModel')
+  const allow = allowList(p)
+  if (allow.kind === 'list') return allow.models.join(', ')
+  if (allow.kind === 'pattern')
+    return t('accounts.providers.patternModels', { pattern: allow.pattern })
+  return t('accounts.providers.anyModel')
 }
 
 function edit(provider: Provider | null) {

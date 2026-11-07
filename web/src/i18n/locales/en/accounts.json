@@ -151,6 +151,7 @@
     "noMatch": "No provider matches.",
     "usedBy": "used by {n} account | used by {n} accounts",
     "anyModel": "any model",
+    "patternModels": "pattern {pattern}",
     "enabledOf": "Use {name}",
     "editOf": "Edit {name}",
     "deleteOf": "Delete {name}",
@@ -171,6 +172,8 @@
     "baseUrl": "Base URL",
     "models": "Models",
     "modelsHint": "Separated by commas; empty allows any model.",
+    "modelsPattern": "Allowed by pattern {pattern}; entering a list replaces this pattern.",
+    "tierModels": "Always allowed (tier models): {models}",
     "enabled": "Accounts can use it",
     "save": "Save provider"
   }

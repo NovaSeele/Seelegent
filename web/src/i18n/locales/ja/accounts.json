@@ -151,6 +151,7 @@
     "noMatch": "一致するプロバイダーはありません。",
     "usedBy": "{n} 個のアカウントが使用中",
     "anyModel": "どのモデルでも",
+    "patternModels": "パターン {pattern}",
     "enabledOf": "{name} を使う",
     "editOf": "{name} を編集",
     "deleteOf": "{name} を削除",
@@ -171,6 +172,8 @@
     "baseUrl": "ベース URL",
     "models": "モデル",
     "modelsHint": "カンマ区切り。空ならどのモデルでも可。",
+    "modelsPattern": "パターン {pattern} で許可されています。リストを入力するとこのパターンは置き換えられます。",
+    "tierModels": "常に許可（ティアのモデル）: {models}",
     "enabled": "アカウントが使える",
     "save": "プロバイダーを保存"
   }

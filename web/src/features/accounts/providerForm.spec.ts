@@ -2,7 +2,14 @@ import { describe, expect, it } from 'vitest'
 
 import { makeProvider } from '@/test/fixtures'
 
-import { parseModels, providerChanges, providerInput, providerModels } from './providerForm'
+import {
+  allowList,
+  exactPattern,
+  parseModels,
+  providerChanges,
+  providerInput,
+  tierModels,
+} from './providerForm'
 
 const form = {
   id: 'zai',
@@ -38,29 +45,67 @@ describe('provider form', () => {
     )
   })
 
-  // Live run: the daemon keeps a saved model list only as an exact allowedModels pattern.
-  it('reads the model list back from an exact allowedModels pattern', () => {
+  it('builds the exact pattern like the daemon (regexp.QuoteMeta per model)', () => {
+    expect(exactPattern([])).toBe('')
+    expect(exactPattern(['gpt-5.5', 'o+1', 'a|b'])).toBe('^(?:gpt-5\\.5|o\\+1|a\\|b)$')
+  })
+
+  // Contract: models is the allow-list as last set, allowedModels the enforced pattern; a hand-written pattern
+  // comes with models []; both empty is any model; tier models are allowed on top and are not in the list.
+  describe('allow-list', () => {
     const p = (allowedModels: string, models: string[] = []) => ({ models, allowedModels })
-    expect(providerModels(p('', ['a']))).toEqual(['a'])
-    expect(providerModels(p(''))).toEqual([])
-    expect(providerModels(p('^(?:claude-sonnet-5|claude-opus-5)$'))).toEqual([
-      'claude-sonnet-5',
-      'claude-opus-5',
-    ])
-    expect(providerModels(p('^(?:gpt-5\\.5|o\\+1|a\\|b)$'))).toEqual(['gpt-5.5', 'o+1', 'a|b'])
-    expect(providerModels(p('^gemini-3\\.8-'))).toBeNull()
-    expect(providerModels(p('^(?:glm-.*)$'))).toBeNull()
+
+    it('takes the list from models when it agrees with the pattern', () => {
+      expect(allowList(p('^(?:deepseek-v4|deepseek-r2)$', ['deepseek-v4', 'deepseek-r2']))).toEqual(
+        { kind: 'list', models: ['deepseek-v4', 'deepseek-r2'] },
+      )
+      expect(allowList(p('^(?:gpt-5\\.5|o\\+1|a\\|b)$'))).toEqual({
+        kind: 'list',
+        models: ['gpt-5.5', 'o+1', 'a|b'],
+      })
+    })
+
+    it('treats both empty as any model', () => {
+      expect(allowList(p(''))).toEqual({ kind: 'any' })
+    })
+
+    it('keeps a hand-written pattern as a pattern', () => {
+      expect(allowList(p('^glm-'))).toEqual({ kind: 'pattern', pattern: '^glm-' })
+      expect(allowList(p('^(?:glm-.*)$'))).toEqual({ kind: 'pattern', pattern: '^(?:glm-.*)$' })
+    })
+
+    // Review S1: a daemon that answers models with the tier models must not put a tier model in the field.
+    it('never takes tier models answered in models as the list', () => {
+      const tiered = p('^(?:deepseek-v4|deepseek-r2)$', ['deepseek-chat'])
+      expect(allowList(tiered)).toEqual({ kind: 'list', models: ['deepseek-v4', 'deepseek-r2'] })
+      expect(allowList(p('^glm-', ['glm-5-air']))).toEqual({ kind: 'pattern', pattern: '^glm-' })
+      expect(allowList(p('', ['glm-5-air']))).toEqual({ kind: 'any' })
+    })
   })
 
-  it('compares an edit with the list read back from the pattern', () => {
-    const before = makeProvider({ name: 'Z.ai', models: [], allowedModels: '^(?:glm-5)$' })
-    expect(providerChanges(before, { ...form, name: 'Z.ai' }, ['glm-5'])).toEqual({})
+  it('lists the tier models once each, in tier order', () => {
+    const tiers = { fast: 'deepseek-chat', standard: 'deepseek-v4', strong: 'deepseek-v4', max: '' }
+    expect(tierModels({ tiers })).toEqual(['deepseek-chat', 'deepseek-v4'])
   })
 
-  // Live run: the daemon answers models [] for a provider saved with a model list (the list lives in
-  // allowedModels), so re-sending the untouched field on an edit wiped the allow-list.
+  it('round-trips a list with tier models without the tier model reaching the body', () => {
+    const before = makeProvider({
+      id: 'deepseek',
+      name: 'DeepSeek',
+      models: ['deepseek-chat'],
+      allowedModels: '^(?:deepseek-v4|deepseek-r2)$',
+      tiers: { fast: 'deepseek-chat', standard: '', strong: '', max: '' },
+    })
+    const same = { ...form, name: 'DeepSeek' }
+    expect(providerChanges(before, same, ['deepseek-v4', 'deepseek-r2'])).toEqual({})
+    expect(providerChanges(before, same, ['deepseek-v4', 'deepseek-r2', 'deepseek-v5'])).toEqual({
+      models: ['deepseek-v4', 'deepseek-r2', 'deepseek-v5'],
+    })
+  })
+
+  // Live run: re-sending the untouched models field on an edit replaced the allow-list.
   it('sends only the changed fields on an edit, and models only when they changed', () => {
-    // A hand-written pattern: the form shows no models, and an untouched field must not replace the pattern.
+    // A hand-written pattern: the field is empty, and leaving it so must not replace the pattern.
     const before = makeProvider({ name: 'Z.ai', models: [], allowedModels: '^glm-' })
     const same = { ...form, name: 'Z.ai' }
     expect(providerChanges(before, same, [])).toEqual({})
@@ -68,11 +113,15 @@ describe('provider form', () => {
       name: 'GLM',
       enabled: false,
     })
+    // A list typed over the pattern replaces it (the dialog says so).
     expect(providerChanges(before, same, ['glm-5', 'glm-5-air'])).toEqual({
       models: ['glm-5', 'glm-5-air'],
     })
-    // An exact list the user cleared is a real change.
-    const listed = makeProvider({ name: 'Z.ai', allowedModels: '^(?:glm-5)$' })
+    // Any model: an empty field is no change.
+    expect(providerChanges(makeProvider({ name: 'Z.ai' }), same, [])).toEqual({})
+    // A list the user cleared is a real change: [] clears it to any model.
+    const listed = makeProvider({ name: 'Z.ai', models: ['glm-5'], allowedModels: '^(?:glm-5)$' })
+    expect(providerChanges(listed, same, ['glm-5'])).toEqual({})
     expect(providerChanges(listed, same, [])).toEqual({ models: [] })
     const official = makeProvider({ id: 'anthropic', baseUrl: '', official: true })
     expect(providerChanges(official, { ...form, ...official, baseUrl: 'https://x' }, [])).toEqual(

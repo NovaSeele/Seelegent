@@ -151,6 +151,7 @@
     "noMatch": "Không có nhà cung cấp nào khớp.",
     "usedBy": "{n} tài khoản đang dùng",
     "anyModel": "mọi mô hình",
+    "patternModels": "mẫu {pattern}",
     "enabledOf": "Dùng {name}",
     "editOf": "Sửa {name}",
     "deleteOf": "Xóa {name}",
@@ -171,6 +172,8 @@
     "baseUrl": "Địa chỉ gốc",
     "models": "Mô hình",
     "modelsHint": "Cách nhau bằng dấu phẩy; để trống là cho mọi mô hình.",
+    "modelsPattern": "Đang cho phép theo mẫu {pattern}; nhập một danh sách sẽ thay mẫu này.",
+    "tierModels": "Luôn được dùng (mô hình theo cấp): {models}",
     "enabled": "Tài khoản được dùng",
     "save": "Lưu nhà cung cấp"
   }

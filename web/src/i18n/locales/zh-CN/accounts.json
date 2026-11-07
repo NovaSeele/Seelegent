@@ -151,6 +151,7 @@
     "noMatch": "没有匹配的提供方。",
     "usedBy": "{n} 个账号在用",
     "anyModel": "任意模型",
+    "patternModels": "模式 {pattern}",
     "enabledOf": "使用 {name}",
     "editOf": "编辑 {name}",
     "deleteOf": "删除 {name}",
@@ -171,6 +172,8 @@
     "baseUrl": "基础 URL",
     "models": "模型",
     "modelsHint": "用逗号分隔；留空则允许任意模型。",
+    "modelsPattern": "由模式 {pattern} 允许；填写列表会替换此模式。",
+    "tierModels": "始终允许（各档模型）：{models}",
     "enabled": "允许账号使用",
     "save": "保存提供方"
   }

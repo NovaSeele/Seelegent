@@ -151,6 +151,7 @@
     "noMatch": "일치하는 제공자가 없습니다.",
     "usedBy": "계정 {n}개가 사용 중",
     "anyModel": "모든 모델",
+    "patternModels": "패턴 {pattern}",
     "enabledOf": "{name} 사용",
     "editOf": "{name} 편집",
     "deleteOf": "{name} 삭제",
@@ -171,6 +172,8 @@
     "baseUrl": "기본 URL",
     "models": "모델",
     "modelsHint": "쉼표로 구분합니다. 비워 두면 모든 모델을 허용합니다.",
+    "modelsPattern": "패턴 {pattern}(으)로 허용됩니다. 목록을 입력하면 이 패턴이 대체됩니다.",
+    "tierModels": "항상 허용(티어 모델): {models}",
     "enabled": "계정이 사용 가능",
     "save": "제공자 저장"
   }

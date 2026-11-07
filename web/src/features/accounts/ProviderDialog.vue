@@ -12,11 +12,20 @@ import TextField from '@/components/ui/TextField.vue'
 import { useProvidersStore } from '@/stores/providers'
 import { useToastStore } from '@/stores/toast'
 
-import { parseModels, providerChanges, providerInput, providerModels } from './providerForm'
+import {
+  allowList,
+  listedModels,
+  parseModels,
+  providerChanges,
+  providerInput,
+  tierModels,
+} from './providerForm'
 
 /**
- * Adds a provider (from a preset, or blank) or edits one. The id and backend are fixed once the provider exists;
- * models are a comma-separated list. Field errors from the daemon show next to their field.
+ * Adds a provider (from a preset, or blank) or edits one. The id and backend are fixed once the provider exists.
+ * The models field edits the allow-list, a comma-separated list (empty: any model). A provider allowed by a
+ * hand-written pattern shows that pattern in the hint, and a list typed over it replaces it; its tier models are
+ * shown read-only, since they are always allowed. Field errors from the daemon show next to their field.
  */
 const props = defineProps<{ provider: Provider | null }>()
 const open = defineModel<boolean>('open', { required: true })
@@ -45,6 +54,13 @@ function blank(): ProviderPreset {
 }
 
 const editing = computed(() => props.provider !== null)
+const allowed = computed(() => (props.provider ? allowList(props.provider) : null))
+const modelsHint = computed(() =>
+  allowed.value?.kind === 'pattern'
+    ? t('accounts.providers.modelsPattern', { pattern: allowed.value.pattern })
+    : t('accounts.providers.modelsHint'),
+)
+const tiers = computed(() => (props.provider ? tierModels(props.provider) : []))
 
 const presetOptions = computed(() => [
   { value: '', label: t('accounts.providers.blank') },
@@ -74,7 +90,7 @@ watch(open, (value) => {
   failure.value = ''
   preset.value = ''
   fill(props.provider ?? blank())
-  if (props.provider) models.value = (providerModels(props.provider) ?? []).join(', ')
+  if (props.provider) models.value = listedModels(allowList(props.provider)).join(', ')
 })
 
 watch(preset, (id) => {
@@ -149,9 +165,13 @@ async function submit() {
       <TextField
         v-model="models"
         :label="t('accounts.providers.models')"
-        :hint="t('accounts.providers.modelsHint')"
+        :placeholder="allowed?.kind === 'pattern' ? undefined : t('accounts.providers.anyModel')"
+        :hint="modelsHint"
         :error="errors.models"
       />
+      <p v-if="tiers.length" class="pform__tiers">
+        {{ t('accounts.providers.tierModels', { models: tiers.join(', ') }) }}
+      </p>
       <Switch v-model="form.enabled" :label="t('accounts.providers.enabled')" />
       <p v-if="failure" class="pform__error" role="alert">{{ failure }}</p>
     </form>
@@ -177,6 +197,11 @@ async function submit() {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: var(--space-3);
+}
+
+.pform__tiers {
+  color: var(--text-secondary);
+  font-size: var(--fs-xs);
 }
 
 .pform__error {

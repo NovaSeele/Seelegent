@@ -151,6 +151,7 @@
     "noMatch": "Ningún proveedor coincide.",
     "usedBy": "lo usa {n} cuenta | lo usan {n} cuentas",
     "anyModel": "cualquier modelo",
+    "patternModels": "patrón {pattern}",
     "enabledOf": "Usar {name}",
     "editOf": "Editar {name}",
     "deleteOf": "Eliminar {name}",
@@ -171,6 +172,8 @@
     "baseUrl": "URL base",
     "models": "Modelos",
     "modelsHint": "Separados por comas; vacío permite cualquier modelo.",
+    "modelsPattern": "Permitidos por el patrón {pattern}; escribir una lista sustituye este patrón.",
+    "tierModels": "Siempre permitidos (modelos de nivel): {models}",
     "enabled": "Las cuentas pueden usarlo",
     "save": "Guardar proveedor"
   }

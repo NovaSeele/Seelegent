@@ -346,7 +346,13 @@ export function createAdminRoutes(ctx) {
 
   // -------------------------------------------------------------------------------------------------------------
   // Providers: the shapes of internal/api (Provider, ProviderPreset, ProviderInput), checked roughly like
-  // account.Provider.Validate and the daemon's applyProvider.
+  // account.Provider.Validate and the daemon's applyProvider. The allow-list follows the contract:
+  // - `models` is the allow-list exactly as last set, never the tier models;
+  // - `allowedModels` is the pattern enforced for it (exactPattern of the list); a hand-written pattern that is
+  //   not such a list comes with `models: []`;
+  // - both empty means any model, and tier models are always allowed on top;
+  // - `models` in a body replaces the list (`[]` clears it); `allowedModels` sets a pattern (models wins when a
+  //   body has both, the mock's choice).
 
   const NO_TIERS = { fast: '', standard: '', strong: '', max: '' }
   const presets = [
@@ -362,35 +368,66 @@ export function createAdminRoutes(ctx) {
     preset('custom-openai', 'Custom (OpenAI API)', 'codex', '', { wireApi: 'chat' }),
   ]
   const providers = [
-    fromPreset('anthropic', 'anthropic', ['claude-sonnet-5', 'claude-opus-5']),
-    fromPreset('deepseek', 'deepseek', ['deepseek-v4']),
-    fromPreset('openai', 'openai', ['gpt-5.5-codex', 'gpt-5.5-mini']),
+    fromPreset('anthropic', 'anthropic', { models: ['claude-sonnet-5', 'claude-opus-5'] }),
+    // A list plus a tier model outside it: the tier model is allowed on top, and stays out of `models`.
+    fromPreset('deepseek', 'deepseek', {
+      models: ['deepseek-v4', 'deepseek-r2'],
+      tiers: { fast: 'deepseek-chat' },
+    }),
+    // A hand-written pattern with tier models: `models` is [].
+    fromPreset('zai', 'zai', {
+      allowedModels: '^glm-',
+      tiers: { fast: 'glm-5-air', standard: 'glm-5', strong: 'glm-5', max: 'glm-5' },
+    }),
+    fromPreset('openai', 'openai', { models: ['gpt-5.5-codex', 'gpt-5.5-mini'] }),
   ]
 
   function preset(id, name, backend, baseUrl, extra = {}) {
     return { id, name, backend, baseUrl, enabled: true, models: [], official: false, ...extra }
   }
 
-  function fromPreset(id, presetId, models) {
+  function fromPreset(id, presetId, { models, allowedModels, tiers } = {}) {
     const p = presets.find((x) => x.id === presetId)
     const at = now()
-    return {
+    const created = {
       ...p,
       id,
       preset: presetId,
-      models,
+      models: [],
       accounts: 0,
-      allowedModels: exactPattern(models),
-      tiers: { ...NO_TIERS },
+      allowedModels: '',
+      tiers: { ...NO_TIERS, ...tiers },
       createdAt: at,
       updatedAt: at,
     }
+    setAllowList(created, models, allowedModels)
+    return created
   }
 
   /** Like the daemon's exactPattern: an anchored pattern of exactly these models ('' for none). */
   function exactPattern(models) {
     if (!models.length) return ''
     return `^(?:${models.map((m) => m.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})$`
+  }
+
+  /** The models an exact pattern names, or null for a hand-written pattern. */
+  function listOf(pattern) {
+    const exact = /^\^\(\?:(.+)\)\$$/.exec(pattern)
+    if (!exact) return null
+    const parts = exact[1].split(/(?<!\\)\|/)
+    if (parts.some((part) => /(^|[^\\])[.*+?^${}()|[\]]/.test(part))) return null
+    return parts.map((part) => part.replace(/\\(.)/g, '$1'))
+  }
+
+  /** Sets the allow-list from a list (models) or a pattern (allowedModels); both undefined leaves it. */
+  function setAllowList(p, models, allowedModels) {
+    if (models !== undefined) {
+      p.models = [...models]
+      p.allowedModels = exactPattern(models)
+    } else if (allowedModels !== undefined) {
+      p.allowedModels = allowedModels
+      p.models = listOf(allowedModels) ?? []
+    }
   }
 
   const providerView = (p) => ({
@@ -424,10 +461,17 @@ export function createAdminRoutes(ctx) {
       ) {
         throw invalid('models are names without spaces', 'models')
       }
-      p.models = body.models
     }
-    if (body.allowedModels !== undefined) p.allowedModels = body.allowedModels
-    else if (body.models !== undefined) p.allowedModels = exactPattern(body.models)
+    if (body.allowedModels !== undefined && body.models === undefined) {
+      if (typeof body.allowedModels !== 'string')
+        throw invalid('allowedModels must be text', 'allowedModels')
+      try {
+        new RegExp(body.allowedModels)
+      } catch {
+        throw invalid('allowedModels is not a valid regular expression', 'allowedModels')
+      }
+    }
+    setAllowList(p, body.models, body.allowedModels)
     if (typeof p.name !== 'string' || p.name.length > 60) {
       throw invalid('name is at most 60 characters', 'name')
     }
@@ -472,7 +516,7 @@ export function createAdminRoutes(ctx) {
         if (!presets.some((p) => p.id === body.preset)) {
           throw invalid(`unknown provider preset "${String(body.preset)}"`, 'preset')
         }
-        created = fromPreset(id, body.preset, [])
+        created = fromPreset(id, body.preset)
       }
       if (body.backend !== undefined) {
         if (created.backend && created.backend !== body.backend) {
