@@ -16,9 +16,16 @@ Package `internal/guard` is pure: it reads a command line (POSIX shells, PowerSh
 subshells, wrappers such as `env`, `xargs`, `timeout`, `chrt`, `parallel`, `script -c`, `su -c`, `find -exec`,
 cmd's `if`; interpreters such as `bash -c`, `powershell -EncodedCommand`, `node -e`, `python -c`; a script a
 shell or an interpreter reads from standard input: `bash <<'EOF'`, `cat <<'EOF' | sh`, `sh -s <<< '...'`,
-`pwsh -Command -`, `python3 - <<'EOF'`) and decides. A here-document fed to any other command (`cat` building a
-commit message, `tee`) is data. Long options count by any prefix git accepts (`commit --amen`, `branch --d`). It
-refuses:
+`printf 'git stash\n' | bash` (with `printf`'s and `echo`'s escapes decoded), `pwsh -Command -`,
+`python3 - <<'EOF'`) and decides. A here-document fed to any other command (`cat` building a commit message, `tee`,
+`sed`, a script file) is data. When the shell is not known (agy's hook reads every dialect), the lines of a POSIX
+here-document are read only as POSIX reads them, except for agy on Windows: its `run_command` runs PowerShell,
+where `<<` starts no here-document and the next lines run as commands, so there `cat <<'EOF'` followed by a line
+`git reset --hard` is refused. The strings of inline code (`python -c`, `node -e`, a script fed to an interpreter) are read as
+command lines only when the code can start a program (`os.system`, `subprocess`, `child_process`, `exec*`,
+`spawn*`, `popen`, Perl's and Ruby's backticks, `qx`, `%x` and pipe `open`, ...); code that cannot, such as a
+script that edits a file mentioning `git stash`, is data. Long options count by any prefix git accepts
+(`commit --amen`, `branch --d`). It refuses:
 
 - always: `reset`, `restore`, `switch`, `revert`, `rebase`, `merge`, `pull`, `push`, `cherry-pick`, `am`, `rm`,
   `mv`, `prune`, `filter-branch`, `filter-repo`, `update-ref`, `update-index`, `read-tree`, `checkout-index`,
@@ -27,10 +34,15 @@ refuses:
   `commit -a|--all|--amend`; `branch` and `tag` deletes, moves and forced writes; `apply` unless it only checks;
   `reflog expire|delete`; `worktree remove|prune|move`; `submodule deinit|update|absorbgitdirs`; `config` writes
   of keys that run programs or redirect git (aliases, includes, `core.hooksPath`, `core.editor`, filters and
-  drivers, ...) and of `gc.pruneExpire`; `sparse-checkout` writes; `bisect` steps; `rerere forget|clear|gc`;
-  `notes remove|prune`; `refs migrate`; `symbolic-ref -d`; `gc --prune=<date>` (plain `gc` and `gc --prune` keep
-  the default expiry);
+  drivers, ...) and of `gc.pruneExpire` and `help.autocorrect` (also as `-c`/`--config-env`); `sparse-checkout`
+  writes; `bisect` steps; `rerere forget|clear|gc`; `notes remove|prune`; `refs migrate`; `symbolic-ref -d`;
+  `gc --prune=<date>` (plain `gc` and `gc --prune` keep the default expiry);
 - an alias that expands to any of the above (read with `git config --get alias.<name>` in the command's folder);
+- a command that sets `GIT_CONFIG_PARAMETERS`, `GIT_CONFIG_COUNT`, `GIT_CONFIG_KEY_<n>`, `GIT_CONFIG_GLOBAL` or
+  `GIT_CONFIG_SYSTEM` (`NAME=value git ...`, `env NAME=value`, `export`/`declare`, PowerShell's `$env:NAME = ...`,
+  `Set-Item env:NAME` and `[Environment]::SetEnvironmentVariable`, cmd's `set` and `setx`, the environment of
+  inline code that starts programs), whether or not the same line runs git: they define aliases and settings that
+  the alias lookup above does not see, for that command and every later git command of the same shell;
 - fail closed: a line that mentions git and cannot be read (an unclosed quote, a variable used as the git
   subcommand or an option, nesting deeper than the limit).
 
@@ -58,7 +70,8 @@ processes of the CLI (Claude Code's `Bash`/`PowerShell` tools, agy's `run_comman
 `send_command_input` writes to), and a child cannot change its parent's environment. The shim runs inside those
 commands, so `env SEELEGENT_GIT_GUARD=off git stash` would reach it: it ignores the variable, and `PATH` alone
 decides whether a worker is guarded. The shim also runs git with `-c help.autocorrect=0`, so a misspelled
-subcommand (`git stsh`) is not run as the command git guesses.
+subcommand (`git stsh`) is not run as the command git guesses. git takes the last `-c` of a key, so a worker's own
+`-c help.autocorrect=...` is refused; the `GIT_CONFIG_*` environment variables come before `-c` and cannot undo it.
 
 ### Limits
 
@@ -73,7 +86,17 @@ subcommand (`git stsh`) is not run as the command git guesses.
   `danger-full-access` only the shim remains.
 - The hooks do not run git, so they cannot turn off `help.autocorrect`: when the user's git config sets it, a
   misspelled subcommand (`git stsh`) passes the hook as an unknown command and git runs the command it guesses.
-  The shim is not affected.
+  The shim is not affected. A worker cannot set it itself: `git config help.autocorrect` and `-c` are refused.
+- Configuration the alias lookup cannot see is caught only in the forms listed above. Set through a computed name
+  (`export GIT_CONFIG_$N=...`), a script file, `set -a`, or through `HOME`/`XDG_CONFIG_HOME` pointing at another
+  `.gitconfig`, it is not; and the aliases of `git -C <other repository>` are looked up in the command's folder.
+- Inline code is read as commands only when it names a way to start a program. Code that reaches one through a
+  computed name (`getattr(os, 'sys' + 'tem')`) or a module the guard does not know (Python's `sh`, `plumbum`)
+  passes; code that does start a program has all its strings read, so it is refused when it also edits text that
+  mentions a risky git command (the refusal then suggests the edit tool).
+- Work at risk counts the lines an earlier turn added to a file (its end snapshot minus its start snapshot) as the
+  task's own, so lines the user typed into that file while the turn ran count as the task's too, and a later turn
+  that deletes them gives no warning (only other tasks' changes are told apart from the task's, not the user's).
 - The hooks live in files of the worker's own profile (`settings.json`, `hooks.json`). A worker that edits those
   files, with its edit tools or a shell command, can remove the hook or (Claude Code's `env` setting) set
   `SEELEGENT_GIT_GUARD`; writes into the profile folders raise no scope warning.
