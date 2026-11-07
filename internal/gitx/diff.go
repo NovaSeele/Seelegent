@@ -67,7 +67,7 @@ func (r *Repos) Diff(ctx context.Context, root, rel, base string, untracked bool
 		}
 	}
 	out, over, err := r.run(ctx, root, ReadTimeout, maxDiffBytes, "diff", "--no-color", "--no-ext-diff",
-		"--no-renames", "-U3", base, "--", rel)
+		"--no-textconv", "--no-renames", "-U3", base, "--", rel)
 	if err != nil {
 		return api.FileDiff{}, err
 	}

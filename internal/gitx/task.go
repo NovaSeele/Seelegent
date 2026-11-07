@@ -138,7 +138,8 @@ func (r *Repos) Commit(ctx context.Context, tf TaskFiles, message string, files 
 	if err != nil {
 		return api.CommitResult{}, err
 	}
-	stat, _, err := r.run(ctx, tg.Root, ReadTimeout, 0, "show", "--shortstat", "--format=", "HEAD")
+	stat, _, err := r.run(ctx, tg.Root, ReadTimeout, 0, "show", "--shortstat", "--format=", "--no-ext-diff",
+		"--no-textconv", "HEAD")
 	if err != nil {
 		return api.CommitResult{}, err
 	}

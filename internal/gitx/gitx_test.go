@@ -207,6 +207,43 @@ func TestStatusOutsideRepoAndBranchCache(t *testing.T) {
 	}
 }
 
+// TestNoTextconv: a textconv driver from the repository config and .gitattributes is a command a worker can set
+// up; the daemon's diffs must never run it (it would run outside any worker tree).
+func TestNoTextconv(t *testing.T) {
+	dir := newRepo(t)
+	ctx := context.Background()
+	r := New(nil)
+	marker := filepath.Join(t.TempDir(), "ran")
+	git(t, dir, "config", "diff.evil.textconv", "touch '"+filepath.ToSlash(marker)+"'; cat")
+	write(t, filepath.Join(dir, ".gitattributes"), "*.txt diff=evil\n")
+	write(t, filepath.Join(dir, "a.txt"), "one\nTWO\nthree\n")
+	// The setup works: plain git runs the driver.
+	git(t, dir, "diff", "--", "a.txt")
+	if _, err := os.Stat(marker); err != nil {
+		t.Fatalf("the textconv driver did not run under plain git: %v", err)
+	}
+	if err := os.Remove(marker); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := r.Status(ctx, dir); err != nil {
+		t.Fatal(err)
+	}
+	tf := TaskFiles{Cwd: dir, Files: map[string]int{"a.txt": 1}}
+	if _, err := r.TaskGit(ctx, tf); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.Diff(ctx, dir, "a.txt", "", false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.Commit(ctx, tf, "Task work", []string{"a.txt"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(marker); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("a gitx call ran the textconv driver (marker: %v)", err)
+	}
+}
+
 func TestCleanPath(t *testing.T) {
 	root := t.TempDir()
 	for _, ok := range []string{"a.txt", "dir/b.txt", `dir\c.txt`, "pages/[id].vue", ":!x"} {

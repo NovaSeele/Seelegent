@@ -84,7 +84,7 @@ func (r *Repos) state(ctx context.Context, root string, numstat bool) (repoState
 		base = emptyTree
 	}
 	diff, _, err := r.run(ctx, root, ReadTimeout, 0, "diff", "--numstat", "-z", "--no-renames", "--no-ext-diff",
-		base, "--")
+		"--no-textconv", base, "--")
 	if err != nil {
 		return repoState{}, err
 	}
