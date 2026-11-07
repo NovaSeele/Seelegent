@@ -2,6 +2,7 @@ package ticket
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"os"
 	"path/filepath"
@@ -10,7 +11,11 @@ import (
 
 	"github.com/NovaSeele/Seelegent/internal/api"
 	"github.com/NovaSeele/Seelegent/internal/gitx"
+	"github.com/NovaSeele/Seelegent/internal/task"
 )
+
+// taskNotice is the stream notice of a task that changed.
+func taskNotice(id string) task.Notice { return task.Notice{Kind: task.NoticeTask, TaskID: id} }
 
 // readyTicket connects the repository, starts a ticket for a local issue and returns it with its task.
 func readyTicket(t *testing.T, e *env, title string) (tk api.Ticket, taskID string) {
@@ -160,6 +165,58 @@ func TestPushScanRefusesCommittedSecret(t *testing.T) {
 	if got, err = e.s.PR(t.Context(), tk.ID, api.PRRequest{}); err != nil || got.Refusal != nil ||
 		got.NeedsAttention != "" {
 		t.Fatalf("pr after the fix = %v, refusal %+v, attention %q", err, got.Refusal, got.NeedsAttention)
+	}
+}
+
+// TestRefusalGoesWithNewWorkOrDrop: a refused pull request's refusal and its message leave the ticket when a task of
+// the ticket runs again (a followup on the same task: the worktree changes) and when the ticket is dropped; the log
+// keeps them.
+func TestRefusalGoesWithNewWorkOrDrop(t *testing.T) {
+	e := setupFlow(t)
+	ctx := t.Context()
+	tk, task := readyTicket(t, e, "Keys again")
+	write(t, filepath.Join(tk.Worktree, "deploy.key"), "x\n")
+	e.tasks.accept(task, "ok")
+	waitTicket(t, e.s, tk.ID, api.TicketReady)
+	refuse := func() {
+		t.Helper()
+		var se *ScanError
+		if _, err := e.s.PR(ctx, tk.ID, api.PRRequest{}); !errors.As(err, &se) {
+			t.Fatalf("pr = %v", err)
+		}
+		// A message kept as the error too (a refusal of an earlier kind): it must go with the refusal.
+		if _, err := e.s.updateTicket(ctx, tk.ID, func(_ *sql.Tx, r *ticketRec) error {
+			r.Error = "refusing to push: an earlier refusal"
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	refuse()
+
+	// A followup on the same task: the ticket works again and the refusal goes.
+	e.tasks.mu.Lock()
+	d := e.tasks.tasks[task]
+	d.Status, d.Review = api.StatusRunning, nil
+	d.Turns = append(d.Turns, api.Turn{N: 2, Message: "remove the key", Status: "running"})
+	e.tasks.mu.Unlock()
+	e.tasks.bus.Publish(taskNotice(task))
+	got := waitTicket(t, e.s, tk.ID, api.TicketWorking)
+	rec, err := e.s.getTicket(ctx, tk.ID)
+	if err != nil || rec.Refusal != nil || got.Error != "" {
+		t.Fatalf("after a followup: refusal %+v, error %q, %v", rec.Refusal, got.Error, err)
+	}
+	e.tasks.accept(task, "still there")
+	waitTicket(t, e.s, tk.ID, api.TicketReady)
+	refuse()
+
+	// Dropped: nothing of the refusal is left to show, the log still has it.
+	got, err = e.s.Drop(ctx, tk.ID, api.DropRequest{Reason: "not now"})
+	if err != nil || got.Refusal != nil || got.Error != "" || !hasLog(got, "scan_refused") {
+		t.Fatalf("dropped = refusal %+v, error %q, %v", got.Refusal, got.Error, err)
+	}
+	if rec, err := e.s.getTicket(ctx, tk.ID); err != nil || rec.Refusal != nil || rec.Error != "" {
+		t.Fatalf("stored after the drop: %+v %q %v", rec.Refusal, rec.Error, err)
 	}
 }
 

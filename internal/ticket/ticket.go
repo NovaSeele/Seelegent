@@ -344,6 +344,16 @@ func (t *ticketRec) needsAttention() string {
 	return ""
 }
 
+// dropRefusal forgets a refused pull request: its refusal and the message of a refusal kept as the error. It no
+// longer says what the next pr will find once new work changes the worktree, nor anything once the ticket is
+// dropped; the ticket's log keeps it.
+func (t *ticketRec) dropRefusal() {
+	t.Refusal = nil
+	if t.Status != api.TicketFailed {
+		t.Error = ""
+	}
+}
+
 func (t *ticketRec) summary() api.TicketSummary {
 	sum := api.TicketSummary{ID: t.ID, RepoID: t.RepoID, IssueKey: t.IssueKey, Issue: t.Issue, Branch: t.Branch,
 		Worktree: t.Worktree, Status: t.Status, TaskIDs: api.NonNil(t.TaskIDs), MeetingID: t.MeetingID, PR: t.PR,

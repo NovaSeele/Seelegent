@@ -146,7 +146,9 @@ the repository has none). The worker's commits stay in the local worktree.
    `refusal {reason, findings, branch, commits, subjects, compareUrl, cause, detail, message, at}` and
    `needsAttention: "push_refused"`,
    so the dashboard explains it in the reader's language with the next step for each file; `message` is the English
-   text the lead's tools show. The next pr clears it, and so does a new task in the ticket.
+   text the lead's tools show. The next pr clears it, and so do a new task in the ticket, a followup that makes
+   one of its tasks run again (the ticket is `working`) and a drop; the ticket's log keeps it. A refusal message kept
+   as the ticket's `error` goes the same way.
 3. **Commit** exactly the uncommitted files git does not ignore, when there are any, in the worktree.
 4. **Push** Seelegent's commit: `commit-tree` of the scanned tree (checked against the worktree's tree), then
    `push origin <sha>:refs/heads/<branch>` with no hooks (`core.hooksPath` set to the null device), no prompts
