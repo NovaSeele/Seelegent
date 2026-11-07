@@ -86,12 +86,25 @@ func (s *Service) ReviewWith(ctx context.Context, id string, req api.ReviewReque
 }
 
 // seniorObjections are the warnings of accepting a task: a senior's objection does not block, but is named with
-// its first finding (or required change).
+// its first finding (or required change). Only each senior's latest finished consult counts: an objection the senior
+// approved in a later consult is no longer theirs.
 func seniorObjections(cs []api.Consult) []string {
-	var out []string
+	latest := map[string]int{}
+	var order []string
 	for i := range cs {
 		c := &cs[i]
-		if c.Rank != api.RankSenior || c.Verdict != api.ConsultObject {
+		if c.Rank != api.RankSenior || c.Status != consultDone {
+			continue
+		}
+		if _, ok := latest[c.Member]; !ok {
+			order = append(order, c.Member)
+		}
+		latest[c.Member] = i
+	}
+	var out []string
+	for _, m := range order {
+		c := &cs[latest[m]]
+		if c.Verdict != api.ConsultObject {
 			continue
 		}
 		w := "senior " + c.Member + " objected"

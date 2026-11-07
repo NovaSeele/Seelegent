@@ -3,6 +3,7 @@ package task
 import (
 	"errors"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -184,16 +185,39 @@ func TestConsultDuringFollowup(t *testing.T) {
 
 func TestSeniorObjectionWarns(t *testing.T) {
 	cs := []api.Consult{
-		{Member: "sam", Rank: api.RankSenior, Verdict: api.ConsultObject,
+		{Member: "sam", Rank: api.RankSenior, Status: consultDone, Verdict: api.ConsultObject,
 			Findings: []api.Claim{{Text: "the total can go negative"}}},
-		{Member: "pia", Rank: api.RankPeer, Verdict: api.ConsultObject},
-		{Member: "ted", Rank: api.RankSenior, Verdict: api.ConsultConcerns},
-		{Member: "una", Rank: api.RankSenior, Verdict: api.ConsultObject, Required: []string{"add a test"}},
+		{Member: "pia", Rank: api.RankPeer, Status: consultDone, Verdict: api.ConsultObject},
+		{Member: "ted", Rank: api.RankSenior, Status: consultDone, Verdict: api.ConsultConcerns},
+		{Member: "una", Rank: api.RankSenior, Status: consultDone, Verdict: api.ConsultObject,
+			Required: []string{"add a test"}},
 	}
 	got := seniorObjections(cs)
 	if len(got) != 2 || got[0] != "senior sam objected: the total can go negative" ||
 		got[1] != "senior una objected: add a test" {
 		t.Errorf("warnings = %q", got)
+	}
+}
+
+// Only a senior's latest finished consult counts: an objection approved later no longer warns, an approval
+// followed by an objection does, and a consult still running or failed leaves the earlier verdict in place.
+func TestSeniorObjectionLatestConsult(t *testing.T) {
+	cs := []api.Consult{
+		{Member: "sam", Rank: api.RankSenior, Status: consultDone, Verdict: api.ConsultObject,
+			Findings: []api.Claim{{Text: "old finding"}}},
+		{Member: "una", Rank: api.RankSenior, Status: consultDone, Verdict: api.ConsultApprove},
+		{Member: "sam", Rank: api.RankSenior, Status: consultDone, Verdict: api.ConsultApprove},
+		{Member: "una", Rank: api.RankSenior, Status: consultDone, Verdict: api.ConsultObject,
+			Findings: []api.Claim{{Text: "new finding"}}},
+		{Member: "ted", Rank: api.RankSenior, Status: consultDone, Verdict: api.ConsultObject,
+			Required: []string{"keep the check"}},
+		{Member: "ted", Rank: api.RankSenior, Status: consultFailed},
+		{Member: "una", Rank: api.RankSenior, Status: consultRunning},
+	}
+	got := seniorObjections(cs)
+	want := []string{"senior una objected: new finding", "senior ted objected: keep the check"}
+	if !slices.Equal(got, want) {
+		t.Errorf("warnings = %q, want %q", got, want)
 	}
 }
 
