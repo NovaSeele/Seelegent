@@ -410,6 +410,34 @@ func (c *Client) Comment(ctx context.Context, n int, body string) (string, error
 	return httpURL(out.HTMLURL), nil
 }
 
+// FindComment returns the link of a comment on issue n, updated at or after since, whose body holds marker (""
+// when there is none). It reads at most 300 comments.
+func (c *Client) FindComment(ctx context.Context, n int, marker string, since time.Time) (string, error) {
+	for page := 1; page <= 3; page++ {
+		p, err := c.repoPath(fmt.Sprintf("/issues/%d/comments?per_page=100&page=%d&since=%s", n, page,
+			url.QueryEscape(since.UTC().Format(time.RFC3339))))
+		if err != nil {
+			return "", err
+		}
+		var list []struct {
+			Body    string `json:"body"`
+			HTMLURL string `json:"html_url"`
+		}
+		if err := c.callJSON(ctx, http.MethodGet, p, nil, &list); err != nil {
+			return "", err
+		}
+		for _, cm := range list {
+			if strings.Contains(cm.Body, marker) {
+				return httpURL(cm.HTMLURL), nil
+			}
+		}
+		if len(list) < 100 {
+			break
+		}
+	}
+	return "", nil
+}
+
 // CurrentUser is the login of the signed-in identity.
 func (c *Client) CurrentUser(ctx context.Context) (string, error) {
 	var u struct {

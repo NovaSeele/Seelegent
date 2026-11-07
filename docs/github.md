@@ -145,6 +145,11 @@ when the daemon starts is `unknown`; before anything is retried it is checked ag
 Seelegent made on the remote branch, does the pull request exist, does the issue hold the comment's marker) and
 marked done when it had happened.
 
+*Comment* (`POST /github/tickets/{id}/comment`) posts on the GitHub issue with the local paths and anything
+token-like removed. Each comment ends with a hidden line `<!-- seelegent:<outbox entry id> -->`. Posting the same
+text again after an attempt a stop cut off (`unknown`) reuses that entry: the issue's comments are searched for its
+marker first, and the comment is posted only when it is not there, so it never appears twice.
+
 ## Checks
 
 While a pull request is open its head commit's check runs and commit statuses are read on every poll. The ticket

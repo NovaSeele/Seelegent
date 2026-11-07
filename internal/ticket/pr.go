@@ -2,8 +2,11 @@ package ticket
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"errors"
+	"fmt"
 	"sort"
 	"strings"
 	"time"
@@ -106,6 +109,15 @@ func (s *Service) recheck(ctx context.Context, id string) error {
 				if found, err := c.FindPR(ctx, t.Branch); err == nil && found != nil {
 					pr = found
 					result = map[string]any{"adopted": true, "number": found.Number, "url": found.URL}
+				}
+			}
+		case e.Kind == api.OutboxComment && t.Issue.Number > 0:
+			// A comment carries its entry's marker (G9): found on the issue, it was posted.
+			c, _, err := s.client(ctx, r)
+			if err == nil && c != nil {
+				if u, err := c.FindComment(ctx, t.Issue.Number, commentMarker(e.ID), commentSince(e.At)); err == nil &&
+					u != "" {
+					result = map[string]any{"url": u}
 				}
 			}
 		}
@@ -521,14 +533,40 @@ func (s *Service) Comment(ctx context.Context, id string, req api.CommentRequest
 		return api.Ticket{}, github.ErrManual
 	}
 	body = s.redact(scrubLocal(body, []string{t.Worktree, r.Path}, s.o.UserHome))
-	if err := s.runStep(ctx, id, api.OutboxComment, map[string]any{"issue": t.Issue.Number,
-		"preview": clip(oneLine(body, 200), 120)}, func() (map[string]any, error) {
-		u, err := c.Comment(ctx, t.Issue.Number, body)
+	sum := sha256.Sum256([]byte(body))
+	args := map[string]any{"issue": t.Issue.Number, "preview": clip(oneLine(body, 200), 120),
+		"hash": hex.EncodeToString(sum[:8])}
+	if err := s.runStepWith(ctx, id, api.OutboxComment, args, func(e stepEntry) (map[string]any, error) {
+		// The hidden marker names the entry (G9): a retry of an attempt a stop cut off looks for it first, so the
+		// comment is never posted twice.
+		marker := commentMarker(e.ID)
+		if e.Prev == api.OutboxUnknown {
+			if u, err := c.FindComment(ctx, t.Issue.Number, marker, commentSince(e.PrevAt)); err != nil {
+				return nil, err
+			} else if u != "" {
+				return map[string]any{"url": u, "recovered": true}, nil
+			}
+		}
+		u, err := c.Comment(ctx, t.Issue.Number, body+"\n\n"+marker)
 		return map[string]any{"url": u}, err
 	}); err != nil {
 		return api.Ticket{}, err
 	}
 	return s.Ticket(ctx, id)
+}
+
+// commentMarker is the hidden line a comment carries: the outbox entry that posted it.
+func commentMarker(entryID int64) string {
+	return fmt.Sprintf("<!-- seelegent:%d -->", entryID)
+}
+
+// commentSince is where the search for a comment of an attempt made at `at` starts (a minute early for clock skew).
+func commentSince(at string) time.Time {
+	t, err := time.Parse(time.RFC3339Nano, at)
+	if err != nil {
+		return time.Time{}
+	}
+	return t.Add(-time.Minute)
 }
 
 // taskPending reports whether one of the ticket's tasks has work going on.

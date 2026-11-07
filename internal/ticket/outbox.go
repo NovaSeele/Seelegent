@@ -111,22 +111,25 @@ func saveEntry(ctx context.Context, tx *sql.Tx, scope, ref string, e api.OutboxE
 	return e.ID, err
 }
 
-// openEntry returns the last pending or unknown entry of kind (to retry it) or a new pending one. Comments never
-// reuse an entry.
+// openEntry returns the last pending or unknown entry of kind (to retry it) or a new pending one. A comment reuses
+// only an entry of the same text (args.hash), so a retry keeps the entry's marker and finds a comment that was
+// posted (G9).
 func openEntry(ctx context.Context, tx *sql.Tx, scope, ref, kind string, args map[string]any, at string) (
 	api.OutboxEntry, error) {
-	if kind != api.OutboxComment {
-		list, err := listEntries(ctx, tx, scope, ref)
-		if err != nil {
-			return api.OutboxEntry{}, err
+	list, err := listEntries(ctx, tx, scope, ref)
+	if err != nil {
+		return api.OutboxEntry{}, err
+	}
+	for i := len(list) - 1; i >= 0; i-- {
+		e := list[i]
+		if e.Kind != kind || e.Status != api.OutboxPending && e.Status != api.OutboxUnknown {
+			continue
 		}
-		for i := len(list) - 1; i >= 0; i-- {
-			e := list[i]
-			if e.Kind == kind && (e.Status == api.OutboxPending || e.Status == api.OutboxUnknown) {
-				e.Args = args
-				return e, nil
-			}
+		if kind == api.OutboxComment && (args["hash"] == nil || e.Args["hash"] != args["hash"]) {
+			continue
 		}
+		e.Args = args
+		return e, nil
 	}
 	return api.OutboxEntry{Kind: kind, Status: api.OutboxPending, Args: args, Result: map[string]any{}, At: at}, nil
 }
@@ -161,12 +164,30 @@ func recoverRunning(ctx context.Context, tx *sql.Tx) (tickets, repos []string, e
 // action's result or failed with its (redacted) error, which also becomes the ticket's error.
 func (s *Service) runStep(ctx context.Context, ticketID, kind string, args map[string]any,
 	fn func() (map[string]any, error)) error {
+	return s.runStepWith(ctx, ticketID, kind, args, func(stepEntry) (map[string]any, error) { return fn() })
+}
+
+// stepEntry is the outbox entry an action runs under: its id, and its status and time before this attempt (""
+// for a new entry; unknown when an attempt cut off by a stop is retried).
+type stepEntry struct {
+	ID     int64
+	Prev   string
+	PrevAt string
+}
+
+// runStepWith is runStep for an action that needs its entry.
+func (s *Service) runStepWith(ctx context.Context, ticketID, kind string, args map[string]any,
+	fn func(stepEntry) (map[string]any, error)) error {
 	var id int64
+	var step stepEntry
 	now := api.FormatTime(s.o.Now())
 	if _, err := s.updateTicket(ctx, ticketID, func(tx *sql.Tx, _ *ticketRec) error {
 		e, err := openEntry(ctx, tx, scopeTicket, ticketID, kind, args, now)
 		if err != nil {
 			return err
+		}
+		if e.ID != 0 {
+			step.Prev, step.PrevAt = e.Status, e.At
 		}
 		e.Status, e.At, e.Error = api.OutboxRunning, now, ""
 		if id, err = saveEntry(ctx, tx, scopeTicket, ticketID, e); err != nil {
@@ -177,7 +198,8 @@ func (s *Service) runStep(ctx context.Context, ticketID, kind string, args map[s
 	}); err != nil {
 		return err
 	}
-	result, runErr := fn()
+	step.ID = id
+	result, runErr := fn(step)
 	// The action happened (or failed): its outcome is recorded even when the caller went away meanwhile (N1).
 	wctx := context.WithoutCancel(ctx)
 	_, err := s.updateTicket(wctx, ticketID, func(tx *sql.Tx, t *ticketRec) error {

@@ -203,7 +203,14 @@ func (f *fakeGitHub) serve(w http.ResponseWriter, r *http.Request) {
 		var in map[string]string
 		_ = json.NewDecoder(r.Body).Decode(&in)
 		f.comments = append(f.comments, in["body"])
-		reply(201, map[string]any{"html_url": f.srv.URL + "/octo/demo/issues/3#c1"})
+		reply(201, map[string]any{"html_url": fmt.Sprintf("%s/octo/demo/issues/3#c%d", f.srv.URL, len(f.comments))})
+	case r.Method == http.MethodGet && strings.HasSuffix(p, "/comments"):
+		out := []map[string]any{}
+		for i, b := range f.comments {
+			out = append(out, map[string]any{"body": b,
+				"html_url": fmt.Sprintf("%s/octo/demo/issues/3#c%d", f.srv.URL, i+1)})
+		}
+		reply(200, out)
 	default:
 		reply(404, map[string]any{"message": "Not Found"})
 	}
