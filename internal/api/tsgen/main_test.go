@@ -30,15 +30,15 @@ func TestGeneratedFileIsCurrent(t *testing.T) {
 
 func TestFormatting(t *testing.T) {
 	long := "'running' | 'ok' | 'quota' | 'auth' | 'transient' | 'background_wait' | 'error' | 'cancelled'"
-	if got := property("  ", "status: ", "string"); got != "  status: string\n" {
+	if got := property("status: ", "string"); got != "  status: string\n" {
 		t.Errorf("short property = %q", got)
 	}
-	got := property("  ", "status: ", long)
+	got := property("status: ", long)
 	if !strings.HasPrefix(got, "  status:\n    'running' |") {
 		t.Errorf("property on next line = %q", got)
 	}
 	longer := long + " | 'something_else' | 'and_more'"
-	got = property("  ", "status: ", longer)
+	got = property("status: ", longer)
 	if !strings.HasPrefix(got, "  status:\n    | 'running'\n    | 'ok'\n") {
 		t.Errorf("property broken per member = %q", got)
 	}

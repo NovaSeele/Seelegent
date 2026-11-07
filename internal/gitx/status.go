@@ -208,7 +208,7 @@ func countLines(path string) (lines int, binary bool) {
 
 // readHead reads at most limit bytes of a regular file.
 func readHead(path string, limit int) ([]byte, error) {
-	f, err := os.Open(path) //nolint:gosec // a path inside the repository, checked by the caller
+	f, err := os.Open(path) // a path inside the repository, checked by the caller
 	if err != nil {
 		return nil, err
 	}

@@ -124,13 +124,13 @@ func (r *Repos) Lock(ctx context.Context, root string) (func(), error) {
 
 // run runs git in dir and returns its standard output. Output beyond limit bytes (0: no limit) is dropped and
 // reported by the second result.
-func (r *Repos) run(ctx context.Context, dir string, timeout time.Duration, limit int, args ...string) (
-	[]byte, bool, error) {
+func (r *Repos) run(ctx context.Context, dir string, timeout time.Duration, limit int, args ...string) (stdout []byte,
+	truncated bool, err error) {
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	full := append([]string{"-c", "core.fsmonitor=false", "-c", "core.quotepath=off", "-c", "color.ui=false"},
 		args...)
-	cmd := exec.Command(r.git, full...) //nolint:gosec // fixed binary, argument list
+	cmd := exec.Command(r.git, full...) //nolint:gosec,noctx // fixed binary, argument list; the tree is killed when ctx ends
 	cmd.Dir = dir
 	cmd.Env = append(cmd.Environ(), "GIT_TERMINAL_PROMPT=0", "GIT_LITERAL_PATHSPECS=1", "LC_ALL=C",
 		"GIT_OPTIONAL_LOCKS=0")
@@ -149,7 +149,7 @@ func (r *Repos) run(ctx context.Context, dir string, timeout time.Duration, limi
 	case err = <-done:
 	case <-ctx.Done():
 		_ = tree.Kill(time.Second)
-		<-done
+		<-done //nolint:errcheck // the tree was killed; its exit error adds nothing
 		return nil, false, &Error{Args: args, Timeout: true, Err: ctx.Err()}
 	}
 	if err != nil {

@@ -31,7 +31,7 @@ func CleanPath(root, p string) (string, error) {
 	}
 	for _, part := range strings.Split(s, "/") {
 		if part == ".." {
-			return "", fmt.Errorf("%w: path %q must not contain ..", ErrInvalid, p)
+			return "", fmt.Errorf("%w: path %q must not contain a .. element", ErrInvalid, p)
 		}
 	}
 	s = path.Clean(s)
@@ -40,7 +40,7 @@ func CleanPath(root, p string) (string, error) {
 	}
 	ok, err := fsutil.Within(root, filepath.Join(root, filepath.FromSlash(s)))
 	if err != nil {
-		return "", fmt.Errorf("%w: path %q: %v", ErrInvalid, p, err)
+		return "", fmt.Errorf("%w: path %q: %w", ErrInvalid, p, err)
 	}
 	if !ok {
 		return "", fmt.Errorf("%w: path %q leaves the repository", ErrInvalid, p)
@@ -92,7 +92,7 @@ func (r *Repos) Diff(ctx context.Context, root, rel, base string, untracked bool
 func untrackedDiff(root, rel string) (api.FileDiff, error) {
 	data, err := readHead(filepath.Join(root, filepath.FromSlash(rel)), maxDiffBytes+1)
 	if err != nil {
-		return api.FileDiff{}, fmt.Errorf("%w: %s: %v", ErrInvalid, rel, err)
+		return api.FileDiff{}, fmt.Errorf("%w: %s: %w", ErrInvalid, rel, err)
 	}
 	d := api.FileDiff{Path: rel, Hunks: []api.DiffHunk{}}
 	if isBinary(data) {

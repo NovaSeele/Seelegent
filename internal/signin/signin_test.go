@@ -38,7 +38,7 @@ func (o *procOpener) Open(_ context.Context, spec platform.TerminalSpec) (Termin
 	o.mu.Lock()
 	o.specs = append(o.specs, spec)
 	o.mu.Unlock()
-	cmd := exec.Command(spec.Argv[0], spec.Argv[1:]...) //nolint:gosec // the test binary
+	cmd := exec.Command(spec.Argv[0], spec.Argv[1:]...) //nolint:noctx // the test binary; a window outlives the request
 	cmd.Dir = spec.Dir
 	cmd.Env = o.env(spec.Env)
 	if spec.StdoutPath != "" {
@@ -70,7 +70,9 @@ func (t *procTerminal) Wait(ctx context.Context) (int, error) {
 	}
 }
 
-func (t *procTerminal) Identity() (int, uint64, bool) { return t.cmd.Process.Pid, 0, true }
+func (t *procTerminal) Identity() (pid int, created uint64, ok bool) {
+	return t.cmd.Process.Pid, 0, true
+}
 
 type fixture struct {
 	accounts *account.Manager

@@ -433,7 +433,7 @@ func (g *generator) writeStruct(k key, name string, st *ast.StructType) error {
 				sep = "?: "
 			}
 			writeDoc(&body, f.Doc.Text(), "  ")
-			body.WriteString(property("  ", field+sep, ts))
+			body.WriteString(property(field+sep, ts))
 		}
 	}
 	if body.Len() == 0 && len(extends) == 0 {
@@ -540,9 +540,10 @@ func unionParts(t string) []string {
 		c := t[i]
 		switch {
 		case inQuote:
-			if c == '\\' {
+			switch c {
+			case '\\':
 				i++
-			} else if c == '\'' {
+			case '\'':
 				inQuote = false
 			}
 		case c == '\'':
@@ -560,9 +561,10 @@ func unionParts(t string) []string {
 	return append(parts, t[start:])
 }
 
-// property formats `name: type` the way prettier does: on one line when it fits, else the type on the next line
-// (indented) when that fits, else one union member per line.
-func property(indent, head, typ string) string {
+// property formats `name: type` of an interface the way prettier does: on one line when it fits, else the type on
+// the next line (indented) when that fits, else one union member per line.
+func property(head, typ string) string {
+	const indent = "  "
 	if len(indent)+len(head)+len(typ) <= printWidth {
 		return indent + head + typ + "\n"
 	}
