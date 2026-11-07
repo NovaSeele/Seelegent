@@ -1,0 +1,92 @@
+{
+  "new": "New role",
+  "edit": "Edit",
+  "save": "Save role",
+  "saved": "Saved {name}",
+  "deleted": "Deleted {name}",
+  "loading": "Loading roles…",
+  "loadFailed": "Roles could not be loaded",
+  "stale": "Showing the last list; the refresh failed: {error}",
+  "noDescription": "No description.",
+  "overrides": "Overrides the global role",
+  "defaults": "Defaults",
+  "none": "None",
+  "newTitle": "New role",
+  "editTitle": "Edit role",
+  "deleteOf": "Delete {name}",
+  "deleteTitle": "Delete {name}?",
+  "deleteGlobalDesc": "Tasks that name this role no longer get its rules. Project roles with the same id stay.",
+  "deleteProjectDesc": "Only the copy in {project} is deleted; a global role with the same id applies there again.",
+  "deleteConfirm": "Delete role",
+  "empty": {
+    "title": "No roles yet",
+    "desc": "A role gives workers standing rules, a report style and skills. Start from a template."
+  },
+  "filter": {
+    "label": "Show roles of",
+    "all": "All"
+  },
+  "scope": {
+    "global": "Global",
+    "project": "One project"
+  },
+  "tier": {
+    "fast": "Fast tier",
+    "standard": "Standard tier",
+    "strong": "Strong tier",
+    "max": "Max tier"
+  },
+  "effort": {
+    "low": "Low effort",
+    "medium": "Medium effort",
+    "high": "High effort",
+    "xhigh": "Extra-high effort",
+    "max": "Max effort"
+  },
+  "field": {
+    "name": "Name",
+    "id": "ID",
+    "idHint": "Tasks pick the role by this id. a-z, 0-9 and -, at most 40.",
+    "scope": "Applies to",
+    "project": "Project",
+    "description": "Description",
+    "rules": "Rules",
+    "rulesHint": "Standing instructions added to every brief of this role.",
+    "outputStyle": "Report style",
+    "outputStyleHint": "How the worker writes its final report.",
+    "tier": "Default tier",
+    "effort": "Default effort"
+  },
+  "skills": {
+    "title": "Skills",
+    "loading": "Loading skills…",
+    "loadFailed": "Skills could not be listed: {error}",
+    "none": "No skills are installed for this place.",
+    "search": "Search skills",
+    "missing": "{n} chosen skill is not installed here; workers will not find it. | {n} chosen skills are not installed here; workers will not find them.",
+    "root": {
+      "project": "Project",
+      "user": "User",
+      "gemini": "Gemini",
+      "claude": "Claude"
+    }
+  },
+  "accounts": {
+    "title": "Preferred accounts",
+    "hint": "Tried first when a task with this role starts; others are used when these are busy or resting."
+  },
+  "errors": {
+    "name": "Give the role a name.",
+    "id": "Use a-z, 0-9 and -, starting with a letter or digit, at most 40 characters.",
+    "project": "Choose a project.",
+    "taken": "A role with this id already exists there."
+  },
+  "templates": {
+    "title": "New role",
+    "desc": "Start from a template and adjust it, or start blank.",
+    "blank": "Blank role",
+    "blankDesc": "Only a name; write the rules yourself.",
+    "loading": "Loading templates…",
+    "loadFailed": "Templates could not be loaded: {error}"
+  }
+}

@@ -4,6 +4,7 @@
  */
 import { createI18n } from 'vue-i18n'
 
+import type accounts from './locales/en/accounts.json'
 import type common from './locales/en/common.json'
 import type git from './locales/en/git.json'
 import type locale from './locales/en/locale.json'
@@ -11,10 +12,12 @@ import type nav from './locales/en/nav.json'
 import type pages from './locales/en/pages.json'
 import type palette from './locales/en/palette.json'
 import type process from './locales/en/process.json'
+import type roles from './locales/en/roles.json'
 import type settings from './locales/en/settings.json'
 import type task from './locales/en/task.json'
 import type tasks from './locales/en/tasks.json'
 import type terminal from './locales/en/terminal.json'
+import type usage from './locales/en/usage.json'
 import type watch from './locales/en/watch.json'
 import { FALLBACK_LOCALE, PLURAL_FORMS, SUPPORTED_LOCALES, type Locale } from './locales'
 
@@ -33,6 +36,9 @@ export const NAMESPACES = [
   'terminal',
   'process',
   'git',
+  'accounts',
+  'usage',
+  'roles',
 ] as const
 export type Namespace = (typeof NAMESPACES)[number]
 
@@ -49,6 +55,9 @@ export interface MessageSchema {
   terminal: typeof terminal
   process: typeof process
   git: typeof git
+  accounts: typeof accounts
+  usage: typeof usage
+  roles: typeof roles
 }
 
 declare module 'vue-i18n' {

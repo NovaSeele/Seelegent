@@ -1,0 +1,92 @@
+{
+  "new": "新建角色",
+  "edit": "编辑",
+  "save": "保存角色",
+  "saved": "已保存 {name}",
+  "deleted": "已删除 {name}",
+  "loading": "正在加载角色…",
+  "loadFailed": "无法加载角色",
+  "stale": "显示的是上次的列表；刷新失败：{error}",
+  "noDescription": "没有描述。",
+  "overrides": "覆盖全局角色",
+  "defaults": "默认值",
+  "none": "无",
+  "newTitle": "新建角色",
+  "editTitle": "编辑角色",
+  "deleteOf": "删除 {name}",
+  "deleteTitle": "删除 {name}？",
+  "deleteGlobalDesc": "指定此角色的任务将不再获得其规则。具有相同 id 的项目角色保持不变。",
+  "deleteProjectDesc": "只删除 {project} 中的副本；具有相同 id 的全局角色会重新在那里生效。",
+  "deleteConfirm": "删除角色",
+  "empty": {
+    "title": "还没有角色",
+    "desc": "角色为工人提供固定规则、报告风格和技能。从模板开始吧。"
+  },
+  "filter": {
+    "label": "显示角色范围",
+    "all": "全部"
+  },
+  "scope": {
+    "global": "全局",
+    "project": "单个项目"
+  },
+  "tier": {
+    "fast": "快速档",
+    "standard": "标准档",
+    "strong": "强档",
+    "max": "最强档"
+  },
+  "effort": {
+    "low": "低投入",
+    "medium": "中等投入",
+    "high": "高投入",
+    "xhigh": "很高投入",
+    "max": "最高投入"
+  },
+  "field": {
+    "name": "名称",
+    "id": "ID",
+    "idHint": "任务通过此 id 选择角色。a-z、0-9 和 -，最多 40 个字符。",
+    "scope": "适用于",
+    "project": "项目",
+    "description": "描述",
+    "rules": "规则",
+    "rulesHint": "添加到此角色每份简报中的固定指示。",
+    "outputStyle": "报告风格",
+    "outputStyleHint": "工人如何写最终报告。",
+    "tier": "默认档位",
+    "effort": "默认投入"
+  },
+  "skills": {
+    "title": "技能",
+    "loading": "正在加载技能…",
+    "loadFailed": "无法列出技能：{error}",
+    "none": "此处没有安装任何技能。",
+    "search": "搜索技能",
+    "missing": "有 {n} 个已选技能未在此处安装，工人将找不到它们。",
+    "root": {
+      "project": "项目",
+      "user": "用户",
+      "gemini": "Gemini",
+      "claude": "Claude"
+    }
+  },
+  "accounts": {
+    "title": "首选账号",
+    "hint": "此角色的任务开始时先尝试这些账号；它们忙碌或休息时使用其他账号。"
+  },
+  "errors": {
+    "name": "请为角色命名。",
+    "id": "使用 a-z、0-9 和 -，以字母或数字开头，最多 40 个字符。",
+    "project": "请选择一个项目。",
+    "taken": "那里已有使用此 id 的角色。"
+  },
+  "templates": {
+    "title": "新建角色",
+    "desc": "从模板开始再调整，或从空白开始。",
+    "blank": "空白角色",
+    "blankDesc": "只有名称；规则由你自己写。",
+    "loading": "正在加载模板…",
+    "loadFailed": "无法加载模板：{error}"
+  }
+}

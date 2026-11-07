@@ -1,0 +1,66 @@
+{
+  "range": "{n} días",
+  "rangeLabel": "Periodo",
+  "period": "Del {from} al {to}",
+  "refresh": "Actualizar uso",
+  "loading": "Cargando uso…",
+  "loadFailed": "No se pudo cargar el uso",
+  "stale": "Se muestran los últimos números; la actualización falló: {error}",
+  "historyFailed": "No se pudo cargar el historial de cuota: {error}",
+  "dataSince": "El uso se guarda desde el {date}.",
+  "noCost": "Sin datos",
+  "showTable": "Ver como tabla",
+  "showChart": "Ver como gráfico",
+  "totals": {
+    "tokens": "Tokens",
+    "costUsd": "Coste",
+    "tasks": "Tareas",
+    "turns": "Turnos"
+  },
+  "delta": {
+    "up": "{pct} más que antes ({previous})",
+    "down": "{pct} menos que antes ({previous})",
+    "same": "Igual que antes ({previous})",
+    "new": "Nada con que comparar (antes: {previous})"
+  },
+  "col": {
+    "date": "Día",
+    "tokens": "Tokens",
+    "cost": "Coste",
+    "tasks": "Tareas",
+    "time": "Hora",
+    "project": "Proyecto",
+    "account": "Cuenta",
+    "attempts": "Intentos"
+  },
+  "daily": {
+    "title": "Tokens por día",
+    "empty": "Sin uso en este periodo.",
+    "summary": "Tokens por día del {from} al {to}; el día con más uso fue {day}, con {top} tokens."
+  },
+  "projects": {
+    "title": "Proyectos con más uso",
+    "empty": "Ningún proyecto usó tokens en este periodo."
+  },
+  "accounts": {
+    "title": "Cuentas con más uso",
+    "empty": "Ninguna cuenta usó tokens en este periodo."
+  },
+  "turn": "Turno {n}",
+  "turns": "{n} turno | {n} turnos",
+  "attempts": "{n} intento | {n} intentos",
+  "showTurns": "Ver los turnos de {title}",
+  "moreTurns": "y {n} turno más | y {n} turnos más",
+  "moreTasks": "y {n} tarea más | y {n} tareas más",
+  "moreProjects": "y {n} proyecto más | y {n} proyectos más",
+  "moreAccounts": "y {n} cuenta más | y {n} cuentas más",
+  "moreModels": "y {n} modelo más | y {n} modelos más",
+  "quota": {
+    "title": "Cuota a lo largo del tiempo",
+    "account": "Cuenta",
+    "empty": "Esta cuenta aún no tiene historial de cuota.",
+    "low": "{key}: mínimo {pct}",
+    "threshold": "Descansa por debajo de {pct}",
+    "summary": "Cuota restante en el periodo. {lines}."
+  }
+}

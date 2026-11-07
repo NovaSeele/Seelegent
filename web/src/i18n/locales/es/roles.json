@@ -1,0 +1,92 @@
+{
+  "new": "Nuevo rol",
+  "edit": "Editar",
+  "save": "Guardar rol",
+  "saved": "Se guardó {name}",
+  "deleted": "Se eliminó {name}",
+  "loading": "Cargando roles…",
+  "loadFailed": "No se pudieron cargar los roles",
+  "stale": "Se muestra la última lista; la actualización falló: {error}",
+  "noDescription": "Sin descripción.",
+  "overrides": "Sustituye al rol global",
+  "defaults": "Predeterminados",
+  "none": "Ninguno",
+  "newTitle": "Nuevo rol",
+  "editTitle": "Editar rol",
+  "deleteOf": "Eliminar {name}",
+  "deleteTitle": "¿Eliminar {name}?",
+  "deleteGlobalDesc": "Las tareas que nombran este rol dejan de recibir sus reglas. Los roles de proyecto con el mismo id se mantienen.",
+  "deleteProjectDesc": "Solo se elimina la copia de {project}; allí vuelve a aplicarse el rol global con el mismo id.",
+  "deleteConfirm": "Eliminar rol",
+  "empty": {
+    "title": "Aún no hay roles",
+    "desc": "Un rol da a los workers reglas fijas, un estilo de informe y skills. Empieza desde una plantilla."
+  },
+  "filter": {
+    "label": "Mostrar roles de",
+    "all": "Todos"
+  },
+  "scope": {
+    "global": "Global",
+    "project": "Un proyecto"
+  },
+  "tier": {
+    "fast": "Nivel rápido",
+    "standard": "Nivel estándar",
+    "strong": "Nivel potente",
+    "max": "Nivel máximo"
+  },
+  "effort": {
+    "low": "Esfuerzo bajo",
+    "medium": "Esfuerzo medio",
+    "high": "Esfuerzo alto",
+    "xhigh": "Esfuerzo muy alto",
+    "max": "Esfuerzo máximo"
+  },
+  "field": {
+    "name": "Nombre",
+    "id": "ID",
+    "idHint": "Las tareas eligen el rol por este id. a-z, 0-9 y -, como máximo 40.",
+    "scope": "Se aplica a",
+    "project": "Proyecto",
+    "description": "Descripción",
+    "rules": "Reglas",
+    "rulesHint": "Instrucciones fijas que se añaden a cada encargo de este rol.",
+    "outputStyle": "Estilo del informe",
+    "outputStyleHint": "Cómo escribe el worker su informe final.",
+    "tier": "Nivel predeterminado",
+    "effort": "Esfuerzo predeterminado"
+  },
+  "skills": {
+    "title": "Skills",
+    "loading": "Cargando skills…",
+    "loadFailed": "No se pudieron listar las skills: {error}",
+    "none": "No hay skills instaladas para este lugar.",
+    "search": "Buscar skills",
+    "missing": "{n} skill elegida no está instalada aquí; los workers no la encontrarán. | {n} skills elegidas no están instaladas aquí; los workers no las encontrarán.",
+    "root": {
+      "project": "Proyecto",
+      "user": "Usuario",
+      "gemini": "Gemini",
+      "claude": "Claude"
+    }
+  },
+  "accounts": {
+    "title": "Cuentas preferidas",
+    "hint": "Se prueban primero cuando empieza una tarea con este rol; las demás se usan cuando estas están ocupadas o descansando."
+  },
+  "errors": {
+    "name": "Ponle un nombre al rol.",
+    "id": "Usa a-z, 0-9 y -, empezando por una letra o un dígito, como máximo 40 caracteres.",
+    "project": "Elige un proyecto.",
+    "taken": "Ya existe allí un rol con este id."
+  },
+  "templates": {
+    "title": "Nuevo rol",
+    "desc": "Parte de una plantilla y ajústala, o empieza en blanco.",
+    "blank": "Rol en blanco",
+    "blankDesc": "Solo un nombre; las reglas las escribes tú.",
+    "loading": "Cargando plantillas…",
+    "loadFailed": "No se pudieron cargar las plantillas: {error}"
+  }
+}

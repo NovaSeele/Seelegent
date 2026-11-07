@@ -1,0 +1,175 @@
+{
+  "failed": "操作未成功：{error}",
+  "backend": {
+    "agy": "Antigravity",
+    "claude": "Claude Code",
+    "codex": "Codex"
+  },
+  "status": {
+    "ok": "就绪",
+    "new": "正在检查配额",
+    "error": "就绪",
+    "needs_login": "需要登录",
+    "no_key": "没有 API 密钥",
+    "no_plan": "套餐不能使用此后端",
+    "twin": "与 {name} 是同一登录",
+    "disabled": "已关闭"
+  },
+  "kind": {
+    "isolated": "独立登录",
+    "system": "本机的登录",
+    "apiKey": "API 密钥",
+    "apiKeyOf": "API 密钥 · {provider}"
+  },
+  "keyHint": "密钥 {hint}",
+  "busy": "{max} 个槽位中 {busy} 个忙碌",
+  "exhausted": "配额用完，{time}恢复",
+  "resting": "休息中",
+  "restingUntil": "休息到 {time}",
+  "signingIn": "正在登录…",
+  "errorNote": "上次读取配额失败，下面的数字可能已过时。",
+  "twinNote": "这与 {name} 是同一个登录，所以工作交给那个账号。",
+  "enabled": "用于工作",
+  "priority": "优先级",
+  "summary": {
+    "ready": "可接收工作",
+    "busy": "正在运行",
+    "resting": "休息中或配额用完",
+    "needsYou": "需要你"
+  },
+  "empty": {
+    "title": "还没有账号",
+    "desc": "添加一个账号，Seelegent 才有工人可以分配任务。"
+  },
+  "action": {
+    "add": "添加账号",
+    "refreshAll": "刷新全部配额",
+    "refresh": "刷新配额",
+    "rename": "重命名",
+    "login": "登录",
+    "logout": "退出登录",
+    "key": "设置 API 密钥",
+    "delete": "删除账号",
+    "more": "{name} 的更多操作"
+  },
+  "done": {
+    "added": "已添加 {name}",
+    "renamed": "已重命名为 {name}",
+    "keySet": "已为 {name} 保存 API 密钥",
+    "keyCleared": "已从 {name} 移除 API 密钥",
+    "deleted": "已删除 {name}",
+    "logout": "已退出登录",
+    "refreshedAll": "配额已刷新"
+  },
+  "quota": {
+    "window": "{window} 窗口",
+    "resets": "{time}重置",
+    "fetched": "读取于 {time}",
+    "seen": "上次在运行中看到于 {time}",
+    "passive": "API 密钥没有可读取的配额；只有运行触及限制时才会显示。",
+    "checking": "正在首次读取配额…",
+    "none": "尚未读取配额。",
+    "noPlan": "此套餐不能使用此后端。",
+    "readFailed": "上次读取失败：{error}"
+  },
+  "login": {
+    "title": "登录",
+    "state": {
+      "starting": "正在开始登录…",
+      "open_url": "请在浏览器中完成登录",
+      "waiting_code": "粘贴登录页面上的代码",
+      "done": "已登录",
+      "failed": "登录失败"
+    },
+    "openHint": "打开登录页面，用你想在这里使用的账号登录，然后回来。此处会自动更新。",
+    "codeHint": "登录后页面会显示一个代码，请粘贴到这里。",
+    "deviceCode": "在页面上输入此代码：",
+    "open": "打开登录页面",
+    "copyLink": "复制链接",
+    "copy": "复制",
+    "linkCopied": "链接已复制",
+    "codeCopied": "代码已复制",
+    "copyFailed": "无法复制；请自行选择文本并复制。",
+    "codeLabel": "代码",
+    "send": "发送代码",
+    "retry": "重试"
+  },
+  "add": {
+    "title": "添加账号",
+    "step1": "第 1 步，共 2 步：账号类型。",
+    "step2": "第 2 步，共 2 步：详细信息。",
+    "backend": "后端",
+    "kind": "类型",
+    "backendDesc": {
+      "agy": "通过 Antigravity CLI 使用 Gemini 模型。",
+      "claude": "通过 Claude Code 使用 Claude 模型。",
+      "codex": "通过 Codex 使用 OpenAI 模型。"
+    },
+    "kindDesc": {
+      "isolated": "独立配置；在浏览器中登录一次。",
+      "system": "使用本机上已有的登录。",
+      "apiKey": "通过 API 提供方按 token 付费。"
+    },
+    "defaultLabel": "{backend} {n}",
+    "label": "名称",
+    "priorityHint": "数字越大越先使用（−1000 到 1000）。",
+    "provider": "提供方",
+    "noProvider": "此后端还没有提供方。请先在“API 提供方”中添加一个。",
+    "keyHint": "可选，可以稍后添加。之后只显示最后几个字符。",
+    "next": "下一步",
+    "submit": "添加账号"
+  },
+  "key": {
+    "title": "{name} 的 API 密钥",
+    "current": "已保存的密钥以 {hint} 结尾。新密钥会替换它。",
+    "none": "尚未保存密钥。",
+    "label": "API 密钥",
+    "hint": "由服务保存；控制面板不会再显示它。",
+    "save": "保存密钥",
+    "clear": "移除密钥"
+  },
+  "rename": {
+    "title": "重命名账号",
+    "submit": "重命名"
+  },
+  "delete": {
+    "title": "删除 {name}？",
+    "desc": "它的配置和登录将从 Seelegent 中移除。它运行过的任务会保留历史。",
+    "confirm": "删除账号",
+    "running": "它正在运行任务，现在不能删除。{error}"
+  },
+  "providers": {
+    "title": "API 提供方",
+    "desc": "API 密钥账号发送请求的地方：Claude Code 使用 Anthropic 兼容服务，Codex 使用 OpenAI 兼容服务。",
+    "add": "添加提供方",
+    "search": "搜索提供方",
+    "loading": "正在加载提供方…",
+    "loadFailed": "无法加载提供方：{error}",
+    "empty": "还没有提供方。",
+    "noMatch": "没有匹配的提供方。",
+    "usedBy": "{n} 个账号在用",
+    "anyModel": "任意模型",
+    "enabledOf": "使用 {name}",
+    "editOf": "编辑 {name}",
+    "deleteOf": "删除 {name}",
+    "deleteTitle": "删除 {name}？",
+    "deleteDesc": "账号将无法再使用它。仍有账号在用的提供方不能删除。",
+    "deleteConfirm": "删除提供方",
+    "inUse": "仍有账号在使用它；请先迁移或删除这些账号。{error}",
+    "deleted": "已删除 {name}",
+    "saved": "已保存 {name}",
+    "addTitle": "添加 API 提供方",
+    "editTitle": "编辑 API 提供方",
+    "preset": "基于",
+    "blank": "空白",
+    "id": "ID",
+    "idHint": "a-z、0-9 和 -；之后不能更改。",
+    "backend": "后端",
+    "name": "名称",
+    "baseUrl": "基础 URL",
+    "models": "模型",
+    "modelsHint": "用逗号分隔；留空则允许任意模型。",
+    "enabled": "允许账号使用",
+    "save": "保存提供方"
+  }
+}

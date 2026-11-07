@@ -1,0 +1,175 @@
+{
+  "failed": "No funcionó: {error}",
+  "backend": {
+    "agy": "Antigravity",
+    "claude": "Claude Code",
+    "codex": "Codex"
+  },
+  "status": {
+    "ok": "Lista",
+    "new": "Comprobando cuota",
+    "error": "Lista",
+    "needs_login": "Hay que iniciar sesión",
+    "no_key": "Sin clave de API",
+    "no_plan": "El plan no permite este backend",
+    "twin": "Misma sesión que {name}",
+    "disabled": "Desactivada"
+  },
+  "kind": {
+    "isolated": "Sesión propia",
+    "system": "Sesión de este equipo",
+    "apiKey": "Clave de API",
+    "apiKeyOf": "Clave de API · {provider}"
+  },
+  "keyHint": "clave {hint}",
+  "busy": "{busy} de {max} huecos ocupados",
+  "exhausted": "Sin cuota, vuelve {time}",
+  "resting": "Descansando",
+  "restingUntil": "Descansa hasta {time}",
+  "signingIn": "Iniciando sesión…",
+  "errorNote": "La última lectura de cuota falló; los números de abajo pueden estar desfasados.",
+  "twinNote": "Es la misma sesión que {name}, así que el trabajo va a esa cuenta.",
+  "enabled": "Usar para trabajar",
+  "priority": "Prioridad",
+  "summary": {
+    "ready": "Listas para trabajar",
+    "busy": "Ejecutando turnos",
+    "resting": "Descansando o sin cuota",
+    "needsYou": "Te necesitan"
+  },
+  "empty": {
+    "title": "Aún no hay cuentas",
+    "desc": "Añade una cuenta para que Seelegent tenga un worker al que dar tareas."
+  },
+  "action": {
+    "add": "Añadir cuenta",
+    "refreshAll": "Actualizar toda la cuota",
+    "refresh": "Actualizar cuota",
+    "rename": "Renombrar",
+    "login": "Iniciar sesión",
+    "logout": "Cerrar sesión",
+    "key": "Poner clave de API",
+    "delete": "Eliminar cuenta",
+    "more": "Más acciones para {name}"
+  },
+  "done": {
+    "added": "Se añadió {name}",
+    "renamed": "Renombrada a {name}",
+    "keySet": "Clave de API guardada para {name}",
+    "keyCleared": "Clave de API quitada de {name}",
+    "deleted": "Se eliminó {name}",
+    "logout": "Sesión cerrada",
+    "refreshedAll": "Cuota actualizada"
+  },
+  "quota": {
+    "window": "Ventana de {window}",
+    "resets": "se renueva {time}",
+    "fetched": "leída {time}",
+    "seen": "vista por última vez en una ejecución {time}",
+    "passive": "Las claves de API no tienen cuota que leer; los límites solo aparecen cuando una ejecución choca con uno.",
+    "checking": "Leyendo la cuota por primera vez…",
+    "none": "Aún no se ha leído la cuota.",
+    "noPlan": "Este plan no permite usar este backend.",
+    "readFailed": "La última lectura falló: {error}"
+  },
+  "login": {
+    "title": "Inicio de sesión",
+    "state": {
+      "starting": "Empezando el inicio de sesión…",
+      "open_url": "Termina de iniciar sesión en el navegador",
+      "waiting_code": "Pega el código de la página de inicio de sesión",
+      "done": "Sesión iniciada",
+      "failed": "El inicio de sesión falló"
+    },
+    "openHint": "Abre la página de inicio de sesión, entra con la cuenta que quieres usar aquí y vuelve. Esto se actualiza solo.",
+    "codeHint": "Tras iniciar sesión, la página muestra un código. Pégalo aquí.",
+    "deviceCode": "Escribe este código en la página:",
+    "open": "Abrir página de inicio de sesión",
+    "copyLink": "Copiar enlace",
+    "copy": "Copiar",
+    "linkCopied": "Enlace copiado",
+    "codeCopied": "Código copiado",
+    "copyFailed": "No se pudo copiar; selecciona el texto y cópialo tú.",
+    "codeLabel": "Código",
+    "send": "Enviar código",
+    "retry": "Reintentar"
+  },
+  "add": {
+    "title": "Añadir cuenta",
+    "step1": "Paso 1 de 2: qué tipo de cuenta.",
+    "step2": "Paso 2 de 2: sus datos.",
+    "backend": "Backend",
+    "kind": "Tipo",
+    "backendDesc": {
+      "agy": "Modelos Gemini a través de la CLI de Antigravity.",
+      "claude": "Modelos Claude a través de Claude Code.",
+      "codex": "Modelos de OpenAI a través de Codex."
+    },
+    "kindDesc": {
+      "isolated": "Su propio perfil; inicias sesión una vez en el navegador.",
+      "system": "Usa la sesión que ya hay en este equipo.",
+      "apiKey": "Paga por token a través de un proveedor de API."
+    },
+    "defaultLabel": "{backend} {n}",
+    "label": "Nombre",
+    "priorityHint": "Los números más altos se usan primero (−1000 a 1000).",
+    "provider": "Proveedor",
+    "noProvider": "Este backend aún no tiene proveedor. Añade uno antes en Proveedores de API.",
+    "keyHint": "Opcional; puedes añadirla después. Luego solo se muestran sus últimos caracteres.",
+    "next": "Siguiente",
+    "submit": "Añadir cuenta"
+  },
+  "key": {
+    "title": "Clave de API de {name}",
+    "current": "La clave guardada termina en {hint}. Una clave nueva la sustituye.",
+    "none": "Aún no hay clave guardada.",
+    "label": "Clave de API",
+    "hint": "La guarda el servicio; el panel no vuelve a mostrarla.",
+    "save": "Guardar clave",
+    "clear": "Quitar clave"
+  },
+  "rename": {
+    "title": "Renombrar cuenta",
+    "submit": "Renombrar"
+  },
+  "delete": {
+    "title": "¿Eliminar {name}?",
+    "desc": "Su perfil y su sesión se quitan de Seelegent. Las tareas que ejecutó conservan su historial.",
+    "confirm": "Eliminar cuenta",
+    "running": "Está ejecutando una tarea, así que ahora no se puede eliminar. {error}"
+  },
+  "providers": {
+    "title": "Proveedores de API",
+    "desc": "Adónde envían sus peticiones las cuentas con clave de API: compatibles con Anthropic para Claude Code, compatibles con OpenAI para Codex.",
+    "add": "Añadir proveedor",
+    "search": "Buscar proveedores",
+    "loading": "Cargando proveedores…",
+    "loadFailed": "No se pudieron cargar los proveedores: {error}",
+    "empty": "Aún no hay proveedores.",
+    "noMatch": "Ningún proveedor coincide.",
+    "usedBy": "lo usa {n} cuenta | lo usan {n} cuentas",
+    "anyModel": "cualquier modelo",
+    "enabledOf": "Usar {name}",
+    "editOf": "Editar {name}",
+    "deleteOf": "Eliminar {name}",
+    "deleteTitle": "¿Eliminar {name}?",
+    "deleteDesc": "Las cuentas ya no podrán usarlo. No se puede eliminar un proveedor que aún usan cuentas.",
+    "deleteConfirm": "Eliminar proveedor",
+    "inUse": "Aún hay cuentas que lo usan; muévelas o elimínalas primero. {error}",
+    "deleted": "Se eliminó {name}",
+    "saved": "Se guardó {name}",
+    "addTitle": "Añadir proveedor de API",
+    "editTitle": "Editar proveedor de API",
+    "preset": "Partir de",
+    "blank": "En blanco",
+    "id": "ID",
+    "idHint": "a-z, 0-9 y -; no se puede cambiar después.",
+    "backend": "Backend",
+    "name": "Nombre",
+    "baseUrl": "URL base",
+    "models": "Modelos",
+    "modelsHint": "Separados por comas; vacío permite cualquier modelo.",
+    "enabled": "Las cuentas pueden usarlo",
+    "save": "Guardar proveedor"
+  }
+}

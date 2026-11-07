@@ -1,0 +1,66 @@
+{
+  "range": "{n} 天",
+  "rangeLabel": "时间段",
+  "period": "{from} 至 {to}",
+  "refresh": "刷新用量",
+  "loading": "正在加载用量…",
+  "loadFailed": "无法加载用量",
+  "stale": "显示的是上次的数字；刷新失败：{error}",
+  "historyFailed": "无法加载配额历史：{error}",
+  "dataSince": "用量数据从 {date} 开始保存。",
+  "noCost": "未报告",
+  "showTable": "以表格显示",
+  "showChart": "以图表显示",
+  "totals": {
+    "tokens": "Token",
+    "costUsd": "费用",
+    "tasks": "任务",
+    "turns": "轮次"
+  },
+  "delta": {
+    "up": "比上期多 {pct}（{previous}）",
+    "down": "比上期少 {pct}（{previous}）",
+    "same": "与上期相同（{previous}）",
+    "new": "没有可比较的数据（上期：{previous}）"
+  },
+  "col": {
+    "date": "日期",
+    "tokens": "Token",
+    "cost": "费用",
+    "tasks": "任务",
+    "time": "时间",
+    "project": "项目",
+    "account": "账号",
+    "attempts": "尝试"
+  },
+  "daily": {
+    "title": "每日 Token",
+    "empty": "此时间段内没有用量。",
+    "summary": "{from} 至 {to} 的每日 Token；最多的一天是 {day}，共 {top} 个 Token。"
+  },
+  "projects": {
+    "title": "用量最多的项目",
+    "empty": "此时间段内没有项目使用 Token。"
+  },
+  "accounts": {
+    "title": "用量最多的账号",
+    "empty": "此时间段内没有账号使用 Token。"
+  },
+  "turn": "第 {n} 轮",
+  "turns": "{n} 轮",
+  "attempts": "{n} 次尝试",
+  "showTurns": "显示 {title} 的各轮",
+  "moreTurns": "还有 {n} 轮",
+  "moreTasks": "还有 {n} 个任务",
+  "moreProjects": "还有 {n} 个项目",
+  "moreAccounts": "还有 {n} 个账号",
+  "moreModels": "还有 {n} 个模型",
+  "quota": {
+    "title": "配额变化",
+    "account": "账号",
+    "empty": "此账号还没有配额历史。",
+    "low": "{key}：最低 {pct}",
+    "threshold": "低于 {pct} 时休息",
+    "summary": "此时间段内的剩余配额。{lines}。"
+  }
+}

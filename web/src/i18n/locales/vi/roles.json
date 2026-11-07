@@ -1,0 +1,92 @@
+{
+  "new": "Vai trò mới",
+  "edit": "Sửa",
+  "save": "Lưu vai trò",
+  "saved": "Đã lưu {name}",
+  "deleted": "Đã xóa {name}",
+  "loading": "Đang tải vai trò…",
+  "loadFailed": "Không tải được vai trò",
+  "stale": "Đang hiện danh sách cũ; lần làm mới bị lỗi: {error}",
+  "noDescription": "Chưa có mô tả.",
+  "overrides": "Thay cho vai trò chung",
+  "defaults": "Mặc định",
+  "none": "Không có",
+  "newTitle": "Vai trò mới",
+  "editTitle": "Sửa vai trò",
+  "deleteOf": "Xóa {name}",
+  "deleteTitle": "Xóa {name}?",
+  "deleteGlobalDesc": "Tác vụ ghi tên vai trò này sẽ không còn nhận các quy tắc của nó. Vai trò dự án có cùng id vẫn được giữ.",
+  "deleteProjectDesc": "Chỉ xóa bản trong {project}; vai trò chung có cùng id sẽ lại áp dụng ở đó.",
+  "deleteConfirm": "Xóa vai trò",
+  "empty": {
+    "title": "Chưa có vai trò nào",
+    "desc": "Vai trò cho worker các quy tắc cố định, cách viết báo cáo và skill. Hãy bắt đầu từ một mẫu."
+  },
+  "filter": {
+    "label": "Hiện vai trò của",
+    "all": "Tất cả"
+  },
+  "scope": {
+    "global": "Chung",
+    "project": "Một dự án"
+  },
+  "tier": {
+    "fast": "Bậc nhanh",
+    "standard": "Bậc chuẩn",
+    "strong": "Bậc mạnh",
+    "max": "Bậc tối đa"
+  },
+  "effort": {
+    "low": "Công sức thấp",
+    "medium": "Công sức vừa",
+    "high": "Công sức cao",
+    "xhigh": "Công sức rất cao",
+    "max": "Công sức tối đa"
+  },
+  "field": {
+    "name": "Tên",
+    "id": "ID",
+    "idHint": "Tác vụ chọn vai trò theo id này. a-z, 0-9 và -, tối đa 40 ký tự.",
+    "scope": "Áp dụng cho",
+    "project": "Dự án",
+    "description": "Mô tả",
+    "rules": "Quy tắc",
+    "rulesHint": "Chỉ dẫn cố định thêm vào mọi brief của vai trò này.",
+    "outputStyle": "Cách viết báo cáo",
+    "outputStyleHint": "Worker viết báo cáo cuối cùng như thế nào.",
+    "tier": "Bậc mặc định",
+    "effort": "Công sức mặc định"
+  },
+  "skills": {
+    "title": "Skill",
+    "loading": "Đang tải skill…",
+    "loadFailed": "Không liệt kê được skill: {error}",
+    "none": "Nơi này chưa cài skill nào.",
+    "search": "Tìm skill",
+    "missing": "{n} skill đã chọn chưa được cài ở đây; worker sẽ không tìm thấy.",
+    "root": {
+      "project": "Dự án",
+      "user": "Người dùng",
+      "gemini": "Gemini",
+      "claude": "Claude"
+    }
+  },
+  "accounts": {
+    "title": "Tài khoản ưu tiên",
+    "hint": "Được thử trước khi một tác vụ có vai trò này bắt đầu; khi các tài khoản này bận hoặc đang nghỉ thì dùng tài khoản khác."
+  },
+  "errors": {
+    "name": "Hãy đặt tên cho vai trò.",
+    "id": "Dùng a-z, 0-9 và -, bắt đầu bằng chữ hoặc số, tối đa 40 ký tự.",
+    "project": "Hãy chọn một dự án.",
+    "taken": "Ở đó đã có vai trò với id này."
+  },
+  "templates": {
+    "title": "Vai trò mới",
+    "desc": "Bắt đầu từ một mẫu rồi chỉnh lại, hoặc bắt đầu từ trống.",
+    "blank": "Vai trò trống",
+    "blankDesc": "Chỉ có tên; bạn tự viết quy tắc.",
+    "loading": "Đang tải mẫu…",
+    "loadFailed": "Không tải được mẫu: {error}"
+  }
+}
