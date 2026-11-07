@@ -54,7 +54,7 @@ func lineWrites(line string, sh Shell, depth int, add func(string)) {
 }
 
 func segmentWrites(ws []word, sh Shell, depth int, add func(string)) {
-	for len(ws) > 0 && !ws[0].quoted && (assignment.MatchString(ws[0].text) || keywords[ws[0].text]) {
+	for len(ws) > 0 && (ws[0].assign || !ws[0].quoted && keywords[ws[0].text]) {
 		ws = ws[1:]
 	}
 	if len(ws) == 0 {

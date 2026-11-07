@@ -230,7 +230,8 @@ func (c Checker) alias(name string, rest []word, depth int) Result {
 // config checks git config: writing a key that makes git run a command (an alias, a hook path, an editor, a
 // filter) is refused; reading is allowed.
 func (c Checker) config(args, rest []word) Result {
-	p := scan(rest, opts{short: "f", long: set("--file", "--blob", "--type", "--default", "--comment", "--value")})
+	p := scan(rest, opts{short: "f", long: set("--file", "--blob", "--type", "--default", "--comment", "--value"),
+		danger: configWrites})
 	if p.has("--get", "--get-all", "--get-regexp", "--get-urlmatch", "-l", "--list", "--get-color",
 		"--get-colorbool", "--show-origin", "--show-scope") {
 		return allow
@@ -239,17 +240,33 @@ func (c Checker) config(args, rest []word) Result {
 	if len(pos) > 0 && !pos[0].dynamic && setHas(pos[0].text, "get", "list") {
 		return allow
 	}
-	if len(pos) > 0 && !pos[0].dynamic && setHas(pos[0].text, "set", "unset", "rename-section", "remove-section") {
-		pos = pos[1:]
+	// The editor can write any key, and a renamed section takes its keys along (foo.clean to filter.x.clean).
+	if p.has("-e", "--edit", "--rename-section") ||
+		len(pos) > 0 && !pos[0].dynamic && setHas(pos[0].text, "edit", "rename-section") {
+		return denyGit(args)
+	}
+	sub := false
+	if len(pos) > 0 && !pos[0].dynamic && setHas(pos[0].text, "set", "unset", "remove-section") {
+		pos, sub = pos[1:], true
 	}
 	if len(pos) == 0 {
 		return allow
 	}
-	if pos[0].dynamic || riskyConfigKey(strings.ToLower(pos[0].text)) {
+	if pos[0].dynamic {
+		return denyGit(args)
+	}
+	if !sub && len(pos) == 1 && !p.has(configWrites...) {
+		return allow // git config <key> reads it
+	}
+	if riskyConfigKey(strings.ToLower(pos[0].text)) {
 		return denyGit(args)
 	}
 	return allow
 }
+
+// configWrites are the options of git config that write with a key alone or with a value.
+var configWrites = []string{"--add", "--unset", "--unset-all", "--replace-all", "--edit", "--rename-section",
+	"--remove-section"}
 
 // configKey returns the lower-case key of a "key=value" pair.
 func configKey(kv string) string {
@@ -266,7 +283,10 @@ func riskyConfigKey(k string) bool {
 		"core.gitproxy", "core.worktree", "sequence.editor", "diff.external", "gpg.program", "credential.helper",
 		"uploadpack.packobjectshook", "include.path", "alias",
 		// Not a program, but the same as gc --prune=now for every later gc, including git's automatic one.
-		"gc.pruneexpire":
+		"gc.pruneexpire",
+		// Makes git run the subcommand it guesses from a typo (git stsh: stash), which the guard reads as an
+		// unknown command; a later -c would also override the git shim's own -c help.autocorrect=0.
+		"help.autocorrect":
 		return true
 	}
 	for _, prefix := range []string{"alias.", "includeif.", "include.", "pager."} {

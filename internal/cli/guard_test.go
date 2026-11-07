@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -61,6 +62,73 @@ func TestHookStdinScripts(t *testing.T) {
 	} {
 		if r := hookDecision(ctx, guard.HookClaude, input(command)); r.Deny != deny {
 			t.Errorf("claude hook %q: deny = %v, want %v (%s)", command, r.Deny, deny, r.Reason)
+		}
+	}
+}
+
+// TestHookHardening runs both hooks on the review findings G1-G6: configuration through the environment and
+// help.autocorrect are refused; data in here-documents and in code that starts no program is allowed (agy on
+// Windows excepted: its run_command runs PowerShell, where the lines after cat <<'EOF' run).
+func TestHookHardening(t *testing.T) {
+	ctx := context.Background()
+	claude := func(command string) io.Reader {
+		data, err := json.Marshal(map[string]any{"tool_name": "Bash", "tool_input": map[string]string{"command": command}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return bytes.NewReader(data)
+	}
+	agy := func(command string) io.Reader {
+		data, err := json.Marshal(map[string]any{"toolCall": map[string]any{"name": "run_command",
+			"args": map[string]string{"CommandLine": command}}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return bytes.NewReader(data)
+	}
+	windows := runtime.GOOS == "windows"
+	for command, want := range map[string][2]bool{ // {claude, agy}
+		"git -c help.autocorrect=immediate stsh":                                     {true, true},
+		`GIT_CONFIG_PARAMETERS="'alias.x=reset --hard'" git x`:                       {true, true},
+		"GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=alias.x GIT_CONFIG_VALUE_0=stash git x": {true, true},
+		`env GIT_CONFIG_PARAMETERS="'alias.x=reset --hard'" git x`:                   {true, true},
+		"export GIT_CONFIG_COUNT=1; git x":                                           {true, true},
+		"cat <<'EOF' | tee notes.md\ngit stash\nEOF":                                 {false, windows},
+		"sed -n '1,5p' <<'EOF'\ngit reset --hard\nEOF":                               {false, windows},
+		"bash script.sh <<'EOF'\ngit stash\nEOF":                                     {false, windows},
+		"python3 - <<'EOF'\nfrom pathlib import Path\np = Path('a.md')\n" +
+			"p.write_text(p.read_text().replace('git stash', 'git stash (refused)'))\nEOF": {false, false},
+		"printf 'git stash\\n' | tr -d '\\r' | bash": {true, true},
+		"git status": {false, false},
+	} {
+		if r := hookDecision(ctx, guard.HookClaude, claude(command)); r.Deny != want[0] {
+			t.Errorf("claude hook %q: deny = %v, want %v (%s)", command, r.Deny, want[0], r.Reason)
+		}
+		if r := hookDecision(ctx, guard.HookAgy, agy(command)); r.Deny != want[1] {
+			t.Errorf("agy hook %q: deny = %v, want %v (%s)", command, r.Deny, want[1], r.Reason)
+		}
+	}
+	in := `{"toolCall":{"name":"run_command","args":{"CommandLine":"$env:GIT_CONFIG_PARAMETERS=\"'alias.x=stash'\"; git x"}}}`
+	if r := hookDecision(ctx, guard.HookAgy, strings.NewReader(in)); !r.Deny {
+		t.Error("agy: $env:GIT_CONFIG_PARAMETERS allowed")
+	}
+	in = `{"tool_name":"PowerShell","tool_input":{"command":"$env:GIT_CONFIG_COUNT = 1; git x"}}`
+	if r := hookDecision(ctx, guard.HookClaude, strings.NewReader(in)); !r.Deny {
+		t.Error("claude PowerShell: $env:GIT_CONFIG_COUNT allowed")
+	}
+}
+
+// TestGitShimAutocorrectOverride (G1): a later -c help.autocorrect would win over the shim's own; it is refused.
+func TestGitShimAutocorrectOverride(t *testing.T) {
+	var out, errOut bytes.Buffer
+	for _, args := range [][]string{
+		{"-c", "help.autocorrect=immediate", "stsh"}, {"--config-env=help.autocorrect=AC", "stsh"},
+		{"config", "help.autocorrect", "immediate"},
+	} {
+		errOut.Reset()
+		if code := runGitShim(t.Context(), "", args, strings.NewReader(""), &out, &errOut); code != 1 ||
+			!strings.HasPrefix(errOut.String(), guard.Marker) {
+			t.Errorf("%q: code %d, stderr %q", args, code, errOut.String())
 		}
 	}
 }

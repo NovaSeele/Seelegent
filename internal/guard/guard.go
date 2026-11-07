@@ -79,19 +79,34 @@ type Checker struct {
 	// Alias returns the value of git alias name (alias.<name>), and whether it exists. nil: aliases are not
 	// resolved, and an unknown git subcommand is allowed.
 	Alias func(name string) (value string, ok bool)
+	// HeredocAsCommands keeps the lines of a POSIX here-document in the PowerShell and cmd readings of a line read in
+	// every dialect, where they are commands. Set for agy on Windows: its run_command runs PowerShell, where
+	// cat <<'EOF' starts no here-document and the next lines run. Unset, those lines are read as POSIX only.
+	HeredocAsCommands bool
 }
 
 // Check reads a command line in every dialect and refuses it when one of them runs a risky git command.
 func Check(line string) Result { return Checker{}.Command(line) }
 
-// Command reads line in the given shells (all of them when none is given).
+// Command reads line in the given shells. With none given the shell is unknown: the line is read in every dialect,
+// and a POSIX here-document's lines only as what POSIX makes of them (the script of bash <<'EOF', the data of
+// cat <<'EOF') unless HeredocAsCommands is set.
 func (c Checker) Command(line string, shells ...Shell) Result {
-	if len(shells) == 0 {
+	unknown := len(shells) == 0
+	if unknown {
 		shells = allShells
+	}
+	other := line // the line as the PowerShell and cmd readings see it
+	if unknown && !c.HeredocAsCommands {
+		other = withoutHeredocs(line)
 	}
 	read := false
 	for _, sh := range shells {
-		r := c.line(line, sh, 0)
+		text := line
+		if sh != POSIX {
+			text = other
+		}
+		r := c.line(text, sh, 0)
 		if r.Deny {
 			return r
 		}
@@ -110,6 +125,27 @@ func (c Checker) Git(args []string) Result {
 		ws[i] = word{text: a}
 	}
 	return c.git(ws, 0)
+}
+
+// withoutHeredocs blanks the here-document bodies (and their closing delimiters) that the POSIX reading of line
+// finds; the line is returned unchanged when POSIX cannot read it.
+func withoutHeredocs(line string) string {
+	if !strings.Contains(line, "<<") {
+		return line
+	}
+	st, err := parseState(line, POSIX, 0)
+	if err != nil || len(st.heredocs) == 0 {
+		return line
+	}
+	b := []byte(line)
+	for _, span := range st.heredocs {
+		for i := span[0]; i < span[1] && i < len(b); i++ {
+			if b[i] != '\n' {
+				b[i] = ' '
+			}
+		}
+	}
+	return string(b)
 }
 
 // mentionsGit is the fail-closed test for a line that could not be read.
@@ -199,7 +235,7 @@ var wrappers = map[string]wrapper{
 	"builtin":    {},
 	"exec":       {valued: set("-a")},
 	"time":       {valued: set("-f", "-o", "--format", "--output")},
-	"xargs":      {valued: set("-I", "-L", "-n", "-P", "-s", "-d", "-E", "-a", "--arg-file", "--delimiter", "--max-args", "--max-procs", "--max-lines", "--max-chars", "--replace", "--eof"), stdinArgs: true},
+	"xargs":      {valued: set("-I", "-L", "-n", "-P", "-s", "-d", "-E", "-a", "--arg-file", "--delimiter", "--max-args", "--max-procs", "--max-lines", "--max-chars"), stdinArgs: true}, // --replace[=R] and --eof[=E] take no next word
 	"watch":      {valued: set("-n", "--interval", "-d", "-x")},
 	"strace":     {valued: set("-o", "-e", "-p", "-s", "-u")},
 	"ltrace":     {valued: set("-o", "-e", "-p", "-s", "-u")},
@@ -221,19 +257,14 @@ var wrappers = map[string]wrapper{
 // segment checks one simple command.
 func (c Checker) segment(s *segment, sh Shell, depth int) Result {
 	ws := s.words
-	// Leading assignments: NAME=value (POSIX, cmd's set is a command of its own) and $x = ... (PowerShell).
-	for len(ws) > 0 {
-		w := ws[0]
-		switch {
-		case !w.quoted && sh == POSIX && assignment.MatchString(w.text):
-			ws = ws[1:]
-			continue
-		case sh == PowerShell && strings.HasPrefix(w.text, "$") && len(ws) > 1 &&
-			(ws[1].text == "=" || ws[1].text == "+=") && !ws[1].quoted:
-			ws = ws[2:]
-			continue
+	// PowerShell's $x = ...: what follows the = is the command. POSIX NAME=value words are left to command, which
+	// checks them after any keyword (then FOO=1 git ...).
+	for sh == PowerShell && len(ws) > 1 && strings.HasPrefix(ws[0].text, "$") &&
+		(ws[1].text == "=" || ws[1].text == "+=") && !ws[1].quoted {
+		if setsConfigEnv(ws, sh) { // $env:GIT_CONFIG_COUNT = 1
+			return denyConfigEnv()
 		}
-		break
+		ws = ws[2:]
 	}
 	return c.command(ws, s, sh, depth)
 }
@@ -247,10 +278,24 @@ func (c Checker) command(ws []word, s *segment, sh Shell, depth int) Result {
 		ws = cmdIf(ws[1:])
 	}
 	for len(ws) > 0 && !ws[0].quoted && keywords[strings.ToLower(ws[0].text)] {
+		kw := strings.ToLower(ws[0].text)
 		ws = ws[1:]
 		if len(ws) > 0 && ws[0].text == "-p" {
 			ws = ws[1:]
 		}
+		if sh == PowerShell && setHas(kw, "if", "while", "until") && len(ws) > 0 && strings.HasPrefix(ws[0].text, "(") {
+			// if (...) { ... }: the condition's commands were parsed already, and it is not a program to run.
+			ws = ws[1:]
+		}
+	}
+	// Every path to a command passes here (after a keyword, cmd's if and do, a wrapper): a command that sets the git
+	// configuration variables is refused, then NAME=value words before the command (a segment's own, and those a
+	// wrapper passes on, sudo NAME=x git) are skipped.
+	if setsConfigEnv(ws, sh) {
+		return denyConfigEnv()
+	}
+	for len(ws) > 0 && ws[0].assign {
+		ws = ws[1:]
 	}
 	if len(ws) == 0 {
 		return allow
@@ -268,7 +313,7 @@ func (c Checker) command(ws []word, s *segment, sh Shell, depth int) Result {
 				}
 			}
 		}
-		return c.code(text, depth)
+		return c.code(text, "", depth)
 	}
 	if head.dynamic {
 		// An unknown program: if its arguments read as a risky git command, the program may well be git.
@@ -289,11 +334,23 @@ func (c Checker) command(ws []word, s *segment, sh Shell, depth int) Result {
 			return allow
 		}
 		rest, ok := unwrap(wr, args)
+		for _, a := range args[:len(args)-len(rest)] {
+			if configAssign(a.text) { // env GIT_CONFIG_PARAMETERS=... git x
+				return denyConfigEnv()
+			}
+		}
 		if !ok {
 			return allow
 		}
 		if wr.stdinArgs {
-			rest = append(rest, word{text: "$STDIN", dynamic: true})
+			var script Shell
+			var fromInput bool
+			rest, script, fromInput = xargsCommand(args[:len(args)-len(rest)], rest)
+			if fromInput { // echo git stash | xargs -I{} sh -c '{}': the input is the shell's script
+				if r := c.piped(s, script, depth); r.Deny {
+					return r
+				}
+			}
 		}
 		if name == "env" {
 			if r := c.envSplit(args, sh, depth); r.Deny {
@@ -506,7 +563,7 @@ func unwrap(wr wrapper, args []word) ([]word, bool) {
 		case t == "--":
 			i++
 			goto positional
-		case wr.assigns && !a.quoted && assignment.MatchString(t):
+		case wr.assigns && assignment.MatchString(t): // env takes "NAME=value" quoted as well
 			i++
 			continue
 		case strings.HasPrefix(t, "-") && len(t) > 1 && !a.dynamic:
@@ -621,30 +678,61 @@ func (c Checker) stdinScript(s *segment, script Shell, depth int) Result {
 	return res.merge(r)
 }
 
+// feeder is a command whose output goes down a pipeline: its words (without leading keywords) and the bodies of
+// its here-documents and here-strings.
+type feeder struct {
+	words []word
+	stdin []string
+}
+
+// upstream returns the commands whose output a pipeline stage reads from u: u itself, or the commands of a
+// subshell or brace group, each with its leading keywords removed ({ echo x; }: echo x).
+func upstream(u *segment) []feeder {
+	members := []*segment{u}
+	if u.group != nil {
+		members = u.group
+	}
+	out := make([]feeder, 0, len(members))
+	for _, m := range members {
+		ws := m.words
+		for len(ws) > 0 && !ws[0].quoted && keywords[strings.ToLower(ws[0].text)] {
+			ws = ws[1:]
+		}
+		out = append(out, feeder{words: ws, stdin: m.stdin})
+	}
+	return out
+}
+
 // piped checks what is piped into an interpreter that reads its script from standard input: the arguments and the
-// here-documents of every command up the pipeline (cat <<'EOF' | sh, echo 'git stash' | tr -d '\r' | sh).
+// here-documents of every command up the pipeline, inside subshells and brace groups too (cat <<'EOF' | sh,
+// echo 'git stash' | tr -d '\r' | sh, { printf 'git stash\n'; } | sh).
 func (c Checker) piped(s *segment, sh Shell, depth int) Result {
 	if s == nil || !s.piped {
 		return allow
 	}
 	res := allow
 	for u := s.prev; u != nil; u = u.prev {
-		ws := u.words
-		if len(ws) > 0 {
-			ws = ws[1:]
-		}
-		for _, w := range ws {
-			if r := c.Command(w.text); r.Deny {
-				return r
+		for _, m := range upstream(u) {
+			ws := m.words
+			if len(ws) > 0 {
+				ws = ws[1:]
 			}
-		}
-		texts := append([]string{joinWords(ws)}, u.stdin...)
-		for _, text := range texts {
-			r := c.line(text, sh, depth+1)
-			if r.Deny {
-				return r
+			for _, w := range ws {
+				if r := c.Command(w.text); r.Deny {
+					return r
+				}
 			}
-			res = res.merge(r)
+			texts := append([]string{joinWords(ws)}, m.stdin...)
+			if out, ok := printed(m.words); ok {
+				texts = append(texts, out) // printf 'git stash\n' | bash: the \n is a line break by then
+			}
+			for _, text := range texts {
+				r := c.line(text, sh, depth+1)
+				if r.Deny {
+					return r
+				}
+				res = res.merge(r)
+			}
 		}
 		if !u.piped {
 			break
@@ -729,10 +817,9 @@ func decodeUTF16Base64(s string) (string, bool) {
 	return string(utf16.Decode(u)), true
 }
 
-// interpreter checks the inline code of a scripting language (node -e, python -c, ...): every string literal is
-// read as a command line, and a literal "git" followed by more literals as a git argument list. Without inline
-// code or a script file (no file, or "-"), the code comes from standard input: its here-documents and here-strings,
-// and the words piped into it, are read the same way.
+// interpreter checks the inline code of a scripting language (node -e, python -c, ...) as code does. Without
+// inline code or a script file (no file, or "-"), the code comes from standard input: its here-documents and
+// here-strings, and the words piped into it, are read the same way.
 func (c Checker) interpreter(name string, args []word, s *segment, depth int) Result {
 	flags := map[string]string{
 		"node": "e", "nodejs": "e", "bun": "e", "deno": "", "python": "c", "python3": "c", "python2": "c", "py": "c",
@@ -765,45 +852,55 @@ func (c Checker) interpreter(name string, args []word, s *segment, depth int) Re
 			}
 			continue
 		}
-		return c.code(code, depth)
+		return c.code(code, codeLang(name), depth)
 	}
 	if name != "deno" && (stdin || !file) {
-		return c.stdinCode(s, depth)
+		return c.stdinCode(s, codeLang(name), depth)
 	}
 	return allow
 }
 
-// stdinCode checks the code an interpreter reads from standard input.
-func (c Checker) stdinCode(s *segment, depth int) Result {
+// stdinCode checks the code an interpreter of language lang reads from standard input.
+func (c Checker) stdinCode(s *segment, lang string, depth int) Result {
 	if s == nil {
 		return allow
 	}
 	texts := slices.Clone(s.stdin)
 	if s.piped {
 		for u := s.prev; u != nil; u = u.prev {
-			if len(u.words) > 1 {
-				texts = append(texts, joinWords(u.words[1:]))
+			for _, m := range upstream(u) {
+				if len(m.words) > 1 {
+					texts = append(texts, joinWords(m.words[1:]))
+				}
+				texts = append(texts, m.stdin...)
 			}
-			texts = append(texts, u.stdin...)
 			if !u.piped {
 				break
 			}
 		}
 	}
 	for _, text := range texts {
-		if r := c.code(text, depth); r.Deny {
+		if r := c.code(text, lang, depth); r.Deny {
 			return r
 		}
 	}
 	return allow
 }
 
-// code checks the string literals of inline code.
-func (c Checker) code(code string, depth int) Result {
-	lits := literals(code)
+// code checks inline code in language lang ("" when unknown). Code that can start a program (runsProcess) has
+// every string literal read as a command line, and a literal "git" followed by more literals as a git argument
+// list; code that cannot start one is data (a script that edits a file mentioning git stash).
+func (c Checker) code(code, lang string, depth int) Result {
+	if !runsProcess(code, lang) {
+		return allow
+	}
+	if configEnvMention.MatchString(code) {
+		return denyConfigEnv() // env={'GIT_CONFIG_PARAMETERS': ...}, os.environ[...], process.env...
+	}
+	lits := append(literals(code), commandQuotes(code, lang)...)
 	for i, l := range lits {
 		if r := c.Command(l); r.Deny {
-			return r
+			return withCodeHint(r)
 		}
 		if cmdName(word{text: l}) == "git" {
 			ws := make([]word, 0, len(lits)-i-1)
@@ -811,7 +908,7 @@ func (c Checker) code(code string, depth int) Result {
 				ws = append(ws, word{text: a})
 			}
 			if r := c.git(ws, depth+1); r.Deny {
-				return r
+				return withCodeHint(r)
 			}
 		}
 	}

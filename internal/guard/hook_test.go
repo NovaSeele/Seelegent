@@ -35,6 +35,29 @@ func TestParseHook(t *testing.T) {
 	}
 }
 
+// TestHookHeredocs (G3): agy's hook reads every dialect; on Windows, where run_command runs PowerShell, a POSIX
+// here-document's lines count as commands, elsewhere they are what POSIX makes of them.
+func TestHookHeredocs(t *testing.T) {
+	data, err := json.Marshal(map[string]any{"toolCall": map[string]any{"name": "run_command",
+		"args": map[string]string{"CommandLine": "cat <<'EOF' | tee notes.md\ngit stash\nEOF"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for goos, deny := range map[string]bool{"windows": true, "linux": false, "darwin": false} {
+		h, err := parseHook(HookAgy, data, goos)
+		if err != nil || h.HeredocAsCommands != deny {
+			t.Fatalf("%s: %+v %v", goos, h, err)
+		}
+		if r := h.Checker(nil).Command(h.Command, h.Shells...); r.Deny != deny {
+			t.Errorf("%s: deny = %v, want %v (%s)", goos, r.Deny, deny, r.Reason)
+		}
+	}
+	h, err := parseHook(HookClaude, []byte(`{"tool_name":"Bash","tool_input":{"command":"ls"}}`), "windows")
+	if err != nil || h.HeredocAsCommands {
+		t.Fatalf("claude: %+v %v", h, err)
+	}
+}
+
 func TestHookOutput(t *testing.T) {
 	r := Check("git stash")
 	var claude struct {
