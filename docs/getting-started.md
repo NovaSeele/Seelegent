@@ -92,10 +92,10 @@ by itself when the sign-in is done. Seelegent never sees your password.
 
 After a sign-in the account's quota is read (every 10 minutes after that). The account card shows its quota windows,
 when they reset, a chip such as "1 of 2 slots busy", and its state: **Ready**, **Checking quota**, **Sign-in
-required**, **No API key**, **Off**, "Same sign-in as …" (signed in to the same identity as an older account, which
-gets the work), and **Resting** or "Out of quota, back …" until a window resets. The account strip on the **Watch**
-page uses shorter labels, such as **Busy** and **Duplicate**. Turn **Use for work** off for an account you want to
-keep but not use for now.
+required**, **No API key**, **Plan cannot use this backend**, **Off**, "Same sign-in as …" (signed in to the same
+identity as an older account, which gets the work), and **Resting** or "Out of quota, back …" until a window resets.
+The account strip on the **Watch** page uses shorter labels, such as **Busy** and **Duplicate**. Turn **Use for
+work** off for an account you want to keep but not use for now.
 
 ## 3. Connect your lead hosts
 
