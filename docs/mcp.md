@@ -83,12 +83,26 @@ structured content is `{error: {code, message, status, details}}`:
 
 | Case | Text |
 |---|---|
-| Called from inside a worker (daemon answers 403 with `caller: worker`) | exactly "Seelegent is not available inside a Seelegent worker." (no prefix) |
+| Called from inside a worker (local guard, or the daemon answers 403 with `caller: worker`) | exactly "Seelegent is not available inside a Seelegent worker." (no prefix) |
 | Route not built yet (501) or tool not built yet | "Seelegent error: ... is not available in this version of Seelegent yet; nothing was done" (code `not_available`) |
 | Other API error | "Seelegent error: <message>" with the API's code and details |
 | No daemon, foreign program on the port, start failed | the reason and what to do (code `daemon_unavailable`) |
 
-The worker guard lives in the daemon only; the MCP server does not keep a second one.
+## Worker guard
+
+Two layers (contract §1.3). The daemon is the authority: it recognises a caller inside a worker's process tree and
+answers 403 with `details.caller: "worker"`, which the server shows as the old refusal text. The server also keeps
+the old local guard (`internal/mcpserver/guard.go`): when `SEELEGENT_WORKER=1` is in its environment (the daemon
+sets it for every worker, so an MCP server a worker starts inherits it), it refuses mutating calls before talking to
+the daemon, with the same text and `{error: {code: "forbidden", details: {caller: "worker"}}}`:
+
+- always: `delegate`, `followup`, `review`, `cancel`, `consult`;
+- `meeting` unless the action is `status`, `list` or `wait`; `issues` unless `repos`, `list`, `tickets` or
+  `ticket`; `memory` unless `read`; `notes` unless `list`; `automations` unless `list` or `runs`; `contest` unless
+  `status` or `wait`;
+- `profiles` with `upsert` or `delete`; `proof` with `run`.
+
+`wait`, `task`, `status`, `members` and the read actions go on to the daemon, which decides what a worker may see.
 
 ## Cancellation
 
@@ -98,8 +112,8 @@ for that.
 
 ## Tests
 
-`internal/mcpserver/unit_test.go` checks the tool schemas against the inventory and the argument-to-request mapping
-against a stub API. `e2e_test.go` runs the tools over in-memory MCP transports against a real daemon built through
+`internal/mcpserver/unit_test.go` checks the tool schemas against the inventory, the argument-to-request mapping
+against a stub API, and the local worker guard (`guard_test.go` pins the old `isMutating` table). `e2e_test.go` runs the tools over in-memory MCP transports against a real daemon built through
 `internal/app` with the fake worker CLI and a temp data directory. `internal/client` tests discovery and start
 against fake daemons, including several servers racing to start one daemon. `internal/cli/mcp_test.go` runs the
 command with autostart off.

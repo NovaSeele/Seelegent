@@ -12,8 +12,10 @@
 // automations) keep their schemas and answer a "not available in this version yet" tool error; any daemon route
 // that answers 501 is reported the same way.
 //
-// The worker guard is the daemon's (contract §1.3): a call from inside a worker's process tree gets 403 with
-// details.caller "worker", which the server turns into the old refusal text. There is no second guard here.
+// The worker guard has two layers (contract §1.3). The daemon is the authority: a call from inside a worker's
+// process tree gets 403 with details.caller "worker", which the server turns into the old refusal text. The server
+// also keeps the old local guard: with SEELEGENT_WORKER=1 in its environment it refuses mutating tools (old
+// isMutating) with the same text before calling the daemon.
 //
 // A host's notifications/cancelled cancels the call's context, which aborts its HTTP request (a long wait ends at
 // once). It never cancels the worker tasks (old C-B4).
@@ -190,6 +192,11 @@ type toolFunc func(ctx context.Context, k *call) (result, error)
 // wrap turns a toolFunc into an MCP handler with the result envelope.
 func (s *Server) wrap(name string, fn toolFunc) mcp.ToolHandler {
 	return func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		// The worker guard runs first, as in the old server: a worker learns nothing else.
+		if s.isWorker() && mutating(name, req.Params.Arguments) {
+			s.o.Logger.Info("mcp: refused inside a worker", "tool", name)
+			return s.fail(name, workerError{}), nil
+		}
 		if s.o.ConfigErr != nil && !s.unavailable[name] {
 			return s.fail(name, fmt.Errorf("the settings cannot be read: %w", s.o.ConfigErr)), nil
 		}
@@ -267,6 +274,10 @@ func (s *Server) fail(name string, err error) *mcp.CallToolResult {
 	var foreign *client.ForeignError
 	var notYetErr *unavailableError
 	switch {
+	case errors.Is(err, workerError{}):
+		text = workerMessage
+		info = errorInfo{Code: string(api.CodeForbidden), Message: workerMessage,
+			Details: map[string]any{"caller": "worker"}}
 	case errors.As(err, &apiErr) && apiErr.Worker():
 		text = workerMessage
 		info = errorInfo{Code: string(apiErr.Code), Message: workerMessage, Status: apiErr.Status, Details: apiErr.Details}

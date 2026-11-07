@@ -433,6 +433,70 @@ func TestStatusQuota(t *testing.T) {
 	}
 }
 
+// TestWorkerGuard: with SEELEGENT_WORKER=1 the server refuses mutating calls itself, with the old text and without
+// calling the daemon, and lets read calls through to the daemon (which stays the authority).
+func TestWorkerGuard(t *testing.T) {
+	var calls atomic.Int32
+	count := func(h http.HandlerFunc) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) { calls.Add(1); h(w, r) }
+	}
+	_, c := newStub(t, map[string]http.HandlerFunc{
+		"GET /memory":  count(answer(http.StatusOK, api.Memory{Cwd: "p", Text: "notes"})),
+		"GET /roles":   count(answer(http.StatusOK, api.RoleList{Items: []api.Role{}})),
+		"POST /wait":   count(waitAnswer("done")),
+		"POST /tasks":  count(answer(http.StatusOK, api.TaskSummary{ID: "t1"})),
+		"POST /memory": count(answer(http.StatusOK, api.Memory{})),
+	})
+	cs := stubSession(t, c, func(o *mcpserver.Options) {
+		o.Getenv = func(k string) string {
+			if k == "SEELEGENT_WORKER" {
+				return "1"
+			}
+			return ""
+		}
+	})
+	refused := []struct {
+		name string
+		args map[string]any
+	}{
+		{"delegate", map[string]any{"prompt": "p", "cwd": "C:\\p"}},
+		{"followup", map[string]any{"task_id": "t1", "message": "m"}},
+		{"review", map[string]any{"task_id": "t1", "verdict": "accepted"}},
+		{"cancel", map[string]any{"task_id": "t1"}},
+		{"memory", map[string]any{"action": "append", "cwd": "C:\\p", "text": "x"}},
+		{"profiles", map[string]any{"action": "delete", "id": "r"}},
+		{"meeting", map[string]any{"action": "open"}},
+		{"contest", map[string]any{}},
+	}
+	for _, r := range refused {
+		res := callTool(t, cs, r.name, r.args)
+		if !res.IsError || text(res, 0) != "Seelegent is not available inside a Seelegent worker." {
+			t.Errorf("%s = %s", r.name, text(res, 0))
+		}
+		data, _ := json.Marshal(res.StructuredContent)
+		if !strings.Contains(string(data), `"code":"forbidden"`) || !strings.Contains(string(data), `"caller":"worker"`) {
+			t.Errorf("%s structured = %s", r.name, data)
+		}
+	}
+	if n := calls.Load(); n != 0 {
+		t.Fatalf("refused calls reached the daemon %d times", n)
+	}
+
+	var mem map[string]any
+	ok(t, cs, "memory", map[string]any{"action": "read", "cwd": "C:\\p"}, &mem)
+	var roles []any
+	ok(t, cs, "profiles", map[string]any{"action": "list"}, &roles)
+	var rep map[string]any
+	ok(t, cs, "wait", map[string]any{"task_ids": []string{"t1"}, "wait_seconds": 1}, &rep)
+	if n := calls.Load(); n != 3 {
+		t.Fatalf("read calls reached the daemon %d times, want 3", n)
+	}
+	// A read action of a tool that is not built yet gets the not-available error, not the refusal.
+	if msg := fails(t, cs, "meeting", map[string]any{"action": "status"}); !strings.Contains(msg, "not available") {
+		t.Fatalf("meeting status = %s", msg)
+	}
+}
+
 func compact(raw json.RawMessage) string {
 	var b bytes.Buffer
 	_ = json.Compact(&b, raw)
