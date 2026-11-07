@@ -190,13 +190,18 @@ func ParseSpec(text string) Spec {
 // ResolveLane turns the path tokens of the tasks a worker implements into lane paths: tokens inside the feature
 // folder (spec documents) are dropped, a bare name without a slash or wildcard counts when that file exists or it
 // has a file extension (a new file the task creates, such as `greet.txt`), and a token naming a folder gets a
-// trailing slash. stat reports "file", "dir" or "" for a repository-relative path; featureRel is the feature folder
-// relative to the repository root ("" when it lies outside).
+// trailing slash. Tokens that are absolute or leave the repository are left out (LanePath). stat reports "file",
+// "dir" or "" for a repository-relative path; featureRel is the feature folder relative to the repository root
+// ("" when it lies outside).
 func ResolveLane(tokens []string, featureRel string, stat func(rel string) string) []string {
 	feature := key(strings.TrimSuffix(featureRel, "/"))
 	var out []string
 	seen := map[string]bool{}
-	for _, tok := range tokens {
+	for _, raw := range tokens {
+		tok, ok := LanePath(raw)
+		if !ok {
+			continue
+		}
 		k := key(tok)
 		if feature != "" && (k == feature || strings.HasPrefix(k, feature+"/")) {
 			continue

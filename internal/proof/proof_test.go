@@ -63,7 +63,12 @@ func TestNormalizeLane(t *testing.T) {
 	if bad != "" || !reflect.DeepEqual(out, []string{"src/", "a.go", "lib/*.go"}) {
 		t.Fatalf("NormalizeLane = %v, %q", out, bad)
 	}
-	for _, p := range []string{"../x", "/etc/passwd", `C:\x`, "a/../../b"} {
+	// Dot segments are resolved before the check: src/../lib is lib, a/./b.go is a/b.go.
+	out, bad = NormalizeLane([]string{"src/../lib/", "a/./b.go", "x/../src"}, isDir)
+	if bad != "" || !reflect.DeepEqual(out, []string{"lib/", "a/b.go", "src/"}) {
+		t.Fatalf("NormalizeLane with dot segments = %v, %q", out, bad)
+	}
+	for _, p := range []string{"../x", "/etc/passwd", `C:\x`, "a/../../b", "src/..", ".", "./", "src/../.."} {
 		if _, bad := NormalizeLane([]string{p}, isDir); bad == "" {
 			t.Errorf("NormalizeLane accepted %q", p)
 		}
@@ -115,8 +120,9 @@ func TestResolveLane(t *testing.T) {
 		return ""
 	}
 	// greet.txt does not exist yet: a new file the task creates is still in its lane.
+	// Spec tokens that are absolute or leave the repository are left out; dot segments are resolved.
 	got := ResolveLane([]string{"internal/p", "README.md", "Makefile", "spec.md", "specs/001/plan.md", "cmd/*.go",
-		"greet.txt"},
+		"greet.txt", "/etc/hosts", "../up.go", "internal/./p"},
 		"specs/001", stat)
 	if !reflect.DeepEqual(got, []string{"internal/p/", "README.md", "cmd/*.go", "greet.txt"}) {
 		t.Errorf("ResolveLane = %v", got)

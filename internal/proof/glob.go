@@ -153,20 +153,19 @@ func Overlap(mine, theirs []string) []PathPair {
 
 // NormalizeLane cleans the lane paths a lead passed: forward slashes, no duplicates, and a trailing slash on a plain
 // path that names an existing folder, so lane ["src"] covers every file under src/ (old bug D13). isDir reports
-// whether a repository-relative path is a folder. Absolute paths and paths that leave the repository are refused
-// with the offending path.
+// whether a repository-relative path is a folder. Absolute paths, paths that leave the repository and the root
+// itself are refused with the offending path.
 func NormalizeLane(paths []string, isDir func(rel string) bool) (out []string, bad string) {
 	seen := map[string]bool{}
 	for _, p := range paths {
-		c := Clean(p)
-		if c == "" {
+		if strings.TrimSpace(p) == "" {
 			continue
 		}
-		if strings.HasPrefix(c, "/") || (len(c) > 1 && c[1] == ':') || c == ".." || strings.HasPrefix(c, "../") ||
-			strings.Contains(c, "/../") {
+		c, ok := LanePath(p)
+		if !ok {
 			return nil, p
 		}
-		if !IsGlob(c) && isDir != nil && isDir(strings.TrimSuffix(c, "/")) {
+		if !IsGlob(c) && isDir != nil && isDir(strings.TrimSuffix(c, "/")) && !strings.HasSuffix(c, "/") {
 			c += "/"
 		}
 		if k := key(c); !seen[k] {
@@ -177,5 +176,23 @@ func NormalizeLane(paths []string, isDir func(rel string) bool) (out []string, b
 	return out, ""
 }
 
+// LanePath cleans one lane path or glob ("." and ".." segments resolved, so src/.. is the root and a/./b is a/b)
+// and reports whether it may be a lane: relative, inside the repository and not the repository root itself. A
+// trailing slash (a folder) is kept.
+func LanePath(p string) (string, bool) {
+	c := Clean(p)
+	if c == "" || strings.HasPrefix(c, "/") || (len(c) > 1 && c[1] == ':') {
+		return "", false
+	}
+	folder := strings.HasSuffix(c, "/")
+	c = path.Clean(c)
+	if c == "." || c == ".." || strings.HasPrefix(c, "../") {
+		return "", false
+	}
+	if folder {
+		c += "/"
+	}
+	return c, true
+}
 // Ext returns the lower-case extension of a repository-relative path.
 func Ext(p string) string { return strings.ToLower(path.Ext(Clean(p))) }
