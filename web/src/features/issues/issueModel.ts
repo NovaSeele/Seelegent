@@ -119,3 +119,45 @@ export function logText(data: Record<string, unknown>, limit = 240): string {
   const text = parts.join(' · ')
   return text.length > limit ? `${text.slice(0, limit - 1)}…` : text
 }
+
+/** A refused push the dashboard explains in the user's language: the i18n key under issues.refusal and its values. */
+export interface PushRefusal {
+  key: 'unsafeFiles' | 'scanFailed' | 'baseMissing' | 'baseNotPushed' | 'branchDiverged'
+  params: Record<string, string | number>
+}
+
+/**
+ * The refusal of a pull request push from an error's details (`reason` of a 409, contract §github), or null when
+ * the error is something else and the daemon's own message is shown.
+ */
+export function pushRefusal(
+  details: Readonly<Record<string, unknown>>,
+  message: string,
+): PushRefusal | null {
+  const branch = typeof details.branch === 'string' ? details.branch : ''
+  switch (details.reason) {
+    case 'unsafe_files': {
+      const findings = Array.isArray(details.findings) ? details.findings : []
+      const paths = findings.flatMap((f: unknown) => {
+        const p = (f as { path?: unknown }).path
+        return typeof p === 'string' ? [p] : []
+      })
+      const shown = paths.slice(0, 10).join(', ') + (paths.length > 10 ? ', …' : '')
+      return { key: 'unsafeFiles', params: { count: paths.length, files: shown } }
+    }
+    case 'scan_failed': {
+      // The daemon's message is "could not scan …: <git's reason>"; the reason alone follows the translated text.
+      const i = message.indexOf(': ')
+      return { key: 'scanFailed', params: { detail: i >= 0 ? message.slice(i + 2) : message } }
+    }
+    case 'base_not_pushed': {
+      const commits = typeof details.commits === 'number' ? details.commits : 0
+      return commits > 0
+        ? { key: 'baseNotPushed', params: { branch, commits } }
+        : { key: 'baseMissing', params: { branch } }
+    }
+    case 'branch_diverged':
+      return { key: 'branchDiverged', params: { branch } }
+  }
+  return null
+}

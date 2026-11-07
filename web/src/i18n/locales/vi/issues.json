@@ -222,5 +222,12 @@
       "comment": "Đăng bình luận",
       "drop": "Bỏ ticket"
     }
+  },
+  "refusal": {
+    "unsafeFiles": "Chưa đẩy: {count} tệp trông như bí mật, khóa hoặc tệp rác: {files}. Xóa chúng (hoặc thêm vào .gitignore) rồi thử lại.",
+    "scanFailed": "Không quét được các thay đổi nên chưa commit hay đẩy gì. Lý do: {detail}",
+    "baseMissing": "Nhánh gốc {branch} chưa có trên GitHub. Hãy đẩy nó trước rồi thử lại.",
+    "baseNotPushed": "Nhánh gốc {branch} có {commits} commit chưa có trên GitHub. Hãy đẩy {branch} trước rồi thử lại.",
+    "branchDiverged": "Nhánh {branch} trên GitHub đã thay đổi kể từ khi Seelegent đẩy. Seelegent không bao giờ xây tiếp hay ghi đè nhánh như vậy: hãy hoàn tác thay đổi trên GitHub, hoặc bỏ ticket này."
   }
 }

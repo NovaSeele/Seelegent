@@ -222,5 +222,12 @@
       "comment": "发表评论",
       "drop": "放弃工单"
     }
+  },
+  "refusal": {
+    "unsafeFiles": "未推送：有 {count} 个文件看起来是密钥、凭据或垃圾文件：{files}。请删除它们（或加入 .gitignore）后重试。",
+    "scanFailed": "无法扫描这些更改，因此没有提交或推送任何内容。原因：{detail}",
+    "baseMissing": "基础分支 {branch} 不在 GitHub 上。请先推送它，然后重试。",
+    "baseNotPushed": "基础分支 {branch} 有 {commits} 个提交不在 GitHub 上。请先推送 {branch}，然后重试。",
+    "branchDiverged": "自 Seelegent 推送以来，GitHub 上的分支 {branch} 已被更改。Seelegent 从不在这样的分支上继续构建或覆盖它：请在 GitHub 上撤销该更改，或放弃此工单。"
   }
 }

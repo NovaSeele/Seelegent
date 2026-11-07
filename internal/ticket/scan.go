@@ -1,26 +1,29 @@
 package ticket
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"fmt"
-	"io"
-	"os"
 	"path"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/NovaSeele/Seelegent/internal/api"
 	"github.com/NovaSeele/Seelegent/internal/gitx"
-	"github.com/NovaSeele/Seelegent/internal/platform"
 )
 
 // The pull request scan (old bug D5: `git add -A` used to stage everything, including .env files, keys and junk
-// such as a file named nul). Before Seelegent commits or pushes a ticket branch it lists exactly the files that
-// would leave the machine — the uncommitted files git does not ignore and every file the branch changed since its
-// base — and refuses the pull request when one of them is a secret, a key, junk or too large. Nothing is
-// committed or pushed then; the refusal names each file and why. There is no override: the user removes the file
-// (or adds it to .gitignore) and calls pr again.
+// such as a file named nul). Seelegent never pushes the worker's history: it pushes one commit it makes itself, of
+// the worktree's tree as it will be committed, on top of the commit it pushed before (or the base). Before anything
+// is committed or pushed, every blob that commit adds — each entry that differs from its parents, with its path
+// and its content as git stores it — is checked, and the pull request is refused when one of them is a secret, a
+// key, junk or too large. Nothing is committed or pushed then; the refusal names each file and why. There is no
+// override: the user removes the file (or adds it to .gitignore) and calls pr again. A scan that cannot run
+// refuses the pull request too.
 
 // MaxFileBytes is the largest file a pull request may carry.
 const MaxFileBytes = 5 << 20
@@ -107,82 +110,222 @@ func scanBytes(data []byte, hasToken func([]byte) bool) string {
 	return ""
 }
 
-// scanPaths returns the files of the ticket's pull request: the uncommitted non-ignored files (to stage) and the
-// files the branch changed since base (already committed).
-func (s *Service) scanPaths(ctx context.Context, wt, base string) (stage, committed []string, err error) {
+// uncommitted returns the uncommitted files of the worktree that git does not ignore: what the commit step stages.
+func (s *Service) uncommitted(ctx context.Context, wt string) ([]string, error) {
 	out, err := s.o.Git.Exec(ctx, wt, gitx.ExecOptions{Timeout: gitx.ReadTimeout}, "status", "--porcelain=v1", "-z",
 		"--untracked-files=all", "--no-renames")
 	if err != nil {
-		_, gerr := s.git(ctx, wt, gitx.ExecOptions{Timeout: gitx.ReadTimeout}, "status", "--porcelain")
-		return nil, nil, gerr
+		return nil, s.scanErr(err)
 	}
+	var stage []string
 	for _, rec := range strings.Split(string(out), "\x00") {
 		if len(rec) < 4 {
 			continue
 		}
 		stage = append(stage, rec[3:])
 	}
-	if base != "" {
-		diff, err := s.o.Git.Exec(ctx, wt, gitx.ExecOptions{Timeout: gitx.ReadTimeout}, "diff", "--name-only", "-z",
-			"--no-renames", "--diff-filter=d", base, "HEAD")
-		if err == nil {
-			for _, p := range strings.Split(string(diff), "\x00") {
-				if p != "" {
-					committed = append(committed, p)
-				}
-			}
-		}
-	}
-	return stage, committed, nil
+	return stage, nil
 }
 
-// scan checks every file that would leave the machine and returns the findings.
-func (s *Service) scan(_ context.Context, wt string, files []string) []api.ScanFinding {
-	findings := []api.ScanFinding{}
+// ErrScan is matched by a scan that could not run: the pull request is refused, never sent unscanned.
+var ErrScan = errors.New("could not scan the changes")
+
+// PushError refuses a push before anything leaves the machine. Reason is scan_failed, base_not_pushed,
+// branch_diverged or history_unsafe; Details go to the HTTP API next to it.
+type PushError struct {
+	Reason  string
+	Message string
+	Details map[string]any
+	// Findings are the unsafe files of history_unsafe.
+	Findings []api.ScanFinding
+}
+
+func (e *PushError) Error() string { return e.Message }
+
+// Is makes errors.Is(err, ErrConflict) true, and errors.Is(err, ErrScan) for a scan that could not run.
+func (e *PushError) Is(target error) bool {
+	return target == ErrConflict || target == ErrScan && e.Reason == "scan_failed"
+}
+
+// APIDetails are the error details of the HTTP API.
+func (e *PushError) APIDetails() map[string]any {
+	d := map[string]any{"reason": e.Reason}
+	for k, v := range e.Details {
+		d[k] = v
+	}
+	if e.Findings != nil {
+		d["findings"] = e.Findings
+	}
+	return d
+}
+
+// scanErr is a scan that could not run (a git failure, redacted).
+func (s *Service) scanErr(err error) error {
+	return &PushError{Reason: "scan_failed", Message: "could not scan the changes, so nothing was committed or " +
+		"pushed: " + s.redactErr(err, 400)}
+}
+
+// object is a blob the push would send: its path in the pushed tree and its mode ("" when unknown: a history scan).
+type object struct {
+	path, mode, sha string
+}
+
+// Tree entry modes.
+const (
+	modeLink    = "120000"
+	modeGitlink = "160000"
+)
+
+// changedObjects lists the blobs of tree that differ from parent (a tree or a commit): what a commit of tree on
+// top of parent adds. Deleted entries carry nothing out; a submodule entry is only a commit name.
+func (s *Service) changedObjects(ctx context.Context, dir, parent, tree string) (map[string]object, error) {
+	out, err := s.o.Git.Exec(ctx, dir, gitx.ExecOptions{Timeout: gitx.ReadTimeout}, "diff-tree", "-r", "-z",
+		"--no-renames", parent, tree)
+	if err != nil {
+		return nil, s.scanErr(err)
+	}
+	objs := map[string]object{}
+	recs := strings.Split(string(out), "\x00")
+	for i := 0; i+1 < len(recs); i += 2 {
+		meta := strings.Fields(strings.TrimPrefix(recs[i], ":"))
+		if len(meta) != 5 {
+			return nil, s.scanErr(fmt.Errorf("unexpected diff-tree line %q", recs[i]))
+		}
+		mode, sha, status := meta[1], meta[3], meta[4]
+		if status == "D" || mode == modeGitlink || strings.Trim(sha, "0") == "" {
+			continue
+		}
+		objs[recs[i+1]] = object{path: recs[i+1], mode: mode, sha: sha}
+	}
+	return objs, nil
+}
+
+// historyObjects lists every blob reachable from rev, with the first path it was seen at (the first publish of a
+// branch sends its whole history).
+func (s *Service) historyObjects(ctx context.Context, dir, rev string) ([]object, error) {
+	out, err := s.o.Git.Exec(ctx, dir, gitx.ExecOptions{Timeout: 5 * time.Minute}, "rev-list", "--objects", rev)
+	if err != nil {
+		return nil, s.scanErr(err)
+	}
+	var objs []object
 	seen := map[string]bool{}
-	for _, rel := range files {
-		if seen[rel] {
+	for _, line := range strings.Split(string(out), "\n") {
+		sha, p, ok := strings.Cut(strings.TrimSpace(line), " ")
+		if !ok || p == "" || seen[sha] {
+			continue // a commit, or a blob seen at another path
+		}
+		seen[sha] = true
+		objs = append(objs, object{path: p, sha: sha})
+	}
+	return objs, nil
+}
+
+// batchMax bounds the bytes one `cat-file --batch` call returns.
+const batchMax = 64 << 20
+
+// scanObjects checks the blobs a push would send (D5 rules: names, links leaving the tree, size, secret content)
+// and returns the findings. A git failure is an ErrScan error: nothing may be sent unscanned.
+func (s *Service) scanObjects(ctx context.Context, dir string, objs []object) ([]api.ScanFinding, error) {
+	findings := []api.ScanFinding{}
+	var check []object
+	for _, o := range objs {
+		if why := nameReason(o.path); why != "" {
+			findings = append(findings, api.ScanFinding{Path: o.path, Reason: why})
 			continue
 		}
-		seen[rel] = true
-		if why := nameReason(rel); why != "" {
-			findings = append(findings, api.ScanFinding{Path: rel, Reason: why})
-			continue
+		check = append(check, o)
+	}
+	if len(check) == 0 {
+		return findings, nil
+	}
+	// Sizes and types first: large blobs are findings without being read.
+	var in bytes.Buffer
+	for _, o := range check {
+		in.WriteString(o.sha + "\n")
+	}
+	out, err := s.o.Git.Exec(ctx, dir, gitx.ExecOptions{Timeout: 5 * time.Minute, Stdin: in.Bytes()}, "cat-file",
+		"--batch-check")
+	if err != nil {
+		return nil, s.scanErr(err)
+	}
+	lines := strings.Split(strings.TrimRight(string(out), "\n"), "\n")
+	if len(lines) != len(check) {
+		return nil, s.scanErr(fmt.Errorf("cat-file answered %d of %d objects", len(lines), len(check)))
+	}
+	var read []object
+	size := map[string]int64{}
+	for i, o := range check {
+		f := strings.Fields(lines[i])
+		if len(f) != 3 || f[0] != o.sha {
+			return nil, s.scanErr(fmt.Errorf("object %s: %q", o.sha, lines[i]))
 		}
-		p := filepath.Join(wt, filepath.FromSlash(rel))
-		fi, err := os.Lstat(p)
+		if f[1] != "blob" {
+			continue // a tree or a commit of a history listing
+		}
+		n, err := strconv.ParseInt(f[2], 10, 64)
 		if err != nil {
-			continue // deleted: nothing of it leaves
+			return nil, s.scanErr(err)
 		}
-		if platform.IsLink(fi) {
-			if target, err := os.Readlink(p); err == nil && (filepath.IsAbs(target) || strings.HasPrefix(
-				filepath.ToSlash(filepath.Clean(filepath.Join(filepath.Dir(rel), target))), "../")) {
-				findings = append(findings, api.ScanFinding{Path: rel, Reason: "link to a place outside the worktree"})
+		if n > MaxFileBytes && o.mode != modeLink {
+			findings = append(findings, api.ScanFinding{Path: o.path,
+				Reason: fmt.Sprintf("larger than %d MB (%d bytes)", MaxFileBytes>>20, n)})
+			continue
+		}
+		size[o.sha] = n
+		read = append(read, o)
+	}
+	for len(read) > 0 {
+		var chunk []object
+		var total int64
+		for len(read) > 0 && (len(chunk) == 0 || total+size[read[0].sha] <= batchMax) {
+			total += size[read[0].sha]
+			chunk, read = append(chunk, read[0]), read[1:]
+		}
+		more, err := s.scanBatch(ctx, dir, chunk)
+		if err != nil {
+			return nil, err
+		}
+		findings = append(findings, more...)
+	}
+	return findings, nil
+}
+
+// scanBatch reads the blobs of objs with one `cat-file --batch` and checks their content.
+func (s *Service) scanBatch(ctx context.Context, dir string, objs []object) ([]api.ScanFinding, error) {
+	var in bytes.Buffer
+	for _, o := range objs {
+		in.WriteString(o.sha + "\n")
+	}
+	out, err := s.o.Git.Exec(ctx, dir, gitx.ExecOptions{Timeout: 5 * time.Minute, Stdin: in.Bytes()}, "cat-file",
+		"--batch")
+	if err != nil {
+		return nil, s.scanErr(err)
+	}
+	var findings []api.ScanFinding
+	for _, o := range objs {
+		head, rest, ok := bytes.Cut(out, []byte("\n"))
+		f := strings.Fields(string(head))
+		if !ok || len(f) != 3 || f[0] != o.sha {
+			return nil, s.scanErr(fmt.Errorf("object %s: unexpected cat-file answer", o.sha))
+		}
+		n, err := strconv.Atoi(f[2])
+		if err != nil || n+1 > len(rest) {
+			return nil, s.scanErr(fmt.Errorf("object %s: short cat-file answer", o.sha))
+		}
+		data := rest[:n]
+		out = rest[n+1:]
+		if o.mode == modeLink {
+			target := string(data)
+			if path.IsAbs(target) || filepath.IsAbs(target) || strings.HasPrefix(
+				path.Clean(path.Join(path.Dir(o.path), filepath.ToSlash(target))), "../") ||
+				path.Clean(path.Join(path.Dir(o.path), filepath.ToSlash(target))) == ".." {
+				findings = append(findings, api.ScanFinding{Path: o.path, Reason: "link to a place outside the worktree"})
 			}
-			continue
-		}
-		if !fi.Mode().IsRegular() {
-			continue
-		}
-		if fi.Size() > MaxFileBytes {
-			findings = append(findings, api.ScanFinding{Path: rel,
-				Reason: fmt.Sprintf("larger than %d MB (%d bytes)", MaxFileBytes>>20, fi.Size())})
-			continue
-		}
-		f, err := os.Open(p)
-		if err != nil {
-			findings = append(findings, api.ScanFinding{Path: rel, Reason: "unreadable: " + oneLine(err.Error(), 100)})
-			continue
-		}
-		data, err := io.ReadAll(io.LimitReader(f, MaxFileBytes+1))
-		_ = f.Close()
-		if err != nil {
-			findings = append(findings, api.ScanFinding{Path: rel, Reason: "unreadable: " + oneLine(err.Error(), 100)})
 			continue
 		}
 		if why := scanBytes(data, s.o.GitHub.HasToken); why != "" {
-			findings = append(findings, api.ScanFinding{Path: rel, Reason: why})
+			findings = append(findings, api.ScanFinding{Path: o.path, Reason: why})
 		}
 	}
-	return findings
+	return findings, nil
 }

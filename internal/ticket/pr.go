@@ -3,6 +3,8 @@ package ticket
 import (
 	"context"
 	"database/sql"
+	"errors"
+	"sort"
 	"strings"
 	"time"
 
@@ -26,24 +28,15 @@ func (s *Service) dirty(ctx context.Context, wt string) (bool, error) {
 	return out != "", err
 }
 
-// remoteSha is the commit origin's push URL holds for the ticket branch ("" when none or unreachable).
-func (s *Service) remoteSha(ctx context.Context, t *ticketRec) string {
-	target := "origin"
-	if u, ok := s.gitOK(ctx, t.Worktree, "remote", "get-url", "--push", "origin"); ok && u != "" &&
-		!strings.HasPrefix(u, "-") && !strings.Contains(u, "::") {
-		target = u
-	}
-	out, err := s.git(ctx, t.Worktree, gitx.ExecOptions{Timeout: time.Minute}, "ls-remote", "--heads", target,
-		"refs/heads/"+t.Branch)
-	if err != nil {
-		return ""
-	}
-	for _, line := range strings.Split(out, "\n") {
-		if f := strings.Fields(line); len(f) == 2 && f[1] == "refs/heads/"+t.Branch {
-			return f[0]
-		}
-	}
-	return ""
+// refused records why a pull request was refused before anything was committed or pushed, and returns err.
+func (s *Service) refused(ctx context.Context, id string, err error) error {
+	msg := s.redactErr(err, 600)
+	_, _ = s.updateTicket(context.WithoutCancel(ctx), id, func(tx *sql.Tx, t *ticketRec) error {
+		t.Error = msg
+		s.logStep(ctx, tx, id, "pr_refused", map[string]any{"error": msg})
+		return nil
+	})
+	return err
 }
 
 // client returns the GitHub client of a ticket's repository, or nil when it is not on GitHub.
@@ -93,6 +86,7 @@ func (s *Service) recheck(ctx context.Context, id string) error {
 	for _, e := range unknown {
 		var result map[string]any
 		var pr *api.TicketPR
+		var pushed *[2]string
 		switch {
 		case e.Kind == api.OutboxCommit && wtOK:
 			if d, err := s.dirty(ctx, t.Worktree); err == nil && !d {
@@ -100,9 +94,11 @@ func (s *Service) recheck(ctx context.Context, id string) error {
 				result = map[string]any{"sha": h}
 			}
 		case e.Kind == api.OutboxPush && wtOK:
-			h, err := s.head(ctx, t.Worktree)
-			if rs := s.remoteSha(ctx, t); err == nil && rs != "" && rs == h {
-				result = map[string]any{"headSha": h}
+			// The push sends a commit made before it (args.sha): it happened when the remote branch holds it.
+			if sha, _ := e.Args["sha"].(string); sha != "" && s.remoteSha(ctx, t) == sha {
+				base, _ := e.Args["base"].(string)
+				result = map[string]any{"sha": sha, "base": base}
+				pushed = &[2]string{sha, base}
 			}
 		case e.Kind == api.OutboxOpenPR:
 			c, _, err := s.client(ctx, r)
@@ -119,6 +115,9 @@ func (s *Service) recheck(ctx context.Context, id string) error {
 		if _, err := s.updateTicket(ctx, id, func(tx *sql.Tx, t *ticketRec) error {
 			if err := markRecovered(ctx, tx, scopeTicket, id, e, result, api.FormatTime(s.o.Now())); err != nil {
 				return err
+			}
+			if pushed != nil {
+				t.PushedSha, t.PushedBase = pushed[0], pushed[1]
 			}
 			if pr != nil {
 				if t.PR != nil {
@@ -173,8 +172,9 @@ func (s *Service) prInputs(ctx context.Context, t *ticketRec, issue api.Issue, r
 
 // PR commits the ticket's worktree (when it has changes), pushes the ticket branch (never with force) and opens a
 // pull request, a draft by default; an existing pull request of the branch is adopted. The manual tier gets a
-// compare link to open by hand. Every step is written ahead in the outbox. Before anything is committed or pushed
-// the files are scanned (old bug D5): secrets, keys, junk and large files refuse the whole request.
+// compare link to open by hand. Every step is written ahead in the outbox. The push sends one commit Seelegent
+// makes of the worktree's tree, never the worker's history (push.go). Before anything is committed or pushed the
+// blobs that commit adds are scanned (old bug D5): secrets, keys, junk and large files refuse the whole request.
 func (s *Service) PR(ctx context.Context, id string, req api.PRRequest) (api.Ticket, error) {
 	unlock, err := s.locks.lock(ctx, "ticket:"+id)
 	if err != nil {
@@ -217,26 +217,65 @@ func (s *Service) PR(ctx context.Context, id string, req api.PRRequest) (api.Tic
 		return api.Ticket{}, err
 	}
 
-	// 0. The scan: everything that would leave the machine.
-	stage, committed, err := s.scanPaths(ctx, t.Worktree, t.BaseSha)
-	if err != nil {
-		return api.Ticket{}, err
-	}
-	if findings := s.scan(ctx, t.Worktree, append(append([]string{}, stage...), committed...)); len(findings) > 0 {
-		serr := &ScanError{Findings: findings}
-		_, _ = s.updateTicket(ctx, id, func(tx *sql.Tx, t *ticketRec) error {
-			t.Error = clip(serr.Error(), 600)
-			s.logStep(ctx, tx, id, "scan_refused", map[string]any{"findings": findings})
-			return nil
-		})
-		return api.Ticket{}, serr
-	}
-
 	unlockRepo, err := s.o.Git.Lock(ctx, t.Worktree)
 	if err != nil {
 		return api.Ticket{}, err
 	}
 	defer unlockRepo()
+
+	// 0. What the push sends: one commit of Seelegent's own on top of the commit pushed before (or the base),
+	// never the worker's history; the remote branch and the base are checked first.
+	plan, err := s.planPush(ctx, t)
+	var pe *PushError
+	if errors.As(err, &pe) && pe.Reason == "branch_diverged" {
+		// The remote changed under the ticket: recorded as a failed push, never built on or forced.
+		perr := err
+		_ = s.runStep(ctx, id, api.OutboxPush, map[string]any{"branch": t.Branch, "remote": pe.Details["remote"]},
+			func() (map[string]any, error) { return nil, perr })
+		return api.Ticket{}, perr
+	}
+	if err != nil {
+		return api.Ticket{}, s.refused(ctx, id, err)
+	}
+	stage, err := s.uncommitted(ctx, t.Worktree)
+	if err == nil {
+		err = s.snapshot(ctx, t, plan)
+	}
+	if err != nil {
+		return api.Ticket{}, s.refused(ctx, id, err)
+	}
+	baseTree, err := s.treeOf(ctx, t.Worktree, plan.parents[0])
+	if err != nil {
+		return api.Ticket{}, s.refused(ctx, id, s.scanErr(err))
+	}
+	if plan.tree == baseTree && len(plan.parents) == 1 {
+		if plan.prev == "" {
+			return api.Ticket{}, invalidf("the ticket branch has no changes beyond its base")
+		}
+		plan = nil // nothing new since the last push
+	}
+
+	// The scan: every blob the pushed commit adds.
+	if plan != nil {
+		objs, err := s.added(ctx, t.Worktree, plan)
+		var findings []api.ScanFinding
+		if err == nil {
+			findings, err = s.scanObjects(ctx, t.Worktree, objs)
+		}
+		if err != nil {
+			return api.Ticket{}, s.refused(ctx, id, err)
+		}
+		if len(findings) > 0 {
+			sort.Slice(findings, func(i, j int) bool { return findings[i].Path < findings[j].Path })
+			serr := &ScanError{Findings: findings}
+			_, _ = s.updateTicket(ctx, id, func(tx *sql.Tx, t *ticketRec) error {
+				t.Error = clip(serr.Error(), 600)
+				s.logStep(ctx, tx, id, "scan_refused", map[string]any{"findings": findings})
+				return nil
+			})
+			return api.Ticket{}, serr
+		}
+	}
 
 	// 1. Commit, only when something is uncommitted: exactly the listed files.
 	if len(stage) > 0 {
@@ -267,20 +306,46 @@ func (s *Service) PR(ctx context.Context, id string, req api.PRRequest) (api.Tic
 	if err != nil {
 		return api.Ticket{}, err
 	}
-	if n, ok := s.gitOK(ctx, t.Worktree, "rev-list", "--count", t.BaseSha+"..HEAD"); ok && n == "0" {
-		return api.Ticket{}, invalidf("the ticket branch has no changes beyond its base")
-	}
 
-	// 2. Push the ticket branch, never with force.
-	if s.remoteSha(ctx, t) != head {
-		if err := s.runStep(ctx, id, api.OutboxPush, map[string]any{"branch": t.Branch, "headSha": head},
-			func() (map[string]any, error) {
-				_, err := s.git(ctx, t.Worktree, gitx.ExecOptions{PushBranch: t.Branch, Timeout: pushTimeout},
-					"push", "-u", "--porcelain", "origin", t.Branch)
-				return map[string]any{"headSha": head}, err
-			}); err != nil {
+	// 2. Push Seelegent's commit of exactly the scanned tree, never with force.
+	pushed := t.PushedSha
+	if pushed == "" && plan == nil {
+		pushed = s.remoteSha(ctx, t)
+	}
+	if plan != nil {
+		if headTree, err := s.treeOf(ctx, t.Worktree, "HEAD"); err != nil || headTree != plan.tree {
+			return api.Ticket{}, s.refused(ctx, id, &PushError{Reason: "scan_failed",
+				Message: "the worktree changed while Seelegent scanned it; nothing was pushed, call pr again"})
+		}
+		title := oneLine(req.Title, 250)
+		if title == "" {
+			title = defaultTitle(t)
+		}
+		sha, err := s.commitTree(ctx, t.Worktree, plan, s.redact(title))
+		if err != nil {
+			return api.Ticket{}, s.refused(ctx, id, err)
+		}
+		if err := s.runStep(ctx, id, api.OutboxPush, map[string]any{"branch": t.Branch, "sha": sha,
+			"parents": plan.parents, "base": plan.base, "headSha": head}, func() (map[string]any, error) {
+			// The remote branch must still be what the plan saw: a change since is never built on or forced.
+			if tip, err := s.remoteRef(ctx, t.Worktree, plan.target, t.Branch); err != nil {
+				return nil, err
+			} else if tip != plan.tip {
+				return nil, divergedErr(t.Branch, plan.prev, tip)
+			}
+			_, err := s.git(ctx, t.Worktree, gitx.ExecOptions{PushBranch: t.Branch, Timeout: pushTimeout},
+				"push", "--porcelain", "origin", sha+":refs/heads/"+t.Branch)
+			return map[string]any{"sha": sha, "base": plan.base}, err
+		}); err != nil {
 			return api.Ticket{}, err
 		}
+		if _, err := s.updateTicket(ctx, id, func(_ *sql.Tx, t *ticketRec) error {
+			t.PushedSha, t.PushedBase = sha, plan.base
+			return nil
+		}); err != nil {
+			return api.Ticket{}, err
+		}
+		pushed = sha
 	}
 
 	// 3. Open the pull request (adopt one that exists; the manual tier gets a compare link).
@@ -308,7 +373,7 @@ func (s *Service) PR(ctx context.Context, id string, req api.PRRequest) (api.Tic
 				return nil, err
 			}
 			if c == nil {
-				newPR = &api.TicketPR{Draft: draft, HeadSha: head}
+				newPR = &api.TicketPR{Draft: draft, HeadSha: pushed}
 				return map[string]any{"skipped": "no_github"}, nil
 			}
 			existing, err := c.FindPR(ctx, t.Branch)
@@ -321,7 +386,7 @@ func (s *Service) PR(ctx context.Context, id string, req api.PRRequest) (api.Tic
 			}
 			if !access.CanWrite() {
 				u := c.CompareURL(t.Base, t.Branch, title, body)
-				newPR = &api.TicketPR{Draft: draft, HeadSha: head, ManualURL: u}
+				newPR = &api.TicketPR{Draft: draft, HeadSha: pushed, ManualURL: u}
 				return map[string]any{"manualUrl": u}, nil
 			}
 			created, err := c.CreatePR(ctx, github.PRInput{Title: title, Body: body, Head: t.Branch, Base: t.Base,
@@ -340,11 +405,11 @@ func (s *Service) PR(ctx context.Context, id string, req api.PRRequest) (api.Tic
 		if newPR != nil {
 			t.PR = newPR
 		} else if t.PR != nil {
-			t.PR.HeadSha = head
+			t.PR.HeadSha = pushed
 		}
-		if t.Checks != nil && t.Checks.HeadSha != head {
+		if t.Checks != nil && t.Checks.HeadSha != pushed {
 			// A new head runs CI again: earlier results do not apply until the next poll.
-			t.Checks = &api.TicketChecks{State: api.ChecksPending, Runs: []api.CheckRun{}, HeadSha: head,
+			t.Checks = &api.TicketChecks{State: api.ChecksPending, Runs: []api.CheckRun{}, HeadSha: pushed,
 				At: api.FormatTime(s.o.Now())}
 		}
 		t.Status = api.TicketPROpen

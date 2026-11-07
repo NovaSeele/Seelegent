@@ -88,6 +88,8 @@ type DB interface {
 type Git interface {
 	Exec(ctx context.Context, dir string, opt gitx.ExecOptions, args ...string) ([]byte, error)
 	Lock(ctx context.Context, root string) (func(), error)
+	// SnapshotTree writes the tree of the working tree at dir through a temporary index in tmpDir.
+	SnapshotTree(ctx context.Context, dir, tmpDir string, exclude ...string) (string, error)
 }
 
 // Tasks is the task engine (task.Service).
@@ -256,14 +258,18 @@ func (s *Service) gh(r *repoRec) ghRepo {
 
 // ticketRec is a ticket as stored.
 type ticketRec struct {
-	ID              string            `json:"id"`
-	RepoID          string            `json:"repoId"`
-	IssueKey        string            `json:"issueKey"`
-	Issue           api.TicketIssue   `json:"issue"`
-	Slug            string            `json:"slug"`
-	Branch          string            `json:"branch"`
-	Base            string            `json:"base"`
-	BaseSha         string            `json:"baseSha,omitempty"`
+	ID       string          `json:"id"`
+	RepoID   string          `json:"repoId"`
+	IssueKey string          `json:"issueKey"`
+	Issue    api.TicketIssue `json:"issue"`
+	Slug     string          `json:"slug"`
+	Branch   string          `json:"branch"`
+	Base     string          `json:"base"`
+	BaseSha  string          `json:"baseSha,omitempty"`
+	// PushedSha is the commit Seelegent last pushed to the ticket branch (its own commit, never the worker's
+	// history) and PushedBase the base commit it built on.
+	PushedSha       string            `json:"pushedSha,omitempty"`
+	PushedBase      string            `json:"pushedBase,omitempty"`
 	Worktree        string            `json:"worktree"`
 	Status          string            `json:"status"`
 	TaskIDs         []string          `json:"taskIds"`

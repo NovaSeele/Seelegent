@@ -222,5 +222,12 @@
       "comment": "コメントを投稿",
       "drop": "チケットを取り下げ"
     }
+  },
+  "refusal": {
+    "unsafeFiles": "プッシュしていません：{count} 件のファイルが秘密情報、鍵、または不要なファイルのようです：{files}。削除する（または .gitignore に追加する）してから、もう一度お試しください。",
+    "scanFailed": "変更をスキャンできなかったため、コミットもプッシュもしていません。理由：{detail}",
+    "baseMissing": "ベースブランチ {branch} が GitHub にありません。先にプッシュしてから、もう一度お試しください。",
+    "baseNotPushed": "ベースブランチ {branch} に GitHub にないコミットが {commits} 件あります。先に {branch} をプッシュしてから、もう一度お試しください。",
+    "branchDiverged": "Seelegent がプッシュした後に、GitHub 上のブランチ {branch} が変更されました。Seelegent はそのようなブランチの上に積み上げたり上書きしたりしません。GitHub で変更を取り消すか、このチケットを破棄してください。"
   }
 }

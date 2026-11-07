@@ -16,6 +16,10 @@ func TestCheckSafePushAndSetup(t *testing.T) {
 		{"symbolic-ref", "--short", "-q", "refs/remotes/origin/HEAD"},
 		{"rev-list", "--count", "a..b"},
 		{"worktree", "add", "-b", "seelegent/t1-fix", "dir", "abc123"},
+		{"push", "--porcelain", "origin", "0123456789abcdef0123456789abcdef01234567:refs/heads/seelegent/t1-fix"},
+		{"fetch", "-q", "--no-tags", "origin", "refs/heads/main"},
+		{"fetch", "--quiet", "/tmp/origin.git", "refs/heads/main", "refs/heads/seelegent/t1-fix"},
+		{"merge-base", "--is-ancestor", "a", "b"}, {"diff-tree", "-r", "-z", "--no-renames", "a", "b"},
 	}
 	for _, a := range ok {
 		if err := gitx.CheckSafe(push, a...); err != nil {
@@ -38,6 +42,14 @@ func TestCheckSafePushAndSetup(t *testing.T) {
 		{"worktree", "add", "-b", "seelegent/", "dir"}, {"worktree", "add", "-b", "seelegent/a..b", "dir"},
 		{"worktree", "add", "--orphan", "-b", "seelegent/x", "dir"},
 		{"commit", "--allow-empty", "-m", "x"},
+		{"push", "origin", "0123456789abcdef0123456789abcdef01234567:refs/heads/main"},
+		{"push", "origin", "HEAD:refs/heads/seelegent/t1-fix"},
+		{"push", "origin", "0123456789abcdef:refs/heads/seelegent/t1-fix"},
+		{"fetch", "origin"}, {"fetch", "origin", "main"}, {"fetch", "origin", "refs/heads/main:refs/heads/main"},
+		{"fetch", "origin", "+refs/heads/main"}, {"fetch", "--force", "origin", "refs/heads/main"},
+		{"fetch", "--upload-pack=x", "origin", "refs/heads/main"}, {"fetch", "ext::sh -c x", "refs/heads/main"},
+		{"fetch", "--prune", "origin", "refs/heads/main"},
+		{"diff-tree", "--ext-diff", "a", "b"},
 	}
 	for _, a := range refused {
 		if err := gitx.CheckSafe(push, a...); err == nil {

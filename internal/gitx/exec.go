@@ -17,7 +17,8 @@ import (
 // and refuses everything that could lose or move the user's work: no checkout, reset, stash, clean, restore,
 // switch, merge, rebase or pull, no --force anywhere, `git apply` on the working tree only, and staging or
 // committing only in a worktree Seelegent owns or into a temporary index. A push names exactly one branch (the
-// ticket's, ExecOptions.PushBranch) on origin, never with force, delete or mirror. The `-c` options before the
+// ticket's, ExecOptions.PushBranch) on origin, never with force, delete or mirror, and runs no hook; a fetch only
+// brings objects (no local ref changes). The `-c` options before the
 // subcommand are checked against their own allow-list (old bug D17: `-c core.hooksPath=...` or
 // `-c core.sshCommand=...` used to pass unchecked).
 
@@ -40,6 +41,8 @@ type ExecOptions struct {
 	// Setup allows the commands that set up a repository the user asked Seelegent to create or publish: `init`,
 	// `remote add origin -- <url>` and an empty first commit (`commit --allow-empty`).
 	Setup bool
+	// Stdin is the command's standard input (`cat-file --batch`); none when nil.
+	Stdin []byte
 }
 
 // BranchPrefix starts every branch Seelegent creates (ticket branches); `worktree add -b` takes no other name.
@@ -49,9 +52,9 @@ const BranchPrefix = "seelegent/"
 var configAllowed = []string{"user.name", "user.email", "commit.gpgsign"}
 
 // subAllowed are the subcommands Exec runs.
-var subAllowed = []string{"add", "apply", "cat-file", "check-ignore", "commit", "commit-tree", "diff", "init", "log",
-	"ls-files", "ls-remote", "push", "read-tree", "remote", "rev-list", "rev-parse", "show", "status", "symbolic-ref",
-	"worktree", "write-tree"}
+var subAllowed = []string{"add", "apply", "cat-file", "check-ignore", "commit", "commit-tree", "diff", "diff-tree",
+	"fetch", "init", "log", "ls-files", "ls-remote", "merge-base", "push", "read-tree", "remote", "rev-list", "rev-parse",
+	"show", "status", "symbolic-ref", "worktree", "write-tree"}
 
 // CheckSafe reports whether Exec would run args with opt, and why not.
 func CheckSafe(opt ExecOptions, args ...string) error {
@@ -99,6 +102,8 @@ func checkSub(opt ExecOptions, temp bool, sub string, rest []string) error {
 		}
 	case "push":
 		return checkPush(opt, rest)
+	case "fetch":
+		return checkFetch(rest)
 	case "ls-remote":
 		for _, a := range rest {
 			if strings.Contains(a, "::") || strings.HasPrefix(a, "-") && a != "--refs" && a != "--heads" {
@@ -196,8 +201,47 @@ func ValidBranch(name string) bool {
 	return !strings.ContainsAny(name, " ~^:?*[\\+\x00\t\n\r")
 }
 
+// checkFetch allows `fetch [-q|--quiet] [--no-tags] <remote> refs/heads/<branch>...`: objects only, never a local
+// ref (no `:` in a refspec, no `+`), from origin or a URL that cannot be read as an option or a remote helper.
+func checkFetch(rest []string) error {
+	var pos []string
+	for _, a := range rest {
+		switch {
+		case a == "-q" || a == "--quiet" || a == "--no-tags":
+		case strings.HasPrefix(a, "-"):
+			return fmt.Errorf("%w: git fetch %s", ErrRefused, a)
+		default:
+			pos = append(pos, a)
+		}
+	}
+	if len(pos) < 2 || strings.Contains(pos[0], "::") {
+		return fmt.Errorf("%w: git fetch must name a remote and branches", ErrRefused)
+	}
+	for _, ref := range pos[1:] {
+		b, ok := strings.CutPrefix(ref, "refs/heads/")
+		if !ok || !ValidBranch(b) {
+			return fmt.Errorf("%w: git fetch %s (only refs/heads/<branch>, into no local ref)", ErrRefused, ref)
+		}
+	}
+	return nil
+}
+
+// isSha reports whether s is a full hexadecimal object name (SHA-1 or SHA-256).
+func isSha(s string) bool {
+	if len(s) != 40 && len(s) != 64 {
+		return false
+	}
+	for _, c := range s {
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
+			return false
+		}
+	}
+	return true
+}
+
 // checkPush allows exactly `push [-u|--set-upstream] [--porcelain] [-q] origin <branch>` (or the refspec
-// refs/heads/<branch>:refs/heads/<branch>) for opt.PushBranch: never force, delete, mirror, tags or other refs.
+// refs/heads/<branch>:refs/heads/<branch>, or <commit sha>:refs/heads/<branch>) for opt.PushBranch: never force,
+// delete, mirror, tags or other refs.
 func checkPush(opt ExecOptions, rest []string) error {
 	b := opt.PushBranch
 	if !ValidBranch(b) {
@@ -216,7 +260,11 @@ func checkPush(opt ExecOptions, rest []string) error {
 	if len(pos) != 2 || pos[0] != "origin" {
 		return fmt.Errorf("%w: git push must name origin and one branch", ErrRefused)
 	}
-	if ref := pos[1]; ref != b && ref != "refs/heads/"+b+":refs/heads/"+b {
+	ref := pos[1]
+	if src, dst, ok := strings.Cut(ref, ":"); ok && isSha(src) && dst == "refs/heads/"+b {
+		return nil
+	}
+	if ref != b && ref != "refs/heads/"+b+":refs/heads/"+b {
 		return fmt.Errorf("%w: git push %s (only %s)", ErrRefused, ref, b)
 	}
 	return nil
@@ -242,11 +290,11 @@ func (r *Repos) Exec(ctx context.Context, dir string, opt ExecOptions, args ...s
 		timeout = CommitTimeout
 	}
 	if runsHooks(args) {
-		// worktree add runs post-checkout and commit runs post-commit even with --no-verify: the repository's hooks
-		// never run for an internal command. The null device holds no hook on any system.
+		// worktree add runs post-checkout, commit runs post-commit even with --no-verify and push runs pre-push: the
+		// repository's hooks never run for an internal command. The null device holds no hook on any system.
 		args = append([]string{"-c", "core.hooksPath=" + os.DevNull}, args...)
 	}
-	out, over, err := r.runEnv(ctx, dir, opt.Env, timeout, opt.Limit, args...)
+	out, over, err := r.runIn(ctx, dir, opt.Env, opt.Stdin, timeout, opt.Limit, args...)
 	if err == nil && over {
 		return out, &Error{Args: args, Err: fmt.Errorf("output larger than %d bytes", opt.Limit)}
 	}
@@ -259,7 +307,7 @@ func runsHooks(args []string) bool {
 	for i+1 < len(args) && args[i] == "-c" {
 		i += 2
 	}
-	return i < len(args) && (args[i] == "commit" || args[i] == "worktree")
+	return i < len(args) && (args[i] == "commit" || args[i] == "worktree" || args[i] == "push")
 }
 
 // ExitCode is the exit code of a git command that ran and failed, or -1.

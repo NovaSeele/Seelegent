@@ -137,26 +137,36 @@ func (r *Repos) run(ctx context.Context, dir string, timeout time.Duration, limi
 // runEnv is run with extra environment variables.
 func (r *Repos) runEnv(ctx context.Context, dir string, env []string, timeout time.Duration, limit int,
 	args ...string) (stdout []byte, truncated bool, err error) {
+	return r.runIn(ctx, dir, env, nil, timeout, limit, args...)
+}
+
+// runIn is runEnv with stdin as the command's standard input (none when nil).
+func (r *Repos) runIn(ctx context.Context, dir string, env []string, stdin []byte, timeout time.Duration, limit int,
+	args ...string) (stdout []byte, truncated bool, err error) {
 	err = r.git.Run(func(git string) error {
 		var runErr error
-		stdout, truncated, runErr = r.runGit(ctx, git, dir, env, timeout, limit, args...)
+		stdout, truncated, runErr = r.runGit(ctx, git, dir, env, stdin, timeout, limit, args...)
 		return runErr
 	})
 	return stdout, truncated, err
 }
 
 // runGit is one attempt of run, with the git executable git.
-func (r *Repos) runGit(ctx context.Context, git, dir string, env []string, timeout time.Duration, limit int,
-	args ...string) (stdout []byte, truncated bool, err error) {
+func (r *Repos) runGit(ctx context.Context, git, dir string, env []string, stdin []byte, timeout time.Duration,
+	limit int, args ...string) (stdout []byte, truncated bool, err error) {
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	full := append([]string{"-c", "core.fsmonitor=false", "-c", "core.quotepath=off", "-c", "color.ui=false"},
 		args...)
 	cmd := exec.Command(git, full...) //nolint:noctx // the tree is killed when ctx ends
 	cmd.Dir = dir
-	cmd.Env = Env(cmd.Environ(), "GIT_TERMINAL_PROMPT=0", "GIT_LITERAL_PATHSPECS=1", "LC_ALL=C",
-		"GIT_OPTIONAL_LOCKS=0")
+	// No prompt of any kind: git's own, and Git Credential Manager's window.
+	cmd.Env = Env(cmd.Environ(), "GIT_TERMINAL_PROMPT=0", "GCM_INTERACTIVE=never", "GIT_LITERAL_PATHSPECS=1",
+		"LC_ALL=C", "GIT_OPTIONAL_LOCKS=0")
 	cmd.Env = append(cmd.Env, env...)
+	if stdin != nil {
+		cmd.Stdin = bytes.NewReader(stdin)
+	}
 	out := &limitedBuffer{limit: limit}
 	errBuf := &limitedBuffer{limit: 64 << 10}
 	cmd.Stdout = out

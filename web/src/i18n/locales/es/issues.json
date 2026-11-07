@@ -222,5 +222,12 @@
       "comment": "Publicar comentario",
       "drop": "Descartar ticket"
     }
+  },
+  "refusal": {
+    "unsafeFiles": "No se ha enviado: {count} archivo parece un secreto, una clave o basura: {files}. Quítalo (o añádelo a .gitignore) e inténtalo de nuevo. | No se ha enviado: {count} archivos parecen secretos, claves o basura: {files}. Quítalos (o añádelos a .gitignore) e inténtalo de nuevo.",
+    "scanFailed": "No se pudieron analizar los cambios, así que no se ha confirmado ni enviado nada. Motivo: {detail}",
+    "baseMissing": "La rama base {branch} no está en GitHub. Envíala primero y vuelve a intentarlo.",
+    "baseNotPushed": "La rama base {branch} tiene {commits} commit que no está en GitHub. Envía {branch} primero y vuelve a intentarlo. | La rama base {branch} tiene {commits} commits que no están en GitHub. Envía {branch} primero y vuelve a intentarlo.",
+    "branchDiverged": "La rama {branch} cambió en GitHub desde que Seelegent la envió. Seelegent nunca construye sobre una rama así ni la sobrescribe: deshaz el cambio en GitHub o descarta este ticket."
   }
 }

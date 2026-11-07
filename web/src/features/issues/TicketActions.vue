@@ -3,7 +3,7 @@ import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 
-import { errorMessage } from '@/api/client'
+import { ApiError, errorMessage } from '@/api/client'
 import type { Repo, Ticket } from '@/api/types'
 import Button from '@/components/ui/Button.vue'
 import Checkbox from '@/components/ui/Checkbox.vue'
@@ -12,7 +12,7 @@ import TextArea from '@/components/ui/TextArea.vue'
 import TextField from '@/components/ui/TextField.vue'
 import { useGitHubStore } from '@/stores/github'
 
-import { ticketDroppable, ticketFinished, ticketPushable } from './issueModel'
+import { pushRefusal, ticketDroppable, ticketFinished, ticketPushable } from './issueModel'
 
 /**
  * What the user can do with a ticket: push it and open its draft pull request, record one opened by hand, start
@@ -98,10 +98,18 @@ async function submit() {
     if (next) emit('changed', next)
     mode.value = null
   } catch (cause) {
-    error.value = errorMessage(cause)
+    error.value = failure(cause)
   } finally {
     busy.value = false
   }
+}
+
+/** The text of a failed action: a refused push in the user's language, else the daemon's message. */
+function failure(cause: unknown): string {
+  const refusal = cause instanceof ApiError ? pushRefusal(cause.details, cause.message) : null
+  if (!refusal) return errorMessage(cause)
+  const n = Number(refusal.params.count ?? refusal.params.commits ?? 1)
+  return t(`issues.refusal.${refusal.key}`, refusal.params, n)
 }
 
 async function direct(action: () => Promise<void>) {
@@ -111,7 +119,7 @@ async function direct(action: () => Promise<void>) {
   try {
     await action()
   } catch (cause) {
-    error.value = errorMessage(cause)
+    error.value = failure(cause)
   } finally {
     busy.value = false
   }

@@ -421,8 +421,10 @@ func TestIssueToPullRequest(t *testing.T) {
 		t.Fatalf("after pr: %s %+v (%s)", tk.Status, tk.PR, tk.Error)
 	}
 	head := run(t, tk.Worktree, "rev-parse", "HEAD")
-	if got := e.gh.originSha(tk.Branch); got != head {
-		t.Fatalf("origin has %q, want %q", got, head)
+	// Origin holds Seelegent's own commit of the worktree's tree (push.go), never the worker's history.
+	if got := e.gh.originSha(tk.Branch); got == "" || run(t, e.origin, "rev-parse", got+"^{tree}") !=
+		run(t, tk.Worktree, "rev-parse", "HEAD^{tree}") {
+		t.Fatalf("origin has %q, want the tree of %q", got, head)
 	}
 	if got := e.gh.originSha("main"); got == head {
 		t.Fatal("main moved")

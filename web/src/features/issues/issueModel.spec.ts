@@ -7,6 +7,7 @@ import {
   inboxOrder,
   isAbsolutePath,
   logText,
+  pushRefusal,
   safeUrl,
   ticketDroppable,
   ticketFinished,
@@ -72,5 +73,31 @@ describe('issueModel', () => {
   it('writes a log step on one short line', () => {
     expect(logText({ files: 2, message: 'fix', empty: '' })).toBe('files: 2 · message: fix')
     expect(logText({ text: 'x'.repeat(300) }, 20)).toHaveLength(20)
+  })
+
+  it('explains a refused push from the error details', () => {
+    const findings = [
+      { path: '.env', reason: 'x' },
+      { path: 'a.pem', reason: 'y' },
+    ]
+    expect(pushRefusal({ reason: 'unsafe_files', findings }, 'm')).toEqual({
+      key: 'unsafeFiles',
+      params: { count: 2, files: '.env, a.pem' },
+    })
+    expect(pushRefusal({ reason: 'base_not_pushed', branch: 'main', commits: 3 }, 'm')).toEqual({
+      key: 'baseNotPushed',
+      params: { branch: 'main', commits: 3 },
+    })
+    expect(pushRefusal({ reason: 'base_not_pushed', branch: 'main', commits: 0 }, 'm')?.key).toBe(
+      'baseMissing',
+    )
+    expect(pushRefusal({ reason: 'branch_diverged', branch: 'b' }, 'm')?.params).toEqual({
+      branch: 'b',
+    })
+    expect(
+      pushRefusal({ reason: 'scan_failed' }, 'could not scan the changes: exit 128: bad object')
+        ?.params,
+    ).toEqual({ detail: 'exit 128: bad object' })
+    expect(pushRefusal({ reason: 'lane_conflict' }, 'm')).toBeNull()
   })
 })

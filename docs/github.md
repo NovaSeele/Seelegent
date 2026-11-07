@@ -70,17 +70,37 @@ user or lead, `failed` when the ticket could not be set up. New work after the p
 `working`; the next *pr* pushes to the same pull request.
 
 The user's checkout is never changed. Seelegent only runs `git worktree add -b seelegent/...`, a plain `git worktree
-remove` of a clean ticket worktree (*cleanup*, for a finished ticket), and status, diff, add, commit and push inside
-the ticket worktree. It never force-pushes, merges, closes issues or pushes any branch but the ticket's own.
+remove` of a clean ticket worktree (*cleanup*, for a finished ticket), and status, diff, add and commit inside the
+ticket worktree, and pushes a commit of its own to the ticket's branch (below). It never force-pushes, merges, closes
+issues or pushes any branch but the ticket's own.
 
 ## The pull request
 
 `POST /github/tickets/{id}/pr` (ticket `ready` or `pr_open`, the repository has an origin):
 
-1. **Scan** (old bug D5: the old version ran `git add -A` and committed `.env` files, keys and a file named `nul`).
-   The files that would leave the machine are listed: every uncommitted file git does not ignore, and every file
-   the branch changed since its base. The request is refused (`409`, `details.reason: "unsafe_files"`, with each
-   file and why) when one of them is:
+Seelegent never pushes the worker's commits (the review's B1: a secret a worker committed and deleted again in a
+later commit stayed in the pushed history). It pushes one commit of its own whose tree is the worktree as the commit
+step leaves it. Its parent is the ticket's base on the first push and the commit Seelegent pushed before on every
+later one, so each update is a fast-forward. When the base moved between two pushes (main was merged into the
+worktree), the commit has two parents, the commit pushed before and the new base, and GitHub shows a merge. Its
+message is the pull request's title (or `#n: title`), its author the repository's identity (Seelegent's own when
+the repository has none). The worker's commits stay in the local worktree.
+
+1. **Check the remote** before anything is written:
+   - the remote branch must still be the commit Seelegent pushed before (none on the first push). A branch someone
+     pushed to or changed on GitHub is never built on or forced: the request is refused (`409`, `details.reason:
+     "branch_diverged"`, with `branch`, `remote` and `pushed`) and the push's outbox row is `failed`. A branch the
+     previous version pushed (the worker's own commits) is adopted when it is an ancestor of the worktree;
+   - the base must already be on GitHub: on the first push, and whenever the base moved, every commit of the base
+     must be reachable from the remote base branch, or those commits would leave unscanned. Otherwise the request is
+     refused (`409`, `details.reason: "base_not_pushed"`, with `branch` and `commits`, the number of base commits
+     GitHub does not have; `0` when the base branch is not on GitHub at all). The user pushes the base branch first.
+2. **Scan** (old bug D5: the old version ran `git add -A` and committed `.env` files, keys and a file named `nul`).
+   The tree to push is written through a temporary index (the worktree plus every uncommitted file git does not
+   ignore, never the shared-folder links), and every entry it adds is scanned: each path whose blob differs from
+   all the commit's parents (`diff-tree -r --no-renames`). Content the base brought in is not the ticket's and is
+   not scanned again. The request is refused (`409`, `details.reason: "unsafe_files"`, with each file and why) when
+   one of them is:
    - an environment file: `.env` or `.env.*`, except `.env.example`, `.env.sample`, `.env.template`, `.env.dist`;
    - a key or certificate store: `*.pem *.key *.p12 *.pfx *.jks *.keystore *.ppk`, or `id_rsa`, `id_dsa`,
      `id_ecdsa`, `id_ed25519`;
@@ -93,10 +113,14 @@ the ticket worktree. It never force-pushes, merges, closes issues or pushes any 
      API key (`AIza…`) or an Anthropic key (`sk-ant-`).
 
    There is no override: nothing is committed or pushed; the user removes the file (or adds it to `.gitignore`)
-   and asks again.
-2. **Commit** exactly the listed files, when anything is uncommitted.
-3. **Push** the ticket branch to origin (never with force).
-4. **Open** a draft pull request (or adopt the one the branch already has). Its body is generated from the tasks'
+   and asks again. A scan that cannot run (a git error) refuses the request too (`409`, `details.reason:
+   "scan_failed"`): nothing is ever sent unscanned.
+3. **Commit** exactly the uncommitted files git does not ignore, when there are any, in the worktree.
+4. **Push** Seelegent's commit: `commit-tree` of the scanned tree (checked against the worktree's tree), then
+   `push origin <sha>:refs/heads/<branch>` with no hooks (`core.hooksPath` set to the null device), no prompts
+   (`GIT_TERMINAL_PROMPT=0`, `GCM_INTERACTIVE=never`) and never with force. Right before it the remote branch is
+   read again; a branch that changed meanwhile is refused as above.
+5. **Open** a draft pull request (or adopt the one the branch already has). Its body is generated from the tasks'
    summaries with local paths removed (`file://` links, folders under the home folder). In the manual tier the
    answer carries a compare link (`pr.manualUrl`); the user opens the pull request and records its number with
    `link-pr`.
@@ -104,7 +128,8 @@ the ticket worktree. It never force-pushes, merges, closes issues or pushes any 
 Each step is a row of the **outbox**, written as `running` before it starts and `done` or `failed` after (old bug
 D6: records are SQLite rows, and a row that cannot be read is an error, never an empty list). A row still `running`
 when the daemon starts is `unknown`; before anything is retried it is checked against git and GitHub (is the commit
-on the remote, does the pull request exist) and marked done when it had happened.
+Seelegent made on the remote branch, does the pull request exist, does the issue hold the comment's marker) and
+marked done when it had happened.
 
 ## Checks
 

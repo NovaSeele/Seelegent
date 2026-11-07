@@ -222,5 +222,12 @@
       "comment": "Post comment",
       "drop": "Drop ticket"
     }
+  },
+  "refusal": {
+    "unsafeFiles": "Not pushed: {count} file looks like a secret, a key or junk: {files}. Remove it (or add it to .gitignore) and try again. | Not pushed: {count} files look like secrets, keys or junk: {files}. Remove them (or add them to .gitignore) and try again.",
+    "scanFailed": "Could not scan the changes, so nothing was committed or pushed. Reason: {detail}",
+    "baseMissing": "The base branch {branch} is not on GitHub. Push it first, then try again.",
+    "baseNotPushed": "The base branch {branch} has {commits} commit that is not on GitHub. Push {branch} first, then try again. | The base branch {branch} has {commits} commits that are not on GitHub. Push {branch} first, then try again.",
+    "branchDiverged": "The branch {branch} changed on GitHub since Seelegent pushed it. Seelegent never builds on or overwrites such a branch: undo the change on GitHub, or drop this ticket."
   }
 }
