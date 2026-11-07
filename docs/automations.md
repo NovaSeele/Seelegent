@@ -61,7 +61,7 @@ automation are kept):
 | Outcome | When |
 |---|---|
 | `skipped_overlap` | the task of the previous run is still pending, or a run is starting |
-| `skipped_quota` | the best usable account of the backend has less than `quota.minRemaining` % left (default 20) in the bucket that limits it |
+| `skipped_quota` | the best usable account of the backend has less than `quota.minRemaining` % left (default 20) in the bucket that limits it; with no quota known for the backend the run starts |
 | `skipped_precheck` | the precheck command (run in the folder through the shell, 60 s at most, its process tree killed after) exited non-zero, timed out or did not start; the detail carries the end of its output |
 | `error` | the delegation itself failed (no folder, no account, a lane conflict) |
 | `started` | a task was delegated; `taskId` names it (the task's `automationId` links back) |

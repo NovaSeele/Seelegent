@@ -5,6 +5,7 @@ import { useI18n } from 'vue-i18n'
 import { errorMessage } from '@/api/client'
 import Button from '@/components/ui/Button.vue'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
+import Spinner from '@/components/ui/Spinner.vue'
 import StatusPill from '@/components/ui/StatusPill.vue'
 import TextField from '@/components/ui/TextField.vue'
 import { useGitHubStore } from '@/stores/github'
@@ -73,6 +74,7 @@ async function refresh() {
     <div class="acc__head">
       <h2 class="acc__title">{{ t('issues.access.title') }}</h2>
       <StatusPill
+        v-if="access || gh.accessStatus === 'error'"
         size="sm"
         :tone="TIER_TONE[tier] ?? 'neutral'"
         :icon="tier === 'manual' ? 'warning' : 'success'"
@@ -82,44 +84,54 @@ async function refresh() {
         {{ t('issues.access.check') }}
       </Button>
     </div>
-    <p class="acc__desc">{{ t(`issues.access.tierDesc.${tier}`) }}</p>
-    <p v-if="access?.ghUser" class="acc__fact">
-      {{ t('issues.access.ghUser', { user: access.ghUser, version: access.ghVersion ?? '' }) }}
-    </p>
-    <p class="acc__fact">
-      {{ t('issues.access.hosts', { hosts: (access?.hosts ?? ['github.com']).join(', ') }) }}
-      <RouterLink class="acc__link" :to="{ name: 'settings', params: { section: 'system' } }">
-        {{ t('issues.access.hostsEdit') }}
-      </RouterLink>
-    </p>
-    <form class="acc__form" autocomplete="off" @submit.prevent="save">
-      <TextField
-        v-model="token"
-        type="password"
-        autocomplete="new-password"
-        :label="access?.tokenHint ? t('issues.access.replace') : t('issues.access.token')"
-        :hint="
-          access?.tokenHint
-            ? t('issues.access.stored', { hint: access.tokenHint })
-            : t('issues.access.tokenHint')
-        "
-        :error="failure || undefined"
-      />
-      <div class="acc__actions">
-        <Button type="submit" variant="primary" size="sm" :loading="busy" :disabled="!token.trim()">
-          {{ t('issues.access.save') }}
-        </Button>
-        <Button
-          v-if="access?.tokenHint"
-          variant="ghost"
-          size="sm"
-          :disabled="busy"
-          @click="removing = true"
-        >
-          {{ t('issues.access.remove') }}
-        </Button>
-      </div>
-    </form>
+    <!-- Until the daemon answers, show nothing about the tier: a "Manual" flash would be wrong (F37). -->
+    <Spinner v-if="!access && gh.accessStatus !== 'error'" :label="t('common.ui.loading')" />
+    <template v-else>
+      <p class="acc__desc">{{ t(`issues.access.tierDesc.${tier}`) }}</p>
+      <p v-if="access?.ghUser" class="acc__fact">
+        {{ t('issues.access.ghUser', { user: access.ghUser, version: access.ghVersion ?? '' }) }}
+      </p>
+      <p class="acc__fact">
+        {{ t('issues.access.hosts', { hosts: (access?.hosts ?? ['github.com']).join(', ') }) }}
+        <RouterLink class="acc__link" :to="{ name: 'settings', params: { section: 'system' } }">
+          {{ t('issues.access.hostsEdit') }}
+        </RouterLink>
+      </p>
+      <form class="acc__form" autocomplete="off" @submit.prevent="save">
+        <TextField
+          v-model="token"
+          type="password"
+          autocomplete="new-password"
+          :label="access?.tokenHint ? t('issues.access.replace') : t('issues.access.token')"
+          :hint="
+            access?.tokenHint
+              ? t('issues.access.stored', { hint: access.tokenHint })
+              : t('issues.access.tokenHint')
+          "
+          :error="failure || undefined"
+        />
+        <div class="acc__actions">
+          <Button
+            type="submit"
+            variant="primary"
+            size="sm"
+            :loading="busy"
+            :disabled="!token.trim()"
+          >
+            {{ t('issues.access.save') }}
+          </Button>
+          <Button
+            v-if="access?.tokenHint"
+            variant="ghost"
+            size="sm"
+            :disabled="busy"
+            @click="removing = true"
+          >
+            {{ t('issues.access.remove') }}
+          </Button>
+        </div>
+      </form>
+    </template>
     <ConfirmDialog
       v-model:open="removing"
       :title="t('issues.access.removeTitle')"

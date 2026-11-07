@@ -7,7 +7,7 @@ import StatusPill from '@/components/ui/StatusPill.vue'
 import { TASK_STATUS } from '@/components/ui/tone'
 import { useFormat } from '@/composables/useFormat'
 
-import { failingChecks, logText, safeUrl, ticketTaskStatus } from './issueModel'
+import { failingChecks, logText, safeUrl, ticketFinished, ticketTaskStatus } from './issueModel'
 
 /**
  * The parts of a ticket below its header: its tasks, the CI checks of the pull request, the changed files, what
@@ -73,7 +73,7 @@ const skipped = computed(() => props.ticket.env?.skipped ?? [])
         <p v-if="run.summary" class="item__text">{{ run.summary }}</p>
       </li>
     </ul>
-    <p v-if="ticket.checksFix" class="sec__none">
+    <p v-if="ticket.checksFix && !ticketFinished(ticket.status)" class="sec__none">
       {{ t('issues.ticket.checksFix', { runs: ticket.checksFix.runs.join(', ') }) }}
       <RouterLink :to="{ name: 'tasks', params: { taskId: ticket.checksFix.taskId } }">
         {{ ticket.checksFix.taskId }}

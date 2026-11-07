@@ -44,12 +44,17 @@ async function read(): Promise<void> {
   }
 }
 
-watch(open, (now) => {
-  if (!now) return
-  shown.value = null
-  error.value = ''
-  void read()
-})
+// immediate: the dialog can be open from the start (the ?confirm= link of the lead's message).
+watch(
+  [open, () => props.automationId],
+  ([now]) => {
+    if (!now) return
+    shown.value = null
+    error.value = ''
+    void read()
+  },
+  { immediate: true },
+)
 
 const schedule = computed(() => {
   if (!shown.value) return ''

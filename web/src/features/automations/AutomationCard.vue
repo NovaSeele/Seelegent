@@ -32,6 +32,10 @@ const schedule = computed(() => {
   return t(w.key, w.params)
 })
 const last = computed(() => props.automation.lastRun)
+// The task to open: the one running now, else the last run's own (a skipped run has none, F39).
+const taskId = computed(() =>
+  props.automation.running ? props.automation.activeTaskId : last.value?.taskId,
+)
 </script>
 
 <template>
@@ -71,10 +75,7 @@ const last = computed(() => props.automation.lastRun)
           :label="t(`automations.outcome.${last.outcome}`)"
         />
       </span>
-      <RouterLink
-        v-if="automation.activeTaskId"
-        :to="{ name: 'tasks', params: { taskId: automation.activeTaskId } }"
-      >
+      <RouterLink v-if="taskId" :to="{ name: 'tasks', params: { taskId } }">
         {{ t('automations.card.task') }}
       </RouterLink>
     </p>

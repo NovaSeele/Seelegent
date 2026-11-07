@@ -10,7 +10,7 @@ import { useFormat } from '@/composables/useFormat'
 import { useLiveRecord } from '@/features/meetings/useLiveRecord'
 import { useGitHubStore } from '@/stores/github'
 
-import { CHECKS_STATE, safeUrl, TICKET_STATUS } from './issueModel'
+import { CHECKS_STATE, safeUrl, TICKET_STATUS, ticketFinished } from './issueModel'
 import TicketActions from './TicketActions.vue'
 import TicketSections from './TicketSections.vue'
 
@@ -32,8 +32,11 @@ const { record, status, error, reload, set } = useLiveRecord(
 
 const repo = computed(() => gh.repos.find((r) => r.id === record.value?.repoId) ?? null)
 const look = computed(() => (record.value ? TICKET_STATUS[record.value.status] : null))
+// A finished ticket's checks are no longer read: its header does not shout the last state (F38).
 const checks = computed(() =>
-  record.value?.checks ? CHECKS_STATE[record.value.checks.state] : null,
+  record.value?.checks && !ticketFinished(record.value.status)
+    ? CHECKS_STATE[record.value.checks.state]
+    : null,
 )
 const prUrl = computed(() => safeUrl(record.value?.pr?.url))
 const manualUrl = computed(() => safeUrl(record.value?.pr?.manualUrl))
