@@ -43,7 +43,7 @@ func (s *Server) proof(ctx context.Context, k *call) (result, error) {
 		return result{}, fmt.Errorf("unknown proof action: %s (matrix, index, run, run_status, cancel_run, stats, "+
 			"lanes or contention)", a.Action)
 	}
-	// Old behaviour: cwd defaults to the server's folder.
+	// As in the old server, cwd defaults to the server's folder.
 	cwd, err := s.absPath(a.Cwd)
 	if err != nil {
 		return result{}, err

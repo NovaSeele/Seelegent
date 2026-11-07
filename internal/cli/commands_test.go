@@ -331,17 +331,10 @@ func TestNotAvailable(t *testing.T) {
 	t.Setenv(config.EnvPort, strconv.Itoa(freeTestPort(t)))
 	td := testDeps(nil)
 	for _, args := range [][]string{
-		{"delegate", "--gate", "go test ./...", "x"},
-		{"delegate", "--lane", "src/", "x"},
-		{"delegate", "--force-lane", "x"},
-		{"delegate", "--verify", "x"},
 		{"delegate", "--member", "alice", "x"},
 		{"delegate", "--variants", "2", "x"},
 		{"delegate", "--variant", "agy:m", "x"},
 		{"delegate", "--no-judge", "x"},
-		{"run", "--gate", "make", "x"},
-		{"followup", "t-1", "--lane", "a", "x"},
-		{"followup", "t-1", "--verify", "x"},
 	} {
 		r := wantErr(t, td, ExitError, codeNotAvailable, append(args, "--json")...)
 		if !strings.Contains(r.stdout, "not available in this version") {
@@ -368,7 +361,7 @@ func TestWorkerGuard(t *testing.T) {
 		{"delegate", "x"}, {"delegate", "--bogus-flag", "x"}, {"run", "x"}, {"followup", "t-1", "x"},
 		{"review", "t-1", "accepted"}, {"cancel", "t-1"}, {"memory", "append", "--cwd", d.cwd, "x"},
 		{"memory", "replace", "--cwd", d.cwd, "x"}, {"memory", "--cwd", d.cwd}, {"stop"}, {"restart"}, {"ui"},
-		{"daemon"}, {"serve", "--port", "1"},
+		{"daemon"}, {"serve", "--port", "1"}, {"proof", "run", "--cwd", d.cwd}, {"proof", "cancel-run", "r1"},
 	} {
 		r := runCLI(t, td, args...)
 		if r.code != ExitError || r.stderr != ops.WorkerMessage+"\n" || r.stdout != "" {
@@ -385,6 +378,7 @@ func TestWorkerGuard(t *testing.T) {
 	must(t, td, "status")
 	must(t, td, "ls")
 	must(t, td, "memory", "read", "--cwd", d.cwd)
+	must(t, td, "proof", "lanes", "--cwd", d.cwd)
 	must(t, td, "version")
 }
 

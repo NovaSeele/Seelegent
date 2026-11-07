@@ -12,9 +12,10 @@ import (
 	"github.com/NovaSeele/Seelegent/internal/ops"
 )
 
-// offFlags are the options this version refuses unless they are off (gate commands, lanes, the verifier).
-type offFlags struct {
+// gateFlags are the gate, lane and verifier options of delegate, run and followup (docs/gates.md).
+type gateFlags struct {
 	gate      []string
+	detect    bool
 	noGate    bool
 	lane      []string
 	noLane    bool
@@ -22,32 +23,49 @@ type offFlags struct {
 	verify    bool
 }
 
-func (o *offFlags) add(fs *pflag.FlagSet) {
-	fs.StringArrayVar(&o.gate, "gate", nil, "gate command (not available in this version; --no-gate is)")
-	fs.BoolVar(&o.noGate, "no-gate", false, "run no gate")
-	fs.StringSliceVar(&o.lane, "lane", nil, "lane paths (not available in this version; --no-lane is)")
-	fs.BoolVar(&o.noLane, "no-lane", false, "no lane")
-	fs.BoolVar(&o.forceLane, "force-lane", false, "force the lane (not available in this version)")
-	fs.BoolVar(&o.verify, "verify", false, "run the verifier (not available in this version)")
+func (o *gateFlags) add(fs *pflag.FlagSet) {
+	fs.StringArrayVar(&o.gate, "gate", nil, "gate command to run after the report (repeatable; replaces the spec's)")
+	fs.BoolVar(&o.detect, "gate-detect", false, "add the repository's detected test, lint and build commands")
+	fs.BoolVar(&o.noGate, "no-gate", false, "run no gate commands (lane and hygiene checks still run)")
+	fs.StringSliceVar(&o.lane, "lane", nil, "files and globs the worker may change, relative to the repository root")
+	fs.BoolVar(&o.noLane, "no-lane", false, "drop the lane a spec would give")
+	fs.BoolVar(&o.forceLane, "force-lane", false, "claim the lane even where another task holds it")
+	fs.BoolVar(&o.verify, "verify", false, "run the second-opinion verifier once the gate is green")
 }
 
-// check refuses what is not available and returns the gate flag (false with --no-gate).
-func (o *offFlags) check() (*bool, error) {
+// gateOptions are the request fields the gate flags set.
+type gateOptions struct {
+	gate      *bool
+	commands  []string
+	lane      []string
+	noLane    bool
+	forceLane bool
+	verify    *bool
+}
+
+// options checks the flags against each other and returns the request fields. verify is sent only when the flag
+// was given, so the verifier setting decides otherwise.
+func (o *gateFlags) options(fs *pflag.FlagSet) (gateOptions, error) {
 	switch {
-	case len(o.gate) > 0 && !o.noGate:
-		return nil, &ops.UnavailableError{What: "running gate commands (--gate)", Detail: "leave --gate out or pass --no-gate"}
-	case len(o.lane) > 0 && !o.noLane:
-		return nil, &ops.UnavailableError{What: "lane enforcement (--lane)", Detail: "leave --lane out or pass --no-lane"}
-	case o.forceLane:
-		return nil, &ops.UnavailableError{What: "--force-lane", Detail: "leave it out; lanes are not enforced yet"}
-	case o.verify:
-		return nil, &ops.UnavailableError{What: "the verifier (--verify)", Detail: "leave --verify out"}
+	case o.noGate && (len(o.gate) > 0 || o.detect):
+		return gateOptions{}, usagef("--no-gate cannot go with --gate or --gate-detect")
+	case o.noLane && len(o.lane) > 0:
+		return gateOptions{}, usagef("--no-lane cannot go with --lane")
 	}
-	if o.noGate {
+	g := gateOptions{commands: o.gate, lane: splitList(o.lane), noLane: o.noLane, forceLane: o.forceLane}
+	switch {
+	case o.noGate:
 		f := false
-		return &f, nil
+		g.gate = &f
+	case o.detect:
+		t := true
+		g.gate = &t
 	}
-	return nil, nil
+	if fs.Changed("verify") {
+		v := o.verify
+		g.verify = &v
+	}
+	return g, nil
 }
 
 // delegateFlags are the options of delegate and run (the old names).
@@ -56,7 +74,7 @@ type delegateFlags struct {
 
 	after    []string
 	allowGit bool
-	off      offFlags
+	gates    gateFlags
 	wait     int
 	// Contest options: refused.
 	variants int
@@ -81,7 +99,7 @@ func (f *delegateFlags) add(fs *pflag.FlagSet, withWait bool) {
 	fs.StringVar(&f.afterMode, "after-mode", "", "accepted (default) or done")
 	fs.BoolVar(&f.allowGit, "allow-git", false, "let the worker commit")
 	fs.StringVar(&f.member, "member", "", "department member (not available in this version)")
-	f.off.add(fs)
+	f.gates.add(fs)
 	if withWait {
 		fs.IntVar(&f.wait, "wait", defaultWait, "seconds to wait for the report (0: return at once)")
 	}
@@ -104,7 +122,7 @@ func (f *delegateFlags) request(fs *pflag.FlagSet, words []string) (api.Delegate
 		return api.DelegateRequest{}, &ops.UnavailableError{What: "department members (--member)",
 			Detail: "leave --member out and pass --backend and --model instead"}
 	}
-	gate, err := f.off.check()
+	g, err := f.gates.options(fs)
 	if err != nil {
 		return api.DelegateRequest{}, err
 	}
@@ -130,7 +148,8 @@ func (f *delegateFlags) request(fs *pflag.FlagSet, words []string) (api.Delegate
 	}
 	req := api.DelegateRequest{Prompt: prompt, Title: f.title, Cwd: cwd, Mode: mode, Model: f.model, Effort: f.effort,
 		Backend: f.backend, Provider: f.provider, Profile: f.profile, After: splitList(f.after), AfterMode: f.afterMode,
-		AllowGit: f.allowGit, Gate: gate, Session: session()}
+		AllowGit: f.allowGit, Gate: g.gate, GateCommands: g.commands, Lane: g.lane, NoLane: g.noLane,
+		ForceLane: g.forceLane, Verify: g.verify, Session: session()}
 	ids := splitList([]string{f.task})
 	switch {
 	case f.spec != "":
@@ -267,6 +286,7 @@ func printReport(w io.Writer, r api.TaskReport, woke string) {
 			_, _ = fmt.Fprintf(w, "  - %s\n", o)
 		}
 	}
+	printGate(w, r)
 	if r.Error != "" {
 		_, _ = fmt.Fprintf(w, "Error: %s\n", r.Error)
 	}

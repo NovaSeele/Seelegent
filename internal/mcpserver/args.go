@@ -173,7 +173,7 @@ func (g *gateArg) UnmarshalJSON(b []byte) error {
 }
 
 // request maps the argument onto DelegateRequest.Gate and GateCommands.
-func (g gateArg) request() (*bool, []string) {
+func (g gateArg) request() (gate *bool, commands []string) {
 	switch {
 	case g.off:
 		f := false
