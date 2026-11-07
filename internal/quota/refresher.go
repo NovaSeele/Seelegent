@@ -98,6 +98,9 @@ type refreshCall struct {
 	gen  uint64 // r.gen when the read started
 	done chan struct{}
 	res  Result
+	// aborted: the context of the caller that started the read ended, so res says nothing about the account (a
+	// reader's own time limit is not this: its error is a real result, shared and kept like any other).
+	aborted bool
 }
 
 // NewRefresher returns a refresher.
@@ -315,7 +318,7 @@ func (r *Refresher) refresh(ctx context.Context, a account.Account, fresh bool) 
 		case <-ctx.Done():
 			return Result{AccountID: a.ID, Err: ctx.Err()}
 		}
-		if join && !canceledByOther(ctx, c.res.Err) {
+		if join && (!c.aborted || ctx.Err() != nil) {
 			return c.res
 		}
 		if r.o.onWoken != nil {
@@ -334,26 +337,16 @@ func (r *Refresher) refresh(ctx context.Context, a account.Account, fresh bool) 
 	r.mu.Unlock()
 
 	c.res = r.readAndStore(ctx, a)
+	c.aborted = ctx.Err() != nil
 
 	r.mu.Lock()
 	delete(r.inflight, a.ID)
-	if !isCtxErr(c.res.Err) {
+	if !c.aborted {
 		r.last[a.ID] = c
 	}
 	r.mu.Unlock()
 	close(c.done)
 	return c.res
-}
-
-// isCtxErr reports whether err only says that a caller's context ended.
-func isCtxErr(err error) bool {
-	return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
-}
-
-// canceledByOther reports whether a shared read failed only because the context of the caller that started it
-// ended, while this caller's own context is still live.
-func canceledByOther(ctx context.Context, err error) bool {
-	return isCtxErr(err) && ctx.Err() == nil
 }
 
 // readAndStore reads one account and stores the merged snapshot. A failure is recorded on that account only.

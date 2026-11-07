@@ -3,6 +3,7 @@ package quota
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -330,5 +331,69 @@ func TestSharedReadCanceledByOtherCaller(t *testing.T) {
 	f.r.mu.Unlock()
 	if last == nil || last.res.Err != nil {
 		t.Fatalf("last read = %+v, want the good second read", last)
+	}
+}
+
+// Review of 3801679: a reader that runs out of its own time limit answers with a wrapped DeadlineExceeded while
+// every caller is still live. That is a real result: it is shared, not read again by each caller.
+func TestReaderTimeoutIsShared(t *testing.T) {
+	timedOut := fmt.Errorf("agy quota: %w", context.DeadlineExceeded)
+	release := make(chan struct{})
+	f := newRefFixture(t, func(context.Context, string) (backend.Quota, error) {
+		<-release
+		return backend.Quota{}, timedOut
+	})
+	a := f.add(t, account.New{Backend: "agy", Kind: account.KindIsolated, Enabled: true})
+	results := make(chan Result, 3)
+	for range 3 {
+		go func() { results <- f.r.refresh(t.Context(), a, false) }()
+	}
+	waitFor(t, "two callers waiting on the first one's read", func() bool { return f.waiting.Load() == 2 })
+	close(release)
+	for range 3 {
+		if res := <-results; !errors.Is(res.Err, context.DeadlineExceeded) {
+			t.Fatalf("result = %v, want the reader's timeout", res.Err)
+		}
+	}
+	if n := f.reader.count(a.ID); n != 1 {
+		t.Fatalf("reads = %d, want 1", n)
+	}
+}
+
+// Review of 3801679, fresh case: two fresh refreshes woken from an older read share the newer read even when that
+// read ends in the reader's own timeout: 2 reads in all, not 3.
+func TestFreshRefreshesShareReaderTimeout(t *testing.T) {
+	timedOut := fmt.Errorf("agy quota: %w", context.DeadlineExceeded)
+	release := make(chan struct{})
+	var calls atomic.Int32
+	f := newRefFixture(t, func(context.Context, string) (backend.Quota, error) {
+		if calls.Add(1) == 1 {
+			<-release
+			return okQuota(0.5), nil
+		}
+		return backend.Quota{}, timedOut
+	})
+	ctx := t.Context()
+	a := f.add(t, account.New{Backend: "agy", Kind: account.KindIsolated, Enabled: true})
+	first := make(chan Result, 1)
+	go func() { first <- f.r.refresh(ctx, a, false) }()
+	waitFor(t, "the first read", func() bool { return f.reader.count(a.ID) == 1 })
+	errs := make(chan error, 2)
+	for range 2 {
+		go func() {
+			_, err := f.r.Refresh(ctx, a.ID)
+			errs <- err
+		}()
+	}
+	waitFor(t, "both refreshes waiting", func() bool { return f.waiting.Load() == 2 })
+	close(release)
+	<-first
+	for range 2 {
+		if err := <-errs; !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("refresh = %v, want the reader's timeout", err)
+		}
+	}
+	if n := f.reader.count(a.ID); n != 2 {
+		t.Fatalf("reads = %d, want 2", n)
 	}
 }
