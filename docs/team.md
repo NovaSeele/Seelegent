@@ -53,7 +53,11 @@ dissents, advice not taken, consults and objections.
 
 Consults, meeting attendees and contest judges run as tasks of kind `consult`, `meeting` and `judge` (the
 verifier's `verify` too). They are read-only (plan mode), have no gate, lane or snapshots, are never listed and are
-read through what started them. When one ends the engine closes it, so it never waits for the lead.
+read through what started them. When one ends the engine closes it, so it never waits for the lead. A run whose
+record was never stored (a consult whose task started a new turn meanwhile, a meeting whose insert failed, a
+cancelled meeting's running turns) is cancelled and closed once its worker has stopped. Open starts a meeting's
+first round before it stores the meeting, so at startup the meeting service also stops and closes the open
+`meeting` runs whose meeting does not exist.
 
 ## Consults
 

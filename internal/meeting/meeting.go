@@ -73,6 +73,9 @@ type Tasks interface {
 	Get(ctx context.Context, id string) (api.TaskDetail, error)
 	Cancel(ctx context.Context, id string, req api.CancelRequest) (api.TaskSummary, bool, error)
 	CloseHiddenRun(id, notes string)
+	// StopHiddenRun cancels a hidden run and closes it once it has stopped.
+	StopHiddenRun(id, notes string)
+	OpenHiddenRuns(ctx context.Context, kind string) ([]task.HiddenRun, error)
 	Bus() *task.Bus
 }
 
@@ -159,8 +162,54 @@ func (s *Service) Start(ctx context.Context) error {
 		s.logStep(ctx, id, "reattach", nil)
 		s.watch(id)
 	}
+	if err := s.stopOrphanRuns(ctx); err != nil {
+		s.log.Warn("meeting: stop runs of meetings that were never stored", "err", err)
+	}
 	s.spawn(s.memory)
 	return nil
+}
+
+// stopOrphanRuns stops and closes the attendee runs whose meeting does not exist: Open starts round 1 before it
+// stores the meeting, so a daemon that stopped in between (or a failed insert whose clean-up did not finish) leaves
+// runs nobody reads. The check holds s.mu, which Open holds from the first run to the insert.
+func (s *Service) stopOrphanRuns(ctx context.Context) error {
+	orphans, err := s.orphanRuns(ctx)
+	if err != nil {
+		return err
+	}
+	for _, id := range orphans {
+		s.log.Info("meeting: stop a run whose meeting was never stored", "task", id)
+		s.o.Tasks.StopHiddenRun(id, "meeting not stored")
+	}
+	return nil
+}
+
+// orphanRuns lists the open meeting runs whose meeting does not exist.
+func (s *Service) orphanRuns(ctx context.Context) ([]string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	runs, err := s.o.Tasks.OpenHiddenRuns(ctx, task.KindMeeting)
+	if err != nil {
+		return nil, err
+	}
+	var orphans []string
+	for _, r := range runs {
+		id := r.MeetingID
+		if id == "" {
+			id = r.ParentID
+		}
+		var n int
+		err := s.o.DB.Read(ctx, func(tx *sql.Tx) error {
+			return tx.QueryRowContext(ctx, `SELECT count(*) FROM meetings WHERE id = ?`, id).Scan(&n)
+		})
+		if err != nil {
+			return nil, fmt.Errorf("meeting %s: %w", id, err)
+		}
+		if n == 0 {
+			orphans = append(orphans, r.ID)
+		}
+	}
+	return orphans, nil
 }
 
 // Close stops the watchers. Attendee runs keep going in the task engine; the next Start picks them up.
@@ -397,8 +446,7 @@ func (s *Service) Open(ctx context.Context, req api.MeetingRequest) (api.Meeting
 		s.mu.Unlock()
 		for i := range m.Attendees {
 			if a := &m.Attendees[i]; a.TaskID != "" {
-				_, _, _ = s.o.Tasks.Cancel(ctx, a.TaskID, api.CancelRequest{})
-				s.o.Tasks.CloseHiddenRun(a.TaskID, "meeting not stored")
+				s.o.Tasks.StopHiddenRun(a.TaskID, "meeting not stored")
 			}
 		}
 		return api.Meeting{}, err
@@ -1170,10 +1218,10 @@ func (s *Service) Cancel(ctx context.Context, id string) (api.Meeting, error) {
 	if err != nil {
 		return api.Meeting{}, err
 	}
+	// A running turn takes a moment to stop; StopHiddenRun closes its run once it has (closeRuns right away would
+	// find it still running and leave it open).
 	for _, tid := range stop {
-		if _, _, err := s.o.Tasks.Cancel(ctx, tid, api.CancelRequest{}); err != nil && !errors.Is(err, task.ErrNotFound) {
-			s.log.Warn("meeting: cancel a run", "meeting", id, "task", tid, "err", err)
-		}
+		s.o.Tasks.StopHiddenRun(tid, "meeting "+api.MeetingStatusCancelled)
 	}
 	s.closeRuns(&m)
 	return m, nil

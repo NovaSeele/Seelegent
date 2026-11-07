@@ -140,8 +140,8 @@ func (s *Service) Consult(ctx context.Context, id string, req api.ConsultRequest
 		return nil, nil
 	})
 	if err != nil {
-		// The run has no record to report to: stop it.
-		_, _, _ = s.Cancel(s.background(), sum.ID, api.CancelRequest{})
+		// The run has no record to report to: stop it and close it, so it never waits for a review.
+		s.StopHiddenRun(sum.ID, "consult not stored")
 		return api.Consult{}, err
 	}
 	s.watchConsult(id, rec.ID, sum.ID)
@@ -223,13 +223,22 @@ func parseConsult(text, root string) (verdict string, findings []api.Claim, requ
 
 // watchConsult follows a consult run until it ends and stores the opinion.
 func (s *Service) watchConsult(taskID, consultID, runID string) {
-	s.spawn("consult", "", func() {
+	s.whenFinished("consult", runID, func(run *Task) { s.finishConsult(taskID, consultID, run) })
+}
+
+// whenFinished calls done once the run has finished (nil: the run is gone), from its own goroutine; it gives up
+// when the service stops.
+func (s *Service) whenFinished(name, runID string, done func(run *Task)) {
+	s.spawn(name, "", func() {
 		for {
 			changed, release := s.bus.TasksChanged([]string{runID})
 			run, err := s.repo.Get(s.root, runID)
 			if errors.Is(err, ErrNotFound) || (err == nil && Finished(run.Status)) {
 				release()
-				s.finishConsult(taskID, consultID, run)
+				if err != nil {
+					run = nil
+				}
+				done(run)
 				return
 			}
 			timer := time.NewTimer(consultPoll)
@@ -313,6 +322,58 @@ func (s *Service) closeHiddenRun(id, notes string) {
 
 // CloseHiddenRun is closeHiddenRun for meetings and contests.
 func (s *Service) CloseHiddenRun(id, notes string) { s.closeHiddenRun(id, notes) }
+
+// HiddenRun is a hidden run that has not been closed yet (no review): its id, what started it and its status.
+type HiddenRun struct {
+	ID        string
+	ParentID  string
+	MeetingID string
+	Status    Status
+}
+
+// OpenHiddenRuns lists the hidden runs of kind (KindMeeting, ...) that have not been closed, so the service that
+// starts them can stop the ones whose record does not exist.
+func (s *Service) OpenHiddenRuns(ctx context.Context, kind string) ([]HiddenRun, error) {
+	if !Hidden(kind) {
+		return nil, invalidf("%q is not a hidden kind", kind)
+	}
+	var out []HiddenRun
+	err := s.repo.db.Read(ctx, func(tx *sql.Tx) error {
+		out = nil
+		rows, err := tx.QueryContext(ctx, `SELECT `+taskColumns+` FROM tasks
+			WHERE json_extract(data, '$.kind') = ? AND json_extract(data, '$.review') IS NULL`, kind)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = rows.Close() }()
+		for rows.Next() {
+			t, err := scanTask(rows)
+			if err != nil {
+				return err
+			}
+			out = append(out, HiddenRun{ID: t.ID, ParentID: t.ParentID, MeetingID: t.MeetingID, Status: t.Status})
+		}
+		return rows.Err()
+	})
+	if err != nil {
+		return nil, fmt.Errorf("task: open hidden runs: %w", err)
+	}
+	return out, nil
+}
+
+// StopHiddenRun stops a hidden run whose record was never stored (nothing will read its answer) and closes it once
+// it has stopped, so it never waits for the lead's review. A running worker takes a moment to stop, which a
+// close right after Cancel would miss.
+func (s *Service) StopHiddenRun(id, notes string) {
+	if _, _, err := s.Cancel(s.background(), id, api.CancelRequest{}); err != nil && !errors.Is(err, ErrNotFound) {
+		s.log.Warn("task: stop a hidden run", "task", id, "err", err)
+	}
+	s.whenFinished("hidden run", id, func(run *Task) {
+		if run != nil {
+			s.closeHiddenRun(run.ID, notes)
+		}
+	})
+}
 
 // resumeConsults follows the consult runs an earlier daemon left running.
 func (s *Service) resumeConsults(ctx context.Context) error {

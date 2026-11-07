@@ -148,6 +148,42 @@ func TestConsultPeerObjection(t *testing.T) {
 	}
 }
 
+// A hidden run whose record was never stored is stopped and, once its worker has stopped, closed: it never waits
+// for the lead's review (a close right after Cancel would find the worker still running).
+func TestStopHiddenRunClosesItOnceStopped(t *testing.T) {
+	h := newHarness(t)
+	h.initRepo(map[string]string{"a.txt": "one\n"})
+	h.agy("w", 2)
+	h.queue.Push(t, okScript("conv-p", "Done."))
+	parent := h.delegate(api.DelegateRequest{Title: "parent"})
+	h.waitStatus(parent.ID, StatusDone)
+	h.queue.Push(t, hangScript("conv-h"))
+	run, err := h.s.DelegateWith(t.Context(), api.DelegateRequest{Prompt: "review", Cwd: h.cwd, Title: "Consult: parent",
+		Mode: ModePlan}, Spawn{Kind: KindConsult, ParentID: parent.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.runningWorker(run.ID)
+	open, err := h.s.OpenHiddenRuns(t.Context(), KindConsult)
+	if err != nil || len(open) != 1 || open[0].ID != run.ID || open[0].ParentID != parent.ID {
+		t.Fatalf("open hidden runs = %+v %v", open, err)
+	}
+	if _, err := h.s.OpenHiddenRuns(t.Context(), KindNormal); !errors.Is(err, ErrInvalid) {
+		t.Errorf("open runs of a listed kind = %v", err)
+	}
+	h.s.StopHiddenRun(run.ID, "consult not stored")
+	h.waitFor("the hidden run to be closed", func() bool {
+		r := h.task(run.ID)
+		return r.Status == StatusCancelled && r.Review != nil
+	})
+	if r := h.task(run.ID); r.Review.Verdict != api.VerdictAccepted || r.Review.Notes != "consult not stored" {
+		t.Errorf("review = %+v", r.Review)
+	}
+	if open, err := h.s.OpenHiddenRuns(t.Context(), KindConsult); err != nil || len(open) != 0 {
+		t.Errorf("open hidden runs after the close = %+v %v", open, err)
+	}
+}
+
 // TestConsultDuringFollowup creates a consult run while a followup on the parent is saved: the child task is
 // created outside the parent's lock, so neither call waits on the other (lock order: claimMu, then the task).
 func TestConsultDuringFollowup(t *testing.T) {

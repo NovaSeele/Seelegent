@@ -98,6 +98,30 @@ func (f *fakeTasks) CloseHiddenRun(id, _ string) {
 	f.mu.Unlock()
 }
 
+func (f *fakeTasks) isClosed(id string) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.closed[id]
+}
+
+func (f *fakeTasks) StopHiddenRun(id, notes string) {
+	_, _, _ = f.Cancel(context.Background(), id, api.CancelRequest{})
+	f.CloseHiddenRun(id, notes)
+}
+
+func (f *fakeTasks) OpenHiddenRuns(_ context.Context, kind string) ([]task.HiddenRun, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var out []task.HiddenRun
+	for id, d := range f.tasks {
+		if d.Kind == kind && !f.closed[id] {
+			out = append(out, task.HiddenRun{ID: id, ParentID: f.spawns[id].ParentID, MeetingID: d.MeetingID,
+				Status: d.Status})
+		}
+	}
+	return out, nil
+}
+
 // answer ends the running turn of id with text.
 func (f *fakeTasks) answer(id, text string) {
 	f.mu.Lock()
@@ -446,6 +470,48 @@ func TestInterruptedLeadActions(t *testing.T) {
 	again, err := s.Act(ctx, m.ID, api.MeetingActRequest{Items: []api.ActItem{{Text: "Add a test."}}})
 	if err != nil || len(again.Tasks) != 1 || again.Tasks[0] != res.Tasks[1] || len(again.Meeting.Actions) != 3 {
 		t.Fatalf("act after the restart = %+v %v", again, err)
+	}
+}
+
+// Open starts round 1 before it stores the meeting: a daemon that stopped in between leaves attendee runs whose
+// meeting does not exist. The next start stops and closes them, and leaves the runs of stored meetings alone.
+func TestStartStopsRunsOfUnstoredMeetings(t *testing.T) {
+	s, ft, repo := setup(t)
+	ctx := t.Context()
+	spawn := func(meetingID string) string {
+		sum, err := ft.DelegateWith(ctx, api.DelegateRequest{Prompt: "x", Cwd: repo},
+			task.Spawn{Kind: task.KindMeeting, ParentID: meetingID, MeetingID: meetingID})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return sum.ID
+	}
+	now := api.FormatTime(time.Now())
+	kept := api.Meeting{ID: "m-kept", Title: "x", Question: "x", Status: api.MeetingStatusDeciding, Cwd: repo,
+		MaxRounds: 2, Rounds: []api.MeetingRound{}, CreatedAt: now, UpdatedAt: now}
+	if err := s.insert(ctx, &kept); err != nil {
+		t.Fatal(err)
+	}
+	keptRun, orphan := spawn("m-kept"), spawn("m-never-stored")
+	normal, err := ft.DelegateWith(ctx, api.DelegateRequest{Prompt: "x", Cwd: repo},
+		task.Spawn{MeetingID: "m-never-stored"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	s2 := New(Options{DB: s.o.DB, Tasks: ft, Members: fakeMembers{}})
+	t.Cleanup(s2.Close)
+	if err := s2.Start(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if d, _ := ft.Get(ctx, orphan); d.Status != api.StatusCancelled || !ft.isClosed(orphan) {
+		t.Errorf("orphan run = %s, closed %v", d.Status, ft.isClosed(orphan))
+	}
+	if d, _ := ft.Get(ctx, keptRun); d.Status != api.StatusRunning || ft.isClosed(keptRun) {
+		t.Errorf("run of a stored meeting = %s, closed %v", d.Status, ft.isClosed(keptRun))
+	}
+	if d, _ := ft.Get(ctx, normal.ID); d.Status != api.StatusRunning {
+		t.Errorf("an action task (not a hidden run) = %s", d.Status)
 	}
 }
 
