@@ -91,7 +91,8 @@ type DaemonOptions struct {
 	NoStart string
 	// HTTPClient is used for every call (http.DefaultClient when nil). It must not have an overall timeout.
 	HTTPClient *http.Client
-	// ProbeTimeout bounds one health probe; StartTimeout how long a started daemon has to answer.
+	// ProbeTimeout bounds one health probe; StartTimeout a whole start: waiting for another process that is starting
+	// the daemon, for a daemon that holds the lock without answering yet, and for a started daemon to answer.
 	ProbeTimeout, StartTimeout time.Duration
 	// PollInterval is the pause between health probes while a daemon starts.
 	PollInterval time.Duration
@@ -236,21 +237,26 @@ func (d *Daemon) Ensure(ctx context.Context) (*Client, error) {
 }
 
 // start starts the daemon under the start lock unless another process did meanwhile, then waits until it answers.
+// One deadline, StartTimeout from now, bounds every phase, so the waits do not add up.
 func (d *Daemon) start(ctx context.Context) (*Client, error) {
 	if err := d.o.Paths.EnsureDirs(); err != nil {
 		return nil, err
 	}
-	lctx, cancel := context.WithTimeout(ctx, d.o.StartTimeout)
+	end := time.Now().Add(d.o.StartTimeout)
+	lctx, cancel := context.WithDeadline(ctx, end)
 	defer cancel()
 	lock, err := fsutil.Lock(lctx, filepath.Join(d.o.Paths.Run, startLockName))
 	if err != nil {
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
+		if lctx.Err() != nil {
+			return d.otherStarter(ctx)
+		}
 		return nil, fmt.Errorf("wait for another process starting the daemon: %w", err)
 	}
 	defer func() { _ = lock.Unlock() }()
-	if c, err := d.Find(ctx); err == nil || !errors.Is(err, ErrNotRunning) {
+	if c, err := d.awaitHolder(ctx, end); c != nil || err != nil {
 		return c, err
 	}
 	d.o.Logger.Info("daemon: starting", "port", d.o.Port, "home", d.o.Paths.Home)
@@ -258,7 +264,7 @@ func (d *Daemon) start(ctx context.Context) (*Client, error) {
 	if err != nil {
 		return nil, fmt.Errorf("start the Seelegent daemon: %w", err)
 	}
-	deadline := time.NewTimer(d.o.StartTimeout)
+	deadline := time.NewTimer(time.Until(end))
 	defer deadline.Stop()
 	tick := time.NewTicker(d.o.PollInterval)
 	defer tick.Stop()
@@ -289,6 +295,70 @@ func (d *Daemon) start(ctx context.Context) (*Client, error) {
 		case <-tick.C:
 		}
 	}
+}
+
+// awaitHolder waits while another daemon of this home holds its single-instance lock but does not answer yet (it is
+// still starting, or shutting down): it returns that daemon as soon as it answers, and nil, nil once nothing answers
+// and the lock is free, so the caller starts one. Starting a daemon while the lock is held would only see it exit
+// for the lock. At end it gives up with an error that says where the holder is.
+func (d *Daemon) awaitHolder(ctx context.Context, end time.Time) (*Client, error) {
+	c, err := d.Find(ctx)
+	if err == nil || !errors.Is(err, ErrNotRunning) {
+		return c, err
+	}
+	if !d.lockHeld() {
+		return nil, nil
+	}
+	d.o.Logger.Info("daemon: another daemon of this home holds its lock; waiting for it to answer", "port", d.o.Port,
+		"home", d.o.Paths.Home)
+	deadline := time.NewTimer(time.Until(end))
+	defer deadline.Stop()
+	tick := time.NewTicker(d.o.PollInterval)
+	defer tick.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-deadline.C:
+			c, err := d.locked(ctx)
+			if err != nil {
+				return nil, &notRunningError{msg: fmt.Sprintf("no Seelegent daemon answered within %s: %s",
+					d.o.StartTimeout, err.Error())}
+			}
+			return c, nil
+		case <-tick.C:
+		}
+		c, err := d.Find(ctx)
+		switch {
+		case err == nil:
+			return c, nil
+		case !errors.Is(err, ErrNotRunning) && !TimedOut(err): // a starting daemon may be slow to answer
+			return nil, err
+		case !d.lockHeld():
+			if errors.Is(err, ErrNotRunning) {
+				return nil, nil
+			}
+			return nil, err
+		}
+	}
+}
+
+// otherStarter handles another process that held the start lock for the whole StartTimeout: its daemon is used
+// when it answers by now, else the error (matching ErrNotRunning) says where the daemon is.
+func (d *Daemon) otherStarter(ctx context.Context) (*Client, error) {
+	where := fmt.Sprintf("nothing answers on port %d and no daemon holds the lock of %s yet: try again shortly",
+		d.o.Port, d.o.Paths.Home)
+	if d.lockHeld() {
+		c, err := d.locked(ctx)
+		if err == nil {
+			return c, nil
+		}
+		where = err.Error()
+	} else if c, err := d.Find(ctx); err == nil {
+		return c, nil
+	}
+	return nil, &notRunningError{msg: fmt.Sprintf("another process has been starting the Seelegent daemon for %s "+
+		"and it does not answer yet: %s", d.o.StartTimeout, where)}
 }
 
 // locked handles a started daemon that exited because another daemon of this home holds the lock: that daemon is

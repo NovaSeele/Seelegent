@@ -58,7 +58,8 @@ func fakeDaemon(port string) int {
 }
 
 // TestSpawnedDaemonLocked: a started daemon that exits for the lock is reported by where the running daemon is,
-// not as a failed start.
+// not as a failed start. While the lock is held nothing is started; the wait for the holder ends with the same
+// account of where it is.
 func TestSpawnedDaemonLocked(t *testing.T) {
 	exe, err := os.Executable()
 	if err != nil {
@@ -68,11 +69,12 @@ func TestSpawnedDaemonLocked(t *testing.T) {
 		name      string
 		hold      bool
 		portFile  int
+		timeout   time.Duration
 		wantParts []string
 	}{
-		{"still shutting down", false, 0, []string{"previous Seelegent daemon", "still shutting down"}},
-		{"starting", true, 0, []string{"holds its lock", "try again shortly"}},
-		{"on another port", true, 1, []string{"runs on port", "this MCP looked on port"}},
+		{"still shutting down", false, 0, 20 * time.Second, []string{"previous Seelegent daemon", "still shutting down"}},
+		{"starting", true, 0, time.Second, []string{"holds its lock", "try again shortly"}},
+		{"on another port", true, 1, time.Second, []string{"runs on port", "this MCP looked on port"}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -92,7 +94,7 @@ func TestSpawnedDaemonLocked(t *testing.T) {
 			}
 			port := freePort(t)
 			start := SpawnDaemon(exe, paths, port, append(os.Environ(), envFakeDaemon+"=locked"))
-			d := NewDaemon(DaemonOptions{Paths: paths, Port: port, Start: start, StartTimeout: 20 * time.Second,
+			d := NewDaemon(DaemonOptions{Paths: paths, Port: port, Start: start, StartTimeout: c.timeout,
 				ProbeTimeout: 500 * time.Millisecond, PollInterval: 50 * time.Millisecond})
 			_, err := d.Ensure(t.Context())
 			if !errors.Is(err, ErrNotRunning) {
