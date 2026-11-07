@@ -66,6 +66,19 @@ export function useSettingsForm() {
     }
   }
 
+  /** Shows `message` under the field without sending anything (a value the dashboard already knows is out of range). */
+  function fail(path: string, message: string): void {
+    errors.value = { ...errors.value, [path]: message }
+  }
+
+  /** The field shows the saved value again: its error, red border and aria-invalid go. */
+  function clear(path: string): void {
+    if (!(path in errors.value)) return
+    const rest = { ...errors.value }
+    delete rest[path]
+    errors.value = rest
+  }
+
   return {
     settings,
     errors,
@@ -73,6 +86,8 @@ export function useSettingsForm() {
     saving,
     get: (path: string) => valueAt(settings.value, path),
     set,
+    fail,
+    clear,
     reset: (path: string) => set(path, null),
   }
 }

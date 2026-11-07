@@ -79,6 +79,8 @@
     "reset": "Default",
     "resetOf": "Reset {name} to its default",
     "range": "{min} to {max}",
+    "rangeWhole": "Enter a whole number from {min} to {max}.",
+    "rangePercent": "Enter a percentage from {min} to {max}.",
     "lines": "One per line; saved when you leave the field.",
     "readonly": "Set when the service starts (seelegent config); it cannot change here."
   },

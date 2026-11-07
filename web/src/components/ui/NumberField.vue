@@ -33,7 +33,8 @@ const props = withDefaults(
   },
 )
 
-const emit = defineEmits<{ commit: [value: number] }>()
+/** `commit`: a new value to save. `unchanged`: the field shows the saved value again (typed back, Esc, unparsable). */
+const emit = defineEmits<{ commit: [value: number]; unchanged: [] }>()
 
 const id = useId()
 const text = ref(String(props.modelValue))
@@ -63,12 +64,16 @@ function commit() {
   const parsed = Number(raw)
   if (raw === '' || !Number.isFinite(parsed)) {
     text.value = String(props.modelValue)
+    emit('unchanged')
     return
   }
   // A whole-number field shows the rounded value it commits, so a later blur finds nothing new to send.
   const value = props.integer ? Math.round(parsed) : parsed
   if (props.integer) text.value = String(value)
-  if (value !== props.modelValue && value !== sent) {
+  if (value === props.modelValue) {
+    sent = undefined
+    emit('unchanged')
+  } else if (value !== sent) {
     sent = value
     emit('commit', value)
   }
@@ -94,6 +99,8 @@ function onKeydown(event: KeyboardEvent) {
     event.stopPropagation()
     clearTimeout(timer)
     text.value = String(props.modelValue)
+    sent = undefined
+    emit('unchanged')
   }
 }
 </script>

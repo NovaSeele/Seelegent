@@ -46,6 +46,21 @@ function save(next: unknown) {
   void props.form.set(props.def.path, next)
 }
 
+/**
+ * A number as shown (`shown`, a percentage for percent fields) saved as `value`. Outside the field's range it is
+ * not sent: the field says which values it takes (the daemon's own message stays for anything else it refuses).
+ */
+function saveInRange(shown: number, value: number) {
+  const def = props.def
+  if ((def.kind === 'number' || def.kind === 'percent') && (shown < def.min || shown > def.max)) {
+    const key =
+      def.kind === 'number' ? 'settings.daemon.rangeWhole' : 'settings.daemon.rangePercent'
+    props.form.fail(def.path, t(key, { min: def.min, max: def.max }))
+    return
+  }
+  save(value)
+}
+
 function saveLines(text: string) {
   save(
     text
@@ -72,7 +87,8 @@ function saveLines(text: string) {
             :error="error"
             :debounce="500"
             integer
-            @commit="save"
+            @commit="saveInRange($event, $event)"
+            @unchanged="form.clear(def.path)"
           />
           <NumberField
             v-else-if="def.kind === 'percent'"
@@ -84,7 +100,8 @@ function saveLines(text: string) {
             :hint="t('settings.daemon.range', { min: def.min, max: def.max })"
             :error="error"
             :debounce="500"
-            @commit="save($event / 100)"
+            @commit="saveInRange($event, $event / 100)"
+            @unchanged="form.clear(def.path)"
           />
           <Switch
             v-else-if="def.kind === 'bool'"

@@ -79,6 +79,8 @@
     "reset": "Predeterminado",
     "resetOf": "Restablecer {name} al valor predeterminado",
     "range": "De {min} a {max}",
+    "rangeWhole": "Introduce un número entero de {min} a {max}.",
+    "rangePercent": "Introduce un porcentaje de {min} a {max}.",
     "lines": "Uno por línea; se guarda al salir del campo.",
     "readonly": "Se fija al iniciar el servicio (seelegent config); aquí no se puede cambiar."
   },

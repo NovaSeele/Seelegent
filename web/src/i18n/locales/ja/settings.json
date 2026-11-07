@@ -79,6 +79,8 @@
     "reset": "既定",
     "resetOf": "{name}を既定値に戻す",
     "range": "{min}～{max}",
+    "rangeWhole": "{min} から {max} までの整数を入力してください。",
+    "rangePercent": "{min} から {max} までのパーセンテージを入力してください。",
     "lines": "1 行に 1 つ。入力欄を離れると保存されます。",
     "readonly": "サービスの起動時に決まります（seelegent config）。ここでは変更できません。"
   },

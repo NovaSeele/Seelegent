@@ -79,6 +79,8 @@
     "reset": "Mặc định",
     "resetOf": "Đặt {name} về mặc định",
     "range": "Từ {min} đến {max}",
+    "rangeWhole": "Nhập một số nguyên từ {min} đến {max}.",
+    "rangePercent": "Nhập một tỉ lệ phần trăm từ {min} đến {max}.",
     "lines": "Mỗi dòng một mục; lưu khi bạn rời ô.",
     "readonly": "Đặt khi dịch vụ khởi động (seelegent config); không đổi được ở đây."
   },

@@ -79,6 +79,8 @@
     "reset": "기본값",
     "resetOf": "{name}을(를) 기본값으로 되돌리기",
     "range": "{min}~{max}",
+    "rangeWhole": "{min}에서 {max} 사이의 정수를 입력하세요.",
+    "rangePercent": "{min}에서 {max} 사이의 백분율을 입력하세요.",
     "lines": "한 줄에 하나씩; 입력란을 벗어나면 저장됩니다.",
     "readonly": "서비스가 시작될 때 정해지며(seelegent config) 여기서는 바꿀 수 없습니다."
   },

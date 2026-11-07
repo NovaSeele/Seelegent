@@ -57,21 +57,63 @@ describe('DaemonSection', () => {
     wrapper.unmount()
   })
 
-  it('shows the daemon’s message for a refused field and keeps the old value', async () => {
-    const patch = vi.fn<SettingsApi['patch']>(() =>
-      Promise.reject(
-        new ApiError(400, 'invalid_argument', 'invalid', {
-          fields: [{ field: 'loopRepeat', message: 'must be between 2 and 100' }],
-        }),
-      ),
-    )
+  it('says which values a field takes for one out of its range, without sending it', async () => {
+    const patch = vi.fn<SettingsApi['patch']>()
     const wrapper = await mountSection('workers', patch)
     const input = wrapper.get('[data-setting="loopRepeat"] input')
     await input.setValue('1')
     await input.trigger('keydown', { key: 'Enter' })
     await flushPromises()
-    expect(wrapper.get('[data-setting="loopRepeat"]').text()).toContain('must be between 2 and 100')
+    expect(wrapper.get('[data-setting="loopRepeat"]').text()).toContain(
+      'Enter a whole number from 2 to 100.',
+    )
+    expect(patch).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('shows the daemon’s message for a value it refuses, and keeps the old value', async () => {
+    const patch = vi.fn<SettingsApi['patch']>(() =>
+      Promise.reject(
+        new ApiError(400, 'invalid_argument', 'invalid', {
+          fields: [{ field: 'loopRepeat', message: 'not while tasks run' }],
+        }),
+      ),
+    )
+    const wrapper = await mountSection('workers', patch)
+    const input = wrapper.get('[data-setting="loopRepeat"] input')
+    await input.setValue('9')
+    await input.trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+    expect(wrapper.get('[data-setting="loopRepeat"]').text()).toContain('not while tasks run')
     expect(useConnectionStore().settings?.loopRepeat).toBe(6)
+    wrapper.unmount()
+  })
+
+  it('clears the error, red border and aria-invalid once the saved value is back', async () => {
+    const patch = vi.fn<SettingsApi['patch']>()
+    const wrapper = await mountSection('workers', patch)
+    const row = () => wrapper.get('[data-setting="loopRepeat"]')
+    const input = row().get('input')
+    await input.setValue('500')
+    await input.trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+    expect(input.attributes('aria-invalid')).toBe('true')
+    expect(row().find('.num--invalid').exists()).toBe(true)
+    await input.setValue('6')
+    await input.trigger('blur')
+    await flushPromises()
+    expect(input.attributes('aria-invalid')).toBeUndefined()
+    expect(row().find('.num--invalid').exists()).toBe(false)
+    expect(row().text()).not.toContain('Enter a whole number')
+    // Esc back to the saved value clears it too.
+    await input.setValue('500')
+    await input.trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+    await input.setValue('7')
+    await input.trigger('keydown', { key: 'Escape' })
+    await flushPromises()
+    expect(input.attributes('aria-invalid')).toBeUndefined()
+    expect(patch).not.toHaveBeenCalled()
     wrapper.unmount()
   })
 
