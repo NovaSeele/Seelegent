@@ -213,11 +213,6 @@ func optionText(m *api.Meeting, key string) string {
 	return ""
 }
 
-// roundBrief is the first message of an attendee's run.
-func roundBrief(m *api.Meeting, a *api.Attendee) string {
-	return joinBrief(m, a, 1)
-}
-
 // joinBrief is the first brief of attendee a, who starts in round n: round 1, or later when the first run could not
 // start (the round message for n follows it, so it must not speak of round 1).
 func joinBrief(m *api.Meeting, a *api.Attendee, n int) string {
