@@ -134,6 +134,76 @@ func TestClaudeCodeCLIFailsOrMissing(t *testing.T) {
 	wantAction(t, rep, "claude", KindMCP, ActionError)
 }
 
+// An update removes the entry and adds the new one; when the add fails, the old entry comes back.
+func TestClaudeCodeAddFailsAfterRemove(t *testing.T) {
+	const original = `{"numStartups": 5, "mcpServers": {"seelegent": {"type": "stdio", "command": "OLD", ` +
+		`"args": ["mcp"], "env": {"SEELEGENT_LEAD": "claude", "X": "1"}}}}`
+	setupCase := func(t *testing.T, failAdd func(args []string, cfg, old string) bool) (*machine, string, string) {
+		m := newMachine(t)
+		exe := m.exe()
+		cfg := fakeClaude(t, m)
+		old := m.write("old/seelegent.exe", "binary")
+		m.write(".claude.json", strings.Replace(original, "OLD", strings.ReplaceAll(old, `\`, `\\`), 1))
+		cli := m.onRun
+		m.onRun = func(name string, args []string) RunResult {
+			if args[1] == "add" && failAdd(args, cfg, old) {
+				return RunResult{Code: 1, Stderr: "add refused"}
+			}
+			return cli(name, args)
+		}
+		return m, exe, cfg
+	}
+
+	t.Run("the old entry is added again", func(t *testing.T) {
+		m, exe, cfg := setupCase(t, func(args []string, _, old string) bool { return !slices.Contains(args, old) })
+		it := wantAction(t, run(t, m, Request{Exe: exe, Hosts: []string{"claude"}, NoSkill: true}), "claude", KindMCP,
+			ActionError)
+		if !strings.Contains(it.Detail, "add refused") || !strings.Contains(it.Detail, "added back") {
+			t.Errorf("detail %q", it.Detail)
+		}
+		if len(m.runs) != 3 || !slices.Contains(m.runs[2], "X=1") {
+			t.Errorf("runs %q", m.runs)
+		}
+		if len(m.runs) == 3 && !slices.Contains(m.runs[2], m.path("old", "seelegent.exe")) {
+			t.Errorf("re-added %q", m.runs[2])
+		}
+		if got := read(t, cfg); !strings.Contains(got, `"X": "1"`) || !strings.Contains(got, `"seelegent"`) {
+			t.Errorf("old entry not back:\n%s", got)
+		}
+	})
+	t.Run("restored from the backup", func(t *testing.T) {
+		m, exe, cfg := setupCase(t, func([]string, string, string) bool { return true })
+		before := read(t, cfg)
+		it := wantAction(t, run(t, m, Request{Exe: exe, Hosts: []string{"claude"}, NoSkill: true}), "claude", KindMCP,
+			ActionError)
+		if !strings.Contains(it.Detail, "restored from "+cfg+BackupSuffix) {
+			t.Errorf("detail %q", it.Detail)
+		}
+		if read(t, cfg) != before {
+			t.Errorf("file not restored:\n%s", read(t, cfg))
+		}
+	})
+	t.Run("a file Claude Code changed is kept", func(t *testing.T) {
+		m, exe, cfg := setupCase(t, func(_ []string, cfg, _ string) bool {
+			// Claude Code writes the file between setup's remove and its failed add.
+			data, _ := os.ReadFile(cfg)
+			_ = os.WriteFile(cfg, bytes.Replace(data, []byte(`"numStartups": 5`), []byte(`"numStartups": 6`), 1), 0o600)
+			return true
+		})
+		it := wantAction(t, run(t, m, Request{Exe: exe, Hosts: []string{"claude"}, NoSkill: true}), "claude", KindMCP,
+			ActionError)
+		if !strings.Contains(it.Detail, "changed since") || !strings.Contains(it.Detail, cfg+BackupSuffix) {
+			t.Errorf("detail %q", it.Detail)
+		}
+		if got := read(t, cfg); !strings.Contains(got, `"numStartups": 6`) {
+			t.Errorf("Claude Code's change was overwritten:\n%s", got)
+		}
+		if !strings.Contains(read(t, cfg+BackupSuffix), `"numStartups": 5`) {
+			t.Error("backup lost")
+		}
+	})
+}
+
 func TestClaudeConfigDirEnv(t *testing.T) {
 	m := newMachine(t)
 	exe := m.exe()

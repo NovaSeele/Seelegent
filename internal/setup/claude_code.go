@@ -1,11 +1,15 @@
 package setup
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/NovaSeele/Seelegent/internal/fsutil"
 )
 
 // claudeTimeout bounds one run of the claude CLI.
@@ -123,12 +127,19 @@ func (c claudeCode) install(ctx context.Context, o op, want Entry) Item {
 	if it.Backup, err = cfg.file.backupOnly(); err != nil {
 		return failItem(it, err)
 	}
+	var afterRemove []byte // the file as the remove left it
 	if cfg.state != stateAbsent {
 		if err := c.runCLI(ctx, o.env, bin, removeArgs); err != nil {
 			return failItem(it, err)
 		}
+		if afterRemove, err = fsutil.ReadFile(cfg.file.real); err != nil {
+			afterRemove = nil
+		}
 	}
 	if err := c.runCLI(ctx, o.env, bin, addArgs(want, env)); err != nil {
+		if cfg.state != stateAbsent {
+			err = c.putBack(ctx, o.env, bin, cfg, afterRemove, it.Backup, err)
+		}
 		return failItem(it, err)
 	}
 	after, err := c.reader().load(want, o.env.goos(), path)
@@ -173,6 +184,45 @@ func (c claudeCode) remove(ctx context.Context, o op) Item {
 		return failItem(it, err)
 	}
 	return it
+}
+
+// putBack restores the entry an update removed when the following `claude mcp add` failed (addErr). It first adds
+// the old entry again through the CLI. When that is not possible, it copies the backup over the file, but only if
+// the file is still exactly as the remove left it (afterRemove): anything Claude Code wrote since is kept. The
+// returned error says what failed and how the entry was put back, or where the backup is.
+func (c claudeCode) putBack(ctx context.Context, e Env, bin string, cfg *jsonConfig, afterRemove []byte,
+	backup string, addErr error) error {
+	var readdErr error
+	if old, ok := readEntry(cfg.entryOrEmpty()); ok {
+		if readdErr = c.runCLI(ctx, e, bin, addArgs(old, old.Env)); readdErr == nil {
+			return fmt.Errorf("%w; the previous entry was added back, so nothing changed", addErr)
+		}
+	} else {
+		readdErr = errors.New("the previous entry is not a command `claude mcp add` can take")
+	}
+	now, err := fsutil.ReadFile(cfg.file.real)
+	switch {
+	case err != nil:
+		return fmt.Errorf("%w; adding the previous entry back failed too (%v), and %s cannot be read (%v); the "+
+			"file before setup is at %s", addErr, readdErr, cfg.file.path, err, backup)
+	case afterRemove == nil || !bytes.Equal(now, afterRemove):
+		return fmt.Errorf("%w; adding the previous entry back failed too (%v), and %s changed since, so it was not "+
+			"overwritten; the file before setup is at %s", addErr, readdErr, cfg.file.path, backup)
+	}
+	if err := fsutil.WriteFileAtomic(cfg.file.real, cfg.file.data, cfg.file.perm); err != nil {
+		return fmt.Errorf("%w; adding the previous entry back failed too (%v), and restoring %s failed (%v); the "+
+			"file before setup is at %s", addErr, readdErr, cfg.file.path, err, backup)
+	}
+	return fmt.Errorf("%w; adding the previous entry back failed too (%v), so %s was restored from %s",
+		addErr, readdErr, cfg.file.path, backup)
+}
+
+// entryOrEmpty is the parsed entry, or an empty object.
+func (c *jsonConfig) entryOrEmpty() *jobject {
+	if c.entry == nil {
+		return &jobject{}
+	}
+	return c.entry
 }
 
 // runCLI runs the claude CLI and turns a failure into an error with its output.
