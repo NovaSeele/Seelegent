@@ -186,9 +186,9 @@ worker 工作的文件夹里，往往有你和其他 worker 尚未提交的改�
 卸载步骤：
 
 1. `seelegent stop`，然后 `seelegent setup --remove`（移除 MCP 条目、lead skill 和钩子）。
-2. 删除二进制文件及其旁边保留的 `seelegent.previous`：Windows 上在 `%LOCALAPPDATA%\Programs\seelegent\bin\`，
-   其他系统是 `~/.local/bin/seelegent*`。再把该文件夹从 PATH 中移除（Windows 上是用户的 `Path`，其他系统是安装脚本
-   加到 shell 配置文件中的 `export PATH=...` 那一行）。
+2. 删除二进制文件及其旁边保留的 `seelegent.exe.previous`（`seelegent.previous`）：Windows 上在
+   `%LOCALAPPDATA%\Programs\seelegent\bin\`，其他系统是 `~/.local/bin/seelegent*`。再把该文件夹从 PATH 中移除
+   （Windows 上是用户的 `Path`，其他系统是安装脚本加到 shell 配置文件中的 `export PATH=...` 那一行）。
 3. 可选：删除 `~/.seelegent`。其中有你的账号 profile（及其登录信息）、密钥、任务和历史。
 
 ## 从旧版本迁移

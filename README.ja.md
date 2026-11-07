@@ -217,7 +217,7 @@ Seelegent は CI チェックを追い、失敗したチェックを直すタス
 アンインストールの手順:
 
 1. `seelegent stop` のあと `seelegent setup --remove` (MCP エントリー、リード用スキル、フックを削除)。
-2. バイナリと、その横に残っている `seelegent.previous` を削除します。Windows は
+2. バイナリと、その横に残っている `seelegent.exe.previous` (`seelegent.previous`) を削除します。Windows は
    `%LOCALAPPDATA%\Programs\seelegent\bin\`、それ以外は `~/.local/bin/seelegent*` です。そのフォルダーを PATH
    から外します (Windows ではユーザーの `Path`、それ以外ではインストーラーがシェルのプロファイルに加えた
    `export PATH=...` の行)。

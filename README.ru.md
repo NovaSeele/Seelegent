@@ -218,9 +218,10 @@ Z.ai GLM, OpenRouter, OpenAI, Groq, локальный Ollama или свой а
 Удаление:
 
 1. `seelegent stop`, затем `seelegent setup --remove` (удаляет записи MCP, навык ведущего и хук).
-2. Удалите бинарный файл и сохранённый рядом `seelegent.previous`: `%LOCALAPPDATA%\Programs\seelegent\bin\` в
-   Windows, `~/.local/bin/seelegent*` в остальных системах. Уберите эту папку из PATH (пользовательская переменная
-   `Path` в Windows, строка `export PATH=...`, которую установщик добавил в профиль оболочки, в остальных системах).
+2. Удалите бинарный файл и сохранённый рядом `seelegent.exe.previous` (`seelegent.previous`):
+   `%LOCALAPPDATA%\Programs\seelegent\bin\` в Windows, `~/.local/bin/seelegent*` в остальных системах. Уберите эту папку
+   из PATH (пользовательская переменная `Path` в Windows, строка `export PATH=...`, которую установщик добавил в профиль
+   оболочки, в остальных системах).
 3. При желании удалите `~/.seelegent`. Там хранятся профили аккаунтов (с их входами), ключи, задачи и история.
 
 ## Переход со старой версии

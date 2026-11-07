@@ -220,9 +220,10 @@ versión más antigua que tus datos. Consulta [docs/release.md](docs/release.md#
 Para desinstalar:
 
 1. `seelegent stop` y después `seelegent setup --remove` (quita las entradas MCP, la skill del lead y el hook).
-2. Borra el binario y el `seelegent.previous` que se guarda a su lado: `%LOCALAPPDATA%\Programs\seelegent\bin\` en
-   Windows, `~/.local/bin/seelegent*` en los demás sistemas. Quita esa carpeta del PATH (el `Path` de usuario en
-   Windows; en los demás, la línea `export PATH=...` que el instalador añadió al perfil de tu shell).
+2. Borra el binario y el `seelegent.exe.previous` (`seelegent.previous`) que se guarda a su lado:
+   `%LOCALAPPDATA%\Programs\seelegent\bin\` en Windows, `~/.local/bin/seelegent*` en los demás sistemas. Quita esa
+   carpeta del PATH (el `Path` de usuario en Windows; en los demás, la línea `export PATH=...` que el instalador añadió
+   al perfil de tu shell).
 3. Si quieres, borra `~/.seelegent`. Contiene los perfiles de tus cuentas (con sus sesiones), las claves, las tareas y
    el historial.
 

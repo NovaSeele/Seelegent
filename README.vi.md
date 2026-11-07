@@ -213,9 +213,10 @@ lần. Cơ sở dữ liệu không bao giờ bị migrate ngược, nên bản p
 Để gỡ cài đặt:
 
 1. `seelegent stop`, rồi `seelegent setup --remove` (gỡ các mục MCP, skill của lead và hook).
-2. Xóa tệp chạy cùng bản `seelegent.previous` được giữ bên cạnh: `%LOCALAPPDATA%\Programs\seelegent\bin\` trên
-   Windows, `~/.local/bin/seelegent*` trên hệ khác. Gỡ thư mục đó khỏi PATH (biến `Path` của người dùng trên Windows,
-   dòng `export PATH=...` mà trình cài đặt đã thêm vào profile của shell trên hệ khác).
+2. Xóa tệp chạy cùng bản `seelegent.exe.previous` (`seelegent.previous`) được giữ bên cạnh:
+   `%LOCALAPPDATA%\Programs\seelegent\bin\` trên Windows, `~/.local/bin/seelegent*` trên hệ khác. Gỡ thư mục đó khỏi
+   PATH (biến `Path` của người dùng trên Windows, dòng `export PATH=...` mà trình cài đặt đã thêm vào profile của shell
+   trên hệ khác).
 3. Nếu muốn, xóa `~/.seelegent`. Thư mục này chứa profile tài khoản (kèm thông tin đăng nhập), khóa, tác vụ và lịch
    sử.
 

@@ -205,7 +205,7 @@ Seelegent에게 커밋, 티켓 브랜치 푸시, 초안 pull request 열기를 �
 제거 방법:
 
 1. `seelegent stop` 후 `seelegent setup --remove`(MCP 항목, 리드 스킬, 훅 제거).
-2. 바이너리와 그 옆에 남아 있는 `seelegent.previous`를 지웁니다. Windows는
+2. 바이너리와 그 옆에 남아 있는 `seelegent.exe.previous` (`seelegent.previous`)를 지웁니다. Windows는
    `%LOCALAPPDATA%\Programs\seelegent\bin\`, 그 밖에는 `~/.local/bin/seelegent*`입니다. 그 폴더를 PATH에서 뺍니다
    (Windows는 사용자 `Path`, 그 밖에는 설치 프로그램이 셸 프로필에 추가한 `export PATH=...` 줄).
 3. 원하면 `~/.seelegent`를 지웁니다. 계정 프로필(과 그 로그인), 키, 작업, 기록이 들어 있습니다.

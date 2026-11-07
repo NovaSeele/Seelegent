@@ -206,9 +206,10 @@ The database is never migrated backwards, so a release older than your data is r
 To uninstall:
 
 1. `seelegent stop`, then `seelegent setup --remove` (removes the MCP entries, the lead skill and the hook).
-2. Delete the binary and the kept `seelegent.previous` next to it: `%LOCALAPPDATA%\Programs\seelegent\bin\` on
-   Windows, `~/.local/bin/seelegent*` elsewhere. Remove that folder from your PATH (the user `Path` on Windows, the
-   `export PATH=...` line the installer added to your shell profile elsewhere).
+2. Delete the binary and the kept `seelegent.exe.previous` (`seelegent.previous`) next to it:
+   `%LOCALAPPDATA%\Programs\seelegent\bin\` on Windows, `~/.local/bin/seelegent*` elsewhere. Remove that folder from
+   your PATH (the user `Path` on Windows, the `export PATH=...` line the installer added to your shell profile
+   elsewhere).
 3. Optionally delete `~/.seelegent`. It holds your account profiles (and their sign-ins), keys, tasks and history.
 
 ## Migrating from the old version
