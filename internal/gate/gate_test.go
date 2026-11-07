@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/NovaSeele/Seelegent/internal/api"
+	"github.com/NovaSeele/Seelegent/internal/envx"
 	"github.com/NovaSeele/Seelegent/internal/proof"
 )
 
@@ -47,8 +48,6 @@ func TestExec(t *testing.T) {
 	if r := Exec(cctx, sleepCmd(8), ExecOptions{Dir: dir, Env: os.Environ()}); !r.Cancelled || r.Exit != nil {
 		t.Errorf("cancel: %+v", r)
 	}
-	// A file name with shell syntax in it is never part of a command line (old bug D1): the auto step does not
-	// use a shell, so nothing runs.
 	if Tail("héllo", 4) != "llo" {
 		t.Errorf("Tail cut a character: %q", Tail("héllo", 4))
 	}
@@ -111,6 +110,30 @@ func TestPlanAndRun(t *testing.T) {
 	in.DoctrineError = "expected version 1"
 	if res, _ := r.Run(context.Background(), Plan(in), nil); res.State != api.GateError {
 		t.Errorf("doctrine error = %+v", res)
+	}
+}
+
+// A file name with shell syntax in it is never part of a command line (old bug D1): node gets the path as its own
+// argument, so the file is checked as a name and nothing in it runs.
+func TestAutoCheckNoShell(t *testing.T) {
+	env := os.Environ()
+	if envx.ResolveCommand("node", env) == "" {
+		t.Skip("node is not on PATH")
+	}
+	root := t.TempDir()
+	name := "x$(mkdir pwned1)`mkdir pwned2`;mkdir pwned3;.js"
+	if runtime.GOOS == "windows" {
+		name = "x&mkdir pwned1&.js" // '$', '`' and ';' mean nothing to cmd; '&' chains commands there.
+	}
+	writeFile(t, filepath.Join(root, name), "function (\n")
+	got := Checker{Env: env}.Check(context.Background(), root, []string{name})
+	if len(got) != 1 || got[0].File != name || got[0].Message == "" {
+		t.Fatalf("check = %+v", got)
+	}
+	for _, p := range []string{"pwned1", "pwned2", "pwned3"} {
+		if _, err := os.Stat(filepath.Join(root, p)); err == nil {
+			t.Errorf("the file name ran a command: %s exists", p)
+		}
 	}
 }
 

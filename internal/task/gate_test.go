@@ -284,6 +284,37 @@ func TestVerifierRejectThenAccept(t *testing.T) {
 	}
 }
 
+// A worker that rewrites the Gate: line of its spec task changes only the reported bar: the gate runs the command
+// frozen when the task started (old bug D10).
+func TestFrozenGateIgnoresWorkerEdits(t *testing.T) {
+	h := newHarness(t)
+	h.set(func(s *config.Settings) { s.Lanes = config.LanesWarn })
+	h.agy("w", 1)
+	frozen := gateCmd(t, "b.txt", "ok")
+	planted := gateCmd(t, "b.txt", "never")
+	if err := mkdir(filepath.Join(h.cwd, "specs", "001-x")); err != nil {
+		t.Fatal(err)
+	}
+	tasksMD := "# Tasks\n\n- [ ] T001 Check `b.txt` Gate: `%s`\n"
+	h.initRepo(map[string]string{"b.txt": "ok\n", "specs/001-x/tasks.md": fmt.Sprintf(tasksMD, frozen)})
+	h.queue.Push(t, editScript("conv-f", filepath.Join(h.cwd, "specs", "001-x", "tasks.md"),
+		fmt.Sprintf(tasksMD, planted), "Updated the gate."))
+	sum := h.delegate(api.DelegateRequest{Title: "frozen", Spec: &api.SpecRequest{Dir: "specs/001-x", TaskIDs: []string{"T001"}}})
+	tk := h.waitStatus(sum.ID, StatusDone)
+	g := tk.LastTurn().Gate
+	if g == nil || g.State != api.GateGreen || len(tk.Turns) != 1 {
+		t.Fatalf("gate = %+v (turns %d)", g, len(tk.Turns))
+	}
+	for _, s := range g.Steps {
+		if strings.Contains(s.Cmd, "never") {
+			t.Errorf("the gate ran the worker's command: %+v", s)
+		}
+	}
+	if len(tk.Proof.BarChanged) == 0 {
+		t.Errorf("bar changed = %v", tk.Proof.BarChanged)
+	}
+}
+
 func TestSpecGateAndLedger(t *testing.T) {
 	h := newHarness(t)
 	h.agy("w", 1)
