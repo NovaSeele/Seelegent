@@ -58,6 +58,55 @@ type TerminalSpec struct {
 type Terminal struct {
 	exitFile string
 	process  waiter
+	// pid is the process that keeps the command running (Windows: the hidden cmd.exe that lives until the window
+	// closes); 0 on Unix, where the script writes its own id to pidFile.
+	pid     int
+	pidFile string
+}
+
+// Identity returns the process that runs the terminal's command and its start time (ProcessStartTime), so a
+// daemon that restarted can tell with ProcessRunning whether the console still runs. On Unix it is the shell that
+// runs the script, known once the script has started (ok is false before that); on Windows the hidden cmd.exe that
+// lives until the window closes.
+func (t *Terminal) Identity() (pid int, start uint64, ok bool) {
+	pid = t.pid
+	if pid == 0 && t.pidFile != "" {
+		data, err := os.ReadFile(t.pidFile)
+		if err != nil {
+			return 0, 0, false
+		}
+		if pid, err = strconv.Atoi(strings.TrimSpace(string(data))); err != nil || pid <= 0 {
+			return 0, 0, false
+		}
+	}
+	if pid <= 0 {
+		return 0, 0, false
+	}
+	start, err := ProcessStartTime(pid)
+	if err != nil {
+		start = 0 // unknown: ProcessRunning then checks the id only
+	}
+	return pid, start, true
+}
+
+// AttachTerminal returns the terminal whose script writes exitFile, opened earlier (by an earlier daemon), so its
+// Identity and Wait can be followed again. On Windows, where the window's process is not recorded in a file,
+// Identity never knows it.
+func AttachTerminal(exitFile string) *Terminal {
+	return &Terminal{exitFile: exitFile, pidFile: pidFileFor(exitFile)}
+}
+
+// ProcessRunning reports whether process pid still runs and is the one that started at start (from
+// ProcessStartTime). A start of 0 means unknown; only the id is checked then.
+func ProcessRunning(pid int, start uint64) bool {
+	if !ProcessAlive(pid) {
+		return false
+	}
+	if start == 0 {
+		return true
+	}
+	now, err := ProcessStartTime(pid)
+	return err != nil || now == start
 }
 
 // waiter is the part of the window process Terminal needs (nil when the window cannot be waited for directly).
@@ -131,6 +180,9 @@ func OpenTerminal(ctx context.Context, spec TerminalSpec) (*Terminal, error) {
 	if err := os.Remove(exitFile); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return nil, fmt.Errorf("open terminal: %w", err)
 	}
+	if err := os.Remove(pidFileFor(exitFile)); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return nil, fmt.Errorf("open terminal: %w", err)
+	}
 	spec.Title = safeTitle(spec.Title)
 	return openTerminal(ctx, spec, filepath.Join(spec.ScriptDir, name), exitFile)
 }
@@ -152,6 +204,9 @@ func safeTitle(s string) string {
 	}
 	return out
 }
+
+// pidFileFor is where a Unix terminal script writes its process id: next to the exit file, as <name>.pid.
+func pidFileFor(exitFile string) string { return strings.TrimSuffix(exitFile, ".exit") + ".pid" }
 
 // shQuote quotes s for a POSIX shell.
 func shQuote(s string) string {
@@ -207,9 +262,15 @@ func validEnvName(name string) bool {
 
 // unixScript builds the sh script a Unix terminal runs: environment changes, banner, the command, and the exit
 // code written to exitFile.
+//
+// The script writes its own process id next to the exit file (<name>.pid, see Terminal.Identity), and a window
+// closed before the command ends (SIGHUP; also SIGINT and SIGTERM) still writes exit code 129, so Wait returns.
 func unixScript(spec TerminalSpec, exitFile string) string {
 	var b strings.Builder
 	b.WriteString("#!/bin/sh\n")
+	b.WriteString("printf '%s' \"$$\" > " + shQuote(pidFileFor(exitFile)) + "\n")
+	b.WriteString("trap 'printf 129 > " + strings.ReplaceAll(shQuote(exitFile), "'", `'\''`) +
+		"; exit 129' HUP INT TERM\n")
 	if spec.Env != nil {
 		set, unset := envDelta(os.Environ(), spec.Env)
 		for _, k := range unset {

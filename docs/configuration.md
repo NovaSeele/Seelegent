@@ -19,6 +19,7 @@ with owner-only permissions when a command starts, never earlier.
 | `run/daemon.lock`  | single-instance lock of the daemon                                                     |
 | `run/daemon.port`  | port of the running daemon                                                             |
 | `backups/`         | copies taken before migrations and imports                                             |
+| `tasks/<id>/t<turn>-a<attempt>/` | files of one worker attempt: `launch/` (launch spec, stream, stderr, exit record), the prompt of CLIs that read it on standard input, a long agy brief |
 
 ## Environment variables
 
@@ -113,7 +114,7 @@ no look-ahead: write `"^gemini-3\\.8-"` (the JSON spelling of `^gemini-3\.8-`) r
 | `verifier` | boolean | `false` | Default of the per-task `verify` option (an LLM review of a green gate). |
 | `verifierTier` | tier | `"fast"` | Model tier of the verifier. |
 | `gitGuard` | boolean | `true` | Install the git guard that stops workers from destroying uncommitted work. |
-| `codeGraph` | boolean | `true` | Build a code graph of the repository and offer it to workers. |
+| `codeGraph` | boolean | `true` | Build a code graph of the repository and offer it to workers. Not implemented yet: the value is stored and validated, but has no effect. |
 | `snapshotRetentionDays` | integer ≥ 1 | `14` | How long work-at-risk snapshots of reviewed tasks are kept. |
 | `contentionWindowHours` | integer ≥ 1 | `24` | How far back tasks count when warning that several tasks touch the same files. |
 

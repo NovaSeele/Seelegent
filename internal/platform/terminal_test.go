@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -148,5 +149,20 @@ func TestTerminalWaitWindowClosed(t *testing.T) {
 	defer cancel()
 	if _, err := (&Terminal{exitFile: filepath.Join(t.TempDir(), "none")}).Wait(ctx); !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("Wait = %v, want deadline", err)
+	}
+}
+
+// TestAttachTerminal finds a console an earlier daemon opened through the pid file next to its exit file.
+func TestAttachTerminal(t *testing.T) {
+	exitFile := filepath.Join(t.TempDir(), "console.exit")
+	if _, _, ok := AttachTerminal(exitFile).Identity(); ok {
+		t.Fatal("identity known before the script started")
+	}
+	if err := os.WriteFile(pidFileFor(exitFile), []byte(strconv.Itoa(os.Getpid())), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	pid, start, ok := AttachTerminal(exitFile).Identity()
+	if !ok || pid != os.Getpid() || !ProcessRunning(pid, start) {
+		t.Fatalf("identity = %d %d %v", pid, start, ok)
 	}
 }

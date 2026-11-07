@@ -104,7 +104,8 @@ type Settings struct {
 	// GitGuard installs the git guard that stops workers from destroying uncommitted work.
 	GitGuard bool `json:"gitGuard"`
 
-	// CodeGraph builds a code graph of the repository and offers it to workers.
+	// CodeGraph builds a code graph of the repository and offers it to workers. Not implemented yet: the setting is
+	// kept and validated, but nothing reads it.
 	CodeGraph bool `json:"codeGraph"`
 	// SnapshotRetentionDays is how long work-at-risk snapshots of reviewed tasks are kept.
 	SnapshotRetentionDays int `json:"snapshotRetentionDays"`

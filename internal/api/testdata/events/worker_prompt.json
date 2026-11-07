@@ -1,0 +1,12 @@
+{
+  "seq": 7,
+  "ts": "2026-11-07T09:00:00.000Z",
+  "taskId": "t261107090000-ab12",
+  "turn": 1,
+  "attempt": 1,
+  "type": "worker_prompt",
+  "data": {
+    "length": 1200,
+    "preview": "You are a coding worker."
+  }
+}
