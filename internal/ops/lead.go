@@ -57,12 +57,9 @@ func MCPSession(getenv func(string) string) *api.Session {
 	return &api.Session{ID: id, HostID: getenv("CLAUDE_CODE_HOST_SESSION_ID"), Lead: DetectLead(getenv)}
 }
 
-// CLISession is the session the command line sends with a delegate: SEELEGENT_SESSION as its id and
-// SEELEGENT_LEAD as the lead when it names a known one, else cli.
+// CLISession is the session the command line sends with a delegate: SEELEGENT_SESSION as its id and the lead as
+// the old buildCliSession named it (SEELEGENT_LEAD || detectLead): a known SEELEGENT_LEAD, else the host whose
+// session variable is set (a `seelegent run` from Claude Code's shell names Claude Code), else cli.
 func CLISession(getenv func(string) string) *api.Session {
-	lead := normLead(getenv(EnvLead))
-	if lead == "" {
-		lead = api.LeadCLI
-	}
-	return &api.Session{ID: getenv(EnvSession), Lead: lead}
+	return &api.Session{ID: getenv(EnvSession), Lead: DetectLead(getenv)}
 }

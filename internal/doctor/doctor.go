@@ -69,7 +69,7 @@ type Options struct {
 
 // Run runs every check in a fixed order.
 func Run(ctx context.Context, o Options) []Check {
-	out := []Check{dataDir(o.Paths), settings(o), database(ctx, o.Paths)}
+	out := []Check{dataDir(o.Paths, o.Daemon.LockHeld()), settings(o), database(ctx, o.Paths)}
 	d, c := daemon(ctx, o)
 	out = append(out, d, portFile(o), dashboard(o.Web), git(o.GitPath))
 	out = append(out, backends(o)...)
@@ -86,7 +86,9 @@ func Failed(checks []Check) bool {
 	return false
 }
 
-func dataDir(p config.Paths) Check {
+// dataDir checks the data directory. While its daemon runs (live: it holds the lock) the daemon is writing there
+// already, so nothing is written; otherwise a probe file is written atomically and removed again.
+func dataDir(p config.Paths, live bool) Check {
 	c := Check{Name: "data_dir"}
 	st, err := os.Stat(p.Home)
 	switch {
@@ -100,6 +102,10 @@ func dataDir(p config.Paths) Check {
 	case !st.IsDir():
 		c.Status, c.Message = Fail, fmt.Sprintf("%s is not a folder", p.Home)
 		c.Fix = "move that file away or set SEELEGENT_HOME to another folder"
+		return c
+	}
+	if live {
+		c.Status, c.Message = OK, "data directory "+p.Home+" (in use by its daemon)"
 		return c
 	}
 	probe := filepath.Join(p.Home, ".doctor-write-test")

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 	"testing/fstest"
+	"time"
 
 	"github.com/NovaSeele/Seelegent/internal/config"
 )
@@ -43,18 +44,29 @@ func TestDataDir(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c := dataDir(p); c.Status != Warn {
+	if c := dataDir(p, false); c.Status != Warn {
 		t.Errorf("missing = %+v", c)
 	}
 	if err := os.MkdirAll(p.Home, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if c := dataDir(p); c.Status != OK {
+	if c := dataDir(p, false); c.Status != OK {
 		t.Errorf("writable = %+v", c)
 	}
 	entries, err := os.ReadDir(p.Home)
 	if err != nil || len(entries) != 0 {
 		t.Errorf("the probe was left behind: %v %v", entries, err)
+	}
+	// While its daemon runs nothing is written: the folder's modification time stays.
+	old := time.Now().Add(-time.Hour).Truncate(time.Second)
+	if err := os.Chtimes(p.Home, old, old); err != nil {
+		t.Fatal(err)
+	}
+	if c := dataDir(p, true); c.Status != OK || !strings.Contains(c.Message, "in use by its daemon") {
+		t.Errorf("live = %+v", c)
+	}
+	if st, err := os.Stat(p.Home); err != nil || !st.ModTime().Equal(old) {
+		t.Errorf("the live data directory changed: %v %v", st.ModTime(), err)
 	}
 	file := filepath.Join(t.TempDir(), "file")
 	if err := os.WriteFile(file, nil, 0o600); err != nil {
@@ -64,7 +76,7 @@ func TestDataDir(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c := dataDir(p2); c.Status != Fail {
+	if c := dataDir(p2, false); c.Status != Fail {
 		t.Errorf("a file = %+v", c)
 	}
 }

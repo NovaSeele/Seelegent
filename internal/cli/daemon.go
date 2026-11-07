@@ -45,6 +45,8 @@ func newDaemonCommand(info buildinfo.Info) *cobra.Command {
 			"to this terminal. `serve` is the old name. Exit code 3: another daemon holds the data directory or\n" +
 			"the port is taken.",
 		Args: noArgs,
+		// Inside a worker a daemon would run in the worker's process tree, on the worker profile's data directory.
+		Annotations: map[string]string{annOp: "daemon"},
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if f.port < 0 || f.port > 65535 {
 				return usagef("--port %d: must be 1..65535", f.port)

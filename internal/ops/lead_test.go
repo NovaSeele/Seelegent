@@ -32,12 +32,16 @@ func TestSessions(t *testing.T) {
 	if s := MCPSession(env); *s != (api.Session{ID: "cc", HostID: "host", Lead: "claude"}) {
 		t.Errorf("MCPSession = %+v", s)
 	}
-	// The command line names only SEELEGENT_LEAD, else cli; it never sends the host session id.
-	if s := CLISession(env); *s != (api.Session{Lead: "cli"}) {
+	// The command line detects the lead as the old buildCliSession did (a `seelegent run` from Claude Code's shell
+	// names Claude Code), but sends only SEELEGENT_SESSION as the id, never the host's session ids.
+	if s := CLISession(env); *s != (api.Session{Lead: "claude"}) {
 		t.Errorf("CLISession = %+v", s)
 	}
-	env = envOf(map[string]string{"SEELEGENT_LEAD": "Codex", "SEELEGENT_SESSION": "s1"})
+	env = envOf(map[string]string{"SEELEGENT_LEAD": "Codex", "SEELEGENT_SESSION": "s1", "CLAUDE_CODE_SESSION_ID": "cc"})
 	if s := CLISession(env); *s != (api.Session{ID: "s1", Lead: "codex"}) {
+		t.Errorf("CLISession = %+v", s)
+	}
+	if s := CLISession(envOf(map[string]string{"SEELEGENT_LEAD": "nobody"})); *s != (api.Session{Lead: "cli"}) {
 		t.Errorf("CLISession = %+v", s)
 	}
 }

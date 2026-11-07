@@ -37,7 +37,8 @@ const limit = 60 * time.Second
 // cliEnv clears the variables that change how the command line behaves, so the developer's own do not leak in.
 func cliEnv(t *testing.T) {
 	t.Helper()
-	for _, k := range []string{account.EnvWorker, ops.EnvLead, ops.EnvSession, envNoAutoStart, config.EnvPort} {
+	for _, k := range []string{account.EnvWorker, ops.EnvLead, ops.EnvSession, envNoAutoStart, config.EnvPort,
+		"CLAUDE_CODE_SESSION_ID", "CODEX_SESSION_ID", "CODEX_THREAD_ID", "GEMINI_SESSION_ID", "GEMINI_CLI_SESSION"} {
 		t.Setenv(k, "")
 	}
 	t.Setenv(envNoAutoStart, "1")
@@ -367,6 +368,7 @@ func TestWorkerGuard(t *testing.T) {
 		{"delegate", "x"}, {"delegate", "--bogus-flag", "x"}, {"run", "x"}, {"followup", "t-1", "x"},
 		{"review", "t-1", "accepted"}, {"cancel", "t-1"}, {"memory", "append", "--cwd", d.cwd, "x"},
 		{"memory", "replace", "--cwd", d.cwd, "x"}, {"memory", "--cwd", d.cwd}, {"stop"}, {"restart"}, {"ui"},
+		{"daemon"}, {"serve", "--port", "1"},
 	} {
 		r := runCLI(t, td, args...)
 		if r.code != ExitError || r.stderr != ops.WorkerMessage+"\n" || r.stdout != "" {
