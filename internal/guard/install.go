@@ -26,6 +26,9 @@ const (
 	agyHookName = "seelegent-guard"
 	// agyScript is the Windows batch file the agy hook runs (agy runs hook commands with cmd /c there).
 	agyScript = "seelegent-guard.cmd"
+	// agyCommand names the batch file relative to the hooks folder. A bare name is not found when the environment
+	// sets NoDefaultCurrentDirectoryInExePath (Claude Code does, and a daemon started from it passes it on).
+	agyCommand = `.\` + agyScript
 	// claudeMatcher is the Claude Code tools the hook watches: both shell tools.
 	claudeMatcher = "Bash|PowerShell"
 	// hookTimeout is the hook timeout in seconds given to the CLIs.
@@ -147,7 +150,7 @@ func InstallAgy(home, exe string, on bool) error {
 		if err := writeIfChanged(script, []byte(body), 0o700); err != nil {
 			return fmt.Errorf("guard: agy hooks: %w", err)
 		}
-		command = agyScript
+		command = agyCommand
 	}
 	groups := make([]any, 0, len(agyShellTools))
 	for _, tool := range agyShellTools {

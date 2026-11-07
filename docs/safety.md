@@ -37,8 +37,8 @@ and the dashboard's terminal and safety panel show it.
 
 | Worker | How |
 |---|---|
-| Claude Code, isolated account | A `PreToolUse` hook on `Bash|PowerShell` in the profile's own `settings.json` runs `seelegent __guard claude`. |
-| agy, isolated account | An entry `seelegent-guard` in the profile's `hooks.json` for `run_command` and `send_command_input` runs `seelegent __guard agy` (through `seelegent-guard.cmd` on Windows, as agy runs hooks with `cmd /c`). |
+| Claude Code, isolated account | A `PreToolUse` hook on `Bash` and `PowerShell` in the profile's own `settings.json` runs `seelegent __guard claude`. |
+| agy, isolated account | An entry `seelegent-guard` in the profile's `hooks.json` for `run_command` and `send_command_input` runs `seelegent __guard agy` (on Windows through the batch file `.\seelegent-guard.cmd` next to `hooks.json`, as agy runs hooks with `cmd /c` from that folder; the `.\` keeps it working when `NoDefaultCurrentDirectoryInExePath` is set). |
 | codex (any account) and system accounts of every backend | The git shim: `<data>/guard/bin` first on the worker's `PATH`. On Windows it is a copy of `seelegent.exe` named `git.exe`; elsewhere a `git` script that runs `seelegent __git`. It checks the arguments and runs the real git found on `PATH` without the shim folder. |
 
 Hooks are written only into the worker's own profile (`Prepare` of the backend), never into the user's real

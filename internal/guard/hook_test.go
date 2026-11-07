@@ -3,6 +3,7 @@ package guard
 import (
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -117,8 +118,19 @@ func TestInstallAgy(t *testing.T) {
 	}
 	if runtime.GOOS == "windows" {
 		script, err := os.ReadFile(filepath.Join(dir, agyScript))
-		if err != nil || !strings.Contains(string(script), `100%% sure`) || groups[0].Hooks[0].Command != agyScript {
+		if err != nil || !strings.Contains(string(script), `100%% sure`) || groups[0].Hooks[0].Command != agyCommand {
 			t.Fatalf("script %q %v, command %q", script, err, groups[0].Hooks[0].Command)
+		}
+		// cmd /c finds the command from the hooks folder even when the current folder is not searched for bare
+		// names (NoDefaultCurrentDirectoryInExePath, set by Claude Code and inherited by a daemon it starts).
+		if err := os.WriteFile(filepath.Join(dir, agyScript), []byte("@echo found\r\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		cmd := exec.CommandContext(t.Context(), "cmd", "/d", "/c", groups[0].Hooks[0].Command)
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(), "NoDefaultCurrentDirectoryInExePath=1")
+		if out, err := cmd.CombinedOutput(); err != nil || strings.TrimSpace(string(out)) != "found" {
+			t.Fatalf("cmd /c %s: %q %v", groups[0].Hooks[0].Command, out, err)
 		}
 	} else if !strings.Contains(groups[0].Hooks[0].Command, "'"+exe+"' __guard agy") {
 		t.Fatalf("command %q", groups[0].Hooks[0].Command)
