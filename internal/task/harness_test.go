@@ -19,6 +19,7 @@ import (
 	"github.com/NovaSeele/Seelegent/internal/config"
 	"github.com/NovaSeele/Seelegent/internal/gitx"
 	"github.com/NovaSeele/Seelegent/internal/launch"
+	"github.com/NovaSeele/Seelegent/internal/member"
 	"github.com/NovaSeele/Seelegent/internal/memory"
 	"github.com/NovaSeele/Seelegent/internal/pool"
 	"github.com/NovaSeele/Seelegent/internal/proof"
@@ -55,6 +56,7 @@ type harness struct {
 	usage    *usage.Store
 	memory   *memory.Store
 	roles    *role.Store
+	members  *member.Store
 	consoles *fakeConsoles
 	pool     *pool.Pool
 	s        *Service
@@ -93,6 +95,7 @@ func newHarness(t *testing.T) *harness {
 	h.usage = usage.NewStore(db, h.clk, time.UTC)
 	h.memory = memory.New(db, h.clk.Now)
 	h.roles = role.New(role.Options{DB: db, Home: filepath.Join(dir, "home"), Now: h.clk.Now})
+	h.members = member.New(member.Options{DB: db, Providers: h.accounts, Now: h.clk.Now})
 	t.Cleanup(h.killWorkers) // runs after the engine is closed
 	h.start()
 	return h
@@ -145,7 +148,7 @@ func (h *harness) start() {
 	s, err := New(Options{
 		DB: h.db, Accounts: h.accounts, Pool: p, Backends: map[string]backend.Backend{config.BackendAgy: agy},
 		Settings: h.config, TasksDir: filepath.Join(h.dir, "tasks"), Launcher: fakecli.Launcher(t),
-		Usage: h.usage, Memory: h.memory, Roles: h.roles, Consoles: h.consoles, Clock: h.clk,
+		Usage: h.usage, Memory: h.memory, Roles: h.roles, Members: h.members, Consoles: h.consoles, Clock: h.clk,
 		QuotaRefresh: func(id string) {
 			h.mu.Lock()
 			h.refreshes = append(h.refreshes, id)

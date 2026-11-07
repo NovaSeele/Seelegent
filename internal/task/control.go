@@ -2,6 +2,7 @@ package task
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"time"
 
@@ -15,15 +16,47 @@ const maxCancelWait = 60
 
 // Review records the lead's verdict (accepted or rejected) on a task whose turn has ended, adds it to the project's
 // review history and re-evaluates the tasks that wait for it.
+//
+// Accepting a task with an unanswered peer objection (a consult) needs req.AnswerObjection: the answer is stored
+// on the objection and added to the review notes.
 func (s *Service) Review(ctx context.Context, id string, req api.ReviewRequest) (api.TaskSummary, error) {
+	return s.ReviewWith(ctx, id, req, ReviewOptions{})
+}
+
+// ReviewOptions are the engine's own review switches.
+type ReviewOptions struct {
+	// SkipHistory leaves the project's review history alone (contest losers: losing is not a defect).
+	SkipHistory bool
+}
+
+// ReviewWith is Review for the daemon's own features.
+func (s *Service) ReviewWith(ctx context.Context, id string, req api.ReviewRequest, o ReviewOptions) (
+	api.TaskSummary, error) {
 	verdict := strings.TrimSpace(req.Verdict)
 	if verdict != api.VerdictAccepted && verdict != api.VerdictRejected {
 		return api.TaskSummary{}, invalidf("verdict %q must be accepted or rejected", req.Verdict)
 	}
 	notes := strings.TrimSpace(req.Notes)
+	answerText := strings.TrimSpace(req.AnswerObjection)
 	t, err := s.mutate(ctx, id, func(t *Task) ([]NewEvent, error) {
+		if Hidden(t.Kind) {
+			return nil, ErrNotFound
+		}
 		if Active(t.Status) || t.Manual || t.Status == StatusWaitingDeps || t.Status == StatusBlockedDeps {
 			return nil, badStatef("task %s is %s; review it after its turn ended", id, t.Status)
+		}
+		notes := notes
+		if open := unansweredObjections(t); verdict == api.VerdictAccepted && len(open) > 0 {
+			if answerText == "" {
+				return nil, &PeerObjectionError{Consults: open}
+			}
+			at := api.FormatTime(s.now())
+			for i := range t.Consults {
+				if c := &t.Consults[i]; c.AnsweredObjection == nil && slices.Contains(open, c.ID) {
+					c.AnsweredObjection = &api.ObjectionAnswer{Text: answerText, At: at}
+				}
+			}
+			notes = strings.TrimSpace(notes + "\n\nAnswer to peer objection: " + answerText)
 		}
 		t.Review = &api.Review{Verdict: verdict, Notes: notes, At: api.FormatTime(s.now())}
 		turn := 0
@@ -35,9 +68,9 @@ func (s *Service) Review(ctx context.Context, id string, req api.ReviewRequest) 
 	if err != nil {
 		return api.TaskSummary{}, err
 	}
-	if s.o.Memory != nil {
-		if err := s.o.Memory.AddVerdict(ctx, memory.Verdict{Cwd: t.Cwd, TaskID: t.ID, Title: t.Title, Verdict: verdict,
-			Notes: notes}); err != nil {
+	if s.o.Memory != nil && !o.SkipHistory {
+		if err := s.o.Memory.AddVerdict(ctx, memory.Verdict{Cwd: t.projectDir(), TaskID: t.ID, Title: t.Title,
+			Verdict: verdict, Notes: t.Review.Notes}); err != nil {
 			s.log.Warn("task: review history", "task", id, "err", err)
 		}
 	}

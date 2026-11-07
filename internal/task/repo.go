@@ -380,9 +380,12 @@ func (r *Repo) List(ctx context.Context, q Query) ([]*Task, string, error) {
 	if limit > 200 {
 		return nil, "", invalidf("limit %d is over 200", limit)
 	}
-	// Verify tasks belong to their parent's gate: they are read through the parent, never listed.
-	where := []string{`json_extract(data, '$.kind') IS NOT '` + KindVerify + `'`}
+	// Hidden runs (verify, consult, meeting, judge) are read through what started them, never listed.
+	where := []string{`coalesce(json_extract(data, '$.kind'), '') NOT IN (` + placeholders(len(hiddenKinds())) + `)`}
 	var args []any
+	for _, k := range hiddenKinds() {
+		args = append(args, k)
+	}
 	if len(q.Statuses) > 0 {
 		for _, s := range q.Statuses {
 			if !ValidStatus(s) {

@@ -399,6 +399,11 @@ func (s *Service) newAttempt(r *run, t *Task, tu *Turn) (bool, error) {
 			return true, nil
 		}
 		if errors.Is(err, pool.ErrNoAccount) {
+			if moved, ferr := s.memberFallback(ctx, t, tu); ferr != nil {
+				return false, ferr
+			} else if moved {
+				return true, nil
+			}
 			if excludedBefore {
 				return s.giveUp(t.ID, tu.N, "no other account can run this task: "+lastError(tu))
 			}
@@ -923,8 +928,8 @@ func lastError(tu *Turn) string {
 // prompt builds what the worker gets: the short continuation of its own conversation, or the full brief for a
 // fresh conversation (with the handoff section, so a worker on another account never loses the task, old B7).
 func (s *Service) prompt(ctx context.Context, t *Task, tu *Turn, continuing bool) string {
-	if t.Kind == KindVerify {
-		return tu.Message // the verifier's brief is complete (verifier.go)
+	if Hidden(t.Kind) {
+		return tu.Message // the briefs of hidden runs are complete on every turn (verifier, consult, meeting, judge)
 	}
 	spec := s.briefSpec(t)
 	if continuing {
@@ -959,19 +964,19 @@ func (s *Service) prompt(ctx context.Context, t *Task, tu *Turn, continuing bool
 		in.Lead = brief.LeadName(t.Session.Lead)
 	}
 	if t.Profile != nil && s.o.Roles != nil {
-		if r, err := s.o.Roles.Get(ctx, t.Profile.ID, t.Cwd); err == nil {
+		if r, err := s.o.Roles.Get(ctx, t.Profile.ID, t.projectDir()); err == nil {
 			in.Role = s.o.Roles.Brief(r, t.Cwd)
 		} else {
 			s.log.Warn("task: role", "task", t.ID, "role", t.Profile.ID, "err", err)
 		}
 	}
 	if s.o.Memory != nil {
-		if n, err := s.o.Memory.Get(ctx, t.Cwd); err == nil {
+		if n, err := s.o.Memory.Get(ctx, t.projectDir()); err == nil {
 			in.Memory = n.Text
 		} else {
 			s.log.Warn("task: project memory", "task", t.ID, "err", err)
 		}
-		if h, err := s.o.Memory.History(ctx, t.Cwd, memory.HistoryShown); err == nil {
+		if h, err := s.o.Memory.History(ctx, t.projectDir(), memory.HistoryShown); err == nil {
 			in.History = h
 		} else {
 			s.log.Warn("task: review history", "task", t.ID, "err", err)

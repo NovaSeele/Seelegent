@@ -24,8 +24,31 @@ const titleChars = 80
 // maxCreateTries bounds the retries when a fresh task id is taken.
 const maxCreateTries = 5
 
+// Spawn holds what only the daemon's own features set on a new task: never the HTTP body, so no caller can attach
+// a task to a meeting, contest or parent it does not own (old C-B21).
+type Spawn struct {
+	// Kind is KindNormal (the default) or a hidden kind (KindMeeting, KindJudge, KindConsult): a hidden run is
+	// read-only (plan mode), has no gate and is never listed.
+	Kind string
+	// ParentID is the task, meeting or contest that started a hidden run.
+	ParentID  string
+	MeetingID string
+	ContestID string
+	// Variant and ProjectCwd describe a contest variant: its label and the user's folder its worktree stands for.
+	Variant    string
+	ProjectCwd string
+	// Prefer lists accounts to try first, before the member's and the role's.
+	Prefer []string
+}
+
 // Delegate creates a task and starts it (or lets it wait for its prerequisites).
 func (s *Service) Delegate(ctx context.Context, req api.DelegateRequest) (api.TaskSummary, error) {
+	return s.DelegateWith(ctx, req, Spawn{})
+}
+
+// DelegateWith is Delegate for the daemon's own features (meetings, contests, consults): sp sets the links and the
+// kind of the new task.
+func (s *Service) DelegateWith(ctx context.Context, req api.DelegateRequest, sp Spawn) (api.TaskSummary, error) {
 	prompt := strings.TrimSpace(req.Prompt)
 	if prompt == "" {
 		return api.TaskSummary{}, invalidf("prompt is required")
@@ -34,15 +57,31 @@ func (s *Service) Delegate(ctx context.Context, req api.DelegateRequest) (api.Ta
 	if err != nil {
 		return api.TaskSummary{}, err
 	}
+	projectCwd := ""
+	if sp.ProjectCwd != "" {
+		if projectCwd, key, name, err = checkCwd(sp.ProjectCwd); err != nil {
+			return api.TaskSummary{}, err
+		}
+	}
+	kind := sp.Kind
+	if kind == "" {
+		kind = KindNormal
+	}
+	if kind != KindNormal && (!Hidden(kind) || kind == KindVerify) {
+		return api.TaskSummary{}, invalidf("kind %q cannot be delegated", kind)
+	}
 	mode := req.Mode
 	if mode == "" {
 		mode = ModeEdit
+		if Hidden(kind) {
+			mode = ModePlan
+		}
 	}
 	if mode != ModeEdit && mode != ModePlan {
 		return api.TaskSummary{}, invalidf("mode %q must be edit or plan", req.Mode)
 	}
-	if req.Member != "" {
-		return api.TaskSummary{}, invalidf("department members are not available yet")
+	if Hidden(kind) && mode != ModePlan {
+		return api.TaskSummary{}, invalidf("a %s run is read-only (plan mode)", kind)
 	}
 	preq := proofRequest{gate: req.Gate, gateCommands: req.GateCommands, lane: req.Lane, noLane: req.NoLane,
 		forceLane: req.ForceLane, verify: req.Verify}
@@ -53,7 +92,15 @@ func (s *Service) Delegate(ctx context.Context, req api.DelegateRequest) (api.Ta
 	if err != nil {
 		return api.TaskSummary{}, err
 	}
-	backendName := req.Backend
+	var mem *api.Member
+	if req.Member != "" {
+		m, err := s.usableMember(ctx, req.Member)
+		if err != nil {
+			return api.TaskSummary{}, err
+		}
+		mem = &m
+	}
+	backendName, providerID, reqModel, reqTier, roleID := memberDefaults(req, mem)
 	if backendName == "" {
 		backendName = config.BackendAgy
 	}
@@ -61,10 +108,10 @@ func (s *Service) Delegate(ctx context.Context, req api.DelegateRequest) (api.Ta
 		return api.TaskSummary{}, err
 	}
 	var prov *account.Provider
-	if req.Provider != "" {
-		p, err := s.o.Accounts.GetProvider(ctx, req.Provider)
+	if providerID != "" {
+		p, err := s.o.Accounts.GetProvider(ctx, providerID)
 		if err != nil {
-			return api.TaskSummary{}, invalidf("provider %s: %v", req.Provider, err)
+			return api.TaskSummary{}, invalidf("provider %s: %v", providerID, err)
 		}
 		if p.Backend != backendName {
 			return api.TaskSummary{}, invalidf("provider %s serves %s, not %s", p.ID, p.Backend, backendName)
@@ -72,20 +119,21 @@ func (s *Service) Delegate(ctx context.Context, req api.DelegateRequest) (api.Ta
 		prov = &p
 	}
 	t := &Task{
-		Title: title(req.Title, prompt), Status: StatusQueued, Kind: KindNormal, Mode: mode, Cwd: cwd,
-		ProjectKey: key, ProjectName: name, Prompt: prompt, Backend: backendName, Provider: req.Provider,
-		AllowGit: req.AllowGit, Session: session, Role: req.Role,
+		Title: title(req.Title, prompt), Status: StatusQueued, Kind: kind, Mode: mode, Cwd: cwd,
+		ProjectKey: key, ProjectName: name, Prompt: prompt, Backend: backendName, Provider: providerID,
+		AllowGit: req.AllowGit, Session: session, Role: req.Role, ParentID: sp.ParentID, MeetingID: sp.MeetingID,
+		ContestID: sp.ContestID, Variant: sp.Variant, ProjectCwd: projectCwd, BaselineTaken: Hidden(kind),
 	}
-	roleID := req.Profile
-	if roleID == "" {
-		roleID = req.Role
+	var memberPrefer []string
+	if mem != nil {
+		t.Member, memberPrefer = mem.ID, mem.PreferredAccounts
 	}
 	var rl *role.Role
 	if roleID != "" {
 		if s.o.Roles == nil {
 			return api.TaskSummary{}, invalidf("roles are not available")
 		}
-		r, err := s.o.Roles.Get(ctx, roleID, cwd)
+		r, err := s.o.Roles.Get(ctx, roleID, t.projectDir())
 		if err != nil {
 			return api.TaskSummary{}, invalidf("role %q: %v", roleID, err)
 		}
@@ -93,7 +141,8 @@ func (s *Service) Delegate(ctx context.Context, req api.DelegateRequest) (api.Ta
 		t.Profile = &api.ProfileRef{ID: r.ID, Name: r.Name}
 		t.Prefer = slices.Clone(r.PreferredAccounts)
 	}
-	model, tier, effort, err := s.resolveModel(backendName, prov, req.Model, req.Tier, req.Effort, rl)
+	t.Prefer = mergePrefer(sp.Prefer, memberPrefer, t.Prefer)
+	model, tier, effort, err := s.resolveModel(backendName, prov, reqModel, reqTier, req.Effort, rl)
 	if err != nil {
 		return api.TaskSummary{}, err
 	}
@@ -142,7 +191,7 @@ func (s *Service) Delegate(ctx context.Context, req api.DelegateRequest) (api.Ta
 	now := s.now()
 	t.CreatedAt, t.UpdatedAt = now, now
 	t.Turns = []*Turn{{N: 1, By: ByLead, Message: prompt, Status: TurnRunning, Model: model,
-		RequestedModel: req.Model, Tier: tier, Effort: effort, TaskIDs: taskIDs, StartedAt: now}}
+		RequestedModel: reqModel, Tier: tier, Effort: effort, TaskIDs: taskIDs, StartedAt: now}}
 	evs := []NewEvent{{Type: api.EventLeadMessage, Turn: 1,
 		Data: api.LeadMessageData{Message: prompt, By: ByLead, Model: model, Effort: effort, Tier: tier}}}
 	if t.Status == StatusWaitingDeps {
@@ -204,12 +253,23 @@ func (s *Service) Followup(ctx context.Context, id string, req api.FollowupReque
 	}
 	preq := proofRequest{gate: req.Gate, gateCommands: req.GateCommands, lane: req.Lane, noLane: req.NoLane,
 		forceLane: req.ForceLane, verify: req.Verify}
+	var mem *api.Member
+	if req.Member != "" {
+		m, err := s.usableMember(ctx, req.Member)
+		if err != nil {
+			return api.TaskSummary{}, err
+		}
+		mem = &m
+	}
 	start := false
 	// A new lane is checked and saved as one step, as in Delegate (old D25a): claimMu is held through the mutate
 	// (lock order claimMu, then the task).
 	s.claimMu.Lock()
 	_, err := s.mutate(ctx, id, func(t *Task) ([]NewEvent, error) {
 		start = false
+		if Hidden(t.Kind) && mem != nil {
+			return nil, invalidf("task %s is a hidden %s run; its member cannot change", id, t.Kind)
+		}
 		if t.Manual {
 			return nil, badStatef("task %s is taken over by the user", id)
 		}
@@ -225,6 +285,9 @@ func (s *Service) Followup(ctx context.Context, id string, req api.FollowupReque
 			}
 		}
 		if t.Status == StatusWaitingDeps || t.Status == StatusBlockedDeps {
+			if mem != nil {
+				return nil, badStatef("task %s has not run yet; delegate a new task with the member instead", id)
+			}
 			if !req.Force {
 				return nil, badStatef("task %s waits for its prerequisites (%s); pass force to start it anyway", id,
 					t.DepsReason)
@@ -254,7 +317,14 @@ func (s *Service) Followup(ctx context.Context, id string, req api.FollowupReque
 		if msg == "" {
 			return nil, invalidf("message is required")
 		}
-		ev, err := s.addTurn(ctx, t, by, msg, req)
+		turnReq := req
+		if mem != nil {
+			var err error
+			if turnReq, err = s.switchMember(ctx, t, *mem, req); err != nil {
+				return nil, err
+			}
+		}
+		ev, err := s.addTurn(ctx, t, by, msg, turnReq)
 		if err != nil {
 			return nil, err
 		}
