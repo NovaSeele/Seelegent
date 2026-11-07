@@ -19,7 +19,8 @@ const props = withDefaults(
   { placeholder: undefined, hint: undefined, error: undefined },
 )
 
-const emit = defineEmits<{ commit: [value: string] }>()
+/** `commit`: a new value to save. `unchanged`: the field shows the saved value again (typed back, Esc). */
+const emit = defineEmits<{ commit: [value: string]; unchanged: [] }>()
 
 const id = useId()
 const text = ref(props.modelValue)
@@ -44,7 +45,11 @@ let sent: string | undefined
 watch([text, () => props.modelValue], () => (sent = undefined))
 
 function commit() {
-  if (text.value === props.modelValue || text.value === sent) return
+  if (text.value === props.modelValue) {
+    emit('unchanged')
+    return
+  }
+  if (text.value === sent) return
   sent = text.value
   emit('commit', text.value)
 }
@@ -61,6 +66,7 @@ function onKeydown(event: KeyboardEvent) {
   } else if (event.key === 'Escape' && text.value !== props.modelValue) {
     event.stopPropagation()
     text.value = props.modelValue
+    emit('unchanged')
   }
 }
 </script>
@@ -68,14 +74,30 @@ function onKeydown(event: KeyboardEvent) {
 <template>
   <div class="cf" :class="{ 'cf--invalid': error }">
     <label :for="id" class="cf__label" :class="{ 'sr-only': hideLabel }">{{ label }}</label>
-    <component
-      :is="multiline ? 'textarea' : 'input'"
+    <!-- Two plain elements, not <component :is>: v-model on a dynamic component binds a modelValue prop, which a
+         native input ignores (the field showed empty and typing never reached `text`). -->
+    <textarea
+      v-if="multiline"
+      :id="id"
+      v-model="text"
+      class="cf__input cf__input--multi"
+      rows="3"
+      :placeholder="placeholder"
+      :disabled="disabled"
+      :aria-invalid="error ? 'true' : undefined"
+      :aria-describedby="describedBy"
+      spellcheck="false"
+      autocomplete="off"
+      @focus="focused = true"
+      @blur="onBlur"
+      @keydown="onKeydown"
+    />
+    <input
+      v-else
       :id="id"
       v-model="text"
       class="cf__input"
-      :class="{ 'cf__input--multi': multiline }"
-      :rows="multiline ? 3 : undefined"
-      :type="multiline ? undefined : 'text'"
+      type="text"
       :placeholder="placeholder"
       :disabled="disabled"
       :aria-invalid="error ? 'true' : undefined"

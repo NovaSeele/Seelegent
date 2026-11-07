@@ -58,6 +58,7 @@ const sandboxOptions = () =>
           :placeholder="t('settings.backends.anyModel')"
           :error="form.errors.value[`backends.${backend.id}.allowedModels`]"
           @commit="form.set(`backends.${backend.id}.allowedModels`, $event.trim())"
+          @unchanged="form.clear(`backends.${backend.id}.allowedModels`)"
         />
         <div class="be__tiers">
           <CommitField
@@ -68,6 +69,7 @@ const sandboxOptions = () =>
             :placeholder="t('settings.backends.tierDefault')"
             :error="form.errors.value[`backends.${backend.id}.tiers.${tier}`]"
             @commit="form.set(`backends.${backend.id}.tiers.${tier}`, $event.trim())"
+            @unchanged="form.clear(`backends.${backend.id}.tiers.${tier}`)"
           />
         </div>
         <template v-if="backend.id === 'codex'">
