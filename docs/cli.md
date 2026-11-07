@@ -13,7 +13,7 @@ group (`delegate.go`, `tasks.go`, `memory.go`, `system.go`, `doctor.go`, `daemon
 |---|---|
 | `--json` | Prints the result as JSON on stdout, one shape per command (below). Errors then go to stdout too, as `{"error": "...", "code": "...", "details": {...}}`. Without `--json`, results go to stdout and errors to stderr as `Error: ...`. |
 | Exit codes | `0` ok; `1` runtime or API error, refusal inside a worker, `doctor` with a failed check; `2` usage error (unknown command or flag, missing or wrong arguments); `3` `seelegent daemon` found the data directory locked by another daemon or its port taken. |
-| Error codes | the API's code (`not_found`, `invalid_argument`, `bad_state`, ...), `not_available` (an option or feature of a later version), `forbidden` with `details.caller: "worker"`, `daemon_unavailable` (no daemon, another program on the port, a Seelegent daemon of another data directory on the port, a daemon that holds its lock without answering), `daemon_stopped` (the daemon was stopped during a wait and did not come back; the tasks keep running), `daemon_locked` (exit 3), `usage` (exit 2), `checksum_mismatch`, `dev_build` and `no_previous` (`update`), `error`. |
+| Error codes | the API's code (`not_found`, `invalid_argument`, `bad_state`, ...), `not_available` (an option or feature of a later version), `forbidden` with `details.caller: "worker"`, `daemon_unavailable` (no daemon, another program on the port, a Seelegent daemon of another data directory on the port, a daemon that holds its lock without answering), `daemon_stopped` (the daemon was stopped during a wait and did not come back; the tasks keep running), `daemon_locked` (exit 3), `usage` (exit 2), `checksum_mismatch`, `dev_build`, `no_previous`, `schema_too_new` and `schema_unknown` (`update`; `schema_too_new` also from `version --check-database`), `error`. |
 | `@file` | A prompt, message, memory text or objection that starts with `@` is read from that file, relative to `--cwd` when the command has it, else to the current folder. |
 | Flags | Normal flags (`--name value` or `--name=value`) after or between the arguments; `--` ends the flags. Unknown flags are an error, `run` included. |
 
@@ -71,16 +71,16 @@ allowed; the daemon's own guard decides what a worker may read. `update` is refu
 | `ls [--active] [--blocked] [--project P] [--limit N]` | Tasks, newest first (limit 1..200, default 50). | `TaskPage` |
 | `memory read\|append\|replace --cwd D [text\|@file]` | A project's notes for workers. | `Memory` |
 | `doctor` | Checks the installation (below); exit 1 when a check fails. | `[{name, status: ok\|warn\|fail, message, fix?}]` |
-| `version` | Version, commit and build date. | `buildinfo.Info` |
+| `version [--check-database]` | Version, commit and build date. `--check-database` also reads the data folder's database read-only and fails with `schema_too_new` when this build cannot open it (the installers run it on a downloaded binary). | `buildinfo.Info` + `schemaVersion` (the number of database migrations in the build) + `databaseSchemaVersion` with `--check-database` (0 without a database) |
 | `setup [--host a,b] [--dry-run] [--remove] [--no-skill] [--hooks] [--force] [--exe path]` | Registers Seelegent with the lead hosts on this machine ([setup.md](setup.md)). Exit 1 when an item is `conflict` or `error`; with `--json` the report is then the only document printed. | `setup.Report` |
 | `skill` | Prints the lead skill `setup` installs. | `{name, version, file, content}` |
 | `migrate [--from dir] [--dry-run]` | Imports the old (Node) Seelegent's data ([setup.md](setup.md)). Exit 1 when an item is `error`; with `--json` the report is then the only document printed. | `migrate.Report` |
-| `update [--check\|--apply\|--rollback] [--version vX.Y.Z]` | `--check` (the default) compares this build with the latest release (or `--version`). `--apply` installs it in place of this executable, verified against the release's `checksums.txt`, restarting the daemon and refreshing the hosts that have an entry; `--version` picks any release, older ones too. `--rollback` puts back the executable the last update replaced, once. Progress lines go to stderr. See below and [release.md](release.md). | `update.CheckResult`, `update.ApplyResult`, `update.RollbackResult` |
+| `update [--check\|--apply\|--rollback] [--version vX.Y.Z] [--force]` | `--check` (the default) compares this build with the latest release (or `--version`). `--apply` installs it in place of this executable, verified against the release's `checksums.txt`, restarting the daemon and refreshing the hosts that have an entry; `--version` picks any release, older ones too. `--rollback` puts back the executable the last update replaced, once. Progress lines go to stderr. See below and [release.md](release.md). | `update.CheckResult`, `update.ApplyResult`, `update.RollbackResult` |
 
 `update` (old `src/update.js`, inventory 6.1):
 
 - Releases come from `https://api.github.com/repos/NovaSeele/Seelegent/releases/latest` (`/releases/tags/<tag>` with
-  `--version`), or from `SEELEGENT_UPDATE_URL`. Only `https`, or `http` on a loopback host, redirects included.
+  `--version`), or from `SEELEGENT_UPDATE_URL`. Only `https`, or `http` on a loopback address (no `user@host`), redirects included.
 - `--check` prints `{currentVersion, latestVersion, updateAvailable, devBuild?, releaseUrl?, asset?, message}`. A
   development build (`dev`, a version between tags, `-dirty`, a snapshot) sets `devBuild` and never
   `updateAvailable`; `--apply` then fails with `dev_build` unless `--version` names the release to install.
@@ -90,6 +90,16 @@ allowed; the daemon's own guard decides what a worker may read. `update` is refu
   executable must be an installed `seelegent` (`seelegent.exe`); a `go run` or test build is refused.
 - `--rollback` prints `{ok, previousVersion, currentVersion, exe, daemonRestarted, hosts, warnings?, message}`, where
   `previousVersion` is the version rolled back from (it is discarded). Without a kept executable: `no_previous`.
+- Before anything is stopped or replaced, `--apply` and `--rollback` compare the database's schema version (read
+  read-only) with the `schemaVersion` the build to install reports: fewer migrations than the database has is
+  `schema_too_new` (its daemon could not open the database, and migrations are never undone), `--force` or not. A
+  build that does not report `schemaVersion` (one from before it) is `schema_unknown`; `--force` installs it anyway
+  with a warning. Without a database there is nothing to compare.
+- When the daemon ran, it is started from the new executable and must answer within two minutes (migrations may run
+  first) as the new version. Otherwise that daemon is stopped (gracefully, or the exact process the update started
+  is killed), the old executable is put back and its daemon started and checked; the error says what runs now. A
+  failed `--rollback` is undone the same way and keeps the kept executable for another try. Ctrl+C during the start
+  still finishes this undo.
 - Versions are printed as the binaries report them, with the `v` (`v1.2.3`); the old updater printed `1.2.3`. The
   old `method` and `installRoot` fields are gone: there is one install layout.
 
