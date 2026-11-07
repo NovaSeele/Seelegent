@@ -101,14 +101,9 @@ func TestRequestChecks(t *testing.T) {
 	e.wantError(e.req(http.MethodDelete, "/api/v1/health", nil, nil), http.StatusNotFound, api.CodeNotFound, "")
 
 	// Reserved paths of later milestones.
-	for _, p := range []string{"/api/v1/members", "/api/v1/members/track", "/api/v1/hooks", "/api/v1/hooks/h1/test",
-		"/api/v1/meetings", "/api/v1/github/repos", "/api/v1/automations",
-		"/api/v1/tasks/t1/notes", "/api/v1/tasks/t1/consult"} {
+	for _, p := range []string{"/api/v1/github/repos", "/api/v1/automations", "/api/v1/automations/a1"} {
 		e.wantError(e.get(p), http.StatusNotImplemented, api.CodeNotImplemented, "")
 	}
-	e.wantError(e.post("/api/v1/hooks/h1/test", map[string]any{}), http.StatusNotImplemented, api.CodeNotImplemented, "")
-	e.wantError(e.req(http.MethodPut, "/api/v1/hooks", map[string]any{"hooks": []any{}}, nil),
-		http.StatusNotImplemented, api.CodeNotImplemented, "")
 }
 
 // TestStatic covers contract §8 and old D-23/B17.

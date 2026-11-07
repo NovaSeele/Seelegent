@@ -11,8 +11,13 @@ import (
 	"github.com/NovaSeele/Seelegent/internal/account"
 	"github.com/NovaSeele/Seelegent/internal/api"
 	"github.com/NovaSeele/Seelegent/internal/config"
+	"github.com/NovaSeele/Seelegent/internal/contest"
 	"github.com/NovaSeele/Seelegent/internal/gitx"
+	"github.com/NovaSeele/Seelegent/internal/hook"
+	"github.com/NovaSeele/Seelegent/internal/meeting"
+	"github.com/NovaSeele/Seelegent/internal/member"
 	"github.com/NovaSeele/Seelegent/internal/memory"
+	"github.com/NovaSeele/Seelegent/internal/notes"
 	"github.com/NovaSeele/Seelegent/internal/proof"
 	"github.com/NovaSeele/Seelegent/internal/role"
 	"github.com/NovaSeele/Seelegent/internal/signin"
@@ -141,7 +146,8 @@ func toAPIError(err error) *apiError {
 	msg := err.Error()
 	// A domain error may carry details for the caller (a lane conflict's tasks, the run already in progress).
 	var withDetails interface{ APIDetails() map[string]any }
-	if errors.As(err, &withDetails) && (errors.Is(err, task.ErrConflict) || errors.Is(err, proof.ErrConflict)) {
+	if errors.As(err, &withDetails) && (errors.Is(err, task.ErrConflict) || errors.Is(err, proof.ErrConflict) ||
+		errors.Is(err, member.ErrDisabled) || errors.Is(err, contest.ErrConflict)) {
 		return &apiError{code: api.CodeConflict, message: msg, details: withDetails.APIDetails()}
 	}
 	switch {
@@ -151,11 +157,15 @@ func toAPIError(err error) *apiError {
 		// The client went away (writeError writes nothing then) or the daemon is stopping: never an internal error.
 		return newError(api.CodeUnavailable, "the request was canceled")
 	case errors.Is(err, task.ErrNotFound), errors.Is(err, account.ErrNotFound), errors.Is(err, role.ErrNotFound),
-		errors.Is(err, signin.ErrNotFound), errors.Is(err, proof.ErrNotFound):
+		errors.Is(err, signin.ErrNotFound), errors.Is(err, proof.ErrNotFound), errors.Is(err, member.ErrNotFound),
+		errors.Is(err, notes.ErrNotFound), errors.Is(err, meeting.ErrNotFound), errors.Is(err, contest.ErrNotFound),
+		errors.Is(err, hook.ErrNotFound):
 		return newError(api.CodeNotFound, "%s", msg)
-	case errors.Is(err, task.ErrBadState), errors.Is(err, signin.ErrBadState):
+	case errors.Is(err, task.ErrBadState), errors.Is(err, signin.ErrBadState), errors.Is(err, notes.ErrBadState),
+		errors.Is(err, meeting.ErrBadState), errors.Is(err, contest.ErrBadState):
 		return newError(api.CodeBadState, "%s", msg)
-	case errors.Is(err, account.ErrConflict), errors.Is(err, task.ErrConflict), errors.Is(err, proof.ErrConflict):
+	case errors.Is(err, account.ErrConflict), errors.Is(err, task.ErrConflict), errors.Is(err, proof.ErrConflict),
+		errors.Is(err, member.ErrConflict), errors.Is(err, member.ErrDisabled), errors.Is(err, contest.ErrConflict):
 		return newError(api.CodeConflict, "%s", msg)
 	case errors.Is(err, task.ErrUnavailable), errors.Is(err, gitx.ErrNoGit):
 		return newError(api.CodeUnavailable, "%s", msg)
@@ -165,7 +175,8 @@ func toAPIError(err error) *apiError {
 		errors.Is(err, account.ErrProviderUnavailable), errors.Is(err, role.ErrInvalid),
 		errors.Is(err, memory.ErrInvalid), errors.Is(err, usage.ErrInvalid), errors.Is(err, gitx.ErrInvalid),
 		errors.Is(err, signin.ErrInvalid), errors.Is(err, config.ErrParse), errors.Is(err, gitx.ErrNotRepo),
-		errors.Is(err, proof.ErrInvalid):
+		errors.Is(err, proof.ErrInvalid), errors.Is(err, member.ErrInvalid), errors.Is(err, notes.ErrInvalid),
+		errors.Is(err, meeting.ErrInvalid), errors.Is(err, contest.ErrInvalid), errors.Is(err, hook.ErrInvalid):
 		return newError(api.CodeInvalidArgument, "%s", msg)
 	}
 	return &apiError{code: api.CodeInternal, msgID: "internal", message: messages["internal"]["en"]}

@@ -52,6 +52,13 @@ func TestWorkerGuard(t *testing.T) {
 		"/api/v1/memory",
 		"/api/v1/spec?cwd=" + url.QueryEscape(elsewhere) + "&dir=x",
 		"/",
+		// Milestone 14 lists none of its endpoints for workers.
+		"/api/v1/members",
+		"/api/v1/members/track",
+		"/api/v1/hooks",
+		"/api/v1/meetings",
+		"/api/v1/contests",
+		"/api/v1/tasks/" + own.ID + "/notes",
 	}
 	for _, p := range denied {
 		got := e.wantError(e.get(p), http.StatusForbidden, api.CodeForbidden, "")

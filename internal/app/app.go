@@ -3,14 +3,16 @@
 // concrete type; the domain packages declare the interfaces they need.
 //
 // It wires the task engine with everything it uses (the store, accounts, quota cache and refresher, the account
-// pool, usage history, project memory, roles, the worker backends and takeover consoles), git, account sign-in and
-// the HTTP API (ListenHTTP). The MCP server and the other features join here as they are built.
+// pool, usage history, project memory, roles, department members, the worker backends and takeover consoles), git,
+// account sign-in, the proof ledger, the team services (review notes, meetings, contests, hooks; team.go) and the
+// HTTP API (ListenHTTP).
 package app
 
 import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"log/slog"
 	"net/http"
@@ -25,12 +27,17 @@ import (
 	"github.com/NovaSeele/Seelegent/internal/buildinfo"
 	"github.com/NovaSeele/Seelegent/internal/clock"
 	"github.com/NovaSeele/Seelegent/internal/config"
+	"github.com/NovaSeele/Seelegent/internal/contest"
 	"github.com/NovaSeele/Seelegent/internal/envx"
 	"github.com/NovaSeele/Seelegent/internal/gitx"
 	"github.com/NovaSeele/Seelegent/internal/guard"
+	"github.com/NovaSeele/Seelegent/internal/hook"
 	"github.com/NovaSeele/Seelegent/internal/httpapi"
 	"github.com/NovaSeele/Seelegent/internal/logx"
+	"github.com/NovaSeele/Seelegent/internal/meeting"
+	"github.com/NovaSeele/Seelegent/internal/member"
 	"github.com/NovaSeele/Seelegent/internal/memory"
+	"github.com/NovaSeele/Seelegent/internal/notes"
 	"github.com/NovaSeele/Seelegent/internal/platform"
 	"github.com/NovaSeele/Seelegent/internal/pool"
 	"github.com/NovaSeele/Seelegent/internal/proof"
@@ -99,6 +106,13 @@ type App struct {
 	Proof     *proof.Service
 	Git       *gitx.Repos
 	SignIn    *signin.Service
+	Members   *member.Store
+	Notes     *notes.Store
+	Meetings  *meeting.Service
+	Contests  *contest.Service
+	Hooks     *hook.Service
+
+	hookLog io.Closer
 
 	settings atomic.Pointer[config.Settings]
 	log      *slog.Logger
@@ -199,6 +213,8 @@ func (a *App) build(o Options) error {
 	a.Usage = usage.NewStore(a.DB, o.Clock, time.Local)
 	a.Memory = memory.New(a.DB, now)
 	a.Roles = role.New(role.Options{DB: a.DB, Home: o.RealHome, Now: now})
+	a.Members = member.New(member.Options{DB: a.DB, Providers: a.Accounts, Now: now,
+		Changed: func() { a.withAPI(func(s *httpapi.Server) { s.PublishMembers() }) }})
 
 	a.Backends = map[string]backend.Backend{}
 	readers := map[string]backend.QuotaReader{}
@@ -285,12 +301,16 @@ func (a *App) build(o Options) error {
 		ScopeAllowed:  scopeAllowed(o.Paths.Profiles, a.env),
 		AccountStates: p.States,
 		Ledger:        ledger,
+		Members:       a.Members,
 	})
 	if err != nil {
 		return err
 	}
 	a.Proof = proof.New(proof.Options{Ledger: ledger, Git: proofGit{a.Git}, Exec: a.proofExec, Active: a.Tasks.ActiveIn,
 		TaskFeatures: a.Tasks.SpecFeatures, Publish: a.publishProofRun, LogDir: o.Paths.Logs, Now: now, Logger: a.log})
+	if err := a.buildTeam(now); err != nil {
+		return err
+	}
 	a.SignIn = signin.New(signin.Options{
 		Accounts: a.Accounts,
 		Backend: func(name string) (backend.Backend, bool) {
@@ -400,6 +420,7 @@ func (a *App) Start(ctx context.Context) error {
 		a.wg.Wait()
 		return err
 	}
+	a.startTeam(ctx, runCtx)
 	return nil
 }
 
@@ -429,6 +450,7 @@ func (a *App) Close(ctx context.Context) error {
 	errs := []error{a.closeHTTP(ctx)}
 	a.SignIn.Close()
 	a.Proof.Close()
+	a.closeTeam()
 	errs = append(errs, a.Tasks.Close(ctx))
 	if cancel != nil {
 		cancel()
