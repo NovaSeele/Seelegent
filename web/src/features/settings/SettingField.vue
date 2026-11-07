@@ -155,15 +155,15 @@ function saveLines(text: string) {
 
 .sf {
   display: flex;
-  flex-wrap: wrap;
   align-items: flex-start;
   gap: var(--space-2);
   width: 100%;
 }
 
+/* The control fills the row's fixed column (SettingRow) next to its reset button and state. */
 .sf__control {
-  flex: 1 1 auto;
-  min-width: 140px;
+  flex: 1 1 0;
+  min-width: 0;
 }
 
 /* A switch is narrow: its reset button sits right next to it. */

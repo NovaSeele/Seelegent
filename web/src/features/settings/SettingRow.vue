@@ -64,12 +64,22 @@ const { t } = useI18n()
   text-wrap: pretty;
 }
 
+/* One fixed-width control column, so the controls of a section line up and each fills it. */
 .setting__control {
   display: flex;
-  flex: 0 1 auto;
+  flex: 0 0 var(--setting-control-width);
   align-items: center;
   gap: var(--space-2);
+  width: var(--setting-control-width);
   min-width: 0;
+  --setting-control-width: 300px;
+}
+
+@media (width < 600px) {
+  .setting__control {
+    flex-basis: 100%;
+    width: 100%;
+  }
 }
 
 .setting--stacked {
@@ -81,6 +91,7 @@ const { t } = useI18n()
 .setting--stacked .setting__text,
 .setting--stacked .setting__control {
   flex: none;
+  width: auto;
 }
 
 /* Wide controls (grids) take the full row; a flex parent would shrink them to their content. */
