@@ -1171,7 +1171,7 @@ func (s *Service) Act(ctx context.Context, id string, req api.MeetingActRequest)
 
 // liveAction returns the task of the latest action with this text, unless that task failed, was cancelled or no
 // longer exists: acting on the same text again then creates a new task (the old action stays listed).
-func (s *Service) liveAction(ctx context.Context, m *api.Meeting, text string) (string, bool, error) {
+func (s *Service) liveAction(ctx context.Context, m *api.Meeting, text string) (taskID string, ok bool, err error) {
 	for i := len(m.Actions) - 1; i >= 0; i-- {
 		a := m.Actions[i]
 		if a.Text != text {
