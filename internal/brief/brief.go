@@ -278,17 +278,23 @@ func Preview(prompt string) string {
 
 // quoted prepares text written by a worker or the lead for a brief section: cut to n characters with a "…" mark,
 // and its Markdown headings demoted three levels (outside code fences), so a report's "## Summary" cannot end the
-// section it is quoted in.
+// section it is quoted in. A code fence left open (by the cut, or by the text itself) is closed at the end, so the
+// brief's next sections are not read as code.
 func quoted(text string, n int) string {
 	lines := strings.Split(cut(text, n, "…"), "\n")
-	fence := false
+	open := "" // the marker of the open code fence ("```", "~~~~", ...); empty outside one
 	for i, line := range lines {
 		trimmed := strings.TrimLeft(line, " ")
-		if strings.HasPrefix(trimmed, "```") || strings.HasPrefix(trimmed, "~~~") {
-			fence = !fence
+		if m := fenceMarker(trimmed); m != "" && len(line)-len(trimmed) <= 3 {
+			switch {
+			case open == "":
+				open = m
+			case m[0] == open[0] && len(m) >= len(open) && strings.TrimSpace(trimmed[len(m):]) == "":
+				open = ""
+			}
 			continue
 		}
-		if fence || len(line)-len(trimmed) > 3 {
+		if open != "" || len(line)-len(trimmed) > 3 {
 			continue
 		}
 		level := len(trimmed) - len(strings.TrimLeft(trimmed, "#"))
@@ -297,7 +303,22 @@ func quoted(text string, n int) string {
 		}
 		lines[i] = strings.Repeat("#", min(level+3, 6)) + trimmed[level:]
 	}
+	if open != "" {
+		lines = append(lines, open)
+	}
 	return strings.Join(lines, "\n")
+}
+
+// fenceMarker returns the run of three or more backticks or tildes a line starts with (a code fence), or "".
+func fenceMarker(line string) string {
+	if line == "" || (line[0] != '`' && line[0] != '~') {
+		return ""
+	}
+	n := len(line) - len(strings.TrimLeft(line, line[:1]))
+	if n < 3 {
+		return ""
+	}
+	return line[:n]
 }
 
 func roleSection(r *Role) string {

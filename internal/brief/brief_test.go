@@ -135,6 +135,23 @@ func TestQuotedAndPreview(t *testing.T) {
 	if got := quoted(strings.Repeat("x", 20), 10); got != strings.Repeat("x", 10)+"…" {
 		t.Errorf("cut turn = %q", got)
 	}
+	// A fence the cut leaves open, or the text never closes, is closed at the end with its own marker; a shorter
+	// or different marker inside it does not close it.
+	for in, want := range map[string]string{
+		"## A\n```go\nx := 1\n## not a heading\n" + strings.Repeat("y", 50): "##### A\n```go\nx := 1\n## not a heading\n" +
+			strings.Repeat("y", 5) + "…\n```",
+		"~~~~\n```\n~~~\n# in code": "~~~~\n```\n~~~\n# in code\n~~~~",
+		"```\ncode\n```  \n# after": "```\ncode\n```  \n#### after",
+	} {
+		if got := quoted(in, 40); got != want {
+			t.Errorf("quoted(%q) =\n%s\nwant\n%s", in, got, want)
+		}
+	}
+	cutReport := Worker(Input{Cwd: "/p", Message: "next",
+		Earlier: []Turn{{N: 1, Message: "m", Response: "```\n" + strings.Repeat("z", TurnChars)}}})
+	if !strings.Contains(cutReport, "z…\n```\n") {
+		t.Errorf("the cut report's fence was not closed:\n%s", cutReport)
+	}
 	a := Preview(Worker(Input{Cwd: "/a", Message: "Task A"}))
 	b := Preview(Worker(Input{Cwd: "/b", Message: "Task B"}))
 	if a == b || !strings.HasPrefix(a, "Working directory: /a") {
