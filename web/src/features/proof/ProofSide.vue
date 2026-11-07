@@ -62,6 +62,9 @@ const statRows = computed(() => {
       {{ t('proof.lanes.title') }}
       <span class="side__muted">{{ t(`proof.lanes.mode.${lanes.mode}`) }}</span>
     </h2>
+    <p v-if="lanes.claims.some((c) => c.heldUntil)" class="side__muted">
+      {{ t('proof.lanes.holdNote') }}
+    </p>
     <p v-if="!lanes.claims.length" class="side__muted">{{ t('proof.lanes.empty') }}</p>
     <ul v-else class="side__list">
       <li v-for="c in lanes.claims" :key="c.taskId" class="side__claim">
@@ -79,9 +82,6 @@ const statRows = computed(() => {
         </span>
       </li>
     </ul>
-    <p v-if="lanes.claims.some((c) => c.heldUntil)" class="side__muted">
-      {{ t('proof.lanes.holdNote') }}
-    </p>
   </section>
   <section v-if="stats" class="side" :aria-label="t('proof.stats.title')">
     <h2 class="side__title">{{ t('proof.stats.title') }}</h2>

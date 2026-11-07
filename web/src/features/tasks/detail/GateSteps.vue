@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 
 import type { GateResult } from '@/api/types'
 import Chip from '@/components/ui/Chip.vue'
+import Icon from '@/components/ui/Icon.vue'
 import { useFormat } from '@/composables/useFormat'
 
 import { stepCommand, stepNote, stepTone } from './gate'
@@ -63,7 +64,9 @@ const notRunShown = computed(() => props.result.steps.some((s) => s.state === 'n
           class="steps__tail"
           :open="(step.state === 'red' || step.state === 'error') && !step.failures?.length"
         >
-          <summary class="steps__tail-summary">{{ t('task.gate.output') }}</summary>
+          <summary class="steps__tail-summary">
+            <Icon name="chevronRight" class="steps__chevron" />{{ t('task.gate.output') }}
+          </summary>
           <pre class="steps__pre">{{ step.tail }}</pre>
         </details>
       </li>
@@ -152,10 +155,25 @@ const notRunShown = computed(() => props.result.steps.some((s) => s.state === 'n
 .steps__tail-summary {
   display: inline-flex;
   align-items: center;
+  gap: var(--space-1);
   min-height: var(--target-min);
   cursor: pointer;
   color: var(--text-secondary);
   font-size: var(--fs-xs);
+}
+
+.steps__chevron {
+  transition: transform var(--duration-fast) var(--ease-standard);
+}
+
+.steps__tail[open] .steps__chevron {
+  transform: rotate(90deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .steps__chevron {
+    transition: none;
+  }
 }
 
 .steps__tail-summary:focus-visible {

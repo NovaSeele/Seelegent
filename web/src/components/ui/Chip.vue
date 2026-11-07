@@ -100,8 +100,10 @@ function onClick() {
   font-size: var(--icon-sm);
 }
 
+/* The label clips for the ellipsis: a line box taller than the glyphs keeps g, p and y whole. */
 .chip__label {
   overflow: hidden;
+  line-height: var(--lh-tight);
   text-overflow: ellipsis;
 }
 
