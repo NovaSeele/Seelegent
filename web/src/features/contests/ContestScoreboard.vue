@@ -139,7 +139,9 @@ const rows = computed(() => {
 
 <style scoped>
 .board {
-  /* The table scrolls inside its box; the page never widens for it. */
+  /* The table scrolls inside its box; the page never widens for it. Positioned, so the sr-only header text
+     (position: absolute) is clipped here too instead of widening the page. */
+  position: relative;
   max-width: 100%;
   min-width: 0;
   overflow-x: auto;

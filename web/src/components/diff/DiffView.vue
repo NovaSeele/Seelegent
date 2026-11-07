@@ -179,6 +179,8 @@ const boxWidth = useClientWidth(scroller)
 }
 
 .diff__scroll {
+  /* Positioned, so absolutely positioned sr-only text inside is clipped here and never widens the page. */
+  position: relative;
   overflow-x: auto;
 }
 
