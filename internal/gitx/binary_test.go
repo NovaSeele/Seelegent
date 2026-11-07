@@ -17,7 +17,7 @@ func TestBinaryNotFoundAndCache(t *testing.T) {
 	b := NewBinary(func() []string {
 		reads++
 		return []string{path}
-	})
+	}, nil)
 	if _, err := b.Path(); !errors.Is(err, ErrNoGit) {
 		t.Fatalf("no git: err = %v", err)
 	}
@@ -50,7 +50,7 @@ func TestBinarySkipsRelativePath(t *testing.T) {
 	t.Chdir(dir)
 	sep := string(filepath.ListSeparator)
 	for _, p := range []string{".", "", sep, "." + sep + "sub", `"."`} {
-		if got, err := NewBinary(func() []string { return []string{"PATH=" + p} }).Path(); !errors.Is(err, ErrNoGit) {
+		if got, err := NewBinary(func() []string { return []string{"PATH=" + p} }, nil).Path(); !errors.Is(err, ErrNoGit) {
 			t.Errorf("PATH=%q: Path = %q, %v; want ErrNoGit", p, got, err)
 		}
 	}

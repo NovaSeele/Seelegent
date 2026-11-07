@@ -3,6 +3,7 @@ package gitx
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -23,20 +24,26 @@ var ErrNoGit = errors.New("git is not available")
 // On Windows a batch shim (git.cmd, git.bat) is never run: Go starts it through cmd.exe, which rewrites the
 // arguments (it eats ^, so HEAD^{commit} became HEAD{commit}) and can run a file name holding & or | as a command.
 // A real git.exe anywhere on PATH wins over a shim earlier on PATH; with only a shim, the git.exe the shim starts
-// is used when the shim names it by path; otherwise Path fails with a clear error.
+// is used when the shim names it by path; then Git for Windows' default place (%ProgramFiles%\Git); otherwise
+// Path fails with a clear error. A git found any other way than as a plain PATH hit is logged once per resolution.
 type Binary struct {
 	env func() []string
+	log *slog.Logger
 
 	mu   sync.Mutex
 	path string
 }
 
-// NewBinary returns a Binary that searches the PATH of env (os.Environ when nil).
-func NewBinary(env func() []string) *Binary {
+// NewBinary returns a Binary that searches the PATH of env (os.Environ when nil) and logs to log (a logx logger;
+// discarded when nil).
+func NewBinary(env func() []string, log *slog.Logger) *Binary {
 	if env == nil {
 		env = os.Environ
 	}
-	return &Binary{env: env}
+	if log == nil {
+		log = slog.New(slog.DiscardHandler)
+	}
+	return &Binary{env: env, log: log}
 }
 
 // Path returns the git executable. A found path is kept for the life of the Binary; a failure is not, so a git
@@ -47,17 +54,21 @@ func (b *Binary) Path() (string, error) {
 	if b.path != "" {
 		return b.path, nil
 	}
-	p, err := findGit(b.env())
+	p, via, err := findGit(b.env())
 	if err != nil {
 		return "", err
+	}
+	if via != "" {
+		b.log.Info("gitx: using git", "path", p, "found", via)
 	}
 	b.path = p
 	return p, nil
 }
 
 // findGit resolves git in the PATH of env. Empty and relative PATH entries are skipped (no git from the current
-// folder), so the result is always an absolute path.
-func findGit(env []string) (string, error) {
+// folder), so the result is always an absolute path. via says how git was found when it was not a plain PATH hit
+// (for the log), and is "" for one.
+func findGit(env []string) (path, via string, err error) {
 	pathVar, _ := envx.Lookup(env, "PATH")
 	var dirs []string
 	for _, dir := range filepath.SplitList(pathVar) {
@@ -67,16 +78,16 @@ func findGit(env []string) (string, error) {
 	}
 	if runtime.GOOS != "windows" {
 		if p := envx.ResolveCommand("git", []string{"PATH=" + strings.Join(dirs, string(filepath.ListSeparator))}); p != "" {
-			return p, nil
+			return p, "", nil
 		}
-		return "", fmt.Errorf("%w: git was not found on PATH", ErrNoGit)
+		return "", "", fmt.Errorf("%w: git was not found on PATH", ErrNoGit)
 	}
 	// Windows: only git.exe is accepted, in PATH order (exec.LookPath would try PATHEXT per folder and return a
 	// git.cmd that comes before a git.exe).
 	shim := ""
 	for _, dir := range dirs {
 		if p := filepath.Join(dir, "git.exe"); isFile(p) {
-			return p, nil
+			return p, "", nil
 		}
 		for _, name := range []string{"git.cmd", "git.bat"} {
 			if p := filepath.Join(dir, name); shim == "" && isFile(p) {
@@ -86,19 +97,19 @@ func findGit(env []string) (string, error) {
 	}
 	if shim != "" {
 		if p := shimTarget(shim); p != "" {
-			return p, nil
+			return p, "as the target of the batch shim " + shim, nil
 		}
 	}
 	// Git for Windows' default place, for a PATH that only has a shim or no git at all.
 	if pf, ok := envx.Lookup(env, "ProgramFiles"); ok && filepath.IsAbs(pf) {
 		if p := filepath.Join(pf, "Git", "cmd", "git.exe"); isFile(p) {
-			return p, nil
+			return p, "in Git for Windows' default place under %ProgramFiles%", nil
 		}
 	}
 	if shim != "" {
-		return "", fmt.Errorf("%w: git was found only as a batch shim at %s; put git.exe on PATH", ErrNoGit, shim)
+		return "", "", fmt.Errorf("%w: git was found only as a batch shim at %s; put git.exe on PATH", ErrNoGit, shim)
 	}
-	return "", fmt.Errorf("%w: git was not found on PATH", ErrNoGit)
+	return "", "", fmt.Errorf("%w: git was not found on PATH", ErrNoGit)
 }
 
 // shimExe matches a git.exe a batch file starts: quoted, or a run of characters without spaces.

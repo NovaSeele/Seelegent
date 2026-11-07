@@ -16,7 +16,7 @@ import (
 
 func gitIn(t *testing.T, dir string, args ...string) string {
 	t.Helper()
-	gitPath, err := gitx.NewBinary(nil).Path() // as the daemon finds it: never a Windows batch shim
+	gitPath, err := gitx.NewBinary(nil, nil).Path() // as the daemon finds it: never a Windows batch shim
 	if err != nil {
 		t.Skipf("no usable git: %v", err)
 	}

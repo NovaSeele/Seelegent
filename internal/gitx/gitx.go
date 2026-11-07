@@ -86,14 +86,14 @@ type branchEntry struct {
 	info *api.BranchInfo
 }
 
-// New returns a Repos that runs the git of bin (the composition root shares one Binary; NewBinary(nil) when nil).
+// New returns a Repos that runs the git of bin (the composition root shares one Binary; NewBinary(nil, nil) when nil).
 // now is the clock of the branch cache (time.Now when nil).
 func New(now func() time.Time, bin *Binary) *Repos {
 	if now == nil {
 		now = time.Now
 	}
 	if bin == nil {
-		bin = NewBinary(nil)
+		bin = NewBinary(nil, nil)
 	}
 	return &Repos{git: bin, now: now, locks: map[string]*sync.Mutex{}, branches: map[string]branchEntry{}}
 }
