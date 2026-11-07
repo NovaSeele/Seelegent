@@ -10,7 +10,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/NovaSeele/Seelegent/internal/account"
+	"github.com/NovaSeele/Seelegent/internal/envx"
 	"github.com/NovaSeele/Seelegent/internal/fsutil"
 )
 
@@ -58,7 +58,7 @@ func (b *Binary) Path() (string, error) {
 // findGit resolves git in the PATH of env. Empty and relative PATH entries are skipped (no git from the current
 // folder), so the result is always an absolute path.
 func findGit(env []string) (string, error) {
-	pathVar, _ := account.Lookup(env, "PATH")
+	pathVar, _ := envx.Lookup(env, "PATH")
 	var dirs []string
 	for _, dir := range filepath.SplitList(pathVar) {
 		if dir = strings.Trim(strings.TrimSpace(dir), `"`); dir != "" && filepath.IsAbs(dir) {
@@ -66,7 +66,7 @@ func findGit(env []string) (string, error) {
 		}
 	}
 	if runtime.GOOS != "windows" {
-		if p := account.ResolveCommand("git", []string{"PATH=" + strings.Join(dirs, string(filepath.ListSeparator))}); p != "" {
+		if p := envx.ResolveCommand("git", []string{"PATH=" + strings.Join(dirs, string(filepath.ListSeparator))}); p != "" {
 			return p, nil
 		}
 		return "", fmt.Errorf("%w: git was not found on PATH", ErrNoGit)
@@ -90,7 +90,7 @@ func findGit(env []string) (string, error) {
 		}
 	}
 	// Git for Windows' default place, for a PATH that only has a shim or no git at all.
-	if pf, ok := account.Lookup(env, "ProgramFiles"); ok && filepath.IsAbs(pf) {
+	if pf, ok := envx.Lookup(env, "ProgramFiles"); ok && filepath.IsAbs(pf) {
 		if p := filepath.Join(pf, "Git", "cmd", "git.exe"); isFile(p) {
 			return p, nil
 		}

@@ -24,6 +24,7 @@ import (
 	"github.com/NovaSeele/Seelegent/internal/buildinfo"
 	"github.com/NovaSeele/Seelegent/internal/clock"
 	"github.com/NovaSeele/Seelegent/internal/config"
+	"github.com/NovaSeele/Seelegent/internal/envx"
 	"github.com/NovaSeele/Seelegent/internal/gitx"
 	"github.com/NovaSeele/Seelegent/internal/httpapi"
 	"github.com/NovaSeele/Seelegent/internal/logx"
@@ -301,7 +302,7 @@ func (a *App) Settings() config.Settings { return *a.settings.Load() }
 
 // dashboardLink is the deep link to a task in the dashboard.
 func (a *App) dashboardLink(id string) string {
-	port, err := config.ResolvePort(a.Settings(), func(k string) string { v, _ := account.Lookup(a.env, k); return v })
+	port, err := config.ResolvePort(a.Settings(), func(k string) string { v, _ := envx.Lookup(a.env, k); return v })
 	if err != nil {
 		port = a.Settings().Port
 	}

@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/NovaSeele/Seelegent/internal/envx"
 	"github.com/NovaSeele/Seelegent/internal/fsutil"
 	"github.com/NovaSeele/Seelegent/internal/platform"
 )
@@ -67,7 +68,7 @@ func (t *Toolchains) Env(ctx context.Context, cwd string, env []string) map[stri
 	if cwd == "" {
 		return map[string]string{}
 	}
-	if v, ok := Lookup(env, "RUSTUP_TOOLCHAIN"); ok && v != "" {
+	if v, ok := envx.Lookup(env, "RUSTUP_TOOLCHAIN"); ok && v != "" {
 		return map[string]string{}
 	}
 	key, err := fsutil.Key(cwd)
@@ -133,10 +134,10 @@ func (t *Toolchains) compute(ctx context.Context, cwd string, env []string) map[
 
 // findRustup returns rustup on PATH, or in $CARGO_HOME/bin (default ~/.cargo/bin), or "".
 func (t *Toolchains) findRustup(env []string) string {
-	if p := ResolveCommand("rustup", env); p != "" {
+	if p := envx.ResolveCommand("rustup", env); p != "" {
 		return p
 	}
-	cargoHome, _ := Lookup(env, "CARGO_HOME")
+	cargoHome, _ := envx.Lookup(env, "CARGO_HOME")
 	if cargoHome == "" {
 		if t.realHome == "" {
 			return ""
@@ -190,43 +191,6 @@ func cargoDirs(root string, maxDepth int) []string {
 		queue = next
 	}
 	return found
-}
-
-// ResolveCommand finds name the way the shell would with the PATH (and on Windows PATHEXT) of env: PATH folders in
-// order, and on Windows each PATHEXT extension in order. It returns "" when nothing matches.
-func ResolveCommand(name string, env []string) string {
-	pathVar, _ := Lookup(env, "PATH")
-	exts := []string{""}
-	if runtime.GOOS == "windows" {
-		pathext, ok := Lookup(env, "PATHEXT")
-		if !ok || pathext == "" {
-			pathext = ".COM;.EXE;.BAT;.CMD"
-		}
-		exts = exts[:0]
-		for _, e := range strings.Split(pathext, ";") {
-			if e = strings.TrimSpace(e); e != "" {
-				exts = append(exts, strings.ToLower(e))
-			}
-		}
-	}
-	for _, dir := range filepath.SplitList(pathVar) {
-		dir = strings.Trim(strings.TrimSpace(dir), `"`)
-		if dir == "" {
-			continue
-		}
-		for _, ext := range exts {
-			candidate := filepath.Join(dir, name+ext)
-			if st, err := os.Stat(candidate); err == nil && !st.IsDir() && executable(st) {
-				return candidate
-			}
-		}
-	}
-	return ""
-}
-
-// executable reports whether the file mode allows running it (always true on Windows, where PATHEXT decides).
-func executable(st os.FileInfo) bool {
-	return runtime.GOOS == "windows" || st.Mode().Perm()&0o111 != 0
 }
 
 // runCommand is the real RunFunc: no console window, a time limit, and at most 1 MiB of output.

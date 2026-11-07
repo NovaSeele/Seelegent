@@ -7,8 +7,8 @@ import (
 	"runtime"
 	"slices"
 
-	"github.com/NovaSeele/Seelegent/internal/account"
 	"github.com/NovaSeele/Seelegent/internal/config"
+	"github.com/NovaSeele/Seelegent/internal/envx"
 )
 
 // Environment variables that point Seelegent at a specific CLI binary.
@@ -33,7 +33,7 @@ func Find(name string, env []string, realHome string) (string, error) {
 	default:
 		return "", fmt.Errorf("%w %q", ErrUnknownBackend, name)
 	}
-	if v, _ := account.Lookup(env, override); v != "" {
+	if v, _ := envx.Lookup(env, override); v != "" {
 		if isFile(v) {
 			return v, nil
 		}
@@ -44,7 +44,7 @@ func Find(name string, env []string, realHome string) (string, error) {
 			return c, nil
 		}
 	}
-	if p := account.ResolveCommand(name, env); p != "" {
+	if p := envx.ResolveCommand(name, env); p != "" {
 		return p, nil
 	}
 	return "", fmt.Errorf("%s: %w", name, ErrNotInstalled)
@@ -52,8 +52,8 @@ func Find(name string, env []string, realHome string) (string, error) {
 
 // candidates lists the install locations of a CLI, in the order the old version checked them.
 func candidates(name string, env []string, realHome, goos string) []string {
-	localAppData, _ := account.Lookup(env, "LOCALAPPDATA")
-	appData, _ := account.Lookup(env, "APPDATA")
+	localAppData, _ := envx.Lookup(env, "LOCALAPPDATA")
+	appData, _ := envx.Lookup(env, "APPDATA")
 	var out []string
 	switch name {
 	case config.BackendAgy:

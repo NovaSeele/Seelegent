@@ -162,23 +162,3 @@ func (e *envList) list() []string {
 	}
 	return out
 }
-
-// Lookup returns the value of name in env ("NAME=value" entries), the last one winning, with case-insensitive names
-// on Windows.
-func Lookup(env []string, name string) (string, bool) {
-	fold := runtime.GOOS == "windows"
-	var (
-		val   string
-		found bool
-	)
-	for _, kv := range env {
-		n, v, ok := strings.Cut(kv, "=")
-		if !ok {
-			continue
-		}
-		if n == name || (fold && strings.EqualFold(n, name)) {
-			val, found = v, true
-		}
-	}
-	return val, found
-}
