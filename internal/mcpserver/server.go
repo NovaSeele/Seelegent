@@ -8,8 +8,8 @@
 // text summary as a second text block. Errors are tool errors (isError) whose text starts with "Seelegent error:",
 // with the daemon's code, message and details as structuredContent.
 //
-// Tools whose daemon side is a later milestone (issues, automations) keep their schemas and answer a "not available in this version yet" tool error; any daemon route
-// that answers 501 is reported the same way.
+// A tool whose daemon side is a later milestone (Unavailable; none since milestone 15) keeps its schema and answers
+// a "not available in this version yet" tool error; any daemon route that answers 501 is reported the same way.
 //
 // The worker guard has two layers (contract §1.3). The daemon is the authority: a call from inside a worker's
 // process tree gets 403 with details.caller "worker", which the server turns into the old refusal text. The server
@@ -44,9 +44,10 @@ import (
 // serverName is the MCP server name hosts register.
 const serverName = "seelegent"
 
-// Unavailable lists the tools whose daemon side comes with a later milestone.
+// Unavailable lists the tools whose daemon side comes with a later milestone (none: milestone 15 built the last
+// ones, issues and automations).
 func Unavailable() map[string]bool {
-	return map[string]bool{"issues": true, "automations": true}
+	return map[string]bool{}
 }
 
 // Daemon finds (and starts) the daemon (client.Daemon).

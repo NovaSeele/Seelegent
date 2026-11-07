@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -52,7 +53,8 @@ func (d *Driver) Hosts() Hosts { return NewHosts(d.hosts()) }
 // only to host's API, and host is always one of Hosts.
 func (d *Driver) Client(_ context.Context, a Access, host Host, owner, repo string) (*Client, error) {
 	if _, ok := d.Hosts().ByName(host.Name); !ok {
-		return nil, &Error{Reason: ReasonInvalid, Message: "host " + host.Name + " is not a GitHub host"}
+		return nil, fmt.Errorf("%w: host %s is not a GitHub host (github.com or githubEnterpriseHosts)", ErrInvalid,
+			host.Name)
 	}
 	o := ClientOptions{Access: a, Host: host, Owner: owner, Repo: repo, HTTP: d.http, Gh: d.gh}
 	if a.Tier == api.TierToken && d.tokens != nil {

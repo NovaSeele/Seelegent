@@ -34,6 +34,12 @@ func (a *App) buildTeam(now func() time.Time) error {
 		Changed: func(m api.MeetingSummary) { a.withAPI(func(s *httpapi.Server) { s.PublishMeeting(m) }) }})
 	a.Contests = contest.New(contest.Options{DB: a.DB, Tasks: a.Tasks, Members: a.Members, Git: a.Git,
 		Accounts: a.contestAccounts, Settings: a.Settings,
+		SharedDirs: func(root string) []string {
+			if a.Tickets == nil {
+				return nil
+			}
+			return a.Tickets.SharedDirs(root)
+		},
 		Dir:          filepath.Join(a.Paths.Home, "contests"),
 		WorktreeBase: filepath.Join(a.Paths.Home, "worktrees", "contests"),
 		Now:          now, Logger: a.log,

@@ -69,7 +69,7 @@ func newDaemon(t *testing.T) *daemon {
 	set := config.Defaults()
 	set.Port = 47831
 	a, err := app.New(t.Context(), app.Options{Paths: paths, Settings: &set, Env: d.queue.Env(os.Environ()),
-		RealHome: filepath.Join(home, "realhome"), Launcher: fakecli.Launcher(t), NoQuotaReaders: true,
+		RealHome: filepath.Join(home, "realhome"), Launcher: fakecli.Launcher(t), NoQuotaReaders: true, NoGh: true,
 		Bins:       map[string]string{config.BackendAgy: fakecli.Exe(t), config.BackendClaude: "", config.BackendCodex: ""},
 		Classifier: d.cls})
 	if err != nil {
@@ -430,14 +430,102 @@ func TestWorkerRefusedByDaemon(t *testing.T) {
 	}
 }
 
-// TestNotYetAvailable: tools of later milestones keep their schema and answer a clear tool error.
-func TestNotYetAvailable(t *testing.T) {
+// TestIssuesAndAutomations: the milestone 15 tools reach the daemon. A repo is made and connected by path, a
+// local issue goes through the inbox, and an automation is created disabled, can only be asked to be enabled,
+// and runs once on demand (its precheck skips it).
+func TestIssuesAndAutomations(t *testing.T) {
+	if len(mcpserver.Unavailable()) != 0 {
+		t.Fatalf("unavailable tools: %v", mcpserver.Unavailable())
+	}
 	d := newDaemon(t)
-	for name := range mcpserver.Unavailable() {
-		msg := fails(t, d.cs, name, map[string]any{"action": "list"})
-		if !strings.Contains(msg, "not available in this version of Seelegent yet") {
-			t.Fatalf("%s = %s", name, msg)
-		}
+	repoDir := filepath.Join(d.home, "repo")
+	if err := os.MkdirAll(repoDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	var repo api.Repo
+	ok(t, d.cs, "issues", map[string]any{"action": "init", "path": repoDir}, &repo)
+	var repos []api.Repo
+	if sum := ok(t, d.cs, "issues", map[string]any{"action": "repos"}, &repos); len(repos) != 1 ||
+		!strings.Contains(sum, "manual") {
+		t.Fatalf("repos = %v, %s", repos, sum)
+	}
+	var issue map[string]any
+	ok(t, d.cs, "issues", map[string]any{"action": "add", "repo": repoDir, "title": "Fix the bug", "body": "b"},
+		&issue)
+	if issue["key"] != "local#1" || issue["body"] != nil {
+		t.Fatalf("add = %v", issue)
+	}
+	ok(t, d.cs, "issues", map[string]any{"action": "suggest", "repo": repo.ID, "key": "local#1",
+		"decision": "skip", "reason": "dup"}, &issue)
+	if s, _ := issue["suggestion"].(map[string]any); s["action"] != "skip" {
+		t.Fatalf("suggest = %v", issue)
+	}
+	var list []map[string]any
+	ok(t, d.cs, "issues", map[string]any{"action": "list", "repo": repo.ID}, &list)
+	if len(list) != 1 || list[0]["key"] != "local#1" {
+		t.Fatalf("list = %v", list)
+	}
+	var tri map[string]any
+	ok(t, d.cs, "issues", map[string]any{"action": "triage", "repo": repo.ID, "key": "local#1",
+		"decision": "skip", "reason": "duplicate"}, &tri)
+	if dec, _ := tri["issue"].(map[string]any)["decision"].(map[string]any); dec["by"] != "lead" {
+		t.Fatalf("triage = %v", tri)
+	}
+	var settings map[string]any
+	ok(t, d.cs, "issues", map[string]any{"action": "repo_settings", "repo": repo.ID, "shared_dirs": "node_modules"},
+		&settings)
+	if dirs, _ := settings["sharedDirs"].([]any); len(dirs) != 1 || dirs[0] != "node_modules" {
+		t.Fatalf("repo_settings = %v", settings)
+	}
+	var tickets []any
+	ok(t, d.cs, "issues", map[string]any{"action": "tickets"}, &tickets)
+	if msg := fails(t, d.cs, "issues", map[string]any{"action": "list", "repo": filepath.Join(d.home, "x")}); !strings.Contains(msg, "not connected") {
+		t.Fatalf("unknown repo = %s", msg)
+	}
+	if msg := fails(t, d.cs, "issues", map[string]any{"action": "pr"}); !strings.Contains(msg, "ticket_id") {
+		t.Fatalf("pr = %s", msg)
+	}
+
+	var x map[string]any
+	sum := ok(t, d.cs, "automations", map[string]any{"action": "create", "name": "nightly", "cwd": d.cwd,
+		"prompt": "check", "every": "daily", "at": "09:00", "precheck": "exit 3"}, &x)
+	id, _ := x["id"].(string)
+	if id == "" || x["enabled"] != false || !strings.Contains(sum, "disabled") {
+		t.Fatalf("create = %v, %s", x, sum)
+	}
+	var en map[string]any
+	ok(t, d.cs, "automations", map[string]any{"action": "enable", "id": id}, &en)
+	if url, _ := en["confirmUrl"].(string); en["confirm"] != true || !strings.Contains(url, "/automations?confirm="+id) ||
+		en["automation"].(map[string]any)["enabled"] != false {
+		t.Fatalf("enable = %v", en)
+	}
+	var run api.AutomationRun
+	ok(t, d.cs, "automations", map[string]any{"action": "run", "id": id}, &run)
+	if run.Outcome != api.AutoSkippedPrecheck {
+		t.Fatalf("run = %+v", run)
+	}
+	var runs []api.AutomationRun
+	ok(t, d.cs, "automations", map[string]any{"action": "runs", "id": id}, &runs)
+	if len(runs) != 1 {
+		t.Fatalf("runs = %v", runs)
+	}
+	ok(t, d.cs, "automations", map[string]any{"action": "update", "id": id, "lane": false, "min_remaining": 50}, &x)
+	if q, _ := x["quota"].(map[string]any); q["minRemaining"] != float64(50) {
+		t.Fatalf("update = %v", x)
+	}
+	x = nil // a reused map keeps the keys the next answer leaves out
+	ok(t, d.cs, "automations", map[string]any{"action": "disable", "id": id}, &x)
+	if x["enabled"] != false || x["enableRequested"] != nil {
+		t.Fatalf("disable = %v", x)
+	}
+	ok(t, d.cs, "automations", map[string]any{"action": "delete", "id": id}, &x)
+	var all []any
+	ok(t, d.cs, "automations", map[string]any{"action": "list"}, &all)
+	if len(all) != 0 {
+		t.Fatalf("list = %v", all)
+	}
+	if msg := fails(t, d.cs, "automations", map[string]any{"action": "enable"}); !strings.Contains(msg, "id is required") {
+		t.Fatalf("enable without id = %s", msg)
 	}
 }
 

@@ -338,22 +338,12 @@ func TestSkillGolden(t *testing.T) {
 	if !isOurSkill([]byte(got)) {
 		t.Error("the rendered skill is not recognized as Seelegent's")
 	}
-	// The skill teaches only what exists (old F10): refused options and unavailable tools are named once, on the
-	// "Not available" line, and nowhere else.
-	var taught []string
-	for line := range strings.SplitSeq(got, "\n") {
-		if !strings.HasPrefix(line, "Not available in this version") {
-			taught = append(taught, line)
-		}
-	}
-	rest := strings.Join(taught, "\n")
-	for _, banned := range []string{"`issues`", "`automations`"} {
-		if strings.Contains(rest, banned) {
-			t.Errorf("skill teaches %q", banned)
-		}
+	// The skill teaches only what exists (old F10): since milestone 15 every tool does, so none is "not available".
+	if strings.Contains(got, "Not available") || strings.Contains(got, "not_available") {
+		t.Error("skill still names an unavailable tool")
 	}
 	for _, tool := range []string{"delegate", "followup", "wait", "review", "cancel", "task", "status", "memory", "profiles",
-		"proof", "members", "consult", "notes", "meeting", "contest"} {
+		"proof", "members", "consult", "notes", "meeting", "contest", "issues", "automations"} {
 		if !strings.Contains(got, "`"+tool+"`") {
 			t.Errorf("skill does not name %s", tool)
 		}

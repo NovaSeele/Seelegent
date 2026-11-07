@@ -23,12 +23,14 @@ import (
 	"time"
 
 	"github.com/NovaSeele/Seelegent/internal/account"
+	"github.com/NovaSeele/Seelegent/internal/automation"
 	"github.com/NovaSeele/Seelegent/internal/backend"
 	"github.com/NovaSeele/Seelegent/internal/buildinfo"
 	"github.com/NovaSeele/Seelegent/internal/clock"
 	"github.com/NovaSeele/Seelegent/internal/config"
 	"github.com/NovaSeele/Seelegent/internal/contest"
 	"github.com/NovaSeele/Seelegent/internal/envx"
+	"github.com/NovaSeele/Seelegent/internal/github"
 	"github.com/NovaSeele/Seelegent/internal/gitx"
 	"github.com/NovaSeele/Seelegent/internal/guard"
 	"github.com/NovaSeele/Seelegent/internal/hook"
@@ -47,6 +49,7 @@ import (
 	"github.com/NovaSeele/Seelegent/internal/snapshot"
 	"github.com/NovaSeele/Seelegent/internal/store"
 	"github.com/NovaSeele/Seelegent/internal/task"
+	"github.com/NovaSeele/Seelegent/internal/ticket"
 	"github.com/NovaSeele/Seelegent/internal/usage"
 )
 
@@ -88,6 +91,10 @@ type Options struct {
 	Classifier httpapi.Classifier
 	// DevOrigins are extra loopback browser origins the HTTP API accepts (the Vite dev server); see httpapi.Options.
 	DevOrigins []string
+	// Gh is the gh CLI (looked up on Env's PATH when empty); NoGh means there is none (tests: the real gh must
+	// never run).
+	Gh   string
+	NoGh bool
 }
 
 // App holds the daemon's services.
@@ -111,6 +118,10 @@ type App struct {
 	Meetings  *meeting.Service
 	Contests  *contest.Service
 	Hooks     *hook.Service
+	// GitHub, Tickets and Automations are milestone 15 (github.go).
+	GitHub      *github.Driver
+	Tickets     *ticket.Service
+	Automations *automation.Service
 
 	hookLog io.Closer
 
@@ -311,6 +322,7 @@ func (a *App) build(o Options) error {
 	if err := a.buildTeam(now); err != nil {
 		return err
 	}
+	a.buildGitHub(o)
 	a.SignIn = signin.New(signin.Options{
 		Accounts: a.Accounts,
 		Backend: func(name string) (backend.Backend, bool) {
@@ -421,6 +433,7 @@ func (a *App) Start(ctx context.Context) error {
 		return err
 	}
 	a.startTeam(ctx, runCtx)
+	a.startGitHub(ctx)
 	return nil
 }
 
@@ -450,6 +463,7 @@ func (a *App) Close(ctx context.Context) error {
 	errs := []error{a.closeHTTP(ctx)}
 	a.SignIn.Close()
 	a.Proof.Close()
+	a.closeGitHub()
 	a.closeTeam(ctx)
 	errs = append(errs, a.Tasks.Close(ctx))
 	if cancel != nil {

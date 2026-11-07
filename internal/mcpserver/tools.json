@@ -1086,7 +1086,7 @@
   },
   {
     "name": "automations",
-    "description": "Saved delegations on a schedule (preset every hourly/daily/weekdays/weekly at HH:MM, or 5-field cron) in a timezone (default local). Each run is skipped when the target backend's best account has less than quota.min_remaining % left (default 20), when the optional precheck shell command (run in cwd, 60 s limit) exits non-zero, or when the previous run is still active. use_before_reset also fires once when a weekly quota resets within 24 h with >= 40% left. Created DISABLED: enable only when the user asked for it. run starts one run now; runs lists the history.",
+    "description": "Saved delegations on a schedule (preset every hourly/daily/weekdays/weekly at HH:MM, or 5-field cron) in a timezone (default local). Each run is skipped when the target backend's best account has less than quota.min_remaining % left (default 20), when the optional precheck shell command (run in cwd, 60 s limit) exits non-zero, or when the previous run is still active. use_before_reset also fires once when a weekly quota resets within 24 h with >= 40% left. Created DISABLED. Call enable only when the user asked for it: enable only asks, and the user confirms it in the dashboard at the returned confirmUrl (a lead cannot enable on its own; changing the prompt, cwd, worker, gate, lane, precheck or schedule of an enabled automation turns it off until the user confirms again). run starts one run now; runs lists the history.",
     "inputSchema": {
       "type": "object",
       "required": [
