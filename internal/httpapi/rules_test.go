@@ -107,6 +107,8 @@ func TestRequestChecks(t *testing.T) {
 		e.wantError(e.get(p), http.StatusNotImplemented, api.CodeNotImplemented, "")
 	}
 	e.wantError(e.post("/api/v1/hooks/h1/test", map[string]any{}), http.StatusNotImplemented, api.CodeNotImplemented, "")
+	e.wantError(e.req(http.MethodPut, "/api/v1/hooks", map[string]any{"hooks": []any{}}, nil),
+		http.StatusNotImplemented, api.CodeNotImplemented, "")
 }
 
 // TestStatic covers contract §8 and old D-23/B17.

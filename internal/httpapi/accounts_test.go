@@ -73,6 +73,9 @@ func TestAccountsProvidersKeys(t *testing.T) {
 		t.Fatalf("api-key account = %+v", keyed)
 	}
 	secret := "sk-test-0123456789abcdef"
+	// The key always comes in a second call: POST /accounts has no key field.
+	e.wantError(e.post("/api/v1/accounts", map[string]any{"backend": "claude", "kind": "api-key", "label": "One step",
+		"provider": "ds", "key": secret}), http.StatusBadRequest, api.CodeInvalidArgument, "key")
 	r := e.req(http.MethodPut, "/api/v1/accounts/"+keyed.ID+"/key", map[string]any{"key": secret}, nil)
 	e.must(r, http.StatusOK).json(t, &keyed)
 	if strings.Contains(string(r.body), secret) || keyed.KeyHint == "" || keyed.Status == api.AccountNoKey {
@@ -114,6 +117,11 @@ func TestAccountsProvidersKeys(t *testing.T) {
 		Format(time.RFC3339))), http.StatusOK).json(t, &hist)
 	if hist.Bucket != "day" || hist.Since == "" {
 		t.Fatalf("usage history = %+v", hist)
+	}
+	e.must(e.get("/api/v1/usage/history?bucket=hour&accountId="+off.ID+"&since="+url.QueryEscape(time.Now().
+		Add(-time.Hour).UTC().Format(time.RFC3339))), http.StatusOK).json(t, &hist)
+	if hist.Bucket != "hour" {
+		t.Fatalf("usage history of one account = %+v", hist)
 	}
 	e.wantError(e.get("/api/v1/usage/history?since=yesterday"), http.StatusBadRequest, api.CodeInvalidArgument, "since")
 }
@@ -192,9 +200,41 @@ func TestSettingsMemoryRoles(t *testing.T) {
 		http.StatusBadRequest, api.CodeInvalidArgument, "scope")
 	e.wantError(e.post("/api/v1/roles", map[string]any{"role": map[string]any{"id": "x", "name": "X"},
 		"scope": "project"}), http.StatusBadRequest, api.CodeInvalidArgument, "cwd")
+	// The same id at the same place replaces the role.
+	var replaced api.Role
+	e.must(e.post("/api/v1/roles", map[string]any{"role": map[string]any{"id": "reviewer", "name": "Strict reviewer",
+		"skills": []string{}, "preferredAccounts": []string{}}, "scope": "global"}),
+		http.StatusCreated).json(t, &replaced)
+	stream.until("roles.changed", nil)
+	e.must(e.get("/api/v1/roles?cwd="+url.QueryEscape(e.cwd)), http.StatusOK).json(t, &rl)
+	if len(rl.Items) != 1 || rl.Items[0].Name != "Strict reviewer" || replaced.CreatedAt != created.CreatedAt {
+		t.Fatalf("after replace: %+v (created %s)", rl.Items, created.CreatedAt)
+	}
 	e.must(e.req(http.MethodDelete, "/api/v1/roles/reviewer?scope=global", nil, nil), http.StatusNoContent)
+	stream.until("roles.changed", nil)
 	e.wantError(e.req(http.MethodDelete, "/api/v1/roles/reviewer?scope=global", nil, nil), http.StatusNotFound,
 		api.CodeNotFound, "")
+
+	// A project role is deleted by the project's key or by its folder.
+	for _, by := range []string{"key", "path"} {
+		e.must(e.post("/api/v1/roles", map[string]any{"role": map[string]any{"id": "local", "name": "Local",
+			"skills": []string{}, "preferredAccounts": []string{}}, "scope": "project", "cwd": e.cwd}),
+			http.StatusCreated)
+		e.must(e.get("/api/v1/roles?all=true"), http.StatusOK).json(t, &rl)
+		if len(rl.Projects) != 1 {
+			t.Fatalf("projects = %+v", rl.Projects)
+		}
+		where := rl.Projects[0].Key
+		if by == "path" {
+			where = e.cwd
+		}
+		e.must(e.req(http.MethodDelete, "/api/v1/roles/local?scope=project&cwd="+url.QueryEscape(where), nil, nil),
+			http.StatusNoContent)
+		e.must(e.get("/api/v1/roles?all=true"), http.StatusOK).json(t, &rl)
+		if len(rl.Items) != 0 || len(rl.Projects) != 0 {
+			t.Fatalf("delete by %s left %+v", by, rl)
+		}
+	}
 	var skills []api.Skill
 	e.must(e.get("/api/v1/roles/skills?cwd="+url.QueryEscape(e.cwd)), http.StatusOK).json(t, &skills)
 	if skills == nil {
@@ -265,6 +305,12 @@ func TestSignIn(t *testing.T) {
 	e.must(e.post("/api/v1/accounts/"+acc.ID+"/login", nil), http.StatusOK).json(t, &l)
 	if l.AccountID != acc.ID || l.State != api.LoginStarting {
 		t.Fatalf("login = %+v", l)
+	}
+	// GET returns the session (a finished one stays readable for a few seconds).
+	var got api.LoginSession
+	e.must(e.get("/api/v1/accounts/"+acc.ID+"/login"), http.StatusOK).json(t, &got)
+	if got.AccountID != acc.ID {
+		t.Fatalf("GET login = %+v", got)
 	}
 	stream.until("account.login", func(f frame) bool {
 		var s api.LoginSession
