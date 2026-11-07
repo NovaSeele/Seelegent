@@ -245,10 +245,14 @@ func TestWriteWaitsForOtherProcess(t *testing.T) {
 	if _, err := tx.ExecContext(ctx, "INSERT INTO meta (key, value) VALUES ('other', '1')"); err != nil {
 		t.Fatal(err)
 	}
+	done := make(chan struct{})
 	go func() {
+		defer close(done)
 		time.Sleep(200 * time.Millisecond)
 		_ = tx.Commit()
 	}()
+	// Wait for the commit before other is closed and the temp dir removed, also when the test fails.
+	defer func() { <-done }()
 	start := time.Now()
 	if err := s.SetMeta(ctx, "mine", "1"); err != nil {
 		t.Fatalf("SetMeta while another connection writes: %v", err)
