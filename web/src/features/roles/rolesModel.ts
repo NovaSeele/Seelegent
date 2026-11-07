@@ -1,11 +1,12 @@
 /** Pure helpers of the Roles page: ids from names, the scope filter, and the editor's draft. */
-import type { Effort, Role, RoleScope, Tier } from '@/api/types'
 import type { RoleFields } from '@/api/roles'
+import { isEffort, isTier, roleScope } from '@/api/types'
+import type { Effort, Role, RoleScope, Tier } from '@/api/types'
 import { pathKey } from '@/lib/paths'
 
+export { EFFORTS, TIERS } from '@/api/types'
+
 export const ROLE_ID = /^[a-z0-9][a-z0-9-]{0,39}$/
-export const TIERS: readonly Tier[] = ['fast', 'standard', 'strong', 'max']
-export const EFFORTS: readonly Effort[] = ['low', 'medium', 'high', 'xhigh', 'max']
 export const LIMITS = { name: 60, description: 300, rules: 8000, outputStyle: 2000, skills: 20 }
 
 /** "Front-end Lead (Vue)" → "front-end-lead-vue"; accents dropped, at most 40 characters, never empty. */
@@ -63,10 +64,11 @@ export function draftOf(role: Role | undefined, scope: RoleScope = 'global', cwd
     rules: role?.rules ?? '',
     outputStyle: role?.outputStyle ?? '',
     skills: [...(role?.skills ?? [])],
-    defaultTier: role?.defaultTier ?? '',
-    defaultEffort: role?.defaultEffort ?? '',
+    // Role keeps these as plain strings (Go); a value the editor does not offer counts as no default.
+    defaultTier: isTier(role?.defaultTier) ? role.defaultTier : '',
+    defaultEffort: isEffort(role?.defaultEffort) ? role.defaultEffort : '',
     preferredAccounts: [...(role?.preferredAccounts ?? [])],
-    scope: role?.scope ?? scope,
+    scope: role ? roleScope(role.scope) : scope,
     cwd: role?.cwd ?? cwd,
   }
 }

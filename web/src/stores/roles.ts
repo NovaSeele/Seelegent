@@ -13,13 +13,14 @@ import { shallowRef } from 'vue'
 import { rolesApi as defaultApi } from '@/api'
 import { ApiError } from '@/api/client'
 import type { RoleFields, RolesApi, RoleWrite } from '@/api/roles'
+import { roleScope } from '@/api/types'
 import type { Role, RoleProject, Skill } from '@/api/types'
 import { pathKey } from '@/lib/paths'
 
 import { useConnectionStore } from './connection'
 import { createLoader } from './loader'
 
-/** Where a role lives: its scope and, for a project role, the project's folder. */
+/** Where a role lives: its scope ('global' or 'project'; Role.scope is a plain string) and, for a project role, the project's folder. */
 export interface RolePlace {
   id: string
   scope: Role['scope']
@@ -134,7 +135,7 @@ export const useRolesStore = defineStore('roles', () => {
       try {
         await removeIfThere(from)
       } catch (cause) {
-        await client.remove(to.id, to.scope, to.cwd).catch(() => undefined)
+        await client.remove(to.id, roleScope(to.scope), to.cwd).catch(() => undefined)
         await load()
         throw cause
       }
@@ -146,7 +147,7 @@ export const useRolesStore = defineStore('roles', () => {
   /** DELETE that counts a 404 (someone deleted it already) as done. */
   async function removeIfThere(place: RolePlace): Promise<void> {
     try {
-      await client.remove(place.id, place.scope, place.cwd)
+      await client.remove(place.id, roleScope(place.scope), place.cwd)
     } catch (cause) {
       if (!(cause instanceof ApiError && cause.status === 404)) throw cause
     }

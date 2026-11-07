@@ -43,4 +43,16 @@ describe('roles model', () => {
     expect('defaultTier' in fields).toBe(false)
     expect(fieldsOf({ ...draftOf(role({})), defaultTier: 'fast' }).defaultTier).toBe('fast')
   })
+
+  // The generated Role keeps defaultTier, defaultEffort and scope as plain strings.
+  it('narrows the plain-string fields of a role into the draft', () => {
+    const known = draftOf(role({ defaultTier: 'strong', defaultEffort: 'high', scope: 'project' }))
+    expect([known.defaultTier, known.defaultEffort, known.scope]).toEqual([
+      'strong',
+      'high',
+      'project',
+    ])
+    const odd = draftOf(role({ defaultTier: 'turbo', defaultEffort: 'extreme', scope: 'team' }))
+    expect([odd.defaultTier, odd.defaultEffort, odd.scope]).toEqual(['', '', 'global'])
+  })
 })

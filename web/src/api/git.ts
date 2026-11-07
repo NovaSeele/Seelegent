@@ -1,11 +1,8 @@
 /** Typed endpoints of a task's git view (contract §3.3). Diffs arrive parsed; the UI never parses diff text. */
 import type { ApiClient } from './client'
-import type { FileDiff, TaskGit } from './types'
+import type { CommitResult, FileDiff, TaskGit } from './types'
 
-export interface CommitResult {
-  sha: string
-  summary: string
-}
+export type { CommitResult }
 
 const enc = encodeURIComponent
 

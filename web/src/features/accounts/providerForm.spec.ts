@@ -9,6 +9,7 @@ const form = {
   baseUrl: 'https://api.z.ai/api/anthropic',
   enabled: true,
   models: [],
+  official: false,
 }
 
 describe('provider form', () => {
@@ -18,10 +19,20 @@ describe('provider form', () => {
 
   it('sends the preset a provider was made from, and none for a blank one', () => {
     expect(providerInput(form, ['glm-5'], 'zai')).toEqual({
-      ...form,
+      id: 'zai',
+      name: 'Z.ai',
+      backend: 'claude',
+      baseUrl: 'https://api.z.ai/api/anthropic',
+      enabled: true,
       models: ['glm-5'],
       preset: 'zai',
     })
     expect(providerInput(form, [], '')).not.toHaveProperty('preset')
+  })
+
+  it('never sends the read-only official flag (ProviderInput has no such field; the daemon refuses unknown ones)', () => {
+    expect(providerInput({ ...form, official: true }, [], 'anthropic')).not.toHaveProperty(
+      'official',
+    )
   })
 })

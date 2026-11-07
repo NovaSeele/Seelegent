@@ -33,7 +33,15 @@ const errors = ref<Record<string, string>>({})
 const failure = ref('')
 
 function blank(): ProviderPreset {
-  return { id: '', name: '', backend: 'claude', baseUrl: '', enabled: true, models: [] }
+  return {
+    id: '',
+    name: '',
+    backend: 'claude',
+    baseUrl: '',
+    enabled: true,
+    models: [],
+    official: false,
+  }
 }
 
 const editing = computed(() => props.provider !== null)

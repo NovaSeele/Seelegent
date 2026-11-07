@@ -1,6 +1,8 @@
 /**
- * Event shapes of contracts/api-v1.md that tygo cannot generate: the TaskEvent union (§3.2), built from the data
- * types in types.ts, and the SSE frames of /api/v1/events (§7).
+ * Event shapes of contracts/api-v1.md that the generator cannot express: the TaskEvent union (§3.2), built from
+ * the generated data types, and the map from SSE frame names (§7) to their generated payloads. Both are checked
+ * against the generated name unions (EventType, StreamEvent) at compile time below, so a type added on the Go
+ * side without its member here fails `pnpm typecheck`.
  *
  * `isTaskEvent` checks a value against the union: the envelope, a known `type` and the required keys of that
  * type's data (EVENT_REQUIRED). It is the drift check for the daemon's fixtures
@@ -13,18 +15,25 @@ import type {
   AttemptEndData,
   AttentionEventData,
   CancelData,
+  Changed,
+  Deleted,
   DepsData,
   ErrorData,
+  EventType,
   HandbackData,
   HandoffData,
+  Hello,
   HookRun,
   LeadMessageData,
   LoginSession,
+  MemoryChanged,
   ReattachData,
+  Reset,
   RetryData,
   ReviewData,
   RouteData,
   Settings,
+  StreamEvent,
   TakeoverData,
   TaskEventBase,
   TaskSummary,
@@ -61,6 +70,17 @@ export type TaskEvent =
   | Ev<'error', ErrorData>
 
 export type TaskEventType = TaskEvent['type']
+
+/** True only when A and B are the same set of names. */
+type SameNames<A extends string, B extends string> = [A] extends [B]
+  ? [B] extends [A]
+    ? true
+    : false
+  : false
+
+// Compile-time drift check: the union has exactly one member per generated EventType.
+const eventTypesMatch: SameNames<TaskEventType, EventType> = true
+void eventTypesMatch
 
 /** The event of one type. */
 export type TaskEventOf<T extends TaskEventType> = Extract<TaskEvent, { type: T }>
@@ -208,39 +228,38 @@ export function createEventParser(log: (message: string) => void = console.warn)
 // SSE frames (§7).
 
 /** `hello`: first frame of every connection. `instance` changes when the daemon restarts. */
-export interface HelloFrame {
-  instance: string
-  pid: number
-  build: string
-  version: string
-  serverTime: string
-}
+export type HelloFrame = Hello
 
 /** `reset`: the stream cannot resume; refetch /state and keep listening. */
-export interface ResetFrame {
-  reason: 'too_old' | 'restart' | 'overflow'
-}
+export type ResetFrame = Reset
 
-/** Named SSE events and their payloads. */
+/**
+ * Named SSE events and their payloads. Hand-written: the generator emits the names (StreamEvent) and the payload
+ * types, but not which payload belongs to which name. hook.ran's HookRun is still hand-written (types.ts).
+ */
 export interface ServerEvents {
   hello: HelloFrame
   reset: ResetFrame
   'task.created': TaskSummary
   'task.updated': TaskSummary
-  'task.deleted': { id: string }
+  'task.deleted': Deleted
   'task.event': TaskEvent
   'account.updated': Account
-  'account.deleted': { id: string }
+  'account.deleted': Deleted
   'account.login': LoginSession
   'settings.updated': Settings
-  'providers.changed': { changedAt: string }
-  'roles.changed': { changedAt: string }
-  'members.changed': { changedAt: string }
-  'memory.changed': { cwd: string }
+  'providers.changed': Changed
+  'roles.changed': Changed
+  'members.changed': Changed
+  'memory.changed': MemoryChanged
   'hook.ran': HookRun
 }
 
 export type ServerEventName = keyof ServerEvents
+
+// Compile-time drift check: one entry per generated StreamEvent name.
+const streamNamesMatch: SameNames<ServerEventName, StreamEvent> = true
+void streamNamesMatch
 
 export const SERVER_EVENT_NAMES: readonly ServerEventName[] = [
   'hello',
