@@ -231,7 +231,10 @@ func (s *Service) runStepWith(ctx context.Context, ticketID, kind string, args m
 			return err
 		}
 		data := map[string]any{"id": id, "kind": kind, "status": e.Status}
-		if e.Error != "" {
+		switch {
+		case runErr != nil && t.Refusal != nil && t.Refusal.At == e.At:
+			data["refused"] = true // the ticket's refusal explains it; the log says "refused", as the outbox list
+		case e.Error != "":
 			data["error"] = e.Error
 		}
 		// The log says a step the way the outbox list does: a compare link left for the lead, a step skipped.

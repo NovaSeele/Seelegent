@@ -233,6 +233,10 @@ func TestPushRemoteRules(t *testing.T) {
 		got.Error != "" || got.NeedsAttention != api.TicketPushRefused {
 		t.Fatalf("diverged refusal = %+v, error %q", rf, got.Error)
 	}
+	// The log says the push was refused (the refusal explains it), not a bare failure.
+	if l := got.Log[len(got.Log)-1]; l.Type != "outbox" || l.Data["refused"] != true || l.Data["error"] != nil {
+		t.Fatalf("last log step = %+v", l)
+	}
 	// A link to the commits Seelegent did not push, before the lead undoes anything.
 	if u := got.Refusal.CompareURL; !strings.Contains(u, "/octo/demo/compare/") || !strings.HasSuffix(u, "..."+theirs) {
 		t.Fatalf("compare link = %q", u)

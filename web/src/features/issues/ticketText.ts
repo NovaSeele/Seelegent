@@ -258,7 +258,8 @@ export function logLine(
   if (e.type === 'outbox' && str(data.kind)) {
     const kind = str(data.kind)
     let state = str(data.status)
-    if (state === 'done' && data.manual) state = 'linkReady'
+    if (state === 'failed' && data.refused) state = 'refused'
+    else if (state === 'done' && data.manual) state = 'linkReady'
     else if (state === 'done' && data.skipped) state = 'skipped'
     const kindWord = f.word(`issues.ticket.outboxKind.${kind}`) ?? kind
     const stateWord = state ? (f.word(`issues.ticket.outboxStatus.${state}`) ?? state) : ''
@@ -266,7 +267,7 @@ export function logLine(
     delete data.kind
     delete data.status
   }
-  for (const k of ['id', 'manual', 'skipped', 'phase']) delete data[k]
+  for (const k of ['id', 'manual', 'skipped', 'refused', 'phase']) delete data[k]
   for (const [k, v] of Object.entries(data)) {
     if (v === null || v === undefined || v === '') continue
     const name = f.word(`issues.ticket.logKey.${k}`) ?? k

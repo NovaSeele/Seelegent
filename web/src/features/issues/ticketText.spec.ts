@@ -120,6 +120,12 @@ describe('ticketText', () => {
     words['issues.ticket.outboxStatus.linkReady'] = 'Link ready'
     words['issues.ticket.outboxStatus.failed'] = 'Failed'
     words['issues.ticket.logKey.error'] = 'error'
+    words['issues.ticket.outboxKind.push'] = 'Push'
+    words['issues.ticket.outboxStatus.refused'] = 'Refused'
+    expect(
+      logLine({ type: 'outbox', data: { id: 5, kind: 'push', status: 'failed', refused: true } }, f)
+        .text,
+    ).toBe('Push: Refused')
     // The same words as the header and the outbox list; no row numbers.
     expect(logLine({ type: 'status', data: { status: 'pr_open', phase: 'open_pr' } }, f).text).toBe(
       'Branch pushed: open the PR',
