@@ -45,6 +45,9 @@ type Options struct {
 	Env []string
 	// ReadyTimeout bounds the wait for the launcher to start the worker; zero means 30 s.
 	ReadyTimeout time.Duration
+	// Started, when set, is called with the handle as soon as the launcher runs, before the worker starts: its
+	// process tree (Handle.Tree) is known from then on, so the worker guard sees the worker from its first moment.
+	Started func(*Handle)
 }
 
 // Handle follows one launch from the daemon. It holds no process handle, so it is equally valid for a launch
@@ -99,6 +102,9 @@ func Start(ctx context.Context, opts Options) (*Handle, error) {
 	launcher := cmd.Process.Pid
 	start, _ := platform.ProcessStartTime(launcher)
 	h := &Handle{files: f, tree: &platform.WorkerTree{ID: f.Dir, RootPID: launcher, RootStart: start, Job: job}}
+	if opts.Started != nil {
+		opts.Started(h)
+	}
 
 	exited := make(chan error, 1)
 	go func() { exited <- cmd.Wait() }() // reap the launcher if it ends while this daemon still runs

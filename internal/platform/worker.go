@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/netip"
 	"slices"
+	"time"
 )
 
 // ErrSocketOwnerUnknown is returned by SocketOwnerInTrees, together with isWorker = true, when worker trees are
@@ -104,6 +105,17 @@ func LockHolders(path string) ([]int, error) { return lockHolders(path) }
 // lead).
 func SocketOwnerInTrees(local, remote netip.AddrPort, trees []*WorkerTree) (id string, isWorker bool, err error) {
 	return socketOwner(local, remote, trees, lookupOptions{})
+}
+
+// SocketOwnerInTreesSince is SocketOwnerInTrees for a connection this process accepted at accepted. On Windows the
+// TCP table names the process that created the client socket, and a child may have inherited the handle: an owner
+// that no longer runs, or that started after accepted (its process id was reused), cannot be trusted, and the
+// answer is then a worker with an empty ID and ErrSocketOwnerUnknown (only while worker trees are live). A zero
+// accepted checks only that the owner still runs. Linux finds the socket among the open files of the processes
+// themselves and needs no such check.
+func SocketOwnerInTreesSince(local, remote netip.AddrPort, trees []*WorkerTree, accepted time.Time) (id string,
+	isWorker bool, err error) {
+	return socketOwner(local, remote, trees, lookupOptions{accepted: accepted})
 }
 
 func socketOwner(local, remote netip.AddrPort, trees []*WorkerTree, opt lookupOptions) (id string, isWorker bool, err error) {

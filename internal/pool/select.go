@@ -236,6 +236,9 @@ func (p *Pool) choose(v *view, req *Request) (Choice, *Unavailable) {
 			continue
 		}
 		e := v.evaluate(a, req, len(p.leases[a.ID]))
+		if p.held[a.ID] > 0 && e.state != stateIneligible {
+			e.state = stateBusy // held by a sign-out (Hold)
+		}
 		switch e.state {
 		case stateIneligible:
 			continue

@@ -9,12 +9,31 @@ import (
 	"path/filepath"
 	"slices"
 	"testing"
+	"time"
 
 	"golang.org/x/sys/windows"
 )
 
 // runOSRole runs the Windows-only helper roles; there are none.
 func runOSRole(string) bool { return false }
+
+// TestStaleOwner: the owner of a client socket is trusted only while it runs and when it started before the
+// connection was accepted (a reused process id is a different process).
+func TestStaleOwner(t *testing.T) {
+	now := time.Now()
+	if staleOwner(os.Getpid(), now) {
+		t.Fatal("this process started before now but counts as stale")
+	}
+	if !staleOwner(os.Getpid(), now.Add(-24*365*time.Hour)) {
+		t.Fatal("an owner that started after the accept time must be stale")
+	}
+	if staleOwner(os.Getpid(), time.Time{}) {
+		t.Fatal("a zero accept time checks only that the owner runs")
+	}
+	if !staleOwner(0x7ffffff0, now) {
+		t.Fatal("an owner that does not run must be stale")
+	}
+}
 
 // startDescribedTree starts cmd as a named worker tree (Windows needs the job name to list it from elsewhere).
 func startDescribedTree(t *testing.T, cmd *exec.Cmd) (*Tree, *WorkerTree) {

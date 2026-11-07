@@ -66,11 +66,19 @@ seen as the lead. See the `platform` package documentation.
 
 - The installed Seelegent daemon uses port 47821 and `~/.seelegent`. Development runs never touch them: run the
   development daemon on **port 47831** with **`SEELEGENT_HOME` set to a temp dir**, for example
-  `SEELEGENT_HOME=$(mktemp -d) SEELEGENT_PORT=47831 go run ./cmd/seelegent daemon` (the daemon arrives in
-  milestone 7; `make dev-daemon` is a placeholder until then).
+  `SEELEGENT_HOME=$(mktemp -d) go run ./cmd/seelegent daemon --port 47831 --dev-origin http://localhost:5173`, or
+  `make dev-daemon`. On Windows (PowerShell): `$env:SEELEGENT_HOME = (New-Item -ItemType Directory
+  "$env:TEMP\sg-dev-$(Get-Random)").FullName; go run ./cmd/seelegent daemon --port 47831`.
+- `seelegent daemon` runs in the foreground until Ctrl+C (graceful shutdown: open SSE streams end, requests get
+  5 s, the task engine stops). `--port` defaults to `SEELEGENT_PORT`, then the settings' `port`. It listens on
+  127.0.0.1 only. Autostart, the lock file and the pid file come in a later milestone.
 - `cd web; pnpm dev` starts Vite on http://localhost:5173 with hot reload. It proxies `/api` to
   `http://127.0.0.1:47831`, so the dashboard talks to the development daemon. The proxy keeps the browser's
-  `Origin` (`http://localhost:5173`); the daemon's origin check must accept it in development.
+  `Host` and `Origin` (`localhost:5173`), which the daemon's Host check (421) and same-origin check (403) refuse
+  unless it was started with `--dev-origin http://localhost:5173`. That flag accepts only loopback `http` origins;
+  never use it outside development.
+- The HTTP API is described in [api.md](api.md); the binding contract is `contracts/api-v1.md` in the spec
+  workspace.
 - `pnpm build` writes `web/dist`; the next `go build` embeds it (package `web`, `web.FS()`).
 
 ## Toolchain decisions

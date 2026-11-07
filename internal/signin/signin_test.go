@@ -1,0 +1,453 @@
+package signin
+
+import (
+	"context"
+	"errors"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/NovaSeele/Seelegent/internal/account"
+	"github.com/NovaSeele/Seelegent/internal/api"
+	"github.com/NovaSeele/Seelegent/internal/backend"
+	"github.com/NovaSeele/Seelegent/internal/config"
+	"github.com/NovaSeele/Seelegent/internal/platform"
+	"github.com/NovaSeele/Seelegent/internal/store"
+	"github.com/NovaSeele/Seelegent/internal/testutil/fakecli"
+)
+
+func TestMain(m *testing.M) { fakecli.Main(m) }
+
+// procOpener runs the sign-in command as a plain child process instead of a window.
+type procOpener struct {
+	env   func([]string) []string
+	mu    sync.Mutex
+	specs []platform.TerminalSpec
+	terms []*procTerminal
+}
+
+type procTerminal struct {
+	cmd  *exec.Cmd
+	done chan struct{}
+	code int
+}
+
+func (o *procOpener) Open(_ context.Context, spec platform.TerminalSpec) (Terminal, error) {
+	o.mu.Lock()
+	o.specs = append(o.specs, spec)
+	o.mu.Unlock()
+	cmd := exec.Command(spec.Argv[0], spec.Argv[1:]...) //nolint:noctx // the test binary; a window outlives the request
+	cmd.Dir = spec.Dir
+	cmd.Env = o.env(spec.Env)
+	if spec.StdoutPath != "" {
+		f, err := os.Create(spec.StdoutPath)
+		if err != nil {
+			return nil, err
+		}
+		cmd.Stdout = f
+		defer func() { _ = f.Close() }()
+	}
+	if err := cmd.Start(); err != nil {
+		return nil, err
+	}
+	t := &procTerminal{cmd: cmd, done: make(chan struct{})}
+	o.mu.Lock()
+	o.terms = append(o.terms, t)
+	o.mu.Unlock()
+	go func() {
+		_ = cmd.Wait()
+		t.code = cmd.ProcessState.ExitCode()
+		close(t.done)
+	}()
+	return t, nil
+}
+
+func (t *procTerminal) Wait(ctx context.Context) (int, error) {
+	select {
+	case <-t.done:
+		return t.code, nil
+	case <-ctx.Done():
+		return -1, ctx.Err()
+	}
+}
+
+func (t *procTerminal) Identity() (pid int, created uint64, ok bool) {
+	return t.cmd.Process.Pid, 0, true
+}
+
+type fixture struct {
+	accounts *account.Manager
+	queue    *fakecli.Queue
+	opener   *procOpener
+	s        *Service
+	mu       sync.Mutex
+	states   []string
+	done     []bool
+}
+
+func newFixture(t *testing.T, linger time.Duration) *fixture {
+	t.Helper()
+	dir := t.TempDir()
+	db, err := store.Open(context.Background(), filepath.Join(dir, "seelegent.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	f := &fixture{queue: fakecli.NewQueue(t)}
+	f.accounts = account.NewManager(db, account.NewProfiles(filepath.Join(dir, "profiles"), filepath.Join(dir, "real")),
+		time.Now)
+	f.opener = &procOpener{env: func(env []string) []string { return f.queue.Env(env) }}
+	codex, err := backend.New(config.BackendCodex, fakecli.Exe(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.s = New(Options{
+		Accounts: f.accounts,
+		Backend: func(name string) (backend.Backend, bool) {
+			return codex, name == config.BackendCodex
+		},
+		Opener: f.opener,
+		Publish: func(l api.LoginSession) {
+			f.mu.Lock()
+			f.states = append(f.states, l.State)
+			f.mu.Unlock()
+		},
+		OnDone: func(_ string, ok bool) {
+			f.mu.Lock()
+			f.done = append(f.done, ok)
+			f.mu.Unlock()
+		},
+		Linger: linger,
+	})
+	t.Cleanup(f.s.Close)
+	return f
+}
+
+func (f *fixture) add(t *testing.T, kind account.Kind, enabled bool) account.Account {
+	t.Helper()
+	a, _, err := f.accounts.Add(t.Context(), account.New{Backend: config.BackendCodex, Kind: kind, Label: "c",
+		Enabled: enabled}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return a
+}
+
+func (f *fixture) waitState(t *testing.T, id, want string) api.LoginSession {
+	t.Helper()
+	deadline := time.Now().Add(20 * time.Second)
+	for {
+		if l, ok := f.s.Get(id); ok && l.State == want {
+			return l
+		}
+		if time.Now().After(deadline) {
+			l, _ := f.s.Get(id)
+			t.Fatalf("sign-in state = %+v, want %s", l, want)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+func TestSignInSucceedsAndEnables(t *testing.T) {
+	f := newFixture(t, time.Hour)
+	a := f.add(t, account.KindIsolated, false)
+	f.queue.Push(t, "Successfully logged in\n#!exit 0\n")
+	l, err := f.s.Start(t.Context(), a.ID)
+	if err != nil || l.State != api.LoginStarting {
+		t.Fatalf("start = %+v, %v", l, err)
+	}
+	f.waitState(t, a.ID, api.LoginDone)
+	got, err := f.accounts.Get(t.Context(), a.ID)
+	if err != nil || !got.Enabled {
+		t.Errorf("account after sign-in = %+v, %v", got, err)
+	}
+	f.s.Close()
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if len(f.done) != 1 || !f.done[0] {
+		t.Errorf("OnDone = %v", f.done)
+	}
+	if len(f.states) < 3 || f.states[1] != api.LoginWaitingCode {
+		t.Errorf("states = %v", f.states)
+	}
+	spec := f.opener.specs[0]
+	if spec.Argv[len(spec.Argv)-1] != "login" || spec.ScriptDir == "" || spec.Dir == "" {
+		t.Errorf("terminal spec = %+v", spec)
+	}
+	if _, err := f.s.SubmitCode(a.ID, "123"); !errors.Is(err, ErrBadState) {
+		t.Errorf("submit code: %v", err)
+	}
+}
+
+func TestSignInFailsCancelsAndLogout(t *testing.T) {
+	f := newFixture(t, 50*time.Millisecond)
+	a := f.add(t, account.KindIsolated, true)
+	f.queue.Push(t, "#!exit 3\n")
+	if _, err := f.s.Start(t.Context(), a.ID); err != nil {
+		t.Fatal(err)
+	}
+	l := f.waitState(t, a.ID, api.LoginFailed)
+	if l.Message == "" {
+		t.Error("a failed sign-in has no message")
+	}
+	// The finished session goes away after Linger.
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		if _, ok := f.s.Get(a.ID); !ok {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the finished session stayed")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	f.queue.Push(t, "#!hang\n")
+	if _, err := f.s.Start(t.Context(), a.ID); err != nil {
+		t.Fatal(err)
+	}
+	f.waitState(t, a.ID, api.LoginWaitingCode)
+	if !f.s.Active(a.ID) {
+		t.Error("a running sign-in is not active")
+	}
+	prof, err := f.accounts.Profile(a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	marker := filepath.Join(prof.Home, "auth.json")
+	if err := os.WriteFile(marker, []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.s.Logout(t.Context(), a.ID); err != nil {
+		t.Fatal(err)
+	}
+	if f.s.Active(a.ID) {
+		t.Error("logout left the sign-in running")
+	}
+	if _, err := os.Stat(marker); !os.IsNotExist(err) {
+		t.Errorf("logout kept the stored sign-in: %v", err)
+	}
+	if _, err := os.Stat(prof.Home); err != nil {
+		t.Errorf("logout did not recreate the profile: %v", err)
+	}
+}
+
+func TestSignInRefusals(t *testing.T) {
+	f := newFixture(t, time.Second)
+	key, _, err := f.accounts.Add(t.Context(), account.New{Backend: config.BackendAgy, Kind: account.KindSystem,
+		Label: "sys", Enabled: true}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.s.Start(t.Context(), key.ID); !errors.Is(err, ErrInvalid) {
+		t.Errorf("system sign-in: %v", err)
+	}
+	if _, err := f.s.Logout(t.Context(), key.ID); !errors.Is(err, ErrInvalid) {
+		t.Errorf("system sign-out: %v", err)
+	}
+	if _, err := f.s.Start(t.Context(), "nope"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("unknown account: %v", err)
+	}
+	if _, err := f.s.SubmitCode("nope", "1"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("code without sign-in: %v", err)
+	}
+}
+
+// openWindows counts the sign-in windows (test processes) still running.
+func (o *procOpener) openWindows() int {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	alive := 0
+	for _, term := range o.terms {
+		select {
+		case <-term.done:
+		default:
+			alive++
+		}
+	}
+	return alive
+}
+
+// TestConcurrentStartsLeaveNoWindow: of several Starts for one account at once, only the last one's window stays
+// open; every other window is closed (none is orphaned without a session), and Cancel closes the last one.
+func TestConcurrentStartsLeaveNoWindow(t *testing.T) {
+	f := newFixture(t, time.Hour)
+	a := f.add(t, account.KindIsolated, true)
+	const n = 6
+	for range n {
+		f.queue.Push(t, "#!hang\n")
+	}
+	var wg sync.WaitGroup
+	for range n {
+		wg.Go(func() {
+			if _, err := f.s.Start(t.Context(), a.ID); err != nil {
+				t.Error(err)
+			}
+		})
+	}
+	wg.Wait()
+	f.waitState(t, a.ID, api.LoginWaitingCode)
+	deadline := time.Now().Add(20 * time.Second)
+	for f.opener.openWindows() > 1 {
+		if time.Now().After(deadline) {
+			t.Fatalf("%d sign-in windows open, want 1", f.opener.openWindows())
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if got := f.opener.openWindows(); got != 1 {
+		t.Fatalf("%d sign-in windows open, want 1", got)
+	}
+	f.s.Cancel(a.ID)
+	for f.opener.openWindows() > 0 {
+		if time.Now().After(deadline) {
+			t.Fatal("Cancel left the last window open")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// TestLogoutHoldsTheAccount: sign-out holds the account in the pool for the whole profile replacement and refuses
+// an account that runs a turn.
+func TestLogoutHoldsTheAccount(t *testing.T) {
+	f := newFixture(t, time.Hour)
+	a := f.add(t, account.KindIsolated, true)
+	var mu sync.Mutex
+	busy, held, released := false, 0, 0
+	f.s.o.Hold = func(string) (func(), bool) {
+		mu.Lock()
+		defer mu.Unlock()
+		if busy {
+			return func() {}, false
+		}
+		held++
+		return func() {
+			mu.Lock()
+			released++
+			mu.Unlock()
+		}, true
+	}
+	if _, err := f.s.Logout(t.Context(), a.ID); err != nil {
+		t.Fatal(err)
+	}
+	mu.Lock()
+	if held != 1 || released != 1 {
+		t.Fatalf("held %d, released %d", held, released)
+	}
+	busy = true
+	mu.Unlock()
+	if _, err := f.s.Logout(t.Context(), a.ID); !errors.Is(err, ErrBadState) {
+		t.Fatalf("logout of a busy account: %v", err)
+	}
+}
+
+// gatedAccounts blocks the first EnsureProfile until release is closed and records how many EnsureProfile calls
+// for one account ran at once.
+type gatedAccounts struct {
+	*account.Manager
+	entered chan struct{}
+	release chan struct{}
+
+	mu            sync.Mutex
+	calls, inside int
+	maxInside     int
+}
+
+func (g *gatedAccounts) EnsureProfile(a account.Account, links []string) (account.Profile, []string, error) {
+	g.mu.Lock()
+	g.calls++
+	first := g.calls == 1
+	g.inside++
+	g.maxInside = max(g.maxInside, g.inside)
+	g.mu.Unlock()
+	defer func() {
+		g.mu.Lock()
+		g.inside--
+		g.mu.Unlock()
+	}()
+	if first {
+		close(g.entered)
+		select {
+		case <-g.release:
+		case <-time.After(20 * time.Second):
+		}
+	}
+	return g.Manager.EnsureProfile(a, links)
+}
+
+func (g *gatedAccounts) stats() (calls, maxInside int) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.calls, g.maxInside
+}
+
+// TestStartDuringLogoutWaitsForProfile: a sign-in started while sign-out replaces the profile prepares its profile
+// only after the replacement; cancelling a sign-in that waits for the profile frees it at once; both finish.
+func TestStartDuringLogoutWaitsForProfile(t *testing.T) {
+	f := newFixture(t, time.Hour)
+	a := f.add(t, account.KindIsolated, true)
+	g := &gatedAccounts{Manager: f.accounts, entered: make(chan struct{}), release: make(chan struct{})}
+	f.s.o.Accounts = g
+
+	logoutErr := make(chan error, 1)
+	go func() {
+		_, err := f.s.Logout(context.Background(), a.ID)
+		logoutErr <- err
+	}()
+	select {
+	case <-g.entered: // Logout removed the profile and is making the fresh one
+	case <-time.After(10 * time.Second):
+		t.Fatal("Logout did not reach the profile replacement")
+	}
+
+	// A sign-in that waits for the profile lock and is cancelled ends at once.
+	if _, err := f.s.Start(t.Context(), a.ID); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(200 * time.Millisecond)
+	if calls, _ := g.stats(); calls != 1 {
+		t.Fatalf("the sign-in prepared its profile during the replacement (%d EnsureProfile calls)", calls)
+	}
+	cancelled := make(chan struct{})
+	go func() { f.s.Cancel(a.ID); close(cancelled) }()
+	select {
+	case <-cancelled:
+	case <-time.After(3 * time.Second):
+		t.Fatal("Cancel of a sign-in waiting for the profile lock hung")
+	}
+	if l := f.waitState(t, a.ID, api.LoginFailed); l.Message != "sign-in cancelled" {
+		t.Fatalf("cancelled sign-in = %+v", l)
+	}
+
+	f.queue.Push(t, "Successfully logged in\n#!exit 0\n")
+	if _, err := f.s.Start(t.Context(), a.ID); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(200 * time.Millisecond)
+	start := time.Now()
+	close(g.release)
+	select {
+	case err := <-logoutErr:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Logout did not finish")
+	}
+	f.waitState(t, a.ID, api.LoginDone)
+	if d := time.Since(start); d > 5*time.Second {
+		t.Fatalf("Logout and the sign-in took %v", d)
+	}
+	if calls, maxInside := g.stats(); calls != 2 || maxInside != 1 {
+		t.Fatalf("EnsureProfile calls %d, at most %d at once; want 2 calls, never overlapping", calls, maxInside)
+	}
+	prof, err := f.accounts.Profile(a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(prof.Home); err != nil {
+		t.Fatalf("the profile is missing after both: %v", err)
+	}
+}

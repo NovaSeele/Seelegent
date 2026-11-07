@@ -152,7 +152,7 @@ func (s *Service) Delegate(ctx context.Context, req api.DelegateRequest) (api.Ta
 			return api.TaskSummary{}, err // not an id collision
 		}
 	}
-	s.publish(t.ID, out)
+	s.publishNotices(t.ID, true, out)
 	if t.Status == StatusQueued {
 		s.startRun(t.ID)
 	} else {

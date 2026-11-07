@@ -369,6 +369,41 @@ func TestMinRemainingAndReasons(t *testing.T) {
 	}
 }
 
+// TestHold: a held account takes no new lease until it is released, and a busy account cannot be held.
+func TestHold(t *testing.T) {
+	f := newFixture(t)
+	a := f.agy(0)
+	f.read(a.ID, "agy", 1, time.Time{})
+	release, ok := f.p.Hold(a.ID)
+	if !ok {
+		t.Fatal("an idle account could not be held")
+	}
+	if _, _, err := f.p.Acquire(t.Context(), gemini("t1")); !errors.Is(err, ErrAllBusy) {
+		t.Fatalf("acquire on a held account: %v", err)
+	}
+	if _, err := f.p.Select(t.Context(), gemini("t1")); !errors.Is(err, ErrAllBusy) {
+		t.Fatalf("select on a held account: %v", err)
+	}
+	woke := f.p.Changed()
+	release()
+	release() // idempotent
+	select {
+	case <-woke:
+	default:
+		t.Fatal("release did not wake waiting tasks")
+	}
+	l, _ := f.acquire(gemini("t1"))
+	if _, ok := f.p.Hold(a.ID); ok {
+		t.Fatal("a busy account was held")
+	}
+	l.Release()
+	if release, ok := f.p.Hold(a.ID); !ok {
+		t.Fatal("hold after release failed")
+	} else {
+		release()
+	}
+}
+
 func TestLeaseLifecycle(t *testing.T) {
 	f := newFixture(t)
 	a := f.agy(0)

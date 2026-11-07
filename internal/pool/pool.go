@@ -99,6 +99,7 @@ type Pool struct {
 
 	mu     sync.Mutex
 	leases map[string]map[string]*Lease // account id -> task id -> lease
+	held   map[string]int               // account id -> holds (Hold): no new lease while > 0
 	signal chan struct{}                // closed and replaced whenever something may have become available
 	anon   int                          // counter for leases without a task id
 }
@@ -117,7 +118,8 @@ func New(o Options) (*Pool, error) {
 	if o.ActiveQuota == nil {
 		o.ActiveQuota = func(string) bool { return true }
 	}
-	return &Pool{o: o, leases: map[string]map[string]*Lease{}, signal: make(chan struct{})}, nil
+	return &Pool{o: o, leases: map[string]map[string]*Lease{}, held: map[string]int{}, signal: make(chan struct{})},
+		nil
 }
 
 // Status says whether an account can take work.
@@ -269,6 +271,31 @@ func (p *Pool) changed() <-chan struct{} {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	return p.signal
+}
+
+// Hold keeps an idle account from new leases until release runs: Acquire, Select, Wait and Handover count it as
+// busy. It fails (ok false) when the account runs a turn now. The check and the hold are one critical section,
+// so nothing can start on the account between them; a sign-out holds the account while it replaces the profile.
+// release is idempotent and wakes waiting tasks.
+func (p *Pool) Hold(accountID string) (release func(), ok bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if len(p.leases[accountID]) > 0 {
+		return func() {}, false
+	}
+	p.held[accountID]++
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			p.mu.Lock()
+			defer p.mu.Unlock()
+			p.held[accountID]--
+			if p.held[accountID] <= 0 {
+				delete(p.held, accountID)
+			}
+			p.notifyLocked()
+		})
+	}, true
 }
 
 // Busy returns the number of turns running on an account.

@@ -52,12 +52,12 @@ fmt: ## Format Go and web sources
 	$(GOLANGCI_LINT) fmt ./...
 	cd web && $(PNPM) format
 
-generate: ## Generate TypeScript API types (tygo, from milestone 5)
-	@echo "generate: nothing to generate yet; tygo will write web/src/api/types.gen.ts from internal/api"
+generate: ## Generate web/src/api/types.gen.ts from internal/api (internal/api/tsgen)
+	$(GO) generate ./internal/api
 
 clean: ## Remove build output
 	rm -rf $(BIN_DIR)
 	find web/dist -mindepth 1 ! -name .gitkeep -exec rm -rf {} +
 
-dev-daemon: ## Run a development daemon (from milestone 7)
-	@echo "dev-daemon: not available yet; it will run the daemon on port 47831 with SEELEGENT_HOME in a temp dir"
+dev-daemon: ## Run a development daemon on port 47831 with a fresh temp SEELEGENT_HOME (accepts the Vite dev server)
+	SEELEGENT_HOME="$$(mktemp -d)" $(GO) run ./cmd/seelegent daemon --port 47831 --dev-origin http://localhost:5173

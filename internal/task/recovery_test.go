@@ -45,6 +45,10 @@ func TestRestartReattaches(t *testing.T) {
 	}
 
 	h.start()
+	// The live worker's tree is known as soon as Start returns, before its run has attached it.
+	if trees := h.s.WorkerTrees(); len(trees) != 1 || trees[0].ID != sum.ID {
+		t.Fatalf("worker trees after the restart = %+v", trees)
+	}
 	h.waitEvent(sum.ID, api.EventReattach)
 	h.waitFor("the reattached worker", func() bool { return len(h.s.LiveWorkers()) == 1 })
 

@@ -59,23 +59,25 @@ func EventTypes() []EventType {
 
 // TaskEvent is one entry of a task's append-only event log. Seq starts at 1 and grows by one per task.
 type TaskEvent struct {
-	Seq     int64     `json:"seq"`
-	TS      string    `json:"ts"`
-	TaskID  string    `json:"taskId"`
-	Turn    int       `json:"turn,omitempty"`
-	Attempt int       `json:"attempt,omitempty"`
-	Type    EventType `json:"type"`
+	Seq     int64  `json:"seq"`
+	TS      string `json:"ts"`
+	TaskID  string `json:"taskId"`
+	Turn    int    `json:"turn,omitempty"`
+	Attempt int    `json:"attempt,omitempty"`
+	// Type and Data are left out of the generated TaskEventBase: web/src/api/events.ts builds the union of
+	// {type, data} pairs on top of it (contract §3.2).
+	Type EventType `json:"type" ts:"-"`
 	// Data has the shape of Type (raw JSON when read back from the log).
-	Data any `json:"data"`
+	Data any `json:"data" ts:"-"`
 }
 
 // LeadMessageData is the data of a lead_message event.
 type LeadMessageData struct {
 	Message string `json:"message"`
-	By      string `json:"by"`
+	By      string `json:"by" ts:"'lead' | 'user' | 'gate' | 'verifier'"`
 	Model   string `json:"model,omitempty"`
 	Effort  string `json:"effort,omitempty"`
-	Tier    string `json:"tier,omitempty"`
+	Tier    string `json:"tier,omitempty" ts:"Tier"`
 }
 
 // RouteData is the data of a route event. AccountLabel is never an email address.
@@ -97,13 +99,13 @@ type WorkerPromptData struct {
 
 // AttemptEndData is the data of an attempt_end event.
 type AttemptEndData struct {
-	Status string `json:"status"`
+	Status string `json:"status" ts:"Attempt['status']"`
 	Error  string `json:"error,omitempty"`
 }
 
 // TurnEndData is the data of a turn_end event.
 type TurnEndData struct {
-	Status   string   `json:"status"`
+	Status   string   `json:"status" ts:"Turn['status']"`
 	Response string   `json:"response,omitempty"`
 	Files    []string `json:"files"`
 	Usage    *Usage   `json:"usage,omitempty"`
@@ -144,7 +146,7 @@ type RecoveryData struct {
 // AttentionData is the data of an attention event that clears the flag ({state: "cleared"}); a raised flag is an
 // Attention.
 type AttentionData struct {
-	State string `json:"state"`
+	State string `json:"state" ts:"'cleared'"`
 }
 
 // Deps states.
@@ -156,7 +158,7 @@ const (
 
 // DepsData is the data of a deps event.
 type DepsData struct {
-	State  string   `json:"state"`
+	State  string   `json:"state" ts:"'waiting' | 'ready' | 'blocked'"`
 	After  []string `json:"after,omitempty"`
 	Reason string   `json:"reason,omitempty"`
 	Forced bool     `json:"forced,omitempty"`
@@ -164,7 +166,7 @@ type DepsData struct {
 
 // TakeoverData is the data of a takeover event (state start or end).
 type TakeoverData struct {
-	State      string `json:"state"`
+	State      string `json:"state" ts:"'start' | 'end'"`
 	AccountID  string `json:"accountId"`
 	DurationMs int64  `json:"durationMs,omitempty"`
 	ExitCode   *int   `json:"exitCode,omitempty"`
@@ -178,7 +180,7 @@ type HandbackData struct {
 
 // ReviewData is the data of a review event.
 type ReviewData struct {
-	Verdict string `json:"verdict"`
+	Verdict string `json:"verdict" ts:"Verdict"`
 	Notes   string `json:"notes,omitempty"`
 }
 

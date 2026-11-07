@@ -39,13 +39,31 @@ func (s *Service) recoverTasks(ctx context.Context) error {
 			}
 			continue
 		}
-		s.startRun(id)
+		s.startRunWith(id, openLaunch(t))
 	}
 	s.mu.Lock()
 	s.unreadable = unreadable
 	s.mu.Unlock()
 	s.checkDeps(ctx)
 	return nil
+}
+
+// openLaunch returns the launch of the attempt t was running when the daemon stopped, or nil. Recovery registers
+// it before the HTTP API serves, so a live worker is never taken for the lead while its run gets going.
+func openLaunch(t *Task) *launch.Handle {
+	tu := t.LastTurn()
+	if tu == nil || tu.Status != TurnRunning {
+		return nil
+	}
+	a := tu.LastAttempt()
+	if a == nil || a.Status != AttemptRunning || a.LaunchDir == "" {
+		return nil
+	}
+	h, err := launch.Attach(a.LaunchDir)
+	if err != nil {
+		return nil
+	}
+	return h
 }
 
 // Unreadable lists the active tasks that recovery skipped because their records could not be read (for doctor).

@@ -300,6 +300,13 @@ func TestCancelStopsWorker(t *testing.T) {
 	if len(live) != 1 || live[0].TaskID != sum.ID || live[0].AccountID != acc.ID || live[0].LaunchDir == "" {
 		t.Fatalf("live workers = %+v", live)
 	}
+	trees := h.s.WorkerTrees()
+	if len(trees) != 1 || trees[0].ID != sum.ID {
+		t.Fatalf("worker trees = %+v", trees)
+	}
+	if pids, err := trees[0].PIDs(); err != nil || len(pids) == 0 {
+		t.Fatalf("worker tree pids = %v, %v", pids, err)
+	}
 	running, err := h.s.Summary(t.Context(), sum.ID)
 	if err != nil || running.ActiveStep == nil {
 		t.Fatalf("running summary = %+v, %v", running, err)
@@ -319,7 +326,7 @@ func TestCancelStopsWorker(t *testing.T) {
 		tk.Attention != nil {
 		t.Fatalf("task = %+v", tk.LastTurn())
 	}
-	if len(h.s.LiveWorkers()) != 0 {
+	if len(h.s.LiveWorkers()) != 0 || len(h.s.WorkerTrees()) != 0 {
 		t.Fatal("worker still followed")
 	}
 	// Cancelling a finished task changes nothing.
