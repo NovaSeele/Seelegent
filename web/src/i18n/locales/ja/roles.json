@@ -9,6 +9,7 @@
   "stale": "前回の一覧を表示しています。更新に失敗：{error}",
   "noDescription": "説明はありません。",
   "overrides": "グローバルのロールを上書き",
+  "overriddenIn": "{project} で上書き",
   "defaults": "既定値",
   "none": "なし",
   "newTitle": "新しいロール",

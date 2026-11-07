@@ -9,6 +9,7 @@
   "stale": "마지막 목록을 보여 줍니다. 새로 고침 실패: {error}",
   "noDescription": "설명이 없습니다.",
   "overrides": "전역 역할을 대체함",
+  "overriddenIn": "{project}에서 대체됨",
   "defaults": "기본값",
   "none": "없음",
   "newTitle": "새 역할",

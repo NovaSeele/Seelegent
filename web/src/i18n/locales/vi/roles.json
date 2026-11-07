@@ -9,6 +9,7 @@
   "stale": "Đang hiện danh sách cũ; lần làm mới bị lỗi: {error}",
   "noDescription": "Chưa có mô tả.",
   "overrides": "Thay cho vai trò chung",
+  "overriddenIn": "Bị thay trong {project}",
   "defaults": "Mặc định",
   "none": "Không có",
   "newTitle": "Vai trò mới",

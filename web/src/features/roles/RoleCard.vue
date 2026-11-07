@@ -17,6 +17,8 @@ const props = defineProps<{
   projectName: string
   /** The skills installed where the role lives; null while unknown (no skill is marked then). */
   installed?: ReadonlySet<string> | null
+  /** For a global role: the projects whose own role with this id hides it there. */
+  overriddenIn?: readonly string[]
 }>()
 const emit = defineEmits<{ edit: []; remove: [] }>()
 
@@ -42,6 +44,9 @@ const preferred = computed(() =>
         </span>
         <span v-if="role.overridesGlobal" class="badge tone-attention">
           {{ t('roles.overrides') }}
+        </span>
+        <span v-if="overriddenIn?.length" class="badge tone-neutral">
+          {{ t('roles.overriddenIn', { project: overriddenIn.join(', ') }) }}
         </span>
       </div>
     </header>

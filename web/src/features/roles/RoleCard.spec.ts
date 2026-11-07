@@ -46,6 +46,13 @@ describe('RoleCard', () => {
     expect(unknown.findAll('.skill--missing')).toHaveLength(0)
   })
 
+  it('says where a project overrides a global role', async () => {
+    const wrapper = await render({ overriddenIn: ['shop', 'blog'] })
+    expect(wrapper.get('.role__badges').text()).toContain('Overridden in shop, blog')
+    const plain = await render()
+    expect(plain.text()).not.toContain('Overridden in')
+  })
+
   it('deletes with a trash button, not a close-looking ×', async () => {
     const wrapper = await render()
     const button = wrapper.get('button[aria-label="Delete QA"]')

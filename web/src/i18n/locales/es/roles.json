@@ -9,6 +9,7 @@
   "stale": "Se muestra la última lista; la actualización falló: {error}",
   "noDescription": "Sin descripción.",
   "overrides": "Sustituye al rol global",
+  "overriddenIn": "Sustituido en {project}",
   "defaults": "Predeterminados",
   "none": "Ninguno",
   "newTitle": "Nuevo rol",

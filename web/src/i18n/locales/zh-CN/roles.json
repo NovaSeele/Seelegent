@@ -9,6 +9,7 @@
   "stale": "显示的是上次的列表；刷新失败：{error}",
   "noDescription": "没有描述。",
   "overrides": "覆盖全局角色",
+  "overriddenIn": "在 {project} 中被覆盖",
   "defaults": "默认值",
   "none": "无",
   "newTitle": "新建角色",

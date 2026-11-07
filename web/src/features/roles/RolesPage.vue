@@ -78,6 +78,16 @@ const chips = computed(() => [
 
 const shown = computed(() => sortRoles(filterRoles(roles.items, filter.value)))
 
+/** Global role id → the projects whose own role with that id overrides it. */
+const overrides = computed(() => {
+  const out = new Map<string, string[]>()
+  for (const role of roles.items) {
+    if (role.scope !== 'project' || !role.overridesGlobal) continue
+    out.set(role.id, [...(out.get(role.id) ?? []), projectName(role.cwd)])
+  }
+  return out
+})
+
 function startNew(template: Role | undefined) {
   const project = filter.value && filter.value !== 'global' ? filter.value : undefined
   target.value = {
@@ -163,6 +173,7 @@ async function remove() {
             :role="role"
             :project-name="projectName(role.cwd)"
             :installed="installed[placeOf(role)] ?? null"
+            :overridden-in="role.scope === 'global' ? overrides.get(role.id) : undefined"
             @edit="target = { role }"
             @remove="askDelete(role)"
           />

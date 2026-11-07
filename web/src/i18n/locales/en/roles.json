@@ -9,6 +9,7 @@
   "stale": "Showing the last list; the refresh failed: {error}",
   "noDescription": "No description.",
   "overrides": "Overrides the global role",
+  "overriddenIn": "Overridden in {project}",
   "defaults": "Defaults",
   "none": "None",
   "newTitle": "New role",
