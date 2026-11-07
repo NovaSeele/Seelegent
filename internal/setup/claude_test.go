@@ -347,13 +347,14 @@ func TestSkillGolden(t *testing.T) {
 		}
 	}
 	rest := strings.Join(taught, "\n")
-	for _, banned := range []string{"lane", "variant", "`member`", "`proof`", "`members`", "`meeting`", "`consult`",
-		"`contest`", "`issues`", "`automations`", "verify: true"} {
+	for _, banned := range []string{"variant", "`member`", "`members`", "`meeting`", "`consult`", "`contest`",
+		"`issues`", "`automations`"} {
 		if strings.Contains(rest, banned) {
 			t.Errorf("skill teaches %q", banned)
 		}
 	}
-	for _, tool := range []string{"delegate", "followup", "wait", "review", "cancel", "task", "status", "memory", "profiles"} {
+	for _, tool := range []string{"delegate", "followup", "wait", "review", "cancel", "task", "status", "memory", "profiles",
+		"proof"} {
 		if !strings.Contains(got, "`"+tool+"`") {
 			t.Errorf("skill does not name %s", tool)
 		}
