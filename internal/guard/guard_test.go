@@ -218,6 +218,37 @@ func TestGitArgs(t *testing.T) {
 	}
 }
 
+// TestAbbreviatedOptions: git accepts any unambiguous prefix of a long option, so a prefix of a refused option is
+// refused too.
+func TestAbbreviatedOptions(t *testing.T) {
+	for line, deny := range map[string]bool{
+		// Probed with git 2.53/2.55: each of these really acts.
+		"git commit --amen --no-edit": true, "git commit --am --no-edit": true, "git branch --del merged": true,
+		"git branch --d merged": true, "git checkout -b x --forc": true, "git checkout -b x --f": true,
+		"git branch --forc main HEAD~1": true, "git tag --del v1": true, "git tag --d v1": true,
+		"git checkout -b x --merg": true, "git checkout -b x --ove": true, "git checkout -b x --orph=y": true,
+		"git commit --al -m x": true, "git commit --amend=x": true, "git branch --mov a b": true,
+		"git branch --cop a b": true, "git apply --appl x.patch": true, "git apply --check --app x.patch": true,
+		"git symbolic-ref --del HEAD": true, "git commit -m x --ame": true, "git commit --amen=$X": true,
+		"git gc --prune=now": true, "git gc --prun=now": true, "git gc --pr=all": true,
+		"git gc --prune=\"$WHEN\"": true, "git -c gc.pruneExpire=now gc": true,
+		"git config gc.pruneExpire now": true,
+		// Prefixes of harmless options still pass.
+		"git log --onel": false, "git log --oneline": false, "git commit -m x --no-ver": false,
+		"git commit -m x --allow-empt": false, "git commit -m x --autho='A <a@b>'": false,
+		"git commit -m x --sig": false, "git branch --lis": false, "git branch --no-forc z": false,
+		"git branch --contains HEAD": false, "git branch --sor=-committerdate": false,
+		"git tag -l --sor=v:refname": false, "git tag v2 --mess=x": false, "git checkout -b x --tr origin/x": false,
+		"git checkout -b x --qui": false, "git apply --check --verb x.patch": false, "git gc": false,
+		"git gc --prune": false, "git gc --auto --quiet": false, "git gc --no-prune": false,
+		"git commit --dry-run": false,
+	} {
+		if r := (Checker{}).Command(line, POSIX); r.Deny != deny {
+			t.Errorf("Command(%q) deny = %v, want %v (%s)", line, r.Deny, deny, r.Reason)
+		}
+	}
+}
+
 func TestAliases(t *testing.T) {
 	aliases := map[string]string{
 		"co":      "checkout",
