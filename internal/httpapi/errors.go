@@ -137,6 +137,9 @@ func toAPIError(err error) *apiError {
 	switch {
 	case errors.Is(err, context.DeadlineExceeded):
 		return newError(api.CodeUnavailable, "the request timed out")
+	case errors.Is(err, context.Canceled):
+		// The client went away (writeError writes nothing then) or the daemon is stopping: never an internal error.
+		return newError(api.CodeUnavailable, "the request was canceled")
 	case errors.Is(err, task.ErrNotFound), errors.Is(err, account.ErrNotFound), errors.Is(err, role.ErrNotFound),
 		errors.Is(err, signin.ErrNotFound):
 		return newError(api.CodeNotFound, "%s", msg)
@@ -159,7 +162,14 @@ func toAPIError(err error) *apiError {
 
 // writeError sends err as the API's error body. Internal errors are logged with the request; their text never
 // reaches the client.
+//
+// When the client has gone away (its request context is done) nothing is written: there is no one to read it, and
+// the cause is logged at Debug only.
 func (s *Server) writeError(w http.ResponseWriter, r *http.Request, err error) {
+	if r.Context().Err() != nil {
+		s.log.Debug("http: client went away", "method", r.Method, "path", r.URL.Path, "err", err)
+		return
+	}
 	ae := toAPIError(err)
 	if ae.code == api.CodeInternal {
 		s.log.Error("http: internal error", "method", r.Method, "path", r.URL.Path, "err", err)
