@@ -40,7 +40,7 @@ func gateReport(t *Task, rep *api.TaskReport) {
 		rg := &api.ReportGate{State: g.State, AutoFixTurns: p.AutoFixes, NotRun: g.NotRun, Warnings: g.Warnings}
 		for i := range g.Steps {
 			st := &g.Steps[i]
-			if st.Foreign || (st.State != api.StepRed && st.State != api.StepError) {
+			if st.State != api.StepRed && st.State != api.StepError {
 				continue
 			}
 			tail := st.Tail
@@ -54,7 +54,7 @@ func gateReport(t *Task, rep *api.TaskReport) {
 				}
 			}
 			rg.Steps = append(rg.Steps, api.ReportGateStep{Label: st.Label, Kind: st.Kind, Cmd: st.Cmd, Exit: st.Exit,
-				Files: files, Tail: tail})
+				Files: files, Tail: tail, CausedBy: st.CausedBy})
 		}
 		rep.Gate = rg
 	}

@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -205,18 +206,47 @@ func TestFixPromptAndForeign(t *testing.T) {
 	}
 
 	step := api.GateStep{Kind: api.StepDoctrine, State: api.StepRed, Tail: "web/src/a.ts:3:1 error\nweb/src/b.ts(4,2): bad"}
-	others := []Other{{ID: "t2", Lane: []string{"web/"}}}
-	if !Foreign(step, []string{"internal/x.go"}, others) {
-		t.Error("a failure in another task's lane is foreign")
+	others := []Other{{ID: "t2", Lane: []string{"web/"}, Files: []string{"web/src/a.ts", "web/src/b.ts"}}}
+	if by := ForeignCause(step, []string{"internal/x.go"}, others); !slices.Equal(by, []string{"t2"}) {
+		t.Errorf("a doctrine failure only in files t2 changed: caused by %v", by)
 	}
-	if Foreign(step, []string{"web/src/a.ts"}, others) {
-		t.Error("a failure in an own file is not foreign")
+	if by := ForeignCause(step, []string{"web/src/a.ts"}, others); by != nil {
+		t.Errorf("a failure in an own file is not foreign: %v", by)
 	}
-	if Foreign(step, nil, nil) {
-		t.Error("no other tasks: not foreign")
+	if by := ForeignCause(step, nil, nil); by != nil {
+		t.Errorf("no other tasks: not foreign: %v", by)
+	}
+	// Another task's lane is not evidence: only files it really changed are.
+	if by := ForeignCause(step, nil, []Other{{ID: "t2", Lane: []string{"web/"}}}); by != nil {
+		t.Errorf("a lane alone made the failure foreign: %v", by)
 	}
 	step.Kind = api.StepTask
-	if Foreign(step, nil, others) {
+	if by := ForeignCause(step, nil, others); by != nil {
 		t.Error("the task's own gate commands are never foreign")
+	}
+}
+
+// TestForeignNeverGreen is the API rename of the review: task A renames a.Foo, the detected build fails in b/b.go,
+// which task B owns. The gate of A must stay red.
+func TestForeignNeverGreen(t *testing.T) {
+	build := api.GateStep{Kind: api.StepDetect, Label: "go build ./...", Cmd: "go build ./...", State: api.StepRed,
+		Tail: "b/b.go:7:9: undefined: a.Foo"}
+	b := []Other{{ID: "B", Lane: []string{"b/"}, Files: []string{"b/b.go"}}}
+	if by := ForeignCause(build, []string{"a/a.go"}, b); by != nil {
+		t.Errorf("a detected command is never foreign: %v", by)
+	}
+	doctrine := build
+	doctrine.Kind = api.StepDoctrine
+	by := ForeignCause(doctrine, []string{"a/a.go"}, b)
+	if !slices.Equal(by, []string{"B"}) {
+		t.Fatalf("caused by %v", by)
+	}
+	doctrine.Foreign, doctrine.CausedBy = true, by
+	steps := []api.GateStep{{Kind: api.StepLane, Label: "lane", State: api.StepGreen}, doctrine}
+	if got := Overall(steps); got != api.GateRed {
+		t.Errorf("overall with a foreign red step = %s, want red", got)
+	}
+	if Failing(api.GateResult{Steps: steps}) != nil {
+		t.Error("a foreign failure is no fix turn's work")
 	}
 }

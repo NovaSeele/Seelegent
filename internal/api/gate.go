@@ -67,8 +67,10 @@ type GateStep struct {
 	Failures []GateFailure `json:"failures,omitempty"`
 	// Findings are the red hygiene findings.
 	Findings []Finding `json:"findings,omitempty"`
-	// Foreign: the step failed only on files other tasks changed; it did not count against this task.
-	Foreign bool `json:"foreign,omitempty"`
+	// Foreign: a doctrine check failed only in files other active tasks changed (CausedBy). The gate stays red, but
+	// no automatic fix turn is spent on it: the lead decides.
+	Foreign  bool     `json:"foreign,omitempty"`
+	CausedBy []string `json:"causedBy,omitempty"`
 }
 
 // GateFailure is a file an auto check refused.
@@ -305,6 +307,8 @@ type ReportGateStep struct {
 	Exit  *int     `json:"exit,omitempty"`
 	Files []string `json:"files,omitempty"`
 	Tail  string   `json:"tail,omitempty"`
+	// CausedBy names the other tasks whose changed files a foreign failure points at.
+	CausedBy []string `json:"caused_by,omitempty"`
 }
 
 // ReportLane is the lane field of a report.

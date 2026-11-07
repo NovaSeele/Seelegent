@@ -167,18 +167,16 @@ export function fixesUsed(view: GateView): number {
 
 /**
  * A readable, translatable account of a failed gate for the attention banner: the kind of each failing step with
- * what it ran or checked (empty when nothing of the task's own failed).
+ * what it ran or checked. A foreign step is listed too: it keeps the gate red.
  */
 export function failedSteps(result: GateResult | null): { kindKey: string; what: string }[] {
-  return failingSteps(result)
-    .filter((s) => !s.foreign)
-    .map((s) => ({
-      kindKey: stepKindKey(s) ?? 'task.gate.kind.task',
-      what:
-        s.kind === 'auto' && s.failures?.length
-          ? s.failures.map((f) => f.file).join(', ')
-          : s.kind === 'lane'
-            ? (s.files ?? []).join(', ')
-            : stepWhat(s),
-    }))
+  return failingSteps(result).map((s) => ({
+    kindKey: stepKindKey(s) ?? 'task.gate.kind.task',
+    what:
+      s.kind === 'auto' && s.failures?.length
+        ? s.failures.map((f) => f.file).join(', ')
+        : s.kind === 'lane'
+          ? (s.files ?? []).join(', ')
+          : stepWhat(s),
+  }))
 }

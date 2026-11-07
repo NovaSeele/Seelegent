@@ -168,15 +168,15 @@ func (r Runner) Run(ctx context.Context, steps []api.GateStep, progress func(i i
 	return res, true
 }
 
-// Overall is the state of a gate from its steps: red when a step is red, else error when one is, else green.
+// Overall is the state of a gate from its steps: red when a step is red, else error when one is, else green. A
+// foreign step counts like any other: the gate never turns green because another task may be to blame.
 func Overall(steps []api.GateStep) string {
 	state := api.GateGreen
 	for i := range steps {
-		s := &steps[i]
-		switch {
-		case s.State == api.StepRed && !s.Foreign:
+		switch steps[i].State {
+		case api.StepRed:
 			return api.GateRed
-		case s.State == api.StepError && !s.Foreign:
+		case api.StepError:
 			state = api.GateError
 		}
 	}

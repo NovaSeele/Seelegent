@@ -53,14 +53,18 @@ function stepFindings(s: GateStep): string[] {
   return s.tail ? s.tail.trimEnd().split('\n') : []
 }
 
-/** The failing steps of a gate (the task's own): each named, then what it found. */
+/**
+ * The failing steps of a gate: each named, then what it found. A foreign step (it keeps the gate red) also says
+ * which tasks may have caused it.
+ */
 export function failingLines(result: GateResult): DetailLine[] {
-  const failing = result.steps.filter(
-    (s) => (s.state === 'red' || s.state === 'error') && !s.foreign,
-  )
+  const failing = result.steps.filter((s) => s.state === 'red' || s.state === 'error')
   return failing.flatMap((s, i) => [
     ...(i ? [{ text: '' }] : []),
     stepLine(s),
+    ...(s.foreign
+      ? [{ label: { key: 'task.gate.foreign', params: { tasks: (s.causedBy ?? []).join(', ') } } }]
+      : []),
     ...stepFindings(s).map((text) => ({ text })),
   ])
 }

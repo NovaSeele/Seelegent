@@ -78,8 +78,10 @@ folder), so a view names the steps in its own language.
 **Settling.** When the gate fails while another worker of the same repository is at work (running, not in its own
 gate phase), the failure may be that worker's half-done change. The task waits (`gatePhase.state: settling`) until
 the others stop, `gateSettleMinutes` at most, polling every `gateSettlePollMs`, then runs the gate once more
-(`settled: true`). A failing step whose files all belong to other active tasks is marked `foreign` and does not
-count; the result carries a warning.
+(`settled: true`). A failing doctrine check whose output names only files other active tasks changed (their real
+changes, not their lanes) is marked `foreign` with `causedBy`. It still counts: the gate stays red, so the lead sees
+it. It only spares the task an automatic fix turn it could do nothing with; the result carries a warning and the
+attention detail and report name the tasks it may be caused by.
 
 **Red.** While `autoFixes < budget`, the daemon opens an automatic fix turn (`by: "gate"`) whose message lists the
 failing steps with their output tails and the files other tasks are changing. The worker fixes, the gate runs
@@ -149,7 +151,8 @@ up or rejected).
 
 ## Reports
 
-`TaskReport` gains `gate` (state, `auto_fix_turns`, failing steps with their output tail, `not_run`, warnings),
+`TaskReport` gains `gate` (state, `auto_fix_turns`, failing steps with their output tail and, for a foreign step,
+`caused_by`, `not_run`, warnings),
 `last_gate` (while the gate runs or a fix turn works), `lane` (`paths`, `out_of_lane`, warnings, forced), `bar`
 (`changed`) and `verifier` (`verdict`, `reasons`, `unverified_cites`). `TaskSummary.gate` gives the list views the
 state and step counts.

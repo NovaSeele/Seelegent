@@ -213,16 +213,21 @@ func computeAttention(t *Task, live liveState, acc accountHealth, now time.Time,
 	return nil
 }
 
-// gateDetail names the failing step of a gate.
 // gateDetail says in plain words which steps of a gate failed ("command failed: npm test; syntax check failed:
-// a.json"). The dashboard builds its own text from the turn's steps; this one is for the lead (MCP, CLI).
+// a.json"), and which other tasks a foreign failure may be caused by. The dashboard builds its own text from the
+// turn's steps; this one is for the lead (MCP, CLI).
 func gateDetail(g *api.GateResult) string {
 	var parts []string
 	for i := range g.Steps {
 		s := &g.Steps[i]
-		if (s.State == api.StepRed || s.State == api.StepError) && !s.Foreign {
-			parts = append(parts, stepFailure(s))
+		if s.State != api.StepRed && s.State != api.StepError {
+			continue
 		}
+		part := stepFailure(s)
+		if s.Foreign {
+			part += " (may be caused by " + strings.Join(s.CausedBy, ", ") + ")"
+		}
+		parts = append(parts, part)
 	}
 	return strings.Join(parts, "; ")
 }
@@ -278,7 +283,7 @@ func hygieneOnly(g *api.GateResult) bool {
 	found := false
 	for i := range g.Steps {
 		s := &g.Steps[i]
-		if (s.State == api.StepRed || s.State == api.StepError) && !s.Foreign {
+		if s.State == api.StepRed || s.State == api.StepError {
 			if s.Kind != api.StepHygiene {
 				return false
 			}

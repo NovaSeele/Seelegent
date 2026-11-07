@@ -206,12 +206,14 @@ func (s *Service) gatePhase(r *run, t *Task) (bool, error) {
 	}
 	others := s.others(r.ctx, t)
 	for i := range res.Steps {
-		if gate.Foreign(res.Steps[i], files, others) {
-			res.Steps[i].Foreign = true
-			res.Warnings = append(res.Warnings, fmt.Sprintf("%s failed only in files of other tasks; not counted",
-				res.Steps[i].Label))
+		st := &res.Steps[i]
+		if by := gate.ForeignCause(*st, files, others); len(by) > 0 {
+			st.Foreign, st.CausedBy = true, by
+			res.Warnings = append(res.Warnings, fmt.Sprintf("%s failed only in files that %s changed: it may be caused "+
+				"by that work, so no automatic fix turn was started for it", st.Label, strings.Join(by, ", ")))
 		}
 	}
+	// A foreign step keeps the gate red: the lead sees it and decides.
 	res.State = gate.Overall(res.Steps)
 	res.EndedAt = api.FormatTime(s.now())
 	s.recordLedger(t, tu, res)
@@ -219,7 +221,8 @@ func (s *Service) gatePhase(r *run, t *Task) (bool, error) {
 	if !failedGate(res) {
 		return s.afterGreen(t, ph.Turn, &res, files, barChanged...)
 	}
-	if p.AutoFixes < p.Budget {
+	// Only the task's own failures are worth a fix turn.
+	if p.AutoFixes < p.Budget && gate.Failing(res) != nil {
 		return s.fixTurn(t.ID, ph.Turn, res, barChanged, gate.FixPrompt(res, p.AutoFixes+1, p.Budget, others), ByGate)
 	}
 	return false, s.endGate(t.ID, ph.Turn, &res, barChanged)

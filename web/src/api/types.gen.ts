@@ -392,8 +392,12 @@ export interface GateStep {
   failures?: GateFailure[]
   /** Findings are the red hygiene findings. */
   findings?: Finding[]
-  /** Foreign: the step failed only on files other tasks changed; it did not count against this task. */
+  /**
+   * Foreign: a doctrine check failed only in files other active tasks changed (CausedBy). The gate stays red, but
+   * no automatic fix turn is spent on it: the lead decides.
+   */
   foreign?: boolean
+  causedBy?: string[]
 }
 
 /** GateFailure is a file an auto check refused. */
@@ -613,6 +617,8 @@ export interface ReportGateStep {
   exit?: number
   files?: string[]
   tail?: string
+  /** CausedBy names the other tasks whose changed files a foreign failure points at. */
+  caused_by?: string[]
 }
 
 /** ReportLane is the lane field of a report. */

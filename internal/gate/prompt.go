@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/NovaSeele/Seelegent/internal/api"
-	"github.com/NovaSeele/Seelegent/internal/proof"
 )
 
 // Other is another active task of the same repository, named in a fix prompt.
@@ -18,7 +17,8 @@ type Other struct {
 	Files []string
 }
 
-// Failing returns the first red or error step of a result (foreign failures do not count), or nil.
+// Failing returns the first red or error step of a result that is the task's own (not foreign), or nil: the step an
+// automatic fix turn works on.
 func Failing(res api.GateResult) *api.GateStep {
 	for i := range res.Steps {
 		if failed(res.Steps[i].State) && !res.Steps[i].Foreign {
@@ -130,29 +130,41 @@ func tailPaths(tail string) []string {
 	return out
 }
 
-// Foreign reports whether a red repository-wide step (doctrine or detected) failed only on files other tasks
-// changed or claim: every path its output names belongs to another task and none to this one. Then the failure
-// does not count against this task.
-func Foreign(s api.GateStep, own []string, others []Other) bool {
-	if s.State != api.StepRed || (s.Kind != api.StepDoctrine && s.Kind != api.StepDetect) || len(others) == 0 {
-		return false
+// ForeignCause returns the other tasks a red doctrine check may be the doing of: every path its output names is a
+// file one of them changed and none is a file this task changed. Only doctrine checks qualify (as in the old
+// version), and only the files the other tasks actually changed count, never their lanes. A foreign step keeps the
+// gate red; it only spares the task an automatic fix turn it could not do anything with.
+func ForeignCause(s api.GateStep, own []string, others []Other) []string {
+	if s.State != api.StepRed || s.Kind != api.StepDoctrine || len(others) == 0 {
+		return nil
 	}
 	paths := tailPaths(s.Tail)
 	if len(paths) == 0 {
-		return false
+		return nil
 	}
 	match := func(list []string, p string) bool {
-		return slices.ContainsFunc(list, func(f string) bool { return proof.Match(f, p) || strings.HasSuffix(p, "/"+f) })
+		return slices.ContainsFunc(list, func(f string) bool { return f == p || strings.HasSuffix(p, "/"+f) })
 	}
 	for _, p := range paths {
 		if match(own, p) {
-			return false
+			return nil
 		}
 	}
+	var by []string
 	for _, p := range paths {
-		if !slices.ContainsFunc(others, func(o Other) bool { return match(o.Files, p) || proof.Contains(o.Lane, p) }) {
-			return false
+		i := slices.IndexFunc(others, func(o Other) bool { return match(o.Files, p) })
+		if i < 0 {
+			return nil
+		}
+		if !slices.Contains(by, others[i].ID) {
+			by = append(by, others[i].ID)
 		}
 	}
-	return true
+	return by
+}
+
+// OwnFailure reports whether a failed gate has a failing step that is not foreign: one an automatic fix turn can
+// work on.
+func OwnFailure(res api.GateResult) bool {
+	return Failing(res) != nil
 }

@@ -421,11 +421,11 @@ func TestGateDetail(t *testing.T) {
 			Failures: []api.GateFailure{{File: "a.json", Message: "bad"}, {File: "b.go", Message: "bad"}}},
 		{Kind: api.StepTask, Label: "T001", Cmd: "npm test", Dir: "web", State: api.StepRed, Exit: &exit},
 		{Kind: api.StepTask, Label: "go vet", Cmd: "go vet", State: api.StepError},
-		{Kind: api.StepTask, Label: "make", Cmd: "make", State: api.StepRed, Foreign: true},
+		{Kind: api.StepDoctrine, Label: "api", Cmd: "make api", State: api.StepRed, Foreign: true, CausedBy: []string{"t9"}},
 		{Kind: api.StepDoctrine, Label: "no-todo", Cmd: "check", State: api.StepRed},
 	}}
 	want := "syntax check failed: a.json, b.go; command failed: cd web && npm test; command could not run: go vet; " +
-		"doctrine check no-todo failed: check"
+		"doctrine check api failed: make api (may be caused by t9); doctrine check no-todo failed: check"
 	if got := gateDetail(g); got != want {
 		t.Errorf("gateDetail = %q, want %q", got, want)
 	}

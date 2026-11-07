@@ -148,7 +148,7 @@ describe('gate model', () => {
     expect(stepKindKey({ label: 'npm test' })).toBeNull()
   })
 
-  it('tells a failed gate by kind and what each step ran or checked, without the foreign ones', () => {
+  it('tells a failed gate by kind and what each step ran or checked, foreign steps included', () => {
     const g = result({
       state: 'red',
       steps: [
@@ -160,13 +160,21 @@ describe('gate model', () => {
           failures: [{ file: 'c.json', message: 'x' }],
         }),
         step({ cmd: 'npm test', state: 'error', taskIds: ['T001'] }),
-        step({ cmd: 'make', state: 'red', foreign: true }),
+        step({
+          kind: 'doctrine',
+          label: 'api',
+          cmd: 'make',
+          state: 'red',
+          foreign: true,
+          causedBy: ['t9'],
+        }),
       ],
     })
     expect(failedSteps(g)).toEqual([
       { kindKey: 'task.gate.kind.lane', what: 'a.go, b.go' },
       { kindKey: 'task.gate.kind.auto', what: 'c.json' },
       { kindKey: 'task.gate.kind.task', what: 'npm test · T001' },
+      { kindKey: 'task.gate.kind.doctrine', what: 'make' },
     ])
     const view = gateOf(makeTask(), makeDetail({ turns: [turn(1, { by: 'gate' })], proof }))
     expect(budgetUsedUp(view)).toBe(true)

@@ -44,7 +44,9 @@ const notRunShown = computed(() => props.result.steps.some((s) => s.state === 'n
             step.taskIds.join(', ')
           }}</span>
         </div>
-        <p v-if="step.foreign" class="steps__note">{{ t('task.gate.foreign') }}</p>
+        <p v-if="step.foreign" class="steps__note">
+          {{ t('task.gate.foreign', { tasks: (step.causedBy ?? []).join(', ') }) }}
+        </p>
         <ul v-if="step.files?.length && step.kind === 'lane'" class="steps__files">
           <li v-for="file in step.files" :key="file">
             <code>{{ file }}</code>
