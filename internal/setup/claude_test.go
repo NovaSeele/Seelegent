@@ -347,14 +347,13 @@ func TestSkillGolden(t *testing.T) {
 		}
 	}
 	rest := strings.Join(taught, "\n")
-	for _, banned := range []string{"variant", "`member`", "`members`", "`meeting`", "`consult`", "`contest`",
-		"`issues`", "`automations`"} {
+	for _, banned := range []string{"`issues`", "`automations`"} {
 		if strings.Contains(rest, banned) {
 			t.Errorf("skill teaches %q", banned)
 		}
 	}
 	for _, tool := range []string{"delegate", "followup", "wait", "review", "cancel", "task", "status", "memory", "profiles",
-		"proof"} {
+		"proof", "members", "consult", "notes", "meeting", "contest"} {
 		if !strings.Contains(got, "`"+tool+"`") {
 			t.Errorf("skill does not name %s", tool)
 		}
@@ -398,7 +397,8 @@ func TestSkillNamesRealParameters(t *testing.T) {
 	}
 	// Words in backticks that are values or states, not parameters.
 	values := map[string]bool{"fast": true, "standard": true, "strong": true, "max": true, "blocked_deps": true,
-		"cancelled": true, "cancelling": true, "true": true, "false": true}
+		"cancelled": true, "cancelling": true, "true": true, "false": true, "worker": true, "senior": true,
+		"peer": true}
 	tick := regexp.MustCompile("`([a-z_]+)(?:: [^`]*)?`")
 	section := strings.SplitN(strings.SplitN(skill, "## Tools\n", 2)[1], "\n## ", 2)[0]
 	for line := range strings.SplitSeq(section, "\n") {
