@@ -10,12 +10,14 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 
 	"github.com/NovaSeele/Seelegent/internal/buildinfo"
 	"github.com/NovaSeele/Seelegent/internal/client"
 	"github.com/NovaSeele/Seelegent/internal/config"
+	"github.com/NovaSeele/Seelegent/internal/store"
 	"github.com/NovaSeele/Seelegent/internal/update"
 )
 
@@ -48,12 +50,16 @@ func updateError(err error) error {
 		return &codedError{code: codeDevBuild, err: err}
 	case errors.Is(err, update.ErrNoPrevious):
 		return &codedError{code: codeNoPrevious, err: err}
+	case errors.Is(err, update.ErrSchemaTooNew):
+		return &codedError{code: codeSchemaTooNew, err: err}
+	case errors.Is(err, update.ErrSchemaUnknown):
+		return &codedError{code: codeSchemaUnknown, err: err}
 	}
 	return err
 }
 
 func newUpdateCommand(info buildinfo.Info, d deps) *cobra.Command {
-	var check, apply, rollback bool
+	var check, apply, rollback, force bool
 	var version string
 	cmd := &cobra.Command{
 		Use:   "update",
@@ -62,13 +68,17 @@ func newUpdateCommand(info buildinfo.Info, d deps) *cobra.Command {
 			"this platform, checks its SHA-256, stops the daemon, replaces this executable in place (the old one is\n" +
 			"kept next to it), starts the daemon again and refreshes the lead hosts that have a Seelegent entry.\n" +
 			"--rollback puts back the executable the last update replaced. --version vX.Y.Z picks a release (also\n" +
-			"an older one); a development build needs it to apply. Releases come from GitHub, or from\n" +
-			update.EnvUpdateURL + ".",
+			"an older one); a development build needs it to apply. A build that knows fewer database migrations\n" +
+			"than the database has is refused (schema_too_new); --force installs a build that does not report\n" +
+			"how many it knows (schema_unknown). Releases come from GitHub, or from " + update.EnvUpdateURL + ".",
 		Args:        noArgs,
 		Annotations: map[string]string{annOp: "update"},
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if (check && apply) || (check && rollback) || (apply && rollback) {
 				return usagef("use only one of --check, --apply and --rollback")
+			}
+			if force && !apply && !rollback {
+				return usagef("--force goes with --apply or --rollback")
 			}
 			tag := ""
 			if version != "" {
@@ -80,7 +90,7 @@ func newUpdateCommand(info buildinfo.Info, d deps) *cobra.Command {
 					return usagef("--version: %v", err)
 				}
 			}
-			u, err := newUpdater(cmd, info, d)
+			u, err := newUpdater(cmd, info, d, force)
 			if err != nil {
 				return err
 			}
@@ -113,11 +123,13 @@ func newUpdateCommand(info buildinfo.Info, d deps) *cobra.Command {
 	f.BoolVar(&apply, "apply", false, "install the latest release (or --version)")
 	f.BoolVar(&rollback, "rollback", false, "go back to the version the last update replaced")
 	f.StringVar(&version, "version", "", "the release to check or install, for example v1.2.3")
+	f.BoolVar(&force, "force", false,
+		"with --apply or --rollback: install a build that does not report which database schema it knows")
 	return cmd
 }
 
 // newUpdater builds the updater for this executable and data folder.
-func newUpdater(cmd *cobra.Command, info buildinfo.Info, d deps) (*update.Updater, error) {
+func newUpdater(cmd *cobra.Command, info buildinfo.Info, d deps, force bool) (*update.Updater, error) {
 	exe, err := setupExecutable()
 	if err != nil {
 		return nil, err
@@ -135,6 +147,17 @@ func newUpdater(cmd *cobra.Command, info buildinfo.Info, d deps) (*update.Update
 		MetadataURL: os.Getenv(update.EnvUpdateURL),
 		Daemon:      &updateDaemon{d: d, log: stderr},
 		Run:         runExecutable,
+		Force:       force,
+		DatabaseSchema: func(ctx context.Context) (int, bool, error) {
+			in, err := store.Inspect(ctx, paths.DB)
+			switch {
+			case store.IsNotExist(err):
+				return 0, false, nil
+			case err != nil && !errors.Is(err, store.ErrSchemaTooNew):
+				return 0, true, err
+			}
+			return in.Version, true, nil
+		},
 		Progress: func(msg string) {
 			if !quiet {
 				_, _ = fmt.Fprintln(stderr, msg)
@@ -143,10 +166,22 @@ func newUpdater(cmd *cobra.Command, info buildinfo.Info, d deps) (*update.Update
 	}), nil
 }
 
+// Waits of the updater's daemon steps.
+const (
+	// updateStartTimeout bounds the start of a daemon after an update: it may run database migrations first.
+	updateStartTimeout = 2 * time.Minute
+	// abortLockWait bounds the wait for the data folder's daemon lock after the daemon was stopped or killed.
+	abortLockWait = 30 * time.Second
+	// abortExitWait bounds the wait for a killed daemon process to exit.
+	abortExitWait = 10 * time.Second
+)
+
 // updateDaemon is the daemon of the data folder for the updater, over the client.
 type updateDaemon struct {
 	d   deps
 	log io.Writer
+	// spawned is the process the last Start started (Abort kills exactly that one when it does not answer).
+	spawned *client.Spawned
 }
 
 func (u *updateDaemon) conn() (*conn, error) { return u.d.connect(startNever, cliLogger(u.log)) }
@@ -180,16 +215,70 @@ func (u *updateDaemon) Stop(ctx context.Context) error {
 	return err
 }
 
-// Start starts the daemon from exe (the executable now installed) and waits until it answers.
-func (u *updateDaemon) Start(ctx context.Context, exe string) error {
+// Start starts the daemon from exe (the executable now installed), waits until it answers (up to
+// updateStartTimeout: migrations may run first) and returns the version it reports.
+func (u *updateDaemon) Start(ctx context.Context, exe string) (string, error) {
+	cn, err := u.conn()
+	if err != nil {
+		return "", err
+	}
+	start, spawned := client.SpawnDaemonTracked(exe, cn.paths, cn.port, os.Environ())
+	u.spawned = spawned
+	dm := client.NewDaemon(client.DaemonOptions{Paths: cn.paths, Port: cn.port, Start: start, Logger: cn.log,
+		StartTimeout: updateStartTimeout})
+	c, err := dm.Ensure(ctx)
+	if err != nil {
+		return "", err
+	}
+	h, err := c.Health(ctx)
+	if err != nil {
+		return "", err
+	}
+	return h.Version, nil
+}
+
+// Abort stops the daemon after a start that failed or brought up the wrong build: a daemon that answers is stopped
+// the normal way; the process the last Start spawned is killed when it is still there (it may be holding the lock
+// while it migrates, or answer only after the start gave up); then the data folder's lock must come free.
+func (u *updateDaemon) Abort(ctx context.Context) error {
 	cn, err := u.conn()
 	if err != nil {
 		return err
 	}
-	dm := client.NewDaemon(client.DaemonOptions{Paths: cn.paths, Port: cn.port,
-		Start: client.SpawnDaemon(exe, cn.paths, cn.port, os.Environ()), Logger: cn.log})
-	_, err = dm.Ensure(ctx)
-	return err
+	var proc *os.Process
+	var done <-chan struct{}
+	if u.spawned != nil {
+		proc, done = u.spawned.Process()
+	}
+	_, stopErr := cn.daemon.Stop(ctx, u.d.stopTimeout)
+	if proc != nil {
+		select {
+		case <-done:
+		default:
+			_ = proc.Kill()
+			select {
+			case <-done:
+			case <-time.After(abortExitWait):
+				return fmt.Errorf("the daemon process %d did not exit after it was killed", proc.Pid)
+			}
+		}
+	}
+	tick := time.NewTicker(250 * time.Millisecond)
+	defer tick.Stop()
+	end := time.After(abortLockWait)
+	for cn.daemon.LockHeld() {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-end:
+			if stopErr != nil {
+				return stopErr
+			}
+			return cn.daemon.NotAnswering()
+		case <-tick.C:
+		}
+	}
+	return nil
 }
 
 // runExecutable runs exe with args and returns its standard output; a failure carries the standard error.

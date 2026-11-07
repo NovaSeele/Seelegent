@@ -19,6 +19,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/NovaSeele/Seelegent/internal/fsutil"
 )
 
 // fakeRelease is one release served by a fakeServer. The "executable" in its archive is the text "seelegent <tag>",
@@ -151,7 +153,10 @@ func (fs *fakeServer) serve(w http.ResponseWriter, r *http.Request) {
 type fakeDaemon struct {
 	running  bool
 	calls    []string
-	startErr func(exe string) error
+	startErr func(ctx context.Context, exe string) error
+	// answers, when set, is the version the started daemon reports (else the one in the executable).
+	answers  func(content string) string
+	abortErr error
 }
 
 func (d *fakeDaemon) Running(context.Context) (bool, error) { return d.running, nil }
@@ -161,15 +166,31 @@ func (d *fakeDaemon) Stop(context.Context) error {
 	return nil
 }
 
-func (d *fakeDaemon) Start(_ context.Context, exe string) error {
+func (d *fakeDaemon) Start(ctx context.Context, exe string) (string, error) {
 	data, _ := os.ReadFile(exe)
-	d.calls = append(d.calls, "start "+string(data))
+	content := string(data)
+	d.calls = append(d.calls, "start "+content)
 	if d.startErr != nil {
-		if err := d.startErr(string(data)); err != nil {
-			return err
+		if err := d.startErr(ctx, content); err != nil {
+			return "", err
 		}
 	}
 	d.running = true
+	if d.answers != nil {
+		return d.answers(content), nil
+	}
+	return strings.TrimPrefix(content, "seelegent "), nil
+}
+
+func (d *fakeDaemon) Abort(ctx context.Context) error {
+	d.calls = append(d.calls, "abort")
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	if d.abortErr != nil {
+		return d.abortErr
+	}
+	d.running = false
 	return nil
 }
 
@@ -178,6 +199,8 @@ func (d *fakeDaemon) Start(_ context.Context, exe string) error {
 type fakeRun struct {
 	registeredHosts []string
 	setupCalls      [][]string
+	// schemas is the schemaVersion each version reports (versions not listed report none).
+	schemas map[string]int
 }
 
 func (f *fakeRun) run(_ context.Context, exe string, args ...string) ([]byte, error) {
@@ -192,6 +215,9 @@ func (f *fakeRun) run(_ context.Context, exe string, args ...string) ([]byte, er
 	}
 	switch args[0] {
 	case "version":
+		if n, ok := f.schemas[ver]; ok {
+			return fmt.Appendf(nil, `{"version":%q,"schemaVersion":%d}`, ver, n), nil
+		}
 		return fmt.Appendf(nil, `{"version":%q}`, ver), nil
 	case "setup":
 		f.setupCalls = append(f.setupCalls, args[1:])
@@ -222,6 +248,9 @@ type env struct {
 	run    *fakeRun
 	server *fakeServer
 	goos   string
+	// dbSchema, when set, is the database's schema version (the schema check runs).
+	dbSchema *int
+	force    bool
 }
 
 func newEnv(t *testing.T, goos, installed string, rels ...string) *env {
@@ -242,9 +271,13 @@ func newEnv(t *testing.T, goos, installed string, rels ...string) *env {
 
 func (e *env) updater(t *testing.T, current string) *Updater {
 	t.Helper()
-	return New(Options{Current: current, Exe: e.exe, WorkDir: filepath.Join(t.TempDir(), "update"),
+	o := Options{Current: current, Exe: e.exe, WorkDir: filepath.Join(t.TempDir(), "update"),
 		MetadataURL: e.server.URL + "/releases/latest", GOOS: e.goos, GOARCH: "amd64", Daemon: e.daemon,
-		Run: e.run.run})
+		Run: e.run.run, Force: e.force}
+	if e.dbSchema != nil {
+		o.DatabaseSchema = func(context.Context) (int, bool, error) { return *e.dbSchema, true, nil }
+	}
+	return New(o)
 }
 
 func readFile(t *testing.T, p string) string {
@@ -333,7 +366,8 @@ func assertNoLeftovers(t *testing.T, exe string) {
 		t.Fatal(err)
 	}
 	for _, en := range entries {
-		if n := en.Name(); n != filepath.Base(exe) && n != filepath.Base(PreviousPath(exe)) {
+		if n := en.Name(); n != filepath.Base(exe) && n != filepath.Base(PreviousPath(exe)) &&
+			n != filepath.Base(exe+lockSuffix) {
 			t.Errorf("leftover %s", n)
 		}
 	}
@@ -415,20 +449,20 @@ func TestApplyDowngradeWithVersion(t *testing.T) {
 
 func TestApplyStartFailurePutsOldBack(t *testing.T) {
 	e := newEnv(t, "windows", "v0.0.1", "v0.0.2")
-	e.daemon.startErr = func(content string) error {
+	e.daemon.startErr = func(_ context.Context, content string) error {
 		if content == "seelegent v0.0.2" {
 			return errors.New("exit status 1")
 		}
 		return nil
 	}
 	_, err := e.updater(t, "v0.0.1").Apply(context.Background(), "")
-	if err == nil || !strings.Contains(err.Error(), "old executable is back") {
+	if err == nil || !strings.Contains(err.Error(), "v0.0.1 is back in place and its daemon runs") {
 		t.Fatalf("err = %v", err)
 	}
 	if got := readFile(t, e.exe); got != "seelegent v0.0.1" {
 		t.Errorf("installed = %q", got)
 	}
-	want := []string{"stop", "start seelegent v0.0.2", "start seelegent v0.0.1"}
+	want := []string{"stop", "start seelegent v0.0.2", "abort", "start seelegent v0.0.1"}
 	if !slices.Equal(e.daemon.calls, want) {
 		t.Errorf("daemon calls = %v, want %v", e.daemon.calls, want)
 	}
@@ -482,5 +516,162 @@ func TestHostRefreshSkipsUnregistered(t *testing.T) {
 	}
 	if len(e.run.setupCalls) != 1 || len(res.Hosts) != 0 {
 		t.Errorf("setup calls = %v, hosts = %+v", e.run.setupCalls, res.Hosts)
+	}
+}
+
+// NS1: a rollback whose daemon does not start is undone, and the kept executable stays for another try.
+func TestRollbackStartFailureKeepsPrevious(t *testing.T) {
+	e := newEnv(t, "windows", "v0.0.2", "v0.0.1")
+	if err := os.WriteFile(PreviousPath(e.exe), []byte("seelegent v0.0.1"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	e.daemon.startErr = func(_ context.Context, content string) error {
+		if content == "seelegent v0.0.1" {
+			return errors.New("database schema is newer than this version of Seelegent")
+		}
+		return nil
+	}
+	_, err := e.updater(t, "v0.0.2").Rollback(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "the rollback was undone") ||
+		!strings.Contains(err.Error(), "kept version v0.0.1") {
+		t.Fatalf("err = %v", err)
+	}
+	if got := readFile(t, e.exe); got != "seelegent v0.0.2" {
+		t.Errorf("installed = %q", got)
+	}
+	if got := readFile(t, PreviousPath(e.exe)); got != "seelegent v0.0.1" {
+		t.Errorf("previous = %q", got)
+	}
+	want := []string{"stop", "start seelegent v0.0.1", "abort", "start seelegent v0.0.2"}
+	if !slices.Equal(e.daemon.calls, want) {
+		t.Errorf("daemon calls = %v, want %v", e.daemon.calls, want)
+	}
+	assertNoLeftovers(t, e.exe)
+}
+
+// NS3: a daemon that answers as another build is stopped and the old executable put back.
+func TestApplyWrongDaemonVersion(t *testing.T) {
+	e := newEnv(t, "linux", "v0.0.1", "v0.0.2")
+	e.daemon.answers = func(content string) string {
+		if content == "seelegent v0.0.2" {
+			return "v0.0.1" // the old daemon came back up instead
+		}
+		return strings.TrimPrefix(content, "seelegent ")
+	}
+	_, err := e.updater(t, "v0.0.1").Apply(context.Background(), "")
+	if err == nil || !strings.Contains(err.Error(), "reports version v0.0.1, not v0.0.2") {
+		t.Fatalf("err = %v", err)
+	}
+	if got := readFile(t, e.exe); got != "seelegent v0.0.1" {
+		t.Errorf("installed = %q", got)
+	}
+	if want := []string{"stop", "start seelegent v0.0.2", "abort", "start seelegent v0.0.1"}; !slices.Equal(
+		e.daemon.calls, want) {
+		t.Errorf("daemon calls = %v, want %v", e.daemon.calls, want)
+	}
+}
+
+// NS3: Ctrl+C while the new daemon starts still stops it and puts the old executable back.
+func TestApplyCancelledDuringStart(t *testing.T) {
+	e := newEnv(t, "windows", "v0.0.1", "v0.0.2")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	e.daemon.startErr = func(sctx context.Context, content string) error {
+		if content == "seelegent v0.0.2" {
+			cancel()
+			return context.Canceled
+		}
+		return sctx.Err() // the undo must not run on the cancelled context
+	}
+	_, err := e.updater(t, "v0.0.1").Apply(ctx, "")
+	if err == nil || !strings.Contains(err.Error(), "is back in place and its daemon runs") {
+		t.Fatalf("err = %v", err)
+	}
+	if got := readFile(t, e.exe); got != "seelegent v0.0.1" {
+		t.Errorf("installed = %q", got)
+	}
+}
+
+// NS3: a new daemon that cannot be stopped keeps its executable installed, and the error says so.
+func TestApplyAbortFailureLeavesNewInstalled(t *testing.T) {
+	e := newEnv(t, "linux", "v0.0.1", "v0.0.2")
+	e.daemon.startErr = func(_ context.Context, content string) error {
+		if content == "seelegent v0.0.2" {
+			return errors.New("did not answer within 2m0s")
+		}
+		return nil
+	}
+	e.daemon.abortErr = errors.New("the daemon lock is still held")
+	_, err := e.updater(t, "v0.0.1").Apply(context.Background(), "")
+	if err == nil || !strings.Contains(err.Error(), "v0.0.2 stays installed") {
+		t.Fatalf("err = %v", err)
+	}
+	if got := readFile(t, e.exe); got != "seelegent v0.0.2" {
+		t.Errorf("installed = %q", got)
+	}
+	if want := []string{"stop", "start seelegent v0.0.2", "abort"}; !slices.Equal(e.daemon.calls, want) {
+		t.Errorf("daemon calls = %v, want %v", e.daemon.calls, want)
+	}
+}
+
+// NS2: a build that knows fewer migrations than the database has is never installed.
+func TestSchemaCheck(t *testing.T) {
+	db := 8
+	e := newEnv(t, "windows", "v0.0.2", "v0.0.1", "v0.0.2")
+	e.dbSchema = &db
+	e.run.schemas = map[string]int{"v0.0.1": 7, "v0.0.2": 8}
+	if err := os.WriteFile(PreviousPath(e.exe), []byte("seelegent v0.0.1"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	if _, err := e.updater(t, "v0.0.2").Apply(ctx, "v0.0.1"); !errors.Is(err, ErrSchemaTooNew) {
+		t.Fatalf("Apply(older) err = %v, want ErrSchemaTooNew", err)
+	}
+	if _, err := e.updater(t, "v0.0.2").Rollback(ctx); !errors.Is(err, ErrSchemaTooNew) {
+		t.Fatalf("Rollback err = %v, want ErrSchemaTooNew", err)
+	}
+	e.force = true // --force never overrides a known schema gap
+	if _, err := e.updater(t, "v0.0.2").Rollback(ctx); !errors.Is(err, ErrSchemaTooNew) {
+		t.Fatalf("Rollback --force err = %v, want ErrSchemaTooNew", err)
+	}
+	if len(e.daemon.calls) != 0 || readFile(t, e.exe) != "seelegent v0.0.2" ||
+		readFile(t, PreviousPath(e.exe)) != "seelegent v0.0.1" {
+		t.Fatalf("something changed: calls %v", e.daemon.calls)
+	}
+
+	// A build that does not report its schema: refused, unless --force (with a warning).
+	e.force = false
+	delete(e.run.schemas, "v0.0.1")
+	if _, err := e.updater(t, "v0.0.2").Rollback(ctx); !errors.Is(err, ErrSchemaUnknown) {
+		t.Fatalf("Rollback (unknown) err = %v, want ErrSchemaUnknown", err)
+	}
+	e.force = true
+	res, err := e.updater(t, "v0.0.2").Rollback(ctx)
+	if err != nil || !res.OK || len(res.Warnings) == 0 || !strings.Contains(res.Warnings[0], "--force") {
+		t.Fatalf("Rollback --force = %+v, %v", res, err)
+	}
+
+	// The same database with a build that knows enough goes ahead.
+	e.force = false
+	res2, err := e.updater(t, "v0.0.1").Apply(ctx, "v0.0.2")
+	if err != nil || !res2.Applied {
+		t.Fatalf("Apply(v0.0.2) = %+v, %v", res2, err)
+	}
+}
+
+// Suggestion 5: two updates of the same executable from different data folders never run at once.
+func TestExecutableLock(t *testing.T) {
+	e := newEnv(t, "linux", "v0.0.1", "v0.0.2")
+	l, err := fsutil.TryLock(e.exe + lockSuffix)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = e.updater(t, "v0.0.1").Apply(context.Background(), "")
+	_ = l.Unlock()
+	if err == nil || !strings.Contains(err.Error(), "another seelegent update of") {
+		t.Fatalf("err = %v", err)
+	}
+	if got := readFile(t, e.exe); got != "seelegent v0.0.1" || len(e.daemon.calls) != 0 {
+		t.Errorf("installed = %q, calls %v", got, e.daemon.calls)
 	}
 }

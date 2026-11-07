@@ -57,7 +57,7 @@ func TestUpdateCommand(t *testing.T) {
 	}
 
 	for _, args := range [][]string{{"--check", "--apply"}, {"--apply", "--rollback"}, {"--rollback", "--version", "v1.0.0"},
-		{"--version", "latest"}, {"extra"}} {
+		{"--version", "latest"}, {"extra"}, {"--force"}, {"--check", "--force"}} {
 		if code, _, errOut := runUpdate(t, args...); code != ExitUsage {
 			t.Errorf("update %v: exit %d (%s)", args, code, errOut)
 		}
@@ -123,6 +123,7 @@ func TestVersionCheckDatabase(t *testing.T) {
 func TestUpdateErrorCodes(t *testing.T) {
 	for err, want := range map[error]string{
 		update.ErrChecksum: codeChecksum, update.ErrDevBuild: codeDevBuild, update.ErrNoPrevious: codeNoPrevious,
+		update.ErrSchemaTooNew: codeSchemaTooNew, update.ErrSchemaUnknown: codeSchemaUnknown,
 	} {
 		if _, out := classify(updateError(err)); out.Code != want {
 			t.Errorf("%v: code %q, want %q", err, out.Code, want)
