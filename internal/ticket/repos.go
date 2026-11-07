@@ -417,7 +417,7 @@ func (s *Service) CreateRemote(ctx context.Context, id string, req api.RemoteReq
 		local, _ = s.gitOK(ctx, r.Path, "rev-parse", "--verify", "--quiet", "refs/heads/"+b+"^{commit}")
 	}
 	if local != "" {
-		if err := s.scanHistory(ctx, r.Path, b); err != nil {
+		if err := s.scanHistory(ctx, r.Path, b, local); err != nil {
 			return api.Repo{}, err
 		}
 	}
@@ -596,9 +596,10 @@ func (s *Service) checkAdopted(ctx context.Context, client *github.Client, info 
 }
 
 // scanHistory refuses to publish a branch whose history holds a file that looks like a secret or junk: the first
-// push sends every commit, not only the last tree.
-func (s *Service) scanHistory(ctx context.Context, dir, branch string) error {
-	objs, err := s.historyObjects(ctx, dir, "refs/heads/"+branch)
+// push sends every commit, not only the last tree. sha is the commit that push sends (read once, so a branch that
+// moves meanwhile cannot make the scanned history differ from the pushed one).
+func (s *Service) scanHistory(ctx context.Context, dir, branch, sha string) error {
+	objs, err := s.historyObjects(ctx, dir, sha)
 	if err != nil {
 		return err
 	}
