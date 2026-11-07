@@ -769,6 +769,15 @@ export interface Health {
 }
 
 /**
+ * DaemonStop is the answer (202) of POST /daemon/stop: the daemon accepted the request and shuts down right after
+ * answering, as on Ctrl+C. The caller waits for its lock to be free and its port to go quiet.
+ */
+export interface DaemonStop {
+  stopping: true
+  pid: number
+}
+
+/**
  * BootState is GET /state: everything the dashboard needs for its first paint, in one request. LastEventID is the
  * SSE id at the moment of the snapshot; the client opens the stream with it, so no change falls between the two.
  */

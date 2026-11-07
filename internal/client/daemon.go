@@ -137,15 +137,38 @@ func (d *Daemon) Port() int { return d.o.Port }
 // ReadPortFile returns the port recorded in paths.PortFile by the running daemon (false when there is none or it
 // is not a port).
 func ReadPortFile(paths config.Paths) (int, bool) {
+	port, _, ok := readPortFile(paths)
+	return port, ok
+}
+
+// ReadPortFilePID returns the process id the daemon recorded on the second line of its port file (false when there
+// is none). It is only ever shown to people (where a daemon that does not answer runs), never used to kill.
+func ReadPortFilePID(paths config.Paths) (int, bool) {
+	_, pid, ok := readPortFile(paths)
+	return pid, ok && pid > 0
+}
+
+// readPortFile parses the port file: the port on the first line, the daemon's process id on the second (files of
+// earlier builds have only the port).
+func readPortFile(paths config.Paths) (port, pid int, ok bool) {
 	data, err := os.ReadFile(paths.PortFile)
 	if err != nil {
-		return 0, false
+		return 0, 0, false
 	}
-	port, err := strconv.Atoi(strings.TrimSpace(string(data)))
+	lines := strings.Fields(string(data))
+	if len(lines) == 0 {
+		return 0, 0, false
+	}
+	port, err = strconv.Atoi(lines[0])
 	if err != nil || port < 1 || port > 65535 {
-		return 0, false
+		return 0, 0, false
 	}
-	return port, true
+	if len(lines) > 1 {
+		if n, err := strconv.Atoi(lines[1]); err == nil && n > 0 {
+			pid = n
+		}
+	}
+	return port, pid, true
 }
 
 // lockHeld reports whether a daemon holds the data directory's single-instance lock. Taking the lock without

@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -102,13 +103,15 @@ func lockDaemon(ctx context.Context, paths config.Paths) (*fsutil.FileLock, erro
 	return nil, err
 }
 
-// writePortFile records the listening address's port in run/daemon.port for discovery (client.Daemon.Find).
+// writePortFile records the listening address's port in run/daemon.port for discovery (client.Daemon.Find), and
+// this process's id on a second line so `seelegent stop` and `doctor` can say which process holds the lock when
+// the daemon does not answer. Nothing ever kills a process by that id (old B3/B14).
 func writePortFile(paths config.Paths, addr string) error {
 	_, port, err := net.SplitHostPort(addr)
 	if err != nil {
 		return err
 	}
-	return fsutil.WriteFileAtomic(paths.PortFile, []byte(port+"\n"), 0o600)
+	return fsutil.WriteFileAtomic(paths.PortFile, []byte(port+"\n"+strconv.Itoa(os.Getpid())+"\n"), 0o600)
 }
 
 // runDaemon runs the daemon until ctx ends. It holds run/daemon.lock for its whole life, so one data directory
@@ -162,8 +165,12 @@ func runDaemon(ctx context.Context, info buildinfo.Info, f daemonFlags, stderr i
 		return fmt.Errorf("record the daemon port: %w", err)
 	}
 	log.Info("daemon: running", "version", info.Version, "home", paths.Home, "addr", addr)
-	_, _ = fmt.Fprintf(stderr, "Seelegent %s listening on http://%s/ (Ctrl+C stops it)\n", info.Version, addr)
-	<-ctx.Done()
+	_, _ = fmt.Fprintf(stderr, "Seelegent %s listening on http://%s/ (Ctrl+C or `seelegent stop` stops it)\n",
+		info.Version, addr)
+	select {
+	case <-ctx.Done():
+	case <-a.StopRequested(): // POST /daemon/stop (`seelegent stop`, `restart`): the same clean shutdown
+	}
 	log.Info("daemon: stopping")
 	// The port file goes first, so discovery stops sending callers here; the lock is released after the close.
 	if err := os.Remove(paths.PortFile); err != nil && !errors.Is(err, fs.ErrNotExist) {

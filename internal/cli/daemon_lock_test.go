@@ -89,8 +89,8 @@ func TestTwoDaemonsOneHome(t *testing.T) {
 	deadline := time.Now().Add(60 * time.Second)
 	for {
 		if data, err := os.ReadFile(paths.PortFile); err == nil {
-			if strings.TrimSpace(string(data)) != strconv.Itoa(portA) {
-				t.Fatalf("port file = %q, want %d", data, portA)
+			if want := strconv.Itoa(portA) + "\n" + strconv.Itoa(os.Getpid()) + "\n"; string(data) != want {
+				t.Fatalf("port file = %q, want %q", data, want)
 			}
 			break
 		}
