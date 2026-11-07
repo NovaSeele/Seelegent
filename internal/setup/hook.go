@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -50,14 +51,23 @@ func AgentHookOutput(input []byte) []byte {
 	return append(out, '\n')
 }
 
-// hookCommandLine is the command Claude Code runs: the executable in double quotes (forward slashes on Windows, so
-// both cmd and a POSIX shell read it the same way) and the hook subcommand. The slashes are swapped by hand, not
-// with filepath.ToSlash, because goos may differ from the OS this binary was built for.
-func hookCommandLine(exe, goos string) string {
-	if goos == "windows" {
-		exe = strings.ReplaceAll(exe, `\`, "/")
+// hookCommandLine is the command Claude Code runs: the quoted executable and the hook subcommand (F15).
+//
+// On macOS and Linux Claude Code runs it with a POSIX shell, so the path goes in single quotes, inside which
+// nothing is special (a single quote in the path ends the quoting, is escaped and starts it again). On Windows the shell may be Git Bash or cmd: the
+// path, with forward slashes, goes in double quotes, which both read the same way, as long as it holds none of the
+// characters either shell still expands there ($ and ` in bash, % in cmd; " cannot be in a Windows path). Such a
+// path is refused: there is no quoting both shells read alike. The slashes are swapped by hand, not with
+// filepath.ToSlash, because goos may differ from the OS this binary was built for.
+func hookCommandLine(exe, goos string) (string, error) {
+	if goos != "windows" {
+		return "'" + strings.ReplaceAll(exe, "'", `'\''`) + "' hook " + HookCommand, nil
 	}
-	return `"` + exe + `" hook ` + HookCommand
+	if strings.ContainsAny(exe, "$`%\"") {
+		return "", fmt.Errorf("the executable's path %q holds $, ` or %%, which the shell running the hook would "+
+			"expand; install Seelegent in a folder without them or pass --exe", exe)
+	}
+	return `"` + strings.ReplaceAll(exe, `\`, "/") + `" hook ` + HookCommand, nil
 }
 
 // isOurHook reports whether a hook command is Seelegent's reminder hook.
@@ -154,7 +164,10 @@ func (s *hookSpot) removeOurHook() error {
 func (c claudeCode) installHook(o op) Item {
 	path := claudeSettings(o.env)
 	it := Item{Host: c.id(), Kind: KindHook, Path: path}
-	want := hookCommandLine(o.req.Exe, o.env.goos())
+	want, err := hookCommandLine(o.req.Exe, o.env.goos())
+	if err != nil {
+		return failItem(it, err)
+	}
 	type commandHook struct {
 		Type    string `json:"type"`
 		Command string `json:"command"`

@@ -138,6 +138,12 @@ C-B2). This version installs it into `~/.claude/settings.json` in the documented
 {"hooks": {"PreToolUse": [{"matcher": "Agent", "hooks": [{"type": "command", "command": "\"<exe>\" hook claude-agent"}]}]}}
 ```
 
+The executable is quoted for the shell that runs the hook: in single quotes on macOS and Linux (`'<exe>' hook
+claude-agent`, a quote in the path written `'\''`), so no part of the path is expanded; on Windows in double quotes
+with forward slashes, which Git Bash and cmd read alike. A Windows path holding `$`, a backquote or `%` (which one
+of those shells would still expand) is refused with an error for the hook item; install Seelegent elsewhere or pass
+`--exe`.
+
 `seelegent hook claude-agent` reads the hook input and, before the Agent tool starts a subagent that could write code,
 adds a reminder to the lead's context to delegate through Seelegent instead. It never blocks the tool. It stays
 silent for read-only subagents (Explore, Plan, claude-code-guide, statusline-setup) and for input it cannot read.

@@ -257,7 +257,11 @@ func TestHookInstallRemove(t *testing.T) {
 		t.Fatal(err)
 	}
 	groups := doc.Hooks.PreToolUse
-	if len(groups) != 2 || groups[1].Matcher != "Agent" || groups[1].Hooks[0].Command != hookCommandLine(exe, m.env().goos()) {
+	wantCmd, err := hookCommandLine(exe, m.env().goos())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(groups) != 2 || groups[1].Matcher != "Agent" || groups[1].Hooks[0].Command != wantCmd {
 		t.Fatalf("hooks %+v", groups)
 	}
 	if !strings.Contains(read(t, cfg), "go test:*") {
@@ -309,8 +313,26 @@ func TestAgentHookOutput(t *testing.T) {
 			t.Errorf("%s gave %s", in, out)
 		}
 	}
-	if hookCommandLine(`C:\Program Files\seelegent\seelegent.exe`, "windows") != `"C:/Program Files/seelegent/seelegent.exe" hook claude-agent` {
-		t.Error("windows hook command line")
+	// F15: the path is quoted for the shell that runs the hook, so no part of it is expanded.
+	for _, c := range []struct{ exe, goos, want string }{
+		{`C:\Program Files\seelegent\seelegent.exe`, "windows", `"C:/Program Files/seelegent/seelegent.exe" hook claude-agent`},
+		{`C:\Users\o'brien\seelegent.exe`, "windows", `"C:/Users/o'brien/seelegent.exe" hook claude-agent`},
+		{"/opt/my apps/seelegent", "linux", `'/opt/my apps/seelegent' hook claude-agent`},
+		{"/home/u/$HOME/`id`/seelegent", "linux", "'/home/u/$HOME/`id`/seelegent' hook claude-agent"},
+		{"/Users/o'brien/bin/seelegent", "darwin", `'/Users/o'\''brien/bin/seelegent' hook claude-agent`},
+	} {
+		got, err := hookCommandLine(c.exe, c.goos)
+		if err != nil || got != c.want {
+			t.Errorf("%s on %s: %s %v, want %s", c.exe, c.goos, got, err, c.want)
+		}
+		if !isOurHook(got) {
+			t.Errorf("%s is not recognised as the hook", got)
+		}
+	}
+	for _, exe := range []string{`C:\a$b\seelegent.exe`, "C:\\`id`\\seelegent.exe", `C:\%TEMP%\seelegent.exe`} {
+		if got, err := hookCommandLine(exe, "windows"); err == nil {
+			t.Errorf("%s gave %s, want a refusal", exe, got)
+		}
 	}
 	if !isOurHook(`"C:/x/seelegent.exe" hook claude-agent`) || isOurHook("echo hook claude-agent") {
 		t.Error("isOurHook")
