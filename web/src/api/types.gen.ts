@@ -231,11 +231,53 @@ export interface AutomationRun {
     | 'skipped_quota'
     | 'skipped_overlap'
     | 'skipped_late'
+    | 'skipped_changed'
     | 'error'
     | 'pending'
   taskId?: string
-  /** Detail says why a run was skipped or failed (the precheck's output tail, the quota left, ...). */
+  /**
+   * Detail says why a run was skipped or failed (the precheck's output tail, the quota left, ...), in English for
+   * the lead's tools.
+   */
   detail?: string
+  /** Info is the same as facts, for the dashboard to say in the user's language. Absent on older rows. */
+  info?: AutomationRunInfo
+}
+
+/**
+ * AutomationRunInfo is what a run's outcome rests on. Which fields are set depends on the outcome: skipped_overlap
+ * (Reason, TaskID and TaskStatus of the task still active), skipped_quota (Backend, or Account for a before-reset
+ * run's weekly bucket, with Remaining and MinRemaining in percent), skipped_precheck and precheck_failed (ExitCode,
+ * TimedOut with TimeoutSeconds, or NotStarted; Output is the command's output tail), skipped_late (LateMinutes,
+ * GraceMinutes), skipped_changed (Reason), error (Reason and Member when known, else Message), pending (Due).
+ */
+export interface AutomationRunInfo {
+  reason?:
+    | 'starting'
+    | 'task_running'
+    | 'changed'
+    | 'unconfirmed'
+    | 'disabled'
+    | 'master_off'
+    | 'interrupted'
+    | 'member_missing'
+    | 'member_disabled'
+  taskId?: string
+  taskStatus?: string
+  backend?: string
+  account?: string
+  remaining?: number
+  minRemaining?: number
+  exitCode?: number
+  timedOut?: boolean
+  timeoutSeconds?: number
+  notStarted?: boolean
+  output?: string
+  lateMinutes?: number
+  graceMinutes?: number
+  member?: string
+  message?: string
+  due?: string
 }
 
 /** Automation is a saved delegation on a schedule. */

@@ -21,7 +21,8 @@
     "skipped_late": "Bỏ qua: quá muộn",
     "error": "Lỗi",
     "pending": "Đang bắt đầu",
-    "precheck_failed": "Kiểm tra trước bị lỗi"
+    "precheck_failed": "Kiểm tra trước bị lỗi",
+    "skipped_changed": "Không chạy: đã đổi"
   },
   "trigger": {
     "schedule": "Theo lịch",
@@ -174,5 +175,29 @@
   },
   "time": {
     "withLocal": "{when} ({local} giờ của bạn)"
+  },
+  "run": {
+    "starting": "Một lần chạy khác của tự động hóa này đang bắt đầu.",
+    "taskRunning": "Tác vụ của lần chạy trước chưa xong ({status}).",
+    "quotaBackend": "Tài khoản {backend} tốt nhất còn {left}; tự động hóa này cần ít nhất {min}.",
+    "quotaBucket": "Hạn mức tuần của {account} sắp đặt lại còn {left}; tự động hóa này cần ít nhất {min}.",
+    "saidSkip": "Kiểm tra trước kết thúc với mã {code}: lần này không có gì để làm.",
+    "exitCode": "Lệnh kết thúc với mã {code}.",
+    "timedOut": "Lệnh không xong trong {limit}.",
+    "notStarted": "Không chạy được lệnh.",
+    "output": "Kết quả của lệnh:",
+    "late": "Seelegent đang tắt khi đến giờ chạy: trễ {late}, quá thời gian ân hạn {grace}.",
+    "changed": {
+      "changed": "Tự động hóa bị sửa trong lúc kiểm tra trước, nên không có gì được chạy. Hãy xem lại và bật để chạy phiên bản mới.",
+      "unconfirmed": "Tự động hóa chưa được xác nhận ở phiên bản hiện tại, nên không có gì được chạy. Hãy xem lại và bật.",
+      "disabled": "Tự động hóa bị tắt trong lúc kiểm tra trước, nên không có gì được chạy.",
+      "master_off": "Tự động hóa bị tắt trong Cài đặt lúc đang kiểm tra trước, nên không có gì được chạy."
+    },
+    "memberMissing": "Thành viên \"{member}\" không còn tồn tại. Hãy sửa tự động hóa để chọn thành viên khác hoặc một backend.",
+    "memberDisabled": "Thành viên \"{member}\" đang tắt. Hãy bật lại ở trang Thành viên, hoặc sửa tự động hóa để chọn người khác.",
+    "interrupted": "Seelegent dừng lại khi lần chạy này đang bắt đầu, nên có thể đã tạo một tác vụ: hãy xem danh sách tác vụ. Lần chạy không tự chạy lại; dùng Chạy ngay nếu vẫn cần.",
+    "couldNotStart": "Không bắt đầu được tác vụ.",
+    "daemonSaid": "Seelegent báo:",
+    "due": "Đến giờ chạy lúc {when}."
   }
 }

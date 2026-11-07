@@ -21,7 +21,8 @@
     "skipped_late": "跳过：太晚",
     "error": "错误",
     "pending": "正在启动",
-    "precheck_failed": "预检查失败"
+    "precheck_failed": "预检查失败",
+    "skipped_changed": "未启动：已更改"
   },
   "trigger": {
     "schedule": "按计划",
@@ -174,5 +175,29 @@
   },
   "time": {
     "withLocal": "{when}（你的时间 {local}）"
+  },
+  "run": {
+    "starting": "此自动化的另一次运行已在启动中。",
+    "taskRunning": "上次运行的任务尚未结束（{status}）。",
+    "quotaBackend": "最好的 {backend} 账号剩余 {left}；此自动化至少需要 {min}。",
+    "quotaBucket": "{account} 即将重置的每周配额剩余 {left}；此自动化至少需要 {min}。",
+    "saidSkip": "预检查以代码 {code} 退出：本次无事可做。",
+    "exitCode": "命令以代码 {code} 退出。",
+    "timedOut": "命令未在 {limit} 内完成。",
+    "notStarted": "命令无法启动。",
+    "output": "命令输出：",
+    "late": "到点时 Seelegent 未运行：晚了 {late}，超过了 {grace} 的宽限时间。",
+    "changed": {
+      "changed": "预检查运行期间自动化被修改，因此未启动任何内容。请审核并开启，以运行新版本。",
+      "unconfirmed": "自动化的当前内容未经确认，因此未启动任何内容。请审核并开启。",
+      "disabled": "预检查运行期间自动化被关闭，因此未启动任何内容。",
+      "master_off": "预检查运行期间在设置中关闭了自动化，因此未启动任何内容。"
+    },
+    "memberMissing": "成员“{member}”已不存在。请编辑自动化，选择其他成员或某个后端。",
+    "memberDisabled": "成员“{member}”已关闭。请在成员页面中开启它，或编辑自动化选择其他成员。",
+    "interrupted": "此次运行启动时 Seelegent 停止了，因此可能已启动任务：请查看任务列表。它不会自动重跑；如仍需要，请使用“立即运行”。",
+    "couldNotStart": "任务无法启动。",
+    "daemonSaid": "Seelegent 提示：",
+    "due": "预定时间：{when}。"
   }
 }

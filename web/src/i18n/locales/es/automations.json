@@ -21,7 +21,8 @@
     "skipped_late": "Omitida: demasiado tarde",
     "error": "Falló",
     "pending": "Iniciando",
-    "precheck_failed": "Falló la comprobación previa"
+    "precheck_failed": "Falló la comprobación previa",
+    "skipped_changed": "No iniciada: cambió"
   },
   "trigger": {
     "schedule": "Según el horario",
@@ -174,5 +175,29 @@
   },
   "time": {
     "withLocal": "{when} ({local} hora local)"
+  },
+  "run": {
+    "starting": "Ya se estaba iniciando otra ejecución de esta automatización.",
+    "taskRunning": "La tarea de su última ejecución aún no ha terminado ({status}).",
+    "quotaBackend": "La mejor cuenta de {backend} tiene {left} disponible; esta automatización necesita al menos {min}.",
+    "quotaBucket": "La cuota semanal de {account} que se reinicia pronto tiene {left} disponible; esta automatización necesita al menos {min}.",
+    "saidSkip": "La comprobación previa terminó con el código {code}: esta vez no hay nada que hacer.",
+    "exitCode": "El comando terminó con el código {code}.",
+    "timedOut": "El comando no terminó en {limit}.",
+    "notStarted": "El comando no pudo iniciarse.",
+    "output": "Salida del comando:",
+    "late": "Seelegent estaba apagado a la hora prevista: {late} de retraso, más que su margen de {grace}.",
+    "changed": {
+      "changed": "La automatización se editó mientras corría su comprobación previa, así que no se inició nada. Revísala y actívala para ejecutar la nueva versión.",
+      "unconfirmed": "La automatización no está confirmada tal como está ahora, así que no se inició nada. Revísala y actívala.",
+      "disabled": "La automatización se desactivó mientras corría su comprobación previa, así que no se inició nada.",
+      "master_off": "Las automatizaciones se desactivaron en Ajustes mientras corría la comprobación previa, así que no se inició nada."
+    },
+    "memberMissing": "El miembro «{member}» ya no existe. Edita la automatización para elegir otro miembro o un backend.",
+    "memberDisabled": "El miembro «{member}» está desactivado. Actívalo en la página Miembros o edita la automatización para elegir otro.",
+    "interrupted": "Seelegent se detuvo mientras se iniciaba esta ejecución, así que puede que haya iniciado una tarea: revisa la lista de tareas. No se vuelve a ejecutar sola; usa Ejecutar ahora si aún hace falta.",
+    "couldNotStart": "La tarea no pudo iniciarse.",
+    "daemonSaid": "Seelegent dijo:",
+    "due": "Prevista para {when}."
   }
 }

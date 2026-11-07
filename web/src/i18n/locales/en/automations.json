@@ -21,7 +21,8 @@
     "skipped_late": "Skipped: too late",
     "error": "Error",
     "pending": "Starting",
-    "precheck_failed": "Precheck failed"
+    "precheck_failed": "Precheck failed",
+    "skipped_changed": "Not started: changed"
   },
   "trigger": {
     "schedule": "On schedule",
@@ -174,5 +175,29 @@
   },
   "time": {
     "withLocal": "{when} ({local} your time)"
+  },
+  "run": {
+    "starting": "Another run of this automation was already starting.",
+    "taskRunning": "The task of its last run has not finished yet ({status}).",
+    "quotaBackend": "The best {backend} account has {left} left; this automation needs at least {min}.",
+    "quotaBucket": "The weekly quota of {account} that resets soon has {left} left; this automation needs at least {min}.",
+    "saidSkip": "The precheck exited with code {code}: nothing to do this time.",
+    "exitCode": "The command exited with code {code}.",
+    "timedOut": "The command did not finish within {limit}.",
+    "notStarted": "The command could not start.",
+    "output": "Command output:",
+    "late": "Seelegent was off when it was due: {late} late, more than its {grace} grace period.",
+    "changed": {
+      "changed": "The automation was edited while its precheck ran, so nothing was started. Review and turn it on to run the new version.",
+      "unconfirmed": "The automation is not confirmed as it is now, so nothing was started. Review and turn it on.",
+      "disabled": "The automation was turned off while its precheck ran, so nothing was started.",
+      "master_off": "Automations were turned off in Settings while the precheck ran, so nothing was started."
+    },
+    "memberMissing": "The member \"{member}\" no longer exists. Edit the automation to pick another member or a backend.",
+    "memberDisabled": "The member \"{member}\" is turned off. Turn it on on the Members page, or edit the automation to pick another.",
+    "interrupted": "Seelegent stopped while this run was starting, so it may have started a task: check the task list. It is not run again on its own; use Run now if it is still needed.",
+    "couldNotStart": "The task could not start.",
+    "daemonSaid": "Seelegent said:",
+    "due": "Due at {when}."
   }
 }

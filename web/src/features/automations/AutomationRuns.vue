@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { shallowRef, watch } from 'vue'
+import { computed, shallowRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { errorMessage } from '@/api/client'
@@ -12,6 +12,7 @@ import { useFormat } from '@/composables/useFormat'
 import { useAutomationsStore } from '@/stores/automations'
 
 import { OUTCOME_LOOK } from './automationModel'
+import { runView } from './runText'
 
 /** An automation's newest runs: when, why it ran, what came of it (a task, or why it was skipped). */
 const props = defineProps<{ automation: Automation | null }>()
@@ -24,6 +25,9 @@ const store = useAutomationsStore()
 const runs = shallowRef<readonly AutomationRun[]>([])
 const loading = shallowRef(false)
 const error = shallowRef('')
+const views = computed(() =>
+  runs.value.map((r) => ({ run: r, ...runView(r, (k, p) => (p ? t(k, p) : t(k)), fmt.value) })),
+)
 
 watch(open, async (now) => {
   const a = props.automation
@@ -58,7 +62,7 @@ watch(open, async (now) => {
       :description="t('automations.runs.emptyDesc')"
     />
     <ol v-else class="runs">
-      <li v-for="r in runs" :key="r.id" class="run">
+      <li v-for="{ run: r, why, output, outputLabel } in views" :key="r.id" class="run">
         <StatusPill
           size="sm"
           :tone="OUTCOME_LOOK[r.outcome].tone"
@@ -72,7 +76,11 @@ watch(open, async (now) => {
             {{ t('automations.runs.task') }}
           </RouterLink>
         </span>
-        <p v-if="r.detail" class="run__detail">{{ r.detail }}</p>
+        <p v-if="why" class="run__why">{{ why }}</p>
+        <p v-if="output" class="run__why">
+          {{ outputLabel }}
+          <code class="run__detail">{{ output }}</code>
+        </p>
       </li>
     </ol>
   </Dialog>
@@ -117,8 +125,16 @@ watch(open, async (now) => {
   }
 }
 
-.run__detail {
+.run__why {
   flex-basis: 100%;
+  color: var(--text-secondary);
+  font-size: var(--fs-sm);
+  overflow-wrap: anywhere;
+}
+
+.run__detail {
+  display: block;
+  margin-top: var(--space-1);
   max-height: 120px;
   overflow: auto;
   color: var(--text-secondary);

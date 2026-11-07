@@ -51,6 +51,9 @@ const (
 	AutoSkippedQuota   = "skipped_quota"
 	AutoSkippedOverlap = "skipped_overlap"
 	AutoSkippedLate    = "skipped_late"
+	// AutoSkippedChanged: the automation was edited, turned off, or the master switch went off while its precheck
+	// ran; nothing was started (an edit is not run before the user confirms it).
+	AutoSkippedChanged = "skipped_changed"
 	AutoError          = "error"
 	// AutoPending is a scheduled run the scheduler decided on that has not started yet. It is written together with
 	// the automation's next run time, so a stop in between leaves a trace (resolved at the next start).
@@ -62,10 +65,55 @@ type AutomationRun struct {
 	ID      int64  `json:"id"`
 	At      string `json:"at"`
 	Trigger string `json:"trigger" ts:"'schedule' | 'missed' | 'manual' | 'before_reset'"`
-	Outcome string `json:"outcome" ts:"'started' | 'skipped_precheck' | 'precheck_failed' | 'skipped_quota' | 'skipped_overlap' | 'skipped_late' | 'error' | 'pending'"`
+	Outcome string `json:"outcome" ts:"'started' | 'skipped_precheck' | 'precheck_failed' | 'skipped_quota' | 'skipped_overlap' | 'skipped_late' | 'skipped_changed' | 'error' | 'pending'"`
 	TaskID  string `json:"taskId,omitempty"`
-	// Detail says why a run was skipped or failed (the precheck's output tail, the quota left, ...).
+	// Detail says why a run was skipped or failed (the precheck's output tail, the quota left, ...), in English for
+	// the lead's tools.
 	Detail string `json:"detail,omitempty"`
+	// Info is the same as facts, for the dashboard to say in the user's language. Absent on older rows.
+	Info *AutomationRunInfo `json:"info,omitempty"`
+}
+
+// Reasons of an automation run (AutomationRunInfo.Reason).
+const (
+	// RunStarting, RunTaskRunning: skipped_overlap, another run is starting or its task is still active.
+	RunStarting    = "starting"
+	RunTaskRunning = "task_running"
+	// RunChanged, RunUnconfirmed, RunDisabled, RunMasterOff: skipped_changed, what changed during the precheck.
+	RunChanged     = "changed"
+	RunUnconfirmed = "unconfirmed"
+	RunDisabled    = "disabled"
+	RunMasterOff   = "master_off"
+	// RunInterrupted: error, the daemon stopped while the run was starting.
+	RunInterrupted = "interrupted"
+	// RunMemberMissing, RunMemberDisabled: error, the automation's member is gone or turned off.
+	RunMemberMissing  = "member_missing"
+	RunMemberDisabled = "member_disabled"
+)
+
+// AutomationRunInfo is what a run's outcome rests on. Which fields are set depends on the outcome: skipped_overlap
+// (Reason, TaskID and TaskStatus of the task still active), skipped_quota (Backend, or Account for a before-reset
+// run's weekly bucket, with Remaining and MinRemaining in percent), skipped_precheck and precheck_failed (ExitCode,
+// TimedOut with TimeoutSeconds, or NotStarted; Output is the command's output tail), skipped_late (LateMinutes,
+// GraceMinutes), skipped_changed (Reason), error (Reason and Member when known, else Message), pending (Due).
+type AutomationRunInfo struct {
+	Reason         string   `json:"reason,omitempty" ts:"'starting' | 'task_running' | 'changed' | 'unconfirmed' | 'disabled' | 'master_off' | 'interrupted' | 'member_missing' | 'member_disabled'"`
+	TaskID         string   `json:"taskId,omitempty"`
+	TaskStatus     string   `json:"taskStatus,omitempty"`
+	Backend        string   `json:"backend,omitempty"`
+	Account        string   `json:"account,omitempty"`
+	Remaining      *float64 `json:"remaining,omitempty"`
+	MinRemaining   float64  `json:"minRemaining,omitempty"`
+	ExitCode       *int     `json:"exitCode,omitempty"`
+	TimedOut       bool     `json:"timedOut,omitempty"`
+	TimeoutSeconds int      `json:"timeoutSeconds,omitempty"`
+	NotStarted     bool     `json:"notStarted,omitempty"`
+	Output         string   `json:"output,omitempty"`
+	LateMinutes    int      `json:"lateMinutes,omitempty"`
+	GraceMinutes   int      `json:"graceMinutes,omitempty"`
+	Member         string   `json:"member,omitempty"`
+	Message        string   `json:"message,omitempty"`
+	Due            string   `json:"due,omitempty"`
 }
 
 // Automation is a saved delegation on a schedule.

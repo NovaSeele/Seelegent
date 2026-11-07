@@ -151,6 +151,7 @@ func (s *Service) resolvePending(ctx context.Context, tx *sql.Tx) error {
 	for _, l := range found {
 		run := l.run
 		run.Outcome, run.Detail = api.AutoError, interruptedRun
+		run.Info = &api.AutomationRunInfo{Reason: api.RunInterrupted}
 		if _, err := saveRun(ctx, tx, l.auto, run); err != nil {
 			return err
 		}
@@ -203,8 +204,11 @@ func (s *Service) tick(ctx context.Context) error {
 			trigger := api.TriggerSchedule
 			switch {
 			case behind > time.Duration(r.GraceMinutes)*time.Minute:
-				late = append(late, api.AutomationRun{Trigger: api.TriggerMissed, Outcome: api.AutoSkippedLate,
-					Detail: fmt.Sprintf("missed by %s (grace %d min)", behind.Round(time.Minute), r.GraceMinutes)})
+				run := api.AutomationRun{Trigger: api.TriggerMissed, Outcome: api.AutoSkippedLate,
+					Info: &api.AutomationRunInfo{LateMinutes: int(behind.Round(time.Minute) / time.Minute),
+						GraceMinutes: r.GraceMinutes}}
+				run.Detail = runDetail(run)
+				late = append(late, run)
 				lateIDs = append(lateIDs, r.ID)
 				continue
 			case behind > MaxTick:
@@ -213,7 +217,8 @@ func (s *Service) tick(ctx context.Context) error {
 			// The pending row goes in with the new next run time (G3): a stop before the run starts leaves it,
 			// and the next start says so instead of losing the run silently.
 			run, err := saveRun(ctx, tx, r.ID, api.AutomationRun{At: api.FormatTime(now), Trigger: trigger,
-				Outcome: api.AutoPending, Detail: "due " + api.FormatTime(due)})
+				Outcome: api.AutoPending, Detail: "due " + api.FormatTime(due),
+				Info: &api.AutomationRunInfo{Due: api.FormatTime(due)}})
 			if err != nil {
 				return err
 			}

@@ -274,6 +274,8 @@ export const OUTCOME_LOOK: Readonly<
   skipped_quota: { tone: 'muted', icon: 'statusWaiting' },
   skipped_overlap: { tone: 'muted', icon: 'statusWaiting' },
   skipped_late: { tone: 'muted', icon: 'statusCancelled' },
+  // Attention: an edit made while the precheck ran waits for the user's confirmation.
+  skipped_changed: { tone: 'attention', icon: 'warning' },
   error: { tone: 'danger', icon: 'statusFailed' },
   pending: { tone: 'running', icon: 'statusRunning' },
 }

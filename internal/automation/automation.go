@@ -134,6 +134,9 @@ type Service struct {
 	wake   chan struct{}
 	redact *logx.Redactor
 
+	// edit is held for writing by every change to an automation record (update, Delete) and for reading by a run
+	// from its last check to its delegate, so no edit or switch-off lands in between.
+	edit    sync.RWMutex
 	mu      sync.Mutex
 	firing  map[string]bool
 	tokens  map[string]confirmEntry
@@ -284,6 +287,7 @@ func (s *Service) now() time.Time { return s.o.Clock.Now() }
 // update reads, changes and saves one automation, then tells the stream.
 func (s *Service) update(ctx context.Context, id string, fn func(r *rec) error) (api.Automation, error) {
 	var out *rec
+	s.edit.Lock()
 	err := s.o.DB.Write(ctx, func(tx *sql.Tx) error {
 		r, err := loadRec(ctx, tx, id)
 		if err != nil {
@@ -295,6 +299,7 @@ func (s *Service) update(ctx context.Context, id string, fn func(r *rec) error) 
 		out = r
 		return saveRec(ctx, tx, r)
 	})
+	s.edit.Unlock()
 	if err != nil {
 		return api.Automation{}, err
 	}
@@ -313,21 +318,21 @@ func (s *Service) poke() {
 }
 
 // running reports whether a run of r is starting or its task is still active.
-func (s *Service) running(ctx context.Context, r *rec) (busy bool, why string) {
+func (s *Service) running(ctx context.Context, r *rec) (busy bool, why *api.AutomationRunInfo) {
 	s.mu.Lock()
 	f := s.firing[r.ID]
 	s.mu.Unlock()
 	if f {
-		return true, "a run is already starting"
+		return true, &api.AutomationRunInfo{Reason: api.RunStarting}
 	}
 	if r.ActiveTaskID == "" {
-		return false, ""
+		return false, nil
 	}
 	sum, err := s.o.Tasks.Summary(ctx, r.ActiveTaskID)
 	if err != nil || !task.Pending(sum.Status) {
-		return false, ""
+		return false, nil
 	}
-	return true, fmt.Sprintf("task %s is still %s", sum.ID, sum.Status)
+	return true, &api.AutomationRunInfo{Reason: api.RunTaskRunning, TaskID: sum.ID, TaskStatus: string(sum.Status)}
 }
 
 func (s *Service) view(ctx context.Context, r *rec) api.Automation {
@@ -608,6 +613,7 @@ func (s *Service) Update(ctx context.Context, id string, p api.AutomationPatch) 
 
 // Delete removes an automation and its run history (its tasks stay).
 func (s *Service) Delete(ctx context.Context, id string) error {
+	s.edit.Lock()
 	err := s.o.DB.Write(ctx, func(tx *sql.Tx) error {
 		res, err := tx.ExecContext(ctx, `DELETE FROM automations WHERE id = ?`, id)
 		if err != nil {
@@ -619,6 +625,7 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 		_, err = tx.ExecContext(ctx, `DELETE FROM automation_runs WHERE automation_id = ?`, id)
 		return err
 	})
+	s.edit.Unlock()
 	if err != nil {
 		return err
 	}
@@ -766,7 +773,16 @@ func (s *Service) Runs(ctx context.Context, id string, limit int) ([]api.Automat
 // row the scheduler wrote); without one, or when that row is gone, it is a new row.
 func (s *Service) record(ctx context.Context, id string, run api.AutomationRun) (api.AutomationRun, error) {
 	run.At = api.FormatTime(s.now())
+	if run.Detail == "" {
+		run.Detail = runDetail(run)
+	}
 	run.Detail = clip(s.redact.String(run.Detail), maxDetail)
+	if run.Info != nil {
+		info := *run.Info
+		info.Output = s.redact.String(info.Output)
+		info.Message = clip(s.redact.String(info.Message), maxDetail)
+		run.Info = &info
+	}
 	var r *rec
 	err := s.o.DB.Write(ctx, func(tx *sql.Tx) error {
 		var err error
@@ -899,13 +915,13 @@ func (s *Service) fire(ctx context.Context, id, trigger string, reset *resetCand
 		return api.AutomationRun{}, err
 	}
 	if busy, why := s.running(ctx, r); busy {
-		return record(ctx, id, api.AutomationRun{Trigger: trigger, Outcome: api.AutoSkippedOverlap, Detail: why})
+		return record(ctx, id, api.AutomationRun{Trigger: trigger, Outcome: api.AutoSkippedOverlap, Info: why})
 	}
 	s.mu.Lock()
 	if s.firing[id] {
 		s.mu.Unlock()
 		return record(ctx, id, api.AutomationRun{Trigger: trigger, Outcome: api.AutoSkippedOverlap,
-			Detail: "a run is already starting"})
+			Info: &api.AutomationRunInfo{Reason: api.RunStarting}})
 	}
 	s.firing[id] = true
 	s.mu.Unlock()
@@ -915,56 +931,169 @@ func (s *Service) fire(ctx context.Context, id, trigger string, reset *resetCand
 		s.mu.Unlock()
 	}()
 
+	// What runs is this version: the one the checks below judge. A change while they run (the precheck can take a
+	// minute) is not run before the user confirms it.
+	h := r.contentHash()
+	if why := s.mayStart(r, h, trigger); why != "" {
+		return record(ctx, id, api.AutomationRun{Trigger: trigger, Outcome: api.AutoSkippedChanged,
+			Info: &api.AutomationRunInfo{Reason: why}})
+	}
 	minLeft := r.Quota.MinRemaining
 	if reset != nil {
 		if reset.remaining*100 < minLeft {
+			left := reset.remaining * 100
 			return record(ctx, id, api.AutomationRun{Trigger: trigger, Outcome: api.AutoSkippedQuota,
-				Detail: fmt.Sprintf("the weekly bucket of %s has %.0f%% left (< %g%%)", reset.accountID,
-					reset.remaining*100, minLeft)})
+				Info: &api.AutomationRunInfo{Account: reset.accountID, Remaining: &left, MinRemaining: minLeft}})
 		}
 	} else {
 		b, rows := s.quotaRows(ctx, r)
 		if best, ok := bestRemaining(rows, s.now()); ok && best*100 < minLeft {
+			left := best * 100
 			return record(ctx, id, api.AutomationRun{Trigger: trigger, Outcome: api.AutoSkippedQuota,
-				Detail: fmt.Sprintf("the best %s account has %.0f%% left (< %g%%)", b, best*100, minLeft)})
+				Info: &api.AutomationRunInfo{Backend: b, Remaining: &left, MinRemaining: minLeft}})
 		}
 	}
 	if r.Precheck != "" {
 		res := s.o.Precheck(ctx, r.Precheck, r.Cwd, PrecheckTimeout)
 		if !res.OK() {
-			// Exit code 1 is the precheck's answer "skip" (grep -q, test, git diff --quiet); anything else means the
-			// precheck itself broke: another exit code (2 for a usage error, 126/127 for a missing command, 128 for
-			// a git error), killed, timed out or not started.
-			outcome := api.AutoPrecheckFailed
-			why := res.Err
-			switch {
-			case res.TimedOut:
-				why = "timed out after 60 s"
-			case res.Exit != nil:
-				why = fmt.Sprintf("exit code %d", *res.Exit)
-				if *res.Exit == 1 {
-					outcome = api.AutoSkippedPrecheck
-				}
-			case why == "":
-				why = "did not run"
-			}
-			if tail := strings.TrimSpace(res.Tail); tail != "" && tail != res.Err {
-				why += ": " + tailOf(tail, 400)
-			}
-			return record(ctx, id, api.AutomationRun{Trigger: trigger, Outcome: outcome, Detail: why})
+			return record(ctx, id, precheckRun(trigger, res))
 		}
 	}
-	if r, err = s.get(ctx, id); err != nil { // deleted or changed during the precheck
+	// The last check and the delegate hold the edit lock: an edit, a switch-off or a delete waits for the task to
+	// exist, or comes first and is seen here.
+	s.edit.RLock()
+	now, err := s.get(ctx, id)
+	if err != nil { // deleted during the precheck
+		s.edit.RUnlock()
 		return api.AutomationRun{}, err
+	}
+	if why := s.mayStart(now, h, trigger); why != "" {
+		s.edit.RUnlock()
+		return record(ctx, id, api.AutomationRun{Trigger: trigger, Outcome: api.AutoSkippedChanged,
+			Info: &api.AutomationRunInfo{Reason: why}})
 	}
 	req := api.DelegateRequest{Prompt: r.Prompt, Cwd: r.Cwd, Title: r.Name, Member: r.Member, Backend: r.Backend,
 		Model: r.Model, Gate: r.Gate, GateCommands: r.GateCommands, Lane: r.Lane, NoLane: r.NoLane}
 	sum, err := s.o.Tasks.DelegateWith(ctx, req, task.Spawn{AutomationID: id})
+	s.edit.RUnlock()
 	if err != nil {
-		return record(ctx, id, api.AutomationRun{Trigger: trigger, Outcome: api.AutoError,
+		return record(ctx, id, api.AutomationRun{Trigger: trigger, Outcome: api.AutoError, Info: errorInfo(err),
 			Detail: oneLine(err.Error(), maxDetail)})
 	}
 	return record(ctx, id, api.AutomationRun{Trigger: trigger, Outcome: api.AutoStarted, TaskID: sum.ID})
+}
+
+// mayStart says why r cannot start now ("" when it can): it must still be the version h whose checks ran and that
+// the user confirmed, and a run of its own (schedule, missed, before reset) also needs it and the master switch on.
+func (s *Service) mayStart(r *rec, h, trigger string) string {
+	switch {
+	case r.contentHash() != h:
+		return api.RunChanged
+	case !r.confirmed():
+		return api.RunUnconfirmed
+	case trigger == api.TriggerManual:
+		return ""
+	case !r.Enabled:
+		return api.RunDisabled
+	case !s.o.MasterOn():
+		return api.RunMasterOff
+	}
+	return ""
+}
+
+// precheckRun is the run of a precheck that did not say go. Exit code 1 is the precheck's answer "skip" (grep -q,
+// test, git diff --quiet); anything else means the precheck itself broke: another exit code (2 for a usage error,
+// 126/127 for a missing command, 128 for a git error), killed, timed out or not started.
+func precheckRun(trigger string, res gate.ExecResult) api.AutomationRun {
+	run := api.AutomationRun{Trigger: trigger, Outcome: api.AutoPrecheckFailed, Info: &api.AutomationRunInfo{}}
+	if tail := strings.TrimSpace(res.Tail); tail != "" && tail != res.Err {
+		run.Info.Output = tailOf(tail, 400)
+	}
+	switch {
+	case res.TimedOut:
+		run.Info.TimedOut, run.Info.TimeoutSeconds = true, int(PrecheckTimeout/time.Second)
+	case res.Exit != nil:
+		code := *res.Exit
+		run.Info.ExitCode = &code
+		if code == 1 {
+			run.Outcome = api.AutoSkippedPrecheck
+		}
+	default:
+		run.Info.NotStarted = true
+		if run.Info.Output == "" {
+			run.Info.Output = tailOf(strings.TrimSpace(res.Err), 400)
+		}
+	}
+	return run
+}
+
+// runDetail is a run's Info said in English, for the lead's tools (the dashboard says it in the user's language).
+func runDetail(run api.AutomationRun) string {
+	in := run.Info
+	if in == nil {
+		return ""
+	}
+	pct := func(p *float64) float64 {
+		if p == nil {
+			return 0
+		}
+		return *p
+	}
+	var why string
+	switch run.Outcome {
+	case api.AutoSkippedOverlap:
+		why = "a run is already starting"
+		if in.Reason == api.RunTaskRunning {
+			why = fmt.Sprintf("task %s is still %s", in.TaskID, in.TaskStatus)
+		}
+	case api.AutoSkippedQuota:
+		if in.Account != "" {
+			why = fmt.Sprintf("the weekly bucket of %s has %.0f%% left (< %g%%)", in.Account, pct(in.Remaining),
+				in.MinRemaining)
+		} else {
+			why = fmt.Sprintf("the best %s account has %.0f%% left (< %g%%)", in.Backend, pct(in.Remaining),
+				in.MinRemaining)
+		}
+	case api.AutoSkippedPrecheck, api.AutoPrecheckFailed:
+		switch {
+		case in.TimedOut:
+			why = fmt.Sprintf("timed out after %d s", in.TimeoutSeconds)
+		case in.ExitCode != nil:
+			why = fmt.Sprintf("exit code %d", *in.ExitCode)
+		default:
+			why = "did not run"
+		}
+		if in.Output != "" {
+			why += ": " + in.Output
+		}
+	case api.AutoSkippedLate:
+		why = fmt.Sprintf("missed by %s (grace %d min)", time.Duration(in.LateMinutes)*time.Minute, in.GraceMinutes)
+	case api.AutoSkippedChanged:
+		why = map[string]string{
+			api.RunChanged:     "the automation changed while its precheck ran; nothing was started",
+			api.RunUnconfirmed: "the automation is not confirmed as it is now; nothing was started",
+			api.RunDisabled:    "the automation was turned off while its precheck ran; nothing was started",
+			api.RunMasterOff:   "automations were turned off while the precheck ran; nothing was started",
+		}[in.Reason]
+	case api.AutoError:
+		why = in.Message
+	}
+	return why
+}
+
+// errorInfo is what is known of a run that could not start: a member that is gone or turned off has a reason; any
+// other cause is only its message.
+func errorInfo(err error) *api.AutomationRunInfo {
+	var detailed interface{ APIDetails() map[string]any }
+	if errors.As(err, &detailed) {
+		d := detailed.APIDetails()
+		reason, _ := d["reason"].(string)
+		member, _ := d["member"].(string)
+		if reason == api.RunMemberMissing || reason == api.RunMemberDisabled {
+			return &api.AutomationRunInfo{Reason: reason, Member: member}
+		}
+	}
+	return &api.AutomationRunInfo{Message: oneLine(err.Error(), maxDetail)}
 }
 
 // NotConfirmedError refuses run now for an automation whose content the user has not confirmed: never confirmed,

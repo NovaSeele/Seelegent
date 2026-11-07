@@ -21,7 +21,8 @@
     "skipped_late": "건너뜀: 너무 늦음",
     "error": "오류",
     "pending": "시작 중",
-    "precheck_failed": "사전 확인 실패"
+    "precheck_failed": "사전 확인 실패",
+    "skipped_changed": "시작 안 함: 변경됨"
   },
   "trigger": {
     "schedule": "일정",
@@ -174,5 +175,29 @@
   },
   "time": {
     "withLocal": "{when} (내 시간 {local})"
+  },
+  "run": {
+    "starting": "이 자동화의 다른 실행이 이미 시작 중이었습니다.",
+    "taskRunning": "지난 실행의 작업이 아직 끝나지 않았습니다({status}).",
+    "quotaBackend": "가장 여유 있는 {backend} 계정의 남은 양은 {left}입니다. 이 자동화에는 최소 {min}이(가) 필요합니다.",
+    "quotaBucket": "곧 초기화되는 {account}의 주간 할당량이 {left} 남았습니다. 이 자동화에는 최소 {min}이(가) 필요합니다.",
+    "saidSkip": "사전 확인이 코드 {code}(으)로 끝났습니다. 이번에는 할 일이 없습니다.",
+    "exitCode": "명령이 코드 {code}(으)로 끝났습니다.",
+    "timedOut": "명령이 {limit} 안에 끝나지 않았습니다.",
+    "notStarted": "명령을 시작할 수 없었습니다.",
+    "output": "명령 출력:",
+    "late": "예정 시각에 Seelegent가 꺼져 있었습니다. {late} 늦어 유예 시간 {grace}을(를) 넘었습니다.",
+    "changed": {
+      "changed": "사전 확인 중에 자동화가 수정되어 아무것도 시작하지 않았습니다. 새 버전을 실행하려면 검토 후 켜세요.",
+      "unconfirmed": "자동화가 현재 내용으로 확인되지 않아 아무것도 시작하지 않았습니다. 검토 후 켜세요.",
+      "disabled": "사전 확인 중에 자동화가 꺼져 아무것도 시작하지 않았습니다.",
+      "master_off": "사전 확인 중에 설정에서 자동화가 꺼져 아무것도 시작하지 않았습니다."
+    },
+    "memberMissing": "멤버 \"{member}\"이(가) 더 이상 없습니다. 자동화를 수정해 다른 멤버나 백엔드를 고르세요.",
+    "memberDisabled": "멤버 \"{member}\"이(가) 꺼져 있습니다. 멤버 페이지에서 켜거나, 자동화를 수정해 다른 멤버를 고르세요.",
+    "interrupted": "이 실행이 시작되는 중에 Seelegent가 멈춰 작업이 시작되었을 수 있습니다. 작업 목록을 확인하세요. 자동으로 다시 실행하지 않으니, 아직 필요하면 지금 실행을 사용하세요.",
+    "couldNotStart": "작업을 시작할 수 없었습니다.",
+    "daemonSaid": "Seelegent 메시지:",
+    "due": "예정 시각: {when}."
   }
 }
