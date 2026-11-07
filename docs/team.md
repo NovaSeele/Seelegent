@@ -64,13 +64,18 @@ and the changes it requires. The record is stored on the task (`TaskDetail.consu
 
 A peer's `object` blocks `review accepted`: the review answers `409 conflict` with `details.reason:
 "peer_objection"` until the lead sends `answerObjection` (MCP `answer_objection`, CLI `--answer-objection`). The
-answer is stored on the objection and added to the review notes. Rejecting needs no answer.
+answer is stored on the objection and added to the review notes. Rejecting needs no answer. While the objection
+stands the finished task's attention is `blocked` with reason `peer_objection` (for the lead). A senior's `object`
+does not block: accepting over it answers the task summary with `warnings` naming it (MCP `Warning:` lines, the
+CLI prints them). The dashboard shows the consults in a "Member opinions" panel of the task; an unanswered peer
+objection disables Accept and the banner's "Answer objection" sends the answer with the acceptance.
 
 ## Review notes
 
 A note sits on a line (or a range) of the task's diff, on the new side unless `side: "old"`, written by the user
 or the lead. It keeps the text of its line (`anchorText`); after each turn it follows that text within 50 lines
-(`currentLine`, 0 when the line is gone). Its status is computed when it is read:
+(`currentLine`, always sent: `line` when there is nothing to look for, 0 when the line is gone; such a note is
+listed but not anchored in the diff). Its status is computed when it is read:
 
 | Status | Meaning |
 |---|---|
@@ -113,7 +118,8 @@ After a round:
 
 `POST /meetings/{id}/decide {decision, rationale?, option?}` records the decision. A senior whose final stance
 differs is recorded as advice not taken; a peer whose stance differs gets one more turn to dissent formally or
-concede (`dissent`), and the meeting closes when those are in. Without options free-text stances cannot be
+concede (`dissent`), and the meeting closes when those are in; a peer whose turn fails or answers nothing usable is
+recorded as `absent` (neither a dissent nor a concession). Without options free-text stances cannot be
 compared, so every senior counts as advice not taken and every peer gets that turn, where it can concede (as in the
 old version); give options when the record matters. For 30 days a dissent watches the files it cites:
 a later task that changed one of them and was rejected, or ended with a red gate, is added to it as a signal. The
@@ -150,12 +156,16 @@ publishes `meeting.updated` with the meeting's summary.
 6. **Judge.** Unless `noJudge`, the judge (the member named, else the first enabled peer) reads the best three as
    anonymous letters with their diffs, read-only, and answers a winner, a ranking and reasons citing
    `[B path:12] "quote"`; every citation is checked against that variant's tree. The judge's winner is proposed when
-   it is qualified and at least one of its citations is verified; otherwise the machine's.
-7. **Pick.** `POST /contests/{id}/pick {winner?}` (default: the proposal) seals the winner's worktree, writes its
-   diff against the base to `contests/<id>.<label>.patch` and, under the repository lock, runs `git apply --check`
-   then `git apply` on the working tree only (never the index). A patch that does not apply changes nothing:
+   it is qualified and at least one of the citations about the winner itself is verified; otherwise the machine's,
+   with `proposal.reasonCode` (`unverified`, `judge_failed`, `judge_running`) saying why.
+7. **Pick.** `POST /contests/{id}/pick {winner?}` (default: the proposal) commits the winner's worktree as it is
+   through a temporary index and `git commit-tree` (the worktree itself is not touched), writes that commit's diff
+   against the base to `contests/<id>.<label>.patch` and, under the repository lock, runs `git apply --check` then
+   `git apply` on the working tree only (never the index). A patch that does not apply changes nothing:
    `409 conflict` with `details.reason: "patch_conflict"` and the files, kept as `lastPickError`. After a pick the
    winner's task is accepted and the other finished variants rejected (losing adds nothing to the review history).
+   The dashboard applies the proposal unless another qualified variant is chosen; when none qualifies it offers
+   "Apply a variant anyway" for a disqualified one that still has work (red gate, lane, rejected).
 
 A followup on a variant while the contest is ready reopens it; it is scored again when the variant ends.
 
@@ -176,7 +186,9 @@ A hook is a shell command (`cmd.exe /d /s /c` on Windows, `/bin/sh -c` elsewhere
 `task.cancelled`, `task.takeover`, `task.handback`, `account.exhausted`, `account.needs_login`, `daemon.started`,
 `daemon.reattached` (and `hook.test`). It gets the event as JSON on stdin and `SEELEGENT_EVENT`,
 `SEELEGENT_TASK_ID`, `SEELEGENT_PORT` in its environment, runs in the task's folder (else the home folder), and is
-killed with its process tree after `timeoutSeconds` (default 20, at most 600). `project` limits it to tasks of one
+killed with its process tree after `timeoutSeconds` (default 20, at most 600). A run ends when its command exits,
+even if a child it left behind still holds the output (2 s later at most). On stop the daemon gives running hooks
+5 s, then kills them ("the daemon stopped"). `project` limits it to tasks of one
 folder. At most 50 hooks; four run at once and 50 events wait, the oldest dropped (and logged) beyond that. Each
 run's output start (4 KiB, secrets masked) goes to `logs/hooks.log` (2 MiB, two old copies) and to `hook.ran`.
 
