@@ -266,7 +266,7 @@ func (s *Service) createTicket(ctx context.Context, r *repoRec, issue api.Issue)
 		break
 	}
 	fail := func(err error) {
-		t.Status, t.Error = api.TicketFailed, s.redactErr(err, 600)
+		t.Status, t.Error, t.ErrorCause = api.TicketFailed, s.redactErr(err, 600), ""
 	}
 	var env *api.WorktreeEnv
 	if t.Branch == "" {

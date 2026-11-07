@@ -25,6 +25,7 @@ type entryData struct {
 	Args   map[string]any `json:"args"`
 	Result map[string]any `json:"result,omitempty"`
 	Error  string         `json:"error,omitempty"`
+	Cause  string         `json:"cause,omitempty"`
 }
 
 func scanEntry(id int64, kind, status, at string, doneAt sql.NullString, raw string) (api.OutboxEntry, error) {
@@ -32,7 +33,8 @@ func scanEntry(id int64, kind, status, at string, doneAt sql.NullString, raw str
 	if err := json.Unmarshal([]byte(raw), &d); err != nil {
 		return api.OutboxEntry{}, fmt.Errorf("outbox entry %d is unreadable: %w", id, err)
 	}
-	e := api.OutboxEntry{ID: id, Kind: kind, Status: status, Args: d.Args, Result: d.Result, Error: d.Error, At: at}
+	e := api.OutboxEntry{ID: id, Kind: kind, Status: status, Args: d.Args, Result: d.Result, Error: d.Error, Cause: d.Cause,
+		At: at}
 	if e.Args == nil {
 		e.Args = map[string]any{}
 	}
@@ -90,7 +92,7 @@ func getEntry(ctx context.Context, tx *sql.Tx, id int64) (api.OutboxEntry, error
 
 // saveEntry writes e (a new row when e.ID is 0) and returns its id.
 func saveEntry(ctx context.Context, tx *sql.Tx, scope, ref string, e api.OutboxEntry) (int64, error) {
-	raw, err := json.Marshal(entryData{Args: e.Args, Result: e.Result, Error: e.Error})
+	raw, err := json.Marshal(entryData{Args: e.Args, Result: e.Result, Error: e.Error, Cause: e.Cause})
 	if err != nil {
 		return 0, err
 	}
@@ -189,7 +191,7 @@ func (s *Service) runStepWith(ctx context.Context, ticketID, kind string, args m
 		if e.ID != 0 {
 			step.Prev, step.PrevAt = e.Status, e.At
 		}
-		e.Status, e.At, e.Error = api.OutboxRunning, now, ""
+		e.Status, e.At, e.Error, e.Cause = api.OutboxRunning, now, "", ""
 		if id, err = saveEntry(ctx, tx, scopeTicket, ticketID, e); err != nil {
 			return err
 		}
@@ -209,11 +211,11 @@ func (s *Service) runStepWith(ctx context.Context, ticketID, kind string, args m
 		}
 		e.DoneAt = api.FormatTime(s.o.Now())
 		if runErr != nil {
-			e.Status, e.Error, e.DoneAt = api.OutboxFailed, s.redactErr(runErr, 600), ""
+			e.Status, e.Error, e.Cause, e.DoneAt = api.OutboxFailed, s.redactErr(runErr, 600), errorCause(runErr), ""
 			if rf := refusalOf(runErr, e.Error, e.At); rf != nil {
 				t.Refusal = rf // the remote's state refused it (branch_diverged): explained, not an error
 			} else {
-				t.Error = e.Error
+				t.Error, t.ErrorCause = e.Error, e.Cause
 			}
 		} else {
 			e.Status, e.Result = api.OutboxDone, result

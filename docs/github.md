@@ -156,6 +156,9 @@ the repository has none). The worker's commits stay in the local worktree.
    read again; a branch that changed meanwhile is refused as above. The push runs on the daemon's own context with
    a 5 minute limit, not the request's: a caller that goes away does not cut it off half way. The commit it sent is
    recorded on the ticket (`pushedSha`, `pushedBase`) in the same transaction that marks its outbox row `done`.
+   The push signs in with the user's own git credentials (credential helper, SSH key), never with the stored token
+   or the gh sign-in (old D18); a push git cannot sign in for fails with the cause `git_auth`, and the dashboard
+   says to set up git's credentials (for example `gh auth setup-git`).
 5. **Open** a draft pull request (or adopt the one the branch already has). Its body is generated from the tasks'
    summaries with local paths removed (`file://` links, the worktree, the repository and the home folder in every
    spelling: either slash, the 8.3 short form such as `C:\Users\JOHNSM~1`, and WSL's `/mnt/c/...`). In the manual tier the
@@ -167,7 +170,11 @@ Each step is a row of the **outbox**, written as `running` before it starts and 
 D6: records are SQLite rows, and a row that cannot be read is an error, never an empty list). A row still `running`
 when the daemon starts is `unknown`; before anything is retried it is checked against git and GitHub (is the commit
 Seelegent made on the remote branch, does the pull request exist, does the issue hold the comment's marker) and
-marked done when it had happened.
+marked done when it had happened. A failed row keeps git's or GitHub's English text in `error` (for the lead's
+tools) and its cause in `cause` (`git_auth`, `git_rejected`, `git`, `network`, `github_auth`, `github_rate_limited`,
+`github_forbidden`, `github_manual`, `github`, `other`); the ticket's `error`, the checks' `error` and a repository's
+`syncError` carry the same cause (`errorCause`, `syncErrorCause`). The dashboard explains each from its cause in the
+reader's language and shows the English text only behind a "Seelegent said" disclosure.
 
 *Comment* (`POST /github/tickets/{id}/comment`) posts on the GitHub issue with the local paths and anything
 token-like removed. Each comment ends with a hidden line `<!-- seelegent:<outbox entry id> -->`. Posting the same

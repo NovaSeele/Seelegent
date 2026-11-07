@@ -240,17 +240,18 @@ func (k *keyed) lock(ctx context.Context, name string) (func(), error) {
 // repoRec is a connected repository as stored. Whether it is on GitHub is worked out from RemoteURL and the host
 // list each time (the settings can change).
 type repoRec struct {
-	ID            string    `json:"id"`
-	Path          string    `json:"path"`
-	Name          string    `json:"name"`
-	HasOrigin     bool      `json:"hasOrigin"`
-	RemoteURL     string    `json:"remoteUrl,omitempty"`
-	DefaultBranch string    `json:"defaultBranch"`
-	SharedDirs    []string  `json:"sharedDirs"`
-	CreatedAt     time.Time `json:"createdAt"`
-	LastSyncAt    time.Time `json:"lastSyncAt,omitzero"`
-	SyncError     string    `json:"syncError,omitempty"`
-	NextLocalID   int       `json:"nextLocalId"`
+	ID             string    `json:"id"`
+	Path           string    `json:"path"`
+	Name           string    `json:"name"`
+	HasOrigin      bool      `json:"hasOrigin"`
+	RemoteURL      string    `json:"remoteUrl,omitempty"`
+	DefaultBranch  string    `json:"defaultBranch"`
+	SharedDirs     []string  `json:"sharedDirs"`
+	CreatedAt      time.Time `json:"createdAt"`
+	LastSyncAt     time.Time `json:"lastSyncAt,omitzero"`
+	SyncError      string    `json:"syncError,omitempty"`
+	SyncErrorCause string    `json:"syncErrorCause,omitempty"`
+	NextLocalID    int       `json:"nextLocalId"`
 }
 
 // ghRepo is the GitHub repository of a connected repository.
@@ -303,6 +304,7 @@ type ticketRec struct {
 	ChecksFix  *api.ChecksFix     `json:"checksFix,omitempty"`
 	Env        *api.WorktreeEnv   `json:"env,omitempty"`
 	Error      string             `json:"error,omitempty"`
+	ErrorCause string             `json:"errorCause,omitempty"`
 	Failure    *api.TicketFailure `json:"failure,omitempty"`
 	Asked      *api.TicketAsk     `json:"asked,omitempty"`
 	Refusal    *api.TicketRefusal `json:"refusal,omitempty"`
@@ -359,6 +361,9 @@ func (t *ticketRec) summary() api.TicketSummary {
 		Worktree: t.Worktree, Status: t.Status, TaskIDs: api.NonNil(t.TaskIDs), MeetingID: t.MeetingID, PR: t.PR,
 		NeedsAttention: t.needsAttention(), Error: t.Error, Asked: t.Asked, CreatedAt: api.FormatTime(t.CreatedAt),
 		UpdatedAt: api.FormatTime(t.UpdatedAt)}
+	if t.Error != "" {
+		sum.ErrorCause = t.ErrorCause
+	}
 	if t.Refusal != nil && (t.Status == api.TicketReady || t.Status == api.TicketPROpen) {
 		rf := *t.Refusal
 		rf.Findings = api.NonNil(rf.Findings)

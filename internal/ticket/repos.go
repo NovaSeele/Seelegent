@@ -49,6 +49,9 @@ func (s *Service) repoView(ctx context.Context, tx *sql.Tx, r *repoRec) (api.Rep
 	v := api.Repo{ID: r.ID, Path: r.Path, Name: r.Name, Owner: g.owner, Repo: g.name, GitHub: g.ok(),
 		NotGitHub: g.why, RemoteURL: r.RemoteURL, DefaultBranch: r.DefaultBranch, SharedDirs: api.NonNil(r.SharedDirs),
 		CreatedAt: api.FormatTime(r.CreatedAt), LastSyncAt: api.FormatTime(r.LastSyncAt), SyncError: r.SyncError}
+	if r.SyncError != "" {
+		v.SyncErrorCause = r.SyncErrorCause
+	}
 	if g.ok() {
 		v.Host = g.host.Name
 	}
@@ -455,7 +458,7 @@ func (s *Service) CreateRemote(ctx context.Context, id string, req api.RemoteReq
 			entry.Result = map[string]any{}
 		}
 		entry.Args = map[string]any{"name": name, "private": private}
-		entry.Status, entry.At, entry.Error = api.OutboxRunning, now, ""
+		entry.Status, entry.At, entry.Error, entry.Cause = api.OutboxRunning, now, "", ""
 		entry.ID, err = saveEntry(ctx, tx, scopeRepo, id, entry)
 		return err
 	})
@@ -470,7 +473,7 @@ func (s *Service) CreateRemote(ctx context.Context, id string, req api.RemoteReq
 		})
 	}
 	fail := func(ferr error) (api.Repo, error) {
-		entry.Status, entry.Error = api.OutboxFailed, s.redactErr(ferr, 600)
+		entry.Status, entry.Error, entry.Cause = api.OutboxFailed, s.redactErr(ferr, 600), errorCause(ferr)
 		save()
 		s.o.IssuesChanged(id)
 		return api.Repo{}, ferr

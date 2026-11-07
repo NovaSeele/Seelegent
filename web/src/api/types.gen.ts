@@ -1017,6 +1017,18 @@ export interface OutboxEntry {
   args: Record<string, unknown>
   result: Record<string, unknown>
   error?: string
+  /** Cause is the cause of Error (api.Cause*), set with it. */
+  cause?:
+    | 'git_auth'
+    | 'git_rejected'
+    | 'git'
+    | 'network'
+    | 'github_auth'
+    | 'github_rate_limited'
+    | 'github_forbidden'
+    | 'github_manual'
+    | 'github'
+    | 'other'
   at: string
   doneAt?: string
 }
@@ -1043,6 +1055,18 @@ export interface Repo {
   createdAt: string
   lastSyncAt?: string
   syncError?: string
+  /** SyncErrorCause is the cause of SyncError (api.Cause*). */
+  syncErrorCause?:
+    | 'git_auth'
+    | 'git_rejected'
+    | 'git'
+    | 'network'
+    | 'github_auth'
+    | 'github_rate_limited'
+    | 'github_forbidden'
+    | 'github_manual'
+    | 'github'
+    | 'other'
   counts: RepoCounts
   outbox: OutboxEntry[]
 }
@@ -1207,6 +1231,18 @@ export interface TicketChecks {
   headSha?: string
   at?: string
   error?: string
+  /** ErrorCause is the cause of Error (api.Cause*). */
+  errorCause?:
+    | 'git_auth'
+    | 'git_rejected'
+    | 'git'
+    | 'network'
+    | 'github_auth'
+    | 'github_rate_limited'
+    | 'github_forbidden'
+    | 'github_manual'
+    | 'github'
+    | 'other'
 }
 
 /** ChecksFix records the task fix_checks started. */
@@ -1270,6 +1306,21 @@ export interface TicketSummary {
   refusal?: TicketRefusal
   /** Error is a failure (a task or meeting that could not start, a GitHub or git call that failed). */
   error?: string
+  /**
+   * ErrorCause is the cause of Error (api.Cause*); absent for a failed ticket, whose Failure (or the generic
+   * "could not start") explains it.
+   */
+  errorCause?:
+    | 'git_auth'
+    | 'git_rejected'
+    | 'git'
+    | 'network'
+    | 'github_auth'
+    | 'github_rate_limited'
+    | 'github_forbidden'
+    | 'github_manual'
+    | 'github'
+    | 'other'
   /**
    * Failure is the known cause of a failed ticket, for the dashboard to explain in its own words (Error stays
    * the text for the lead's tools and for causes without a code).

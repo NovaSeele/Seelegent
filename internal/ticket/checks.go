@@ -51,7 +51,7 @@ func (s *Service) readChecks(ctx context.Context, t *ticketRec, c *github.Client
 			return t.Checks, false
 		}
 		return &api.TicketChecks{State: api.ChecksUnknown, Runs: []api.CheckRun{}, HeadSha: sha,
-			At: api.FormatTime(s.o.Now()), Error: s.redactErr(err, 300)}, true
+			At: api.FormatTime(s.o.Now()), Error: s.redactErr(err, 300), ErrorCause: errorCause(err)}, true
 	}
 	next.At = api.FormatTime(s.o.Now())
 	changed := checksSig(t.Checks) != checksSig(&next) || t.Checks != nil && t.Checks.Error != ""
@@ -176,7 +176,7 @@ func (s *Service) pollTicket(ctx context.Context, id string, r *repoRec, access 
 			if t.Error == msg {
 				return errUnchanged
 			}
-			t.Error = msg
+			t.Error, t.ErrorCause = msg, errorCause(perr)
 			return nil
 		})
 		return errors.Join(perr, err)

@@ -83,7 +83,7 @@ func (s *Service) adopt(ctx context.Context, t *ticketRec, plan *pushPlan) error
 func (s *Service) setRefusal(ctx context.Context, tx *sql.Tx, t *ticketRec, err error, msg string) {
 	rf := refusalOf(err, msg, api.FormatTime(s.o.Now()))
 	if rf == nil {
-		t.Error = msg
+		t.Error, t.ErrorCause = msg, errorCause(err)
 		s.logStep(ctx, tx, t.ID, "pr_refused", map[string]any{"error": msg})
 		return
 	}
