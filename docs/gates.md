@@ -34,8 +34,9 @@ When the task starts, its proof is resolved and frozen (`TaskDetail.proof`):
   (`{"version": 1, "checks": [{"id", "run", "principle"?, "when"?: [globs]}]}`), frozen so a worker cannot loosen
   them. A check with `when` runs only when a changed file matches. A file that cannot be read is reported as
   `doctrineError` and fails the doctrine step.
-- **Lane**: the lead's `lane`, or the paths the spec tasks name (back-quoted paths in their `tasks.md` lines), unless
-  `lane: false`.
+- **Lane**: the lead's `lane`, or the paths the spec tasks name (back-quoted paths in their `tasks.md` lines: a path
+  with a folder, a glob, or a file name with an extension, even one the task has yet to create; spec documents of
+  the feature are left out), unless `lane: false`.
 - **Bar**: hashes of what defines "done": the gate commands, the constitution
   (`.specify/memory/constitution.md`), the doctrine, the feature's `spec.md`, `plan.md`, `tasks.md` lines of its
   tasks (ticks ignored) and `contracts/`. A worker that changes any of them shows up as `bar.changed` in the report

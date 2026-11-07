@@ -114,9 +114,11 @@ func TestResolveLane(t *testing.T) {
 		}
 		return ""
 	}
-	got := ResolveLane([]string{"internal/p", "README.md", "Makefile", "spec.md", "specs/001/plan.md", "cmd/*.go"},
+	// greet.txt does not exist yet: a new file the task creates is still in its lane.
+	got := ResolveLane([]string{"internal/p", "README.md", "Makefile", "spec.md", "specs/001/plan.md", "cmd/*.go",
+		"greet.txt"},
 		"specs/001", stat)
-	if !reflect.DeepEqual(got, []string{"internal/p/", "README.md", "cmd/*.go"}) {
+	if !reflect.DeepEqual(got, []string{"internal/p/", "README.md", "cmd/*.go", "greet.txt"}) {
 		t.Errorf("ResolveLane = %v", got)
 	}
 }
