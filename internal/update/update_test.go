@@ -672,20 +672,20 @@ func TestSchemaCheck(t *testing.T) {
 
 // migratingEnv is a database at schema 7 under the running v0.0.1 (schema 7); v0.0.2 knows schema 8, and its daemon
 // migrates the database to 8 and then fails.
-func migratingEnv(t *testing.T, installed string, rels ...string) (*env, *int) {
+func migratingEnv(t *testing.T, installed string, rels ...string) (e *env, db *int) {
 	t.Helper()
-	db := 7
-	e := newEnv(t, "windows", installed, rels...)
-	e.dbSchema, e.currentSchema = &db, 7
+	schema := 7
+	e = newEnv(t, "windows", installed, rels...)
+	e.dbSchema, e.currentSchema = &schema, 7
 	e.run.schemas = map[string]int{"v0.0.1": 7, "v0.0.2": 8}
 	e.daemon.startErr = func(_ context.Context, content string) error {
 		if content == "seelegent v0.0.2" {
-			db = 8
+			schema = 8
 			return errors.New("exited before it answered")
 		}
 		return nil
 	}
-	return e, &db
+	return e, &schema
 }
 
 // A new daemon that migrated the database and then failed is not undone: the old build could not open the database.
