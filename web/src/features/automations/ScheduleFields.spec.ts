@@ -83,6 +83,10 @@ describe('ScheduleFields', () => {
       'In the minute field, 61 is outside 0–59.',
     )
     form.value = { ...form.value, cron: '0 6 31 2 *' }
+    // The old error goes at once; the new one comes when typing stops.
+    await vi.advanceTimersByTimeAsync(10)
+    expect(wrapper.text()).not.toContain('61 is outside')
+    expect(wrapper.text()).not.toContain('never runs')
     await vi.advanceTimersByTimeAsync(450)
     expect(wrapper.text()).toContain('This schedule never runs')
     expect(fetch).not.toHaveBeenCalled()

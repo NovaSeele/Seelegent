@@ -54,12 +54,14 @@ const weekdays = computed<SelectOption<number>[]>(() =>
   [1, 2, 3, 4, 5, 6, 0].map((value) => ({ value, label: weekdayName(value, locale.value) })),
 )
 
-// The cron text last checked: errors follow the field a moment after typing stops, not at every key. Once Save
-// has refused the field, it is checked at every key until it is right.
+// The cron text last checked: an error shows a moment after typing stops, not at every key, and goes at the first
+// key after it (never an error about text that is no longer there). Once Save has refused the field, it is checked
+// at every key until it is right.
 const checked = shallowRef(form.value.cron)
 const cronError = computed(() => {
   if (mode.value !== 'cron') return undefined
-  const text = (props.problems.includes('cron') ? form.value.cron : checked.value).trim()
+  if (!props.problems.includes('cron') && form.value.cron !== checked.value) return undefined
+  const text = form.value.cron.trim()
   if (!text) return props.problems.includes('cron') ? t('automations.editor.cronError') : undefined
   const parsed = parseCron(text)
   if (!('cron' in parsed)) return words.cronProblem(parsed.problem)
