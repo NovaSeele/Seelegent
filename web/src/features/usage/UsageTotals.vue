@@ -69,6 +69,7 @@ const tiles = computed(() =>
 <style scoped>
 .totals {
   display: grid;
+  margin: 0;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: var(--space-2);
 }
@@ -89,12 +90,14 @@ const tiles = computed(() =>
 }
 
 .total__value {
+  margin: 0;
   font-size: var(--fs-xl);
   font-weight: var(--fw-semibold);
   font-variant-numeric: tabular-nums;
 }
 
 .total__delta {
+  margin: 0;
   display: flex;
   align-items: center;
   gap: var(--space-1);

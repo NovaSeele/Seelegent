@@ -29,7 +29,7 @@ const connection = useConnectionStore()
 const settings = useSettingsStore()
 const toast = useToastStore()
 
-const cwd = ref(connection.projects[0]?.cwd ?? '')
+const cwd = ref('')
 const text = ref('')
 const status = ref<'idle' | 'loading' | 'ready' | 'error'>('idle')
 const error = ref('')
@@ -52,6 +52,15 @@ async function load(folder: string) {
   }
 }
 
+// Projects arrive with the first snapshot, which a deep link to this section can be faster than: pick the first
+// project once there is one (and again if the chosen one disappears).
+watch(
+  options,
+  (list) => {
+    if (!list.some((o) => o.value === cwd.value)) cwd.value = list[0]?.value ?? ''
+  },
+  { immediate: true },
+)
 watch(cwd, (folder) => void load(folder), { immediate: true })
 
 async function save() {

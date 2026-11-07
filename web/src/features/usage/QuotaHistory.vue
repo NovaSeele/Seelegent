@@ -276,6 +276,8 @@ const summary = computed(() =>
   gap: var(--space-1) var(--space-4);
   color: var(--text-secondary);
   font-size: var(--fs-xs);
+  margin: 0;
+  padding: 0;
   list-style: none;
 }
 

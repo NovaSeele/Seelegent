@@ -68,30 +68,43 @@ const summary = computed(() => {
     </figcaption>
 
     <div v-if="!asTable" class="daily__chart">
-      <span class="daily__max">{{ fmt.compact(max) }}</span>
-      <svg
-        class="daily__svg"
-        :viewBox="`0 0 ${W} ${H}`"
-        preserveAspectRatio="none"
-        role="img"
-        :aria-label="summary"
-      >
-        <line x1="0" :y1="H / 2" :x2="W" :y2="H / 2" class="daily__grid" />
-        <line x1="0" :y1="H" :x2="W" :y2="H" class="daily__axis" />
-        <rect
-          v-for="bar in bars"
-          :key="bar.date"
-          class="daily__bar"
-          :x="bar.x"
-          :y="bar.y"
-          :width="bar.w"
-          :height="bar.h"
-          rx="2"
+      <div class="daily__plot">
+        <span class="daily__label daily__label--top" aria-hidden="true">{{
+          fmt.compact(max)
+        }}</span>
+        <span class="daily__label daily__label--mid" aria-hidden="true">{{
+          fmt.compact(max / 2)
+        }}</span>
+        <svg
+          class="daily__svg"
+          :viewBox="`0 0 ${W} ${H}`"
+          preserveAspectRatio="none"
+          role="img"
+          :aria-label="summary"
         >
-          <title>{{ `${short(bar.date)}: ${fmt.number(bar.tokens)}` }}</title>
-        </rect>
-      </svg>
-      <div class="daily__ticks" aria-hidden="true">
+          <line x1="0" y1="0" :x2="W" y2="0" class="daily__grid" />
+          <line x1="0" :y1="H / 2" :x2="W" :y2="H / 2" class="daily__grid" />
+          <line x1="0" :y1="H" :x2="W" :y2="H" class="daily__axis" />
+          <rect
+            v-for="bar in bars"
+            :key="bar.date"
+            class="daily__bar"
+            :x="bar.x"
+            :y="bar.y"
+            :width="bar.w"
+            :height="bar.h"
+            rx="2"
+          >
+            <title>{{ `${short(bar.date)}: ${fmt.number(bar.tokens)}` }}</title>
+          </rect>
+        </svg>
+      </div>
+      <div
+        class="daily__ticks"
+        :class="{ 'daily__ticks--each': daily.length <= 7 }"
+        :style="daily.length <= 7 ? { gridTemplateColumns: `repeat(${daily.length}, 1fr)` } : {}"
+        aria-hidden="true"
+      >
         <span v-for="tick in ticks" :key="tick">{{ tick }}</span>
       </div>
     </div>
@@ -149,14 +162,38 @@ const summary = computed(() => {
   gap: var(--space-1);
 }
 
-.daily__max,
+.daily__label,
 .daily__ticks {
   color: var(--text-muted);
   font-size: var(--fs-2xs);
   font-variant-numeric: tabular-nums;
 }
 
+.daily__plot {
+  position: relative;
+  margin-top: var(--space-3);
+}
+
+/* Value of the grid line it sits on, just above the line at the left. */
+.daily__label {
+  position: absolute;
+  left: 0;
+  padding-right: var(--space-1);
+  background: var(--bg-surface);
+  line-height: 1;
+  transform: translateY(calc(-100% - 2px));
+}
+
+.daily__label--top {
+  top: 0;
+}
+
+.daily__label--mid {
+  top: 50%;
+}
+
 .daily__svg {
+  display: block;
   width: 100%;
   height: 160px;
   overflow: visible;
@@ -184,6 +221,12 @@ const summary = computed(() => {
 .daily__ticks {
   display: flex;
   justify-content: space-between;
+}
+
+/* One label under each bar. */
+.daily__ticks--each {
+  display: grid;
+  text-align: center;
 }
 
 .daily__table {

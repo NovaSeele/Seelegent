@@ -141,6 +141,22 @@ function setPriority(priority: number) {
     <QuotaGroups :account="account" :now="now" />
     <LoginPanel v-if="session" :account="account" :session="session" />
 
+    <div v-if="next" class="card__next">
+      <Button
+        v-if="next === 'login'"
+        size="sm"
+        variant="primary"
+        icon="external"
+        :loading="actions.isBusy('login')"
+        @click="onMenu('login')"
+      >
+        {{ t('accounts.action.login') }}
+      </Button>
+      <Button v-else size="sm" variant="primary" @click="emit('dialog', 'key')">
+        {{ t('accounts.action.key') }}
+      </Button>
+    </div>
+
     <footer class="card__foot">
       <Switch
         :model-value="account.enabled"
@@ -157,19 +173,6 @@ function setPriority(priority: number) {
         @commit="setPriority"
       />
       <span class="card__spacer" />
-      <Button
-        v-if="next === 'login'"
-        size="sm"
-        variant="primary"
-        icon="external"
-        :loading="actions.isBusy('login')"
-        @click="onMenu('login')"
-      >
-        {{ t('accounts.action.login') }}
-      </Button>
-      <Button v-else-if="next === 'key'" size="sm" variant="primary" @click="emit('dialog', 'key')">
-        {{ t('accounts.action.key') }}
-      </Button>
       <IconButton
         icon="refresh"
         size="sm"
@@ -256,6 +259,8 @@ function setPriority(priority: number) {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-1);
+  margin: 0;
+  padding: 0;
   list-style: none;
 }
 
@@ -273,7 +278,12 @@ function setPriority(priority: number) {
   font-size: var(--fs-xs);
 }
 
+.card__next {
+  display: flex;
+}
+
 .card__foot {
+  margin-top: auto;
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;

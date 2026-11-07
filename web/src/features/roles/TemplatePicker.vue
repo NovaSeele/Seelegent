@@ -65,6 +65,8 @@ function pick(template: Role | undefined) {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr));
   gap: var(--space-2);
+  margin: 0;
+  padding: 0;
   list-style: none;
 }
 

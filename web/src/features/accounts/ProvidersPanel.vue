@@ -206,6 +206,8 @@ function setEnabled(provider: Provider, enabled: boolean) {
   border: var(--border-width) solid var(--border-subtle);
   border-radius: var(--radius-lg);
   background: var(--bg-surface);
+  margin: 0;
+  padding: 0;
   list-style: none;
 }
 

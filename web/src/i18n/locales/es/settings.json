@@ -124,7 +124,7 @@
     "loadFailed": "No se pudieron cargar los hooks: {error}",
     "empty": "Aún no hay hooks.",
     "hookN": "Hook {n}",
-    "enabled": "Activo",
+    "enabled": "Activado",
     "run": "Comando",
     "runHint": "Se ejecuta en una shell; el evento llega como variables de entorno SEELEGENT_*.",
     "on": "Se ejecuta con",

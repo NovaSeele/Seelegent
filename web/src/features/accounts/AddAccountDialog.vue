@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { errorMessage, fieldProblems } from '@/api/client'
 import type { Account } from '@/api/types'
 import Button from '@/components/ui/Button.vue'
+import ChoiceGroup from '@/components/ui/ChoiceGroup.vue'
 import Dialog from '@/components/ui/Dialog.vue'
 import NumberField from '@/components/ui/NumberField.vue'
 import Select from '@/components/ui/Select.vue'
@@ -14,7 +15,6 @@ import { useProvidersStore } from '@/stores/providers'
 import { useToastStore } from '@/stores/toast'
 
 import { BACKENDS, kindKey } from './accountView'
-import ChoiceGroup from '@/components/ui/ChoiceGroup.vue'
 
 /**
  * Adding an account in two steps: what it is (backend and kind), then its details (name, priority; for an API
@@ -38,6 +38,7 @@ const key = ref('')
 const busy = ref(false)
 const errors = ref<Record<string, string>>({})
 const failure = ref('')
+const formEl = ref<HTMLFormElement | null>(null)
 
 const hasSystem = computed(() => accounts.accounts.some((a) => a.kind === 'system'))
 
@@ -87,7 +88,8 @@ watch(providerOptions, (options) => {
   if (!options.some((o) => o.value === provider.value)) provider.value = options[0]?.value ?? ''
 })
 
-function toDetails() {
+/** Step 2 starts at the name field (the submit button keeps focus otherwise, and Enter would add at once). */
+async function toDetails() {
   step.value = 2
   if (!label.value) {
     const count = accounts.accounts.filter((a) => a.backend === backend.value).length
@@ -96,6 +98,10 @@ function toDetails() {
       n: count + 1,
     })
   }
+  await nextTick()
+  const first = formEl.value?.querySelector<HTMLInputElement>('input')
+  first?.focus()
+  first?.select()
 }
 
 async function submit() {
@@ -135,7 +141,12 @@ async function submit() {
     :description="t(step === 1 ? 'accounts.add.step1' : 'accounts.add.step2')"
     :dismissible="!busy"
   >
-    <form id="add-account" class="add" @submit.prevent="step === 1 ? toDetails() : submit()">
+    <form
+      id="add-account"
+      ref="formEl"
+      class="add"
+      @submit.prevent="step === 1 ? toDetails() : submit()"
+    >
       <template v-if="step === 1">
         <ChoiceGroup
           v-model="backend"

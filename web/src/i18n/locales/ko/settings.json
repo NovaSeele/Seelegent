@@ -124,7 +124,7 @@
     "loadFailed": "훅을 불러오지 못했습니다: {error}",
     "empty": "아직 훅이 없습니다.",
     "hookN": "훅 {n}",
-    "enabled": "켜짐",
+    "enabled": "사용",
     "run": "명령",
     "runHint": "셸에서 실행되며, 이벤트는 SEELEGENT_* 환경 변수로 전달됩니다.",
     "on": "실행 시점",

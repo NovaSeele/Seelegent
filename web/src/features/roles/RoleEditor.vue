@@ -235,7 +235,7 @@ async function save() {
 .editor__row {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
-  align-items: end;
+  align-items: start;
   gap: var(--space-3);
 }
 

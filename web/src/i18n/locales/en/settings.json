@@ -124,7 +124,7 @@
     "loadFailed": "Hooks could not be loaded: {error}",
     "empty": "No hooks yet.",
     "hookN": "Hook {n}",
-    "enabled": "On",
+    "enabled": "Enabled",
     "run": "Command",
     "runHint": "Runs in a shell; the event arrives as SEELEGENT_* environment variables.",
     "on": "Runs on",

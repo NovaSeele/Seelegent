@@ -152,9 +152,14 @@ const preferred = computed(() =>
 
 .role__facts {
   display: flex;
+  margin: 0;
   flex-direction: column;
   gap: var(--space-2);
   font-size: var(--fs-xs);
+}
+
+.role__facts dd {
+  margin-inline-start: 0;
 }
 
 .role__facts dt {

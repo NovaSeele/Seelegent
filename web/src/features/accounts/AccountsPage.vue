@@ -157,6 +157,7 @@ watch(() => accounts.accounts.filter((a) => a.signingIn).length, resumeLogins)
 
 .accounts__summary {
   display: grid;
+  margin: 0;
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: var(--space-2);
 }
@@ -177,6 +178,7 @@ watch(() => accounts.accounts.filter((a) => a.signingIn).length, resumeLogins)
 }
 
 .tile__value {
+  margin: 0;
   font-size: var(--fs-xl);
   font-weight: var(--fw-semibold);
   font-variant-numeric: tabular-nums;

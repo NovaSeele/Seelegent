@@ -60,7 +60,7 @@ function saveLines(text: string) {
   <SettingRow :item="def.item" :highlighted="highlighted" :stacked="def.kind === 'lines'">
     <div class="sf-wrap">
       <div class="sf">
-        <div class="sf__control">
+        <div class="sf__control" :class="{ 'sf__control--switch': def.kind === 'bool' }">
           <NumberField
             v-if="def.kind === 'number'"
             :model-value="Number(value ?? 0)"
@@ -115,12 +115,6 @@ function saveLines(text: string) {
           />
           <code v-else class="sf__readonly">{{ value }}</code>
         </div>
-        <span class="sf__state" aria-live="polite">
-          <Spinner v-if="busy" size="sm" :label="t('settings.daemon.saving')" />
-          <span v-else-if="done" class="sf__saved">
-            <Icon name="check" />{{ t('settings.daemon.saved') }}
-          </span>
-        </span>
         <Button
           v-if="def.kind !== 'readonly'"
           size="sm"
@@ -131,6 +125,12 @@ function saveLines(text: string) {
         >
           {{ t('settings.daemon.reset') }}
         </Button>
+        <span class="sf__state" aria-live="polite">
+          <Spinner v-if="busy" size="sm" :label="t('settings.daemon.saving')" />
+          <span v-else-if="done" class="sf__saved">
+            <Icon name="check" />{{ t('settings.daemon.saved') }}
+          </span>
+        </span>
       </div>
       <p
         v-if="error && (def.kind === 'bool' || def.kind === 'select')"
@@ -163,6 +163,12 @@ function saveLines(text: string) {
 .sf__control {
   flex: 1 1 auto;
   min-width: 140px;
+}
+
+/* A switch is narrow: its reset button sits right next to it. */
+.sf__control--switch {
+  flex: 0 0 auto;
+  min-width: 0;
 }
 
 .sf__state {
