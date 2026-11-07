@@ -112,9 +112,10 @@ type pending struct {
 	row     int64
 }
 
-// interruptedRun is the detail of a run the daemon stopped before it started.
-const interruptedRun = "Seelegent stopped before this run started. It is not run again on its own, so it never " +
-	"runs twice; use Run now if it is still needed"
+// interruptedRun is the detail of a run the daemon stopped while it was starting. The stop may have come after the
+// task was made (the row is written before the task exists and resolved after), so the text does not claim either.
+const interruptedRun = "Seelegent stopped while this run was starting, so it may have started a task: check the " +
+	"task list. It is not run again on its own, so it never runs twice; use Run now if it is still needed"
 
 // resolvePending resolves the pending run rows a stop left behind (the next run time had already moved on): they
 // become errors that say so, never silently lost runs.

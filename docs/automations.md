@@ -60,8 +60,8 @@ every scheduled run; *run now* still works.
 A due run is written as `pending` in the same transaction that moves the automation to its next run time, and the
 run's outcome later replaces that row. A stop between the two (the daemon closed while the quota or the precheck was
 being checked) leaves the row `pending`; the next start turns it into `error` with a detail that says the daemon
-stopped before the run started. It is not started again on its own: the stop may have come after the task was made,
-and an unattended run must never happen twice. *Run now* runs it if it is still needed.
+stopped while the run was starting and that it may have started a task (check the task list). It is not started
+again on its own: the stop may have come after the task was made, and an unattended run must never happen twice. *Run now* runs it if it is still needed.
 
 ## A run
 
