@@ -13,10 +13,17 @@ import { runTone } from './proofModel'
  * the end of their output; a running one can be stopped.
  */
 defineProps<{ runs: readonly ProofRun[]; busy: boolean }>()
-const emit = defineEmits<{ cancel: [id: string] }>()
+const emit = defineEmits<{ cancel: [id: string]; expand: [id: string] }>()
 
 const { t } = useI18n()
 const fmt = useFormat()
+
+/** The index lists runs without their results: an opened finished run asks for them. */
+function onToggle(run: ProofRun, event: Event) {
+  const open = (event.target as HTMLDetailsElement).open
+  if (open && run.state !== 'running' && !run.results.length && run.total > 0)
+    emit('expand', run.id)
+}
 </script>
 
 <template>
@@ -25,7 +32,10 @@ const fmt = useFormat()
     <p v-if="!runs.length" class="runs__muted">{{ t('proof.runs.empty') }}</p>
     <ul v-else class="runs__list">
       <li v-for="run in runs" :key="run.id" class="runs__item">
-        <details :open="run.state === 'running' || run.state === 'red'">
+        <details
+          :open="run.state === 'running' || run.state === 'red'"
+          @toggle="onToggle(run, $event)"
+        >
           <summary class="runs__summary">
             <Chip :tone="runTone(run.state)">{{ t(`proof.runs.state.${run.state}`) }}</Chip>
             <span class="runs__what">{{ run.feature || t('proof.runs.all') }}</span>
@@ -58,7 +68,7 @@ const fmt = useFormat()
                   <span v-if="r.exit !== undefined" class="runs__muted">
                     {{ t('task.gate.exit', { n: r.exit }) }}
                   </span>
-                  <span v-if="r.ms" class="runs__muted">{{ fmt.duration(r.ms) }}</span>
+                  <span v-if="r.ms >= 1000" class="runs__muted">{{ fmt.duration(r.ms) }}</span>
                 </div>
                 <pre v-if="r.tail && r.state !== 'green'" class="runs__pre">{{ r.tail }}</pre>
               </li>

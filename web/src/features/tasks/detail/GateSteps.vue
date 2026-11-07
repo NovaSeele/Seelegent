@@ -5,7 +5,7 @@ import type { GateResult } from '@/api/types'
 import Chip from '@/components/ui/Chip.vue'
 import { useFormat } from '@/composables/useFormat'
 
-import { stepCommand, stepTone } from './gate'
+import { stepCommand, stepNote, stepTone } from './gate'
 
 /**
  * The steps of one gate run: each with its state, command, exit code and time, the files it is about, and the end
@@ -28,11 +28,13 @@ const fmt = useFormat()
           <Chip :tone="stepTone(step.state)">{{ t(`task.gate.stepState.${step.state}`) }}</Chip>
           <span class="steps__label">{{ t(`task.gate.kind.${step.kind}`) }}</span>
           <code v-if="step.cmd" class="steps__cmd">{{ stepCommand(step) }}</code>
-          <span v-else-if="step.label" class="steps__muted">{{ step.label }}</span>
+          <span v-else-if="stepNote(step)" class="steps__muted">{{ stepNote(step) }}</span>
           <span v-if="step.exit !== undefined" class="steps__muted">
             {{ t('task.gate.exit', { n: step.exit }) }}
           </span>
-          <span v-if="step.ms" class="steps__muted">{{ fmt.duration(step.ms) }}</span>
+          <span v-if="step.ms && step.ms >= 1000" class="steps__muted">{{
+            fmt.duration(step.ms)
+          }}</span>
           <span v-if="step.timedOut" class="steps__muted">{{ t('task.gate.timedOut') }}</span>
           <span v-if="step.taskIds?.length" class="steps__muted">{{
             step.taskIds.join(', ')

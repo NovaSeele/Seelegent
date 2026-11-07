@@ -118,6 +118,14 @@ export function failingSteps(result: GateResult | null): GateStep[] {
   return (result?.steps ?? []).filter((s) => s.state === 'red' || s.state === 'error')
 }
 
+/** Step labels the kind's name already says ('lane', 'hygiene', 'syntax'): not repeated next to it. */
+const PLAIN_LABELS = new Set(['lane', 'hygiene', 'syntax'])
+
+/** What a step without a command says besides its kind (a doctrine check's id), or ''. */
+export function stepNote(step: GateStep): string {
+  return PLAIN_LABELS.has(step.label) ? '' : step.label
+}
+
 /** The command line a step ran, with its folder when not the repository root. */
 export function stepCommand(step: GateStep): string {
   if (!step.cmd) return ''

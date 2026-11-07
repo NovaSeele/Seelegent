@@ -5,7 +5,7 @@ import type { GateResult, GateStep, TaskProof, Turn, VerifierResult } from '@/ap
 import { setupApp } from '@/test/app'
 import { iso, makeDetail, makeTask } from '@/test/fixtures'
 
-import { fixTurnsOf, gateOf, gateTone, gateUrgent, hasGate, stepCommand } from './gate'
+import { fixTurnsOf, gateOf, gateTone, gateUrgent, hasGate, stepCommand, stepNote } from './gate'
 import GatePanel from './GatePanel.vue'
 
 const turn = (n: number, extra: Partial<Turn> = {}): Turn => ({
@@ -126,6 +126,9 @@ describe('gate model', () => {
     expect(stepCommand(step({ cmd: 'go test ./...', dir: 'api' }))).toBe('cd api && go test ./...')
     expect(stepCommand(step({ cmd: 'make' }))).toBe('make')
     expect(stepCommand(step({ kind: 'lane' }))).toBe('')
+    // The kind already names lane, hygiene and syntax steps; a doctrine check keeps its id.
+    expect(stepNote(step({ kind: 'lane', label: 'lane' }))).toBe('')
+    expect(stepNote(step({ kind: 'doctrine', label: 'vet' }))).toBe('vet')
   })
 })
 

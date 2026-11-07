@@ -88,6 +88,26 @@ describe('useProof', () => {
     scope.stop()
   })
 
+  it('reads the results of a listed run when it is opened, without reading the index again', async () => {
+    const listed = { ...runOf('red'), total: 1 }
+    const full = {
+      ...listed,
+      results: [{ cmd: 'make', keys: [], kind: 'task', state: 'red', ms: 5 }],
+    }
+    const api = fakeApi({
+      index: vi.fn(() => Promise.resolve(index([listed]))),
+      runStatus: vi.fn(() => Promise.resolve(full as ProofRun)),
+    })
+    const scope = effectScope()
+    const proof = scope.run(() => useProof(ref('D:/app'), ref(''), api))!
+    await flush()
+    await proof.loadRun('r1')
+    expect(api.runStatus).toHaveBeenCalledWith('D:/app', 'r1')
+    expect(proof.index.value?.runs[0]?.results.map((r) => r.cmd)).toEqual(['make'])
+    expect(api.index).toHaveBeenCalledTimes(1)
+    scope.stop()
+  })
+
   it('shows a failed read as an error', async () => {
     const api = fakeApi({ index: vi.fn(() => Promise.reject(new Error('boom'))) })
     const scope = effectScope()

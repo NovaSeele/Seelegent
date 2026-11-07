@@ -142,25 +142,37 @@ const running = computed(() => proof.index.value?.runs.some((r) => r.state === '
           </p>
         </section>
 
+        <!-- Two columns on wide screens; one column below 900px in reading order: features, matrix, runs, lanes. -->
         <div class="proof__grid">
-          <ProofFeatures
-            :features="proof.index.value.features"
-            :selected="feature"
-            @select="feature = $event"
-          />
-          <ProofMatrixView
-            v-if="proof.index.value.features.length"
-            :matrix="proof.matrix.value"
-            :loading="proof.matrixLoading.value"
-            :error="proof.matrixError.value"
-          />
-        </div>
-
-        <div class="proof__grid">
-          <div class="proof__side">
-            <ProofSide :lanes="proof.lanes.value" :stats="proof.stats.value" />
+          <div class="proof__col">
+            <div class="proof__features">
+              <ProofFeatures
+                :features="proof.index.value.features"
+                :selected="feature"
+                @select="feature = $event"
+              />
+            </div>
+            <div class="proof__side">
+              <ProofSide :lanes="proof.lanes.value" :stats="proof.stats.value" />
+            </div>
           </div>
-          <ProofRuns :runs="proof.index.value.runs" :busy="proof.busy.value" @cancel="cancel" />
+          <div class="proof__col">
+            <div v-if="proof.index.value.features.length" class="proof__matrix">
+              <ProofMatrixView
+                :matrix="proof.matrix.value"
+                :loading="proof.matrixLoading.value"
+                :error="proof.matrixError.value"
+              />
+            </div>
+            <div class="proof__runs">
+              <ProofRuns
+                :runs="proof.index.value.runs"
+                :busy="proof.busy.value"
+                @cancel="cancel"
+                @expand="proof.loadRun"
+              />
+            </div>
+          </div>
         </div>
       </template>
     </div>
@@ -223,16 +235,48 @@ const running = computed(() => proof.index.value?.runs.some((r) => r.state === '
   align-items: start;
 }
 
+.proof__col,
 .proof__side {
   display: flex;
   flex-direction: column;
+  gap: var(--space-6);
+  min-width: 0;
+}
+
+.proof__side {
   gap: var(--space-5);
+}
+
+.proof__features,
+.proof__matrix,
+.proof__runs {
   min-width: 0;
 }
 
 @media (width < 900px) {
   .proof__grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* The columns dissolve so the sections take reading order. */
+  .proof__col {
+    display: contents;
+  }
+
+  .proof__features {
+    order: 1;
+  }
+
+  .proof__matrix {
+    order: 2;
+  }
+
+  .proof__runs {
+    order: 3;
+  }
+
+  .proof__side {
+    order: 4;
   }
 }
 

@@ -118,6 +118,15 @@ export function useProof(cwd: Ref<string>, feature: Ref<string>, api: ProofApi =
     }
   }
 
+  /** Reads a run's results (the index lists runs without them); a failed read leaves the run as it is. */
+  async function loadRun(id: string) {
+    try {
+      applyRun(await api.runStatus(cwd.value, id))
+    } catch {
+      // The summary stays; the next open tries again.
+    }
+  }
+
   async function cancelRun(id: string) {
     busy.value = true
     try {
@@ -151,5 +160,6 @@ export function useProof(cwd: Ref<string>, feature: Ref<string>, api: ProofApi =
     load,
     startRun,
     cancelRun,
+    loadRun,
   }
 }
