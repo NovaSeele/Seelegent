@@ -7,8 +7,27 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 )
+
+// Spellings lists the ways an existing path may be written in text: as given, its canonical form and, on Windows,
+// the 8.3 short form of either (C:\Users\NOVASE~1 for C:\Users\NovaSeele). Duplicates are left out.
+func Spellings(p string) []string {
+	out := []string{}
+	add := func(s string) {
+		if s != "" && !slices.Contains(out, s) {
+			out = append(out, s)
+		}
+	}
+	add(p)
+	if c, err := Canonical(p); err == nil {
+		add(c)
+		add(shortName(c))
+	}
+	add(shortName(p))
+	return out
+}
 
 // Canonical returns the absolute, cleaned form of p with links resolved, so that two spellings of the same location
 // give the same string. On Windows it also expands 8.3 short names (C:\Users\NOVASE~1 becomes C:\Users\NovaSeele),

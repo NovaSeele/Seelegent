@@ -5,11 +5,14 @@ import (
 	"net/url"
 	"path"
 	"regexp"
+	"slices"
+	"sort"
 	"strconv"
 	"strings"
 	"unicode"
 
 	"github.com/NovaSeele/Seelegent/internal/api"
+	"github.com/NovaSeele/Seelegent/internal/fsutil"
 	"github.com/NovaSeele/Seelegent/internal/github"
 )
 
@@ -146,9 +149,20 @@ func scrubLocal(text string, roots []string, home string) string {
 		}
 		return path.Base(strings.ReplaceAll(p, `\`, "/"))
 	})
+	// Every spelling of a folder (G4): as given, canonical, 8.3 short (C:\Users\NOVASE~1), with either slash, and
+	// as WSL writes a Windows drive (/mnt/c/Users/...).
 	variants := func(p string) []string {
-		fwd := strings.TrimRight(strings.ReplaceAll(p, `\`, "/"), "/")
-		return []string{fwd, strings.ReplaceAll(fwd, "/", `\`)}
+		var out []string
+		for _, sp := range fsutil.Spellings(p) {
+			fwd := strings.TrimRight(strings.ReplaceAll(sp, `\`, "/"), "/")
+			out = append(out, fwd, strings.ReplaceAll(fwd, "/", `\`))
+			if len(fwd) > 2 && fwd[1] == ':' && fwd[2] == '/' {
+				out = append(out, "/mnt/"+strings.ToLower(fwd[:1])+fwd[2:])
+			}
+		}
+		// Longer spellings first: one spelling never cuts another short.
+		sort.SliceStable(out, func(i, j int) bool { return len(out[i]) > len(out[j]) })
+		return slices.Compact(out)
 	}
 	for _, r := range roots {
 		if strings.TrimSpace(r) == "" {

@@ -133,7 +133,8 @@ the repository has none). The worker's commits stay in the local worktree.
    (`GIT_TERMINAL_PROMPT=0`, `GCM_INTERACTIVE=never`) and never with force. Right before it the remote branch is
    read again; a branch that changed meanwhile is refused as above.
 5. **Open** a draft pull request (or adopt the one the branch already has). Its body is generated from the tasks'
-   summaries with local paths removed (`file://` links, folders under the home folder). In the manual tier the
+   summaries with local paths removed (`file://` links, the worktree, the repository and the home folder in every
+   spelling: either slash, the 8.3 short form such as `C:\Users\NOVASE~1`, and WSL's `/mnt/c/...`). In the manual tier the
    answer carries a compare link (`pr.manualUrl`); the user opens the pull request and records its number with
    `link-pr`.
 

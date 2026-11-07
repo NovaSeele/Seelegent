@@ -66,6 +66,11 @@ func TestScrubLocal(t *testing.T) {
 			t.Fatalf("%q missing from %q", want, got)
 		}
 	}
+	// WSL spells a Windows drive /mnt/<letter>/ (G4).
+	got = scrubLocal("ran in /mnt/c/Work/app/src and /mnt/C/Users/me/.cache/x", []string{`C:\Work\app`}, `C:\Users\me`)
+	if got != "ran in src and ~/.cache/x" {
+		t.Fatalf("wsl paths: %q", got)
+	}
 }
 
 // TestPRBodyGateLines: a step whose label is its kind is named once (F35).
