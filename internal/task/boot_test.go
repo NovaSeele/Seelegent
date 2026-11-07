@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/NovaSeele/Seelegent/internal/api"
 )
@@ -21,6 +22,7 @@ func TestBootProjectsAndGitScope(t *testing.T) {
 		t.Fatal(err)
 	}
 	h.queue.Push(t, okScript("conv-c", "ok"))
+	h.clk.Advance(time.Second) // the order is by creation time; equal times would fall back to the random id
 	reviewed := h.delegate(api.DelegateRequest{Title: "second", Cwd: other})
 	h.waitStatus(reviewed.ID, StatusDone)
 	if _, err := h.s.Review(t.Context(), reviewed.ID, api.ReviewRequest{Verdict: api.VerdictAccepted}); err != nil {
