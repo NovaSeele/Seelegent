@@ -257,22 +257,14 @@ var wrappers = map[string]wrapper{
 // segment checks one simple command.
 func (c Checker) segment(s *segment, sh Shell, depth int) Result {
 	ws := s.words
-	if setsConfigEnv(ws, sh) {
-		return denyConfigEnv()
-	}
-	// Leading assignments: NAME=value (POSIX, cmd's set is a command of its own) and $x = ... (PowerShell).
-	for len(ws) > 0 {
-		w := ws[0]
-		switch {
-		case sh == POSIX && w.assign:
-			ws = ws[1:]
-			continue
-		case sh == PowerShell && strings.HasPrefix(w.text, "$") && len(ws) > 1 &&
-			(ws[1].text == "=" || ws[1].text == "+=") && !ws[1].quoted:
-			ws = ws[2:]
-			continue
+	// PowerShell's $x = ...: what follows the = is the command. POSIX NAME=value words are left to command, which
+	// checks them after any keyword (then FOO=1 git ...).
+	for sh == PowerShell && len(ws) > 1 && strings.HasPrefix(ws[0].text, "$") &&
+		(ws[1].text == "=" || ws[1].text == "+=") && !ws[1].quoted {
+		if setsConfigEnv(ws, sh) { // $env:GIT_CONFIG_COUNT = 1
+			return denyConfigEnv()
 		}
-		break
+		ws = ws[2:]
 	}
 	return c.command(ws, s, sh, depth)
 }
@@ -296,11 +288,13 @@ func (c Checker) command(ws []word, s *segment, sh Shell, depth int) Result {
 			ws = ws[1:]
 		}
 	}
-	// NAME=value words before the command: a segment's own in POSIX, and those a wrapper passes on (sudo NAME=x git).
+	// Every path to a command passes here (after a keyword, cmd's if and do, a wrapper): a command that sets the git
+	// configuration variables is refused, then NAME=value words before the command (a segment's own, and those a
+	// wrapper passes on, sudo NAME=x git) are skipped.
+	if setsConfigEnv(ws, sh) {
+		return denyConfigEnv()
+	}
 	for len(ws) > 0 && ws[0].assign {
-		if configAssign(ws[0].text) {
-			return denyConfigEnv()
-		}
 		ws = ws[1:]
 	}
 	if len(ws) == 0 {
