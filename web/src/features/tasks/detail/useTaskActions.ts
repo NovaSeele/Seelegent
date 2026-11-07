@@ -9,7 +9,7 @@ import { useI18n } from 'vue-i18n'
 import { ApiError, tasksApi, type TasksApi } from '@/api'
 import type { FollowupRequest, LaneConflict, TaskSummary, Verdict } from '@/api/types'
 import { useTasksStore } from '@/stores/tasks'
-import { useToastStore } from '@/stores/toast'
+import { DURATION_LONG, useToastStore, type ToastOptions } from '@/stores/toast'
 
 export type TaskActionName =
   'followup' | 'answer' | 'cancel' | 'takeover' | 'review' | 'dismiss' | 'copy'
@@ -32,16 +32,33 @@ export function useTaskActions(taskId: () => string, api: TasksApi = tasksApi) {
     return t('task.actions.failed', { error: message })
   }
 
+  /**
+   * The toast of a review: accepting over a senior member's objection keeps the daemon's warnings in view (an info
+   * toast that stays long enough to read), not a plain "Accepted".
+   */
+  function reviewToast(verdict: Verdict, sum: TaskSummary): ToastOptions {
+    if (verdict !== 'accepted') return { message: t('task.review.rejectedToast'), tone: 'success' }
+    const warnings = sum.warnings ?? []
+    if (!warnings.length) return { message: t('task.review.acceptedToast'), tone: 'success' }
+    return {
+      message: t('task.review.acceptedWarned', { warnings: warnings.join('; ') }),
+      tone: 'info',
+      duration: DURATION_LONG,
+    }
+  }
+
   async function run(
     name: TaskActionName,
     call: () => Promise<TaskSummary>,
-    success?: string,
+    success?: string | ((sum: TaskSummary) => ToastOptions),
   ): Promise<boolean> {
     if (busy.value) return false
     busy.value = name
     try {
-      tasks.upsertIfNewer(await call())
-      if (success) toast.show({ message: success, tone: 'success' })
+      const sum = await call()
+      tasks.upsertIfNewer(sum)
+      if (typeof success === 'string') toast.show({ message: success, tone: 'success' })
+      else if (success) toast.show(success(sum))
       return true
     } catch (error) {
       toast.show({ message: failure(error), tone: 'error' })
@@ -63,7 +80,7 @@ export function useTaskActions(taskId: () => string, api: TasksApi = tasksApi) {
       run(
         'review',
         () => api.review(taskId(), verdict, notes, answerObjection),
-        t(verdict === 'accepted' ? 'task.review.acceptedToast' : 'task.review.rejectedToast'),
+        (sum) => reviewToast(verdict, sum),
       ),
     dismiss: () => run('dismiss', () => api.dismissAttention(taskId())),
     async copyId(): Promise<boolean> {

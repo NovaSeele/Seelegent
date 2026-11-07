@@ -67,7 +67,8 @@ A peer's `object` blocks `review accepted`: the review answers `409 conflict` wi
 answer is stored on the objection and added to the review notes. Rejecting needs no answer. While the objection
 stands the finished task's attention is `blocked` with reason `peer_objection` (for the lead). A senior's `object`
 does not block: accepting over it answers the task summary with `warnings` naming it (MCP `Warning:` lines, the
-CLI prints them). The dashboard shows the consults in a "Member opinions" panel of the task; an unanswered peer
+CLI prints them, the dashboard shows them in the acceptance toast). Only each senior's latest finished consult
+counts, so a senior who approves in a later consult no longer warns. The dashboard shows the consults in a "Member opinions" panel of the task; an unanswered peer
 objection disables Accept and the banner's "Answer objection" sends the answer with the acceptance.
 
 ## Review notes

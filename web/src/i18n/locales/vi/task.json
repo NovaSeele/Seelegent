@@ -70,6 +70,7 @@
     "acceptedConfirm": "Chấp nhận",
     "rejectedConfirm": "Từ chối",
     "acceptedToast": "Đã chấp nhận",
+    "acceptedWarned": "Đã chấp nhận. Cảnh báo: {warnings}",
     "rejectedToast": "Đã từ chối"
   },
   "confirm": {

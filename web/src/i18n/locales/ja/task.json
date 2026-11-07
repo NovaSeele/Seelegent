@@ -70,6 +70,7 @@
     "acceptedConfirm": "承認",
     "rejectedConfirm": "差し戻し",
     "acceptedToast": "承認しました",
+    "acceptedWarned": "承認しました。警告: {warnings}",
     "rejectedToast": "差し戻しました"
   },
   "confirm": {

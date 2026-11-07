@@ -70,6 +70,7 @@
     "acceptedConfirm": "Aceptar",
     "rejectedConfirm": "Rechazar",
     "acceptedToast": "Aceptada",
+    "acceptedWarned": "Aceptada. Aviso: {warnings}",
     "rejectedToast": "Rechazada"
   },
   "confirm": {

@@ -70,6 +70,7 @@
     "acceptedConfirm": "接受",
     "rejectedConfirm": "退回",
     "acceptedToast": "已接受",
+    "acceptedWarned": "已接受。警告：{warnings}",
     "rejectedToast": "已退回"
   },
   "confirm": {

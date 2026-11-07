@@ -70,6 +70,7 @@
     "acceptedConfirm": "승인",
     "rejectedConfirm": "반려",
     "acceptedToast": "승인했습니다",
+    "acceptedWarned": "승인했습니다. 경고: {warnings}",
     "rejectedToast": "반려했습니다"
   },
   "confirm": {
