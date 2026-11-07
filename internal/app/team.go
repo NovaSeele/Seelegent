@@ -75,8 +75,8 @@ func (a *App) startTeam(ctx, runCtx context.Context) {
 }
 
 // closeTeam stops the team services (before the task engine).
-func (a *App) closeTeam() {
-	a.Hooks.Close()
+func (a *App) closeTeam(ctx context.Context) {
+	a.Hooks.Close(ctx)
 	a.Contests.Close()
 	a.Meetings.Close()
 	if a.hookLog != nil {

@@ -163,7 +163,7 @@ func Run(ctx context.Context, o Options) (Report, error) {
 	m.team = team{members: member.New(member.Options{DB: db, Providers: m.accounts, Now: o.Now}),
 		meetings: meeting.New(meeting.Options{DB: db, Now: o.Now}), hooks: hook.New(hook.Options{DB: db, Now: o.Now})}
 	defer m.team.meetings.Close()
-	defer m.team.hooks.Close()
+	defer m.team.hooks.Close(context.WithoutCancel(ctx))
 	settings, providers := m.importSettings()
 	m.importProviders(ctx, providers, settings)
 	m.importAccounts(ctx, settings)

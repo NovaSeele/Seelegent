@@ -450,7 +450,7 @@ func (a *App) Close(ctx context.Context) error {
 	errs := []error{a.closeHTTP(ctx)}
 	a.SignIn.Close()
 	a.Proof.Close()
-	a.closeTeam()
+	a.closeTeam(ctx)
 	errs = append(errs, a.Tasks.Close(ctx))
 	if cancel != nil {
 		cancel()

@@ -45,6 +45,15 @@ const (
 	maxQueue       = 50
 	maxOutput      = 4096
 	notifyBuffer   = 1024
+	// waitDelay bounds how long a run waits for its output pipes once the shell has exited or been killed: a
+	// background child (setsid, start /b) can hold them open long after.
+	waitDelay = 2 * time.Second
+	// closeGrace is how long Close lets running hooks finish before it kills them.
+	closeGrace = 5 * time.Second
+	// maxSeen and seenTTL keep the task-state map small: past maxSeen entries, finished tasks not seen for seenTTL
+	// are forgotten (a later change of one fires only what a task first seen fires).
+	maxSeen = 1000
+	seenTTL = 24 * time.Hour
 )
 
 // ErrInvalid and ErrNotFound are matched by the errors of the API calls.
@@ -86,7 +95,10 @@ type Service struct {
 	log    *slog.Logger
 	ctx    context.Context
 	cancel context.CancelFunc
-	wg     sync.WaitGroup
+	// runCtx ends the hook runs themselves; Close cancels it after closeGrace.
+	runCtx    context.Context
+	runCancel context.CancelFunc
+	wg        sync.WaitGroup
 
 	mu      sync.Mutex
 	queue   []job
@@ -112,6 +124,7 @@ type taskState struct {
 	blocked  bool
 	reviewed string
 	manual   bool
+	at       time.Time // when this state was seen
 }
 
 // New returns a service; Start begins following the task events.
@@ -132,7 +145,9 @@ func New(o Options) *Service {
 		o.Log = io.Discard
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	return &Service{o: o, log: o.Logger, ctx: ctx, cancel: cancel, seen: map[string]taskState{}}
+	runCtx, runCancel := context.WithCancel(context.Background())
+	return &Service{o: o, log: o.Logger, ctx: ctx, cancel: cancel, runCtx: runCtx, runCancel: runCancel,
+		seen: map[string]taskState{}}
 }
 
 // Start follows the task bus and fires daemon.started (daemon.reattached too when reattached is true).
@@ -151,14 +166,36 @@ func (s *Service) Start(reattached bool) {
 	}
 }
 
-// Close stops following events and waits for running hooks (each ends at its timeout at the latest).
-func (s *Service) Close() {
+// Close stops following events and waits for running hooks: a few seconds or until ctx ends, whichever is first;
+// then it kills what still runs and waits for that, bounded too.
+func (s *Service) Close(ctx context.Context) {
 	s.mu.Lock()
 	s.closed = true
 	s.queue = nil
 	s.mu.Unlock()
 	s.cancel()
-	s.wg.Wait()
+	defer s.runCancel()
+	done := make(chan struct{})
+	go func() {
+		s.wg.Wait()
+		close(done)
+	}()
+	grace := time.NewTimer(closeGrace)
+	defer grace.Stop()
+	select {
+	case <-done:
+		return
+	case <-grace.C:
+	case <-ctx.Done():
+	}
+	s.runCancel()
+	limit := time.NewTimer(waitDelay + 3*time.Second)
+	defer limit.Stop()
+	select {
+	case <-done:
+	case <-limit.C:
+		s.log.Warn("hook: close: runs still waiting after the kill")
+	}
 }
 
 func (s *Service) spawn(fn func()) bool {
@@ -395,7 +432,8 @@ func (s *Service) taskChanged(id string, created bool) {
 	if err != nil || task.Hidden(d.Kind) {
 		return
 	}
-	now := taskState{status: d.Status, blocked: d.Attention != nil && d.Attention.State == "blocked", manual: d.Manual}
+	now := taskState{status: d.Status, blocked: d.Attention != nil && d.Attention.State == "blocked", manual: d.Manual,
+		at: s.o.Now()}
 	if d.Review != nil {
 		now.reviewed = d.Review.Verdict
 	}
@@ -436,11 +474,20 @@ func (s *Service) taskChanged(id string, created bool) {
 			events = append(events, api.HookTaskHandback)
 		}
 	}
+	s.mu.Lock()
 	if task.Finished(now.status) && now.reviewed != "" {
-		s.mu.Lock()
 		delete(s.seen, id) // a reviewed, finished task changes rarely; forget it to keep the map small
-		s.mu.Unlock()
 	}
+	if len(s.seen) > maxSeen {
+		// Finished tasks nobody reviews would stay forever; forget those not seen for a while.
+		cut := s.o.Now().Add(-seenTTL)
+		for k, st := range s.seen {
+			if task.Finished(st.status) && st.at.Before(cut) {
+				delete(s.seen, k)
+			}
+		}
+	}
+	s.mu.Unlock()
 	for _, e := range events {
 		s.fireTask(e, &d)
 	}
@@ -627,10 +674,13 @@ func (s *Service) run(j job) api.HookRun {
 	r := api.HookRun{HookID: j.hook.ID, Event: j.event, TaskID: j.taskID, StartedAt: api.FormatTime(start),
 		Test: j.test}
 	timeout := time.Duration(max(j.hook.TimeoutSeconds, 1)) * time.Second
-	ctx, cancel := context.WithTimeout(context.WithoutCancel(s.ctx), timeout)
+	ctx, cancel := context.WithTimeout(s.runCtx, timeout)
 	defer cancel()
 	cmd := shellCommand(context.Background(), j.hook.Run)
 	cmd.Cancel = nil
+	// Without it Wait blocks on the output copy for as long as a background child keeps the pipes open: after the
+	// shell has exited, and even after Kill when the child left the tree (setsid), holding a slot.
+	cmd.WaitDelay = waitDelay
 	dir := j.cwd
 	if st, err := os.Stat(dir); dir == "" || err != nil || !st.IsDir() {
 		dir, _ = os.UserHomeDir()
@@ -651,7 +701,11 @@ func (s *Service) run(j job) api.HookRun {
 		select {
 		case err = <-done:
 		case <-ctx.Done():
-			r.TimedOut = true
+			if s.runCtx.Err() != nil {
+				r.Error = "the daemon stopped"
+			} else {
+				r.TimedOut = true
+			}
 			_ = tree.Kill(time.Second)
 			err = <-done
 		}
@@ -660,7 +714,7 @@ func (s *Service) run(j job) api.HookRun {
 			code := cmd.ProcessState.ExitCode()
 			r.ExitCode = &code
 		}
-		if err != nil && r.ExitCode == nil && !r.TimedOut {
+		if err != nil && r.ExitCode == nil && !r.TimedOut && r.Error == "" {
 			r.Error = err.Error()
 		}
 	}

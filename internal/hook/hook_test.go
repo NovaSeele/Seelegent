@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -84,8 +85,67 @@ func setup(t *testing.T) (*Service, *fakeTasks, chan api.HookRun, *syncBuf) {
 	log := &syncBuf{}
 	s := New(Options{DB: db, Tasks: ft, Port: 47858, Log: log, Ran: func(r api.HookRun) { ran <- r },
 		Redact: func(s string) string { return strings.ReplaceAll(s, "sekrit", "[REDACTED]") }})
-	t.Cleanup(s.Close)
+	t.Cleanup(func() { s.Close(context.Background()) })
 	return s, ft, ran, log
+}
+
+// orphanCmd leaves a child that keeps the output pipe open after the shell exits; with setsid (Linux) it also
+// leaves the process tree, so Kill does not reach it.
+func orphanCmd() string {
+	if runtime.GOOS == "windows" {
+		return "start /b ping -n 30 127.0.0.1 & echo started"
+	}
+	if _, err := exec.LookPath("setsid"); err == nil {
+		return "setsid sleep 30 & echo started"
+	}
+	return "sleep 30 & echo started"
+}
+
+func TestOrphanedChildDoesNotHoldTheRun(t *testing.T) {
+	s, _, _, _ := setup(t)
+	hooks, err := s.Replace(t.Context(), []api.Hook{{On: []string{api.HookTaskDone}, Run: orphanCmd(),
+		TimeoutSeconds: 20}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	start := time.Now()
+	r, err := s.Test(t.Context(), hooks[0].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if took := time.Since(start); took > 10*time.Second || r.TimedOut || !strings.Contains(r.Output, "started") {
+		t.Errorf("run = %+v after %v; want it to end soon after the shell", r, took)
+	}
+}
+
+func TestCloseKillsLongRuns(t *testing.T) {
+	s, _, _, _ := setup(t)
+	hooks, err := s.Replace(t.Context(), []api.Hook{{On: []string{api.HookTaskDone}, Run: sleepCmd(),
+		TimeoutSeconds: 600}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := make(chan api.HookRun, 1)
+	go func() {
+		r, _ := s.Test(context.Background(), hooks[0].ID)
+		got <- r
+	}()
+	time.Sleep(500 * time.Millisecond)
+	ctx, cancel := context.WithTimeout(t.Context(), 300*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	s.Close(ctx)
+	if took := time.Since(start); took > 8*time.Second {
+		t.Errorf("Close took %v", took)
+	}
+	select {
+	case r := <-got:
+		if r.TimedOut || r.Error != "the daemon stopped" {
+			t.Errorf("run = %+v", r)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("the run did not end")
+	}
 }
 
 func TestReplaceKeepsIDs(t *testing.T) {
