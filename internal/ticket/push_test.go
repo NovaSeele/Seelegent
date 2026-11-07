@@ -13,7 +13,7 @@ import (
 )
 
 // readyTicket connects the repository, starts a ticket for a local issue and returns it with its task.
-func readyTicket(t *testing.T, e *env, title string) (api.Ticket, string) {
+func readyTicket(t *testing.T, e *env, title string) (tk api.Ticket, taskID string) {
 	t.Helper()
 	ctx := t.Context()
 	r, err := e.s.Connect(ctx, api.RepoConnectRequest{Path: e.repo})
@@ -35,7 +35,7 @@ func readyTicket(t *testing.T, e *env, title string) (api.Ticket, string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tk, err := e.s.Ticket(ctx, tr.Ticket.ID)
+	tk, err = e.s.Ticket(ctx, tr.Ticket.ID)
 	if err != nil {
 		t.Fatal(err)
 	}

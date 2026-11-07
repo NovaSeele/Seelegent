@@ -441,7 +441,7 @@ func TestParseChecks(t *testing.T) {
 // TestRedirectDropsAuthorization: a redirect to another host, or from https to http on the same host (G7), never
 // carries the token.
 func TestRedirectDropsAuthorization(t *testing.T) {
-	first, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, "https://ghe.example.com/api/v3/x", nil)
+	first, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, "https://ghe.example.com/api/v3/x", http.NoBody)
 	for target, keep := range map[string]bool{
 		"https://ghe.example.com/api/v3/y":    true,
 		"https://GHE.example.com/api/v3/y":    true,
@@ -449,7 +449,7 @@ func TestRedirectDropsAuthorization(t *testing.T) {
 		"https://ghe.example.com:8443/y":      false,
 		"https://storage.example.com/log.txt": false,
 	} {
-		req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, target, nil)
+		req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, target, http.NoBody)
 		req.Header.Set("Authorization", "Bearer x")
 		if err := checkRedirect(req, []*http.Request{first}); err != nil {
 			t.Fatal(err)
@@ -458,7 +458,7 @@ func TestRedirectDropsAuthorization(t *testing.T) {
 			t.Errorf("%s: authorization kept = %v", target, got)
 		}
 	}
-	req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, "https://ghe.example.com/z", nil)
+	req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, "https://ghe.example.com/z", http.NoBody)
 	if err := checkRedirect(req, make([]*http.Request, maxRedirects)); err == nil {
 		t.Error("followed a sixth redirect")
 	}
