@@ -102,7 +102,7 @@ func TestRequestChecks(t *testing.T) {
 
 	// Reserved paths of later milestones.
 	for _, p := range []string{"/api/v1/members", "/api/v1/members/track", "/api/v1/hooks", "/api/v1/hooks/h1/test",
-		"/api/v1/lanes", "/api/v1/proof/x", "/api/v1/meetings", "/api/v1/github/repos", "/api/v1/automations",
+		"/api/v1/meetings", "/api/v1/github/repos", "/api/v1/automations",
 		"/api/v1/tasks/t1/notes", "/api/v1/tasks/t1/consult"} {
 		e.wantError(e.get(p), http.StatusNotImplemented, api.CodeNotImplemented, "")
 	}

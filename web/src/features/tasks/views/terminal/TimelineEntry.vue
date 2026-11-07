@@ -40,6 +40,19 @@ const noticeText = computed(() => {
   if (item.until) parts.push(t('terminal.until', { time: format.value.time(item.until) }))
   return parts.join(' · ')
 })
+
+/** The notice's detail: its lines with their labels translated, or its plain detail. */
+const detailText = computed(() => {
+  const item = props.item
+  if (item.kind !== 'notice') return ''
+  if (!item.lines) return item.detail ?? ''
+  return item.lines
+    .map((line) => {
+      const label = line.label ? say(line.label) : ''
+      return label && line.text ? `${label}: ${line.text}` : label || (line.text ?? '')
+    })
+    .join('\n')
+})
 </script>
 
 <template>
@@ -133,7 +146,7 @@ const noticeText = computed(() => {
         <Icon :name="item.icon" class="te__icon" />
         <span>{{ noticeText }}</span>
       </p>
-      <pre v-if="item.detail" class="te__pre te__detail">{{ item.detail }}</pre>
+      <pre v-if="detailText" class="te__pre te__detail">{{ detailText }}</pre>
     </div>
   </div>
 </template>

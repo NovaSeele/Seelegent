@@ -1,0 +1,115 @@
+{
+  "repo": "リポジトリ",
+  "overview": "概要",
+  "loading": "証拠を読み込み中",
+  "loadFailed": "証拠を読み込めませんでした",
+  "empty": {
+    "title": "まだリポジトリがありません",
+    "desc": "git リポジトリでタスクが実行されると、ここに証拠が表示されます。"
+  },
+  "counts": {
+    "none": "要件なし"
+  },
+  "status": {
+    "proven": "証明済み",
+    "unproven": "未証明",
+    "in_progress": "進行中",
+    "unmapped": "タスクなし",
+    "failing": "失敗中",
+    "regressed": "回帰"
+  },
+  "features": {
+    "title": "機能",
+    "empty": "このリポジトリには Spec Kit の機能がありません。",
+    "tasks": "{total} 件中 {done} 件のタスクが完了"
+  },
+  "matrix": {
+    "loading": "マトリクスを読み込み中",
+    "pick": "機能を選んでください。",
+    "featureGate": "機能のゲート:",
+    "done": "完了",
+    "open": "未完了",
+    "result": {
+      "green": "ゲート通過",
+      "red": "ゲート失敗",
+      "error": "ゲートを実行できません"
+    },
+    "noResult": "ゲートの結果はまだありません",
+    "noGate": "ゲートコマンドなし",
+    "byRun": "回帰実行 {id}",
+    "stories": "ユーザーストーリー",
+    "uncovered": "Covers: 行のないタスク: {tasks}"
+  },
+  "runs": {
+    "title": "回帰実行",
+    "empty": "回帰実行はまだありません。",
+    "all": "すべての機能",
+    "state": {
+      "running": "実行中",
+      "green": "通過",
+      "red": "失敗",
+      "error": "実行できません",
+      "cancelled": "キャンセル"
+    },
+    "kind": {
+      "task": "タスクのゲート",
+      "feature": "機能のゲート",
+      "doctrine": "プロジェクトの原則"
+    },
+    "noisy": "他のタスクが動いていたため、結果にその未完成の変更が含まれている可能性があります。",
+    "dirty": "リポジトリに未コミットの変更がありました。",
+    "cancel": "実行を停止",
+    "force": "タスクが動いていても実行",
+    "start": "すべてのゲートを再実行",
+    "refused": "開始しませんでした: まだ動いているタスクがあります ({tasks})。待つか、そのまま実行してください。",
+    "failed": "実行に失敗しました: {error}",
+    "part": {
+      "green": "通過 {n}",
+      "red": "失敗 {n}",
+      "error": "実行不可 {n}"
+    },
+    "sep": "、",
+    "of": "{total} 件中 {parts}"
+  },
+  "lanes": {
+    "title": "レーン",
+    "mode": {
+      "off": "オフ",
+      "warn": "警告のみ",
+      "enforce": "強制"
+    },
+    "empty": "レーンを持つタスクはありません。",
+    "status": {
+      "waiting_deps": "依存待ち",
+      "blocked_deps": "依存によりブロック",
+      "queued": "待機列",
+      "running": "実行中",
+      "waiting_quota": "クォータ待ち",
+      "done": "完了",
+      "failed": "失敗",
+      "cancelled": "キャンセル"
+    },
+    "source": {
+      "lead": "リードが指定",
+      "spec": "spec のタスクから"
+    },
+    "heldUntil": "{time} まで保持",
+    "holdNote": "終了したタスクは、承認か却下されるまで、または保持期間が終わるまでレーンを保持します。"
+  },
+  "stats": {
+    "title": "ゲートの成果",
+    "tasks": "ゲート付きのタスク",
+    "tasksValue": "{total} 件中 {gated} 件",
+    "gateRuns": "ゲート実行",
+    "firstRunRed": "初回で失敗",
+    "caught": "レビュー前に検出",
+    "autoFix": "自動修正",
+    "autoFixValue": "{n} ターン、上限到達 {out} 件",
+    "lanes": "レーン",
+    "lanesValue": "拒否 {refused}、強制 {forced}、違反検出 {caught}",
+    "followups": "タスクごとのリードのフォローアップ",
+    "followupsValue": "ゲートあり {gated}、ゲートなし {ungated}",
+    "verifier": "セカンドオピニオンのレビュー",
+    "verifierValue": "{runs} 回: 承認 {accepts}、却下 {rejects}、見逃し {slipped}"
+  }
+}

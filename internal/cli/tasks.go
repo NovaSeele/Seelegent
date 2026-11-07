@@ -71,7 +71,7 @@ func newFollowupCommand(d deps) *cobra.Command {
 	var (
 		by, model, effort, task, profile string
 		allowGit, force                  bool
-		off                              offFlags
+		gates                            gateFlags
 		wait                             int
 	)
 	cmd := &cobra.Command{
@@ -81,7 +81,7 @@ func newFollowupCommand(d deps) *cobra.Command {
 		Annotations: map[string]string{annOp: "followup"},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			id := args[0]
-			gate, err := off.check()
+			g, err := gates.options(cmd.Flags())
 			if err != nil {
 				return err
 			}
@@ -96,7 +96,8 @@ func newFollowupCommand(d deps) *cobra.Command {
 				return usagef("--wait must be 0 or more")
 			}
 			req := api.FollowupRequest{Message: msg, By: by, Model: model, Effort: effort, TaskIDs: splitList([]string{task}),
-				Profile: profile, Gate: gate, Force: force}
+				Profile: profile, Gate: g.gate, GateCommands: g.commands, Lane: g.lane, NoLane: g.noLane,
+				ForceLane: g.forceLane, Verify: g.verify, Force: force}
 			if cmd.Flags().Changed("allow-git") {
 				req.AllowGit = &allowGit
 			}
@@ -129,7 +130,7 @@ func newFollowupCommand(d deps) *cobra.Command {
 	fs.BoolVar(&allowGit, "allow-git", false, "let the worker commit")
 	fs.BoolVar(&force, "force", false, "start a task that waits for its prerequisites anyway")
 	fs.IntVar(&wait, "wait", defaultWait, "seconds to wait for the report (0: return at once)")
-	off.add(fs)
+	gates.add(fs)
 	return cmd
 }
 

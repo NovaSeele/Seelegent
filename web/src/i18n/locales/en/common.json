@@ -123,7 +123,8 @@
     "workAtRisk": "Work may be lost",
     "depsBlocked": "Earlier task failed",
     "waitingDeps": "Waiting on earlier task",
-    "hygiene": "Hygiene problem"
+    "hygiene": "Hygiene problem",
+    "verifierRejected": "Review rejected it"
   },
   "stage": {
     "explore": "Explore",

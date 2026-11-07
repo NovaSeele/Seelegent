@@ -11,7 +11,8 @@
     "cancelled": "Đã huỷ tác vụ",
     "tookOver": "Đang mở console trên cuộc hội thoại của worker",
     "copied": "Đã chép mã tác vụ",
-    "copyFailed": "Không chép được: trình duyệt từ chối quyền clipboard"
+    "copyFailed": "Không chép được: trình duyệt từ chối quyền clipboard",
+    "laneConflict": "Bị từ chối: {files} nằm trong làn của {tasks}. Hãy chờ các tác vụ đó xong hoặc được duyệt."
   },
   "header": {
     "driving": "Bạn đang điều khiển",
@@ -129,7 +130,7 @@
     },
     "findings": "Kiểm tra của lượt {n}",
     "severity": {
-      "red": "Lỗi",
+      "red": "Vấn đề",
       "warn": "Cảnh báo"
     },
     "finding": {
@@ -166,5 +167,90 @@
       "forceDesc": "Các tệp này đã đổi sau khi lượt kết thúc. Nội dung mới hơn sẽ được thay bằng nội dung trước lượt {n}; bản sao lưu được giữ lại trước.",
       "forceConfirm": "Ghi đè ({n})"
     }
+  },
+  "gate": {
+    "title": "Cổng kiểm tra",
+    "state": {
+      "none": "chưa chạy",
+      "running": "đang chạy",
+      "green": "đạt",
+      "red": "không đạt",
+      "error": "không chạy được",
+      "skipped": "đã dừng"
+    },
+    "phase": {
+      "running": "đang chạy",
+      "settling": "chờ các tác vụ khác",
+      "verifying": "đang duyệt lần hai"
+    },
+    "turn": "lượt {n}",
+    "fixTurns": "{count} lượt tự sửa",
+    "barShort": "tiêu chí hoàn thành đã đổi",
+    "notYet": "Cổng sẽ chạy khi worker báo cáo.",
+    "steps": "Các bước",
+    "stepsOfTurn": "Các bước sau lượt {n}",
+    "stepState": {
+      "pending": "Đang chờ",
+      "running": "Đang chạy",
+      "green": "Đạt",
+      "red": "Không đạt",
+      "error": "Không chạy được",
+      "warn": "Cảnh báo",
+      "not_run": "Không chạy"
+    },
+    "kind": {
+      "lane": "Làn",
+      "hygiene": "Vệ sinh mã",
+      "auto": "Kiểm tra cú pháp",
+      "doctrine": "Nguyên tắc dự án",
+      "task": "Lệnh",
+      "detect": "Lệnh tự phát hiện"
+    },
+    "exit": "mã thoát {n}",
+    "timedOut": "quá thời gian",
+    "foreign": "Có thể do {tasks}: chỉ không đạt ở các tệp mà tác vụ đó đã sửa. Không bắt đầu lượt tự sửa nào.",
+    "output": "Kết quả in ra",
+    "notRun": "Không chạy: {steps}",
+    "settled": "Đã chạy lại sau khi chờ các tác vụ khác trong kho mã.",
+    "verifier": {
+      "title": "Duyệt lần hai",
+      "verdict": {
+        "running": "Đang duyệt",
+        "accept": "Chấp nhận",
+        "reject": "Từ chối",
+        "error": "Không có kết luận"
+      },
+      "short": {
+        "running": "đang duyệt lần hai",
+        "accept": "duyệt lần hai chấp nhận",
+        "reject": "duyệt lần hai từ chối",
+        "error": "duyệt lần hai không kết luận"
+      },
+      "unverified": "{n} dòng được trích dẫn không khớp với kho mã:",
+      "on": "Bật",
+      "off": "Tắt"
+    },
+    "checks": "Cổng kiểm tra những gì",
+    "lane": {
+      "title": "Làn",
+      "none": "Không có làn: được sửa mọi tệp",
+      "source": {
+        "lead": "do lead đặt",
+        "spec": "lấy từ tác vụ spec"
+      },
+      "forced": "đã giành chỗ của {tasks}"
+    },
+    "commands": "Lệnh",
+    "off": "Đã tắt (vẫn kiểm tra làn và vệ sinh mã)",
+    "noCommands": "Không có lệnh",
+    "detected": "tự phát hiện",
+    "doctrine": "Nguyên tắc dự án",
+    "budget": "Tự sửa",
+    "fixes": "đã dùng {n}/{max}",
+    "feature": "Tính năng spec",
+    "bar": "Đã đổi từ lúc bắt đầu",
+    "usedUp": "đã hết lượt tự sửa ({n}/{max})",
+    "nextStep": "Cổng không thể tự sửa thêm: hãy gửi chỉ dẫn tiếp hoặc tiếp quản tác vụ.",
+    "causedBy": "có thể do {tasks}"
   }
 }

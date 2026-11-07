@@ -108,6 +108,27 @@
     "log": "Log của worker",
     "session": "Bắt đầu hội thoại · {model}",
     "restored": "Đã khôi phục {count} tệp (lượt {n})",
-    "atRisk": "{count} tệp vẫn có nguy cơ mất"
+    "atRisk": "{count} tệp vẫn có nguy cơ mất",
+    "gate": {
+      "start": "Bắt đầu cổng kiểm tra: {count} bước",
+      "settling": "Cổng không đạt trong lúc các tác vụ khác đang chạy; chờ chúng xong rồi chạy lại",
+      "running": "Cổng đang chạy",
+      "green": "Cổng đạt",
+      "red": "Cổng không đạt",
+      "error": "Không chạy được cổng",
+      "skipped": "Cổng đã dừng",
+      "autoFix": "tự sửa ở lượt {n}"
+    },
+    "lane": {
+      "forced": "Đã giành làn bất chấp chỗ giữ của {count} tác vụ khác",
+      "warning": "Làn trùng với {count} tác vụ khác",
+      "violation": "Đã sửa {count} tệp ngoài làn"
+    },
+    "verify": {
+      "start": "Bắt đầu duyệt lần hai",
+      "accept": "Duyệt lần hai chấp nhận thay đổi",
+      "reject": "Duyệt lần hai từ chối thay đổi",
+      "error": "Duyệt lần hai không hoàn tất được"
+    }
   }
 }

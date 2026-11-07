@@ -141,11 +141,14 @@ type Review struct {
 	At      string `json:"at"`
 }
 
-// Gate is the state of a task's proof gate (filled by milestone 13).
+// Gate is the state of a task's gate: the last gate run, or running while it runs (Phase running, settling or
+// verifying).
 type Gate struct {
 	State     string `json:"state" ts:"'running' | 'green' | 'red' | 'error' | 'skipped'"`
-	Phase     string `json:"phase,omitempty"`
+	Phase     string `json:"phase,omitempty" ts:"'running' | 'settling' | 'verifying'"`
 	AutoFixes int    `json:"autoFixes"`
+	// Turn is the turn the gate is about.
+	Turn int `json:"turn,omitempty"`
 }
 
 // SpecRef is the Spec Kit feature a task works on.
@@ -171,6 +174,8 @@ type TaskDetail struct {
 	Turns    []Turn `json:"turns"`
 	// FileOverlaps are the files this task and another task of the same repository changed in overlapping time.
 	FileOverlaps []FileOverlap `json:"fileOverlaps"`
+	// Proof is what the task's gate checks (null for a task without gate, lane or verifier).
+	Proof *TaskProof `json:"proof"`
 }
 
 // Turn is one lead (or user) message and the worker's answer to it.
@@ -200,6 +205,9 @@ type Turn struct {
 	Scope      []Finding  `json:"scope"`
 	// OutsideDiff is true when the turn has snapshots, so GET /tasks/{id}/turns/{n}/outside-diff can answer.
 	OutsideDiff bool `json:"outsideDiff"`
+	// Gate is the gate run after the turn (null when none ran); Verifier the review of its green gate.
+	Gate     *GateResult     `json:"gate"`
+	Verifier *VerifierResult `json:"verifier"`
 }
 
 // TurnGit lists the files a turn changed, relative to the repository root (null for a turn without snapshots).
@@ -269,27 +277,40 @@ type DelegateRequest struct {
 	After     []string     `json:"after,omitempty"`
 	AfterMode string       `json:"afterMode,omitempty" ts:"'accepted' | 'done'"`
 	AllowGit  bool         `json:"allowGit,omitempty"`
-	Gate      *bool        `json:"gate,omitempty"`
-	Lane      []string     `json:"lane,omitempty"`
-	Verify    *bool        `json:"verify,omitempty"`
-	Session   *Session     `json:"session,omitempty"`
+	// Gate: true adds the test, lint and build commands found in the repository; false turns the gate's commands
+	// off (lane and hygiene still run). GateCommands are the lead's own gate commands; with spec task ids they
+	// replace the tasks' Gate: lines and the feature gate, and prove those tasks.
+	Gate         *bool    `json:"gate,omitempty"`
+	GateCommands []string `json:"gateCommands,omitempty"`
+	// Lane lists the files and globs (relative to the repository root) the worker may change; NoLane drops the
+	// lane a spec would give. ForceLane overrides the lane claims of other tasks.
+	Lane      []string `json:"lane,omitempty"`
+	NoLane    bool     `json:"noLane,omitempty"`
+	ForceLane bool     `json:"forceLane,omitempty"`
+	// Verify asks for an LLM review of a green gate (default: the verifier setting).
+	Verify  *bool    `json:"verify,omitempty"`
+	Session *Session `json:"session,omitempty"`
 }
 
 // FollowupRequest adds a turn to a task.
 type FollowupRequest struct {
 	Message string `json:"message"`
 	// By is lead (default) or user.
-	By        string   `json:"by,omitempty" ts:"'lead' | 'user'"`
-	Tier      string   `json:"tier,omitempty" ts:"Tier"`
-	Model     string   `json:"model,omitempty"`
-	Effort    string   `json:"effort,omitempty"`
-	TaskIDs   []string `json:"taskIds,omitempty"`
-	Profile   string   `json:"profile,omitempty"`
-	AllowGit  *bool    `json:"allowGit,omitempty"`
-	Gate      *bool    `json:"gate,omitempty"`
-	Lane      []string `json:"lane,omitempty"`
-	ForceLane bool     `json:"forceLane,omitempty"`
-	Verify    *bool    `json:"verify,omitempty"`
+	By       string   `json:"by,omitempty" ts:"'lead' | 'user'"`
+	Tier     string   `json:"tier,omitempty" ts:"Tier"`
+	Model    string   `json:"model,omitempty"`
+	Effort   string   `json:"effort,omitempty"`
+	TaskIDs  []string `json:"taskIds,omitempty"`
+	Profile  string   `json:"profile,omitempty"`
+	AllowGit *bool    `json:"allowGit,omitempty"`
+	// Gate, GateCommands, Lane, NoLane, ForceLane and Verify change the task's gate from this turn on (see
+	// DelegateRequest); left out, the task keeps what it had.
+	Gate         *bool    `json:"gate,omitempty"`
+	GateCommands []string `json:"gateCommands,omitempty"`
+	Lane         []string `json:"lane,omitempty"`
+	NoLane       bool     `json:"noLane,omitempty"`
+	ForceLane    bool     `json:"forceLane,omitempty"`
+	Verify       *bool    `json:"verify,omitempty"`
 	// Force starts a task that waits for (or is blocked by) its prerequisites anyway.
 	Force bool `json:"force,omitempty"`
 }

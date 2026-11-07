@@ -218,7 +218,7 @@ func (s *Service) endRun(r *run) {
 		return
 	}
 	if t, err := s.repo.Get(s.root, r.id); err == nil && Active(t.Status) && !t.Manual {
-		if tu := t.LastTurn(); tu != nil && tu.Status == TurnRunning {
+		if tu := t.LastTurn(); t.GatePhase != nil || (tu != nil && tu.Status == TurnRunning) {
 			s.startRun(r.id)
 		}
 	}
@@ -237,6 +237,27 @@ func (s *Service) runTask(r *run) {
 		}
 		if !Active(t.Status) || t.Manual {
 			return
+		}
+		if t.GatePhase != nil {
+			switch {
+			case t.CancelRequested:
+				s.finishCancel(r.id)
+				return
+			case r.ctx.Err() != nil:
+				return
+			}
+			more, err := s.gatePhase(r, t)
+			if err != nil {
+				if s.root.Err() != nil {
+					return
+				}
+				s.fail(r.id, err.Error())
+				return
+			}
+			if !more {
+				return
+			}
+			continue
 		}
 		tu := t.LastTurn()
 		if tu == nil || tu.Status != TurnRunning {
@@ -578,9 +599,9 @@ func (s *Service) finishAttempt(r *run, id string, turn, n int, accountID, model
 	check := s.preCheck(ctx, id, turn, status, &o, n, maxAttempts)
 	now := s.now()
 	var retry time.Duration
-	more := false
+	more, gating := false, false
 	t, err := s.mutate(ctx, id, func(t *Task) ([]NewEvent, error) {
-		more, retry = false, 0
+		more, gating, retry = false, false, 0
 		tu := t.TurnN(turn)
 		if tu == nil || n > len(tu.Attempts) {
 			return nil, fmt.Errorf("%w: attempt %d of turn %d", ErrNotFound, n, turn)
@@ -667,6 +688,12 @@ func (s *Service) finishAttempt(r *run, id string, turn, n int, accountID, model
 		if tu.Status != TurnRunning {
 			evs = append(evs, applyCheck(t, tu, check)...)
 		}
+		if t.Status == StatusDone && wantsGate(t, tu) {
+			// The gate runs before the lead sees the turn: the task stays running in its gate phase.
+			t.Status = StatusRunning
+			t.GatePhase = &GatePhase{State: api.GatePhaseRunning, Turn: turn, Since: now}
+			gating = true
+		}
 		return evs, nil
 	})
 	if err != nil {
@@ -675,6 +702,9 @@ func (s *Service) finishAttempt(r *run, id string, turn, n int, accountID, model
 	s.recordUsage(ctx, t, turn, n, accountID, b.Name(), model, o.Usage)
 	if s.o.QuotaRefresh != nil && accountID != "" {
 		s.o.QuotaRefresh(accountID)
+	}
+	if gating {
+		return true, nil
 	}
 	if !more {
 		s.lateCheck(ctx, id, turn) // when the turn ended without its checks (they could not run before)
@@ -733,13 +763,19 @@ func (s *Service) giveUp(id string, turn int, message string) (bool, error) {
 
 // finishCancel ends a cancelled task that has no worker running.
 func (s *Service) finishCancel(id string) {
+	child := ""
 	_, err := s.mutate(s.background(), id, func(t *Task) ([]NewEvent, error) {
+		child = ""
 		if !t.CancelRequested && t.Status == StatusCancelled {
 			return nil, errNoChange
 		}
 		var evs []NewEvent
 		if tu := t.LastTurn(); tu != nil && tu.Status == TurnRunning {
 			evs = append(evs, s.endTurn(t, tu, TurnCancelled, backend.Outcome{}))
+		}
+		if ph := t.GatePhase; ph != nil {
+			child = ph.ChildID
+			evs = append(evs, cancelGate(t, ph, s.now())...)
 		}
 		t.CancelRequested, t.Waiting, t.WaitDetail, t.WaitingUntil = false, "", "", time.Time{}
 		if t.Status != StatusCancelled {
@@ -752,6 +788,11 @@ func (s *Service) finishCancel(id string) {
 	if err != nil {
 		s.log.Error("task: finish cancel", "task", id, "err", err)
 		return
+	}
+	if child != "" {
+		if _, _, err := s.Cancel(s.background(), child, api.CancelRequest{}); err != nil {
+			s.log.Warn("task: cancel the verify task", "task", child, "err", err)
+		}
 	}
 	if t, err := s.repo.Get(s.background(), id); err == nil && t.LastTurn() != nil {
 		s.lateCheck(s.background(), id, t.LastTurn().N)
@@ -882,9 +923,17 @@ func lastError(tu *Turn) string {
 // prompt builds what the worker gets: the short continuation of its own conversation, or the full brief for a
 // fresh conversation (with the handoff section, so a worker on another account never loses the task, old B7).
 func (s *Service) prompt(ctx context.Context, t *Task, tu *Turn, continuing bool) string {
+	if t.Kind == KindVerify {
+		return tu.Message // the verifier's brief is complete (verifier.go)
+	}
 	spec := s.briefSpec(t)
 	if continuing {
 		request := brief.Continue(tu.Message, spec, tu.TaskIDsPassed)
+		if tu.ProofChanged {
+			if sec := brief.GateSection(s.briefGate(t)); sec != "" {
+				request = sec + "\n\n" + request
+			}
+		}
 		if last := tu.LastAttempt(); last != nil {
 			switch last.Status {
 			case AttemptTransient:
@@ -902,6 +951,7 @@ func (s *Service) prompt(ctx context.Context, t *Task, tu *Turn, continuing bool
 	}
 	in := brief.Input{Cwd: t.Cwd, Plan: t.Mode == ModePlan, Spec: spec, Deps: t.DepsContext,
 		Interrupted: len(tu.Attempts) > 0, Message: tu.Message, Baseline: displayPaths(t.Cwd, t.Baseline)}
+	in.Lane, in.Gate = s.briefGate(t)
 	if tu.Handback {
 		in.Message = brief.HandbackElsewhere // a new conversation: the console's context is not available
 	}

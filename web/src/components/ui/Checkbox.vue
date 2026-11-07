@@ -127,4 +127,20 @@ watchEffect(() => {
   color: var(--text-muted);
   font-size: var(--fs-xs);
 }
+
+/* Touch: the row is a full-size target; a tap anywhere on it toggles through the label. */
+@media (pointer: coarse) {
+  .check {
+    position: relative;
+    align-items: center;
+    min-width: var(--target-min);
+    min-height: var(--target-min);
+  }
+
+  .check__label::after {
+    position: absolute;
+    inset: 0;
+    content: '';
+  }
+}
 </style>

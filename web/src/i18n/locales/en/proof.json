@@ -1,0 +1,115 @@
+{
+  "repo": "Repository",
+  "overview": "Overview",
+  "loading": "Loading the proof",
+  "loadFailed": "Could not load the proof",
+  "empty": {
+    "title": "No repository yet",
+    "desc": "The proof appears once a task has run in a git repository."
+  },
+  "counts": {
+    "none": "No requirements"
+  },
+  "status": {
+    "proven": "Proven",
+    "unproven": "Not proven",
+    "in_progress": "In progress",
+    "unmapped": "No task",
+    "failing": "Failing",
+    "regressed": "Regressed"
+  },
+  "features": {
+    "title": "Features",
+    "empty": "No Spec Kit features in this repository.",
+    "tasks": "{done} of {total} tasks done"
+  },
+  "matrix": {
+    "loading": "Loading the matrix",
+    "pick": "Pick a feature.",
+    "featureGate": "Feature gate:",
+    "done": "done",
+    "open": "open",
+    "result": {
+      "green": "Gate passed",
+      "red": "Gate failed",
+      "error": "Gate could not run"
+    },
+    "noResult": "No gate result yet",
+    "noGate": "No gate command",
+    "byRun": "regression run {id}",
+    "stories": "User stories",
+    "uncovered": "Tasks without a Covers: line: {tasks}"
+  },
+  "runs": {
+    "title": "Regression runs",
+    "empty": "No regression run yet.",
+    "all": "All features",
+    "state": {
+      "running": "Running",
+      "green": "Passed",
+      "red": "Failed",
+      "error": "Could not run",
+      "cancelled": "Cancelled"
+    },
+    "kind": {
+      "task": "task gate",
+      "feature": "feature gate",
+      "doctrine": "doctrine"
+    },
+    "noisy": "Other tasks were active, so results may include their unfinished work.",
+    "dirty": "The repository had uncommitted changes.",
+    "cancel": "Stop run",
+    "force": "Run even while tasks are active",
+    "start": "Run every gate again",
+    "refused": "Not started: tasks are still active ({tasks}). Wait for them or run anyway.",
+    "failed": "The run failed: {error}",
+    "part": {
+      "green": "{n} passed",
+      "red": "{n} failed",
+      "error": "{n} could not run"
+    },
+    "sep": ", ",
+    "of": "{parts} of {total}"
+  },
+  "lanes": {
+    "title": "Lanes",
+    "mode": {
+      "off": "off",
+      "warn": "warn only",
+      "enforce": "enforced"
+    },
+    "empty": "No task holds a lane.",
+    "status": {
+      "waiting_deps": "Waiting for dependencies",
+      "blocked_deps": "Blocked by dependencies",
+      "queued": "Queued",
+      "running": "Running",
+      "waiting_quota": "Waiting for quota",
+      "done": "Done",
+      "failed": "Failed",
+      "cancelled": "Cancelled"
+    },
+    "source": {
+      "lead": "set by the lead",
+      "spec": "from the spec tasks"
+    },
+    "heldUntil": "held until {time}",
+    "holdNote": "A finished task keeps its lane until it is accepted or rejected, or until the hold ends."
+  },
+  "stats": {
+    "title": "What the gates did",
+    "tasks": "Gated tasks",
+    "tasksValue": "{gated} of {total}",
+    "gateRuns": "Gate runs",
+    "firstRunRed": "Red on the first run",
+    "caught": "Caught before review",
+    "autoFix": "Automatic fixes",
+    "autoFixValue": "{n} turns, {out} ran out of budget",
+    "lanes": "Lanes",
+    "lanesValue": "{refused} refused, {forced} forced, {caught} violations caught",
+    "followups": "Lead follow-ups per task",
+    "followupsValue": "{gated} gated, {ungated} ungated",
+    "verifier": "Second-opinion review",
+    "verifierValue": "{runs} runs: {accepts} accepted, {rejects} rejected, {slipped} slipped through"
+  }
+}

@@ -86,8 +86,11 @@ const (
 	AttemptCancelled      = "cancelled"
 )
 
-// KindNormal is the kind of a task the lead delegated.
-const KindNormal = "normal"
+// Task kinds: a task the lead delegated, and the hidden task that reviews a green gate (verifier.go).
+const (
+	KindNormal = "normal"
+	KindVerify = "verify"
+)
 
 // Task is the stored record of a task. Turns are stored in their own rows and loaded with it.
 type Task struct {
@@ -150,6 +153,13 @@ type Task struct {
 	AttentionDismissedAt time.Time      `json:"attentionDismissedAt,omitzero"`
 	Review               *api.Review    `json:"review,omitempty"`
 
+	// Proof is what the task's gate checks (gates.go); nil for a task without gate, lane or verifier.
+	Proof *Proof `json:"proof,omitempty"`
+	// GatePhase is set while the gate (or the verifier) of a finished turn runs: the task stays running.
+	GatePhase *GatePhase `json:"gatePhase,omitempty"`
+	// Verdict is the verdict of a verify task (KindVerify) once it ended.
+	Verdict *api.VerifierResult `json:"verdict,omitempty"`
+
 	ParentID  string `json:"parentId,omitempty"`
 	ContestID string `json:"contestId,omitempty"`
 	TicketID  string `json:"ticketId,omitempty"`
@@ -191,9 +201,12 @@ type Turn struct {
 	Effort         string   `json:"effort,omitempty"`
 	TaskIDs        []string `json:"taskIds,omitempty"`
 	// TaskIDsPassed is true when the lead named spec tasks for this turn.
-	TaskIDsPassed bool      `json:"taskIdsPassed,omitempty"`
-	StartedAt     time.Time `json:"startedAt"`
-	EndedAt       time.Time `json:"endedAt,omitzero"`
+	TaskIDsPassed bool `json:"taskIdsPassed,omitempty"`
+	// ProofChanged is true when the followup that opened the turn changed the task's lane or gate commands: the
+	// continuation repeats them.
+	ProofChanged bool      `json:"proofChanged,omitempty"`
+	StartedAt    time.Time `json:"startedAt"`
+	EndedAt      time.Time `json:"endedAt,omitzero"`
 
 	Response        string       `json:"response,omitempty"`
 	Files           []string     `json:"files,omitempty"`
@@ -220,6 +233,10 @@ type Turn struct {
 	// Hygiene and Scope are the findings of the post-turn checks.
 	Hygiene []api.Finding `json:"hygiene,omitempty"`
 	Scope   []api.Finding `json:"scope,omitempty"`
+
+	// Gate is the gate run after the turn (milestone 13); Verifier the review of its green gate.
+	Gate     *api.GateResult     `json:"gate,omitempty"`
+	Verifier *api.VerifierResult `json:"verifier,omitempty"`
 
 	// Attempts are stored in the attempts table.
 	Attempts []*Attempt `json:"-"`

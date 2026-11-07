@@ -103,17 +103,19 @@ set). RE2 has no look-ahead: write `"^gemini-3\\.8-"` (the JSON spelling of
 
 ### Gates, lanes and safety
 
+Gates, lanes, the verifier and the proof ledger are described in [gates.md](gates.md).
+
 | Setting | Type | Default | Meaning |
 | --- | --- | --- | --- |
 | `gates` | boolean | `true` | Run the gate commands after each worker report; `false` leaves only the lane and hygiene steps. |
-| `gateAutoChecks` | boolean | `true` | Add cheap syntax checks of changed files to the gate. |
+| `gateAutoChecks` | boolean | `true` | Add syntax checks of the changed `.json`, `.go` and `.js` files to the gate (a parse error the HEAD version did not have fails it). |
 | `gateTimeoutSec` | integer 1–86400 | `300` | Time limit of one gate command. |
-| `gateMaxAutoFixes` | integer 0–10 | `2` | Automatic fix turns per lead instruction (shared by the gate, the verifier and background-wait continuations). |
+| `gateMaxAutoFixes` | integer 0–10 | `2` | Automatic fix turns per lead instruction, shared by the gate and the verifier; a lead or user followup starts the count again. |
 | `gateSettleMinutes` | integer ≥ 0 | `10` | How long a red gate waits for other running tasks in the same repository before it runs again. |
 | `gateSettlePollMs` | integer ≥ 100 | `15000` | How often that wait checks the other tasks. |
 | `gateOutputTailBytes` | integer 1–1048576 | `2000` | Output tail kept for each gate step. |
 | `hygiene` | boolean | `true` | Add the hygiene step (line endings, BOM, junk and unreported files) to the gate. |
-| `lanes` | `off`, `warn`, `enforce` | `"enforce"` | How file lanes are enforced. |
+| `lanes` | `off`, `warn`, `enforce` | `"enforce"` | How file lanes are enforced: `enforce` refuses an overlapping claim (unless `forceLane`) and fails the gate for files outside the lane, `warn` only reports, `off` ignores lanes. |
 | `laneHoldHours` | integer ≥ 0 | `12` | How long a finished but unreviewed task keeps its lane claim. |
 | `verifier` | boolean | `false` | Default of the per-task `verify` option (an LLM review of a green gate). |
 | `verifierTier` | tier | `"fast"` | Model tier of the verifier. |

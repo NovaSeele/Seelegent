@@ -144,8 +144,8 @@ func (l *strList) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-// gateArg is the gate argument: a command, a list of commands, or false. true (run the default gates) is kept so
-// it can be refused as not available rather than as a bad argument.
+// gateArg is the gate argument: a command, a list of commands, true (the repository's detected test, lint and
+// build commands) or false (no gate commands; the lane and hygiene checks still run).
 type gateArg struct {
 	set  bool
 	off  bool
@@ -170,6 +170,19 @@ func (g *gateArg) UnmarshalJSON(b []byte) error {
 		*g = gateArg{set: true, cmds: l}
 	}
 	return nil
+}
+
+// request maps the argument onto DelegateRequest.Gate and GateCommands.
+func (g gateArg) request() (gate *bool, commands []string) {
+	switch {
+	case g.off:
+		f := false
+		return &f, nil
+	case g.on:
+		t := true
+		return &t, nil
+	}
+	return nil, g.cmds
 }
 
 // laneArg is the lane argument: a list of paths or globs, or false.

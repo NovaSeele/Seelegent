@@ -164,6 +164,9 @@ type Options struct {
 	Settings Settings
 	SignIn   SignIn
 	Git      Git
+	// Proof and Gates serve the proof ledger, lanes and contention (milestone 13); their routes answer 404 when nil.
+	Proof Proof
+	Gates Gates
 	// Backends are the worker CLIs by name.
 	Backends map[string]backend.Backend
 	// LogDir is the folder of daemon.log and hooks.log (GET /logs).
@@ -420,6 +423,7 @@ func (s *Server) routes() {
 	s.gitRoutes()
 	s.accountRoutes()
 	s.settingsRoutes()
+	s.proofRoutes()
 	s.reservedRoutes()
 	s.mux.HandleFunc("GET "+apiPrefix+"/events", s.serveEvents)
 	s.mux.HandleFunc(apiPrefix+"/", func(w http.ResponseWriter, r *http.Request) {
@@ -432,7 +436,7 @@ func (s *Server) reservedRoutes() {
 	notImplemented := func(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, r, translated(api.CodeNotImplemented, "not_implemented"))
 	}
-	for _, p := range []string{"/members", "/members/", "/hooks", "/hooks/", "/proof/", "/lanes", "/contention",
+	for _, p := range []string{"/members", "/members/", "/hooks", "/hooks/",
 		"/meetings", "/meetings/", "/contests", "/contests/", "/github/", "/automations", "/automations/"} {
 		s.mux.HandleFunc(apiPrefix+p, notImplemented)
 	}

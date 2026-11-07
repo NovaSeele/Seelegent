@@ -33,6 +33,7 @@ import (
 	"github.com/NovaSeele/Seelegent/internal/memory"
 	"github.com/NovaSeele/Seelegent/internal/platform"
 	"github.com/NovaSeele/Seelegent/internal/pool"
+	"github.com/NovaSeele/Seelegent/internal/proof"
 	"github.com/NovaSeele/Seelegent/internal/quota"
 	"github.com/NovaSeele/Seelegent/internal/role"
 	"github.com/NovaSeele/Seelegent/internal/signin"
@@ -95,6 +96,7 @@ type App struct {
 	Roles     *role.Store
 	Backends  map[string]backend.Backend
 	Tasks     *task.Service
+	Proof     *proof.Service
 	Git       *gitx.Repos
 	SignIn    *signin.Service
 
@@ -269,6 +271,7 @@ func (a *App) build(o Options) error {
 	// only their sandbox and the work-at-risk check.
 	shim := installShim(a.log, o.Paths.GuardBin, o.GuardExe)
 	a.Git = gitx.New(now, gitBin)
+	ledger := proof.NewLedger(a.DB, now)
 	a.Tasks, err = task.New(task.Options{
 		DB: a.DB, Accounts: a.Accounts, Pool: p, Backends: a.Backends, Settings: a.Settings,
 		TasksDir: o.Paths.Tasks, Launcher: o.Launcher, Usage: a.Usage, QuotaRefresh: a.Refresher.Request,
@@ -281,10 +284,13 @@ func (a *App) build(o Options) error {
 		Repos:         a.Git,
 		ScopeAllowed:  scopeAllowed(o.Paths.Profiles, a.env),
 		AccountStates: p.States,
+		Ledger:        ledger,
 	})
 	if err != nil {
 		return err
 	}
+	a.Proof = proof.New(proof.Options{Ledger: ledger, Git: proofGit{a.Git}, Exec: a.proofExec, Active: a.Tasks.ActiveIn,
+		TaskFeatures: a.Tasks.SpecFeatures, Publish: a.publishProofRun, LogDir: o.Paths.Logs, Now: now, Logger: a.log})
 	a.SignIn = signin.New(signin.Options{
 		Accounts: a.Accounts,
 		Backend: func(name string) (backend.Backend, bool) {
@@ -386,6 +392,9 @@ func (a *App) Start(ctx context.Context) error {
 		defer a.wg.Done()
 		a.Refresher.Run(runCtx)
 	}()
+	if err := a.Proof.Start(ctx); err != nil {
+		a.log.Warn("app: abandon stale proof runs", "err", err)
+	}
 	if err := a.Tasks.Start(ctx); err != nil {
 		cancel()
 		a.wg.Wait()
@@ -419,6 +428,7 @@ func (a *App) Close(ctx context.Context) error {
 	a.mu.Unlock()
 	errs := []error{a.closeHTTP(ctx)}
 	a.SignIn.Close()
+	a.Proof.Close()
 	errs = append(errs, a.Tasks.Close(ctx))
 	if cancel != nil {
 		cancel()

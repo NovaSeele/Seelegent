@@ -108,6 +108,27 @@
     "log": "Worker log",
     "session": "Conversation started · {model}",
     "restored": "Restored {count} file (turn {n}) | Restored {count} files (turn {n})",
-    "atRisk": "{count} file still at risk | {count} files still at risk"
+    "atRisk": "{count} file still at risk | {count} files still at risk",
+    "gate": {
+      "start": "Gate started: {count} step | Gate started: {count} steps",
+      "settling": "The gate failed while other tasks were working; it waits for them and runs again",
+      "running": "Gate running",
+      "green": "Gate passed",
+      "red": "Gate failed",
+      "error": "The gate could not run",
+      "skipped": "Gate stopped",
+      "autoFix": "automatic fix in turn {n}"
+    },
+    "lane": {
+      "forced": "Lane taken over {count} other task's claim | Lane taken over {count} other tasks' claims",
+      "warning": "The lane overlaps {count} other task | The lane overlaps {count} other tasks",
+      "violation": "Changed {count} file outside the lane | Changed {count} files outside the lane"
+    },
+    "verify": {
+      "start": "Second-opinion review started",
+      "accept": "The reviewer accepted the change",
+      "reject": "The reviewer rejected the change",
+      "error": "The review could not finish"
+    }
   }
 }

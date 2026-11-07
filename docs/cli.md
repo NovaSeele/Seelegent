@@ -2,10 +2,10 @@
 
 `seelegent <command> [flags]`. The commands are thin: they talk to the daemon through `internal/client` and share
 their logic with the MCP tools through `internal/ops` (see [mcp.md](mcp.md)). Code: `internal/cli`, one file per
-group (`delegate.go`, `tasks.go`, `memory.go`, `system.go`, `doctor.go`, `daemon.go`, `mcp.go`, `setup.go`,
-`migrate.go`, `update.go`); the checks of `doctor` are `internal/doctor`, the work of `setup` and `migrate` is
-`internal/setup` and `internal/migrate` ([setup.md](setup.md)), the work of `update` is `internal/update`
-([release.md](release.md)).
+group (`delegate.go`, `tasks.go`, `proof.go`, `memory.go`, `system.go`, `doctor.go`, `daemon.go`, `mcp.go`,
+`setup.go`, `migrate.go`, `update.go`); the checks of `doctor` are `internal/doctor`, the work of `setup` and
+`migrate` is `internal/setup` and `internal/migrate` ([setup.md](setup.md)), the work of `update` is
+`internal/update` ([release.md](release.md)).
 
 ## Common rules
 
@@ -44,9 +44,9 @@ file exists.
 ### Worker guard (old B12)
 
 With `SEELEGENT_WORKER=1`, `delegate`, `run`, `followup`, `review`, `cancel`, `memory append|replace`, `stop`,
-`restart`, `ui`, `daemon` (`serve`), `setup` (a dry run too), `migrate` and `restore` print exactly `Seelegent is not available inside a Seelegent worker.` and exit 1 (with `--json`:
+`restart`, `ui`, `daemon` (`serve`), `setup` (a dry run too), `migrate`, `restore`, `proof run` and `proof cancel-run` print exactly `Seelegent is not available inside a Seelegent worker.` and exit 1 (with `--json`:
 `{"error": that text, "code": "forbidden", "details": {"caller": "worker"}}`). The check runs before the flags are
-parsed and before any call. `status`, `wait`, `task`, `ls`, `memory read`, `doctor`, `version`, `skill` and the
+parsed and before any call. `status`, `wait`, `task`, `ls`, `memory read`, the other `proof` commands, `doctor`, `version`, `skill` and the
 hidden `hook claude-agent` (Claude Code's reminder hook, which may run inside a worker and only prints advice) stay
 allowed; the daemon's own guard decides what a worker may read. `update` is refused the same way in every mode,
 `--check` included (it replaces the executable and restarts the daemon that runs the worker).
@@ -61,9 +61,9 @@ allowed; the daemon's own guard decides what a worker may read. `update` is refu
 | `status` | Daemon, backends, accounts (labels and quota, never e-mails) and the tasks that need you. Prints `not running` (exit 0) when no daemon runs; a daemon that holds its lock without answering, or another program on the port, is exit 1. | `{running, dashboard?, health?, backends: Backend[], accounts: Account[], activeTasks: TaskSummary[]}` |
 | `stop` | Asks the daemon to shut down (`POST /api/v1/daemon/stop`) and waits up to 15 s until its lock is free and its port silent; prints `stopped` or `not running`. Open waits are answered at once (`daemon_stopping`), so this takes about a second, and a lead that was waiting does not start the daemon again (see waits below). Removes a port file left by a daemon that is gone. A daemon that holds its lock but does not answer is reported with its pid (when recorded) and the log path, exit 1. Nothing is ever killed by a pid read from a file (old B3, B14). | `{ok, stopped}` |
 | `restart` | `stop`, then start the daemon and wait until it answers. Prints `Daemon restarted.` | `{ok: true, restarted: true}` |
-| `delegate [flags] <prompt\|@file>` | Creates a task and waits for its report. Flags: `--cwd`, `--title`, `--backend`, `--provider`, `--model`, `--effort`, `--mode full\|plan`, `--profile`, `--spec`, `--task T001,T002` (needs `--spec`), `--after t1,t2`, `--after-mode accepted\|done`, `--allow-git`, `--no-gate`, `--no-lane`, `--wait N` (default 600; 0 returns at once; a task with `--after` does not wait unless `--wait` is given). | `TaskReport` |
+| `delegate [flags] <prompt\|@file>` | Creates a task and waits for its report. Flags: `--cwd`, `--title`, `--backend`, `--provider`, `--model`, `--effort`, `--mode full\|plan`, `--profile`, `--spec`, `--task T001,T002` (needs `--spec`), `--after t1,t2`, `--after-mode accepted\|done`, `--allow-git`, the gate flags below, `--wait N` (default 600; 0 returns at once; a task with `--after` does not wait unless `--wait` is given). The text report ends with the gate, lane, bar and verifier lines. | `TaskReport` |
 | `run [flags] <prompt\|@file>` | Legacy: `delegate` with a 3600 s wait; always prints the report JSON. Same flags as `delegate` except `--wait`. | `TaskReport` |
-| `followup <id> [flags] <message\|@file>` | Sends the next instruction and waits for the report. Flags: `--by lead\|user`, `--model`, `--effort`, `--task`, `--profile`, `--allow-git`, `--force` (start a task waiting for its prerequisites; the message may then be empty), `--no-gate`, `--no-lane`, `--wait N` (default 600). | `TaskReport` |
+| `followup <id> [flags] <message\|@file>` | Sends the next instruction and waits for the report. Flags: `--by lead\|user`, `--model`, `--effort`, `--task`, `--profile`, `--allow-git`, `--force` (start a task waiting for its prerequisites; the message may then be empty), the gate flags below, `--wait N` (default 600). Gate flags on a followup change the gate from this turn on. | `TaskReport` |
 | `wait <id...> [--any] [--seconds N] [--no-wake]` | Waits (default 600 s) and prints the reports. `--no-wake` keeps waiting when a task needs the lead. | `WaitResult` with `reports` |
 | `review <id> accepted\|rejected [--notes T] [--answer-objection T\|@file]` | Records the verdict; the answer to an objection is appended to the notes. | `TaskSummary` |
 | `cancel <id> [--wait N]` | Cancels and waits up to N s (default 15, max 60) for the worker to stop. | `TaskReport` read after the cancel (`cancelling: true` while it stops) |
@@ -71,6 +71,14 @@ allowed; the daemon's own guard decides what a worker may read. `update` is refu
 | `ls [--active] [--blocked] [--project P] [--limit N]` | Tasks, newest first (limit 1..200, default 50). | `TaskPage` |
 | `restore <id> --turn N [--file=<path>]... [--force]` | Puts back the content files had when turn N started, from its snapshot ([safety.md](safety.md)); without `--file`, every work-at-risk file of the turn not restored yet. Paths are relative to the repository root. A file changed after the turn ended is skipped (`changed since the turn ended`) unless `--force`. Prints `restored`/`skipped` lines and the `backup` snapshot that keeps what the files held before. Refused while the task is active. | `RestoreResult` |
 | `memory read\|append\|replace --cwd D [text\|@file]` | A project's notes for workers. | `Memory` |
+| `proof index [--cwd D]` | Every Spec Kit feature of the repository (default: the current folder) with its requirement counts, and the latest regression runs ([gates.md](gates.md)). | `ProofIndex` |
+| `proof matrix <feature>\|--feature F [--cwd D]` | The requirement matrix of a feature: each FR/SC with its status and covering tasks. | `ProofMatrix` |
+| `proof run [<feature>] [--force] [--wait N] [--cwd D]` | Starts a regression run of every gate command (or one feature's); `--wait N` polls until it ends or N s pass (default 0). Refused (`conflict`, with the active task ids) while other tasks of the repository are active, unless `--force`. | `ProofRun` |
+| `proof run-status <run-id> [--cwd D]` (alias `run_status`) | A regression run's state and results. | `ProofRun` |
+| `proof cancel-run <run-id> [--cwd D]` (alias `cancel_run`) | Stops a running regression run; a finished one is printed as it is. | `ProofRun` |
+| `proof stats [--since T] [--cwd D]` | Gate, lane and verifier statistics (`--since`: RFC 3339). | `ProofStats` |
+| `proof lanes [--cwd D]` | The lane claims held in the repository and the `lanes` mode. | `LanesView` |
+| `proof contention [--cwd D]` | Files several tasks of the repository changed recently. | `ContentionView` |
 | `doctor` | Checks the installation (below); exit 1 when a check fails. | `[{name, status: ok\|warn\|fail, message, fix?}]` |
 | `version [--check-database]` | Version, commit and build date. `--check-database` also reads the data folder's database read-only and fails with `schema_too_new` when this build cannot open it (the installers run it on a downloaded binary). | `buildinfo.Info` + `schemaVersion` (the number of database migrations in the build) + `databaseSchemaVersion` with `--check-database` (0 without a database) |
 | `setup [--host a,b] [--dry-run] [--remove] [--no-skill] [--hooks] [--force] [--exe path]` | Registers Seelegent with the lead hosts on this machine ([setup.md](setup.md)). Exit 1 when an item is `conflict` or `error`; with `--json` the report is then the only document printed. | `setup.Report` |
@@ -122,12 +130,28 @@ Waits (`wait`, `delegate`, `followup`, `run`; the same code as the MCP tools, `o
   tasks keep running: wait again later"), exit 1. Nothing in that wait starts a daemon until a daemon is found
   again; from then on the rules above apply again (a later crash is ridden out, a later stop starts a new grace).
 
+### Gate flags
+
+`delegate`, `run` and `followup` take the gate options ([gates.md](gates.md)):
+
+- `--gate <cmd>` (repeatable): the lead's gate commands. With `--spec --task` they replace those tasks' `Gate:` lines
+  and the feature gate, and prove those tasks in the ledger.
+- `--gate-detect`: add the test, lint and build commands found in the repository (`gate: true` of the MCP tool).
+- `--no-gate`: no gate commands; the lane and hygiene checks still run. It cannot go with `--gate` or
+  `--gate-detect` (usage error).
+- `--lane a,b` (or repeated): the files and globs the worker may change, relative to the repository root; a folder
+  covers everything under it. `--no-lane` drops the lane a spec would give (usage error with `--lane`).
+- `--force-lane`: claim the lane even where another active task holds it (recorded as forced).
+- `--verify` / `--verify=false`: run, or skip, the second-opinion verifier once the gate is green; left out, the
+  `verifier` setting decides.
+
+A plan task (`--mode plan`) refuses `--gate`, `--gate-detect`, `--lane`, `--force-lane` and `--verify`.
+
 ### Not in this version
 
-There are no `meeting`, `consult`, `issues`, `notes`, `automations`, `contest` or `proof` commands.
+There are no `meeting`, `consult`, `issues`, `notes`, `automations` or `contest` commands.
 Options of later milestones keep their old names but are
-refused before anything is sent, with exit 1 and code `not_available`: `--gate <cmd>` (`--no-gate` is accepted),
-`--lane <paths>` (`--no-lane` is accepted), `--force-lane`, `--verify`, `--member`, and the contest options
+refused before anything is sent, with exit 1 and code `not_available`: `--member`, and the contest options
 `--variants`, `--variant`, `--judge`, `--no-judge`, `--deadline`.
 
 ## doctor

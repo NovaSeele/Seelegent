@@ -16,24 +16,33 @@ If the environment variable `SEELEGENT_WORKER` is `1`, you are a Seelegent worke
 
 ## Tools
 
-- `delegate` starts a task. Required: `prompt` (the brief) and `cwd` (the absolute project folder). Optional: `title`; `model` (a tier `fast`, `standard`, `strong` or `max`, or a model id the settings allow); `effort`; `mode` (`full`, the default, or `plan` for read-only investigation); `backend` (`agy`, `claude`, `codex`); `provider` (an API-key provider id; its harness sets the backend); `profile` (a worker role id); `spec` and `task_ids` (Spec Kit); `after` and `after_mode` (dependencies); `allow_git`; `gate: false`; `wait_seconds` (default 600, at most 3000; 0 returns at once with the task id; the default is 0 with `after`); `wake_on_blocked` (default true).
+- `delegate` starts a task. Required: `prompt` (the brief) and `cwd` (the absolute project folder). Optional: `title`; `model` (a tier `fast`, `standard`, `strong` or `max`, or a model id the settings allow); `effort`; `mode` (`full`, the default, or `plan` for read-only investigation); `backend` (`agy`, `claude`, `codex`); `provider` (an API-key provider id; its harness sets the backend); `profile` (a worker role id); `spec` and `task_ids` (Spec Kit); `after` and `after_mode` (dependencies); `allow_git`; `gate`, `lane`, `force_lane` and `verify` (see Gates and lanes); `wait_seconds` (default 600, at most 3000; 0 returns at once with the task id; the default is 0 with `after`); `wake_on_blocked` (default true).
 - `wait` waits for `task_ids` up to `wait_seconds`; `any: true` wakes when the first one finishes. It also wakes early when a task needs you.
 - `task` shows a task's report; `steps: N` adds its last N tool steps, `full: true` the whole record.
-- `followup` sends the next instruction to a task (`task_id`, `message`), with the same `model`, `effort`, `profile`, `task_ids`, `allow_git`, `wait_seconds` and `wake_on_blocked` options as `delegate`. `force: true` starts a task held in `blocked_deps`. A followup cannot change the provider.
+- `followup` sends the next instruction to a task (`task_id`, `message`), with the same `model`, `effort`, `profile`, `task_ids`, `allow_git`, `gate`, `lane`, `force_lane`, `verify`, `wait_seconds` and `wake_on_blocked` options as `delegate`. `force: true` starts a task held in `blocked_deps`. A followup cannot change the provider.
 - `review` closes a task: `verdict` `accepted` or `rejected`, with short `notes`. Verdicts go into the project's history, which later briefs show.
 - `cancel` stops a task (`task_id`). It waits up to `wait_seconds` (default 15, at most 60) and answers `cancelled`, or `cancelling` while the worker is still stopping.
 - `status` lists the accounts with their quota, the active tasks and the backends (`full: true` for everything).
 - `memory` keeps the project notes every brief of that project includes: `cwd`, `action` (`read`, `append` or `replace`), `text`.
 - `profiles` manages worker roles (`list`, `get`, `upsert`, `delete`, with `scope` `global` or `project` and `cwd`) and lists the skills a role can name (`skills`).
+- `proof` shows what is proven in a repository (`cwd`): `index` (every Spec Kit feature), `matrix` (one `feature`: each requirement with its status and covering tasks), `run` (runs every gate command again; `wait_seconds` waits for the end; refused while other tasks of the repository run unless `force`), `run_status` and `cancel_run` (`run_id`), `stats` (`since`), `lanes` (the claims held) and `contention` (files several tasks changed).
 
-Not available in this version yet: the tools `proof`, `members`, `meeting`, `consult`, `notes`, `contest`, `issues` and `automations`, and the `delegate`/`followup` options `lane`, `force_lane`, `verify: true`, gate commands (`gate: true` or a list of commands), `member` and `variants`. They answer with the error code `not_available` and do nothing; leave them out.
+Not available in this version yet: the tools `members`, `meeting`, `consult`, `notes`, `contest`, `issues` and `automations`, and the `delegate` options `member` and `variants`. They answer with the error code `not_available` and do nothing; leave them out.
 
 ## The loop
 
 1. `delegate` with a brief written like a ticket. The call waits up to `wait_seconds` and returns the worker's report, or returns earlier with the task id; then `wait` for it.
-2. Read the report: the status, the worker's answer, the changed files, and the attention reason when the task needs you. A worker that ends its answer with a `## Blocked` question waits for your decision: answer it with `followup`.
+2. Read the report: the status, the worker's answer, the changed files, the `gate` result, and the attention reason when the task needs you. A worker that ends its answer with a `## Blocked` question waits for your decision: answer it with `followup`.
 3. Check the work yourself: read the diff and run the tests or the build. Do not accept on the report alone.
 4. Send concrete fixes with `followup` (the worker keeps its conversation), or close the task with `review`. Repeat until it is right.
+
+## Gates and lanes
+
+After each worker report, Seelegent runs the task's gate in the task's repository before the task counts as done: the commands from `gate` (a command or a list), the `Gate:` commands of the Spec Kit tasks and the feature gate, the repository's detected test, lint and build commands with `gate: true`, the project doctrine, the lane check and the hygiene check (no secrets, conflict markers or stray files). A red gate sends the failing output back to the worker as an automatic fix turn, up to the `gateMaxAutoFixes` budget; the report's `gate` field shows the failing steps with the end of their output, and the attention reason `gate_red` means the budget is used up. `gate: false` turns the commands off; the lane and hygiene checks still run. A gate is still your first check, not your last: read the diff.
+
+`lane` lists the files and globs (relative to the repository root) the worker may change. With the `lanes` setting at `enforce`, a lane that overlaps another active task's claim is refused (error `conflict`, reason `lane_conflict`, with the holding tasks) unless `force_lane: true`; at `warn` it is only reported. Files changed outside the lane fail the gate. A Spec Kit task's paths become its lane unless you pass `lane: false`.
+
+`verify: true` (or the `verifier` setting) has a second, read-only worker review the diff once the gate is green; a reject is sent back as an automatic fix turn, and the report's `verifier` field shows the verdict and reasons. Plan-mode tasks take none of these options.
 
 ## How to write a brief
 
@@ -49,7 +58,7 @@ Pick the tier by difficulty: `fast` for mechanical edits and lookups, `standard`
 
 ## Parallel work
 
-Split the work into pieces on disjoint files, `delegate` each with `wait_seconds: 0`, then `wait` with `any: true` on the ids still running, and review each piece as it finishes. Never give two workers the same files at once: this version does not check that for you. Run the full build and tests once every piece is accepted.
+Split the work into pieces on disjoint files, `delegate` each with `wait_seconds: 0`, then `wait` with `any: true` on the ids still running, and review each piece as it finishes. Never give two workers the same files at once; give each a `lane` so Seelegent can check that for you. Run the full build and tests once every piece is accepted.
 
 ## Dependencies
 
@@ -61,7 +70,7 @@ Keep durable project facts for workers (conventions, commands, pitfalls) with `m
 
 ## Spec Kit
 
-For a Spec Kit feature, pass `spec` (the feature folder, absolute) and `task_ids` (for example `["T001", "T002"]`). The brief points the worker at the spec, plan, tasks and contracts, and the project constitution is included. Workers implement only the named tasks and never edit `tasks.md`; you tick the tasks after review.
+For a Spec Kit feature, pass `spec` (the feature folder, absolute) and `task_ids` (for example `["T001", "T002"]`). The brief points the worker at the spec, plan, tasks and contracts, and the project constitution is included. Workers implement only the named tasks and never edit `tasks.md`; you tick the tasks after review. Each task's `Covers:` line maps it to requirements and its `Gate:` commands become the gate; green gates are recorded in the proof ledger, which `proof matrix` shows.
 
 ## Without MCP
 

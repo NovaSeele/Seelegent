@@ -1,0 +1,115 @@
+{
+  "repo": "Repositorio",
+  "overview": "Resumen",
+  "loading": "Cargando las pruebas",
+  "loadFailed": "No se pudieron cargar las pruebas",
+  "empty": {
+    "title": "Aún no hay repositorios",
+    "desc": "Las pruebas aparecen cuando una tarea se ha ejecutado en un repositorio git."
+  },
+  "counts": {
+    "none": "Sin requisitos"
+  },
+  "status": {
+    "proven": "Demostrado",
+    "unproven": "Sin demostrar",
+    "in_progress": "En curso",
+    "unmapped": "Sin tarea",
+    "failing": "Fallando",
+    "regressed": "Regresión"
+  },
+  "features": {
+    "title": "Funcionalidades",
+    "empty": "Este repositorio no tiene funcionalidades de Spec Kit.",
+    "tasks": "{done} de {total} tareas hechas"
+  },
+  "matrix": {
+    "loading": "Cargando la matriz",
+    "pick": "Elige una funcionalidad.",
+    "featureGate": "Gate de la funcionalidad:",
+    "done": "hecha",
+    "open": "pendiente",
+    "result": {
+      "green": "Gate superado",
+      "red": "Gate fallido",
+      "error": "El gate no se pudo ejecutar"
+    },
+    "noResult": "Aún sin resultado del gate",
+    "noGate": "Sin comando de gate",
+    "byRun": "ejecución de regresión {id}",
+    "stories": "Historias de usuario",
+    "uncovered": "Tareas sin línea Covers: {tasks}"
+  },
+  "runs": {
+    "title": "Ejecuciones de regresión",
+    "empty": "Aún no hay ejecuciones de regresión.",
+    "all": "Todas las funcionalidades",
+    "state": {
+      "running": "En marcha",
+      "green": "Superado",
+      "red": "Fallido",
+      "error": "No se pudo ejecutar",
+      "cancelled": "Cancelado"
+    },
+    "kind": {
+      "task": "gate de tarea",
+      "feature": "gate de funcionalidad",
+      "doctrine": "doctrina"
+    },
+    "noisy": "Había otras tareas activas, así que los resultados pueden incluir su trabajo sin terminar.",
+    "dirty": "El repositorio tenía cambios sin confirmar.",
+    "cancel": "Detener ejecución",
+    "force": "Ejecutar aunque haya tareas activas",
+    "start": "Volver a ejecutar todos los gates",
+    "refused": "No se inició: aún hay tareas activas ({tasks}). Espera o ejecútalo de todos modos.",
+    "failed": "La ejecución falló: {error}",
+    "part": {
+      "green": "{n} superados",
+      "red": "{n} fallidos",
+      "error": "{n} sin ejecutar"
+    },
+    "sep": ", ",
+    "of": "{parts} de {total}"
+  },
+  "lanes": {
+    "title": "Carriles",
+    "mode": {
+      "off": "desactivados",
+      "warn": "solo avisos",
+      "enforce": "obligatorios"
+    },
+    "empty": "Ninguna tarea tiene un carril.",
+    "status": {
+      "waiting_deps": "Esperando dependencias",
+      "blocked_deps": "Bloqueada por dependencias",
+      "queued": "En cola",
+      "running": "En marcha",
+      "waiting_quota": "Esperando cuota",
+      "done": "Hecha",
+      "failed": "Fallida",
+      "cancelled": "Cancelada"
+    },
+    "source": {
+      "lead": "fijado por el lead",
+      "spec": "de las tareas de la spec"
+    },
+    "heldUntil": "reservado hasta {time}",
+    "holdNote": "Una tarea terminada conserva su carril hasta que se acepta o rechaza, o hasta que acaba la reserva."
+  },
+  "stats": {
+    "title": "Lo que hicieron los gates",
+    "tasks": "Tareas con gate",
+    "tasksValue": "{gated} de {total}",
+    "gateRuns": "Ejecuciones del gate",
+    "firstRunRed": "Fallidos a la primera",
+    "caught": "Detectados antes de la revisión",
+    "autoFix": "Correcciones automáticas",
+    "autoFixValue": "{n} turnos, {out} agotaron el límite",
+    "lanes": "Carriles",
+    "lanesValue": "{refused} rechazos, {forced} forzados, {caught} infracciones detectadas",
+    "followups": "Seguimientos del lead por tarea",
+    "followupsValue": "{gated} con gate, {ungated} sin gate",
+    "verifier": "Segunda revisión",
+    "verifierValue": "{runs} revisiones: {accepts} aceptadas, {rejects} rechazadas, {slipped} se colaron"
+  }
+}

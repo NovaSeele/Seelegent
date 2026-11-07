@@ -18,7 +18,7 @@ var update = flag.Bool("update", false, "rewrite the event fixtures")
 // fails there.
 func eventSamples() map[EventType]any {
 	remaining := 0.425
-	code := 0
+	code, one := 0, 1
 	return map[EventType]any{
 		EventWorker: event.Event{Kind: event.KindToolCall, Step: 2, Tool: &event.Tool{ID: "c1", Name: "shell",
 			State: event.ToolCalling, Command: "go test ./..."}},
@@ -45,7 +45,17 @@ func eventSamples() map[EventType]any {
 		EventWorkAtRisk: WorkAtRiskData{Files: []string{"main.go"},
 			Snapshot: "refs/seelegent/snap/t1"},
 		EventRestored: RestoredData{Files: []string{"main.go"}, Backup: "t1-restore-1762506000000000000"},
-		EventError:    ErrorData{Message: "the worker CLI is missing"},
+		EventGate: GateEventData{Phase: GateEventResult, Result: &GateResult{State: GateRed,
+			Steps: []GateStep{{Kind: StepTask, Label: "T001", Cmd: "go test ./...", State: StepRed, Exit: &one,
+				Ms: 1200, Tail: "FAIL x"}, {Kind: StepDetect, Label: "go vet ./...", Cmd: "go vet ./...", State: StepNotRun}},
+			NotRun: []string{"go vet ./..."}, Warnings: []string{}, StartedAt: "2026-11-07T09:00:00.000Z",
+			EndedAt: "2026-11-07T09:00:02.000Z", AutoFix: 2}, BarChanged: []string{"spec.md"}},
+		EventLane: LaneEventData{Kind: LaneForced, Paths: []string{"src/"}, Conflicts: []LaneConflict{{TaskID: "t2",
+			Title: "Other", Status: StatusRunning, Paths: []PathPair{{Mine: "src/", Theirs: "src/a.go"}}}}},
+		EventVerify: VerifyEventData{Phase: "result", ChildID: "t3", Result: &VerifierResult{Verdict: VerdictReject,
+			ChildID: "t3", Reasons: []string{"main.go:3 - nil map"}, Cites: []CiteCheck{{Path: "main.go", Line: 3,
+				State: "located"}}}},
+		EventError: ErrorData{Message: "the worker CLI is missing"},
 	}
 }
 

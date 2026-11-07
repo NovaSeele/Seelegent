@@ -63,6 +63,8 @@ func (s *Service) Takeover(ctx context.Context, id string) (api.TaskSummary, err
 			return nil, badStatef("task %s waits for its prerequisites", id)
 		case t.CancelRequested:
 			return nil, badStatef("task %s is being cancelled", id)
+		case t.GatePhase != nil:
+			return nil, badStatef("task %s is running its gate; wait for it or cancel it first", id)
 		}
 		prev = t.Status
 		if t.Status != StatusRunning {

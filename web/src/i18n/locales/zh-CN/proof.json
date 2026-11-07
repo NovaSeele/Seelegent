@@ -1,0 +1,115 @@
+{
+  "repo": "仓库",
+  "overview": "概览",
+  "loading": "正在加载证据",
+  "loadFailed": "无法加载证据",
+  "empty": {
+    "title": "还没有仓库",
+    "desc": "在 git 仓库中运行过任务后，这里就会显示证据。"
+  },
+  "counts": {
+    "none": "没有需求"
+  },
+  "status": {
+    "proven": "已证明",
+    "unproven": "未证明",
+    "in_progress": "进行中",
+    "unmapped": "没有任务",
+    "failing": "失败中",
+    "regressed": "已回归"
+  },
+  "features": {
+    "title": "功能",
+    "empty": "这个仓库没有 Spec Kit 功能。",
+    "tasks": "已完成 {done}/{total} 个任务"
+  },
+  "matrix": {
+    "loading": "正在加载矩阵",
+    "pick": "请选择一个功能。",
+    "featureGate": "功能关卡：",
+    "done": "已完成",
+    "open": "未完成",
+    "result": {
+      "green": "关卡通过",
+      "red": "关卡未通过",
+      "error": "关卡无法运行"
+    },
+    "noResult": "还没有关卡结果",
+    "noGate": "没有关卡命令",
+    "byRun": "回归运行 {id}",
+    "stories": "用户故事",
+    "uncovered": "没有 Covers: 行的任务：{tasks}"
+  },
+  "runs": {
+    "title": "回归运行",
+    "empty": "还没有回归运行。",
+    "all": "全部功能",
+    "state": {
+      "running": "运行中",
+      "green": "通过",
+      "red": "未通过",
+      "error": "无法运行",
+      "cancelled": "已取消"
+    },
+    "kind": {
+      "task": "任务关卡",
+      "feature": "功能关卡",
+      "doctrine": "项目准则"
+    },
+    "noisy": "运行时还有其他任务在进行，结果可能包含它们未完成的改动。",
+    "dirty": "仓库中有未提交的改动。",
+    "cancel": "停止运行",
+    "force": "即使有任务在进行也运行",
+    "start": "重新运行全部关卡",
+    "refused": "未开始：还有任务在进行（{tasks}）。请等待，或仍然运行。",
+    "failed": "运行失败：{error}",
+    "part": {
+      "green": "{n} 通过",
+      "red": "{n} 未通过",
+      "error": "{n} 无法运行"
+    },
+    "sep": "，",
+    "of": "共 {total} 项：{parts}"
+  },
+  "lanes": {
+    "title": "通道",
+    "mode": {
+      "off": "关闭",
+      "warn": "仅警告",
+      "enforce": "强制"
+    },
+    "empty": "没有任务占用通道。",
+    "status": {
+      "waiting_deps": "等待依赖",
+      "blocked_deps": "被依赖阻塞",
+      "queued": "排队中",
+      "running": "运行中",
+      "waiting_quota": "等待额度",
+      "done": "已完成",
+      "failed": "失败",
+      "cancelled": "已取消"
+    },
+    "source": {
+      "lead": "由 lead 设定",
+      "spec": "来自 spec 任务"
+    },
+    "heldUntil": "保留到 {time}",
+    "holdNote": "已完成的任务会保留通道，直到被接受或拒绝，或保留时间结束。"
+  },
+  "stats": {
+    "title": "关卡的作用",
+    "tasks": "有关卡的任务",
+    "tasksValue": "{gated}/{total}",
+    "gateRuns": "关卡运行次数",
+    "firstRunRed": "首次运行未通过",
+    "caught": "审查前发现",
+    "autoFix": "自动修复",
+    "autoFixValue": "{n} 轮，{out} 个任务用完次数",
+    "lanes": "通道",
+    "lanesValue": "{refused} 次拒绝，{forced} 次强占，发现 {caught} 次越界",
+    "followups": "每个任务的 lead 跟进次数",
+    "followupsValue": "有关卡 {gated}，无关卡 {ungated}",
+    "verifier": "二次审查",
+    "verifierValue": "{runs} 次：{accepts} 次接受，{rejects} 次拒绝，{slipped} 次漏过"
+  }
+}

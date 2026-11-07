@@ -11,7 +11,8 @@
     "cancelled": "Tarea cancelada",
     "tookOver": "Se está abriendo una consola con la conversación del worker",
     "copied": "ID de la tarea copiado",
-    "copyFailed": "No se pudo copiar: el navegador denegó el acceso al portapapeles"
+    "copyFailed": "No se pudo copiar: el navegador denegó el acceso al portapapeles",
+    "laneConflict": "Rechazado: {files} están en el carril de {tasks}. Espera a que esas tareas terminen o se revisen."
   },
   "header": {
     "driving": "La controlas tú",
@@ -166,5 +167,90 @@
       "forceDesc": "Estos archivos cambiaron después de terminar el turno. Su contenido más reciente se reemplaza por el que tenían antes del turno {n}; antes se guarda una copia de seguridad.",
       "forceConfirm": "Sobrescribir ({n})"
     }
+  },
+  "gate": {
+    "title": "Gate",
+    "state": {
+      "none": "aún sin ejecutar",
+      "running": "en marcha",
+      "green": "superado",
+      "red": "fallido",
+      "error": "no se pudo ejecutar",
+      "skipped": "detenido"
+    },
+    "phase": {
+      "running": "en marcha",
+      "settling": "esperando a otras tareas",
+      "verifying": "segunda revisión"
+    },
+    "turn": "turno {n}",
+    "fixTurns": "{count} corrección automática | {count} correcciones automáticas",
+    "barShort": "cambió lo que define «hecho»",
+    "notYet": "El gate se ejecuta cuando el worker informa.",
+    "steps": "Pasos",
+    "stepsOfTurn": "Pasos tras el turno {n}",
+    "stepState": {
+      "pending": "En espera",
+      "running": "En marcha",
+      "green": "Superado",
+      "red": "Fallido",
+      "error": "Error",
+      "warn": "Aviso",
+      "not_run": "Sin ejecutar"
+    },
+    "kind": {
+      "lane": "Carril",
+      "hygiene": "Higiene",
+      "auto": "Comprobación de sintaxis",
+      "doctrine": "Doctrina",
+      "task": "Comando",
+      "detect": "Comando detectado"
+    },
+    "exit": "salida {n}",
+    "timedOut": "tiempo agotado",
+    "foreign": "Puede deberse a {tasks}: falló solo en archivos que cambió esa tarea. No se inició ninguna corrección automática.",
+    "output": "Salida",
+    "notRun": "Sin ejecutar: {steps}",
+    "settled": "Se ejecutó de nuevo tras esperar a las otras tareas del repositorio.",
+    "verifier": {
+      "title": "Segunda revisión",
+      "verdict": {
+        "running": "Revisando",
+        "accept": "Aceptado",
+        "reject": "Rechazado",
+        "error": "Sin veredicto"
+      },
+      "short": {
+        "running": "segunda revisión en marcha",
+        "accept": "segunda revisión: aceptado",
+        "reject": "segunda revisión: rechazado",
+        "error": "segunda revisión sin veredicto"
+      },
+      "unverified": "{n} líneas citadas no coinciden con el repositorio:",
+      "on": "Sí",
+      "off": "No"
+    },
+    "checks": "Qué comprueba el gate",
+    "lane": {
+      "title": "Carril",
+      "none": "Sin carril: puede cambiar cualquier archivo",
+      "source": {
+        "lead": "fijado por el lead",
+        "spec": "de las tareas de la spec"
+      },
+      "forced": "reclamado sobre {tasks}"
+    },
+    "commands": "Comandos",
+    "off": "Desactivado (el carril y la higiene se siguen comprobando)",
+    "noCommands": "Sin comandos",
+    "detected": "detectado",
+    "doctrine": "Doctrina",
+    "budget": "Correcciones automáticas",
+    "fixes": "{n} de {max} usadas",
+    "feature": "Funcionalidad de la spec",
+    "bar": "Cambiado desde el inicio",
+    "usedUp": "correcciones automáticas agotadas ({n}/{max})",
+    "nextStep": "El gate ya no puede corregirlo solo: envía un seguimiento o toma el control de la tarea.",
+    "causedBy": "puede deberse a {tasks}"
   }
 }

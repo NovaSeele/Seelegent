@@ -179,5 +179,23 @@ describe('catalogs', () => {
     ]) {
       expect(vi[key], key).toBe('Thất bại')
     }
+    // A check that did not pass is "không đạt" (paired with "đạt"); "lỗi" stays for errors of the system.
+    for (const key of ['task.gate.stepState.red', 'proof.status.failing', 'proof.runs.state.red']) {
+      expect(vi[key], key).toBe('Không đạt')
+    }
+    expect(vi['task.gate.stepState.green']).toBe('Đạt')
+    expect(vi['task.gate.state.red']).toBe('không đạt')
+    for (const key of [
+      'common.attention.gateRed',
+      'terminal.ev.gate.red',
+      'proof.matrix.result.red',
+      'proof.runs.part.red',
+      'proof.stats.firstRunRed',
+    ]) {
+      expect(vi[key], key).toMatch(/không đạt/i)
+      expect(vi[key], key).not.toMatch(/lỗi/i)
+    }
+    // A red safety finding is a problem to look at, not an error of the system.
+    expect(vi['task.safety.severity.red']).toBe('Vấn đề')
   })
 })

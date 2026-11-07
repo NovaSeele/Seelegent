@@ -11,6 +11,7 @@ import { readStored, writeStored } from '@/lib/storage'
 
 import AttentionBanner from './AttentionBanner.vue'
 import FollowupComposer from './FollowupComposer.vue'
+import GatePanel from './GatePanel.vue'
 import SafetyPanel from './SafetyPanel.vue'
 import TaskDialogs, { type TaskDialog } from './TaskDialogs.vue'
 import TaskHeader from './TaskHeader.vue'
@@ -21,8 +22,8 @@ import { useTaskCommands } from './useTaskCommands'
 import { useTaskDetail } from './useTaskDetail'
 
 /**
- * The open task: header and actions, why it waits (banner, question), what the safety checks found, the five views (keys 1-5: Terminal,
- * Tree, Graph, Files, Git) and the follow-up composer. Mounted per task (keyed by id), so nothing of one task
+ * The open task: header and actions, why it waits (banner, question), its gate, what the safety checks found, the
+ * five views (keys 1-5: Terminal, Tree, Graph, Files, Git) and the follow-up composer. Mounted per task (keyed by id), so nothing of one task
  * can leak into another's view.
  */
 const props = defineProps<{ taskId: string; titleLevel: 1 | 2; showBack: boolean }>()
@@ -110,9 +111,11 @@ const loadingFirst = computed(() => !summary.value && !error.value)
       />
       <AttentionBanner
         :task="summary"
+        :detail="detail"
         :actions="actions"
         @confirm="(kind) => (dialog = { kind })"
       />
+      <GatePanel :task="summary" :detail="detail" />
       <SafetyPanel :task="summary" :detail="detail" @changed="reload" />
       <section v-if="detail?.error" class="td__error" role="alert">
         <strong>{{ t('task.detail.error') }}</strong>

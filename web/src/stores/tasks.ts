@@ -115,6 +115,8 @@ export const useTasksStore = defineStore('tasks', () => {
   }
 
   function upsert(task: TaskSummary): void {
+    // A verifier's review task is part of its parent's gate, never a task of its own (docs/gates.md).
+    if (task.kind === 'verify') return
     summaries.set(task.id, task)
     const log = logs.get(task.id)
     if (log && task.lastEventSeq > log.state.lastSeq) scheduleCatchUp(log)

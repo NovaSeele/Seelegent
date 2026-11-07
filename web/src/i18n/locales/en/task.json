@@ -11,7 +11,8 @@
     "cancelled": "Task cancelled",
     "tookOver": "A console is opening on the worker's conversation",
     "copied": "Task ID copied",
-    "copyFailed": "Could not copy: the browser refused clipboard access"
+    "copyFailed": "Could not copy: the browser refused clipboard access",
+    "laneConflict": "Refused: {files} are in the lane of {tasks}. Wait until those tasks finish or are reviewed."
   },
   "header": {
     "driving": "You are driving",
@@ -166,5 +167,90 @@
       "forceDesc": "These files changed after the turn ended. Their newer content is replaced with what they held before turn {n}; a backup of it is kept first.",
       "forceConfirm": "Overwrite ({n})"
     }
+  },
+  "gate": {
+    "title": "Gate",
+    "state": {
+      "none": "not run yet",
+      "running": "running",
+      "green": "passed",
+      "red": "failed",
+      "error": "could not run",
+      "skipped": "stopped"
+    },
+    "phase": {
+      "running": "running",
+      "settling": "waiting for other tasks",
+      "verifying": "second-opinion review"
+    },
+    "turn": "turn {n}",
+    "fixTurns": "{count} automatic fix | {count} automatic fixes",
+    "barShort": "what defines done changed",
+    "notYet": "The gate runs when the worker reports.",
+    "steps": "Steps",
+    "stepsOfTurn": "Steps after turn {n}",
+    "stepState": {
+      "pending": "Waiting",
+      "running": "Running",
+      "green": "Passed",
+      "red": "Failed",
+      "error": "Error",
+      "warn": "Warning",
+      "not_run": "Not run"
+    },
+    "kind": {
+      "lane": "Lane",
+      "hygiene": "Hygiene",
+      "auto": "Syntax check",
+      "doctrine": "Doctrine",
+      "task": "Command",
+      "detect": "Detected command"
+    },
+    "exit": "exit {n}",
+    "timedOut": "timed out",
+    "foreign": "May be caused by {tasks}: it failed only in files that task changed. No automatic fix was started for it.",
+    "output": "Output",
+    "notRun": "Not run: {steps}",
+    "settled": "Ran again after waiting for the other tasks of the repository.",
+    "verifier": {
+      "title": "Second-opinion review",
+      "verdict": {
+        "running": "Reviewing",
+        "accept": "Accepted",
+        "reject": "Rejected",
+        "error": "No verdict"
+      },
+      "short": {
+        "running": "review running",
+        "accept": "review accepted",
+        "reject": "review rejected",
+        "error": "review gave no verdict"
+      },
+      "unverified": "{n} cited lines do not match the repository:",
+      "on": "On",
+      "off": "Off"
+    },
+    "checks": "What the gate checks",
+    "lane": {
+      "title": "Lane",
+      "none": "No lane: any file may change",
+      "source": {
+        "lead": "set by the lead",
+        "spec": "from the spec tasks"
+      },
+      "forced": "claimed over {tasks}"
+    },
+    "commands": "Commands",
+    "off": "Turned off (lane and hygiene still run)",
+    "noCommands": "No commands",
+    "detected": "detected",
+    "doctrine": "Doctrine",
+    "budget": "Automatic fixes",
+    "fixes": "{n} of {max} used",
+    "feature": "Spec feature",
+    "bar": "Changed since start",
+    "usedUp": "automatic fixes used up ({n}/{max})",
+    "nextStep": "The gate cannot fix this by itself any more: send a follow-up or take over the task.",
+    "causedBy": "may be caused by {tasks}"
   }
 }

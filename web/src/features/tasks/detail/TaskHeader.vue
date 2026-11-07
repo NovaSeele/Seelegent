@@ -34,6 +34,7 @@ const fmt = useFormat()
 const now = useNow(1000)
 
 const status = computed(() => displayStatus(props.task))
+
 const age = computed(() => {
   const end = isActive(props.task) ? now.value : Date.parse(props.task.updatedAt)
   return fmt.value.duration(Math.max(0, end - Date.parse(props.task.createdAt)))

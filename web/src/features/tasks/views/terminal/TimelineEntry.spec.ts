@@ -45,4 +45,26 @@ describe('TimelineEntry notices', () => {
     expect(note.text()).toBe('Awaiting review')
     expect(note.find('.te__notice--dim').exists()).toBe(true)
   })
+
+  it('names the steps of a gate in the reader language, with their commands', async () => {
+    const items = buildTimeline([
+      makeEvent(
+        't1',
+        1,
+        {
+          phase: 'start',
+          steps: ['lane', 'hygiene', 'npm test'],
+          plan: [
+            { kind: 'lane', label: 'lane' },
+            { kind: 'hygiene', label: 'hygiene' },
+            { kind: 'task', label: 'npm test', cmd: 'npm test' },
+          ],
+        },
+        'gate',
+      ),
+    ])
+    const start = await render(items[0] as TimelineItem)
+    expect(start.text()).toContain('Gate started: 3 steps')
+    expect(start.find('pre').text()).toBe('Lane\nHygiene\nCommand: npm test')
+  })
 })

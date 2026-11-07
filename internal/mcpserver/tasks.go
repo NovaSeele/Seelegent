@@ -33,6 +33,7 @@ func (s *Server) handlers() map[string]toolFunc {
 		"status":   s.status,
 		"memory":   s.memory,
 		"profiles": s.profiles,
+		"proof":    s.proof,
 	}
 }
 
@@ -93,20 +94,16 @@ func (s *Server) delegate(ctx context.Context, k *call) (result, error) {
 	if err != nil {
 		return result{}, err
 	}
-	gate, err := gateFlag(a.Gate)
-	if err != nil {
-		return result{}, err
-	}
-	if err := unsupported(a.Lane, a.Verify, a.ForceLane); err != nil {
-		return result{}, err
-	}
 	if a.Member != "" {
 		return result{}, &ops.UnavailableError{What: "department members (member)",
 			Detail: "leave member out and pass backend and model instead"}
 	}
 	req := api.DelegateRequest{Prompt: a.Prompt, Title: a.Title, Cwd: cwd, Mode: mode, Model: a.Model,
 		Effort: a.Effort, Backend: a.Backend, Provider: a.Provider, Profile: a.Profile, After: a.After,
-		AfterMode: a.AfterMode, AllowGit: a.AllowGit.or(false), Gate: gate, Session: s.session()}
+		AfterMode: a.AfterMode, AllowGit: a.AllowGit.or(false), Session: s.session(), Verify: a.Verify.ptr(),
+		ForceLane: a.ForceLane.or(false)}
+	req.Gate, req.GateCommands = a.Gate.request()
+	req.Lane, req.NoLane = a.Lane.paths, a.Lane.off
 	switch {
 	case a.Spec != "":
 		req.Spec = &api.SpecRequest{Dir: a.Spec, TaskIDs: a.TaskIDs}
@@ -134,33 +131,6 @@ func (s *Server) delegate(ctx context.Context, k *call) (result, error) {
 		return result{}, fmt.Errorf("task %s was created, but reading its report failed: %w", sum.ID, err)
 	}
 	return reportResult(res), nil
-}
-
-// gateFlag maps the gate argument: false turns gates off; true and commands need the proof gate milestone.
-func gateFlag(g gateArg) (*bool, error) {
-	switch {
-	case g.off:
-		f := false
-		return &f, nil
-	case g.on, len(g.cmds) > 0:
-		return nil, &ops.UnavailableError{What: "running gate commands", Detail: "leave gate out or pass false"}
-	}
-	return nil, nil
-}
-
-// unsupported refuses, before any call, the delegate and followup options this version does not have yet (the
-// daemon would refuse them too, with a less helpful error). lane: false and verify/force_lane false mean "off" and
-// pass.
-func unsupported(lane laneArg, verify, forceLane optBool) error {
-	switch {
-	case len(lane.paths) > 0:
-		return &ops.UnavailableError{What: "lane enforcement (lane)", Detail: "leave lane out or pass false"}
-	case verify.or(false):
-		return &ops.UnavailableError{What: "the verifier (verify: true)", Detail: "leave verify out"}
-	case forceLane.or(false):
-		return &ops.UnavailableError{What: "force_lane", Detail: "leave force_lane out; lanes are not enforced yet"}
-	}
-	return nil
 }
 
 // session is the lead session that delegates, from the host's environment (as the old server read it), with the
@@ -197,13 +167,6 @@ func (s *Server) followup(ctx context.Context, k *call) (result, error) {
 	if strings.TrimSpace(a.Message) == "" && !a.Force.or(false) {
 		return result{}, errors.New("message is required (it may be left out only with force: true)")
 	}
-	gate, err := gateFlag(a.Gate)
-	if err != nil {
-		return result{}, err
-	}
-	if err := unsupported(a.Lane, a.Verify, a.ForceLane); err != nil {
-		return result{}, err
-	}
 	c, err := k.client(ctx)
 	if err != nil {
 		return result{}, err
@@ -223,7 +186,10 @@ func (s *Server) followup(ctx context.Context, k *call) (result, error) {
 		}
 	}
 	req := api.FollowupRequest{Message: a.Message, Model: a.Model, Effort: a.Effort, TaskIDs: a.TaskIDs,
-		Profile: a.Profile, AllowGit: a.AllowGit.ptr(), Gate: gate, Force: a.Force.or(false)}
+		Profile: a.Profile, AllowGit: a.AllowGit.ptr(), Force: a.Force.or(false), Verify: a.Verify.ptr(),
+		ForceLane: a.ForceLane.or(false)}
+	req.Gate, req.GateCommands = a.Gate.request()
+	req.Lane, req.NoLane = a.Lane.paths, a.Lane.off
 	if _, err := c.Followup(ctx, a.TaskID, req); err != nil {
 		return result{}, err
 	}

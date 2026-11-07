@@ -17,6 +17,8 @@ var (
 	// ErrUnavailable: something the action needs is missing (no terminal for a takeover console, the engine is
 	// shutting down).
 	ErrUnavailable = errors.New("unavailable")
+	// ErrConflict: the request collides with other tasks (a lane overlapping their claims, LaneConflictError).
+	ErrConflict = errors.New("conflict")
 )
 
 func invalidf(format string, args ...any) error {

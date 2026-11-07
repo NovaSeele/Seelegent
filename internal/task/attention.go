@@ -26,6 +26,10 @@ const (
 	ReasonLooping        = "looping"
 	ReasonWorkAtRisk     = "work_at_risk"
 	ReasonHygiene        = "hygiene"
+	// ReasonGateRed: the gate is still red (or error) after the automatic fix turns.
+	ReasonGateRed = "gate_red"
+	// ReasonVerifierRejected: the verifier rejected the work and no fix turn is left.
+	ReasonVerifierRejected = "verifier_rejected"
 )
 
 // Who needs to act.
@@ -176,7 +180,27 @@ func computeAttention(t *Task, live liveState, acc accountHealth, now time.Time,
 		if q := parseBlocked(tu.Response); q != nil {
 			return att(api.AttentionQuestion, ReasonQuestion, WhoLead, q.Text)
 		}
-		if red := redFindings(tu.Hygiene); red > 0 {
+		if g := tu.Gate; g != nil && (g.State == api.GateRed || g.State == api.GateError) && !hygieneOnly(g) {
+			return att(api.AttentionBlocked, ReasonGateRed, WhoLead, gateDetail(g))
+		}
+		if v := tu.Verifier; v != nil && v.Verdict == api.VerdictReject {
+			detail := ""
+			if len(v.Reasons) > 0 {
+				detail = v.Reasons[0]
+			}
+			return att(api.AttentionBlocked, ReasonVerifierRejected, WhoLead, detail)
+		}
+		red := redFindings(tu.Hygiene)
+		if g := tu.Gate; g != nil && hygieneOnly(g) {
+			// The gate carries the findings of earlier turns that are still open.
+			for i := range g.Steps {
+				s := &g.Steps[i]
+				if s.Kind == api.StepHygiene {
+					red = max(red, len(s.Files))
+				}
+			}
+		}
+		if red > 0 {
 			return att(api.AttentionBlocked, ReasonHygiene, WhoLead, fmt.Sprintf("%d hygiene finding(s)", red))
 		}
 		if n := atRisk(t); n > 0 {
@@ -187,6 +211,98 @@ func computeAttention(t *Task, live liveState, acc accountHealth, now time.Time,
 		return att(api.AttentionBlocked, ReasonFailed, WhoLead, t.Error)
 	}
 	return nil
+}
+
+// gateDetail says in plain words which steps of a gate failed ("command failed: npm test; syntax check failed:
+// a.json"), and which other tasks a foreign failure may be caused by. The dashboard builds its own text from the
+// turn's steps; this one is for the lead (MCP, CLI).
+func gateDetail(g *api.GateResult) string {
+	var parts []string
+	for i := range g.Steps {
+		s := &g.Steps[i]
+		if s.State != api.StepRed && s.State != api.StepError {
+			continue
+		}
+		part := stepFailure(s)
+		if s.Foreign {
+			causes := make([]string, 0, len(s.CausedBy))
+			for _, c := range s.CausedBy {
+				causes = append(causes, causeName(c))
+			}
+			part += " (may be caused by " + strings.Join(causes, ", ") + ")"
+		}
+		parts = append(parts, part)
+	}
+	return strings.Join(parts, "; ")
+}
+
+// causeName names another task for the lead: "t2 (API rename)", the same form as the fix prompt.
+func causeName(c api.GateCause) string {
+	if c.Title == "" {
+		return c.TaskID
+	}
+	return c.TaskID + " (" + c.Title + ")"
+}
+
+// stepFailure is one failing step in plain words.
+func stepFailure(s *api.GateStep) string {
+	switch s.Kind {
+	case api.StepLane:
+		return withList("files outside the lane", s.Files)
+	case api.StepHygiene:
+		files := make([]string, 0, len(s.Findings))
+		for _, f := range s.Findings {
+			files = append(files, f.Path)
+		}
+		return withList("hygiene findings", files)
+	case api.StepAuto:
+		files := make([]string, 0, len(s.Failures))
+		for _, f := range s.Failures {
+			files = append(files, f.File)
+		}
+		return withList("syntax check failed", files)
+	case api.StepDoctrine:
+		if s.Cmd == "" {
+			return "doctrine file refused: " + s.Label
+		}
+		return "doctrine check " + s.Label + " failed: " + s.Cmd
+	default:
+		cmd := s.Cmd
+		if s.Dir != "" {
+			cmd = "cd " + s.Dir + " && " + cmd
+		}
+		if s.State == api.StepError {
+			return "command could not run: " + cmd
+		}
+		return "command failed: " + cmd
+	}
+}
+
+// withList puts at most three names after head, then says how many more there are.
+func withList(head string, names []string) string {
+	const most = 3
+	switch {
+	case len(names) == 0:
+		return head
+	case len(names) <= most:
+		return head + ": " + strings.Join(names, ", ")
+	}
+	return fmt.Sprintf("%s: %s and %d more", head, strings.Join(names[:most], ", "), len(names)-most)
+}
+
+// hygieneOnly reports whether the hygiene step is the gate's only failure (the hygiene flag says more).
+func hygieneOnly(g *api.GateResult) bool {
+	found := false
+	for i := range g.Steps {
+		s := &g.Steps[i]
+		if s.State == api.StepRed || s.State == api.StepError {
+			if s.Kind != api.StepHygiene {
+				return false
+			}
+			found = true
+		}
+	}
+	return found
 }
 
 // noAccountDetail explains a no_accounts flag.

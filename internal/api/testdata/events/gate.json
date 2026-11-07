@@ -1,0 +1,41 @@
+{
+  "seq": 7,
+  "ts": "2026-11-07T09:00:00.000Z",
+  "taskId": "t261107090000-ab12",
+  "turn": 1,
+  "attempt": 1,
+  "type": "gate",
+  "data": {
+    "phase": "result",
+    "result": {
+      "state": "red",
+      "steps": [
+        {
+          "kind": "task",
+          "label": "T001",
+          "cmd": "go test ./...",
+          "state": "red",
+          "exit": 1,
+          "ms": 1200,
+          "tail": "FAIL x"
+        },
+        {
+          "kind": "detect",
+          "label": "go vet ./...",
+          "cmd": "go vet ./...",
+          "state": "not_run"
+        }
+      ],
+      "notRun": [
+        "go vet ./..."
+      ],
+      "warnings": [],
+      "startedAt": "2026-11-07T09:00:00.000Z",
+      "endedAt": "2026-11-07T09:00:02.000Z",
+      "autoFix": 2
+    },
+    "barChanged": [
+      "spec.md"
+    ]
+  }
+}

@@ -123,7 +123,8 @@
     "workAtRisk": "作業が失われるおそれ",
     "depsBlocked": "前のタスクが失敗",
     "waitingDeps": "前のタスク待ち",
-    "hygiene": "衛生上の問題"
+    "hygiene": "衛生上の問題",
+    "verifierRejected": "レビューで却下"
   },
   "stage": {
     "explore": "調査",

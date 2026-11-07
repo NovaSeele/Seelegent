@@ -7,6 +7,7 @@ import { i18n } from '@/i18n'
 import { createAccountsApi } from './accounts'
 import { createApiClient } from './client'
 import { createGitApi } from './git'
+import { createProofApi } from './proof'
 import { createProvidersApi } from './providers'
 import { createRolesApi } from './roles'
 import { createSettingsApi } from './settings'
@@ -22,6 +23,7 @@ export * from './events'
 export type { TaskListQuery, TaskEventsPage, EventsQuery, TasksApi } from './tasks'
 export type { CommitResult, GitApi } from './git'
 export type { AccountChanges, AccountsApi, NewAccount } from './accounts'
+export type { ProofApi } from './proof'
 export type { ProviderChanges, ProvidersApi } from './providers'
 export type { HistoryQuery, UsageApi } from './usage'
 export type { SettingsApi } from './settings'
@@ -30,6 +32,7 @@ export { EVENTS_PAGE_MAX } from './tasks'
 export {
   createAccountsApi,
   createGitApi,
+  createProofApi,
   createProvidersApi,
   createRolesApi,
   createSettingsApi,
@@ -45,5 +48,6 @@ export const providersApi = createProvidersApi(api)
 export const usageApi = createUsageApi(api)
 export const settingsApi = createSettingsApi(api)
 export const rolesApi = createRolesApi(api)
+export const proofApi = createProofApi(api)
 
 export const EVENTS_URL = '/api/v1/events'

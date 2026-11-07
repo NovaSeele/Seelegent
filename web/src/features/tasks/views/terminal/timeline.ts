@@ -17,6 +17,7 @@ import type {
 import type { IconName } from '@/components/ui/icons'
 
 import { reasonKey } from '../../detail/question'
+import { gateNotice, laneNotice, verifyNotice } from './gateNotices'
 
 interface Base {
   key: string
@@ -33,6 +34,12 @@ export interface Message {
   params?: Record<string, string | number>
   /** Shown instead when the catalog has no `key` (an attention reason this dashboard does not know). */
   fallback?: string
+}
+
+/** A line of a notice's detail: an optional translated label (a gate step's kind), then data shown as it is. */
+export interface DetailLine {
+  label?: Message
+  text?: string
 }
 
 export type TimelineItem =
@@ -59,6 +66,8 @@ export type TimelineItem =
       note?: Message
       /** Data shown under the line as it is (paths, an error, the worker's question); never daemon prose. */
       detail?: string
+      /** Detail lines with translated labels (gate steps), shown instead of detail. */
+      lines?: DetailLine[]
     })
 
 export type TimelineKind = TimelineItem['kind']
@@ -74,12 +83,15 @@ interface Fold {
   atRisk: Map<number, Set<string>>
   /** The turn of a work_at_risk notice shown since the last attention or restored event. */
   riskShown: number | undefined
+  /** The attention reason a gate or verify line just told (gate_red, verifier_rejected), with its turn. */
+  flagShown: { reason: string; turn: number } | undefined
 }
 
 interface Extra {
   until?: string
   note?: Message
   detail?: string
+  lines?: DetailLine[]
 }
 
 /** Attention reasons are snake_case words; anything else (older daemons sent prose) has no label. */
@@ -230,6 +242,24 @@ function fold(f: Fold, event: TaskEvent): Draft | null {
           )
         : null
     }
+    case 'gate':
+    case 'lane':
+    case 'verify': {
+      const n =
+        event.type === 'gate'
+          ? gateNotice(event)
+          : event.type === 'lane'
+            ? laneNotice(event)
+            : verifyNotice(event)
+      if (!n) return null
+      const flag = shownFlag(event)
+      if (flag) f.flagShown = { reason: flag, turn: event.turn ?? 0 }
+      return notice(n.tone, n.icon, n.message.key, n.message.params, {
+        note: n.note,
+        detail: n.detail,
+        lines: n.lines,
+      })
+    }
     case 'error':
       return notice('error', 'error', 'terminal.ev.error', {}, { detail: event.data.message })
     case 'worker':
@@ -241,7 +271,8 @@ function fold(f: Fold, event: TaskEvent): Draft | null {
  * An attention flag. Its line names the reason (common.attention.*, the words of the task's pill) and falls back
  * to the state; the daemon's English detail is never shown, only the worker's own question or what the transcript
  * itself knows (the files still at risk). A work_at_risk flag right after that turn's work_at_risk line says
- * nothing new and is left out.
+ * nothing new and is left out, and so is a gate_red or verifier_rejected flag right after that turn's failed
+ * gate or rejecting review.
  */
 function foldAttention(
   f: Fold,
@@ -250,7 +281,9 @@ function foldAttention(
 ): Draft | null {
   const data = event.data
   const riskShown = f.riskShown
+  const flagShown = f.flagShown
   f.riskShown = undefined
+  f.flagShown = undefined
   const line = (tone: Tone, icon: IconName, message: Message, extra: Extra = {}): Draft => ({
     ...base,
     kind: 'notice',
@@ -261,6 +294,8 @@ function foldAttention(
   })
   if (data.state === 'cleared') return line('dim', 'check', { key: 'terminal.ev.attentionCleared' })
   if (data.reason === 'work_at_risk' && riskShown !== undefined && riskShown === event.turn)
+    return null
+  if (flagShown && flagShown.reason === data.reason && flagShown.turn === (event.turn ?? 0))
     return null
   const state = `terminal.ev.attention.${data.state}`
   const message: Message = REASON.test(data.reason)
@@ -278,6 +313,16 @@ function foldAttention(
     message,
     extra,
   )
+}
+
+/** The attention reason a gate or verify event already tells: a failed gate or a rejecting review. */
+function shownFlag(event: TaskEvent): string | null {
+  if (event.type === 'gate' && event.data.phase === 'result') {
+    const state = event.data.result?.state
+    return state === 'red' || state === 'error' ? 'gate_red' : null
+  }
+  if (event.type === 'verify' && event.data.result?.verdict === 'reject') return 'verifier_rejected'
+  return null
 }
 
 function foldWorker(
@@ -376,7 +421,13 @@ export function buildTimeline(
   events: readonly TaskEvent[],
   previous: readonly TimelineItem[] = [],
 ): TimelineItem[] {
-  const f: Fold = { items: [], open: new Map(), atRisk: new Map(), riskShown: undefined }
+  const f: Fold = {
+    items: [],
+    open: new Map(),
+    atRisk: new Map(),
+    riskShown: undefined,
+    flagShown: undefined,
+  }
   const items = f.items
   for (const event of events) {
     const touched = fold(f, event)

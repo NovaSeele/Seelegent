@@ -12,6 +12,7 @@ import type nav from './locales/en/nav.json'
 import type pages from './locales/en/pages.json'
 import type palette from './locales/en/palette.json'
 import type process from './locales/en/process.json'
+import type proof from './locales/en/proof.json'
 import type roles from './locales/en/roles.json'
 import type settings from './locales/en/settings.json'
 import type task from './locales/en/task.json'
@@ -39,6 +40,7 @@ export const NAMESPACES = [
   'accounts',
   'usage',
   'roles',
+  'proof',
 ] as const
 export type Namespace = (typeof NAMESPACES)[number]
 
@@ -58,6 +60,7 @@ export interface MessageSchema {
   accounts: typeof accounts
   usage: typeof usage
   roles: typeof roles
+  proof: typeof proof
 }
 
 declare module 'vue-i18n' {

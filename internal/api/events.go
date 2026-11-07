@@ -3,7 +3,7 @@ package api
 // EventType names the kind of a task event; Data has one shape per type.
 type EventType string
 
-// Task event types (contract §3.2). Gate, lane and verifier events arrive with milestone 13.
+// Task event types (contract §3.2).
 const (
 	// EventWorker: a normalized worker event (internal/event.Event) as Data.
 	EventWorker EventType = "worker"
@@ -47,6 +47,12 @@ const (
 	EventWorkAtRisk EventType = "work_at_risk"
 	// EventRestored: RestoredData, files of a turn put back from its start snapshot (milestone 12).
 	EventRestored EventType = "restored"
+	// EventGate: GateEventData, the gate after a turn (milestone 13).
+	EventGate EventType = "gate"
+	// EventLane: LaneEventData, a lane claim forced or warned about at delegate or followup (milestone 13).
+	EventLane EventType = "lane"
+	// EventVerify: VerifyEventData, the verifier's review of a green gate (milestone 13).
+	EventVerify EventType = "verify"
 	// EventError: ErrorData.
 	EventError EventType = "error"
 )
@@ -56,7 +62,7 @@ func EventTypes() []EventType {
 	return []EventType{EventWorker, EventLeadMessage, EventRoute, EventWorkerPrompt, EventAttemptEnd, EventTurnEnd,
 		EventQuotaExhausted, EventAuthFailed, EventWaitingQuota, EventRetry, EventHandoff, EventReattach,
 		EventResumed, EventAttention, EventDeps, EventTakeover, EventHandback, EventReview, EventCancel,
-		EventWorkAtRisk, EventRestored, EventError}
+		EventWorkAtRisk, EventRestored, EventGate, EventLane, EventVerify, EventError}
 }
 
 // TaskEvent is one entry of a task's append-only event log. Seq starts at 1 and grows by one per task.

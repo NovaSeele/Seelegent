@@ -123,7 +123,8 @@
     "workAtRisk": "工作可能丢失",
     "depsBlocked": "前置任务失败",
     "waitingDeps": "等待前置任务",
-    "hygiene": "卫生问题"
+    "hygiene": "卫生问题",
+    "verifierRejected": "二次审查拒绝"
   },
   "stage": {
     "explore": "探索",

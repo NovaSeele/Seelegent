@@ -123,7 +123,8 @@
     "workAtRisk": "작업이 유실될 수 있음",
     "depsBlocked": "선행 작업 실패",
     "waitingDeps": "선행 작업 대기",
-    "hygiene": "위생 문제"
+    "hygiene": "위생 문제",
+    "verifierRejected": "2차 검토 거절"
   },
   "stage": {
     "explore": "탐색",

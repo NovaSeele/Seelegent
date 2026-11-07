@@ -108,6 +108,27 @@
     "log": "worker 日志",
     "session": "对话开始 · {model}",
     "restored": "已恢复 {count} 个文件（第 {n} 轮）",
-    "atRisk": "仍有 {count} 个文件有风险"
+    "atRisk": "仍有 {count} 个文件有风险",
+    "gate": {
+      "start": "关卡开始：{count} 步",
+      "settling": "其他任务工作期间关卡未通过；等它们完成后再运行一次",
+      "running": "关卡运行中",
+      "green": "关卡通过",
+      "red": "关卡未通过",
+      "error": "关卡无法运行",
+      "skipped": "关卡已停止",
+      "autoFix": "第 {n} 轮自动修复"
+    },
+    "lane": {
+      "forced": "已越过另外 {count} 个任务的占用取得通道",
+      "warning": "通道与另外 {count} 个任务重叠",
+      "violation": "改动了通道外的 {count} 个文件"
+    },
+    "verify": {
+      "start": "二次审查开始",
+      "accept": "二次审查接受了改动",
+      "reject": "二次审查拒绝了改动",
+      "error": "二次审查未能完成"
+    }
   }
 }
