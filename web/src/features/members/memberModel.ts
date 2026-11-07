@@ -16,6 +16,11 @@ export const RANK_TONE: Record<Rank, Tone> = {
   peer: 'attention',
 }
 
+/** "Peri Okafor" for a known member, else its id. */
+export function memberLabel(members: readonly Member[], id: string): string {
+  return members.find((m) => m.id === id)?.name || id
+}
+
 export interface MemberDraft {
   id: string
   name: string

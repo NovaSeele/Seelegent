@@ -212,14 +212,15 @@
       "variant": "Вариант",
       "runsOn": "Работает на",
       "status": "Статус",
-      "gate": "Гейт",
+      "gate": "Шлюз",
       "fixes": "Автоисправления",
       "files": "Файлы",
       "lines": "Строки",
       "outOfLane": "Вне зоны",
       "tokens": "Токены",
       "duration": "Время",
-      "verifier": "Проверяющий"
+      "verifier": "Проверяющий",
+      "diff": "Изменения"
     },
     "out": "Выбыл: {reason}",
     "disqualified": {
@@ -229,7 +230,7 @@
       "cancelled": "отменён",
       "rejected": "отклонён",
       "lane_violation": "вне зоны",
-      "gate_red": "красный гейт",
+      "gate_red": "шлюз не пройден",
       "no_changes": "нет изменений"
     },
     "proposal": "Предложение",
@@ -263,7 +264,26 @@
     "diffFailed": "Не удалось загрузить изменения: {error}",
     "openTask": "Открыть задачу {label}",
     "removed": "Worktree удалён",
-    "cleanupError": "Очистка не удалась: {error}"
+    "cleanupError": "Очистка не удалась: {error}",
+    "rowStatus": {
+      "done": "Завершён",
+      "missing": "Нет задачи"
+    },
+    "reasonCode": {
+      "unverified": "у выбора судьи нет проверенных ссылок",
+      "judge_failed": "судья не справился",
+      "judge_running": "судья ещё не закончил"
+    },
+    "because": "— {reason}",
+    "letters": "Анонимные буквы: {list}",
+    "winnerIs": "Победитель: {winner}",
+    "proposalIs": "Предложение: {winner}",
+    "choose": "Выберите вариант",
+    "outOption": "{label} (выбыл: {reason})",
+    "pickAnyway": "Всё равно применить вариант…",
+    "pickAnywayTitle": "Применить выбывший вариант?",
+    "pickAnywayDesc": "Ни один вариант не прошёл отбор. Можно применить вариант с завершённой работой; у каждого указано, почему он выбыл.",
+    "pickNone": "Применить"
   },
   "notes": {
     "title": "Заметки ревью",

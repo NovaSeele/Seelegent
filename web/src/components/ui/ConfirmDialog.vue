@@ -18,6 +18,8 @@ withDefaults(
     danger?: boolean
     busy?: boolean
     error?: string | null
+    /** The confirm button waits for a choice inside the dialog. */
+    confirmDisabled?: boolean
   }>(),
   { description: undefined, error: null },
 )
@@ -41,7 +43,12 @@ const { t } = useI18n()
       <Button variant="ghost" :disabled="busy" @click="emit('update:open', false)">
         {{ t('common.action.cancel') }}
       </Button>
-      <Button :variant="danger ? 'danger' : 'primary'" :loading="busy" @click="emit('confirm')">
+      <Button
+        :variant="danger ? 'danger' : 'primary'"
+        :loading="busy"
+        :disabled="confirmDisabled"
+        @click="emit('confirm')"
+      >
         {{ confirmLabel }}
       </Button>
     </template>

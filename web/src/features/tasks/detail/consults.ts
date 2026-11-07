@@ -1,5 +1,5 @@
 /** Pure helpers of the task's member opinions (consults): which objections stand and how each verdict reads. */
-import type { Consult, Member, TaskDetail } from '@/api/types'
+import type { Consult, TaskDetail } from '@/api/types'
 import type { Tone } from '@/components/ui/tone'
 
 /** A peer objection the lead has not answered: it blocks review accepted (contract: consult). */
@@ -34,7 +34,4 @@ export function consultState(c: Consult): string {
   return c.verdict ?? 'done'
 }
 
-/** "Peri Okafor" for a known member, else its id. */
-export function memberLabel(members: readonly Member[], id: string): string {
-  return members.find((m) => m.id === id)?.name || id
-}
+export { memberLabel } from '@/features/members/memberModel'

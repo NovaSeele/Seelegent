@@ -10,9 +10,10 @@ import { useTeamStore } from '@/stores/team'
 
 /**
  * The changes of one variant against the snapshot every variant started from, file by file (parsed by the daemon,
- * contract §3.3). Read when the variant is picked.
+ * contract §3.3). Read when the variant is picked, and again quietly when the contest changes (`version`: a new
+ * score after a variant's next turn), keeping the old changes on screen until the new ones arrive.
  */
-const props = defineProps<{ contestId: string; label: string }>()
+const props = defineProps<{ contestId: string; label: string; version?: string }>()
 
 const { t } = useI18n()
 const team = useTeamStore()
@@ -21,12 +22,12 @@ const error = shallowRef('')
 let controller: AbortController | null = null
 
 watch(
-  () => [props.contestId, props.label] as const,
-  async ([id, label]) => {
+  () => [props.contestId, props.label, props.version] as const,
+  async ([id, label], old) => {
     controller?.abort()
     const mine = new AbortController()
     controller = mine
-    diff.value = null
+    if (!old || old[0] !== id || old[1] !== label) diff.value = null
     error.value = ''
     try {
       const d = await team.api().contestDiff(id, label, mine.signal)

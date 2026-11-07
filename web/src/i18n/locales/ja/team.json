@@ -219,7 +219,8 @@
       "outOfLane": "範囲外",
       "tokens": "トークン",
       "duration": "時間",
-      "verifier": "検証者"
+      "verifier": "検証者",
+      "diff": "変更"
     },
     "out": "失格: {reason}",
     "disqualified": {
@@ -229,7 +230,7 @@
       "cancelled": "キャンセル",
       "rejected": "却下",
       "lane_violation": "範囲違反",
-      "gate_red": "ゲートが赤",
+      "gate_red": "ゲート不合格",
       "no_changes": "変更なし"
     },
     "proposal": "提案",
@@ -263,7 +264,26 @@
     "diffFailed": "変更を読み込めませんでした: {error}",
     "openTask": "{label} のタスクを開く",
     "removed": "worktree を削除済み",
-    "cleanupError": "クリーンアップに失敗しました: {error}"
+    "cleanupError": "クリーンアップに失敗しました: {error}",
+    "rowStatus": {
+      "done": "完了",
+      "missing": "タスクなし"
+    },
+    "reasonCode": {
+      "unverified": "審査員の選択に検証済みの引用がありません",
+      "judge_failed": "審査員が失敗しました",
+      "judge_running": "審査員はまだ終わっていません"
+    },
+    "because": "（{reason}）",
+    "letters": "匿名の記号: {list}",
+    "winnerIs": "勝者: {winner}",
+    "proposalIs": "提案: {winner}",
+    "choose": "バリアントを選択",
+    "outOption": "{label}（失格: {reason}）",
+    "pickAnyway": "それでもバリアントを適用…",
+    "pickAnywayTitle": "失格のバリアントを適用しますか？",
+    "pickAnywayDesc": "条件を満たすバリアントはありません。作業が完了したものは適用できます。それぞれ失格の理由を示しています。",
+    "pickNone": "適用"
   },
   "notes": {
     "title": "レビューノート",

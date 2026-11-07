@@ -219,7 +219,8 @@
       "outOfLane": "Outside lane",
       "tokens": "Tokens",
       "duration": "Time",
-      "verifier": "Verifier"
+      "verifier": "Verifier",
+      "diff": "Changes"
     },
     "out": "Out: {reason}",
     "disqualified": {
@@ -263,7 +264,26 @@
     "diffFailed": "The changes could not be loaded: {error}",
     "openTask": "Open the task of {label}",
     "removed": "Worktree removed",
-    "cleanupError": "Cleanup failed: {error}"
+    "cleanupError": "Cleanup failed: {error}",
+    "rowStatus": {
+      "done": "Finished",
+      "missing": "No task"
+    },
+    "reasonCode": {
+      "unverified": "the judge's pick has no verified citation",
+      "judge_failed": "the judge failed",
+      "judge_running": "the judge has not finished yet"
+    },
+    "because": "— {reason}",
+    "letters": "Anonymous letters: {list}",
+    "winnerIs": "Winner: {winner}",
+    "proposalIs": "Proposal: {winner}",
+    "choose": "Choose a variant",
+    "outOption": "{label} (out: {reason})",
+    "pickAnyway": "Apply a variant anyway…",
+    "pickAnywayTitle": "Apply a disqualified variant?",
+    "pickAnywayDesc": "No variant qualified. You can still apply one whose work finished; each says why it is out.",
+    "pickNone": "Apply"
   },
   "notes": {
     "title": "Review notes",

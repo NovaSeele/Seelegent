@@ -1,16 +1,32 @@
 <script setup lang="ts">
+import { computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import type { Contest } from '@/api/types'
 import ClaimList from '@/features/meetings/ClaimList.vue'
+import { memberLabel } from '@/features/members/memberModel'
+import { useTeamStore } from '@/stores/team'
+
+import { letterLegend } from './contestModel'
 
 /**
  * The winner Seelegent proposes and why: the judge's pick when it is qualified and backed by a verified citation,
  * else the machine score's; and the judge's ranking with its reasons (each citation checked).
  */
-defineProps<{ contest: Contest }>()
+const props = defineProps<{ contest: Contest }>()
 
 const { t } = useI18n()
+const team = useTeamStore()
+onMounted(() => team.ensureMembers())
+
+/** Why the machine's winner is proposed, in the reader's language (the daemon's English only as a fallback). */
+const reason = computed(() => {
+  const p = props.contest.proposal
+  if (!p) return ''
+  return p.reasonCode ? t(`team.contests.reasonCode.${p.reasonCode}`) : (p.reason ?? '')
+})
+const legend = computed(() => letterLegend(props.contest.judge?.letters ?? {}))
+const judgeName = computed(() => memberLabel(team.members, props.contest.judge?.member ?? ''))
 </script>
 
 <template>
@@ -25,8 +41,8 @@ const { t } = useI18n()
           })
         }}
       </strong>
-      <span v-if="contest.proposal.reason" class="proposal__muted">
-        — {{ contest.proposal.reason }}
+      <span v-if="reason" class="proposal__muted">
+        {{ t('team.contests.because', { reason }) }}
       </span>
     </p>
     <p
@@ -40,8 +56,11 @@ const { t } = useI18n()
     </p>
     <template v-if="contest.judge">
       <h3 class="proposal__sub">
-        {{ t('team.contests.judge', { member: contest.judge.member }) }}
+        {{ t('team.contests.judge', { member: judgeName }) }}
       </h3>
+      <p v-if="legend.length" class="proposal__muted">
+        {{ t('team.contests.letters', { list: legend.join(' · ') }) }}
+      </p>
       <p v-if="contest.judge.status === 'running'" class="proposal__muted">
         {{ t('team.contests.judgeRunning') }}
       </p>

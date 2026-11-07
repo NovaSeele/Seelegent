@@ -192,7 +192,7 @@
     "loadFailed": "No se pudieron cargar los concursos: {error}",
     "notFound": "No se pudo cargar este concurso: {error}",
     "empty": "Aún no hay concursos",
-    "emptyDesc": "Un concurso ejecuta un brief como de dos a cinco variantes, cada una en su propio worktree, las puntúa y propone una ganadora. El lead inicia uno delegando con variantes.",
+    "emptyDesc": "Un concurso ejecuta un encargo como de dos a cinco variantes, cada una en su propio worktree, las puntúa y propone una ganadora. El lead inicia uno delegando con variantes.",
     "back": "Todos los concursos",
     "status": {
       "starting": "Iniciando",
@@ -206,7 +206,7 @@
     "variantsN": "{n} variante | {n} variantes",
     "deadline": "Plazo {time}",
     "deadlineHit": "Se alcanzó el plazo",
-    "brief": "Brief",
+    "brief": "Encargo",
     "scoreboard": "Marcador",
     "col": {
       "variant": "Variante",
@@ -219,7 +219,8 @@
       "outOfLane": "Fuera de carril",
       "tokens": "Tokens",
       "duration": "Tiempo",
-      "verifier": "Verificador"
+      "verifier": "Verificador",
+      "diff": "Cambios"
     },
     "out": "Fuera: {reason}",
     "disqualified": {
@@ -263,7 +264,26 @@
     "diffFailed": "No se pudieron cargar los cambios: {error}",
     "openTask": "Abrir la tarea de {label}",
     "removed": "Worktree eliminado",
-    "cleanupError": "La limpieza falló: {error}"
+    "cleanupError": "La limpieza falló: {error}",
+    "rowStatus": {
+      "done": "Terminada",
+      "missing": "Sin tarea"
+    },
+    "reasonCode": {
+      "unverified": "la elección del juez no tiene ninguna cita verificada",
+      "judge_failed": "el juez falló",
+      "judge_running": "el juez aún no ha terminado"
+    },
+    "because": "— {reason}",
+    "letters": "Letras anónimas: {list}",
+    "winnerIs": "Ganadora: {winner}",
+    "proposalIs": "Propuesta: {winner}",
+    "choose": "Elige una variante",
+    "outOption": "{label} (fuera: {reason})",
+    "pickAnyway": "Aplicar una variante de todos modos…",
+    "pickAnywayTitle": "¿Aplicar una variante descalificada?",
+    "pickAnywayDesc": "Ninguna variante se clasificó. Aún puedes aplicar una cuyo trabajo terminó; cada una indica por qué quedó fuera.",
+    "pickNone": "Aplicar"
   },
   "notes": {
     "title": "Notas de revisión",

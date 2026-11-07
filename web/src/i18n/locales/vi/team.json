@@ -212,14 +212,15 @@
       "variant": "Phiên bản",
       "runsOn": "Chạy trên",
       "status": "Trạng thái",
-      "gate": "Cổng",
+      "gate": "Cổng kiểm tra",
       "fixes": "Tự sửa",
       "files": "Tệp",
       "lines": "Dòng",
       "outOfLane": "Ngoài phạm vi",
       "tokens": "Token",
       "duration": "Thời gian",
-      "verifier": "Kiểm định"
+      "verifier": "Kiểm định",
+      "diff": "Thay đổi"
     },
     "out": "Bị loại: {reason}",
     "disqualified": {
@@ -229,7 +230,7 @@
       "cancelled": "đã huỷ",
       "rejected": "bị từ chối",
       "lane_violation": "vượt phạm vi",
-      "gate_red": "cổng đỏ",
+      "gate_red": "không đạt cổng kiểm tra",
       "no_changes": "không có thay đổi"
     },
     "proposal": "Đề xuất",
@@ -263,7 +264,26 @@
     "diffFailed": "Không tải được thay đổi: {error}",
     "openTask": "Mở tác vụ của {label}",
     "removed": "Đã xoá worktree",
-    "cleanupError": "Dọn dẹp thất bại: {error}"
+    "cleanupError": "Dọn dẹp thất bại: {error}",
+    "rowStatus": {
+      "done": "Đã xong",
+      "missing": "Không có tác vụ"
+    },
+    "reasonCode": {
+      "unverified": "lựa chọn của giám khảo không có trích dẫn nào đã kiểm chứng",
+      "judge_failed": "giám khảo thất bại",
+      "judge_running": "giám khảo chưa xong"
+    },
+    "because": "— {reason}",
+    "letters": "Ký hiệu ẩn danh: {list}",
+    "winnerIs": "Người thắng: {winner}",
+    "proposalIs": "Đề xuất: {winner}",
+    "choose": "Chọn một phiên bản",
+    "outOption": "{label} (bị loại: {reason})",
+    "pickAnyway": "Vẫn áp dụng một phiên bản…",
+    "pickAnywayTitle": "Áp dụng một phiên bản đã bị loại?",
+    "pickAnywayDesc": "Không phiên bản nào đủ điều kiện. Bạn vẫn có thể áp dụng một phiên bản đã làm xong; mỗi phiên bản ghi rõ lý do bị loại.",
+    "pickNone": "Áp dụng"
   },
   "notes": {
     "title": "Ghi chú review",

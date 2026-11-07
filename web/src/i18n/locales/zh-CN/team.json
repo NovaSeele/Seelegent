@@ -212,14 +212,15 @@
       "variant": "变体",
       "runsOn": "运行于",
       "status": "状态",
-      "gate": "检查门",
+      "gate": "关卡",
       "fixes": "自动修复",
       "files": "文件",
       "lines": "行",
       "outOfLane": "越界",
       "tokens": "令牌",
       "duration": "用时",
-      "verifier": "验证者"
+      "verifier": "验证者",
+      "diff": "改动"
     },
     "out": "淘汰：{reason}",
     "disqualified": {
@@ -229,7 +230,7 @@
       "cancelled": "已取消",
       "rejected": "被拒绝",
       "lane_violation": "越界",
-      "gate_red": "检查门为红色",
+      "gate_red": "关卡未通过",
       "no_changes": "没有改动"
     },
     "proposal": "提议",
@@ -263,7 +264,26 @@
     "diffFailed": "无法加载改动：{error}",
     "openTask": "打开 {label} 的任务",
     "removed": "worktree 已移除",
-    "cleanupError": "清理失败：{error}"
+    "cleanupError": "清理失败：{error}",
+    "rowStatus": {
+      "done": "已完成",
+      "missing": "无任务"
+    },
+    "reasonCode": {
+      "unverified": "评审的选择没有经过验证的引用",
+      "judge_failed": "评审失败",
+      "judge_running": "评审尚未完成"
+    },
+    "because": "（{reason}）",
+    "letters": "匿名字母：{list}",
+    "winnerIs": "胜出：{winner}",
+    "proposalIs": "提议：{winner}",
+    "choose": "选择一个变体",
+    "outOption": "{label}（出局：{reason}）",
+    "pickAnyway": "仍然应用一个变体…",
+    "pickAnywayTitle": "应用一个已出局的变体？",
+    "pickAnywayDesc": "没有符合条件的变体。仍可应用一个已完成的变体；每个都注明了出局原因。",
+    "pickNone": "应用"
   },
   "notes": {
     "title": "审阅备注",

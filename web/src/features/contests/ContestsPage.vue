@@ -58,10 +58,12 @@ const look = (status: keyof typeof CONTEST_STATUS) => CONTEST_STATUS[status]
                 <span class="row__title">{{ c.title }}</span>
                 <span class="row__meta">
                   <span>{{ t('team.contests.variantsN', { n: c.variants }, c.variants) }}</span>
-                  <span v-if="c.winner">{{ t('team.contests.winner') }}: {{ c.winner }}</span>
-                  <span v-else-if="c.proposal"
-                    >{{ t('team.contests.proposal') }}: {{ c.proposal }}</span
-                  >
+                  <span v-if="c.winner">{{
+                    t('team.contests.winnerIs', { winner: c.winner })
+                  }}</span>
+                  <span v-else-if="c.proposal">{{
+                    t('team.contests.proposalIs', { winner: c.proposal })
+                  }}</span>
                   <span>{{ fmt.dateTime(c.createdAt) }}</span>
                 </span>
               </span>

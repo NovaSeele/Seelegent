@@ -1,14 +1,19 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 
-import type { Contest, ScoreRow } from '@/api/types'
+import type { Contest } from '@/api/types'
 import IconButton from '@/components/ui/IconButton.vue'
+import StatusPill from '@/components/ui/StatusPill.vue'
+import type { Tone } from '@/components/ui/tone'
 import { useFormat } from '@/composables/useFormat'
+
+import { gateCell, runsOn, variantStatus, verifierCell } from './contestModel'
 
 /**
  * The machine score of each variant, in the machine's ranking order: gate, auto-fix turns, files, lines, lane,
- * tokens, time and verifier. A disqualified variant says why in words. The proposed winner and the picked one are
- * marked. Each row opens the variant's changes.
+ * tokens, time and verifier, in the words and tones of the task views. A disqualified variant says why in words.
+ * The proposed winner and the picked one are marked. Each row opens the variant's changes.
  */
 const props = defineProps<{ contest: Contest; selected: string | null }>()
 const emit = defineEmits<{ select: [label: string] }>()
@@ -16,22 +21,37 @@ const emit = defineEmits<{ select: [label: string] }>()
 const { t } = useI18n()
 const fmt = useFormat()
 
-function ordered(): ScoreRow[] {
-  const rank = new Map(props.contest.machineRanking.map((l, i) => [l, i]))
-  return [...props.contest.scoreboard].sort(
-    (a, b) =>
-      (rank.get(a.label) ?? 99) - (rank.get(b.label) ?? 99) || a.label.localeCompare(b.label),
-  )
-}
-
-const runsOn = (r: ScoreRow) =>
-  [r.member, r.provider ?? r.backend, r.model].filter((x): x is string => !!x).join(' · ')
-const mark = (label: string) =>
-  label === props.contest.winner
-    ? t('team.contests.winner')
-    : label === props.contest.proposal?.winner
-      ? t('team.contests.proposal')
-      : ''
+const rows = computed(() => {
+  const c = props.contest
+  const rank = new Map(c.machineRanking.map((l, i) => [l, i]))
+  return [...c.scoreboard]
+    .sort(
+      (a, b) =>
+        (rank.get(a.label) ?? 99) - (rank.get(b.label) ?? 99) || a.label.localeCompare(b.label),
+    )
+    .map((r) => {
+      const mark: { text: string; tone: Tone } | null =
+        r.label === c.winner
+          ? { text: t('team.contests.winner'), tone: 'success' }
+          : r.label === c.proposal?.winner
+            ? { text: t('team.contests.proposal'), tone: 'accent' }
+            : null
+      const status = variantStatus(r.status)
+      return {
+        r,
+        mark,
+        runsOn: runsOn(r),
+        out: r.disqualified
+          ? t('team.contests.out', { reason: t(`team.contests.disqualified.${r.disqualified}`) })
+          : '',
+        status: 'status' in status ? status.status : undefined,
+        statusTone: 'tone' in status ? status.tone : undefined,
+        statusWord: 'key' in status ? t(status.key) : undefined,
+        gate: gateCell(r.gate),
+        verifier: verifierCell(r.verifier),
+      }
+    })
+})
 </script>
 
 <template>
@@ -56,49 +76,58 @@ const mark = (label: string) =>
           <th scope="col" class="num">{{ t('team.contests.col.duration') }}</th>
           <th scope="col">{{ t('team.contests.col.verifier') }}</th>
           <th scope="col">
-            <span class="sr-only">{{ t('team.contests.diff', { label: '' }) }}</span>
+            <span class="sr-only">{{ t('team.contests.col.diff') }}</span>
           </th>
         </tr>
       </thead>
       <tbody>
         <tr
-          v-for="r in ordered()"
-          :key="r.label"
-          :class="{ 'is-out': r.disqualified, 'is-selected': selected === r.label }"
+          v-for="row in rows"
+          :key="row.r.label"
+          :class="{ 'is-out': row.r.disqualified, 'is-selected': selected === row.r.label }"
         >
           <th scope="row">
-            <span class="board__label">{{ r.label }}</span>
-            <span v-if="mark(r.label)" class="board__mark tone-success">{{ mark(r.label) }}</span>
+            <span class="board__label">{{ row.r.label }}</span>
+            <span v-if="row.mark" class="board__mark" :class="`tone-${row.mark.tone}`">{{
+              row.mark.text
+            }}</span>
           </th>
-          <td>{{ runsOn(r) }}</td>
+          <td>{{ row.runsOn }}</td>
           <td>
-            <span v-if="r.disqualified" class="board__out tone-danger">
-              {{
-                t('team.contests.out', {
-                  reason: t(`team.contests.disqualified.${r.disqualified}`),
-                })
-              }}
-            </span>
-            <span v-else>{{ r.status }}</span>
+            <StatusPill v-if="row.out" size="sm" tone="danger" :label="row.out" />
+            <StatusPill v-else-if="row.status" size="sm" :status="row.status" />
+            <StatusPill v-else size="sm" :tone="row.statusTone" :label="row.statusWord" />
           </td>
-          <td>{{ r.gate }}</td>
-          <td class="num">{{ fmt.number(r.autoFixTurns) }}</td>
-          <td class="num">{{ fmt.number(r.files) }}</td>
+          <td>
+            <StatusPill size="sm" :tone="row.gate.tone" :label="t(row.gate.key)" />
+          </td>
+          <td class="num">{{ fmt.number(row.r.autoFixTurns) }}</td>
+          <td class="num">{{ fmt.number(row.r.files) }}</td>
           <td class="num">
-            <span class="add">+{{ fmt.number(r.added) }}</span>
-            <span class="del">−{{ fmt.number(r.removed) }}</span>
+            <span class="add">+{{ fmt.number(row.r.added) }}</span>
+            <span class="del">−{{ fmt.number(row.r.removed) }}</span>
           </td>
-          <td class="num">{{ fmt.number(r.outOfLane) }}</td>
-          <td class="num">{{ fmt.compact(r.tokens) }}</td>
-          <td class="num">{{ r.durationMs === null ? '–' : fmt.duration(r.durationMs) }}</td>
-          <td>{{ r.verifier ?? '–' }}</td>
+          <td class="num">{{ fmt.number(row.r.outOfLane) }}</td>
+          <td class="num">{{ fmt.compact(row.r.tokens) }}</td>
+          <td class="num">
+            {{ row.r.durationMs === null ? '–' : fmt.duration(row.r.durationMs) }}
+          </td>
+          <td>
+            <StatusPill
+              v-if="row.verifier"
+              size="sm"
+              :tone="row.verifier.tone"
+              :label="t(row.verifier.key)"
+            />
+            <span v-else>–</span>
+          </td>
           <td>
             <IconButton
               icon="git"
               size="sm"
-              :label="t('team.contests.showDiff', { label: r.label })"
-              :pressed="selected === r.label"
-              @click="emit('select', r.label)"
+              :label="t('team.contests.showDiff', { label: row.r.label })"
+              :pressed="selected === row.r.label"
+              @click="emit('select', row.r.label)"
             />
           </td>
         </tr>
@@ -109,6 +138,9 @@ const mark = (label: string) =>
 
 <style scoped>
 .board {
+  /* The table scrolls inside its box; the page never widens for it. */
+  max-width: 100%;
+  min-width: 0;
   overflow-x: auto;
   border: var(--border-width) solid var(--border-subtle);
   border-radius: var(--radius-lg);
@@ -148,27 +180,25 @@ const mark = (label: string) =>
   color: var(--text-muted);
 }
 
-.is-selected {
-  background: var(--bg-active);
+/* Selection is a bar at the row's start, not a tint: the +/− counts keep their contrast on the surface. */
+.is-selected > th {
+  box-shadow: inset 3px 0 0 var(--accent);
 }
 
 .board__label {
   font-weight: var(--fw-semibold);
 }
 
-.board__mark,
-.board__out {
+.board__mark {
   margin-left: var(--space-2);
   padding: 0 var(--space-2);
+  border: var(--border-width) solid var(--tone-border);
   border-radius: var(--radius-pill);
   background: var(--tone-bg);
-  color: var(--tone-fg);
+  /* Body text on the tint: the colour is in the border, the word stays readable (contrast ≥ 4.5). */
+  color: var(--text-primary);
   font-size: var(--fs-2xs);
   font-weight: var(--fw-medium);
-}
-
-.board__out {
-  margin-left: 0;
 }
 
 .add {
