@@ -218,6 +218,45 @@ func TestGitArgs(t *testing.T) {
 	}
 }
 
+// TestStdinScripts: a here-document, here-string or pipe that feeds a shell its script is read as that script; fed
+// to any other command it is data.
+func TestStdinScripts(t *testing.T) {
+	deny := []string{
+		"bash <<'EOF'\ngit reset --hard\nEOF", "bash <<EOF\ngit stash\nEOF", "cat <<'EOF' | sh\ngit stash\nEOF",
+		"bash -s <<EOF\ngit stash\nEOF", "bash -s -- a b <<'EOF'\ngit stash\nEOF", "sh -s <<< 'git stash'",
+		"bash <<< 'git stash'", "bash -x <<-EOF\n\tgit stash\n\tEOF",
+		"cat <<'EOF' | tr -d '\\r' | bash\ngit stash\nEOF", "sudo bash <<'EOF'\ngit stash\nEOF",
+		"env FOO=1 bash -e <<'EOF'\necho ok\ngit checkout -- .\nEOF", "bash /dev/stdin <<< 'git stash'",
+		"source /dev/stdin <<< 'git stash'", ". /dev/stdin <<'EOF'\ngit stash\nEOF",
+		"(bash <<'EOF'\ngit stash\nEOF\n)", "echo start && bash <<'EOF' && echo done\ncd x\ngit stash\nEOF",
+		"bash <<'A' <<'B'\necho a\nA\ngit stash\nB", "bash - <<'EOF'\ngit stash\nEOF",
+		"cmd <<'EOF'\ngit stash\nEOF", "pwsh -Command - <<'EOF'\ngit stash\nEOF", "pwsh -NoProfile <<< 'git stash'",
+		"python3 <<'EOF'\nimport os\nos.system('git stash')\nEOF",
+		"python3 - <<'EOF'\nimport subprocess\nsubprocess.run(['git', 'reset', '--hard'])\nEOF",
+		"node <<< \"require('child_process').execSync('git stash')\"",
+	}
+	for _, line := range deny {
+		if r := (Checker{}).Command(line, POSIX); !r.Deny {
+			t.Errorf("Command(%q) allowed, want deny", line)
+		}
+	}
+	allowLines := []string{
+		// Claude Code's commit messages: the heredoc is fed to cat, and its text is data.
+		"git commit -m \"$(cat <<'EOF'\nfix: x\n\ngit stash and git reset --hard are refused now\nEOF\n)\"",
+		"cat <<'EOF'\ngit reset --hard\nEOF", "cat <<'EOF' > notes.md\ngit stash\nEOF",
+		"tee out.txt <<'EOF'\ngit reset --hard\nEOF", "grep -c stash <<< 'git stash'",
+		"bash script.sh <<'EOF'\ngit stash\nEOF", "bash -c 'read x; echo $x' <<< 'git stash'",
+		"bash <<'EOF'\ngo test ./...\ngit status\nEOF", "sh -s <<< 'git log --oneline -3'",
+		"python3 - <<'EOF'\nprint('ok')\nEOF", "python3 script.py <<'EOF'\ngit stash\nEOF",
+		"cat <<'EOF' | sh\necho hi\nEOF", "git log --oneline | head -5",
+	}
+	for _, line := range allowLines {
+		if r := (Checker{}).Command(line, POSIX); r.Deny {
+			t.Errorf("Command(%q) denied (%s), want allow", line, r.Reason)
+		}
+	}
+}
+
 // TestAbbreviatedOptions: git accepts any unambiguous prefix of a long option, so a prefix of a refused option is
 // refused too.
 func TestAbbreviatedOptions(t *testing.T) {

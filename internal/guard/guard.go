@@ -16,6 +16,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"regexp"
+	"slices"
 	"strings"
 	"unicode/utf16"
 )
@@ -278,14 +279,18 @@ func (c Checker) command(ws []word, s *segment, sh Shell, depth int) Result {
 	}
 	switch name {
 	case "bash", "sh", "zsh", "dash", "ksh", "mksh", "ash", "fish", "yash", "tcsh", "csh":
-		return c.posixShell(args, s, sh, depth)
+		return c.posixShell(args, s, depth)
+	case "source", ".":
+		if len(args) > 0 && isStdinFile(args[0].text) {
+			return c.stdinScript(s, POSIX, depth)
+		}
 	case "cmd":
 		return c.cmdShell(args, s, depth)
 	case "powershell", "pwsh", "powershell_ise":
 		return c.pwshShell(args, s, depth)
 	case "node", "nodejs", "deno", "bun", "python", "python3", "python2", "py", "pythonw", "perl", "ruby", "php",
 		"osascript":
-		return c.interpreter(name, args, depth)
+		return c.interpreter(name, args, s, depth)
 	case "eval":
 		return c.line(joinWords(args), POSIX, depth+1)
 	case "iex", "invoke-expression":
@@ -371,41 +376,91 @@ func stripNamed(args []word, name string) []word {
 	return out
 }
 
-// posixShell checks bash -c 'script' (and a script piped into a shell).
-func (c Checker) posixShell(args []word, s *segment, sh Shell, depth int) Result {
+// posixShell checks bash -c 'script' and a script the shell reads from standard input (no script file, -s, or the
+// file /dev/stdin): its here-documents, here-strings and what is piped into it.
+func (c Checker) posixShell(args []word, s *segment, depth int) Result {
+	fromStdin, options := false, true
 	for i := 0; i < len(args); i++ {
 		t := args[i].text
+		short := options && strings.HasPrefix(t, "-") && !strings.HasPrefix(t, "--")
 		switch {
-		case t == "--rcfile" || t == "--init-file" || t == "-o" || t == "+o" || t == "-O" || t == "+O":
+		case options && (t == "-" || t == "--"):
+			options = false
+		case options && (t == "--rcfile" || t == "--init-file" || t == "-o" || t == "+o" || t == "-O" || t == "+O"):
 			i++
-		case t == "-c" || (strings.HasPrefix(t, "-") && !strings.HasPrefix(t, "--") && strings.Contains(t, "c")):
+		case short && strings.Contains(t, "c"):
 			if i+1 >= len(args) {
 				return allow
 			}
 			return c.line(args[i+1].text, POSIX, depth+1)
-		case strings.HasPrefix(t, "-") || strings.HasPrefix(t, "+"):
+		case short && strings.Contains(t, "s"):
+			fromStdin = true // -s: the script comes from standard input, the words after it are its arguments
+		case options && (strings.HasPrefix(t, "-") || strings.HasPrefix(t, "+")):
+		case fromStdin || isStdinFile(t):
+			return c.stdinScript(s, POSIX, depth)
 		default:
 			return allow // a script file
 		}
 	}
-	return c.piped(s, sh, depth)
+	return c.stdinScript(s, POSIX, depth)
 }
 
-// piped checks what is piped into an interpreter that reads its script from standard input.
-func (c Checker) piped(s *segment, sh Shell, depth int) Result {
-	if s == nil || !s.piped || s.prev == nil {
+// isStdinFile reports a file name that is standard input.
+func isStdinFile(t string) bool {
+	return t == "/dev/stdin" || t == "/proc/self/fd/0" || t == "/dev/fd/0"
+}
+
+// stdinScript checks the script a shell reads from standard input, read in its dialect: the here-documents and
+// here-strings of its command, and what is piped into it.
+func (c Checker) stdinScript(s *segment, script Shell, depth int) Result {
+	if s == nil {
 		return allow
 	}
-	ws := s.prev.words
-	if len(ws) > 0 {
-		ws = ws[1:]
-	}
-	for _, w := range ws {
-		if r := c.Command(w.text); r.Deny {
+	res := allow
+	for _, body := range s.stdin {
+		r := c.line(body, script, depth+1)
+		if r.Deny {
 			return r
 		}
+		res = res.merge(r)
 	}
-	return c.line(joinWords(ws), sh, depth+1)
+	r := c.piped(s, script, depth)
+	if r.Deny {
+		return r
+	}
+	return res.merge(r)
+}
+
+// piped checks what is piped into an interpreter that reads its script from standard input: the arguments and the
+// here-documents of every command up the pipeline (cat <<'EOF' | sh, echo 'git stash' | tr -d '\r' | sh).
+func (c Checker) piped(s *segment, sh Shell, depth int) Result {
+	if s == nil || !s.piped {
+		return allow
+	}
+	res := allow
+	for u := s.prev; u != nil; u = u.prev {
+		ws := u.words
+		if len(ws) > 0 {
+			ws = ws[1:]
+		}
+		for _, w := range ws {
+			if r := c.Command(w.text); r.Deny {
+				return r
+			}
+		}
+		texts := append([]string{joinWords(ws)}, u.stdin...)
+		for _, text := range texts {
+			r := c.line(text, sh, depth+1)
+			if r.Deny {
+				return r
+			}
+			res = res.merge(r)
+		}
+		if !u.piped {
+			break
+		}
+	}
+	return res
 }
 
 // cmdShell checks cmd /c ... and cmd /k ....
@@ -424,7 +479,7 @@ func (c Checker) cmdShell(args []word, s *segment, depth int) Result {
 			return allow
 		}
 	}
-	return c.piped(s, Cmd, depth)
+	return c.stdinScript(s, Cmd, depth)
 }
 
 // pwshValued are powershell.exe/pwsh options that take a value.
@@ -439,7 +494,11 @@ func (c Checker) pwshShell(args []word, s *segment, depth int) Result {
 		if strings.HasPrefix(t, "/") {
 			t = "-" + t[1:]
 		}
+		stdinNext := i+1 < len(args) && args[i+1].text == "-"
 		switch {
+		case stdinNext && (t == "-c" || t == "-f" || len(t) >= 3 && (isAbbrev(t, "-command") || isAbbrev(t, "-file"))):
+			// -Command - and -File - read the script from standard input.
+			return c.stdinScript(s, PowerShell, depth)
 		case t == "-c" || len(t) >= 3 && isAbbrev(t, "-command") && t != "-co":
 			return c.line(joinWords(args[i+1:]), PowerShell, depth+1)
 		case t == "-co":
@@ -464,7 +523,7 @@ func (c Checker) pwshShell(args []word, s *segment, depth int) Result {
 			return c.line(joinWords(args[i:]), PowerShell, depth+1)
 		}
 	}
-	return c.piped(s, PowerShell, depth)
+	return c.stdinScript(s, PowerShell, depth)
 }
 
 // decodeUTF16Base64 decodes powershell -EncodedCommand (base64 of UTF-16LE text).
@@ -481,12 +540,15 @@ func decodeUTF16Base64(s string) (string, bool) {
 }
 
 // interpreter checks the inline code of a scripting language (node -e, python -c, ...): every string literal is
-// read as a command line, and a literal "git" followed by more literals as a git argument list.
-func (c Checker) interpreter(name string, args []word, depth int) Result {
+// read as a command line, and a literal "git" followed by more literals as a git argument list. Without inline
+// code or a script file (no file, or "-"), the code comes from standard input: its here-documents and here-strings,
+// and the words piped into it, are read the same way.
+func (c Checker) interpreter(name string, args []word, s *segment, depth int) Result {
 	flags := map[string]string{
 		"node": "e", "nodejs": "e", "bun": "e", "deno": "", "python": "c", "python3": "c", "python2": "c", "py": "c",
 		"pythonw": "c", "perl": "eE", "ruby": "e", "php": "r", "osascript": "e",
 	}[name]
+	file, stdin := false, false
 	for i := 0; i < len(args); i++ {
 		t := args[i].text
 		code := ""
@@ -505,9 +567,43 @@ func (c Checker) interpreter(name string, args []word, depth int) Result {
 				code = args[i+1].text
 			}
 		default:
+			if !file && (t == "-" || isStdinFile(t)) {
+				stdin = true
+			}
+			if !strings.HasPrefix(t, "-") || t == "-" {
+				file = true // the script (or "-"); later words are its arguments
+			}
 			continue
 		}
 		return c.code(code, depth)
+	}
+	if name != "deno" && (stdin || !file) {
+		return c.stdinCode(s, depth)
+	}
+	return allow
+}
+
+// stdinCode checks the code an interpreter reads from standard input.
+func (c Checker) stdinCode(s *segment, depth int) Result {
+	if s == nil {
+		return allow
+	}
+	texts := slices.Clone(s.stdin)
+	if s.piped {
+		for u := s.prev; u != nil; u = u.prev {
+			if len(u.words) > 1 {
+				texts = append(texts, joinWords(u.words[1:]))
+			}
+			texts = append(texts, u.stdin...)
+			if !u.piped {
+				break
+			}
+		}
+	}
+	for _, text := range texts {
+		if r := c.code(text, depth); r.Deny {
+			return r
+		}
 	}
 	return allow
 }

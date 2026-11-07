@@ -3,6 +3,8 @@ package cli
 import (
 	"bytes"
 	"context"
+	"encoding/json"
+	"io"
 	"os/exec"
 	"strings"
 	"testing"
@@ -31,6 +33,33 @@ func TestHookDecision(t *testing.T) {
 	in = `{"tool_name":"Bash","tool_input":{"command":"git stash"}}`
 	if r := hookDecision(ctx, guard.HookClaude, strings.NewReader(in)); r.Deny {
 		t.Fatal("SEELEGENT_GIT_GUARD=off still denies")
+	}
+}
+
+// TestHookStdinScripts runs Claude Code's Bash hook (read in the POSIX dialect only) on scripts fed to a shell
+// through a here-document, a here-string or a pipe.
+func TestHookStdinScripts(t *testing.T) {
+	ctx := context.Background()
+	input := func(command string) io.Reader {
+		data, err := json.Marshal(map[string]any{"tool_name": "Bash", "tool_input": map[string]string{"command": command}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return bytes.NewReader(data)
+	}
+	for command, deny := range map[string]bool{
+		"bash <<'EOF'\ngit reset --hard\nEOF":                                     true,
+		"cat <<'EOF' | sh\ngit stash\nEOF":                                        true,
+		"bash -s <<EOF\ngit stash\nEOF":                                           true,
+		"sh -s <<< 'git stash'":                                                   true,
+		"git commit --amen --no-edit":                                             true,
+		"bash <<'EOF'\ngo test ./...\nEOF":                                        false,
+		"cat <<'EOF'\ngit reset --hard\nEOF":                                      false,
+		"git commit -m \"$(cat <<'EOF'\nfix: x\n\nnever git stash here\nEOF\n)\"": false,
+	} {
+		if r := hookDecision(ctx, guard.HookClaude, input(command)); r.Deny != deny {
+			t.Errorf("claude hook %q: deny = %v, want %v (%s)", command, r.Deny, deny, r.Reason)
+		}
 	}
 }
 
