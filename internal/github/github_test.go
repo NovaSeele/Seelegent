@@ -212,6 +212,51 @@ func TestDetectorSingleFlight(t *testing.T) {
 	}
 }
 
+// TestDetectorForgetDuringDetection: callers waiting on a detection that a Forget overtook (the user signed in to
+// gh while it was being asked) get a detection made after the Forget, never the old answer.
+func TestDetectorForgetDuringDetection(t *testing.T) {
+	release := make(chan struct{})
+	var once sync.Once
+	gh := &fakeGh{fn: func(args []string, _ []byte) ([]byte, []byte, error) {
+		first := false
+		once.Do(func() { first = true })
+		if first {
+			<-release
+			return nil, nil, ErrNoGh // the answer from before the sign-in
+		}
+		if args[0] == "--version" {
+			return []byte("gh version 2.60.0"), nil, nil
+		}
+		return []byte("octo\n"), nil, nil
+	}}
+	d := NewDetector(gh, nil, nil)
+	results := make(chan Access, 2)
+	for range 2 {
+		go func() { results <- d.Access(t.Context(), true) }()
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		gh.mu.Lock()
+		n := len(gh.calls)
+		gh.mu.Unlock()
+		if n > 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("no detection started")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	time.Sleep(50 * time.Millisecond) // the second caller reaches the running detection
+	d.Forget()
+	close(release)
+	for range 2 {
+		if a := <-results; a.Tier != api.TierGh || a.GhUser != "octo" {
+			t.Fatalf("access after Forget = %+v", a)
+		}
+	}
+}
+
 func TestDetector(t *testing.T) {
 	now := time.Date(2026, 11, 7, 10, 0, 0, 0, time.UTC)
 	clock := func() time.Time { return now }

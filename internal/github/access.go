@@ -140,31 +140,45 @@ func NewDetector(gh GhRunner, tokens *TokenStore, now func() time.Time) *Detecto
 	return &Detector{gh: gh, tokens: tokens, now: now}
 }
 
-// Access returns the current access (force: detect again now, or wait for the detection already running).
+// Access returns the current access (force: detect again now, or wait for the detection already running). A
+// detection that a Forget overtook is not answered: the caller detects again (or waits for the newer detection).
 func (d *Detector) Access(ctx context.Context, force bool) Access {
+	for {
+		a, gen := d.access(ctx, force)
+		d.mu.Lock()
+		current := d.gen == gen
+		d.mu.Unlock()
+		if current || ctx.Err() != nil {
+			return a
+		}
+	}
+}
+
+// access is one attempt of Access; gen is the generation the answer belongs to.
+func (d *Detector) access(ctx context.Context, force bool) (Access, int) {
 	d.mu.Lock()
+	gen := d.gen
 	if d.ok && !force && d.now().Sub(d.cached.CheckedAt) < accessTTL {
 		a := d.cached
 		d.mu.Unlock()
-		return a
+		return a, gen
 	}
 	if f := d.flight; f != nil {
 		if d.ok && !force {
 			a := d.cached // stale by less than the detection takes
 			d.mu.Unlock()
-			return a
+			return a, gen
 		}
 		d.mu.Unlock()
 		select {
 		case <-f.done:
-			return f.a
+			return f.a, gen
 		case <-ctx.Done():
-			return Access{Tier: api.TierManual, CheckedAt: d.now()}
+			return Access{Tier: api.TierManual, CheckedAt: d.now()}, gen
 		}
 	}
 	f := &detection{done: make(chan struct{})}
 	d.flight = f
-	gen := d.gen
 	d.mu.Unlock()
 	// Detached from the caller: the callers waiting for this detection must not get a cancelled one.
 	f.a = d.detect(context.WithoutCancel(ctx))
@@ -177,7 +191,7 @@ func (d *Detector) Access(ctx context.Context, force bool) Access {
 	}
 	d.mu.Unlock()
 	close(f.done)
-	return f.a
+	return f.a, gen
 }
 
 // detect asks gh and the token store.
