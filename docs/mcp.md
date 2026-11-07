@@ -78,14 +78,15 @@ the server's working directory.
 - `content[1]`: a one- or two-line summary.
 - `structuredContent`: the same JSON (a list is wrapped as `{"items": [...]}`).
 
-Errors are tool results with `isError: true`:
+Errors are tool results with `isError: true`. Their text starts with "Seelegent error: " as before, and the
+structured content is `{error: {code, message, status, details}}`:
 
 | Case | Text |
 |---|---|
-| Called from inside a worker (daemon answers 403 with `caller: worker`) | "Seelegent is not available inside a Seelegent worker." |
-| Route not built yet (501) or tool not built yet | "... is not available in this version of Seelegent yet; nothing was done" |
-| Other API error | "Seelegent error: <message>", with `{error: {code, message, status, details}}` as structured content |
-| No daemon, foreign program on the port, start failed | the reason and what to do (`daemon_unavailable`) |
+| Called from inside a worker (daemon answers 403 with `caller: worker`) | exactly "Seelegent is not available inside a Seelegent worker." (no prefix) |
+| Route not built yet (501) or tool not built yet | "Seelegent error: ... is not available in this version of Seelegent yet; nothing was done" (code `not_available`) |
+| Other API error | "Seelegent error: <message>" with the API's code and details |
+| No daemon, foreign program on the port, start failed | the reason and what to do (code `daemon_unavailable`) |
 
 The worker guard lives in the daemon only; the MCP server does not keep a second one.
 
