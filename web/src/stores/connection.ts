@@ -220,6 +220,9 @@ export const useConnectionStore = defineStore('connection', () => {
         accounts.remove((data as ServerEvents['account.deleted']).id)
         break
       case 'settings.updated':
+        // A careful replay skips settings on purpose: a settings frame carries no time, so it cannot be ordered
+        // against the snapshot just applied, and an older frame would undo a newer value. The snapshot wins; a
+        // change that raced it shows with the next settings.updated or resync. Live frames always apply.
         if (!careful) settings.value = data as Settings
         break
       default:
