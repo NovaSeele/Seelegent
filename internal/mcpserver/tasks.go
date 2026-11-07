@@ -101,13 +101,16 @@ func (s *Server) delegate(ctx context.Context, k *call) (result, error) {
 	if err != nil {
 		return result{}, err
 	}
-	req := api.DelegateRequest{Prompt: a.Prompt, Title: a.Title, Cwd: cwd, Mode: mode, Model: a.Model,
-		Effort: a.Effort, Backend: a.Backend, Provider: a.Provider, Member: a.Member, Profile: a.Profile,
-		After: a.After, AfterMode: a.AfterMode, AllowGit: a.AllowGit.or(false), Gate: gate, Verify: a.Verify.ptr(),
-		Session: s.session()}
-	if !a.Lane.off {
-		req.Lane = a.Lane.paths
+	if err := unsupported(a.Lane, a.Verify, a.ForceLane); err != nil {
+		return result{}, err
 	}
+	if a.Member != "" {
+		return result{}, &unavailableError{what: "department members (member)",
+			detail: "leave member out and pass backend and model instead"}
+	}
+	req := api.DelegateRequest{Prompt: a.Prompt, Title: a.Title, Cwd: cwd, Mode: mode, Model: a.Model,
+		Effort: a.Effort, Backend: a.Backend, Provider: a.Provider, Profile: a.Profile, After: a.After,
+		AfterMode: a.AfterMode, AllowGit: a.AllowGit.or(false), Gate: gate, Session: s.session()}
 	switch {
 	case a.Spec != "":
 		req.Spec = &api.SpecRequest{Dir: a.Spec, TaskIDs: a.TaskIDs}
@@ -160,6 +163,21 @@ func gateFlag(g gateArg) (*bool, error) {
 	return nil, nil
 }
 
+// unsupported refuses, before any call, the delegate and followup options this version does not have yet (the
+// daemon would refuse them too, with a less helpful error). lane: false and verify/force_lane false mean "off" and
+// pass.
+func unsupported(lane laneArg, verify, forceLane optBool) error {
+	switch {
+	case len(lane.paths) > 0:
+		return &unavailableError{what: "lane enforcement (lane)", detail: "leave lane out or pass false"}
+	case verify.or(false):
+		return &unavailableError{what: "the verifier (verify: true)", detail: "leave verify out"}
+	case forceLane.or(false):
+		return &unavailableError{what: "force_lane", detail: "leave force_lane out; lanes are not enforced yet"}
+	}
+	return nil
+}
+
 // session is the lead session that delegates, from the host's environment (as the old server read it).
 func (s *Server) session() *api.Session {
 	id := s.o.Getenv("SEELEGENT_SESSION")
@@ -207,6 +225,9 @@ func (s *Server) followup(ctx context.Context, k *call) (result, error) {
 	if err != nil {
 		return result{}, err
 	}
+	if err := unsupported(a.Lane, a.Verify, a.ForceLane); err != nil {
+		return result{}, err
+	}
 	c, err := k.client(ctx)
 	if err != nil {
 		return result{}, err
@@ -226,11 +247,7 @@ func (s *Server) followup(ctx context.Context, k *call) (result, error) {
 		}
 	}
 	req := api.FollowupRequest{Message: a.Message, Model: a.Model, Effort: a.Effort, TaskIDs: a.TaskIDs,
-		Profile: a.Profile, AllowGit: a.AllowGit.ptr(), Gate: gate, ForceLane: a.ForceLane.or(false),
-		Verify: a.Verify.ptr(), Force: a.Force.or(false)}
-	if !a.Lane.off {
-		req.Lane = a.Lane.paths
-	}
+		Profile: a.Profile, AllowGit: a.AllowGit.ptr(), Gate: gate, Force: a.Force.or(false)}
 	if _, err := c.Followup(ctx, a.TaskID, req); err != nil {
 		return result{}, err
 	}

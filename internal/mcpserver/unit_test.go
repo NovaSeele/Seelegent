@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -219,7 +220,7 @@ func TestDelegateRequest(t *testing.T) {
 	var rep api.TaskReport
 	ok(t, cs, "delegate", map[string]any{"prompt": "p", "cwd": "sub", "mode": "full", "model": "fast",
 		"gate": false, "lane": false, "allow_git": "true", "spec": "specs/001", "task_ids": []string{"T1"},
-		"after": []string{"t0"}, "after_mode": "done", "force_lane": true, "unknown_field": 1}, &rep)
+		"after": []string{"t0"}, "after_mode": "done", "force_lane": false, "verify": false, "unknown_field": 1}, &rep)
 	var req map[string]any
 	st.body(t, "POST /tasks", &req)
 	want := map[string]any{"prompt": "p", "cwd": filepath.Join(wd, "sub"), "mode": "edit", "model": "fast",
@@ -494,6 +495,48 @@ func TestWorkerGuard(t *testing.T) {
 	// A read action of a tool that is not built yet gets the not-available error, not the refusal.
 	if msg := fails(t, cs, "meeting", map[string]any{"action": "status"}); !strings.Contains(msg, "not available") {
 		t.Fatalf("meeting status = %s", msg)
+	}
+}
+
+// TestUnsupportedOptions: lane, verify, force_lane, gate commands (and member on delegate) are refused before any
+// daemon call, as not available, in both delegate and followup.
+func TestUnsupportedOptions(t *testing.T) {
+	var calls atomic.Int32
+	_, c := newStub(t, map[string]http.HandlerFunc{
+		"POST /tasks": func(w http.ResponseWriter, r *http.Request) {
+			calls.Add(1)
+			answer(http.StatusOK, api.TaskSummary{ID: "t1"})(w, r)
+		},
+		"POST /tasks/t1/followup": func(w http.ResponseWriter, r *http.Request) {
+			calls.Add(1)
+			answer(http.StatusOK, api.TaskSummary{ID: "t1"})(w, r)
+		},
+	})
+	cs := stubSession(t, c, nil)
+	options := map[string]map[string]any{
+		"lane":       {"lane": []string{"src/**"}},
+		"verify":     {"verify": true},
+		"force_lane": {"force_lane": true},
+		"gate":       {"gate": "go test ./..."},
+	}
+	for name, opt := range options {
+		for _, tool := range []string{"delegate", "followup"} {
+			args := map[string]any{"prompt": "p", "cwd": `C:\p`, "task_id": "t1", "message": "m"}
+			maps.Copy(args, opt)
+			res := callTool(t, cs, tool, args)
+			data, _ := json.Marshal(res.StructuredContent)
+			if !res.IsError || !strings.Contains(text(res, 0), "nothing was done") ||
+				!strings.Contains(string(data), `"code":"not_available"`) {
+				t.Errorf("%s with %s = %s %s", tool, name, text(res, 0), data)
+			}
+		}
+	}
+	res := callTool(t, cs, "delegate", map[string]any{"prompt": "p", "cwd": `C:\p`, "member": "m1"})
+	if !res.IsError || !strings.Contains(text(res, 0), "leave member out") {
+		t.Errorf("delegate with member = %s", text(res, 0))
+	}
+	if n := calls.Load(); n != 0 {
+		t.Fatalf("refused options reached the daemon %d times", n)
 	}
 }
 
