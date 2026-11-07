@@ -403,6 +403,10 @@ type Ticket struct {
 	DropReason      string        `json:"dropReason,omitempty"`
 	WorktreeRemoved bool          `json:"worktreeRemoved"`
 	CleanedAt       string        `json:"cleanedAt,omitempty"`
+	// Exposed lists what the branch already held on GitHub when Seelegent took it over from the previous version
+	// (which pushed the worker's history): files that look like secrets or junk are public already. A warning, not a
+	// block: the keys they hold should be rotated.
+	Exposed []ScanFinding `json:"exposed,omitempty"`
 	// Tasks, Gates, Files and Log are read when the ticket is shown.
 	Tasks []TicketTask     `json:"tasks"`
 	Gates []TicketGate     `json:"gates"`

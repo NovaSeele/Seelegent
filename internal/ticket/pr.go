@@ -43,6 +43,42 @@ func (s *Service) refused(ctx context.Context, id string, err error) error {
 	return err
 }
 
+// adopt records the remote branch planPush took over as the commit pushed before. A branch the previous version
+// pushed held the worker's history, public already: it is scanned once, and what looks like a secret or junk is
+// kept on the ticket as a warning (the keys should be rotated; removing them now would not unpublish them).
+func (s *Service) adopt(ctx context.Context, t *ticketRec, plan *pushPlan) error {
+	var exposed []api.ScanFinding
+	if plan.adopted == "legacy" {
+		rev := plan.prev
+		if t.BaseSha != "" && s.isAncestor(ctx, t.Worktree, t.BaseSha, plan.prev) {
+			rev = t.BaseSha + ".." + plan.prev
+		}
+		objs, err := s.historyObjects(ctx, t.Worktree, rev)
+		if err == nil {
+			exposed, err = s.scanObjects(ctx, t.Worktree, objs)
+		}
+		if err != nil {
+			s.log.Warn("ticket: scan of the adopted branch", "ticket", t.ID, "err", err)
+		}
+		sort.Slice(exposed, func(i, j int) bool { return exposed[i].Path < exposed[j].Path })
+	}
+	wctx := context.WithoutCancel(ctx)
+	_, err := s.updateTicket(wctx, t.ID, func(tx *sql.Tx, r *ticketRec) error {
+		r.PushedSha, r.PushedBase = plan.prev, plan.prevBase
+		data := map[string]any{"sha": plan.prev, "from": plan.adopted}
+		if len(exposed) > 0 {
+			r.Exposed = exposed
+			data["exposed"] = len(exposed)
+		}
+		s.logStep(wctx, tx, r.ID, "push_adopted", data)
+		return nil
+	})
+	if err == nil {
+		t.PushedSha, t.PushedBase = plan.prev, plan.prevBase
+	}
+	return err
+}
+
 // setRefusal records err on t: as its refusal when it is one, else as its error.
 func (s *Service) setRefusal(ctx context.Context, tx *sql.Tx, t *ticketRec, err error, msg string) {
 	rf := refusalOf(err, msg, api.FormatTime(s.o.Now()))
@@ -266,6 +302,11 @@ func (s *Service) PR(ctx context.Context, id string, req api.PRRequest) (api.Tic
 	if err != nil {
 		return api.Ticket{}, s.refused(ctx, id, err)
 	}
+	if plan.adopted != "" {
+		if err := s.adopt(ctx, t, plan); err != nil {
+			return api.Ticket{}, err
+		}
+	}
 	stage, err := s.uncommitted(ctx, t.Worktree)
 	if err == nil {
 		err = s.snapshot(ctx, t, plan)
@@ -358,21 +399,20 @@ func (s *Service) PR(ctx context.Context, id string, req api.PRRequest) (api.Tic
 		}
 		if err := s.runStep(ctx, id, api.OutboxPush, map[string]any{"branch": t.Branch, "sha": sha,
 			"parents": plan.parents, "base": plan.base, "headSha": head}, func() (map[string]any, error) {
+			// The push runs to its end even when the caller goes away: a push cut off half way leaves GitHub and the
+			// ticket disagreeing. Only a daemon stop or the timeout ends it.
+			pctx, cancel := context.WithTimeout(s.ctx, pushTimeout)
+			defer cancel()
 			// The remote branch must still be what the plan saw: a change since is never built on or forced.
-			if tip, err := s.remoteRef(ctx, t.Worktree, plan.target, t.Branch); err != nil {
+			if tip, err := s.remoteRef(pctx, t.Worktree, plan.target, t.Branch); err != nil {
 				return nil, err
 			} else if tip != plan.tip {
 				return nil, divergedErr(t.Branch, plan.prev, tip)
 			}
-			_, err := s.git(ctx, t.Worktree, gitx.ExecOptions{PushBranch: t.Branch, Timeout: pushTimeout},
+			_, err := s.git(pctx, t.Worktree, gitx.ExecOptions{PushBranch: t.Branch, Timeout: pushTimeout},
 				"push", "--porcelain", "origin", sha+":refs/heads/"+t.Branch)
+			// runStepWith records sha and base as the ticket's pushed commit in the transaction that finishes the step.
 			return map[string]any{"sha": sha, "base": plan.base}, err
-		}); err != nil {
-			return api.Ticket{}, err
-		}
-		if _, err := s.updateTicket(ctx, id, func(_ *sql.Tx, t *ticketRec) error {
-			t.PushedSha, t.PushedBase = sha, plan.base
-			return nil
 		}); err != nil {
 			return api.Ticket{}, err
 		}

@@ -1271,6 +1271,12 @@ export interface Ticket extends TicketSummary {
   dropReason?: string
   worktreeRemoved: boolean
   cleanedAt?: string
+  /**
+   * Exposed lists what the branch already held on GitHub when Seelegent took it over from the previous version
+   * (which pushed the worker's history): files that look like secrets or junk are public already. A warning, not a
+   * block: the keys they hold should be rotated.
+   */
+  exposed?: ScanFinding[]
   /** Tasks, Gates, Files and Log are read when the ticket is shown. */
   tasks: TicketTask[]
   gates: TicketGate[]

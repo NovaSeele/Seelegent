@@ -2,6 +2,7 @@ package ticket
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"os"
@@ -9,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/NovaSeele/Seelegent/internal/api"
 	"github.com/NovaSeele/Seelegent/internal/gitx"
 )
 
@@ -30,8 +32,11 @@ type pushPlan struct {
 	target string
 	// tip is the remote branch's commit before the push ("" when it has none).
 	tip string
-	// prev is the commit pushed before ("" on the first push).
-	prev string
+	// prev is the commit pushed before ("" on the first push) and prevBase the base it built on.
+	prev, prevBase string
+	// adopted is set when prev is not what the ticket recorded: "own" (a push of Seelegent's whose recording was
+	// lost to a stop or a cancelled request) or "legacy" (the worker's history the previous version pushed).
+	adopted string
 	// base is the commit of the base branch the pushed commit builds on.
 	base    string
 	parents []string
@@ -160,6 +165,25 @@ func short(sha string) string {
 	return sha
 }
 
+// ownPush finds the push of ticket id that sent sha (its outbox entry, in any state, names the commit before the
+// push runs) and the base that commit built on.
+func (s *Service) ownPush(ctx context.Context, id, sha string) (base string, ok bool) {
+	if sha == "" {
+		return "", false
+	}
+	_ = s.o.DB.Read(ctx, func(tx *sql.Tx) error {
+		list, err := listEntries(ctx, tx, scopeTicket, id)
+		for _, e := range list {
+			if a, _ := e.Args["sha"].(string); e.Kind == api.OutboxPush && a == sha {
+				base, _ = e.Args["base"].(string)
+				ok = true
+			}
+		}
+		return err
+	})
+	return base, ok
+}
+
 // planPush works out the commit a push of the ticket sends: its parents, after checking the remote branch and the
 // base. tree is filled in by snapshot.
 func (s *Service) planPush(ctx context.Context, t *ticketRec) (*pushPlan, error) {
@@ -171,10 +195,15 @@ func (s *Service) planPush(ctx context.Context, t *ticketRec) (*pushPlan, error)
 	p.tip = tip
 	pushedBase := t.PushedBase
 	if tip != p.prev {
-		// A branch the version before this one pushed (the worker's history, already public): build on it.
-		if p.prev == "" && s.isAncestor(ctx, t.Worktree, tip, "HEAD") {
-			p.prev = tip
-		} else {
+		switch base, own := s.ownPush(ctx, t.ID, tip); {
+		case own:
+			// Seelegent's own commit: a push whose recording was lost (the request went away or the daemon stopped
+			// after GitHub took it). The outbox wrote its sha before the push.
+			p.prev, pushedBase, p.adopted = tip, base, "own"
+		case p.prev == "" && s.isAncestor(ctx, t.Worktree, tip, "HEAD"):
+			// A branch the version before this one pushed (the worker's history, already public): build on it.
+			p.prev, p.adopted = tip, "legacy"
+		default:
 			return nil, divergedErr(t.Branch, p.prev, tip)
 		}
 	}
@@ -186,6 +215,7 @@ func (s *Service) planPush(ctx context.Context, t *ticketRec) (*pushPlan, error)
 			pushedBase = t.BaseSha
 		}
 	}
+	p.prevBase = pushedBase
 	p.base = s.currentBase(ctx, t)
 	switch {
 	case p.prev == "":

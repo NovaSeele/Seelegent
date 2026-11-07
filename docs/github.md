@@ -104,8 +104,14 @@ the repository has none). The worker's commits stay in the local worktree.
 1. **Check the remote** before anything is written:
    - the remote branch must still be the commit Seelegent pushed before (none on the first push). A branch someone
      pushed to or changed on GitHub is never built on or forced: the request is refused (`409`, `details.reason:
-     "branch_diverged"`, with `branch`, `remote` and `pushed`) and the push's outbox row is `failed`. A branch the
-     previous version pushed (the worker's own commits) is adopted when it is an ancestor of the worktree;
+     "branch_diverged"`, with `branch`, `remote` and `pushed`) and the push's outbox row is `failed`. Two remote
+     tips the ticket did not record are adopted instead (log step `push_adopted`): a commit one of the ticket's own
+     push rows names (`args.sha`, in any state: a push GitHub took while its recording was lost to a stop or a
+     cancelled request), with that row's base; and, on a ticket with no recorded push, a branch the previous version
+     pushed (the worker's own commits) when it is an ancestor of the worktree. That branch is public already: its
+     commits since the base are scanned once, and what looks like a secret or junk is kept on the ticket as
+     `exposed` (the same findings as below). It is a warning, not a block: removing such a file now does not
+     unpublish it, so the dashboard asks the user to rotate the keys it held;
    - the base must already be on GitHub: on the first push, and whenever the base moved, every commit of the base
      must be reachable from the remote base branch, or those commits would leave unscanned. Otherwise the request is
      refused (`409`, `details.reason: "base_not_pushed"`, with `branch` and `commits`, the number of base commits
@@ -142,7 +148,9 @@ the repository has none). The worker's commits stay in the local worktree.
 4. **Push** Seelegent's commit: `commit-tree` of the scanned tree (checked against the worktree's tree), then
    `push origin <sha>:refs/heads/<branch>` with no hooks (`core.hooksPath` set to the null device), no prompts
    (`GIT_TERMINAL_PROMPT=0`, `GCM_INTERACTIVE=never`) and never with force. Right before it the remote branch is
-   read again; a branch that changed meanwhile is refused as above.
+   read again; a branch that changed meanwhile is refused as above. The push runs on the daemon's own context with
+   a 5 minute limit, not the request's: a caller that goes away does not cut it off half way. The commit it sent is
+   recorded on the ticket (`pushedSha`, `pushedBase`) in the same transaction that marks its outbox row `done`.
 5. **Open** a draft pull request (or adopt the one the branch already has). Its body is generated from the tasks'
    summaries with local paths removed (`file://` links, the worktree, the repository and the home folder in every
    spelling: either slash, the 8.3 short form such as `C:\Users\NOVASE~1`, and WSL's `/mnt/c/...`). In the manual tier the

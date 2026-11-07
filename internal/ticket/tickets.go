@@ -485,7 +485,8 @@ func (s *Service) Ticket(ctx context.Context, id string) (api.Ticket, error) {
 	}
 	out := api.Ticket{TicketSummary: t.summary(), Slug: t.Slug, Base: t.Base, BaseSha: t.BaseSha, Env: t.Env,
 		Outbox: outbox, ChecksFix: t.ChecksFix, DropReason: t.DropReason, WorktreeRemoved: t.WorktreeRemoved,
-		CleanedAt: api.FormatTime(t.CleanedAt), Tasks: []api.TicketTask{}, Gates: []api.TicketGate{}, Log: logs}
+		CleanedAt: api.FormatTime(t.CleanedAt), Exposed: t.Exposed, Tasks: []api.TicketTask{}, Gates: []api.TicketGate{},
+		Log: logs}
 	for _, tid := range t.TaskIDs {
 		d, err := s.o.Tasks.Get(ctx, tid)
 		if err != nil {

@@ -83,22 +83,22 @@ func slimIssueOf(i *api.Issue) slimIssue {
 
 // slimTicket is the old ticket summary: the checks only as their state and the failing check names.
 type slimTicket struct {
-	ID             string          `json:"id"`
-	RepoID         string          `json:"repoId"`
-	IssueKey       string          `json:"issueKey"`
-	Issue          api.TicketIssue `json:"issue"`
-	Branch         string          `json:"branch"`
-	Worktree       string          `json:"worktree"`
-	Status         string          `json:"status"`
-	TaskIDs        []string        `json:"taskIds"`
-	MeetingID      string          `json:"meetingId,omitempty"`
-	PR             *api.TicketPR   `json:"pr,omitempty"`
-	UpdatedAt      string          `json:"updatedAt"`
-	Error          string          `json:"error,omitempty"`
+	ID        string          `json:"id"`
+	RepoID    string          `json:"repoId"`
+	IssueKey  string          `json:"issueKey"`
+	Issue     api.TicketIssue `json:"issue"`
+	Branch    string          `json:"branch"`
+	Worktree  string          `json:"worktree"`
+	Status    string          `json:"status"`
+	TaskIDs   []string        `json:"taskIds"`
+	MeetingID string          `json:"meetingId,omitempty"`
+	PR        *api.TicketPR   `json:"pr,omitempty"`
+	UpdatedAt string          `json:"updatedAt"`
+	Error     string          `json:"error,omitempty"`
 	// Refused is why the last pr stopped before pushing (needsAttention push_refused).
-	Refused        string          `json:"refused,omitempty"`
-	Checks         *slimChecks     `json:"checks,omitempty"`
-	NeedsAttention string          `json:"needsAttention,omitempty"`
+	Refused        string      `json:"refused,omitempty"`
+	Checks         *slimChecks `json:"checks,omitempty"`
+	NeedsAttention string      `json:"needsAttention,omitempty"`
 }
 
 type slimChecks struct {

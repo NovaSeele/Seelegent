@@ -217,6 +217,12 @@ func (s *Service) runStepWith(ctx context.Context, ticketID, kind string, args m
 			}
 		} else {
 			e.Status, e.Result = api.OutboxDone, result
+			if sha, _ := result["sha"].(string); kind == api.OutboxPush && sha != "" {
+				// What the remote now holds is recorded with the step itself: a pushed commit the ticket does not
+				// know would make the next push look diverged.
+				t.PushedSha = sha
+				t.PushedBase, _ = result["base"].(string)
+			}
 		}
 		if e.Result == nil {
 			e.Result = map[string]any{}

@@ -270,23 +270,25 @@ type ticketRec struct {
 	BaseSha  string          `json:"baseSha,omitempty"`
 	// PushedSha is the commit Seelegent last pushed to the ticket branch (its own commit, never the worker's
 	// history) and PushedBase the base commit it built on.
-	PushedSha       string             `json:"pushedSha,omitempty"`
-	PushedBase      string             `json:"pushedBase,omitempty"`
-	Worktree        string             `json:"worktree"`
-	Status          string             `json:"status"`
-	TaskIDs         []string           `json:"taskIds"`
-	MeetingID       string             `json:"meetingId,omitempty"`
-	PR              *api.TicketPR      `json:"pr,omitempty"`
-	Checks          *api.TicketChecks  `json:"checks,omitempty"`
-	ChecksFix       *api.ChecksFix     `json:"checksFix,omitempty"`
-	Env             *api.WorktreeEnv   `json:"env,omitempty"`
-	Error           string             `json:"error,omitempty"`
-	Refusal         *api.TicketRefusal `json:"refusal,omitempty"`
-	DropReason      string             `json:"dropReason,omitempty"`
-	WorktreeRemoved bool               `json:"worktreeRemoved,omitempty"`
-	CleanedAt       time.Time          `json:"cleanedAt,omitzero"`
-	CreatedAt       time.Time          `json:"createdAt"`
-	UpdatedAt       time.Time          `json:"updatedAt"`
+	PushedSha  string             `json:"pushedSha,omitempty"`
+	PushedBase string             `json:"pushedBase,omitempty"`
+	Worktree   string             `json:"worktree"`
+	Status     string             `json:"status"`
+	TaskIDs    []string           `json:"taskIds"`
+	MeetingID  string             `json:"meetingId,omitempty"`
+	PR         *api.TicketPR      `json:"pr,omitempty"`
+	Checks     *api.TicketChecks  `json:"checks,omitempty"`
+	ChecksFix  *api.ChecksFix     `json:"checksFix,omitempty"`
+	Env        *api.WorktreeEnv   `json:"env,omitempty"`
+	Error      string             `json:"error,omitempty"`
+	Refusal    *api.TicketRefusal `json:"refusal,omitempty"`
+	// Exposed is what the branch the previous version pushed already held on GitHub when Seelegent adopted it.
+	Exposed         []api.ScanFinding `json:"exposed,omitempty"`
+	DropReason      string            `json:"dropReason,omitempty"`
+	WorktreeRemoved bool              `json:"worktreeRemoved,omitempty"`
+	CleanedAt       time.Time         `json:"cleanedAt,omitzero"`
+	CreatedAt       time.Time         `json:"createdAt"`
+	UpdatedAt       time.Time         `json:"updatedAt"`
 }
 
 // derived are the statuses that follow the ticket's tasks.
