@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -102,12 +101,9 @@ func checkURL(raw string) error {
 	return fmt.Errorf("%w: %s", ErrInsecureURL, u.Redacted())
 }
 
+// loopback accepts exactly the names the installers accept for a local test server: localhost, 127.0.0.1 and ::1.
 func loopback(host string) bool {
-	if strings.EqualFold(host, "localhost") {
-		return true
-	}
-	ip := net.ParseIP(host)
-	return ip != nil && ip.IsLoopback()
+	return strings.EqualFold(host, "localhost") || host == "127.0.0.1" || host == "::1"
 }
 
 // NewHTTPClient returns a client that refuses redirects to addresses checkURL does not accept and stops after a few
