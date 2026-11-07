@@ -15,6 +15,7 @@ with owner-only permissions when a command starts, never earlier.
 | `profiles/<id>/`   | one isolated CLI profile per worker account (same place as the old version)            |
 | `profiles/<id>/home/` | the home directory the worker CLI sees, with links into your real home (`linkIntoProfiles`) |
 | `profiles/<id>/seelegent-key` | API key of an API-key account: a DPAPI blob on Windows, a 0600 file elsewhere; never inside `home/` |
+| `github/token`     | the GitHub token set from the dashboard ([github.md](github.md)): a DPAPI blob for the current Windows user on Windows; elsewhere **plain text** in a 0600 file, readable by any program running as you (see below) |
 | `logs/`            | `daemon.log` and its rotated copies `daemon.log.1` … (JSON lines, secrets masked)      |
 | `run/daemon.lock`  | single-instance lock of the daemon                                                     |
 | `run/daemon.port`  | port of the running daemon (removed when it stops cleanly; see [mcp.md](mcp.md))       |
@@ -23,6 +24,11 @@ with owner-only permissions when a command starts, never earlier.
 | `tasks/<id>/t<turn>-a<attempt>/` | files of one worker attempt: `launch/` (launch spec, stream, stderr, exit record), the prompt of CLIs that read it on standard input, a long agy brief |
 | `contests/`        | the winners' patches (`<id>.<label>.patch`) and temporary indexes of contests ([team.md](team.md)) |
 | `worktrees/contests/<id>/<label>/` | the worktree of one contest variant. Once its task stops, its content is committed inside it and the folder removed (never forced); a removal that fails is retried at the next start |
+
+Outside Windows, `profiles/<id>/seelegent-key` and `github/token` are plain text protected only by their 0600 mode:
+there is no OS key store Seelegent uses there. Anyone who can read your files (a program running as you, root, a
+backup that does not keep modes) can read them. Prefer a fine-grained GitHub token limited to the repositories
+Seelegent works on, or the `gh` CLI, whose own credential store Seelegent then uses instead of a token.
 
 ## Environment variables
 

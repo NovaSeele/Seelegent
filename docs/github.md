@@ -37,8 +37,10 @@ to `http` redirect would send the token in clear).
 
 **The token** is set and removed only from the dashboard (`PUT/DELETE /github/token` answer only the dashboard's
 own requests, as the automation confirmation does, see [automations.md](automations.md)); no MCP tool or command
-can set it. It is stored in one private file (`<home>/github/token`: a DPAPI blob for the current Windows user, a
-0600 file elsewhere) and shown only as its last four characters. It is masked in every log line, error message,
+can set it. It is stored in one private file (`<home>/github/token`): a DPAPI blob for the current Windows user on Windows;
+elsewhere the token in plain text in a 0600 file, which any program running as the same user can read (no OS key
+store is used; a fine-grained token limited to the needed repositories, or the `gh` CLI, limits what a leak gives).
+It is shown only as its last four characters. It is masked in every log line, error message,
 ticket log and outbox row (`github.Redact`: the stored token, anything shaped like a GitHub token, `user:pass@` in
 URLs, `Authorization` values).
 
