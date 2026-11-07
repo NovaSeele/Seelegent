@@ -438,8 +438,10 @@ func (s *Service) validate(r *rec) error {
 	if r.Timezone == "" {
 		r.Timezone = "local"
 	}
-	if _, err := Zone(r.Timezone); err != nil {
+	if _, ok, err := NextRun(r.Schedule, r.Timezone, s.now()); err != nil {
 		return err
+	} else if !ok {
+		return invalidf("the schedule never runs: no date in the next %d years matches it", searchYears)
 	}
 	r.Member, r.Model = strings.TrimSpace(r.Member), strings.TrimSpace(r.Model)
 	if len(r.Member) > 100 || len(r.Model) > 200 {

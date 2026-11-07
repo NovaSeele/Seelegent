@@ -197,6 +197,8 @@ func TestCreateValidation(t *testing.T) {
 		{Prompt: "x", Cwd: "relative", Schedule: api.Schedule{Every: api.EveryDaily}},
 		{Prompt: "x", Cwd: filepath.Join(f.dir, "missing"), Schedule: api.Schedule{Every: api.EveryDaily}},
 		{Prompt: "x", Cwd: f.dir, Schedule: api.Schedule{Cron: "* * *"}},
+		{Prompt: "x", Cwd: f.dir, Schedule: api.Schedule{Cron: "61 * * * *"}},
+		{Prompt: "x", Cwd: f.dir, Schedule: api.Schedule{Cron: "0 6 31 2 *"}},
 		{Prompt: "x", Cwd: f.dir, Schedule: api.Schedule{Every: api.EveryDaily}, Timezone: "Nowhere/City"},
 		{Prompt: "x", Cwd: f.dir, Schedule: api.Schedule{Every: api.EveryDaily}, Backend: "gpt"},
 		{Prompt: "x", Cwd: f.dir, Schedule: api.Schedule{Every: api.EveryDaily},
