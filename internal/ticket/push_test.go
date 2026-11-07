@@ -220,6 +220,67 @@ func TestRefusalGoesWithNewWorkOrDrop(t *testing.T) {
 	}
 }
 
+// TestMergedPRChecksReadOnce: the poll that sees a pull request merged reads its checks one last time (the ticket
+// keeps the checks of the merged head, not the pending ones an earlier poll saw); the done ticket is never polled
+// again.
+func TestMergedPRChecksReadOnce(t *testing.T) {
+	e := setupFlow(t)
+	ctx := t.Context()
+	tk, task := readyTicket(t, e, "Merge me")
+	write(t, filepath.Join(tk.Worktree, "src", "cache.go"), "package src\n\nvar ttl = 7\n")
+	e.tasks.accept(task, "ok")
+	waitTicket(t, e.s, tk.ID, api.TicketReady)
+	setChecks := func(status, conclusion string) {
+		e.gh.mu.Lock()
+		e.gh.checks = `{"check_runs":[{"id":5,"name":"test","status":"` + status + `","conclusion":` + conclusion +
+			`,"html_url":"` + e.gh.srv.URL + `/octo/demo/actions/runs/1/job/5","app":{"slug":"github-actions"}}]}`
+		e.gh.mu.Unlock()
+	}
+	setChecks("in_progress", "null")
+	if _, err := e.s.PR(ctx, tk.ID, api.PRRequest{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.s.Poll(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := e.s.Ticket(ctx, tk.ID); got.Checks == nil || got.Checks.State != api.ChecksPending {
+		t.Fatalf("checks while open = %+v", got.Checks)
+	}
+	// Merged on GitHub after CI passed: one last read.
+	setChecks("completed", `"success"`)
+	e.gh.mu.Lock()
+	e.gh.prs[0]["state"], e.gh.prs[0]["merged"] = "closed", true
+	e.gh.mu.Unlock()
+	if err := e.s.Poll(ctx); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := e.s.Ticket(ctx, tk.ID)
+	if got.Status != api.TicketDone || got.PR.State != "merged" || got.Checks == nil ||
+		got.Checks.State != api.ChecksSuccess {
+		t.Fatalf("after the merge: %s, pr %+v, checks %+v", got.Status, got.PR, got.Checks)
+	}
+	// Never polled again.
+	countChecks := func() int {
+		e.gh.mu.Lock()
+		defer e.gh.mu.Unlock()
+		n := 0
+		for _, p := range e.gh.paths {
+			if strings.Contains(p, "/check-runs") {
+				n++
+			}
+		}
+		return n
+	}
+	before := countChecks()
+	setChecks("completed", `"failure"`)
+	if err := e.s.Poll(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := e.s.Ticket(ctx, tk.ID); countChecks() != before || got.Checks.State != api.ChecksSuccess {
+		t.Fatalf("a done ticket was polled again: %d -> %d reads, checks %+v", before, countChecks(), got.Checks)
+	}
+}
+
 // brokenCatFile is git with a cat-file that fails: the scan cannot read what it must check.
 type brokenCatFile struct{ Git }
 

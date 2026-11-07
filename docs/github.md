@@ -178,7 +178,10 @@ marker first, and the comment is posted only when it is not there, so it never a
 
 While a pull request is open its head commit's check runs and commit statuses are read on every poll. The ticket
 shows `checks.state` (`pending`, `success`, `failure`, `unknown`) and `needsAttention: "checks_failed"` while the
-open pull request's checks failed (conclusions `failure`, `timed_out`, `startup_failure`, `error`).
+open pull request's checks failed (conclusions `failure`, `timed_out`, `startup_failure`, `error`). The poll that
+finds the pull request merged or closed reads the checks of its final head one last time; the ticket is `done` then
+and is not polled again, so it keeps the checks of the code that was merged (checks still running then stay
+`pending`).
 
 *Retry* (`POST /github/tickets/{id}/retry`, body as add-task with the prompt optional) starts the task of a
 `failed` ticket again, in its worktree, optionally with another member, backend or model: its first task or
