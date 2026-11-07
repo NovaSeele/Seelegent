@@ -39,7 +39,7 @@ var wantTools = []struct {
 		"wait_seconds wake_on_blocked"},
 	// followup requires only task_id: force makes message optional (old C-B8).
 	{"followup", []string{"task_id"}, "task_id message profile model effort task_ids gate lane force_lane allow_git " +
-		"verify wait_seconds wake_on_blocked provider force"},
+		"verify wait_seconds wake_on_blocked provider force member"},
 	{"wait", []string{"task_ids"}, "task_ids wait_seconds any wake_on_blocked"},
 	{"review", []string{"task_id", "verdict"}, "task_id verdict notes answer_objection"},
 	{"cancel", []string{"task_id"}, "task_id wait_seconds"},
@@ -736,14 +736,14 @@ func TestWorkerGuard(t *testing.T) {
 	if n := calls.Load(); n != 3 {
 		t.Fatalf("read calls reached the daemon %d times, want 3", n)
 	}
-	// A read action of a tool that is not built yet gets the not-available error, not the refusal.
-	if msg := fails(t, cs, "meeting", map[string]any{"action": "status"}); !strings.Contains(msg, "not available") {
+	// A read action is checked like any call, not refused.
+	if msg := fails(t, cs, "meeting", map[string]any{"action": "status"}); !strings.Contains(msg, "meeting_id is required") {
 		t.Fatalf("meeting status = %s", msg)
 	}
 }
 
 // TestGateOptions: gate (commands, true, false), lane (paths, false), verify and force_lane reach the daemon in both
-// delegate and followup; member on delegate is still refused before any call.
+// delegate and followup, and so does member.
 func TestGateOptions(t *testing.T) {
 	var calls atomic.Int32
 	st, c := newStub(t, map[string]http.HandlerFunc{
@@ -773,6 +773,7 @@ func TestGateOptions(t *testing.T) {
 			`"gateCommands":["go vet ./...","go test ./..."]`},
 		{"gate true", map[string]any{"gate": true}, `"gate":true`},
 		{"gate false", map[string]any{"gate": false}, `"gate":false`},
+		{"member", map[string]any{"member": "m1"}, `"member":"m1"`},
 	}
 	for _, opt := range options {
 		for tool, key := range map[string]string{"delegate": "POST /tasks", "followup": "POST /tasks/t1/followup"} {
@@ -788,13 +789,8 @@ func TestGateOptions(t *testing.T) {
 			}
 		}
 	}
-	before := calls.Load()
-	res := callTool(t, cs, "delegate", map[string]any{"prompt": "p", "cwd": `C:\p`, "member": "m1"})
-	if !res.IsError || !strings.Contains(text(res, 0), "leave member out") {
-		t.Errorf("delegate with member = %s", text(res, 0))
-	}
-	if n := calls.Load(); n != before {
-		t.Fatalf("member reached the daemon")
+	if calls.Load() == 0 {
+		t.Fatal("no call reached the daemon")
 	}
 }
 

@@ -21,7 +21,8 @@ const (
 	maxCancel     = 60
 )
 
-// handlers maps tool names to their functions (tools a later milestone builds are not listed).
+// handlers maps tool names to their functions (tools a later milestone builds are not listed; team.go has the
+// milestone 14 tools).
 func (s *Server) handlers() map[string]toolFunc {
 	return map[string]toolFunc{
 		"delegate": s.delegate,
@@ -34,6 +35,11 @@ func (s *Server) handlers() map[string]toolFunc {
 		"memory":   s.memory,
 		"profiles": s.profiles,
 		"proof":    s.proof,
+		"members":  s.members,
+		"consult":  s.consult,
+		"notes":    s.notes,
+		"meeting":  s.meeting,
+		"contest":  s.contest,
 	}
 }
 
@@ -58,12 +64,12 @@ type delegateArgs struct {
 	Verify          optBool         `json:"verify"`
 	After           strList         `json:"after"`
 	AfterMode       string          `json:"after_mode"`
-	Variants        json.RawMessage `json:"variants"`
+	Variants        optNum          `json:"variants"`
 	VariantSpecs    json.RawMessage `json:"variant_specs"`
 	WaitSeconds     optNum          `json:"wait_seconds"`
 	WakeOnBlocked   optBool         `json:"wake_on_blocked"`
-	DeadlineMinutes json.RawMessage `json:"deadline_minutes"`
-	Judge           json.RawMessage `json:"judge"`
+	DeadlineMinutes optNum          `json:"deadline_minutes"`
+	Judge           judgeArg        `json:"judge"`
 }
 
 // given reports whether a raw argument was passed with a value.
@@ -76,9 +82,6 @@ func (s *Server) delegate(ctx context.Context, k *call) (result, error) {
 	var a delegateArgs
 	if err := k.decode(&a); err != nil {
 		return result{}, err
-	}
-	if given(a.Variants) || given(a.VariantSpecs) {
-		return result{}, &ops.UnavailableError{What: "contests (delegate with variants)"}
 	}
 	if strings.TrimSpace(a.Prompt) == "" {
 		return result{}, errors.New("prompt is required")
@@ -94,11 +97,7 @@ func (s *Server) delegate(ctx context.Context, k *call) (result, error) {
 	if err != nil {
 		return result{}, err
 	}
-	if a.Member != "" {
-		return result{}, &ops.UnavailableError{What: "department members (member)",
-			Detail: "leave member out and pass backend and model instead"}
-	}
-	req := api.DelegateRequest{Prompt: a.Prompt, Title: a.Title, Cwd: cwd, Mode: mode, Model: a.Model,
+	req := api.DelegateRequest{Prompt: a.Prompt, Title: a.Title, Cwd: cwd, Mode: mode, Model: a.Model, Member: a.Member,
 		Effort: a.Effort, Backend: a.Backend, Provider: a.Provider, Profile: a.Profile, After: a.After,
 		AfterMode: a.AfterMode, AllowGit: a.AllowGit.or(false), Session: s.session(), Verify: a.Verify.ptr(),
 		ForceLane: a.ForceLane.or(false)}
@@ -109,6 +108,9 @@ func (s *Server) delegate(ctx context.Context, k *call) (result, error) {
 		req.Spec = &api.SpecRequest{Dir: a.Spec, TaskIDs: a.TaskIDs}
 	case len(a.TaskIDs) > 0:
 		return result{}, errors.New("task_ids needs spec (the Spec Kit feature folder they come from)")
+	}
+	if a.Variants.set || given(a.VariantSpecs) {
+		return s.startContest(ctx, k, &a, req)
 	}
 	c, err := k.client(ctx)
 	if err != nil {
@@ -154,6 +156,7 @@ type followupArgs struct {
 	WakeOnBlocked optBool `json:"wake_on_blocked"`
 	Provider      *string `json:"provider"`
 	Force         optBool `json:"force"`
+	Member        string  `json:"member"`
 }
 
 func (s *Server) followup(ctx context.Context, k *call) (result, error) {
@@ -187,7 +190,7 @@ func (s *Server) followup(ctx context.Context, k *call) (result, error) {
 	}
 	req := api.FollowupRequest{Message: a.Message, Model: a.Model, Effort: a.Effort, TaskIDs: a.TaskIDs,
 		Profile: a.Profile, AllowGit: a.AllowGit.ptr(), Force: a.Force.or(false), Verify: a.Verify.ptr(),
-		ForceLane: a.ForceLane.or(false)}
+		ForceLane: a.ForceLane.or(false), Member: a.Member}
 	req.Gate, req.GateCommands = a.Gate.request()
 	req.Lane, req.NoLane = a.Lane.paths, a.Lane.off
 	if _, err := c.Followup(ctx, a.TaskID, req); err != nil {
@@ -280,15 +283,15 @@ func (s *Server) review(ctx context.Context, k *call) (result, error) {
 	if a.TaskID == "" || a.Verdict == "" {
 		return result{}, errors.New("task_id and verdict (accepted or rejected) are required")
 	}
-	notes := a.Notes
-	if a.AnswerObjection != nil && strings.TrimSpace(*a.AnswerObjection) != "" {
-		notes = strings.TrimSpace(notes + "\n\nAnswer to the objection: " + *a.AnswerObjection)
+	answer := ""
+	if a.AnswerObjection != nil {
+		answer = strings.TrimSpace(*a.AnswerObjection)
 	}
 	c, err := k.client(ctx)
 	if err != nil {
 		return result{}, err
 	}
-	sum, err := c.Review(ctx, a.TaskID, api.ReviewRequest{Verdict: a.Verdict, Notes: notes})
+	sum, err := c.Review(ctx, a.TaskID, api.ReviewRequest{Verdict: a.Verdict, Notes: a.Notes, AnswerObjection: answer})
 	if err != nil {
 		return result{}, err
 	}

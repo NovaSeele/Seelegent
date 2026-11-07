@@ -12,8 +12,9 @@ import (
 // toolsJSON is the tool list of the old MCP server (src/mcp.js TOOLS, as its tools/list printed it): names,
 // descriptions and input schemas verbatim, because leads, the lead skill and host configurations rely on them.
 // Two fixes of the old list are applied: followup requires only task_id (force makes message optional, old C-B8)
-// and issues declares wake_on_blocked, which its handler reads (old C-B20). The MODEL description names the agy
-// tier models through {{tier.<name>}} placeholders filled from the settings at start.
+// and issues declares wake_on_blocked, which its handler reads (old C-B20). followup also takes member (milestone
+// 14). The MODEL description names the agy tier models through {{tier.<name>}} placeholders filled from the
+// settings at start.
 //
 //go:embed tools.json
 var toolsJSON []byte
