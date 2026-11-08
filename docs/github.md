@@ -146,7 +146,9 @@ the repository has none). The worker's commits stay in the local worktree.
    `refusal {reason, findings, branch, commits, subjects, compareUrl, cause, detail, message, at}` and
    `needsAttention: "push_refused"`,
    so the dashboard explains it in the reader's language with the next step for each file; `message` is the English
-   text the lead's tools show. The next pr clears it, and so does a new task in the ticket.
+   text the lead's tools show. The next pr clears it, and so do a new task in the ticket, a followup that makes
+   one of its tasks run again (the ticket is `working`) and a drop; the ticket's log keeps it. A refusal message kept
+   as the ticket's `error` goes the same way.
 3. **Commit** exactly the uncommitted files git does not ignore, when there are any, in the worktree.
 4. **Push** Seelegent's commit: `commit-tree` of the scanned tree (checked against the worktree's tree), then
    `push origin <sha>:refs/heads/<branch>` with no hooks (`core.hooksPath` set to the null device), no prompts
@@ -154,6 +156,14 @@ the repository has none). The worker's commits stay in the local worktree.
    read again; a branch that changed meanwhile is refused as above. The push runs on the daemon's own context with
    a 5 minute limit, not the request's: a caller that goes away does not cut it off half way. The commit it sent is
    recorded on the ticket (`pushedSha`, `pushedBase`) in the same transaction that marks its outbox row `done`.
+   In the `token` tier the push, and the `ls-remote` and `fetch` before it, sign in with the stored token (old
+   D18): when origin's push URL is an `https` URL of the repository's GitHub host (`http` only on loopback), that
+   one git command gets an `Authorization` header for that host only, through `GIT_CONFIG_COUNT`/`KEY`/`VALUE` in
+   its environment. The token is never in a command line and never written to a git config file; an extra header
+   the user's config sets for the same host is dropped for that command. An `ssh` remote, a remote on another host
+   and the `gh` and `manual` tiers sign in with the user's own git credentials (credential helper, SSH key). A push
+   git cannot sign in for fails with the cause `git_auth`, and the dashboard says to set up git's credentials (for
+   example `gh auth setup-git`) or check the token.
 5. **Open** a draft pull request (or adopt the one the branch already has). Its body is generated from the tasks'
    summaries with local paths removed (`file://` links, the worktree, the repository and the home folder in every
    spelling: either slash, the 8.3 short form such as `C:\Users\JOHNSM~1`, and WSL's `/mnt/c/...`). In the manual tier the
@@ -165,7 +175,11 @@ Each step is a row of the **outbox**, written as `running` before it starts and 
 D6: records are SQLite rows, and a row that cannot be read is an error, never an empty list). A row still `running`
 when the daemon starts is `unknown`; before anything is retried it is checked against git and GitHub (is the commit
 Seelegent made on the remote branch, does the pull request exist, does the issue hold the comment's marker) and
-marked done when it had happened.
+marked done when it had happened. A failed row keeps git's or GitHub's English text in `error` (for the lead's
+tools) and its cause in `cause` (`git_auth`, `git_rejected`, `git`, `network`, `github_auth`, `github_rate_limited`,
+`github_forbidden`, `github_not_found`, `github_manual`, `github`, `other`); the ticket's `error`, the checks' `error` and a repository's
+`syncError` carry the same cause (`errorCause`, `syncErrorCause`). The dashboard explains each from its cause in the
+reader's language and shows the English text only behind a "Seelegent said" disclosure.
 
 *Comment* (`POST /github/tickets/{id}/comment`) posts on the GitHub issue with the local paths and anything
 token-like removed. Each comment ends with a hidden line `<!-- seelegent:<outbox entry id> -->`. Posting the same
@@ -176,7 +190,10 @@ marker first, and the comment is posted only when it is not there, so it never a
 
 While a pull request is open its head commit's check runs and commit statuses are read on every poll. The ticket
 shows `checks.state` (`pending`, `success`, `failure`, `unknown`) and `needsAttention: "checks_failed"` while the
-open pull request's checks failed (conclusions `failure`, `timed_out`, `startup_failure`, `error`).
+open pull request's checks failed (conclusions `failure`, `timed_out`, `startup_failure`, `error`). The poll that
+finds the pull request merged or closed reads the checks of its final head one last time; the ticket is `done` then
+and is not polled again, so it keeps the checks of the code that was merged (checks still running then stay
+`pending`).
 
 *Retry* (`POST /github/tickets/{id}/retry`, body as add-task with the prompt optional) starts the task of a
 `failed` ticket again, in its worktree, optionally with another member, backend or model: its first task or
@@ -185,8 +202,10 @@ leaves it `failed` with the new error. A cause with a code is kept as `failure {
 the member was deleted; `member_disabled`: it is turned off) for the dashboard to explain; `error` stays the
 English text. A ticket remembers who its last task was asked for (`asked {member, backend, model}`): a retry or a
 new task without a member or backend goes to them again ("as before"), so a ticket whose member is gone needs
-another member or a backend, and the dashboard makes the lead pick one. A ticket whose worktree could not be made cannot be retried: drop it and
-decide the issue again.
+another member or a backend. A retry as before of a ticket with such a `failure` is refused before anything
+changes: `409 bad_state` with `details` `{reason: member_missing | member_disabled, member}` (the lead names the
+member again once it is back, or picks another); the dashboard makes the lead pick one. A ticket whose worktree
+could not be made cannot be retried: drop it and decide the issue again.
 
 *Fix checks* (`POST /github/tickets/{id}/fix-checks`) starts a task in the ticket's worktree with the failing
 checks' names, their summaries and the tail of each GitHub Actions job log (at most 4,000 characters, ANSI codes

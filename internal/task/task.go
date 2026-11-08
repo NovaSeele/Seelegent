@@ -139,6 +139,8 @@ type Task struct {
 	After      []string `json:"after,omitempty"`
 	AfterMode  string   `json:"afterMode,omitempty"`
 	DepsReason string   `json:"depsReason,omitempty"`
+	// DepsBlock names the prerequisite that blocks the task (blocked_deps), for the attention flag's params.
+	DepsBlock *api.AttentionParams `json:"depsBlock,omitempty"`
 	// DepsContext is the context from the prerequisites, fixed when the task starts (brief.DepsContext).
 	DepsContext string `json:"depsContext,omitempty"`
 	// Baseline lists the files (absolute paths) that already had uncommitted changes when the task's first turn

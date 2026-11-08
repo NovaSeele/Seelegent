@@ -63,7 +63,9 @@ func hookDecision(ctx context.Context, kind string, stdin io.Reader) guard.Resul
 	if strings.TrimSpace(h.Command) == "" {
 		return guard.Result{}
 	}
-	return h.Checker(gitAlias(ctx, os.Environ(), h.Cwd)).Command(h.Command, h.Shells...)
+	c := h.Checker(gitAlias(ctx, os.Environ(), h.Cwd))
+	c.Config = fetchConfig(ctx, os.Environ(), h.Cwd)
+	return c.Command(h.Command, h.Shells...)
 }
 
 // gitAlias returns a resolver that reads git aliases with `git config --get alias.<name>` in dir.
@@ -94,6 +96,48 @@ func gitAlias(ctx context.Context, env []string, dir string) func(string) (strin
 	}
 }
 
+// fetchConfig returns a reader of the fetch settings (guard.FetchConfigPattern) of the repository a git command
+// works in: `git <globals> config --null --get-regexp` run in dir. No match (exit code 1) is no settings.
+func fetchConfig(ctx context.Context, env []string, dir string) func(globals []string) ([]guard.ConfigEntry, error) {
+	bin := gitx.NewBinary(func() []string { return env }, nil)
+	return func(globals []string) ([]guard.ConfigEntry, error) {
+		var out []byte
+		err := bin.Run(func(git string) error {
+			cctx, cancel := context.WithTimeout(ctx, aliasTimeout)
+			defer cancel()
+			args := append(append([]string{"-c", "core.fsmonitor=false"}, globals...),
+				"config", "--null", "--get-regexp", guard.FetchConfigPattern)
+			c := exec.CommandContext(cctx, git, args...)
+			if dir != "" {
+				if st, err := os.Stat(dir); err == nil && st.IsDir() {
+					c.Dir = dir
+				}
+			}
+			c.Env = gitx.Env(env, "GIT_OPTIONAL_LOCKS=0", "GIT_TERMINAL_PROMPT=0")
+			platform.HideWindow(c)
+			var err error
+			out, err = c.Output()
+			return err
+		})
+		var ee *exec.ExitError
+		if errors.As(err, &ee) && ee.ExitCode() == 1 {
+			return nil, nil
+		}
+		if err != nil {
+			return nil, err
+		}
+		var entries []guard.ConfigEntry
+		for _, rec := range strings.Split(string(out), "\x00") {
+			if rec == "" {
+				continue
+			}
+			key, value, _ := strings.Cut(rec, "\n")
+			entries = append(entries, guard.ConfigEntry{Key: key, Value: value})
+		}
+		return entries, nil
+	}
+}
+
 // gitShimArgs splits the arguments of `seelegent __git [--shim-dir=DIR] <git args>`, which the POSIX git shim runs.
 func gitShimArgs(args []string) (dir string, rest []string) {
 	if len(args) > 0 && strings.HasPrefix(args[0], "--shim-dir=") {
@@ -114,7 +158,8 @@ func runGitShim(ctx context.Context, shimDir string, args []string, stdin io.Rea
 	if shimDir != "" {
 		search = guard.WithoutDir(env, shimDir)
 	}
-	if r := (guard.Checker{Alias: gitAlias(ctx, search, "")}).Git(args); r.Deny {
+	check := guard.Checker{Alias: gitAlias(ctx, search, ""), Config: fetchConfig(ctx, search, "")}
+	if r := check.Git(args); r.Deny {
 		_, _ = fmt.Fprintln(stderr, r.Reason)
 		return 1
 	}

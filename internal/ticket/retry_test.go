@@ -37,9 +37,19 @@ func TestRetryFailedTicket(t *testing.T) {
 	}
 	id := list[0].ID
 
-	// "As before" (no member, no backend) is the same unknown member: failed again.
-	if _, err := e.s.Retry(ctx, id, api.TicketTaskRequest{}); err == nil {
-		t.Fatal("retry as before started a task with the unknown member")
+	// "As before" (no member, no backend) is the same unknown member: refused before anything changes, with the
+	// failure's code (F69).
+	before, _ := e.s.Ticket(ctx, id)
+	_, err = e.s.Retry(ctx, id, api.TicketTaskRequest{})
+	var fe *FailureError
+	if !errors.Is(err, ErrBadState) || !errors.As(err, &fe) || fe.APIDetails()["reason"] != api.FailureMemberMissing ||
+		fe.APIDetails()["member"] != unknownMember {
+		t.Fatalf("retry as before: %v", err)
+	}
+	if got, _ := e.s.Ticket(ctx, id); got.Status != api.TicketFailed || got.Failure == nil ||
+		len(got.Log) != len(before.Log) {
+		t.Fatalf("a refused retry changed the ticket: %+v, log %d -> %d", got.TicketSummary, len(before.Log),
+			len(got.Log))
 	}
 	// Again with the same unknown member: failed again, with the new error.
 	if _, err := e.s.Retry(ctx, id, api.TicketTaskRequest{TicketTaskOptions: api.TicketTaskOptions{

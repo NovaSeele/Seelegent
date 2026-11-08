@@ -2,6 +2,7 @@ package ticket
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"os"
 	"path/filepath"
@@ -10,7 +11,11 @@ import (
 
 	"github.com/NovaSeele/Seelegent/internal/api"
 	"github.com/NovaSeele/Seelegent/internal/gitx"
+	"github.com/NovaSeele/Seelegent/internal/task"
 )
+
+// taskNotice is the stream notice of a task that changed.
+func taskNotice(id string) task.Notice { return task.Notice{Kind: task.NoticeTask, TaskID: id} }
 
 // readyTicket connects the repository, starts a ticket for a local issue and returns it with its task.
 func readyTicket(t *testing.T, e *env, title string) (tk api.Ticket, taskID string) {
@@ -60,7 +65,7 @@ func TestPushNeverSendsWorkerHistory(t *testing.T) {
 	if err := os.Chmod(filepath.Join(e.repo, ".git", "hooks", "pre-push"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	tk, task := readyTicket(t, e, "Config")
+	tk, tid := readyTicket(t, e, "Config")
 	wt := tk.Worktree
 	aws := "AKIA" + "Z7Q4TESTCHECK2X9"
 	write(t, filepath.Join(wt, ".env"), "AWS="+aws+"\n")
@@ -73,7 +78,7 @@ func TestPushNeverSendsWorkerHistory(t *testing.T) {
 	write(t, filepath.Join(wt, "cfg.txt"), "token = none\n")
 	run(t, wt, "add", "-A")
 	run(t, wt, "commit", "-q", "-m", "fix")
-	e.tasks.accept(task, "ok")
+	e.tasks.accept(tid, "ok")
 	waitTicket(t, e.s, tk.ID, api.TicketReady)
 
 	tk, err := e.s.PR(ctx, tk.ID, api.PRRequest{})
@@ -122,12 +127,12 @@ func TestPushNeverSendsWorkerHistory(t *testing.T) {
 // the worker and still in the tree is refused like an uncommitted one, and nothing is pushed.
 func TestPushScanRefusesCommittedSecret(t *testing.T) {
 	e := setupFlow(t)
-	tk, task := readyTicket(t, e, "Keys")
+	tk, tid := readyTicket(t, e, "Keys")
 	write(t, filepath.Join(tk.Worktree, "deploy.key"), "x\n")
 	write(t, filepath.Join(tk.Worktree, "src", "cfg.go"), "package src\n\nconst k = \""+testToken+"\"\n")
 	run(t, tk.Worktree, "add", "-A")
 	run(t, tk.Worktree, "commit", "-q", "-m", "keys")
-	e.tasks.accept(task, "ok")
+	e.tasks.accept(tid, "ok")
 	waitTicket(t, e.s, tk.ID, api.TicketReady)
 	_, err := e.s.PR(t.Context(), tk.ID, api.PRRequest{})
 	var se *ScanError
@@ -163,6 +168,119 @@ func TestPushScanRefusesCommittedSecret(t *testing.T) {
 	}
 }
 
+// TestRefusalGoesWithNewWorkOrDrop: a refused pull request's refusal and its message leave the ticket when a task of
+// the ticket runs again (a followup on the same task: the worktree changes) and when the ticket is dropped; the log
+// keeps them.
+func TestRefusalGoesWithNewWorkOrDrop(t *testing.T) {
+	e := setupFlow(t)
+	ctx := t.Context()
+	tk, tid := readyTicket(t, e, "Keys again")
+	write(t, filepath.Join(tk.Worktree, "deploy.key"), "x\n")
+	e.tasks.accept(tid, "ok")
+	waitTicket(t, e.s, tk.ID, api.TicketReady)
+	refuse := func() {
+		t.Helper()
+		var se *ScanError
+		if _, err := e.s.PR(ctx, tk.ID, api.PRRequest{}); !errors.As(err, &se) {
+			t.Fatalf("pr = %v", err)
+		}
+		// A message kept as the error too (a refusal of an earlier kind): it must go with the refusal.
+		if _, err := e.s.updateTicket(ctx, tk.ID, func(_ *sql.Tx, r *ticketRec) error {
+			r.Error = "refusing to push: an earlier refusal"
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	refuse()
+
+	// A followup on the same task: the ticket works again and the refusal goes.
+	e.tasks.mu.Lock()
+	d := e.tasks.tasks[tid]
+	d.Status, d.Review = api.StatusRunning, nil
+	d.Turns = append(d.Turns, api.Turn{N: 2, Message: "remove the key", Status: "running"})
+	e.tasks.mu.Unlock()
+	e.tasks.bus.Publish(taskNotice(tid))
+	got := waitTicket(t, e.s, tk.ID, api.TicketWorking)
+	rec, err := e.s.getTicket(ctx, tk.ID)
+	if err != nil || rec.Refusal != nil || got.Error != "" {
+		t.Fatalf("after a followup: refusal %+v, error %q, %v", rec.Refusal, got.Error, err)
+	}
+	e.tasks.accept(tid, "still there")
+	waitTicket(t, e.s, tk.ID, api.TicketReady)
+	refuse()
+
+	// Dropped: nothing of the refusal is left to show, the log still has it.
+	got, err = e.s.Drop(ctx, tk.ID, api.DropRequest{Reason: "not now"})
+	if err != nil || got.Refusal != nil || got.Error != "" || !hasLog(got, "scan_refused") {
+		t.Fatalf("dropped = refusal %+v, error %q, %v", got.Refusal, got.Error, err)
+	}
+	if rec, err := e.s.getTicket(ctx, tk.ID); err != nil || rec.Refusal != nil || rec.Error != "" {
+		t.Fatalf("stored after the drop: %+v %q %v", rec.Refusal, rec.Error, err)
+	}
+}
+
+// TestMergedPRChecksReadOnce: the poll that sees a pull request merged reads its checks one last time (the ticket
+// keeps the checks of the merged head, not the pending ones an earlier poll saw); the done ticket is never polled
+// again.
+func TestMergedPRChecksReadOnce(t *testing.T) {
+	e := setupFlow(t)
+	ctx := t.Context()
+	tk, tid := readyTicket(t, e, "Merge me")
+	write(t, filepath.Join(tk.Worktree, "src", "cache.go"), "package src\n\nvar ttl = 7\n")
+	e.tasks.accept(tid, "ok")
+	waitTicket(t, e.s, tk.ID, api.TicketReady)
+	setChecks := func(status, conclusion string) {
+		e.gh.mu.Lock()
+		e.gh.checks = `{"check_runs":[{"id":5,"name":"test","status":"` + status + `","conclusion":` + conclusion +
+			`,"html_url":"` + e.gh.srv.URL + `/octo/demo/actions/runs/1/job/5","app":{"slug":"github-actions"}}]}`
+		e.gh.mu.Unlock()
+	}
+	setChecks("in_progress", "null")
+	if _, err := e.s.PR(ctx, tk.ID, api.PRRequest{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.s.Poll(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := e.s.Ticket(ctx, tk.ID); got.Checks == nil || got.Checks.State != api.ChecksPending {
+		t.Fatalf("checks while open = %+v", got.Checks)
+	}
+	// Merged on GitHub after CI passed: one last read.
+	setChecks("completed", `"success"`)
+	e.gh.mu.Lock()
+	e.gh.prs[0]["state"], e.gh.prs[0]["merged"] = "closed", true
+	e.gh.mu.Unlock()
+	if err := e.s.Poll(ctx); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := e.s.Ticket(ctx, tk.ID)
+	if got.Status != api.TicketDone || got.PR.State != "merged" || got.Checks == nil ||
+		got.Checks.State != api.ChecksSuccess {
+		t.Fatalf("after the merge: %s, pr %+v, checks %+v", got.Status, got.PR, got.Checks)
+	}
+	// Never polled again.
+	countChecks := func() int {
+		e.gh.mu.Lock()
+		defer e.gh.mu.Unlock()
+		n := 0
+		for _, p := range e.gh.paths {
+			if strings.Contains(p, "/check-runs") {
+				n++
+			}
+		}
+		return n
+	}
+	before := countChecks()
+	setChecks("completed", `"failure"`)
+	if err := e.s.Poll(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := e.s.Ticket(ctx, tk.ID); countChecks() != before || got.Checks.State != api.ChecksSuccess {
+		t.Fatalf("a done ticket was polled again: %d -> %d reads, checks %+v", before, countChecks(), got.Checks)
+	}
+}
+
 // brokenCatFile is git with a cat-file that fails: the scan cannot read what it must check.
 type brokenCatFile struct{ Git }
 
@@ -177,9 +295,9 @@ func (b brokenCatFile) Exec(ctx context.Context, dir string, opt gitx.ExecOption
 // committed or pushed unscanned.
 func TestPushRefusedWhenScanFails(t *testing.T) {
 	e := setupFlow(t)
-	tk, task := readyTicket(t, e, "Broken")
+	tk, tid := readyTicket(t, e, "Broken")
 	write(t, filepath.Join(tk.Worktree, "src", "cache.go"), "package src\n\nvar ttl = 3\n")
-	e.tasks.accept(task, "ok")
+	e.tasks.accept(tid, "ok")
 	waitTicket(t, e.s, tk.ID, api.TicketReady)
 	e.s.o.Git = brokenCatFile{e.s.o.Git}
 	_, err := e.s.PR(t.Context(), tk.ID, api.PRRequest{})
@@ -202,9 +320,9 @@ func TestPushRefusedWhenScanFails(t *testing.T) {
 func TestPushRemoteRules(t *testing.T) {
 	e := setupFlow(t)
 	ctx := t.Context()
-	tk, task := readyTicket(t, e, "Remote")
+	tk, tid := readyTicket(t, e, "Remote")
 	write(t, filepath.Join(tk.Worktree, "src", "cache.go"), "package src\n\nvar ttl = 7\n")
-	e.tasks.accept(task, "ok")
+	e.tasks.accept(tid, "ok")
 	waitTicket(t, e.s, tk.ID, api.TicketReady)
 	if _, err := e.s.PR(ctx, tk.ID, api.PRRequest{}); err != nil {
 		t.Fatal(err)
@@ -245,7 +363,8 @@ func TestPushRemoteRules(t *testing.T) {
 	// A base the remote does not have: the user's main has a commit that was never pushed.
 	write(t, filepath.Join(e.repo, "local.txt"), "not pushed\n")
 	run(t, e.repo, "add", "local.txt")
-	run(t, e.repo, "commit", "-q", "-m", "local only")
+	// Its subject carries a token-like string: the refusal keeps it redacted (F68).
+	run(t, e.repo, "commit", "-q", "-m", "local only ghp_"+strings.Repeat("Ab1", 10))
 	tk2, task2 := readyTicket(t, e, "Second")
 	write(t, filepath.Join(tk2.Worktree, "src", "cache.go"), "package src\n\nvar ttl = 9\n")
 	e.tasks.accept(task2, "ok")
@@ -259,7 +378,7 @@ func TestPushRemoteRules(t *testing.T) {
 	}
 	if got, _ := e.s.Ticket(ctx, tk2.ID); got.Refusal == nil || got.Refusal.Reason != api.RefusalBaseNotPushed ||
 		got.Refusal.Commits != 1 || got.Refusal.Branch != "main" || len(got.Refusal.Subjects) != 1 ||
-		got.Refusal.Subjects[0] != "local only" {
+		got.Refusal.Subjects[0] != "local only [REDACTED]" {
 		t.Fatalf("base refusal = %+v", got.Refusal)
 	}
 	// Once main is pushed, the pull request goes.
@@ -275,9 +394,9 @@ func TestPushRemoteRules(t *testing.T) {
 func TestPushAfterBaseMoved(t *testing.T) {
 	e := setupFlow(t)
 	ctx := t.Context()
-	tk, task := readyTicket(t, e, "Moved")
+	tk, tid := readyTicket(t, e, "Moved")
 	write(t, filepath.Join(tk.Worktree, "src", "cache.go"), "package src\n\nvar ttl = 11\n")
-	e.tasks.accept(task, "ok")
+	e.tasks.accept(tid, "ok")
 	waitTicket(t, e.s, tk.ID, api.TicketReady)
 	if _, err := e.s.PR(ctx, tk.ID, api.PRRequest{}); err != nil {
 		t.Fatal(err)

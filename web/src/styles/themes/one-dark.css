@@ -19,7 +19,7 @@
   --text-on-accent: #282c34;
   --accent: #77baf1;
   --accent-hover: #74baf2;
-  --accent-soft: rgba(97, 175, 239, 0.18);
+  --accent-soft: rgba(97, 175, 239, 0.16);
   --accent-border: rgba(97, 175, 239, 0.38);
   --status-queued-fg: #cbd5e1;
   --status-queued-bg: rgba(203, 213, 225, 0.14);

@@ -83,7 +83,7 @@ func (s *Service) adopt(ctx context.Context, t *ticketRec, plan *pushPlan) error
 func (s *Service) setRefusal(ctx context.Context, tx *sql.Tx, t *ticketRec, err error, msg string) {
 	rf := refusalOf(err, msg, api.FormatTime(s.o.Now()))
 	if rf == nil {
-		t.Error = msg
+		t.Error, t.ErrorCause = msg, errorCause(err)
 		s.logStep(ctx, tx, t.ID, "pr_refused", map[string]any{"error": msg})
 		return
 	}
@@ -419,8 +419,9 @@ func (s *Service) PR(ctx context.Context, id string, req api.PRRequest) (api.Tic
 			} else if tip != plan.tip {
 				return nil, divergedErr(t.Branch, plan.prev, tip)
 			}
-			_, err := s.git(pctx, t.Worktree, gitx.ExecOptions{PushBranch: t.Branch, Timeout: pushTimeout},
-				"push", "--porcelain", "origin", sha+":refs/heads/"+t.Branch)
+			// "origin" is plan.target, origin's push URL: its token (token tier) is set for this command only.
+			_, err := s.git(pctx, t.Worktree, gitx.ExecOptions{PushBranch: t.Branch, Timeout: pushTimeout,
+				Env: s.authEnv(pctx, plan.target)}, "push", "--porcelain", "origin", sha+":refs/heads/"+t.Branch)
 			// runStepWith records sha and base as the ticket's pushed commit in the transaction that finishes the step.
 			return map[string]any{"sha": sha, "base": plan.base}, err
 		}); err != nil {

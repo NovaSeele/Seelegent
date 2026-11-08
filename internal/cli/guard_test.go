@@ -211,6 +211,71 @@ func TestGitShimNoAutocorrect(t *testing.T) {
 	}
 }
 
+// TestGuardFetchConfig (review N1): the shim and the hook read the fetch refspecs of the repository's own
+// configuration, so a refspec that forces into the branches (written to .git/config by any means) refuses a plain
+// git fetch, while a normal remote still fetches and prunes.
+func TestGuardFetchConfig(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not installed")
+	}
+	root := t.TempDir()
+	t.Setenv("GIT_CONFIG_GLOBAL", filepath.Join(root, "no-global"))
+	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
+	run := func(dir string, args ...string) {
+		t.Helper()
+		c := exec.CommandContext(t.Context(), "git", append([]string{"-C", dir}, args...)...)
+		if b, err := c.CombinedOutput(); err != nil {
+			t.Fatalf("git %q: %v\n%s", args, err, b)
+		}
+	}
+	upstream, repo := filepath.Join(root, "upstream"), filepath.Join(root, "repo")
+	for _, dir := range []string{upstream, repo} {
+		run(root, "init", "-q", "-b", "main", dir)
+		run(dir, "config", "user.name", "T")
+		run(dir, "config", "user.email", "t@example.invalid")
+		run(dir, "config", "commit.gpgsign", "false")
+		run(dir, "commit", "-q", "--allow-empty", "-m", "init")
+	}
+	run(repo, "config", "remote.origin.url", upstream)
+	run(repo, "config", "remote.origin.fetch", "+refs/heads/*:refs/remotes/origin/*")
+	run(repo, "config", "fetch.prune", "true")
+	shim := func(args ...string) (int, string) {
+		var out, errOut bytes.Buffer
+		code := runGitShim(t.Context(), "", append([]string{"-C", repo}, args...), strings.NewReader(""), &out, &errOut)
+		return code, errOut.String()
+	}
+	hook := func(command string) bool {
+		data, err := json.Marshal(map[string]any{"cwd": repo, "tool_name": "Bash",
+			"tool_input": map[string]string{"command": command}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return hookDecision(t.Context(), guard.HookClaude, bytes.NewReader(data)).Deny
+	}
+	if code, stderr := shim("fetch", "origin"); code != 0 {
+		t.Fatalf("fetch origin: code %d, stderr %q", code, stderr)
+	}
+	if code, stderr := shim("fetch"); code != 0 {
+		t.Fatalf("fetch: code %d, stderr %q", code, stderr)
+	}
+	if hook("git fetch origin") || hook("git fetch --prune") {
+		t.Fatal("hook refused a normal fetch")
+	}
+	run(repo, "config", "remote.old.url", upstream)
+	run(repo, "config", "remote.old.fetch", "+refs/heads/*:refs/heads/*")
+	for _, args := range [][]string{{"fetch", "old"}, {"fetch"}, {"fetch", "old", "main"}, {"remote", "update"}} {
+		if code, stderr := shim(args...); code != 1 || !strings.HasPrefix(stderr, guard.Marker) {
+			t.Errorf("%q with a forcing refspec configured: code %d, stderr %q", args, code, stderr)
+		}
+	}
+	if !hook("git fetch old") || !hook("git fetch") {
+		t.Error("hook allowed a fetch with a forcing refspec configured")
+	}
+	if code, stderr := shim("fetch", "origin"); code != 0 {
+		t.Errorf("fetch origin next to a mirror remote: code %d, stderr %q", code, stderr)
+	}
+}
+
 func TestGitShimArgs(t *testing.T) {
 	dir, rest := gitShimArgs([]string{"--shim-dir=/a b", "status", "--short"})
 	if dir != "/a b" || len(rest) != 2 || rest[0] != "status" {

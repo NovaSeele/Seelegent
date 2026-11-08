@@ -139,6 +139,8 @@ function onKeydown(event: KeyboardEvent) {
   border: var(--border-width) solid var(--accent-border);
   border-radius: var(--radius-md);
   background: var(--accent-soft);
+  --text-muted: var(--text-primary);
+  --text-secondary: var(--text-primary);
   font-size: var(--fs-sm);
 }
 

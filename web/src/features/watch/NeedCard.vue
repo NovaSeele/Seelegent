@@ -5,6 +5,7 @@ import { useI18n } from 'vue-i18n'
 import Button from '@/components/ui/Button.vue'
 import Icon from '@/components/ui/Icon.vue'
 import { useFormat } from '@/composables/useFormat'
+import { attentionText } from '@/features/tasks/detail/attentionText'
 import { NEED_WORD_KEY, type NeedKind, statusWordKey } from '@/lib/taskStatus'
 import { useTasksStore } from '@/stores/tasks'
 
@@ -13,7 +14,7 @@ import { NEED_LOOK, nextStep, OVERDUE_MS } from './watchModel'
 /** One task that waits for you: why, since when, and the next step. Reads its own task from the store. */
 const props = defineProps<{ id: string; kind: NeedKind; since: string; now: number }>()
 
-const { t } = useI18n()
+const { t, te } = useI18n()
 const fmt = useFormat()
 const tasks = useTasksStore()
 
@@ -27,14 +28,18 @@ const word = computed(() =>
   props.kind === 'blocked' && task.value ? statusWordKey(task.value) : NEED_WORD_KEY[props.kind],
 )
 
-/** First line of the reason the daemon gave (the question, the stall, the failed dependency). */
+/**
+ * First line of why, in the reader's language (F14): the worker's question as it asked it, else the sentence built
+ * from the flag's reason and params. The daemon's English detail is not shown here.
+ */
 const detail = computed(() => {
-  const value = task.value
-  if (!value) return ''
-  const text = value.attention?.detail ?? (props.kind === 'depsBlocked' ? value.depsReason : '')
+  const a = task.value?.attention
+  if (!a) return ''
+  const view = attentionText(a, t, te)
+  const text = a.reason === 'question' ? (a.detail ?? '') : view.why || view.quote
   return (
     text
-      ?.split('\n')
+      .split('\n')
       .find((line) => line.trim())
       ?.trim() ?? ''
   )

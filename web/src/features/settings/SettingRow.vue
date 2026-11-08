@@ -108,6 +108,8 @@ const { t } = useI18n()
   from {
     box-shadow: inset 3px 0 0 var(--accent);
     background: var(--accent-soft);
+    --text-muted: var(--text-primary);
+    --text-secondary: var(--text-primary);
   }
 }
 </style>

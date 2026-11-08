@@ -126,7 +126,9 @@
     "waitingDeps": "선행 작업 대기",
     "hygiene": "위생 문제",
     "verifierRejected": "2차 검토 거절",
-    "peerObjection": "동료가 이의를 제기함"
+    "peerObjection": "동료가 이의를 제기함",
+    "backgroundWait": "백그라운드 명령을 기다리는 중",
+    "unknown": "확인 필요"
   },
   "stage": {
     "explore": "탐색",
@@ -162,5 +164,6 @@
     "collapseSidebar": "사이드바 숨기기",
     "expandSidebar": "사이드바 보이기",
     "noResults": "결과 없음"
-  }
+  },
+  "daemonSaid": "Seelegent 메시지:"
 }

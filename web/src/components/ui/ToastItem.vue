@@ -173,6 +173,8 @@ onBeforeUnmount(() => clearTimeout(timer))
 
 .toast__action:hover {
   background: var(--bg-hover);
+  --text-muted: var(--text-primary);
+  --text-secondary: var(--text-primary);
 }
 
 .toast__close {
@@ -193,6 +195,8 @@ onBeforeUnmount(() => clearTimeout(timer))
 
 .toast__close:hover {
   background: var(--bg-hover);
+  --text-muted: var(--text-primary);
+  --text-secondary: var(--text-primary);
   color: var(--text-primary);
 }
 

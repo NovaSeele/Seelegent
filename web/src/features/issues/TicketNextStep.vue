@@ -5,6 +5,7 @@ import { useI18n } from 'vue-i18n'
 import type { Ticket } from '@/api/types'
 import Button from '@/components/ui/Button.vue'
 import Icon from '@/components/ui/Icon.vue'
+import DaemonSaid from '@/components/DaemonSaid.vue'
 import { useFormat } from '@/composables/useFormat'
 
 import { failingChecks, safeUrl, ticketPhase } from './issueModel'
@@ -44,15 +45,19 @@ const fixing = computed(() => props.ticket.checksFix?.taskId ?? '')
 const toReview = computed(
   () => [...props.ticket.tasks].reverse().find((x) => x.status === 'done' && !x.verdict)?.id ?? '',
 )
-/** Why the task could not start: a known cause in the lead's language, the daemon's text otherwise. */
+/**
+ * Why the task could not start, in the reader's language: a gone or turned-off member by name, else the general
+ * advice; the daemon's own text stays behind "Seelegent said:" (failedSaid).
+ */
 const failedWhy = computed(() => {
   const f = props.ticket.failure
   if (f?.member) {
     const key = f.reason === 'member_disabled' ? 'memberDisabled' : 'memberMissing'
     return t(`issues.next.failed.${key}`, { member: f.member })
   }
-  return props.ticket.error || t('issues.next.failed.why')
+  return t('issues.next.failed.why')
 })
+const failedSaid = computed(() => (props.ticket.failure?.member ? '' : (props.ticket.error ?? '')))
 const shown = computed(() =>
   ['push_refused', 'open_pr', 'checks_failed', 'review', 'ready', 'failed'].includes(phase.value),
 )
@@ -192,6 +197,7 @@ const shown = computed(() =>
           <strong>{{ t('issues.next.failed.title') }}</strong>
         </p>
         <p class="banner__text">{{ failedWhy }}</p>
+        <DaemonSaid v-if="failedSaid" :text="failedSaid" />
         <div class="banner__actions">
           <Button size="sm" variant="primary" icon="refresh" @click="emit('act', 'retry')">
             {{ t('issues.next.failed.action') }}

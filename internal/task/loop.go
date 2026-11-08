@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"slices"
 
+	"github.com/NovaSeele/Seelegent/internal/api"
 	"github.com/NovaSeele/Seelegent/internal/config"
 	"github.com/NovaSeele/Seelegent/internal/event"
 	"github.com/NovaSeele/Seelegent/internal/fsutil"
@@ -162,15 +163,17 @@ func loopRepeatOf(n int) int {
 // or the same call repeat times (the loopRepeat setting; the window holds loopWindow calls, so a larger value
 // never fires). Like the old detectLoop, every run of repeat consecutive occurrences of a call is judged on its own:
 // calls that alternate with something different each time (reading a file between edits, bugs.md A9) are not a
-// loop, and neither are repeats with progress between them: a successful edit seen only once in that run.
-func detectLoop(steps []loopStep, repeat int) (loop bool, detail string) {
+// loop, and neither are repeats with progress between them: a successful edit seen only once in that run. params
+// carry the numbers of detail for the dashboard's translated sentence.
+func detectLoop(steps []loopStep, repeat int) (loop bool, detail string, params *api.AttentionParams) {
 	repeat = loopRepeatOf(repeat)
 	failed := 0
 	for i := len(steps) - 1; i >= 0 && steps[i].failed; i-- {
 		failed++
 	}
 	if failed >= loopErrors {
-		return true, fmt.Sprintf("the last %d tool calls failed", failed)
+		return true, fmt.Sprintf("the last %d tool calls failed", failed),
+			&api.AttentionParams{Kind: api.AttentionCallsFailed, Count: failed}
 	}
 	pos := map[string][]int{}
 	for i, st := range steps {
@@ -184,11 +187,12 @@ func detectLoop(steps []loopStep, repeat int) (loop bool, detail string) {
 		for w := 0; w+repeat <= len(ps); w++ {
 			if loopRun(steps, ps[w:w+repeat]) {
 				return true, fmt.Sprintf("the worker repeated the same %s call %d times in its last %d steps",
-					st.name, len(ps), len(steps))
+						st.name, len(ps), len(steps)),
+					&api.AttentionParams{Kind: api.AttentionRepeated, Tool: st.name, Count: len(ps), Steps: len(steps)}
 			}
 		}
 	}
-	return false, ""
+	return false, "", nil
 }
 
 // loopRun judges one run of occurrences (positions in steps) of the same call.

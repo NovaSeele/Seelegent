@@ -2,6 +2,7 @@ package task
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -209,6 +210,37 @@ func TestAuthMovesOn(t *testing.T) {
 	}
 	if len(eventsOf(h.events(sum.ID), api.EventAuthFailed)) != 1 {
 		t.Fatal("no auth_failed event")
+	}
+}
+
+// TestCrashSaidOnce (design review): a worker that crashes without a report left its message three times in the
+// history (the report Seelegent made up, the error event, the attempt's end); the log says it once, in the report.
+func TestCrashSaidOnce(t *testing.T) {
+	h := newHarness(t)
+	h.agy("only", 0)
+	const crash = "fatal: the worker process crashed"
+	h.queue.Push(t, script("#!stderr "+crash, "#!exit 1"))
+	sum := h.delegate(api.DelegateRequest{})
+	tk := h.waitStatus(sum.ID, StatusFailed)
+	if tk.Error != crash {
+		t.Fatalf("error = %q", tk.Error)
+	}
+	if a := tk.LastTurn().Attempts[0]; a.Error != crash {
+		t.Fatalf("attempt error = %q", a.Error)
+	}
+	said := 0
+	for _, e := range h.events(sum.ID) {
+		if e.Type != api.EventWorker && e.Type != api.EventAttemptEnd {
+			continue
+		}
+		data, err := json.Marshal(e.Data)
+		if err != nil {
+			t.Fatal(err)
+		}
+		said += strings.Count(string(data), crash)
+	}
+	if said != 1 {
+		t.Fatalf("the crash is said %d times in the worker and attempt events, want 1", said)
 	}
 }
 
@@ -491,8 +523,9 @@ func TestDependencies(t *testing.T) {
 		t.Fatal(err)
 	}
 	te := h.waitStatus(e.ID, StatusBlockedDeps)
-	if a := te.Attention; a == nil || a.Reason != ReasonDepsBlocked {
-		t.Fatalf("attention = %+v", te.Attention)
+	if a := te.Attention; a == nil || a.Reason != ReasonDepsBlocked || a.Params == nil ||
+		a.Params.Kind != api.AttentionDepRejected || a.Params.Task != d.ID || a.Params.Title != d.Title {
+		t.Fatalf("attention = %+v %+v", te.Attention, te.Attention.Params)
 	}
 	if _, err := h.s.Followup(t.Context(), e.ID, api.FollowupRequest{Message: "go"}); !errors.Is(err, ErrBadState) {
 		t.Errorf("followup without force: %v", err)
@@ -556,7 +589,9 @@ func TestAnswerQuestion(t *testing.T) {
 	h.queue.Push(t, okScript("conv-q", "## Blocked\n\nWhich database?\n\n- SQLite\n- Postgres"))
 	sum := h.delegate(api.DelegateRequest{})
 	tk := h.waitStatus(sum.ID, StatusDone)
-	if a := tk.Attention; a == nil || a.State != api.AttentionQuestion || a.Detail != "Which database?" {
+	// The options follow the question as a numbered list, which the dashboard offers as choices (design review).
+	if a := tk.Attention; a == nil || a.State != api.AttentionQuestion ||
+		a.Detail != "Which database?\n1. SQLite\n2. Postgres" {
 		t.Fatalf("attention = %+v", tk.Attention)
 	}
 	rep, _ := h.s.Report(t.Context(), sum.ID, "")

@@ -11,6 +11,8 @@ import { useFormat } from '@/composables/useFormat'
 import { useGitHubStore } from '@/stores/github'
 import { useToastStore } from '@/stores/toast'
 
+import CauseError from './CauseError.vue'
+
 /**
  * The chosen repository: which one (when several are connected), where it is, whether its origin is on GitHub,
  * the last inbox sync, and the Sync and Disconnect actions. Disconnecting forgets the repository and its inbox;
@@ -110,7 +112,7 @@ async function disconnect() {
       <span>{{ t('issues.repo.counts', { ...repo.counts }) }}</span>
     </div>
     <p v-if="!repo.github && repo.notGithub" class="repo__note">{{ repo.notGithub }}</p>
-    <p v-if="repo.syncError" class="repo__error" role="alert">{{ repo.syncError }}</p>
+    <CauseError v-if="repo.syncError" :cause="repo.syncErrorCause" :text="repo.syncError" />
     <ConfirmDialog
       :open="removing"
       :title="
@@ -176,12 +178,6 @@ async function disconnect() {
 
 .repo__note {
   color: var(--text-secondary);
-  font-size: var(--fs-sm);
-  overflow-wrap: anywhere;
-}
-
-.repo__error {
-  color: var(--status-danger-fg);
   font-size: var(--fs-sm);
   overflow-wrap: anywhere;
 }

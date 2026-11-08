@@ -1,5 +1,5 @@
 /** An automation the user never confirmed offers no Run now that would only fail: it offers its review instead. */
-import { mount } from '@vue/test-utils'
+import { mount, RouterLinkStub } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 
 import type { Automation } from '@/api/types'
@@ -33,7 +33,16 @@ const automation = (overrides: Partial<Automation>): Automation => ({
 
 async function card(a: Automation) {
   const { plugins } = await setupApp()
-  return mount(AutomationCard, { props: { automation: a, busy: false }, global: { plugins } })
+  return mount(AutomationCard, {
+    props: { automation: a, busy: false },
+    global: { plugins, stubs: { RouterLink: RouterLinkStub } },
+  })
+}
+
+/** The task "Open its task" links to, or undefined when the card has no such link. */
+function taskLink(w: Awaited<ReturnType<typeof card>>): string | undefined {
+  const link = w.findAllComponents(RouterLinkStub).find((l) => l.text() === 'Open its task')
+  return (link?.props('to') as { params?: { taskId?: string } } | undefined)?.params?.taskId
 }
 
 describe('AutomationCard', () => {
@@ -71,5 +80,36 @@ describe('AutomationCard', () => {
       expect.arrayContaining(['Turn on', 'Run now']),
     )
     expect(w.text()).not.toContain('Not confirmed')
+  })
+
+  it('links the task of the last run, never an older run after a skipped one (F40)', async () => {
+    const at = '2026-11-08T06:00:00.000Z'
+    const skipped = await card(
+      automation({
+        confirmed: true,
+        activeTaskId: 't-old',
+        lastRun: { id: 2, at, trigger: 'schedule', outcome: 'skipped_quota' },
+      }),
+    )
+    expect(taskLink(skipped)).toBeUndefined()
+
+    const started = await card(
+      automation({
+        confirmed: true,
+        activeTaskId: 't-old',
+        lastRun: { id: 3, at, trigger: 'schedule', outcome: 'started', taskId: 't-new' },
+      }),
+    )
+    expect(taskLink(started)).toBe('t-new')
+
+    const running = await card(
+      automation({
+        confirmed: true,
+        running: true,
+        activeTaskId: 't-run',
+        lastRun: { id: 3, at, trigger: 'schedule', outcome: 'started', taskId: 't-new' },
+      }),
+    )
+    expect(taskLink(running)).toBe('t-run')
   })
 })

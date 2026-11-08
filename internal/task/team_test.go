@@ -54,6 +54,45 @@ func TestDelegateAndFollowupByMember(t *testing.T) {
 	}
 }
 
+// TestFollowupRefusedOnEndedContestVariant: a variant task takes followups while its contest runs or is ready (a
+// followup reopens a ready contest), and none once the contest was applied, cancelled or failed, whose stored copy
+// of the variant's changes would go stale (F46).
+func TestFollowupRefusedOnEndedContestVariant(t *testing.T) {
+	h := newHarness(t)
+	h.agy("w", 1)
+	h.mu.Lock()
+	h.contestStatus = map[string]string{"k1": api.ContestStatusReady}
+	h.mu.Unlock()
+	h.queue.Push(t, okScript("conv-v", "Variant done."))
+	sum, err := h.s.DelegateWith(t.Context(), api.DelegateRequest{Prompt: "x", Cwd: h.cwd, Title: "V1"},
+		Spawn{ContestID: "k1", Variant: "V1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.waitStatus(sum.ID, StatusDone)
+	h.queue.Push(t, okScript("conv-v", "Again."))
+	if _, err := h.s.Followup(t.Context(), sum.ID, api.FollowupRequest{Message: "once more"}); err != nil {
+		t.Fatalf("followup while the contest is ready: %v", err)
+	}
+	tk := h.waitStatus(sum.ID, StatusDone)
+	turns := len(tk.Turns)
+
+	for _, st := range []string{api.ContestStatusApplied, api.ContestStatusCancelled, api.ContestStatusFailed} {
+		h.mu.Lock()
+		h.contestStatus["k1"] = st
+		h.mu.Unlock()
+		_, err := h.s.Followup(t.Context(), sum.ID, api.FollowupRequest{Message: "after the end"})
+		var ce *ContestEndedError
+		if !errors.Is(err, ErrBadState) || !errors.As(err, &ce) || ce.APIDetails()["reason"] != "contest_ended" ||
+			ce.APIDetails()["contest"] != "k1" || ce.APIDetails()["status"] != st {
+			t.Fatalf("followup once the contest is %s: %v", st, err)
+		}
+	}
+	if tk = h.waitStatus(sum.ID, StatusDone); len(tk.Turns) != turns {
+		t.Fatalf("a refused followup added a turn: %d -> %d", turns, len(tk.Turns))
+	}
+}
+
 func TestConsultPeerObjection(t *testing.T) {
 	h := newHarness(t)
 	h.initRepo(map[string]string{"a.txt": "one\n"})
@@ -185,11 +224,14 @@ func TestStopHiddenRunClosesItOnceStopped(t *testing.T) {
 }
 
 // A daemon that stopped between creating a consult run and storing its record leaves a run nobody reads: the next
-// start stops and closes it, and leaves alone a consult run its parent records.
+// start stops and closes it, and leaves alone a consult run its parent records as running. A run whose consult
+// already ended (the daemon stopped between storing the outcome and closing the run) is closed too, whether it
+// finished or still runs.
 func TestStartStopsOrphanConsultRuns(t *testing.T) {
 	h := newHarness(t)
 	h.initRepo(map[string]string{"a.txt": "one\n"})
 	h.agy("w", 3)
+	h.agy("w2", 2) // two turns at a time per account: three runs hang at once
 	h.queue.Push(t, okScript("conv-p", "Done."))
 	parent := h.delegate(api.DelegateRequest{Title: "parent"})
 	h.waitStatus(parent.ID, StatusDone)
@@ -203,16 +245,40 @@ func TestStartStopsOrphanConsultRuns(t *testing.T) {
 		h.runningWorker(run.ID)
 		return run.ID
 	}
-	orphan, recorded := consult("conv-o"), consult("conv-r")
+	orphan, recorded, endedRunning := consult("conv-o"), consult("conv-r"), consult("conv-e")
+	h.queue.Push(t, okScript("conv-d", "Approve."))
+	finished, err := h.s.DelegateWith(t.Context(), api.DelegateRequest{Prompt: "review", Cwd: h.cwd,
+		Title: "Consult: parent", Mode: ModePlan}, Spawn{Kind: KindConsult, ParentID: parent.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.waitStatus(finished.ID, StatusDone)
+	record := func(id, run, status string) api.Consult {
+		return api.Consult{ID: id, Member: "rev", Rank: api.RankPeer, RunTaskID: run, Status: status,
+			Findings: []api.Claim{}, Required: []string{}, At: api.FormatTime(h.clk.Now())}
+	}
 	if _, err := h.s.mutate(t.Context(), parent.ID, func(tk *Task) ([]NewEvent, error) {
-		tk.Consults = append(tk.Consults, api.Consult{ID: "c1", Member: "rev", Rank: api.RankPeer, RunTaskID: recorded,
-			Status: consultRunning, Findings: []api.Claim{}, Required: []string{}, At: api.FormatTime(h.clk.Now())})
+		tk.Consults = append(tk.Consults, record("c1", recorded, consultRunning), record("c2", finished.ID, consultDone),
+			record("c3", endedRunning, consultFailed))
 		return nil, nil
 	}); err != nil {
 		t.Fatal(err)
 	}
+	if open, err := h.s.OpenHiddenRuns(t.Context(), KindConsult); err != nil || len(open) != 4 {
+		t.Fatalf("open hidden runs before the restart = %+v %v", open, err)
+	}
 	h.stop()
 	h.start()
+	h.waitFor("the ended consults' runs to be closed", func() bool {
+		d, e := h.task(finished.ID), h.task(endedRunning)
+		return d.Review != nil && e.Status == StatusCancelled && e.Review != nil
+	})
+	if r := h.task(finished.ID); r.Status != StatusDone || r.Review.Notes != "consult "+consultDone {
+		t.Errorf("finished run of a stored consult = %s, review %+v", r.Status, r.Review)
+	}
+	if r := h.task(endedRunning); r.Review.Notes != "consult "+consultFailed {
+		t.Errorf("running run of an ended consult: review %+v", r.Review)
+	}
 	h.waitFor("the orphan consult run to be closed", func() bool {
 		r := h.task(orphan)
 		return r.Status == StatusCancelled && r.Review != nil
@@ -273,9 +339,13 @@ func TestSeniorObjectionWarns(t *testing.T) {
 			Required: []string{"add a test"}},
 	}
 	got := seniorObjections(cs)
-	if len(got) != 2 || got[0] != "senior sam objected: the total can go negative" ||
-		got[1] != "senior una objected: add a test" {
-		t.Errorf("warnings = %q", got)
+	if want := []api.SeniorObjection{{Member: "sam", Text: "the total can go negative"},
+		{Member: "una", Text: "add a test"}}; !slices.Equal(got, want) {
+		t.Errorf("objections = %+v", got)
+	}
+	if w := objectionWarnings(got); !slices.Equal(w, []string{"senior sam objected: the total can go negative",
+		"senior una objected: add a test"}) {
+		t.Errorf("warnings = %q", w)
 	}
 }
 
@@ -294,7 +364,7 @@ func TestSeniorObjectionLatestConsult(t *testing.T) {
 		{Member: "ted", Rank: api.RankSenior, Status: consultFailed},
 		{Member: "una", Rank: api.RankSenior, Status: consultRunning},
 	}
-	got := seniorObjections(cs)
+	got := objectionWarnings(seniorObjections(cs))
 	want := []string{"senior una objected: new finding", "senior ted objected: keep the check"}
 	if !slices.Equal(got, want) {
 		t.Errorf("warnings = %q, want %q", got, want)

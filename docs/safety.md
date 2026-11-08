@@ -25,22 +25,46 @@ where `<<` starts no here-document and the next lines run as commands, so there 
 command lines only when the code can start a program (`os.system`, `subprocess`, `child_process`, `exec*`,
 `spawn*`, `popen`, Perl's and Ruby's backticks, `qx`, `%x` and pipe `open`, ...); code that cannot, such as a
 script that edits a file mentioning `git stash`, is data. Long options count by any prefix git accepts
-(`commit --amen`, `branch --d`). It refuses:
+(`commit --amen`, `branch --d`). The subcommand is read without a trailing `.exe`, which Git for Windows strips
+(`git reset.exe --hard` runs `reset --hard`). It refuses:
 
 - always: `reset`, `restore`, `switch`, `revert`, `rebase`, `merge`, `pull`, `push`, `cherry-pick`, `am`, `rm`,
   `mv`, `prune`, `filter-branch`, `filter-repo`, `update-ref`, `update-index`, `read-tree`, `checkout-index`,
-  `merge-file`, `replace`;
-- `stash` except `list` and `show`; `clean` without `-n`; `checkout` except `checkout -b|-B <new> [<start>]`;
-  `commit -a|--all|--amend`; `branch` and `tag` deletes, moves and forced writes; `apply` unless it only checks;
-  `reflog expire|delete`; `worktree remove|prune|move`; `submodule deinit|update|absorbgitdirs`; `config` writes
-  of keys that run programs or redirect git (aliases, includes, `core.hooksPath`, `core.editor`, filters and
-  drivers, ...) and of `gc.pruneExpire` and `help.autocorrect` (also as `-c`/`--config-env`; `git config <key>`
-  and `git config get <key>` only read and pass), `config --edit` and `--rename-section` (the editor or the
-  renamed section can bring any key); `sparse-checkout` writes; `bisect` steps; `rerere forget|clear|gc`; `notes remove|prune`; `refs migrate`; `symbolic-ref -d`;
-  `gc --prune=<date>` (plain `gc` and `gc --prune` keep the default expiry);
+  `merge-file`, `replace`, `send-pack`;
+- `stash` except `list` and `show`; `clean` without `-n`; `checkout` except `checkout -b <new> [<start>]` (`-B`
+  resets an existing branch); `commit -a|--all|--amend`; `branch` and `tag` deletes, moves and forced writes;
+  `apply` unless it only checks; `reflog expire|delete|drop` (the stash is a reflog); `worktree remove|prune|move`
+  and `worktree add -B`; `replay` unless `--ref-action=print`; `fetch --update-head-ok` and `--stdin`, and a fetch
+  with a refspec that can move a branch back or delete one. Every refspec that applies is checked: the command
+  line's, the `--refmap` values, or else the `remote.<name>.fetch` refspecs of the remotes it reads (read with
+  `git config --get-regexp` in the command's folder, with its `-C`/`--git-dir`/`--work-tree`; a configuration that
+  cannot be read refuses the fetch). A destination (compared in lower case, as on a disk that ignores case) that is
+  empty, `FETCH_HEAD` or under `refs/remotes/` or `refs/tags/` passes; any other is refused when it has a
+  wildcard, when the refspec is forced (`+` or `--force`), when the fetch prunes (`--prune`, `-p`, `--prune-tags`,
+  or `fetch.prune`/`remote.<name>.prune` set), or when it is under `refs/` outside `refs/heads/` (git updates such
+  refs whatever their history). `remote add --mirror`, and `remote prune` and `remote update` by the same rule;
+  writes (also `-c` and `--config-env`) of `remote.<name>.fetch` outside `refs/remotes/`, and of
+  `remote.<name>.mirror`, `remote.<name>.prune[Tags]` and `fetch.prune[Tags]` other than false;
+  `repack -a -d` without `-A` or `--cruft` (it drops unreachable objects); `submodule deinit|update|absorbgitdirs`;
+  `config` writes of keys that run programs or redirect git (aliases, includes, `core.hooksPath`, `core.editor`,
+  filters and drivers, ...) and of `gc.pruneExpire`, `gc[.<pattern>].reflogExpire[Unreachable]` and
+  `help.autocorrect` (also as `-c`/`--config-env`; `git config <key>` and `git config get <key>` only read and
+  pass), `config --edit` and `--rename-section` (the editor or the renamed section can bring any key);
+  `sparse-checkout` writes; `bisect` steps; `rerere forget|clear|gc`; `notes remove|prune`; `refs migrate`;
+  `symbolic-ref -d`; `gc --prune=<date>` (plain `gc` and `gc --prune` keep the default expiry);
+- options, settings and URLs that make git run a command of the caller's choosing: `grep -O|--open-files-in-pager`,
+  `difftool -x|--extcmd`, `--upload-pack`, `--receive-pack` and `--exec` on the transport commands (and `clone
+  -u`), an `ext::` URL (also as a config value), `protocol.allow` and `protocol.<name>.allow`,
+  `core.alternateRefsCommand`, `interactive.diffFilter`, risky keys in `clone -c|--config`, `--exec-path=<dir>`
+  and `send-email`'s `--*-cmd` and `--smtp-server=<path>`; a reading command whose argument starts with an
+  expansion where an option would (`git grep "-O$x"`) fails closed, one that starts with the expansion (`git grep
+  "$pattern"`) is a pattern;
 - an alias that expands to any of the above (read with `git config --get alias.<name>` in the command's folder);
-- a command that sets `GIT_CONFIG_PARAMETERS`, `GIT_CONFIG_COUNT`, `GIT_CONFIG_KEY_<n>`, `GIT_CONFIG_GLOBAL` or
-  `GIT_CONFIG_SYSTEM` (`NAME=value git ...`, `env NAME=value`, `export`/`declare`, PowerShell's `$env:NAME = ...`,
+- a command that sets `GIT_CONFIG_PARAMETERS`, `GIT_CONFIG_COUNT`, `GIT_CONFIG_KEY_<n>`, `GIT_CONFIG_GLOBAL`,
+  `GIT_CONFIG_SYSTEM` or a variable whose value git runs (`GIT_ALLOW_PROTOCOL`, `GIT_SSH_COMMAND`, `GIT_SSH`,
+  `GIT_PROXY_COMMAND`, `GIT_EXTERNAL_DIFF`, `GIT_EXEC_PATH`), or an editor, pager or password prompt git runs
+  (`GIT_EDITOR`, `GIT_SEQUENCE_EDITOR`, `GIT_PAGER`, `GIT_ASKPASS`, `EDITOR`, `VISUAL`, `PAGER`, `SSH_ASKPASS`) to
+  anything but empty, `cat`, `less`, `more` or `true` with options (`NAME=value git ...`, `env NAME=value`, `export`/`declare`, PowerShell's `$env:NAME = ...`,
   `Set-Item env:NAME` and `[Environment]::SetEnvironmentVariable`, cmd's `set` and `setx`, the environment of
   inline code that starts programs), whether or not the same line runs git: they define aliases and settings that
   the alias lookup above does not see, for that command and every later git command of the same shell;
@@ -81,9 +105,10 @@ subcommand (`git stsh`) is not run as the command git guesses. git takes the las
   integration is not seen either.
 - The guard reads command lines, not files: a command stored in a variable and run later, a script file the worker
   wrote, or a Makefile target are not read. Dynamic words in the git part are refused (fail closed), dynamic words
-  elsewhere are not. What is piped into a shell is read from simple commands, subshells and brace groups, not from
-  compound commands (`for x in a; do echo git stash; done | sh`); `xargs` reading its input from a file (`-a`,
-  `--arg-file`) into a shell is not read either.
+  elsewhere are not. What is piped into a shell is read from simple commands, subshells, brace groups and compound
+  commands (`for x in a; do echo git stash; done | sh`, `if`, `while`, `until`, `case`), and a shell inside a group
+  on the read end of a pipe reads it too (`echo git stash | (cd x && bash)`); `xargs` reading its input from a file
+  (`-a`, `--arg-file`) into a shell is not read.
 - codex has no pre-tool hook. Its own sandbox (`backends.codex.sandbox`, default `workspace-write`; plan mode is
   `read-only`) limits where it can write; the shim covers the git commands it runs through `PATH`. With
   `danger-full-access` only the shim remains.

@@ -13,6 +13,34 @@ import (
 	"github.com/NovaSeele/Seelegent/internal/launch"
 )
 
+// TestReadExitText: every message exitText writes reads back as its kind, backend and exit code, so the dashboard
+// words a failed turn from a code (design review: "agy exited with code 0 and no result" was shown in English).
+func TestReadExitText(t *testing.T) {
+	for _, tc := range []struct {
+		exit launch.Exit
+		want ExitFailure
+	}{
+		{launch.Exit{Reason: launch.ReasonTimeout}, ExitFailure{Kind: ExitTimeout, Backend: "agy"}},
+		{launch.Exit{Reason: launch.ReasonCanceled}, ExitFailure{Kind: ExitCanceled, Backend: "agy"}},
+		{launch.Exit{Reason: launch.ReasonStartFailed, Error: "no such file"},
+			ExitFailure{Kind: ExitStartFailed, Backend: "agy"}},
+		{launch.Exit{Reason: launch.ReasonLost}, ExitFailure{Kind: ExitLauncherLost, Backend: "agy"}},
+		{launch.Exit{Code: 0}, ExitFailure{Kind: ExitNoResult, Backend: "agy"}},
+		{launch.Exit{Code: -1}, ExitFailure{Kind: ExitNoResult, Backend: "agy", Code: -1}},
+		{launch.Exit{Code: 2, Error: "boom"}, ExitFailure{Kind: ExitError, Backend: "agy", Code: 2}},
+	} {
+		msg := exitText("agy", tc.exit)
+		if got, ok := ReadExitText(msg); !ok || got != tc.want {
+			t.Errorf("%q: got %+v %v, want %+v", msg, got, ok, tc.want)
+		}
+	}
+	for _, msg := range []string{"", "quota exhausted", "the agy run failed with code 0 and no result"} {
+		if _, ok := ReadExitText(msg); ok {
+			t.Errorf("%q read as an exit", msg)
+		}
+	}
+}
+
 // replay feeds a recorded stream to a parser the way the task engine does (stream lines, then stderr lines, then
 // Finish) and returns every event and the outcome.
 func replay(t *testing.T, b Backend, file string, secrets ...string) ([]event.Event, Outcome) {

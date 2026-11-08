@@ -5,12 +5,13 @@ import { useI18n } from 'vue-i18n'
 import StatusPill from '@/components/ui/StatusPill.vue'
 import { useFormat } from '@/composables/useFormat'
 import { displayStatus, statusWordKey } from '@/lib/taskStatus'
+import { depsText } from '@/features/tasks/detail/attentionText'
 import { useTasksStore } from '@/stores/tasks'
 
 /** A task in progress: what it is doing now, for how long, and on which account. */
 const props = defineProps<{ id: string; now: number }>()
 
-const { t } = useI18n()
+const { t, te } = useI18n()
 const fmt = useFormat()
 const tasks = useTasksStore()
 
@@ -23,6 +24,8 @@ const stepFor = computed(() => {
   const since = task.value?.activeStep?.since
   return since ? fmt.value.duration(Math.max(0, props.now - Date.parse(since))) : ''
 })
+/** Why it waits on other tasks, in the reader's language (never the daemon's English depsReason). */
+const deps = computed(() => (task.value ? depsText(task.value, t, te) : ''))
 const until = computed(() =>
   task.value?.waitingUntil ? fmt.value.relative(task.value.waitingUntil, props.now) : '',
 )
@@ -53,7 +56,7 @@ const until = computed(() =>
       <span v-if="stepFor" class="run__step-time">{{ stepFor }}</span>
     </p>
     <p v-else-if="until" class="run__step">{{ t('watch.running.until', { time: until }) }}</p>
-    <p v-else-if="task.depsReason" class="run__step">{{ task.depsReason }}</p>
+    <p v-else-if="deps" class="run__step">{{ deps }}</p>
     <footer class="run__foot">
       <span v-if="task.turnCount">{{ t('watch.running.turn', { n: task.turnCount }) }}</span>
       <span v-if="task.tokensUsed">

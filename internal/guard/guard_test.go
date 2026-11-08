@@ -80,7 +80,7 @@ func TestCheckAllShells(t *testing.T) {
 		"", "git status", "git log --oneline -5", "git diff", "git diff --cached", "git show HEAD",
 		"git add a.go", "git add -A", "git commit -m 'fix: x'", "git commit -m \"fix: x\" a.go",
 		"git commit -F msg.txt", "git stash list", "git stash show -p", "git clean -n", "git clean -nd",
-		"git clean --dry-run", "git checkout -b feature", "git checkout -B feature origin/main",
+		"git clean --dry-run", "git checkout -b feature", "git checkout -b feature origin/main",
 		"git checkout -q -b x", "git branch", "git branch feature", "git branch -a", "git branch --list",
 		"git branch -c a b", "git tag v1", "git tag -a v1 -m 'release'", "git fetch", "git fetch origin",
 		"git worktree add ../wt -b x", "git worktree list", "git reflog", "git reflog show",

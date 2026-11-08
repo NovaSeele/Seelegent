@@ -79,6 +79,10 @@ type Checker struct {
 	// Alias returns the value of git alias name (alias.<name>), and whether it exists. nil: aliases are not
 	// resolved, and an unknown git subcommand is allowed.
 	Alias func(name string) (value string, ok bool)
+	// Config returns the configuration settings matching FetchConfigPattern (the remotes' fetch refspecs and prune
+	// settings) of the repository a git command with the global options globals (-C, --git-dir, --work-tree) works
+	// in; an error refuses the fetch. nil: no configuration is read, and only the command's own refspecs are checked.
+	Config func(globals []string) ([]ConfigEntry, error)
 	// HeredocAsCommands keeps the lines of a POSIX here-document in the PowerShell and cmd readings of a line read in
 	// every dialect, where they are commands. Set for agy on Windows: its run_command runs PowerShell, where
 	// cat <<'EOF' starts no here-document and the next lines run. Unset, those lines are read as POSIX only.
@@ -173,7 +177,7 @@ func (c Checker) line(line string, sh Shell, depth int) Result {
 	return res
 }
 
-// isAbbrev reports whether t abbreviates the PowerShell option full (a prefix of it, as pwsh accepts).
+// isAbbrev reports whether t abbreviates the option full (a prefix of it, as pwsh and git's long options accept).
 func isAbbrev(t, full string) bool { return strings.HasPrefix(full, t) }
 
 // cmdName is a command word reduced to its name: the last path element, lower case, without .exe/.cmd/.bat/.com.
@@ -326,7 +330,7 @@ func (c Checker) command(ws []word, s *segment, sh Shell, depth int) Result {
 	if name == "git" {
 		return c.git(args, depth+1)
 	}
-	if strings.HasPrefix(name, "git-") && builtins[name[4:]] {
+	if strings.HasPrefix(name, "git-") && builtins[subcommand(name[4:])] {
 		return c.git(append([]word{{text: name[4:]}}, args...), depth+1)
 	}
 	if wr, ok := wrappers[name]; ok {

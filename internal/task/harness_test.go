@@ -65,6 +65,8 @@ type harness struct {
 
 	mu        sync.Mutex
 	refreshes []string
+	// contestStatus is the status of each contest for Options.ContestEnded (guarded by mu).
+	contestStatus map[string]string
 }
 
 var harnessEpoch = time.Date(2026, 11, 7, 9, 0, 0, 0, time.UTC)
@@ -170,6 +172,13 @@ func (h *harness) start() {
 		Repos:         repos,
 		AccountStates: p.States,
 		Ledger:        proof.NewLedger(h.db, h.clk.Now),
+		ContestEnded: func(_ context.Context, id string) (string, bool, error) {
+			h.mu.Lock()
+			defer h.mu.Unlock()
+			st := h.contestStatus[id]
+			return st, st == api.ContestStatusApplied || st == api.ContestStatusCancelled ||
+				st == api.ContestStatusFailed, nil
+		},
 	})
 	if err != nil {
 		t.Fatal(err)

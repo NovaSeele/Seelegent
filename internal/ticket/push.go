@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/NovaSeele/Seelegent/internal/api"
+	"github.com/NovaSeele/Seelegent/internal/github"
 	"github.com/NovaSeele/Seelegent/internal/gitx"
 )
 
@@ -53,10 +54,34 @@ func (s *Service) pushTarget(ctx context.Context, wt string) string {
 	return "origin"
 }
 
+// authEnv is the environment of a git command that reaches target (old bug D18). In the token tier it gives git
+// the stored token for the repository's GitHub host only (github.com or a listed enterprise host; http only on
+// loopback), through the environment of that one command: never in argv, never in the user's git config. The gh
+// and manual tiers, ssh remotes and remotes on other hosts get nil and use the user's own git credentials.
+func (s *Service) authEnv(ctx context.Context, target string) []string {
+	rem, ok := github.ParseRemote(target)
+	if !ok || rem.SSH {
+		return nil
+	}
+	host, ok := s.o.GitHub.Hosts().Lookup(rem)
+	if !ok {
+		return nil
+	}
+	access := s.o.GitHub.Access(ctx, false)
+	if access.Tier != api.TierToken {
+		return nil
+	}
+	c, err := s.o.GitHub.Client(ctx, access, host, rem.Owner, rem.Repo)
+	if err != nil {
+		return nil
+	}
+	return c.GitEnv(target)
+}
+
 // remoteRef is the commit target holds at refs/heads/<branch> ("" when none). An unreachable remote is an error.
 func (s *Service) remoteRef(ctx context.Context, wt, target, branch string) (string, error) {
-	out, err := s.git(ctx, wt, gitx.ExecOptions{Timeout: time.Minute}, "ls-remote", "--heads", target,
-		"refs/heads/"+branch)
+	out, err := s.git(ctx, wt, gitx.ExecOptions{Timeout: time.Minute, Env: s.authEnv(ctx, target)}, "ls-remote",
+		"--heads", target, "refs/heads/"+branch)
 	if err != nil {
 		return "", err
 	}
@@ -88,8 +113,8 @@ func (s *Service) ensureObject(ctx context.Context, dir, target, branch, sha str
 	if s.hasObject(ctx, dir, sha) {
 		return nil
 	}
-	if _, err := s.git(ctx, dir, gitx.ExecOptions{Timeout: pushTimeout}, "fetch", "--quiet", "--no-tags", target,
-		"refs/heads/"+branch); err != nil {
+	if _, err := s.git(ctx, dir, gitx.ExecOptions{Timeout: pushTimeout, Env: s.authEnv(ctx, target)}, "fetch",
+		"--quiet", "--no-tags", target, "refs/heads/"+branch); err != nil {
 		return err
 	}
 	if !s.hasObject(ctx, dir, sha) {
@@ -140,10 +165,15 @@ func (s *Service) baseOnRemote(ctx context.Context, t *ticketRec, target, base s
 	}
 	if count, _ := strconv.Atoi(n); count > 0 {
 		d := map[string]any{"branch": t.Base, "commits": count}
-		// The newest few, by subject, so the lead knows which commits to push.
+		// The newest few, by subject, so the lead knows which commits to push. A subject is text anyone wrote (a
+		// pasted token or a URL with a password in it), so it is redacted like every other detail.
 		if out, err := s.git(ctx, t.Worktree, gitx.ExecOptions{Timeout: gitx.ReadTimeout}, "log",
 			"--format=%s", "-n", "3", base, "--not", tip); err == nil && strings.TrimSpace(out) != "" {
-			d["subjects"] = strings.Split(strings.TrimSpace(out), "\n")
+			subjects := strings.Split(strings.TrimSpace(out), "\n")
+			for i, subj := range subjects {
+				subjects[i] = oneLine(s.redact(subj), 200)
+			}
+			d["subjects"] = subjects
 		}
 		return &PushError{Reason: "base_not_pushed", Details: d,
 			Message: fmt.Sprintf("the base has %d commit(s) that are not on GitHub; push %s first", count, t.Base)}

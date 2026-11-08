@@ -191,7 +191,8 @@ func (s *Service) derive(ctx context.Context, id string, sum *api.TaskSummary) {
 		changed := false
 		if sum != nil && !slices.Contains(t.TaskIDs, sum.ID) {
 			// New work changes the worktree: an earlier refusal no longer says what the next pr will find.
-			t.TaskIDs, t.Refusal = append(t.TaskIDs, sum.ID), nil
+			t.TaskIDs = append(t.TaskIDs, sum.ID)
+			t.dropRefusal()
 			s.logStep(ctx, tx, t.ID, "task", map[string]any{"taskId": sum.ID})
 			changed = true
 		}
@@ -215,6 +216,11 @@ func (s *Service) derive(ctx context.Context, id string, sum *api.TaskSummary) {
 		if next := deriveStatus(list); next != t.Status {
 			t.Status = next
 			s.logStep(ctx, tx, t.ID, "status", map[string]any{"status": next})
+			changed = true
+		}
+		// A task of the ticket runs again (a followup on it): the worktree changes, so a refusal goes too.
+		if t.Status == api.TicketWorking && (t.Refusal != nil || t.Error != "") {
+			t.dropRefusal()
 			changed = true
 		}
 		if !changed {
@@ -260,7 +266,7 @@ func (s *Service) createTicket(ctx context.Context, r *repoRec, issue api.Issue)
 		break
 	}
 	fail := func(err error) {
-		t.Status, t.Error = api.TicketFailed, s.redactErr(err, 600)
+		t.Status, t.Error, t.ErrorCause = api.TicketFailed, s.redactErr(err, 600), ""
 	}
 	var env *api.WorktreeEnv
 	if t.Branch == "" {
@@ -434,6 +440,10 @@ func (s *Service) Retry(ctx context.Context, id string, req api.TicketTaskReques
 	}
 	if !t.worktreeOK() {
 		return api.TicketTaskResult{}, badStatef("the ticket's worktree is missing; drop it and decide the issue again")
+	}
+	// "As before" asks the member that is gone or turned off again: refused before anything changes (F69).
+	if f := t.Failure; f != nil && f.Member != "" && req.Member == "" && req.Backend == "" {
+		return api.TicketTaskResult{}, &FailureError{Failure: *f}
 	}
 	if _, err := s.updateTicket(ctx, id, func(tx *sql.Tx, t *ticketRec) error {
 		t.Status, t.Error, t.Failure = api.TicketWorking, "", nil
@@ -621,6 +631,7 @@ func (s *Service) Drop(ctx context.Context, id string, req api.DropRequest) (api
 	reason := oneLine(req.Reason, maxReason)
 	if _, err := s.updateTicket(ctx, id, func(tx *sql.Tx, t *ticketRec) error {
 		t.Status, t.DropReason = api.TicketDropped, reason
+		t.dropRefusal()
 		s.logStep(ctx, tx, id, "drop", map[string]any{"reason": reason})
 		return nil
 	}); err != nil {

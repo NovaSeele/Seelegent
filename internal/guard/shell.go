@@ -2,6 +2,7 @@ package guard
 
 import (
 	"errors"
+	"slices"
 	"strings"
 )
 
@@ -136,21 +137,67 @@ func (p *parser) peek(off int) byte {
 	return 0
 }
 
+// compoundOpeners are the POSIX words that open a compound command; compoundClosers map each closing word to
+// the openers it closes.
+var (
+	compoundOpeners = map[string]bool{"if": true, "for": true, "while": true, "until": true, "select": true,
+		"case": true}
+	compoundClosers = map[string][]string{"fi": {"if"}, "done": {"for", "while", "until", "select"},
+		"esac": {"case"}}
+)
+
+// compound is an open POSIX compound command: the word that opened it and where its commands start in the
+// state's commands.
+type compound struct {
+	open  string
+	start int
+}
+
 // list reads commands until term (0: the end of the text). The terminator is consumed.
 func (p *parser) list(term byte) error {
 	cur := &segment{}
 	var prev *segment
 	// group is a subshell or brace group that just closed: a | right after it pipes the output of its commands.
 	var group *segment
-	// braces holds where each open POSIX brace group starts in the state's commands.
+	// braces holds where each open POSIX brace group starts in the state's commands; compounds the open compound
+	// commands (if..fi, for/while/until/select..done, case..esac), which are groups as well (F16).
 	var braces []int
+	var compounds []compound
+	// inherit gives the commands from p.st.out[start:] that read no input of their own the input of the group
+	// that in opened: in echo git stash | (cd x && bash), bash reads what echo prints (F16). in is the command
+	// that carried the pipe into the group; a command with its own pipe or here-document keeps it.
+	inherit := func(start int, in *segment) {
+		if !in.piped {
+			return
+		}
+		for _, m := range p.st.out[start:] {
+			if m != in && !m.piped && len(m.stdin) == 0 {
+				m.piped, m.prev = true, in.prev
+			}
+		}
+	}
+	// groupOf is the group of the commands from p.st.out[start:], piped as in was.
+	groupOf := func(start int, in *segment) *segment {
+		inherit(start, in)
+		return &segment{group: p.st.out[start:len(p.st.out):len(p.st.out)], piped: in.piped, prev: in.prev}
+	}
 	flush := func(piped bool) {
+		var closed *segment
 		if len(cur.words) > 0 {
 			p.st.out = append(p.st.out, cur)
 			prev = cur
 			if p.sh == POSIX {
+				closed = closeCompound(&compounds, cur, func(start int) *segment {
+					return groupOf(start, p.st.out[start])
+				})
 				for _, w := range cur.words {
-					if w.quoted || !keywords[w.text] {
+					if w.quoted {
+						break
+					}
+					if compoundOpeners[w.text] {
+						compounds = append(compounds, compound{open: w.text, start: len(p.st.out) - 1})
+					}
+					if !keywords[w.text] {
 						break
 					}
 					if w.text == "{" {
@@ -162,7 +209,10 @@ func (p *parser) list(term byte) error {
 		next := &segment{piped: piped}
 		if piped {
 			next.prev = prev
-			if len(cur.words) == 0 && group != nil {
+			switch {
+			case closed != nil:
+				next.prev = closed // if ...; fi | sh: the output of the compound's commands
+			case len(cur.words) == 0 && group != nil:
 				next.prev = group
 			}
 		}
@@ -172,7 +222,7 @@ func (p *parser) list(term byte) error {
 	// was waiting for its first word when the group opened (it carries the pipe into the group).
 	closeGroup := func(start int, in *segment) {
 		if start < len(p.st.out) {
-			group = &segment{group: p.st.out[start:len(p.st.out):len(p.st.out)], piped: in.piped, prev: in.prev}
+			group = groupOf(start, in)
 		}
 	}
 	for p.i < len(p.s) {
@@ -292,6 +342,26 @@ func (p *parser) list(term byte) error {
 		return errParse
 	}
 	flush(false)
+	return nil
+}
+
+// closeCompound closes the open compound command that seg's first word ends (fi, done, esac) and returns its
+// group (made by group from where it starts), or nil when seg closes none.
+func closeCompound(open *[]compound, seg *segment, group func(start int) *segment) *segment {
+	if len(seg.words) == 0 || seg.words[0].quoted {
+		return nil
+	}
+	openers, ok := compoundClosers[seg.words[0].text]
+	if !ok {
+		return nil
+	}
+	for j := len(*open) - 1; j >= 0; j-- {
+		if slices.Contains(openers, (*open)[j].open) {
+			start := (*open)[j].start
+			*open = (*open)[:j]
+			return group(start)
+		}
+	}
 	return nil
 }
 

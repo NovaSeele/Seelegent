@@ -64,7 +64,7 @@ func (s *Service) Sync(ctx context.Context, id string) (api.SyncResult, error) {
 			if kerr != nil {
 				return kerr
 			}
-			cur.SyncError = msg
+			cur.SyncError, cur.SyncErrorCause = msg, errorCause(err)
 			return saveRepo(ctx, tx, cur, key)
 		})
 		s.o.IssuesChanged(id)
@@ -149,7 +149,7 @@ func (s *Service) Sync(ctx context.Context, id string) (api.SyncResult, error) {
 		if err != nil {
 			return err
 		}
-		cur.LastSyncAt, cur.SyncError = s.o.Now(), ""
+		cur.LastSyncAt, cur.SyncError, cur.SyncErrorCause = s.o.Now(), "", ""
 		return saveRepo(ctx, tx, cur, key)
 	})
 	if err != nil {
@@ -491,7 +491,7 @@ func failureOf(err error) *api.TicketFailure {
 func (s *Service) failTicket(ctx context.Context, id, step string, cause error) {
 	msg := s.redactErr(cause, 600)
 	_, err := s.updateTicket(context.WithoutCancel(ctx), id, func(tx *sql.Tx, t *ticketRec) error {
-		t.Status, t.Error, t.Failure = api.TicketFailed, msg, failureOf(cause)
+		t.Status, t.Error, t.ErrorCause, t.Failure = api.TicketFailed, msg, "", failureOf(cause)
 		s.logStep(ctx, tx, id, step, map[string]any{"error": msg})
 		return nil
 	})

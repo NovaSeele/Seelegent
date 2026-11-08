@@ -8,6 +8,27 @@ import (
 	"testing"
 )
 
+// TestBatchUnsafeArg: the one rule for arguments of a .cmd/.bat program on Windows, used by backend and setup.
+func TestBatchUnsafeArg(t *testing.T) {
+	for _, bad := range []string{"a&b", "50%", "!x!", "a|b", "a<b", "a>b", "x^y", `say "hi"`, "line\nbreak", "cr\r"} {
+		if a, ok := BatchUnsafeArg(`C:\npm\claude.CMD`, "windows", []string{"ok", bad}); !ok || a != bad {
+			t.Errorf("%q: got %q %v", bad, a, ok)
+		}
+		if _, ok := BatchUnsafeArg(`C:\npm\codex.bat`, "windows", []string{bad}); !ok {
+			t.Errorf("%q passed for a .bat", bad)
+		}
+		if _, ok := BatchUnsafeArg(`C:\bin\claude.exe`, "windows", []string{bad}); ok {
+			t.Errorf("%q refused for an .exe", bad)
+		}
+		if _, ok := BatchUnsafeArg("/usr/bin/claude.cmd", "linux", []string{bad}); ok {
+			t.Errorf("%q refused off Windows", bad)
+		}
+	}
+	if _, ok := BatchUnsafeArg(`C:\npm\claude.cmd`, "windows", []string{"-p", `C:\Users\A B\x.json`}); ok {
+		t.Error("safe arguments refused")
+	}
+}
+
 func writeFile(t *testing.T, path string, mode os.FileMode) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {

@@ -26,7 +26,35 @@
     "drivingDesc": "ワーカーの会話がコンソールで開いています。閉じると、ワーカーが引き継ぎレポートを書きます。",
     "needsYou": "あなたの対応が必要",
     "needsLead": "リードの対応が必要",
-    "dismiss": "閉じる"
+    "dismiss": "閉じる",
+    "why": {
+      "backgroundWait": "ワーカー CLI は、ワーカーがバックグラウンドで始めたコマンドを待っています。止まっているのではなく、静かなだけです。",
+      "failed": "タスクが失敗しました。最後のターンを確認してから、フォローアップするか再実行してください。",
+      "exit": {
+        "timeout": "{backend} はターンの制限時間で停止されました。",
+        "canceled": "{backend} はキャンセルされました。",
+        "start_failed": "{backend} を起動できませんでした。",
+        "launcher_lost": "{backend} を実行していたプロセスが、ターンの終わり方を記録する前に消えました。",
+        "exit_error": "{backend} は終了コード {code} で停止しました。",
+        "no_result": "{backend} は結果を送らずにターンを終えました（終了コード {code}）。"
+      },
+      "noResponse": "ワーカーはレポートなしでターンを終えました。",
+      "denied": "ワーカーはレポートなしでターンを終えました。拒否された操作: {actions}",
+      "notStarted": "起動から {minutes} 分たってもワーカーが始まっていません。",
+      "noOutput": "{minutes} 分間出力がありません。",
+      "toolQuiet": "{minutes} 分間出力がありません。最後のステップ: {step}",
+      "callsFailed": "直近 {count} 回のツール呼び出しが失敗しました。",
+      "repeated": "ワーカーは直近 {steps} ステップで同じ {tool} の呼び出しを {count} 回繰り返しました。",
+      "noAccounts": "作業できる {backend} アカウントがありません。サインインするか有効にしてください。",
+      "auth": "有効な {backend} アカウントはすべてサインインが必要です。",
+      "depMissing": "前のタスク {task} はもう存在しません。",
+      "depRejected": "前のタスク {title}（{task}）は却下されました。",
+      "depFailed": "前のタスク {title}（{task}）は失敗しました。",
+      "depsWaiting": "{tasks} の完了を待っています。",
+      "depCancelled": "前のタスク {title}（{task}）はキャンセルされました。",
+      "hygiene": "確認が必要な衛生チェックの指摘が {count} 件あります",
+      "workAtRisk": "{count} 件のファイルで変更が失われた可能性があります"
+    }
   },
   "question": {
     "title": "ワーカーからの質問",
@@ -71,7 +99,9 @@
     "rejectedConfirm": "差し戻し",
     "acceptedToast": "承認しました",
     "acceptedWarned": "承認しました。警告: {warnings}",
-    "rejectedToast": "差し戻しました"
+    "rejectedToast": "差し戻しました",
+    "objected": "{who} が異議: {text}",
+    "objectedBare": "{who} が異議"
   },
   "confirm": {
     "cancelTitle": "このタスクをキャンセルしますか？",

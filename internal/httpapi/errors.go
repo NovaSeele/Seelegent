@@ -237,12 +237,16 @@ func toAPIError(err error) *apiError {
 		errors.Is(err, ticket.ErrConflict)) {
 		return &apiError{code: api.CodeConflict, message: msg, details: withDetails.APIDetails()}
 	}
-	// A member named for work that does not exist: a bad argument that says which (details.reason member_missing).
-	if errors.As(err, &withDetails) && errors.Is(err, member.ErrInvalid) {
+	// A member or role named for work that does not exist: a bad argument that says which (details.reason
+	// member_missing or role_missing).
+	if errors.As(err, &withDetails) && (errors.Is(err, member.ErrInvalid) || errors.Is(err, task.ErrInvalid)) {
 		return &apiError{code: api.CodeInvalidArgument, message: msg, details: withDetails.APIDetails()}
 	}
-	// An automation run now refused because the user has not confirmed it as it is (details.reason not_confirmed).
-	if errors.As(err, &withDetails) && errors.Is(err, automation.ErrBadState) {
+	// An automation run now refused because the user has not confirmed it as it is (details.reason not_confirmed);
+	// a ticket retried as before whose member is gone or off (details.reason member_missing or member_disabled).
+	// A followup on a variant of a contest that ended (details.reason contest_ended).
+	if errors.As(err, &withDetails) && (errors.Is(err, automation.ErrBadState) || errors.Is(err, ticket.ErrBadState) ||
+		errors.Is(err, task.ErrBadState)) {
 		return &apiError{code: api.CodeBadState, message: msg, details: withDetails.APIDetails()}
 	}
 	switch {

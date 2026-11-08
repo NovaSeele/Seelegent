@@ -397,5 +397,18 @@
       "device": "Bórralo: Windows no puede extraer un archivo con este nombre.",
       "link": "Borra el enlace o copia en el worktree aquello a lo que apunta."
     }
+  },
+  "cause": {
+    "gitAuth": "Git no pudo iniciar sesión en el remoto. Configura credenciales de git para él (en GitHub: gh auth setup-git) o revisa el token y vuelve a intentarlo.",
+    "gitRejected": "El remoto rechazó el push (una rama protegida o una regla del servidor). Haz push a otra rama o pide a un administrador del repositorio que lo permita.",
+    "git": "Falló un comando de git. Lee abajo el motivo de git, corrígelo en el repositorio y vuelve a intentarlo.",
+    "network": "No se pudo llegar a GitHub o al remoto a tiempo. Revisa la conexión y vuelve a intentarlo.",
+    "githubAuth": "GitHub rechazó el inicio de sesión. Vuelve a iniciar sesión en gh o cambia el token.",
+    "githubRateLimited": "Se alcanzó el límite de peticiones de GitHub. Se restablece en menos de una hora; vuelve a intentarlo entonces.",
+    "githubForbidden": "La cuenta o el token de GitHub no pueden hacer esto en este repositorio. Dales acceso al repositorio (o el permiso que necesitan) y vuelve a intentarlo.",
+    "githubNotFound": "GitHub no conoce este repositorio o lo oculta a este token o cuenta de gh. Revisa el propietario y el nombre, o inicia sesión con una cuenta que pueda verlo.",
+    "githubManual": "Este paso necesita la CLI gh con sesión iniciada o un token de GitHub. Ejecuta gh auth login (o configura un token de GitHub) y vuelve a intentarlo.",
+    "github": "GitHub devolvió un error. Suele ser pasajero: vuelve a intentarlo en unos minutos y, si sigue fallando, lee abajo el mensaje de GitHub.",
+    "other": "El paso falló. Lee el mensaje de abajo y vuelve a intentarlo."
   }
 }

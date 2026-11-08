@@ -15,11 +15,46 @@ const { t } = useI18n()
 const connection = useConnectionStore()
 const toasts = useToastStore()
 
-const now = ref(Date.now())
-const timer = setInterval(() => (now.value = Date.now()), 1000)
-onBeforeUnmount(() => clearInterval(timer))
-
 const offline = computed(() => connection.status === 'offline')
+
+/**
+ * The clock of the countdown ticks only while there is one to show: offline, with a retry time still ahead, and the
+ * tab visible (E-B24: a one-second timer used to run for the whole session).
+ */
+const now = ref(Date.now())
+const visible = ref(document.visibilityState !== 'hidden')
+let timer: ReturnType<typeof setInterval> | undefined
+
+function stop() {
+  if (timer !== undefined) clearInterval(timer)
+  timer = undefined
+}
+
+function tick() {
+  now.value = Date.now()
+  if (connection.retryAt === null || connection.retryAt <= now.value) stop()
+}
+
+function onVisibility() {
+  visible.value = document.visibilityState !== 'hidden'
+}
+
+watch(
+  [offline, () => connection.retryAt, visible],
+  ([isOffline, retryAt, isVisible]) => {
+    stop()
+    now.value = Date.now()
+    if (isOffline && isVisible && retryAt !== null && retryAt > now.value)
+      timer = setInterval(tick, 1000)
+  },
+  { immediate: true },
+)
+document.addEventListener('visibilitychange', onVisibility)
+onBeforeUnmount(() => {
+  stop()
+  document.removeEventListener('visibilitychange', onVisibility)
+})
+
 const secondsLeft = computed(() =>
   connection.retryAt === null ? 0 : Math.max(0, Math.ceil((connection.retryAt - now.value) / 1000)),
 )

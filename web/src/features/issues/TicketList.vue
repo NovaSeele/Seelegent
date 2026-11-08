@@ -116,6 +116,8 @@ const look = (x: TicketSummary) => TICKET_PHASE[ticketPhase(x)]
 
 .row:hover {
   background: var(--bg-hover);
+  --text-muted: var(--text-primary);
+  --text-secondary: var(--text-primary);
 }
 
 .row:focus-visible {

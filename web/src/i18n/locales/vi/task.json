@@ -26,7 +26,35 @@
     "drivingDesc": "Cuộc hội thoại của worker đang mở trong một console. Khi bạn đóng nó, worker sẽ viết báo cáo bàn giao.",
     "needsYou": "cần bạn",
     "needsLead": "cần lead",
-    "dismiss": "Bỏ qua"
+    "dismiss": "Bỏ qua",
+    "why": {
+      "backgroundWait": "CLI của worker đang chờ một lệnh mà worker đã chạy nền. Nó chỉ im lặng, không bị kẹt.",
+      "failed": "Tác vụ đã thất bại. Xem lượt cuối, rồi gửi tiếp yêu cầu hoặc chạy lại.",
+      "exit": {
+        "timeout": "{backend} đã bị dừng khi hết thời gian của lượt.",
+        "canceled": "{backend} đã bị huỷ.",
+        "start_failed": "Không khởi động được {backend}.",
+        "launcher_lost": "Tiến trình chạy {backend} đã biến mất trước khi ghi lại lượt kết thúc thế nào.",
+        "exit_error": "{backend} đã dừng với mã thoát {code}.",
+        "no_result": "{backend} đã kết thúc lượt (mã thoát {code}) mà không gửi kết quả."
+      },
+      "noResponse": "Worker đã kết thúc lượt mà không có báo cáo.",
+      "denied": "Worker đã kết thúc lượt mà không có báo cáo. Hành động bị từ chối: {actions}",
+      "notStarted": "Worker chưa bắt đầu sau {minutes} phút kể từ khi khởi chạy.",
+      "noOutput": "Không có đầu ra trong {minutes} phút.",
+      "toolQuiet": "Không có đầu ra trong {minutes} phút; bước cuối {step}.",
+      "callsFailed": "{count} lần gọi công cụ gần nhất đều thất bại.",
+      "repeated": "Worker đã lặp lại cùng một lệnh gọi {tool} {count} lần trong {steps} bước gần nhất.",
+      "noAccounts": "Không có tài khoản {backend} nào chạy được việc. Hãy đăng nhập hoặc bật một tài khoản.",
+      "auth": "Mọi tài khoản {backend} đang bật đều cần đăng nhập.",
+      "depMissing": "Tác vụ trước {task} không còn tồn tại.",
+      "depRejected": "Tác vụ trước {title} ({task}) đã bị từ chối.",
+      "depFailed": "Tác vụ trước {title} ({task}) đã thất bại.",
+      "depsWaiting": "Đang chờ {tasks} hoàn tất.",
+      "depCancelled": "Tác vụ trước {title} ({task}) đã bị huỷ.",
+      "hygiene": "{count} phát hiện vệ sinh mã cần xem",
+      "workAtRisk": "{count} tệp có thể đã mất thay đổi"
+    }
   },
   "question": {
     "title": "Worker hỏi",
@@ -71,7 +99,9 @@
     "rejectedConfirm": "Từ chối",
     "acceptedToast": "Đã chấp nhận",
     "acceptedWarned": "Đã chấp nhận. Cảnh báo: {warnings}",
-    "rejectedToast": "Đã từ chối"
+    "rejectedToast": "Đã từ chối",
+    "objected": "{who} phản đối: {text}",
+    "objectedBare": "{who} phản đối"
   },
   "confirm": {
     "cancelTitle": "Huỷ tác vụ này?",

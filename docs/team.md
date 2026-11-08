@@ -39,8 +39,10 @@ Using a member (`delegate`/`followup` with `member`):
 
 - What the request names wins; the member fills the rest: backend or provider, model or tier (its model only on
   its own backend), role and preferred accounts.
-- An unknown member is `400 invalid_argument`; a member that is off (or whose provider is gone, `invalid`) is
-  `409 conflict` with `details.reason: "member_disabled"`.
+- An unknown member is `400 invalid_argument` with `details.reason: "member_missing"`. A member's role is checked
+  when the member is used, not when it is saved (roles can be project-level): a role that is neither the project's
+  nor global is `400 invalid_argument` with `details` `{reason: "role_missing", role, member}`. A member that is
+  off (or whose provider is gone, `invalid`) is `409 conflict` with `details.reason: "member_disabled"`.
 - When no account of the member's backend can run the task, the task moves to the next of its fallback backends,
   forward only. A task on a provider, or on a backend the lead chose outside the list, stays.
 - A followup with `member` moves the task to that member from this turn on (a new backend starts a new
@@ -58,7 +60,8 @@ record was never stored (a consult whose task started a new turn meanwhile, a me
 cancelled meeting's running turns) is cancelled and closed once its worker has stopped. A daemon that stops first
 leaves such runs open, so at startup the meeting service stops and closes the open `meeting` runs whose meeting
 does not exist (Open starts a meeting's first round before it stores the meeting) or has ended (cancelled, closed,
-failed), and the task engine those of kind `consult` that no consult of their parent task names.
+failed), and the task engine those of kind `consult` that no consult of their parent task names or whose consult
+has already ended (stored as done or failed before the run was closed); a consult still `running` is followed again.
 
 ## Consults
 
@@ -180,7 +183,10 @@ publishes `meeting.updated` with the meeting's summary.
    The dashboard applies the proposal unless another qualified variant is chosen; when none qualifies it offers
    "Apply a variant anyway" for a disqualified one that still has work (red gate, lane, rejected).
 
-A followup on a variant while the contest is ready reopens it; it is scored again when the variant ends.
+A followup on a variant while the contest is ready reopens it; it is scored again when the variant ends. Once the
+contest is applied, cancelled or failed its variants take no followup (`409 bad_state` with `details` `{reason:
+"contest_ended", contest, status}`): their changes were stored once when the contest ended, and a later turn would
+never show in the contest; delegate a new task instead.
 
 Cleanup: once a variant's task stops running, its changes are stored in Seelegent's data folder
 (`contests/<id>/<label>.json`: the diff against the base cut at 400 000 bytes, the files and line counts, and a

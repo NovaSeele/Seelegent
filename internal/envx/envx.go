@@ -70,3 +70,30 @@ func ResolveCommand(name string, env []string) string {
 func executable(st os.FileInfo) bool {
 	return runtime.GOOS == "windows" || st.Mode().Perm()&0o111 != 0
 }
+
+// BatchMeta lists the characters cmd.exe reads in a batch file's arguments however Go quotes them: it expands
+// %VAR% (and !VAR!), cuts the line at an unquoted & | < >, ^ and " change the quoting itself, and a line break ends
+// the command.
+const BatchMeta = "%!&|<>^\"\r\n"
+
+// IsBatch reports whether bin is a batch file (.cmd or .bat), which Windows runs through cmd.exe.
+func IsBatch(bin string) bool {
+	ext := strings.ToLower(filepath.Ext(bin))
+	return ext == ".cmd" || ext == ".bat"
+}
+
+// BatchUnsafeArg returns the first of args that cmd.exe would misread when bin is a batch file run on goos
+// "windows" (such as the npm shims claude.cmd and codex.cmd), and whether there is one. Go quotes arguments for
+// the program's own parser, which a batch file does not have, so callers refuse such an argument instead of
+// escaping it. Both the worker launch (backend) and setup use this one rule, so they cannot drift apart.
+func BatchUnsafeArg(bin, goos string, args []string) (string, bool) {
+	if goos != "windows" || !IsBatch(bin) {
+		return "", false
+	}
+	for _, a := range args {
+		if strings.ContainsAny(a, BatchMeta) {
+			return a, true
+		}
+	}
+	return "", false
+}

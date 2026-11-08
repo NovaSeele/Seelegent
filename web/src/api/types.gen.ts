@@ -1113,6 +1113,19 @@ export interface OutboxEntry {
   args: Record<string, unknown>
   result: Record<string, unknown>
   error?: string
+  /** Cause is the cause of Error (api.Cause*), set with it. */
+  cause?:
+    | 'git_auth'
+    | 'git_rejected'
+    | 'git'
+    | 'network'
+    | 'github_auth'
+    | 'github_rate_limited'
+    | 'github_forbidden'
+    | 'github_not_found'
+    | 'github_manual'
+    | 'github'
+    | 'other'
   at: string
   doneAt?: string
 }
@@ -1139,6 +1152,19 @@ export interface Repo {
   createdAt: string
   lastSyncAt?: string
   syncError?: string
+  /** SyncErrorCause is the cause of SyncError (api.Cause*). */
+  syncErrorCause?:
+    | 'git_auth'
+    | 'git_rejected'
+    | 'git'
+    | 'network'
+    | 'github_auth'
+    | 'github_rate_limited'
+    | 'github_forbidden'
+    | 'github_not_found'
+    | 'github_manual'
+    | 'github'
+    | 'other'
   counts: RepoCounts
   outbox: OutboxEntry[]
 }
@@ -1303,6 +1329,19 @@ export interface TicketChecks {
   headSha?: string
   at?: string
   error?: string
+  /** ErrorCause is the cause of Error (api.Cause*). */
+  errorCause?:
+    | 'git_auth'
+    | 'git_rejected'
+    | 'git'
+    | 'network'
+    | 'github_auth'
+    | 'github_rate_limited'
+    | 'github_forbidden'
+    | 'github_not_found'
+    | 'github_manual'
+    | 'github'
+    | 'other'
 }
 
 /** ChecksFix records the task fix_checks started. */
@@ -1366,6 +1405,22 @@ export interface TicketSummary {
   refusal?: TicketRefusal
   /** Error is a failure (a task or meeting that could not start, a GitHub or git call that failed). */
   error?: string
+  /**
+   * ErrorCause is the cause of Error (api.Cause*); absent for a failed ticket, whose Failure (or the generic
+   * "could not start") explains it.
+   */
+  errorCause?:
+    | 'git_auth'
+    | 'git_rejected'
+    | 'git'
+    | 'network'
+    | 'github_auth'
+    | 'github_rate_limited'
+    | 'github_forbidden'
+    | 'github_not_found'
+    | 'github_manual'
+    | 'github'
+    | 'other'
   /**
    * Failure is the known cause of a failed ticket, for the dashboard to explain in its own words (Error stays
    * the text for the lead's tools and for causes without a code).
@@ -2366,6 +2421,17 @@ export interface TaskSummary {
   lastEventSeq: number
   /** Warnings are set only by a review: accepting over a senior member's objection names it and its first finding. */
   warnings?: string[]
+  /** Objections are the same warnings as values, for a text in the reader's language (F14). */
+  objections?: SeniorObjection[]
+}
+
+/**
+ * SeniorObjection is a senior member's standing objection to a task that was accepted anyway: the member and its
+ * first finding or required change (at most 300 characters).
+ */
+export interface SeniorObjection {
+  member: string
+  text?: string
 }
 
 /** ProfileRef names the role profile of a task. */
@@ -2390,8 +2456,52 @@ export interface Attention {
   reason: string
   /** Who is lead or user. */
   who: 'lead' | 'user'
+  /**
+   * Detail says why in English, for the lead (MCP, CLI); for a question it is the worker's question. The
+   * dashboard builds its own text from Reason and Params (F14).
+   */
   detail?: string
+  /** Params are the values behind Detail, for a text in the reader's language. */
+  params?: AttentionParams
   since: string
+}
+
+/**
+ * AttentionParams are the values an attention flag's text is made of. Only the fields of the reason are set:
+ * stalled (Kind, Minutes, Tool, Command), looping (Kind, Count, Tool, Steps), no_accounts and auth (Backend),
+ * deps_blocked (Kind, Task, Title), no_response (Denied), hygiene and work_at_risk (Count).
+ */
+export interface AttentionParams {
+  kind?:
+    | 'not_started'
+    | 'no_output'
+    | 'tool'
+    | 'failed_calls'
+    | 'repeated'
+    | 'missing'
+    | 'rejected'
+    | 'failed'
+    | 'cancelled'
+    | 'timeout'
+    | 'canceled'
+    | 'start_failed'
+    | 'launcher_lost'
+    | 'exit_error'
+    | 'no_result'
+  /** ExitCode is the worker process's exit code of a failed flag whose kind is exit_error or no_result. */
+  exitCode?: number
+  minutes?: number
+  count?: number
+  /** Steps is how many recent tool calls a repeat was counted in. */
+  steps?: number
+  tool?: string
+  command?: string
+  backend?: string
+  /** Task and Title name the prerequisite of deps_blocked. */
+  task?: string
+  title?: string
+  /** Denied are the actions the worker was refused before it ended without a report. */
+  denied?: string[]
 }
 
 /** Review is the lead's verdict on a task. */

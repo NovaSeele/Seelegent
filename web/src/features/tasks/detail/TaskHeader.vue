@@ -9,6 +9,7 @@ import { useFormat } from '@/composables/useFormat'
 import { useNow } from '@/composables/useNow'
 import { displayStatus, isActive, isBlocked, statusWordKey } from '@/lib/taskStatus'
 
+import DepLinks from './DepLinks.vue'
 import { runTime } from './runTime'
 import TaskHeaderActions from './TaskHeaderActions.vue'
 import type { TaskActions } from './useTaskActions'
@@ -116,18 +117,7 @@ const age = computed(() => {
       <strong>{{ t(`task.review.verdict.${task.review.verdict}`) }}</strong>
       <span v-if="task.review.notes"> · {{ task.review.notes }}</span>
     </p>
-    <p v-if="task.after.length" class="th__deps">
-      {{ t('task.header.after') }}
-      <RouterLink
-        v-for="dep in task.after"
-        :key="dep"
-        :to="{ name: 'tasks', params: { taskId: dep } }"
-        class="th__dep"
-      >
-        {{ dep }}
-      </RouterLink>
-      <span v-if="task.depsReason"> · {{ task.depsReason }}</span>
-    </p>
+    <DepLinks :ids="task.after" />
   </header>
 </template>
 
@@ -220,19 +210,6 @@ const age = computed(() => {
   color: var(--tone-fg);
   font-size: var(--fs-sm);
   overflow-wrap: anywhere;
-}
-
-.th__deps {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-1) var(--space-2);
-  color: var(--text-secondary);
-  font-size: var(--fs-xs);
-}
-
-.th__dep {
-  color: var(--accent);
-  font-family: var(--font-mono);
 }
 
 @media (width < 600px) {

@@ -89,6 +89,8 @@ function pick(template: Role | undefined) {
 .template:hover {
   border-color: var(--text-muted);
   background: var(--bg-hover);
+  --text-muted: var(--text-primary);
+  --text-secondary: var(--text-primary);
 }
 
 .template:focus-visible {

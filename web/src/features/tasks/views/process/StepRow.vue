@@ -78,6 +78,8 @@ const duration = computed(() => {
 
 .sr__btn:hover {
   background: var(--bg-hover);
+  --text-muted: var(--text-primary);
+  --text-secondary: var(--text-primary);
 }
 
 .sr__btn:focus-visible {

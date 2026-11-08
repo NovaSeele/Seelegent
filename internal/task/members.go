@@ -7,6 +7,7 @@ import (
 	"slices"
 
 	"github.com/NovaSeele/Seelegent/internal/api"
+	"github.com/NovaSeele/Seelegent/internal/role"
 )
 
 // usableMember returns the member with id for new work.
@@ -24,14 +25,96 @@ func (s *Service) usableMember(ctx context.Context, id string) (api.Member, erro
 		}
 		if errors.As(err, &detailed) {
 			if detailed.APIDetails()["reason"] == "member_missing" {
-				// A member that is gone: a bad argument of this request that keeps its details.
-				return api.Member{}, fmt.Errorf("%w: %w", ErrInvalid, err)
+				// A member that is gone: a bad argument of this request that keeps its message and details (F22:
+				// no "invalid: not found:" prefixes in what the lead reads).
+				return api.Member{}, &invalidError{err: err}
 			}
 			return api.Member{}, err
 		}
 		return api.Member{}, invalidf("%v", err)
 	}
 	return m, nil
+}
+
+// ContestEndedError refuses a followup on a variant task of a contest that was applied, cancelled or failed (F46):
+// the variant's changes were stored once when the contest ended, so a new turn would never show in the contest.
+type ContestEndedError struct {
+	Task, Contest, Status string
+}
+
+func (e *ContestEndedError) Error() string {
+	return fmt.Sprintf("task %s is a variant of contest %s, which is %s: its changes were kept when the contest "+
+		"ended, so it takes no more turns; delegate a new task instead", e.Task, e.Contest, e.Status)
+}
+
+// Is makes errors.Is(err, ErrBadState) true.
+func (e *ContestEndedError) Is(target error) bool { return target == ErrBadState }
+
+// APIDetails are the details of the API error (reason contest_ended).
+func (e *ContestEndedError) APIDetails() map[string]any {
+	return map[string]any{"reason": "contest_ended", "contest": e.Contest, "status": e.Status}
+}
+
+// checkContest refuses a followup on t when it is a variant of a contest that ended.
+func (s *Service) checkContest(ctx context.Context, t *Task) error {
+	if t.ContestID == "" || t.Kind != KindNormal || s.o.ContestEnded == nil {
+		return nil
+	}
+	status, ended, err := s.o.ContestEnded(ctx, t.ContestID)
+	if err != nil {
+		return fmt.Errorf("read contest %s: %w", t.ContestID, err)
+	}
+	if ended {
+		return &ContestEndedError{Task: t.ID, Contest: t.ContestID, Status: status}
+	}
+	return nil
+}
+
+// invalidError is a bad argument (ErrInvalid) that keeps the message and the API details of the error it wraps.
+type invalidError struct{ err error }
+
+func (e *invalidError) Error() string { return e.err.Error() }
+
+// Is makes errors.Is(err, ErrInvalid) true.
+func (e *invalidError) Is(target error) bool { return target == ErrInvalid }
+
+func (e *invalidError) Unwrap() error { return e.err }
+
+// RoleMissingError is a role named for a task (by the request or by its member) that is neither a role of the
+// task's project nor a global one. A member's role is checked only when the member is used: roles can be
+// project-level, so a role that is missing for one project may exist in another.
+type RoleMissingError struct {
+	// Role is the role id; Member is the member whose role it is ("" when the request named the role).
+	Role, Member string
+}
+
+func (e *RoleMissingError) Error() string {
+	if e.Member != "" {
+		return fmt.Sprintf("member %q has the role %q, which is not a role of this project or a global role; "+
+			"fix the member's role in Members or pick another role", e.Member, e.Role)
+	}
+	return fmt.Sprintf("no role %q in this project or the global roles; pick another role", e.Role)
+}
+
+// Is makes errors.Is(err, ErrInvalid) true.
+func (e *RoleMissingError) Is(target error) bool { return target == ErrInvalid }
+
+// APIDetails are the details of the API error (reason role_missing).
+func (e *RoleMissingError) APIDetails() map[string]any {
+	d := map[string]any{"reason": "role_missing", "role": e.Role}
+	if e.Member != "" {
+		d["member"] = e.Member
+	}
+	return d
+}
+
+// roleErr is the error of a role lookup that failed: RoleMissingError when there is no such role. member is the
+// member whose role it is, or "".
+func roleErr(id, member string, err error) error {
+	if errors.Is(err, role.ErrNotFound) {
+		return &RoleMissingError{Role: id, Member: member}
+	}
+	return invalidf("role %q: %v", id, err)
 }
 
 // memberDefaults applies a member to a delegate: the request's own backend, provider, model, tier and role win,

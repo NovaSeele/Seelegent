@@ -113,10 +113,21 @@ defineExpose({ focusSelected })
 
 .gfl__row:hover {
   background: var(--bg-hover);
+  --text-muted: var(--text-primary);
+  --text-secondary: var(--text-primary);
 }
 
 .gfl__row--selected {
   background: var(--accent-soft);
+  --text-muted: var(--text-primary);
+  --text-secondary: var(--text-primary);
+}
+
+/* The tint of a hovered or selected row takes the quiet text below 4.5:1 in every theme: it reads in the primary
+   colour there (F33). */
+.gfl__row:hover :is(.gfl__dir, .gfl__from, .gfl__count, .gfl__name--deleted),
+.gfl__row--selected :is(.gfl__dir, .gfl__from, .gfl__count, .gfl__name--deleted) {
+  color: var(--text-primary);
 }
 
 .gfl__row:focus-visible {

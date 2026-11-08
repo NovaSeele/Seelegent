@@ -126,7 +126,9 @@
     "waitingDeps": "Esperando tarea previa",
     "hygiene": "Problema de higiene",
     "verifierRejected": "Rechazado en la revisión",
-    "peerObjection": "Un par se opone"
+    "peerObjection": "Un par se opone",
+    "backgroundWait": "Esperando un comando en segundo plano",
+    "unknown": "Necesita revisión"
   },
   "stage": {
     "explore": "Explorar",
@@ -162,5 +164,6 @@
     "collapseSidebar": "Ocultar panel lateral",
     "expandSidebar": "Mostrar panel lateral",
     "noResults": "Sin resultados"
-  }
+  },
+  "daemonSaid": "Seelegent dijo:"
 }

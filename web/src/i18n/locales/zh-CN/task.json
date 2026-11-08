@@ -26,7 +26,35 @@
     "drivingDesc": "worker 的对话已在控制台中打开。关闭后，worker 会写一份交接报告。",
     "needsYou": "需要你处理",
     "needsLead": "需要主管处理",
-    "dismiss": "忽略"
+    "dismiss": "忽略",
+    "why": {
+      "backgroundWait": "Worker CLI 正在等待 worker 在后台启动的命令。它只是安静，并没有卡住。",
+      "failed": "任务失败了。先查看最后一轮，再追加说明或重新开始。",
+      "exit": {
+        "timeout": "{backend} 到达本轮时间上限，已被停止。",
+        "canceled": "{backend} 已取消。",
+        "start_failed": "无法启动 {backend}。",
+        "launcher_lost": "运行 {backend} 的进程在记录本轮如何结束之前消失了。",
+        "exit_error": "{backend} 以退出码 {code} 停止。",
+        "no_result": "{backend} 结束了本轮（退出码 {code}），但没有发送结果。"
+      },
+      "noResponse": "Worker 结束了这一轮，但没有报告。",
+      "denied": "Worker 结束了这一轮，但没有报告。被拒绝的操作：{actions}",
+      "notStarted": "启动 {minutes} 分钟后 worker 仍未开始。",
+      "noOutput": "已经 {minutes} 分钟没有输出。",
+      "toolQuiet": "已经 {minutes} 分钟没有输出；最后一步 {step}。",
+      "callsFailed": "最近 {count} 次工具调用都失败了。",
+      "repeated": "Worker 在最近 {steps} 步中把同一个 {tool} 调用重复了 {count} 次。",
+      "noAccounts": "没有能干活的 {backend} 账号。请登录或启用一个账号。",
+      "auth": "所有已启用的 {backend} 账号都需要登录。",
+      "depMissing": "前置任务 {task} 已不存在。",
+      "depRejected": "前置任务 {title}（{task}）被拒绝了。",
+      "depFailed": "前置任务 {title}（{task}）失败了。",
+      "depsWaiting": "等待 {tasks} 完成。",
+      "depCancelled": "前置任务 {title}（{task}）已取消。",
+      "hygiene": "有 {count} 条卫生检查发现需要查看",
+      "workAtRisk": "{count} 个文件的修改可能已丢失"
+    }
   },
   "question": {
     "title": "worker 的问题",
@@ -71,7 +99,9 @@
     "rejectedConfirm": "退回",
     "acceptedToast": "已接受",
     "acceptedWarned": "已接受。警告：{warnings}",
-    "rejectedToast": "已退回"
+    "rejectedToast": "已退回",
+    "objected": "{who} 反对：{text}",
+    "objectedBare": "{who} 反对"
   },
   "confirm": {
     "cancelTitle": "取消这个任务？",

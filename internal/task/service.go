@@ -155,6 +155,11 @@ type Options struct {
 	// Members are the department members (delegate and followup by member, consults, backend fallback); nil
 	// refuses member.
 	Members Members
+	// ContestEnded reports whether the contest with id was applied, cancelled or failed, and its status
+	// (contest.Service.Ended). A followup on a variant task of such a contest is refused: the contest stored the
+	// variant's changes once, when it ended, and the views keep showing that copy. It must not take the contest's
+	// lock (a pick holds it while it reviews the variant tasks). nil allows every followup.
+	ContestEnded func(ctx context.Context, id string) (status string, ended bool, err error)
 
 	// BaseEnv returns the environment workers inherit (os.Environ when nil).
 	BaseEnv func() []string

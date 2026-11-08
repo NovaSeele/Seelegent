@@ -65,6 +65,36 @@ const (
 	OutboxUnknown = "unknown"
 )
 
+// Causes of a failed GitHub or git step (OutboxEntry.Cause, TicketSummary.ErrorCause, TicketChecks.ErrorCause,
+// Repo.SyncErrorCause): the dashboard explains the step in the reader's language from the cause and keeps the
+// English error text, which stays for the lead's tools, behind a disclosure.
+const (
+	// CauseGitAuth: git could not sign in to the remote. Seelegent pushes with the user's own git credentials
+	// (credential helper, SSH key), never with its GitHub token (old D18).
+	CauseGitAuth = "git_auth"
+	// CauseGitRejected: the remote rejected the push (a protected branch, a server-side hook).
+	CauseGitRejected = "git_rejected"
+	// CauseGit: another git failure.
+	CauseGit = "git"
+	// CauseNetwork: GitHub or the remote could not be reached in time.
+	CauseNetwork = "network"
+	// CauseGitHubAuth: GitHub refused the token or the gh sign-in.
+	CauseGitHubAuth = "github_auth"
+	// CauseGitHubRateLimited: GitHub's rate limit.
+	CauseGitHubRateLimited = "github_rate_limited"
+	// CauseGitHubForbidden: the token or gh account may not do this on the repository.
+	CauseGitHubForbidden = "github_forbidden"
+	// CauseGitHubNotFound: GitHub does not know the repository (or the item), or hides a private one from this
+	// token or gh account.
+	CauseGitHubNotFound = "github_not_found"
+	// CauseGitHubManual: the step needs the gh CLI signed in or a token.
+	CauseGitHubManual = "github_manual"
+	// CauseGitHub: another GitHub API error.
+	CauseGitHub = "github"
+	// CauseOther: anything else.
+	CauseOther = "other"
+)
+
 // OutboxEntry is one action that leaves the machine (or changes the ticket's branch), written before it runs.
 type OutboxEntry struct {
 	ID     int64          `json:"id"`
@@ -73,8 +103,10 @@ type OutboxEntry struct {
 	Args   map[string]any `json:"args"`
 	Result map[string]any `json:"result"`
 	Error  string         `json:"error,omitempty"`
-	At     string         `json:"at"`
-	DoneAt string         `json:"doneAt,omitempty"`
+	// Cause is the cause of Error (api.Cause*), set with it.
+	Cause  string `json:"cause,omitempty" ts:"'git_auth' | 'git_rejected' | 'git' | 'network' | 'github_auth' | 'github_rate_limited' | 'github_forbidden' | 'github_not_found' | 'github_manual' | 'github' | 'other'"`
+	At     string `json:"at"`
+	DoneAt string `json:"doneAt,omitempty"`
 }
 
 // Repo is a connected repository.
@@ -90,15 +122,17 @@ type Repo struct {
 	GitHub    bool   `json:"github"`
 	NotGitHub string `json:"notGithub,omitempty"`
 	// Remote is "origin" when the repository has one; RemoteURL is its URL without credentials.
-	Remote        string        `json:"remote,omitempty"`
-	RemoteURL     string        `json:"remoteUrl,omitempty"`
-	DefaultBranch string        `json:"defaultBranch"`
-	SharedDirs    []string      `json:"sharedDirs"`
-	CreatedAt     string        `json:"createdAt"`
-	LastSyncAt    string        `json:"lastSyncAt,omitempty"`
-	SyncError     string        `json:"syncError,omitempty"`
-	Counts        RepoCounts    `json:"counts"`
-	Outbox        []OutboxEntry `json:"outbox"`
+	Remote        string   `json:"remote,omitempty"`
+	RemoteURL     string   `json:"remoteUrl,omitempty"`
+	DefaultBranch string   `json:"defaultBranch"`
+	SharedDirs    []string `json:"sharedDirs"`
+	CreatedAt     string   `json:"createdAt"`
+	LastSyncAt    string   `json:"lastSyncAt,omitempty"`
+	SyncError     string   `json:"syncError,omitempty"`
+	// SyncErrorCause is the cause of SyncError (api.Cause*).
+	SyncErrorCause string        `json:"syncErrorCause,omitempty" ts:"'git_auth' | 'git_rejected' | 'git' | 'network' | 'github_auth' | 'github_rate_limited' | 'github_forbidden' | 'github_not_found' | 'github_manual' | 'github' | 'other'"`
+	Counts         RepoCounts    `json:"counts"`
+	Outbox         []OutboxEntry `json:"outbox"`
 }
 
 // RepoConnectRequest is the body of POST /github/repos: connect the repository at path, or make one there first
@@ -282,6 +316,8 @@ type TicketChecks struct {
 	HeadSha string     `json:"headSha,omitempty"`
 	At      string     `json:"at,omitempty"`
 	Error   string     `json:"error,omitempty"`
+	// ErrorCause is the cause of Error (api.Cause*).
+	ErrorCause string `json:"errorCause,omitempty" ts:"'git_auth' | 'git_rejected' | 'git' | 'network' | 'github_auth' | 'github_rate_limited' | 'github_forbidden' | 'github_not_found' | 'github_manual' | 'github' | 'other'"`
 }
 
 // ChecksFix records the task fix_checks started.
@@ -357,6 +393,9 @@ type TicketSummary struct {
 	Refusal *TicketRefusal `json:"refusal,omitempty"`
 	// Error is a failure (a task or meeting that could not start, a GitHub or git call that failed).
 	Error string `json:"error,omitempty"`
+	// ErrorCause is the cause of Error (api.Cause*); absent for a failed ticket, whose Failure (or the generic
+	// "could not start") explains it.
+	ErrorCause string `json:"errorCause,omitempty" ts:"'git_auth' | 'git_rejected' | 'git' | 'network' | 'github_auth' | 'github_rate_limited' | 'github_forbidden' | 'github_not_found' | 'github_manual' | 'github' | 'other'"`
 	// Failure is the known cause of a failed ticket, for the dashboard to explain in its own words (Error stays
 	// the text for the lead's tools and for causes without a code).
 	Failure *TicketFailure `json:"failure,omitempty"`

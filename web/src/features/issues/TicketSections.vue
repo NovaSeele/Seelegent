@@ -16,6 +16,7 @@ import {
   ticketFinished,
   ticketTaskStatus,
 } from './issueModel'
+import CauseError from './CauseError.vue'
 import { findingView } from './ticketText'
 import TicketLog from './TicketLog.vue'
 
@@ -91,7 +92,11 @@ function outboxState(o: OutboxEntry): string {
 
   <section v-if="ticket.checks" class="sec" :aria-label="t('issues.ticket.checks')">
     <h2 class="sec__h">{{ t('issues.ticket.checks') }}</h2>
-    <p v-if="ticket.checks.error" class="sec__error" role="alert">{{ ticket.checks.error }}</p>
+    <CauseError
+      v-if="ticket.checks.error"
+      :cause="ticket.checks.errorCause"
+      :text="ticket.checks.error"
+    />
     <p v-if="!ticket.checks.runs.length" class="sec__none">{{ t('issues.ticket.noChecks') }}</p>
     <ul v-else class="sec__list">
       <li v-for="run in ticket.checks.runs" :key="`${run.kind}-${run.id ?? run.name}`" class="item">
@@ -170,7 +175,7 @@ function outboxState(o: OutboxEntry): string {
           <span>{{ fmt.dateTime(o.at) }}</span>
         </span>
         <p v-if="o.id === refusedStep" class="item__text">{{ t('issues.ticket.outboxRefused') }}</p>
-        <p v-else-if="o.error" class="item__text item__bad">{{ o.error }}</p>
+        <CauseError v-else-if="o.error" class="item__text" :cause="o.cause" :text="o.error" />
       </li>
     </ul>
   </section>
@@ -203,12 +208,6 @@ function outboxState(o: OutboxEntry): string {
 
 .sec__none {
   color: var(--text-secondary);
-  font-size: var(--fs-sm);
-  overflow-wrap: anywhere;
-}
-
-.sec__error {
-  color: var(--status-danger-fg);
   font-size: var(--fs-sm);
   overflow-wrap: anywhere;
 }

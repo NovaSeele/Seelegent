@@ -164,6 +164,8 @@ const tiles = computed(() => [
 
 .files__row:hover {
   background: var(--bg-hover);
+  --text-muted: var(--text-primary);
+  --text-secondary: var(--text-primary);
 }
 
 .files__row td,

@@ -123,6 +123,8 @@ const moreActive = computed(() => secondary.some((item) => item.id === props.act
 
 .bottom-nav__item--active .bottom-nav__icon {
   background: var(--accent-soft);
+  --text-muted: var(--text-primary);
+  --text-secondary: var(--text-primary);
   color: var(--accent);
 }
 
@@ -154,10 +156,14 @@ const moreActive = computed(() => secondary.some((item) => item.id === props.act
 
 .more-list__item:hover {
   background: var(--bg-hover);
+  --text-muted: var(--text-primary);
+  --text-secondary: var(--text-primary);
 }
 
 .more-list__item--active {
   background: var(--accent-soft);
+  --text-muted: var(--text-primary);
+  --text-secondary: var(--text-primary);
   color: var(--accent);
 }
 

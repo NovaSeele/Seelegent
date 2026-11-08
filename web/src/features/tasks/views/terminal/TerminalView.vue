@@ -216,6 +216,8 @@ onBeforeUnmount(unregister)
   .term__flash {
     animation: none;
     background: var(--accent-soft);
+    --text-muted: var(--text-primary);
+    --text-secondary: var(--text-primary);
   }
 }
 

@@ -54,6 +54,28 @@ func notFoundf(format string, args ...any) error {
 	return fmt.Errorf("%w: %s", ErrNotFound, fmt.Sprintf(format, args...))
 }
 
+// FailureError refuses a retry "as before" of a ticket whose task could not start because its member is gone or
+// turned off (F69): the same choice would fail again at once. The lead retries with another member or backend, or
+// names the member again once it is back.
+type FailureError struct{ Failure api.TicketFailure }
+
+func (e *FailureError) Error() string {
+	why := "no longer exists"
+	if e.Failure.Reason == api.FailureMemberDisabled {
+		why = "is turned off"
+	}
+	return fmt.Sprintf("the ticket failed because member %q %s, so a retry as before would fail again; retry with "+
+		"another member or backend, or name the member again once it can work", e.Failure.Member, why)
+}
+
+// Is makes errors.Is(err, ErrBadState) true.
+func (e *FailureError) Is(target error) bool { return target == ErrBadState }
+
+// APIDetails are the details of the API error (reason member_missing or member_disabled).
+func (e *FailureError) APIDetails() map[string]any {
+	return map[string]any{"reason": e.Failure.Reason, "member": e.Failure.Member}
+}
+
 // GitError is a git command of the ticket flow that failed; Message is redacted.
 type GitError struct {
 	Op      string
@@ -218,17 +240,18 @@ func (k *keyed) lock(ctx context.Context, name string) (func(), error) {
 // repoRec is a connected repository as stored. Whether it is on GitHub is worked out from RemoteURL and the host
 // list each time (the settings can change).
 type repoRec struct {
-	ID            string    `json:"id"`
-	Path          string    `json:"path"`
-	Name          string    `json:"name"`
-	HasOrigin     bool      `json:"hasOrigin"`
-	RemoteURL     string    `json:"remoteUrl,omitempty"`
-	DefaultBranch string    `json:"defaultBranch"`
-	SharedDirs    []string  `json:"sharedDirs"`
-	CreatedAt     time.Time `json:"createdAt"`
-	LastSyncAt    time.Time `json:"lastSyncAt,omitzero"`
-	SyncError     string    `json:"syncError,omitempty"`
-	NextLocalID   int       `json:"nextLocalId"`
+	ID             string    `json:"id"`
+	Path           string    `json:"path"`
+	Name           string    `json:"name"`
+	HasOrigin      bool      `json:"hasOrigin"`
+	RemoteURL      string    `json:"remoteUrl,omitempty"`
+	DefaultBranch  string    `json:"defaultBranch"`
+	SharedDirs     []string  `json:"sharedDirs"`
+	CreatedAt      time.Time `json:"createdAt"`
+	LastSyncAt     time.Time `json:"lastSyncAt,omitzero"`
+	SyncError      string    `json:"syncError,omitempty"`
+	SyncErrorCause string    `json:"syncErrorCause,omitempty"`
+	NextLocalID    int       `json:"nextLocalId"`
 }
 
 // ghRepo is the GitHub repository of a connected repository.
@@ -281,6 +304,7 @@ type ticketRec struct {
 	ChecksFix  *api.ChecksFix     `json:"checksFix,omitempty"`
 	Env        *api.WorktreeEnv   `json:"env,omitempty"`
 	Error      string             `json:"error,omitempty"`
+	ErrorCause string             `json:"errorCause,omitempty"`
 	Failure    *api.TicketFailure `json:"failure,omitempty"`
 	Asked      *api.TicketAsk     `json:"asked,omitempty"`
 	Refusal    *api.TicketRefusal `json:"refusal,omitempty"`
@@ -322,11 +346,24 @@ func (t *ticketRec) needsAttention() string {
 	return ""
 }
 
+// dropRefusal forgets a refused pull request: its refusal and the message of a refusal kept as the error. It no
+// longer says what the next pr will find once new work changes the worktree, nor anything once the ticket is
+// dropped; the ticket's log keeps it.
+func (t *ticketRec) dropRefusal() {
+	t.Refusal = nil
+	if t.Status != api.TicketFailed {
+		t.Error = ""
+	}
+}
+
 func (t *ticketRec) summary() api.TicketSummary {
 	sum := api.TicketSummary{ID: t.ID, RepoID: t.RepoID, IssueKey: t.IssueKey, Issue: t.Issue, Branch: t.Branch,
 		Worktree: t.Worktree, Status: t.Status, TaskIDs: api.NonNil(t.TaskIDs), MeetingID: t.MeetingID, PR: t.PR,
 		NeedsAttention: t.needsAttention(), Error: t.Error, Asked: t.Asked, CreatedAt: api.FormatTime(t.CreatedAt),
 		UpdatedAt: api.FormatTime(t.UpdatedAt)}
+	if t.Error != "" {
+		sum.ErrorCause = t.ErrorCause
+	}
 	if t.Refusal != nil && (t.Status == api.TicketReady || t.Status == api.TicketPROpen) {
 		rf := *t.Refusal
 		rf.Findings = api.NonNil(rf.Findings)

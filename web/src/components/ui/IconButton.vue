@@ -113,11 +113,15 @@ const keyshortcuts = computed(() => (props.shortcut ? ariaKeyShortcuts(props.sho
 
 .icon-btn:hover:not(:disabled) {
   background: var(--bg-hover);
+  --text-muted: var(--text-primary);
+  --text-secondary: var(--text-primary);
   color: var(--text-primary);
 }
 
 .icon-btn[aria-pressed='true'] {
   background: var(--accent-soft);
+  --text-muted: var(--text-primary);
+  --text-secondary: var(--text-primary);
   color: var(--accent);
 }
 

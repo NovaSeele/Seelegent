@@ -28,12 +28,20 @@ func checksSig(c *api.TicketChecks) string {
 
 // readChecks reads the checks of the open pull request's head (gh or token tier). It returns nil when there is
 // nothing to read; a failed read keeps an earlier result for the same head.
+//
+// A pull request found merged or closed gets one last read of its final head, in the poll that sees it end: the
+// ticket is done then and never polled again, so the checks it keeps are those of the code that was merged, not
+// whatever an earlier poll saw (often still pending). Checks still running at that moment stay as read.
 func (s *Service) readChecks(ctx context.Context, t *ticketRec, c *github.Client, access github.Access) (
 	*api.TicketChecks, bool) {
 	if !access.CanWrite() || c == nil {
 		return nil, t.Checks != nil
 	}
-	if t.Status != api.TicketPROpen || t.PR == nil || t.PR.State != "open" || t.PR.HeadSha == "" {
+	if t.PR == nil || t.PR.HeadSha == "" {
+		return t.Checks, false
+	}
+	open := t.PR.State == "open" && t.Status == api.TicketPROpen
+	if !open && !prEnded(t.PR.State) {
 		return t.Checks, false
 	}
 	sha := t.PR.HeadSha
@@ -43,12 +51,15 @@ func (s *Service) readChecks(ctx context.Context, t *ticketRec, c *github.Client
 			return t.Checks, false
 		}
 		return &api.TicketChecks{State: api.ChecksUnknown, Runs: []api.CheckRun{}, HeadSha: sha,
-			At: api.FormatTime(s.o.Now()), Error: s.redactErr(err, 300)}, true
+			At: api.FormatTime(s.o.Now()), Error: s.redactErr(err, 300), ErrorCause: errorCause(err)}, true
 	}
 	next.At = api.FormatTime(s.o.Now())
 	changed := checksSig(t.Checks) != checksSig(&next) || t.Checks != nil && t.Checks.Error != ""
 	return &next, changed
 }
+
+// prEnded reports whether a pull request state is final (merged or closed).
+func prEnded(state string) bool { return state == "merged" || state == "closed" }
 
 // failingNames are the names of the failing runs.
 func failingNames(c *api.TicketChecks) []string {
@@ -135,13 +146,23 @@ func (s *Service) pollTicket(ctx context.Context, id string, r *repoRec, access 
 		if err != nil || found == nil {
 			return err
 		}
+		// A pull request opened by hand that already ended: its checks are read once, as it is never polled again.
+		var final *api.TicketChecks
+		if prEnded(found.State) {
+			probe := *t
+			probe.PR = found
+			final, _ = s.readChecks(ctx, &probe, c, access)
+		}
 		_, err = s.updateTicket(ctx, id, func(tx *sql.Tx, t *ticketRec) error {
 			if t.PR != nil {
 				found.ManualURL = t.PR.ManualURL
 			}
 			t.PR = found
-			if found.State == "merged" || found.State == "closed" {
+			if prEnded(found.State) {
 				t.Status = api.TicketDone
+				if final != nil {
+					t.Checks = final
+				}
 			}
 			s.logStep(ctx, tx, id, "pr_found", map[string]any{"number": found.Number, "state": found.State})
 			return nil
@@ -155,7 +176,7 @@ func (s *Service) pollTicket(ctx context.Context, id string, r *repoRec, access 
 			if t.Error == msg {
 				return errUnchanged
 			}
-			t.Error = msg
+			t.Error, t.ErrorCause = msg, errorCause(perr)
 			return nil
 		})
 		return errors.Join(perr, err)
@@ -178,7 +199,7 @@ func (s *Service) pollTicket(ctx context.Context, id string, r *repoRec, access 
 		if st.URL != "" {
 			t.PR.URL = st.URL
 		}
-		if (st.State == "merged" || st.State == "closed") && t.Status != api.TicketDone {
+		if prEnded(st.State) && t.Status != api.TicketDone {
 			t.Status = api.TicketDone
 			s.logStep(ctx, tx, id, "status", map[string]any{"status": api.TicketDone, "pr": st.State})
 			changed = true

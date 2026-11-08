@@ -126,7 +126,9 @@
     "waitingDeps": "Waiting on earlier task",
     "hygiene": "Hygiene problem",
     "verifierRejected": "Review rejected it",
-    "peerObjection": "A peer objects"
+    "peerObjection": "A peer objects",
+    "backgroundWait": "Waiting on a background command",
+    "unknown": "Needs a look"
   },
   "stage": {
     "explore": "Explore",
@@ -162,5 +164,6 @@
     "collapseSidebar": "Hide sidebar",
     "expandSidebar": "Show sidebar",
     "noResults": "No results"
-  }
+  },
+  "daemonSaid": "Seelegent said:"
 }

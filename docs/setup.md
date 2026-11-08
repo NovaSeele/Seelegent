@@ -21,9 +21,9 @@ seelegent setup [--host a,b] [--dry-run] [--remove] [--no-skill] [--hooks] [--fo
 |---|---|
 | `--host` | Only these hosts (ids below). Without it, every detected host. A named host that is not installed is reported as `skipped`. |
 | `--dry-run` | Report every action without writing a file or running a host CLI. |
-| `--remove` | Remove what setup added: the MCP entry, the skill and the hook. An entry or skill that is not Seelegent's is left alone. |
+| `--remove` | Remove what setup added: the MCP entry, the skill and the hook. An entry or skill that is not Seelegent's is left alone. A host whose program is gone but whose config file or Seelegent skill is still there (Gemini CLI uninstalled) is cleaned up too. A run that is cancelled still records the files it created so far. |
 | `--no-skill` | Leave the skill alone. |
-| `--hooks` | Also install the Claude Code reminder hook. `--remove` always removes it. |
+| `--hooks` | Also install the Claude Code reminder hook. `--remove` always removes it, every copy of it. |
 | `--force` | Replace an entry or skill named `seelegent` that another program wrote (the old one is backed up first). |
 | `--exe` | The executable the hosts start. Default: the running `seelegent`, with symbolic links resolved. It must be named `seelegent` (`seelegent.exe` on Windows), because setup recognizes its own entries by that name: with any other name (a `seelegent-dev.exe` build, a test binary) setup refuses before writing anything, a dry run too, and says to install or copy the binary as `seelegent` or to pass `--exe`. `--remove` is not checked. |
 | `--json` | Print the report as JSON (`setup.Report`). When an item failed, the report is the only document printed (exit 1). |
@@ -77,7 +77,9 @@ The exit code is 1 when any item is `conflict` or `error`. Other items still run
   the item is `manual` with the command to run. An update runs `remove` and then `add`; when the `add` fails, setup
   adds the previous entry back with the CLI. If that fails too, it copies the backup over `~/.claude.json` only when
   the file is still exactly what the `remove` left (nothing Claude Code wrote since is lost); otherwise the error names
-  the backup to restore by hand.
+  the backup to restore by hand. On Windows the CLI is often the npm shim `claude.cmd`, which `cmd.exe` runs: an
+  argument holding `% ! & | < > ^ "` (in the executable's path or an env value) would be cut or expanded there, so
+  setup runs nothing and the item is `manual` with the entry to add to `~/.claude.json` while Claude Code is closed.
 - Setup records the host files and folders it creates (they did not exist before) in `setup-created.json` in the
   data folder. `--remove` deletes such a file once it holds nothing but an empty server list (for example
   `{"mcpServers": {}}`, an empty `settings.json`, or a `config.toml` with only white space), together with its
@@ -137,6 +139,12 @@ C-B2). This version installs it into `~/.claude/settings.json` in the documented
 ```json
 {"hooks": {"PreToolUse": [{"matcher": "Agent", "hooks": [{"type": "command", "command": "\"<exe>\" hook claude-agent"}]}]}}
 ```
+
+The executable is quoted for the shell that runs the hook: in single quotes on macOS and Linux (`'<exe>' hook
+claude-agent`, a quote in the path written `'\''`), so no part of the path is expanded; on Windows in double quotes
+with forward slashes, which Git Bash and cmd read alike. A Windows path holding `$`, a backquote or `%` (which one
+of those shells would still expand) is refused with an error for the hook item; install Seelegent elsewhere or pass
+`--exe`.
 
 `seelegent hook claude-agent` reads the hook input and, before the Agent tool starts a subagent that could write code,
 adds a reminder to the lead's context to delegate through Seelegent instead. It never blocks the tool. It stays

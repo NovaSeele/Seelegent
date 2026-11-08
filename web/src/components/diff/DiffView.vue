@@ -254,6 +254,8 @@ const stop = computed(() => picker.stopOf(lines.value))
   background: var(--term-diff-add-bg);
 }
 
+/* The line numbers of a changed line take its colour: the dim colour misses 4.5:1 on the tint (F33). */
+.diff__row--add .diff__no,
 .diff__row--add .diff__sign,
 .diff__row--add .diff__text {
   color: var(--term-diff-add-fg);
@@ -263,6 +265,7 @@ const stop = computed(() => picker.stopOf(lines.value))
   background: var(--term-diff-del-bg);
 }
 
+.diff__row--del .diff__no,
 .diff__row--del .diff__sign,
 .diff__row--del .diff__text {
   color: var(--term-diff-del-fg);
@@ -272,7 +275,8 @@ const stop = computed(() => picker.stopOf(lines.value))
   padding-inline: var(--space-2);
   padding-block: var(--space-1);
   background: var(--term-prompt-bg);
-  color: var(--term-dim);
+  /* The text colour made for the prompt tint: the dim colour misses 4.5:1 on it (F33). */
+  color: var(--term-prompt-fg);
   white-space: pre;
 }
 

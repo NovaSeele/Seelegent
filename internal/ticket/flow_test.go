@@ -132,6 +132,8 @@ type fakeGitHub struct {
 	repos    map[string]map[string]any
 	branches map[string][]map[string]any
 	creates  []string
+	// git serves git's smart HTTP for /octo/demo.git/ when set (a token push, D18).
+	git http.Handler
 }
 
 func newFakeGitHub(t *testing.T, origin string) *fakeGitHub {
@@ -162,6 +164,10 @@ func (f *fakeGitHub) serve(w http.ResponseWriter, r *http.Request) {
 	defer f.mu.Unlock()
 	f.auths = append(f.auths, r.Header.Get("Authorization"))
 	f.paths = append(f.paths, r.Method+" "+r.URL.RequestURI())
+	if f.git != nil && strings.HasPrefix(r.URL.Path, "/octo/demo.git/") {
+		f.git.ServeHTTP(w, r)
+		return
+	}
 	p := strings.TrimPrefix(r.URL.Path, "/api/v3/repos/octo/demo")
 	reply := func(status int, v any) {
 		w.Header().Set("Content-Type", "application/json")

@@ -8,7 +8,9 @@ import (
 // in the working tree, the index or the branches others use.
 var alwaysDenied = set("reset", "restore", "switch", "revert", "rebase", "merge", "pull", "push", "cherry-pick",
 	"am", "rm", "filter-branch", "filter-repo", "update-ref", "prune", "mv", "update-index", "read-tree",
-	"checkout-index", "merge-file", "replace")
+	"checkout-index", "merge-file", "replace",
+	// send-pack . :refs/heads/x deletes a branch, +x:refs/heads/y moves one (H3).
+	"send-pack")
 
 // builtins are git's own commands; any other name may be an alias (resolved through Checker.Alias).
 var builtins = set("add", "am", "annotate", "apply", "archive", "bisect", "blame", "branch", "bugreport", "bundle",
@@ -38,6 +40,7 @@ func (c Checker) git(args []word, depth int) Result {
 		return denyUnreadable()
 	}
 	i := 0
+	var globals []string // -C, --git-dir and --work-tree, for reading the configuration of the same repository
 	for i < len(args) {
 		a := args[i]
 		t := a.text
@@ -54,19 +57,31 @@ func (c Checker) git(args []word, depth int) Result {
 			if i+1 >= len(args) {
 				return allow
 			}
-			if args[i+1].dynamic || riskyConfigKey(configKey(args[i+1].text)) {
+			v := args[i+1].text
+			if args[i+1].dynamic || t == "-c" && riskyConfig(v) || t == "--config-env" && riskyEnvConfig(v) {
 				return denyGit(args)
 			}
 			i += 2
 			continue
 		case strings.HasPrefix(t, "--config-env="):
-			if riskyConfigKey(configKey(strings.TrimPrefix(t, "--config-env="))) {
+			if riskyEnvConfig(strings.TrimPrefix(t, "--config-env=")) {
 				return denyGit(args)
 			}
 		case strings.HasPrefix(t, "-c") && len(t) > 2:
-			if riskyConfigKey(configKey(t[2:])) {
+			if riskyConfig(t[2:]) {
 				return denyGit(args)
 			}
+		case strings.HasPrefix(t, "--exec-path="):
+			// git runs its external commands and dashed helpers from this folder (H4).
+			return denyGit(args)
+		case setHas(t, "-C", "--git-dir", "--work-tree"):
+			if i+1 < len(args) {
+				globals = append(globals, t, args[i+1].text)
+			}
+			i += 2
+			continue
+		case strings.HasPrefix(t, "--git-dir=") || strings.HasPrefix(t, "--work-tree="):
+			globals = append(globals, t)
 		case globalValued[t]:
 			i += 2
 			continue
@@ -76,12 +91,15 @@ func (c Checker) git(args []word, depth int) Result {
 	if i >= len(args) {
 		return allow
 	}
-	sub := strings.ToLower(args[i].text)
+	sub := subcommand(args[i].text)
 	rest := args[i+1:]
 	if len(rest) == 1 && !rest[0].dynamic && (rest[0].text == "-h" || rest[0].text == "--help") {
 		return allow
 	}
 	deny := func() Result { return denyGit(args) }
+	if transports[sub] && runsProgram(sub, rest) {
+		return deny()
+	}
 	if alwaysDenied[sub] {
 		if sub == "replace" && listsOnly(rest, "-l", "--list") {
 			return allow
@@ -108,8 +126,8 @@ func (c Checker) git(args []word, depth int) Result {
 			"--pathspec-from-file", "--orphan"}
 		p := scan(rest, opts{short: "bB", long: set("--orphan", "--conflict", "--pathspec-from-file"),
 			danger: danger})
-		create := p.has("-b", "-B")
-		if p.unknown || !create || p.dashdash || len(p.pos) > 1 || p.has(danger...) {
+		// -b creates a branch and fails on an existing one; -B resets an existing one to the start point (H3).
+		if p.unknown || !p.has("-b") || p.has("-B") || p.dashdash || len(p.pos) > 1 || p.has(danger...) {
 			return deny()
 		}
 	case "branch":
@@ -147,13 +165,102 @@ func (c Checker) git(args []word, depth int) Result {
 			return deny()
 		}
 	case "reflog":
+		// The stash is a reflog: reflog drop refs/stash (or --all) deletes every stashed change at once (H2).
 		p := scan(rest, opts{})
-		if p.unknown || len(p.pos) > 0 && (p.pos[0].text == "expire" || p.pos[0].text == "delete") {
+		if p.unknown || len(p.pos) > 0 && setHas(p.pos[0].text, "expire", "delete", "drop") {
 			return deny()
 		}
 	case "worktree":
-		p := scan(rest, opts{})
+		p := scan(rest, opts{short: "bB", long: set("--reason")})
 		if p.unknown || len(p.pos) > 0 && setHas(p.pos[0].text, "remove", "prune", "move") {
+			return deny()
+		}
+		// worktree add -B resets an existing branch to the start point (H3).
+		if len(p.pos) > 0 && p.pos[0].text == "add" && p.has("-B") {
+			return deny()
+		}
+	case "replay":
+		// git replay updates the branches it rewrites unless told only to print the updates (H3).
+		if !replayPrintsOnly(rest) {
+			return deny()
+		}
+	case "fetch":
+		// A fetch writes and deletes refs as its refspecs say: a forced or pruning one into a branch moves it back
+		// or deletes it (H3, review N1).
+		f, ok := fetchCommand(rest)
+		if !ok || c.fetchUnsafe(globals, f) {
+			return deny()
+		}
+	case "remote":
+		// remote add --mirror=fetch configures +refs/*:refs/*, which the next plain git fetch forces into every
+		// branch; remote prune and remote update fetch and prune with the configured refspecs (review N1).
+		p := scan(rest, opts{short: "tm", danger: []string{"--mirror", "--prune"}})
+		if p.unknown {
+			return deny()
+		}
+		if len(p.pos) > 0 {
+			var names []string
+			for _, w := range p.pos[1:] {
+				names = append(names, w.text)
+			}
+			switch p.pos[0].text {
+			case "add":
+				if p.has("--mirror") {
+					return deny()
+				}
+			case "prune":
+				if c.fetchUnsafe(globals, fetchPlan{remotes: names, prune: true}) {
+					return deny()
+				}
+			case "update":
+				if c.fetchUnsafe(globals, fetchPlan{remotes: names, prune: p.has("-p", "--prune")}) {
+					return deny()
+				}
+			}
+		}
+	case "grep":
+		// grep -O<cmd> (--open-files-in-pager) runs a program on the files it found (H4).
+		p := scan(rest, opts{short: "efABCm", long: set("--max-depth", "--threads", "--max-count", "--context",
+			"--after-context", "--before-context", "--file"), danger: []string{"--open-files-in-pager"}})
+		if p.has("-O", "--open-files-in-pager") || optionUnknown(rest) {
+			return deny()
+		}
+	case "difftool":
+		// difftool -x <cmd> (--extcmd) runs any program on each file pair (H4).
+		p := scan(rest, opts{short: "tx", long: set("--tool", "--extcmd"), danger: []string{"--extcmd"}})
+		if p.has("-x", "--extcmd") || optionUnknown(rest) {
+			return deny()
+		}
+	case "clone":
+		// clone -c/--config sets configuration for the new repository, which runs while it is checked out.
+		for j, a := range rest {
+			switch {
+			case (a.text == "-c" || a.text == "--config") && j+1 < len(rest):
+				if rest[j+1].dynamic || riskyConfig(rest[j+1].text) {
+					return deny()
+				}
+			case strings.HasPrefix(a.text, "--config="):
+				if riskyConfig(strings.TrimPrefix(a.text, "--config=")) {
+					return deny()
+				}
+			}
+		}
+	case "send-email":
+		// The --*-cmd options and an --smtp-server path run programs.
+		for _, a := range rest {
+			name, value, _ := strings.Cut(a.text, "=")
+			if a.dynamic || strings.HasSuffix(name, "-cmd") || strings.HasPrefix(name, "--smtp-s") &&
+				(strings.HasPrefix(value, "/") || strings.Contains(value, `\`)) {
+				return deny()
+			}
+		}
+	case "repack":
+		// repack -a -d drops the unreachable objects of the old packs, where lost work still is (a dropped stash, a
+		// commit a reset left behind); -A and --cruft keep them.
+		p := scan(rest, opts{short: "g", long: set("--window", "--depth", "--threads", "--window-memory",
+			"--max-pack-size", "--filter", "--filter-to", "--expire-to", "--cruft-expiration", "--max-cruft-size",
+			"--geometric", "--keep-pack", "--name-hash-version")})
+		if p.unknown || p.has("-a") && p.has("-d") && !p.has("-A", "--cruft") {
 			return deny()
 		}
 	case "config":
@@ -209,6 +316,101 @@ func (c Checker) git(args []word, depth int) Result {
 	return allow
 }
 
+// subcommand is the git subcommand a word names: lower-case, and without the ".exe" that Git for Windows strips
+// from it before it looks up builtins and aliases (git reset.exe --hard runs reset --hard, git st.exe the alias st;
+// H1). git strips only a lower-case ".exe", once, and takes no other suffix, trailing dot or space; any case is
+// stripped here, since refusing a name git would not run costs nothing. It is stripped until none is left: Git for
+// Windows before 2.29 ships git-<builtin>.exe in its exec-path, so git reset.exe.exe runs git-reset.exe (G1).
+func subcommand(s string) string {
+	s = strings.ToLower(s)
+	for strings.HasSuffix(s, ".exe") {
+		s = strings.TrimSuffix(s, ".exe")
+	}
+	return s
+}
+
+// transports are the subcommands that talk to a remote, whose options can name the program run on the other end.
+var transports = set("fetch", "clone", "ls-remote", "archive", "fetch-pack", "send-pack", "remote", "submodule",
+	"pull", "push")
+
+// programOptions are the transport options whose value git runs as a command (any prefix git accepts counts).
+var programOptions = []string{"--upload-pack", "--receive-pack", "--exec"}
+
+// runsProgram reports a transport command that runs a program of the caller's choosing (H4): --upload-pack,
+// --receive-pack or --exec (and clone's -u), or an ext:: URL, which git runs as a shell command when
+// protocol.ext.allow lets it.
+func runsProgram(sub string, rest []word) bool {
+	for _, a := range rest {
+		t := a.text
+		if strings.Contains(strings.ToLower(t), "ext::") {
+			return true
+		}
+		if a.dynamic {
+			continue
+		}
+		name, _, _ := strings.Cut(t, "=")
+		if strings.HasPrefix(name, "--") && len(name) > 3 {
+			for _, o := range programOptions {
+				if strings.HasPrefix(o, name) {
+					return true
+				}
+			}
+		}
+	}
+	if sub == "clone" {
+		p := scan(rest, opts{short: "obucj", long: set("--origin", "--branch", "--upload-pack", "--config",
+			"--depth", "--shallow-since", "--shallow-exclude", "--reference", "--reference-if-able",
+			"--separate-git-dir", "--jobs", "--filter", "--server-option", "--template", "--bundle-uri",
+			"--ref-format", "--revision")})
+		return p.has("-u")
+	}
+	return false
+}
+
+// optionUnknown reports an argument whose expansion starts where an option would ("-$X", "--x=$Y" aside): such a
+// word can turn into any option, so a reading command with risky options fails closed on it. A word that starts
+// with the expansion is taken as a pattern or path (git grep "$pattern").
+func optionUnknown(rest []word) bool {
+	for _, a := range rest {
+		if a.text == "--" && !a.dynamic {
+			return false
+		}
+		if a.dynamic && strings.HasPrefix(a.text, "-") {
+			return true
+		}
+	}
+	return false
+}
+
+// replayPrintsOnly reports whether git replay is told to print the ref updates instead of making them
+// (--ref-action=print, the last one given; git takes an unambiguous prefix of the option).
+func replayPrintsOnly(args []word) bool {
+	prints := false
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if a.dynamic {
+			return false
+		}
+		name, value, eq := strings.Cut(a.text, "=")
+		if name == "--no-ref-action" {
+			prints = false
+			continue
+		}
+		if len(name) < len("--ref") || !isAbbrev(name, "--ref-action") {
+			continue
+		}
+		if !eq {
+			if i+1 >= len(args) || args[i+1].dynamic {
+				return false
+			}
+			i++
+			value = args[i].text
+		}
+		prints = value == "print"
+	}
+	return prints
+}
+
 // alias resolves a git alias and checks what it runs.
 func (c Checker) alias(name string, rest []word, depth int) Result {
 	value, ok := c.Alias(name)
@@ -261,12 +463,47 @@ func (c Checker) config(args, rest []word) Result {
 	if riskyConfigKey(strings.ToLower(pos[0].text)) {
 		return denyGit(args)
 	}
+	// remote.<name>.fetch "+refs/heads/*:refs/heads/*", remote.<name>.mirror or fetch.prune true: a later plain git
+	// fetch forces or prunes into the branches (review N1). The key alone (--unset, remove-section) is safe.
+	if refConfigKey(pos[0].text) && len(pos) > 1 && (pos[1].dynamic || refConfigRisky(pos[0].text, pos[1].text)) {
+		return denyGit(args)
+	}
+	for _, w := range pos {
+		if strings.Contains(strings.ToLower(w.text), "ext::") {
+			return denyGit(args) // url.ext::sh -c ....insteadOf origin
+		}
+	}
 	return allow
 }
 
 // configWrites are the options of git config that write with a key alone or with a value.
 var configWrites = []string{"--add", "--unset", "--unset-all", "--replace-all", "--edit", "--rename-section",
 	"--remove-section"}
+
+// riskyConfig reports a "key=value" setting that runs a program: a risky key, or a value that is an ext:: URL (a
+// url.<base>.insteadOf that rewrites a remote into one).
+// A remote's fetch refspec, mirror or prune setting is risky with a value that lets a later git fetch move or delete
+// a branch (refConfigRisky; a key given without a value is true).
+func riskyConfig(kv string) bool {
+	k := configKey(kv)
+	if refConfigKey(k) {
+		v := "true"
+		if _, value, ok := strings.Cut(kv, "="); ok {
+			v = value
+		}
+		if refConfigRisky(k, v) {
+			return true
+		}
+	}
+	return riskyConfigKey(k) || strings.Contains(strings.ToLower(kv), "ext::")
+}
+
+// riskyEnvConfig reports a --config-env "key=VARIABLE" whose value the guard cannot see: a risky key, or one of the
+// fetch settings riskyConfig checks by value.
+func riskyEnvConfig(kv string) bool {
+	k := configKey(kv)
+	return riskyConfigKey(k) || refConfigKey(k)
+}
 
 // configKey returns the lower-case key of a "key=value" pair.
 func configKey(kv string) string {
@@ -282,6 +519,8 @@ func riskyConfigKey(k string) bool {
 	case "core.hookspath", "core.fsmonitor", "core.sshcommand", "core.editor", "core.pager", "core.askpass",
 		"core.gitproxy", "core.worktree", "sequence.editor", "diff.external", "gpg.program", "credential.helper",
 		"uploadpack.packobjectshook", "include.path", "alias",
+		// Commands git runs for alternates and for each hunk of add -p; protocol.allow lets ext:: URLs run (H4).
+		"core.alternaterefscommand", "interactive.difffilter", "protocol.allow",
 		// Not a program, but the same as gc --prune=now for every later gc, including git's automatic one.
 		"gc.pruneexpire",
 		// Makes git run the subcommand it guesses from a typo (git stsh: stash), which the guard reads as an
@@ -294,8 +533,13 @@ func riskyConfigKey(k string) bool {
 			return true
 		}
 	}
+	if strings.HasPrefix(k, "protocol.") && strings.HasSuffix(k, ".allow") {
+		return true // allowing the ext protocol lets ext:: URLs run commands
+	}
 	for _, suffix := range []string{".clean", ".smudge", ".process", ".textconv", ".command", ".driver",
-		".program", ".cmd", ".helper", ".uploadpack", ".receivepack", ".proxy"} {
+		".program", ".cmd", ".helper", ".uploadpack", ".receivepack", ".proxy",
+		// gc.reflogExpire=now (or gc.<pattern>.reflogExpire) makes gc drop reflogs at once, refs/stash included.
+		".reflogexpire", ".reflogexpireunreachable"} {
 		if strings.HasSuffix(k, suffix) {
 			return true
 		}

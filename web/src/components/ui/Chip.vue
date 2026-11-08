@@ -88,6 +88,8 @@ function onClick() {
 .chip--toggle.is-selected {
   border-color: var(--accent-border);
   background: var(--accent-soft);
+  --text-muted: var(--text-primary);
+  --text-secondary: var(--text-primary);
   color: var(--accent);
 }
 
@@ -120,5 +122,7 @@ function onClick() {
 
 .chip__remove:hover {
   background: var(--bg-hover);
+  --text-muted: var(--text-primary);
+  --text-secondary: var(--text-primary);
 }
 </style>

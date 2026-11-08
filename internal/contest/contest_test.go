@@ -292,10 +292,20 @@ func TestContestToWinner(t *testing.T) {
 	if err != nil || !strings.Contains(diff.Diff, "+hello") {
 		t.Fatalf("diff = %+v %v", diff, err)
 	}
+	// A ready contest still takes followups on its variants (they reopen it); an applied one does not (F46).
+	if st, ended, err := e.s.Ended(ctx, c.ID); err != nil || ended || st != api.ContestStatusReady {
+		t.Fatalf("ended while ready = %s %v %v", st, ended, err)
+	}
 
 	c, err = e.s.Pick(ctx, c.ID, api.ContestPickRequest{})
 	if err != nil {
 		t.Fatal(err)
+	}
+	if st, ended, err := e.s.Ended(ctx, c.ID); err != nil || !ended || st != api.ContestStatusApplied {
+		t.Fatalf("ended once applied = %s %v %v", st, ended, err)
+	}
+	if st, ended, err := e.s.Ended(ctx, "k-gone"); err != nil || !ended || st != "missing" {
+		t.Fatalf("ended of a missing contest = %s %v %v", st, ended, err)
 	}
 	if c.Status != api.ContestStatusApplied || c.Winner != "V2" || c.CleanedAt == "" || len(c.Applied.Files) != 2 {
 		t.Fatalf("picked = %+v", c)

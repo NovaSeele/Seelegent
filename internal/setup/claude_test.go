@@ -134,6 +134,45 @@ func TestClaudeCodeCLIFailsOrMissing(t *testing.T) {
 	wantAction(t, rep, "claude", KindMCP, ActionError)
 }
 
+// TestClaudeBatchShimRefusesMetacharacters (H10): on Windows the claude CLI is often the npm shim claude.cmd, which
+// cmd.exe runs: an executable path or env value holding & or %VAR% would be cut or expanded there. Setup runs
+// nothing and reports the entry to add by hand; a plain path still goes through the CLI.
+func TestClaudeBatchShimRefusesMetacharacters(t *testing.T) {
+	for _, c := range []struct {
+		dir    string
+		manual bool
+	}{{"a&b", true}, {"%USERPROFILE%", true}, {"x^y", true}, {"it!s", true}, {"Program Files (x86)", false}} {
+		m := newMachine(t)
+		exe := m.write(c.dir+"/seelegent.exe", "binary") // the name setup wants on Windows
+		cfg := fakeClaude(t, m)
+		m.bins["claude"] = m.path("npm", "claude.cmd")
+		env := m.env()
+		env.GOOS = "windows"
+		rep, err := Run(t.Context(), env, Request{Exe: exe, Hosts: []string{"claude"}, NoSkill: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !c.manual {
+			wantAction(t, rep, "claude", KindMCP, ActionAdded)
+			continue
+		}
+		it := wantAction(t, rep, "claude", KindMCP, ActionManual)
+		if len(m.runs) != 0 || exists(cfg) {
+			t.Errorf("%s: ran %q", c.dir, m.runs)
+		}
+		if !strings.Contains(it.Detail, "claude.cmd") || !strings.Contains(it.Snippet, `"mcpServers"`) ||
+			!strings.Contains(it.Snippet, strings.ReplaceAll(exe, `\`, `\\`)) {
+			t.Errorf("%s: %q / %q", c.dir, it.Detail, it.Snippet)
+		}
+	}
+	// The same paths through claude.exe (no batch file) or on another OS go through the CLI.
+	if batchUnsafe(`C:\x\claude.exe`, "windows", []string{"a&b"}) != "" ||
+		batchUnsafe("/usr/bin/claude.cmd", "linux", []string{"a&b"}) != "" ||
+		batchUnsafe(`C:\x\CLAUDE.CMD`, "windows", []string{"ok", "50%"}) != `"50%"` {
+		t.Error("batchUnsafe")
+	}
+}
+
 // An update removes the entry and adds the new one; when the add fails, the old entry comes back.
 func TestClaudeCodeAddFailsAfterRemove(t *testing.T) {
 	const original = `{"numStartups": 5, "mcpServers": {"seelegent": {"type": "stdio", "command": "OLD", ` +
@@ -257,7 +296,11 @@ func TestHookInstallRemove(t *testing.T) {
 		t.Fatal(err)
 	}
 	groups := doc.Hooks.PreToolUse
-	if len(groups) != 2 || groups[1].Matcher != "Agent" || groups[1].Hooks[0].Command != hookCommandLine(exe, m.env().goos()) {
+	wantCmd, err := hookCommandLine(exe, m.env().goos())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(groups) != 2 || groups[1].Matcher != "Agent" || groups[1].Hooks[0].Command != wantCmd {
 		t.Fatalf("hooks %+v", groups)
 	}
 	if !strings.Contains(read(t, cfg), "go test:*") {
@@ -286,6 +329,27 @@ func TestHookInstallRemove(t *testing.T) {
 	}
 }
 
+// TestHookRemoveEveryCopy (H21): --remove deletes every Seelegent reminder hook, also a second copy in another
+// group or in the same group, and keeps the user's own hooks.
+func TestHookRemoveEveryCopy(t *testing.T) {
+	m := newMachine(t)
+	fakeClaude(t, m)
+	ours := `{"type": "command", "command": "\"C:/x/seelegent.exe\" hook claude-agent"}`
+	cfg := m.write(".claude/settings.json", `{"hooks": {"PreToolUse": [
+  {"matcher": "Agent", "hooks": [`+ours+`]},
+  {"matcher": "Bash", "hooks": [{"type": "command", "command": "echo hi"}, `+ours+`]},
+  {"matcher": "Agent", "hooks": [`+strings.Replace(ours, "C:/x", "D:/old", 1)+`, `+ours+`]}
+]}}`)
+	rep := run(t, m, Request{Remove: true, Hosts: []string{"claude"}, NoSkill: true})
+	it := wantAction(t, rep, "claude", KindHook, ActionRemoved)
+	got := read(t, cfg)
+	if strings.Contains(got, "claude-agent") || !strings.Contains(got, "echo hi") || !strings.Contains(it.Detail, "4") {
+		t.Errorf("%q left %s", it.Detail, got)
+	}
+	rep = run(t, m, Request{Remove: true, Hosts: []string{"claude"}, NoSkill: true})
+	wantAction(t, rep, "claude", KindHook, ActionSkipped)
+}
+
 func TestAgentHookOutput(t *testing.T) {
 	out := AgentHookOutput([]byte(`{"tool_name":"Agent","tool_input":{"subagent_type":"general-purpose","prompt":"x"}}`))
 	var got struct {
@@ -309,8 +373,26 @@ func TestAgentHookOutput(t *testing.T) {
 			t.Errorf("%s gave %s", in, out)
 		}
 	}
-	if hookCommandLine(`C:\Program Files\seelegent\seelegent.exe`, "windows") != `"C:/Program Files/seelegent/seelegent.exe" hook claude-agent` {
-		t.Error("windows hook command line")
+	// F15: the path is quoted for the shell that runs the hook, so no part of it is expanded.
+	for _, c := range []struct{ exe, goos, want string }{
+		{`C:\Program Files\seelegent\seelegent.exe`, "windows", `"C:/Program Files/seelegent/seelegent.exe" hook claude-agent`},
+		{`C:\Users\o'brien\seelegent.exe`, "windows", `"C:/Users/o'brien/seelegent.exe" hook claude-agent`},
+		{"/opt/my apps/seelegent", "linux", `'/opt/my apps/seelegent' hook claude-agent`},
+		{"/home/u/$HOME/`id`/seelegent", "linux", "'/home/u/$HOME/`id`/seelegent' hook claude-agent"},
+		{"/Users/o'brien/bin/seelegent", "darwin", `'/Users/o'\''brien/bin/seelegent' hook claude-agent`},
+	} {
+		got, err := hookCommandLine(c.exe, c.goos)
+		if err != nil || got != c.want {
+			t.Errorf("%s on %s: %s %v, want %s", c.exe, c.goos, got, err, c.want)
+		}
+		if !isOurHook(got) {
+			t.Errorf("%s is not recognized as the hook", got)
+		}
+	}
+	for _, exe := range []string{`C:\a$b\seelegent.exe`, "C:\\`id`\\seelegent.exe", `C:\%TEMP%\seelegent.exe`} {
+		if got, err := hookCommandLine(exe, "windows"); err == nil {
+			t.Errorf("%s gave %s, want a refusal", exe, got)
+		}
 	}
 	if !isOurHook(`"C:/x/seelegent.exe" hook claude-agent`) || isOurHook("echo hook claude-agent") {
 		t.Error("isOurHook")

@@ -397,5 +397,18 @@
       "device": "Delete it: Windows cannot check out a file with this name.",
       "link": "Delete the link, or copy what it points to into the worktree."
     }
+  },
+  "cause": {
+    "gitAuth": "Git could not sign in to the remote. Set up git credentials for it (for GitHub: gh auth setup-git), or check the token, then try again.",
+    "gitRejected": "The remote refused the push (a protected branch or a server-side rule). Push to another branch, or ask a repository admin to allow it.",
+    "git": "A git command failed. Read git's reason below, fix it in the repository, then try again.",
+    "network": "GitHub or the remote could not be reached in time. Check the connection and try again.",
+    "githubAuth": "GitHub refused the sign-in. Sign in to gh again or replace the token.",
+    "githubRateLimited": "GitHub's rate limit was reached. It resets within the hour; try again then.",
+    "githubForbidden": "The GitHub account or token may not do this on this repository. Give it access to the repository (or the scope it needs), then try again.",
+    "githubNotFound": "GitHub does not know this repository, or hides it from this token or gh account. Check the owner and name, or sign in with an account that can see it.",
+    "githubManual": "This step needs the gh CLI signed in or a GitHub token. Run gh auth login (or set a GitHub token), then try again.",
+    "github": "GitHub returned an error. It is often temporary: try again in a few minutes, and if it keeps failing, read GitHub's message below.",
+    "other": "The step failed. Read the message below, then try again."
   }
 }

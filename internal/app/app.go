@@ -322,6 +322,7 @@ func (a *App) build(o Options) error {
 		AccountStates: p.States,
 		Ledger:        ledger,
 		Members:       a.Members,
+		ContestEnded:  a.contestEnded,
 	})
 	if err != nil {
 		return err

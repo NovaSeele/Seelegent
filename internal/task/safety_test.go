@@ -437,7 +437,7 @@ func TestDetectLoop(t *testing.T) {
 		{"test runs between path-only edits that change nothing", st("test", "edit\x00h1", "test", "edit\x00h1",
 			"test", "edit\x00h1", "test"), true},
 	} {
-		if got, _ := detectLoop(tc.steps, 4); got != tc.want {
+		if got, _, _ := detectLoop(tc.steps, 4); got != tc.want {
 			t.Errorf("%s: loop = %v", tc.name, got)
 		}
 	}
@@ -445,8 +445,24 @@ func TestDetectLoop(t *testing.T) {
 	for i := range failed {
 		failed[i].failed = true
 	}
-	if ok, detail := detectLoop(failed, 4); !ok || !strings.Contains(detail, "5") {
-		t.Errorf("failed calls: %v %q", ok, detail)
+	ok, detail, params := detectLoop(failed, 4)
+	if !ok || !strings.Contains(detail, "5") || params == nil ||
+		params.Kind != api.AttentionCallsFailed || params.Count != 5 {
+		t.Errorf("failed calls: %v %q %+v", ok, detail, params)
+	}
+	ok, _, params = detectLoop(st("read", "ls", "read", "grep", "ls", "read", "x", "read"), 4)
+	if !ok || params == nil || params.Kind != api.AttentionRepeated || params.Tool != "read" || params.Count != 4 ||
+		params.Steps != 8 {
+		t.Errorf("repeated call: %v %+v", ok, params)
+	}
+	// The numbers follow the loopRepeat setting and the sentence, not a fixed four.
+	ok, detail, params = detectLoop(st("ls", "read", "read", "read"), 3)
+	if !ok || params == nil || params.Count != 3 || params.Steps != 4 ||
+		!strings.Contains(detail, "3 times in its last 4 steps") {
+		t.Errorf("repeat 3: %v %q %+v", ok, detail, params)
+	}
+	if ok, _, _ = detectLoop(st("ls", "read", "read", "read"), 4); ok {
+		t.Error("three repeats are no loop at the default setting")
 	}
 }
 
@@ -481,16 +497,16 @@ func TestLoopPathOnlyEdits(t *testing.T) {
 		}
 		return addStep(steps, run, "", "")
 	}
-	if loop, detail := detectLoop(tdd([]string{"v1", "v2", "v3"}, file), 4); loop {
+	if loop, detail, _ := detectLoop(tdd([]string{"v1", "v2", "v3"}, file), 4); loop {
 		t.Errorf("real edits (absolute path) flagged: %s", detail)
 	}
-	if loop, detail := detectLoop(tdd([]string{"v1", "v2", "v3"}, "handler.go"), 4); loop {
+	if loop, detail, _ := detectLoop(tdd([]string{"v1", "v2", "v3"}, "handler.go"), 4); loop {
 		t.Errorf("real edits (relative path) flagged: %s", detail)
 	}
-	if loop, detail := detectLoop(tdd([]string{"", "", ""}, filepath.Join(dir, "gone.go")), 4); loop {
+	if loop, detail, _ := detectLoop(tdd([]string{"", "", ""}, filepath.Join(dir, "gone.go")), 4); loop {
 		t.Errorf("unreadable edits flagged: %s", detail)
 	}
-	if loop, _ := detectLoop(tdd([]string{"same", "same", "same"}, file), 4); !loop {
+	if loop, _, _ := detectLoop(tdd([]string{"same", "same", "same"}, file), 4); !loop {
 		t.Error("edits that change nothing between the same test runs are a loop")
 	}
 	// Without a mark the old behavior: the same key each time, a loop.
@@ -498,7 +514,7 @@ func TestLoopPathOnlyEdits(t *testing.T) {
 	for range 3 {
 		bare = addStep(addStep(bare, run, "", ""), edit(file), "", "")
 	}
-	if loop, _ := detectLoop(addStep(bare, run, "", ""), 4); !loop {
+	if loop, _, _ := detectLoop(addStep(bare, run, "", ""), 4); !loop {
 		t.Error("unmarked path-only edits should look the same")
 	}
 
@@ -594,7 +610,7 @@ func TestLoopFalseAlarmPathOnlyEdits(t *testing.T) {
 			}
 			h.waitFor("7 tool results", func() bool { return len(h.s.live(sum.ID).steps) >= 7 })
 			live := h.s.live(sum.ID)
-			if loop, detail := detectLoop(live.steps, h.config().LoopRepeat); loop {
+			if loop, detail, _ := detectLoop(live.steps, h.config().LoopRepeat); loop {
 				t.Errorf("a TDD loop with path-only edits is flagged as looping: %s", detail)
 			}
 			tk := h.task(sum.ID)
@@ -626,7 +642,7 @@ func TestLoopRepeatSetting(t *testing.T) {
 		{4, 4, true}, {4, 3, false}, {8, 4, false}, {8, 7, false}, {8, 8, true}, {2, 2, true}, {2, 1, false},
 		{0, 4, true}, {0, 3, false}, {1, 3, false}, {101, 4, true},
 	} {
-		if got, _ := detectLoop(steps(tc.calls), tc.repeat); got != tc.want {
+		if got, _, _ := detectLoop(steps(tc.calls), tc.repeat); got != tc.want {
 			t.Errorf("loopRepeat %d, %d calls: loop = %v, want %v", tc.repeat, tc.calls, got, tc.want)
 		}
 	}
