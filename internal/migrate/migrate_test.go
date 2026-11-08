@@ -149,14 +149,14 @@ func (f *fixture) realistic() {
   "options": [{"key": "A", "text": "SQLite"}], "context": [], "cwd": "`+js(f.project)+`", "repoRoot": "`+js(f.project)+`",
   "status": "closed", "maxRounds": 2, "round": 1, "sealed": null,
   "attendees": [{"label": "P1", "member": "ana", "rank": "senior", "backend": "agy", "taskId": "t9", "present": true}],
-  "rounds": [{"n": 1, "startedAt": "2026-10-01T10:00:00.000Z", "runs": [{"label": "P1", "taskId": "t9", "turn": 1, "done": true}],
-    "answers": [{"label": "P1", "option": "A", "stance": "SQLite is enough.", "confidence": 80, "arguments": [], "claims": [], "risks": [], "actions": [], "questions": [], "rebuttal": "", "moved": null, "raw": "x"}]}],
+  "rounds": [{"n": 1, "startedAt": "2026-10-01T10:00:00.000Z", "endedAt": "2026-10-01T10:04:00.000Z", "runs": {"P1": {"taskId": "t9", "turn": 1}},
+    "answers": {"P1": {"option": "A", "stance": "SQLite is enough.", "confidence": 80, "arguments": [], "claims": [{"text": "Small data", "cites": [{"path": "store.go", "line": 3, "endLine": 3, "quote": null, "state": "located", "detail": "lines 3-3 exist"}]}], "risks": [], "actions": [], "questions": ["Size?"], "rebuttal": "", "moved": null, "raw": "x"}}}],
   "leadQA": [{"id": "q1", "round": 1, "label": "P1", "question": "Size?", "answer": "Small"}], "leadNotes": [],
   "decision": {"text": "SQLite", "option": "A", "at": "2026-10-01T10:05:00.000Z"},
   "dissents": [{"id": "d1", "label": "P1", "member": "ana", "kind": "dissent", "text": "Too small", "claims": [], "watchPaths": ["store.go"],
     "signals": [{"taskId": "t3", "reason": "regression", "at": "x"}, {"taskId": "t4", "reason": "rejected", "at": "2026-10-02T10:00:00.000Z"}]}],
   "adviceNotTaken": [], "actions": [], "minutes": "Biên bản", "estimate": null, "usage": {"runs": 1, "byBackend": {"agy": 1}, "tokens": 10},
-  "createdAt": "2026-10-01T10:00:00.000Z", "updatedAt": "2026-10-01T10:06:00.000Z"}`)
+  "createdAt": "2026-10-01T10:00:00.000Z", "updatedAt": "2026-10-01T10:06:00.000Z", "dissentRuns": {}}`)
 	f.write("meetings/m2610011000-ab12.jsonl", `{"type": "open"}`+"\n")
 	f.write("meetings/m2610021000-cd34.json", `{"id": "m2610021000-cd34", "title": "Still going", "status": "round", "round": 1, "maxRounds": 3,
   "attendees": [], "rounds": [], "createdAt": "2026-10-02T10:00:00.000Z", "updatedAt": "2026-10-02T10:00:00.000Z"}`)
@@ -385,6 +385,12 @@ func TestMigrate(t *testing.T) {
 		strings.Contains(mt.Minutes, "Biên") || !strings.Contains(mt.Minutes, "SQLite") ||
 		mt.CreatedAt != "2026-10-01T10:00:00.000Z" {
 		t.Errorf("meeting %+v, %v", mt, err)
+	}
+	if r := mt.Rounds; len(r) != 1 || len(r[0].Answers) != 1 || r[0].Answers[0].Label != "P1" ||
+		r[0].Answers[0].Option != "A" || len(r[0].Answers[0].Claims) != 1 || len(r[0].Runs) != 1 ||
+		r[0].Runs[0] != (api.MeetingRun{Label: "P1", TaskID: "t9", Turn: 1, Done: true}) ||
+		mt.DissentRuns == nil || len(mt.DissentRuns) != 0 {
+		t.Errorf("meeting rounds %+v, dissent runs %+v", r, mt.DissentRuns)
 	}
 	if mt, err := meetings.Get(context.Background(), "m2610021000-cd34"); err != nil ||
 		mt.Status != api.MeetingStatusCancelled {
