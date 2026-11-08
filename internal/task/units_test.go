@@ -79,6 +79,18 @@ func TestComputeAttention(t *testing.T) {
 	if got := computeAttention(x, liveState{}, accountHealth{}, now, set); got.Since != "2026-11-07T08:00:00.000Z" {
 		t.Fatalf("since = %s", got.Since)
 	}
+	// A turn the time limit ended while the CLI only waited for a background command says so (field report 4, F8).
+	bg := done("The dev server is running.")
+	bg.Turns[0].Attempts = []*Attempt{{N: 1, Status: AttemptBackgroundWait,
+		Outcome: &backend.Outcome{Status: backend.OutcomeBackgroundWait, Error: backend.BackgroundWaitTimeout}}}
+	if got := computeAttention(bg, liveState{}, accountHealth{}, now, set); got == nil || got.Reason != ReasonReview ||
+		got.Detail != backend.BackgroundWaitTimeout {
+		t.Errorf("background timeout attention = %+v", got)
+	}
+	if st, text := classify(backend.Outcome{Status: backend.OutcomeBackgroundWait, Error: backend.BackgroundWaitTimeout},
+		launch.Exit{Reason: launch.ReasonTimeout}, 30); st != AttemptBackgroundWait || text != backend.BackgroundWaitTimeout {
+		t.Errorf("classify background timeout = %s %q", st, text)
+	}
 	if !strings.Contains(computeAttention(running, liveState{running: true, sawInit: true, tool: "run_command",
 		command: "npm test", lastEvent: now.Add(-21 * time.Minute)}, accountHealth{}, now, set).Detail, `"npm test"`) {
 		t.Fatal("the stall detail does not name the command")

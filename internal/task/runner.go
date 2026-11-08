@@ -625,7 +625,7 @@ func classify(o backend.Outcome, exit launch.Exit, timeoutMinutes int) (status, 
 	case backend.OutcomeCanceled:
 		return AttemptCancelled, ""
 	case backend.OutcomeBackgroundWait:
-		return AttemptBackgroundWait, ""
+		return AttemptBackgroundWait, o.Error // BackgroundWaitTimeout when the time limit ended the wait
 	case backend.OutcomeFailed:
 	}
 	if exit.MemoryLimitHit {

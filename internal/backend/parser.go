@@ -218,6 +218,13 @@ func (b *base) Finish(exit launch.Exit, stderrTail string) []event.Event {
 			r.Error = exitText(b.name, exit)
 		}
 	}
+	if exit.Reason == launch.ReasonTimeout && b.waiting != "" {
+		// The time limit hit while the CLI only waited for a command the agent had started in the background (a dev
+		// server): the agent's own work was done. The same outcome as a CLI that ends by itself in that state, with
+		// no error event, so the engine continues the conversation and the report (the agent's last message) is kept
+		// (field report 4, F8).
+		return append(out, event.Event{Kind: event.KindBackgroundWait, Text: b.waiting})
+	}
 	if !cliReport {
 		switch exit.Reason {
 		case launch.ReasonTimeout, launch.ReasonStartFailed:
