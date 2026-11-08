@@ -1,6 +1,7 @@
 package task
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -56,10 +57,24 @@ func TestPlanRuleFollowsAttemptBackend(t *testing.T) {
 	h.queue.Push(t, codexOK("th-plan", "The pool retries twice."))
 	sum := h.delegate(api.DelegateRequest{Title: "explain", Member: "dual", Mode: ModePlan,
 		Prompt: "Explain the pool."})
-	if sum.Backend != config.BackendAgy {
-		t.Fatalf("the task starts on %q", sum.Backend)
-	}
 	tk := h.waitStatus(sum.ID, StatusDone)
+	// The task starts on agy and moves to codex (no agy account). The summary delegate returns may already show
+	// codex on a busy machine, so the move is read from the handoff event.
+	moved := false
+	for _, e := range eventsOf(h.events(sum.ID), api.EventHandoff) {
+		data, err := json.Marshal(e.Data)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var d api.HandoffData
+		if json.Unmarshal(data, &d) == nil && d.Kind == api.HandoffBackend && d.From == config.BackendAgy &&
+			d.To == config.BackendCodex {
+			moved = true
+		}
+	}
+	if !moved {
+		t.Fatalf("no handoff from agy to codex: %+v", h.events(sum.ID))
+	}
 	a := tk.LastTurn().LastAttempt()
 	if tk.Backend != config.BackendCodex || a == nil || a.Backend != config.BackendCodex {
 		t.Fatalf("task backend %q, attempt %+v", tk.Backend, a)
