@@ -130,7 +130,9 @@ in the daemon.
   away writes nothing. When the daemon shuts down (`Server.Close`, on `POST /daemon/stop` and on Ctrl+C) every open
   wait ends at once with `503 daemon_stopping` (a wait that ended on its own just before is answered normally), so
   `http.Server.Shutdown` does not sit out the waits; the clients take that code to mean "do not start the daemon
-  again" (see [cli.md](cli.md) and [mcp.md](mcp.md)).
+  again" (see [cli.md](cli.md) and [mcp.md](mcp.md)). The other long waits do the same: `GET /meetings/{id}/wait`,
+  `GET /contests/{id}/wait` and `POST /tasks/{id}/cancel` with `waitSeconds` (the cancel itself is recorded before
+  its wait, and the next daemon finishes it).
 - `GET /health` carries `homeId` (`config.HomeID`: 16 hex digits of the SHA-256 of `fsutil.Key(home)`), so a client
   of another data directory refuses this daemon instead of using or stopping it.
 - `capabilities.takeover` is true for backends that can resume a session; `apiKey` for every backend but agy;

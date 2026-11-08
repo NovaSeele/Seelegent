@@ -239,7 +239,13 @@ func (s *Server) wait(ctx context.Context, k *call) (result, error) {
 // only, never started, after it said it was stopping).
 func (s *Server) waitReports(ctx context.Context, k *call, ids []string, seconds int, anyDone, wake bool,
 	cwd string) (api.WaitResult, error) {
-	connect := func(ctx context.Context, how ops.Lookup) (*client.Client, error) {
+	return ops.WaitReports(ctx, s.connector(k), s.waitOpts(ids, seconds, anyDone, wake, cwd))
+}
+
+// connector is the daemon lookup of the call's waits (ops.Connect): it reuses the call's client, finds the daemon
+// again without starting it (after it said it was stopping), or finds or starts it.
+func (s *Server) connector(k *call) ops.Connect {
+	return func(ctx context.Context, how ops.Lookup) (*client.Client, error) {
 		switch how {
 		case ops.Reuse:
 		case ops.FindOnly:
@@ -253,8 +259,12 @@ func (s *Server) waitReports(ctx context.Context, k *call, ids []string, seconds
 		}
 		return k.client(ctx)
 	}
-	return ops.WaitReports(ctx, connect, ops.Wait{IDs: ids, Seconds: seconds, Any: anyDone, WakeOnBlocked: wake,
-		Cwd: cwd, RetryPause: s.o.RetryPause, StopGrace: s.o.StopGrace, Logger: s.o.Logger.With("from", "mcp")})
+}
+
+// waitOpts are the options of a wait of seconds (the ids and flags only matter to task waits).
+func (s *Server) waitOpts(ids []string, seconds int, anyDone, wake bool, cwd string) ops.Wait {
+	return ops.Wait{IDs: ids, Seconds: seconds, Any: anyDone, WakeOnBlocked: wake, Cwd: cwd,
+		RetryPause: s.o.RetryPause, StopGrace: s.o.StopGrace, Logger: s.o.Logger.With("from", "mcp")}
 }
 
 // reportResult is the result of a call that returns one task's report.

@@ -246,8 +246,10 @@ func (s *Server) meetingRoutes() {
 		if err != nil {
 			return 0, nil, err
 		}
-		v, err := m.Wait(r.Context(), r.PathValue("id"), d)
-		return http.StatusOK, v, err
+		return s.untilStop(r, func(ctx context.Context) (int, any, error) {
+			v, err := m.Wait(ctx, r.PathValue("id"), d)
+			return http.StatusOK, v, err
+		})
 	})
 	s.handle("GET /meetings/{id}/events", func(_ http.ResponseWriter, r *http.Request) (int, any, error) {
 		v, err := m.Events(r.Context(), r.PathValue("id"))
@@ -337,8 +339,10 @@ func (s *Server) contestRoutes() {
 		if err != nil {
 			return 0, nil, err
 		}
-		v, err := c.Wait(r.Context(), r.PathValue("id"), d)
-		return http.StatusOK, v, err
+		return s.untilStop(r, func(ctx context.Context) (int, any, error) {
+			v, err := c.Wait(ctx, r.PathValue("id"), d)
+			return http.StatusOK, v, err
+		})
 	})
 	s.handle("GET /contests/{id}/events", func(_ http.ResponseWriter, r *http.Request) (int, any, error) {
 		v, err := c.Events(r.Context(), r.PathValue("id"))
