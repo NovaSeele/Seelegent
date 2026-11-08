@@ -96,6 +96,8 @@ func newEnvWith(t *testing.T, adjust func(*envOptions)) *env {
 		client: &http.Client{Timeout: limit}}
 	set := config.Defaults()
 	set.Port = 47831
+	// The engine tests must not depend on this machine's free memory.
+	set.MinFreeMemoryMB, set.MinFreeCommitMB, set.CriticalFreeMemoryMB = 0, 0, 0
 	a, err := app.New(t.Context(), app.Options{
 		Paths: paths, Settings: &set, Env: e.queue.Env(os.Environ()), RealHome: filepath.Join(home, "home"),
 		Launcher: fakecli.Launcher(t), NoQuotaReaders: true, NoGh: true,
