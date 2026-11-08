@@ -16,6 +16,7 @@ import FollowupComposer from './FollowupComposer.vue'
 import GatePanel from './GatePanel.vue'
 import SafetyPanel from './SafetyPanel.vue'
 import TaskDialogs, { type TaskDialog } from './TaskDialogs.vue'
+import TaskError from './TaskError.vue'
 import TaskHeader from './TaskHeader.vue'
 import { TASK_VIEW, TASK_VIEWS, VIEW_ICONS, type TaskView } from './taskKeys'
 import TaskViews from './TaskViews.vue'
@@ -126,10 +127,7 @@ const loadingFirst = computed(() => !summary.value && !error.value)
       <GatePanel :task="summary" :detail="detail" />
       <ConsultPanel :detail="detail" />
       <SafetyPanel :task="summary" :detail="detail" @changed="reload" />
-      <section v-if="detail?.error" class="td__error" role="alert">
-        <strong>{{ t('task.detail.error') }}</strong>
-        <pre class="td__error-text">{{ detail.error }}</pre>
-      </section>
+      <TaskError v-if="detail?.error" :error="detail.error" :attention="summary.attention" />
     </div>
     <Tabs
       v-model="view"
@@ -175,25 +173,6 @@ const loadingFirst = computed(() => !summary.value && !error.value)
   flex: none;
 }
 
-.td__error {
-  margin: 0 var(--space-5) var(--space-3);
-  padding: var(--space-3) var(--space-4);
-  border: var(--border-width) solid var(--status-danger-border);
-  border-radius: var(--radius-lg);
-  background: var(--status-danger-bg);
-  color: var(--status-danger-fg);
-  font-size: var(--fs-sm);
-}
-
-.td__error-text {
-  margin-top: var(--space-1);
-  color: var(--text-primary);
-  font-family: var(--font-mono);
-  font-size: var(--fs-xs);
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-
 .td__tabs {
   flex: none;
   padding: 0 var(--space-4);
@@ -222,10 +201,6 @@ const loadingFirst = computed(() => !summary.value && !error.value)
 }
 
 @media (width < 600px) {
-  .td__error {
-    margin: 0 var(--space-4) var(--space-3);
-  }
-
   .td__tabs {
     padding: 0 var(--space-2);
   }
