@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"net/http"
 	"path/filepath"
+	"runtime"
 	"time"
 
 	"github.com/NovaSeele/Seelegent/internal/account"
@@ -31,10 +32,14 @@ const (
 // ClaudeReader reads the plan quota of a Claude Code sign-in account from the OAuth usage endpoint, with the
 // access token in the profile's .credentials.json. The token is sent only to that endpoint and never stored or
 // logged. API-key accounts are passive. It implements backend.QuotaReader.
+//
+// On macOS Claude Code keeps the sign-in in the login Keychain instead of that file, so there a profile without the
+// file is not signed out: its quota is unknown (noSignIn).
 type ClaudeReader struct {
 	client *http.Client
 	url    string
 	now    func() time.Time
+	goos   string // runtime.GOOS; tests set another system
 }
 
 // NewClaudeReader returns the reader. client nil uses a default client; url "" is ClaudeUsageURL; now nil is
@@ -49,7 +54,7 @@ func NewClaudeReader(client *http.Client, url string, now func() time.Time) *Cla
 	if now == nil {
 		now = time.Now
 	}
-	return &ClaudeReader{client: client, url: url, now: now}
+	return &ClaudeReader{client: client, url: url, now: now, goos: runtime.GOOS}
 }
 
 // claudeCredentials is the part of .credentials.json the reader needs.
@@ -133,7 +138,7 @@ func (r *ClaudeReader) ReadQuota(ctx context.Context, prof account.Profile, _ []
 func (r *ClaudeReader) token(home string) (string, error) {
 	data, err := fsutil.ReadFile(filepath.Join(home, ".credentials.json"))
 	if errors.Is(err, fs.ErrNotExist) {
-		return "", fmt.Errorf("%w: no Claude Code sign-in in the profile", ErrNeedsLogin)
+		return "", r.noSignIn("no Claude Code sign-in in the profile")
 	}
 	if err != nil {
 		return "", fmt.Errorf("read sign-in: %w", err)
@@ -143,12 +148,25 @@ func (r *ClaudeReader) token(home string) (string, error) {
 		return "", fmt.Errorf("%w: the sign-in file is not valid JSON", ErrFormat)
 	}
 	if c.ClaudeAiOauth == nil || c.ClaudeAiOauth.AccessToken == "" {
-		return "", fmt.Errorf("%w: no OAuth sign-in in the profile", ErrNeedsLogin)
+		return "", r.noSignIn("no OAuth sign-in in the profile")
 	}
 	if exp := c.ClaudeAiOauth.ExpiresAt; exp > 0 && time.UnixMilli(int64(exp)).Before(r.now()) {
 		return "", fmt.Errorf("%w: renewed on the next run", ErrTokenExpired)
 	}
 	return c.ClaudeAiOauth.AccessToken, nil
+}
+
+// noSignIn is the error for a profile whose .credentials.json has no OAuth token (what says why). That means
+// signed out on Linux and Windows. On macOS Claude Code stores the sign-in in the login Keychain (a generic password
+// whose service name gets a suffix derived from CLAUDE_CONFIG_DIR) and may write no file at all, so there it says
+// nothing: the quota is unavailable, the account stays usable, and a run refused for its sign-in still marks it
+// signed out (pool). Reading the token from the Keychain (`security find-generic-password`) is left until it can
+// be verified on a Mac (bugs.md, macOS Keychain).
+func (r *ClaudeReader) noSignIn(what string) error {
+	if r.goos == "darwin" {
+		return fmt.Errorf("%w: the macOS Keychain holds the Claude Code sign-in; quota is not read", ErrUnavailable)
+	}
+	return fmt.Errorf("%w: %s", ErrNeedsLogin, what)
 }
 
 // parseClaudeUsage maps the usage answer to quota groups: Claude (weekly, 5h), Claude Opus and Claude Sonnet
