@@ -367,9 +367,9 @@ func (s *Service) OpenHiddenRuns(ctx context.Context, kind string) ([]HiddenRun,
 // stopOrphanConsults stops and closes the consult runs nobody reads: a run whose parent task has no consult that
 // names it (the daemon stopped between creating the run and storing its record), and a run whose consult has
 // already ended (an older daemon, which stored the outcome before closing the run, stopped in between, or the
-// record was ended otherwise while its run stayed open), as meetings do with the runs of an ended meeting. A run whose consult is
-// still running is followed by resumeConsults. It runs at start, before the API serves, and outside any task lock
-// (StopHiddenRun takes its own).
+// record was ended otherwise while its run stayed open), as meetings do with the runs of an ended meeting. A run
+// whose consult is still running is followed by resumeConsults. It runs at start, before the API serves, and
+// outside any task lock (StopHiddenRun takes its own).
 func (s *Service) stopOrphanConsults(ctx context.Context) error {
 	runs, err := s.OpenHiddenRuns(ctx, KindConsult)
 	if err != nil {
