@@ -27,6 +27,35 @@ describe('AccountCard', () => {
     expect(wrapper.text()).toContain(text)
   })
 
+  it('shows an account without credit as held, with what to do and no date', async () => {
+    const wrapper = await render(
+      makeAccount({
+        kind: 'api-key',
+        resting: true,
+        restReason: 'credits',
+        restingUntil: undefined,
+      }),
+    )
+    expect(wrapper.text()).toContain('No credit left')
+    expect(wrapper.text()).toContain('Top up, then test the key or turn the account off and on.')
+    expect(wrapper.text()).not.toContain('9999')
+    expect(wrapper.text()).not.toContain('Resting')
+  })
+
+  it('shows an account at its budget with the spend and the budget', async () => {
+    const wrapper = await render(
+      makeAccount({
+        kind: 'api-key',
+        resting: true,
+        restReason: 'budget_reached',
+        spentUsd: 200.4,
+        budgetUsd: 200,
+      }),
+    )
+    expect(wrapper.text()).toContain('Budget reached ($200.40 of $200)')
+    expect(wrapper.text()).not.toContain('Top up')
+  })
+
   it('keeps an account whose last quota read failed ready, with a note', async () => {
     const wrapper = await render(makeAccount({ status: 'error' }))
     expect(wrapper.text()).toContain('Ready')

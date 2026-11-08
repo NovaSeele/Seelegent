@@ -52,7 +52,9 @@ type Pool interface {
 	Handover(ctx context.Context, in pool.HandoverInput) (pool.Handover, error)
 	MarkExhausted(ctx context.Context, accountID string, ex pool.Exhaustion) (pool.Cooldown, error)
 	MarkAuthFailed(ctx context.Context, accountID, message string) error
+	MarkSucceeded(ctx context.Context, accountID string, started time.Time) error
 	MarkNoCredit(ctx context.Context, accountID, message string) error
+	ProviderResting(ctx context.Context, providerID string) error
 	Changed() <-chan struct{}
 }
 

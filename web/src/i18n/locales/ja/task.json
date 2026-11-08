@@ -46,6 +46,7 @@
       "callsFailed": "直近 {count} 回のツール呼び出しが失敗しました。",
       "repeated": "ワーカーは直近 {steps} ステップで同じ {tool} の呼び出しを {count} 回繰り返しました。",
       "noAccounts": "作業できる {backend} アカウントがありません。サインインするか有効にしてください。",
+      "budgetReached": "{account} は予算 {budget} に達しました。予算を上げるか、キーを変更してください。",
       "auth": "有効な {backend} アカウントはすべてサインインが必要です。",
       "depMissing": "前のタスク {task} はもう存在しません。",
       "depRejected": "前のタスク {title}（{task}）は却下されました。",

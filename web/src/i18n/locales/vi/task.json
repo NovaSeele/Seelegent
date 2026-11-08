@@ -46,6 +46,7 @@
       "callsFailed": "{count} lần gọi công cụ gần nhất đều thất bại.",
       "repeated": "Worker đã lặp lại cùng một lệnh gọi {tool} {count} lần trong {steps} bước gần nhất.",
       "noAccounts": "Không có tài khoản {backend} nào chạy được việc. Hãy đăng nhập hoặc bật một tài khoản.",
+      "budgetReached": "{account} đã dùng hết ngân sách {budget}. Hãy nâng ngân sách hoặc đổi khóa.",
       "auth": "Mọi tài khoản {backend} đang bật đều cần đăng nhập.",
       "depMissing": "Tác vụ trước {task} không còn tồn tại.",
       "depRejected": "Tác vụ trước {title} ({task}) đã bị từ chối.",

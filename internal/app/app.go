@@ -256,6 +256,13 @@ func (a *App) build(o Options) error {
 	a.Accounts = account.NewManager(a.DB, account.NewProfiles(o.Paths.Profiles, o.RealHome), now)
 	a.Quotas = quota.NewStore(a.DB)
 	a.Usage = usage.NewStore(a.DB, o.Clock, time.Local)
+	a.Usage.OnBudget(func(_ context.Context, c account.BudgetCrossing) {
+		// The dashboard shows the state from the account (budgetState); the log keeps the moment it was crossed.
+		a.log.Info("account: budget "+c.State, "account", c.AccountID, "provider", c.Provider, "message", c.Message())
+		if a.Pool != nil {
+			a.Pool.Notify() // a reached budget changes what the pool may pick, and wakes the account frames
+		}
+	})
 	a.Memory = memory.New(a.DB, now)
 	a.Roles = role.New(role.Options{DB: a.DB, Home: o.RealHome, Now: now})
 	a.Members = member.New(member.Options{DB: a.DB, Providers: a.Accounts, Now: now,

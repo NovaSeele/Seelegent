@@ -21,6 +21,46 @@ export interface Account {
   /** KeyHint shows the last four characters of an API key ("…abcd"); the key itself is never sent. */
   keyHint?: string
   status: AccountStatus
+  /**
+   * TestResult is the test state of an API-key account (absent for the others): not_tested until a key test or
+   * a turn on the current key and provider endpoint succeeds, then ok, or the reason of the last failed test.
+   * Storing a key or changing the provider's endpoint makes it not_tested again. It never changes Status or
+   * selection: a not_tested account is picked like any other. TestedAt is when it was set (absent while
+   * not_tested).
+   */
+  testResult?:
+    | 'not_tested'
+    | 'ok'
+    | 'refused'
+    | 'not_found'
+    | 'no_models_endpoint'
+    | 'unreachable'
+    | 'redirected'
+    | 'error'
+  testedAt?: string
+  /**
+   * ModelPerTask is true for an API-key account whose provider has no tier models: a delegate on it must name
+   * its model (shown as "Model: chosen per task").
+   */
+  modelPerTask?: boolean
+  /**
+   * Spend of an API-key account (absent for the others). SpentUSD is what the current key spent since SpentSince
+   * (when the key was set): a running total, counted whatever usageHistory says, from the provider's spend
+   * source (Provider.spendSource; only "cli" gives a cost today, the others count tokens only). SpentTokens is
+   * every token reported, SpentInputTokens and SpentOutputTokens its parts. BudgetUSD is the user's budget for
+   * the key; BudgetStop (default true) rests the account once it is reached. BudgetState is ok, warn (80% or
+   * more), reached, or unknown when the spend source gives no cost (the account then never rests on its budget).
+   */
+  spentUsd?: number
+  spentTokens?: number
+  spentInputTokens?: number
+  spentOutputTokens?: number
+  spentSince?: string
+  spendSource?: string
+  budgetUsd?: number
+  budgetStop?: boolean
+  budgetState?: 'ok' | 'warn' | 'reached' | 'unknown'
+  previousKey?: PreviousKey
   twinOf?: string
   /** Busy is the number of running turns; MaxConcurrent the cap per account. */
   busy: number
@@ -28,6 +68,13 @@ export interface Account {
   /** Resting is true during a cooldown or while a quota window is at or below minRemaining. */
   resting: boolean
   restingUntil?: string
+  /**
+   * RestReason says why the account is held until the user acts, never as a date (no restingUntil then):
+   * credits (a run reported that its credit or billing ran out; a new key, a passing key test or an edit such
+   * as switching it off and on lifts it) or budget_reached (an API-key account at its budget with budgetStop on;
+   * raising the budget, switching the stop off or a new key lifts it).
+   */
+  restReason?: 'credits' | 'budget_reached'
   signingIn: boolean
   /** Email is shown in the local UI only and never logged. */
   email?: string
@@ -35,6 +82,78 @@ export interface Account {
   models: string[]
   createdAt: string
   updatedAt: string
+  /**
+   * Notices are set only in the answers to POST /accounts and PUT /accounts/{id}/key: what the call changed on
+   * its own (key cleaned, base URL trimmed, preset switched, provider reused) and advice about the key.
+   */
+  notices?: Notice[]
+}
+
+/** PreviousKey is what the key before an account's current one spent (kept when the key was replaced or removed). */
+export interface PreviousKey {
+  keyHint?: string
+  since?: string
+  until: string
+  spentUsd: number
+  spentTokens: number
+  spentInputTokens: number
+  spentOutputTokens: number
+  budgetUsd?: number
+}
+
+/** AccountCreated is the answer to POST /accounts: the account, and the provider when the body had newProvider. */
+export interface AccountCreated extends Account {
+  /**
+   * NewProvider is the provider the call created or reused for newProvider (absent otherwise);
+   * ProviderCreated is true when it was created.
+   */
+  newProvider?: Provider
+  providerCreated?: boolean
+}
+
+/**
+ * Notice is something a save changed on its own, or advice that did not block it. Code names it for translation,
+ * Field the request field it is about (when any), Message is the English text.
+ */
+export interface Notice {
+  code:
+    | 'base_url_trimmed'
+    | 'official_preset'
+    | 'key_name_removed'
+    | 'key_quotes_removed'
+    | 'key_assignment'
+    | 'key_prefix'
+    | 'provider_reused'
+  field?: string
+  message: string
+}
+
+/**
+ * KeyTestRequest is POST /providers/test: the provider (an existing id, or newProvider as in POST /providers,
+ * id optional) and the key (apiKey, or accountId to use that account's stored key; then provider may be left out
+ * and the result is saved on the account).
+ */
+export interface KeyTestRequest {
+  provider?: string
+  newProvider?: ProviderInput
+  apiKey?: string
+  accountId?: string
+}
+
+/** KeyTestResult is the answer to POST /providers/test (status 200 also when the key is refused: the call worked). */
+export interface KeyTestResult {
+  ok: boolean
+  /** Status is the HTTP status the service answered (0 when it could not be reached). */
+  status: number
+  reason:
+    'ok' | 'refused' | 'not_found' | 'no_models_endpoint' | 'unreachable' | 'redirected' | 'error'
+  message: string
+  models: string[]
+  latencyMs: number
+  /** Notices are what the request's key or provider needed cleaning, and advice about the key. */
+  notices?: Notice[]
+  /** Saved is true when the result was stored on the account (accountId). */
+  saved?: boolean
 }
 
 /**
@@ -91,15 +210,27 @@ export interface LoginSession {
   message?: string
 }
 
-/** NewAccount is POST /accounts. */
+/**
+ * NewAccount is POST /accounts. A sign-in account needs backend and kind. An API-key account names an existing
+ * provider, or gives newProvider (a provider to create, or to reuse unchanged when an enabled one has the same
+ * preset, backend, base URL, wire API, models, allow-list and tiers; its id is optional), and may give apiKey and a
+ * budget; it is all done in one transaction, so a failure leaves nothing behind. backend may then be left out (the
+ * provider's), kind too (api-key), and label ("<provider name> <n>").
+ */
 export interface NewAccount {
-  backend: 'agy' | 'claude' | 'codex'
-  kind: 'isolated' | 'system' | 'api-key'
-  label: string
+  backend?: 'agy' | 'claude' | 'codex'
+  kind?: 'isolated' | 'system' | 'api-key'
+  label?: string
   provider?: string
+  newProvider?: ProviderInput
+  /** APIKey is cleaned and checked like PUT /accounts/{id}/key. */
+  apiKey?: string
   /** Enabled defaults to true. */
   enabled?: boolean
   priority?: number
+  /** BudgetUSD is the key's budget in US dollars (API-key accounts; absent: none); BudgetStop defaults to true. */
+  budgetUsd?: number
+  budgetStop?: boolean
 }
 
 /** AccountPatch is PATCH /accounts/{id}; absent fields stay as they are. */
@@ -107,6 +238,12 @@ export interface AccountPatch {
   label?: string
   enabled?: boolean
   priority?: number
+  /**
+   * BudgetUSD sets an API-key account's budget in US dollars; 0 removes it. BudgetStop: rest the account once
+   * the budget is reached.
+   */
+  budgetUsd?: number
+  budgetStop?: boolean
 }
 
 /** KeyRequest is PUT /accounts/{id}/key. The key never appears in a response, an error or a log. */
@@ -148,8 +285,24 @@ export interface Provider {
    */
   allowedModels: string
   tiers: TierModels
+  /**
+   * ModelPerTask is true when no tier has a model: every delegate on the provider must name its model ("Model:
+   * chosen per task"). A valid set-up, not an error. Absent when false.
+   */
+  modelPerTask?: boolean
+  /**
+   * SpendSource says where its accounts' spend comes from: "cli" (the CLI's own cost estimate, official Anthropic
+   * only), "free" (local: Ollama or a localhost base URL) or "none" (tokens only). Open set: later versions add
+   * "service" and "prices".
+   */
+  spendSource?: string
   createdAt?: string
   updatedAt?: string
+  /**
+   * Notices are set only in the answers to POST and PATCH /providers: what the save changed on its own
+   * (base_url_trimmed, official_preset).
+   */
+  notices?: Notice[]
 }
 
 /** ProviderPreset is a provider template (Provider without accounts and times). */
@@ -162,6 +315,11 @@ export interface ProviderPreset {
   models: string[]
   wireApi?: string
   official: boolean
+  /**
+   * Tiers are suggested tier models: for "anthropic" the claude backend's tiers from the settings, when set;
+   * absent for the others (their models come from a key test).
+   */
+  tiers?: TierModels
 }
 
 /** ProviderList is GET /providers. */
@@ -519,7 +677,7 @@ export interface AccountFailureData {
  */
 export interface WaitingQuotaData {
   until?: string
-  reason?: 'memory' | 'no_account' | 'resting' | 'busy'
+  reason?: 'memory' | 'no_account' | 'resting' | 'busy' | 'budget_reached'
   detail?: string
   availableMB?: number
   needMB?: number
@@ -1838,6 +1996,11 @@ export interface TaskReport {
   effort?: string
   profile?: string
   tokens_used: number
+  /**
+   * TurnCostUSD is what the latest turn cost by the CLI's own estimate (Claude Code total_cost_usd), given only
+   * when that estimate is trusted: a task on the official Anthropic API (spend source cli).
+   */
+  turn_cost_usd?: number
   spec?: ReportSpec
   /** Response is the worker's last report, with markdown links to file:// targets reduced to their text. */
   response?: string
@@ -2599,10 +2762,11 @@ export interface TaskSummary {
    * Waiting says why a waiting_quota task waits: WaitingBusy (every account that could run it has no free
    * slot), WaitingResting (they rest; WaitingUntil is when one is back), WaitingNoAccount (none can run it), or
    * WaitingMemory while free memory or free commit is below minFreeMemoryMB / minFreeCommitMB (that wait never
-   * raises an attention flag: the lead cannot act on it). Absent for other statuses, and from older daemons,
-   * which reported only the memory wait.
+   * raises an attention flag: the lead cannot act on it), or WaitingBudget (every account rests on its budget;
+   * raises a budget_reached flag for the user). Absent for other statuses, and from older daemons, which reported
+   * only the memory wait.
    */
-  waiting?: 'memory' | 'no_account' | 'resting' | 'busy'
+  waiting?: 'memory' | 'no_account' | 'resting' | 'busy' | 'budget_reached'
   /** WaitDetail is the daemon's English explanation of Waiting, for example "acc6: 2 of 2 running" for busy. */
   waitDetail?: string
   /** NeedsSince is since when the task waits for the lead or the user. */
@@ -2682,7 +2846,7 @@ export interface Attention {
  * AttentionParams are the values an attention flag's text is made of. Only the fields of the reason are set:
  * stalled (Kind, Minutes, Tool, Command), looping (Kind, Count, Tool, Steps), no_accounts and auth (Backend),
  * deps_blocked (Kind, Task, Title), no_response (Denied), hygiene and work_at_risk (Count), question (Options),
- * resources_wait (Minutes, AvailableMB, NeedMB).
+ * resources_wait (Minutes, AvailableMB, NeedMB), budget_reached (Account, BudgetUSD, Count: how many accounts).
  */
 export interface AttentionParams {
   kind?:
@@ -2726,6 +2890,9 @@ export interface AttentionParams {
    */
   availableMB?: number
   needMB?: number
+  /** Account and BudgetUSD name the first account at its budget and that budget (budget_reached). */
+  account?: string
+  budgetUsd?: number
 }
 
 /** Review is the lead's verdict on a task. */

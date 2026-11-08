@@ -118,6 +118,7 @@
     "noResponse": "작업자 응답 없음",
     "auth": "로그인 필요",
     "noAccounts": "사용 가능한 계정 없음",
+    "budgetReached": "예산 도달",
     "failed": "실패",
     "review": "검토 대기",
     "quotaWait": "할당량 대기",

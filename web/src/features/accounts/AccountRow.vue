@@ -81,7 +81,7 @@ const details = computed(() =>
         class="row__status"
         :tone="pill.tone"
         :label="pill.label"
-        :title="pill.label"
+        :title="pill.title"
         size="sm"
       />
       <span class="row__slots" :class="{ 'row__slots--busy': account.busy > 0 }">{{ slots }}</span>

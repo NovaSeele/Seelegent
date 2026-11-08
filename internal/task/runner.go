@@ -519,6 +519,7 @@ func (s *Service) newAttempt(r *run, t *Task, tu *Turn) (bool, error) {
 			}
 		}
 		t.Waiting, t.WaitDetail, t.WaitingUntil, t.MemoryWait = "", "", time.Time{}, nil
+		t.WaitBudget = nil
 		a := &Attempt{N: n, AccountID: acc.ID, AccountLabel: label, Backend: t.Backend, Model: attemptModel,
 			Continuing: continuing, StartedAt: s.now(), Status: AttemptRunning, LaunchDir: launchDir, Prompt: prompt}
 		if continuing {
@@ -863,6 +864,12 @@ func (s *Service) finishAttempt(r *run, id string, turn, n int, accountID, model
 		return false, err
 	}
 	s.recordUsage(ctx, t, turn, n, accountID, b.Name(), model, o.Usage)
+	if (status == AttemptOK || status == AttemptBackgroundWait) && accountID != "" {
+		// The account's key and provider work: an API-key account that was not tested counts as working now.
+		if err := s.o.Pool.MarkSucceeded(ctx, accountID, attemptStart(t, turn, n)); err != nil {
+			s.log.Warn("task: record the account's good run", "account", accountID, "err", err)
+		}
+	}
 	if s.o.QuotaRefresh != nil && accountID != "" {
 		// A run that failed on the account (quota, sign-in, transient or other error) always reads its quota
 		// again; one that ended well, waits in the background or was cancelled only when the quota is stale.
@@ -930,6 +937,7 @@ func (s *Service) giveUp(id string, turn int, message string) (bool, error) {
 		ev := s.endTurn(t, tu, TurnFailed)
 		t.Status, t.Error = StatusFailed, message
 		t.Waiting, t.WaitDetail, t.WaitingUntil, t.MemoryWait = "", "", time.Time{}, nil
+		t.WaitBudget = nil
 		return []NewEvent{ev}, nil
 	})
 	if err == nil {
@@ -956,6 +964,7 @@ func (s *Service) finishCancel(id string) {
 			evs = append(evs, cancelGate(t, ph, s.now())...)
 		}
 		t.CancelRequested, t.Waiting, t.WaitDetail, t.WaitingUntil, t.MemoryWait = false, "", "", time.Time{}, nil
+		t.WaitBudget = nil
 		if t.Status != StatusCancelled {
 			if err := t.SetStatus(StatusCancelled); err != nil {
 				return nil, err
@@ -995,6 +1004,10 @@ func (s *Service) setWaiting(id string, u *pool.Unavailable) {
 		}
 		// MemoryWait stays: a pool wait that ends back in a memory wait keeps its start (resources_wait).
 		t.Waiting, t.WaitDetail, t.WaitingUntil = string(u.Reason), detail, u.Until.UTC()
+		t.WaitBudget = nil
+		if u.Reason == pool.ReasonBudget {
+			t.WaitBudget = slices.Clone(u.BudgetReached)
+		}
 		turn := 0
 		if tu := t.LastTurn(); tu != nil {
 			turn = tu.N
@@ -1083,6 +1096,17 @@ func (s *Service) recordUsage(ctx context.Context, t *Task, turn, n int, account
 		StartedAt: started, EndedAt: s.now(), Usage: u}); err != nil {
 		s.log.Warn("task: record usage", "task", t.ID, "err", err)
 	}
+}
+
+// attemptStart returns when attempt n of the turn started (zero when the task does not have it).
+func attemptStart(t *Task, turn, n int) time.Time {
+	if t == nil {
+		return time.Time{}
+	}
+	if tu := t.TurnN(turn); tu != nil && n >= 1 && n <= len(tu.Attempts) {
+		return tu.Attempts[n-1].StartedAt
+	}
+	return time.Time{}
 }
 
 func (s *Service) attemptDir(id string, turn, n int) string {

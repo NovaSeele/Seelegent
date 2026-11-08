@@ -204,6 +204,35 @@
     "enabled": "Accounts can use it",
     "save": "Save provider"
   },
+  "testResult": {
+    "not_tested": "Not tested",
+    "ok": "Key works",
+    "refused": "Key refused",
+    "not_found": "Wrong address",
+    "no_models_endpoint": "Not verified: the first turn will test it",
+    "unreachable": "Service unreachable",
+    "redirected": "Redirected elsewhere",
+    "error": "Test failed",
+    "testedAt": "Tested {time}"
+  },
+  "notice": {
+    "base_url_trimmed": "Base URL shortened",
+    "official_preset": "Switched to the Anthropic preset",
+    "key_name_removed": "Variable name removed from the key",
+    "key_quotes_removed": "Quotes removed from the key",
+    "key_assignment": "This looks like NAME=value: paste only the part after =",
+    "key_prefix": "Key looks like another service's",
+    "provider_reused": "Existing provider reused"
+  },
+  "keyError": {
+    "empty": "Paste the API key",
+    "too_long": "This key is too long",
+    "url": "This looks like a URL, not an API key",
+    "whitespace": "The key must not contain spaces or line breaks",
+    "control": "The key contains invisible characters"
+  },
+  "modelPerTask": "Model chosen per task",
+  "modelPerTaskHint": "This provider has no default model: each task names the model it runs.",
   "view": {
     "label": "Accounts view",
     "list": "List",
@@ -241,5 +270,21 @@
       "passive": "No quota to read",
       "checking": "Reading quota…"
     }
+  },
+  "budgetState": {
+    "ok": "Within budget",
+    "warn": "80% of the budget used",
+    "reached": "Budget reached",
+    "unknown": "Spend not known for this service"
+  },
+  "restReason": {
+    "budget_reached": "Budget reached ({spent} of {budget})",
+    "credits": "No credit left",
+    "creditsHint": "Top up, then test the key or turn the account off and on."
+  },
+  "spendSource": {
+    "cli": "Claude Code's estimate",
+    "free": "Local · free",
+    "none": "Cost not reported by this service"
   }
 }

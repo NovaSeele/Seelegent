@@ -49,9 +49,11 @@ import (
 	"github.com/NovaSeele/Seelegent/internal/quota"
 )
 
-// Accounts lists the accounts; *account.Manager satisfies it.
+// Accounts lists the accounts and records runs that proved an API key; *account.Manager satisfies it.
 type Accounts interface {
 	List(ctx context.Context) ([]account.Account, error)
+	// MarkRunOK records that a turn that started at started ended well on the account (account.Repo.MarkRunOK).
+	MarkRunOK(ctx context.Context, id string, started time.Time) (bool, error)
 }
 
 // Quotas is the quota cache; *quota.Store satisfies it.
@@ -195,6 +197,9 @@ const (
 	ReasonResting Reason = "resting"
 	// ReasonBusy: every matching account that is not resting runs its maximum of turns.
 	ReasonBusy Reason = "busy"
+	// ReasonBudget: every matching account rests because it reached its budget (RestBudget). It matches
+	// ErrAllResting: the request waits, until the user raises a budget, switches its stop off or changes a key.
+	ReasonBudget Reason = "budget_reached"
 )
 
 // Errors matched by Unavailable; use errors.Is.
@@ -230,6 +235,35 @@ type Unavailable struct {
 	// NoCredit are the matching accounts left out because their credit ran out (MarkNoCredit). They do not count
 	// as candidates: with nothing else the reason is no_account, and the caller fails rather than waits.
 	NoCredit []NoCredit `json:"noCredit,omitempty"`
+	// BudgetReached are the matching accounts that rest on their budget (RestBudget), counted in Resting.
+	BudgetReached []BudgetHold `json:"budgetReached,omitempty"`
+}
+
+// BudgetHold is an API-key account that rests on its budget (Unavailable.BudgetReached).
+type BudgetHold struct {
+	AccountID string  `json:"accountId"`
+	Label     string  `json:"label,omitempty"`
+	Provider  string  `json:"provider"`
+	BudgetUSD float64 `json:"budgetUsd"`
+	SpentUSD  float64 `json:"spentUsd"`
+}
+
+// budgetHold describes account a, which rests on its budget.
+func budgetHold(a *account.Account) BudgetHold {
+	h := BudgetHold{AccountID: a.ID, Label: a.Label, Provider: a.Provider, SpentUSD: a.Spent.USD}
+	if a.BudgetUSD != nil {
+		h.BudgetUSD = *a.BudgetUSD
+	}
+	return h
+}
+
+// restingReason is the reason of a request that only waits on resting accounts: ReasonBudget when each of them
+// rests on its budget, else ReasonResting.
+func (u *Unavailable) restingReason() Reason {
+	if u.Resting > 0 && len(u.BudgetReached) == u.Resting {
+		return ReasonBudget
+	}
+	return ReasonResting
 }
 
 // NoCredit is an account whose credit ran out (Unavailable.NoCredit).
@@ -274,6 +308,14 @@ func (u *Unavailable) Error() string {
 			return b.String()
 		}
 		fmt.Fprintf(&b, "no enabled, signed-in %s account can run this", u.Backend)
+	case ReasonBudget:
+		// What the user must do is all there is to say: no time ends the wait.
+		u.writeBudget(&b)
+		if len(u.NoCredit) > 0 {
+			b.WriteString("; ")
+			u.writeNoCredit(&b)
+		}
+		return b.String()
 	case ReasonResting:
 		fmt.Fprintf(&b, "all %d %s accounts are resting", u.Resting, u.Backend)
 		if !u.Until.IsZero() {
@@ -310,11 +352,33 @@ func (u *Unavailable) Error() string {
 		fmt.Fprintf(&b, " (quota group %s)", u.Group)
 	}
 	u.writeKeyProviders(&b)
+	if len(u.BudgetReached) > 0 {
+		b.WriteString("; ")
+		u.writeBudget(&b)
+	}
 	if len(u.NoCredit) > 0 {
 		b.WriteString("; ")
 		u.writeNoCredit(&b)
 	}
 	return b.String()
+}
+
+// writeBudget names the accounts at their budget: "acc9 reached its $200 budget: raise the budget or change the
+// key".
+func (u *Unavailable) writeBudget(b *strings.Builder) {
+	if len(u.BudgetReached) == 1 {
+		h := u.BudgetReached[0]
+		fmt.Fprintf(b, "%s reached its %s budget: raise the budget or change the key", h.AccountID,
+			account.FormatUSD(h.BudgetUSD))
+		return
+	}
+	for i, h := range u.BudgetReached {
+		if i > 0 {
+			b.WriteString(", ")
+		}
+		fmt.Fprintf(b, "%s (%s)", h.AccountID, account.FormatUSD(h.BudgetUSD))
+	}
+	b.WriteString(" reached their budgets: raise the budgets or change the keys")
 }
 
 // writeNoCredit names the accounts without credit, each provider once: "the anthropic key has no credit left; top
@@ -364,7 +428,7 @@ func (u *Unavailable) Is(target error) bool {
 	switch u.Reason {
 	case ReasonNoAccount:
 		return target == ErrNoAccount
-	case ReasonResting:
+	case ReasonResting, ReasonBudget:
 		return target == ErrAllResting
 	case ReasonBusy:
 		return target == ErrAllBusy

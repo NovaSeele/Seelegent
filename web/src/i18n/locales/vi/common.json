@@ -118,6 +118,7 @@
     "noResponse": "Worker không trả lời",
     "auth": "Cần đăng nhập",
     "noAccounts": "Hết tài khoản",
+    "budgetReached": "Đã hết ngân sách",
     "failed": "Thất bại",
     "review": "Chờ duyệt",
     "quotaWait": "Chờ quota",

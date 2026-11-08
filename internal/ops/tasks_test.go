@@ -47,3 +47,15 @@ func TestBlockedCoversEveryFlagForTheLead(t *testing.T) {
 		t.Error("a task without attention is blocked")
 	}
 }
+
+// The one-line summary names the turn's cost when the report has one (a task on the official Anthropic API).
+func TestReportSummaryCost(t *testing.T) {
+	r := api.TaskReport{TaskID: "t1", Status: "done", Turn: 2, FilesChanged: []string{"a.go"}, TurnCostUSD: 0.003}
+	if got, want := ReportSummary(r), "Task t1: done, turn 2, 1 file changed, turn cost ≈ $0.003."; got != want {
+		t.Errorf("ReportSummary = %q, want %q", got, want)
+	}
+	r.TurnCostUSD = 0
+	if got := ReportSummary(r); got != "Task t1: done, turn 2, 1 file changed." {
+		t.Errorf("without a cost: %q", got)
+	}
+}

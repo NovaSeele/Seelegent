@@ -11,6 +11,7 @@ import (
 	"github.com/NovaSeele/Seelegent/internal/account"
 	"github.com/NovaSeele/Seelegent/internal/api"
 	"github.com/NovaSeele/Seelegent/internal/backend"
+	"github.com/NovaSeele/Seelegent/internal/config"
 	"github.com/NovaSeele/Seelegent/internal/quota"
 	"github.com/NovaSeele/Seelegent/internal/usage"
 )
@@ -28,7 +29,7 @@ func (s *Server) accountRoutes() {
 		}
 		id := r.PathValue("id")
 		if _, err := s.o.Accounts.Update(r.Context(), id, account.Patch{Label: req.Label, Enabled: req.Enabled,
-			Priority: req.Priority}); err != nil {
+			Priority: req.Priority, BudgetUSD: req.BudgetUSD, BudgetStop: req.BudgetStop}); err != nil {
 			return 0, nil, err
 		}
 		if req.Enabled != nil && *req.Enabled {
@@ -105,16 +106,34 @@ func (s *Server) accountRoutes() {
 		if strings.TrimSpace(req.Key) == "" {
 			return 0, nil, invalid("key is required").withField("key")
 		}
-		if _, err := s.o.Accounts.SetKey(r.Context(), id, req.Key); err != nil {
+		key, notices, err := account.NormalizeKey(req.Key)
+		if err != nil {
+			return 0, nil, account.KeyFieldAs("key", err)
+		}
+		start := s.clock()
+		a, err := s.o.Accounts.SetKey(r.Context(), id, key)
+		if err != nil {
 			return 0, nil, keyError(err)
 		}
-		return s.accountChanged(r.Context(), id, http.StatusOK)
+		s.logPreviousKey(a, start)
+		if p, err := s.o.Accounts.GetProvider(r.Context(), a.Provider); err == nil {
+			notices = append(notices, account.KeyNotices(p, key)...)
+		}
+		code, body, err := s.accountChanged(r.Context(), id, http.StatusOK)
+		if out, ok := body.(api.Account); ok && err == nil {
+			out.Notices = noticeDTOs(account.RenameNotices(notices, "apiKey", "key"))
+			body = out
+		}
+		return code, body, err
 	})
 	s.handle("DELETE /accounts/{id}/key", func(_ http.ResponseWriter, r *http.Request) (int, any, error) {
 		id := r.PathValue("id")
-		if _, err := s.o.Accounts.ClearKey(r.Context(), id); err != nil {
+		start := s.clock()
+		a, err := s.o.Accounts.ClearKey(r.Context(), id)
+		if err != nil {
 			return 0, nil, err
 		}
+		s.logPreviousKey(a, start)
 		return s.accountChanged(r.Context(), id, http.StatusOK)
 	})
 	s.providerRoutes()
@@ -122,11 +141,29 @@ func (s *Server) accountRoutes() {
 	s.handle("GET /usage/history", s.usageHistory)
 }
 
+// logPreviousKey records in the log what the key an account just replaced or removed had spent (also kept on the
+// account as previousKey), when the change archived one.
+func (s *Server) logPreviousKey(a account.Account, since time.Time) {
+	pk := a.PreviousKey
+	if pk == nil || pk.Until.Before(since.Add(-time.Second)) {
+		return
+	}
+	budget := "none"
+	if pk.BudgetUSD != nil {
+		budget = account.FormatUSD(*pk.BudgetUSD)
+	}
+	s.log.Info("account: key replaced; the old key's spend is kept", "account", a.ID, "oldKey", pk.KeyHint,
+		"spentUsd", pk.Spent.USD, "spentTokens", pk.Spent.Tokens, "budget", budget)
+}
+
 // keyError keeps the submitted key out of an error message: only the error's kind is passed on.
 func keyError(err error) error {
 	switch {
 	case errors.Is(err, account.ErrNotFound):
 		return newError(api.CodeNotFound, "account not found")
+	case errors.Is(err, account.ErrBadKey):
+		// The message says what is wrong with the key (a URL, spaces, ...) and never quotes it.
+		return account.KeyFieldAs("key", err)
 	case errors.Is(err, account.ErrInvalid):
 		return invalid("the key cannot be stored for this account (only API-key accounts take a key)").
 			withField("key")
@@ -146,11 +183,16 @@ func (s *Server) accountChanged(ctx context.Context, id string, status int) (cod
 	return status, a, nil
 }
 
-// addAccount is POST /accounts.
+// addAccount is POST /accounts: a sign-in account, or an API-key account with its provider and key in one
+// transaction (addDirect).
 func (s *Server) addAccount(w http.ResponseWriter, r *http.Request) (code int, body any, err error) {
 	var req api.NewAccount
 	if err := decode(w, r, &req); err != nil {
 		return 0, nil, err
+	}
+	if req.NewProvider != nil || req.APIKey != "" || req.Kind == string(account.KindAPIKey) ||
+		(req.Kind == "" && req.Provider != "") || req.BudgetUSD != nil || req.BudgetStop != nil {
+		return s.addDirect(r.Context(), &req)
 	}
 	if err := oneOf("backend", req.Backend, false, backend.Names()...); err != nil {
 		return 0, nil, err
@@ -208,15 +250,102 @@ func (s *Server) removeAccount(_ http.ResponseWriter, r *http.Request) (code int
 	return http.StatusNoContent, nil, nil
 }
 
+// addDirect adds an API-key account with an existing provider or a new one (created or reused) and, optionally,
+// its key: all or nothing (account.Manager.AddDirect). Errors name the request field (apiKey,
+// newProvider.baseUrl, ...).
+func (s *Server) addDirect(ctx context.Context, req *api.NewAccount) (code int, body any, err error) {
+	if err := oneOf("backend", req.Backend, true, config.BackendClaude, config.BackendCodex); err != nil {
+		return 0, nil, err
+	}
+	in := account.DirectNew{New: account.New{Backend: req.Backend, Kind: account.Kind(req.Kind), Label: req.Label,
+		Enabled: true, Provider: req.Provider}, Key: req.APIKey, BudgetUSD: req.BudgetUSD, BudgetStop: req.BudgetStop}
+	if req.Enabled != nil {
+		in.Enabled = *req.Enabled
+	}
+	if req.Priority != nil {
+		in.Priority = *req.Priority
+	}
+	if req.NewProvider != nil {
+		p, err := providerFromInput(req.NewProvider, false, "newProvider")
+		if err != nil {
+			return 0, nil, err
+		}
+		in.NewProvider = &p
+	}
+	res, err := s.o.Accounts.AddDirect(ctx, in, s.o.Settings.Settings().LinkIntoProfiles)
+	if err != nil {
+		return 0, nil, err
+	}
+	for _, wmsg := range res.Warnings {
+		s.log.Warn("account: profile link", "account", res.Account.ID, "warning", wmsg)
+	}
+	if req.NewProvider != nil {
+		s.providersChanged()
+	}
+	status, body, err := s.accountChanged(ctx, res.Account.ID, http.StatusCreated)
+	if err != nil {
+		return 0, nil, err
+	}
+	out := api.AccountCreated{Account: body.(api.Account), ProviderCreated: res.ProviderCreated}
+	out.Notices = noticeDTOs(res.Notices)
+	if req.NewProvider != nil {
+		p, err := s.provider(ctx, res.Provider.ID)
+		if err != nil {
+			return 0, nil, err
+		}
+		out.NewProvider = &p
+	}
+	return status, out, nil
+}
+
+// providerFromInput builds a provider from a POST /providers body (or the newProvider of POST /accounts and POST
+// /providers/test): from the preset when one is named, then the given fields. requireID makes id mandatory;
+// prefix is put before the field names of errors ("newProvider").
+func providerFromInput(in *api.ProviderInput, requireID bool, prefix string) (account.Provider, error) {
+	field := func(f string) string {
+		if prefix == "" {
+			return f
+		}
+		return prefix + "." + f
+	}
+	p := account.Provider{Enabled: true}
+	if in.ID != nil {
+		p.ID = strings.TrimSpace(*in.ID)
+	}
+	if requireID && p.ID == "" {
+		return account.Provider{}, invalid("id is required").withField(field("id"))
+	}
+	if in.Preset != nil && *in.Preset != "" {
+		fp, err := account.FromPreset(p.ID, *in.Preset)
+		if err != nil {
+			return account.Provider{}, account.PrefixField(field("preset"), err)
+		}
+		p = fp
+	}
+	if in.Backend != nil {
+		if p.Backend != "" && p.Backend != *in.Backend {
+			return account.Provider{}, invalid("preset %s serves %s, not %s", p.Preset, p.Backend, *in.Backend).
+				withField(field("backend"))
+		}
+		p.Backend = *in.Backend
+	}
+	if p.Backend == "" {
+		return account.Provider{}, invalid("backend is required").withField(field("backend"))
+	}
+	applyProvider(&p, in)
+	return p, nil
+}
+
 func (s *Server) providerRoutes() {
 	s.handle("GET /providers", func(_ http.ResponseWriter, r *http.Request) (int, any, error) {
 		list, err := s.providers(r.Context())
 		if err != nil {
 			return 0, nil, err
 		}
-		return http.StatusOK, api.ProviderList{Items: list, Presets: presetDTOs()}, nil
+		return http.StatusOK, api.ProviderList{Items: list, Presets: presetDTOs(s.o.Settings.Settings())}, nil
 	})
 	s.handle("POST /providers", s.createProvider)
+	s.handle("POST /providers/test", s.testKey)
 	s.handle("PATCH /providers/{id}", s.updateProvider)
 	s.handle("DELETE /providers/{id}", func(_ http.ResponseWriter, r *http.Request) (int, any, error) {
 		if err := s.o.Accounts.DeleteProvider(r.Context(), r.PathValue("id")); err != nil {
@@ -278,33 +407,21 @@ func (s *Server) createProvider(w http.ResponseWriter, r *http.Request) (code in
 	if err := decode(w, r, &in); err != nil {
 		return 0, nil, err
 	}
-	if in.ID == nil || strings.TrimSpace(*in.ID) == "" {
-		return 0, nil, invalid("id is required").withField("id")
+	p, err := providerFromInput(&in, true, "")
+	if err != nil {
+		return 0, nil, err
 	}
-	p := account.Provider{ID: strings.TrimSpace(*in.ID), Enabled: true}
-	if in.Preset != nil && *in.Preset != "" {
-		var err error
-		if p, err = account.FromPreset(p.ID, *in.Preset); err != nil {
-			return 0, nil, err
-		}
+	notices, err := p.Check()
+	if err != nil {
+		return 0, nil, err
 	}
-	if in.Backend != nil {
-		if p.Backend != "" && p.Backend != *in.Backend {
-			return 0, nil, invalid("preset %s serves %s, not %s", p.Preset, p.Backend, *in.Backend).
-				withField("backend")
-		}
-		p.Backend = *in.Backend
-	}
-	if p.Backend == "" {
-		return 0, nil, invalid("backend is required").withField("backend")
-	}
-	applyProvider(&p, &in)
 	created, err := s.o.Accounts.CreateProvider(r.Context(), p)
 	if err != nil {
 		return 0, nil, err
 	}
 	s.providersChanged()
 	out, err := s.provider(r.Context(), created.ID)
+	out.Notices = noticeDTOs(notices)
 	return http.StatusCreated, out, err
 }
 
@@ -327,11 +444,16 @@ func (s *Server) updateProvider(w http.ResponseWriter, r *http.Request) (code in
 		return 0, nil, invalid("a provider's preset cannot change").withField("preset")
 	}
 	applyProvider(&p, &in)
+	notices, err := p.Check()
+	if err != nil {
+		return 0, nil, err
+	}
 	if _, err := s.o.Accounts.UpdateProvider(r.Context(), p); err != nil {
 		return 0, nil, err
 	}
 	s.providersChanged()
 	out, err := s.provider(r.Context(), p.ID)
+	out.Notices = noticeDTOs(notices)
 	return http.StatusOK, out, err
 }
 

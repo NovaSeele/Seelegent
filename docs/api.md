@@ -92,8 +92,11 @@ in the daemon.
 
 - `TaskSummary.waiting` (an addition) says why a `waiting_quota` task waits: `busy` (every account that could run it
   has no free slot: `maxConcurrentPerAccount`, or the `maxConcurrentWorkers` cap), `resting` (`waitingUntil` is when
-  one is back), `no_account`, or `memory`; `waitDetail` is the daemon's English line for it (for `busy` the full
-  accounts, `acc6: 2 of 2 running`). The `waiting_quota` event carries the same as `reason` and `detail`. Both are
+  one is back), `budget_reached` (every account that could run it rests on its budget; no `waitingUntil`, the
+  task raises a `budget_reached` attention flag for the user with `params.account`, `params.budgetUsd` and
+  `params.count`, and wakes when a budget is raised, its stop switched off or a key changed), `no_account`, or
+  `memory`; `waitDetail` is the daemon's English line for it (for `busy` the full accounts, `acc6: 2 of 2 running`;
+  for `budget_reached` "acc9 reached its $200 budget: raise the budget or change the key"). The `waiting_quota` event carries the same as `reason` and `detail`. Both are
   absent for other statuses; events and daemons from before this addition carry only `memory` (an account wait
   had no reason), which the dashboard reads as waiting for quota. The lead's report (`TaskReport.waiting`) still
   names only the memory wait; `TaskReport.wait_detail` carries `waitDetail` while the task waits. A task without
@@ -190,6 +193,77 @@ in the daemon.
   so a client that sends the whole provider back can still clear the list). Neither touches `tiers`. The list is
   stored in `providers.models`; rows from before that column get it back from their pattern when the pattern was
   built from a list. `Account.models` of an API-key account is its provider's tier models followed by that list.
+- Base URLs are cleaned when a provider is saved (`account.Provider.Check`) and again when a turn uses it
+  (`Manager.Credentials`, for rows saved before): a claude provider drops a trailing `/`, `/v1` or `/v1/messages`
+  (Claude Code adds `/v1/messages` itself); a claude provider without a preset or with `custom-anthropic` whose host
+  is `api.anthropic.com` becomes the official `anthropic` preset (no base URL, the key as `x-api-key`). Codex base
+  URLs keep their `/v1`. What a save changed on its own comes back in `notices` (`{code, field?, message}`; codes
+  `base_url_trimmed`, `official_preset`, `key_name_removed`, `key_quotes_removed`, `key_assignment`, `key_prefix`,
+  `provider_reused`) on `POST`/`PATCH /providers`, `POST /accounts` and `PUT /accounts/{id}/key`; notices never block a save.
+- API keys (`POST /accounts` `apiKey`, `PUT /accounts/{id}/key`, `POST /providers/test`) go through
+  `account.NormalizeKey`: surrounding whitespace and matching quotes are dropped, and so is a leading `NAME=` or
+  `export NAME=` (a pasted `.env` line), each with a notice; a key with `://` (a URL), inner whitespace or control
+  characters is `400 invalid_argument` with `details.field` (`apiKey`, or `key` for `PUT .../key`) and
+  `details.reason` (`url`, `whitespace`, `control`, `empty`, `too_long`). The message never holds the key. A
+  known prefix that does not fit the preset (`sk-ant-` outside Anthropic, an OpenRouter or Groq key on another
+  known preset, the official preset without `sk-ant-`) is a `key_prefix` notice only. Only an upper-case `NAME=`
+  followed by at least 8 characters is removed; a key kept whole that still reads as `name=value` (say
+  `llm_api_key=sk-…`) gets a `key_assignment` notice ("paste only the part after ="). Validation errors of
+  accounts and providers carry `details.field` (`newProvider.baseUrl` for a field of `newProvider`).
+- `POST /accounts` also takes an API-key account in one call: `provider` (existing) or `newProvider` (a
+  `ProviderInput`, `id` optional) and `apiKey`; `backend`, `kind` (`api-key`) and `label` (`"<provider name> <n>"`)
+  may be left out, and `budgetUsd`/`budgetStop` given. An enabled provider with the same preset, backend, base URL,
+  official flag, wire API, models, allow-list and tiers (and id, when given) is reused unchanged (`provider_reused`
+  notice); a reused provider is never modified, so tiers that differ (on a model-per-task provider, say) create a
+  new provider under a free id (the preset's, then `-2`, ...). Provider, account, profile folder and key are written in one transaction; a failure at any step leaves none
+  of them behind. The `201` answer is `AccountCreated`: the account plus `newProvider` and `providerCreated`. Old
+  bodies (`backend`, `kind`, `label`, `provider`, no key) work as before.
+- `Account.testResult` (API-key accounts only) is `not_tested` until a key test succeeds or a turn on the current key
+  ends well, then `ok` or the last failed test's reason, with `testedAt`; it is stored in `accounts.test_result`,
+  `tested_at`, `test_reset_at` (migration 0013 marks a key that already served a turn as `ok`). Storing a key or
+  changing the provider's endpoint (backend, base URL, wire API, official) resets it; a test or turn that started
+  before that reset does not count. It never changes `status` or account selection.
+- `POST /providers/test` (`KeyTestRequest`: `provider` or `newProvider`, and `apiKey` or `accountId`) makes one
+  call that spends no tokens: `GET {base}/v1/models` for claude providers (`api.anthropic.com` for the official
+  one), `GET {base}/models` for codex ones, with the key in the header the backend's environment rules would use
+  (`x-api-key` for the official provider, else `Authorization: Bearer`; `anthropic-version` for claude). 10 s
+  timeout, 1 MiB body cap, at most 3 redirects and only on the same scheme and host (a redirect elsewhere answers
+  `redirected` and the key is not sent there). It answers `200 KeyTestResult` whenever the call could be made, a
+  refused key included: `reason` is `ok`, `refused` (401/403), `not_found` (404 on a hand-made base URL),
+  `no_models_endpoint` (404 on a preset's address, or 405), `unreachable`, `redirected` or `error`, with `models`
+  on `ok`. With `accountId` the stored key is used, only against the account's own provider (`newProvider`, or a
+  `provider` other than the account's, is `400` with `details.field`, so a stored key never goes to an address the
+  caller chose), and the result is saved on it (`saved: true`). Only the provider, reason and status are logged. Workers may not call it.
+- A provider whose tiers have no model is "model per task" (`Provider.modelPerTask`, `Account.modelPerTask`): valid,
+  but a task on it must name its model. `POST /tasks` without `model`, or with only a tier it has no model for, is
+  `400 invalid_argument` at once with `details.reason: "no_default_model"`, `details.provider`,
+  `details.tier` and `details.models` (the provider's models, as examples). `ProviderPreset.tiers` suggests tier models: for
+  `anthropic` the claude backend's tiers from the settings, when set; none for the others.
+- `no_models_endpoint` from `POST /providers/test` is not a pass: the key is not verified (DeepSeek, Kimi and Z.ai
+  usually have no `/v1/models`), the account stays untested, and its first good turn marks it `ok`. Only `ok` is a
+  verified key.
+- Spend and budget of API-key accounts (`internal/account/spend.go`). `Account.spentUsd`, `spentTokens`,
+  `spentInputTokens`, `spentOutputTokens` are what the current key spent since `spentSince` (when the key was set):
+  a running total that `account.ApplySpendTx` keeps in the transaction of every `usage.RecordAttempt`, adding only
+  the difference when an attempt is recorded again. It is never summed from `usage_turns` (pruned after
+  `TurnRetentionDays`) and it counts whatever `usageHistory` says (that setting only stops the hourly snapshots).
+  The dollar amount comes from the provider's `spendSource` (`Provider.spendSource`, `account.Provider.SpendSource`,
+  the one place that decides): `cli` (the CLI's own estimate, Claude Code `total_cost_usd`) only for the official
+  Anthropic API, `free` for Ollama and localhost base URLs, `none` otherwise (tokens only: the CLI's price table does
+  not know other services' models). The set is open (`service` and `prices` come later). Replacing or removing the
+  key resets the total and keeps the old one as `previousKey` (also logged). `budgetUsd` (`PATCH /accounts/{id}`,
+  or with `POST /accounts`; `0` removes it) and `budgetStop` (default true) set the budget; `budgetState` is `ok`,
+  `warn` (80%), `reached` or `unknown` (a budget on a source without cost: never enforced). A reached budget with
+  `budgetStop` rests the account in the pool (`resting: true`, `restReason: "budget_reached"`, no `restingUntil`)
+  until the budget is raised, `budgetStop` is turned off or the key replaced; it is not an error. Each rise to warn
+  or reached is logged once and wakes the pool. An account whose credit or billing ran out (a run ended with class
+  `credits`) is held the same way, by reason and never as a date: `resting: true`, `restReason: "credits"`, no
+  `restingUntil`, until a new key is stored, a key test passes (`testResult: ok` after the mark) or the account is
+  edited (switched off and on after a top-up); spend updates never count as an edit. One pool predicate decides both
+  holds. `POST /tasks` and followups on a provider whose every usable key is held are `400 invalid_argument`:
+  `details.reason: "budget_reached"`, "anthropic keys reached their budget ($200); raise it in Accounts", or
+  `details.reason: "credits"`, "the anthropic key has no credit left; top up or change the key". Migration 0013 back-fills the totals from the attempts still stored since
+  the key was set. The task report adds `turn_cost_usd` for a task on a `cli` provider.
 - `POST /automations/{id}/confirm-token` takes `{revision}`, the `Automation.revision` the dashboard shows, and
   answers `409 bad_state` when the automation changed since (`400` without it), so a token enables exactly what
   the user read (F34). It and `POST /automations/{id}/confirm`, `PUT` and `DELETE /github/token` answer only

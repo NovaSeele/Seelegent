@@ -14,6 +14,8 @@ type Manager struct {
 	repo     *Repo
 	profiles Profiles
 	keys     Keys
+	// faults, set by tests only, fails a step of AddDirect.
+	faults func(step string) error
 }
 
 // NewManager returns the account service on db, with profiles under profiles. now is the clock (time.Now when nil).
@@ -93,6 +95,32 @@ func (m *Manager) SetKey(ctx context.Context, id, key string) (Account, error) {
 	return m.repo.Get(ctx, a.ID)
 }
 
+// MarkRunOK records that a turn that started at started ended well on the account; see Repo.MarkRunOK.
+func (m *Manager) MarkRunOK(ctx context.Context, id string, started time.Time) (bool, error) {
+	return m.repo.MarkRunOK(ctx, id, started)
+}
+
+// RecordTest stores the result of a key test of the account; see Repo.RecordTest.
+func (m *Manager) RecordTest(ctx context.Context, id, result string, started time.Time) (bool, error) {
+	return m.repo.RecordTest(ctx, id, result, started)
+}
+
+// StoredKey returns the account and its stored API key, for a key test. The key must never be logged or shown.
+func (m *Manager) StoredKey(ctx context.Context, id string) (Account, string, error) {
+	a, err := m.repo.Get(ctx, id)
+	if err != nil {
+		return Account{}, "", err
+	}
+	if a.Kind != KindAPIKey {
+		return Account{}, "", withField("accountId", invalidf("account %s is not an API-key account", id))
+	}
+	key, err := m.keys.Load(a.ID)
+	if err != nil {
+		return Account{}, "", err
+	}
+	return a, key, nil
+}
+
 // ClearKey removes the stored API key.
 func (m *Manager) ClearKey(ctx context.Context, id string) (Account, error) {
 	a, err := m.repo.Get(ctx, id)
@@ -129,6 +157,11 @@ func (m *Manager) Credentials(ctx context.Context, a Account) (Provider, string,
 	}
 	if err != nil {
 		return Provider{}, "", err
+	}
+	// A provider saved before the base URL rules ran with its URL cleaned (and as the official preset when it
+	// points at api.anthropic.com).
+	if p.Official || validateBaseURL(p.BaseURL) == nil {
+		p.normalizeEndpoint()
 	}
 	if !p.Enabled {
 		return Provider{}, "", fmt.Errorf("account %s: provider %s is disabled: %w", a.ID, p.ID, ErrProviderUnavailable)

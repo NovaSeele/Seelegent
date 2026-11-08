@@ -169,6 +169,16 @@ function fold(f: Fold, event: TaskEvent): Draft | null {
         const key = data.reason === 'busy' ? 'terminal.ev.waitingSlot' : 'terminal.ev.noAccounts'
         return notice('warn', 'statusWaiting', key, {}, { detail: data.detail })
       }
+      if (data.reason === 'budget_reached') {
+        // No time ends it: the daemon's line says which account and what to do.
+        return notice(
+          'warn',
+          'statusWaiting',
+          'terminal.ev.budgetReached',
+          {},
+          { detail: data.detail },
+        )
+      }
       if (data.reason !== 'memory') {
         // resting, or no reason (events of an older daemon): waiting for quota.
         return notice(

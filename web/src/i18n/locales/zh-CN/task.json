@@ -46,6 +46,7 @@
       "callsFailed": "最近 {count} 次工具调用都失败了。",
       "repeated": "Worker 在最近 {steps} 步中把同一个 {tool} 调用重复了 {count} 次。",
       "noAccounts": "没有能干活的 {backend} 账号。请登录或启用一个账号。",
+      "budgetReached": "{account} 已达到 {budget} 的预算。请提高预算或更换密钥。",
       "auth": "所有已启用的 {backend} 账号都需要登录。",
       "depMissing": "前置任务 {task} 已不存在。",
       "depRejected": "前置任务 {title}（{task}）被拒绝了。",

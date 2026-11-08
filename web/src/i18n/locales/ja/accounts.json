@@ -241,5 +241,50 @@
       "passive": "読み取れるクォータなし",
       "checking": "クォータを取得中…"
     }
+  },
+  "testResult": {
+    "not_tested": "未テスト",
+    "ok": "キーは有効",
+    "refused": "キーが拒否されました",
+    "not_found": "アドレスが違います",
+    "no_models_endpoint": "未確認: 最初のターンで確認されます",
+    "unreachable": "サービスに接続できません",
+    "redirected": "別の場所にリダイレクトされました",
+    "error": "テストに失敗しました",
+    "testedAt": "{time} にテスト"
+  },
+  "notice": {
+    "base_url_trimmed": "ベース URL を短縮しました",
+    "official_preset": "Anthropic のプリセットに切り替えました",
+    "key_name_removed": "キーから変数名を取り除きました",
+    "key_quotes_removed": "キーから引用符を取り除きました",
+    "key_assignment": "NAME=値 の形に見えます。= の後ろの部分だけを貼り付けてください",
+    "key_prefix": "別のサービスのキーのようです",
+    "provider_reused": "既存のプロバイダーを再利用しました"
+  },
+  "keyError": {
+    "empty": "API キーを貼り付けてください",
+    "too_long": "このキーは長すぎます",
+    "url": "API キーではなく URL のようです",
+    "whitespace": "キーに空白や改行を含めないでください",
+    "control": "キーに見えない文字が含まれています"
+  },
+  "modelPerTask": "モデルはタスクごとに指定",
+  "modelPerTaskHint": "このプロバイダーには既定のモデルがありません。各タスクが使うモデルを指定します。",
+  "budgetState": {
+    "ok": "予算内",
+    "warn": "予算の 80% を使用",
+    "reached": "予算に達しました",
+    "unknown": "このサービスの支出は不明"
+  },
+  "restReason": {
+    "budget_reached": "予算に達しました ({spent} / {budget})",
+    "credits": "クレジットなし",
+    "creditsHint": "チャージしてから、キーをテストするか、アカウントをオフにしてからオンにしてください。"
+  },
+  "spendSource": {
+    "cli": "Claude Code の推定",
+    "free": "ローカル · 無料",
+    "none": "このサービスは費用を報告しません"
   }
 }

@@ -62,6 +62,7 @@
       "running": "The attempt is still running",
       "quota": "The account ran out of quota",
       "auth": "The account needs to sign in again",
+      "credits": "The key has no credit left",
       "transient": "The attempt hit a temporary error",
       "background_wait": "The worker is waiting on background work",
       "error": "The attempt failed"
@@ -71,6 +72,7 @@
     "waitingQuota": "Waiting for quota",
     "waitingSlot": "Waiting for a free slot",
     "noAccounts": "No accounts left",
+    "budgetReached": "Waiting: an account reached its budget",
     "retry": "Trying again in {seconds} s",
     "handoff": "Moved from {from} to {to}",
     "reattach": "Reconnected to the running worker",
@@ -108,6 +110,7 @@
     "worker": {
       "quota_exhausted": "The worker ran out of quota",
       "auth_required": "The worker needs to sign in",
+      "credits": "The account has no credit left",
       "transient": "The worker hit a temporary error",
       "fatal": "The worker failed"
     },

@@ -358,11 +358,82 @@ func TestClaudeCreditsFailsAtOnce(t *testing.T) {
 				t.Fatal(err)
 			}
 			for i := range states {
-				if st := &states[i]; st.Account.ID == broke.ID && (len(st.Cooldowns) != 1 ||
-					st.Cooldowns[0].Reason != claudeCreditsMessage || st.Cooldowns[0].Until.Year() != 9999) {
-					t.Errorf("the account without credit rests %+v", st.Cooldowns)
+				// A rest until the user acts (restReason), not one with a date.
+				if st := &states[i]; st.Account.ID == broke.ID && (len(st.Cooldowns) != 0 || st.RestReason != pool.RestCredits) {
+					t.Errorf("the account without credit: rest reason %q, cooldowns %+v", st.RestReason, st.Cooldowns)
 				}
 			}
 		})
+	}
+}
+
+// claudeOverloadedScript fails on an overloaded API after spending cost (a transient error: the turn is retried).
+func claudeOverloadedScript(sess string, cost float64) string {
+	return script(claudeInit(sess),
+		claudeLine(map[string]any{"type": "result", "subtype": "success", "is_error": true,
+			"result": "API Error: 529 overloaded_error", "session_id": sess, "total_cost_usd": cost,
+			"usage": map[string]any{"input_tokens": 9000, "output_tokens": 300}}),
+		"#!exit 1")
+}
+
+// TestBudgetReachedMidTask (review N1): the only key of a provider crosses its budget during an attempt that is
+// then retried. The task waits with reason budget_reached, its detail and attention say what to do, and raising
+// the budget lets it finish.
+func TestBudgetReachedMidTask(t *testing.T) {
+	h := newHarness(t)
+	h.useClaude()
+	acc := h.anthropicKey("solo", "qz7Kp2mWx9Rt4Lb8Nc3Vd6Fh1Jg5Ty0Ue", 0)
+	budget := 0.10
+	if _, err := h.accounts.Repo().Update(t.Context(), acc.ID, account.Patch{BudgetUSD: &budget}); err != nil {
+		t.Fatal(err)
+	}
+	h.queue.Push(t, claudeOverloadedScript("sess-budget", 0.25))
+	h.queue.Push(t, claudeOKScript("sess-budget", "Finished after the budget was raised."))
+	sum := h.delegate(api.DelegateRequest{Backend: config.BackendClaude, Provider: "anthropic",
+		Model: "claude-opus-5"})
+
+	h.waitFor("the task to wait on the budget", func() bool {
+		tk := h.task(sum.ID)
+		if tk.Status != StatusWaitingQuota {
+			h.clk.Advance(5 * time.Second) // the retry delay
+		}
+		return tk.Status == StatusWaitingQuota && tk.Waiting == api.WaitingBudget
+	})
+	tk := h.task(sum.ID)
+	want := acc.ID + " reached its $0.10 budget: raise the budget or change the key"
+	if tk.WaitDetail != want || !tk.WaitingUntil.IsZero() || len(tk.WaitBudget) != 1 ||
+		tk.WaitBudget[0].AccountID != acc.ID {
+		t.Fatalf("waiting %q (%q), until %v, budget %+v", tk.Waiting, tk.WaitDetail, tk.WaitingUntil, tk.WaitBudget)
+	}
+	det, err := h.s.Get(t.Context(), sum.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a := det.Attention; a == nil || a.Reason != ReasonBudgetReached || a.Who != WhoUser || a.Detail != want ||
+		a.Params == nil || a.Params.Account != acc.ID || a.Params.BudgetUSD != 0.10 || a.Params.Count != 1 {
+		t.Fatalf("attention = %+v", det.Attention)
+	}
+	if det.Waiting != api.WaitingBudget || det.WaitDetail != want {
+		t.Errorf("summary waiting %q (%q)", det.Waiting, det.WaitDetail)
+	}
+	evs := eventsOf(h.events(sum.ID), api.EventWaitingQuota)
+	if len(evs) == 0 {
+		t.Fatal("no waiting_quota event")
+	}
+	var d api.WaitingQuotaData
+	decode(t, evs[len(evs)-1], &d)
+	if d.Reason != api.WaitingBudget || d.Detail != want {
+		t.Errorf("waiting_quota data = %+v", d)
+	}
+
+	// Raising the budget wakes the task (the account edit notifies the pool).
+	raised := 5.0
+	if _, err := h.accounts.Repo().Update(t.Context(), acc.ID, account.Patch{BudgetUSD: &raised}); err != nil {
+		t.Fatal(err)
+	}
+	h.pool.Notify()
+	tk = h.waitStatus(sum.ID, StatusDone)
+	if tk.Waiting != "" || tk.WaitBudget != nil {
+		t.Errorf("the wait was not cleared: %q %+v", tk.Waiting, tk.WaitBudget)
 	}
 }

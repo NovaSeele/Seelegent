@@ -25,6 +25,44 @@ type ModelPolicy struct {
 	Tiers config.TierModels
 	// Source names where the policy comes from, for error messages ("backends.claude" or "provider zai").
 	Source string
+	// Provider is the provider id of an API-key account's policy ("" for a backend's), and Models its model
+	// allow-list (examples for the error of a turn without a model).
+	Provider string
+	Models   []string
+}
+
+// NoDefaultModelError is a turn without a model (or with only a tier) on a provider that has no model for that
+// tier: most often a "model per task" provider without any tier model (account.Provider.ModelPerTask), where the
+// lead must name the model. It matches ErrModel.
+type NoDefaultModelError struct {
+	Provider string
+	// Tier is the tier that has no model; Tiers are the tiers that have one (none for a model-per-task provider).
+	Tier  string
+	Tiers []string
+	// Models are example model ids (the provider's allow-list), possibly none.
+	Models []string
+}
+
+func (e *NoDefaultModelError) Error() string {
+	example := ""
+	if len(e.Models) > 0 {
+		example = " (e.g. " + strings.Join(e.Models[:min(len(e.Models), 3)], ", ") + ")"
+	}
+	if len(e.Tiers) == 0 {
+		return fmt.Sprintf("provider %s has no default model: pass model%s in delegate; this provider runs the model "+
+			"each task names", e.Provider, example)
+	}
+	return fmt.Sprintf("provider %s has no model for tier %s: pass model%s in delegate, or a tier it has (%s)",
+		e.Provider, e.Tier, example, strings.Join(e.Tiers, ", "))
+}
+
+// Is makes the error match ErrModel.
+func (e *NoDefaultModelError) Is(target error) bool { return target == ErrModel }
+
+// APIDetails gives the API error's details: reason no_default_model, the provider and the example models.
+func (e *NoDefaultModelError) APIDetails() map[string]any {
+	return map[string]any{"reason": "no_default_model", "provider": e.Provider, "models": slices.Clone(e.Models),
+		"tier": e.Tier}
 }
 
 // PolicyFor returns the model policy of a turn on backend name: the provider's tiers and pattern for an API-key
@@ -37,7 +75,8 @@ func PolicyFor(name string, s config.Settings, provider *account.Provider) (Mode
 	if provider != nil {
 		return ModelPolicy{
 			Backend: name, Enabled: b.Enabled && provider.Enabled, AllowedModels: provider.AllowedModels,
-			Tiers: provider.Tiers, Source: "provider " + provider.ID,
+			Tiers: provider.Tiers, Source: "provider " + provider.ID, Provider: provider.ID,
+			Models: slices.Clone(provider.Models),
 		}, nil
 	}
 	return ModelPolicy{
@@ -65,6 +104,16 @@ func (p ModelPolicy) Resolve(model, tier, defaultTier string) (string, error) {
 		if !ok {
 			if !slices.Contains(config.Tiers(), tier) {
 				return "", fmt.Errorf("%w: unknown tier %q (want %s)", ErrModel, tier, strings.Join(config.Tiers(), ", "))
+			}
+			if p.Provider != "" {
+				var have []string
+				for _, t := range config.Tiers() {
+					if _, ok := p.Tiers.Model(t); ok {
+						have = append(have, t)
+					}
+				}
+				return "", &NoDefaultModelError{Provider: p.Provider, Tier: tier, Tiers: have,
+					Models: slices.Clone(p.Models)}
 			}
 			return "", fmt.Errorf("%w: tier %s has no model in %s", ErrModel, tier, p.Source)
 		}

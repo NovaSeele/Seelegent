@@ -113,7 +113,7 @@ append the events in **one transaction**, then publish on the bus. The log and t
 | ok | turn `ok`, task `done` (a hand-back turn also logs `handback`); a gated task stays `running` in its gate phase first (below) |
 | quota | the account rests for that quota group (`pool.MarkExhausted`), next attempt |
 | auth | the account is marked signed out (`pool.MarkAuthFailed`), next attempt on another account |
-| credits | the key's credit or billing ran out (class `credits`, never a quota rest): the account is left out with no end time (`pool.MarkNoCredit`) until the user stores a new key or edits the account (switches it off and on after a top-up); next attempt on another account, or, when no other account can run the task, the task fails at once naming the key ("the anthropic key has no credit left; top up or change the key") instead of waiting |
+| credits | the key's credit or billing ran out (class `credits`, never a quota rest): the account is held with no end time (`pool.MarkNoCredit`, `restReason: credits`) until the user stores a new key, a key test passes or the user edits the account (switches it off and on after a top-up); next attempt on another account, or, when no other account can run the task, the task fails at once naming the key ("the anthropic key has no credit left; top up or change the key") instead of waiting |
 | transient | `retry` event, wait 15 s then 45 s on the same account (only its own timer wakes it), then another account |
 | background_wait | continue once with the background-wait prompt; the second time the turn ends `ok` |
 | error / timeout | turn and task `failed` |
@@ -210,7 +210,9 @@ settings change.
 `computeAttention` maps the task and what the run knows about its worker onto the contract's states:
 
 - `blocked`: prerequisites failed (`deps_blocked`), no account can run it (`no_accounts`, for the user), every
-  account needs a sign-in (`auth`, for the user), the worker repeats itself (`looping`: the same call `loopRepeat`
+  account needs a sign-in (`auth`, for the user), every account that could run it rests on its budget
+  (`budget_reached`, for the user: waiting reason `budget_reached`, detail "acc9 reached its $200 budget: raise the
+  budget or change the key"; raising the budget, switching its stop off or a new key wakes the task), the worker repeats itself (`looping`: the same call `loopRepeat`
   times in its last 12 without progress, or five failed calls in a row; an edit that reports only its file is told
   apart by the file's content hash, or counts as new when the file cannot be read), a done turn with no answer
   (`no_response`), red hygiene findings (`hygiene`), files at risk not restored (`work_at_risk`), a failed task

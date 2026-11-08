@@ -354,6 +354,7 @@ func (s *Service) setMemoryWaiting(id string, h memHold) {
 			since = mw.Since
 		}
 		t.Waiting, t.WaitDetail, t.WaitingUntil = api.WaitingMemory, h.detail(), time.Time{}
+		t.WaitBudget = nil
 		t.MemoryWait = &MemoryWait{Since: since, AvailableMB: h.avail, NeedMB: h.need}
 		if mw != nil && mw.NeedMB == h.need {
 			return nil, nil

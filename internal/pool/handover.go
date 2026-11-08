@@ -78,6 +78,8 @@ func (p *Pool) Handover(ctx context.Context, in HandoverInput) (Handover, error)
 		why = "the account must sign in again"
 	case own.noCredit:
 		why = "the account has no credit left"
+	case own.budget:
+		why = "the account reached its budget"
 	case own.state == stateIneligible:
 		why = "the account can no longer run this task (" + string(v.status[cur.ID]) + ")"
 	case own.state == stateResting:
@@ -100,8 +102,11 @@ func (p *Pool) Handover(ctx context.Context, in HandoverInput) (Handover, error)
 	if own.state == stateResting || own.state == statePending {
 		u.Candidates++
 		u.Resting++
-		if u.Reason == ReasonNoAccount {
-			u.Reason = ReasonResting
+		if own.budget {
+			u.BudgetReached = append(u.BudgetReached, budgetHold(cur))
+		}
+		if u.Reason != ReasonBusy {
+			u.Reason = u.restingReason()
 		}
 		if !own.until.IsZero() && (u.Until.IsZero() || own.until.Before(u.Until)) {
 			u.Until = own.until

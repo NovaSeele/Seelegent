@@ -563,6 +563,10 @@ func (failingAccounts) List(context.Context) ([]account.Account, error) {
 	return nil, errors.New("db down")
 }
 
+func (failingAccounts) MarkRunOK(context.Context, string, time.Time) (bool, error) {
+	return false, errors.New("db down")
+}
+
 type failingQuotas struct{}
 
 func (failingQuotas) All(context.Context) (map[string]quota.Snapshot, error) {
