@@ -54,7 +54,14 @@ type ExecResult struct {
 	Tail      string
 	// Err says why the command could not run, or "timeout"/"cancelled".
 	Err string
+	// Stopped is api.StepStoppedLowMemory when ctx ended with cause ErrLowMemory (the memory watchdog); Cancelled is
+	// false then.
+	Stopped string
 }
+
+// ErrLowMemory is the cancel cause the memory watchdog gives a gate command's context (context.WithCancelCause):
+// Exec reports it as Stopped, not Cancelled, and the runner stops the remaining steps of that run.
+var ErrLowMemory = errors.New("stopped: machine low on memory")
 
 // OK reports whether the command exited with code 0.
 func (r ExecResult) OK() bool { return r.Exit != nil && *r.Exit == 0 }

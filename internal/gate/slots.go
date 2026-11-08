@@ -38,7 +38,8 @@ func NewSlots(limit func() int) *Slots {
 // Acquire waits for a free slot and returns the function that gives it back (calling it more than once is
 // harmless). While it waits, onWait (optional) gets the caller's place in the queue, from 1, on the caller's
 // goroutine: first when it starts waiting, then every time the place changes. A slot that is free at once calls
-// onWait never. When ctx ends first, Acquire leaves the queue and returns ctx's error.
+// onWait never. When ctx ends first, Acquire leaves the queue and returns ctx's error. A slot handed over just as
+// ctx ends can still be returned with a nil error: callers defer release() before they look at ctx.
 func (s *Slots) Acquire(ctx context.Context, onWait func(pos int)) (release func(), err error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err

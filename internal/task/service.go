@@ -145,7 +145,8 @@ type Resources interface {
 // GateSlots limits the gate commands that run at the same time (gateConcurrency); *gate.Slots satisfies it.
 type GateSlots interface {
 	// Acquire waits for a slot in FIFO order and returns the function that gives it back; onWait gets the
-	// caller's place in the queue (from 1) while it waits. It fails with ctx's error when ctx ends first.
+	// caller's place in the queue (from 1) while it waits. It fails with ctx's error when ctx ends first, but a slot
+	// handed over as ctx ends can still come back with a nil error: defer release() before checking ctx.
 	Acquire(ctx context.Context, onWait func(pos int)) (release func(), err error)
 	// Limit is the current number of slots (0 = unlimited), for the queued gate event.
 	Limit() int
