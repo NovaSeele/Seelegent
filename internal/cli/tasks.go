@@ -231,6 +231,13 @@ func newReviewCommand(d deps) *cobra.Command {
 	return cmd
 }
 
+// cancelRecordedOut is what cancel prints when the daemon stopped during the wait after recording the cancel.
+type cancelRecordedOut struct {
+	TaskID         string `json:"taskId"`
+	Status         string `json:"status"`
+	CancelRecorded bool   `json:"cancelRecorded"`
+}
+
 func newCancelCommand(d deps) *cobra.Command {
 	var wait int
 	cmd := &cobra.Command{
@@ -248,6 +255,13 @@ func newCancelCommand(d deps) *cobra.Command {
 				return err
 			}
 			_, stopped, err := c.Cancel(cmd.Context(), id, api.CancelRequest{WaitSeconds: wait})
+			if ops.CancelRecorded(err) {
+				out := cancelRecordedOut{TaskID: id, Status: "cancelling", CancelRecorded: true}
+				return emit(cmd, out, func(w io.Writer) {
+					_, _ = fmt.Fprintf(w, "Task %s: the cancel was recorded; the daemon is stopping and carries it out "+
+						"when it starts again.\n", id)
+				})
+			}
 			if err != nil {
 				return err
 			}

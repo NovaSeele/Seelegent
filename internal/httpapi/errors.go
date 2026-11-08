@@ -107,6 +107,10 @@ var messages = map[string]map[string]string{
 		"en": "the daemon is shutting down",
 		"vi": "daemon đang tắt",
 	},
+	"stopping_cancel_recorded": {
+		"en": "the daemon is stopping; the cancel was recorded and is carried out when the daemon starts again",
+		"vi": "daemon đang dừng; lệnh huỷ đã được ghi nhận và sẽ được thực hiện khi daemon khởi động lại",
+	},
 }
 
 // language picks "vi" or "en" from Accept-Language.

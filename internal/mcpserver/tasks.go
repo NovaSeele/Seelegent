@@ -344,6 +344,12 @@ func (s *Server) cancel(ctx context.Context, k *call) (result, error) {
 		return result{}, err
 	}
 	sum, stopped, err := c.Cancel(ctx, a.TaskID, api.CancelRequest{WaitSeconds: secs})
+	if ops.CancelRecorded(err) {
+		return result{value: taskStatus{TaskID: a.TaskID, Status: "cancelling",
+			Note: "the daemon is stopping; the cancel was recorded and is carried out when it starts again. " +
+				"Do not cancel again; check with task later."},
+			summary: fmt.Sprintf("Task %s: cancel recorded; the daemon is stopping.", a.TaskID)}, nil
+	}
 	if err != nil {
 		return result{}, err
 	}

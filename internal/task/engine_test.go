@@ -335,6 +335,38 @@ func TestCancelStopsWorker(t *testing.T) {
 	}
 }
 
+// A cancel whose wait ends with its context (the daemon stopping) still answers with the task's summary and no
+// error: the cancel was recorded, and the HTTP API says so (M18 review G5).
+func TestCancelWaitCutStillRecorded(t *testing.T) {
+	h := newHarness(t)
+	h.agy("only", 0)
+	h.queue.Push(t, hangScript("conv-k"))
+	sum := h.delegate(api.DelegateRequest{})
+	h.runningWorker(sum.ID)
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	cut := make(chan struct{})
+	go func() { // the stop comes right after the cancel was written, while the worker is still stopping
+		defer close(cut)
+		for ctx.Err() == nil {
+			if len(eventsOf(h.events(sum.ID), api.EventCancel)) > 0 {
+				cancel()
+				return
+			}
+			time.Sleep(time.Millisecond)
+		}
+	}()
+	got, stopped, err := h.s.Cancel(ctx, sum.ID, api.CancelRequest{WaitSeconds: 20})
+	<-cut
+	if err != nil || got.ID != sum.ID {
+		t.Fatalf("cancel cut by its context = %+v, %v, %v", got, stopped, err)
+	}
+	if stopped {
+		t.Skip("the worker stopped before the context ended")
+	}
+	h.waitStatus(sum.ID, StatusCancelled)
+}
+
 // TestWaitCancelLeavesTask ends a wait by its context without touching the task (old C-B4).
 func TestWaitCancelLeavesTask(t *testing.T) {
 	h := newHarness(t)

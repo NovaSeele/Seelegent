@@ -66,8 +66,10 @@ func (s *Server) taskRoutes() {
 		if req.WaitSeconds < 0 || req.WaitSeconds > 60 {
 			return 0, nil, invalid("waitSeconds must be 0..60").withField("waitSeconds")
 		}
+		recorded := false
 		run := func(ctx context.Context) (int, any, error) {
 			sum, stopped, err := s.o.Tasks.Cancel(ctx, r.PathValue("id"), req)
+			recorded = err == nil
 			if stopped {
 				return http.StatusOK, sum, err
 			}
@@ -76,7 +78,12 @@ func (s *Server) taskRoutes() {
 		if req.WaitSeconds == 0 {
 			return run(r.Context())
 		}
-		return s.untilStop(r, run)
+		code, body, err := s.untilStop(r, run)
+		if e := (*apiError)(nil); recorded && errors.As(err, &e) && e.code == api.CodeDaemonStopping {
+			// The wait was cut, not the cancel: say so, so the lead does not cancel again or think it failed.
+			return 0, nil, translated(api.CodeDaemonStopping, "stopping_cancel_recorded").with("cancelRecorded", true)
+		}
+		return code, body, err
 	})
 	s.handle("POST /tasks/{id}/answer", func(w http.ResponseWriter, r *http.Request) (int, any, error) {
 		var req api.AnswerRequest

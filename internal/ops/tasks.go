@@ -3,6 +3,7 @@ package ops
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -55,6 +56,13 @@ func ActiveTasks(ctx context.Context, c *client.Client) ([]api.TaskSummary, erro
 // a lead's wait (M18 hunt H16: questions and stalls were left out).
 func Blocked(t api.TaskSummary) bool {
 	return t.Attention != nil && api.NeedsLead(t.Attention.State)
+}
+
+// CancelRecorded reports whether err is the daemon_stopping answer of a cancel whose wait the shutdown cut short
+// after the cancel was recorded: the task is cancelled when the daemon starts again (M18 review G5).
+func CancelRecorded(err error) bool {
+	var apiErr *client.Error
+	return errors.As(err, &apiErr) && apiErr.Code == api.CodeDaemonStopping && apiErr.Details["cancelRecorded"] == true
 }
 
 // TaskReason says why a task needs attention, or nil.

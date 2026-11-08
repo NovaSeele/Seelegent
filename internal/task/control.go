@@ -200,7 +200,9 @@ func (s *Service) Cancel(ctx context.Context, id string, req api.CancelRequest) 
 			}
 		}
 	}
-	sum, err = s.Summary(ctx, id)
+	// The cancel is recorded: its summary is read even when ctx ended the wait (a daemon that is stopping), so a
+	// nil error always means the cancel stands.
+	sum, err = s.Summary(context.WithoutCancel(ctx), id)
 	if err != nil {
 		return api.TaskSummary{}, false, err
 	}
