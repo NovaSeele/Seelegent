@@ -170,7 +170,7 @@ func (s *Service) DelegateWith(ctx context.Context, req api.DelegateRequest, sp 
 	t.AfterMode = afterMode
 	if gated(t) {
 		t.RepoRoot = s.gitRoot(ctx, cwd)
-		if t.Proof, err = s.resolveProof(t, preq, nil); err != nil {
+		if t.Proof, err = s.resolveProof(t, preq, nil, false); err != nil {
 			return api.TaskSummary{}, err
 		}
 	}

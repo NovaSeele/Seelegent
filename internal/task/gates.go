@@ -46,6 +46,10 @@ type Proof struct {
 	DoctrineError string        `json:"doctrineError,omitempty"`
 	Bar           proof.Bar     `json:"bar,omitempty"`
 	BarChanged    []string      `json:"barChanged,omitempty"`
+	// SpecTasks are the task's spec tasks (their Gate: commands and paths) and the feature gate as tasks.md said
+	// when they were first read, so a followup never reads a line the worker has edited since (bugs.md D10).
+	// Absent on proofs frozen before it existed.
+	SpecTasks *proof.Tasks `json:"specTasks,omitempty"`
 	// AutoFixes counts the automatic fix turns since the lead's last message; Budget is the most allowed.
 	AutoFixes int `json:"autoFixes,omitempty"`
 	Budget    int `json:"budget"`
@@ -107,7 +111,7 @@ func (s *Service) followupProof(ctx context.Context, t *Task, req proofRequest, 
 	if t.RepoRoot == "" {
 		t.RepoRoot = s.gitRoot(ctx, t.Cwd)
 	}
-	p, err := s.resolveProof(t, req, prev)
+	p, err := s.resolveProof(t, req, prev, tasksChanged)
 	if err != nil {
 		return nil, false, err
 	}
@@ -228,7 +232,11 @@ func specFeature(t *Task) string {
 // resolveProof works out what the gate of t checks from the request, the settings, the spec tasks and the
 // repository, keeping what prev (the task's current proof) had for the options the request leaves out. It
 // returns nil for a task without a gate.
-func (s *Service) resolveProof(t *Task, req proofRequest, prev *Proof) (*Proof, error) {
+//
+// A followup (prev set) never takes gate commands from a tasks.md line the worker could have edited: with the gate
+// and the spec tasks unchanged the frozen commands are kept as they are; with a new gate option or new task ids the
+// spec tasks it keeps come from SpecTasks, frozen when they were first read, and only tasks it adds are read again.
+func (s *Service) resolveProof(t *Task, req proofRequest, prev *Proof, tasksChanged bool) (*Proof, error) {
 	if !gated(t) {
 		return nil, nil
 	}
@@ -273,6 +281,19 @@ func (s *Service) resolveProof(t *Task, req proofRequest, prev *Proof) (*Proof, 
 		}
 		p.NoLane, p.Lane = false, &api.TaskLane{Paths: lane, Source: "lead"}
 	}
+	if prev != nil && req.gate == nil && req.gateCommands == nil && !tasksChanged {
+		// The gate is left alone: run exactly the commands frozen before (the old rule), and read nothing again
+		// from the working tree, which the worker can edit (bugs.md D10: a lane-only followup ran a Gate: line the
+		// worker had planted in tasks.md and re-froze the bar over the change). The bar stays as frozen, so a
+		// changed tasks.md line keeps showing in barChanged.
+		p.Commands = slices.Clone(prev.Commands)
+		p.Feature, p.FeatureKey, p.FeatureDir = prev.Feature, prev.FeatureKey, prev.FeatureDir
+		p.SpecTasks, p.BarChanged = prev.SpecTasks, slices.Clone(prev.BarChanged)
+		if p.Lane == nil && !p.NoLane && prev.Lane != nil && prev.Lane.Source == "spec" {
+			p.Lane = &api.TaskLane{Paths: slices.Clone(prev.Lane.Paths), Source: "spec"}
+		}
+		return p, nil
+	}
 	feature := specFeature(t)
 	var ids []string
 	if feature != "" {
@@ -290,7 +311,7 @@ func (s *Service) resolveProof(t *Task, req proofRequest, prev *Proof) (*Proof, 
 	if feature != "" {
 		f := proof.FeatureOf(root, feature)
 		p.Feature, p.FeatureKey, p.FeatureDir = f.Display, f.Key, feature
-		if err := s.specProof(t, root, feature, p, lines); err != nil {
+		if err := s.specProof(t, root, feature, p, lines, prev); err != nil {
 			return nil, err
 		}
 	}
@@ -319,12 +340,27 @@ func (s *Service) resolveProof(t *Task, req proofRequest, prev *Proof) (*Proof, 
 	if prev == nil || prev.Bar == nil {
 		p.Bar = bar
 	} else {
-		// A followup that changes the gate on purpose moves the bar for the gate commands only.
+		// A followup that changes the gate or the spec tasks on purpose moves the bar for the gate commands, and
+		// for the lines of tasks it adds (lines holds only those); a task it keeps keeps its frozen line, and one it
+		// drops leaves the bar.
 		p.Bar["gate"] = bar["gate"]
+		for k := range p.Bar {
+			if id, ok := strings.CutPrefix(k, "tasks.md#"); ok && !slices.Contains(ids, id) {
+				delete(p.Bar, k)
+			}
+		}
 		for k, v := range bar {
 			if strings.HasPrefix(k, "tasks.md#") {
 				p.Bar[k] = v
 			}
+		}
+		// What changed before stays reported, unless the lead has just frozen it again.
+		for _, k := range prev.BarChanged {
+			task := strings.HasPrefix(k, "tasks.md#")
+			if _, read := bar[k]; k == "gate" || (task && (read || p.Bar[k] == "")) {
+				continue // frozen again (gate, a task read now) or gone (a task dropped)
+			}
+			p.BarChanged = append(p.BarChanged, k)
 		}
 	}
 	return p, nil
@@ -353,18 +389,97 @@ func (s *Service) leadLane(root string, paths []string) ([]string, error) {
 	return lane, nil
 }
 
+// specTasks returns the spec tasks ids name and the feature gate (see specProof), or nil for a feature without
+// tasks.md. lines gets the raw lines of the tasks read from tasks.md now.
+func (s *Service) specTasks(t *Task, feature string, ids []string, lines map[string]string, prev *Proof) (
+	*proof.Tasks, error) {
+	var frozen, fresh *proof.Tasks
+	if prev != nil {
+		frozen = prev.SpecTasks
+	}
+	legacy := prev != nil && frozen == nil
+	read := func() (*proof.Tasks, error) {
+		if fresh != nil {
+			return fresh, nil
+		}
+		text, _, err := fsutil.ReadRegular(filepath.Join(feature, "tasks.md"), 4<<20)
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, nil
+		}
+		if err != nil {
+			return nil, invalidf("spec tasks.md: %v", err)
+		}
+		ts := proof.ParseTasks(string(text))
+		fresh = &ts
+		return fresh, nil
+	}
+	out := &proof.Tasks{FeatureGate: []string{}, Tasks: []proof.TaskLine{}}
+	for _, id := range ids {
+		if frozen != nil {
+			if tl, ok := frozen.Find(id); ok {
+				out.Tasks = append(out.Tasks, tl)
+				continue
+			}
+		}
+		ts, err := read()
+		if err != nil {
+			return nil, err
+		}
+		if ts == nil {
+			// A feature without tasks.md: the ids are the lead's word.
+			if frozen == nil && len(out.Tasks) == 0 {
+				return nil, nil
+			}
+			out.Tasks = append(out.Tasks, proof.TaskLine{ID: id, Gates: []string{}, PathTokens: []string{},
+				Covers: []string{}})
+			continue
+		}
+		tl, ok := ts.Find(id)
+		if !ok {
+			return nil, invalidf("task %s is not in %s/tasks.md", id, t.Spec.Dir)
+		}
+		if key := "tasks.md#" + id; legacy && prev.Bar[key] != "" {
+			if proof.SnapshotBar("", "", map[string]string{id: tl.Line}, nil)[key] != prev.Bar[key] {
+				tl = proof.TaskLine{ID: id, Gates: []string{}, PathTokens: []string{}, Covers: []string{}}
+			}
+			out.Tasks = append(out.Tasks, tl) // the bar keeps the frozen line
+			continue
+		}
+		lines[id] = tl.Line
+		out.Tasks = append(out.Tasks, tl)
+	}
+	if frozen != nil {
+		out.FeatureGate = slices.Clone(frozen.FeatureGate)
+		return out, nil
+	}
+	switch ts, err := read(); {
+	case err != nil:
+		return nil, err
+	case ts == nil:
+	case legacy:
+		for _, g := range ts.FeatureGate {
+			if slices.ContainsFunc(prev.Commands, func(c api.GateCommand) bool { return c.Cmd == g }) {
+				out.FeatureGate = append(out.FeatureGate, g)
+			}
+		}
+	default:
+		out.FeatureGate = slices.Clone(ts.FeatureGate)
+	}
+	return out, nil
+}
+
 // specProof adds what the spec tasks of t give: their Gate: commands, the feature gate, and (without a lead lane)
-// the lane from their path tokens; lines gets their raw lines for the bar.
-func (s *Service) specProof(t *Task, root, feature string, p *Proof, lines map[string]string) error {
-	text, _, err := fsutil.ReadRegular(filepath.Join(feature, "tasks.md"), 4<<20)
+// the lane from their path tokens; lines gets the raw lines of the tasks read now, for the bar. Tasks frozen in
+// prev.SpecTasks are taken from there; on an older proof without it, a line read again is used only when it still
+// matches the frozen bar, and a feature gate command only when the gate ran it before (otherwise nothing of it is
+// taken, and the bar reports the change).
+func (s *Service) specProof(t *Task, root, feature string, p *Proof, lines map[string]string, prev *Proof) error {
 	ids := t.Spec.TaskIDs
-	if errors.Is(err, os.ErrNotExist) {
-		return nil // a feature without tasks.md: the ids are the lead's word
+	tasks, err := s.specTasks(t, feature, ids, lines, prev)
+	if err != nil || tasks == nil {
+		return err
 	}
-	if err != nil {
-		return invalidf("spec tasks.md: %v", err)
-	}
-	tasks := proof.ParseTasks(string(text))
+	p.SpecTasks = tasks
 	var tokens []string
 	add := func(cmd string, ids []string) {
 		for i := range p.Commands {
@@ -380,11 +495,7 @@ func (s *Service) specProof(t *Task, root, feature string, p *Proof, lines map[s
 		p.Commands = append(p.Commands, api.GateCommand{Cmd: cmd, TaskIDs: slices.Clone(ids), Kind: api.StepTask})
 	}
 	for _, id := range ids {
-		tl, ok := tasks.Find(id)
-		if !ok {
-			return invalidf("task %s is not in %s/tasks.md", id, t.Spec.Dir)
-		}
-		lines[id] = tl.Line
+		tl, _ := tasks.Find(id)
 		tokens = append(tokens, tl.PathTokens...)
 		if len(p.LeadCommands) == 0 {
 			for _, g := range tl.Gates {

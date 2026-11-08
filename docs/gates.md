@@ -45,7 +45,12 @@ When the task starts, its proof is resolved and frozen (`TaskDetail.proof`):
 - **Budget**: `gateMaxAutoFixes`.
 
 A followup that changes `gate`, `gateCommands`, `lane`, `verify` or the spec task ids resolves the proof again (a new
-lane is checked like a new claim) and the next worker prompt starts with the new gate and lane. A followup by the
+lane is checked like a new claim) and the next worker prompt starts with the new gate and lane. A followup never
+takes gate commands from the working tree, which the worker can edit: one that leaves `gate`, `gateCommands` and
+the task ids alone runs exactly the frozen commands; a new `gate` or `gateCommands` runs what the lead asked for,
+with the spec tasks' `Gate:` lines and feature gate as they were frozen; new task ids read `tasks.md` only for the
+tasks they add. The bar is frozen again only for what the lead changed (the gate commands, the lines of added
+tasks), so a `tasks.md` line the worker edited stays in `barChanged` on every turn. A followup by the
 lead or the user resets the automatic fix count.
 
 ## The gate phase
