@@ -5,7 +5,7 @@ import { useI18n } from 'vue-i18n'
 import Button from '@/components/ui/Button.vue'
 import Icon from '@/components/ui/Icon.vue'
 import { useFormat } from '@/composables/useFormat'
-import { formatMB, freeMB } from '@/lib/memory'
+import { distinctMB, freeMB, mbFormatter } from '@/lib/memory'
 import { useConnectionStore } from '@/stores/connection'
 import { useTasksStore } from '@/stores/tasks'
 
@@ -27,15 +27,21 @@ const facts = computed(() => {
   const memory = connection.health?.memory
   const phys = freeMB(memory, 'phys')
   const commit = freeMB(memory, 'commit')
-  const parts: string[] = []
-  if (phys !== null) parts.push(t('nav.lowMemory.freePhys', { free: formatMB(fmt.value, phys) }))
-  if (commit !== null)
-    parts.push(t('nav.lowMemory.freeCommit', { free: formatMB(fmt.value, commit) }))
   const floor = connection.settings?.criticalFreeMemoryMB ?? 0
-  if (floor > 0) {
+  // The amounts read together: free memory just under the floor must not read the same as the floor.
+  const shownMB = [phys, commit, floor > 0 ? floor : null]
+  const present = shownMB.filter((mb): mb is number => mb !== null)
+  const texts = distinctMB(mbFormatter(fmt.value), present)
+  const [freeText, commitText, floorText] = shownMB.map((mb) =>
+    mb === null ? null : (texts[present.indexOf(mb)] ?? ''),
+  )
+  const parts: string[] = []
+  if (freeText) parts.push(t('nav.lowMemory.freePhys', { free: freeText }))
+  if (commitText) parts.push(t('nav.lowMemory.freeCommit', { free: commitText }))
+  if (floorText) {
     parts.push(
       t('nav.lowMemory.floor', {
-        floor: formatMB(fmt.value, floor),
+        floor: floorText,
         setting: t('settings.items.criticalFreeMemory.label'),
       }),
     )
