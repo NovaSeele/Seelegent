@@ -5,6 +5,7 @@
   "notRepoDesc": "{cwd} is not inside a git repository, so there is nothing to commit.",
   "noBranch": "detached",
   "uncommittedCount": "{n} uncommitted file | {n} uncommitted files",
+  "sumShown": "in the files listed",
   "refresh": "Read again",
   "empty": "No changes from this task",
   "emptyDesc": "Files the worker changes show up here, ready to review and commit.",
@@ -125,7 +126,8 @@
     "label": "Untracked folders",
     "files": "{n} file | {n} files",
     "more": "and {n} more file | and {n} more files",
-    "listLabel": "Files in {path}"
+    "listLabel": "Files in {path}",
+    "others": "{n} other file here is not this task's | {n} other files here are not this task's"
   },
   "image": {
     "before": "Before (HEAD)",

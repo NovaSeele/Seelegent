@@ -343,16 +343,20 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 	// Every answer, refusals included: no page may frame the dashboard (clickjacking), and no link leaks the
-	// daemon's URL to another site.
+	// daemon's URL to another site. An API answer is also never loaded by another origin's page as a resource (an
+	// <img> or <script> of another site, which no CORS check covers).
+	isAPI := r.URL.Path == apiPrefix || strings.HasPrefix(r.URL.Path, apiPrefix+"/")
 	h := w.Header()
 	h.Set("X-Frame-Options", "DENY")
 	h.Set("Content-Security-Policy", "frame-ancestors 'none'")
 	h.Set("Referrer-Policy", "no-referrer")
+	if isAPI {
+		h.Set("Cross-Origin-Resource-Policy", "same-origin")
+	}
 	if !s.hostAllowed(r.Host) {
 		s.writeError(w, r, translated(api.CodeMisdirected, "misdirected"))
 		return
 	}
-	isAPI := r.URL.Path == apiPrefix || strings.HasPrefix(r.URL.Path, apiPrefix+"/")
 	if isAPI && mutating(r.Method) {
 		if r.Header.Get("X-Seelegent") != "1" {
 			s.writeError(w, r, translated(api.CodeForbidden, "no_header"))

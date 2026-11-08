@@ -285,7 +285,7 @@ that was dirty before the turn but whose start content the snapshot did not keep
 | `bom_changed` | red | a byte order mark was added or removed |
 | `bom_new_file` | red | a new file starts with a BOM while the repository's tracked files of that extension have none (first 20 checked) |
 | `junk_file` | red | a new file that looks like a leftover: `*.orig`, `*.rej`, `*.tmp`, `*.bak`, `*~`, or a Windows device name such as `nul` (from `> nul` in a POSIX shell) |
-| `unreported_file` | warn | a new file the report names neither by its path nor by its file name |
+| `unreported_file` | warn | a new file the worker made (one of its edit tools' files, or a path its shell commands write) that the report names neither by its path (from the repository root or from the task's folder) nor by its file name; a file only the snapshots show, such as one the lead edited during the turn, is not judged |
 
 A red finding makes a done task's attention `hygiene`.
 

@@ -1032,6 +1032,12 @@ export interface GitDir {
   bytes: number
   /** Files are its first GitDirFiles files by path; Count minus their number are left out. */
   files: GitFile[]
+  /**
+   * Others counts the folder's untracked files that are not the task's (already there when it started, or
+   * outside its folder and never touched by it). The row stands for the whole folder, so the repository view
+   * does not list them either.
+   */
+  others?: number
 }
 
 /** GitFile is one changed file. */
@@ -1044,6 +1050,12 @@ export interface GitFile {
   /** Turn is the turn that last changed the file, when known. */
   turn?: number
   binary: boolean
+  /**
+   * Stamp changes whenever an image's preview would (TaskGit.Files and UntrackedDirs of the Git tab view only,
+   * images only): the working tree file's size and modification time, and its blob id at HEAD. The view adds it
+   * to the image URLs, so a rewritten image is read again although its status and line counts stay the same.
+   */
+  stamp?: string
 }
 
 /**

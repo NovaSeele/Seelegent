@@ -13,7 +13,7 @@ import { isBoolean, readStored, writeStored } from '@/lib/storage'
 import { isActive } from '@/lib/taskStatus'
 
 import CommitDialog from './CommitDialog.vue'
-import { isDrafts, putDraft, stepFile, totals, type Drafts } from './git'
+import { isDrafts, putDraft, type Drafts } from './git'
 import GitDiffPane from './GitDiffPane.vue'
 import GitDirList from './GitDirList.vue'
 import GitFileList from './GitFileList.vue'
@@ -33,7 +33,8 @@ import { useNotes } from './useNotes'
  * The Git view: what this task committed since it started (GitHistory), the files it changed and has not
  * committed (paths from the repository root) with the selected file's diff and a commit of the ticked ones, and
  * the rest of the repository (GitRepoPanel), never offered. `path` selects a file (opened from the Files view).
- * j/k step through the uncommitted files. `detail` says which turns have changes outside the edit tools to show.
+ * j/k step through the uncommitted files, an open folder's included (the list holding the file takes the focus).
+ * `detail` says which turns have changes outside the edit tools to show.
  */
 const props = defineProps<{
   task: TaskSummary
@@ -43,8 +44,9 @@ const props = defineProps<{
 
 const { t } = useI18n()
 const format = useFormat()
-const model = useGit(() => props.task)
-const { git, files, dirs, expanded, shown, selected, selectedFile, diff } = model
+const openPath = () => props.path
+const model = useGit(() => props.task, undefined, openPath)
+const { git, files, dirs, expanded, shown, count, sums, selected, selectedFile, diff } = model
 const history = useGitHistory(
   () => props.task.id,
   () => git.value,
@@ -52,20 +54,8 @@ const history = useGitHistory(
 const repo = useRepoStatus(() => git.value)
 
 const list = ref<InstanceType<typeof GitFileList> | null>(null)
-const sums = computed(() => totals(files.value))
-const count = computed(() => files.value.length + dirs.value.reduce((n, d) => n + d.count, 0))
+const dirList = ref<InstanceType<typeof GitDirList> | null>(null)
 const active = computed(() => isActive(props.task))
-
-watch(
-  () => [props.path, files.value, dirs.value] as const,
-  ([path, list, folders]) => {
-    if (!path) return
-    const dir = folders.find((d) => d.files.some((f) => f.path === path))
-    if (dir) expanded.value = new Set([...expanded.value, dir.path])
-    if (dir || list.some((f) => f.path === path)) selected.value = path
-  },
-  { immediate: true },
-)
 
 const WRAP = { name: 'git.wrap', fallback: false, validate: isBoolean }
 const wrap = ref(readStored(WRAP))
@@ -84,11 +74,9 @@ const notes = useNotes(
 )
 
 function step(delta: number) {
-  const next = stepFile(shown.value, selected.value, delta)
-  if (next) {
-    selected.value = next
-    list.value?.focusSelected()
-  }
+  if (!model.step(delta)) return
+  list.value?.focusSelected()
+  dirList.value?.focusSelected()
 }
 
 useGitCommands(
@@ -126,6 +114,7 @@ useGitCommands(
           {{ t('git.uncommittedCount', { n: count }, count) }}
           <span class="git__add">+{{ format.number(sums.additions) }}</span>
           <span class="git__del">−{{ format.number(sums.deletions) }}</span>
+          <span v-if="model.hidden.value">{{ t('git.sumShown') }}</span>
         </span>
         <span
           v-if="model.state.value.status === 'ready' && model.state.value.refreshError"
@@ -166,7 +155,12 @@ useGitCommands(
             :files="files"
             :label="t('git.listLabel')"
           />
-          <GitDirList v-model:selected="selected" v-model:expanded="expanded" :dirs="dirs" />
+          <GitDirList
+            ref="dirList"
+            v-model:selected="selected"
+            v-model:expanded="expanded"
+            :dirs="dirs"
+          />
         </nav>
         <GitDiffPane
           v-model:wrap="wrap"

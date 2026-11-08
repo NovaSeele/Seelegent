@@ -18,7 +18,7 @@ const { t } = useI18n()
 const sides = computed(() =>
   imageSides(props.file).map((s) => ({
     ...s,
-    src: gitImageUrl(props.taskId, s.path, s.version),
+    src: gitImageUrl(props.taskId, s.path, s.version, props.file.stamp),
     label: t(`git.image.${s.side}`),
   })),
 )
