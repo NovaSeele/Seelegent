@@ -5,6 +5,7 @@ import type { GateResult, GateStep, TaskProof, Turn, VerifierResult } from '@/ap
 import { useConnectionStore } from '@/stores/connection'
 import { useTasksStore } from '@/stores/tasks'
 import { setupApp } from '@/test/app'
+import { readFile } from '@/test/files'
 import { iso, makeDetail, makeEvent, makeTask } from '@/test/fixtures'
 
 import {
@@ -15,6 +16,7 @@ import {
   gateTone,
   gateUrgent,
   hasGate,
+  LOW_MEMORY_STOPS_MAX,
   queuePlace,
   stepCommand,
   stepKindKey,
@@ -86,6 +88,12 @@ const red = result({
 })
 
 describe('gate model', () => {
+  it('stops as many times as the daemon before a gate ends for low memory', () => {
+    // tsgen writes string unions only, so the number is copied: this fails when internal/api/gate.go changes it.
+    const go = readFile('../internal/api/gate.go').match(/const GateLowMemoryStopsMax = (\d+)/)
+    expect(Number(go?.[1])).toBe(LOW_MEMORY_STOPS_MAX)
+  })
+
   it('takes state and phase from the summary and the steps from the latest gated turn', () => {
     const detail = makeDetail({
       turns: [turn(1, { gate: red }), turn(2, { by: 'gate' })],

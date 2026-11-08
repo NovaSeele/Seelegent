@@ -21,7 +21,10 @@ export type GatePhase = NonNullable<NonNullable<TaskSummary['gate']>['phase']>
 export type StepState = GateStep['state']
 export type GateWait = NonNullable<NonNullable<TaskSummary['gate']>['wait']>
 
-/** api.GateLowMemoryStopsMax: memory-watchdog stops of one gate phase before the gate ends in error. */
+/**
+ * api.GateLowMemoryStopsMax (internal/api/gate.go): memory-watchdog stops of one gate phase before the gate ends in
+ * error. tsgen does not write number constants; GatePanel.spec.ts fails when the Go value changes.
+ */
 export const LOW_MEMORY_STOPS_MAX = 3
 
 export interface GateView {

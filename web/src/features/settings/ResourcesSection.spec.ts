@@ -207,6 +207,94 @@ describe('Resources settings', () => {
     wrapper.unmount()
   })
 
+  it('sends a refused floor again once the other field fixes the clash (min 2048, critical 1024)', async () => {
+    const patch = vi.fn<SettingsApi['patch']>((body) => {
+      const next = { ...useConnectionStore().settings, ...body } as Settings
+      return Promise.resolve(next)
+    })
+    const wrapper = await mountSection(patch)
+    const critical = () => wrapper.get('[data-setting="criticalFreeMemory"]')
+    const min = () => wrapper.get('[data-setting="minFreeMemory"]')
+    const message = 'The emergency memory floor must be below Free memory to start'
+    await critical().get('input').setValue('3000')
+    await critical().get('input').trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+    expect(patch).not.toHaveBeenCalled()
+    expect(critical().text()).toContain(message)
+    expect(min().text()).toContain(message)
+
+    await min().get('input').setValue('4096')
+    await min().get('input').trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+    // The floor typed earlier is valid now: it is sent, not left in the field unsaved and without an error.
+    expect(patch.mock.calls.map(([body]) => body)).toEqual([
+      { minFreeMemoryMB: 4096 },
+      { criticalFreeMemoryMB: 3000 },
+    ])
+    expect(useConnectionStore().settings?.criticalFreeMemoryMB).toBe(3000)
+    expect(critical().get('input').element.value).toBe('3000')
+    expect(wrapper.text()).not.toContain(message)
+    wrapper.unmount()
+  })
+
+  it('shows the clash again when the other field saves but the refused floor is still too high', async () => {
+    const patch = vi.fn<SettingsApi['patch']>((body) =>
+      Promise.resolve({ ...useConnectionStore().settings, ...body } as Settings),
+    )
+    const wrapper = await mountSection(patch)
+    const critical = () => wrapper.get('[data-setting="criticalFreeMemory"]')
+    const message = 'The emergency memory floor must be below Free memory to start'
+    await critical().get('input').setValue('3000')
+    await critical().get('input').trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+    const min = wrapper.get('[data-setting="minFreeMemory"] input')
+    await min.setValue('2500')
+    await min.trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+    expect(patch.mock.calls.map(([body]) => body)).toEqual([{ minFreeMemoryMB: 2500 }])
+    expect(critical().text()).toContain(message)
+    expect(critical().get('input').attributes('aria-invalid')).toBe('true')
+    expect(critical().get('input').element.value).toBe('3000')
+    wrapper.unmount()
+  })
+
+  it('sends a floor the daemon refused again once the other field saves', async () => {
+    const patch = vi
+      .fn<SettingsApi['patch']>()
+      .mockRejectedValueOnce(
+        new ApiError(400, 'invalid_argument', '1 setting(s) are not valid', {
+          fields: [
+            {
+              field: 'criticalFreeMemoryMB',
+              message: 'must be below minFreeMemoryMB (2048) while both are on (got 3000)',
+            },
+          ],
+        }),
+      )
+      .mockImplementation((body) =>
+        Promise.resolve({ ...useConnectionStore().settings, ...body } as Settings),
+      )
+    const wrapper = await mountSection(patch)
+    // The dashboard knows an older minFreeMemoryMB, so its own check lets 3000 through and the daemon refuses.
+    useConnectionStore().settings = { ...SETTINGS, minFreeMemoryMB: 8000 }
+    const critical = wrapper.get('[data-setting="criticalFreeMemory"] input')
+    await critical.setValue('3000')
+    await critical.trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+    expect(wrapper.text()).toContain('must be below minFreeMemoryMB (2048)')
+    const min = wrapper.get('[data-setting="minFreeMemory"] input')
+    await min.setValue('4096')
+    await min.trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+    expect(patch.mock.calls.map(([body]) => body)).toEqual([
+      { criticalFreeMemoryMB: 3000 },
+      { minFreeMemoryMB: 4096 },
+      { criticalFreeMemoryMB: 3000 },
+    ])
+    expect(wrapper.text()).not.toContain('must be below')
+    wrapper.unmount()
+  })
+
   it('keeps a plain range error on its own field', async () => {
     const patch = vi.fn<SettingsApi['patch']>(() =>
       Promise.reject(
