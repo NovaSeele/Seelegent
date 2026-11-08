@@ -454,7 +454,7 @@ func listQuery(q Query) (sqlText string, args []any, limit int, err error) {
 		where = append(where, `(created_at < ? OR (created_at = ? AND id < ?))`)
 		args = append(args, at, at, id)
 	}
-	sqlText = `SELECT ` + listedColumns + ` FROM tasks WHERE ` + //nolint:gosec // fixed filters with placeholders
+	sqlText = `SELECT ` + listedColumns + ` FROM tasks WHERE ` +
 		strings.Join(where, " AND ") + ` ORDER BY created_at DESC, id DESC LIMIT ?`
 	return sqlText, append(args, limit+1), limit, nil
 }
