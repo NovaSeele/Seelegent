@@ -185,8 +185,8 @@ func (r *Repos) turnCommits(ctx context.Context, root string, rng []string, turn
 // turnNames reads the files the commits made during the task's turns changed, with the newest turn of each, and
 // counts those commits: git diffs the trees of those commits only (`log --no-walk --stdin`). A log past
 // maxLogBytes keeps what it read.
-func (r *Repos) turnNames(ctx context.Context, root string, rng []string, turns []TurnSpan) (map[string]int, int,
-	error) {
+func (r *Repos) turnNames(ctx context.Context, root string, rng []string, turns []TurnSpan) (names map[string]int,
+	count int, err error) {
 	shas, err := r.turnCommits(ctx, root, rng, turns)
 	if err != nil || len(shas) == 0 {
 		return map[string]int{}, 0, err
@@ -196,7 +196,7 @@ func (r *Repos) turnNames(ctx context.Context, root string, rng []string, turns 
 	if err != nil {
 		return nil, 0, err
 	}
-	_, names := parseLog(out, turns)
+	_, names = parseLog(out, turns)
 	return names, len(shas), nil
 }
 
