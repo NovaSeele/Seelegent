@@ -470,7 +470,7 @@ func TestLoopPathOnlyEdits(t *testing.T) {
 				if err := os.WriteFile(file, []byte(c), 0o600); err != nil {
 					t.Fatal(err)
 				}
-				mark = fileMark(dir, path)
+				mark = fileMark(dir, "", path)
 			} else {
 				mark = fmt.Sprintf("#%d", i)
 			}
@@ -512,8 +512,48 @@ func TestLoopPathOnlyEdits(t *testing.T) {
 			t.Errorf("pathOnlyEdit(%s %s) = %q", tl.Name, tl.Input, got)
 		}
 	}
-	if fileMark("", "rel.go") != "" || fileMark(dir, "missing.go") != "" || fileMark(dir, ".") != "" {
+	if fileMark("", "", "rel.go") != "" || fileMark(dir, "", "missing.go") != "" || fileMark(dir, "", ".") != "" {
 		t.Error("fileMark of an unreadable file")
+	}
+}
+
+// TestFileMarkStaysInTask: the loop check hashes only files inside the task's folder or its repository root; a file
+// a worker names anywhere else (or a link out of the folder) is never read, and the edit gets a unique mark instead.
+func TestFileMarkStaysInTask(t *testing.T) {
+	repo := t.TempDir()
+	cwd := filepath.Join(repo, "web")
+	outside := t.TempDir()
+	if err := os.MkdirAll(cwd, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	write := func(p string) string {
+		if err := os.WriteFile(p, []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+	inCwd, inRepo, out := write(filepath.Join(cwd, "a.ts")), write(filepath.Join(repo, "go.mod")),
+		write(filepath.Join(outside, "secret.txt"))
+	if fileMark(cwd, repo, inCwd) == "" || fileMark(cwd, repo, "a.ts") == "" {
+		t.Error("a file in the task's folder is not hashed")
+	}
+	if fileMark(cwd, repo, inRepo) == "" || fileMark(cwd, repo, filepath.Join("..", "go.mod")) == "" {
+		t.Error("a file in the repository is not hashed")
+	}
+	if fileMark(cwd, "", inRepo) != "" {
+		t.Error("a file above the task's folder is hashed outside git")
+	}
+	if fileMark(cwd, repo, out) != "" || fileMark(cwd, repo, filepath.Join("..", "..", filepath.Base(outside),
+		"secret.txt")) != "" {
+		t.Error("a file outside the task is hashed")
+	}
+	link := filepath.Join(cwd, "link.txt")
+	if err := os.Symlink(out, link); err == nil {
+		if fileMark(cwd, repo, link) != "" {
+			t.Error("a link out of the task is followed")
+		}
+	} else {
+		t.Logf("no symlink: %v", err)
 	}
 }
 

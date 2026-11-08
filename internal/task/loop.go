@@ -13,6 +13,7 @@ import (
 
 	"github.com/NovaSeele/Seelegent/internal/config"
 	"github.com/NovaSeele/Seelegent/internal/event"
+	"github.com/NovaSeele/Seelegent/internal/fsutil"
 	"github.com/NovaSeele/Seelegent/internal/pool"
 )
 
@@ -72,14 +73,28 @@ func pathOnlyEdit(t *event.Tool) string {
 	return file
 }
 
-// fileMark is the content hash of file (relative to cwd), or "" when it cannot be read or is larger than
-// fileMarkMax.
-func fileMark(cwd, file string) string {
+// fileMark is the content hash of file (relative to cwd), or "" when it cannot be read, is larger than fileMarkMax,
+// or lies outside both cwd and repo (the task's repository root, "" outside git): the daemon reads only the task's
+// own files for the worker's sake, never one a worker names elsewhere (compared through fsutil.Key, links resolved).
+func fileMark(cwd, repo, file string) string {
 	if !filepath.IsAbs(file) {
 		if cwd == "" {
 			return ""
 		}
 		file = filepath.Join(cwd, file)
+	}
+	inside := false
+	for _, root := range []string{cwd, repo} {
+		if root == "" {
+			continue
+		}
+		if ok, err := fsutil.Within(root, file); err == nil && ok {
+			inside = true
+			break
+		}
+	}
+	if !inside {
+		return ""
 	}
 	st, err := os.Stat(file)
 	if err != nil || !st.Mode().IsRegular() || st.Size() > fileMarkMax {

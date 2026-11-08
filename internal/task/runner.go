@@ -59,8 +59,9 @@ type run struct {
 	starting *launch.Handle
 	account  string
 	live     liveState
-	// cwd is the task's folder, against which the loop check resolves the relative paths of edits.
-	cwd string
+	// cwd is the task's folder, against which the loop check resolves the relative paths of edits; repo is its
+	// repository root ("" outside git). The loop check hashes only files inside one of them.
+	cwd, repo string
 }
 
 // setStarting records a launch whose worker is about to run, until setHandle or clearHandle.
@@ -125,9 +126,9 @@ func (r *run) note(ev event.Event, now time.Time, replay bool) {
 			pathOnly = true
 			if !replay {
 				r.mu.Lock()
-				cwd := r.cwd
+				cwd, repo := r.cwd, r.repo
 				r.mu.Unlock()
-				mark = fileMark(cwd, p)
+				mark = fileMark(cwd, repo, p)
 			}
 		}
 	}
@@ -261,7 +262,7 @@ func (s *Service) runTask(r *run) {
 			return
 		}
 		r.mu.Lock()
-		r.cwd = t.Cwd
+		r.cwd, r.repo = t.Cwd, t.RepoRoot
 		r.mu.Unlock()
 		if t.GatePhase != nil {
 			switch {
