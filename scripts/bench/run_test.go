@@ -223,7 +223,8 @@ func (e *env) startDaemon(ctx context.Context) (*exec.Cmd, <-chan error, error) 
 	if err != nil {
 		return nil, nil, err
 	}
-	args := []string{"daemon", "--port", strconv.Itoa(e.o.port), "--pprof-addr", "127.0.0.1:" + strconv.Itoa(e.o.pprofPort)}
+	args := []string{"daemon", "--port", strconv.Itoa(e.o.port),
+		"--pprof-addr", "127.0.0.1:" + strconv.Itoa(e.o.pprofPort)}
 	// No context: the daemon is stopped through POST /daemon/stop (stopDaemon), and killed only when that fails.
 	cmd := exec.Command(e.bin, args...) //nolint:noctx // stopped through the API, see above
 	cmd.Env, cmd.Stdout, cmd.Stderr, cmd.Dir = e.daemonEnv(), logf, logf, e.work

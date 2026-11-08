@@ -94,6 +94,8 @@ type jobStat struct {
 type goStats struct {
 	Goroutines int    `json:"goroutines"`
 	HeapAlloc  uint64 `json:"heapAlloc"`
+	// HeapLive is the heap marked live by the last GC: no sawtooth, so its slope shows a leak.
+	HeapLive   uint64 `json:"heapLive"`
 	HeapInuse  uint64 `json:"heapInuse"`
 	HeapSys    uint64 `json:"heapSys"`
 	Sys        uint64 `json:"sys"`
@@ -335,7 +337,7 @@ func (s *sampler) goStats(ctx context.Context) (goStats, error) {
 	var vars struct {
 		Goroutines int `json:"goroutines"`
 		Runtime    struct {
-			HeapObjectsBytes, HeapAllocBytesTotal, HeapAllocObjectsTotal, GCCycles, TotalBytes uint64
+			HeapObjectsBytes, HeapLiveBytes, HeapAllocBytesTotal, HeapAllocObjectsTotal, GCCycles, TotalBytes uint64
 		} `json:"runtime"`
 		Memstats *struct {
 			HeapInuse, HeapSys, PauseTotalNs uint64
@@ -345,8 +347,9 @@ func (s *sampler) goStats(ctx context.Context) (goStats, error) {
 		return goStats{}, err
 	}
 	rt := vars.Runtime
-	g := goStats{Goroutines: vars.Goroutines, HeapAlloc: rt.HeapObjectsBytes, Sys: rt.TotalBytes,
-		TotalAlloc: rt.HeapAllocBytesTotal, Mallocs: rt.HeapAllocObjectsTotal, NumGC: uint32(rt.GCCycles)}
+	g := goStats{Goroutines: vars.Goroutines, HeapAlloc: rt.HeapObjectsBytes, HeapLive: rt.HeapLiveBytes,
+		Sys: rt.TotalBytes, TotalAlloc: rt.HeapAllocBytesTotal, Mallocs: rt.HeapAllocObjectsTotal,
+		NumGC: uint32(rt.GCCycles)}
 	if m := vars.Memstats; m != nil {
 		s.memstatsAt = time.Now()
 		s.lastMem = goStats{HeapInuse: m.HeapInuse, HeapSys: m.HeapSys, PauseTotal: m.PauseTotalNs}

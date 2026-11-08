@@ -49,6 +49,8 @@ type daemonSummary struct {
 	GoroutinesMax  int     `json:"goroutinesMax"`
 	HeapAllocMean  float64 `json:"heapAllocMeanMB"`
 	HeapAllocMax   float64 `json:"heapAllocMaxMB"`
+	HeapLiveMean   float64 `json:"heapLiveMeanMB"`
+	HeapLiveMax    float64 `json:"heapLiveMaxMB"`
 	HeapSysMax     float64 `json:"heapSysMaxMB"`
 	SysMax         float64 `json:"goSysMaxMB"`
 	AllocMBps      float64 `json:"allocMBPerSecond"`
@@ -57,7 +59,8 @@ type daemonSummary struct {
 	WSGrowthMB     float64 `json:"wsGrowthMB"`
 	HeapGrowthMB   float64 `json:"heapGrowthMB"`
 	// WSSlope and HeapSlope are least-squares slopes over the second half of the window, in MB per hour: a
-	// leak shows there once the start-up growth is over.
+	// leak shows there once the start-up growth is over. HeapSlope is the live heap's (marked at the last GC), not
+	// the allocated heap's, whose GC sawtooth swamps a few minutes of samples.
 	WSSlope   float64 `json:"wsSlopeSecondHalfMBPerHour"`
 	HeapSlope float64 `json:"heapSlopeSecondHalfMBPerHour"`
 }
@@ -221,6 +224,14 @@ func slopePerHour(win []*sample, v func(*sample) float64) float64 {
 	return (n*sxy - sx*sy) / den
 }
 
+// liveHeap is the sample's live heap, or its allocated heap from a daemon without /gc/heap/live.
+func liveHeap(x *sample) uint64 {
+	if x.Go.HeapLive > 0 {
+		return x.Go.HeapLive
+	}
+	return x.Go.HeapAlloc
+}
+
 // fillMachine summarizes the machine over the window.
 func (r *result) fillMachine(win []*sample) {
 	m := &r.Machine
@@ -356,11 +367,12 @@ func (r *result) fill(s *sampler, g *loadGen, spawns []spawnRecord) {
 	r.fillTree(base, win, scanCPU)
 
 	d := &r.Daemon
-	var ws, priv, gor, heap float64
+	var ws, priv, gor, heap, live float64
 	for _, smp := range win {
 		dr := smp.Roles["daemon"]
 		ws, priv = ws+mb(smp.DaemonWS), priv+mb(dr.Private)
-		gor, heap = gor+float64(smp.Go.Goroutines), heap+mb(smp.Go.HeapAlloc)
+		gor, heap, live = gor+float64(smp.Go.Goroutines), heap+mb(smp.Go.HeapAlloc), live+mb(liveHeap(smp))
+		d.HeapLiveMax = max(d.HeapLiveMax, mb(liveHeap(smp)))
 		d.PeakWSMB = max(d.PeakWSMB, mb(smp.DaemonWS))
 		d.OSPeakWSMB = max(d.OSPeakWSMB, mb(smp.DaemonPeak))
 		d.PeakPrivMB = max(d.PeakPrivMB, mb(dr.Private))
@@ -372,7 +384,7 @@ func (r *result) fill(s *sampler, g *loadGen, spawns []spawnRecord) {
 	}
 	if n := float64(len(win)); n > 0 {
 		d.MeanWSMB, d.MeanPrivMB = round(ws/n, 1), round(priv/n, 1)
-		d.GoroutinesMean, d.HeapAllocMean = round(gor/n, 1), round(heap/n, 1)
+		d.GoroutinesMean, d.HeapAllocMean, d.HeapLiveMean = round(gor/n, 1), round(heap/n, 1), round(live/n, 1)
 		first, last := base, win[len(win)-1]
 		if first == nil {
 			first = win[0]
@@ -388,7 +400,7 @@ func (r *result) fill(s *sampler, g *loadGen, spawns []spawnRecord) {
 		d.WSGrowthMB = round(mb(last.DaemonWS)-mb(first.DaemonWS), 1)
 		half := win[len(win)/2:]
 		d.WSSlope = round(slopePerHour(half, func(x *sample) float64 { return mb(x.DaemonWS) }), 2)
-		d.HeapSlope = round(slopePerHour(half, func(x *sample) float64 { return mb(x.Go.HeapAlloc) }), 2)
+		d.HeapSlope = round(slopePerHour(half, func(x *sample) float64 { return mb(liveHeap(x)) }), 2)
 		d.HeapGrowthMB = round(mb(last.Go.HeapAlloc)-mb(first.Go.HeapAlloc), 1)
 		r.DB = dbSummary{DBStartMB: round(float64(first.DBBytes)/mib, 2), DBEndMB: round(float64(last.DBBytes)/mib, 2),
 			WALStartMB: round(float64(first.WALBytes)/mib, 2), WALEndMB: round(float64(last.WALBytes)/mib, 2)}
@@ -398,6 +410,7 @@ func (r *result) fill(s *sampler, g *loadGen, spawns []spawnRecord) {
 	}
 	d.PeakWSMB, d.OSPeakWSMB, d.PeakPrivMB = round(d.PeakWSMB, 1), round(d.OSPeakWSMB, 1), round(d.PeakPrivMB, 1)
 	d.HeapAllocMax, d.HeapSysMax, d.SysMax = round(d.HeapAllocMax, 1), round(d.HeapSysMax, 1), round(d.SysMax, 1)
+	d.HeapLiveMax = round(d.HeapLiveMax, 1)
 
 	byRole := map[string]*spawnSummary{}
 	exited := map[string]int{}
@@ -457,7 +470,7 @@ func (r *result) budget() []budgetCheck {
 	}
 	// A leak shows as a slope once the start is over; the limits allow for the noise of a few minutes of samples.
 	add("daemon WS slope over the second half MB/h", 10, r.Daemon.WSSlope)
-	add("daemon heap slope over the second half MB/h", 5, r.Daemon.HeapSlope)
+	add("daemon live heap slope over the second half MB/h", 5, r.Daemon.HeapSlope)
 	if r.Scenario == "idle" {
 		add("idle daemon CPU % of one core", 0.1, r.Daemon.CPUPercent)
 		add("idle daemon peak working set MB", 100, r.Daemon.PeakWSMB)
@@ -512,11 +525,12 @@ func writeMarkdown(w io.Writer, r *result) {
 	p("| CPU | %.3f s, %.4f %% of one core |\n", d.CPUSeconds, d.CPUPercent)
 	p("| handles / threads (peak) | %d / %d |\n", d.Handles, d.Threads)
 	p("| goroutines mean / max | %.1f / %d |\n", d.GoroutinesMean, d.GoroutinesMax)
-	p("| heap alloc mean / max, heap sys max, Go sys max | %.1f / %.1f, %.1f, %.1f MB |\n", d.HeapAllocMean,
-		d.HeapAllocMax, d.HeapSysMax, d.SysMax)
+	p("| heap alloc mean / max, live heap mean / max | %.1f / %.1f, %.1f / %.1f MB |\n", d.HeapAllocMean,
+		d.HeapAllocMax, d.HeapLiveMean, d.HeapLiveMax)
+	p("| heap sys max, Go sys max | %.1f, %.1f MB |\n", d.HeapSysMax, d.SysMax)
 	p("| allocation rate | %.3f MB/s, %.1f mallocs/s, %.2f GC/min |\n", d.AllocMBps, d.MallocsPerSec, d.GCPerMin)
 	p("| growth over the window | WS %+.1f MB, heap %+.1f MB |\n", d.WSGrowthMB, d.HeapGrowthMB)
-	p("| slope over the second half | WS %+.2f MB/h, heap %+.2f MB/h |\n", d.WSSlope, d.HeapSlope)
+	p("| slope over the second half | WS %+.2f MB/h, live heap %+.2f MB/h |\n", d.WSSlope, d.HeapSlope)
 	p("| database start / end | %.2f / %.2f MB, WAL %.2f / %.2f MB (max %.2f) |\n\n", r.DB.DBStartMB, r.DB.DBEndMB,
 		r.DB.WALStartMB, r.DB.WALEndMB, r.DB.WALMaxMB)
 	p("## Process tree by role\n\n| role | peak n | WS mean / peak MB | private mean / peak MB | CPU s | %% core | " +
@@ -594,7 +608,8 @@ func (r *result) metrics() []metric {
 		{"daemon alloc MB/s", r.Daemon.AllocMBps}, {"daemon GC/min", r.Daemon.GCPerMin},
 		{"daemon handles", float64(r.Daemon.Handles)}, {"daemon threads", float64(r.Daemon.Threads)},
 		{"DB end MB", r.DB.DBEndMB}, {"WAL max MB", r.DB.WALMaxMB},
-		{"daemon WS slope MB/h", r.Daemon.WSSlope}, {"daemon heap slope MB/h", r.Daemon.HeapSlope},
+		{"daemon WS slope MB/h", r.Daemon.WSSlope}, {"daemon live heap slope MB/h", r.Daemon.HeapSlope},
+		{"daemon live heap max MB", r.Daemon.HeapLiveMax},
 		{"machine free memory min MB", r.Machine.FreeMemMinMB}, {"machine threads mean", r.Machine.ThreadsMean},
 	}
 	for _, x := range r.Setup {

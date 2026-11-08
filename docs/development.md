@@ -100,8 +100,8 @@ server and a mux of their own (never the API's port, never `http.DefaultServeMux
 default and never a setting. It takes loopback addresses only (`127.0.0.1`, `[::1]`, `localhost`; a `localhost`
 that resolves to anything else is refused once it listens) and refuses requests whose `Host` header is not
 `127.0.0.1`, `localhost`, `[::1]` or the address it listens on, with its port (the API's DNS-rebinding check).
-`/debug/vars` is expvar-style JSON: `goroutines` and `runtime` (runtime/metrics: heap, allocations, GC cycles)
-always, `memstats` and `cmdline` unless the query has `light=1` (`runtime.ReadMemStats` stops the world, so a
+`/debug/vars` is expvar-style JSON: `goroutines` and `runtime` (runtime/metrics: heap, live heap, allocations,
+GC cycles) always, `memstats` and `cmdline` unless the query has `light=1` (`runtime.ReadMemStats` stops the world, so a
 sampler polls `?light=1`). It is a development tool: heap and
 goroutine profiles can hold secrets (API keys, prompts, tokens in memory), so never share them or start a daemon
 with it on a machine others use.
@@ -158,8 +158,8 @@ Results go to `-out` (default `<temp>/seelegent-bench/<time>-<scenario>`, outsid
 `result.md` (the tables), `setup-cpu.pprof`, `cpu.pprof`, `allocs-start.pprof`, `allocs-end.pprof`, `heap.pprof`, `goroutine.txt` and
 the daemon's log. Compare allocation profiles with `go tool pprof -top -sample_index=alloc_space -base
 allocs-start.pprof allocs-end.pprof`. The budget (under 0.1% of one core and under 100 MB working set when idle;
-growth under load not linear in the events; a working-set slope under 10 MB/h and a heap slope under 5 MB/h over
-the second half of the window, so a leak shows once the start-up growth is over) is printed and flagged, never a
+growth under load not linear in the events; a working-set slope under 10 MB/h and a live-heap slope under 5 MB/h
+over the second half of the window, so a leak shows once the start-up growth is over) is printed and flagged, never a
 failure. Run it at low priority and
 on an otherwise quiet machine; the latency numbers depend on what else runs.
 
