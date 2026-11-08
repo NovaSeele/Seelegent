@@ -11,7 +11,13 @@ import { useFormat } from '@/composables/useFormat'
  * second, muted group after the task's own. Up/Down, Home/End move the selection across both groups; older
  * commits past the cap are counted at the end.
  */
-const props = defineProps<{ commits: readonly GitCommit[]; more: number; label: string }>()
+const props = defineProps<{
+  commits: readonly GitCommit[]
+  more: number
+  /** All the commits made outside the task's turns, the older ones the list leaves out included. */
+  othersTotal: number
+  label: string
+}>()
 const selected = defineModel<string | null>('selected', { required: true })
 
 const { t } = useI18n()
@@ -30,7 +36,7 @@ const groups = computed(() =>
         { id: ownId, title: t('git.history.ownGroup'), hint: '', commits: own.value },
         {
           id: othersId,
-          title: t('git.history.othersGroup'),
+          title: t('git.history.othersGroup', { n: props.othersTotal }, props.othersTotal),
           hint: t('git.history.othersHint'),
           commits: others.value,
         },

@@ -281,6 +281,9 @@ func TestTaskGitOtherCommits(t *testing.T) {
 	if got := strings.Join(subjects, ","); got != "shared:0:true,someone else:0:true,parallel docs:1:false,task work:1:false" {
 		t.Fatalf("commits: %s", got)
 	}
+	if g.OwnCommits != 2 {
+		t.Fatalf("own commits: %d", g.OwnCommits)
+	}
 	var files []string
 	for _, f := range g.CommittedFiles {
 		files = append(files, fmt.Sprintf("%s:%d", f.Path, f.Turn))
@@ -334,8 +337,8 @@ func TestTaskGitLongRange(t *testing.T) {
 	if err != nil || g.HistoryState != "" {
 		t.Fatal(g.HistoryState, err)
 	}
-	if len(g.Commits) != api.MaxTaskCommits || g.CommitsMore != own+others-api.MaxTaskCommits {
-		t.Fatalf("listed %d, more %d", len(g.Commits), g.CommitsMore)
+	if len(g.Commits) != api.MaxTaskCommits || g.CommitsMore != own+others-api.MaxTaskCommits || g.OwnCommits != own {
+		t.Fatalf("listed %d, more %d, own %d", len(g.Commits), g.CommitsMore, g.OwnCommits)
 	}
 	for _, c := range g.Commits {
 		if !c.OutsideTurns || c.Turn != 0 || c.FileCount != 1 {

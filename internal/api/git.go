@@ -67,6 +67,9 @@ type TaskGit struct {
 	// (someone else's, or between turns) is listed with OutsideTurns set.
 	Commits     []GitCommit `json:"commits"`
 	CommitsMore int         `json:"commitsMore"`
+	// OwnCommits counts the commits of the range made during the task's turns (listed or among the older ones),
+	// the task's own by time; the others are Commits plus CommitsMore minus OwnCommits.
+	OwnCommits int `json:"ownCommits,omitempty"`
 	// CommittedFiles are the task's files among those the commits since the start changed: files the task's turns
 	// touched, and files under the task's folder that a commit made during one of its turns changed. A file only
 	// a commit outside the turns changed is left out. Each is counted from the start to the working tree (a file

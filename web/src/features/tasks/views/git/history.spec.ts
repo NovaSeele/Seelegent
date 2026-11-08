@@ -207,8 +207,13 @@ describe('useGitHistory', () => {
     const other = commit('e', 'someone else', { turn: 0, outsideTurns: true })
     const mine = commit('b', 'mine')
     const api = fakeApi({ commitDetail: vi.fn(() => Promise.resolve(detailOf(mine, ['b.ts']))) })
-    const { model } = await setup(api, view({ commits: [other, mine] }))
+    const { model } = await setup(
+      api,
+      view({ commits: [other, mine], commitsMore: 7, ownCommits: 2 }),
+    )
     expect(model().commits.value.map((c) => c.subject)).toEqual(['mine', 'someone else'])
+    // Own: 2 (one listed, one older); others: the 9 commits of the range less those.
+    expect([model().own.value, model().others.value]).toEqual([2, 7])
     expect(model().selectedCommit.value).toBe(mine.sha)
   })
 
@@ -332,6 +337,10 @@ describe('repository status', () => {
     )
     await up.setProps({ upstream: { name: 'origin/main', ahead: 0, behind: 0, gone: true } })
     expect(up.find('.sr-only').text()).toBe('origin/main no longer exists')
+    // Gone is said in words on screen too, in the muted tone (no attention colour).
+    expect(up.find('.up__gone').text()).toBe('(gone)')
+    expect(up.find('.up__short').text()).toBe('origin/main(gone)')
+    expect(up.classes()).not.toContain('up--gone')
     await up.setProps({ upstream: null })
     expect(up.html()).toBe('<!--v-if-->')
   })
@@ -346,6 +355,7 @@ describe('commit list and history section', () => {
       props: {
         commits,
         more: 4,
+        othersTotal: 0,
         label: 'Commits',
         selected: selected.value,
         'onUpdate:selected': (v: string | null) => {
@@ -382,7 +392,13 @@ describe('commit list and history section', () => {
         make: () => {
           const history = useGitHistory(
             () => 't1',
-            () => view({ commits: [c], commitsMore: 2, committedFiles: [file('parser.go')] }),
+            () =>
+              view({
+                commits: [c, commit('e', 'theirs', { turn: 0, outsideTurns: true })],
+                commitsMore: 2,
+                ownCommits: 3,
+                committedFiles: [file('parser.go')],
+              }),
             api,
           )
           return () => h(GitHistory, { history, wrap: false })
@@ -395,8 +411,11 @@ describe('commit list and history section', () => {
     expect(w.find('.gcd__subject').text()).toBe('Add the parser')
     expect(w.find('.gcd__body').text()).toBe('Why it changed.')
     expect(w.text()).toContain('in parser.go')
-    // The count includes the older commits the list leaves out.
+    // The count is the task's own commits, the older ones the list leaves out included; the others have theirs.
     expect(w.findAll('[role="radio"]').map((r) => r.text())).toEqual(['3 commits', '1 file'])
+    expect(w.find('[data-group="others"] .gcl__title').text()).toBe(
+      '1 other commit since the task started',
+    )
 
     await w.findAll('[role="radio"]')[1]?.trigger('click')
     await flush(6)
@@ -414,6 +433,7 @@ describe('commit list and history section', () => {
       props: {
         commits: [...own, ...others],
         more: 0,
+        othersTotal: 4,
         label: 'Commits',
         selected: selected.value,
         'onUpdate:selected': (v: string | null) => {
@@ -427,10 +447,10 @@ describe('commit list and history section', () => {
     const groups = w.findAll('[role="group"]')
     expect(groups.map((g) => g.attributes('data-group'))).toEqual(['own', 'others'])
     expect(groups[0]?.find('.gcl__title').text()).toBe("Made during this task's turns")
-    expect(groups[1]?.find('.gcl__title').text()).toBe('Other commits since the task started')
+    expect(groups[1]?.find('.gcl__title').text()).toBe('4 other commits since the task started')
     expect(groups[1]?.find('.gcl__hint').text()).toContain('not counted as this task')
     const labelled = groups[1]?.attributes('aria-labelledby') ?? ''
-    expect(w.find(`#${CSS.escape(labelled)}`).text()).toBe('Other commits since the task started')
+    expect(w.find(`#${CSS.escape(labelled)}`).text()).toBe('4 other commits since the task started')
     expect(groups[1]?.findAll('[role="option"]').map((o) => o.classes())).toEqual([
       expect.arrayContaining(['gcl__row--other']),
     ])
@@ -449,7 +469,7 @@ describe('commit list and history section', () => {
 
     // With only the task's own commits there are no group headings.
     const plain = mount(GitCommitList, {
-      props: { commits: own, more: 0, label: 'Commits', selected: null },
+      props: { commits: own, more: 0, othersTotal: 0, label: 'Commits', selected: null },
       global: { plugins },
     })
     expect(plain.findAll('[role="group"]')).toHaveLength(0)

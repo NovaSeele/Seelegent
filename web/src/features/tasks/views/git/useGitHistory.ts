@@ -55,6 +55,9 @@ export function useGitHistory(
   })
   const files = computed(() => sortFiles(git()?.committedFiles ?? []))
   const more = computed(() => git()?.commitsMore ?? 0)
+  // The task's own commits (made during its turns, listed or older) and the others since its start.
+  const own = computed(() => git()?.ownCommits ?? 0)
+  const others = computed(() => Math.max(0, commits.value.length + more.value - own.value))
   const notices = computed(() => startNotices(git()))
   const hasHistory = computed(() => commits.value.length > 0 || files.value.length > 0)
   const mode = shallowRef<HistoryMode>('commits')
@@ -169,6 +172,8 @@ export function useGitHistory(
     commits,
     files,
     more,
+    own,
+    others,
     notices,
     hasHistory,
     mode,

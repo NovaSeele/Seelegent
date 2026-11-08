@@ -25,8 +25,8 @@ const { t } = useI18n()
 const h = props.history
 const titleId = useId()
 
-// The commit count includes the older ones the list leaves out.
-const total = computed(() => h.commits.value.length + h.more.value)
+// The task's own commits (older ones the list leaves out included); the others are counted in their group.
+const total = computed(() => h.own.value)
 const options = computed(() => [
   {
     value: 'commits' as HistoryMode,
@@ -60,6 +60,7 @@ const options = computed(() => [
           v-model:selected="h.selectedCommit.value"
           :commits="h.commits.value"
           :more="h.more.value"
+          :others-total="h.others.value"
           :label="t('git.history.commitsLabel')"
         />
       </nav>

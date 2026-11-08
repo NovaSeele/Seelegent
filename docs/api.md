@@ -108,7 +108,8 @@ in the daemon.
   HEAD (a rebase or a reset); then no commits are listed and diffs compare with HEAD.
 - `commits` lists every commit in start..HEAD, the task's or not. Each gets the `turn` that was running when it was
   committed (by committer time); one made while none of the task's turns ran (someone else's, or between turns) has
-  no turn and `outsideTurns: true`. Attribution is by time only: another task's commit made while this task's turn
+  no turn and `outsideTurns: true`; `ownCommits` counts the range's commits made during the turns (listed or older),
+  so the others number `commits` plus `commitsMore` minus `ownCommits`. Attribution is by time only: another task's commit made while this task's turn
   `n` ran is also given turn `n`. `committedFiles` keeps only the task's files among those the range changed: a file
   its turns touched, or a file under the task's folder that a commit made during one of its turns changed. A file
   only commits outside the turns changed is never listed. A committed file's diff compares the working tree with

@@ -4,7 +4,7 @@
   "notRepo": "Not a git repository",
   "notRepoDesc": "{cwd} is not inside a git repository, so there is nothing to commit.",
   "noBranch": "detached",
-  "files": "{n} file | {n} files",
+  "uncommittedCount": "{n} uncommitted file | {n} uncommitted files",
   "refresh": "Read again",
   "empty": "No changes from this task",
   "emptyDesc": "Files the worker changes show up here, ready to review and commit.",
@@ -61,12 +61,13 @@
     "commit": "Git: commit this task's files…"
   },
   "outside": {
-    "open": "Outside changes",
+    "open": "Shell edits",
     "title": "Changes outside the edit tools",
     "desc": "What the turn changed through shell commands and other programs, compared with the snapshot taken before it.",
     "turn": "Turn",
     "error": "Could not read the changes: {error}",
-    "empty": "Nothing changed outside the edit tools."
+    "empty": "Nothing changed outside the edit tools.",
+    "hint": "What the worker's turns changed through shell commands and other programs, outside the edit tools."
   },
   "notice": {
     "unknown": "This task did not record the commit it started from (it is older than that, or its folder was not in git then). Only uncommitted changes are shown, compared with HEAD; commits are not listed.",
@@ -77,7 +78,7 @@
   },
   "history": {
     "title": "Committed in this task",
-    "desc": "Commits made since the task started. View only: this work is already committed.",
+    "desc": "Commits made during this task's turns, then any other commits since it started. View only: this work is already committed.",
     "mode": "Show",
     "commits": "{n} commit | {n} commits",
     "files": "{n} file | {n} files",
@@ -97,7 +98,7 @@
     "noUncommitted": "Nothing left to commit",
     "noUncommittedDesc": "Everything this task changed is in its commits above.",
     "ownGroup": "Made during this task's turns",
-    "othersGroup": "Other commits since the task started",
+    "othersGroup": "{n} other commit since the task started | {n} other commits since the task started",
     "othersHint": "Made while none of this task's turns ran: someone else's, or between turns. Their files are not counted as this task's.",
     "outside": "Outside the task's turns",
     "sinceStartNote": "Compared with the task's start, so other commits to this file since then are included."
@@ -116,6 +117,7 @@
     "ahead": "{n} commit ahead | {n} commits ahead",
     "behind": "{n} commit behind | {n} commits behind",
     "synced": "Up to date with {name}",
-    "gone": "{name} no longer exists"
+    "gone": "{name} no longer exists",
+    "goneShort": "(gone)"
   }
 }

@@ -93,7 +93,7 @@ func (r *Repos) TaskGit(ctx context.Context, tf TaskFiles) (api.TaskGit, error) 
 		}
 		r.git.log.Warn("gitx: the task's commits could not be read", "root", root, "err", err)
 		out.HistoryState = api.GitHistoryUnavailable
-		out.Commits, out.CommitsMore, out.CommittedFiles = []api.GitCommit{}, 0, []api.GitFile{}
+		out.Commits, out.CommitsMore, out.CommittedFiles, out.OwnCommits = []api.GitCommit{}, 0, []api.GitFile{}, 0
 	}
 	return out, nil
 }

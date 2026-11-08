@@ -118,7 +118,7 @@ useGitCommands(
         </span>
         <GitUpstream :upstream="repo.upstream.value" />
         <span class="git__sum">
-          {{ t('git.files', { n: files.length }, files.length) }}
+          {{ t('git.uncommittedCount', { n: files.length }, files.length) }}
           <span class="git__add">+{{ format.number(sums.additions) }}</span>
           <span class="git__del">−{{ format.number(sums.deletions) }}</span>
         </span>

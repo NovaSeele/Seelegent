@@ -4,7 +4,7 @@
   "notRepo": "No es un repositorio git",
   "notRepoDesc": "{cwd} no está dentro de un repositorio git, así que no hay nada que confirmar.",
   "noBranch": "desacoplado",
-  "files": "{n} archivo | {n} archivos",
+  "uncommittedCount": "{n} archivo sin confirmar | {n} archivos sin confirmar",
   "refresh": "Volver a leer",
   "empty": "Esta tarea no tiene cambios",
   "emptyDesc": "Los archivos que cambie el worker aparecen aquí, listos para revisar y confirmar.",
@@ -61,12 +61,13 @@
     "commit": "Git: confirmar los archivos de esta tarea…"
   },
   "outside": {
-    "open": "Cambios externos",
+    "open": "Ediciones por shell",
     "title": "Cambios fuera de las herramientas de edición",
     "desc": "Lo que el turno cambió con comandos de shell y otros programas, comparado con la instantánea tomada antes.",
     "turn": "Turno",
     "error": "No se pudieron leer los cambios: {error}",
-    "empty": "Nada cambió fuera de las herramientas de edición."
+    "empty": "Nada cambió fuera de las herramientas de edición.",
+    "hint": "Lo que los turnos del worker cambiaron con comandos de shell y otros programas, fuera de las herramientas de edición."
   },
   "notice": {
     "unknown": "Esta tarea no registró el commit desde el que empezó (es anterior a esta función o su carpeta no estaba en git entonces). Solo se muestran los cambios sin confirmar, comparados con HEAD; no se listan commits.",
@@ -77,7 +78,7 @@
   },
   "history": {
     "title": "Confirmado en esta tarea",
-    "desc": "Commits hechos desde que empezó la tarea. Solo lectura: este trabajo ya está confirmado.",
+    "desc": "Commits hechos durante los turnos de esta tarea y, después, otros commits desde que empezó. Solo lectura: este trabajo ya está confirmado.",
     "mode": "Mostrar",
     "commits": "{n} commit | {n} commits",
     "files": "{n} archivo | {n} archivos",
@@ -97,7 +98,7 @@
     "noUncommitted": "No queda nada por confirmar",
     "noUncommittedDesc": "Todo lo que cambió esta tarea está en sus commits de arriba.",
     "ownGroup": "Hechos durante los turnos de esta tarea",
-    "othersGroup": "Otros commits desde que empezó la tarea",
+    "othersGroup": "{n} otro commit desde que empezó la tarea | {n} otros commits desde que empezó la tarea",
     "othersHint": "Hechos mientras no corría ningún turno de esta tarea: de otra persona o entre turnos. Sus archivos no cuentan como de esta tarea.",
     "outside": "Fuera de los turnos de la tarea",
     "sinceStartNote": "Comparado con el inicio de la tarea, así que incluye otros commits a este archivo desde entonces."
@@ -116,6 +117,7 @@
     "ahead": "{n} commit por delante | {n} commits por delante",
     "behind": "{n} commit por detrás | {n} commits por detrás",
     "synced": "Al día con {name}",
-    "gone": "{name} ya no existe"
+    "gone": "{name} ya no existe",
+    "goneShort": "(eliminada)"
   }
 }

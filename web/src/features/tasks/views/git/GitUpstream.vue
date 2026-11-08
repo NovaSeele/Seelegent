@@ -5,7 +5,7 @@ import { useI18n } from 'vue-i18n'
 import type { Upstream } from './useRepoStatus'
 
 /**
- * The branch against its upstream, for the Git view's bar: "origin/main ↑2 ↓1", "up to date" or "gone". Nothing
+ * The branch against its upstream, for the Git view's bar: "origin/main ↑2 ↓1", "✓" or "(gone)", all in the muted tone (amber is for what needs the user). Nothing
  * when the branch has no upstream. The arrows are spelled out for screen readers.
  */
 const props = defineProps<{ upstream: Upstream | null }>()
@@ -25,7 +25,7 @@ const text = computed(() => {
 </script>
 
 <template>
-  <span v-if="upstream" class="up" :class="{ 'up--gone': upstream.gone }" :title="text">
+  <span v-if="upstream" class="up" :title="text">
     <span aria-hidden="true" class="up__short">
       <span class="up__name">{{ upstream.name }}</span>
       <template v-if="!upstream.gone">
@@ -33,7 +33,7 @@ const text = computed(() => {
         <span v-if="upstream.behind">↓{{ upstream.behind }}</span>
         <span v-if="!upstream.ahead && !upstream.behind">✓</span>
       </template>
-      <span v-else>✕</span>
+      <span v-else class="up__gone">{{ t('git.upstream.goneShort') }}</span>
     </span>
     <span class="sr-only">{{ text }}</span>
   </span>
@@ -60,7 +60,7 @@ const text = computed(() => {
   overflow-wrap: anywhere;
 }
 
-.up--gone {
-  color: var(--attention-fg);
+.up__gone {
+  font-family: var(--font-sans);
 }
 </style>

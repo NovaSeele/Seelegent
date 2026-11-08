@@ -4,7 +4,7 @@
   "notRepo": "Không phải kho git",
   "notRepoDesc": "{cwd} không nằm trong kho git nào nên không có gì để commit.",
   "noBranch": "detached",
-  "files": "{n} tệp",
+  "uncommittedCount": "{n} tệp chưa commit",
   "refresh": "Đọc lại",
   "empty": "Tác vụ này chưa đổi tệp nào",
   "emptyDesc": "Tệp worker sửa sẽ hiện ở đây để xem lại và commit.",
@@ -61,12 +61,13 @@
     "commit": "Git: commit các tệp của tác vụ…"
   },
   "outside": {
-    "open": "Thay đổi ngoài công cụ sửa",
+    "open": "Sửa qua shell",
     "title": "Thay đổi ngoài công cụ sửa",
     "desc": "Những gì lượt này đổi qua lệnh shell và chương trình khác, so với bản chụp trước lượt.",
     "turn": "Lượt",
     "error": "Không đọc được thay đổi: {error}",
-    "empty": "Không có thay đổi nào ngoài công cụ sửa."
+    "empty": "Không có thay đổi nào ngoài công cụ sửa.",
+    "hint": "Những gì các lượt của worker đã đổi qua lệnh shell và chương trình khác, ngoài công cụ sửa."
   },
   "notice": {
     "unknown": "Tác vụ này không ghi lại commit lúc bắt đầu (tác vụ cũ hơn tính năng này, hoặc thư mục khi đó chưa nằm trong git). Chỉ hiện các thay đổi chưa commit, so với HEAD; không liệt kê commit.",
@@ -77,7 +78,7 @@
   },
   "history": {
     "title": "Đã commit trong tác vụ này",
-    "desc": "Các commit từ lúc tác vụ bắt đầu. Chỉ để xem: phần việc này đã được commit.",
+    "desc": "Các commit tạo trong các lượt của tác vụ, rồi đến các commit khác từ lúc tác vụ bắt đầu. Chỉ để xem: phần việc này đã được commit.",
     "mode": "Xem theo",
     "commits": "{n} commit",
     "files": "{n} tệp",
@@ -97,7 +98,7 @@
     "noUncommitted": "Không còn gì để commit",
     "noUncommittedDesc": "Mọi thứ tác vụ này đổi đều nằm trong các commit ở trên.",
     "ownGroup": "Tạo trong các lượt của tác vụ này",
-    "othersGroup": "Các commit khác từ lúc tác vụ bắt đầu",
+    "othersGroup": "{n} commit khác từ lúc tác vụ bắt đầu",
     "othersHint": "Tạo khi không có lượt nào của tác vụ đang chạy: của người khác, hoặc giữa các lượt. Tệp của chúng không được tính là của tác vụ này.",
     "outside": "Ngoài các lượt của tác vụ",
     "sinceStartNote": "So với lúc tác vụ bắt đầu, nên gồm cả các commit khác vào tệp này từ đó đến nay."
@@ -116,6 +117,7 @@
     "ahead": "đi trước {n} commit",
     "behind": "đi sau {n} commit",
     "synced": "Đã đồng bộ với {name}",
-    "gone": "{name} không còn tồn tại"
+    "gone": "{name} không còn tồn tại",
+    "goneShort": "(đã mất)"
   }
 }
