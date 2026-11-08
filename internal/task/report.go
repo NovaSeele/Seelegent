@@ -163,7 +163,9 @@ func (s *Service) turnCost(ctx context.Context, t *Task, tu *Turn) float64 {
 			continue
 		}
 		u := a.Usage
-		_, usd := account.AttemptCost(&p, a.Backend, a.Model, u.InputTokens, u.CachedTokens, u.OutputTokens, u.CostUSD)
+		_, usd := account.AttemptCost(&p, a.Backend, a.Model, account.Tokens{Input: u.InputTokens,
+			Cached: u.CachedTokens, CacheWrite: u.CacheWriteTokens, CacheWrite1h: u.CacheWrite1hTokens,
+			Output: u.OutputTokens}, u.CostUSD)
 		cost += usd
 	}
 	return math.Round(cost*1e6) / 1e6

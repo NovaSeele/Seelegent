@@ -139,7 +139,12 @@ type Usage struct {
 	OutputTokens int64 `json:"outputTokens"`
 	// CachedTokens is the part of the input served from a prompt cache.
 	CachedTokens int64 `json:"cachedTokens,omitempty"`
-	TotalTokens  int64 `json:"totalTokens"`
+	// CacheWriteTokens is the input written to a prompt cache (Claude Code's cache_creation_input_tokens; apart
+	// from InputTokens there), CacheWrite1hTokens the part of it cached for one hour instead of five minutes (they
+	// cost more).
+	CacheWriteTokens   int64 `json:"cacheWriteTokens,omitempty"`
+	CacheWrite1hTokens int64 `json:"cacheWrite1hTokens,omitempty"`
+	TotalTokens        int64 `json:"totalTokens"`
 	// CostUSD is the cost the CLI reports, when it does.
 	CostUSD float64 `json:"costUsd,omitempty"`
 }
@@ -147,11 +152,13 @@ type Usage struct {
 // Add returns the sum of u and v.
 func (u Usage) Add(v Usage) Usage {
 	return Usage{
-		InputTokens:  u.InputTokens + v.InputTokens,
-		OutputTokens: u.OutputTokens + v.OutputTokens,
-		CachedTokens: u.CachedTokens + v.CachedTokens,
-		TotalTokens:  u.TotalTokens + v.TotalTokens,
-		CostUSD:      u.CostUSD + v.CostUSD,
+		InputTokens:        u.InputTokens + v.InputTokens,
+		OutputTokens:       u.OutputTokens + v.OutputTokens,
+		CachedTokens:       u.CachedTokens + v.CachedTokens,
+		CacheWriteTokens:   u.CacheWriteTokens + v.CacheWriteTokens,
+		CacheWrite1hTokens: u.CacheWrite1hTokens + v.CacheWrite1hTokens,
+		TotalTokens:        u.TotalTokens + v.TotalTokens,
+		CostUSD:            u.CostUSD + v.CostUSD,
 	}
 }
 

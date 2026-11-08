@@ -43,14 +43,23 @@ func TestProviderPrices(t *testing.T) {
 		"prices")
 	e.wantError(e.req(http.MethodPut, path, map[string]any{"prices": []any{map[string]any{"model": "*",
 		"inputUsd": -1, "outputUsd": 1}}}, nil), http.StatusBadRequest, api.CodeInvalidArgument, "prices[0].inputUsd")
+	e.wantError(e.req(http.MethodPut, path, map[string]any{"prices": []any{map[string]any{"model": "*",
+		"inputUsd": 1, "cacheWriteUsd": -2, "outputUsd": 1}}}, nil), http.StatusBadRequest, api.CodeInvalidArgument,
+		"prices[0].cacheWriteUsd")
 
 	e.must(e.req(http.MethodPut, path, map[string]any{"prices": []any{
 		map[string]any{"model": "*", "inputUsd": 1, "outputUsd": 4},
-		map[string]any{"model": "glm-5", "inputUsd": 2, "cachedInputUsd": 0.5, "outputUsd": 8},
+		map[string]any{"model": "glm-5", "inputUsd": 2, "cachedInputUsd": 0.5, "cacheWriteUsd": 3, "outputUsd": 8},
 	}}, nil), http.StatusOK).json(t, &table)
 	if table.SpendSource != api.SpendPrices || len(table.Prices) != 2 || table.Prices[0].Model != "*" ||
-		table.Prices[1].CachedInputUSD == nil || *table.Prices[1].CachedInputUSD != 0.5 || table.Prices[1].UpdatedAt == "" {
+		table.Prices[1].CachedInputUSD == nil || *table.Prices[1].CachedInputUSD != 0.5 || table.Prices[1].UpdatedAt == "" ||
+		table.Prices[1].CacheWriteUSD == nil || *table.Prices[1].CacheWriteUSD != 3 || table.Prices[0].CacheWriteUSD != nil {
 		t.Fatalf("stored table = %+v", table)
+	}
+	var again api.PriceTable
+	e.must(e.get(path), http.StatusOK).json(t, &again)
+	if len(again.Prices) != 2 || again.Prices[1].CacheWriteUSD == nil || *again.Prices[1].CacheWriteUSD != 3 {
+		t.Fatalf("read back = %+v", again)
 	}
 	var list api.ProviderList
 	e.must(e.get("/api/v1/providers"), http.StatusOK).json(t, &list)

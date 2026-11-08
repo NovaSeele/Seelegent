@@ -190,21 +190,27 @@ export interface ServiceError {
 /**
  * Price is one row of a provider's price table: US dollars per million tokens for a model ("*": every model
  * without its own row). CachedInputUSD is the price of input served from a prompt cache; absent means the input
- * price. Seelegent ships no prices.
+ * price. CacheWriteUSD is the price of input written to the prompt cache for five minutes (one-hour writes cost
+ * 1.6 × it); absent means 1.25 × the input price (one-hour writes: 2 ×). Seelegent ships no prices.
  */
 export interface Price {
   model: string
   inputUsd: number
   cachedInputUsd?: number
+  cacheWriteUsd?: number
   outputUsd: number
   updatedAt?: string
 }
 
-/** PriceInput is one row of PUT /providers/{id}/prices (cachedInputUsd null or absent: the input price). */
+/**
+ * PriceInput is one row of PUT /providers/{id}/prices (cachedInputUsd null or absent: the input price;
+ * cacheWriteUsd null or absent: 1.25 × the input price).
+ */
 export interface PriceInput {
   model: string
   inputUsd: number
   cachedInputUsd?: number
+  cacheWriteUsd?: number
   outputUsd: number
 }
 

@@ -387,7 +387,8 @@ func (s *Server) setPrices(w http.ResponseWriter, r *http.Request) (code int, bo
 	in := make([]account.Price, 0, len(req.Prices))
 	for _, pr := range req.Prices {
 		in = append(in, account.Price{Model: pr.Model, InputUSD: pr.InputUSD, CachedInputUSD: pr.CachedInputUSD,
-			OutputUSD: pr.OutputUSD})
+			CacheWriteUSD: pr.CacheWriteUSD,
+			OutputUSD:     pr.OutputUSD})
 	}
 	p, err := s.o.Accounts.SetPrices(r.Context(), r.PathValue("id"), in)
 	if err != nil {

@@ -60,7 +60,8 @@ func (s *Store) RecordAttempt(ctx context.Context, a Attempt) error {
 	}
 	next := account.SpendRow{AccountID: a.AccountID, StartedAt: formatTime(started), Backend: a.Backend,
 		Model: a.Model, CostUSD: max(0, u.CostUSD), Input: max(0, u.InputTokens), Output: max(0, u.OutputTokens),
-		Cached: max(0, u.CachedTokens), Total: total}
+		Cached: max(0, u.CachedTokens), CacheWrite: max(0, u.CacheWriteTokens),
+		CacheWrite1h: max(0, u.CacheWrite1hTokens), Total: total}
 	var crossings []account.BudgetCrossing
 	err := s.db.Write(ctx, func(tx *sql.Tx) error {
 		// The attempt's earlier record, if any: what it added to the spend is taken back before the new one is

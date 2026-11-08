@@ -119,8 +119,7 @@ func isLocalURL(raw string) bool {
 // replaces the CLI's estimate on the official Anthropic API); SpendCLI with the CLI's own cost on the official
 // Anthropic API; SpendNone (tokens only) otherwise, also when p is nil. backend and model are the attempt's, cost
 // is what the CLI reported.
-func AttemptCost(p *Provider, backend, model string, input, cached, output int64, cost float64) (source string,
-	usd float64) {
+func AttemptCost(p *Provider, backend, model string, tokens Tokens, cost float64) (source string, usd float64) {
 	switch {
 	case p == nil:
 		return SpendNone, 0
@@ -128,7 +127,7 @@ func AttemptCost(p *Provider, backend, model string, input, cached, output int64
 		return SpendFree, 0
 	}
 	if pr, ok := p.PriceFor(model); ok {
-		return SpendPrices, pr.Cost(backend, input, cached, output)
+		return SpendPrices, pr.Cost(backend, tokens)
 	}
 	if p.cliCost() {
 		return SpendCLI, roundUSD(max(0, cost))
@@ -233,7 +232,10 @@ type SpendRow struct {
 	Input   int64
 	Output  int64
 	Cached  int64
-	Total   int64
+	// CacheWrite and CacheWrite1h are the prompt-cache writes (Tokens); they price the attempt and are not stored.
+	CacheWrite   int64
+	CacheWrite1h int64
+	Total        int64
 	// Source and USD are how the attempt was counted in its account's spend (Counted): set on a stored row,
 	// Source "" when it was not counted.
 	Source string
@@ -404,8 +406,9 @@ func ApplySpendTx(ctx context.Context, tx *sql.Tx, prev *SpendRow, next SpendRow
 			spent = spent.with(*prev, prev.Source, prev.USD, -1)
 		}
 		if next.AccountID == id && next.StartedAt >= st.keySetAt {
-			counted.Source, counted.USD = AttemptCost(p, next.Backend, next.Model, next.Input, next.Cached,
-				next.Output, next.CostUSD)
+			counted.Source, counted.USD = AttemptCost(p, next.Backend, next.Model, Tokens{Input: next.Input,
+				Cached: next.Cached, CacheWrite: next.CacheWrite, CacheWrite1h: next.CacheWrite1h, Output: next.Output},
+				next.CostUSD)
 			spent = spent.with(next, counted.Source, counted.USD, 1)
 		}
 		if spent == st.spent {

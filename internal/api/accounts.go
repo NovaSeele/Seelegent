@@ -197,20 +197,24 @@ const (
 
 // Price is one row of a provider's price table: US dollars per million tokens for a model ("*": every model
 // without its own row). CachedInputUSD is the price of input served from a prompt cache; absent means the input
-// price. Seelegent ships no prices.
+// price. CacheWriteUSD is the price of input written to the prompt cache for five minutes (one-hour writes cost
+// 1.6 × it); absent means 1.25 × the input price (one-hour writes: 2 ×). Seelegent ships no prices.
 type Price struct {
 	Model          string   `json:"model"`
 	InputUSD       float64  `json:"inputUsd"`
 	CachedInputUSD *float64 `json:"cachedInputUsd,omitempty"`
+	CacheWriteUSD  *float64 `json:"cacheWriteUsd,omitempty"`
 	OutputUSD      float64  `json:"outputUsd"`
 	UpdatedAt      string   `json:"updatedAt,omitempty"`
 }
 
-// PriceInput is one row of PUT /providers/{id}/prices (cachedInputUsd null or absent: the input price).
+// PriceInput is one row of PUT /providers/{id}/prices (cachedInputUsd null or absent: the input price;
+// cacheWriteUsd null or absent: 1.25 × the input price).
 type PriceInput struct {
 	Model          string   `json:"model"`
 	InputUSD       float64  `json:"inputUsd"`
 	CachedInputUSD *float64 `json:"cachedInputUsd,omitempty"`
+	CacheWriteUSD  *float64 `json:"cacheWriteUsd,omitempty"`
 	OutputUSD      float64  `json:"outputUsd"`
 }
 

@@ -96,7 +96,8 @@ func priceDTOs(in []account.Price) []api.Price {
 	out := make([]api.Price, 0, len(in))
 	for _, pr := range in {
 		out = append(out, api.Price{Model: pr.Model, InputUSD: pr.InputUSD, CachedInputUSD: pr.CachedInputUSD,
-			OutputUSD: pr.OutputUSD, UpdatedAt: api.FormatTime(pr.UpdatedAt)})
+			CacheWriteUSD: pr.CacheWriteUSD,
+			OutputUSD:     pr.OutputUSD, UpdatedAt: api.FormatTime(pr.UpdatedAt)})
 	}
 	return out
 }
