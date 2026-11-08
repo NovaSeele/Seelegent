@@ -124,3 +124,13 @@ func parseProcStat(data []byte) (procInfo, error) {
 	}
 	return procInfo{pid: pid, ppid: ppid, pgid: pgid, start: start, zombie: f[0] == "Z" || f[0] == "X"}, nil
 }
+
+// niceOf returns the nice value of who. The Linux system call returns 20 - nice (1-40) instead of the nice value
+// the C library hands out.
+func niceOf(which, who int) (int, error) {
+	prio, err := unix.Getpriority(which, who)
+	if err != nil {
+		return 0, err
+	}
+	return 20 - prio, nil
+}

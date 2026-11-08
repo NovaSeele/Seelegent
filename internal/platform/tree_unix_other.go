@@ -5,6 +5,8 @@ package platform
 import (
 	"os/exec"
 	"syscall"
+
+	"golang.org/x/sys/unix"
 )
 
 // macOS and the BSDs have no child subreaper: a worker tree is the owner's descendants by parent id, best effort.
@@ -27,3 +29,6 @@ func signalVerified(p procInfo, sig syscall.Signal) {
 		_ = syscall.Kill(p.pid, sig)
 	}
 }
+
+// niceOf returns the nice value of who.
+func niceOf(which, who int) (int, error) { return unix.Getpriority(which, who) }

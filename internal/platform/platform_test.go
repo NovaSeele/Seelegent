@@ -75,6 +75,40 @@ func TestMain(m *testing.M) {
 		_, _ = conn.Write([]byte("x"))
 		time.Sleep(time.Minute)
 		os.Exit(0)
+	case "alloc":
+		// Allocates and touches the MiB given last, then exits 0 (under a job memory cap the runtime fails first).
+		mb, _ := strconv.Atoi(os.Args[len(os.Args)-1])
+		b := make([]byte, mb<<20)
+		for i := 0; i < len(b); i += 4096 {
+			b[i] = 1
+		}
+		runtime.KeepAlive(b)
+		os.Exit(0)
+	case "low-owner":
+		// Owns a low-priority worker tree (root "parent" and its child), like a launcher, until <pidFile>.done
+		// exists; then closes the tree. It writes its own pid, the root's and the grandchild's to pidFile.
+		pidFile := os.Args[len(os.Args)-1]
+		root := exec.Command(selfExe(), pidFile+".tree") //nolint:noctx // worker trees take no context
+		root.Env = append(os.Environ(), roleEnv+"=parent")
+		tree, err := StartWorkerTreeWith(root, "", TreeOptions{Priority: PriorityLow})
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(3)
+		}
+		waitFile(pidFile + ".tree")
+		tp, err := parsePids(pidFile + ".tree")
+		if err != nil || len(tp) != 2 {
+			os.Exit(4)
+		}
+		writePids(pidFile, os.Getpid(), tp[0], tp[1])
+		for range 1500 { // 30 s
+			if _, err := os.Stat(pidFile + ".done"); err == nil {
+				break
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
+		_ = tree.Close()
+		os.Exit(0)
 	default:
 		if runOSRole(os.Getenv(roleEnv)) {
 			os.Exit(0)
@@ -99,8 +133,23 @@ func writePids(path string, pids ...int) {
 		parts[i] = strconv.Itoa(p)
 	}
 	tmp := path + ".tmp"
-	_ = os.WriteFile(tmp, []byte(strings.Join(parts, " ")), 0o600)
-	_ = os.Rename(tmp, path)
+	if err := os.WriteFile(tmp, []byte(strings.Join(parts, " ")), 0o600); err != nil {
+		fmt.Fprintln(os.Stderr, "write pids:", err)
+		os.Exit(6)
+	}
+	// On Windows the rename fails while the test (or a scanner) has the target open for a moment: retry.
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		err := os.Rename(tmp, path)
+		if err == nil {
+			return
+		}
+		if time.Now().After(deadline) {
+			fmt.Fprintln(os.Stderr, "write pids:", err)
+			os.Exit(6)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
 }
 
 // waitFile waits up to 10 s for path to exist.
@@ -113,23 +162,44 @@ func waitFile(path string) {
 	}
 }
 
-// readPids waits for the pid file and parses it.
+// readPidsWait is how long readPids waits for a pid file: helpers start slowly on a loaded machine.
+const readPidsWait = 30 * time.Second
+
+// readPids waits for the pid file and parses it. Every failure (missing file, a sharing violation on Windows while
+// the writer renames it, an empty or unparsable file) is retried until readPidsWait has passed.
 func readPids(t *testing.T, path string) []int {
 	t.Helper()
-	waitFile(path)
+	deadline := time.Now().Add(readPidsWait)
+	for {
+		pids, err := parsePids(path)
+		if err == nil {
+			return pids
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("read pids: %v", err)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+// parsePids reads and parses a pid file.
+func parsePids(path string) ([]int, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		t.Fatalf("read pids: %v", err)
+		return nil, err
 	}
 	var pids []int
 	for _, f := range strings.Fields(string(data)) {
 		p, err := strconv.Atoi(f)
 		if err != nil {
-			t.Fatalf("parse pid %q: %v", f, err)
+			return nil, fmt.Errorf("parse pid %q: %w", f, err)
 		}
 		pids = append(pids, p)
 	}
-	return pids
+	if len(pids) == 0 {
+		return nil, fmt.Errorf("%s: no pid", path)
+	}
+	return pids, nil
 }
 
 // helper builds a command that runs this test binary in the given role.

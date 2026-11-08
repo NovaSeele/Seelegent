@@ -10,6 +10,7 @@ import (
 	"slices"
 	"testing"
 	"time"
+	"unsafe"
 
 	"golang.org/x/sys/windows"
 )
@@ -226,4 +227,116 @@ func TestHiddenStartsHaveNoConsoleWindow(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = tree.Close() })
 	check("tree", cmd, tree.Wait, windows.CREATE_NO_WINDOW)
+}
+
+// priorityOf returns the priority class of process pid.
+func priorityOf(t *testing.T, pid int) int {
+	t.Helper()
+	h, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION, false, uint32(pid))
+	if err != nil {
+		t.Fatalf("open process %d: %v", pid, err)
+	}
+	defer func() { _ = windows.CloseHandle(h) }()
+	class, err := windows.GetPriorityClass(h)
+	if err != nil {
+		t.Fatalf("priority class of %d: %v", pid, err)
+	}
+	return int(class)
+}
+
+// isLow reports whether a priority class is the low one of a tree.
+func isLow(class int) bool { return class == windows.BELOW_NORMAL_PRIORITY_CLASS }
+
+// TestTreeMemoryCap: a tree that needs more than its job memory cap fails, and MemoryLimitHit says why; one that
+// stays under it, or has no cap, reports nothing.
+func TestTreeMemoryCap(t *testing.T) {
+	run := func(mb string, opt TreeOptions) (code int, hit bool) {
+		t.Helper()
+		tree, err := StartTreeWith(helper("alloc", mb), opt)
+		if err != nil {
+			t.Fatalf("StartTreeWith: %v", err)
+		}
+		_ = tree.Wait()
+		code, hit = tree.ExitCode(), tree.MemoryLimitHit()
+		if err := tree.Close(); err != nil {
+			t.Fatal(err)
+		}
+		if tree.MemoryLimitHit() {
+			t.Fatal("MemoryLimitHit after Close must be false")
+		}
+		return code, hit
+	}
+	if code, hit := run("200", TreeOptions{MemoryLimitMB: 64}); code == 0 || !hit {
+		t.Fatalf("200 MB under a 64 MB cap: exit %d, limit hit %v; want a failure and a hit", code, hit)
+	}
+	if code, hit := run("8", TreeOptions{MemoryLimitMB: 256}); code != 0 || hit {
+		t.Fatalf("8 MB under a 256 MB cap: exit %d, limit hit %v", code, hit)
+	}
+	if code, hit := run("8", TreeOptions{}); code != 0 || hit {
+		t.Fatalf("no cap: exit %d, limit hit %v", code, hit)
+	}
+}
+
+// TestTreeJobLimits: the job holds what the options ask for (read back from the job).
+func TestTreeJobLimits(t *testing.T) {
+	tree, err := StartTreeWith(helper("sleeper", filepath.Join(t.TempDir(), "pid")),
+		TreeOptions{Priority: PriorityLow, MemoryLimitMB: 512, CPURatePercent: 25})
+	if err != nil {
+		t.Fatalf("StartTreeWith: %v", err)
+	}
+	defer func() { _ = tree.Close() }()
+	var rate jobCPURateControl
+	if err := windows.QueryInformationJobObject(tree.os.job, windows.JobObjectCpuRateControlInformation,
+		uintptr(unsafe.Pointer(&rate)), uint32(unsafe.Sizeof(rate)), nil); err != nil {
+		t.Fatalf("query CPU rate: %v", err)
+	}
+	if rate.controlFlags != jobCPURateControlEnable|jobCPURateControlHardCap || rate.cpuRate != 2500 {
+		t.Errorf("CPU rate control %+v, want enabled hard cap at 2500 (25%%)", rate)
+	}
+	var info windows.JOBOBJECT_EXTENDED_LIMIT_INFORMATION
+	if err := windows.QueryInformationJobObject(tree.os.job, windows.JobObjectExtendedLimitInformation,
+		uintptr(unsafe.Pointer(&info)), uint32(unsafe.Sizeof(info)), nil); err != nil {
+		t.Fatalf("query limits: %v", err)
+	}
+	want := uint32(windows.JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE | windows.JOB_OBJECT_LIMIT_PRIORITY_CLASS |
+		windows.JOB_OBJECT_LIMIT_JOB_MEMORY)
+	b := info.BasicLimitInformation
+	if b.LimitFlags != want || b.PriorityClass != windows.BELOW_NORMAL_PRIORITY_CLASS || info.JobMemoryLimit != 512<<20 {
+		t.Errorf("limits: flags %#x (want %#x), class %#x, memory %d", b.LimitFlags, want, b.PriorityClass,
+			info.JobMemoryLimit)
+	}
+	if tree.os.port == 0 {
+		t.Error("a memory cap needs the job's completion port")
+	}
+
+	// No options: kill-on-close only, no CPU rate control, no port.
+	plain, err := StartTreeWith(helper("sleeper", filepath.Join(t.TempDir(), "pid")), TreeOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = plain.Close() }()
+	rate = jobCPURateControl{}
+	if err := windows.QueryInformationJobObject(plain.os.job, windows.JobObjectCpuRateControlInformation,
+		uintptr(unsafe.Pointer(&rate)), uint32(unsafe.Sizeof(rate)), nil); err != nil {
+		t.Fatalf("query CPU rate: %v", err)
+	}
+	if rate.controlFlags != 0 || plain.os.port != 0 {
+		t.Errorf("plain tree: CPU rate %+v, port %v", rate, plain.os.port)
+	}
+}
+
+// atNormalPriority runs the test at normal priority for its duration: a test started at below normal (a gentle
+// `go test` on a busy machine) could not tell a lowered tree from an inherited priority.
+func atNormalPriority(t *testing.T) {
+	t.Helper()
+	self := windows.CurrentProcess()
+	class, err := windows.GetPriorityClass(self)
+	if err != nil || class == windows.NORMAL_PRIORITY_CLASS {
+		return
+	}
+	if err := windows.SetPriorityClass(self, windows.NORMAL_PRIORITY_CLASS); err != nil {
+		t.Logf("cannot run at normal priority: %v", err)
+		return
+	}
+	t.Cleanup(func() { _ = windows.SetPriorityClass(self, class) })
 }

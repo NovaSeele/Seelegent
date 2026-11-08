@@ -7,8 +7,12 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"runtime"
+	"strconv"
 	"syscall"
 	"time"
+
+	"golang.org/x/sys/unix"
 )
 
 // Timing of Tree.Kill on Unix.
@@ -24,6 +28,9 @@ const (
 	freezeRounds = 10
 )
 
+// lowNice is the nice value of a low-priority tree.
+const lowNice = 10
+
 // treeOS holds the process group of a tree and, for worker trees, its owner.
 type treeOS struct {
 	pgid      int
@@ -37,9 +44,15 @@ type treeOS struct {
 
 // start runs cmd as the leader of a new process group; its descendants inherit the group. On Linux the root also
 // gets SIGKILL when the owner of the tree dies (parentDeathSignal), and a worker tree makes the owner a subreaper.
-func (t *treeOS) start(cmd *exec.Cmd, worker bool, _ string) error {
+// A low-priority tree starts at nice 10 (StartTreeWith, StartWorkerTreeWith); the caps of opt do not exist here.
+func (t *treeOS) start(cmd *exec.Cmd, worker bool, _ string, opt TreeOptions) error {
+	low := opt.Priority == PriorityLow
 	sysProcAttr(cmd).Setpgid = true
 	parentDeathSignal(cmd)
+	niced := false
+	if low && !worker {
+		niced = runNiced(cmd)
+	}
 	var r *reaper
 	if worker {
 		t.owner = os.Getpid()
@@ -49,18 +62,59 @@ func (t *treeOS) start(cmd *exec.Cmd, worker bool, _ string) error {
 			return err
 		}
 	}
+	if low && worker {
+		// Linux keeps nice per thread, and the child inherits the forking thread's: lower this thread and fork
+		// from it. The thread is unlocked again (never left to exit), so the root's parent-death signal, which
+		// is tied to it, stays armed.
+		runtime.LockOSThread()
+		defer runtime.UnlockOSThread()
+		lowerNice(unix.PRIO_PROCESS, 0)
+	}
 	if err := cmd.Start(); err != nil {
 		r.stop()
 		return err
 	}
 	t.pgid = cmd.Process.Pid
 	t.rootStart, _ = procStart(t.pgid)
+	if low && !worker && !niced {
+		// No nice program: lower the group now. What the root started before this call and moved out of its
+		// group by then keeps the caller's priority.
+		lowerNice(unix.PRIO_PGRP, t.pgid)
+	}
 	if r != nil {
 		r.run(t.pgid)
 		t.reaper = r
 	}
 	return nil
 }
+
+// runNiced makes cmd run through `nice -n 10` when nice is on PATH, so the root starts at the lower priority and
+// everything it starts inherits it. It reports whether it did.
+func runNiced(cmd *exec.Cmd) bool {
+	if cmd.Path == "" || cmd.Err != nil || len(cmd.Args) == 0 {
+		return false
+	}
+	nice, err := exec.LookPath("nice")
+	if err != nil {
+		return false
+	}
+	cmd.Args = append([]string{nice, "-n", strconv.Itoa(lowNice), cmd.Path}, cmd.Args[1:]...)
+	cmd.Path = nice
+	return true
+}
+
+// lowerNice sets the nice value of who (a process or thread, or a process group) to lowNice, unless the caller
+// already runs at lowNice or lower priority (an unprivileged process could not go back up). Best effort: a
+// refused call leaves the priority as it was.
+func lowerNice(which, who int) {
+	if cur, err := niceOf(unix.PRIO_PROCESS, 0); err == nil && cur >= lowNice {
+		return
+	}
+	_ = unix.Setpriority(which, who, lowNice)
+}
+
+// memoryLimitHit is always false: Unix trees have no memory cap.
+func (*treeOS) memoryLimitHit(int) bool { return false }
 
 func (t *treeOS) describe(id string, root int) *WorkerTree {
 	if t.owner > 0 {
