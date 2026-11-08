@@ -23,6 +23,7 @@ with owner-only permissions when a command starts, never earlier.
 | `run/start.lock`   | held by an MCP server while it starts the daemon, so several start only one            |
 | `backups/`         | copies taken before migrations and imports                                             |
 | `tasks/<id>/t<turn>-a<attempt>/` | files of one worker attempt: `launch/` (launch spec, stream, stderr, exit record), the prompt of CLIs that read it on standard input, a long agy brief |
+| `tasks/<id>/t<turn>-a<attempt>/mask` | the secrets the attempt's output is masked for (an API-key account's key), kept while the worker runs so a restarted daemon still masks them: a DPAPI blob on Windows, a 0600 file elsewhere |
 | `snapshots/`       | turn snapshots of the work at risk: content-addressed file copies (`blobs/`) and one manifest per task turn (`tasks/<id>/`), never anything inside your repository ([safety.md](safety.md)) |
 | `guard/bin/`       | the git shim workers without a pre-tool hook get first on `PATH` ([safety.md](safety.md)) |
 | `contests/<id>/<label>.json` | the stored copy of a contest variant's changes, written once its task stops ([team.md](team.md)) |
@@ -33,8 +34,8 @@ with owner-only permissions when a command starts, never earlier.
 | `update/`          | downloads and the lock of `seelegent update` ([release.md](release.md))                |
 | `setup-created.json` | the host files and folders `seelegent setup` created, so `setup --remove` deletes them only when they are empty again ([setup.md](setup.md)) |
 
-Outside Windows, `profiles/<id>/seelegent-key` and `github/token` are plain text protected only by their 0600 mode:
-there is no OS key store Seelegent uses there. Anyone who can read your files (a program running as you, root, a
+Outside Windows, `profiles/<id>/seelegent-key`, `github/token` and a running attempt's `mask` are plain text
+protected only by their 0600 mode: there is no OS key store Seelegent uses there. Anyone who can read your files (a program running as you, root, a
 backup that does not keep modes) can read them. Prefer a fine-grained GitHub token limited to the repositories
 Seelegent works on, or the `gh` CLI, whose own credential store Seelegent then uses instead of a token.
 
