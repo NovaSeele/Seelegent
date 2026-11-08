@@ -152,7 +152,11 @@ func globReaches(glob, plain string) bool {
 		if gs[i] == "**" {
 			return true
 		}
-		if ok, err := path.Match(gs[i], seg); err != nil || !ok {
+		ok, err := path.Match(gs[i], seg)
+		if err != nil {
+			return true // a malformed segment (an unclosed [): cannot tell, so report the overlap
+		}
+		if !ok {
 			return false
 		}
 	}

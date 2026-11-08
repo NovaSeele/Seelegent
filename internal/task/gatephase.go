@@ -16,6 +16,7 @@ import (
 	"github.com/NovaSeele/Seelegent/internal/fsutil"
 	"github.com/NovaSeele/Seelegent/internal/gate"
 	"github.com/NovaSeele/Seelegent/internal/proof"
+	"github.com/NovaSeele/Seelegent/internal/snapshot"
 )
 
 // The gate phase (docs/gates.md): when a turn of a gated task ends well, the task stays running with a GatePhase
@@ -206,8 +207,14 @@ func (s *Service) gatePhase(r *run, t *Task) (bool, error) {
 	}
 	if in.Lane != nil {
 		// The lane judges the net change, and only what a worker touched counts against it (F5, F6).
-		in.LaneFiles = s.netLane(t, ph.Turn, files, nil)
-		touch := laneTouched(t, ph.Turn)
+		var end *snapshot.Manifest
+		if s.o.Snapshots != nil {
+			if e, err := s.o.Snapshots.Load(t.ID, ph.Turn, snapshot.KindEnd); err == nil {
+				end = &e
+			}
+		}
+		in.LaneFiles = s.netLane(t, ph.Turn, files, end)
+		touch := s.laneTouched(r.ctx, t, ph.Turn, end)
 		in.Touched, in.UnknownWrites = touch.wrote, touch.unknown
 	}
 	if p.GateOff {

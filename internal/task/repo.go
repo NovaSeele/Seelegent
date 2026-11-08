@@ -498,6 +498,13 @@ func (r *Repo) Events(ctx context.Context, id string, after int64, limit int) ([
 		WHERE task_id = ? AND seq > ? ORDER BY seq LIMIT ?`, id, after, limit)
 }
 
+// TurnEvents returns up to limit events of type typ of turns from..to, ascending.
+func (r *Repo) TurnEvents(ctx context.Context, id string, typ api.EventType, from, to, limit int) ([]api.TaskEvent,
+	error) {
+	return r.events(ctx, id, `SELECT seq, ts, type, turn, attempt, data FROM task_events
+		WHERE task_id = ? AND type = ? AND turn BETWEEN ? AND ? ORDER BY seq LIMIT ?`, id, string(typ), from, to, limit)
+}
+
 // Tail returns the newest n events, ascending.
 func (r *Repo) Tail(ctx context.Context, id string, n int) ([]api.TaskEvent, error) {
 	return r.events(ctx, id, `SELECT seq, ts, type, turn, attempt, data FROM (

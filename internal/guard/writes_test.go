@@ -132,7 +132,7 @@ func TestWriteTargets(t *testing.T) {
 		{`Remove-Item -Path $env:X\dist -Recurse`, []Target{unknown}},
 		{`del %OUT%\x.txt`, []Target{unknown}},
 		{`cd $env:X; Remove-Item dist`, []Target{unknown}},
-		{`cd $(mktemp -d) && rm x`, []Target{unknown}},
+		{`cd $(mktemp -d) && rm x`, nil}, // a temporary folder (review G2)
 		{`echo hi > "$LOG"`, []Target{unknown}},
 		{`rm src/$name.ts`, []Target{{Path: "src"}, {Path: "src/$name.ts"}}}, // cmd: a literal name
 		{`cd $X && rm /abs/y`, []Target{{Path: "/abs/y"}}},
@@ -142,6 +142,26 @@ func TestWriteTargets(t *testing.T) {
 		{`npm test > $null 2>&1`, nil},
 		{`npm test > /dev/null`, nil},
 		{`npm test > nul`, nil},
+		// A cd inside a subshell, a substitution or a PowerShell block leaves the rest of the line in a folder that
+		// cannot be told (review G1); inside the group it still applies.
+		{`(cd src && rm a) && rm b`, []Target{{Path: "src/a"}, unknown}},
+		{`echo $(cd src; pwd) && rm b`, []Target{unknown}},
+		{`Get-ChildItem | ForEach-Object { Set-Location src }; Remove-Item b`, []Target{{Path: "b"}, unknown}}, // POSIX: b
+		{`cmd /c "(cd src) && del b"`, []Target{unknown}},
+		{`(rm a) && rm b`, []Target{{Path: "a"}, {Path: "b"}}},
+		// Temporary files and variables assigned from them (review G2).
+		{`npm test > $(mktemp)`, nil},
+		{`t=$(mktemp); npm test > "$t"; rm -f $t`, nil},
+		{`t=$(mktemp) && echo x > ${t}.log`, nil},
+		{`$f = Join-Path $env:TEMP x.log; npm test > $f`, nil},
+		{`$f = New-TemporaryFile; Set-Content $f.FullName -Value x`, nil},
+		{`$f = [IO.Path]::GetTempFileName(); Out-File -FilePath $f`, nil},
+		{`npm test | Out-File (New-TemporaryFile)`, nil},
+		{`Set-Content ([System.IO.Path]::GetTempFileName()) -Value x`, nil},
+		{`$g = Join-Path $env:TEMP x; $h = "$g.bak"; Remove-Item $h`, nil},
+		// A variable from anywhere else stays unknown.
+		{`$f = Join-Path $root x.log; npm test > $f`, []Target{unknown}},
+		{`t=$(pwd)/x; echo hi > $t`, []Target{unknown}},
 	} {
 		// Each dialect that reads the line adds its reading: cmd takes $X literally, POSIX reads D:\\x as D:x. The
 		// callers drop a path that starts with $ or %, as the start of a variable; the other readings must match.

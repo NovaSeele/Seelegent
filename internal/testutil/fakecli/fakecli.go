@@ -25,6 +25,7 @@
 //	#!touch <path>       create path (tells the test the script got here)
 //	#!write <path>\t<q> write the Go-quoted string q to path, making its folders (a change no edit tool reports)
 //	#!remove <path>      remove path
+//	#!mtime <path>\t<ns> set path's modification time to ns Unix nanoseconds (a write at a given time)
 //	#!pid <path>         write the fake CLI's process id to path (for checks from outside, such as its priority)
 //	#!alloc <mb>         allocate and touch mb MiB, kept until the CLI exits (a worker that needs that much memory;
 //	                     under a job memory cap the Go runtime fails with "out of memory", exit code 2)
@@ -327,6 +328,13 @@ func runCLI(dir string) int {
 		case "remove":
 			_ = out.Flush()
 			_ = os.Remove(arg) //nolint:gosec // a path the test's own script names
+		case "mtime":
+			_ = out.Flush()
+			p, ns, _ := strings.Cut(arg, "\t")
+			if n, err := strconv.ParseInt(ns, 10, 64); err == nil {
+				at := time.Unix(0, n)
+				_ = os.Chtimes(p, at, at)
+			}
 		case "pid":
 			_ = out.Flush()
 			_ = os.WriteFile(arg, []byte(strconv.Itoa(os.Getpid())), 0o600) //nolint:gosec // a path the test's own script names

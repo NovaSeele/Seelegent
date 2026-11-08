@@ -6,6 +6,7 @@ import (
 	"runtime"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/NovaSeele/Seelegent/internal/guard"
 	"github.com/NovaSeele/Seelegent/internal/proof"
@@ -69,6 +70,12 @@ type workerWrites struct {
 	keys      []string // snapshot keys of root-relative files and folders
 	globs     []string
 	unknown   []string // the commands that wrote where Seelegent could not read
+	// runs are the windows the worker's commands ran in, and mtime a file's modification time (cmdwindows.go): a
+	// file that changed during a run is the worker's (the lane check only; nil mtime: no window applies). runners
+	// is true when a code runner ran: a file gone from the end snapshot, whose time is unknown, counts then.
+	runs    []commandRun
+	mtime   func(rel string) (time.Time, bool)
+	runners bool
 }
 
 // newWorkerWrites reads a turn's edit-tool files (edited: relative to root, '/' separators) and its shell
@@ -156,6 +163,12 @@ func (w *workerWrites) wrote(rel string) bool {
 		if proof.Match(g, rel) {
 			return true
 		}
+	}
+	if w.mtime != nil {
+		if at, ok := w.mtime(rel); ok {
+			return ranDuring(w.runs, at)
+		}
+		return w.runners
 	}
 	return false
 }
