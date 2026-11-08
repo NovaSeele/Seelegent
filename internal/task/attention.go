@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/NovaSeele/Seelegent/internal/api"
+	"github.com/NovaSeele/Seelegent/internal/backend"
 	"github.com/NovaSeele/Seelegent/internal/config"
 	"github.com/NovaSeele/Seelegent/internal/pool"
 )
@@ -254,9 +255,25 @@ func computeAttention(t *Task, live liveState, acc accountHealth, now time.Time,
 		}
 		return att(api.AttentionInfo, ReasonReview, WhoLead, "")
 	case StatusFailed:
-		return att(api.AttentionBlocked, ReasonFailed, WhoLead, t.Error)
+		return att(api.AttentionBlocked, ReasonFailed, WhoLead, t.Error, failedParams(t.Error))
 	}
 	return nil
+}
+
+// failedParams are the params of a failed flag whose error says how the worker process ended (backend.exitText):
+// its kind, backend and exit code, which the dashboard words in the reader's language. nil for any other error,
+// which the dashboard shows as the daemon said it.
+func failedParams(msg string) *api.AttentionParams {
+	f, ok := backend.ReadExitText(msg)
+	if !ok {
+		return nil
+	}
+	p := &api.AttentionParams{Kind: f.Kind, Backend: f.Backend}
+	if f.Kind == backend.ExitError || f.Kind == backend.ExitNoResult {
+		code := f.Code
+		p.ExitCode = &code
+	}
+	return p
 }
 
 // gateDetail says in plain words which steps of a gate failed ("command failed: npm test; syntax check failed:
@@ -447,7 +464,8 @@ func sameParams(a, b *api.AttentionParams) bool {
 	}
 	return a.Kind == b.Kind && a.Minutes == b.Minutes && a.Count == b.Count && a.Steps == b.Steps &&
 		a.Tool == b.Tool && a.Command == b.Command && a.Backend == b.Backend && a.Task == b.Task &&
-		a.Title == b.Title && slices.Equal(a.Denied, b.Denied)
+		a.Title == b.Title && slices.Equal(a.Denied, b.Denied) &&
+		(a.ExitCode == nil) == (b.ExitCode == nil) && (a.ExitCode == nil || *a.ExitCode == *b.ExitCode)
 }
 
 // watchAttention re-checks running tasks for stalls every 30 s and finished ones for decayed flags every 10 min. It

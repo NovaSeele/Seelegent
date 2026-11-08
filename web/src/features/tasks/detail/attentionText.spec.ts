@@ -44,6 +44,23 @@ describe('attention text (F14)', () => {
     expect(view.why).toBe('The earlier task Add login (t-1) was rejected.')
   })
 
+  it('words how the worker ended from its code (design review)', async () => {
+    const failed = (params?: Attention['params']) =>
+      at({ reason: 'failed', detail: 'agy exited with code 0 and no result', params })
+    const view = await text(failed({ kind: 'no_result', backend: 'agy', exitCode: 0 }))
+    expect(view.why).toBe(
+      'agy ended its turn (exit code 0) without sending a result. The task failed. Look at the last turn, ' +
+        'then follow up or start it again.',
+    )
+    expect(view.said).toBe('')
+    expect(
+      (await text(failed({ kind: 'no_result', backend: 'agy', exitCode: 0 }), 'ja')).why,
+    ).toContain('終了コード 0')
+    // An error that is not how the process ended stays as the daemon said it.
+    const other = await text(failed())
+    expect(other.said).toBe('agy exited with code 0 and no result')
+  })
+
   it('does not stop twice after a title that is a sentence (design review)', async () => {
     const view = await text(
       at({

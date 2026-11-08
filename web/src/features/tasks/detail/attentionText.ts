@@ -83,10 +83,18 @@ export function attentionText(a: Attention, t: Translate, te: HasKey): Attention
     case 'verifier_rejected':
       out.quote = a.detail ?? ''
       return out
-    case 'failed':
+    case 'failed': {
+      // How the worker process ended, from its code (design review: "agy exited with code 0 and no result").
+      const exitKey = `task.attention.why.exit.${p?.kind ?? ''}`
+      if (p?.kind && te(exitKey)) {
+        const ended = t(exitKey, { backend: p.backend ?? '', code: p.exitCode ?? '' })
+        out.why = `${ended} ${why('failed')}`
+        return out
+      }
       out.why = why('failed')
       out.said = a.detail ?? ''
       return out
+    }
     case 'no_response':
       out.why = p?.denied?.length
         ? why('denied', { actions: p.denied.join(', ') })

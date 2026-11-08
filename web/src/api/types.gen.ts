@@ -2372,6 +2372,14 @@ export interface AttentionParams {
     | 'rejected'
     | 'failed'
     | 'cancelled'
+    | 'timeout'
+    | 'canceled'
+    | 'start_failed'
+    | 'launcher_lost'
+    | 'exit_error'
+    | 'no_result'
+  /** ExitCode is the worker process's exit code of a failed flag whose kind is exit_error or no_result. */
+  exitCode?: number
   minutes?: number
   count?: number
   /** Steps is how many recent tool calls a repeat was counted in. */

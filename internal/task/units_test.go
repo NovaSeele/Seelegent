@@ -96,6 +96,10 @@ func TestAttentionParams(t *testing.T) {
 		tu.N, tu.EndedAt = 1, now
 		return &Task{Status: StatusDone, Kind: KindNormal, UpdatedAt: now, Turns: []*Turn{tu}}
 	}
+	failed := func(msg string) *Task {
+		return &Task{Status: StatusFailed, Kind: KindNormal, Error: msg, UpdatedAt: now,
+			Turns: []*Turn{{N: 1, StartedAt: now, EndedAt: now}}}
+	}
 	failedCalls := make([]loopStep, loopErrors)
 	for i := range failedCalls {
 		failedCalls[i] = loopStep{key: fmt.Sprint(i), name: "run", failed: true}
@@ -133,6 +137,13 @@ func TestAttentionParams(t *testing.T) {
 			liveState{}, accountHealth{}, api.AttentionParams{Count: 2}},
 		{"at risk", done(&Turn{Response: "ok", WorkAtRisk: []api.RiskFile{{Path: "a"}, {Path: "b"}, {Path: "c"}}}),
 			liveState{}, accountHealth{}, api.AttentionParams{Count: 3}},
+		// Design review: a failed turn says how the worker ended as a code, not only in English.
+		{"no result", failed("agy exited with code 0 and no result"), liveState{}, accountHealth{},
+			api.AttentionParams{Kind: "no_result", Backend: "agy", ExitCode: new(0)}},
+		{"exit error", failed("claude exited with code 3: out of memory"), liveState{}, accountHealth{},
+			api.AttentionParams{Kind: "exit_error", Backend: "claude", ExitCode: new(3)}},
+		{"timeout", failed("codex was stopped at the turn's time limit"), liveState{}, accountHealth{},
+			api.AttentionParams{Kind: "timeout", Backend: "codex"}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

@@ -30,6 +30,14 @@
     "why": {
       "backgroundWait": "CLI của worker đang chờ một lệnh mà worker đã chạy nền. Nó chỉ im lặng, không bị kẹt.",
       "failed": "Tác vụ đã thất bại. Xem lượt cuối, rồi gửi tiếp yêu cầu hoặc chạy lại.",
+      "exit": {
+        "timeout": "{backend} đã bị dừng khi hết thời gian của lượt.",
+        "canceled": "{backend} đã bị huỷ.",
+        "start_failed": "Không khởi động được {backend}.",
+        "launcher_lost": "Tiến trình chạy {backend} đã biến mất trước khi ghi lại lượt kết thúc thế nào.",
+        "exit_error": "{backend} đã dừng với mã thoát {code}.",
+        "no_result": "{backend} đã kết thúc lượt (mã thoát {code}) mà không gửi kết quả."
+      },
       "noResponse": "Worker đã kết thúc lượt mà không có báo cáo.",
       "denied": "Worker đã kết thúc lượt mà không có báo cáo. Hành động bị từ chối: {actions}",
       "notStarted": "Worker chưa bắt đầu sau {minutes} phút kể từ khi khởi chạy.",

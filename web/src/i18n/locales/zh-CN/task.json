@@ -30,6 +30,14 @@
     "why": {
       "backgroundWait": "Worker CLI 正在等待 worker 在后台启动的命令。它只是安静，并没有卡住。",
       "failed": "任务失败了。先查看最后一轮，再追加说明或重新开始。",
+      "exit": {
+        "timeout": "{backend} 到达本轮时间上限，已被停止。",
+        "canceled": "{backend} 已取消。",
+        "start_failed": "无法启动 {backend}。",
+        "launcher_lost": "运行 {backend} 的进程在记录本轮如何结束之前消失了。",
+        "exit_error": "{backend} 以退出码 {code} 停止。",
+        "no_result": "{backend} 结束了本轮（退出码 {code}），但没有发送结果。"
+      },
       "noResponse": "Worker 结束了这一轮，但没有报告。",
       "denied": "Worker 结束了这一轮，但没有报告。被拒绝的操作：{actions}",
       "notStarted": "启动 {minutes} 分钟后 worker 仍未开始。",

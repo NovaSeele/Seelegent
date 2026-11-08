@@ -30,6 +30,14 @@
     "why": {
       "backgroundWait": "The worker CLI waits for a command the worker started in the background. It is quiet, not stuck.",
       "failed": "The task failed. Look at the last turn, then follow up or start it again.",
+      "exit": {
+        "timeout": "{backend} was stopped at the turn's time limit.",
+        "canceled": "{backend} was cancelled.",
+        "start_failed": "{backend} could not be started.",
+        "launcher_lost": "The process that ran {backend} disappeared before it recorded how the turn ended.",
+        "exit_error": "{backend} stopped with exit code {code}.",
+        "no_result": "{backend} ended its turn (exit code {code}) without sending a result."
+      },
       "noResponse": "The worker ended its turn without a report.",
       "denied": "The worker ended its turn without a report. Refused actions: {actions}",
       "notStarted": "The worker has not started {minutes} min after launch.",

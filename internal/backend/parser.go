@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -261,6 +262,53 @@ func exitText(name string, exit launch.Exit) string {
 		return fmt.Sprintf("%s exited with code %d: %s", name, exit.Code, exit.Error)
 	}
 	return fmt.Sprintf("%s exited with code %d and no result", name, exit.Code)
+}
+
+// Kinds of an ended process (ExitFailure.Kind), as exitText words them.
+const (
+	ExitTimeout      = "timeout"
+	ExitCanceled     = "canceled"
+	ExitStartFailed  = "start_failed"
+	ExitLauncherLost = "launcher_lost"
+	ExitError        = "exit_error"
+	ExitNoResult     = "no_result"
+)
+
+// ExitFailure is how a worker process ended, read back from the text exitText gave it, so that the dashboard can
+// word it in the reader's language from a code instead of showing the English.
+type ExitFailure struct {
+	Kind    string
+	Backend string
+	// Code is the exit code (exit_error and no_result).
+	Code int
+}
+
+var exitTexts = []struct {
+	kind string
+	re   *regexp.Regexp
+}{
+	{ExitTimeout, regexp.MustCompile(`^(\S+) was stopped at the turn's time limit$`)},
+	{ExitCanceled, regexp.MustCompile(`^(\S+) was canceled$`)},
+	{ExitStartFailed, regexp.MustCompile(`^(\S+) could not be started: `)},
+	{ExitLauncherLost, regexp.MustCompile(`^(\S+) launcher disappeared without an exit record$`)},
+	{ExitNoResult, regexp.MustCompile(`^(\S+) exited with code (-?\d+) and no result$`)},
+	{ExitError, regexp.MustCompile(`^(\S+) exited with code (-?\d+): `)},
+}
+
+// ReadExitText reads a failure message that exitText wrote (a task's error); ok is false for any other message.
+func ReadExitText(msg string) (f ExitFailure, ok bool) {
+	for _, e := range exitTexts {
+		m := e.re.FindStringSubmatch(msg)
+		if m == nil {
+			continue
+		}
+		f = ExitFailure{Kind: e.kind, Backend: m[1]}
+		if len(m) > 2 {
+			f.Code, _ = strconv.Atoi(m[2])
+		}
+		return f, true
+	}
+	return ExitFailure{}, false
 }
 
 // usageJSON is the union of the usage field names the CLIs use.
