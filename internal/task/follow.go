@@ -162,6 +162,12 @@ func (f *follower) line(stderr bool, line []byte, next int64) error {
 	for _, ev := range evs {
 		f.coll.Add(ev)
 		f.r.note(ev, now, replay)
+		if !replay && ev.Tool != nil && ev.Tool.Blocked {
+			// The whole refused command goes to the (redacted) daemon log: the task's events cut it short, which kept
+			// a false refusal from being understood (field report 4, F11).
+			f.s.log.Info("task: the git guard refused a command", "task", f.id, "turn", f.turn,
+				"command", ev.Tool.Command, "reason", ev.Tool.Output)
+		}
 	}
 	if !replay && f.r.activity() != before {
 		// The task's active step changed: the summary views show it (field report 4, F9: it stayed "starting" for

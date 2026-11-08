@@ -81,7 +81,11 @@ script that edits a file mentioning `git stash`, is data. Long options count by 
   inline code that starts programs), whether or not the same line runs git: they define aliases and settings that
   the alias lookup above does not see, for that command and every later git command of the same shell;
 - fail closed: a line that mentions git and cannot be read (an unclosed quote, a variable used as the git
-  subcommand or an option, nesting deeper than the limit).
+  subcommand or an option, nesting deeper than the limit). "Mentions git" is any `git` in the line, also once the
+  quotes and escape characters of every dialect are taken out, except inside the words `digit`, `legit`,
+  `.gitignore`, `.gitattributes`, `.gitkeep`, `github`, `gitlab` and `gitea`, which name no git program or folder
+  (field report 4, F11). The refusal quotes the place with some context (`mentions git: "…the digits and then git
+  stash…"`), and the daemon log keeps the whole refused command (the task's events cut it short).
 
 Every refusal starts with `Blocked by Seelegent` (`guard.Marker`). The backend parsers look for that text and mark
 the tool call `blocked`; the turn lists the command under `blockedCommands`, the report under `blocked_commands`,
