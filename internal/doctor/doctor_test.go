@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/NovaSeele/Seelegent/internal/config"
+	"github.com/NovaSeele/Seelegent/internal/platform"
 )
 
 func TestSmallChecks(t *testing.T) {
@@ -126,5 +127,57 @@ func TestDataDir(t *testing.T) {
 	}
 	if c := dataDir(p2, false); c.Status != Fail {
 		t.Errorf("a file = %+v", c)
+	}
+}
+
+func TestResourcesCheck(t *testing.T) {
+	set := config.Defaults()
+	// A 16 GB Windows machine with 24 GB of commit: auto minFreeMemoryMB 2048, minFreeCommitMB 2457.
+	read := func(phys, commit int64) func() platform.MemoryStatus {
+		return func() platform.MemoryStatus {
+			return platform.MemoryStatus{AvailPhysMB: phys, AvailCommitMB: commit, TotalPhysMB: 16384,
+				TotalCommitMB: 24576, Known: true}
+		}
+	}
+	if _, ok := resources(Options{Settings: set}, "windows"); ok {
+		t.Fatal("no reader: the check must be skipped")
+	}
+	c, _ := resources(Options{Settings: set, Memory: read(8000, 12000)}, "windows")
+	if c.Status != OK || !strings.Contains(c.Message, "one reading") ||
+		!strings.Contains(c.Message, "minFreeMemoryMB 2048, auto for this machine") ||
+		!strings.Contains(c.Message, "minFreeCommitMB 2457, auto") {
+		t.Errorf("enough memory: %+v", c)
+	}
+	// Physical below its threshold, commit fine: a range for minFreeMemoryMB and the commit hint.
+	c, _ = resources(Options{Settings: set, Memory: read(1500, 5000)}, "windows")
+	if c.Status != Warn || !strings.Contains(c.Message, "would wait") || !strings.Contains(c.Message, "single reading") ||
+		!strings.Contains(c.Fix, "minFreeMemoryMB somewhere around 512-1024 MB") ||
+		!strings.Contains(c.Fix, "stronger guard") || strings.Contains(c.Fix, "minFreeCommitMB somewhere") ||
+		!strings.Contains(c.Fix, "Auto goes back") {
+		t.Errorf("physical low: %+v", c)
+	}
+	// Both low, the commit threshold set by the user: a range for each.
+	set.MinFreeCommitMB = config.Int(4096)
+	c, _ = resources(Options{Settings: set, Memory: read(1500, 3000)}, "windows")
+	if c.Status != Warn || !strings.Contains(c.Fix, "minFreeCommitMB somewhere around 1280-2048 MB") ||
+		strings.Contains(c.Fix, "stronger guard") || !strings.Contains(c.Message, "minFreeCommitMB 4096, set by you") {
+		t.Errorf("both low: %+v", c)
+	}
+	// Commit unknown (not Windows) never warns for commit; thresholds off never warn.
+	c, _ = resources(Options{Settings: config.Defaults(), Memory: read(8000, 0)}, "linux")
+	if c.Status != OK || strings.Contains(c.Message, "commit") {
+		t.Errorf("commit unknown: %+v", c)
+	}
+	set.MinFreeMemoryMB, set.MinFreeCommitMB, set.CriticalFreeMemoryMB = config.Int(0), config.Int(0), config.Int(0)
+	if c, _ = resources(Options{Settings: set, Memory: read(100, 100)}, "windows"); c.Status != OK {
+		t.Errorf("thresholds off: %+v", c)
+	}
+	c, _ = resources(Options{Settings: set, Memory: func() platform.MemoryStatus { return platform.MemoryStatus{} }},
+		"windows")
+	if c.Status != OK || !strings.Contains(c.Message, "cannot be read") {
+		t.Errorf("unknown: %+v", c)
+	}
+	if lo, hi := memoryRange(300); lo != 256 || hi != 256 {
+		t.Errorf("memoryRange(300) = %d, %d", lo, hi)
 	}
 }
