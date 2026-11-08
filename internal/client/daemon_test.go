@@ -51,8 +51,25 @@ func testPaths(t *testing.T) config.Paths {
 	return p
 }
 
+// answerTimeout bounds a probe that is meant to get its answer (or a refusal). The probe timeout is wall-clock by
+// nature and only TestProbeTimeout is about it; anywhere else a tight one turned a slow answer on a loaded machine
+// into a "did not answer" (M18 G5: TestFind hit its 500 ms while other suites ran).
+const answerTimeout = 10 * time.Second
+
+// refusingClient refuses every call at once, as a port nothing listens on does, without the network: the deadline
+// tests then measure only the waits they are about.
+func refusingClient() *http.Client {
+	return &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		return nil, errors.New("connection refused (test)")
+	})}
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
 func newTestDaemon(t *testing.T, port int, start StartFunc) *Daemon {
-	return NewDaemon(DaemonOptions{Paths: testPaths(t), Port: port, Start: start, ProbeTimeout: 500 * time.Millisecond,
+	return NewDaemon(DaemonOptions{Paths: testPaths(t), Port: port, Start: start, ProbeTimeout: answerTimeout,
 		StartTimeout: 5 * time.Second, PollInterval: 20 * time.Millisecond})
 }
 
@@ -246,7 +263,7 @@ func TestFindThroughPortFile(t *testing.T) {
 	writePortFile(t, paths, running)
 	holdLock(t, paths)
 	started := false
-	d := NewDaemon(DaemonOptions{Paths: paths, Port: configured, ProbeTimeout: 500 * time.Millisecond,
+	d := NewDaemon(DaemonOptions{Paths: paths, Port: configured, ProbeTimeout: answerTimeout,
 		Start: func(context.Context) (<-chan error, error) { started = true; return nil, nil }})
 	c, err := d.Ensure(t.Context())
 	if err != nil || started || c.BaseURL() != "http://127.0.0.1:"+strconv.Itoa(running) {
@@ -290,7 +307,7 @@ func TestStalePortFile(t *testing.T) {
 			}
 			var starts atomic.Int32
 			var early atomic.Bool
-			d := NewDaemon(DaemonOptions{Paths: paths, Port: configured, ProbeTimeout: 500 * time.Millisecond,
+			d := NewDaemon(DaemonOptions{Paths: paths, Port: configured, ProbeTimeout: answerTimeout,
 				StartTimeout: 5 * time.Second, PollInterval: 20 * time.Millisecond,
 				Start: func(context.Context) (<-chan error, error) {
 					starts.Add(1)
@@ -316,7 +333,7 @@ func TestStartWaitsForLockHolder(t *testing.T) {
 		port := freePort(t)
 		holdLock(t, paths)
 		var starts atomic.Int32
-		d := NewDaemon(DaemonOptions{Paths: paths, Port: port, ProbeTimeout: 500 * time.Millisecond,
+		d := NewDaemon(DaemonOptions{Paths: paths, Port: port, ProbeTimeout: answerTimeout,
 			StartTimeout: 5 * time.Second, PollInterval: 20 * time.Millisecond,
 			Start: func(context.Context) (<-chan error, error) { starts.Add(1); return make(chan error), nil }})
 		time.AfterFunc(300*time.Millisecond, func() { listenOn(t, port, healthHandler(api.APIVersion, paths.Home)) })
@@ -347,7 +364,12 @@ func TestStartWaitsForLockHolder(t *testing.T) {
 }
 
 // TestStartOneDeadline: a start that first waits for another process holding the start lock, and then for a
-// daemon that holds its lock without answering, stays within one StartTimeout instead of adding the two waits.
+// daemon that holds its lock without answering, ends at its one deadline instead of adding the two waits.
+//
+// It asserts order and outcome, not a wall-time window (M18 G5: the old 0.9..1.4 s window failed at 2.3 s under
+// load). The deadline is 1 s away but StartTimeout is an hour: a phase that took a fresh StartTimeout instead of
+// the shared deadline would wait an hour, so "returned at or after the deadline, within a minute" tells the two
+// apart however slow the machine is. Probes are refused at once, so no probe timeout is in play.
 func TestStartOneDeadline(t *testing.T) {
 	paths := testPaths(t)
 	holdLock(t, paths)
@@ -355,19 +377,28 @@ func TestStartOneDeadline(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	time.AfterFunc(500*time.Millisecond, func() { _ = other.Unlock() })
+	var released atomic.Bool
+	time.AfterFunc(500*time.Millisecond, func() { released.Store(true); _ = other.Unlock() })
 	var starts atomic.Int32
-	d := NewDaemon(DaemonOptions{Paths: paths, Port: freePort(t), ProbeTimeout: 200 * time.Millisecond,
-		StartTimeout: time.Second, PollInterval: 20 * time.Millisecond,
+	d := NewDaemon(DaemonOptions{Paths: paths, Port: freePort(t), HTTPClient: refusingClient(),
+		ProbeTimeout: answerTimeout, StartTimeout: time.Hour, PollInterval: 20 * time.Millisecond,
 		Start: func(context.Context) (<-chan error, error) { starts.Add(1); return make(chan error), nil }})
-	begun := time.Now()
-	_, err = d.Ensure(t.Context())
-	took := time.Since(begun)
-	if !errors.Is(err, ErrNotRunning) || starts.Load() != 0 || !strings.Contains(err.Error(), "holds its lock") {
-		t.Fatalf("ensure = %v (starts %d)", err, starts.Load())
+	end := time.Now().Add(time.Second)
+	done := make(chan error, 1)
+	go func() { _, err := d.start(t.Context(), end); done <- err }()
+	select {
+	case err = <-done:
+	case <-time.After(time.Minute):
+		t.Fatal("the start is still waiting a minute after its 1s deadline: a phase took a fresh StartTimeout")
 	}
-	if took < 900*time.Millisecond || took > 1400*time.Millisecond {
-		t.Fatalf("the start took %s, want about the 1s StartTimeout", took)
+	if !errors.Is(err, ErrNotRunning) || starts.Load() != 0 || !strings.Contains(err.Error(), "holds its lock") {
+		t.Fatalf("start = %v (starts %d)", err, starts.Load())
+	}
+	if !released.Load() {
+		t.Fatal("the start ended before the other process freed the start lock: it never waited for the holder")
+	}
+	if time.Now().Before(end) {
+		t.Fatal("the start gave up before its deadline")
 	}
 }
 
@@ -462,12 +493,15 @@ func TestWithEnv(t *testing.T) {
 // TestEnsureOneDeadlineInProcess (old F11): a call that arrives while another call of this process is starting the
 // daemon waits for it at most until its own StartTimeout ends, instead of waiting without a bound and then taking a
 // fresh StartTimeout.
+//
+// The first start hangs until the test ends, so the unbounded wait of F11 would never return: the bound below only
+// has to tell "about a second" from "never" (M18 G5: the old 0.9..1.5 s window was too tight under load).
 func TestEnsureOneDeadlineInProcess(t *testing.T) {
 	release := make(chan struct{})
 	defer close(release)
 	var starts atomic.Int32
-	d := NewDaemon(DaemonOptions{Paths: testPaths(t), Port: freePort(t), ProbeTimeout: 200 * time.Millisecond,
-		StartTimeout: time.Second, PollInterval: 20 * time.Millisecond,
+	d := NewDaemon(DaemonOptions{Paths: testPaths(t), Port: freePort(t), HTTPClient: refusingClient(),
+		ProbeTimeout: answerTimeout, StartTimeout: time.Second, PollInterval: 20 * time.Millisecond,
 		Start: func(ctx context.Context) (<-chan error, error) {
 			starts.Add(1)
 			select { // a start that hangs, holding the in-process semaphore
@@ -481,14 +515,21 @@ func TestEnsureOneDeadlineInProcess(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	begun := time.Now()
-	_, err := d.Ensure(t.Context())
+	done := make(chan error, 1)
+	go func() { _, err := d.Ensure(t.Context()); done <- err }()
+	var err error
+	select {
+	case err = <-done:
+	case <-time.After(time.Minute):
+		t.Fatal("the second call is still waiting for the first start: its wait has no bound")
+	}
 	took := time.Since(begun)
 	if !errors.Is(err, ErrNotRunning) || !strings.Contains(err.Error(), "another start of the Seelegent daemon in "+
 		"this process") || starts.Load() != 1 {
 		t.Fatalf("second ensure = %v (starts %d)", err, starts.Load())
 	}
-	if took < 900*time.Millisecond || took > 1500*time.Millisecond {
-		t.Fatalf("the second call took %s, want about the 1s StartTimeout", took)
+	if took < time.Second {
+		t.Fatalf("the second call gave up after %s, before its 1s StartTimeout", took)
 	}
 }
 
