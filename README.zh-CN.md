@@ -1,14 +1,17 @@
 <div align="center">
 
-<img src="docs/media/logo.svg" alt="Seelegent" width="344">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/media/logo-dark.svg">
+  <img src="docs/media/logo-light.svg" alt="Seelegent" width="372">
+</picture>
 
 **一个主导 agent 负责规划和审阅，运行在你自己账号上的编程 CLI 负责写代码。**
 
-[安装](#安装) · [快速上手](#快速上手) · [使用指南](docs/usage.md) · [文档](docs/README.md) ·
+[安装](#安装)&nbsp;· [快速上手](#快速上手)&nbsp;· [使用指南](docs/usage.md)&nbsp;· [文档](docs/README.md)&nbsp;·
 [参与贡献](CONTRIBUTING.md)
 
-[English](README.md) · [Tiếng Việt](README.vi.md) · **简体中文** · [Español](README.es.md) ·
-[한국어](README.ko.md) · [日本語](README.ja.md) · [Русский](README.ru.md)
+[English](README.md)&nbsp;· [Tiếng Việt](README.vi.md)&nbsp;· **简体中文**&nbsp;· [Español](README.es.md)&nbsp;·
+[한국어](README.ko.md)&nbsp;· [日本語](README.ja.md)&nbsp;· [Русский](README.ru.md)
 
 [![License: FSL-1.1-ALv2](https://img.shields.io/badge/license-FSL--1.1--ALv2-blue)](LICENSE)
 [![Latest release](https://img.shields.io/github/v/release/NovaSeele/Seelegent)](https://github.com/NovaSeele/Seelegent/releases/latest)
@@ -18,6 +21,7 @@
 
 </div>
 
+<!-- Hero: at publish time, replace this block with the uploaded user-attachments video URL on its own line. -->
 <p align="center">
   <a href="docs/media/hero.mp4"><img src="docs/media/hero.webp" width="900"
     alt="主导 agent 通过 Seelegent 委派任务；仪表盘显示 worker 的步骤、关卡和 diff"></a>
@@ -49,14 +53,10 @@ profile 中进行的普通 CLI 调用，每个账号仍须遵守对应服务商�
   2 到 5 个变体的竞赛，在各自的 worktree 中运行。→ [团队](docs/team.md)
 - **从 issue 到草稿 pull request，或按计划执行。** 把 GitHub issue 分拣为拥有独立 worktree 和分支的工单，在扫描机密后
   创建草稿 pull request，并按计划运行已保存的委派。→ [GitHub](docs/github.md) · [自动化](docs/automations.md)
-- **按你的机器调整。** 关卡并发数、内存阈值和测试并行度都根据本机的内存和 CPU 计算；你可以在 **设置 › 资源**
-  中单独设定任意一项，或恢复为自动。→ [资源](docs/configuration.md#resources)
-- **一条命令完成设置，另一条命令完成检查。** `seelegent setup` 把 MCP 服务器和 lead skill 注册到九种 lead 宿主，
-  `seelegent doctor` 检查安装情况并说明如何修复失败项。→ [设置](docs/setup.md) · [doctor](docs/cli.md#doctor)
 
 ### 实际效果
 
-点击每张预览图可观看一段短视频。
+点击每张预览图可观看一段短视频；[使用指南](docs/usage.md) 里还有更多。
 
 <table>
   <tr>
@@ -75,38 +75,18 @@ profile 中进行的普通 CLI 调用，每个账号仍须遵守对应服务商�
       <b>任务详情</b>
     </td>
     <td width="50%" align="center">
-      <a href="docs/media/accounts.mp4"><img src="docs/media/accounts.webp" alt="账号页面的配额窗口和登录"></a><br>
-      <b>账号与配额</b>
-    </td>
-  </tr>
-  <tr>
-    <td width="50%" align="center">
       <a href="docs/media/gates-proof.mp4"><img src="docs/media/gates-proof.webp" alt="未通过的关卡作为修复轮次退回 worker；证据页面"></a><br>
       <b>关卡与证据</b>
     </td>
+  </tr>
+  <tr>
     <td width="50%" align="center">
       <a href="docs/media/git-guard.mp4"><img src="docs/media/git-guard.webp" alt="Git 保护拒绝一条危险的 git 命令；恢复有风险的文件"></a><br>
       <b>Git 保护与恢复</b>
     </td>
-  </tr>
-  <tr>
     <td width="50%" align="center">
       <a href="docs/media/team.mp4"><img src="docs/media/team.webp" alt="成员、咨询、会议和竞赛"></a><br>
       <b>团队</b>
-    </td>
-    <td width="50%" align="center">
-      <a href="docs/media/github-automations.mp4"><img src="docs/media/github-automations.webp" alt="issue 分拣为工单和草稿 pull request；自动化计划"></a><br>
-      <b>GitHub 与自动化</b>
-    </td>
-  </tr>
-  <tr>
-    <td width="50%" align="center">
-      <a href="docs/media/resources.mp4"><img src="docs/media/resources.webp" alt="设置 › 资源：本机的自动值、设置与使用自动"></a><br>
-      <b>资源</b>
-    </td>
-    <td width="50%" align="center">
-      <a href="docs/media/setup-doctor.mp4"><img src="docs/media/setup-doctor.webp" alt="seelegent setup 注册 lead 宿主；seelegent doctor 检查安装"></a><br>
-      <b>设置与 doctor</b>
     </td>
   </tr>
 </table>
@@ -143,9 +123,11 @@ lead 宿主运行 `seelegent setup`。完成后请打开新的终端并重启 le
 
 ## 快速上手
 
-1. **检查安装：** `seelegent doctor`。全新安装出现 `warn` 是正常的；`fail` 会附带修复方法。
-2. **连接 lead 宿主：** 安装脚本已经运行过 `seelegent setup`，它会把 `seelegent` MCP 服务器添加到找到的每个 lead
-   宿主，并安装 lead skill。安装新宿主后请再运行一次（`--dry-run` 先预览改动，`--remove` 撤销），然后重启宿主。
+1. **检查安装：** `seelegent doctor` 检查安装情况并说明如何修复失败项。全新安装出现 `warn` 是正常的；`fail` 会附带
+   修复方法。
+2. **连接 lead 宿主：** 安装脚本已经运行过 `seelegent setup`，它会把 `seelegent` MCP 服务器和 lead skill 注册到找到
+   的每个 lead 宿主（它支持九种宿主）。安装新宿主后请再运行一次（`--dry-run` 先预览改动，`--remove` 撤销），然后
+   重启宿主。→ [设置](docs/setup.md)
 3. **添加账号：** `seelegent ui` 会在需要时启动守护进程，并打开 http://127.0.0.1:47821/。在 **账号** 页面选择
    **添加账号**，选好后端和类型，再点 **登录**：运行的是 worker CLI 自己的登录流程，在浏览器或终端窗口中完成，
    Seelegent 永远看不到你的密码。
@@ -155,6 +137,12 @@ lead 宿主运行 `seelegent setup`。完成后请打开新的终端并重启 le
 
 [使用指南](docs/usage.md)（英文）按任务讲解日常用法，[docs/getting-started.md](docs/getting-started.md)（英文）
 详细讲解第一次运行的每一步。
+
+## 配置
+
+设置位于仪表盘的 **设置** 对话框和 `~/.seelegent/config.json` 中。关卡并发数、内存阈值和测试并行度默认根据本机的
+内存和 CPU 计算；你可以在 **设置 › 资源** 中单独设定任意一项，或恢复为自动。→
+[配置](docs/configuration.md) · [资源](docs/configuration.md#resources)
 
 ## 工作原理
 
@@ -175,133 +163,33 @@ flowchart LR
   守护进程会重新接管仍在运行的 worker。
 - **Worker** 就是你已经在用的 CLI，每个账号一个独立的 profile 文件夹。账号在任务中途用完配额时，会休息到配额窗口
   重置，任务则带着交接信息转到另一个账号。
-- **仪表盘**（http://127.0.0.1:47821/）包括监控、任务、Issue、会议、竞赛、自动化、证据、账号、用量、角色和成员页面，
-  以及可搜索的设置对话框。它提供 26 种配色主题、七种界面语言、命令面板（`Ctrl+K`，macOS 上为 `Cmd+K`）和键盘
-  快捷键，内嵌在二进制文件中，不从互联网加载任何内容。
-- **命令行。** 除 `profiles` 外，每个 MCP 工具都有对应命令（worker 角色在 **角色** 页面和通过 `profiles` 工具编辑），
-  所有命令都支持 `--json`：见 `seelegent --help` 和 [docs/cli.md](docs/cli.md)。
+- **仪表盘**（http://127.0.0.1:47821/）内嵌在二进制文件中，不从互联网加载任何内容。它提供七种语言，默认跟随浏览器的
+  语言，除非你在 **设置 › 语言** 中另选一种。除 `profiles` 外，每个 MCP 工具都有对应的 `seelegent` 命令
+  （[docs/cli.md](docs/cli.md)）。
 
-### 一个任务会经历什么
-
-**账号。** 三种后端（`agy`、`claude`、`codex`）和三种账号：带独立登录的隔离 profile、本机已有的登录（仅 `agy`），
-或某个提供方的 API 密钥（仅 `claude` 和 `codex`：Anthropic、DeepSeek、Moonshot Kimi、Z.ai GLM、OpenRouter、OpenAI、
-Groq、本地 Ollama，或自定义端点）。账号池读取每个账号的配额窗口，优先选择优先级更高、运行中任务更少、剩余配额更多
-的账号。模型档位 `fast`、`standard`、`strong` 和 `max` 按后端映射到实际模型。
-
-**任务。** 一个任务就是一段对话：先 `delegate`，再按需多次 `followup`，最后用 `review` 给出 `accepted` 或
-`rejected`。任务可以并行运行，可以互相等待（`after`），每份 brief 都附带项目记忆和审阅历史，可以按某个 worker 角色
-运行（规则、输出风格、技能、默认档位），也可以只传 Spec Kit 的功能文件夹和任务编号，而不必传整份 spec。停滞、
-陷入循环或提出问题的任务会提前唤醒 lead；需要你处理的任务（需要登录、没有可用账号）会排在仪表盘最前面。你还可以在
-控制台中 **接管** 任务，之后再交还给 worker。
-
-**关卡、通道与证据。** worker 每次报告后，守护进程都会运行任务的关卡：lead 给的命令、spec 中的 `Gate:` 行或在仓库中
-检测到的测试、lint、构建命令，以及项目准则、语法检查和卫生检查。关卡未通过时，会作为自动修复轮次退回给 worker
-（默认 2 次），之后才唤醒 lead。通道列出任务可以修改的文件，让并行的 worker 互不踩踏。可选的二次审查会在关卡通过
-后以只读方式再审一遍。
-
-**团队、GitHub 与自动化。** 成员是有名字的 worker，带有后端、模型或档位、角色和级别（`worker`、`senior`、`peer`）；
-在咨询中，同级成员的反对意见在 lead 答复之前会阻止接受。事件钩子会在任务、账号和守护进程的事件发生时运行你自己的
-shell 命令。已连接仓库的 issue 会变成工单；工作被接受后，Seelegent 提交、推送工单分支、创建草稿 pull request，并跟踪
-其 CI 检查。已登录 `gh` 时使用 `gh`，否则使用你在仪表盘中保存的 token，再否则使用带比较链接的手动模式。自动化按计划
-运行（每小时、每天、工作日、每周或 cron，可指定时区），可以带预检命令和配额规则。
-
-### 供 lead 使用的 MCP 工具
-
-| 工具 | 作用 |
-|---|---|
-| `delegate` | 启动任务（或竞赛）并等待 worker 的报告。 |
-| `wait` | 等待一个或多个任务；`any: true` 在第一个完成时返回。 |
-| `followup` | 给任务发送下一条指示或修改要求。 |
-| `review` | 以 `accepted` 或 `rejected` 结束任务，并附备注。 |
-| `cancel` | 停止运行中或排队中的任务。 |
-| `task` | 任务的报告及 worker 最近的步骤。 |
-| `status` | 账号与配额、活动任务、后端。 |
-| `memory` | 按项目保存、会写入每份 brief 的笔记。 |
-| `profiles` | Worker 角色：规则、输出风格、技能、默认档位。 |
-| `proof` | 需求矩阵、回归运行、通道占用、统计。 |
-| `members` | 部门成员。 |
-| `consult` | 由资深或同级成员对已完成任务给出第二意见。 |
-| `notes` | 任务 diff 上的审阅备注，作为一次追加要求发送。 |
-| `meeting` | 决策前由成员参加的结构化会议。 |
-| `contest` | 跟进竞赛，选出胜者。 |
-| `issues` | 把 GitHub issue 变成工单、worktree 和草稿 pull request。 |
-| `automations` | 按计划执行的委派。 |
-
-`seelegent setup` 还会安装 lead skill，教 lead 掌握这个循环；`seelegent skill` 可以打印它。详情见
-[docs/mcp.md](docs/mcp.md)。
+[使用指南](docs/usage.md#what-a-task-goes-through)（英文）说明一个任务会经历什么，并列出全部 17 个 MCP 工具。
 
 ## 安全
 
-worker 工作的文件夹里，往往有你和其他 worker 尚未提交的改动。Seelegent 分层保护这些改动；任何一层都不会单独判定
-任务失败，而是告诉 lead 和仪表盘发生了什么。见 [docs/safety.md](docs/safety.md)。
-
-- **Git 保护。** worker 无法运行可能丢掉未提交改动或改写历史的 git 命令：`reset`、`restore`、`stash`、`checkout`
-  （用 `checkout -b` 创建分支除外）、`switch`、`clean`、`rebase`、`merge`、`pull`、`push`、`commit -a` 和
-  `--amend` 等等，藏在 `bash -c`、PowerShell、管道传给 shell 的命令或 git 别名里也一样。lead 可以用 `allow_git`
-  为一轮解除保护。
-- **快照。** 每轮前后，Seelegent 都会记录仓库中未提交的文件，而不触碰你的 index、stash 或 ref。本轮可能弄丢的文件
-  会显示为 *有风险*，可以在仪表盘中恢复，或使用 `seelegent restore` 命令。
-- **轮后检查。** 换行符或 BOM 的变化、多余文件、写到项目之外的内容，以及与其他任务的重叠，都会在任务上报告。
-- **worker 做不到的事。** worker 无法调用 Seelegent 本身（不能创建、修改或审阅任务），不能开启自动化，也不能保存
-  GitHub token。后两件事只有你能在仪表盘中完成。
-- **推送之前。** Seelegent 只推送它自己创建的一个提交，从不推送 worker 的提交，并且会先扫描要加入的每个文件：
-  `.env` 文件、密钥和证书、凭据文件、内容中的 token、`nul` 之类的 Windows 设备名以及超过 5 MB 的文件都会让推送被
-  拒绝，且无法绕过。它从不强制推送、合并或关闭 issue。
-- **自动化默认关闭。** 每个自动化创建时都是关闭的。只有在你于仪表盘中确认了它具体要做什么之后才会运行；对运行内容
-  或时间的任何改动都会让它再次关闭。
-
-这些是防护，而不是沙箱：worker CLI 以你的用户身份运行。请审阅它们改动的内容。报告安全问题请见
-[SECURITY.md](SECURITY.md)。
+Git 保护会拒绝可能丢掉未提交改动的 git 命令，每轮前后的快照让你能恢复本轮可能弄丢的内容，Seelegent 在推送工单分支
+前还会扫描每个文件。这些是防护，而不是沙箱：worker CLI 以你的用户身份运行，请审阅它们改动的内容。见
+[docs/safety.md](docs/safety.md)；报告安全问题请见 [SECURITY.md](SECURITY.md)。
 
 ## 数据与隐私
 
-- 一切都在你的机器上运行。守护进程只监听 `127.0.0.1`。Seelegent 本身不发送任何遥测；各 worker CLI 遵循它们自己的
-  设置。
-- 数据位于 `~/.seelegent`（设置 `SEELEGENT_HOME` 可以改位置）：`config.json`（设置）、`seelegent.db`（任务、账号、
-  用量、团队、工单、自动化）、`profiles/`（每个账号一个隔离 profile，含其 API 密钥）、`github/`（token）、
-  `snapshots/`、`contests/`（保存的竞赛 diff）、`worktrees/`（仅用于竞赛和工单）、`run/` 和 `logs/`。见
-  [docs/configuration.md](docs/configuration.md)。
-- Seelegent 从不索要密码。每个 worker CLI 用自己的流程登录，并把 token 保存在账号的 profile 中。API 密钥和 GitHub
-  token 各自存放在单独的文件里：在 Windows 上用 DPAPI 加密，在其他系统上是仅所有者可读（0600）的明文；仪表盘只显示
-  最后四个字符，日志会遮盖所有机密。
-- 会离开本机的内容：worker CLI 与各自的服务商通信（这就是工作本身）；配额通过 CLI 读取（对于 Claude 登录账号，则用
-  该账号自己的登录信息访问 Anthropic 的用量接口）；API 密钥账号调用你配置的提供方；GitHub 只会因你连接的仓库而被
-  访问（同步、每 10 分钟轮询一次 issue 和 pull request，可用 `githubPollMinutes: 0` 关闭，以及你或 lead 要求的推送、
-  pull request 和评论），以及在你打开 **Issue** 页面时检查你的 GitHub 登录；此外还有安装脚本和 `seelegent update`。
+一切都在你的机器上运行：守护进程只监听 `127.0.0.1`，Seelegent 不发送遥测，也从不索要密码。数据位于 `~/.seelegent`
+（可用 `SEELEGENT_HOME` 改位置）。其中保存了什么、哪些内容会离开本机，见 [使用指南](docs/usage.md#data-and-privacy)。
 
 ## 更新与卸载
 
-`seelegent update` 告诉你是否有新版本；`seelegent update --apply` 就地安装（用 `checksums.txt` 校验、重启守护进程、
-刷新 lead 宿主），`seelegent update --rollback` 可回退一次。数据库从不向后迁移，所以比你的数据更旧的版本会被拒绝。
-见 [docs/release.md](docs/release.md#updating)。
-
-卸载步骤：
-
-1. `seelegent stop`，然后 `seelegent setup --remove`（移除 MCP 条目、lead skill 和钩子）。
-2. 删除二进制文件及其旁边保留的 `seelegent.exe.previous`（`seelegent.previous`）：Windows 上在
-   `%LOCALAPPDATA%\Programs\seelegent\bin\`，其他系统是 `~/.local/bin/seelegent*`。再把该文件夹从 PATH 中移除
-   （Windows 上是用户的 `Path`，其他系统是安装脚本加到 shell 配置文件中的 `export PATH=...` 那一行）。
-3. 可选：删除 `~/.seelegent`。其中有你的账号 profile（及其登录信息）、密钥、任务和历史。
-
-### 从旧版本迁移
-
-旧的 Node 版本把数据放在同一个文件夹。首次安装时，安装脚本会运行 `seelegent migrate`，导入设置、提供方、账号（含
-profile 和 API 密钥）、项目记忆和审阅历史、角色、成员、钩子、会议记录和自动化（所有自动化都处于关闭状态，需要重新
-确认）。任务、审阅备注、竞赛、证据记录、用量历史和 GitHub 文件夹不会导入：请重新连接仓库并重新保存 token。旧文件夹
-永远不会被修改。在 Windows 上，如果安装文件夹中有旧的启动器，它会保留为 `seelegent-node`。安装前请先停止旧的守护
-进程，并可运行 `seelegent migrate --dry-run` 预览将导入的内容。见 [docs/setup.md](docs/setup.md#seelegent-migrate)。
+`seelegent update --apply` 就地安装新版本，`seelegent update --rollback` 可回退一次。删除二进制文件之前，先用
+`seelegent setup --remove` 撤销宿主注册。完整步骤以及从旧的 Node 版本迁移，见
+[使用指南](docs/usage.md#update-and-uninstall)。
 
 ## 故障排查
 
-- `seelegent doctor` 检查数据文件夹、设置、数据库、守护进程、git、每个已启用的 worker CLI、账号、PATH，以及空闲内存
-  是否高于资源阈值，并说明如何修复失败项。除了在数据文件夹中做一次写入测试（`.doctor-write-test`，随后删除）之外，
-  它不会改动任何东西。
-- `seelegent status` 显示守护进程、账号及配额，以及需要你处理的任务；`seelegent restart` 重启守护进程。日志位于
-  `~/.seelegent/logs/daemon.log`。
-- `seelegent setup --dry-run` 显示各 lead 宿主上已注册的内容。运行 setup 或更新后请重启宿主。
-- “Seelegent is not available inside a Seelegent worker.” 表示某个 worker 试图调用 Seelegent，这是有意拒绝的。
-- 处于 **需要你处理** 的任务会在横幅上说明原因：回答它的问题、登录一个账号、恢复有风险的文件，或在关卡未通过时
-  追加要求。
+先运行 `seelegent doctor`，再运行 `seelegent status`；守护进程日志位于 `~/.seelegent/logs/daemon.log`。处于
+**需要你处理** 的任务会在横幅上说明该做什么。更多见 [使用指南](docs/usage.md#doctor-and-troubleshooting)。
 
 ## 文档
 
