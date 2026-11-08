@@ -127,35 +127,43 @@ func TestWorkerDataFolder(t *testing.T) {
 	}
 }
 
-// Every worker brief keeps the worker out of Seelegent's data folder (field report 4, F10), with or without an
-// exception: each worker-brief golden carries exactly one data-folder rule, naming ~/.seelegent when the data
-// folder is unknown. The readonly-* goldens are ReadOnlyRun prompts (consults, meetings), which carry none of the
-// worker rules.
+// Every prompt that starts a worker's or a read-only member's conversation keeps it out of Seelegent's data folder
+// (field report 4, F10), with or without an exception: each golden (worker briefs and ReadOnlyRun prompts of
+// consults, meetings and judges) carries exactly one data-folder rule line, naming ~/.seelegent when the data
+// folder is unknown.
 func TestEveryGoldenHasDataRule(t *testing.T) {
 	files, err := filepath.Glob(filepath.Join("testdata", "*.golden"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	briefs := 0
+	briefs, runs := 0, 0
 	for _, f := range files {
 		data, err := os.ReadFile(f)
 		if err != nil {
 			t.Fatal(err)
 		}
 		text := strings.ReplaceAll(string(data), "\r\n", "\n")
-		if !strings.HasPrefix(text, rulesHead) {
-			continue
+		switch {
+		case strings.HasPrefix(text, rulesHead):
+			briefs++
+		case strings.HasPrefix(text, PlanRule(true)), strings.HasPrefix(text, PlanRule(false)):
+			runs++
 		}
-		briefs++
-		if n := strings.Count(text, "\n- Do not explore "); n != 1 {
+		n := 0
+		for _, line := range strings.Split(text, "\n") {
+			if strings.HasPrefix(line, "Do not explore ") || strings.HasPrefix(line, "- Do not explore ") {
+				n++
+			}
+		}
+		if n != 1 {
 			t.Errorf("%s: %d data-folder rules", f, n)
 		}
 		if !strings.Contains(text, " or Seelegent's processes; inside it, ") {
 			t.Errorf("%s: the data-folder rule lost its wording", f)
 		}
 	}
-	if briefs < 7 {
-		t.Errorf("only %d of %d goldens are worker briefs", briefs, len(files))
+	if briefs < 7 || runs < 2 || briefs+runs != len(files) {
+		t.Errorf("%d worker briefs and %d read-only runs among %d goldens", briefs, runs, len(files))
 	}
 }
 
@@ -269,19 +277,24 @@ func TestWorkerPlanRulePerBackend(t *testing.T) {
 	}
 }
 
-// A hidden read-only run starts with the plan rule of its backend; a codex run is also told to take its citation
+// A hidden read-only run starts with the plan rule of its backend and the data-folder rule (F10: a read-only member
+// can explore ~/.seelegent and the daemon's processes like a worker); a codex run is also told to take its citation
 // line numbers from rg -n, so its [path:line] citations verify.
 func TestReadOnlyRun(t *testing.T) {
 	const body = "You are P1, a peer.\n\n## Question\nShould the pool retry?"
-	codex := ReadOnlyRun(body, true)
+	codex := ReadOnlyRun(body, true, "", "/work/app")
 	golden(t, "readonly-codex", codex)
 	if !strings.HasPrefix(codex, PlanRule(true)+" ") || !strings.Contains(codex, "citations from `rg -n`") ||
-		!strings.HasSuffix(codex, "\n\n"+body) {
+		!strings.HasSuffix(codex, "\n"+DataRule("", "/work/app", "")+"\n\n"+body) ||
+		!strings.Contains(codex, "Do not explore ~/.seelegent or Seelegent's processes") {
 		t.Errorf("codex run:\n%s", codex)
 	}
-	tools := ReadOnlyRun(body, false)
+	data := "/home/u/.seelegent"
+	ws := data + "/specs/app-spec"
+	tools := ReadOnlyRun(body, false, data, ws)
 	golden(t, "readonly-file-tools", tools)
-	if tools != PlanRule(false)+"\n\n"+body {
-		t.Errorf("agy/claude run:\n%s", tools)
+	if rule := DataRule(data, ws, ""); tools != PlanRule(false)+"\n"+rule+"\n\n"+body ||
+		!strings.HasSuffix(rule, "inside it, work only in "+ws+".") {
+		t.Errorf("agy/claude run in the data folder:\n%s", tools)
 	}
 }

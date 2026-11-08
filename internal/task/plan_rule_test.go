@@ -105,7 +105,8 @@ func TestConsultCodexMemberPrompt(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !strings.HasPrefix(prompt, brief.ReadOnlyRun("", c.codex)) || !strings.Contains(prompt, "## Verdict") {
+		if !strings.HasPrefix(prompt, brief.PlanRule(c.codex)) || !strings.Contains(prompt, "## Verdict") ||
+			!strings.Contains(prompt, "\nDo not explore ~/.seelegent or Seelegent's processes") {
 			t.Errorf("%s consult prompt:\n%s", c.member, prompt)
 		}
 		if strings.Contains(prompt, "`rg -n`") != c.codex || strings.Contains(prompt, "file tools") == c.codex {

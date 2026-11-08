@@ -59,11 +59,16 @@ type segment struct {
 	stdin []string
 	// redirs are the targets of the command's output redirections (> file, >> file), in order (Writes).
 	redirs []word
+	// list numbers the command list the command belongs to: 0 for the line itself, another number for each
+	// subshell, substitution, PowerShell block or nested text (Writes: a cd inside one does not reach past it).
+	list int
 }
 
 // state is shared by a parser and the parsers of the substitutions it reads.
 type state struct {
 	out []*segment
+	// lists counts the command lists read so far (segment.list).
+	lists int
 	// heredocs are the byte ranges of the line that hold here-document bodies with their closing delimiter lines
 	// (POSIX only, and only those of the line itself, not of a nested script).
 	heredocs [][2]int
@@ -155,6 +160,8 @@ type compound struct {
 
 // list reads commands until term (0: the end of the text). The terminator is consumed.
 func (p *parser) list(term byte) error {
+	lid := p.st.lists
+	p.st.lists++
 	cur := &segment{}
 	var prev *segment
 	// group is a subshell or brace group that just closed: a | right after it pipes the output of its commands.
@@ -184,6 +191,7 @@ func (p *parser) list(term byte) error {
 	flush := func(piped bool) {
 		var closed *segment
 		if len(cur.words) > 0 {
+			cur.list = lid
 			p.st.out = append(p.st.out, cur)
 			prev = cur
 			if p.sh == POSIX {

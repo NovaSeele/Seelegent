@@ -168,7 +168,10 @@ known) and after it, the task engine records the repository's uncommitted files.
 before the turn's first launch, once an account is leased, not when the turn is queued: what others change while
 the turn waits for an account or for memory is not the turn's work. Retries and handovers of the turn keep that
 snapshot. A turn in which no worker ever ran (it waited and was cancelled, or every launch failed before the worker
-started) gets no post-turn checks: no work at risk, no hygiene findings, no changed files. A snapshot:
+started) gets no post-turn checks: no work at risk, no hygiene findings, no changed files. A worker counts as
+started when an attempt reported a conversation, an edit or a command, or its launch folder shows the ready
+record, an exit record with a start time, or output on the stream: the launcher writes the ready record only after
+the worker process was started (resumed, on Windows), so a worker that crashed at once can leave none. A snapshot:
 
 - `git status` (read-only, `GIT_OPTIONAL_LOCKS=0`) lists the changed, deleted and untracked files; nothing touches
   the user's index, stash, refs or objects (bugs.md D7, D25c);

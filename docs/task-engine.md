@@ -75,7 +75,9 @@ append the events in **one transaction**, then publish on the bus. The log and t
    turn in its `read-only` sandbox, where shell commands that only read (`rg -n`, `Get-Content`, `git diff`, tests
    that write nothing) work and every write is refused, so it reads with the shell. A hidden run (consult, meeting,
    judge, verifier) gets the same rule at the top of each fresh conversation (`brief.ReadOnlyRun`), and on codex
-   also the advice to take its citation line numbers from `rg -n` or `Select-String`. Before the first attempt of a
+   also the advice to take its citation line numbers from `rg -n` or `Select-String`; below it comes the worker
+   brief's data-folder rule (`brief.DataRule`: do not explore the data folder or Seelegent's processes, with the
+   run's folder as the exception when it lies inside the data folder). Before the first attempt of a
    task the baseline is taken:
    `git status --porcelain` (literal pathspecs, `core.fsmonitor` off, no shell, 20 s timeout) lists the files under
    the task folder that already have uncommitted changes, and the brief tells the worker not to revert them. With it
