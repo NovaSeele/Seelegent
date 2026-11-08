@@ -453,11 +453,11 @@ func TestLowMemoryHysteresis(t *testing.T) {
 		runs: map[string]*run{"t": {}}, lowWake: make(chan struct{}), log: slog.New(slog.DiscardHandler)}
 	ctxA, cancelA := context.WithCancelCause(t.Context())
 	defer cancelA(nil)
-	untrackA := s.trackGate(cancelA)
+	untrackA := s.TrackHeavy(cancelA)
 	defer untrackA()
 	ctxB, cancelB := context.WithCancelCause(t.Context())
 	defer cancelB(nil)
-	untrackB := s.trackGate(cancelB)
+	untrackB := s.TrackHeavy(cancelB)
 	stopped := func(ctx context.Context) bool { return errors.Is(context.Cause(ctx), gate.ErrLowMemory) }
 	step := func(phys, commit int64, want bool) {
 		t.Helper()

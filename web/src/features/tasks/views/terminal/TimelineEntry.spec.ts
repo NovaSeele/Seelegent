@@ -87,4 +87,35 @@ describe('TimelineEntry notices', () => {
     expect(start.text()).toContain('Gate started: 3 steps')
     expect(start.find('pre').text()).toBe('Lane\nHygiene\nCommand: npm test')
   })
+
+  it('reads a memory wait in GB, or in MB when the two amounts would read the same', async () => {
+    const items = buildTimeline([
+      makeEvent('t1', 1, { reason: 'memory', availableMB: 1536, needMB: 2048 }, 'waiting_quota'),
+    ])
+    expect((await render(items[0] as TimelineItem)).text()).toContain(
+      'Waiting for resources: 1.5 GB free, needs 2 GB',
+    )
+    const close = buildTimeline([
+      makeEvent('t1', 1, { reason: 'memory', availableMB: 2040, needMB: 2048 }, 'waiting_quota'),
+    ])
+    expect((await render(close[0] as TimelineItem)).text()).toContain(
+      'Waiting for resources: 2,040 MB free, needs 2,048 MB',
+    )
+  })
+
+  it('names the setting to lower after a gate the machine kept stopping', async () => {
+    const result = {
+      state: 'error',
+      reason: 'low_memory',
+      steps: [],
+      notRun: [],
+      warnings: [],
+      startedAt: '',
+    }
+    const items = buildTimeline([makeEvent('t1', 1, { phase: 'result', result }, 'gate')])
+    const wrapper = await render(items[0] as TimelineItem)
+    expect(wrapper.get('.te__detail').text()).toBe(
+      'Free some memory or lower “Gates at once”, then run the gate again.',
+    )
+  })
 })

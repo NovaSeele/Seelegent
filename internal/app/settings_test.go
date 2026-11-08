@@ -1,13 +1,19 @@
 package app
 
 import (
+	"context"
 	"math"
 	"net/http"
+	"path/filepath"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
+
+	"github.com/NovaSeele/Seelegent/internal/gate"
 )
 
 // countReschedule stands in for the quota refresher.
@@ -107,5 +113,24 @@ func TestDaemonMemoryLimit(t *testing.T) {
 	a.applyMemoryLimit(0)
 	if len(env.calls) != 0 {
 		t.Fatalf("GOMEMLIMIT is set, yet SetMemoryLimit was called: %v", env.calls)
+	}
+}
+
+// TestProofExecStoppedForMemory: a regression run command the memory watchdog stops says so in its tail.
+func TestProofExecStoppedForMemory(t *testing.T) {
+	d := newDaemon(t)
+	cmd := "sleep 30"
+	if runtime.GOOS == "windows" {
+		cmd = "ping -n 30 127.0.0.1 >nul"
+	}
+	ctx, cancel := context.WithCancelCause(t.Context())
+	defer cancel(nil)
+	go func() {
+		time.Sleep(500 * time.Millisecond)
+		cancel(gate.ErrLowMemory)
+	}()
+	res := d.a.proofExec(ctx, cmd, d.cwd, filepath.Join(t.TempDir(), "cmd.log"))
+	if res.Exit != nil || !strings.HasSuffix(res.Tail, "stopped: machine low on memory") {
+		t.Fatalf("result exit=%v tail=%q", res.Exit, res.Tail)
 	}
 }

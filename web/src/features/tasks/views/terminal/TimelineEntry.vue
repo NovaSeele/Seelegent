@@ -6,7 +6,7 @@ import FileIcon from '@/components/ui/FileIcon.vue'
 import Icon from '@/components/ui/Icon.vue'
 import RichText from '@/components/RichText.vue'
 import { useFormat } from '@/composables/useFormat'
-import { formatMB } from '@/lib/memory'
+import { distinctMB, mbFormatter } from '@/lib/memory'
 import { relativeTo } from '@/lib/paths'
 
 import PromptItem from './PromptItem.vue'
@@ -33,10 +33,12 @@ const format = useFormat()
 function say(m: Message): string {
   const key = m.fallback && !te(m.key) ? m.fallback : m.key
   const params: Record<string, string | number> = { ...m.params }
-  for (const name of m.mb ?? []) {
-    const value = params[name]
-    if (typeof value === 'number') params[name] = formatMB(format.value, value)
-  }
+  const names = (m.mb ?? []).filter((name) => typeof params[name] === 'number')
+  const texts = distinctMB(
+    mbFormatter(format.value),
+    names.map((name) => Number(params[name])),
+  )
+  names.forEach((name, i) => (params[name] = texts[i] ?? ''))
   for (const name of m.keys ?? []) {
     const value = params[name]
     if (typeof value === 'string') params[name] = t(value)

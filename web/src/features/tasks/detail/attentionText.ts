@@ -5,7 +5,7 @@
  * verifier's reason are the worker's own words and stay as they are (`quote`).
  */
 import type { Attention, TaskSummary } from '@/api/types'
-import type { FormatMB } from '@/lib/memory'
+import { distinctMB, type FormatMB } from '@/lib/memory'
 
 import { reasonKey } from './question'
 
@@ -62,6 +62,12 @@ export function depsText(
     return t('task.attention.why.depsWaiting', { tasks: task.after.join(', ') })
   }
   return ''
+}
+
+/** The free and needed memory of a wait, never reading the same when they differ. */
+function amounts(mb: FormatMB, available: number, need: number) {
+  const [a = '', n = ''] = distinctMB(mb, [available, need])
+  return { available: a, need: n }
 }
 
 /** Memory amounts when the caller has no formatter (the daemon's MB as they are). */
@@ -169,8 +175,7 @@ export function attentionText(
         p.availableMB !== undefined && p.needMB
           ? why('resourcesWait', {
               minutes: p.minutes ?? 0,
-              available: mb(p.availableMB),
-              need: mb(p.needMB),
+              ...amounts(mb, p.availableMB, p.needMB),
             })
           : why('resourcesWaitPlain', { minutes: p.minutes ?? 0 })
       break

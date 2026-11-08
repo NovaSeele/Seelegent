@@ -42,6 +42,12 @@ func TestMaxConcurrentWorkers(t *testing.T) {
 	if n := f.p.Busy(a.ID) + f.p.Busy(b.ID); n != 2 {
 		t.Fatalf("running turns after lowering the cap = %d, want 2", n)
 	}
+	_, _, err := f.p.Acquire(t.Context(), gemini("t3"))
+	var u *Unavailable
+	if !errors.As(err, &u) || u.Running != 2 || u.Capped != 1 ||
+		!strings.Contains(u.Error(), "2 worker turns run already (maxConcurrentWorkers 1)") {
+		t.Fatalf("over the lowered cap: %v (%+v)", err, u)
+	}
 	l1.Release()
 	refused(1) // one still runs: at the cap
 

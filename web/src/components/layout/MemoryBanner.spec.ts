@@ -91,6 +91,20 @@ describe('MemoryBanner', () => {
     expect(wrapper.get('[role="status"]').text()).not.toContain('floor')
   })
 
+  it('gives free memory just under the floor in MB, so it does not read the same as the floor', async () => {
+    const { wrapper, connection } = await mounted()
+    connection.status = 'online'
+    connection.settings = { criticalFreeMemoryMB: 2048 } as never
+    connection.health = health({
+      lowMemory: true,
+      memory: { availPhysMB: 2040, availCommitMB: 9000, known: true },
+    })
+    await flushPromises()
+    const text = wrapper.get('[role="status"]').text()
+    expect(text).toContain('2,040 MB memory free')
+    expect(text).toContain('of 2,048 MB')
+  })
+
   it('leaves out an unknown reading and hides while offline', async () => {
     const { wrapper, connection } = await mounted()
     connection.status = 'online'

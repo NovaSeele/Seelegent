@@ -78,6 +78,12 @@ func run(o *options) error {
 			return err
 		}
 	}
+	// The bench measures the daemon's own cost: the memory thresholds are off, so a busy machine cannot hold the
+	// bench's tasks (missing keys keep their defaults).
+	off := []byte(`{"minFreeMemoryMB": 0, "minFreeCommitMB": 0, "criticalFreeMemoryMB": 0}` + "\n")
+	if err := os.WriteFile(filepath.Join(e.home, "config.json"), off, 0o600); err != nil {
+		return err
+	}
 	if err := e.build(ctx); err != nil {
 		return err
 	}

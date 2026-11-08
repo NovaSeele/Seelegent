@@ -41,6 +41,16 @@ describe('attention text (F14)', () => {
     expect(formatted.why).toBe(
       'Waiting for resources for over 12 minutes: 1.5 GB free, needs 2 GB.',
     )
+    // Two amounts that would both read "2 GB" are given in MB.
+    const close = attentionText(
+      at({ reason: 'resources_wait', params: { minutes: 12, availableMB: 2040, needMB: 2048 } }),
+      i18n.global.t as never,
+      i18n.global.te as never,
+      mbFormatter(createFormatters('en')),
+    )
+    expect(close.why).toBe(
+      'Waiting for resources for over 12 minutes: 2,040 MB free, needs 2,048 MB.',
+    )
     expect(view.said).toBe('')
     const plain = await text(at({ reason: 'resources_wait', params: { minutes: 10 } }))
     expect(plain.why).toContain('short of free memory')

@@ -6,6 +6,8 @@ import { computed, ref, useId, watch } from 'vue'
  * parsed value when the field loses focus or Enter is pressed (or after `debounce` ms of no typing), so an
  * autosaving form does not send every keystroke. Esc puts the last committed value back. An empty or unparsable
  * entry commits nothing and shows the value again. An `integer` field rounds the entry and shows what it sent.
+ * When the field's error goes away while it still holds an entry that was not saved (another field fixed the clash
+ * that refused it), the entry commits again: it may be valid now, and if not its error comes back.
  */
 const props = withDefaults(
   defineProps<{
@@ -51,6 +53,16 @@ watch(
   (value) => {
     sent = undefined
     if (!editing) text.value = String(value)
+  },
+)
+
+watch(
+  () => props.error,
+  (now, before) => {
+    if (before && !now && text.value.trim() !== String(props.modelValue)) {
+      sent = undefined
+      commit()
+    }
   },
 )
 
