@@ -1,7 +1,10 @@
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 
+import type { ProvidersApi } from '@/api/providers'
+import { useProvidersStore } from '@/stores/providers'
 import { setupApp } from '@/test/app'
+import { makeProvider } from '@/test/fixtures'
 
 import { providerEdge, providerToken } from './provider'
 import ProviderMark from './ProviderMark.vue'
@@ -29,17 +32,39 @@ describe('ProviderMark', () => {
     expect(wrapper.attributes('style')).toContain('--pm-hue: var(--provider-other)')
   })
 
-  it('shows an API-key provider as a neutral chip next to the backend', async () => {
-    const wrapper = await mark({ backend: 'claude', provider: 'DeepSeek' })
+  it('shows an API-key provider as a neutral chip with its display name', async () => {
+    const wrapper = await mark({ backend: 'claude', provider: 'deepseek' })
     expect(wrapper.find('.pm__name').text()).toBe('Claude Code')
-    expect(wrapper.find('.pm__chip').text()).toBe('DeepSeek')
+    // The providers are not read yet: the id stands in.
+    expect(wrapper.find('.pm__chip').text()).toBe('deepseek')
     // The provider has no hue of its own: the mark keeps the backend's.
     expect(wrapper.attributes('style')).toContain('--pm-hue: var(--provider-claude)')
+
+    const providers = useProvidersStore()
+    providers.setApi({
+      list: () =>
+        Promise.resolve({
+          items: [makeProvider({ id: 'deepseek', name: 'DeepSeek' })],
+          presets: [],
+        }),
+    } as unknown as ProvidersApi)
+    await providers.load()
+    await flushPromises()
+    expect(wrapper.find('.pm__chip').text()).toBe('DeepSeek')
+  })
+
+  it('keeps only the dot where there is no room, with the name as tooltip and for screen readers', async () => {
+    const wrapper = await mark({ backend: 'agy', label: 'hidden' })
+    expect(wrapper.find('.pm__name').exists()).toBe(false)
+    expect(wrapper.attributes('title')).toBe('Antigravity')
+    expect(wrapper.find('.sr-only').text()).toBe('Antigravity')
   })
 
   it('leaves the name out with label false, and sizes', async () => {
     const wrapper = await mark({ backend: 'agy', label: false, size: 'sm' })
     expect(wrapper.find('.pm__name').exists()).toBe(false)
+    expect(wrapper.text()).toBe('')
+    expect(wrapper.attributes('title')).toBeUndefined()
     expect(wrapper.classes()).toContain('pm--sm')
   })
 })

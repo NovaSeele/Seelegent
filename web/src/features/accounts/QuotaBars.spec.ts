@@ -69,6 +69,34 @@ describe('QuotaBars', () => {
     expect(wrapper.text()).not.toContain('Claude')
   })
 
+  it('names the group of a bar that comes from another matching group', async () => {
+    const account = makeAccount({
+      backend: 'agy',
+      quota: {
+        source: 'active',
+        groups: [
+          { name: 'Gemini Models', windows: [{ window: '5h', remaining: 0.62 }] },
+          { name: 'Gemini', windows: [{ window: 'weekly', remaining: 0.4 }] },
+        ],
+      },
+    })
+    const wrapper = await render(account, 'gemini-3.8-flash')
+    expect(wrapper.findAll('.qb__name').map((n) => n.text())).toEqual(['5h', 'Gemini · Weekly'])
+  })
+
+  it('draws one bar when the routing group has no weekly window', async () => {
+    const account = makeAccount({
+      backend: 'agy',
+      quota: {
+        source: 'active',
+        groups: [{ name: 'Gemini Models', windows: [{ window: '5h', remaining: 0.62 }] }],
+      },
+    })
+    const wrapper = await render(account, 'gemini-3.8-flash')
+    expect(wrapper.findAll('.qb__name').map((n) => n.text())).toEqual(['5h'])
+    expect(wrapper.find('.qb__more').exists()).toBe(false)
+  })
+
   it('falls back to the lowest of all windows in a neutral colour, and says so', async () => {
     const wrapper = await render(agy(), 'mystery-model')
     const bars = wrapper.findAllComponents(ProgressBar)

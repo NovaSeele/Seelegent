@@ -10,16 +10,28 @@
  * those in the Antigravity app never shows as an empty bar on an account that still takes work. For Claude Code,
  * "Claude" and the sub-limits of the tier families ("Claude Opus" for claude-opus-5) match.
  *
+ * A group named after the backend itself (its id or product name: "Codex", "Claude", "Claude Code") is a routing
+ * group whatever the tier models: Claude Code and Codex put every model in that one group (backend QuotaGroup),
+ * and Codex models are gpt-* ids that never contain "codex". Antigravity has no such group (its groups are model
+ * families), so it relies on the tier models alone.
+ *
  * Which windows: of the matching groups, the lowest short window (a day or less, e.g. 5h) and the lowest long one
- * (weekly), then the lowest others to fill two. When no group matches (tiers unset, a renamed group), the summary
- * falls back to the single lowest window of all groups, marked `routing: false`: the row draws it in a neutral
- * colour and says it is the lowest of all windows. `more` counts the windows not shown.
+ * (weekly); the group of the short one is the row's group. Two short windows are never shown side by side (two
+ * "5h" bars of gemini-pro and gemini-flash read as one window twice): without a long window the row has one bar.
+ * A window from another group than the row's (a "Claude Opus" weekly sub-limit beside "Claude" 5h) is `named`, so
+ * its label carries the group. With neither length known, the lowest matching window is the one bar.
+ *
+ * When no group matches (tiers unset, a renamed group), the summary falls back to the single lowest window of all
+ * groups, marked `routing: false` and named: the row draws it in a neutral colour and says it is the lowest of all
+ * windows. `more` counts the windows not shown.
  */
 import type { Account, QuotaWindow, TierModels } from '@/api/types'
 
 export interface SummaryWindow {
   group: string
   window: QuotaWindow
+  /** The label names the group: the window is not from the row's own group. */
+  named?: boolean
 }
 
 export interface QuotaSummary {
@@ -61,6 +73,19 @@ const words = (text: string): string[] =>
 
 const FILLER = new Set(['model', 'models'])
 
+/** Group names that stand for a whole backend (lower case): its id and its product name. */
+const BACKEND_GROUPS: Readonly<Record<string, readonly string[]>> = {
+  agy: ['agy', 'antigravity'],
+  claude: ['claude', 'claude code'],
+  codex: ['codex'],
+}
+
+/** Is `name` the backend's own group (see the file comment)? */
+export function isBackendGroup(name: string, backend: string): boolean {
+  const key = name.trim().toLowerCase().replace(/\s+/g, ' ')
+  return key === backend.toLowerCase() || (BACKEND_GROUPS[backend]?.includes(key) ?? false)
+}
+
 /** Does the quota group `name` govern `model`? (See the file comment.) */
 export function groupMatchesModel(name: string, model: string): boolean {
   const modelWords = words(model)
@@ -87,10 +112,13 @@ export function quotaSummary(account: Account, tiers: TierModels | undefined): Q
   if (!all.length) return { windows: [], routing: false, more: 0 }
 
   const models = tiers ? Object.values(tiers).filter((m): m is string => !!m) : []
-  const routed = all.filter((w) => models.some((m) => groupMatchesModel(w.group, m)))
+  const routed = all.filter(
+    (w) =>
+      isBackendGroup(w.group, account.backend) || models.some((m) => groupMatchesModel(w.group, m)),
+  )
   if (!routed.length) {
     const only = lowest(all) as SummaryWindow
-    return { windows: [only], routing: false, more: all.length - 1 }
+    return { windows: [{ ...only, named: true }], routing: false, more: all.length - 1 }
   }
 
   const short = lowest(
@@ -98,13 +126,9 @@ export function quotaSummary(account: Account, tiers: TierModels | undefined): Q
   )
   const long = lowest(routed.filter((w) => windowMinutes(w.window) > DAY))
   const picked = [short, long].filter((w): w is SummaryWindow => !!w)
-  const rest = routed.filter((w) => !picked.includes(w))
-  while (picked.length < 2 && rest.length) {
-    const next = lowest(rest) as SummaryWindow
-    picked.push(next)
-    rest.splice(rest.indexOf(next), 1)
-  }
+  if (!picked.length) picked.push(lowest(routed) as SummaryWindow)
   // Shorter window first, so "5h" sits before "weekly" in every row.
-  picked.sort((a, b) => windowMinutes(a.window) - windowMinutes(b.window))
-  return { windows: picked, routing: true, more: all.length - picked.length }
+  const own = (picked[0] as SummaryWindow).group
+  const windows = picked.map((w) => ({ ...w, named: w.group !== own }))
+  return { windows, routing: true, more: all.length - windows.length }
 }
