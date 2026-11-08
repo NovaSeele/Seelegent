@@ -290,10 +290,14 @@ func (c Checker) git(args []word, depth int) Result {
 // subcommand is the git subcommand a word names: lower-case, and without the ".exe" that Git for Windows strips
 // from it before it looks up builtins and aliases (git reset.exe --hard runs reset --hard, git st.exe the alias st;
 // H1). git strips only a lower-case ".exe", once, and takes no other suffix, trailing dot or space; any case is
-// stripped here, since refusing a name git would not run costs nothing.
+// stripped here, since refusing a name git would not run costs nothing. It is stripped until none is left: Git for
+// Windows before 2.29 ships git-<builtin>.exe in its exec-path, so git reset.exe.exe runs git-reset.exe (G1).
 func subcommand(s string) string {
 	s = strings.ToLower(s)
-	return strings.TrimSuffix(s, ".exe")
+	for strings.HasSuffix(s, ".exe") {
+		s = strings.TrimSuffix(s, ".exe")
+	}
+	return s
 }
 
 // transports are the subcommands that talk to a remote, whose options can name the program run on the other end.

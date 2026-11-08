@@ -16,19 +16,24 @@ func TestExeSuffixSubcommand(t *testing.T) {
 		return "", false
 	}}
 	shim := map[string]bool{
-		"reset.exe --hard":    true,
-		"stash.exe":           true,
-		"stash.exe clear":     true,
-		"clean.exe -fdx":      true,
-		"checkout.exe -- .":   true,
-		"push.exe --force":    true,
-		"RESET.EXE --hard":    true,
-		"st.exe":              true,
-		"status.exe":          false,
-		"log.exe --oneline":   false,
-		"stash.exe list":      false,
-		"clean.exe -n":        false,
-		"checkout.exe -b new": false,
+		"reset.exe --hard":  true,
+		"stash.exe":         true,
+		"stash.exe clear":   true,
+		"clean.exe -fdx":    true,
+		"checkout.exe -- .": true,
+		"push.exe --force":  true,
+		"RESET.EXE --hard":  true,
+		"st.exe":            true,
+		// Git for Windows before 2.29 ships git-<builtin>.exe in its exec-path: git strips one ".exe" from
+		// reset.exe.exe and runs the dashed git-reset.exe, which resets (review G1).
+		"reset.exe.exe --hard":  true,
+		"stash.EXE.exe.exe":     true,
+		"status.exe":            false,
+		"log.exe.exe --oneline": false,
+		"log.exe --oneline":     false,
+		"stash.exe list":        false,
+		"clean.exe -n":          false,
+		"checkout.exe -b new":   false,
 	}
 	for args, want := range shim {
 		if got := c.Git(strings.Fields(args)); got.Deny != want {
