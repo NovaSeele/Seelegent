@@ -114,14 +114,23 @@ export function useGit(
     }
   })
 
-  // A file asked for by path is selected once it is known; a folder holding it opens.
+  // A file asked for by path is selected once it is known; a folder holding it opens. Each value is applied once:
+  // a later reload keeps the file the user picked since. A path that is cleared and asked for again applies again.
+  let applied: string | null = null
   watch(
     () => [path(), files.value, dirs.value] as const,
     ([want, list, folders]) => {
-      if (!want) return
+      if (!want) {
+        applied = null
+        return
+      }
+      if (want === applied) return
       const dir = folders.find((d) => d.files.some((f) => f.path === want))
       if (dir) expanded.value = new Set([...expanded.value, dir.path])
-      if (dir || list.some((f) => f.path === want)) selected.value = want
+      if (dir || list.some((f) => f.path === want)) {
+        selected.value = want
+        applied = want
+      }
     },
     { immediate: true },
   )

@@ -200,7 +200,9 @@ More: [every MCP tool and its arguments](mcp.md), [every command](cli.md), [the 
 - **Tasks** lists every task with filters and search. Open one for its header (status, account, model, actions),
   its gate and safety panels, and five views: **Terminal** (the conversation and every tool call), **Tree** (turns,
   attempts and steps), **Graph** (steps over time), **Files** (what the worker read or edited) and **Git** (the
-  task's commits and uncommitted changes, file by file).
+  task's commits and uncommitted changes, file by file). The Git view previews changed images; it shows no
+  preview for an image reached through a symbolic link or a Windows junction, even one that points inside the
+  repository.
 - **Take over** opens the worker's conversation in a console on the same account; when you close it, the worker
   writes a hand-back report.
 
