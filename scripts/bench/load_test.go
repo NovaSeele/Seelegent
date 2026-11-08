@@ -142,8 +142,8 @@ type loadGen struct {
 	events    int64
 }
 
-// start queues one long script per task, delegates the tasks and starts the pollers.
-func (g *loadGen) start(ctx context.Context, wg *sync.WaitGroup) error {
+// delegateAll queues one long script per task and delegates the tasks.
+func (g *loadGen) delegateAll(ctx context.Context) error {
 	o := g.e.o
 	perTask := o.rate / float64(o.tasks)
 	every := time.Duration(float64(time.Second) / perTask)
@@ -163,11 +163,42 @@ func (g *loadGen) start(ctx context.Context, wg *sync.WaitGroup) error {
 		}
 		g.ids = append(g.ids, id)
 	}
+	return nil
+}
+
+// waitStreaming waits until every load task was seen working on a tool (its worker streams).
+func (g *loadGen) waitStreaming(ctx context.Context, limit time.Duration) error {
+	deadline := time.Now().Add(limit)
+	seen := map[string]bool{}
+	for {
+		for _, id := range g.ids {
+			var sum api.TaskSummary
+			if seen[id] {
+				continue
+			}
+			if _, err := g.e.call(ctx, http.MethodGet, "/tasks/"+id, nil, &sum); err == nil &&
+				(sum.ActiveStep != nil || terminal(sum.Status)) {
+				seen[id] = true
+			}
+		}
+		if len(seen) == len(g.ids) {
+			return nil
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("%d of %d load tasks did not stream within %s", len(g.ids)-len(seen), len(g.ids), limit)
+		}
+		if err := sleep(ctx, 100*time.Millisecond); err != nil {
+			return err
+		}
+	}
+}
+
+// startPollers starts the list and detail pollers.
+func (g *loadGen) startPollers(ctx context.Context, wg *sync.WaitGroup) {
 	wg.Go(func() { g.poll(ctx, "list", func(int) string { return "/tasks?limit=50" }) })
 	wg.Go(func() {
 		g.poll(ctx, "detail", func(n int) string { return "/tasks/" + g.ids[n%len(g.ids)] })
 	})
-	return nil
 }
 
 func (g *loadGen) poll(ctx context.Context, name string, path func(int) string) {

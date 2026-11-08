@@ -56,6 +56,54 @@ type daemonSummary struct {
 	GCPerMin       float64 `json:"gcPerMinute"`
 	WSGrowthMB     float64 `json:"wsGrowthMB"`
 	HeapGrowthMB   float64 `json:"heapGrowthMB"`
+	// WSSlope and HeapSlope are least-squares slopes over the second half of the window, in MB per hour: a
+	// leak shows there once the start-up growth is over.
+	WSSlope   float64 `json:"wsSlopeSecondHalfMBPerHour"`
+	HeapSlope float64 `json:"heapSlopeSecondHalfMBPerHour"`
+}
+
+// setupPhase is the cost of one setup phase (G1): the daemon's CPU and the whole tree's (Windows job).
+type setupPhase struct {
+	Name             string  `json:"name"`
+	Unit             string  `json:"unit"`
+	Count            int     `json:"count"`
+	Seconds          float64 `json:"seconds"`
+	DaemonCPUSeconds float64 `json:"daemonCpuSeconds"`
+	DaemonCPUPerUnit float64 `json:"daemonCpuSecondsPerUnit"`
+	TreeCPUSeconds   float64 `json:"treeCpuSeconds,omitempty"`
+	TreeCPUPerUnit   float64 `json:"treeCpuSecondsPerUnit,omitempty"`
+	ProcessesStarted int     `json:"processesStarted,omitempty"`
+}
+
+// machineSummary is the machine profile and its state over the measured window: the defaults are computed per
+// machine, and StartTree's cost grows with the machine's thread count.
+type machineSummary struct {
+	OS             string  `json:"os"`
+	OSVersion      string  `json:"osVersion"`
+	LogicalCPUs    int     `json:"logicalCpus"`
+	TotalMemMB     float64 `json:"totalMemoryMB"`
+	CommitLimitMB  float64 `json:"commitLimitMB"`
+	FreeMemMinMB   float64 `json:"freeMemoryMinMB"`
+	FreeMemMeanMB  float64 `json:"freeMemoryMeanMB"`
+	FreeCommMinMB  float64 `json:"freeCommitMinMB"`
+	FreeCommMeanMB float64 `json:"freeCommitMeanMB"`
+	ThreadsMean    float64 `json:"systemThreadsMean"`
+	ThreadsMax     int     `json:"systemThreadsMax"`
+	ProcessesMean  float64 `json:"systemProcessesMean"`
+}
+
+// treeSummary is the Windows job's accounting of the whole tree over the window (G4): exact CPU, short-lived
+// processes included, and every process started.
+type treeSummary struct {
+	CPUSeconds     float64 `json:"cpuSeconds"`
+	CPUPercent     float64 `json:"cpuPercentOfCore"`
+	ScanCPUSeconds float64 `json:"pidScanCpuSeconds"`
+	Started        int     `json:"processesStarted"`
+	StartedPerHour float64 `json:"processesPerHour"`
+	ActiveMax      int     `json:"activeMax"`
+	PeakCommitMB   float64 `json:"peakJobCommitMB"`
+	RunStarted     int     `json:"processesStartedWholeRun"`
+	RunCPUSeconds  float64 `json:"cpuSecondsWholeRun"`
 }
 
 type dbSummary struct {
@@ -108,7 +156,11 @@ type result struct {
 	Started     time.Time         `json:"started"`
 	WindowStart time.Time         `json:"windowStart"`
 	WindowEnd   time.Time         `json:"windowEnd"`
+	Machine     machineSummary    `json:"machine"`
+	Setup       []setupPhase      `json:"setup"`
 	Daemon      daemonSummary     `json:"daemon"`
+	Tree        *treeSummary      `json:"tree,omitempty"`
+	TreeFinal   *jobStat          `json:"treeFinal,omitempty"`
 	Roles       []roleSummary     `json:"roles"`
 	Spawns      []spawnSummary    `json:"spawnLog"`
 	DB          dbSummary         `json:"db"`
@@ -123,7 +175,7 @@ func optionsOf(o *options) map[string]string {
 	return map[string]string{"duration": o.duration.String(), "warmup": o.warmup.String(),
 		"cpuprofile": o.cpuProfile.String(), "interval": o.interval.String(), "accounts": fmt.Sprint(o.accounts),
 		"tasks": fmt.Sprint(o.tasks), "rate": fmt.Sprint(o.rate), "sse": fmt.Sprint(o.sse), "poll": o.poll.String(),
-		"seedTasks": fmt.Sprint(o.seedTasks)}
+		"seedTasks": fmt.Sprint(o.seedTasks), "setupProfile": o.setupProf.String()}
 }
 
 func mb(b uint64) float64 { return float64(b) / mib }
@@ -139,7 +191,7 @@ func cpuIn(t *tracked, from, to time.Time) time.Duration {
 	seen := false
 	for _, p := range t.CPUAt {
 		switch {
-		case p.At.Before(from):
+		case !p.At.After(from):
 			before = p.CPU
 		case !p.At.After(to):
 			last, seen = p.CPU, true
@@ -151,6 +203,89 @@ func cpuIn(t *tracked, from, to time.Time) time.Duration {
 	return last - before
 }
 
+// slopePerHour is the least-squares slope of v over the samples' times, per hour.
+func slopePerHour(win []*sample, v func(*sample) float64) float64 {
+	if len(win) < 3 {
+		return 0
+	}
+	t0 := win[0].At
+	var n, sx, sy, sxx, sxy float64
+	for _, smp := range win {
+		x, y := smp.At.Sub(t0).Hours(), v(smp)
+		n, sx, sy, sxx, sxy = n+1, sx+x, sy+y, sxx+x*x, sxy+x*y
+	}
+	den := n*sxx - sx*sx
+	if den == 0 {
+		return 0
+	}
+	return (n*sxy - sx*sy) / den
+}
+
+// fillMachine summarizes the machine over the window.
+func (r *result) fillMachine(win []*sample) {
+	m := &r.Machine
+	m.OS, m.LogicalCPUs = r.GOOS, r.NumCPU
+	var free, comm, threads, procs float64
+	n := 0
+	for _, smp := range win {
+		ms := smp.Machine
+		if ms.TotalPhys == 0 {
+			continue
+		}
+		f, c := mb(ms.AvailPhys), mb(ms.CommitAvail)
+		if n == 0 || f < m.FreeMemMinMB {
+			m.FreeMemMinMB = f
+		}
+		if n == 0 || c < m.FreeCommMinMB {
+			m.FreeCommMinMB = c
+		}
+		m.TotalMemMB, m.CommitLimitMB = mb(ms.TotalPhys), mb(ms.CommitLimit)
+		m.ThreadsMax = max(m.ThreadsMax, ms.Threads)
+		free, comm, threads, procs = free+f, comm+c, threads+float64(ms.Threads), procs+float64(ms.Processes)
+		n++
+	}
+	if n > 0 {
+		k := float64(n)
+		m.FreeMemMeanMB, m.FreeCommMeanMB = round(free/k, 0), round(comm/k, 0)
+		m.ThreadsMean, m.ProcessesMean = round(threads/k, 0), round(procs/k, 0)
+	}
+	m.FreeMemMinMB, m.FreeCommMinMB = round(m.FreeMemMinMB, 0), round(m.FreeCommMinMB, 0)
+	m.TotalMemMB, m.CommitLimitMB = round(m.TotalMemMB, 0), round(m.CommitLimitMB, 0)
+}
+
+// fillTree summarizes the job's accounting over the window.
+func (r *result) fillTree(base *sample, win []*sample, scanCPU float64) {
+	var first, last *jobStat
+	if base != nil {
+		first = base.Job
+	}
+	t := &treeSummary{}
+	for _, smp := range win {
+		if smp.Job == nil {
+			continue
+		}
+		if first == nil {
+			first = smp.Job
+		}
+		last = smp.Job
+		t.ActiveMax = max(t.ActiveMax, smp.Job.Active)
+		t.PeakCommitMB = max(t.PeakCommitMB, round(mb(smp.Job.PeakCommit), 1))
+	}
+	if first == nil || last == nil {
+		return
+	}
+	secs := r.WindowEnd.Sub(r.WindowStart).Seconds()
+	t.CPUSeconds = round((last.CPU - first.CPU).Seconds(), 3)
+	t.CPUPercent = round(100*t.CPUSeconds/secs, 4)
+	t.ScanCPUSeconds = round(scanCPU, 3)
+	t.Started = last.Started - first.Started
+	t.StartedPerHour = round(float64(t.Started)/(secs/3600), 1)
+	if f := r.TreeFinal; f != nil {
+		t.RunStarted, t.RunCPUSeconds = f.Started, round(f.CPU.Seconds(), 3)
+	}
+	r.Tree = t
+}
+
 // fill computes the summaries of the measured window from the samples.
 func (r *result) fill(s *sampler, g *loadGen, spawns []spawnRecord) {
 	s.mu.Lock()
@@ -159,12 +294,12 @@ func (r *result) fill(s *sampler, g *loadGen, spawns []spawnRecord) {
 	from, to := r.WindowStart, r.WindowEnd
 	secs := to.Sub(from).Seconds()
 	var win []*sample
-	// The sample just before the window is the base of the rates.
+	// The sample taken as the window starts (or the last one before) is the base of the rates.
 	var base *sample
 	for i := range s.samples {
 		smp := &s.samples[i]
 		switch {
-		case smp.At.Before(from):
+		case !smp.At.After(from):
 			base = smp
 		case !smp.At.After(to):
 			win = append(win, smp)
@@ -213,6 +348,12 @@ func (r *result) fill(s *sampler, g *loadGen, spawns []spawnRecord) {
 		r.Roles = append(r.Roles, *x)
 	}
 	sort.Slice(r.Roles, func(i, j int) bool { return r.Roles[i].Role < r.Roles[j].Role })
+	scanCPU := 0.0
+	for _, x := range r.Roles {
+		scanCPU += x.CPUSeconds
+	}
+	r.fillMachine(win)
+	r.fillTree(base, win, scanCPU)
 
 	d := &r.Daemon
 	var ws, priv, gor, heap float64
@@ -245,6 +386,9 @@ func (r *result) fill(s *sampler, g *loadGen, spawns []spawnRecord) {
 			d.GCPerMin = round(float64(last.Go.NumGC-first.Go.NumGC)/(span/60), 2)
 		}
 		d.WSGrowthMB = round(mb(last.DaemonWS)-mb(first.DaemonWS), 1)
+		half := win[len(win)/2:]
+		d.WSSlope = round(slopePerHour(half, func(x *sample) float64 { return mb(x.DaemonWS) }), 2)
+		d.HeapSlope = round(slopePerHour(half, func(x *sample) float64 { return mb(x.Go.HeapAlloc) }), 2)
 		d.HeapGrowthMB = round(mb(last.Go.HeapAlloc)-mb(first.Go.HeapAlloc), 1)
 		r.DB = dbSummary{DBStartMB: round(float64(first.DBBytes)/mib, 2), DBEndMB: round(float64(last.DBBytes)/mib, 2),
 			WALStartMB: round(float64(first.WALBytes)/mib, 2), WALEndMB: round(float64(last.WALBytes)/mib, 2)}
@@ -311,6 +455,9 @@ func (r *result) budget() []budgetCheck {
 	add := func(name string, limit, value float64) {
 		out = append(out, budgetCheck{Name: name, Limit: limit, Value: value, OK: value < limit})
 	}
+	// A leak shows as a slope once the start is over; the limits allow for the noise of a few minutes of samples.
+	add("daemon WS slope over the second half MB/h", 10, r.Daemon.WSSlope)
+	add("daemon heap slope over the second half MB/h", 5, r.Daemon.HeapSlope)
 	if r.Scenario == "idle" {
 		add("idle daemon CPU % of one core", 0.1, r.Daemon.CPUPercent)
 		add("idle daemon peak working set MB", 100, r.Daemon.PeakWSMB)
@@ -343,6 +490,21 @@ func writeMarkdown(w io.Writer, r *result) {
 	p("Commit %s, %s/%s, %d CPUs, started %s. Measured %s (window %s to %s). Options: %v.\n\n", r.Commit, r.GOOS,
 		r.GOARCH, r.NumCPU, r.Started.Format(time.RFC3339), r.WindowEnd.Sub(r.WindowStart).Round(time.Second),
 		r.WindowStart.Format("15:04:05"), r.WindowEnd.Format("15:04:05"), r.Options)
+	mc := r.Machine
+	p("## Machine\n\n%s (%s), %d logical CPUs, %.0f MB RAM, commit limit %.0f MB. Over the window: free memory "+
+		"min / mean %.0f / %.0f MB, free commit min / mean %.0f / %.0f MB, %.0f processes and %.0f threads on the "+
+		"system (max %d threads).\n\n", mc.OSVersion, mc.OS, mc.LogicalCPUs, mc.TotalMemMB, mc.CommitLimitMB,
+		mc.FreeMemMinMB, mc.FreeMemMeanMB, mc.FreeCommMinMB, mc.FreeCommMeanMB, mc.ProcessesMean, mc.ThreadsMean,
+		mc.ThreadsMax)
+	if len(r.Setup) > 0 {
+		p("## Setup cost\n\n| phase | n | seconds | daemon CPU s | per unit | tree CPU s | per unit | processes |\n" +
+			"|---|---|---|---|---|---|---|---|\n")
+		for _, x := range r.Setup {
+			p("| %s | %d %s | %.1f | %.3f | %.3f | %.3f | %.3f | %d |\n", x.Name, x.Count, x.Unit, x.Seconds,
+				x.DaemonCPUSeconds, x.DaemonCPUPerUnit, x.TreeCPUSeconds, x.TreeCPUPerUnit, x.ProcessesStarted)
+		}
+		p("\nsetup-cpu.pprof profiles the daemon from its start (-setup-profile).\n\n")
+	}
 	d := r.Daemon
 	p("## Daemon\n\n| metric | value |\n|---|---|\n")
 	p("| working set mean / peak / OS peak | %.1f / %.1f / %.1f MB |\n", d.MeanWSMB, d.PeakWSMB, d.OSPeakWSMB)
@@ -354,6 +516,7 @@ func writeMarkdown(w io.Writer, r *result) {
 		d.HeapAllocMax, d.HeapSysMax, d.SysMax)
 	p("| allocation rate | %.3f MB/s, %.1f mallocs/s, %.2f GC/min |\n", d.AllocMBps, d.MallocsPerSec, d.GCPerMin)
 	p("| growth over the window | WS %+.1f MB, heap %+.1f MB |\n", d.WSGrowthMB, d.HeapGrowthMB)
+	p("| slope over the second half | WS %+.2f MB/h, heap %+.2f MB/h |\n", d.WSSlope, d.HeapSlope)
 	p("| database start / end | %.2f / %.2f MB, WAL %.2f / %.2f MB (max %.2f) |\n\n", r.DB.DBStartMB, r.DB.DBEndMB,
 		r.DB.WALStartMB, r.DB.WALEndMB, r.DB.WALMaxMB)
 	p("## Process tree by role\n\n| role | peak n | WS mean / peak MB | private mean / peak MB | CPU s | %% core | " +
@@ -363,6 +526,12 @@ func writeMarkdown(w io.Writer, r *result) {
 		p("| %s | %d | %.1f / %.1f | %.1f / %.1f | %.3f | %.4f | %d | %d | %d | %.1f | %d | %.1f |\n", x.Role,
 			x.PeakCount, x.MeanWSMB, x.PeakWSMB, x.MeanPrivMB, x.PeakPrivMB, x.CPUSeconds, x.CPUPercent, x.PeakHandles,
 			x.PeakThreads, x.Spawns, x.SpawnsPerHr, x.SeenInRun, x.ProcPeakWSMB)
+	}
+	if t := r.Tree; t != nil {
+		p("\nWhole tree (Windows job, exact): CPU %.3f s = %.4f %% of one core (the pid scan above sums %.3f s), "+
+			"%d processes started (%.1f/h), at most %d alive, peak job commit %.1f MB. Whole run: %d processes, "+
+			"%.3f CPU s.\n", t.CPUSeconds, t.CPUPercent, t.ScanCPUSeconds, t.Started, t.StartedPerHour, t.ActiveMax,
+			t.PeakCommitMB, t.RunStarted, t.RunCPUSeconds)
 	}
 	p("\nSpawns are counted by a pid scan every 250 ms (a process that lives less than that can be missed); the " +
 		"fake CLI's own log below is exact.\n\n")
@@ -398,6 +567,16 @@ func writeMarkdown(w io.Writer, r *result) {
 	if len(r.Errors) > 0 {
 		p("\nSample errors: %v\n", r.Errors)
 	}
+	p("\n## Notes\n\n" +
+		"- The fake agy answers a quota read instantly from a canned answer. A real agy is a Node.js process that " +
+		"signs in and calls Google: its reads cost far more CPU, memory and time, so the quota-reader numbers here " +
+		"are lower bounds.\n" +
+		"- gh is faked too (a copy of the bench named gh, first on PATH; GH_CONFIG_DIR, APPDATA and LOCALAPPDATA " +
+		"point to temp folders): the bench never uses this machine's GitHub sign-in or reaches GitHub.\n" +
+		"- The daemon's /debug/vars is read with ?light=1 (runtime/metrics, no stop-the-world) every sample and " +
+		"with memstats once a minute.\n" +
+		"- Windows CPU profiles count threads blocked in a system call (pipe reads) as busy: use the CPU seconds " +
+		"above, which come from the process counters, for the cost.\n")
 }
 
 // metric is one value compared with a baseline.
@@ -415,6 +594,15 @@ func (r *result) metrics() []metric {
 		{"daemon alloc MB/s", r.Daemon.AllocMBps}, {"daemon GC/min", r.Daemon.GCPerMin},
 		{"daemon handles", float64(r.Daemon.Handles)}, {"daemon threads", float64(r.Daemon.Threads)},
 		{"DB end MB", r.DB.DBEndMB}, {"WAL max MB", r.DB.WALMaxMB},
+		{"daemon WS slope MB/h", r.Daemon.WSSlope}, {"daemon heap slope MB/h", r.Daemon.HeapSlope},
+		{"machine free memory min MB", r.Machine.FreeMemMinMB}, {"machine threads mean", r.Machine.ThreadsMean},
+	}
+	for _, x := range r.Setup {
+		m = append(m, metric{x.Name + " daemon CPU s per " + x.Unit, x.DaemonCPUPerUnit},
+			metric{x.Name + " tree CPU s per " + x.Unit, x.TreeCPUPerUnit})
+	}
+	if t := r.Tree; t != nil {
+		m = append(m, metric{"tree CPU % core", t.CPUPercent}, metric{"tree processes/h", t.StartedPerHour})
 	}
 	for _, x := range r.Roles {
 		if x.Role != "daemon" {
