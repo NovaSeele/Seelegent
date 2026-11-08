@@ -259,7 +259,7 @@
     },
     "locale": {
       "label": "Idioma",
-      "desc": "«Según el navegador» usa los idiomas preferidos de tu navegador.",
+      "desc": "Idioma del panel: inglés salvo que elijas otro aquí.",
       "keywords": "idioma traducción lengua"
     },
     "concurrency": {

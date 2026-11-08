@@ -6,6 +6,5 @@
     "prefix": "Idioma:",
     "apply": "Idioma: {name}",
     "group": "Idioma"
-  },
-  "browser": "Según el navegador"
+  }
 }
