@@ -121,11 +121,16 @@ each launch):
 | memory cap | `JOB_OBJECT_LIMIT_JOB_MEMORY` (memory committed by the whole tree) | none |
 | CPU cap | CPU rate control, hard cap, as a percentage of the whole machine | none |
 
-When the memory cap refuses an allocation the job posts `JOB_OBJECT_MSG_JOB_MEMORY_LIMIT` to its completion port;
-the launcher reads it after the worker exits and writes `memoryLimitHit: true` into `exit.json`, and the turn fails
-saying so. If that message is missed, a worker that exits non-zero after the job's peak memory reached 90% of the
-cap counts as well. A worker's own test and lint runs are bounded only by this cap; the start check and the memory
-watchdog act on new starts and gate commands, never on a running worker.
+When the memory cap refuses an allocation the job posts `JOB_OBJECT_MSG_JOB_MEMORY_LIMIT` to its completion port.
+The launcher drains the port on its cancel ticker (so the per-process packets do not pile up in kernel memory over
+a long turn) and once more after the worker exits; it then notes the hit in `stderr.txt` and writes
+`memoryLimitHit: true` into `exit.json`, and the turn fails saying so. The job's report on that port decides: a
+query of the job's limit violations does not help, as it only covers notification limits, which a hard cap never
+lets usage pass. Only when the port could not be set up does a worker that failed by itself after the job's peak
+memory reached 90% of the cap count as a hit; a tree the launcher stopped (cancel, timeout) never does. A limit
+the system refuses is left out and named in `stderr.txt` ("the system refused these limits ..."). A worker's own
+test and lint runs are bounded only by this cap; the start check and the memory watchdog act on new starts and
+gate commands, never on a running worker.
 
 ## Attention
 
