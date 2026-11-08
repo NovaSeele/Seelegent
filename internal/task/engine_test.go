@@ -286,6 +286,32 @@ func TestTransientRetriesAfterDelay(t *testing.T) {
 	}
 }
 
+// TestTransientBackoffIgnoresPoolWakes: the 15 s backoff after a transient failure is not cut short when the pool
+// wakes its waiters (an account released, added or changed); only the delay ends it (old B9: every release woke
+// the backoff, so a busy pool burned both retries in seconds).
+func TestTransientBackoffIgnoresPoolWakes(t *testing.T) {
+	h := newHarness(t)
+	h.agy("only", 0)
+	h.queue.Push(t, transientScript())
+	h.queue.Push(t, okScript("conv-b9", "ok"))
+	sum := h.delegate(api.DelegateRequest{})
+	h.waitEvent(sum.ID, api.EventRetry)
+	for range 5 {
+		h.pool.Notify()
+		time.Sleep(20 * time.Millisecond)
+	}
+	h.clk.Advance(14 * time.Second)
+	time.Sleep(100 * time.Millisecond)
+	if h.queue.Left(t) != 1 {
+		t.Fatal("pool wakes cut the backoff short")
+	}
+	h.waitFor("the retry after the delay", func() bool {
+		h.clk.Advance(time.Second)
+		return h.queue.Left(t) == 0
+	})
+	h.waitStatus(sum.ID, StatusDone)
+}
+
 // TestBackgroundWaitContinuesOnce continues a turn whose CLI stopped on a background wait, once.
 func TestBackgroundWaitContinuesOnce(t *testing.T) {
 	h := newHarness(t)
