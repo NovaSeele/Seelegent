@@ -3,6 +3,13 @@ package config
 // DefaultPort is the port of the installed daemon. Development runs use 47831 through SEELEGENT_PORT.
 const DefaultPort = 47821
 
+// Range and default of the loopRepeat setting.
+const (
+	LoopRepeatMin     = 2
+	LoopRepeatMax     = 100
+	LoopRepeatDefault = 4
+)
+
 // Model tiers: aliases the lead passes instead of a model id. Each backend maps them to its own models.
 const (
 	TierFast     = "fast"
@@ -70,7 +77,8 @@ type Settings struct {
 	StallMinutes int `json:"stallMinutes"`
 	// StallToolMinutes flags a single tool call that has been running for this long.
 	StallToolMinutes int `json:"stallToolMinutes"`
-	// LoopRepeat flags a worker that repeats the same tool call this many times in a row.
+	// LoopRepeat flags a worker that repeats the same tool call this many times within its last 12 tool calls
+	// without progress in between.
 	LoopRepeat int `json:"loopRepeat"`
 	// AttentionDecayHours drops an unanswered attention flag after this long.
 	AttentionDecayHours int `json:"attentionDecayHours"`
@@ -223,7 +231,7 @@ func Defaults() Settings {
 		},
 		StallMinutes:          10,
 		StallToolMinutes:      25,
-		LoopRepeat:            4,
+		LoopRepeat:            LoopRepeatDefault,
 		AttentionDecayHours:   24,
 		Gates:                 true,
 		GateAutoChecks:        true,

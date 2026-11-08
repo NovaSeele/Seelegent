@@ -155,6 +155,14 @@ func splitList(vals []string) []string {
 	return out
 }
 
+// optList points at vals when the flag was given (`--gate ""` clears the lead's commands), nil when it was not.
+func optList(vals []string) *[]string {
+	if vals == nil {
+		return nil
+	}
+	return &vals
+}
+
 const delegateUsage = "seelegent delegate [flags] <prompt|@file>"
 
 func newDelegateCommand(d deps) *cobra.Command {

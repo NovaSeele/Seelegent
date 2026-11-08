@@ -157,6 +157,39 @@ func TestFindRustupInCargoHome(t *testing.T) {
 	}
 }
 
+func TestCargoOnPath(t *testing.T) {
+	exe := func(dir, name string) {
+		if runtime.GOOS == "windows" {
+			name += ".exe"
+		}
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("#!/bin/sh\n"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	sep := string(os.PathListSeparator)
+	proxy, _ := fakeRustup(t)
+	exe(proxy, "cargo")
+	plain := t.TempDir()
+	exe(plain, "cargo")
+	noHome := "CARGO_HOME=" + t.TempDir()
+
+	if st, _, _ := CargoOnPath([]string{"PATH=" + plain, noHome}, ""); st != CargoNoRustup {
+		t.Errorf("no rustup: %v", st)
+	}
+	if st, _, cargo := CargoOnPath([]string{"PATH=" + proxy + sep + plain}, ""); st != CargoProxy ||
+		filepath.Dir(cargo) != proxy {
+		t.Errorf("proxy first: %v %q", st, cargo)
+	}
+	if st, rustup, cargo := CargoOnPath([]string{"PATH=" + plain + sep + proxy}, ""); st != CargoPlain ||
+		filepath.Dir(cargo) != plain || filepath.Dir(rustup) != proxy {
+		t.Errorf("plain first: %v %q %q", st, rustup, cargo)
+	}
+	onlyRustup, _ := fakeRustup(t)
+	if st, _, _ := CargoOnPath([]string{"PATH=" + onlyRustup}, ""); st != CargoMissing {
+		t.Errorf("no cargo: %v", st)
+	}
+}
+
 func TestCargoDirsLimits(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, "a", "b", "c", "Cargo.toml"), "")

@@ -73,8 +73,9 @@ again on its own: the stop may have come after the task was made, and an unatten
 *Run now* (`POST /automations/{id}/run`) runs only what the user confirmed: an automation never confirmed in the
 dashboard, or changed since (`confirmed: false`), is refused with `409 bad_state`, `details: {reason:
 "not_confirmed", confirmUrl}`, because the lead's tools can create and edit automations and running one at once
-would run a prompt the user never saw. The dashboard shows *Review and turn on* in its place. A confirmed
-automation runs now also while it is off or the master switch is off.
+would run a prompt the user never saw. The dashboard shows *Review and turn on* in its place, and asks once more
+before *Run now*, since a run hands work to a worker at once. A confirmed automation runs now also while it is off
+or the master switch is off.
 
 A precheck follows the shell convention of `grep -q`, `test` and `git diff --quiet`: exit code 0 runs, 1 means
 "nothing to do" and skips the run quietly, and anything else is a broken precheck the user should look at.

@@ -89,7 +89,7 @@ allowed, and so do the read commands of `members`, `meeting`, `contest`, `notes`
 | `members add --name N --backend B --rank R [flags]`, `members set <id> [flags]`, `members remove <id>` | Change the department. Flags: `--id`, `--name`, `--backend`, `--provider`, `--rank worker\|senior\|peer`, `--tier`, `--model`, `--role`, `--prefer a,b`, `--fallback a,b`, `--enabled`. `set` sends only the flags given. | `Member`; `remove` `{ok, removed}` |
 | `consult <task-id> --member M [--focus T] [--wait N]` | A senior or peer member reads the finished task read-only and answers a verdict (`approve`, `concerns`, `object`) with findings; waits up to N s (default 600). | `Consult` |
 | `notes list\|add\|resolve\|reopen\|delete\|send <task-id> ...` | Review notes on a task's diff. `add --file F --line N [--end-line N] [--side new\|old] <body\|@file>`; `send [--extra T\|@file] [--wait N]` sends the drafts and the notes the last turn left unaddressed as one followup and waits for the report. | `Note[]`, `Note`, `NotesSendResult` or `TaskReport` |
-| `meeting open --attendee id[:rank] ... [--option T]... [--context a,b] [--rounds N] [--sealed T] [--title T] [--cwd D] [--estimate] [--wait N] <question\|@file>` | Opens a meeting of 1 to 6 members (`--estimate` only prints the most runs it takes). | `Meeting` (`RunEstimate` with `--estimate`) |
+| `meeting open --attendee id[:rank] ... [--option T]... [--context a,b] [--rounds N] [--sealed T\|@file] [--title T] [--cwd D] [--estimate] [--wait N] <question\|@file>` | Opens a meeting of 1 to 6 members (`--estimate` only prints the most runs it takes). | `Meeting` (`RunEstimate` with `--estimate`) |
 | `meeting list\|status <id>\|wait <id> [--seconds N]` | Meetings, one meeting's state and minutes, or a wait (default 600, at most 1500) until it needs you or ends. | `MeetingSummary[]`, `Meeting` |
 | `meeting post <id> --answer q1=text ... [--note T]`, `decide <id> [--option K] [--rationale T] <decision>`, `act <id> [--member M] [--backend B] [--model M] [--cwd D] <brief>`, `cancel <id>`, `dissent-outcome <id> <dissent-id> vindicated\|dismissed` | The lead's side of a meeting: answer questions, decide, turn the decision into a task, cancel, settle a dissent later. | `Meeting`; `act` `MeetingActResult` |
 | `contest list\|status <id>\|wait <id> [--seconds N]\|diff <id> <variant>` | Contests, one contest's scoreboard, judge and proposal, a wait until it is ready or ended, a variant's diff against the base. | `ContestSummary[]`, `Contest`, `ContestDiff` |
@@ -185,6 +185,27 @@ A plan task (`--mode plan`) refuses `--gate`, `--gate-detect`, `--lane`, `--forc
 the brief in its own worktree. `--judge M` names the judge (default: the first enabled peer), `--no-judge` scores by
 machine only, `--deadline N` sets the minutes (default 60). A contest refuses `--after` and `--mode plan`.
 
+### Old syntax
+
+The Node version's spellings still work, so scripts and lead skills written for it keep running. They are hidden
+from the help (aliases and hidden flags); the forms in the table above are the ones to write.
+
+| Old form | Same as |
+|---|---|
+| `meeting dissent <id> <dissent-id> vindicated\|dismissed` | `meeting dissent-outcome ...` |
+| `meeting open --question T\|@file ...` | the question as the argument (not both) |
+| `meeting open --seal T\|@file` | `--sealed T\|@file` |
+| `meeting act <id> --item T\|@file [--item ...] [--member M]` | the brief as the argument; each `--item` is one task with the same options |
+| `issues list <repo> --all`, `--closed` | `--state all`, `--state closed` (one of the three) |
+| `issues add <repo> --title T --body B\|@file` | the body as the argument (not both) |
+| `issues triage <repo> <key> assign <brief\|@file>` | `--prompt brief\|@file` (not both) |
+| `issues repo-settings <repo> [--shared-dir D]... [--no-shared-dirs]` | `issues shared-dirs <repo> [D...] [--clear]` (`--shared-dir` takes comma lists too) |
+| `contest status <id> --full` | `--json`: the whole record |
+
+Not carried over: the old `--full` of the other commands (the record they print with `--json` is the whole one
+already), `contest status` without an id (now `contest list`), and `@file` for `meeting decide --rationale`, `issues
+triage --reason`/`--question` (these take text only).
+
 ### No token and no confirmation here
 
 The GitHub token is stored, and an automation is confirmed, only in the dashboard: the command line (like the MCP
@@ -210,6 +231,7 @@ when no daemon of the data directory runs does it check writability by writing a
 | `backend_<id>` | enabled and its CLI found (`backend.Find`), or disabled | – | enabled but not found |
 | `accounts` | counts: total, enabled and (daemon running) usable | no enabled account, or counts unknown | – |
 | `path` | no relative PATH entries | relative entries (a worker would resolve them in the project folder) | – |
+| `cargo` (only when rustup is installed) | the first `cargo` on PATH is rustup's proxy | no `cargo` on PATH; or another `cargo` comes first (a dependency's own `rust-toolchain.toml` can then switch compilers mid-build, error E0514, in your own shells; workers and gates are pinned) | – |
 
 There is no host registration check (MCP entries, skills) yet; `seelegent setup --dry-run` shows what is
 registered.

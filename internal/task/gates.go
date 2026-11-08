@@ -46,6 +46,13 @@ type Proof struct {
 	DoctrineError string        `json:"doctrineError,omitempty"`
 	Bar           proof.Bar     `json:"bar,omitempty"`
 	BarChanged    []string      `json:"barChanged,omitempty"`
+	// SpecTasks are the task's spec tasks (their Gate: commands and paths) and the feature gate as tasks.md said
+	// when they were first read, so a followup never reads a line the worker has edited since (bugs.md D10).
+	// Absent on proofs frozen before it existed.
+	SpecTasks *proof.Tasks `json:"specTasks,omitempty"`
+	// SpecLines hold the bar hash of every task line tasks.md had when the proof was first frozen (not only the
+	// task's own), so a task a followup adds is checked against its frozen line too.
+	SpecLines map[string]string `json:"specLines,omitempty"`
 	// AutoFixes counts the automatic fix turns since the lead's last message; Budget is the most allowed.
 	AutoFixes int `json:"autoFixes,omitempty"`
 	Budget    int `json:"budget"`
@@ -66,7 +73,8 @@ type GatePhase struct {
 	ChildID string `json:"childId,omitempty"`
 }
 
-// proofRequest is the gate part of a delegate or followup.
+// proofRequest is the gate part of a delegate or followup. gateCommands nil leaves the lead's commands as they are;
+// an empty, non-nil list clears them.
 type proofRequest struct {
 	gate         *bool
 	gateCommands []string
@@ -77,8 +85,19 @@ type proofRequest struct {
 }
 
 func (r proofRequest) empty() bool {
-	return r.gate == nil && len(r.gateCommands) == 0 && len(r.lane) == 0 && !r.noLane && !r.forceLane &&
+	return r.gate == nil && r.gateCommands == nil && len(r.lane) == 0 && !r.noLane && !r.forceLane &&
 		r.verify == nil
+}
+
+// listOf is the list p points to: non-nil when p is set (an explicit empty list stays empty), nil when p is nil.
+func listOf(p *[]string) []string {
+	switch {
+	case p == nil:
+		return nil
+	case *p == nil:
+		return []string{}
+	}
+	return *p
 }
 
 // asksGate reports whether the request turns on something only an edit task has.
@@ -107,7 +126,7 @@ func (s *Service) followupProof(ctx context.Context, t *Task, req proofRequest, 
 	if t.RepoRoot == "" {
 		t.RepoRoot = s.gitRoot(ctx, t.Cwd)
 	}
-	p, err := s.resolveProof(t, req, prev)
+	p, err := s.resolveProof(t, req, prev, tasksChanged)
 	if err != nil {
 		return nil, false, err
 	}
@@ -228,7 +247,12 @@ func specFeature(t *Task) string {
 // resolveProof works out what the gate of t checks from the request, the settings, the spec tasks and the
 // repository, keeping what prev (the task's current proof) had for the options the request leaves out. It
 // returns nil for a task without a gate.
-func (s *Service) resolveProof(t *Task, req proofRequest, prev *Proof) (*Proof, error) {
+//
+// A followup (prev set) never takes gate commands from a tasks.md line the worker could have edited: with the gate
+// and the spec tasks unchanged the frozen commands are kept as they are; with a new gate option or new task ids the
+// spec tasks it keeps come from SpecTasks, frozen when they were first read, and a task it adds counts only while
+// its line is the one SpecLines froze with the first proof (see specProof).
+func (s *Service) resolveProof(t *Task, req proofRequest, prev *Proof, tasksChanged bool) (*Proof, error) {
 	if !gated(t) {
 		return nil, nil
 	}
@@ -273,6 +297,19 @@ func (s *Service) resolveProof(t *Task, req proofRequest, prev *Proof) (*Proof, 
 		}
 		p.NoLane, p.Lane = false, &api.TaskLane{Paths: lane, Source: "lead"}
 	}
+	if prev != nil && req.gate == nil && req.gateCommands == nil && !tasksChanged {
+		// The gate is left alone: run exactly the commands frozen before (the old rule), and read nothing again
+		// from the working tree, which the worker can edit (bugs.md D10: a lane-only followup ran a Gate: line the
+		// worker had planted in tasks.md and re-froze the bar over the change). The bar stays as frozen, so a
+		// changed tasks.md line keeps showing in barChanged.
+		p.Commands = slices.Clone(prev.Commands)
+		p.Feature, p.FeatureKey, p.FeatureDir = prev.Feature, prev.FeatureKey, prev.FeatureDir
+		p.SpecTasks, p.SpecLines, p.BarChanged = prev.SpecTasks, prev.SpecLines, slices.Clone(prev.BarChanged)
+		if p.Lane == nil && !p.NoLane && prev.Lane != nil && prev.Lane.Source == "spec" {
+			p.Lane = &api.TaskLane{Paths: slices.Clone(prev.Lane.Paths), Source: "spec"}
+		}
+		return p, nil
+	}
 	feature := specFeature(t)
 	var ids []string
 	if feature != "" {
@@ -286,11 +323,11 @@ func (s *Service) resolveProof(t *Task, req proofRequest, prev *Proof) (*Proof, 
 		p.Commands = append(p.Commands, api.GateCommand{Cmd: c, Dir: leadDir, TaskIDs: slices.Clone(ids),
 			Kind: api.StepTask})
 	}
-	lines := map[string]string{}
+	lines, marks := map[string]string{}, map[string]string{}
 	if feature != "" {
 		f := proof.FeatureOf(root, feature)
 		p.Feature, p.FeatureKey, p.FeatureDir = f.Display, f.Key, feature
-		if err := s.specProof(t, root, feature, p, lines); err != nil {
+		if err := s.specProof(t, root, feature, p, specIO{lines: lines, marks: marks}, prev); err != nil {
 			return nil, err
 		}
 	}
@@ -319,12 +356,37 @@ func (s *Service) resolveProof(t *Task, req proofRequest, prev *Proof) (*Proof, 
 	if prev == nil || prev.Bar == nil {
 		p.Bar = bar
 	} else {
-		// A followup that changes the gate on purpose moves the bar for the gate commands only.
+		// A followup that changes the gate or the spec tasks on purpose moves the bar for the gate commands, and
+		// for the lines of tasks it adds (lines holds only those); a task it keeps keeps its frozen line, and one it
+		// drops leaves the bar.
 		p.Bar["gate"] = bar["gate"]
+		for k := range p.Bar {
+			if id, ok := strings.CutPrefix(k, "tasks.md#"); ok && !slices.Contains(ids, id) {
+				delete(p.Bar, k)
+			}
+		}
 		for k, v := range bar {
 			if strings.HasPrefix(k, "tasks.md#") {
 				p.Bar[k] = v
 			}
+		}
+		// What changed before stays reported, unless the lead has just frozen it again.
+		for _, k := range prev.BarChanged {
+			task := strings.HasPrefix(k, "tasks.md#")
+			if _, read := bar[k]; k == "gate" || (task && (read || p.Bar[k] == "")) {
+				continue // frozen again (gate, a task read now) or gone (a task dropped)
+			}
+			p.BarChanged = append(p.BarChanged, k)
+		}
+		// A task added whose line changed since the freeze, or that tasks.md did not have then: its bar entry is not
+		// the line read now, so the gate reports it on every turn, and it shows at once.
+		var marked []string
+		for k, v := range marks {
+			p.Bar[k] = v
+			marked = append(marked, k)
+		}
+		if len(marked) > 0 {
+			p.BarChanged = mergeSorted(p.BarChanged, marked)
 		}
 	}
 	return p, nil
@@ -353,18 +415,157 @@ func (s *Service) leadLane(root string, paths []string) ([]string, error) {
 	return lane, nil
 }
 
+// barAdded is the bar entry of a task a followup added that tasks.md did not have when the proof was frozen: no
+// line hash matches it, so the task shows in barChanged on every turn.
+const barAdded = "added after the freeze"
+
+// specIO are what specTasks fills in for the bar: lines, the raw lines of the tasks whose bar entry is the line
+// read now; marks, the bar entries of added tasks that are not (the frozen hash of a line that changed since, or
+// barAdded).
+type specIO struct {
+	lines, marks map[string]string
+}
+
+// noTask is a task taken without anything from its line: no gate commands, no paths.
+func noTask(id string) proof.TaskLine {
+	return proof.TaskLine{ID: id, Gates: []string{}, PathTokens: []string{}, Covers: []string{}}
+}
+
+// specTasks returns the spec tasks ids name and the feature gate (see specProof), or nil for a feature without
+// tasks.md, and the bar hash of every task line, frozen with the first proof (prev's on a followup).
+func (s *Service) specTasks(t *Task, feature string, ids []string, sink specIO, prev *Proof) (
+	*proof.Tasks, map[string]string, error) {
+	var frozen, fresh *proof.Tasks
+	var all map[string]string
+	if prev != nil {
+		frozen, all = prev.SpecTasks, prev.SpecLines
+	}
+	legacy := prev != nil && frozen == nil
+	read := func() (*proof.Tasks, error) {
+		if fresh != nil {
+			return fresh, nil
+		}
+		text, _, err := fsutil.ReadRegular(filepath.Join(feature, "tasks.md"), 4<<20)
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, nil
+		}
+		if err != nil {
+			return nil, invalidf("spec tasks.md: %v", err)
+		}
+		ts := proof.ParseTasks(string(text))
+		fresh = &ts
+		return fresh, nil
+	}
+	out := &proof.Tasks{FeatureGate: []string{}, Tasks: []proof.TaskLine{}}
+	for _, id := range ids {
+		if frozen != nil {
+			if tl, ok := frozen.Find(id); ok {
+				out.Tasks = append(out.Tasks, tl)
+				continue
+			}
+		}
+		ts, err := read()
+		if err != nil {
+			return nil, nil, err
+		}
+		if ts == nil {
+			// A feature without tasks.md: the ids are the lead's word.
+			if frozen == nil && len(out.Tasks) == 0 {
+				return nil, all, nil
+			}
+			out.Tasks = append(out.Tasks, noTask(id))
+			continue
+		}
+		tl, ok := ts.Find(id)
+		if !ok {
+			return nil, nil, invalidf("task %s is not in %s/tasks.md", id, t.Spec.Dir)
+		}
+		key := "tasks.md#" + id
+		switch {
+		case prev == nil:
+			sink.lines[id] = tl.Line
+		case legacy && prev.Bar[key] != "":
+			// A task of a proof frozen before SpecTasks: its line counts only while it matches the frozen bar; when
+			// it changed, the commands the gate ran for it before stay and nothing else of the line is taken.
+			if proof.TaskLineHash(tl.Line) != prev.Bar[key] {
+				gates := frozenGates(prev, id)
+				tl = noTask(id)
+				tl.Gates = gates
+			}
+			// the bar keeps the frozen line
+		case all[id] != "":
+			// A task tasks.md had at the freeze: taken only while its line is the frozen one (the worker can edit
+			// tasks.md); a changed line gives no commands and no paths, and stays in barChanged.
+			if proof.TaskLineHash(tl.Line) == all[id] {
+				sink.lines[id] = tl.Line
+			} else {
+				tl = noTask(id)
+				sink.marks[key] = all[id]
+			}
+		default:
+			// A task tasks.md did not have at the freeze (or a proof that kept no lines): read now, and shown in
+			// barChanged as added after the freeze, so the lead sees its line was never frozen.
+			sink.marks[key] = barAdded
+		}
+		out.Tasks = append(out.Tasks, tl)
+	}
+	if prev == nil {
+		if ts, err := read(); err != nil {
+			return nil, nil, err
+		} else if ts != nil {
+			all = make(map[string]string, len(ts.Tasks))
+			for i := range ts.Tasks {
+				all[ts.Tasks[i].ID] = proof.TaskLineHash(ts.Tasks[i].Line)
+			}
+		}
+	}
+	if frozen != nil {
+		out.FeatureGate = slices.Clone(frozen.FeatureGate)
+		return out, all, nil
+	}
+	switch ts, err := read(); {
+	case err != nil:
+		return nil, nil, err
+	case ts == nil:
+	case legacy:
+		for _, g := range ts.FeatureGate {
+			if slices.ContainsFunc(prev.Commands, func(c api.GateCommand) bool { return c.Cmd == g }) {
+				out.FeatureGate = append(out.FeatureGate, g)
+			}
+		}
+	default:
+		out.FeatureGate = slices.Clone(ts.FeatureGate)
+	}
+	return out, all, nil
+}
+
+// frozenGates are the spec commands prev's gate ran for task id (not the lead's own).
+func frozenGates(prev *Proof, id string) []string {
+	out := []string{}
+	for i := range prev.Commands {
+		c := &prev.Commands[i]
+		if c.Kind == api.StepTask && slices.Contains(c.TaskIDs, id) && !slices.Contains(prev.LeadCommands, c.Cmd) &&
+			!slices.Contains(out, c.Cmd) {
+			out = append(out, c.Cmd)
+		}
+	}
+	return out
+}
+
 // specProof adds what the spec tasks of t give: their Gate: commands, the feature gate, and (without a lead lane)
-// the lane from their path tokens; lines gets their raw lines for the bar.
-func (s *Service) specProof(t *Task, root, feature string, p *Proof, lines map[string]string) error {
-	text, _, err := fsutil.ReadRegular(filepath.Join(feature, "tasks.md"), 4<<20)
+// the lane from their path tokens; sink gets what the bar needs. Tasks frozen in prev.SpecTasks are taken from there;
+// a task a followup adds is taken from tasks.md only while its line is the one frozen in prev.SpecLines (a changed
+// line gives nothing, a line added after the freeze is marked). On an older proof without SpecTasks, a line read
+// again is used only when it still matches the frozen bar (else the commands the gate ran for it before), and a
+// feature gate command only when the gate ran it before.
+func (s *Service) specProof(t *Task, root, feature string, p *Proof, sink specIO, prev *Proof) error {
 	ids := t.Spec.TaskIDs
-	if errors.Is(err, os.ErrNotExist) {
-		return nil // a feature without tasks.md: the ids are the lead's word
+	tasks, all, err := s.specTasks(t, feature, ids, sink, prev)
+	p.SpecLines = all
+	if err != nil || tasks == nil {
+		return err
 	}
-	if err != nil {
-		return invalidf("spec tasks.md: %v", err)
-	}
-	tasks := proof.ParseTasks(string(text))
+	p.SpecTasks = tasks
 	var tokens []string
 	add := func(cmd string, ids []string) {
 		for i := range p.Commands {
@@ -380,11 +581,7 @@ func (s *Service) specProof(t *Task, root, feature string, p *Proof, lines map[s
 		p.Commands = append(p.Commands, api.GateCommand{Cmd: cmd, TaskIDs: slices.Clone(ids), Kind: api.StepTask})
 	}
 	for _, id := range ids {
-		tl, ok := tasks.Find(id)
-		if !ok {
-			return invalidf("task %s is not in %s/tasks.md", id, t.Spec.Dir)
-		}
-		lines[id] = tl.Line
+		tl, _ := tasks.Find(id)
 		tokens = append(tokens, tl.PathTokens...)
 		if len(p.LeadCommands) == 0 {
 			for _, g := range tl.Gates {

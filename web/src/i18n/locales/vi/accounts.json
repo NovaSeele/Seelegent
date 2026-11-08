@@ -59,7 +59,8 @@
     "keyCleared": "Đã gỡ khóa API khỏi {name}",
     "deleted": "Đã xóa {name}",
     "logout": "Đã đăng xuất",
-    "refreshedAll": "Đã làm mới hạn mức"
+    "refreshedAll": "Đã làm mới hạn mức",
+    "off": "Đã tắt nhận việc cho {name}"
   },
   "quota": {
     "window": "Khung {window}",
@@ -141,6 +142,21 @@
     "desc": "Hồ sơ và lượt đăng nhập của nó bị gỡ khỏi Seelegent. Các tác vụ nó đã chạy vẫn giữ lịch sử.",
     "confirm": "Xóa tài khoản",
     "running": "Tài khoản đang chạy một tác vụ nên chưa xóa được. {error}"
+  },
+  "logout": {
+    "title": "Đăng xuất {name}?",
+    "desc": "Lượt đăng nhập đã lưu trong hồ sơ riêng của nó bị gỡ, và nó không nhận việc cho tới khi bạn đăng nhập lại. Lượt đăng nhập trên máy này không bị đụng tới.",
+    "confirm": "Đăng xuất",
+    "running": "Tài khoản đang chạy một tác vụ nên chưa đăng xuất được. {error}"
+  },
+  "off": {
+    "title": "Tắt nhận việc cho {name}?",
+    "desc": "Tài khoản sẽ không nhận việc mới. Bạn bật lại được bất cứ lúc nào.",
+    "confirm": "Tắt nhận việc",
+    "running": "{n} tác vụ đang chạy trên tài khoản này vẫn chạy tới hết lượt.",
+    "only": "Đây là tài khoản {backend} duy nhất nhận việc được lúc này: tác vụ {backend} mới sẽ chờ tới khi bạn bật lại một tài khoản hoặc một tài khoản khác nhận việc được trở lại.",
+    "others": "Việc mới và lượt sau của các tác vụ đang chạy sẽ sang tài khoản {backend} khác.",
+    "withProvider": "{backend} ({provider})"
   },
   "providers": {
     "title": "Nhà cung cấp API",

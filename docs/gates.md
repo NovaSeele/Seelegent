@@ -45,7 +45,17 @@ When the task starts, its proof is resolved and frozen (`TaskDetail.proof`):
 - **Budget**: `gateMaxAutoFixes`.
 
 A followup that changes `gate`, `gateCommands`, `lane`, `verify` or the spec task ids resolves the proof again (a new
-lane is checked like a new claim) and the next worker prompt starts with the new gate and lane. A followup by the
+lane is checked like a new claim) and the next worker prompt starts with the new gate and lane. A followup never
+takes gate commands from the working tree, which the worker can edit: one that leaves `gate`, `gateCommands` and
+the task ids alone runs exactly the frozen commands; a new `gate` or `gateCommands` runs what the lead asked for,
+with the spec tasks' `Gate:` lines and feature gate as they were frozen (an empty `gateCommands` list, which is
+not the same as leaving it out, clears the lead's commands, so those lines run again); new task ids read `tasks.md` only for the
+tasks they add. The first proof also freezes a hash of every `tasks.md` line of the feature, so an added task is
+taken only while its line is the one frozen: a line changed since gives no commands and no paths and shows as
+`tasks.md#<id>` in `barChanged`; a task `tasks.md` did not have at the freeze is read now and shows in `barChanged`
+on every turn, so the lead sees its line was never frozen. The bar is frozen again only for what the lead changed
+(the gate commands, the unchanged lines of added tasks), so a `tasks.md` line the worker edited stays in
+`barChanged` on every turn. A followup by the
 lead or the user resets the automatic fix count.
 
 ## The gate phase
@@ -72,7 +82,11 @@ of the project file it came from, and a spec's `Gate:` and `Feature gate:` lines
 place a regression run uses. The worker's brief prints each command as the gate runs it. They run with the daemon's
 environment plus `CI=1`, `SEELEGENT_GATE=1`, `SEELEGENT_TASK` and `SEELEGENT_TURN_FILES` (the changed files, one
 per line; left out, also when inherited, if longer than 16000 characters), `gateTimeoutSec` each, in their own
-process tree (killed on timeout or cancel). The full output goes to `tasks/<id>/gate-t<turn>-<n>.log`; the step
+process tree (killed on timeout or cancel). In a Rust repository they also get the `RUSTUP_TOOLCHAIN` the worker
+got: when every Cargo folder within three levels picks the same toolchain (`rustup show active-toolchain`, run
+with the real home and `RUSTUP_AUTO_INSTALL=0`) and the daemon's environment does not set one, that toolchain is
+pinned, so a dependency's own `rust-toolchain.toml` cannot switch compilers mid-build (error E0514). Regression
+runs get the same pin. The full output goes to `tasks/<id>/gate-t<turn>-<n>.log`; the step
 keeps the last `gateOutputTailBytes`.
 
 Gate commands run outside the git guard and without `SEELEGENT_WORKER=1`: test suites legitimately run

@@ -59,7 +59,8 @@
     "keyCleared": "API key removed from {name}",
     "deleted": "Deleted {name}",
     "logout": "Signed out",
-    "refreshedAll": "Quota refreshed"
+    "refreshedAll": "Quota refreshed",
+    "off": "Work turned off for {name}"
   },
   "quota": {
     "window": "{window} window",
@@ -141,6 +142,21 @@
     "desc": "Its profile and sign-in are removed from Seelegent. Tasks it ran keep their history.",
     "confirm": "Delete account",
     "running": "It is running a task, so it cannot be deleted now. {error}"
+  },
+  "logout": {
+    "title": "Sign out of {name}?",
+    "desc": "Its saved sign-in is removed from its own profile, and it takes no work until you sign in again. The sign-in on this computer is not touched.",
+    "confirm": "Sign out",
+    "running": "It is running a task, so it cannot sign out now. {error}"
+  },
+  "off": {
+    "title": "Turn off work for {name}?",
+    "desc": "The account takes no new work. You can turn it back on any time.",
+    "confirm": "Turn off work",
+    "running": "The task running on it finishes its turn. | The {n} tasks running on it finish their turns.",
+    "only": "It is the only {backend} account that can take work now: new {backend} tasks wait until you turn one back on or another one can take work again.",
+    "others": "New work and the next turns of running tasks go to another {backend} account.",
+    "withProvider": "{backend} ({provider})"
   },
   "providers": {
     "title": "API providers",

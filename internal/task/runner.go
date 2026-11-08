@@ -59,6 +59,9 @@ type run struct {
 	starting *launch.Handle
 	account  string
 	live     liveState
+	// cwd is the task's folder, against which the loop check resolves the relative paths of edits; repo is its
+	// repository root ("" outside git). The loop check hashes only files inside one of them.
+	cwd, repo string
 }
 
 // setStarting records a launch whose worker is about to run, until setHandle or clearHandle.
@@ -112,8 +115,23 @@ func (r *run) requestStop() {
 	}
 }
 
-// note updates what is known about the worker from one of its events.
-func (r *run) note(ev event.Event, now time.Time) {
+// note updates what is known about the worker from one of its events. replay marks an event read again after a
+// daemon restart (the files it touched may have changed since).
+func (r *run) note(ev event.Event, now time.Time, replay bool) {
+	// An edit that reports only its file is told apart by the file's content (read outside the lock), so repeated
+	// real edits of one file count as progress, not as a repeated call (old fix 492493d, bugs.md A1).
+	pathOnly, mark := false, ""
+	if ev.Kind == event.KindToolResult && ev.Tool != nil {
+		if p := pathOnlyEdit(ev.Tool); p != "" {
+			pathOnly = true
+			if !replay {
+				r.mu.Lock()
+				cwd, repo := r.cwd, r.repo
+				r.mu.Unlock()
+				mark = fileMark(cwd, repo, p)
+			}
+		}
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	l := &r.live
@@ -133,7 +151,12 @@ func (r *run) note(ev event.Event, now time.Time) {
 	case event.KindToolResult:
 		l.tool, l.command, l.toolSince = "", "", time.Time{}
 		if ev.Tool != nil {
-			l.steps = addStep(l.steps, ev.Tool, l.pending)
+			if pathOnly && mark == "" {
+				// Content unknown: each such edit is its own step.
+				l.edits++
+				mark = fmt.Sprintf("#%d", l.edits)
+			}
+			l.steps = addStep(l.steps, ev.Tool, l.pending, mark)
 			l.pending = ""
 		}
 	case event.KindFile:
@@ -238,6 +261,9 @@ func (s *Service) runTask(r *run) {
 		if !Active(t.Status) || t.Manual {
 			return
 		}
+		r.mu.Lock()
+		r.cwd, r.repo = t.Cwd, t.RepoRoot
+		r.mu.Unlock()
 		if t.GatePhase != nil {
 			switch {
 			case t.CancelRequested:
@@ -492,7 +518,7 @@ func (s *Service) launchAndFollow(r *run, t *Task, turn, n int, acc account.Acco
 	set := s.settings()
 	tu := t.TurnN(turn)
 	env, err := s.o.Accounts.Env(ctx, acc, b, account.EnvOptions{Base: s.o.BaseEnv(), Model: model,
-		AllowGit: t.AllowGit})
+		AllowGit: t.AllowGit, Extra: s.toolEnv(ctx, t.Cwd)})
 	if err != nil {
 		if errors.Is(err, account.ErrNoKey) || errors.Is(err, account.ErrProviderUnavailable) {
 			return failed(event.ClassAuthRequired, err)
@@ -534,6 +560,10 @@ func (s *Service) launchAndFollow(r *run, t *Task, turn, n int, acc account.Acco
 	if err != nil {
 		return failed(event.ClassFatal, err)
 	}
+	// Fail closed: a worker whose output could not be masked after a daemon restart is never started.
+	if err := saveMask(dir, env.Secrets); err != nil {
+		return failed(event.ClassFatal, fmt.Errorf("keep the mask list: %w", err))
+	}
 	h, err := launch.Start(r.stopCtx, launch.Options{Launcher: s.o.Launcher, Dir: launchDir, Spec: spec,
 		Env: env.Vars, Started: r.setStarting})
 	if err != nil {
@@ -542,7 +572,7 @@ func (s *Service) launchAndFollow(r *run, t *Task, turn, n int, acc account.Acco
 	}
 	r.setHandle(h, acc.ID, s.clk.Now())
 	defer r.clearHandle()
-	return s.follow(r, h, b, env.Secrets, t.ID, turn, n, Offsets{Turn: turn, Attempt: n})
+	return s.follow(r, h, b, attemptMask{secrets: env.Secrets}, t.ID, turn, n, Offsets{Turn: turn, Attempt: n})
 }
 
 // classify maps an outcome to an attempt status and its error text.
@@ -583,6 +613,9 @@ func classify(o backend.Outcome, exit launch.Exit, timeoutMinutes int) (status, 
 func (s *Service) finishAttempt(r *run, id string, turn, n int, accountID, model string, b backend.Backend,
 	res attemptResult) (bool, error) {
 	ctx := s.background()
+	if err := removeMask(s.attemptDir(id, turn, n)); err != nil {
+		s.log.Warn("task: remove the mask list", "task", id, "err", err)
+	}
 	set := s.settings()
 	o := res.outcome
 	status, errText := classify(o, res.exit, set.TaskTimeoutMinutes)

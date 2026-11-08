@@ -792,6 +792,26 @@ func TestGateOptions(t *testing.T) {
 	if calls.Load() == 0 {
 		t.Fatal("no call reached the daemon")
 	}
+	// A followup's empty gate list clears the lead's commands: it reaches the daemon as an empty list, and a gate
+	// left out sends nothing.
+	for _, c := range []struct {
+		gate any
+		want string
+		in   bool
+	}{{[]string{}, `"gateCommands":[]`, true}, {nil, `"gateCommands"`, false}} {
+		args := map[string]any{"task_id": "t1", "message": "m", "wait_seconds": 0}
+		if c.gate != nil {
+			args["gate"] = c.gate
+		}
+		var rep any
+		ok(t, cs, "followup", args, &rep)
+		st.mu.Lock()
+		body := string(st.bodies["POST /tasks/t1/followup"])
+		st.mu.Unlock()
+		if strings.Contains(body, c.want) != c.in {
+			t.Errorf("followup with gate %v: body %s", c.gate, body)
+		}
+	}
 }
 
 // TestDelegateAnnouncesTask: the new task's id reaches the host before the wait, as a progress notification and a

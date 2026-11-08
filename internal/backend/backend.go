@@ -82,6 +82,9 @@ type Parser interface {
 	// Finish ends the turn: it returns a synthesized report when the CLI wrote none, and an error event with its
 	// class when the turn failed. stderrTail is the end of standard error (launch.Handle.StderrTail).
 	Finish(exit launch.Exit, stderrTail string) []event.Event
+	// MaskPatterns makes the parser also run redact over every text it emits, after the literal secrets: for a
+	// turn whose secrets are not known for sure, redact masks keys by their shape (logx.Redactor.String).
+	MaskPatterns(redact func(string) string)
 }
 
 // SignIn describes how an account signs in: a command run in a terminal window the user interacts with.

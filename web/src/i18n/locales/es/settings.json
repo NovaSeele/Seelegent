@@ -246,7 +246,7 @@
     },
     "loopRepeat": {
       "label": "Detección de bucles",
-      "desc": "El mismo paso repetido estas veces cuenta como un bucle.",
+      "desc": "El mismo paso repetido estas veces cuenta como un bucle. Tiene efecto hasta 12: la comprobación mira las últimas 12 llamadas a herramientas.",
       "keywords": "bucle repetir atasco"
     },
     "attentionDecay": {

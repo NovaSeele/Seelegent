@@ -535,7 +535,16 @@ export interface HandoffData {
 export interface ReattachData {
   accountId: string
   offset?: number
+  /**
+   * NoticeCode says what the lead should know about the recovery (RecoveryNotice*); the dashboard words it.
+   * Notice is the same in English, the raw text behind the code (logs, API clients).
+   */
+  noticeCode?: RecoveryNoticeCode
+  notice?: string
 }
+
+/** RecoveryNoticeCode says what the lead should know about a recovery. */
+export type RecoveryNoticeCode = 'mask_unreadable'
 
 /**
  * AttentionData is the data of an attention event that clears the flag ({state: "cleared"}); a raised flag is an
@@ -1903,7 +1912,10 @@ export interface Settings {
   stallMinutes: number
   /** StallToolMinutes flags a single tool call that has been running for this long. */
   stallToolMinutes: number
-  /** LoopRepeat flags a worker that repeats the same tool call this many times in a row. */
+  /**
+   * LoopRepeat flags a worker that repeats the same tool call this many times within its last 12 tool calls
+   * without progress in between.
+   */
   loopRepeat: number
   /** AttentionDecayHours drops an unanswered attention flag after this long. */
   attentionDecayHours: number
@@ -2456,7 +2468,8 @@ export interface FollowupRequest {
   allowGit?: boolean
   /**
    * Gate, GateCommands, Lane, NoLane, ForceLane and Verify change the task's gate from this turn on (see
-   * DelegateRequest); left out, the task keeps what it had.
+   * DelegateRequest); left out, the task keeps what it had. An empty GateCommands list (not left out) clears the
+   * lead's commands, so the spec's Gate: lines (as frozen) or the detected commands run again.
    */
   gate?: boolean
   gateCommands?: string[]

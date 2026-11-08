@@ -40,9 +40,18 @@ func (a *App) PatchSettings(ctx context.Context, patch []byte) (config.Settings,
 	if err != nil {
 		return config.Settings{}, err
 	}
-	a.settings.Store(&out)
-	a.Pool.Notify()
+	prev := a.settings.Swap(&out)
+	a.settingsChanged(*prev, out)
 	return out, nil
+}
+
+// settingsChanged tells the services that read a setting only when they arm a timer or wait: the pool (limits and
+// rest periods) and the quota refresher (quotaRefreshMinutes, re-armed from its last cycle).
+func (a *App) settingsChanged(prev, next config.Settings) {
+	a.Pool.Notify()
+	if prev.QuotaRefreshMinutes != next.QuotaRefreshMinutes {
+		a.rescheduler.Reschedule()
+	}
 }
 
 // settingsStore adapts the App to httpapi.Settings.

@@ -73,6 +73,10 @@
     "handoff": "{from} から {to} へ移動",
     "reattach": "実行中のワーカーに再接続しました",
     "resumed": "デーモンの再起動後に再開しました",
+    "recoveryNotice": {
+      "mask_unreadable": "この試行の保存済みマスクリストを読めなかったため、出力はキーのパターンでもマスクされます。",
+      "unknown": "デーモンがこの復旧について、このダッシュボードが知らない内容を報告しました。"
+    },
     "attentionCleared": "待機は解消されました",
     "attention": {
       "blocked": "ワーカーがブロックされています",

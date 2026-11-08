@@ -8,14 +8,18 @@ import Button from '@/components/ui/Button.vue'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import Dialog from '@/components/ui/Dialog.vue'
 import TextField from '@/components/ui/TextField.vue'
+import { useNow } from '@/composables/useNow'
 import { useAccountsStore } from '@/stores/accounts'
 import { useToastStore } from '@/stores/toast'
 
 import type { AccountDialog } from './AccountCard.vue'
+import { offConsequence } from './accountView'
 
 /**
  * The account dialogs the cards ask for: rename, the API key (set or clear; only its hint is ever shown, and the
- * typed key is cleared when the dialog closes) and delete (409 while the account runs a task, said in the dialog).
+ * typed key is cleared when the dialog closes), delete and sign out (409 while the account runs a task, said in the
+ * dialog), and turning work off, which says what changes now (running turns finish; the last account of its kind
+ * leaves new work waiting).
  */
 const props = defineProps<{ account: Account | undefined }>()
 const dialog = defineModel<AccountDialog | null>({ required: true })
@@ -45,6 +49,18 @@ watch(
 
 const name = computed(() => props.account?.label ?? '')
 
+// Read while the dialog is open, so a turn that ends meanwhile updates the wording.
+const now = useNow(30_000)
+const off = computed(() =>
+  props.account ? offConsequence(props.account, accounts.accounts, now.value) : null,
+)
+const backendName = computed(() => {
+  const a = props.account
+  if (!a) return ''
+  const backend = t(`accounts.backend.${a.backend}`)
+  return a.provider ? t('accounts.off.withProvider', { backend, provider: a.provider }) : backend
+})
+
 async function run(action: (account: Account) => Promise<unknown>, done: string) {
   const account = props.account
   if (!account || busy.value) return
@@ -59,7 +75,9 @@ async function run(action: (account: Account) => Promise<unknown>, done: string)
     error.value =
       cause instanceof ApiError && cause.status === 409 && dialog.value === 'delete'
         ? t('accounts.delete.running', { error: cause.message })
-        : (field?.message ?? errorMessage(cause))
+        : cause instanceof ApiError && cause.status === 409 && dialog.value === 'logout'
+          ? t('accounts.logout.running', { error: cause.message })
+          : (field?.message ?? errorMessage(cause))
   } finally {
     busy.value = false
   }
@@ -79,6 +97,12 @@ const clearKey = () =>
   run((a) => accounts.clearKey(a.id), t('accounts.done.keyCleared', { name: name.value }))
 const remove = () =>
   run((a) => accounts.removeAccount(a.id), t('accounts.done.deleted', { name: name.value }))
+const logout = () => run((a) => accounts.logout(a.id), t('accounts.done.logout'))
+const turnOff = () =>
+  run(
+    (a) => accounts.update(a.id, { enabled: false }),
+    t('accounts.done.off', { name: name.value }),
+  )
 </script>
 
 <template>
@@ -162,4 +186,53 @@ const remove = () =>
     @update:open="dialog = null"
     @confirm="remove"
   />
+
+  <ConfirmDialog
+    :open="dialog === 'logout'"
+    :title="t('accounts.logout.title', { name })"
+    :description="t('accounts.logout.desc')"
+    :confirm-label="t('accounts.logout.confirm')"
+    danger
+    :busy="busy"
+    :error="error"
+    @update:open="dialog = null"
+    @confirm="logout"
+  />
+
+  <ConfirmDialog
+    :open="dialog === 'off'"
+    :title="t('accounts.off.title', { name })"
+    :description="t('accounts.off.desc')"
+    :confirm-label="t('accounts.off.confirm')"
+    danger
+    :busy="busy"
+    :error="error"
+    @update:open="dialog = null"
+    @confirm="turnOff"
+  >
+    <ul class="off">
+      <li v-if="off && off.running > 0">
+        {{ t('accounts.off.running', { n: off.running }, off.running) }}
+      </li>
+      <li>
+        {{
+          off?.only
+            ? t('accounts.off.only', { backend: backendName })
+            : t('accounts.off.others', { backend: backendName })
+        }}
+      </li>
+    </ul>
+  </ConfirmDialog>
 </template>
+
+<style scoped>
+.off {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding-inline-start: var(--space-5);
+  color: var(--text-secondary);
+  font-size: var(--fs-sm);
+  list-style: disc;
+}
+</style>

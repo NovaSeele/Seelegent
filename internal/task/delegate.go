@@ -170,7 +170,7 @@ func (s *Service) DelegateWith(ctx context.Context, req api.DelegateRequest, sp 
 	t.AfterMode = afterMode
 	if gated(t) {
 		t.RepoRoot = s.gitRoot(ctx, cwd)
-		if t.Proof, err = s.resolveProof(t, preq, nil); err != nil {
+		if t.Proof, err = s.resolveProof(t, preq, nil, false); err != nil {
 			return api.TaskSummary{}, err
 		}
 	}
@@ -255,8 +255,8 @@ func (s *Service) Followup(ctx context.Context, id string, req api.FollowupReque
 	if by != ByLead && by != ByUser {
 		return api.TaskSummary{}, invalidf("by %q must be lead or user", req.By)
 	}
-	preq := proofRequest{gate: req.Gate, gateCommands: req.GateCommands, lane: req.Lane, noLane: req.NoLane,
-		forceLane: req.ForceLane, verify: req.Verify}
+	preq := proofRequest{gate: req.Gate, gateCommands: listOf(req.GateCommands), lane: req.Lane,
+		noLane: req.NoLane, forceLane: req.ForceLane, verify: req.Verify}
 	var mem *api.Member
 	if req.Member != "" {
 		m, err := s.usableMember(ctx, req.Member)

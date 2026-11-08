@@ -92,7 +92,7 @@ does), with two additions: `gate` of `delegate` and `followup` also takes `true`
 | Tool | Routes | Now |
 |---|---|---|
 | `delegate` | `POST /tasks`, then `POST /wait?cwd=`; with `variants` or `variant_specs`: `POST /contests`, then `GET /contests/{id}/wait` | yes. `member` runs the task as that member ([team.md](team.md)). `variants`/`variant_specs` start a contest, with `judge` (a member id, or `false` for machine scoring only) and `deadline_minutes`; a contest cannot take `after`. `gate` (a command, a list, `true` for the detected commands, `false`), `lane` (paths, or `false` for `noLane`), `force_lane` and `verify` map onto `gate`/`gateCommands`/`lane`/`noLane`/`forceLane`/`verify` ([gates.md](gates.md)) |
-| `followup` | `GET /tasks/{id}` (only to check `provider`), `POST /tasks/{id}/followup`, `POST /wait` | yes; `member` moves the task to that member |
+| `followup` | `GET /tasks/{id}` (only to check `provider`), `POST /tasks/{id}/followup`, `POST /wait` | yes; `member` moves the task to that member; `gate: []` clears the lead's gate commands (sent as `gateCommands: []`), so the spec's frozen `Gate:` lines or the detected commands run again |
 | `wait` | `POST /wait` (`reports: true`) | yes |
 | `review` | `POST /tasks/{id}/review` | yes; `answer_objection` is sent as `answerObjection`, which accepting a task a peer objected to needs; a senior's objection comes back as a `Warning:` line |
 | `cancel` | `POST /tasks/{id}/cancel` | yes; 202 is reported as `cancelling` |

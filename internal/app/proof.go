@@ -2,6 +2,8 @@ package app
 
 import (
 	"context"
+	"maps"
+	"slices"
 	"time"
 
 	"github.com/NovaSeele/Seelegent/internal/api"
@@ -26,10 +28,17 @@ func (g proofGit) Head(ctx context.Context, root string) (string, bool) {
 }
 
 // proofExec runs one command of a regression run like a gate command: through the shell, from dir, with the gate
-// time limit and output tail.
+// time limit, output tail and Rust toolchain pin.
 func (a *App) proofExec(ctx context.Context, cmd, dir, logFile string) proof.CmdResult {
 	set := a.Settings()
-	env := append(append([]string(nil), a.env...), "CI=1", "SEELEGENT_GATE=1")
+	env := append([]string(nil), a.env...)
+	if a.toolchains != nil {
+		pin := a.toolchains.Env(ctx, dir, a.env)
+		for _, k := range slices.Sorted(maps.Keys(pin)) {
+			env = append(env, k+"="+pin[k])
+		}
+	}
+	env = append(env, "CI=1", "SEELEGENT_GATE=1")
 	res := gate.Exec(ctx, cmd, gate.ExecOptions{Dir: dir, Env: env,
 		Timeout:   time.Duration(max(set.GateTimeoutSec, 1)) * time.Second,
 		TailBytes: max(set.GateOutputTailBytes, 1), LogFile: logFile})

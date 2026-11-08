@@ -41,6 +41,7 @@ const historyOf = ref<Automation | null>(null)
 const removing = ref<Automation | null>(null)
 const removeBusy = ref(false)
 const removeError = ref('')
+const running = ref<Automation | null>(null)
 const busyId = ref('')
 
 onMounted(() => store.ensure())
@@ -93,7 +94,15 @@ const disable = (a: Automation) =>
     return t('automations.card.disabled', { name: a.name })
   })
 
-const runNow = (a: Automation) =>
+// Asked first: a run hands work to a worker at once (precheck, quota and overlap still decide).
+function runNow() {
+  const a = running.value
+  if (!a) return
+  running.value = null
+  void runOne(a)
+}
+
+const runOne = (a: Automation) =>
   act(a, async () => {
     const run = await store.api().run(a.id)
     return t('automations.card.ran', { outcome: t(`automations.outcome.${run.outcome}`) })
@@ -159,7 +168,7 @@ async function remove() {
           :busy="busyId === a.id"
           @confirm="askConfirm(a)"
           @disable="disable(a)"
-          @run="runNow(a)"
+          @run="running = a"
           @edit="edit(a)"
           @runs="showRuns(a)"
           @remove="removing = a"
@@ -179,6 +188,14 @@ async function remove() {
       :error="removeError"
       @update:open="removing = null"
       @confirm="remove"
+    />
+    <ConfirmDialog
+      :open="running !== null"
+      :title="t('automations.runTitle', { name: running?.name ?? '' })"
+      :description="t('automations.runDesc')"
+      :confirm-label="t('automations.card.runNow')"
+      @update:open="running = null"
+      @confirm="runNow"
     />
   </PageContainer>
 </template>

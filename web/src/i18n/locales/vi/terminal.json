@@ -73,6 +73,10 @@
     "handoff": "Chuyển từ {from} sang {to}",
     "reattach": "Đã kết nối lại với worker đang chạy",
     "resumed": "Chạy tiếp sau khi daemon khởi động lại",
+    "recoveryNotice": {
+      "mask_unreadable": "Không đọc được danh sách che đã lưu của lần chạy này, nên đầu ra của nó cũng được che theo mẫu khóa.",
+      "unknown": "Daemon báo một điều về lần khôi phục này mà bảng điều khiển này không biết."
+    },
     "attentionCleared": "Không còn chờ nữa",
     "attention": {
       "blocked": "Worker bị chặn",

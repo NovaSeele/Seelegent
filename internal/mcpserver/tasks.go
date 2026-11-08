@@ -194,7 +194,7 @@ func (s *Server) followup(ctx context.Context, k *call) (result, error) {
 	req := api.FollowupRequest{Message: a.Message, Model: a.Model, Effort: a.Effort, TaskIDs: a.TaskIDs,
 		Profile: a.Profile, AllowGit: a.AllowGit.ptr(), Force: a.Force.or(false), Verify: a.Verify.ptr(),
 		ForceLane: a.ForceLane.or(false), Member: a.Member}
-	req.Gate, req.GateCommands = a.Gate.request()
+	req.Gate, req.GateCommands = a.Gate.followup()
 	req.Lane, req.NoLane = a.Lane.paths, a.Lane.off
 	if _, err := c.Followup(ctx, a.TaskID, req); err != nil {
 		return result{}, err

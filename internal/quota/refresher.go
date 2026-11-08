@@ -45,8 +45,8 @@ type RefresherOptions struct {
 	Store    *Store
 	// Readers are the quota readers by backend name.
 	Readers map[string]backend.QuotaReader
-	// Interval returns the time between cycles; it is asked before every wait, so a changed quotaRefreshMinutes
-	// applies from the next cycle. Nil or a non-positive result means DefaultInterval.
+	// Interval returns the time between cycles; it is asked before every wait and again on Reschedule, so a changed
+	// quotaRefreshMinutes applies at once. Nil or a non-positive result means DefaultInterval.
 	Interval func() time.Duration
 	// Timeout bounds the read of one account (DefaultTimeout when zero).
 	Timeout time.Duration
@@ -84,6 +84,7 @@ type Result struct {
 type Refresher struct {
 	o       RefresherOptions
 	kick    chan struct{}
+	resched chan struct{}
 	request chan struct{}
 	sem     chan struct{} // Parallel slots, shared by cycles and requests
 
@@ -123,8 +124,9 @@ func NewRefresher(o RefresherOptions) (*Refresher, error) {
 	if o.Logger == nil {
 		o.Logger = slog.New(slog.DiscardHandler)
 	}
-	return &Refresher{o: o, kick: make(chan struct{}, 1), request: make(chan struct{}, 1),
-		sem: make(chan struct{}, o.Parallel), inflight: map[string]*refreshCall{}, last: map[string]*refreshCall{},
+	return &Refresher{o: o, kick: make(chan struct{}, 1), resched: make(chan struct{}, 1),
+		request: make(chan struct{}, 1),
+		sem:     make(chan struct{}, o.Parallel), inflight: map[string]*refreshCall{}, last: map[string]*refreshCall{},
 		pending: map[string]bool{}}, nil
 }
 
@@ -140,15 +142,44 @@ func (r *Refresher) Run(ctx context.Context) {
 	defer wg.Wait()
 	for {
 		r.RefreshAll(ctx)
-		t := r.o.Clock.NewTimer(r.nextWait())
+		if !r.sleep(ctx, r.o.Clock.Now()) {
+			return
+		}
+	}
+}
+
+// sleep waits for the next cycle after one that ended at last. A Reschedule re-arms the wait with the interval as
+// it is now, still counted from last (a cycle starts at once when that time has passed), so a lowered interval
+// applies without waiting for the old timer and without a burst of reads. It reports false when ctx ended.
+func (r *Refresher) sleep(ctx context.Context, last time.Time) bool {
+	wait := r.nextWait()
+	for {
+		t := r.o.Clock.NewTimer(wait)
 		select {
 		case <-ctx.Done():
 			t.Stop()
-			return
+			return false
 		case <-r.kick:
 			t.Stop()
+			return true
 		case <-t.C():
+			return true
+		case <-r.resched:
+			t.Stop()
+			wait = last.Add(r.nextWait()).Sub(r.o.Clock.Now())
+			if wait <= 0 {
+				return true
+			}
 		}
+	}
+}
+
+// Reschedule tells Run that the interval changed (quotaRefreshMinutes): the wait in progress is re-armed with the
+// new interval from the end of the last cycle. It never blocks.
+func (r *Refresher) Reschedule() {
+	select {
+	case r.resched <- struct{}{}:
+	default:
 	}
 }
 
@@ -200,7 +231,8 @@ func (r *Refresher) serveRequests(ctx context.Context) {
 	}
 }
 
-// Kick starts the next cycle of Run now (for example after quotaRefreshMinutes changed).
+// Kick starts the next cycle of Run now. A changed interval goes through Reschedule instead, which does not read
+// every account at once.
 func (r *Refresher) Kick() {
 	select {
 	case r.kick <- struct{}{}:
