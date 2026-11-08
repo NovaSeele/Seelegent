@@ -157,7 +157,8 @@ func registerFlags(fs *flag.FlagSet) *options {
 	fs.DurationVar(&o.interval, "interval", 5*time.Second, "sampling interval")
 	fs.StringVar(&o.out, "out", "", "output folder (default: <temp>/seelegent-bench/<time>)")
 	fs.StringVar(&o.baseline, "baseline", "", "an earlier result.json: print the deltas")
-	fs.StringVar(&o.bin, "bin", "", "seelegent binary to run (default: build ./cmd/seelegent)")
+	fs.StringVar(&o.bin, "bin", "", "seelegent binary to run; the daemon uses the companion seelegent-launch next "+
+		"to it when that is of the same build (default: build ./cmd/seelegent and ./cmd/seelegent-launch)")
 	fs.StringVar(&o.commit, "commit", "", "commit recorded in the result (default: git rev-parse HEAD of the module)")
 	fs.IntVar(&o.port, "port", 0, "daemon port (default: a free port picked for this run)")
 	fs.IntVar(&o.pprofPort, "pprof-port", 0, "daemon --pprof-addr port on 127.0.0.1 (default: a free port)")

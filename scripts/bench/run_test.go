@@ -170,10 +170,17 @@ func (e *env) build(ctx context.Context) error {
 		return nil
 	}
 	e.bin = filepath.Join(e.work, exeName("seelegent"))
-	cmd := exec.CommandContext(ctx, "go", "build", "-trimpath", "-o", e.bin, "./cmd/seelegent")
-	cmd.Dir, cmd.Stdout, cmd.Stderr = e.root, os.Stderr, os.Stderr
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("build seelegent: %w", err)
+	// The companion launcher next to it, built the same way, so the daemon runs the launches in it as a release
+	// does (launchbin). With -bin, the daemon uses the companion that sits next to that binary, if any.
+	for _, b := range []struct{ out, pkg string }{
+		{e.bin, "./cmd/seelegent"},
+		{filepath.Join(e.work, exeName("seelegent-launch")), "./cmd/seelegent-launch"},
+	} {
+		cmd := exec.CommandContext(ctx, "go", "build", "-trimpath", "-o", b.out, b.pkg)
+		cmd.Dir, cmd.Stdout, cmd.Stderr = e.root, os.Stderr, os.Stderr
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("build %s: %w", b.pkg, err)
+		}
 	}
 	return nil
 }

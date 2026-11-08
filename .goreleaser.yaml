@@ -18,24 +18,35 @@ builds:
   - id: seelegent
     main: ./cmd/seelegent
     binary: seelegent
-    env:
+    env: &env
       - CGO_ENABLED=0
-    goos: [windows, linux, darwin]
-    goarch: [amd64, arm64]
-    flags:
+    goos: &goos [windows, linux, darwin]
+    goarch: &goarch [amd64, arm64]
+    flags: &flags
       - -trimpath
-    ldflags:
+    ldflags: &ldflags
       - -s -w
       - -X github.com/NovaSeele/Seelegent/internal/buildinfo.version=v{{ .Version }}
       - -X github.com/NovaSeele/Seelegent/internal/buildinfo.commit={{ .ShortCommit }}
       - -X github.com/NovaSeele/Seelegent/internal/buildinfo.date={{ .CommitDate }}
     # Reproducible: the binaries carry the commit's time, not the build's.
-    mod_timestamp: "{{ .CommitTimestamp }}"
+    mod_timestamp: &mod_timestamp "{{ .CommitTimestamp }}"
+  # The companion launcher, shipped next to seelegent (docs/release.md). The daemon runs it only when its build
+  # information matches its own (flags, -ldflags, revision), so it shares every setting above through the anchors.
+  - id: seelegent-launch
+    main: ./cmd/seelegent-launch
+    binary: seelegent-launch
+    env: *env
+    goos: *goos
+    goarch: *goarch
+    flags: *flags
+    ldflags: *ldflags
+    mod_timestamp: *mod_timestamp
 
 archives:
   - id: seelegent
-    ids: [seelegent]
-    # seelegent_<version>_<os>_<arch>.tar.gz (.zip on Windows), the binary at the archive's root.
+    ids: [seelegent, seelegent-launch]
+    # seelegent_<version>_<os>_<arch>.tar.gz (.zip on Windows), both binaries at the archive's root.
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     formats: [tar.gz]
     format_overrides:

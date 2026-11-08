@@ -1,6 +1,7 @@
-// Package bench is Seelegent's resource benchmark (M19). It builds the seelegent binary, starts a daemon on a temp
-// SEELEGENT_HOME with fake agy accounts (quota readers on), and samples the daemon's whole process tree while it
-// idles or runs a load of fake workers. The code is behind the `bench` build tag, so `go test ./...` never runs it:
+// Package bench is Seelegent's resource benchmark (M19). It builds the seelegent binary and its companion launcher
+// seelegent-launch, starts a daemon on a temp SEELEGENT_HOME with fake agy accounts (quota readers on), and samples
+// the daemon's whole process tree while it idles or runs a load of fake workers. The code is behind the `bench`
+// build tag, so `go test ./...` never runs it:
 //
 //	make bench                                   # idle, 10 minutes
 //	make bench BENCH_ARGS="-scenario load -duration 5m"

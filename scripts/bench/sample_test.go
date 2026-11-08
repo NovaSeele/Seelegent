@@ -176,7 +176,8 @@ func (s *sampler) role(name, parentRole string, pid int) string {
 	}
 	base := exeBase(name)
 	switch {
-	case base == "seelegent" && parentRole == "daemon":
+	case (base == "seelegent" || strings.HasPrefix(base, "seelegent-launc")) && parentRole == "daemon":
+		// `seelegent __launch`, or the companion seelegent-launch (its name cut to 15 characters on Linux).
 		return "launcher"
 	case base == s.selfName && parentRole == "launcher":
 		return "worker"
