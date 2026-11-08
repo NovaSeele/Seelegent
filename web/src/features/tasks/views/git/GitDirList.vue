@@ -104,6 +104,8 @@ const listId = (dir: GitDir) => `${base}-${props.dirs.indexOf(dir)}`
 }
 
 .gdl__row:hover {
+  --text-muted: var(--text-primary);
+  --text-secondary: var(--text-primary);
   background: var(--bg-hover);
 }
 
