@@ -167,14 +167,11 @@ type Turn struct {
 // request. A turn after earlier ones (or after an interrupted attempt) carries the handoff section, so a worker on
 // another account never loses the task (old bug B7).
 func Worker(in Input) string {
-	head := rulesHead + rulesTail
 	specDir := ""
 	if in.Spec != nil && in.Spec.Outside {
 		specDir = in.Spec.Dir
 	}
-	if rule := DataRule(in.DataDir, in.Cwd, specDir); rule != "" {
-		head = rulesHead + "- " + rule + "\n" + rulesTail
-	}
+	head := rulesHead + "- " + DataRule(in.DataDir, in.Cwd, specDir) + "\n" + rulesTail
 	if in.Lead != "" {
 		head += "\nThe lead for this task is " + in.Lead + "."
 	}
@@ -375,21 +372,24 @@ func Preview(prompt string) string {
 	return cut(strings.TrimLeft(prompt, "\n"), PreviewChars, "")
 }
 
-// DataRule is the rule about Seelegent's data folder (dataDir; named ~/.seelegent when "") that the worker brief
-// and the gate's fix prompts carry: explore neither it nor the daemon's processes, read only the paths the brief
-// names inside it. It is "" when the task's folder (cwd) or its spec folder outside the repository (specDir, an
-// absolute path; "" for none) lies inside the data folder: a Spec Kit workspace is <data>/specs/<repo>-spec/, and
-// the task works there.
+// DataRule is the rule about Seelegent's data folder (dataDir; named ~/.seelegent when "", and then no exception
+// can be told) that every worker brief and the gate's fix prompts carry: explore neither it nor the daemon's
+// processes (field report 4, F10). A Spec Kit workspace lives inside it (<data>/specs/<repo>-spec/), so the rule
+// names the exception: the task's folder (cwd) when that lies inside (the speckit-* steps work there), else its
+// spec folder outside the repository (specDir, an absolute path; "" for none) when that lies inside.
 func DataRule(dataDir, cwd, specDir string) string {
 	shown := "~/.seelegent"
 	if dataDir != "" {
-		if within(cwd, dataDir) || within(specDir, dataDir) {
-			return ""
-		}
 		shown = dataDir
 	}
-	return "Do not explore " + shown + " or Seelegent's processes; inside it, read only the paths this brief names, " +
-		"such as the spec folder."
+	head := "Do not explore " + shown + " or Seelegent's processes; inside it, "
+	switch {
+	case dataDir != "" && within(cwd, dataDir):
+		return head + "work only in " + cwd + "."
+	case dataDir != "" && within(specDir, dataDir):
+		return head + "read only " + specDir + " (your spec folder) and the paths this brief names."
+	}
+	return head + "read only the paths this brief names, such as the spec folder."
 }
 
 // within reports whether p lies in dir or is dir, compared through fsutil.Key.

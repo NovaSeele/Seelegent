@@ -56,8 +56,8 @@ type Folders struct {
 
 // FixPrompt is the message of an automatic fix turn after a failed gate (attempt of budget). lane is the task's lane:
 // when the lane step lists files outside it, the prompt names the lane and those files as information only, and
-// tells the worker not to delete, revert or move them. It ends with the worker brief's data-folder rule, left out
-// like there when the task works in the data folder (a Spec Kit workspace).
+// tells the worker not to delete, revert or move them. It ends with the worker brief's data-folder rule, with the
+// same exception for a Spec Kit workspace in the data folder.
 func FixPrompt(res api.GateResult, lane []string, attempt, budget int, others []Other, where Folders) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "Seelegent ran the gate for your work and it failed (automatic fix %d/%d).\n", attempt, budget)
@@ -135,9 +135,7 @@ func FixPrompt(res api.GateResult, lane []string, attempt, budget int, others []
 		fmt.Fprintf(&b, "\nOther workers are active in this repository: %s; failures in their files are not yours "+
 			"to fix.\n", strings.Join(parts, "; "))
 	}
-	if rule := brief.DataRule(where.Data, where.Cwd, where.Spec); rule != "" {
-		b.WriteString("\n" + rule + "\n")
-	}
+	b.WriteString("\n" + brief.DataRule(where.Data, where.Cwd, where.Spec) + "\n")
 	return strings.TrimRight(b.String(), "\n")
 }
 
