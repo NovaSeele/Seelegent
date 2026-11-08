@@ -256,11 +256,12 @@ func (p *Pool) choose(v *view, req *Request) (Choice, *Unavailable) {
 		}
 		u.Candidates++
 	}
-	if limit := v.settings.MaxConcurrentWorkers; limit > 0 && len(free) > 0 && p.runningLocked() >= limit {
+	if limit, running := v.settings.MaxConcurrentWorkers, p.runningLocked(); limit > 0 && len(free) > 0 &&
+		running >= limit {
 		// maxConcurrentWorkers: every free account counts as busy until a running turn ends (a release wakes the
 		// waiters). Lowering the cap stops nothing.
 		u.Busy += len(free)
-		u.Capped = limit
+		u.Capped, u.Running = limit, running
 		free = nil
 	}
 	if len(free) == 0 {
