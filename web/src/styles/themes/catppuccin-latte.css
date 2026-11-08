@@ -50,9 +50,9 @@
   --term-tool: #1e66f5;
   --term-path: #8839ef;
   --term-diff-add-bg: rgba(22, 163, 74, 0.12);
-  --term-diff-add-fg: #15803d;
+  --term-diff-add-fg: #126e35;
   --term-diff-del-bg: rgba(220, 38, 38, 0.12);
-  --term-diff-del-fg: #b91c1c;
+  --term-diff-del-fg: #b51b1b;
   --term-border: rgba(76, 79, 105, 0.1);
   --diff-del: #b51b1b; /* contrast fix 2026-11-06 */
   --shadow-lg: 0 16px 40px rgba(17, 24, 39, 0.16), 0 4px 12px rgba(17, 24, 39, 0.08);

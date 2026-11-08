@@ -119,6 +119,13 @@ defineExpose({ focusSelected })
   background: var(--accent-soft);
 }
 
+/* The tint of a hovered or selected row takes the quiet text below 4.5:1 in every theme: it reads in the primary
+   colour there (F33). */
+.gfl__row:hover :is(.gfl__dir, .gfl__from, .gfl__count, .gfl__name--deleted),
+.gfl__row--selected :is(.gfl__dir, .gfl__from, .gfl__count, .gfl__name--deleted) {
+  color: var(--text-primary);
+}
+
 .gfl__row:focus-visible {
   outline: none;
   box-shadow: inset 0 0 0 var(--focus-ring-width) var(--border-focus);

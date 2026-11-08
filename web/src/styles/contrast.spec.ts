@@ -5,6 +5,7 @@
  *
  *   4.5:1  all text: primary, secondary and muted on every surface, text on the accent, links (accent), status
  *          words on their tinted pill (cancelled too), terminal text and its dim text
+ *          (F33: diff lines on their tint, the hunk header on the prompt tint, text on a selected row)
  *   3:1    only UI parts whose colour carries meaning: the focus ring and the outline of a control that has no
  *          fill of its own (checkbox, --border-control)
  *
@@ -53,6 +54,13 @@ const RULES: readonly Rule[] = [
   },
   { fg: '--term-fg', on: ['--term-bg'], min: 4.5 },
   { fg: '--term-dim', on: ['--term-bg'], min: 4.5 },
+  // F33: the text and line numbers of added and deleted diff lines on their tint, the hunk header and the lead's
+  // prompt on the prompt tint, and the text of a selected list row (file names; a git file's folder on a hovered
+  // or selected row).
+  { fg: '--term-diff-add-fg', on: ['--term-diff-add-bg'], min: 4.5, base: '--term-bg' },
+  { fg: '--term-diff-del-fg', on: ['--term-diff-del-bg'], min: 4.5, base: '--term-bg' },
+  { fg: '--term-prompt-fg', on: ['--term-prompt-bg'], min: 4.5, base: '--term-bg' },
+  { fg: '--text-primary', on: ['--accent-soft'], min: 4.5, base: '--bg-surface' },
 ]
 
 /** The custom properties declared in a CSS block (last declaration wins). */
@@ -152,4 +160,22 @@ describe('theme contrast (WCAG)', () => {
   it.each(THEMES.map((theme) => theme.id))('%s meets the contrast table', (id) => {
     expect(violations(id)).toEqual([])
   })
+
+  // F8: muted and secondary text sit close together in the palettes whose own foreground is near 4.5:1 (Everforest,
+  // Solarized, One Dark, Darcula); a wider step would put secondary above primary or muted below 4.5:1. The order of
+  // the three never inverts.
+  it.each(THEMES.map((theme) => theme.id))(
+    '%s keeps primary, secondary and muted in order',
+    (id) => {
+      const resolve = resolver(declarations(readFile(`src/styles/themes/${id}.css`)), derived)
+      const surface = resolve('--bg-surface')
+      const [primary, secondary, muted] = [
+        '--text-primary',
+        '--text-secondary',
+        '--text-muted',
+      ].map((name) => contrast(resolve(name), surface)) as [number, number, number]
+      expect(primary).toBeGreaterThanOrEqual(secondary)
+      expect(secondary).toBeGreaterThan(muted)
+    },
+  )
 })
