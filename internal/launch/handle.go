@@ -111,6 +111,9 @@ type Handle struct {
 	watchMu  sync.Mutex
 	watch    *launcherWatch
 	lastFull time.Time
+	// noWatch is set once the system could not wait for the launcher (any WatchProcess error: no pidfd, a
+	// seccomp EPERM, a BSD): the tails poll from then on instead of trying again at every look.
+	noWatch bool
 
 	treeMu     sync.Mutex
 	tree       *platform.WorkerTree // set by Start, or by Tree once a record checks out
@@ -363,10 +366,13 @@ type launcherWatch struct {
 // watchLauncher starts (or joins) a wait on the launcher process; release ends the caller's share, and the wait
 // ends with the last one. done is nil when the launcher cannot be waited for (its tree is not known or not
 // checked yet, or the system cannot wait for it): the caller looks for the end by polling then, and may try again
-// later.
+// later. A launcher the system could not wait for once is not tried again (noWatch).
 func (h *Handle) watchLauncher() (done <-chan struct{}, release func()) {
 	h.watchMu.Lock()
 	defer h.watchMu.Unlock()
+	if h.noWatch {
+		return nil, func() {}
+	}
 	if h.watch == nil {
 		tree, ok := h.Tree()
 		if !ok || tree.RootPID <= 0 || tree.RootStart == 0 {
@@ -376,6 +382,7 @@ func (h *Handle) watchLauncher() (done <-chan struct{}, release func()) {
 		ch, err := platform.WatchProcess(ctx, tree.RootPID, tree.RootStart)
 		if err != nil {
 			cancel()
+			h.noWatch = true
 			return nil, func() {}
 		}
 		h.watch = &launcherWatch{done: ch, cancel: cancel}

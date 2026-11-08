@@ -13,8 +13,9 @@ import (
 // process ends or ctx does) and ends with ctx (the channel then stays open).
 //
 // It fails with an error wrapping errors.ErrUnsupported where the system cannot wait for a process that is not a
-// child (Linux before 5.3, BSDs) and when start is 0 (unknown: a reused id could not be told apart); callers
-// look for the end by polling then.
+// child (Linux before 5.3, BSDs) and when start is 0 (unknown: a reused id could not be told apart). Other errors
+// are possible too (a sandbox refusing pidfd_open with EPERM, a process that cannot be opened): callers treat
+// every error as "poll for the end instead".
 func WatchProcess(ctx context.Context, pid int, start uint64) (<-chan struct{}, error) {
 	if pid <= 0 || start == 0 {
 		return nil, fmt.Errorf("watch process %d: no start time: %w", pid, errors.ErrUnsupported)
