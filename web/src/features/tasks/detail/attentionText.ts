@@ -29,6 +29,17 @@ const DEP_KEY: Readonly<Record<string, string>> = {
   cancelled: 'depCancelled',
 }
 
+/**
+ * A task title placed inside a sentence: without the full stop it ends with, so "The earlier task Migrate the cart.
+ * (t1) failed." does not stop twice. A task's title is the first line of its prompt, often a sentence; an ellipsis
+ * stays.
+ */
+export function inSentence(title: string): string {
+  const trimmed = title.trim()
+  if (/(\.\.\.|…)$/.test(trimmed)) return trimmed
+  return trimmed.replace(/[.。．]+$/, '')
+}
+
 export function attentionTitle(a: Pick<Attention, 'reason'>, t: Translate, te: HasKey): string {
   const key = `common.attention.${reasonKey(a.reason)}`
   return te(key) ? t(key) : t('common.attention.unknown')
@@ -112,7 +123,7 @@ export function attentionText(a: Attention, t: Translate, te: HasKey): Attention
     case 'deps_blocked':
       out.why = why(DEP_KEY[p.kind ?? ''] ?? 'depFailed', {
         task: p.task ?? '',
-        title: p.title || p.task,
+        title: inSentence(p.title || p.task || ''),
       })
       break
     case 'hygiene':

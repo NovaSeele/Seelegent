@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import type { Attention } from '@/api/types'
 import { activateLocale, i18n, type Locale } from '@/i18n'
 
-import { attentionText, depsText } from './attentionText'
+import { attentionText, depsText, inSentence } from './attentionText'
 
 const at = (a: Partial<Attention> & Pick<Attention, 'reason'>): Attention =>
   ({ since: '', ...a }) as Attention
@@ -42,6 +42,18 @@ describe('attention text (F14)', () => {
       }),
     )
     expect(view.why).toBe('The earlier task Add login (t-1) was rejected.')
+  })
+
+  it('does not stop twice after a title that is a sentence (design review)', async () => {
+    const view = await text(
+      at({
+        reason: 'deps_blocked',
+        params: { kind: 'failed', task: 't-1', title: 'Migrate the cart to TypeScript.' },
+      }),
+    )
+    expect(view.why).toBe('The earlier task Migrate the cart to TypeScript (t-1) failed.')
+    expect(inSentence('Wait for it...')).toBe('Wait for it...')
+    expect(inSentence('カートを移行する。')).toBe('カートを移行する')
   })
 
   it('counts with plural forms', async () => {
