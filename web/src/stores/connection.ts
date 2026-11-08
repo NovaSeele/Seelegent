@@ -11,7 +11,9 @@
  * - `hello` with another `build` than the page was loaded with: the dashboard reloads to the new bundle.
  *   Another `instance` (daemon restart) also resyncs, in case the daemon's own reset was missed.
  * - task.* frames go to the tasks store, account.* (sign-in progress included) to the accounts store,
- *   settings.updated and resources.changed (the memory watchdog's lowMemory, into health) here. Other frames
+ *   settings.updated and resources.changed (the memory watchdog's lowMemory, into health) here; after
+ *   settings.updated /health is read again, since the effective resource values (Health.resources) follow the
+ *   settings. Other frames
  *   (providers.changed, roles.changed, memory.changed, hook.ran) go to the stores that `subscribe` to them,
  *   through the same hold-and-replay path, so none is lost during a resync.
  * - After every snapshot but the first, `onResync` listeners run: data that is not in /state (providers, roles,
@@ -103,6 +105,13 @@ export const useConnectionStore = defineStore('connection', () => {
   let attempt = 0
   let retryTimer: ReturnType<typeof setTimeout> | undefined
   let stopped = false
+  /** Bumped by every /health read; an answer applies only while it is the newest. */
+  let healthSeq = 0
+  /**
+   * healthSeq when the last live resources.changed frame came: a /health read begun at or before it answers with a
+   * lowMemory and memory older than the frame's, so those two keep the frame's values.
+   */
+  let lowSeq = -1
 
   function setStatus(next: ConnectionStatus): void {
     status.value = next
@@ -122,6 +131,7 @@ export const useConnectionStore = defineStore('connection', () => {
   function applySnapshot(state: BootState): void {
     if (checkBuild(state.health.build)) return
     health.value = state.health
+    healthSeq++ // a /health read already on its way is older than this snapshot
     settings.value = state.settings
     backends.value = state.backends
     projects.value = state.projects
@@ -253,13 +263,17 @@ export const useConnectionStore = defineStore('connection', () => {
         // A careful replay skips settings on purpose: a settings frame carries no time, so it cannot be ordered
         // against the snapshot just applied, and an older frame would undo a newer value. The snapshot wins; a
         // change that raced it shows with the next settings.updated or resync. Live frames always apply.
-        if (!careful) settings.value = data as Settings
+        if (!careful) {
+          settings.value = data as Settings
+          void refreshHealth()
+        }
         break
       case 'resources.changed': {
         // Like settings, it carries no time: a careful replay leaves lowMemory to the snapshot just applied.
         const change = data as ServerEvents['resources.changed']
         if (!careful && health.value) {
           health.value = { ...health.value, lowMemory: change.lowMemory, memory: change.memory }
+          lowSeq = healthSeq
         }
         break
       }
@@ -377,13 +391,20 @@ export const useConnectionStore = defineStore('connection', () => {
   }
 
   /**
-   * Reads GET /health again (the free memory shown next to the resource settings is read when the daemon answers).
+   * Reads GET /health again (the free memory shown next to the resource settings is read when the daemon answers;
+   * the effective resource values change with the settings). Only the newest read applies, so a slow answer never
+   * puts back values older than one already shown; a resources.changed frame that came while it was on its way
+   * keeps its lowMemory and memory (the rest of the answer, the resources after a settings change, still applies).
    * A failure keeps the last reading: the connection state says when the daemon is gone.
    */
   async function refreshHealth(signal?: AbortSignal): Promise<void> {
+    const seq = ++healthSeq
     try {
       const next = await client.get<Health>('/health', { signal })
-      if (health.value) health.value = next
+      const shown = health.value
+      if (!shown || seq !== healthSeq) return
+      health.value =
+        lowSeq >= seq ? { ...next, lowMemory: shown.lowMemory, memory: shown.memory } : next
     } catch {
       // Kept as it was.
     }

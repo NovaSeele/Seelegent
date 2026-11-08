@@ -529,7 +529,7 @@ func (s *Service) launchAndFollow(r *run, t *Task, turn, n int, acc account.Acco
 	set := s.settings()
 	tu := t.TurnN(turn)
 	base := s.o.BaseEnv()
-	extra := ParallelVars(base, set.TestParallelism)
+	extra := ParallelVars(base, s.limits().TestParallelism)
 	maps.Copy(extra, s.toolEnv(ctx, t.Cwd))
 	env, err := s.o.Accounts.Env(ctx, acc, b, account.EnvOptions{Base: base, Model: model,
 		AllowGit: t.AllowGit, Extra: extra})
@@ -1057,7 +1057,7 @@ func (s *Service) prompt(ctx context.Context, t *Task, tu *Turn, continuing, pla
 	}
 	in := brief.Input{Cwd: t.Cwd, Plan: t.Mode == ModePlan, PlanShell: planShell, Spec: spec, Deps: t.DepsContext,
 		Interrupted: len(tu.Attempts) > 0, Message: tu.Message, Baseline: displayPaths(t.Cwd, t.Baseline),
-		TestParallelism: s.settings().TestParallelism}
+		TestParallelism: s.limits().TestParallelism}
 	in.Lane, in.Gate = s.briefGate(t)
 	if tu.Handback {
 		in.Message = brief.HandbackElsewhere // a new conversation: the console's context is not available

@@ -150,9 +150,9 @@ func (s *Service) othersWorking(ctx context.Context, t *Task) bool {
 // PYTEST_XDIST_AUTO_NUM_WORKERS=N (unless the daemon's environment sets them): ParallelVars.
 func (s *Service) gateEnv(ctx context.Context, t *Task, root string, files []string) []string {
 	base := s.o.BaseEnv()
-	extra := ParallelVars(base, s.settings().TestParallelism)
+	extra := ParallelVars(base, s.limits().TestParallelism)
 	maps.Copy(extra, s.toolEnv(ctx, root))
-	own := []string{"CI", "SEELEGENT_GATE", "SEELEGENT_TASK", "SEELEGENT_TURN_FILES"}
+	own := []string{"CI", "SEELEGENT_GATE", api.EnvGateTask, "SEELEGENT_TURN_FILES"}
 	for k := range extra {
 		own = append(own, k)
 	}
@@ -166,7 +166,7 @@ func (s *Service) gateEnv(ctx context.Context, t *Task, root string, files []str
 	for _, k := range slices.Sorted(maps.Keys(extra)) {
 		env = append(env, k+"="+extra[k])
 	}
-	env = append(env, "CI=1", "SEELEGENT_GATE=1", "SEELEGENT_TASK="+t.ID)
+	env = append(env, "CI=1", "SEELEGENT_GATE=1", api.EnvGateTask+"="+t.ID)
 	if v := strings.Join(files, "\n"); len(v) <= turnFilesEnvMax {
 		env = append(env, "SEELEGENT_TURN_FILES="+v)
 	}
@@ -424,26 +424,58 @@ func (s *Service) runGate(r *run, id string, turn int, runner gate.Runner, steps
 // while it waits for memory: it gives the slot back and queues again. It returns the slot's release, or false
 // when the run was stopped meanwhile.
 func (s *Service) gateAdmit(r *run, id string, turn int) (func(), bool) {
-	release, err := s.admitHeavy(r.ctx, func(pos, limit int) {
+	release, err := s.admitHeavy(r.ctx, true, func(pos, limit int) {
 		s.gateQueued(id, turn, api.GateWaitSlot, pos, limit)
 	}, func() { s.gateQueued(id, turn, api.GateWaitMemory, 0, 0) })
-	return release, err == nil
+	if err != nil {
+		return nil, false
+	}
+	s.holdSlot(id, 1)
+	return func() {
+		s.holdSlot(id, -1)
+		release()
+	}, true
+}
+
+// holdSlot counts a gate slot taken (+1) or given back (-1) by the gate of task id (HoldsGateSlot).
+func (s *Service) holdSlot(id string, delta int) {
+	s.resMu.Lock()
+	defer s.resMu.Unlock()
+	if s.slotHolders == nil {
+		s.slotHolders = map[string]int{}
+	}
+	if s.slotHolders[id] += delta; s.slotHolders[id] <= 0 {
+		delete(s.slotHolders, id)
+	}
+}
+
+// HoldsGateSlot reports whether the gate of task id holds a gate slot now.
+func (s *Service) HoldsGateSlot(id string) bool {
+	s.resMu.Lock()
+	defer s.resMu.Unlock()
+	return s.slotHolders[id] > 0
 }
 
 // AdmitHeavy admits a heavy command outside a task gate (a regression run command): it waits for a gate slot
 // (gateConcurrency, in order with the task gates), then for memory like a gate, giving the slot back while it waits
-// for memory. It returns the slot's release, or ctx's error when ctx ended first. A gate command that runs a
-// regression through the daemon asks for a slot while its own gate holds one.
-func (s *Service) AdmitHeavy(ctx context.Context) (func(), error) {
-	return s.admitHeavy(ctx, nil, nil)
+// for memory. It returns the slot's release, or ctx's error when ctx ended first.
+//
+// gateTask is the task whose gate command asked for the run (SEELEGENT_TASK in a gate's environment; "" from
+// anywhere else). While that task's gate holds a slot the command shares it: it takes no second slot, so a gate
+// command that runs a regression through the daemon cannot wait for a slot its own gate holds (with
+// gateConcurrency N, N such gates would wait for each other until gateTimeoutSec). It still waits for memory. An
+// id the daemon does not know, or a gate that holds no slot, waits for a slot as usual.
+func (s *Service) AdmitHeavy(ctx context.Context, gateTask string) (func(), error) {
+	return s.admitHeavy(ctx, gateTask == "" || !s.HoldsGateSlot(gateTask), nil, nil)
 }
 
 // admitHeavy is AdmitHeavy with the queue reports: onSlot with the place in line while it waits for a slot,
-// onMemory when it waits for memory (each may be nil).
-func (s *Service) admitHeavy(ctx context.Context, onSlot func(pos, limit int), onMemory func()) (func(), error) {
+// onMemory when it waits for memory (each may be nil). Without slot it waits for memory only.
+func (s *Service) admitHeavy(ctx context.Context, slot bool, onSlot func(pos, limit int), onMemory func()) (func(),
+	error) {
 	for {
 		release := func() {}
-		if sl := s.o.GateSlots; sl != nil {
+		if sl := s.o.GateSlots; sl != nil && slot {
 			var onWait func(int)
 			if onSlot != nil {
 				onWait = func(pos int) { onSlot(pos, sl.Limit()) }
@@ -461,7 +493,7 @@ func (s *Service) admitHeavy(ctx context.Context, onSlot func(pos, limit int), o
 			}
 		}
 		wake := s.memoryWake()
-		if s.memoryHold(s.settings()) == nil {
+		if s.memoryHold(s.limits()) == nil {
 			return release, nil
 		}
 		release()

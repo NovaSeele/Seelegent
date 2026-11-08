@@ -4,6 +4,7 @@ import (
 	"context"
 	"math"
 	"net/http"
+	"os"
 	"path/filepath"
 	"runtime"
 	"slices"
@@ -13,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/NovaSeele/Seelegent/internal/config"
 	"github.com/NovaSeele/Seelegent/internal/gate"
 )
 
@@ -129,8 +131,50 @@ func TestProofExecStoppedForMemory(t *testing.T) {
 		time.Sleep(500 * time.Millisecond)
 		cancel(gate.ErrLowMemory)
 	}()
-	res := d.a.proofExec(ctx, cmd, d.cwd, filepath.Join(t.TempDir(), "cmd.log"))
-	if res.Exit != nil || !strings.HasSuffix(res.Tail, "stopped: machine low on memory") {
+	res := d.a.proofExec(ctx, cmd, d.cwd, filepath.Join(t.TempDir(), "cmd.log"), "")
+	if res.Exit != nil || !res.Stopped || !strings.HasSuffix(res.Tail, "stopped: machine low on memory") {
 		t.Fatalf("result exit=%v tail=%q", res.Exit, res.Tail)
+	}
+}
+
+// TestMachineProfile: the machine profile is read at start and again on a settings change, never per memory
+// reading; the effective values follow it; config.json never gets an auto value.
+func TestMachineProfile(t *testing.T) {
+	d := newDaemon(t)
+	var reads atomic.Int32
+	d.a.readMachine = func() config.Machine {
+		reads.Add(1)
+		return config.NewMachine(32*1024, 0, 24, "linux")
+	}
+	for range 5 {
+		d.a.sampler.Sample()
+		d.a.Limits()
+	}
+	if n := reads.Load(); n != 0 {
+		t.Fatalf("%d machine reads between settings changes", n)
+	}
+	if _, err := d.a.PatchSettings(t.Context(), []byte(`{"workerPriority": "normal"}`)); err != nil {
+		t.Fatal(err)
+	}
+	if n := reads.Load(); n != 1 {
+		t.Fatalf("%d machine reads after a settings change, want 1", n)
+	}
+	if r := d.a.Limits(); r.TestParallelism != 6 || r.GateConcurrency != 3 || r.MinFreeMemoryMB != 0 {
+		t.Fatalf("limits = %+v", r)
+	}
+	if _, err := d.a.PatchSettings(t.Context(), []byte(`{"minFreeMemoryMB": null}`)); err != nil {
+		t.Fatal(err)
+	}
+	if r := d.a.Limits(); r.MinFreeMemoryMB != 2048 {
+		t.Fatalf("auto minFreeMemoryMB = %d", r.MinFreeMemoryMB)
+	}
+	data, err := os.ReadFile(d.paths.Config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, k := range []string{"minFreeMemoryMB", "testParallelism", "gateConcurrency"} {
+		if strings.Contains(string(data), `"`+k+`"`) {
+			t.Errorf("config.json has the auto setting %s: %s", k, data)
+		}
 	}
 }

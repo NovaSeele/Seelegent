@@ -95,7 +95,32 @@
     "osOnly": "仅限 {os}。",
     "osOther": "仅限 {os}：在服务所在的系统上不起作用。",
     "criticalBelowMin": "两者都开启时，紧急内存下限必须小于“启动所需空闲内存”。",
-    "mbIs": "= {size}"
+    "mbIs": "= {size}",
+    "auto": "自动",
+    "autoValue": "{auto}：本机为 {value}",
+    "autoZero": {
+      "off": "{auto}：本机关闭",
+      "unlimited": "{auto}：本机不限"
+    },
+    "derived": {
+      "half": "{auto}：你设置的“{other}”的一半，{value}",
+      "twice": "{auto}：你设置的“{other}”的两倍，{value}"
+    },
+    "set": "设置",
+    "setOf": "自行设置{name}",
+    "useAuto": "使用自动",
+    "useAutoOf": "将{name}恢复为自动（按本机计算）",
+    "explicit": "由你设置。",
+    "explicitZero": {
+      "off": "由你设置：关闭。",
+      "unlimited": "由你设置：不限。"
+    },
+    "machine": {
+      "full": "本机：{memory} 内存，{cpus}",
+      "withCommit": "本机：{memory} 内存，提交上限 {commit}，{cpus}",
+      "cpusOnly": "本机：{cpus}",
+      "cpus": "{n} 个 CPU"
+    }
   },
   "units": {
     "min": "分钟",
@@ -481,7 +506,7 @@
     },
     "criticalFreeMemory": {
       "label": "紧急内存下限",
-      "desc": "空闲内存或空闲提交低于此值时，最新运行的关卡命令会被停止并重新排队，所有新启动等待，直到内存回到启动阈值以上。工人从不会被停止。必须小于“启动所需空闲内存”。",
+      "desc": "空闲内存或空闲提交低于此值时，最新运行的关卡命令会被停止并重新排队，所有新启动等待，直到内存回到启动阈值以上。工人从不会被停止。两者都设置时，必须小于“启动所需空闲内存”。",
       "keywords": "紧急 看门狗 内存不足 卡死"
     },
     "workerMemoryLimit": {

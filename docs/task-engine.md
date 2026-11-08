@@ -136,7 +136,10 @@ gate commands, never on a running worker.
 
 The engine reads memory through `Options.Resources` (`task.Sampler` over `platform.Memory`: a reading is cached
 for 2 s, and `Changed` fires when one crosses a threshold or the settings change). A reading the system cannot give
-(`Known` false; commit is unknown when `AvailCommitMB` is 0) never holds anything.
+(`Known` false; commit is unknown when `AvailCommitMB` is 0) never holds anything. Every threshold below is the
+effective value (`config.EffectiveResources`: the user's value, or the auto value computed from the machine profile
+the daemon reads at start and on each settings change; see [configuration.md](configuration.md#resources)), so it
+does not move between readings.
 
 - **Start check.** Before a run asks the pool for an account, it compares free physical memory with
   `minFreeMemoryMB` and free commit with `minFreeCommitMB` (each `0` = off). Below either the task is
@@ -158,8 +161,8 @@ for 2 s, and `Changed` fires when one crosses a threshold or the settings change
   and `Running` say so); a release wakes the waiters, and a lowered cap stops nothing.
 - **Watchdog.** A goroutine checks memory on every sampler signal and every 2 s while a task runs, a heavy command
   (gate run or regression run command, `TrackHeavy`) is in flight or the machine is low. Otherwise it arms no timer
-  and sleeps until a run or a heavy command starts. With `criticalFreeMemoryMB` above 0, the machine turns **low** when free physical
-  memory, or free commit when it is known, drops below it, and turns back only at the resume level: physical at
+  and sleeps until a run or a heavy command starts. With `criticalFreeMemoryMB` above 0, the machine turns **low**
+  when free physical memory, or free commit when it is known, drops below it, and turns back only at the resume level: physical at
   `minFreeMemoryMB` (twice the critical line when that is off), commit at `minFreeCommitMB` (likewise). Between the
   two lines nothing flips, so a reading that swings around the critical line does not flicker. While low, every
   new start waits at the resume level instead of the `minFree` thresholds, `LowMemory()` is true (GET /health and

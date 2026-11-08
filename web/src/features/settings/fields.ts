@@ -4,7 +4,7 @@
  * checks them again and its field errors show next to the field. Labels and descriptions are
  * settings.items.<item>.{label,desc,keywords}.
  */
-import type { Settings } from '@/api/types'
+import type { EffectiveResources, Settings } from '@/api/types'
 
 export type Unit = 'min' | 'h' | 's' | 'ms' | 'days' | 'bytes' | 'times' | 'pct' | 'mb'
 
@@ -281,6 +281,23 @@ export type FieldSection = keyof typeof FIELDS
 export const isFieldSection = (id: string): id is FieldSection => Object.hasOwn(FIELDS, id)
 
 /**
+ * The machine-sized settings (docs/configuration.md "Resources"): absent or null = auto, the daemon computes the
+ * value from the machine and Health.resources has the value in use; a number the user set wins (0 = off).
+ */
+export const AUTO_PATHS = [
+  'gateConcurrency',
+  'minFreeMemoryMB',
+  'minFreeCommitMB',
+  'criticalFreeMemoryMB',
+  'testParallelism',
+] as const satisfies readonly (keyof EffectiveResources & keyof Settings)[]
+
+export type AutoPath = (typeof AUTO_PATHS)[number]
+
+export const isAutoPath = (path: string): path is AutoPath =>
+  (AUTO_PATHS as readonly string[]).includes(path)
+
+/**
  * Settings checked against each other (internal/config/validate.go): an error about one is shown on all of them,
  * since changing either one fixes it.
  */
@@ -291,13 +308,14 @@ export const LINKED_FIELDS: Readonly<Record<string, readonly string[]>> = {
 
 /**
  * The cross-field rule the dashboard can check before sending: criticalFreeMemoryMB must be below minFreeMemoryMB
- * while both are on. Returns the paths that clash with `path` set to `value`, or [] when it is fine.
+ * while both are set (an auto one, null or absent, is derived by the daemon to stay in order) and on. Returns the
+ * paths that clash with `path` set to `value`, or [] when it is fine.
  */
 export function crossFieldClash(settings: Settings | null, path: string, value: number): string[] {
   if (!settings || (path !== 'criticalFreeMemoryMB' && path !== 'minFreeMemoryMB')) return []
   const critical = path === 'criticalFreeMemoryMB' ? value : settings.criticalFreeMemoryMB
   const min = path === 'minFreeMemoryMB' ? value : settings.minFreeMemoryMB
-  return critical > 0 && min > 0 && critical >= min
+  return critical != null && min != null && critical > 0 && min > 0 && critical >= min
     ? ['criticalFreeMemoryMB', 'minFreeMemoryMB']
     : []
 }

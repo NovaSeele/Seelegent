@@ -110,20 +110,34 @@ counts as finished, not cut short. The task then runs the whole gate again once 
 that only shows a stopped step therefore never reads as green.
 
 **Slots and memory.** Each gate run (all its commands, one after the other) and each regression run command takes
-one of `gateConcurrency` slots (`gate.Slots`, shared by every task; `0` = no limit). Slots are given in the order
+one of `gateConcurrency` slots (`gate.Slots`, shared by every task; the effective value, auto from the machine
+unless set; `0` = no limit). Slots are given in the order
 they were asked for; while a gate waits for one its phase is `queued` with `wait: "slot"` and its place in line
 (`position`, 1 = next), published as a `gate` event with `phase: "queued"`. That event is logged when the wait
 starts, when what it waits for changes, and when the position moves: every move at position 3 or less, further
 back only when the position halved, so a long queue logs about log2(k)+3 events per gate instead of k. With a
-slot in hand, a gate checks memory next: below `minFreeMemoryMB` / `minFreeCommitMB` (or, while the machine is low on memory, below the resume level)
-it gives the slot back and waits with `wait: "memory"`, so a gate that cannot start never blocks one that could.
+slot in hand, a gate checks memory next: below `minFreeMemoryMB` / `minFreeCommitMB` (or, while the machine is low
+on memory, below the resume level) it gives the slot back and waits with `wait: "memory"`, so a gate that cannot
+start never blocks one that could.
 `gateTimeoutSec` counts from the moment a command starts, never while it is queued. A lowered `gateConcurrency`
 stops nothing: the runs that hold a slot finish and the next ones wait. A queued phase is no attention flag; the
 dashboard shows the wait. Each regression run command is admitted the same way (`AdmitHeavy`: a slot, then
 free memory, giving the slot back while it waits for memory), and the memory watchdog may stop it like a gate run;
-it then fails with "stopped: machine low on memory" in its tail. A gate command that itself asks the daemon for a
-regression run waits for a slot while its own gate holds one: with `gateConcurrency: 1` it waits until
-`gateTimeoutSec` ends the gate command.
+it then fails with "stopped: machine low on memory" in its tail. Such a stop is no result: the regression run
+runs the command again once memory is back, and after 3 stops of one command it ends `cancelled` with an `error`
+saying so, without recording anything for that command's spec tasks (no false error in the ledger).
+
+A gate command may ask the daemon for a regression run (`seelegent proof run`). The CLI sends the gate's task id
+(`SEELEGENT_TASK` of the gate environment) as the request's `gateTask`, and while that task's gate holds a slot
+the regression's commands share it instead of waiting for a second one (they still wait for memory), so the gate
+cannot wait on its own slot; while that gate holds its slot, its own task does not count as another active task
+either (no `--force` needed for it). The run is not tied to the gate: started without `--wait`, or still going when
+the gate times out, it goes on after the gate ends, so for the command running then it may exceed
+`gateConcurrency` by one (at most one run per project), while its next commands wait for a slot and the memory
+watchdog watches it like any heavy command. An id the daemon does not know (Seelegent's own tests inside a gate start their own
+daemon, which never saw the outer task) and a gate that holds no slot change nothing: the commands wait for a slot
+as usual. Only a request sent without the id (an HTTP client of its own that drops it) can still wait on the slot
+its gate holds, until `gateTimeoutSec` ends the gate command.
 
 Each step is published as a `gate` task event (`phase: start | step | settling | result`) and stored on the turn
 (`Turn.gate`), so the dashboard shows it live. The `start` event carries the plan (each step's kind, command and

@@ -55,6 +55,7 @@ func (a *App) settingsChanged(prev, next config.Settings) {
 	if prev.QuotaRefreshMinutes != next.QuotaRefreshMinutes {
 		a.rescheduler.Reschedule()
 	}
+	a.refreshMachine()
 	a.slots.Notify()
 	a.sampler.Kick()
 	if prev.DaemonMemoryLimitMB != next.DaemonMemoryLimitMB {
@@ -94,7 +95,7 @@ func (a *App) ListenHTTP(ctx context.Context, port int) (string, error) {
 		DevOrigins: a.devOrigins, Stop: a.RequestStop, Proof: a.Proof, Gates: a.Tasks, HomeID: config.HomeID(a.Paths.Home),
 		Members: a.Members, Consults: a.Tasks, Notes: a.Notes, Meetings: a.Meetings, Contests: a.Contests,
 		Hooks: a.Hooks, Tickets: a.Tickets, Automations: a.Automations, FreeMemory: a.sampler.Sample,
-		LowMemory: a.Tasks.LowMemory,
+		LowMemory: a.Tasks.LowMemory, Machine: a.Machine,
 	})
 	if err != nil {
 		_ = ln.Close()

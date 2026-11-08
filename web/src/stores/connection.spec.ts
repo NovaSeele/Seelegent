@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createApiClient } from '@/api/client'
 import type { BootState } from '@/api/types'
 import { FakeEventSource, setupApp } from '@/test/app'
-import { iso, makeAccount, makeTask } from '@/test/fixtures'
+import { iso, makeAccount, makeHealthResources, makeTask } from '@/test/fixtures'
 
 import { useAccountsStore } from './accounts'
 import { useConnectionStore } from './connection'
@@ -25,6 +25,7 @@ function boot(overrides: Partial<BootState> = {}): BootState {
       os: 'windows',
       memory: { availPhysMB: 0, availCommitMB: 0, known: false },
       lowMemory: false,
+      ...makeHealthResources(),
     },
     settings: {} as BootState['settings'],
     accounts: [makeAccount()],
@@ -257,6 +258,85 @@ describe('connection store', () => {
     await flushPromises()
     expect(fetch).toHaveBeenCalledTimes(3)
     expect(useTasksStore().get('t1')?.title).toBe('after')
+  })
+
+  it('reads /health again after settings.updated, and only the newest answer applies', async () => {
+    const answers: ((value: Response) => void)[] = []
+    const fetch = vi.fn<typeof globalThis.fetch>(async (input) => {
+      if (String(input) === '/api/v1/state') return json(boot())
+      return new Promise<Response>((resolve) => answers.push(resolve))
+    })
+    const store = start(fetch)
+    await flushPromises()
+    const source = FakeEventSource.last
+    source.open()
+    const withGates = (value: number) => ({
+      ...boot().health,
+      resources: {
+        ...makeHealthResources().resources,
+        gateConcurrency: { value, source: 'explicit' as const },
+      },
+    })
+    source.emit('settings.updated', JSON.stringify({ gateConcurrency: 3 }), 'a1b2c3d4.42')
+    source.emit('settings.updated', JSON.stringify({ gateConcurrency: 4 }), 'a1b2c3d4.43')
+    await flushPromises()
+    const reads = fetch.mock.calls.filter(([input]) => String(input) === '/api/v1/health')
+    expect(reads).toHaveLength(2)
+    answers[1]?.(json(withGates(4)))
+    await flushPromises()
+    expect(store.health?.resources.gateConcurrency.value).toBe(4)
+    // The first read answers last: it is older than what is shown and does not apply.
+    answers[0]?.(json(withGates(3)))
+    await flushPromises()
+    expect(store.health?.resources.gateConcurrency.value).toBe(4)
+    expect(store.settings?.gateConcurrency).toBe(4)
+  })
+
+  it('keeps a resources.changed frame that comes while a /health read is on its way', async () => {
+    const answers: ((value: Response) => void)[] = []
+    const low = { availPhysMB: 300, availCommitMB: 900, known: true }
+    const fetch = vi.fn<typeof globalThis.fetch>(async (input) => {
+      if (String(input) === '/api/v1/state') {
+        return json(boot({ health: { ...boot().health, lowMemory: true, memory: low } }))
+      }
+      return new Promise<Response>((resolve) => answers.push(resolve))
+    })
+    const store = start(fetch)
+    await flushPromises()
+    const source = FakeEventSource.last
+    source.open()
+    // A save while memory is low: the read starts, the daemon answers while lowMemory is still true...
+    source.emit('settings.updated', JSON.stringify({ gateConcurrency: 3 }), 'a1b2c3d4.42')
+    await flushPromises()
+    // ...then the watchdog recovers, and its frame comes before that answer.
+    const recovered = { availPhysMB: 9000, availCommitMB: 12000, known: true }
+    source.emit(
+      'resources.changed',
+      JSON.stringify({ lowMemory: false, memory: recovered }),
+      'a1b2c3d4.43',
+    )
+    expect(store.health?.lowMemory).toBe(false)
+    const { resources } = makeHealthResources()
+    answers[0]?.(
+      json({
+        ...boot().health,
+        lowMemory: true,
+        memory: low,
+        resources: { ...resources, gateConcurrency: { value: 3, source: 'explicit' } },
+      }),
+    )
+    await flushPromises()
+    // The answer's resources apply; its older lowMemory and memory do not.
+    expect(store.health?.resources.gateConcurrency).toEqual({ value: 3, source: 'explicit' })
+    expect(store.health?.lowMemory).toBe(false)
+    expect(store.health?.memory).toEqual(recovered)
+
+    // A read that starts after the frame applies whole.
+    source.emit('settings.updated', JSON.stringify({ gateConcurrency: 2 }), 'a1b2c3d4.44')
+    await flushPromises()
+    answers[1]?.(json({ ...boot().health, lowMemory: true, memory: low }))
+    await flushPromises()
+    expect(store.health?.lowMemory).toBe(true)
   })
 
   it('careful replay keeps the snapshot for settings, older accounts and deleted tasks', async () => {

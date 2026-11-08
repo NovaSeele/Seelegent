@@ -160,6 +160,9 @@ type Options struct {
 	FreeMemory func() platform.MemoryStatus
 	// LowMemory reports whether the memory watchdog holds new starts (Health.LowMemory); nil answers false.
 	LowMemory func() bool
+	// Machine is the machine profile the auto resource settings are computed from (Health.Resources and
+	// Health.Machine); nil answers an unknown machine.
+	Machine func() config.Machine
 
 	Tasks    Tasks
 	Accounts Accounts

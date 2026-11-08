@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 )
 
@@ -78,6 +79,17 @@ func (o *object) set(key string, value json.RawMessage) {
 		}
 	}
 	o.members = append(o.members, member{key: key, value: value})
+}
+
+// without returns a copy of o without the given top-level keys.
+func (o *object) without(keys ...string) *object {
+	out := &object{}
+	for _, m := range o.members {
+		if !slices.Contains(keys, m.key) {
+			out.members = append(out.members, m)
+		}
+	}
+	return out
 }
 
 // marshal encodes the object compactly, keys in order.

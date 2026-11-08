@@ -768,6 +768,15 @@ export function createAdminRoutes(ctx) {
   // Settings
 
   const DEFAULTS = structuredClone(settings)
+  // Auto settings: absent from the settings until set; null resets one to auto.
+  const AUTO = [
+    'gateConcurrency',
+    'minFreeMemoryMB',
+    'minFreeCommitMB',
+    'criticalFreeMemoryMB',
+    'testParallelism',
+  ]
+  const KNOWN = { ...DEFAULTS, ...Object.fromEntries(AUTO.map((key) => [key, null])) }
   const INT_RANGES = {
     maxConcurrentPerAccount: [1, 64],
     quotaRefreshMinutes: [1, 10080],
@@ -825,11 +834,12 @@ export function createAdminRoutes(ctx) {
           known(obj[key], shape[key], `${prefix}${key}.`)
       }
     }
-    known(patch, DEFAULTS, '')
+    known(patch, KNOWN, '')
     if (next.port !== settings.port)
       bad('port', 'the port cannot change here; use seelegent config or the command line')
     for (const [key, [min, max]] of Object.entries(INT_RANGES)) {
       const v = next[key]
+      if (AUTO.includes(key) && v === undefined) continue
       if (!Number.isInteger(v) || v < min || v > max)
         bad(key, `must be a whole number from ${min} to ${max}`)
     }
@@ -846,7 +856,7 @@ export function createAdminRoutes(ctx) {
       if (!['low', 'normal'].includes(next[key])) bad(key, 'must be low or normal')
     }
     const { criticalFreeMemoryMB: critical, minFreeMemoryMB: min } = next
-    if (critical > 0 && min > 0 && critical >= min) {
+    if (critical !== undefined && min !== undefined && critical > 0 && min > 0 && critical >= min) {
       bad(
         'criticalFreeMemoryMB',
         `must be below minFreeMemoryMB (${min}) while both are on (got ${critical})`,
@@ -897,9 +907,10 @@ export function createAdminRoutes(ctx) {
   }
 
   async function patchSettings(req, res) {
-    const patch = await readBody(req, Object.keys(DEFAULTS))
+    const patch = await readBody(req, Object.keys(KNOWN))
     const next = structuredClone(settings)
     merge(next, patch, DEFAULTS)
+    for (const key of AUTO) if (next[key] === undefined) delete next[key]
     const problems = validateSettings(next, patch)
     if (problems.length) {
       throw new HttpError(400, 'invalid_argument', `${problems.length} setting(s) are not valid`, {

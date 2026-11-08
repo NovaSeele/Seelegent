@@ -31,10 +31,11 @@ func (g proofGit) Head(ctx context.Context, root string) (string, bool) {
 
 // proofExec runs one command of a regression run like a gate command: through the shell, from dir, with the gate
 // time limit, output tail, Rust toolchain pin, testParallelism variables and gatePriority. Each command is admitted
-// like a task gate (task.Service.AdmitHeavy: one of the gateConcurrency slots, then free memory) and the memory
-// watchdog may stop it (TrackHeavy); a stopped command says so in its tail.
-func (a *App) proofExec(ctx context.Context, cmd, dir, logFile string) proof.CmdResult {
-	release, err := a.Tasks.AdmitHeavy(ctx)
+// like a task gate (task.Service.AdmitHeavy: one of the gateConcurrency slots, or the slot of gateTask's gate
+// when the run was asked for from a gate that holds one, then free memory) and the memory watchdog may stop it
+// (TrackHeavy); a stopped command says so in its tail.
+func (a *App) proofExec(ctx context.Context, cmd, dir, logFile, gateTask string) proof.CmdResult {
+	release, err := a.Tasks.AdmitHeavy(ctx, gateTask)
 	if err != nil {
 		return proof.CmdResult{Tail: "cancelled while waiting for a gate slot or for free memory"}
 	}
@@ -43,7 +44,7 @@ func (a *App) proofExec(ctx context.Context, cmd, dir, logFile string) proof.Cmd
 	defer cancel(nil)
 	defer a.Tasks.TrackHeavy(cancel)()
 	set := a.Settings()
-	extra := task.ParallelVars(a.env, set.TestParallelism)
+	extra := task.ParallelVars(a.env, a.Limits().TestParallelism)
 	if a.toolchains != nil {
 		maps.Copy(extra, a.toolchains.Env(ctx, dir, a.env))
 	}
@@ -71,7 +72,7 @@ func (a *App) proofExec(ctx context.Context, cmd, dir, logFile string) proof.Cmd
 	if res.Stopped == api.StepStoppedLowMemory {
 		tail = strings.TrimSpace(tail + "\nstopped: machine low on memory")
 	}
-	return proof.CmdResult{Exit: res.Exit, Ms: res.Ms, Tail: tail}
+	return proof.CmdResult{Exit: res.Exit, Ms: res.Ms, Tail: tail, Stopped: res.Stopped == api.StepStoppedLowMemory}
 }
 
 // publishProofRun forwards a regression run's progress to the SSE stream once the HTTP API runs.
