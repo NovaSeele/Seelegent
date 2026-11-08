@@ -260,6 +260,38 @@ describe('connection store', () => {
     expect(useTasksStore().get('t1')?.title).toBe('after')
   })
 
+  it('reads /health again after settings.updated, and only the newest answer applies', async () => {
+    const answers: ((value: Response) => void)[] = []
+    const fetch = vi.fn<typeof globalThis.fetch>(async (input) => {
+      if (String(input) === '/api/v1/state') return json(boot())
+      return new Promise<Response>((resolve) => answers.push(resolve))
+    })
+    const store = start(fetch)
+    await flushPromises()
+    const source = FakeEventSource.last
+    source.open()
+    const withGates = (value: number) => ({
+      ...boot().health,
+      resources: {
+        ...makeHealthResources().resources,
+        gateConcurrency: { value, source: 'explicit' as const },
+      },
+    })
+    source.emit('settings.updated', JSON.stringify({ gateConcurrency: 3 }), 'a1b2c3d4.42')
+    source.emit('settings.updated', JSON.stringify({ gateConcurrency: 4 }), 'a1b2c3d4.43')
+    await flushPromises()
+    const reads = fetch.mock.calls.filter(([input]) => String(input) === '/api/v1/health')
+    expect(reads).toHaveLength(2)
+    answers[1]?.(json(withGates(4)))
+    await flushPromises()
+    expect(store.health?.resources.gateConcurrency.value).toBe(4)
+    // The first read answers last: it is older than what is shown and does not apply.
+    answers[0]?.(json(withGates(3)))
+    await flushPromises()
+    expect(store.health?.resources.gateConcurrency.value).toBe(4)
+    expect(store.settings?.gateConcurrency).toBe(4)
+  })
+
   it('careful replay keeps the snapshot for settings, older accounts and deleted tasks', async () => {
     let resolveSecond: (value: Response) => void = () => {}
     const fetch = vi

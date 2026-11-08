@@ -71,9 +71,12 @@ export const useSettingsStore = defineStore('settings', () => {
     })
   }
 
+  /** Sends a merge patch; the answer is the settings now, and /health is read again for the values in use. */
   async function save(patch: SettingsPatch): Promise<Settings> {
     const next = await client.patch(patch)
-    useConnectionStore().settings = next
+    const connection = useConnectionStore()
+    connection.settings = next
+    void connection.refreshHealth()
     return next
   }
 

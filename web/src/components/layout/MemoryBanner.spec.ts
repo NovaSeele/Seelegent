@@ -29,6 +29,12 @@ function health(extra: Partial<Health> = {}): Health {
   }
 }
 
+/** Health.resources with the emergency floor in use at `mb` (auto unless said). */
+function floorAt(mb: number, source: 'auto' | 'explicit' = 'auto'): Pick<Health, 'resources'> {
+  const { resources } = makeHealthResources()
+  return { resources: { ...resources, criticalFreeMemoryMB: { value: mb, source } } }
+}
+
 const json = (body: unknown) =>
   new Response(JSON.stringify(body), {
     status: 200,
@@ -73,7 +79,7 @@ describe('MemoryBanner', () => {
     const { wrapper, connection } = await mounted()
     connection.status = 'online'
     connection.settings = { criticalFreeMemoryMB: 1024 } as never
-    connection.health = health({ lowMemory: true })
+    connection.health = health({ lowMemory: true, ...floorAt(1024, 'explicit') })
     await flushPromises()
     const banner = wrapper.get('[role="status"]')
     expect(banner.text()).toContain('below the Emergency memory floor of 1 GB')
@@ -88,16 +94,28 @@ describe('MemoryBanner', () => {
     expect(wrapper.get('[data-waiting]').text()).toBe('2 tasks waiting')
 
     connection.settings = { criticalFreeMemoryMB: 0 } as never
+    connection.health = health({ lowMemory: true, ...floorAt(0, 'explicit') })
     await flushPromises()
     expect(wrapper.get('[role="status"]').text()).not.toContain('floor')
+  })
+
+  it('names the floor in use while the setting is auto (absent from the settings)', async () => {
+    const { wrapper, connection } = await mounted()
+    connection.status = 'online'
+    connection.settings = {} as never
+    connection.health = health({ lowMemory: true, ...floorAt(1536) })
+    await flushPromises()
+    expect(wrapper.get('[role="status"]').text()).toContain(
+      'below the Emergency memory floor of 1.5 GB',
+    )
   })
 
   it('gives free memory just under the floor in MB, so it does not read the same as the floor', async () => {
     const { wrapper, connection } = await mounted()
     connection.status = 'online'
-    connection.settings = { criticalFreeMemoryMB: 2048 } as never
     connection.health = health({
       lowMemory: true,
+      ...floorAt(2048),
       memory: { availPhysMB: 2040, availCommitMB: 9000, known: true },
     })
     await flushPromises()
