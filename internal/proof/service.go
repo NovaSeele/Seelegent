@@ -24,6 +24,8 @@ var (
 	ErrInvalid  = errors.New("invalid")
 	ErrNotFound = errors.New("not found")
 	ErrConflict = errors.New("conflict")
+	// ErrStopping is returned by StartRun once Close began: the daemon is shutting down.
+	ErrStopping = errors.New("the daemon is stopping")
 )
 
 // ConflictError is a refused regression run, with details for the API (runId, activeTaskIds).
@@ -434,7 +436,7 @@ func (s *Service) StartRun(ctx context.Context, req api.ProofRunRequest) (api.Pr
 			Details: map[string]any{"reason": "run_in_progress", "runId": a.id}}
 	}
 	if s.root.Err() != nil {
-		return api.ProofRun{}, errors.New("the daemon is stopping")
+		return api.ProofRun{}, ErrStopping
 	}
 	// The record is written before the run is registered: a failed write leaves nothing stuck (old bug D11).
 	if err := s.o.Ledger.SaveRun(ctx, p.Key, run); err != nil {

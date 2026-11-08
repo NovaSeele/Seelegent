@@ -191,6 +191,8 @@ func toAPIError(err error) *apiError {
 		errors.Is(err, notes.ErrNotFound), errors.Is(err, meeting.ErrNotFound), errors.Is(err, contest.ErrNotFound),
 		errors.Is(err, hook.ErrNotFound), errors.Is(err, ticket.ErrNotFound), errors.Is(err, automation.ErrNotFound):
 		return newError(api.CodeNotFound, "%s", msg)
+	case errors.Is(err, proof.ErrStopping):
+		return translated(api.CodeDaemonStopping, "shutting_down")
 	case errors.Is(err, automation.ErrForbidden):
 		return newError(api.CodeForbidden, "%s", msg)
 	case errors.Is(err, task.ErrBadState), errors.Is(err, signin.ErrBadState), errors.Is(err, notes.ErrBadState),
