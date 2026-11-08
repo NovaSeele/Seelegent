@@ -235,5 +235,33 @@
       "passive": "没有可读取的配额",
       "checking": "正在读取配额…"
     }
-  }
+  },
+  "testResult": {
+    "not_tested": "未测试",
+    "ok": "密钥可用",
+    "refused": "密钥被拒绝",
+    "not_found": "地址错误",
+    "no_models_endpoint": "此处无法列出模型",
+    "unreachable": "无法连接服务",
+    "redirected": "被重定向到别处",
+    "error": "测试失败",
+    "testedAt": "测试于 {time}"
+  },
+  "notice": {
+    "base_url_trimmed": "已缩短基础 URL",
+    "official_preset": "已切换到 Anthropic 预设",
+    "key_name_removed": "已去掉密钥中的变量名",
+    "key_quotes_removed": "已去掉密钥两侧的引号",
+    "key_prefix": "密钥看起来属于其他服务",
+    "provider_reused": "已复用现有提供方"
+  },
+  "keyError": {
+    "empty": "请粘贴 API 密钥",
+    "too_long": "密钥过长",
+    "url": "这看起来是 URL，而不是 API 密钥",
+    "whitespace": "密钥不能包含空格或换行",
+    "control": "密钥包含不可见字符"
+  },
+  "modelPerTask": "每个任务自选模型",
+  "modelPerTaskHint": "此提供方没有默认模型：每个任务自行指定所用模型。"
 }

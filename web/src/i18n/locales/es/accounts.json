@@ -235,5 +235,33 @@
       "passive": "Sin cuota que leer",
       "checking": "Leyendo la cuota…"
     }
-  }
+  },
+  "testResult": {
+    "not_tested": "Sin probar",
+    "ok": "La clave funciona",
+    "refused": "Clave rechazada",
+    "not_found": "Dirección incorrecta",
+    "no_models_endpoint": "No se pueden listar los modelos aquí",
+    "unreachable": "Servicio inalcanzable",
+    "redirected": "Redirigido a otro sitio",
+    "error": "La prueba falló",
+    "testedAt": "Probada {time}"
+  },
+  "notice": {
+    "base_url_trimmed": "URL base acortada",
+    "official_preset": "Cambiado a la plantilla de Anthropic",
+    "key_name_removed": "Se quitó el nombre de variable de la clave",
+    "key_quotes_removed": "Se quitaron las comillas de la clave",
+    "key_prefix": "La clave parece de otro servicio",
+    "provider_reused": "Se reutilizó un proveedor existente"
+  },
+  "keyError": {
+    "empty": "Pega la clave de API",
+    "too_long": "Esta clave es demasiado larga",
+    "url": "Esto parece una URL, no una clave de API",
+    "whitespace": "La clave no debe contener espacios ni saltos de línea",
+    "control": "La clave contiene caracteres invisibles"
+  },
+  "modelPerTask": "Modelo elegido por tarea",
+  "modelPerTaskHint": "Este proveedor no tiene modelo predeterminado: cada tarea indica el modelo que usa."
 }

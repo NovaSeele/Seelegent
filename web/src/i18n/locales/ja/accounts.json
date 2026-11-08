@@ -235,5 +235,33 @@
       "passive": "読み取れるクォータなし",
       "checking": "クォータを取得中…"
     }
-  }
+  },
+  "testResult": {
+    "not_tested": "未テスト",
+    "ok": "キーは有効",
+    "refused": "キーが拒否されました",
+    "not_found": "アドレスが違います",
+    "no_models_endpoint": "ここではモデル一覧を取得できません",
+    "unreachable": "サービスに接続できません",
+    "redirected": "別の場所にリダイレクトされました",
+    "error": "テストに失敗しました",
+    "testedAt": "{time} にテスト"
+  },
+  "notice": {
+    "base_url_trimmed": "ベース URL を短縮しました",
+    "official_preset": "Anthropic のプリセットに切り替えました",
+    "key_name_removed": "キーから変数名を取り除きました",
+    "key_quotes_removed": "キーから引用符を取り除きました",
+    "key_prefix": "別のサービスのキーのようです",
+    "provider_reused": "既存のプロバイダーを再利用しました"
+  },
+  "keyError": {
+    "empty": "API キーを貼り付けてください",
+    "too_long": "このキーは長すぎます",
+    "url": "API キーではなく URL のようです",
+    "whitespace": "キーに空白や改行を含めないでください",
+    "control": "キーに見えない文字が含まれています"
+  },
+  "modelPerTask": "モデルはタスクごとに指定",
+  "modelPerTaskHint": "このプロバイダーには既定のモデルがありません。各タスクが使うモデルを指定します。"
 }

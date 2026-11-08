@@ -240,9 +240,9 @@ export interface Provider {
   tiers: TierModels
   /**
    * ModelPerTask is true when no tier has a model: every delegate on the provider must name its model ("Model:
-   * chosen per task"). A valid set-up, not an error.
+   * chosen per task"). A valid set-up, not an error. Absent when false.
    */
-  modelPerTask: boolean
+  modelPerTask?: boolean
   createdAt?: string
   updatedAt?: string
   /**
@@ -264,9 +264,9 @@ export interface ProviderPreset {
   official: boolean
   /**
    * Tiers are suggested tier models: for "anthropic" the claude backend's tiers from the settings, when set;
-   * empty for the others (their models come from a key test).
+   * absent for the others (their models come from a key test).
    */
-  tiers: TierModels
+  tiers?: TierModels
 }
 
 /** ProviderList is GET /providers. */

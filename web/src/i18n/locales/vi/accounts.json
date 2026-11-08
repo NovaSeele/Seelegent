@@ -230,8 +230,8 @@
     "whitespace": "Khóa không được chứa dấu cách hay xuống dòng",
     "control": "Khóa chứa ký tự ẩn"
   },
-  "modelPerTask": "Chọn mô hình theo từng task",
-  "modelPerTaskHint": "Nhà cung cấp này không có mô hình mặc định: mỗi task tự ghi mô hình nó chạy.",
+  "modelPerTask": "Chọn mô hình theo từng tác vụ",
+  "modelPerTaskHint": "Nhà cung cấp này không có mô hình mặc định: mỗi tác vụ tự ghi mô hình nó chạy.",
   "view": {
     "label": "Kiểu xem tài khoản",
     "list": "Danh sách",

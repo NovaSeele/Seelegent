@@ -260,8 +260,8 @@ type Provider struct {
 	AllowedModels string     `json:"allowedModels"`
 	Tiers         TierModels `json:"tiers"`
 	// ModelPerTask is true when no tier has a model: every delegate on the provider must name its model ("Model:
-	// chosen per task"). A valid set-up, not an error.
-	ModelPerTask bool   `json:"modelPerTask"`
+	// chosen per task"). A valid set-up, not an error. Absent when false.
+	ModelPerTask bool   `json:"modelPerTask,omitempty"`
 	CreatedAt    string `json:"createdAt,omitempty"`
 	UpdatedAt    string `json:"updatedAt,omitempty"`
 	// Notices are set only in the answers to POST and PATCH /providers: what the save changed on its own
@@ -280,8 +280,8 @@ type ProviderPreset struct {
 	WireAPI  string   `json:"wireApi,omitempty"`
 	Official bool     `json:"official"`
 	// Tiers are suggested tier models: for "anthropic" the claude backend's tiers from the settings, when set;
-	// empty for the others (their models come from a key test).
-	Tiers TierModels `json:"tiers"`
+	// absent for the others (their models come from a key test).
+	Tiers TierModels `json:"tiers,omitzero"`
 }
 
 // ProviderList is GET /providers.
