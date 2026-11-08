@@ -16,6 +16,9 @@ const (
 	NoticeTask NoticeKind = "task"
 	// NoticeEvent: an event was appended to the task's log (Event).
 	NoticeEvent NoticeKind = "event"
+	// NoticeLive: what the task's worker does now changed (its active step: a tool, responding); the record did not.
+	// Only views of the summary care (the SSE feed); it wakes no TasksChanged waiter.
+	NoticeLive NoticeKind = "live"
 )
 
 // Notice is one change the engine publishes.

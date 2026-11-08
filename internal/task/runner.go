@@ -152,6 +152,9 @@ func (r *run) note(ev event.Event, now time.Time, replay bool) {
 	case event.KindToolResult:
 		l.tool, l.command, l.toolSince = "", "", time.Time{}
 		if ev.Tool != nil {
+			if ev.Tool.Name != "" {
+				l.step = ev.Tool.Name // agy reports a quick tool only when it is done (F9)
+			}
 			if pathOnly && mark == "" {
 				// Content unknown: each such edit is its own step.
 				l.edits++
@@ -166,7 +169,7 @@ func (r *run) note(ev event.Event, now time.Time, replay bool) {
 			l.edited = append(l.edited, ev.File.Path)
 		}
 	case event.KindMessage:
-		l.waiting, l.step = time.Time{}, "writing"
+		l.waiting, l.step = time.Time{}, "responding"
 	case event.KindBackgroundWait:
 		l.waiting = now
 	default:

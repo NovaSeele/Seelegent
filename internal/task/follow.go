@@ -131,6 +131,13 @@ func (s *Service) follow(r *run, h *launch.Handle, b backend.Backend, m attemptM
 	return attemptResult{outcome: f.coll.Outcome(exit), exit: exit, finish: finish}, nil
 }
 
+// activity is what the worker does now, as the task's active step shows it: its step label and open tool.
+func (r *run) activity() [2]string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return [2]string{r.live.step, r.live.tool}
+}
+
 // line takes one line of the stream (or stderr).
 func (f *follower) line(stderr bool, line []byte, next int64) error {
 	f.mu.Lock()
@@ -151,9 +158,15 @@ func (f *follower) line(stderr bool, line []byte, next int64) error {
 		replay = next <= f.committed.Stream
 	}
 	now := f.s.clk.Now()
+	before := f.r.activity()
 	for _, ev := range evs {
 		f.coll.Add(ev)
 		f.r.note(ev, now, replay)
+	}
+	if !replay && f.r.activity() != before {
+		// The task's active step changed: the summary views show it (field report 4, F9: it stayed "starting" for
+		// 45 minutes, as worker events never republished the summary).
+		f.s.bus.Publish(Notice{Kind: NoticeLive, TaskID: f.id})
 	}
 	if replay || len(evs) == 0 || f.mergeLocked(evs) {
 		if f.pending == nil {
