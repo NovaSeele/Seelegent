@@ -16,10 +16,11 @@
     "disabled": "オフ"
   },
   "kind": {
-    "isolated": "専用のサインイン",
-    "system": "このコンピューターのサインイン",
-    "apiKey": "API キー",
-    "apiKeyOf": "API キー · {provider}"
+    "apiKeyOf": "API キー · {provider}",
+    "line": {
+      "isolated": "サブスクリプション · 専用のサインイン",
+      "system": "サブスクリプション · このコンピューター"
+    }
   },
   "keyHint": "キー {hint}",
   "busy": "{max} 枠中 {busy} 枠使用中",
@@ -48,10 +49,16 @@
     "rename": "名前を変更",
     "login": "サインイン",
     "logout": "サインアウト",
-    "key": "API キーを設定",
     "delete": "アカウントを削除",
     "more": "{name} のその他の操作",
-    "priority": "優先度: {n}…"
+    "priority": "優先度: {n}…",
+    "test": "再テスト",
+    "addKey": "キーを追加",
+    "replaceKey": "キーを差し替え",
+    "model": "モデルを変更",
+    "budget": "予算を設定",
+    "turnOff": "オフにする",
+    "turnOn": "オンにする"
   },
   "done": {
     "added": "{name} を追加しました",
@@ -62,7 +69,10 @@
     "logout": "サインアウトしました",
     "refreshedAll": "クォータを更新しました",
     "off": "{name} の作業受付をオフにしました",
-    "priority": "{name} の優先度を {n} にしました"
+    "priority": "{name} の優先度を {n} にしました",
+    "budgetSet": "{name} の予算を {budget} に設定しました",
+    "budgetRemoved": "{name} の予算を外しました",
+    "modelSet": "{service} のモデルを保存しました"
   },
   "quota": {
     "window": "{window} ウィンドウ",
@@ -101,39 +111,36 @@
   },
   "add": {
     "title": "アカウントを追加",
-    "step1": "ステップ 1/2：アカウントの種類。",
-    "step2": "ステップ 2/2：詳細。",
-    "backend": "バックエンド",
-    "kind": "種類",
-    "backendDesc": {
-      "agy": "Antigravity CLI 経由の Gemini モデル。",
-      "claude": "Claude Code 経由の Claude モデル。",
-      "codex": "Codex 経由の OpenAI モデル。"
+    "connect": {
+      "legend": "このアカウントの接続方法は?",
+      "subscription": "サブスクリプションでサインイン",
+      "subscriptionDesc": "Gemini、Claude、ChatGPT のプランを使います。ブラウザーで一度サインインします。",
+      "apiKey": "API キーを使う",
+      "apiKeyDesc": "Anthropic、DeepSeek、OpenRouter、OpenAI などのキーでトークン単位で支払います。"
     },
-    "kindDesc": {
-      "isolated": "専用のプロファイル。ブラウザーで一度サインインします。",
-      "system": "このコンピューターにある既存のサインインを使います。",
-      "apiKey": "API プロバイダー経由でトークン単位で支払います。"
+    "product": {
+      "legend": "どのサブスクリプション?",
+      "agy": "Gemini(Antigravity 経由)",
+      "claude": "Claude Pro または Max(Claude Code 経由)",
+      "codex": "ChatGPT(Codex 経由)"
     },
+    "useSystem": "このコンピューターにある既存のサインインを使う",
+    "signIn": "サインイン",
+    "made": "{name} を追加しました。下でサインインを完了してください。閉じて後から行の操作で続けることもできます。",
+    "done": "完了",
     "defaultLabel": "{backend} {n}",
     "label": "名前",
     "priorityHint": "数値が大きいほど先に使われます（−1000～1000）。",
-    "provider": "プロバイダー",
-    "noProvider": "このバックエンドにはまだプロバイダーがありません。先に「API プロバイダー」で追加してください。",
-    "keyHint": "任意です。後から追加できます。以降は末尾の数文字だけが表示されます。",
-    "keyless": "{name} は追加されましたが、キーがありません。キーが拒否され、アカウントを削除し直すこともできませんでした。ここでキーを入力してください。",
     "loginFailed": "{name} を追加しましたが、サインインを開始できませんでした: {error}。カードの「サインイン」からもう一度お試しください。",
-    "systemTaken": "追加済み: {name}",
-    "next": "次へ",
-    "submit": "アカウントを追加"
+    "next": "次へ"
   },
   "key": {
-    "title": "{name} の API キー",
+    "titleAdd": "{name} にキーを追加",
+    "titleReplace": "{name} のキーを差し替え",
     "current": "保存済みのキーは {hint} で終わります。新しいキーで置き換わります。",
     "none": "キーはまだ保存されていません。",
-    "label": "API キー",
-    "hint": "サービスが保管し、ダッシュボードには二度と表示されません。",
-    "save": "キーを保存",
+    "save": "テストして保存",
+    "saveUntested": "テストせずに保存",
     "clear": "キーを削除"
   },
   "rename": {
@@ -166,28 +173,27 @@
     "withProvider": "{backend}（{provider}）"
   },
   "providers": {
-    "title": "API プロバイダー",
-    "desc": "API キーのアカウントがリクエストを送る先：Claude Code は Anthropic 互換、Codex は OpenAI 互換。",
-    "add": "プロバイダーを追加",
-    "search": "プロバイダーを検索",
-    "loading": "プロバイダーを読み込み中…",
-    "loadFailed": "プロバイダーを読み込めませんでした：{error}",
-    "empty": "プロバイダーはまだありません。",
-    "noMatch": "一致するプロバイダーはありません。",
-    "usedBy": "{n} 個のアカウントが使用中",
+    "title": "サービス",
+    "desc": "API キーがリクエストを送る先。ほとんどの人は変更する必要がありません。",
+    "add": "サービスを追加",
+    "search": "サービスを検索",
+    "loading": "サービスを読み込んでいます…",
+    "loadFailed": "サービスを読み込めませんでした:{error}",
+    "empty": "サービスはまだありません。API キーを追加すると作られます。",
+    "noMatch": "一致するサービスはありません。",
     "anyModel": "どのモデルでも",
     "patternModels": "パターン {pattern}",
     "enabledOf": "{name} を使う",
     "editOf": "{name} を編集",
     "deleteOf": "{name} を削除",
     "deleteTitle": "{name} を削除しますか？",
-    "deleteDesc": "アカウントはこれを使えなくなります。アカウントがまだ使っているプロバイダーは削除できません。",
-    "deleteConfirm": "プロバイダーを削除",
-    "inUse": "まだ使っているアカウントがあります。先に移すか削除してください。{error}",
+    "deleteDesc": "API キーはこのサービスを使えなくなります。",
+    "deleteConfirm": "サービスを削除",
+    "inUse": "まだ使っているアカウントがあります。先に削除してください。{error}",
     "deleted": "{name} を削除しました",
     "saved": "{name} を保存しました",
-    "addTitle": "API プロバイダーを追加",
-    "editTitle": "API プロバイダーを編集",
+    "addTitle": "サービスを追加",
+    "editTitle": "サービスを編集",
     "preset": "元にする設定",
     "blank": "空白",
     "id": "ID",
@@ -200,10 +206,40 @@
     "modelsPattern": "パターン {pattern} で許可されています。リストを入力するとこのパターンは置き換えられます。",
     "allowAny": "どのモデルでも許可",
     "anyOnSave": "保存するとパターンが削除され、どのモデルでも許可されます。",
-    "tierModels": "常に許可（ティアのモデル）: {models}",
     "enabled": "アカウントが使える",
-    "save": "プロバイダーを保存"
+    "save": "プロバイダーを保存",
+    "tiers": "ティアごとのモデル"
   },
+  "testResult": {
+    "not_tested": "未テスト",
+    "ok": "キーは有効",
+    "refused": "キーが拒否されました",
+    "not_found": "アドレスが違います",
+    "no_models_endpoint": "未確認: 最初のターンで確認されます",
+    "unreachable": "サービスに接続できません",
+    "redirected": "別の場所にリダイレクトされました",
+    "error": "テストに失敗しました",
+    "creditUnseen": "このテストではクレジット残高を確認できません",
+    "testedAt": "{time} にテスト"
+  },
+  "notice": {
+    "base_url_trimmed": "ベース URL を短縮しました",
+    "official_preset": "Anthropic のプリセットに切り替えました",
+    "key_name_removed": "キーから変数名を取り除きました",
+    "key_quotes_removed": "キーから引用符を取り除きました",
+    "key_assignment": "NAME=値 の形に見えます。= の後ろの部分だけを貼り付けてください",
+    "key_prefix": "別のサービスのキーのようです",
+    "provider_reused": "既存のプロバイダーを再利用しました"
+  },
+  "keyError": {
+    "empty": "API キーを貼り付けてください",
+    "too_long": "このキーは長すぎます",
+    "url": "キーではなく Web アドレスのようです。",
+    "whitespace": "キーだけを貼り付けてください:中に空白か改行があります。",
+    "control": "キーに見えない文字が含まれています"
+  },
+  "modelPerTask": "モデルはタスクごとに指定",
+  "modelPerTaskHint": "このプロバイダーには既定のモデルがありません。各タスクが使うモデルを指定します。",
   "view": {
     "label": "アカウントの表示",
     "list": "リスト",
@@ -214,7 +250,7 @@
       "account": "アカウント",
       "status": "状態",
       "slots": "枠",
-      "quota": "クォータ",
+      "quota": "クォータまたは支出",
       "controls": "作業に使う · 優先度"
     },
     "slots": "{busy}/{max} 使用中",
@@ -242,36 +278,6 @@
       "checking": "クォータを取得中…"
     }
   },
-  "testResult": {
-    "not_tested": "未テスト",
-    "ok": "キーは有効",
-    "refused": "キーが拒否されました",
-    "not_found": "アドレスが違います",
-    "no_models_endpoint": "未確認: 最初のターンで確認されます",
-    "unreachable": "サービスに接続できません",
-    "redirected": "別の場所にリダイレクトされました",
-    "error": "テストに失敗しました",
-    "creditUnseen": "このテストではクレジット残高を確認できません",
-    "testedAt": "{time} にテスト"
-  },
-  "notice": {
-    "base_url_trimmed": "ベース URL を短縮しました",
-    "official_preset": "Anthropic のプリセットに切り替えました",
-    "key_name_removed": "キーから変数名を取り除きました",
-    "key_quotes_removed": "キーから引用符を取り除きました",
-    "key_assignment": "NAME=値 の形に見えます。= の後ろの部分だけを貼り付けてください",
-    "key_prefix": "別のサービスのキーのようです",
-    "provider_reused": "既存のプロバイダーを再利用しました"
-  },
-  "keyError": {
-    "empty": "API キーを貼り付けてください",
-    "too_long": "このキーは長すぎます",
-    "url": "API キーではなく URL のようです",
-    "whitespace": "キーに空白や改行を含めないでください",
-    "control": "キーに見えない文字が含まれています"
-  },
-  "modelPerTask": "モデルはタスクごとに指定",
-  "modelPerTaskHint": "このプロバイダーには既定のモデルがありません。各タスクが使うモデルを指定します。",
   "budgetState": {
     "ok": "予算内",
     "warn": "予算の 80% を使用",
@@ -287,5 +293,149 @@
     "cli": "Claude Code の推定",
     "free": "ローカル · 無料",
     "none": "このサービスは費用を報告しません"
+  },
+  "service": {
+    "label": "サービス",
+    "search": "サービスを検索",
+    "yours": "あなたのサービス",
+    "presets": "サービス",
+    "keys": "キー {n} 個",
+    "noKey": "キーはまだありません",
+    "change": "変更",
+    "changeOf": "サービスを変更({name})",
+    "runsOn": "{cli} で動作",
+    "otherAnthropic": "その他(Anthropic 互換)",
+    "otherOpenai": "その他(OpenAI 互換)",
+    "noMatch": "一致するサービスはありません。",
+    "detected": "{service} のキーを検出しました",
+    "required": "キーの発行元サービスを選んでください"
+  },
+  "keyField": {
+    "label": "API キー",
+    "hint": "保存後は末尾 4 文字だけが表示されます。",
+    "show": "表示",
+    "hide": "隠す",
+    "showLabel": "キーを表示",
+    "nameRemoved": "先頭の {name}= を取り除きました"
+  },
+  "modelPicker": {
+    "label": "ワーカーが使うモデル",
+    "lead": "リードに任せる(任意のモデル)",
+    "perTier": "ティアごとに別のモデル",
+    "perTierOption": "ティアごとのモデル(下記)",
+    "leadHint": "各タスクがモデルを指定します。指定のないタスクは拒否されます。",
+    "fromService": "{service} の全キー共通の設定です。変更はアカウントの「モデルを変更」から。",
+    "tier": {
+      "fast": "高速",
+      "standard": "標準",
+      "strong": "高性能",
+      "max": "最大"
+    },
+    "tierEmpty": "タスクごとに指定",
+    "tierHint": "空のティア:そのティアのタスクはモデルを指定する必要があります。"
+  },
+  "form": {
+    "testAndAdd": "テストして追加",
+    "addUntested": "テストせずに追加",
+    "listModels": "キーを確認してモデルを一覧",
+    "testing": "キーをテストしています…",
+    "more": "その他のオプション",
+    "advanced": "詳細設定",
+    "budget": "予算(USD)",
+    "budgetHint": "0 で予算なし。費用を報告するのは Anthropic のキーだけ(Claude Code の推定)で、他のサービスはトークン数のみです。",
+    "budgetStop": "予算を使い切ったらこのキーを使わない",
+    "baseUrl": "ベース URL",
+    "baseUrlHint": "サービスのアドレス。Claude Code が /v1/messages を自分で付けるので、付けないでください。",
+    "baseUrlRequired": "サービスのアドレスを入力してください",
+    "wireApi": "Wire API",
+    "wireChat": "Chat Completions",
+    "wireResponses": "Responses",
+    "extraModels": "追加で許可するモデル",
+    "extraModelsHint": "カンマ区切り。空なら任意のモデルを許可。"
+  },
+  "budget": {
+    "title": "{name} の予算",
+    "save": "予算を保存",
+    "remove": "予算を外す",
+    "positive": "0 より大きい金額を入力してください",
+    "noCost": "このサービスは費用を報告しないため、予算を確認できません。予算でキーが止まることはありません。"
+  },
+  "model": {
+    "title": "{service} のモデル",
+    "desc": "{service} のすべてのキーに適用されます。",
+    "save": "モデルを保存"
+  },
+  "needs": {
+    "title": "対応が必要",
+    "row": "{name}:{problem}。",
+    "problem": {
+      "no_key": "キーがありません",
+      "needs_login": "サインアウトしています",
+      "no_plan": "プランがこのバックエンドを使えません",
+      "refused": "サービスがキーを拒否しました",
+      "not_found": "サービスのアドレスが間違っているようです",
+      "redirected": "サービスがテストを別の場所へ送りました",
+      "credits": "クレジットがありません",
+      "budget_reached": "予算に達しました({budget} 中 {spent})"
+    },
+    "action": {
+      "key": "キーを追加",
+      "login": "サインイン",
+      "replaceKey": "キーを差し替え",
+      "test": "キーをテスト",
+      "budget": "予算を増やす"
+    }
+  },
+  "testState": {
+    "ok": "有効",
+    "not_tested": "未テスト",
+    "refused": "拒否",
+    "not_found": "アドレス誤り",
+    "no_models_endpoint": "未確認",
+    "unreachable": "接続不可",
+    "redirected": "リダイレクト",
+    "error": "テスト失敗"
+  },
+  "testHelp": {
+    "ok": "キーは有効です。モデル {n} 個が使えます。",
+    "refused": "サービスがこのキーを拒否しました。",
+    "not_found": "アドレスが違います:そこには何も応答しません。ベース URL の末尾の /v1 を外してください。",
+    "no_models_endpoint": "このサービスは確認できません:キーを照合するモデル一覧がありません。最初のタスクでテストされます。",
+    "unreachable": "サービスに接続できませんでした。アドレスと接続を確認してください。",
+    "redirected": "サービスがテストを別のアドレスへ送りました。キーはそこへは送られていません。",
+    "error": "サービスがエラーを返しました(HTTP {status})。"
+  },
+  "spend": {
+    "short": {
+      "budget": "≈ {spent} / {budget}",
+      "over": "≈ {spent} / {budget}",
+      "since": "≈ {spent}({date} から)",
+      "cost": "≈ {spent}",
+      "tokens": "費用の報告なし · {tokens} トークン"
+    },
+    "long": {
+      "budget": "≈ {budget} 中 {spent} 使用 · 残り {left}",
+      "over": "≈ {budget} 中 {spent} 使用 · {left} 超過",
+      "since": "≈ キー設定以降 {spent} 使用({date})",
+      "cost": "≈ {spent} 使用",
+      "tokens": "このサービスは費用を報告しません · {tokens} トークン"
+    },
+    "free": "ローカル · 無料",
+    "estimateTip": "Claude Code 自身の推定で、サービスの請求額ではありません",
+    "setBudget": "予算を設定",
+    "barLabel": "予算の使用量",
+    "budgetUnknown": "予算 {budget} は適用されません:このサービスは費用を報告しません"
+  },
+  "facts": {
+    "model": "モデル:{model}",
+    "models": "モデル:{models}"
+  },
+  "routing": "タスクが {service} を指定したときに使われます(provider: {id})。",
+  "services": {
+    "advanced": "詳細",
+    "addKey": "キーを追加",
+    "official": "api.anthropic.com(公式)",
+    "allows": "許可:{models}",
+    "usedByNames": "{names} がまだ使っています。先にそのアカウントを削除してください。"
   }
 }

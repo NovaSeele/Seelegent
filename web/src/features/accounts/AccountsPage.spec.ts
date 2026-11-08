@@ -20,13 +20,13 @@ async function tiles(list: Account[]): Promise<Record<string, string>> {
         AccountCard: true,
         AccountDialogs: true,
         AddAccountDialog: true,
-        ProvidersPanel: true,
+        ServicesSection: true,
       },
     },
   })
   const out: Record<string, string> = {}
-  for (const tile of wrapper.findAll('.tile')) {
-    out[tile.find('dt').text()] = tile.find('dd').text()
+  for (const chip of wrapper.findAll('.chip')) {
+    out[chip.find('dt').text()] = chip.find('dd').text()
   }
   return out
 }
@@ -89,7 +89,7 @@ describe('AccountsPage view', () => {
           AccountList: true,
           AccountDialogs: true,
           AddAccountDialog: true,
-          ProvidersPanel: true,
+          ServicesSection: true,
         },
       },
     })

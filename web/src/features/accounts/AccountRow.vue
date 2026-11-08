@@ -12,7 +12,10 @@ import StatusPill from '@/components/ui/StatusPill.vue'
 import Switch from '@/components/ui/Switch.vue'
 
 import AccountFacts from './AccountFacts.vue'
+import AccountSpend from './AccountSpend.vue'
 import { showsSlots } from './accountView'
+import KeyActions from './KeyActions.vue'
+import KeyFacts from './KeyFacts.vue'
 import LoginPanel from './LoginPanel.vue'
 import QuotaBars from './QuotaBars.vue'
 import QuotaGroups from './QuotaGroups.vue'
@@ -20,8 +23,8 @@ import { type AccountDialog, useAccountControls } from './useAccountControls'
 import { useAccountState } from './useAccountState'
 
 /**
- * One account as a list row: name and type, status, slots, the routing quota at a glance, and the controls (use
- * for work, priority, ⋯). Clicking the row or its chevron opens the details in place: the chips, every quota
+ * One account as a list row: name and type, status (an API key's test state), slots, the routing quota at a glance
+ * (an API key's spend instead), and the controls (use for work, priority, ⋯). Clicking the row or its chevron opens the details in place: the chips, every quota
  * window and the next step, as the card shows them. The controls never open the row. In a narrow list
  * (`narrow`, set by AccountList) the row takes two lines and the priority moves into the ⋯ menu.
  */
@@ -32,7 +35,7 @@ const { t } = useI18n()
 const id = useId()
 
 const { pill } = useAccountState(props)
-const { actions, session, kindLabel, next, menu, onMenu, setEnabled, setPriority } =
+const { actions, session, kindLabel, routing, next, menu, onMenu, setEnabled, setPriority } =
   useAccountControls(
     props,
     (kind) => emit('dialog', kind),
@@ -72,7 +75,9 @@ const details = computed(() =>
         :aria-controls="`${id}-details`"
       />
       <div class="row__name">
-        <h3 :id="`${id}-name`" class="row__label">{{ account.label }}</h3>
+        <h3 :id="`${id}-name`" class="row__label" :title="routing || undefined">
+          {{ account.label }}
+        </h3>
         <p class="row__kind">
           {{ kindLabel }}<span v-if="slots" class="row__slots-inline"> · {{ slots }}</span>
         </p>
@@ -85,7 +90,14 @@ const details = computed(() =>
         size="sm"
       />
       <span class="row__slots" :class="{ 'row__slots--busy': account.busy > 0 }">{{ slots }}</span>
-      <QuotaBars class="row__quota" :account="account" :now="now" />
+      <AccountSpend
+        v-if="account.kind === 'api-key'"
+        class="row__quota"
+        :account="account"
+        compact
+        @budget="emit('dialog', 'budget')"
+      />
+      <QuotaBars v-else class="row__quota" :account="account" :now="now" />
       <div class="row__controls" @click.stop>
         <Switch
           :model-value="account.enabled"
@@ -137,7 +149,11 @@ const details = computed(() =>
         <span v-for="item in details" :key="item">{{ item }}</span>
       </p>
       <AccountFacts :account="account" :now="now" :has-session="!!session" />
-      <QuotaGroups :account="account" :now="now" />
+      <template v-if="account.kind === 'api-key'">
+        <KeyFacts :account="account" :now="now" @budget="emit('dialog', 'budget')" />
+        <KeyActions :account="account" @dialog="emit('dialog', $event)" />
+      </template>
+      <QuotaGroups v-else :account="account" :now="now" />
       <div v-if="next" class="row__next">
         <Button
           v-if="next === 'login'"
@@ -150,7 +166,7 @@ const details = computed(() =>
           {{ t('accounts.action.login') }}
         </Button>
         <Button v-else size="sm" variant="primary" @click="emit('dialog', 'key')">
-          {{ t('accounts.action.key') }}
+          {{ t('accounts.action.addKey') }}
         </Button>
       </div>
     </div>

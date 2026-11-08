@@ -1,6 +1,6 @@
 /** Typed endpoints of API providers (contract §4). */
 import type { ApiClient } from './client'
-import type { Provider, ProviderInput, ProviderList } from './types'
+import type { KeyTestRequest, KeyTestResult, Provider, ProviderInput, ProviderList } from './types'
 
 const enc = encodeURIComponent
 
@@ -15,6 +15,11 @@ export function createProvidersApi(client: ApiClient) {
       client.patch<Provider>(`/providers/${enc(id)}`, { body }),
     /** 409 conflict while accounts use it. */
     remove: (id: string) => client.delete<void>(`/providers/${enc(id)}`),
+    /**
+     * Checks a key with one call that spends no tokens (the service's model list). 200 also when the key is
+     * refused; with accountId the stored key is used and the result is saved on the account.
+     */
+    test: (body: KeyTestRequest) => client.post<KeyTestResult>('/providers/test', { body }),
   }
 }
 

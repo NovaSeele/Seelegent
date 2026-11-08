@@ -11,18 +11,9 @@ import { computed, shallowRef } from 'vue'
 
 import { accountsApi as defaultApi } from '@/api'
 import type { AccountChanges, AccountsApi, NewAccount } from '@/api/accounts'
-import type { Account, LoginSession } from '@/api/types'
+import type { Account, AccountCreated, KeyTestResult, LoginSession } from '@/api/types'
 
-/** The account was created, its key was refused, and deleting it again failed: it exists with no key. */
-export class KeylessAccountError extends Error {
-  constructor(
-    readonly account: Account,
-    readonly reason: unknown,
-  ) {
-    super(`account ${account.id} was created but has no key`)
-    this.name = 'KeylessAccountError'
-  }
-}
+import { useProvidersStore } from './providers'
 
 function order(list: readonly Account[]): Account[] {
   return [...list].sort((a, b) => b.priority - a.priority || a.label.localeCompare(b.label))
@@ -85,24 +76,33 @@ export const useAccountsStore = defineStore('accounts', () => {
   }
 
   /**
-   * Adds an account; with `key`, also stores its API key. The contract has no single route for both, so when the
-   * key cannot be stored the new account is deleted again (old bug: a keyless account was left behind). When that
-   * delete fails too, a KeylessAccountError says the account exists without a key.
+   * Adds an account in one call (POST /accounts): for an API key the provider (existing, or created or reused
+   * from newProvider) and the key go with it, and a refused key leaves nothing behind. A provider the call
+   * created goes into the providers store at once.
    */
-  async function create(body: NewAccount, key?: string): Promise<Account> {
-    const account = await keep(client.create(body))
-    if (key === undefined) return account
-    try {
-      return await keep(client.setKey(account.id, key))
-    } catch (error) {
-      const removed = await client.remove(account.id).then(
-        () => true,
-        () => false,
-      )
-      if (!removed) throw new KeylessAccountError(account, error)
-      remove(account.id)
-      throw error
-    }
+  async function create(body: NewAccount): Promise<AccountCreated> {
+    const created = await client.create(body)
+    // The list keeps the account alone: the provider and the notices belong to this answer.
+    const account: AccountCreated = { ...created }
+    delete account.newProvider
+    delete account.providerCreated
+    delete account.notices
+    upsert(account)
+    if (created.newProvider) useProvidersStore().upsert(created.newProvider)
+    return created
+  }
+
+  /**
+   * Notes a key test that was saved on the account (POST /providers/test with accountId), so its state shows
+   * before the account.updated frame arrives; the frame then brings the daemon's own record.
+   */
+  function noteTest(id: string, result: KeyTestResult): void {
+    const account = byId.value.get(id)
+    if (!account || !result.saved) return
+    accounts.value = order([
+      ...accounts.value.filter((a) => a.id !== id),
+      { ...account, testResult: result.reason, testedAt: new Date().toISOString() },
+    ])
   }
 
   async function removeAccount(id: string): Promise<void> {
@@ -143,6 +143,7 @@ export const useAccountsStore = defineStore('accounts', () => {
     applyLogin,
     clearLogin,
     create,
+    noteTest,
     removeAccount,
     update: (id: string, changes: AccountChanges) => keep(client.update(id, changes)),
     refresh: (id: string) => keep(client.refresh(id)),

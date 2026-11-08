@@ -1,6 +1,6 @@
 /** Pure helpers of the provider dialog: the allow-list, the create body and the edit body. */
 import type { ProviderChanges } from '@/api/providers'
-import type { Provider, ProviderInput, ProviderPreset } from '@/api/types'
+import type { Provider, ProviderInput, ProviderPreset, TierModels } from '@/api/types'
 
 /** "a, b  c" → ['a', 'b', 'c']: models are names without spaces, split on commas or whitespace. */
 export function parseModels(text: string): string[] {
@@ -84,14 +84,32 @@ export function tierModels(p: Pick<Provider, 'tiers'>): string[] {
   return [...new Set([fast, standard, strong, max].filter(Boolean))]
 }
 
-/** The POST /providers body; `preset` names the preset the form was filled from, so the daemon keeps it. */
+const sameTiers = (a: TierModels, b: TierModels) =>
+  a.fast === b.fast && a.standard === b.standard && a.strong === b.strong && a.max === b.max
+
+const hasTiers = (tiers: TierModels | undefined) => !!tiers && Object.values(tiers).some(Boolean)
+
+/**
+ * The POST /providers body; `preset` names the preset the form was filled from, so the daemon keeps it. Tier
+ * models are sent when any is set (none: each task names its model).
+ */
 export function providerInput(
   form: ProviderPreset,
   models: string[],
   preset: string,
+  tiers?: TierModels,
 ): ProviderInput {
   const { id, name, backend, baseUrl, enabled } = form
-  return { id, name, backend, baseUrl, enabled, models, ...(preset ? { preset } : {}) }
+  return {
+    id,
+    name,
+    backend,
+    baseUrl,
+    enabled,
+    models,
+    ...(preset ? { preset } : {}),
+    ...(tiers && hasTiers(tiers) ? { tiers: { ...tiers } } : {}),
+  }
 }
 
 /**
@@ -99,14 +117,17 @@ export function providerInput(
  * clears it to "any model"), so it is sent only when the field differs from the list it was filled with: an
  * untouched field never replaces a hand-written pattern or the list. `allowAny` (the dialog's "Allow any model")
  * sends `models: []` for an empty field, the only way to turn a hand-written pattern back into "any model".
+ * `tiers` (the tier editor) are sent when they differ from the provider's.
  */
 export function providerChanges(
   before: Provider,
   form: ProviderPreset,
   models: string[],
   allowAny = false,
+  tiers?: TierModels,
 ): ProviderChanges {
   const changes: ProviderChanges = {}
+  if (tiers && !sameTiers(tiers, before.tiers)) changes.tiers = { ...tiers }
   if (form.name !== before.name) changes.name = form.name
   if (!before.official && form.baseUrl !== before.baseUrl) changes.baseUrl = form.baseUrl
   if (form.enabled !== before.enabled) changes.enabled = form.enabled

@@ -7,7 +7,13 @@ import { shallowRef } from 'vue'
 
 import { providersApi as defaultApi } from '@/api'
 import type { ProviderChanges, ProvidersApi } from '@/api/providers'
-import type { Provider, ProviderInput, ProviderPreset } from '@/api/types'
+import type {
+  KeyTestRequest,
+  KeyTestResult,
+  Provider,
+  ProviderInput,
+  ProviderPreset,
+} from '@/api/types'
 
 import { useConnectionStore } from './connection'
 import { createLoader } from './loader'
@@ -51,6 +57,19 @@ export const useProvidersStore = defineStore('providers', () => {
     return provider
   }
 
+  /** Puts a provider another call returned (POST /accounts with newProvider) into the list. */
+  function upsert(provider: Provider): void {
+    const found = items.value.some((p) => p.id === provider.id)
+    items.value = found
+      ? items.value.map((p) => (p.id === provider.id ? provider : p))
+      : [...items.value, provider]
+  }
+
+  /** Checks a key (POST /providers/test); nothing is stored unless accountId is given. */
+  function test(body: KeyTestRequest): Promise<KeyTestResult> {
+    return client.test(body)
+  }
+
   /** 409 conflict while accounts use the provider. */
   async function remove(id: string): Promise<void> {
     await client.remove(id)
@@ -62,5 +81,19 @@ export const useProvidersStore = defineStore('providers', () => {
     return items.value.find((p) => p.id === id)?.name || id
   }
 
-  return { items, presets, status, error, setApi, ensure, load, create, update, remove, nameOf }
+  return {
+    items,
+    presets,
+    status,
+    error,
+    setApi,
+    ensure,
+    load,
+    create,
+    update,
+    upsert,
+    test,
+    remove,
+    nameOf,
+  }
 })

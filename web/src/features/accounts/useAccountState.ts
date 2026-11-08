@@ -6,12 +6,13 @@ import { useFormat } from '@/composables/useFormat'
 import { formatUSD } from '@/lib/usd'
 import { useAccountsStore } from '@/stores/accounts'
 
-import { PILL_TONE, pillState, STATUS_TONE } from './accountView'
+import { PILL_TONE, pillState, STATUS_TONE, TEST_TONE } from './accountView'
 
 /**
  * The words for an account's state, shared by its card and the card's chips: out of quota and resting (with
  * when they end; a hold until the user acts says why, never a date), the twin's name, and the pill (status word,
- * or held / out of quota / resting in its place) with its tooltip (a hold adds what to do).
+ * or held / out of quota / resting in its place; an API key's test state instead of "Ready") with its tooltip (a
+ * hold adds what to do).
  */
 export function useAccountState(props: { readonly account: Account; readonly now: number }) {
   const { t } = useI18n()
@@ -49,6 +50,15 @@ export function useAccountState(props: { readonly account: Account; readonly now
         })
       : t('accounts.resting')
   })
+  /** The key test in full: "Key refused · Tested 2 hours ago" ('' for a sign-in account). */
+  const testTitle = computed(() => {
+    const a = props.account
+    if (!a.testResult) return ''
+    const result = t(`accounts.testResult.${a.testResult}`)
+    return a.testedAt
+      ? `${result} · ${t('accounts.testResult.testedAt', { time: fmt.value.relative(a.testedAt, props.now) })}`
+      : result
+  })
   const pill = computed(() => {
     const state = pillState(props.account, props.now)
     if (state === 'held') {
@@ -68,9 +78,15 @@ export function useAccountState(props: { readonly account: Account; readonly now
       const label = restingLabel.value
       return { state, tone: PILL_TONE.resting, label, title: label }
     }
-    const label = t(`accounts.status.${props.account.status}`, { name: twinLabel.value })
-    return { state, tone: STATUS_TONE[props.account.status], label, title: label }
+    const a = props.account
+    // A ready API-key account shows its key test instead of "Ready": Works, Not tested, Refused, …
+    if (a.kind === 'api-key' && a.testResult && (a.status === 'ok' || a.status === 'error')) {
+      const label = t(`accounts.testState.${a.testResult}`)
+      return { state, tone: TEST_TONE[a.testResult], label, title: testTitle.value }
+    }
+    const label = t(`accounts.status.${a.status}`, { name: twinLabel.value })
+    return { state, tone: STATUS_TONE[a.status], label, title: label }
   })
 
-  return { twinLabel, exhaustedLabel, restingLabel, holdHint, pill }
+  return { twinLabel, exhaustedLabel, restingLabel, holdHint, testTitle, pill }
 }

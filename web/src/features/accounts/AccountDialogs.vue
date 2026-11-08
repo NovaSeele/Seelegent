@@ -13,13 +13,16 @@ import { useNow } from '@/composables/useNow'
 import { useAccountsStore } from '@/stores/accounts'
 import { useToastStore } from '@/stores/toast'
 
-import type { AccountDialog } from './useAccountControls'
 import { offConsequence } from './accountView'
+import BudgetDialog from './BudgetDialog.vue'
+import KeyDialog from './KeyDialog.vue'
+import ModelDialog from './ModelDialog.vue'
+import type { AccountDialog } from './useAccountControls'
 
 /**
- * The account dialogs the cards and list rows ask for: rename, the priority (a narrow list row has no room for its
- * field), the API key (set or clear; only its hint is ever shown, and the typed key is cleared when the dialog
- * closes), delete and sign out (409 while the account runs a task, said in the dialog), and turning work off, which
+ * The account dialogs the cards, list rows and the "Needs you" strip ask for: rename, the priority (a narrow list
+ * row has no room for its field), an API key's key, budget and model (KeyDialog, BudgetDialog, ModelDialog), delete
+ * and sign out (409 while the account runs a task, said in the dialog), and turning work off, which
  * says what changes now (running turns finish; the last account of its kind leaves new work waiting).
  */
 const props = defineProps<{ account: Account | undefined }>()
@@ -31,12 +34,10 @@ const toast = useToastStore()
 
 const label = ref('')
 const priority = ref(0)
-const key = ref('')
 const busy = ref(false)
 const error = ref('')
 
 watch(dialog, (value) => {
-  key.value = ''
   error.value = ''
   label.value = value === 'rename' ? (props.account?.label ?? '') : ''
   priority.value = props.account?.priority ?? 0
@@ -96,13 +97,6 @@ const savePriority = () =>
     (a) => accounts.update(a.id, { priority: priority.value }),
     t('accounts.done.priority', { name: name.value, n: priority.value }),
   )
-const saveKey = () =>
-  run(
-    (a) => accounts.setKey(a.id, key.value.trim()),
-    t('accounts.done.keySet', { name: name.value }),
-  )
-const clearKey = () =>
-  run((a) => accounts.clearKey(a.id), t('accounts.done.keyCleared', { name: name.value }))
 const remove = () =>
   run((a) => accounts.removeAccount(a.id), t('accounts.done.deleted', { name: name.value }))
 const logout = () => run((a) => accounts.logout(a.id), t('accounts.done.logout'))
@@ -169,47 +163,9 @@ const turnOff = () =>
     </template>
   </Dialog>
 
-  <Dialog
-    :open="dialog === 'key'"
-    size="sm"
-    :title="t('accounts.key.title', { name })"
-    :description="
-      account?.keyHint
-        ? t('accounts.key.current', { hint: account.keyHint })
-        : t('accounts.key.none')
-    "
-    :dismissible="!busy"
-    initial-focus="input"
-    @update:open="dialog = null"
-  >
-    <form id="account-key" @submit.prevent="saveKey">
-      <TextField
-        v-model="key"
-        type="password"
-        autocomplete="new-password"
-        :label="t('accounts.key.label')"
-        :hint="t('accounts.key.hint')"
-        :error="error || undefined"
-      />
-    </form>
-    <template #footer>
-      <Button v-if="account?.keyHint" variant="danger" :disabled="busy" @click="clearKey">
-        {{ t('accounts.key.clear') }}
-      </Button>
-      <Button variant="ghost" :disabled="busy" @click="dialog = null">
-        {{ t('common.action.cancel') }}
-      </Button>
-      <Button
-        type="submit"
-        form="account-key"
-        variant="primary"
-        :loading="busy"
-        :disabled="!key.trim()"
-      >
-        {{ t('accounts.key.save') }}
-      </Button>
-    </template>
-  </Dialog>
+  <KeyDialog :open="dialog === 'key'" :account="account" @update:open="dialog = null" />
+  <BudgetDialog :open="dialog === 'budget'" :account="account" @update:open="dialog = null" />
+  <ModelDialog :open="dialog === 'model'" :account="account" @update:open="dialog = null" />
 
   <ConfirmDialog
     :open="dialog === 'delete'"

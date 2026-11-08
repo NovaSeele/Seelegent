@@ -104,7 +104,8 @@ describe('AccountList', () => {
     expect(openRows(w)).toBe(0)
     for (const row of rows(w)) {
       expect(row.find('.pill').text()).not.toBe('')
-      expect(row.find('.qb').text()).not.toBe('')
+      // A sign-in row shows its quota; an API-key row its spend in the same column.
+      expect(row.find('.row__quota').text()).not.toBe('')
     }
     // Antigravity rows show the Gemini group, never the drained Claude/GPT or Argon groups.
     const agyRows = rows(w).filter((r) => r.attributes('style')?.includes('provider-agy'))
