@@ -26,9 +26,11 @@
     "invalid": "Cannot be used: {reason}",
     "runsOn": "Runs on",
     "role": "Role",
+    "trackFailed": "Track records could not be read: {error}",
     "track": {
       "title": "Track record",
       "none": "No meetings or consults yet.",
+      "failed": "Could not be read.",
       "meetings": "Meetings",
       "dissents": "Dissents",
       "vindicated": "Vindicated",

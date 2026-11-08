@@ -95,18 +95,28 @@ async function remove() {
         :title="t('team.members.empty')"
         :description="t('team.members.emptyDesc')"
       />
-      <ul v-else class="members__grid">
-        <MemberCard
-          v-for="member in shown"
-          :key="member.id"
-          :member="member"
-          :track="team.track[member.id]"
-          :busy="toggling === member.id"
-          @edit="target = member"
-          @remove="askDelete(member)"
-          @toggle="toggle(member, $event)"
-        />
-      </ul>
+      <template v-else>
+        <!-- The members are there but their track records are not: say so, never "none yet" (E-B11). -->
+        <div v-if="team.trackError" class="members__note" role="alert">
+          {{ t('team.members.trackFailed', { error: team.trackError }) }}
+          <Button size="sm" variant="ghost" @click="team.loadMembers()">
+            {{ t('common.action.retry') }}
+          </Button>
+        </div>
+        <ul class="members__grid">
+          <MemberCard
+            v-for="member in shown"
+            :key="member.id"
+            :member="member"
+            :track="team.track[member.id]"
+            :track-failed="team.trackError !== null"
+            :busy="toggling === member.id"
+            @edit="target = member"
+            @remove="askDelete(member)"
+            @toggle="toggle(member, $event)"
+          />
+        </ul>
+      </template>
     </div>
 
     <MemberEditor :target="target" @close="target = null" />

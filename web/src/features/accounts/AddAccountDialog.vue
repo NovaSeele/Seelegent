@@ -136,6 +136,18 @@ function showError(error: unknown) {
   if (!problems.length) failure.value = errorMessage(error)
 }
 
+/** Starts the new account's sign-in; the dialog is closed by then, so a failure is a toast (E-B11). */
+async function startLogin(account: Account) {
+  try {
+    await accounts.login(account.id)
+  } catch (error) {
+    toast.show({
+      message: t('accounts.add.loginFailed', { name: account.label, error: errorMessage(error) }),
+      tone: 'error',
+    })
+  }
+}
+
 async function submit() {
   if (busy.value) return
   busy.value = true
@@ -156,7 +168,7 @@ async function submit() {
     )
     open.value = false
     toast.show({ message: t('accounts.done.added', { name: created.label }), tone: 'success' })
-    if (created.kind === 'isolated') await accounts.login(created.id).catch(() => undefined)
+    if (created.kind === 'isolated') await startLogin(created)
   } catch (error) {
     showError(error)
   } finally {

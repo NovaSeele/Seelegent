@@ -15,7 +15,13 @@ import { RANK_TONE, trackFacts } from './memberModel'
  * One member: name and id, rank, what it runs on, its role, an on/off switch and its track record. A member whose
  * provider is gone says why it cannot be used.
  */
-const props = defineProps<{ member: Member; track?: MemberTrack; busy?: boolean }>()
+const props = defineProps<{
+  member: Member
+  track?: MemberTrack
+  /** The track records could not be read: say so instead of "none yet" (E-B11). */
+  trackFailed?: boolean
+  busy?: boolean
+}>()
 const emit = defineEmits<{ edit: []; remove: []; toggle: [enabled: boolean] }>()
 
 const { t } = useI18n()
@@ -73,7 +79,12 @@ const facts = computed(() => trackFacts(props.track))
     </p>
     <div class="member__track">
       <span class="member__track-title">{{ t('team.members.track.title') }}</span>
-      <span v-if="!facts.length" class="member__muted">{{ t('team.members.track.none') }}</span>
+      <span v-if="trackFailed && !facts.length" class="member__muted">{{
+        t('team.members.track.failed')
+      }}</span>
+      <span v-else-if="!facts.length" class="member__muted">{{
+        t('team.members.track.none')
+      }}</span>
       <span v-for="f in facts" :key="f.key" class="member__fact">
         {{ t(`team.members.track.${f.key}`) }} <strong>{{ fmt.number(f.value) }}</strong>
       </span>

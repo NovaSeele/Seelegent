@@ -26,9 +26,11 @@
     "invalid": "No se puede usar: {reason}",
     "runsOn": "Se ejecuta en",
     "role": "Rol",
+    "trackFailed": "No se pudieron leer los historiales: {error}",
     "track": {
       "title": "Historial",
       "none": "Aún no hay reuniones ni consultas.",
+      "failed": "No se pudo leer.",
       "meetings": "Reuniones",
       "dissents": "Disensos",
       "vindicated": "Con razón",

@@ -120,6 +120,7 @@
     "noProvider": "No provider is set up for this backend yet. Add one under API providers first.",
     "keyHint": "Optional; you can add it later. Only its last characters are shown afterwards.",
     "keyless": "{name} was added, but it has no key: the key was refused and the account could not be removed again. Enter a key for it here.",
+    "loginFailed": "{name} was added, but its sign-in could not start: {error}. Use Sign in on its card to try again.",
     "systemTaken": "Already added: {name}",
     "next": "Next",
     "submit": "Add account"

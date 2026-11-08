@@ -8,6 +8,7 @@ import { defineStore } from 'pinia'
 import { shallowRef } from 'vue'
 
 import { teamApi as defaultApi } from '@/api'
+import { ApiError, errorMessage } from '@/api/client'
 import type { MemberWrite, TeamApi } from '@/api/team'
 import type { ContestSummary, MeetingSummary, Member, MemberTrack } from '@/api/types'
 
@@ -31,20 +32,31 @@ export const useTeamStore = defineStore('team', () => {
   let client: TeamApi = defaultApi
   const members = shallowRef<readonly Member[]>([])
   const track = shallowRef<Readonly<Record<string, MemberTrack>>>({})
+  /** Why the track records could not be read with the members (null: they were, or the daemon has none). */
+  const trackError = shallowRef<string | null>(null)
   const meetings = shallowRef<readonly MeetingSummary[]>([])
   const contests = shallowRef<readonly ContestSummary[]>([])
 
   const membersLoader = createLoader(
     async (signal) => {
+      // A daemon without track records answers 404: that is "none yet". Any other failure is said as one (E-B11),
+      // never as an empty record.
       const [list, records] = await Promise.all([
         client.members(signal),
-        client.memberTrack(signal).catch(() => [] as MemberTrack[]),
+        client.memberTrack(signal).then(
+          (records) => ({ records, error: null }),
+          (cause: unknown) =>
+            cause instanceof ApiError && cause.status === 404
+              ? { records: [] as MemberTrack[], error: null }
+              : { records: [] as MemberTrack[], error: errorMessage(cause) },
+        ),
       ])
-      return { list, records }
+      return { list, ...records }
     },
-    ({ list, records }) => {
+    ({ list, records, error }) => {
       members.value = list
       track.value = Object.fromEntries(records.map((r) => [r.member, r]))
+      trackError.value = error
     },
   )
   const meetingsLoader = createLoader(
@@ -126,6 +138,7 @@ export const useTeamStore = defineStore('team', () => {
   return {
     members,
     track,
+    trackError,
     meetings,
     contests,
     membersStatus: membersLoader.status,

@@ -26,9 +26,11 @@
     "invalid": "Không dùng được: {reason}",
     "runsOn": "Chạy trên",
     "role": "Vai trò",
+    "trackFailed": "Không đọc được thành tích: {error}",
     "track": {
       "title": "Thành tích",
       "none": "Chưa có cuộc họp hay lần hỏi ý kiến nào.",
+      "failed": "Không đọc được.",
       "meetings": "Cuộc họp",
       "dissents": "Bất đồng",
       "vindicated": "Được chứng minh đúng",
