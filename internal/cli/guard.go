@@ -107,7 +107,6 @@ func fetchConfig(ctx context.Context, env []string, dir string) func(globals []s
 			defer cancel()
 			args := append(append([]string{"-c", "core.fsmonitor=false"}, globals...),
 				"config", "--null", "--get-regexp", guard.FetchConfigPattern)
-			//nolint:gosec // git comes from the resolver; every argument is one word, never a shell word
 			c := exec.CommandContext(cctx, git, args...)
 			if dir != "" {
 				if st, err := os.Stat(dir); err == nil && st.IsDir() {
