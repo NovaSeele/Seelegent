@@ -207,6 +207,9 @@ func (s *Service) DelegateWith(ctx context.Context, req api.DelegateRequest, sp 
 			Data: api.DepsData{State: api.DepsWaiting, After: t.After, Reason: t.DepsReason}})
 	}
 	// The lane check and the create are one step: two delegates cannot both claim the same files (old D25a).
+	// The new task's first flags are read against the accounts as they are now, not as the last attention tick saw
+	// them: an account added or signed in since must not show as no_accounts, which wakes the delegate's wait (N2).
+	s.refreshHealth(ctx)
 	s.claimMu.Lock()
 	laneEvs, err := s.checkLane(ctx, t, t.Proof, req.ForceLane)
 	if err != nil {
@@ -259,6 +262,7 @@ func (s *Service) Followup(ctx context.Context, id string, req api.FollowupReque
 	if by != ByLead && by != ByUser {
 		return api.TaskSummary{}, invalidf("by %q must be lead or user", req.By)
 	}
+	s.refreshHealth(ctx) // the new turn's flags against the accounts as they are now (see DelegateWith)
 	preq := proofRequest{gate: req.Gate, gateCommands: listOf(req.GateCommands), lane: req.Lane,
 		noLane: req.NoLane, forceLane: req.ForceLane, verify: req.Verify}
 	var mem *api.Member

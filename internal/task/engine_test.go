@@ -629,6 +629,19 @@ func TestWaitSinceWakesOnFlagRaisedAtCreation(t *testing.T) {
 	}
 }
 
+// TestNewTaskSeesAccountsAddedSinceTheTick: an account added after the last attention tick counts for a new task's
+// first flags, so the task is not flagged no_accounts (which would wake the delegate's wait) when it can run.
+func TestNewTaskSeesAccountsAddedSinceTheTick(t *testing.T) {
+	h := newHarness(t)
+	h.agy("late", 0)
+	h.queue.Push(t, okScript("conv-l", "ok"))
+	sum := h.delegate(api.DelegateRequest{})
+	if sum.Attention != nil {
+		t.Fatalf("a task that can run was flagged at creation: %+v", sum.Attention)
+	}
+	h.waitStatus(sum.ID, StatusDone)
+}
+
 // TestAnswerQuestion turns a "## Blocked" report into a question that the user answers with a new turn.
 func TestAnswerQuestion(t *testing.T) {
 	h := newHarness(t)
