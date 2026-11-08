@@ -343,8 +343,9 @@ func (a *App) build(o Options) error {
 	a.slots = gate.NewSlots(func() int { return a.Limits().GateConcurrency })
 	a.Tasks, err = task.New(task.Options{
 		DB: a.DB, Accounts: a.Accounts, Pool: p, Backends: a.Backends, Settings: a.Settings,
-		TasksDir: o.Paths.Tasks, Launcher: o.Launcher, Usage: a.Usage, QuotaRefresh: a.Refresher.AfterRun,
-		Memory: a.Memory, Roles: a.Roles, Consoles: consoles, Clock: o.Clock, Logger: a.log,
+		TasksDir: o.Paths.Tasks, DataDir: o.Paths.Home, Launcher: o.Launcher, Usage: a.Usage,
+		QuotaRefresh: a.Refresher.AfterRun, Memory: a.Memory, Roles: a.Roles, Consoles: consoles, Clock: o.Clock,
+		Logger:        a.log,
 		BaseEnv:       func() []string { return a.env },
 		Toolchains:    a.toolchains,
 		Dashboard:     a.dashboardLink,
