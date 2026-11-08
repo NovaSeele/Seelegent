@@ -15,6 +15,7 @@ const CAUSE_KEY: Readonly<Record<Cause, string>> = {
   github_auth: 'githubAuth',
   github_rate_limited: 'githubRateLimited',
   github_forbidden: 'githubForbidden',
+  github_not_found: 'githubNotFound',
   github_manual: 'githubManual',
   github: 'github',
   other: 'other',

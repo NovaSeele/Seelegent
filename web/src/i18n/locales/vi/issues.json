@@ -400,14 +400,15 @@
   },
   "cause": {
     "gitAuth": "Git không đăng nhập được vào remote. Hãy thiết lập thông tin đăng nhập git cho nó (với GitHub: gh auth setup-git) hoặc kiểm tra token, rồi thử lại.",
-    "gitRejected": "Remote đã từ chối lần push (nhánh được bảo vệ hoặc quy tắc phía máy chủ).",
-    "git": "Một lệnh git đã thất bại.",
+    "gitRejected": "Remote đã từ chối lần push (nhánh được bảo vệ hoặc quy tắc phía máy chủ). Hãy push lên nhánh khác, hoặc nhờ quản trị viên kho cho phép.",
+    "git": "Một lệnh git đã lỗi. Đọc lý do của git bên dưới, sửa trong kho rồi thử lại.",
     "network": "Không kết nối được tới GitHub hoặc remote kịp lúc. Kiểm tra kết nối rồi thử lại.",
     "githubAuth": "GitHub từ chối đăng nhập. Hãy đăng nhập lại gh hoặc thay token.",
-    "githubRateLimited": "Đã chạm giới hạn yêu cầu của GitHub. Hãy thử lại sau.",
-    "githubForbidden": "Tài khoản hoặc token GitHub không có quyền làm việc này trên kho này.",
-    "githubManual": "Bước này cần gh CLI đã đăng nhập hoặc một token GitHub.",
-    "github": "GitHub trả về lỗi.",
-    "other": "Bước này đã thất bại."
+    "githubRateLimited": "Đã chạm giới hạn yêu cầu của GitHub. Giới hạn đặt lại trong vòng một giờ; hãy thử lại sau đó.",
+    "githubForbidden": "Tài khoản hoặc token GitHub không được làm việc này trên kho này. Cấp quyền truy cập kho (hoặc phạm vi cần thiết) rồi thử lại.",
+    "githubNotFound": "GitHub không biết kho này, hoặc ẩn nó với token hay tài khoản gh này. Kiểm tra chủ sở hữu và tên, hoặc đăng nhập bằng tài khoản xem được kho.",
+    "githubManual": "Bước này cần gh CLI đã đăng nhập hoặc một token GitHub. Chạy gh auth login (hoặc đặt một token GitHub) rồi thử lại.",
+    "github": "GitHub trả về lỗi. Thường chỉ là tạm thời: thử lại sau vài phút, nếu vẫn lỗi thì đọc thông báo của GitHub bên dưới.",
+    "other": "Bước này đã lỗi. Đọc thông báo bên dưới rồi thử lại."
   }
 }

@@ -177,7 +177,7 @@ when the daemon starts is `unknown`; before anything is retried it is checked ag
 Seelegent made on the remote branch, does the pull request exist, does the issue hold the comment's marker) and
 marked done when it had happened. A failed row keeps git's or GitHub's English text in `error` (for the lead's
 tools) and its cause in `cause` (`git_auth`, `git_rejected`, `git`, `network`, `github_auth`, `github_rate_limited`,
-`github_forbidden`, `github_manual`, `github`, `other`); the ticket's `error`, the checks' `error` and a repository's
+`github_forbidden`, `github_not_found`, `github_manual`, `github`, `other`); the ticket's `error`, the checks' `error` and a repository's
 `syncError` carry the same cause (`errorCause`, `syncErrorCause`). The dashboard explains each from its cause in the
 reader's language and shows the English text only behind a "Seelegent said" disclosure.
 

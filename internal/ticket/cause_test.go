@@ -35,7 +35,7 @@ func TestErrorCause(t *testing.T) {
 		{git("fatal: bad object abc"), api.CauseGit},
 		{&github.Error{Reason: github.ReasonAuth, Status: 401, Message: "Bad credentials"}, api.CauseGitHubAuth},
 		{&github.Error{Reason: github.ReasonRateLimited, Status: 403}, api.CauseGitHubRateLimited},
-		{&github.Error{Reason: github.ReasonNotFound, Status: 404}, api.CauseGitHubForbidden},
+		{&github.Error{Reason: github.ReasonNotFound, Status: 404}, api.CauseGitHubNotFound},
 		{&github.Error{Reason: github.ReasonNetwork}, api.CauseNetwork},
 		{&github.Error{Reason: github.ReasonInvalid, Status: 422}, api.CauseGitHub},
 		{fmt.Errorf("open pr: %w", github.ErrManual), api.CauseGitHubManual},

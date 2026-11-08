@@ -400,14 +400,15 @@
   },
   "cause": {
     "gitAuth": "Git 无法登录远程仓库。请为它配置 git 凭据（GitHub 可用 gh auth setup-git），或检查令牌后重试。",
-    "gitRejected": "远程仓库拒绝了推送（受保护的分支或服务器端规则）。",
-    "git": "一个 git 命令失败了。",
+    "gitRejected": "远程仓库拒绝了推送（受保护的分支或服务器端规则）。请推送到其他分支，或请仓库管理员允许。",
+    "git": "git 命令失败了。阅读下方 git 给出的原因，在仓库中修复后重试。",
     "network": "未能及时连接到 GitHub 或远程仓库。请检查网络后重试。",
     "githubAuth": "GitHub 拒绝了登录。请重新登录 gh 或更换令牌。",
-    "githubRateLimited": "已达到 GitHub 的请求上限。请稍后重试。",
-    "githubForbidden": "该 GitHub 账号或令牌无权在此仓库执行此操作。",
-    "githubManual": "这一步需要已登录的 gh CLI 或 GitHub 令牌。",
-    "github": "GitHub 返回了错误。",
-    "other": "这一步失败了。"
+    "githubRateLimited": "已达到 GitHub 的速率限制。它会在一小时内重置，届时再试。",
+    "githubForbidden": "这个 GitHub 账号或令牌不能在此仓库执行该操作。给它仓库访问权限（或所需的权限范围）后重试。",
+    "githubNotFound": "GitHub 找不到这个仓库，或对此令牌或 gh 账号隐藏了它。请检查所有者和名称，或用能看到它的账号登录。",
+    "githubManual": "这一步需要已登录的 gh CLI 或 GitHub 令牌。运行 gh auth login（或设置 GitHub 令牌）后重试。",
+    "github": "GitHub 返回了错误。这通常是暂时的：几分钟后重试；如果一直失败，请阅读下方 GitHub 的消息。",
+    "other": "该步骤失败了。阅读下方的消息后重试。"
   }
 }

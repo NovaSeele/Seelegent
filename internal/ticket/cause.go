@@ -40,8 +40,10 @@ func errorCause(err error) string {
 			return api.CauseGitHubAuth
 		case github.ReasonRateLimited:
 			return api.CauseGitHubRateLimited
-		case github.ReasonForbidden, github.ReasonNotFound:
+		case github.ReasonForbidden:
 			return api.CauseGitHubForbidden
+		case github.ReasonNotFound:
+			return api.CauseGitHubNotFound
 		case github.ReasonNetwork:
 			return api.CauseNetwork
 		}
