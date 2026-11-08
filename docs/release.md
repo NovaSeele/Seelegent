@@ -116,7 +116,7 @@ See [cli.md](cli.md) for the output. The steps of `--apply`:
 2. Under `<data folder>/update/` (with a lock there and one for the executable in the user's cache folder,
    `<cache>/seelegent/update-<hash of the executable's path>.lock`, so two updates never run at once on the same data
    folder or the same executable; only without a cache folder is that lock `<exe>.update.lock` next to the
-   executable): download the archive, verify its
+   executable; a `download-*` folder an interrupted update left there is removed first): download the archive, verify its
    SHA-256 against `checksums.txt` (no line, or another hash: refused, code `checksum_mismatch`), extract the binary
    and run its `version --json`. Its `schemaVersion` is compared with the database (read-only): see
    [Database schema](#database-schema-and-going-back) (`schema_too_new`, `schema_unknown`, `--force`).

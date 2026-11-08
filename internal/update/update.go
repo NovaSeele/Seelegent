@@ -322,6 +322,7 @@ func (u *Updater) Apply(ctx context.Context, tag string) (ApplyResult, error) {
 	}
 	defer unlock()
 	sweep(u.o.Exe)
+	u.sweepDownloads()
 
 	dlCtx, cancel := u.withTimeout(ctx, 10*time.Minute)
 	defer cancel()
@@ -372,6 +373,18 @@ func (u *Updater) Apply(ctx context.Context, tag string) (ApplyResult, error) {
 	sweep(u.o.Exe)
 	res.Message = fmt.Sprintf("updated %s -> %s", u.o.Current, rel.Version)
 	return res, nil
+}
+
+// sweepDownloads removes the download folders an interrupted update left in WorkDir (a killed process never runs
+// its deferred cleanup). The caller holds the data folder's update lock, so no other update downloads into them.
+func (u *Updater) sweepDownloads() {
+	left, err := filepath.Glob(filepath.Join(u.o.WorkDir, "download-*"))
+	if err != nil {
+		return
+	}
+	for _, p := range left {
+		_ = os.RemoveAll(p) // one that cannot go yet is tried again by the next update
+	}
 }
 
 // stage downloads and checks the release's archive and returns the new executable next to the installed one
