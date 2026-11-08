@@ -115,7 +115,7 @@ set). RE2 has no look-ahead: write `"^gemini-3\\.8-"` (the JSON spelling of
 | --- | --- | --- | --- |
 | `stallMinutes` | integer ≥ 1 | `10` | Flag a running turn that produced no event for this long. |
 | `stallToolMinutes` | integer ≥ 1 | `25` | Flag a single tool call running this long. |
-| `loopRepeat` | integer 2–100 | `4` | Flag a worker as looping when the same tool call (same tool and parameters) comes back this many times within its last 12 tool calls with no progress in between (a successful edit seen once), or alternates this many times with the same other call. Takes effect at once. The check looks at 12 calls, so a value above 12 turns it off; five failed calls in a row are flagged whatever the value. |
+| `loopRepeat` | integer 2–100 | `4` | Flag a worker as looping when the same tool call (same tool and parameters) comes back this many times within its last 12 tool calls with no progress in between (a successful edit seen once), or alternates this many times with the same other call. Takes effect at once. Effective up to 12: the check looks at the last 12 tool calls, so a value above 12 turns it off (such values are still accepted, so existing files keep loading); five failed calls in a row are flagged whatever the value. |
 | `attentionDecayHours` | integer ≥ 1 | `24` | Drop an unanswered attention flag after this long. |
 
 ### Gates, lanes and safety
