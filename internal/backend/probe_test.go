@@ -129,7 +129,7 @@ func TestProbeKeyFailures(t *testing.T) {
 
 func TestProbeKeyTimeoutAndUnreachable(t *testing.T) {
 	release := make(chan struct{})
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 		select {
 		case <-release:
 		case <-r.Context().Done():

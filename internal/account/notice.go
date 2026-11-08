@@ -159,7 +159,7 @@ func NormalizeKey(raw string) (string, []Notice, error) {
 	if err := validateKey(key); err != nil {
 		return "", nil, err
 	}
-	if i := strings.IndexByte(key, '='); looksAssigned.MatchString(key) && len(key)-i-1 >= minKeyAfterName {
+	if i := strings.IndexByte(key, '='); looksAssigned.MatchString(key) && len(key)-i > minKeyAfterName {
 		notices = append(notices, Notice{Code: NoticeKeyAssignment, Field: "apiKey",
 			Message: "this looks like NAME=value; paste only the part after ="})
 	}
