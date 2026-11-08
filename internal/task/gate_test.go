@@ -471,7 +471,7 @@ func TestGateCommandFolders(t *testing.T) {
 
 	h.queue.Push(t, editScript("conv-e", filepath.Join(sub, "b.txt"), "c\n", "Did T001."))
 	sum = h.delegate(api.DelegateRequest{Title: "spec in sub", Cwd: sub,
-		Spec: &api.SpecRequest{Dir: "../specs/001-x", TaskIDs: []string{"T001"}}})
+		Spec: &api.SpecRequest{Dir: filepath.Join(h.cwd, "specs", "001-x"), TaskIDs: []string{"T001"}}})
 	tk = h.waitStatus(sum.ID, StatusDone)
 	if g := tk.LastTurn().Gate; g == nil || g.State != api.GateGreen {
 		t.Fatalf("spec gate = %+v", g)

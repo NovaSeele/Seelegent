@@ -482,20 +482,26 @@ func checkCwd(cwd string) (canonical, key, name string, err error) {
 	return canonical, key, name, nil
 }
 
-// checkSpec validates a Spec Kit feature directory: relative to cwd (inside it) or absolute (outside it).
+// checkSpec validates a Spec Kit feature directory: relative to cwd (inside it) or absolute (outside it). A relative
+// one that leaves cwd once cleaned and resolved (.., a link or junction out) is refused, as the old version, GET
+// /spec and proof refuse it (A-L9h): a folder outside cwd is named by its absolute path.
 func checkSpec(cwd string, req *api.SpecRequest) (spec *api.SpecRef, outside bool, err error) {
 	dir := strings.TrimSpace(req.Dir)
 	if dir == "" {
 		return nil, false, invalidf("spec.dir is required")
 	}
 	abs := dir
-	if !filepath.IsAbs(abs) {
+	relative := !filepath.IsAbs(abs)
+	if relative {
 		abs = filepath.Join(cwd, dir)
 	}
 	if st, err := os.Stat(abs); err != nil || !st.IsDir() {
 		return nil, false, invalidf("spec.dir %q is not an existing folder", req.Dir)
 	}
 	rel, inside := relInside(cwd, abs)
+	if relative && !inside {
+		return nil, false, invalidf("spec.dir %q leaves cwd; pass an absolute path", req.Dir)
+	}
 	if inside {
 		dir = filepath.ToSlash(rel)
 	} else {

@@ -67,7 +67,7 @@
         },
         "spec": {
           "type": "string",
-          "description": "Spec Kit feature directory relative to cwd (e.g. specs/001-feature) or an absolute path if the spec folder lives outside the repo. Seelegent then briefs the worker to read spec/plan/tasks/contracts and the constitution, and to implement only task_ids."
+          "description": "Spec Kit feature directory relative to cwd (e.g. specs/001-feature; a relative path that leaves cwd is refused) or an absolute path if the spec folder lives outside the repo. Seelegent then briefs the worker to read spec/plan/tasks/contracts and the constitution, and to implement only task_ids."
         },
         "task_ids": {
           "type": "array",
