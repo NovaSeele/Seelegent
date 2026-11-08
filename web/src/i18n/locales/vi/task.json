@@ -53,7 +53,9 @@
       "depsWaiting": "Đang chờ {tasks} hoàn tất.",
       "depCancelled": "Tác vụ trước {title} ({task}) đã bị huỷ.",
       "hygiene": "{count} phát hiện vệ sinh mã cần xem",
-      "workAtRisk": "{count} tệp có thể đã mất thay đổi"
+      "workAtRisk": "{count} tệp có thể đã mất thay đổi",
+      "resourcesWait": "Đã chờ tài nguyên hơn {minutes} phút: trống {available} MB, cần {need} MB.",
+      "resourcesWaitPlain": "Đã chờ tài nguyên hơn {minutes} phút: máy không đủ bộ nhớ trống."
     }
   },
   "question": {
@@ -213,7 +215,8 @@
     "phase": {
       "running": "đang chạy",
       "settling": "chờ các tác vụ khác",
-      "verifying": "đang duyệt lần hai"
+      "verifying": "đang duyệt lần hai",
+      "queued": "đang xếp hàng"
     },
     "turn": "lượt {n}",
     "fixTurns": "{count} lượt tự sửa",
@@ -283,7 +286,15 @@
     "bar": "Đã đổi từ lúc bắt đầu",
     "usedUp": "đã hết lượt tự sửa ({n}/{max})",
     "nextStep": "Cổng không thể tự sửa thêm: hãy gửi chỉ dẫn tiếp hoặc tiếp quản tác vụ.",
-    "causedBy": "có thể do {tasks}"
+    "causedBy": "có thể do {tasks}",
+    "queued": {
+      "slot": "chờ lượt chạy cổng",
+      "memory": "chờ bộ nhớ trống",
+      "place": "thứ {position} trong hàng, {limit} cùng lúc",
+      "limit": "{limit} cùng lúc"
+    },
+    "stoppedLowMemory": "Bị dừng vì máy thiếu bộ nhớ ({n}/{max}); cổng chạy lại khi bộ nhớ trống trở lại.",
+    "lowMemory": "Máy liên tục thiếu bộ nhớ: cổng đã bị dừng {max} lần."
   },
   "consults": {
     "title": "Ý kiến thành viên",

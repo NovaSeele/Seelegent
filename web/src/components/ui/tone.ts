@@ -12,6 +12,8 @@ export const TASK_STATUS = {
   running: { tone: 'running', icon: 'statusRunning' },
   waiting: { tone: 'neutral', icon: 'statusWaiting' },
   waitingWorker: { tone: 'neutral', icon: 'statusWaiting' },
+  /** waiting_quota with waiting "memory": the machine is short of free memory, not the account of quota. */
+  waitingResources: { tone: 'neutral', icon: 'statusWaiting' },
   blocked: { tone: 'attention', icon: 'statusBlocked' },
   review: { tone: 'attention', icon: 'statusReview' },
   accepted: { tone: 'success', icon: 'statusAccepted' },

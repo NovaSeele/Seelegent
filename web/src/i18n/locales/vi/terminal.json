@@ -122,7 +122,12 @@
       "red": "Cổng không đạt",
       "error": "Không chạy được cổng",
       "skipped": "Cổng đã dừng",
-      "autoFix": "tự sửa ở lượt {n}"
+      "autoFix": "tự sửa ở lượt {n}",
+      "queued": "Cổng kiểm tra đang xếp hàng",
+      "queuedSlot": "Cổng kiểm tra đang xếp hàng: thứ {position}, {limit} cùng lúc",
+      "queuedMemory": "Cổng kiểm tra chờ bộ nhớ trống",
+      "stoppedLowMemory": "Bước kiểm tra bị dừng: máy thiếu bộ nhớ ({n}/{max})",
+      "lowMemory": "máy liên tục thiếu bộ nhớ ({max} lần dừng)"
     },
     "lane": {
       "forced": "Đã giành làn bất chấp chỗ giữ của {count} tác vụ khác",
@@ -134,6 +139,8 @@
       "accept": "Duyệt lần hai chấp nhận thay đổi",
       "reject": "Duyệt lần hai từ chối thay đổi",
       "error": "Duyệt lần hai không hoàn tất được"
-    }
+    },
+    "waitingMemory": "Chờ tài nguyên: trống {available} MB, cần {need} MB",
+    "waitingResources": "Chờ tài nguyên"
   }
 }

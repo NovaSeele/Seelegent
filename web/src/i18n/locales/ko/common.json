@@ -105,6 +105,10 @@
     "blockedDeps": {
       "label": "선행 작업 실패",
       "short": "선행 실패"
+    },
+    "waitingResources": {
+      "label": "리소스 대기",
+      "short": "리소스"
     }
   },
   "attention": {
@@ -128,7 +132,8 @@
     "verifierRejected": "2차 검토 거절",
     "peerObjection": "동료가 이의를 제기함",
     "backgroundWait": "백그라운드 명령을 기다리는 중",
-    "unknown": "확인 필요"
+    "unknown": "확인 필요",
+    "resourcesWait": "리소스 대기"
   },
   "stage": {
     "explore": "탐색",

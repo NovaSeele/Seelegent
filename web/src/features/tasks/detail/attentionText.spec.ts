@@ -19,6 +19,22 @@ describe('attention text (F14)', () => {
     await activateLocale('en')
   })
 
+  it('says how long a task waited for resources and how much memory it needs', async () => {
+    const view = await text(
+      at({
+        reason: 'resources_wait',
+        state: 'info',
+        detail: 'free 1500 MB < threshold 2048 MB',
+        params: { minutes: 12, availableMB: 1500, needMB: 2048 },
+      }),
+    )
+    expect(view.title).toBe('Waiting for resources')
+    expect(view.why).toBe('Waiting for resources for over 12 minutes: 1500 MB free, needs 2048 MB.')
+    expect(view.said).toBe('')
+    const plain = await text(at({ reason: 'resources_wait', params: { minutes: 10 } }))
+    expect(plain.why).toContain('short of free memory')
+  })
+
   it('builds the sentence from params, not from the daemon detail', async () => {
     const view = await text(
       at({

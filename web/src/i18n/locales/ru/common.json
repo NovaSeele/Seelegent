@@ -105,6 +105,10 @@
     "blockedDeps": {
       "label": "Предыдущая задача упала",
       "short": "Сбой пред."
+    },
+    "waitingResources": {
+      "label": "Ждёт ресурсы",
+      "short": "Ресурсы"
     }
   },
   "attention": {
@@ -128,7 +132,8 @@
     "verifierRejected": "Отклонено вторым мнением",
     "peerObjection": "Коллега возражает",
     "backgroundWait": "Ждёт фоновую команду",
-    "unknown": "Требует внимания"
+    "unknown": "Требует внимания",
+    "resourcesWait": "Ждёт ресурсы"
   },
   "stage": {
     "explore": "Поиск",

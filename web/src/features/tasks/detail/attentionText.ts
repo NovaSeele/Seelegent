@@ -140,6 +140,17 @@ export function attentionText(a: Attention, t: Translate, te: HasKey): Attention
     case 'work_at_risk':
       out.why = why('workAtRisk', { count: p.count ?? 0 }, p.count ?? 0)
       break
+    case 'resources_wait':
+      // Free memory (or commit) below the threshold that holds the task; the lead cannot act on it.
+      out.why =
+        p.availableMB !== undefined && p.needMB
+          ? why('resourcesWait', {
+              minutes: p.minutes ?? 0,
+              available: p.availableMB,
+              need: p.needMB,
+            })
+          : why('resourcesWaitPlain', { minutes: p.minutes ?? 0 })
+      break
     default:
       out.said = a.detail ?? a.reason
   }

@@ -5,8 +5,10 @@ import { useI18n } from 'vue-i18n'
 import type { TaskDetail, TaskSummary } from '@/api/types'
 import Icon from '@/components/ui/Icon.vue'
 import Spinner from '@/components/ui/Spinner.vue'
+import { useConnectionStore } from '@/stores/connection'
+import { useTasksStore } from '@/stores/tasks'
 
-import { budgetUsedUp, fixesUsed, gateOf, gateTone, gateUrgent, hasGate } from './gate'
+import { budgetUsedUp, fixesUsed, gateOf, gateTone, gateUrgent, hasGate, queuePlace } from './gate'
 import GateFacts from './GateFacts.vue'
 import GateSteps from './GateSteps.vue'
 
@@ -14,14 +16,18 @@ import GateSteps from './GateSteps.vue'
  * The task's gate (docs/gates.md): what it is doing now (running, settling, the second-opinion review), the
  * steps of the latest run with the end of their output, the automatic fix turns, the verifier's verdict, and what
  * the gate checks (lane, commands, doctrine, the frozen bar). A disclosure that opens by itself when the gate
- * fails or the verifier rejects; hidden for a task without a gate.
+ * fails or the verifier rejects; hidden for a task without a gate. A queued gate says what it waits for: a slot
+ * (with its place in line when the task's log is on screen, else how many gates run at once) or free memory.
  */
 const props = defineProps<{ task: TaskSummary; detail: TaskDetail | null }>()
 
 const { t } = useI18n()
+const tasks = useTasksStore()
+const connection = useConnectionStore()
 
 const view = computed(() => gateOf(props.task, props.detail))
-const tone = computed(() => gateTone(view.value.state, view.value.phase))
+const tone = computed(() => gateTone(view.value.state, view.value.phase, view.value.wait))
+const queued = computed(() => view.value.phase === 'queued')
 const urgent = computed(() => gateUrgent(view.value))
 /** The fixes are used up and the gate still fails: only the lead or the user can move it now. */
 const usedUp = computed(
@@ -33,9 +39,19 @@ const usedUp = computed(
 
 const stateText = computed(() => {
   const v = view.value
+  if (v.phase === 'queued' && v.wait) return t(`task.gate.queued.${v.wait}`)
   if (v.phase) return t(`task.gate.phase.${v.phase}`)
   if (v.state) return t(`task.gate.state.${v.state}`)
   return t('task.gate.state.none')
+})
+
+/** Where a gate waiting for a slot stands: its place in line, else the slot count from the settings. */
+const queueText = computed(() => {
+  if (view.value.wait !== 'slot') return ''
+  const place = queuePlace(tasks.eventLog(props.task.id)?.items.value)
+  if (place) return t('task.gate.queued.place', place)
+  const limit = connection.settings?.gateConcurrency ?? 0
+  return limit > 0 ? t('task.gate.queued.limit', { limit }) : ''
 })
 
 const expanded = ref(urgent.value)
@@ -53,11 +69,17 @@ watch(urgent, (value) => {
     @toggle="expanded = ($event.target as HTMLDetailsElement).open"
   >
     <summary class="gate__summary">
-      <Spinner v-if="view.phase" size="sm" decorative />
+      <Icon
+        v-if="queued"
+        :name="view.wait === 'memory' ? 'gauge' : 'statusQueued'"
+        class="gate__icon"
+      />
+      <Spinner v-else-if="view.phase" size="sm" decorative />
       <Icon v-else :name="urgent ? 'warning' : 'info'" class="gate__icon" />
       <strong>{{ t('task.gate.title') }}</strong>
       <span class="gate__state">{{ stateText }}</span>
       <span class="gate__parts">
+        <span v-if="queueText" class="gate__phrase">{{ queueText }}</span>
         <span v-if="view.turn" class="gate__phrase">{{
           t('task.gate.turn', { n: view.turn })
         }}</span>

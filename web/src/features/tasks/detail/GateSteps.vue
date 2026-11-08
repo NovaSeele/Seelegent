@@ -8,11 +8,13 @@ import Chip from '@/components/ui/Chip.vue'
 import Icon from '@/components/ui/Icon.vue'
 import { useFormat } from '@/composables/useFormat'
 
-import { stepCommand, stepNote, stepTone } from './gate'
+import { LOW_MEMORY_STOPS_MAX, stepCommand, stepNote, stepTone } from './gate'
 
 /**
  * The steps of one gate run: each with its state, command, exit code and time, the files it is about, and the end
- * of its output (open for a failing step). Worker and command output is shown as text, never as HTML.
+ * of its output (open for a failing step). Worker and command output is shown as text, never as HTML. A step the
+ * memory watchdog stopped says so (with the stops of this gate phase), and so does a run that ended in error
+ * because the machine kept running out of memory.
  */
 const props = defineProps<{ result: GateResult; turn: number | null }>()
 
@@ -46,6 +48,9 @@ const notRunShown = computed(() => props.result.steps.some((s) => s.state === 'n
             step.taskIds.join(', ')
           }}</span>
         </div>
+        <p v-if="step.stopped === 'low_memory'" class="steps__note" data-stopped>
+          {{ t('task.gate.stoppedLowMemory', { n: step.stops ?? 1, max: LOW_MEMORY_STOPS_MAX }) }}
+        </p>
         <I18nT v-if="step.foreign" keypath="task.gate.foreign" tag="p" class="steps__note">
           <template #tasks>
             <template v-for="(c, ci) in step.causedBy ?? []" :key="c.taskId"
@@ -83,6 +88,9 @@ const notRunShown = computed(() => props.result.steps.some((s) => s.state === 'n
     </ol>
     <p v-if="result.notRun.length && !notRunShown" class="steps__muted">
       {{ t('task.gate.notRun', { steps: result.notRun.join(', ') }) }}
+    </p>
+    <p v-if="result.reason === 'low_memory'" class="steps__note" data-reason>
+      {{ t('task.gate.lowMemory', { max: LOW_MEMORY_STOPS_MAX }) }}
     </p>
     <p v-if="result.settled" class="steps__muted">{{ t('task.gate.settled') }}</p>
     <ul v-if="result.warnings.length" class="steps__warnings">

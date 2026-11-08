@@ -7,7 +7,7 @@ import type { TaskEvent } from '@/api/events'
 import type { GateResult, GateStep } from '@/api/types'
 import type { IconName } from '@/components/ui/icons'
 
-import { causeNames, stepKindKey, stepWhat } from '../../detail/gate'
+import { causeNames, LOW_MEMORY_STOPS_MAX, stepKindKey, stepWhat } from '../../detail/gate'
 import type { DetailLine, Message, Tone } from './timeline'
 
 export interface GateNotice {
@@ -85,6 +85,22 @@ export function gateNotice(event: Of<'gate'>): GateNotice | null {
     }
     case 'settling':
       return { tone: 'warn', icon: 'statusWaiting', message: { key: 'terminal.ev.gate.settling' } }
+    case 'queued':
+      return queuedNotice(data)
+    case 'step': {
+      // Step progress shows in the gate panel; a step the memory watchdog stopped is worth a line of its own.
+      const step = data.step
+      if (step?.stopped !== 'low_memory') return null
+      return {
+        tone: 'warn',
+        icon: 'gauge',
+        message: {
+          key: 'terminal.ev.gate.stoppedLowMemory',
+          params: { n: step.stops ?? 1, max: LOW_MEMORY_STOPS_MAX },
+        },
+        lines: [stepLine(step)],
+      }
+    }
     case 'result': {
       const result = data.result
       if (!result) return null
@@ -93,14 +109,33 @@ export function gateNotice(event: Of<'gate'>): GateNotice | null {
         tone: GATE_TONE[result.state],
         icon: GATE_ICON[result.state],
         message: { key: `terminal.ev.gate.${result.state}` },
-        note: result.autoFix
-          ? { key: 'terminal.ev.gate.autoFix', params: { n: result.autoFix } }
-          : undefined,
+        note:
+          result.reason === 'low_memory'
+            ? { key: 'terminal.ev.gate.lowMemory', params: { max: LOW_MEMORY_STOPS_MAX } }
+            : result.autoFix
+              ? { key: 'terminal.ev.gate.autoFix', params: { n: result.autoFix } }
+              : undefined,
         lines: lines.length ? lines : undefined,
       }
     }
-    default:
-      return null // step progress shows in the gate panel
+  }
+}
+
+/** A gate waiting to start: for free memory, or for a slot (gateConcurrency) with its place in line. */
+function queuedNotice(data: Of<'gate'>['data']): GateNotice {
+  if (data.wait === 'memory') {
+    return { tone: 'warn', icon: 'gauge', message: { key: 'terminal.ev.gate.queuedMemory' } }
+  }
+  return {
+    tone: 'dim',
+    icon: 'statusQueued',
+    message:
+      data.position && data.limit
+        ? {
+            key: 'terminal.ev.gate.queuedSlot',
+            params: { position: data.position, limit: data.limit },
+          }
+        : { key: 'terminal.ev.gate.queued' },
   }
 }
 

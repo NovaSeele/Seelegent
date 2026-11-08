@@ -53,7 +53,9 @@
       "depsWaiting": "Espera a que terminen {tasks}.",
       "depCancelled": "La tarea previa {title} ({task}) fue cancelada.",
       "hygiene": "{count} hallazgo de higiene por revisar | {count} hallazgos de higiene por revisar",
-      "workAtRisk": "{count} archivo puede haber perdido cambios | {count} archivos pueden haber perdido cambios"
+      "workAtRisk": "{count} archivo puede haber perdido cambios | {count} archivos pueden haber perdido cambios",
+      "resourcesWait": "Lleva más de {minutes} minutos esperando recursos: {available} MB libres, necesita {need} MB.",
+      "resourcesWaitPlain": "Lleva más de {minutes} minutos esperando recursos: a la máquina le falta memoria libre."
     }
   },
   "question": {
@@ -213,7 +215,8 @@
     "phase": {
       "running": "en marcha",
       "settling": "esperando a otras tareas",
-      "verifying": "segunda revisión"
+      "verifying": "segunda revisión",
+      "queued": "en cola"
     },
     "turn": "turno {n}",
     "fixTurns": "{count} corrección automática | {count} correcciones automáticas",
@@ -283,7 +286,15 @@
     "bar": "Cambiado desde el inicio",
     "usedUp": "correcciones automáticas agotadas ({n}/{max})",
     "nextStep": "El gate ya no puede corregirlo solo: envía un seguimiento o toma el control de la tarea.",
-    "causedBy": "puede deberse a {tasks}"
+    "causedBy": "puede deberse a {tasks}",
+    "queued": {
+      "slot": "esperando turno de gate",
+      "memory": "esperando memoria libre",
+      "place": "puesto {position} en la fila, {limit} a la vez",
+      "limit": "{limit} a la vez"
+    },
+    "stoppedLowMemory": "Detenido porque la máquina se quedó sin memoria ({n} de {max}); el gate vuelve a correr cuando haya memoria.",
+    "lowMemory": "La máquina se quedó sin memoria una y otra vez: el gate se detuvo {max} veces."
   },
   "consults": {
     "title": "Opiniones de miembros",

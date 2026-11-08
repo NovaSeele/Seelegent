@@ -53,7 +53,9 @@
       "depsWaiting": "等待 {tasks} 完成。",
       "depCancelled": "前置任务 {title}（{task}）已取消。",
       "hygiene": "有 {count} 条卫生检查发现需要查看",
-      "workAtRisk": "{count} 个文件的修改可能已丢失"
+      "workAtRisk": "{count} 个文件的修改可能已丢失",
+      "resourcesWait": "等待资源已超过 {minutes} 分钟：空闲 {available} MB，需要 {need} MB。",
+      "resourcesWaitPlain": "等待资源已超过 {minutes} 分钟：机器空闲内存不足。"
     }
   },
   "question": {
@@ -213,7 +215,8 @@
     "phase": {
       "running": "运行中",
       "settling": "等待其他任务",
-      "verifying": "二次审查中"
+      "verifying": "二次审查中",
+      "queued": "排队中"
     },
     "turn": "第 {n} 轮",
     "fixTurns": "{count} 次自动修复",
@@ -283,7 +286,15 @@
     "bar": "开始后有变化",
     "usedUp": "自动修复已用完（{n}/{max}）",
     "nextStep": "关卡已无法自行修复：请发送后续指示，或接管该任务。",
-    "causedBy": "可能由 {tasks} 引起"
+    "causedBy": "可能由 {tasks} 引起",
+    "queued": {
+      "slot": "等待关卡名额",
+      "memory": "等待空闲内存",
+      "place": "排第 {position} 位，同时 {limit} 个",
+      "limit": "同时 {limit} 个"
+    },
+    "stoppedLowMemory": "因机器内存不足而停止（{n}/{max}）；内存恢复后关卡会重新运行。",
+    "lowMemory": "机器内存一再不足：关卡已被停止 {max} 次。"
   },
   "consults": {
     "title": "成员意见",

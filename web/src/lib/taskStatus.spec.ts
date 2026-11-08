@@ -29,6 +29,10 @@ describe('task status', () => {
       'running',
     )
     expect(displayStatus(makeTask({ status: 'waiting_quota' }))).toBe('waiting')
+    // The same status while free memory is low: its own word, never the quota's.
+    const memory = makeTask({ status: 'waiting_quota', waiting: 'memory' })
+    expect(displayStatus(memory)).toBe('waitingResources')
+    expect(statusWordKey(memory)).toBe('common.status.waitingResources.label')
     expect(displayStatus(makeTask({ status: 'done' }))).toBe('review')
     const review = { verdict: 'accepted' as const, at: iso() }
     expect(displayStatus(makeTask({ status: 'done', review }))).toBe('accepted')

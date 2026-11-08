@@ -105,6 +105,10 @@
     "blockedDeps": {
       "label": "前のタスクが失敗",
       "short": "前が失敗"
+    },
+    "waitingResources": {
+      "label": "リソース待ち",
+      "short": "リソース"
     }
   },
   "attention": {
@@ -128,7 +132,8 @@
     "verifierRejected": "レビューで却下",
     "peerObjection": "ピアが異議を出しています",
     "backgroundWait": "バックグラウンドのコマンドを待機中",
-    "unknown": "確認が必要"
+    "unknown": "確認が必要",
+    "resourcesWait": "リソース待ち"
   },
   "stage": {
     "explore": "調査",

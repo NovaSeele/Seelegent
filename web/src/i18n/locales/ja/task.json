@@ -53,7 +53,9 @@
       "depsWaiting": "{tasks} の完了を待っています。",
       "depCancelled": "前のタスク {title}（{task}）はキャンセルされました。",
       "hygiene": "確認が必要な衛生チェックの指摘が {count} 件あります",
-      "workAtRisk": "{count} 件のファイルで変更が失われた可能性があります"
+      "workAtRisk": "{count} 件のファイルで変更が失われた可能性があります",
+      "resourcesWait": "{minutes} 分以上リソースを待っています：空き {available} MB、必要 {need} MB。",
+      "resourcesWaitPlain": "{minutes} 分以上リソースを待っています：マシンの空きメモリが足りません。"
     }
   },
   "question": {
@@ -213,7 +215,8 @@
     "phase": {
       "running": "実行中",
       "settling": "他のタスクを待機中",
-      "verifying": "セカンドオピニオンのレビュー中"
+      "verifying": "セカンドオピニオンのレビュー中",
+      "queued": "順番待ち"
     },
     "turn": "ターン {n}",
     "fixTurns": "自動修正 {count} 回",
@@ -283,7 +286,15 @@
     "bar": "開始後に変更",
     "usedUp": "自動修正を使い切りました ({n}/{max})",
     "nextStep": "ゲートはもう自分では直せません。フォローアップを送るか、タスクを引き継いでください。",
-    "causedBy": "{tasks} が原因の可能性"
+    "causedBy": "{tasks} が原因の可能性",
+    "queued": {
+      "slot": "ゲートの順番待ち",
+      "memory": "空きメモリ待ち",
+      "place": "{position} 番目、同時に {limit} 件まで",
+      "limit": "同時に {limit} 件まで"
+    },
+    "stoppedLowMemory": "マシンのメモリ不足で停止しました（{n}/{max}）。メモリが戻るとゲートを再実行します。",
+    "lowMemory": "マシンのメモリ不足が続きました：ゲートは {max} 回停止されました。"
   },
   "consults": {
     "title": "メンバーの意見",

@@ -53,7 +53,9 @@
       "depsWaiting": "Waits for {tasks} to finish.",
       "depCancelled": "The earlier task {title} ({task}) was cancelled.",
       "hygiene": "{count} hygiene finding to look at | {count} hygiene findings to look at",
-      "workAtRisk": "{count} file may have lost changes | {count} files may have lost changes"
+      "workAtRisk": "{count} file may have lost changes | {count} files may have lost changes",
+      "resourcesWait": "Waiting for resources for over {minutes} minutes: {available} MB free, needs {need} MB.",
+      "resourcesWaitPlain": "Waiting for resources for over {minutes} minutes: the machine is short of free memory."
     }
   },
   "question": {
@@ -213,7 +215,8 @@
     "phase": {
       "running": "running",
       "settling": "waiting for other tasks",
-      "verifying": "second-opinion review"
+      "verifying": "second-opinion review",
+      "queued": "queued"
     },
     "turn": "turn {n}",
     "fixTurns": "{count} automatic fix | {count} automatic fixes",
@@ -283,7 +286,15 @@
     "bar": "Changed since start",
     "usedUp": "automatic fixes used up ({n}/{max})",
     "nextStep": "The gate cannot fix this by itself any more: send a follow-up or take over the task.",
-    "causedBy": "may be caused by {tasks}"
+    "causedBy": "may be caused by {tasks}",
+    "queued": {
+      "slot": "waiting for a gate slot",
+      "memory": "waiting for free memory",
+      "place": "number {position} in line, {limit} at a time",
+      "limit": "{limit} at a time"
+    },
+    "stoppedLowMemory": "Stopped because the machine ran low on memory ({n} of {max}); the gate runs again once memory is back.",
+    "lowMemory": "The machine kept running out of memory: the gate was stopped {max} times."
   },
   "consults": {
     "title": "Member opinions",
