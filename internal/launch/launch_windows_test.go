@@ -1,11 +1,16 @@
 package launch
 
 import (
+	"context"
 	"os/exec"
+	"path/filepath"
 	"syscall"
 	"testing"
+	"unsafe"
 
 	"golang.org/x/sys/windows"
+
+	"github.com/NovaSeele/Seelegent/internal/platform"
 )
 
 // detach starts cmd without a console and in its own process group, like a daemonising program. It stays in the
@@ -17,36 +22,52 @@ func detach(cmd *exec.Cmd) {
 // checkAdopted has nothing to check on Windows: membership comes from the job, not from parent ids.
 func checkAdopted(*testing.T, int, int) {}
 
-// priorityOf returns the priority class of process pid.
-func priorityOf(t *testing.T, pid int) int {
-	t.Helper()
-	h, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION, false, uint32(pid))
+// TestWorkerMemoryLimitCancelNearCap: a worker whose job peak reached 93% of its cap, never refused memory, and that
+// the launcher then stopped (cancel) is no memory failure: the kill's exit code is not the cap's (review N1).
+func TestWorkerMemoryLimitCancelNearCap(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "a1")
+	pid := filepath.Join(dir, "worker.pid")
+	opts := testOptions(dir, "alloc:64", "pid:"+pid, "sleep:60000")
+	opts.Spec.Tree = platform.TreeOptions{MemoryLimitMB: 1024}
+	h, err := Start(context.Background(), opts)
 	if err != nil {
-		t.Fatalf("open process %d: %v", pid, err)
+		t.Fatalf("Start: %v", err)
 	}
-	defer func() { _ = windows.CloseHandle(h) }()
-	class, err := windows.GetPriorityClass(h)
-	if err != nil {
-		t.Fatalf("priority class of %d: %v", pid, err)
+	readPid(t, pid)
+	r, _ := h.Ready()
+	capAbovePeak(t, r.Job, 93)
+	if err := h.Cancel(); err != nil {
+		t.Fatal(err)
 	}
-	return int(class)
+	if ex := wait(t, h); ex.Reason != ReasonCanceled || ex.MemoryLimitHit {
+		t.Fatalf("cancelled at 93%% of the cap: %+v", ex)
+	}
 }
 
-// isLow reports whether a priority class is the low one of a tree.
-func isLow(class int) bool { return class == windows.BELOW_NORMAL_PRIORITY_CLASS }
-
-// atNormalPriority runs the test at normal priority for its duration, so that a gentle `go test` at below normal
-// can still tell a lowered tree from an inherited priority.
-func atNormalPriority(t *testing.T) {
+// capAbovePeak opens the worker's named job and moves its memory cap so that its peak so far is pct percent of it.
+func capAbovePeak(t *testing.T, job string, pct uint64) {
 	t.Helper()
-	self := windows.CurrentProcess()
-	class, err := windows.GetPriorityClass(self)
-	if err != nil || class == windows.NORMAL_PRIORITY_CLASS {
-		return
+	name, err := windows.UTF16PtrFromString(job)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if err := windows.SetPriorityClass(self, windows.NORMAL_PRIORITY_CLASS); err != nil {
-		t.Logf("cannot run at normal priority: %v", err)
-		return
+	const access = 0x1F003F // JOB_OBJECT_ALL_ACCESS
+	r, _, callErr := windows.NewLazySystemDLL("kernel32.dll").NewProc("OpenJobObjectW").Call(access, 0,
+		uintptr(unsafe.Pointer(name)))
+	if r == 0 {
+		t.Fatalf("open job %s: %v", job, callErr)
 	}
-	t.Cleanup(func() { _ = windows.SetPriorityClass(self, class) })
+	h := windows.Handle(r)
+	defer func() { _ = windows.CloseHandle(h) }()
+	var info windows.JOBOBJECT_EXTENDED_LIMIT_INFORMATION
+	if err := windows.QueryInformationJobObject(h, windows.JobObjectExtendedLimitInformation,
+		uintptr(unsafe.Pointer(&info)), uint32(unsafe.Sizeof(info)), nil); err != nil {
+		t.Fatal(err)
+	}
+	info.JobMemoryLimit = info.PeakJobMemoryUsed * 100 / uintptr(pct)
+	if _, err := windows.SetInformationJobObject(h, windows.JobObjectExtendedLimitInformation,
+		uintptr(unsafe.Pointer(&info)), uint32(unsafe.Sizeof(info))); err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("peak %d MiB, cap %d MiB", info.PeakJobMemoryUsed>>20, info.JobMemoryLimit>>20)
 }

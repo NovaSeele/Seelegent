@@ -167,6 +167,32 @@ func (t *Tree) MemoryLimitHit() bool {
 	return t.os.memoryLimitHit(t.os.exitCode(t.cmd))
 }
 
+// Poll lets the tree take in what its processes did so far; call it now and then while the tree runs (the
+// launcher does on its cancel ticker). It reports whether the tree has run into its memory cap so far. Windows:
+// it drains the job's completion port, whose packets would otherwise pile up in kernel memory over a long turn.
+// Unix: nothing to do, false.
+func (t *Tree) Poll() bool {
+	if t == nil {
+		return false
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.closed {
+		return false
+	}
+	return t.os.poll()
+}
+
+// Unapplied names the limits of TreeOptions that were asked for and that the system refused, such as "low
+// priority", "memory cap" or "CPU rate cap"; nil when everything asked for holds. The caps that do not exist on
+// Unix are not listed: they are documented as ignored there.
+func (t *Tree) Unapplied() []string {
+	if t == nil {
+		return nil
+	}
+	return t.os.unappliedLimits()
+}
+
 // Kill stops every process of the tree. On Unix the tree first gets SIGTERM and, if anything is left after grace,
 // SIGKILL, repeated until nothing is left (bounded); grace <= 0 kills at once. On Windows the job is terminated at
 // once. Killing a tree whose processes have all exited is not an error. Kill may be called while another

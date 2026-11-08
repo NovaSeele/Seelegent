@@ -6,14 +6,16 @@ import (
 	"runtime"
 	"testing"
 	"time"
+
+	"github.com/NovaSeele/Seelegent/internal/testutil/priority"
 )
 
 // TestTreePriority: a low-priority tree runs its root and its grandchildren at low priority (Windows: the job's
 // BELOW_NORMAL priority class; Unix: nice 10 through `nice`), and a normal or zero one at the caller's.
 func TestTreePriority(t *testing.T) {
-	atNormalPriority(t)
-	self := priorityOf(t, os.Getpid())
-	if isLow(self) {
+	priority.AtNormal(t)
+	self := priority.MustOf(t, os.Getpid())
+	if priority.IsLow(self) {
 		t.Skip("the test already runs at low priority")
 	}
 	for _, tc := range []struct {
@@ -37,8 +39,8 @@ func TestTreePriority(t *testing.T) {
 				t.Fatalf("pids = %v, root %d", pids, tree.Pid())
 			}
 			for _, p := range pids {
-				got := priorityOf(t, p)
-				if tc.low && !isLow(got) || !tc.low && got != self {
+				got := priority.MustOf(t, p)
+				if tc.low && !priority.IsLow(got) || !tc.low && got != self {
 					t.Errorf("process %d: priority %#x (this test %#x), low wanted: %v", p, got, self, tc.low)
 				}
 			}
@@ -54,9 +56,9 @@ func TestTreePriority(t *testing.T) {
 // TestWorkerTreePriority: a low-priority worker tree runs its root and grandchildren at low priority, the way the
 // launcher starts a worker. On Windows the owner itself keeps its priority.
 func TestWorkerTreePriority(t *testing.T) {
-	atNormalPriority(t)
-	self := priorityOf(t, os.Getpid())
-	if isLow(self) {
+	priority.AtNormal(t)
+	self := priority.MustOf(t, os.Getpid())
+	if priority.IsLow(self) {
 		t.Skip("the test already runs at low priority")
 	}
 	pidFile := filepath.Join(t.TempDir(), "pids")
@@ -74,12 +76,12 @@ func TestWorkerTreePriority(t *testing.T) {
 		t.Fatalf("pids = %v, owner %d", pids, owner.Process.Pid)
 	}
 	for _, p := range pids[1:] {
-		if got := priorityOf(t, p); !isLow(got) {
+		if got := priority.MustOf(t, p); !priority.IsLow(got) {
 			t.Errorf("worker tree process %d: priority %#x, want low", p, got)
 		}
 	}
 	if runtime.GOOS == "windows" {
-		if got := priorityOf(t, pids[0]); got != self {
+		if got := priority.MustOf(t, pids[0]); got != self {
 			t.Errorf("owner: priority %#x, want %#x (only the job is lowered)", got, self)
 		}
 	}

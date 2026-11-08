@@ -72,3 +72,32 @@ func TestMemorystatusLevel(t *testing.T) {
 		}
 	}
 }
+
+func TestCgroupV2(t *testing.T) {
+	const self = "12:pids:/user.slice\n1:name=systemd:/user.slice/x.scope\n0::/user.slice/user-1000.slice/x.scope\n"
+	if p, ok := cgroupV2Path([]byte(self)); !ok || p != "/user.slice/user-1000.slice/x.scope" {
+		t.Fatalf("path %q, %v", p, ok)
+	}
+	if p, ok := cgroupV2Path([]byte("0::/\n")); !ok || p != "/" {
+		t.Fatalf("container root: %q, %v", p, ok)
+	}
+	if _, ok := cgroupV2Path([]byte("4:memory:/docker/abc\n")); ok {
+		t.Fatal("cgroup v1 only has no v2 path")
+	}
+	for _, tc := range []struct {
+		name, max, cur string
+		free           int64
+		ok             bool
+	}{
+		{"limited", "4294967296\n", "1073741824\n", 3072, true},
+		{"no limit", "max\n", "1073741824\n", 0, false},
+		{"over", "1073741824\n", "2147483648\n", 0, true},
+		{"bad max", "lots\n", "1\n", 0, false},
+		{"bad current", "4294967296\n", "\n", 0, false},
+		{"empty", "", "", 0, false},
+	} {
+		if free, ok := cgroupFreeMB([]byte(tc.max), []byte(tc.cur)); free != tc.free || ok != tc.ok {
+			t.Errorf("%s: %d, %v; want %d, %v", tc.name, free, ok, tc.free, tc.ok)
+		}
+	}
+}

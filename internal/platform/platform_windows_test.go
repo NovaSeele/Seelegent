@@ -229,24 +229,6 @@ func TestHiddenStartsHaveNoConsoleWindow(t *testing.T) {
 	check("tree", cmd, tree.Wait, windows.CREATE_NO_WINDOW)
 }
 
-// priorityOf returns the priority class of process pid.
-func priorityOf(t *testing.T, pid int) int {
-	t.Helper()
-	h, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION, false, uint32(pid))
-	if err != nil {
-		t.Fatalf("open process %d: %v", pid, err)
-	}
-	defer func() { _ = windows.CloseHandle(h) }()
-	class, err := windows.GetPriorityClass(h)
-	if err != nil {
-		t.Fatalf("priority class of %d: %v", pid, err)
-	}
-	return int(class)
-}
-
-// isLow reports whether a priority class is the low one of a tree.
-func isLow(class int) bool { return class == windows.BELOW_NORMAL_PRIORITY_CLASS }
-
 // TestTreeMemoryCap: a tree that needs more than its job memory cap fails, and MemoryLimitHit says why; one that
 // stays under it, or has no cap, reports nothing.
 func TestTreeMemoryCap(t *testing.T) {
@@ -275,6 +257,91 @@ func TestTreeMemoryCap(t *testing.T) {
 	if code, hit := run("8", TreeOptions{}); code != 0 || hit {
 		t.Fatalf("no cap: exit %d, limit hit %v", code, hit)
 	}
+}
+
+// TestTreeMemoryLimitPeak: a tree whose peak memory reached 93% of its cap but was never refused memory reports
+// no hit: not when its owner killed it (exit code 1 is the kill's; review N1), and not when it failed by itself while
+// the job's port works (the port's report decides). Only without a port does a failure near the cap count.
+func TestTreeMemoryLimitPeak(t *testing.T) {
+	for _, tc := range []struct {
+		name           string
+		kill, withPort bool
+		want           bool
+	}{
+		{"killed, port", true, true, false},
+		{"killed, no port", true, false, false},
+		{"failed, port", false, true, false},
+		{"failed, no port", false, false, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			pidFile := filepath.Join(t.TempDir(), "pid")
+			tree, err := StartTreeWith(helper("hold", "64", pidFile, "3"), TreeOptions{MemoryLimitMB: 1024})
+			if err != nil {
+				t.Fatalf("StartTreeWith: %v", err)
+			}
+			defer func() { _ = tree.Close() }()
+			if !tc.withPort {
+				dropPort(tree)
+			}
+			readPids(t, pidFile)
+			capAbovePeak(t, tree, 93)
+			if tc.kill {
+				if err := tree.Kill(0); err != nil {
+					t.Fatal(err)
+				}
+			} else if err := os.WriteFile(pidFile+".go", nil, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			_ = tree.Wait()
+			if code, hit := tree.ExitCode(), tree.MemoryLimitHit(); code == 0 || hit != tc.want {
+				t.Fatalf("exit %d, limit hit %v; want a failure and hit %v", code, hit, tc.want)
+			}
+		})
+	}
+}
+
+// TestTreePollSeesLimit: Poll drains the job's port and reports a refused allocation.
+func TestTreePollSeesLimit(t *testing.T) {
+	tree, err := StartTreeWith(helper("alloc", "200"), TreeOptions{MemoryLimitMB: 64})
+	if err != nil {
+		t.Fatalf("StartTreeWith: %v", err)
+	}
+	_ = tree.Wait()
+	if !tree.Poll() || !tree.MemoryLimitHit() {
+		t.Error("the job's report must reach Poll and MemoryLimitHit")
+	}
+	_ = tree.Close()
+	if tree.Poll() {
+		t.Error("Poll after Close must be false")
+	}
+}
+
+// capAbovePeak moves the job's memory cap so that its peak so far is pct percent of it.
+func capAbovePeak(t *testing.T, tree *Tree, pct uint64) {
+	t.Helper()
+	tree.mu.Lock()
+	defer tree.mu.Unlock()
+	var info windows.JOBOBJECT_EXTENDED_LIMIT_INFORMATION
+	if err := windows.QueryInformationJobObject(tree.os.job, windows.JobObjectExtendedLimitInformation,
+		uintptr(unsafe.Pointer(&info)), uint32(unsafe.Sizeof(info)), nil); err != nil {
+		t.Fatal(err)
+	}
+	limit := uint64(info.PeakJobMemoryUsed) * 100 / pct
+	info.JobMemoryLimit = uintptr(limit)
+	if _, err := windows.SetInformationJobObject(tree.os.job, windows.JobObjectExtendedLimitInformation,
+		uintptr(unsafe.Pointer(&info)), uint32(unsafe.Sizeof(info))); err != nil {
+		t.Fatal(err)
+	}
+	tree.os.memCap = limit
+	t.Logf("peak %d MiB, cap %d MiB", info.PeakJobMemoryUsed>>20, limit>>20)
+}
+
+// dropPort closes the job's completion port, as if it could not be set up.
+func dropPort(tree *Tree) {
+	tree.mu.Lock()
+	defer tree.mu.Unlock()
+	_ = windows.CloseHandle(tree.os.port)
+	tree.os.port = 0
 }
 
 // TestTreeJobLimits: the job holds what the options ask for (read back from the job).
@@ -308,6 +375,9 @@ func TestTreeJobLimits(t *testing.T) {
 	if tree.os.port == 0 {
 		t.Error("a memory cap needs the job's completion port")
 	}
+	if refused := tree.Unapplied(); refused != nil {
+		t.Errorf("refused limits: %v", refused)
+	}
 
 	// No options: kill-on-close only, no CPU rate control, no port.
 	plain, err := StartTreeWith(helper("sleeper", filepath.Join(t.TempDir(), "pid")), TreeOptions{})
@@ -323,20 +393,4 @@ func TestTreeJobLimits(t *testing.T) {
 	if rate.controlFlags != 0 || plain.os.port != 0 {
 		t.Errorf("plain tree: CPU rate %+v, port %v", rate, plain.os.port)
 	}
-}
-
-// atNormalPriority runs the test at normal priority for its duration: a test started at below normal (a gentle
-// `go test` on a busy machine) could not tell a lowered tree from an inherited priority.
-func atNormalPriority(t *testing.T) {
-	t.Helper()
-	self := windows.CurrentProcess()
-	class, err := windows.GetPriorityClass(self)
-	if err != nil || class == windows.NORMAL_PRIORITY_CLASS {
-		return
-	}
-	if err := windows.SetPriorityClass(self, windows.NORMAL_PRIORITY_CLASS); err != nil {
-		t.Logf("cannot run at normal priority: %v", err)
-		return
-	}
-	t.Cleanup(func() { _ = windows.SetPriorityClass(self, class) })
 }

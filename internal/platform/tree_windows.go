@@ -35,8 +35,8 @@ const (
 	jobMsgJobMemoryLimit = 10
 )
 
-// memoryPeakShare is the fallback of MemoryLimitHit: a root that failed after the job's peak memory reached this
-// share of the cap (percent) counts as having hit it.
+// memoryPeakShare is the fallback of MemoryLimitHit when the job has no completion port: a root that failed by
+// itself after the job's peak memory reached this share of the cap (percent) counts as having hit it.
 const memoryPeakShare = 90
 
 // jobCPURateControl is JOBOBJECT_CPU_RATE_CONTROL_INFORMATION with the CpuRate member of its union.
@@ -62,6 +62,10 @@ type treeOS struct {
 	memCap uint64
 	port   windows.Handle
 	memHit bool
+	// killed is set once kill terminated the job: its exit code is then ours, not a failure of the tree.
+	killed bool
+	// unapplied names the limits that were asked for and that Windows refused.
+	unapplied []string
 }
 
 // start creates a kill-on-close job (named when name is set) with the limits of opt, starts cmd suspended and
@@ -77,7 +81,7 @@ func (t *treeOS) start(cmd *exec.Cmd, worker bool, name string, opt TreeOptions)
 			_ = windows.CloseHandle(job)
 		}
 	}()
-	memCap, err := limitJob(job, opt)
+	memCap, unapplied, err := limitJob(job, opt)
 	if err != nil {
 		return err
 	}
@@ -106,7 +110,7 @@ func (t *treeOS) start(cmd *exec.Cmd, worker bool, name string, opt TreeOptions)
 		_ = cmd.Wait()
 		return err
 	}
-	t.job, t.name, t.memCap, t.port = job, name, memCap, port
+	t.job, t.name, t.memCap, t.port, t.unapplied = job, name, memCap, port, unapplied
 	if worker {
 		t.owner = os.Getpid()
 	}
@@ -115,8 +119,9 @@ func (t *treeOS) start(cmd *exec.Cmd, worker bool, name string, opt TreeOptions)
 
 // limitJob makes job kill-on-close and applies the limits of opt: the priority class (BELOW_NORMAL for every
 // process of the job; a process cannot raise it), the job memory limit and the CPU rate hard cap. It returns the
-// memory cap in bytes that holds (0: none). A limit Windows refuses is left out; kill-on-close never is.
-func limitJob(job windows.Handle, opt TreeOptions) (memCap uint64, err error) {
+// memory cap in bytes that holds (0: none) and the names of the limits Windows refused, which are left out:
+// priority and memory cap together, else priority alone, else neither. Kill-on-close is never left out.
+func limitJob(job windows.Handle, opt TreeOptions) (memCap uint64, unapplied []string, err error) {
 	set := func(info *windows.JOBOBJECT_EXTENDED_LIMIT_INFORMATION) error {
 		_, err := windows.SetInformationJobObject(job, windows.JobObjectExtendedLimitInformation,
 			uintptr(unsafe.Pointer(info)), uint32(unsafe.Sizeof(*info)))
@@ -132,6 +137,7 @@ func limitJob(job windows.Handle, opt TreeOptions) (memCap uint64, err error) {
 		info.BasicLimitInformation.LimitFlags |= windows.JOB_OBJECT_LIMIT_PRIORITY_CLASS
 		info.BasicLimitInformation.PriorityClass = windows.BELOW_NORMAL_PRIORITY_CLASS
 	}
+	priorityOnly := info
 	if opt.MemoryLimitMB > 0 {
 		memCap = uint64(opt.MemoryLimitMB) << 20
 		limit := uintptr(memCap)
@@ -141,23 +147,34 @@ func limitJob(job windows.Handle, opt TreeOptions) (memCap uint64, err error) {
 		info.BasicLimitInformation.LimitFlags |= windows.JOB_OBJECT_LIMIT_JOB_MEMORY
 		info.JobMemoryLimit = limit
 	}
+	flags := func(i windows.JOBOBJECT_EXTENDED_LIMIT_INFORMATION) uint32 { return i.BasicLimitInformation.LimitFlags }
 	if err := set(&info); err != nil {
-		memCap = 0
-		if info.BasicLimitInformation.LimitFlags == plain.BasicLimitInformation.LimitFlags {
-			return 0, fmt.Errorf("configure job object: %w", err)
+		if flags(info) == flags(plain) {
+			return 0, nil, fmt.Errorf("configure job object: %w", err)
 		}
-		if err := set(&plain); err != nil {
-			return 0, fmt.Errorf("configure job object: %w", err)
+		memCap = 0
+		if opt.MemoryLimitMB > 0 {
+			unapplied = append(unapplied, "memory cap")
+		}
+		if flags(priorityOnly) == flags(plain) || flags(priorityOnly) == flags(info) || set(&priorityOnly) != nil {
+			if opt.Priority == PriorityLow {
+				unapplied = append(unapplied, "low priority")
+			}
+			if err := set(&plain); err != nil {
+				return 0, nil, fmt.Errorf("configure job object: %w", err)
+			}
 		}
 	}
 	if pct := min(opt.CPURatePercent, 100); pct > 0 {
 		rate := jobCPURateControl{controlFlags: jobCPURateControlEnable | jobCPURateControlHardCap,
 			cpuRate: uint32(pct) * 100}
 		// Before Windows 8 there is no CPU rate control: the tree runs uncapped.
-		_, _ = windows.SetInformationJobObject(job, windows.JobObjectCpuRateControlInformation,
-			uintptr(unsafe.Pointer(&rate)), uint32(unsafe.Sizeof(rate)))
+		if _, err := windows.SetInformationJobObject(job, windows.JobObjectCpuRateControlInformation,
+			uintptr(unsafe.Pointer(&rate)), uint32(unsafe.Sizeof(rate))); err != nil {
+			unapplied = append(unapplied, "CPU rate cap")
+		}
 	}
-	return memCap, nil
+	return memCap, unapplied, nil
 }
 
 // notifyPort creates a completion port and associates it with job, so the job's notifications (among them
@@ -194,7 +211,16 @@ func (t *treeOS) drainPort() {
 	}
 }
 
-// memoryLimitHit implements Tree.MemoryLimitHit; code is the root's exit code (-1: not exited).
+// poll implements Tree.Poll: it drains the port, so its packets (one per process start and exit) do not pile up in
+// kernel memory over a long turn, and reports whether the job reported its memory limit so far.
+func (t *treeOS) poll() bool {
+	t.drainPort()
+	return t.memHit
+}
+
+// memoryLimitHit implements Tree.MemoryLimitHit; code is the root's exit code (-1: not exited). The job's own
+// report on its port decides. Only a job without a port falls back to its peak memory, and never after kill
+// terminated it (its exit code 1 is then ours, and a peak near the cap proves nothing).
 func (t *treeOS) memoryLimitHit(code int) bool {
 	if t.memCap == 0 || t.job == 0 {
 		return false
@@ -203,7 +229,7 @@ func (t *treeOS) memoryLimitHit(code int) bool {
 	if t.memHit {
 		return true
 	}
-	if code == 0 || code == -1 {
+	if t.port != 0 || t.killed || code == 0 || code == -1 {
 		return false
 	}
 	var info windows.JOBOBJECT_EXTENDED_LIMIT_INFORMATION
@@ -323,6 +349,7 @@ func (t *treeOS) kill(time.Duration) error {
 	if t.job == 0 {
 		return ErrNotStarted
 	}
+	t.killed = true
 	if err := windows.TerminateJobObject(t.job, 1); err != nil {
 		return fmt.Errorf("terminate job: %w", err)
 	}
@@ -346,3 +373,6 @@ func (t *treeOS) close(*exec.Cmd) error {
 	}
 	return nil
 }
+
+// unappliedLimits implements Tree.Unapplied.
+func (t *treeOS) unappliedLimits() []string { return t.unapplied }

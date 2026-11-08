@@ -17,6 +17,8 @@ import (
 	"time"
 
 	"golang.org/x/sys/unix"
+
+	"github.com/NovaSeele/Seelegent/internal/testutil/priority"
 )
 
 // runOSRole runs the Unix-only helper roles:
@@ -248,19 +250,6 @@ func TestTreeKillReachesNewSession(t *testing.T) {
 	waitDead(t, pids...)
 }
 
-// priorityOf returns the nice value of process pid (its main thread on Linux).
-func priorityOf(t *testing.T, pid int) int {
-	t.Helper()
-	n, err := niceOf(unix.PRIO_PROCESS, pid)
-	if err != nil {
-		t.Fatalf("nice of %d: %v", pid, err)
-	}
-	return n
-}
-
-// isLow reports whether a nice value is that of a low-priority tree (nice adds to the caller's).
-func isLow(nice int) bool { return nice >= lowNice }
-
 // TestRunNiced: a command is wrapped in `nice -n 10` with its own path and arguments.
 func TestRunNiced(t *testing.T) {
 	if _, err := exec.LookPath("nice"); err != nil {
@@ -281,8 +270,8 @@ func TestRunNiced(t *testing.T) {
 // TestLowerNiceGroup: without a nice program the process group is lowered right after the start; the processes
 // already in it (the root and its child) get nice 10.
 func TestLowerNiceGroup(t *testing.T) {
-	atNormalPriority(t)
-	if self := priorityOf(t, os.Getpid()); isLow(self) {
+	priority.AtNormal(t)
+	if self := priority.MustOf(t, os.Getpid()); priority.IsLow(self) {
 		t.Skip("the test already runs at low priority")
 	}
 	pidFile := filepath.Join(t.TempDir(), "pids")
@@ -292,13 +281,12 @@ func TestLowerNiceGroup(t *testing.T) {
 	}
 	defer func() { _ = tree.Close() }()
 	pids := readPids(t, pidFile)
-	lowerNice(unix.PRIO_PGRP, tree.Pid())
+	if err := lowerNice(unix.PRIO_PGRP, tree.Pid()); err != nil {
+		t.Fatal(err)
+	}
 	for _, p := range pids {
-		if got := priorityOf(t, p); got != lowNice {
+		if got := priority.MustOf(t, p); got != lowNice {
 			t.Errorf("process %d: nice %d, want %d", p, got, lowNice)
 		}
 	}
 }
-
-// atNormalPriority does nothing on Unix: an unprivileged process cannot raise its priority again.
-func atNormalPriority(*testing.T) {}

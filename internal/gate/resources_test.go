@@ -14,14 +14,19 @@ import (
 
 	"github.com/NovaSeele/Seelegent/internal/api"
 	"github.com/NovaSeele/Seelegent/internal/platform"
+	"github.com/NovaSeele/Seelegent/internal/testutil/priority"
 )
 
-// roleEnv makes the test binary a helper: "priority" writes its own priority (ownPriority) to the file named last.
+// roleEnv makes the test binary a helper: "priority" writes its own priority (priority.Of) to the file named last.
 const roleEnv = "GATE_TEST_ROLE"
 
 func TestMain(m *testing.M) {
 	if os.Getenv(roleEnv) == "priority" {
-		if err := os.WriteFile(os.Args[len(os.Args)-1], []byte(strconv.Itoa(ownPriority())), 0o600); err != nil {
+		v, err := priority.Of(os.Getpid())
+		if err != nil {
+			os.Exit(4)
+		}
+		if err := os.WriteFile(os.Args[len(os.Args)-1], []byte(strconv.Itoa(v)), 0o600); err != nil {
 			os.Exit(3)
 		}
 		os.Exit(0)
@@ -40,9 +45,9 @@ func quoted(p string) string {
 // TestRunnerPriority: with Runner.Tree low a gate command and what it starts (here the test binary, a grandchild of
 // the tree) run at low priority; without it at the caller's.
 func TestRunnerPriority(t *testing.T) {
-	atNormalPriority(t)
-	self := ownPriority()
-	if isLow(self) {
+	priority.AtNormal(t)
+	self := priority.MustOf(t, os.Getpid())
+	if priority.IsLow(self) {
 		t.Skip("the test already runs at low priority")
 	}
 	exe, err := os.Executable()
@@ -72,7 +77,7 @@ func TestRunnerPriority(t *testing.T) {
 				t.Fatal(err)
 			}
 			got, _ := strconv.Atoi(string(data))
-			if tc.low && !isLow(got) || !tc.low && got != self {
+			if tc.low && !priority.IsLow(got) || !tc.low && got != self {
 				t.Fatalf("command priority %#x (this test %#x), low wanted: %v", got, self, tc.low)
 			}
 		})

@@ -11,7 +11,8 @@ import (
 // 0 then, and a caller must never hold work back on an unknown reading.
 type MemoryStatus struct {
 	// AvailPhysMB is the physical memory available to new processes, in MiB (Windows: ullAvailPhys of
-	// GlobalMemoryStatusEx; Linux: MemAvailable of /proc/meminfo; macOS: best effort).
+	// GlobalMemoryStatusEx; Linux: MemAvailable of /proc/meminfo, or less when the cgroup v2 memory limit of the
+	// daemon leaves less; macOS: best effort).
 	AvailPhysMB int64
 	// AvailCommitMB is the commit still available (RAM plus page file), in MiB: Windows only (ullAvailPageFile of
 	// GlobalMemoryStatusEx); 0 elsewhere, where commit is unknown. A known reading with AvailCommitMB 0 therefore
@@ -52,6 +53,36 @@ func parseMeminfo(data []byte) MemoryStatus {
 		return MemoryStatus{AvailPhysMB: int64(kb >> 10), Known: true}
 	}
 	return MemoryStatus{}
+}
+
+// cgroupV2Path returns the cgroup v2 path of a process from its /proc/<pid>/cgroup ("0::/user.slice/x.scope"); false
+// without a v2 entry (cgroup v1 only).
+func cgroupV2Path(data []byte) (string, bool) {
+	for line := range strings.SplitSeq(string(data), "\n") {
+		if p, ok := strings.CutPrefix(strings.TrimSpace(line), "0::"); ok && strings.HasPrefix(p, "/") {
+			return p, true
+		}
+	}
+	return "", false
+}
+
+// cgroupFreeMB is the memory a cgroup v2 still allows, in MiB: memory.max minus memory.current, at least 0. False
+// when there is no limit ("max") or a file does not parse. memory.current counts the group's page cache too, so
+// this is a low estimate; Memory takes the smaller of it and MemAvailable.
+func cgroupFreeMB(maxData, currentData []byte) (int64, bool) {
+	limit := strings.TrimSpace(string(maxData))
+	if limit == "" || limit == "max" {
+		return 0, false
+	}
+	maxBytes, err1 := strconv.ParseUint(limit, 10, 64)
+	cur, err2 := strconv.ParseUint(strings.TrimSpace(string(currentData)), 10, 64)
+	if err1 != nil || err2 != nil {
+		return 0, false
+	}
+	if cur >= maxBytes {
+		return 0, true
+	}
+	return mib(maxBytes - cur), true
 }
 
 // fromMemorystatusLevel is macOS's best-effort reading: hw.memsize (bytes of RAM) times kern.memorystatus_level

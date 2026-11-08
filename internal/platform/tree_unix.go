@@ -40,6 +40,8 @@ type treeOS struct {
 	ownerStart uint64
 	// reaper reaps the root and the orphans the owner adopts as a child subreaper (Linux worker trees only).
 	reaper *reaper
+	// unapplied names the limits the system refused ("low priority").
+	unapplied []string
 }
 
 // start runs cmd as the leader of a new process group; its descendants inherit the group. On Linux the root also
@@ -68,7 +70,9 @@ func (t *treeOS) start(cmd *exec.Cmd, worker bool, _ string, opt TreeOptions) er
 		// is tied to it, stays armed.
 		runtime.LockOSThread()
 		defer runtime.UnlockOSThread()
-		lowerNice(unix.PRIO_PROCESS, 0)
+		if err := lowerNice(unix.PRIO_PROCESS, 0); err != nil {
+			t.unapplied = []string{"low priority"}
+		}
 	}
 	if err := cmd.Start(); err != nil {
 		r.stop()
@@ -79,7 +83,9 @@ func (t *treeOS) start(cmd *exec.Cmd, worker bool, _ string, opt TreeOptions) er
 	if low && !worker && !niced {
 		// No nice program: lower the group now. What the root started before this call and moved out of its
 		// group by then keeps the caller's priority.
-		lowerNice(unix.PRIO_PGRP, t.pgid)
+		if err := lowerNice(unix.PRIO_PGRP, t.pgid); err != nil {
+			t.unapplied = []string{"low priority"}
+		}
 	}
 	if r != nil {
 		r.run(t.pgid)
@@ -104,17 +110,23 @@ func runNiced(cmd *exec.Cmd) bool {
 }
 
 // lowerNice sets the nice value of who (a process or thread, or a process group) to lowNice, unless the caller
-// already runs at lowNice or lower priority (an unprivileged process could not go back up). Best effort: a
-// refused call leaves the priority as it was.
-func lowerNice(which, who int) {
+// already runs at lowNice or lower priority (an unprivileged process could not go back up). A refused call leaves
+// the priority as it was and returns the error.
+func lowerNice(which, who int) error {
 	if cur, err := niceOf(unix.PRIO_PROCESS, 0); err == nil && cur >= lowNice {
-		return
+		return nil
 	}
-	_ = unix.Setpriority(which, who, lowNice)
+	return unix.Setpriority(which, who, lowNice)
 }
 
 // memoryLimitHit is always false: Unix trees have no memory cap.
 func (*treeOS) memoryLimitHit(int) bool { return false }
+
+// poll has nothing to take in on Unix.
+func (*treeOS) poll() bool { return false }
+
+// unappliedLimits implements Tree.Unapplied.
+func (t *treeOS) unappliedLimits() []string { return t.unapplied }
 
 func (t *treeOS) describe(id string, root int) *WorkerTree {
 	if t.owner > 0 {

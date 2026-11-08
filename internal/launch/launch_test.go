@@ -20,6 +20,7 @@ import (
 
 	"github.com/NovaSeele/Seelegent/internal/fsutil"
 	"github.com/NovaSeele/Seelegent/internal/platform"
+	"github.com/NovaSeele/Seelegent/internal/testutil/priority"
 )
 
 // The test binary plays three parts, chosen by its first argument:
@@ -714,9 +715,12 @@ func TestDeliverLongLine(t *testing.T) {
 	}
 }
 
-// waitPidFile waits up to 10 s for path to hold a pid.
+// pidWait is how long the tests wait for a pid file: helpers start slowly on a loaded machine.
+const pidWait = 30 * time.Second
+
+// waitPidFile waits up to pidWait for path to hold a pid.
 func waitPidFile(path string) {
-	for i := 0; i < 500; i++ {
+	for deadline := time.Now().Add(pidWait); time.Now().Before(deadline); {
 		if data, err := os.ReadFile(path); err == nil && strings.TrimSpace(string(data)) != "" {
 			return
 		}
@@ -724,9 +728,10 @@ func waitPidFile(path string) {
 	}
 }
 
+// readPid waits up to pidWait for path to hold a pid and returns it.
 func readPid(t *testing.T, path string) int {
 	t.Helper()
-	for i := 0; i < 500; i++ {
+	for deadline := time.Now().Add(pidWait); time.Now().Before(deadline); {
 		if data, err := os.ReadFile(path); err == nil {
 			if pid, err := strconv.Atoi(strings.TrimSpace(string(data))); err == nil {
 				return pid
@@ -782,9 +787,9 @@ func TestSpecTreeTravelsInLaunchJSON(t *testing.T) {
 // TestWorkerTreePriority: Spec.Tree.Priority low runs the worker and its grandchild at low priority (Windows: the
 // job's BELOW_NORMAL class; Unix: nice 10 from the launcher); the zero value leaves them at the caller's.
 func TestWorkerTreePriority(t *testing.T) {
-	atNormalPriority(t)
-	self := priorityOf(t, os.Getpid())
-	if isLow(self) {
+	priority.AtNormal(t)
+	self := priority.MustOf(t, os.Getpid())
+	if priority.IsLow(self) {
 		t.Skip("the test already runs at low priority")
 	}
 	for _, tc := range []struct {
@@ -807,13 +812,13 @@ func TestWorkerTreePriority(t *testing.T) {
 			r, _ := h.Ready()
 			pids := []int{readPid(t, workerPid), readPid(t, childPid)}
 			for _, p := range pids {
-				got := priorityOf(t, p)
-				if tc.low && !isLow(got) || !tc.low && got != self {
+				got := priority.MustOf(t, p)
+				if tc.low && !priority.IsLow(got) || !tc.low && got != self {
 					t.Errorf("process %d: priority %#x (this test %#x), low wanted: %v", p, got, self, tc.low)
 				}
 			}
 			if runtime.GOOS == "windows" {
-				if got := priorityOf(t, r.LauncherPID); got != self {
+				if got := priority.MustOf(t, r.LauncherPID); got != self {
 					t.Errorf("launcher: priority %#x, want %#x", got, self)
 				}
 			}
