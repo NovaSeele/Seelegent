@@ -10,8 +10,8 @@
 [安装](#安装)&nbsp;· [快速上手](#快速上手)&nbsp;· [使用指南](docs/usage.md)&nbsp;· [文档](docs/README.md)&nbsp;·
 [参与贡献](CONTRIBUTING.md)
 
-[English](README.md)&nbsp;· [Tiếng Việt](README.vi.md)&nbsp;· **简体中文**&nbsp;· [Español](README.es.md)&nbsp;·
-[한국어](README.ko.md)&nbsp;· [日本語](README.ja.md)&nbsp;· [Русский](README.ru.md)
+[English](README.md)&nbsp;· [Tiếng Việt](README.vi.md)&nbsp;· **简⁠体⁠中⁠文**&nbsp;· [Español](README.es.md)&nbsp;·
+[한⁠국⁠어](README.ko.md)&nbsp;· [日⁠本⁠語](README.ja.md)&nbsp;· [Русский](README.ru.md)
 
 [![License: FSL-1.1-ALv2](https://img.shields.io/badge/license-FSL--1.1--ALv2-blue)](LICENSE)
 [![Latest release](https://img.shields.io/github/v/release/NovaSeele/Seelegent)](https://github.com/NovaSeele/Seelegent/releases/latest)
