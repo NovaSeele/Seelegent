@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -57,12 +58,13 @@ func (f *workFlags) options(fs *pflag.FlagSet) (api.TicketTaskOptions, error) {
 		GateCommands: g.commands, Lane: g.lane, NoLane: g.noLane}, nil
 }
 
-// waitTicketTask waits up to wait seconds for a task a ticket action started and prints its report.
-func waitTicketTask(cmd *cobra.Command, d deps, taskID string, wait int, v any, head string) error {
+// waitTicketTask waits up to wait seconds for a task a ticket action started and prints its report. since is a mark
+// taken before the action, so a flag the new task has from the start wakes the wait (N2).
+func waitTicketTask(cmd *cobra.Command, d deps, taskID string, wait int, since time.Time, v any, head string) error {
 	if wait <= 0 || taskID == "" {
 		return emit(cmd, v, func(w io.Writer) { _, _ = fmt.Fprintln(w, head) })
 	}
-	return waitAndPrint(cmd, d, nil, taskID, min(wait, 3000), head)
+	return waitAndPrint(cmd, d, nil, taskID, min(wait, 3000), since, head)
 }
 
 // listState is the state issues list asks for: --state, or the Node version's --all and --closed (one of them).
@@ -387,6 +389,7 @@ func newTriageCommand(d deps) *cobra.Command {
 				m, rank, _ := strings.Cut(a, ":")
 				req.Attendees = append(req.Attendees, api.AttendeeRef{Member: m, Rank: rank})
 			}
+			mark := time.Now()
 			res, err := c.TriageIssue(cmd.Context(), id, ops.IssueKey(args[1]), req)
 			if err != nil {
 				return err
@@ -398,7 +401,7 @@ func newTriageCommand(d deps) *cobra.Command {
 			case res.Ticket != nil && res.MeetingID != "":
 				head = fmt.Sprintf("Ticket %s; meeting %s opened.", res.Ticket.ID, res.MeetingID)
 			}
-			return waitTicketTask(cmd, d, res.TaskID, wait, res, head)
+			return waitTicketTask(cmd, d, res.TaskID, wait, mark, res, head)
 		})
 	fs := cmd.Flags()
 	f.add(fs)
@@ -456,11 +459,12 @@ func issueTicketCommands(d deps) []*cobra.Command {
 			if err != nil {
 				return err
 			}
+			mark := time.Now()
 			res, err := c.TicketTask(cmd.Context(), args[0], api.TicketTaskRequest{Prompt: brief, TicketTaskOptions: opt})
 			if err != nil {
 				return err
 			}
-			return waitTicketTask(cmd, d, res.TaskID, addWait, res, "Task "+res.TaskID+" started.")
+			return waitTicketTask(cmd, d, res.TaskID, addWait, mark, res, "Task "+res.TaskID+" started.")
 		})
 	f.add(addTask.Flags())
 	addTask.Flags().IntVar(&addWait, "wait", 0, "seconds to wait for the report (default 0)")
@@ -477,11 +481,12 @@ func issueTicketCommands(d deps) []*cobra.Command {
 			if err != nil {
 				return err
 			}
+			mark := time.Now()
 			res, err := c.RetryTicket(cmd.Context(), args[0], api.TicketTaskRequest{Prompt: brief, TicketTaskOptions: opt})
 			if err != nil {
 				return err
 			}
-			return waitTicketTask(cmd, d, res.TaskID, retryWait, res, "Task "+res.TaskID+" started.")
+			return waitTicketTask(cmd, d, res.TaskID, retryWait, mark, res, "Task "+res.TaskID+" started.")
 		})
 	rf.add(retry.Flags())
 	retry.Flags().IntVar(&retryWait, "wait", 0, "seconds to wait for the report (default 0)")
@@ -570,12 +575,13 @@ func newFixChecksCommand(d deps) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			mark := time.Now()
 			res, err := c.FixChecks(cmd.Context(), args[0], api.FixChecksRequest{Member: member, Extra: more,
 				Backend: backend, Model: model})
 			if err != nil {
 				return err
 			}
-			return waitTicketTask(cmd, d, res.TaskID, wait, res, "Task "+res.TaskID+" started.")
+			return waitTicketTask(cmd, d, res.TaskID, wait, mark, res, "Task "+res.TaskID+" started.")
 		})
 	fs := cmd.Flags()
 	fs.StringVar(&member, "member", "", "department member (default: the last task's)")

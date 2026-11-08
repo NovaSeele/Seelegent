@@ -99,5 +99,8 @@ func runGit(ctx context.Context, git, dir string, args ...string) ([]byte, error
 	cmd.Dir = dir
 	cmd.Env = gitx.Env(cmd.Environ(), "GIT_OPTIONAL_LOCKS=0", "GIT_TERMINAL_PROMPT=0")
 	platform.HideWindow(cmd)
+	// A child git leaves running (a filter or credential helper) can hold the pipes after git is killed: stop
+	// waiting for them soon after the timeout.
+	cmd.WaitDelay = 2 * time.Second
 	return cmd.Output()
 }

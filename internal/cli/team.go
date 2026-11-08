@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -337,6 +338,7 @@ func newNotesCommand(d deps) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			mark := time.Now()
 			res, err := c.SendNotes(cmd.Context(), args[0], api.NotesSendRequest{Extra: text, By: "lead"})
 			if err != nil {
 				return err
@@ -346,7 +348,7 @@ func newNotesCommand(d deps) *cobra.Command {
 					_, _ = fmt.Fprintf(w, "%d note(s) sent to task %s.\n", len(res.Sent), args[0])
 				})
 			}
-			return waitAndPrint(cmd, d, c, args[0], wait,
+			return waitAndPrint(cmd, d, c, args[0], wait, mark,
 				fmt.Sprintf("%d note(s) sent to task %s.", len(res.Sent), args[0]))
 		})
 	send.Flags().StringVar(&extra, "extra", "", "text after the notes (or @file)")
