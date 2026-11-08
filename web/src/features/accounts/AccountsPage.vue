@@ -12,7 +12,7 @@ import { useAccountsStore } from '@/stores/accounts'
 
 import AccountCard, { type AccountDialog } from './AccountCard.vue'
 import AccountDialogs from './AccountDialogs.vue'
-import { BACKENDS, isExhausted, useActions } from './accountView'
+import { BACKENDS, isExhausted, readyForWork, useActions } from './accountView'
 import AddAccountDialog from './AddAccountDialog.vue'
 import ProvidersPanel from './ProvidersPanel.vue'
 
@@ -44,16 +44,7 @@ const needsYou = (a: Account) =>
 const summary = computed(() => {
   const list = accounts.accounts
   return [
-    {
-      id: 'ready',
-      value: list.filter(
-        (a) =>
-          a.enabled &&
-          (a.status === 'ok' || a.status === 'error') &&
-          !a.resting &&
-          !isExhausted(a, now.value),
-      ).length,
-    },
+    { id: 'ready', value: list.filter((a) => readyForWork(a, now.value)).length },
     { id: 'busy', value: list.reduce((sum, a) => sum + a.busy, 0) },
     {
       id: 'resting',

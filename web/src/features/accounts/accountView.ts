@@ -37,6 +37,17 @@ export const isExhausted = (account: Account, now: number): boolean =>
   !!account.quota.exhaustedUntil && Date.parse(account.quota.exhaustedUntil) > now
 
 /**
+ * Can the account take a new turn now: on, signed in (or with old quota numbers), not resting, not out of quota,
+ * and with a free slot (a 1/1 busy account makes a new delegation wait, A-L16).
+ */
+export const readyForWork = (account: Account, now: number): boolean =>
+  account.enabled &&
+  (account.status === 'ok' || account.status === 'error') &&
+  !account.resting &&
+  !isExhausted(account, now) &&
+  account.busy < account.maxConcurrent
+
+/**
  * What the card's pill shows. A Ready account (ok, or error with old numbers) that is out of quota or resting
  * shows that instead of Ready (attention tone for out of quota, neutral for resting), and the matching chip is
  * left out; every other status keeps its own word.
