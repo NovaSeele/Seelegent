@@ -71,6 +71,8 @@
     "loadFailed": "issue를 불러오지 못했습니다: {error}",
     "empty": "issue가 없습니다",
     "emptyDesc": "동기화해서 GitHub에서 저장소의 issue를 가져오거나 로컬 issue를 추가하세요.",
+    "syncFailed": "마지막 동기화가 끝나지 않았습니다",
+    "syncFailedDesc": "issue를 아직 가져오지 못했습니다. {next}",
     "closed": "닫힘",
     "by": "작성자 {author}",
     "suggested": "제안: {action}",

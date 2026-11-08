@@ -71,6 +71,8 @@
     "loadFailed": "Could not load the issues: {error}",
     "empty": "No issues here",
     "emptyDesc": "Sync to fetch the repository's issues from GitHub, or add a local issue.",
+    "syncFailed": "The last sync did not finish",
+    "syncFailedDesc": "Its issues are not here yet. {next}",
     "closed": "Closed",
     "by": "by {author}",
     "suggested": "Suggested: {action}",

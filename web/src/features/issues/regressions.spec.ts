@@ -6,11 +6,13 @@ import { mount, RouterLinkStub } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { createApiClient, createGitHubApi } from '@/api'
-import type { GitHubAccess, Ticket } from '@/api/types'
+import type { GitHubAccess, Repo, Ticket } from '@/api/types'
+import { i18n } from '@/i18n'
 import { useGitHubStore } from '@/stores/github'
 import { flush, setupApp } from '@/test/app'
 
 import AccessPanel from './AccessPanel.vue'
+import IssueInbox from './IssueInbox.vue'
 import TicketDetail from './TicketDetail.vue'
 import TicketSections from './TicketSections.vue'
 
@@ -54,6 +56,32 @@ function makeTicket(overrides: Partial<Ticket> = {}): Ticket {
 describe('issues regressions', () => {
   beforeEach(() => {
     document.body.innerHTML = ''
+  })
+
+  it('says a failed sync and its next step in an empty inbox, not "sync to fetch" (design review)', async () => {
+    const { plugins } = await setupApp()
+    const repo = (extra: Partial<Repo>) =>
+      ({ id: 'r1', owner: 'o', name: 'billing', path: '/srv/billing', ...extra }) as Repo
+    let current = repo({ syncError: 'HTTP 404: Not Found', syncErrorCause: 'github_not_found' })
+    const fetch = vi.fn<typeof globalThis.fetch>((input) =>
+      Promise.resolve(json(String(input).includes('/issues') ? [] : [current])),
+    )
+    const gh = useGitHubStore()
+    gh.setApi(createGitHubApi(createApiClient({ fetch })))
+    await gh.loadRepos()
+    gh.select('r1')
+    await gh.loadIssues()
+    const w = mount(IssueInbox, { global: { plugins, stubs: { RouterLink: RouterLinkStub } } })
+    await flush()
+    expect(w.text()).toContain('The last sync did not finish')
+    expect(w.text()).toContain(i18n.global.t('issues.cause.githubNotFound'))
+    expect(w.text()).not.toContain('Sync to fetch')
+
+    current = repo({ lastSyncAt: '2026-11-08T00:00:00Z' })
+    await gh.loadRepos()
+    await flush()
+    expect(w.text()).toContain('Sync to fetch')
+    expect(w.text()).not.toContain('The last sync did not finish')
   })
 
   it('shows no tier until the daemon answers, then the real one (F38)', async () => {
