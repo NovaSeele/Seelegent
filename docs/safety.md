@@ -30,7 +30,10 @@ script that edits a file mentioning `git stash`, is data. Long options count by 
 
 - always: `reset`, `restore`, `switch`, `revert`, `rebase`, `merge`, `pull`, `push`, `cherry-pick`, `am`, `rm`,
   `mv`, `prune`, `filter-branch`, `filter-repo`, `update-ref`, `update-index`, `read-tree`, `checkout-index`,
-  `merge-file`, `replace`, `send-pack`;
+  `merge-file`, `replace`, `send-pack`; except `update-index --refresh` or `--really-refresh`, alone or with only
+  `-q`, `--unmerged`, `--ignore-missing` and `--ignore-submodules` (whole option names, no path), which only
+  refreshes the stat information (every other `update-index`, such as `--add`, `--remove`, `--force-remove`,
+  `--cacheinfo`, `--index-info`, `--assume-unchanged`, `--skip-worktree` or a path, stays refused);
 - `stash` except `list` and `show`; `clean` without `-n`; `checkout` except `checkout -b <new> [<start>]` (`-B`
   resets an existing branch); `commit -a|--all|--amend`; `branch` and `tag` deletes, moves and forced writes;
   `apply` unless it only checks; `reflog expire|delete|drop` (the stash is a reflog); `worktree remove|prune|move`

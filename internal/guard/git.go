@@ -104,6 +104,9 @@ func (c Checker) git(args []word, depth int) Result {
 		if sub == "replace" && listsOnly(rest, "-l", "--list") {
 			return allow
 		}
+		if sub == "update-index" && refreshesOnly(rest) {
+			return allow
+		}
 		return deny()
 	}
 	switch sub {
@@ -393,6 +396,26 @@ func optionUnknown(rest []word) bool {
 		}
 	}
 	return false
+}
+
+// refreshOnlyFlags are the update-index options that only refresh the stat information of the index entries.
+var refreshOnlyFlags = set("--refresh", "--really-refresh", "-q", "--unmerged", "--ignore-missing",
+	"--ignore-submodules")
+
+// refreshesOnly reports whether git update-index only refreshes the stat information of the entries (--refresh
+// or --really-refresh, with only the options that tune the refresh). Every other option, and any path, changes
+// what the index holds (--add, --remove, --force-remove, --cacheinfo, --index-info, --assume-unchanged,
+// --skip-worktree, ...; a path stages that file), so it stays refused. Options are matched whole: an abbreviation
+// is refused.
+func refreshesOnly(args []word) bool {
+	refresh := false
+	for _, a := range args {
+		if a.dynamic || !refreshOnlyFlags[a.text] {
+			return false
+		}
+		refresh = refresh || a.text == "--refresh" || a.text == "--really-refresh"
+	}
+	return refresh
 }
 
 // replayPrintsOnly reports whether git replay is told to print the ref updates instead of making them
