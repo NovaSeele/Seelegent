@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/NovaSeele/Seelegent/internal/api"
 	"github.com/NovaSeele/Seelegent/internal/httpapi"
@@ -181,7 +182,7 @@ func TestKeyTestEndpoint(t *testing.T) {
 	var status atomic.Int32
 	status.Store(http.StatusOK)
 	var otherReached atomic.Int32
-	other := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	other := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
 		otherReached.Add(1)
 	}))
 	defer other.Close()
@@ -234,8 +235,19 @@ func TestKeyTestEndpoint(t *testing.T) {
 	status.Store(http.StatusOK)
 	r = e.post("/api/v1/providers/test", map[string]any{"accountId": created.ID})
 	e.must(r, http.StatusOK).json(t, &res)
-	if !res.OK || !res.Saved {
+	if !res.OK || !res.Saved || res.CreditUnseen || strings.Contains(res.Message, "credit") {
 		t.Fatalf("account test = %s", r.body)
+	}
+	// Without credit: the pass lifts the rest but says that listing models cannot see the balance.
+	if err := e.a.Pool.MarkNoCredit(t.Context(), created.ID, "Credit balance is too low"); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(2 * time.Millisecond) // the test must come after the mark
+	r = e.post("/api/v1/providers/test", map[string]any{"accountId": created.ID})
+	e.must(r, http.StatusOK).json(t, &res)
+	if !res.OK || !res.CreditUnseen ||
+		res.Message != "the key works; 2 models available; this test cannot see the credit balance" {
+		t.Fatalf("test without credit = %s", r.body)
 	}
 	var accounts []api.Account
 	e.must(e.get("/api/v1/accounts"), http.StatusOK).json(t, &accounts)

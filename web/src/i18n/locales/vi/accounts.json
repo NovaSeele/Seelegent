@@ -213,6 +213,7 @@
     "unreachable": "Không kết nối được dịch vụ",
     "redirected": "Bị chuyển hướng sang nơi khác",
     "error": "Kiểm tra thất bại",
+    "creditUnseen": "Phép kiểm tra này không thấy được số dư tín dụng",
     "testedAt": "Đã kiểm tra {time}"
   },
   "notice": {

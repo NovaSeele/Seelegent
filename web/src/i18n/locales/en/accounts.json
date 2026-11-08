@@ -213,6 +213,7 @@
     "unreachable": "Service unreachable",
     "redirected": "Redirected elsewhere",
     "error": "Test failed",
+    "creditUnseen": "This test cannot see the credit balance",
     "testedAt": "Tested {time}"
   },
   "notice": {

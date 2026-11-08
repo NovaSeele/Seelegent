@@ -251,6 +251,7 @@
     "unreachable": "Servicio inalcanzable",
     "redirected": "Redirigido a otro sitio",
     "error": "La prueba falló",
+    "creditUnseen": "Esta prueba no puede ver el saldo de crédito",
     "testedAt": "Probada {time}"
   },
   "notice": {

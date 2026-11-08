@@ -154,6 +154,12 @@ export interface KeyTestResult {
   notices?: Notice[]
   /** Saved is true when the result was stored on the account (accountId). */
   saved?: boolean
+  /**
+   * CreditUnseen is true when the key passed while its account rested for lack of credit (restReason credits):
+   * the test lists models, which works at zero credit too, so it cannot see the balance. The pass still lifts
+   * the rest; Message then ends with "; this test cannot see the credit balance".
+   */
+  creditUnseen?: boolean
 }
 
 /**

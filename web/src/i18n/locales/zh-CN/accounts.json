@@ -251,6 +251,7 @@
     "unreachable": "无法连接服务",
     "redirected": "被重定向到别处",
     "error": "测试失败",
+    "creditUnseen": "此测试无法查看余额",
     "testedAt": "测试于 {time}"
   },
   "notice": {
