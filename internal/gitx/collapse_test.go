@@ -1,13 +1,17 @@
 package gitx
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/NovaSeele/Seelegent/internal/api"
 )
@@ -164,5 +168,118 @@ func TestUnbornHead(t *testing.T) {
 	}
 	if _, err := r.Commit(ctx, tf, "first", []string{"index.html", "staged.txt"}); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// A folder row counts the untracked files in it that are not the task's (here: already there when it started),
+// so the view can say so instead of losing them.
+func TestUntrackedFolderCountsOthers(t *testing.T) {
+	dir := newRepo(t)
+	ctx := context.Background()
+	var baseline []string
+	for i := range 5 {
+		p := filepath.Join(dir, "cache", fmt.Sprintf("old%d.bin", i))
+		write(t, p, "o\n")
+		baseline = append(baseline, p)
+	}
+	for i := range 25 {
+		write(t, filepath.Join(dir, "cache", fmt.Sprintf("new%02d.bin", i)), "n\n")
+	}
+	view, err := New(nil, nil).TaskGitView(ctx, TaskFiles{Cwd: dir, Baseline: baseline})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(view.UntrackedDirs) != 1 {
+		t.Fatalf("folders: %+v", view.UntrackedDirs)
+	}
+	if d := view.UntrackedDirs[0]; d.Path != "cache/" || d.Count != 25 || d.Others != 5 {
+		t.Fatalf("cache row: path %q count %d others %d", d.Path, d.Count, d.Others)
+	}
+}
+
+// Grouping the folders is only a convenience of the view: when it fails, the failure is logged and the view lists
+// every file instead of failing.
+func TestCollapseFailureListsEveryFile(t *testing.T) {
+	dir := newRepo(t)
+	var logs bytes.Buffer
+	r := New(nil, NewBinary(nil, slog.New(slog.NewTextHandler(&logs, nil))))
+	r.collapse = func(context.Context, string, []api.GitFile) ([]api.GitFile, []api.GitDir, error) {
+		return nil, nil, errors.New("ls-files: timed out")
+	}
+	for i := range 30 {
+		write(t, filepath.Join(dir, "gen", fmt.Sprintf("g%02d.txt", i)), "x\n")
+	}
+	view, err := r.TaskGitView(context.Background(), TaskFiles{Cwd: dir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(view.Files) != 30 || len(view.UntrackedDirs) != 0 || view.Files[0].Additions != 1 {
+		t.Fatalf("view: %d files, folders %+v", len(view.Files), view.UntrackedDirs)
+	}
+	if !strings.Contains(logs.String(), "could not be grouped") || !strings.Contains(logs.String(), "timed out") {
+		t.Fatalf("log: %s", logs.String())
+	}
+}
+
+// An image's stamp changes when the file is rewritten, also when its status and line counts do not (a binary is
+// always 0/0), so the view's image URLs change and the preview is read again. Other files have none.
+func TestImageStamps(t *testing.T) {
+	dir := newRepo(t)
+	ctx := context.Background()
+	r := New(nil, nil)
+	logo := filepath.Join(dir, "img", "logo.png")
+	write(t, logo, "PNG\x00one")
+	git(t, dir, "add", ".")
+	git(t, dir, "commit", "-q", "-m", "logo")
+	blob := strings.TrimSpace(git(t, dir, "rev-parse", "HEAD:img/logo.png"))
+	write(t, logo, "PNG\x00two")
+	write(t, filepath.Join(dir, "new.svg"), "<svg/>")
+	write(t, filepath.Join(dir, "a.txt"), "changed\n")
+	tf := TaskFiles{Cwd: dir}
+	stamps := func() map[string]api.GitFile {
+		t.Helper()
+		view, err := r.TaskGitView(ctx, tf)
+		if err != nil {
+			t.Fatal(err)
+		}
+		out := map[string]api.GitFile{}
+		for _, f := range view.Files {
+			out[f.Path] = f
+		}
+		return out
+	}
+	first := stamps()
+	before := first["img/logo.png"]
+	if !strings.HasSuffix(before.Stamp, "."+blob) || strings.HasPrefix(before.Stamp, ".") || !before.Binary {
+		t.Fatalf("logo: %+v (HEAD blob %s)", before, blob)
+	}
+	if s := first["new.svg"].Stamp; s == "" || !strings.HasSuffix(s, ".") {
+		t.Fatalf("a new image has no HEAD half: %q", s)
+	}
+	if s := first["a.txt"].Stamp; s != "" {
+		t.Fatalf("a text file has a stamp: %q", s)
+	}
+	// The same size, the same status and counts: only the content and the time differ.
+	write(t, logo, "PNG\x00six")
+	later := time.Now().Add(2 * time.Second)
+	if err := os.Chtimes(logo, later, later); err != nil {
+		t.Fatal(err)
+	}
+	after := stamps()["img/logo.png"]
+	if after.Status != before.Status || after.Additions != before.Additions || after.Deletions != before.Deletions {
+		t.Fatalf("the rewrite changed more than the content: %+v, %+v", before, after)
+	}
+	if after.Stamp == before.Stamp {
+		t.Fatalf("the stamp stayed %q after the image was rewritten", after.Stamp)
+	}
+	// TaskGit (what a commit reads) does not stamp.
+	full, err := r.TaskGit(ctx, tf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range full.Files {
+		if f.Stamp != "" {
+			t.Fatalf("TaskGit stamped %s", f.Path)
+		}
 	}
 }

@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 
 import type { TaskSummary, Turn } from '@/api/types'
 import Button from '@/components/ui/Button.vue'
+import ProviderMark from '@/components/ui/ProviderMark.vue'
 import StatusPill from '@/components/ui/StatusPill.vue'
 import { useFormat } from '@/composables/useFormat'
 import { useNow } from '@/composables/useNow'
@@ -84,6 +85,7 @@ const age = computed(() => {
       <span
         >{{ task.model }}<template v-if="task.tier"> · {{ task.tier }}</template></span
       >
+      <ProviderMark :backend="task.backend" :provider="task.provider" size="sm" />
       <span>{{ task.accountLabel ?? t('common.worker.unassigned') }}</span>
       <span v-if="task.turnCount">{{ t('task.header.turn', { n: task.turnCount }) }}</span>
       <span v-if="task.tokensUsed">

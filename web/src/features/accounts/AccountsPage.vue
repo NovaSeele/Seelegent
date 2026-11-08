@@ -7,24 +7,36 @@ import PageContainer from '@/components/layout/PageContainer.vue'
 import PageHeader from '@/components/layout/PageHeader.vue'
 import Button from '@/components/ui/Button.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
+import ProviderMark from '@/components/ui/ProviderMark.vue'
+import SegmentedControl, { type SegmentOption } from '@/components/ui/SegmentedControl.vue'
 import { useNow } from '@/composables/useNow'
 import { useAccountsStore } from '@/stores/accounts'
 
-import AccountCard, { type AccountDialog } from './AccountCard.vue'
+import AccountCard from './AccountCard.vue'
 import AccountDialogs from './AccountDialogs.vue'
+import AccountList from './AccountList.vue'
+import { type AccountsView, useAccountsView } from './accountsView'
 import { BACKENDS, isExhausted, readyForWork, useActions } from './accountView'
 import AddAccountDialog from './AddAccountDialog.vue'
 import ProvidersPanel from './ProvidersPanel.vue'
+import type { AccountDialog } from './useAccountControls'
 
 /**
  * Accounts: a summary of what can take work now, then the accounts grouped by backend (status, quota, sign-in,
- * controls), then the API providers the API-key accounts use. Everything stays live over SSE (account.updated,
+ * controls) as a compact list (default) or as cards, then the API providers the API-key accounts use. The view
+ * choice is remembered per viewer (accountsView.ts). Everything stays live over SSE (account.updated,
  * account.login, providers.changed).
  */
 const { t } = useI18n()
 const accounts = useAccountsStore()
 const actions = useActions()
 const now = useNow(30_000)
+
+const view = useAccountsView()
+const viewOptions = computed<SegmentOption<AccountsView>[]>(() => [
+  { value: 'list', label: t('accounts.view.list') },
+  { value: 'cards', label: t('accounts.view.cards') },
+])
 
 const adding = ref(false)
 const dialog = ref<AccountDialog | null>(null)
@@ -78,6 +90,12 @@ watch(() => accounts.accounts.filter((a) => a.signingIn).length, resumeLogins)
   <PageContainer>
     <PageHeader :title="t('nav.accounts.label')" :description="t('nav.accounts.desc')">
       <template #actions>
+        <SegmentedControl
+          v-if="accounts.accounts.length"
+          v-model="view"
+          :options="viewOptions"
+          :label="t('accounts.view.label')"
+        />
         <Button
           variant="secondary"
           icon="refresh"
@@ -108,26 +126,30 @@ watch(() => accounts.accounts.filter((a) => a.signingIn).length, resumeLogins)
           </div>
         </dl>
 
-        <section
-          v-for="group in groups"
-          :key="group.backend"
-          class="accounts__group"
-          :aria-labelledby="`accounts-${group.backend}`"
-        >
-          <h2 :id="`accounts-${group.backend}`" class="accounts__heading">
-            {{ t(`accounts.backend.${group.backend}`) }}
-            <span class="accounts__count">{{ group.items.length }}</span>
-          </h2>
-          <div class="accounts__grid">
-            <AccountCard
-              v-for="account in group.items"
-              :key="account.id"
-              :account="account"
-              :now="now"
-              @dialog="openDialog(account, $event)"
-            />
-          </div>
-        </section>
+        <AccountList v-if="view === 'list'" :groups="groups" :now="now" @dialog="openDialog" />
+        <template v-else>
+          <section
+            v-for="group in groups"
+            :key="group.backend"
+            class="accounts__group"
+            :aria-labelledby="`accounts-${group.backend}`"
+          >
+            <h2 :id="`accounts-${group.backend}`" class="accounts__heading">
+              <ProviderMark :backend="group.backend" :label="false" />
+              {{ t(`accounts.backend.${group.backend}`) }}
+              <span class="accounts__count">{{ group.items.length }}</span>
+            </h2>
+            <div class="accounts__grid">
+              <AccountCard
+                v-for="account in group.items"
+                :key="account.id"
+                :account="account"
+                :now="now"
+                @dialog="openDialog(account, $event)"
+              />
+            </div>
+          </section>
+        </template>
       </template>
 
       <ProvidersPanel />

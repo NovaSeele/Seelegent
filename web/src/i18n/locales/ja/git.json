@@ -5,6 +5,7 @@
   "notRepoDesc": "{cwd} は git リポジトリの中にないため、コミットするものはありません。",
   "noBranch": "detached",
   "uncommittedCount": "未コミットのファイル {n} 件",
+  "sumShown": "(表示中のファイルのみ)",
   "refresh": "再読み込み",
   "empty": "このタスクの変更はありません",
   "emptyDesc": "ワーカーが変更したファイルがここに表示され、確認してコミットできます。",
@@ -125,7 +126,8 @@
     "label": "追跡されていないフォルダー",
     "files": "{n} 件のファイル",
     "more": "ほか {n} 件",
-    "listLabel": "{path} のファイル"
+    "listLabel": "{path} のファイル",
+    "others": "ここにある他の {n} 件のファイルはこのタスクのものではありません"
   },
   "image": {
     "before": "変更前 (HEAD)",

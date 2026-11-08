@@ -137,6 +137,10 @@ type GitDir struct {
 	Bytes int64 `json:"bytes"`
 	// Files are its first GitDirFiles files by path; Count minus their number are left out.
 	Files []GitFile `json:"files"`
+	// Others counts the folder's untracked files that are not the task's (already there when it started, or
+	// outside its folder and never touched by it). The row stands for the whole folder, so the repository view
+	// does not list them either.
+	Others int `json:"others,omitempty"`
 }
 
 // GitFile is one changed file.
@@ -149,6 +153,34 @@ type GitFile struct {
 	// Turn is the turn that last changed the file, when known.
 	Turn   int  `json:"turn,omitempty"`
 	Binary bool `json:"binary"`
+	// Stamp changes whenever an image's preview would (TaskGit.Files and UntrackedDirs of the Git tab view only,
+	// images only): the working tree file's size and modification time, and its blob id at HEAD. The view adds it
+	// to the image URLs, so a rewritten image is read again although its status and line counts stay the same.
+	Stamp string `json:"stamp,omitempty"`
+}
+
+// GitImageType returns the Content-Type of an image the Git view previews by its extension (lower case, with the
+// dot), or false for any other extension.
+func GitImageType(ext string) (string, bool) {
+	switch ext {
+	case ".png":
+		return "image/png", true
+	case ".jpg", ".jpeg":
+		return "image/jpeg", true
+	case ".gif":
+		return "image/gif", true
+	case ".webp":
+		return "image/webp", true
+	case ".avif":
+		return "image/avif", true
+	case ".bmp":
+		return "image/bmp", true
+	case ".ico":
+		return "image/x-icon", true
+	case ".svg":
+		return "image/svg+xml", true
+	}
+	return "", false
 }
 
 // RepoStatus is GET /git/status. Repo false means cwd is not inside a git repository (the other fields are then

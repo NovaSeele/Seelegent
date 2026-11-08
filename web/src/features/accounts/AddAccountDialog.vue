@@ -8,6 +8,7 @@ import Button from '@/components/ui/Button.vue'
 import ChoiceGroup from '@/components/ui/ChoiceGroup.vue'
 import Dialog from '@/components/ui/Dialog.vue'
 import NumberField from '@/components/ui/NumberField.vue'
+import ProviderMark from '@/components/ui/ProviderMark.vue'
 import Select from '@/components/ui/Select.vue'
 import TextField from '@/components/ui/TextField.vue'
 import { KeylessAccountError, useAccountsStore } from '@/stores/accounts'
@@ -195,7 +196,11 @@ async function submit() {
           v-model="backend"
           :legend="t('accounts.add.backend')"
           :options="backendOptions"
-        />
+        >
+          <template #mark="{ option }">
+            <ProviderMark :backend="option.value" :label="false" class="add__mark" />
+          </template>
+        </ChoiceGroup>
         <ChoiceGroup v-model="kind" :legend="t('accounts.add.kind')" :options="kindOptions" />
       </template>
       <TextField
@@ -262,6 +267,10 @@ async function submit() {
 </template>
 
 <style scoped>
+.add__mark {
+  margin-right: var(--space-2);
+}
+
 .add {
   display: flex;
   flex-direction: column;

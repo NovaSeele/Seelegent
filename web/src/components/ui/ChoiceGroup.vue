@@ -10,6 +10,7 @@ export interface Choice<V> {
 
 /**
  * Radio buttons drawn as cards (a fieldset with a legend): arrow keys move between them, as with any radio group.
+ * The `mark` slot puts something small before an option's label (a provider dot).
  */
 const model = defineModel<T>({ required: true })
 defineProps<{ legend: string; options: readonly Choice<T>[] }>()
@@ -36,7 +37,7 @@ const name = useId()
           :disabled="option.disabled"
         />
         <span class="choice__text">
-          <span class="choice__label">{{ option.label }}</span>
+          <span class="choice__label"><slot name="mark" :option="option" />{{ option.label }}</span>
           <span v-if="option.description" class="choice__desc">{{ option.description }}</span>
         </span>
       </label>
