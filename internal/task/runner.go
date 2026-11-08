@@ -791,6 +791,12 @@ func (s *Service) finishAttempt(r *run, id string, turn, n int, accountID, model
 		return false, err
 	}
 	s.recordUsage(ctx, t, turn, n, accountID, b.Name(), model, o.Usage)
+	if (status == AttemptOK || status == AttemptBackgroundWait) && accountID != "" {
+		// The account's key and provider work: an API-key account that was not tested counts as working now.
+		if err := s.o.Pool.MarkSucceeded(ctx, accountID, attemptStart(t, turn, n)); err != nil {
+			s.log.Warn("task: record the account's good run", "account", accountID, "err", err)
+		}
+	}
 	if s.o.QuotaRefresh != nil && accountID != "" {
 		// A run that failed on the account (quota, sign-in, transient or other error) always reads its quota
 		// again; one that ended well, waits in the background or was cancelled only when the quota is stale.
@@ -972,6 +978,17 @@ func (s *Service) recordUsage(ctx context.Context, t *Task, turn, n int, account
 		StartedAt: started, EndedAt: s.now(), Usage: u}); err != nil {
 		s.log.Warn("task: record usage", "task", t.ID, "err", err)
 	}
+}
+
+// attemptStart returns when attempt n of the turn started (zero when the task does not have it).
+func attemptStart(t *Task, turn, n int) time.Time {
+	if t == nil {
+		return time.Time{}
+	}
+	if tu := t.TurnN(turn); tu != nil && n >= 1 && n <= len(tu.Attempts) {
+		return tu.Attempts[n-1].StartedAt
+	}
+	return time.Time{}
 }
 
 func (s *Service) attemptDir(id string, turn, n int) string {

@@ -47,9 +47,11 @@ import (
 	"github.com/NovaSeele/Seelegent/internal/quota"
 )
 
-// Accounts lists the accounts; *account.Manager satisfies it.
+// Accounts lists the accounts and records runs that proved an API key; *account.Manager satisfies it.
 type Accounts interface {
 	List(ctx context.Context) ([]account.Account, error)
+	// MarkRunOK records that a turn that started at started ended well on the account (account.Repo.MarkRunOK).
+	MarkRunOK(ctx context.Context, id string, started time.Time) (bool, error)
 }
 
 // Quotas is the quota cache; *quota.Store satisfies it.

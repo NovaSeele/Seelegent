@@ -124,6 +124,22 @@ func (p *Pool) MarkAuthFailed(ctx context.Context, accountID, message string) er
 	return fmt.Errorf("mark %s signed out: %w", accountID, account.ErrNotFound)
 }
 
+// MarkSucceeded records that a turn that started at started ended well on the account. An API-key account that was
+// not tested, or whose last test failed, now counts as working (account.Account.TestState ok). The status the
+// pool computes does not change (accounts that were never tested are selected like any other), so only the
+// account feed is woken.
+func (p *Pool) MarkSucceeded(ctx context.Context, accountID string, started time.Time) error {
+	changed, err := p.o.Accounts.MarkRunOK(ctx, accountID, started)
+	if err != nil {
+		return fmt.Errorf("mark %s working: %w", accountID, err)
+	}
+	if changed {
+		p.o.Logger.Info("pool: API key works", "account", accountID)
+		p.Notify()
+	}
+	return nil
+}
+
 // freshSnapshot reads the account's quota now when possible, else returns the cached snapshot (zero when none).
 func (p *Pool) freshSnapshot(ctx context.Context, id string) quota.Snapshot {
 	if p.o.Refresh != nil {
