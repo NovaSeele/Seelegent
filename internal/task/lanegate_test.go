@@ -568,6 +568,24 @@ func TestLaneScriptWriteIsRed(t *testing.T) {
 	}
 }
 
+// The daemon stamps the call event when it reads it, up to a second (and more on a busy machine) after the command
+// started: a file the script wrote 800 ms before the call's time still counts (review N1).
+func TestLaneWriteBeforeCallEventIsRed(t *testing.T) {
+	h := newHarness(t)
+	laneRepo(h)
+	h.agy("w", 1)
+	cmd := `node gen.js`
+	out := filepath.Join(h.cwd, "docs", "early.md")
+	h.queue.Push(t, script(agyInit("conv-e"), fakeWrite(out, "e\n"),
+		fakeMtime(out, h.clk.Now().Add(-800*time.Millisecond)), agyTool(1, "CALLING", cmd), agyTool(1, "DONE", cmd), agyResult("conv-e", "Generated the docs.")))
+	sum := h.delegate(api.DelegateRequest{Title: "early write", Lane: []string{"src/"}})
+	tk := h.waitStatus(sum.ID, StatusDone)
+	if st := h.laneOf(tk, 1); st.State != api.StepRed || !slices.Equal(st.Files, []string{"docs/early.md"}) ||
+		len(st.Unseen) != 0 {
+		t.Fatalf("lane = %+v", st)
+	}
+}
+
 // The lead edits a file outside the lane while no worker command runs: the worker's command ran (and is timed)
 // before, so the change stays a warning.
 func TestLaneEditOutsideRunsWarns(t *testing.T) {

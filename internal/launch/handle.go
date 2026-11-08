@@ -24,6 +24,9 @@ const (
 	pollInterval = 100 * time.Millisecond
 	// maxPollInterval bounds the backoff of Tail: a line written after a long quiet stretch is read within it.
 	maxPollInterval = time.Second
+	// ReadDelay bounds how long after the worker writes a line Tail reads it (maxPollInterval). The daemon stamps
+	// a worker event when it reads the line, so the event's time may trail what it tells by up to this much.
+	ReadDelay = maxPollInterval
 	// maxWaitInterval bounds the backoff of Wait.
 	maxWaitInterval = 500 * time.Millisecond
 	// exitCheckInterval is how often at most Tail looks for the exit record (Exited: a file open, a stat and a lock

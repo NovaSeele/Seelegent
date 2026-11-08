@@ -8,17 +8,21 @@ import (
 
 	"github.com/NovaSeele/Seelegent/internal/event"
 	"github.com/NovaSeele/Seelegent/internal/guard"
+	"github.com/NovaSeele/Seelegent/internal/launch"
 	"github.com/NovaSeele/Seelegent/internal/snapshot"
 )
 
 // A worker's script writes files no word of its command names (python fix.py, npm run format). The lane counts
 // such a file as the worker's when it changed while one of the worker's commands ran: its modification time in the
-// end snapshot lies in the command's run window, from its start event to its end event plus runSlack. A change
-// outside every window (the lead editing while the worker thinks) stays unseen. A code runner whose start is not
-// known writes where Seelegent cannot tell: unknown, so the lane fails closed (field report 4, review).
+// end snapshot lies in the command's run window, from its start event to its end event, widened by runSlack on both
+// sides. A change outside every window (the lead editing while the worker thinks) stays unseen. A code runner whose
+// start is not known writes where Seelegent cannot tell: unknown, so the lane fails closed (field report 4, review).
 
-// runSlack is added to a command's end: a file's time may trail its last event a little.
-const runSlack = 2 * time.Second
+// runSlack widens a command's run window on both sides. The daemon stamps an event when it reads the worker's line,
+// up to launch.ReadDelay after the worker wrote it (the tail backs off while the worker is quiet), and later still on
+// a busy machine: a command's first write may come before its call event's time. A file's time may also trail the
+// result event a little.
+const runSlack = launch.ReadDelay + 2*time.Second
 
 // maxRunEvents bounds the shell tool events read for the run windows of one lane check. Each is a few fields
 // (CommandEvents), so the bound holds the memory to a few megabytes; a runner past it has no known start and fails
@@ -122,7 +126,7 @@ func (s *Service) addRuns(ctx context.Context, w *workerWrites, t *Task, n int, 
 // ranDuring reports whether a file changed at the given time while one of runs ran.
 func ranDuring(runs []commandRun, at time.Time) bool {
 	for _, r := range runs {
-		if !at.Before(r.start) && !at.After(r.end.Add(runSlack)) {
+		if !at.Before(r.start.Add(-runSlack)) && !at.After(r.end.Add(runSlack)) {
 			return true
 		}
 	}

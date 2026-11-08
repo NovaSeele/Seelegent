@@ -244,8 +244,11 @@ latest instruction (field report 4):
 - **Scripts by time.** A code runner writes files no word of its command names (`python fix.py`, `node gen.js`,
   `go run ./tools/x`, `npm run format`, `make`). A file outside the lane counts as the worker's when its
   modification time in the end snapshot lies in one of the worker's command windows: from the command's call event
-  to its result event plus 2 s (a result with a duration and no call event starts at its time minus the duration;
-  a call without a result runs to the turn's end). A change outside every window, such as the lead editing while
+  to its result event, widened by 3 s on both sides (a result with a duration and no call event starts at its time
+  minus the duration; a call without a result runs to the turn's end). The daemon stamps an event when it reads the
+  worker's line, up to a second after it was written (the read backs off while the worker is quiet) and later on a
+  busy machine, so a script's first write can come before its call event's time; the 3 s are that second plus
+  room. A change outside every window, such as the lead editing while
   the worker thinks, stays a warning. A code runner whose start is not known (a result with neither a call event
   nor a duration, or no event at all) counts as a write Seelegent cannot read, and a file gone from the end
   snapshot (no time to compare) counts as the worker's when a code runner ran. Event times and file times come from
