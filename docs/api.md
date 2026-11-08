@@ -326,7 +326,7 @@ in the daemon.
   (harmless), but no change can be missing from both.
 - SSE: the `hello` frame carries an id like every frame (contract §7: "every frame"). On a fresh connect it is the
   current id; on a resume it is the client's id. A `reset` frame carries the current id, so a reconnect after it
-  resumes from there. `task.updated` is coalesced per task for 100 ms; account frames are sent when the account's
+  resumes from there. `task.updated` is coalesced per task for 100 ms, or for 1 s when only the worker's active step changed; account frames are sent when the account's
   JSON changed, checked on pool and task notices, after account writes and every 30 s. An account added to,
   removed from or moved to another provider is followed by `providers.changed` (because `Provider.accounts` counts
   them), whichever of the handler and that watcher sees the change first. Accounts cannot change provider through
