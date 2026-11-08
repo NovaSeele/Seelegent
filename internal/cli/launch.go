@@ -19,10 +19,15 @@ const launchCommandName = "__launch"
 // after), and the soft memory limit makes the collector keep the heap near what the launcher uses. Both apply only
 // when the environment does not set GOMAXPROCS or GOMEMLIMIT itself.
 //
-// Most of the rest is not the launcher's to save: about 10 MB of its working set are pages of the executable,
-// shared with the daemon and the other launchers, and 32 MiB of its private bytes are the zero-filled entropy
-// buffer of crypto/internal/fips140/drbg in the image's .bss, which Windows charges as commit although it is
-// never touched.
+// The launcher also returns the garbage of the package initializers of the whole binary (about 2 MB allocated)
+// to the system right away (limitLauncherRuntime), instead of keeping those heap pages committed for the turn.
+//
+// Most of the rest is not the launcher's to save. Measured on Windows (about 52 MB private before the release,
+// 50.6 MB after): 32 MiB are the zero-filled entropy buffer of crypto/internal/fips140/drbg in the image's .bss,
+// which Windows charges as commit although it is never touched, and which every binary that imports any crypto
+// package links (drbg's initializer refers to it); 8 MiB are the Go runtime's heap arena index, which every Go
+// program on Windows commits; the heap and the runtime's own structures hold the last 10 MB. About 10 MB of the
+// working set are pages of the executable, shared with the daemon and the other launchers.
 const (
 	launcherMaxProcs    = 2
 	launcherMemoryLimit = 16 << 20
@@ -43,7 +48,8 @@ func newLaunchCommand() *cobra.Command {
 // isLaunch reports whether args (without the program name) run the launcher, as the daemon starts it.
 func isLaunch(args []string) bool { return len(args) > 0 && args[0] == launchCommandName }
 
-// limitLauncherRuntime applies the launcher's runtime limits. Execute calls it first thing, before the runtime
+// limitLauncherRuntime applies the launcher's runtime limits and then returns the initializers' garbage to the
+// system (a collection and a scavenge, a millisecond or two). Execute calls it first thing, before the runtime
 // has started threads for more Ps (the first collection starts a mark worker per P). It changes the runtime, not
 // the environment, which the launcher passes on to the worker unchanged.
 func limitLauncherRuntime(getenv func(string) string) {
@@ -53,4 +59,5 @@ func limitLauncherRuntime(getenv func(string) string) {
 	if getenv("GOMEMLIMIT") == "" {
 		debug.SetMemoryLimit(launcherMemoryLimit)
 	}
+	debug.FreeOSMemory()
 }
