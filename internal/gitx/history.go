@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/NovaSeele/Seelegent/internal/api"
+	"github.com/NovaSeele/Seelegent/internal/fsutil"
 )
 
 // What a task committed since it started (TaskGit's commits and committed files, and one commit's diff). Every
@@ -61,14 +62,39 @@ func EmptyTree(oid string) string {
 	return emptyTree
 }
 
-// history fills the start fields, the commits since the start and the files they changed. touched are the files
-// the task's turns touched (repository-relative) with the last turn of each.
-func (r *Repos) history(ctx context.Context, root string, tf TaskFiles, st repoState, touched map[string]int,
-	out *api.TaskGit) error {
-	out.StartState = api.GitStartUnknown
-	if tf.Start == nil {
+// maxLogBytes bounds the log of the commits since a task's start (all of them, for the files they changed).
+const maxLogBytes = 8 << 20
+
+// usableStart returns the task's start when it can be used in the repository at root: a recorded start, or a
+// start snapshot's head (Root set) taken in this same repository. A snapshot without a head is not trusted to mean
+// "no commit yet" (the snapshot may simply not have recorded it), so it is unknown too.
+func usableStart(tf TaskFiles, root string) *TaskStart {
+	s := tf.Start
+	if s == nil || s.Root == "" {
+		return s
+	}
+	if s.Head == "" {
 		return nil
 	}
+	a, errA := fsutil.Key(s.Root)
+	b, errB := fsutil.Key(root)
+	if errA != nil || errB != nil || a != b {
+		return nil
+	}
+	return s
+}
+
+// history fills the start fields, the commits since the start and the task's files among those they changed.
+// touched are the files the task's turns touched (repository-relative) with the last turn of each; cwdRel is the
+// task's folder relative to root.
+func (r *Repos) history(ctx context.Context, root, cwdRel string, tf TaskFiles, st repoState,
+	touched map[string]int, out *api.TaskGit) error {
+	out.StartState = api.GitStartUnknown
+	start := usableStart(tf, root)
+	if start == nil {
+		return nil
+	}
+	tf.Start = start
 	out.StartHead, out.StartBranch = tf.Start.Head, tf.Start.Branch
 	out.BranchChanged = tf.Start.Branch != "" && st.branch != tf.Start.Branch
 	ok, err := r.startReachable(ctx, root, tf.Start.Head, st.head)
@@ -95,16 +121,21 @@ func (r *Repos) history(ctx context.Context, root string, tf TaskFiles, st repoS
 	if total == 0 {
 		return nil
 	}
+	// Every commit of the range, for the files the task's commits changed; the list shows the newest ones. A log
+	// past maxLogBytes keeps what it read: files of older commits then count as not the task's.
 	args := append([]string{"log", "-z", "--no-renames", "--name-only", "--no-color",
-		"--format=%x1e%H%x1f%an%x1f%at%x1f%ct%x1f%s", "-n", strconv.Itoa(api.MaxTaskCommits)}, rng...)
-	logOut, _, err := r.run(ctx, root, ReadTimeout, 4<<20, append(args, "--")...)
+		"--format=%x1e%H%x1f%an%x1f%at%x1f%ct%x1f%s"}, rng...)
+	logOut, _, err := r.run(ctx, root, ReadTimeout, maxLogBytes, append(args, "--")...)
 	if err != nil {
 		return err
 	}
 	commits, names := parseLog(logOut, tf.Turns)
+	if len(commits) > api.MaxTaskCommits {
+		commits = commits[:api.MaxTaskCommits]
+	}
 	out.Commits = commits
 	out.CommitsMore = max(0, total-len(commits))
-	return r.committedFiles(ctx, root, tf.Start.Head, st.oid, touched, names, out)
+	return r.committedFiles(ctx, root, cwdRel, tf.Start.Head, st.oid, touched, names, out)
 }
 
 // startReachable reports whether start ("" for a repository that had no commit) is an ancestor of HEAD. hasHead
@@ -134,7 +165,8 @@ func (r *Repos) isAncestor(ctx context.Context, root, a, b string) (bool, error)
 }
 
 // parseLog reads `git log -z --name-only --format=%x1e%H%x1f%an%x1f%at%x1f%ct%x1f%s`: the commits, and for each
-// file the newest turn of a listed commit that changed it.
+// file a commit made during one of the task's turns changed, the newest such turn. Files only commits outside the
+// turns changed are not in names.
 func parseLog(out []byte, turns []TurnSpan) (commits []api.GitCommit, names map[string]int) {
 	commits = []api.GitCommit{}
 	names = map[string]int{}
@@ -151,12 +183,15 @@ func parseLog(out []byte, turns []TurnSpan) (commits []api.GitCommit, names map[
 		ct, _ := strconv.ParseInt(f[3], 10, 64)
 		c := api.GitCommit{SHA: f[0], Author: f[1], AuthorTime: api.FormatTime(time.Unix(at, 0)), Subject: f[4],
 			Turn: turnAt(turns, time.Unix(ct, 0))}
+		c.OutsideTurns = c.Turn == 0
 		for _, name := range strings.Split(strings.TrimPrefix(rest, "\n"), "\x00") {
 			if name == "" {
 				continue
 			}
 			c.FileCount++
-			names[name] = max(names[name], c.Turn)
+			if c.Turn > 0 {
+				names[name] = max(names[name], c.Turn)
+			}
 		}
 		commits = append(commits, c)
 	}
@@ -175,10 +210,12 @@ func turnAt(turns []TurnSpan, t time.Time) int {
 	return n
 }
 
-// committedFiles lists the files changed between start and HEAD, each counted from start to the working tree,
-// with the newest turn that touched or committed it.
-func (r *Repos) committedFiles(ctx context.Context, root, start, head string, touched, names map[string]int,
-	out *api.TaskGit) error {
+// committedFiles lists the task's files among those changed between start and HEAD, each counted from start to
+// the working tree, with the newest turn that touched or committed it. A file is the task's when its turns touched
+// it, or when a commit made during one of its turns (names) changed it and it lies under the task's folder, the
+// same rule as the uncommitted files; a file only commits outside the turns changed is someone else's.
+func (r *Repos) committedFiles(ctx context.Context, root, cwdRel, start, head string,
+	touched, names map[string]int, out *api.TaskGit) error {
 	base := start
 	if base == "" {
 		base = EmptyTree(head)
@@ -188,26 +225,48 @@ func (r *Repos) committedFiles(ctx context.Context, root, start, head string, to
 	if err != nil {
 		return err
 	}
-	status := parseNameStatus(ns)
-	if len(status) == 0 {
+	var files []api.GitFile
+	size := 0
+	for p, s := range parseNameStatus(ns) {
+		_, hit := touched[p]
+		if _, ours := names[p]; !hit && (!ours || !under(cwdRel, p)) {
+			continue
+		}
+		files = append(files, api.GitFile{Path: p, Status: s, Turn: max(touched[p], names[p])})
+		size += len(p) + 1
+	}
+	if len(files) == 0 {
 		return nil
 	}
-	num, _, err := r.run(ctx, root, ReadTimeout, 0, "diff", "--numstat", "-z", "--no-renames", "--no-ext-diff",
-		"--no-textconv", base, "--")
+	sort.Slice(files, func(i, j int) bool { return files[i].Path < files[j].Path })
+	// The counts against the working tree, for those files only when they fit on a command line (a whole-repo diff
+	// of a big repository is slow); paths are literal (GIT_LITERAL_PATHSPECS).
+	args := []string{"diff", "--numstat", "-z", "--no-renames", "--no-ext-diff", "--no-textconv", base, "--"}
+	if len(files) <= maxNumstatPaths && size <= maxNumstatChars {
+		for _, f := range files {
+			args = append(args, f.Path)
+		}
+	}
+	num, _, err := r.run(ctx, root, ReadTimeout, 0, args...)
 	if err != nil {
 		return err
 	}
 	stats := parseNumstat(num)
-	for p, s := range status {
-		f := api.GitFile{Path: p, Status: s, Turn: max(touched[p], names[p])}
-		if ls, ok := stats[p]; ok {
-			f.Additions, f.Deletions, f.Binary = ls.add, ls.del, ls.binary
+	for i, f := range files {
+		if ls, ok := stats[f.Path]; ok {
+			files[i].Additions, files[i].Deletions, files[i].Binary = ls.add, ls.del, ls.binary
 		}
-		out.CommittedFiles = append(out.CommittedFiles, f)
 	}
-	sort.Slice(out.CommittedFiles, func(i, j int) bool { return out.CommittedFiles[i].Path < out.CommittedFiles[j].Path })
+	out.CommittedFiles = files
 	return nil
 }
+
+// The numstat of committedFiles names the files when at most this many, this long in all (a Windows command line
+// holds 32767 characters).
+const (
+	maxNumstatPaths = 200
+	maxNumstatChars = 16 << 10
+)
 
 // parseNameStatus reads `git diff --name-status -z --no-renames`: "X\0path\0" pairs.
 func parseNameStatus(out []byte) map[string]string {
@@ -248,7 +307,7 @@ func (r *Repos) TaskCommit(ctx context.Context, tf TaskFiles, sha string) (api.G
 	if err != nil {
 		return d, err
 	}
-	if tf.Start == nil {
+	if tf.Start = usableStart(tf, root); tf.Start == nil {
 		return d, &StartError{State: api.GitStartUnknown}
 	}
 	ok, err := r.startReachable(ctx, root, tf.Start.Head, st.head)
@@ -321,6 +380,7 @@ func (r *Repos) commitDetail(ctx context.Context, root, commit string, turns []T
 	ct, _ := strconv.ParseInt(f[4], 10, 64)
 	d.SHA, d.Author, d.AuthorTime, d.Subject = f[0], f[2], api.FormatTime(time.Unix(at, 0)), f[5]
 	d.Turn = turnAt(turns, time.Unix(ct, 0))
+	d.OutsideTurns = d.Turn == 0
 	d.Body = strings.TrimSpace(f[6])
 	base := EmptyTree(commit)
 	if parents := strings.Fields(f[1]); len(parents) > 0 {

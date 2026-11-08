@@ -82,10 +82,11 @@ func TestGitStartOutsideGit(t *testing.T) {
 	}
 }
 
-// TestTaskStartFallback: a task from before starts were recorded uses its first turn's start snapshot (HEAD only;
-// "" there means a repository without commits); without one it has no start.
+// TestTaskStartFallback: a task from before starts were recorded uses its first turn's start snapshot, head and
+// repository (gitx uses it only there); a snapshot without a head or a root is no start, and nor is nothing.
 func TestTaskStartFallback(t *testing.T) {
 	sha := strings.Repeat("ab", 20)
+	root := filepath.Join(t.TempDir(), "repo")
 	cases := []struct {
 		name string
 		task Task
@@ -93,9 +94,12 @@ func TestTaskStartFallback(t *testing.T) {
 	}{
 		{"recorded", Task{GitStart: &GitStart{Head: sha, Branch: "dev"},
 			Turns: []*Turn{{N: 1, Snap: &TurnSnap{Head: "other"}}}}, &gitx.TaskStart{Head: sha, Branch: "dev"}},
-		{"snapshot", Task{Turns: []*Turn{{N: 1, Snap: &TurnSnap{Head: sha}}}}, &gitx.TaskStart{Head: sha}},
-		{"snapshot without commits", Task{Turns: []*Turn{{N: 1, Snap: &TurnSnap{}}}}, &gitx.TaskStart{}},
-		{"later turn's snapshot only", Task{Turns: []*Turn{{N: 1}, {N: 2, Snap: &TurnSnap{Head: sha}}}}, nil},
+		{"snapshot", Task{Turns: []*Turn{{N: 1, Snap: &TurnSnap{Root: root, Head: sha}}}},
+			&gitx.TaskStart{Head: sha, Root: root}},
+		{"snapshot without a head", Task{Turns: []*Turn{{N: 1, Snap: &TurnSnap{Root: root}}}}, nil},
+		{"snapshot without a root", Task{Turns: []*Turn{{N: 1, Snap: &TurnSnap{Head: sha}}}}, nil},
+		{"later turn's snapshot only", Task{Turns: []*Turn{{N: 1}, {N: 2, Snap: &TurnSnap{Root: root, Head: sha}}}},
+			nil},
 		{"nothing", Task{}, nil},
 	}
 	for _, c := range cases {

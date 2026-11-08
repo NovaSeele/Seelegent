@@ -29,10 +29,13 @@ type TaskFiles struct {
 }
 
 // TaskStart is where a task started: the HEAD commit ("" when the repository had no commit yet) and the branch
-// ("" when HEAD was detached or the branch is not known).
+// ("" when HEAD was detached or the branch is not known). Root is set only for a start read from a task's first
+// start snapshot (tasks from before the start was recorded): the repository the snapshot was taken in. Such a
+// start is used only in that same repository and only with a head.
 type TaskStart struct {
 	Head   string
 	Branch string
+	Root   string
 }
 
 // TurnSpan is when one turn of a task ran; End is zero while it runs.
@@ -82,8 +85,15 @@ func (r *Repos) TaskGit(ctx context.Context, tf TaskFiles) (api.TaskGit, error) 
 		out.Files = append(out.Files, f)
 	}
 	out.Head = st.oid
-	if err := r.history(ctx, root, tf, st, touched, &out); err != nil {
-		return out, err
+	// What the task committed is extra: when it cannot be read (git too slow on a big repository, a missing
+	// object), the uncommitted files and the commit dialog still work.
+	if err := r.history(ctx, root, cwdRel, tf, st, touched, &out); err != nil {
+		if ctx.Err() != nil {
+			return out, err
+		}
+		r.git.log.Warn("gitx: the task's commits could not be read", "root", root, "err", err)
+		out.HistoryState = api.GitHistoryUnavailable
+		out.Commits, out.CommitsMore, out.CommittedFiles = []api.GitCommit{}, 0, []api.GitFile{}
 	}
 	return out, nil
 }

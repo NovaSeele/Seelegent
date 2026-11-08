@@ -3,6 +3,7 @@ package gitx
 import (
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -216,7 +217,7 @@ func TestTaskGitLegacyAndUnborn(t *testing.T) {
 	git(t, fresh, "init", "-q", "-b", "main")
 	git(t, fresh, "config", "user.name", "Test")
 	git(t, fresh, "config", "user.email", "test@example.invalid")
-	tf := TaskFiles{Cwd: fresh, Start: &TaskStart{Branch: "main"}}
+	tf := TaskFiles{Cwd: fresh, Start: &TaskStart{Branch: "main"}, Turns: []TurnSpan{{N: 1, Start: time.Now().Add(-time.Hour)}}}
 	if g, err := r.TaskGit(ctx, tf); err != nil || g.StartState != api.GitStartRecorded || g.Head != "" {
 		t.Fatalf("unborn, no commit yet: %+v, %v", g, err)
 	}
@@ -234,6 +235,126 @@ func TestTaskGitLegacyAndUnborn(t *testing.T) {
 	d, err := r.Diff(ctx, fresh, "first.txt", EmptyTree(g.Head), false)
 	if err != nil || len(d.Hunks) != 1 || len(d.Hunks[0].Lines) != 2 {
 		t.Fatalf("diff against the empty tree: %+v, %v", d, err)
+	}
+}
+
+// TestTaskGitOtherCommits (review N1): in a shared repository others commit too. Every commit since the start is
+// listed, those made outside the task's turns marked; but the committed files are only the task's: files its turns
+// touched, and files under its folder that a commit made during one of its turns changed. Someone else's commit
+// outside the turns and outside the folder adds nothing there, and a file outside the folder that a commit during
+// a turn changed (another task's, attributed by time) is left out too.
+func TestTaskGitOtherCommits(t *testing.T) {
+	dir := newRepo(t)
+	ctx := t.Context()
+	r := New(nil, nil)
+	start := head(t, dir)
+	now := time.Now()
+	turn1 := TurnSpan{N: 1, Start: now.Add(-time.Hour), End: now.Add(-30 * time.Minute)}
+	tf := TaskFiles{Cwd: filepath.Join(dir, "web"), Files: map[string]int{"app.ts": 1, "../shared.txt": 1},
+		Start: &TaskStart{Head: start, Branch: "main"}, Turns: []TurnSpan{turn1}}
+	commitAt := func(at time.Time, msg string, files map[string]string) {
+		t.Helper()
+		for p, text := range files {
+			write(t, filepath.Join(dir, filepath.FromSlash(p)), text)
+			git(t, dir, "add", "--", p)
+		}
+		t.Setenv("GIT_COMMITTER_DATE", fmt.Sprintf("%d +0000", at.Unix()))
+		git(t, dir, "commit", "-q", "-m", msg)
+		t.Setenv("GIT_COMMITTER_DATE", "")
+	}
+	// During turn 1: the task's web/app.ts, and docs.md at the root (another task's, outside this task's folder).
+	commitAt(now.Add(-45*time.Minute), "task work", map[string]string{"web/app.ts": "export {}\n"})
+	commitAt(now.Add(-40*time.Minute), "parallel docs", map[string]string{"docs.md": "# docs\n"})
+	// After the turn: someone else's other.go, and shared.txt, a file the task's stream touched.
+	commitAt(now.Add(-10*time.Minute), "someone else", map[string]string{"other.go": "package x\n"})
+	commitAt(now.Add(-5*time.Minute), "shared", map[string]string{"shared.txt": "s\n"})
+
+	g, err := r.TaskGit(ctx, tf)
+	if err != nil || g.HistoryState != "" {
+		t.Fatal(g, err)
+	}
+	var subjects []string
+	for _, c := range g.Commits {
+		subjects = append(subjects, fmt.Sprintf("%s:%d:%v", c.Subject, c.Turn, c.OutsideTurns))
+	}
+	if got := strings.Join(subjects, ","); got != "shared:0:true,someone else:0:true,parallel docs:1:false,task work:1:false" {
+		t.Fatalf("commits: %s", got)
+	}
+	var files []string
+	for _, f := range g.CommittedFiles {
+		files = append(files, fmt.Sprintf("%s:%d", f.Path, f.Turn))
+	}
+	if got := strings.Join(files, ","); got != "shared.txt:1,web/app.ts:1" {
+		t.Fatalf("committed files: %s", got)
+	}
+	// Someone else's commit can still be opened: it is in start..HEAD, and says it was made outside the turns.
+	c, err := r.TaskCommit(ctx, tf, g.Commits[1].SHA)
+	if err != nil || !c.OutsideTurns || c.Turn != 0 || len(c.Files) != 1 || c.Files[0].Path != "other.go" {
+		t.Fatalf("someone else's commit: %+v, %v", c, err)
+	}
+}
+
+// TestTaskGitHistoryUnavailable (review G1): when the commits since the start cannot be read (here a tree object
+// is missing; on a big repository git may time out), the view still answers with the uncommitted files and says
+// the history is unavailable, instead of failing as a whole.
+func TestTaskGitHistoryUnavailable(t *testing.T) {
+	dir := newRepo(t)
+	start := head(t, dir)
+	write(t, filepath.Join(dir, "a.txt"), "first\n")
+	git(t, dir, "commit", "-q", "-am", "first")
+	broken := strings.TrimSpace(git(t, dir, "rev-parse", "HEAD^{tree}"))
+	write(t, filepath.Join(dir, "b.txt"), "second\n")
+	git(t, dir, "commit", "-q", "-am", "second")
+	if err := os.Remove(filepath.Join(dir, ".git", "objects", broken[:2], broken[2:])); err != nil {
+		t.Fatal(err)
+	}
+	write(t, filepath.Join(dir, "other.txt"), "dirty\n")
+	tf := TaskFiles{Cwd: dir, Start: &TaskStart{Head: start}, Turns: []TurnSpan{{N: 1, Start: time.Now().Add(-time.Hour)}}}
+	g, err := New(nil, nil).TaskGit(t.Context(), tf)
+	if err != nil {
+		t.Fatalf("TaskGit failed as a whole: %v", err)
+	}
+	if g.HistoryState != api.GitHistoryUnavailable || len(g.Commits) != 0 || len(g.CommittedFiles) != 0 ||
+		len(g.Files) != 1 || g.Files[0].Path != "other.txt" {
+		t.Fatalf("view: %+v", g)
+	}
+}
+
+// TestTaskGitLegacySnapshotStart (review G2): a start read from a turn snapshot is used only in the repository the
+// snapshot was taken in and only with a head; an empty head is not taken to mean "no commit yet".
+func TestTaskGitLegacySnapshotStart(t *testing.T) {
+	dir := newRepo(t)
+	ctx := t.Context()
+	r := New(nil, nil)
+	start := head(t, dir)
+	git(t, dir, "commit", "-q", "--allow-empty", "-m", "after")
+	turns := []TurnSpan{{N: 1, Start: time.Now().Add(-time.Hour)}}
+	for name, c := range map[string]struct {
+		start *TaskStart
+		want  string
+	}{
+		"same repository":    {&TaskStart{Head: start, Root: dir}, api.GitStartRecorded},
+		"another repository": {&TaskStart{Head: start, Root: t.TempDir()}, api.GitStartUnknown},
+		"no head":            {&TaskStart{Root: dir}, api.GitStartUnknown},
+	} {
+		tf := TaskFiles{Cwd: dir, Start: c.start, Turns: turns}
+		g, err := r.TaskGit(ctx, tf)
+		if err != nil || g.StartState != c.want {
+			t.Fatalf("%s: %+v, %v", name, g, err)
+		}
+		if c.want == api.GitStartRecorded {
+			if len(g.Commits) != 1 {
+				t.Fatalf("%s: commits %+v", name, g.Commits)
+			}
+			continue
+		}
+		if len(g.Commits) != 0 || g.StartHead != "" {
+			t.Fatalf("%s: listed %+v (start %q)", name, g.Commits, g.StartHead)
+		}
+		var se *StartError
+		if _, err := r.TaskCommit(ctx, tf, head(t, dir)); !errors.As(err, &se) || se.State != api.GitStartUnknown {
+			t.Fatalf("%s: TaskCommit = %v", name, err)
+		}
 	}
 }
 

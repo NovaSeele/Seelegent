@@ -37,6 +37,10 @@ const (
 // MaxTaskCommits caps TaskGit.Commits; TaskGit.CommitsMore counts the rest.
 const MaxTaskCommits = 50
 
+// GitHistoryUnavailable (TaskGit.HistoryState): the commits since the start could not be read this time (git timed
+// out on a large repository, or an object is missing). Commits and CommittedFiles are empty; Files are as usual.
+const GitHistoryUnavailable = "history_unavailable"
+
 // TaskGit is GET /tasks/{id}/git: the repository of a task and the files the task changed in it.
 type TaskGit struct {
 	Repo   bool   `json:"repo"`
@@ -59,13 +63,18 @@ type TaskGit struct {
 	// BranchChanged: the task started on StartBranch and the repository is now on another branch or detached.
 	BranchChanged bool `json:"branchChanged"`
 	// Commits are the commits since the start (start..HEAD), newest first, at most MaxTaskCommits; CommitsMore
-	// counts the older ones left out. Empty unless StartState is recorded.
+	// counts the older ones left out. Empty unless StartState is recorded. A commit made outside the task's turns
+	// (someone else's, or between turns) is listed with OutsideTurns set.
 	Commits     []GitCommit `json:"commits"`
 	CommitsMore int         `json:"commitsMore"`
-	// CommittedFiles are the files the commits since the start changed, each counted from the start to the
-	// working tree (a file committed and then edited again shows its whole change). View only: a commit takes
-	// Files.
+	// CommittedFiles are the task's files among those the commits since the start changed: files the task's turns
+	// touched, and files under the task's folder that a commit made during one of its turns changed. A file only
+	// a commit outside the turns changed is left out. Each is counted from the start to the working tree (a file
+	// committed and then edited again shows its whole change, other commits to the same file included). View
+	// only: a commit takes Files.
 	CommittedFiles []GitFile `json:"committedFiles"`
+	// HistoryState is GitHistoryUnavailable when the commits could not be read; empty otherwise.
+	HistoryState string `json:"historyState,omitempty" ts:"'history_unavailable'"`
 }
 
 // GitCommit is one commit made since a task started.
@@ -75,8 +84,11 @@ type GitCommit struct {
 	Author  string `json:"author"`
 	// AuthorTime is when the commit was written.
 	AuthorTime string `json:"authorTime"`
-	// Turn is the task's turn that was running when the commit was made, when one was.
+	// Turn is the task's turn that was running when the commit was made, when one was. Attribution is by time:
+	// another task's commit made while this task's turn n ran also has Turn n.
 	Turn int `json:"turn,omitempty"`
+	// OutsideTurns: the commit was made while none of the task's turns ran (by someone else, or between turns).
+	OutsideTurns bool `json:"outsideTurns,omitempty"`
 	// FileCount counts the files the commit changed (0 for a merge in the list).
 	FileCount int `json:"fileCount"`
 }

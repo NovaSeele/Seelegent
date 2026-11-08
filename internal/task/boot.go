@@ -147,14 +147,15 @@ func (s *Service) GitScope(ctx context.Context, id string) (GitScope, error) {
 	return g, nil
 }
 
-// taskStart is where task t started: its recorded GitStart, else the HEAD of its first turn's start snapshot
-// (tasks from before the start was recorded; the branch is then unknown), else nil.
+// taskStart is where task t started: its recorded GitStart, else the HEAD of its first turn's start snapshot with
+// the repository it was taken in (tasks from before the start was recorded; the branch is then unknown, and gitx
+// uses it only in that repository), else nil. A snapshot without a head says nothing reliable about the start.
 func taskStart(t *Task) *gitx.TaskStart {
 	if t.GitStart != nil {
 		return &gitx.TaskStart{Head: t.GitStart.Head, Branch: t.GitStart.Branch}
 	}
-	if first := t.TurnN(1); first != nil && first.Snap != nil {
-		return &gitx.TaskStart{Head: first.Snap.Head}
+	if first := t.TurnN(1); first != nil && first.Snap != nil && first.Snap.Head != "" && first.Snap.Root != "" {
+		return &gitx.TaskStart{Head: first.Snap.Head, Root: first.Snap.Root}
 	}
 	return nil
 }
