@@ -94,7 +94,8 @@
     "nowFree": "현재 여유: {free}",
     "osOnly": "{os} 전용.",
     "osOther": "{os} 전용: 서비스가 실행 중인 시스템에서는 효과가 없습니다.",
-    "criticalBelowMin": "둘 다 켜져 있을 때 비상 메모리 하한은 시작에 필요한 여유 메모리보다 작아야 합니다."
+    "criticalBelowMin": "둘 다 켜져 있을 때 비상 메모리 하한은 시작에 필요한 여유 메모리보다 작아야 합니다.",
+    "mbIs": "= {size}"
   },
   "units": {
     "min": "분",

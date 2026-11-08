@@ -94,7 +94,8 @@
     "nowFree": "Hiện trống: {free}",
     "osOnly": "Chỉ trên {os}.",
     "osOther": "Chỉ trên {os}: không có tác dụng trên hệ điều hành dịch vụ đang chạy.",
-    "criticalBelowMin": "Ngưỡng RAM khẩn cấp phải nhỏ hơn RAM trống để bắt đầu khi cả hai đều bật."
+    "criticalBelowMin": "Ngưỡng RAM khẩn cấp phải nhỏ hơn RAM trống để bắt đầu khi cả hai đều bật.",
+    "mbIs": "= {size}"
   },
   "units": {
     "min": "phút",

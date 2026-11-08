@@ -94,7 +94,8 @@
     "nowFree": "Ahora: {free} libres",
     "osOnly": "Solo en {os}.",
     "osOther": "Solo en {os}: no tiene efecto en el sistema donde corre el servicio.",
-    "criticalBelowMin": "El mínimo de memoria de emergencia debe ser menor que Memoria libre para iniciar mientras ambos estén activos."
+    "criticalBelowMin": "El mínimo de memoria de emergencia debe ser menor que Memoria libre para iniciar mientras ambos estén activos.",
+    "mbIs": "= {size}"
   },
   "units": {
     "min": "min",

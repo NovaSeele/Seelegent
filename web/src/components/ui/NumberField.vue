@@ -23,11 +23,14 @@ const props = withDefaults(
     integer?: boolean
     /** The label sits before the input on the same row (a compact field in a toolbar or card footer). */
     inline?: boolean
+    /** Ids of more text about the field outside it (notes under a setting), read after the error and hint. */
+    describedby?: string
   }>(),
   {
     unit: undefined,
     hint: undefined,
     error: undefined,
+    describedby: undefined,
     size: 'md',
     debounce: 0,
   },
@@ -53,7 +56,11 @@ watch(
 
 const describedBy = computed(
   () =>
-    [props.error ? `${id}-error` : null, props.hint ? `${id}-hint` : null]
+    [
+      props.error ? `${id}-error` : null,
+      props.hint ? `${id}-hint` : null,
+      props.describedby ?? null,
+    ]
       .filter(Boolean)
       .join(' ') || undefined,
 )

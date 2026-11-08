@@ -78,7 +78,10 @@ describe('Resources settings', () => {
     expect(wrapper.get('[data-setting="workerPriority"]').text()).toContain('Low')
     const memory = wrapper.get('[data-setting="minFreeMemory"]')
     expect(memory.text()).toContain('MB')
-    expect(memory.text()).toContain('0 to 1048576 (0 = off)')
+    // Ranges and the saved amount read in GB or TB, not as a long number of MB.
+    expect(memory.text()).toContain('0 to 1 TB (0 = off)')
+    expect(memory.text()).toContain('= 2 GB')
+    expect(wrapper.get('[data-setting="workerMemoryLimit"]').text()).not.toContain('= 0')
     expect(wrapper.get('[data-setting="gateConcurrency"]').text()).toContain('0 = no limit')
     expect(wrapper.get('[data-setting="workerCpuRate"]').text()).toContain('whole machine')
     wrapper.unmount()
@@ -89,13 +92,19 @@ describe('Resources settings', () => {
     for (const item of WINDOWS_ONLY) {
       const row = wrapper.get(`[data-setting="${item}"]`)
       expect(row.get('[data-os-note]').text(), item).toBe('Windows only.')
-      expect(row.classes()).not.toContain('sf-row--inert')
+      // A screen reader hears the note with the field.
+      const notes = row.get('.sf__notes').attributes('id')
+      expect(row.get('input').attributes('aria-describedby'), item).toContain(notes)
     }
+    const memory = wrapper.get('[data-setting="minFreeMemory"]')
+    expect(memory.get('input').attributes('aria-describedby')).toContain(
+      memory.get('[data-now]').element.parentElement?.id,
+    )
     expect(wrapper.find('[data-setting="minFreeMemory"] [data-os-note]').exists()).toBe(false)
     wrapper.unmount()
   })
 
-  it('says a Windows-only setting has no effect on another system, and dims it', async () => {
+  it('says a Windows-only setting has no effect on another system, and keeps it editable', async () => {
     const linux = health({
       os: 'linux',
       memory: { availPhysMB: 900, availCommitMB: 0, known: true },
@@ -104,7 +113,9 @@ describe('Resources settings', () => {
     for (const item of WINDOWS_ONLY) {
       const row = wrapper.get(`[data-setting="${item}"]`)
       expect(row.get('[data-os-note]').text(), item).toContain('has no effect')
-      expect(row.classes()).toContain('sf-row--inert')
+      // Settings sync across machines: the field stays editable and is not dimmed.
+      expect(row.get('input').attributes('disabled'), item).toBeUndefined()
+      expect(row.html(), item).not.toContain('opacity')
     }
     // Commit is unknown off Windows: no "now" line for it, physical memory in MB below 1 GB.
     expect(wrapper.find('[data-setting="minFreeCommit"] [data-now]').exists()).toBe(false)

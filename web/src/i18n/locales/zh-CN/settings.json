@@ -94,7 +94,8 @@
     "nowFree": "当前空闲：{free}",
     "osOnly": "仅限 {os}。",
     "osOther": "仅限 {os}：在服务所在的系统上不起作用。",
-    "criticalBelowMin": "两者都开启时，紧急内存下限必须小于“启动所需空闲内存”。"
+    "criticalBelowMin": "两者都开启时，紧急内存下限必须小于“启动所需空闲内存”。",
+    "mbIs": "= {size}"
   },
   "units": {
     "min": "分钟",

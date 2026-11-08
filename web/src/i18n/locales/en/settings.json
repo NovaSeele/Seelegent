@@ -94,7 +94,8 @@
     "nowFree": "Now: {free} free",
     "osOnly": "{os} only.",
     "osOther": "{os} only: has no effect on the system the service runs on.",
-    "criticalBelowMin": "The emergency memory floor must be below Free memory to start while both are on."
+    "criticalBelowMin": "The emergency memory floor must be below Free memory to start while both are on.",
+    "mbIs": "= {size}"
   },
   "units": {
     "min": "min",
