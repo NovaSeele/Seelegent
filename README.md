@@ -1,7 +1,27 @@
-# Seelegent
+<div align="center">
+
+<img src="docs/media/logo.svg" alt="Seelegent" width="344">
+
+**One lead agent plans and reviews. Worker coding CLIs on your own accounts write the code.**
+
+[Install](#install) · [Quick start](#quick-start) · [Usage guide](docs/usage.md) · [Docs](docs/README.md) ·
+[Contributing](CONTRIBUTING.md)
 
 **English** · [Tiếng Việt](README.vi.md) · [简体中文](README.zh-CN.md) · [Español](README.es.md) ·
 [한국어](README.ko.md) · [日本語](README.ja.md) · [Русский](README.ru.md)
+
+[![License: FSL-1.1-ALv2](https://img.shields.io/badge/license-FSL--1.1--ALv2-blue)](LICENSE)
+[![Latest release](https://img.shields.io/github/v/release/NovaSeele/Seelegent)](https://github.com/NovaSeele/Seelegent/releases/latest)
+[![Go version](https://img.shields.io/github/go-mod/go-version/NovaSeele/Seelegent)](go.mod)
+[![Platforms: Windows | Linux | macOS](https://img.shields.io/badge/platforms-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey)](#requirements)
+[![CI](https://github.com/NovaSeele/Seelegent/actions/workflows/ci.yml/badge.svg)](https://github.com/NovaSeele/Seelegent/actions/workflows/ci.yml)
+
+</div>
+
+<p align="center">
+  <a href="docs/media/hero.mp4"><img src="docs/media/hero.webp" width="900"
+    alt="A lead agent delegates a task through Seelegent; the dashboard shows the worker's steps, the gate and the diff"></a>
+</p>
 
 Seelegent lets one lead coding agent hand work to worker coding CLIs that run on your own accounts. You talk to the
 lead (Claude Code, Codex, Antigravity, OpenCode or another MCP host); the lead designs the work, writes a brief and
@@ -11,6 +31,140 @@ have several subscriptions or API keys and want one agent to plan and review whi
 
 Seelegent is not a proxy and does not pool accounts behind one endpoint. Every run is an ordinary CLI call on an
 account you own, in its own isolated profile, and each provider's terms still apply to each account.
+
+## Features
+
+- **Delegate from the lead you already use.** The lead calls `delegate`, `wait`, `followup` and `review` over MCP,
+  and Seelegent runs each turn as one ordinary worker CLI call and returns its report. → [MCP tools](docs/mcp.md)
+- **See what needs you first.** The **Watch** page puts tasks with a question, a missing sign-in, a red gate or
+  work at risk at the top, each with a banner that says what to do. →
+  [When something is stuck](docs/getting-started.md#7-when-something-is-stuck)
+- **Every step on record.** Each task has Terminal, Tree, Graph, Files and Git views: the conversation, every tool
+  call, turns and attempts, and the diff with review notes on its lines. → [Task engine](docs/task-engine.md)
+- **Many accounts, one pool.** Own sign-ins, this computer's sign-in or API keys are picked by priority, running
+  tasks and quota left, and a task whose account runs out moves to another one with a handover. →
+  [Configuration](docs/configuration.md)
+- **Gates that send red work back.** After every report the daemon runs the tests, lint and build, returns a red
+  gate to the worker as an automatic fix turn, and the **Proof** page tracks which Spec Kit requirements are
+  proven. → [Gates, lanes and proof](docs/gates.md)
+- **Your uncommitted work stays put.** The git guard refuses the git commands that can throw work away, and
+  snapshots before and after every turn let you restore files a turn may have lost. → [Safety](docs/safety.md)
+- **A team, not only workers.** Named members with ranks give second opinions, hold meetings before hard
+  decisions, and run one brief as a contest of 2 to 5 variants in separate worktrees. → [Team](docs/team.md)
+- **From issue to draft pull request, or on a schedule.** Triage GitHub issues into tickets with their own worktree
+  and branch, open a draft pull request after a secret scan, and run saved delegations on a schedule. →
+  [GitHub](docs/github.md) · [Automations](docs/automations.md)
+- **Sized to your machine.** Gate concurrency, memory thresholds and test parallelism are computed from this
+  machine's memory and CPUs; set any of them, or go back to auto, in **Settings › Resources**. →
+  [Resources](docs/configuration.md#resources)
+- **Set up in one command, checked by another.** `seelegent setup` registers the MCP server and the lead skill with
+  nine lead hosts, and `seelegent doctor` checks the install and says how to fix what fails. →
+  [Setup](docs/setup.md) · [doctor](docs/cli.md#doctor)
+
+### See it in action
+
+Each preview links to a short video.
+
+<table>
+  <tr>
+    <td width="50%" align="center">
+      <a href="docs/media/delegate.mp4"><img src="docs/media/delegate.webp" alt="The lead delegates a task and gets the worker's report back"></a><br>
+      <b>Delegate</b>
+    </td>
+    <td width="50%" align="center">
+      <a href="docs/media/needs-you.mp4"><img src="docs/media/needs-you.webp" alt="The Watch page lists the tasks that need you, with a banner on each"></a><br>
+      <b>Needs you</b>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" align="center">
+      <a href="docs/media/task-detail.mp4"><img src="docs/media/task-detail.webp" alt="A task's Terminal, Tree, Graph, Files and Git views"></a><br>
+      <b>Task detail</b>
+    </td>
+    <td width="50%" align="center">
+      <a href="docs/media/accounts.mp4"><img src="docs/media/accounts.webp" alt="The Accounts page with quota windows and sign-in"></a><br>
+      <b>Accounts and quota</b>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" align="center">
+      <a href="docs/media/gates-proof.mp4"><img src="docs/media/gates-proof.webp" alt="A red gate goes back to the worker as a fix turn; the Proof page"></a><br>
+      <b>Gates and proof</b>
+    </td>
+    <td width="50%" align="center">
+      <a href="docs/media/git-guard.mp4"><img src="docs/media/git-guard.webp" alt="The git guard refuses a destructive git command; files at risk are restored"></a><br>
+      <b>Git guard and restore</b>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" align="center">
+      <a href="docs/media/team.mp4"><img src="docs/media/team.webp" alt="Members, a consult, a meeting and a contest"></a><br>
+      <b>Team</b>
+    </td>
+    <td width="50%" align="center">
+      <a href="docs/media/github-automations.mp4"><img src="docs/media/github-automations.webp" alt="An issue triaged into a ticket and a draft pull request; an automation schedule"></a><br>
+      <b>GitHub and automations</b>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" align="center">
+      <a href="docs/media/resources.mp4"><img src="docs/media/resources.webp" alt="Settings, Resources: auto values for this machine, Set and Use auto"></a><br>
+      <b>Resources</b>
+    </td>
+    <td width="50%" align="center">
+      <a href="docs/media/setup-doctor.mp4"><img src="docs/media/setup-doctor.webp" alt="seelegent setup registers the lead hosts; seelegent doctor checks the install"></a><br>
+      <b>Setup and doctor</b>
+    </td>
+  </tr>
+</table>
+
+## Requirements
+
+- **OS:** Windows 10 or 11, Linux or macOS, on x64 or ARM64. Windows is the most tested platform.
+- **Git.** Seelegent needs it for snapshots, the Git view, contests and GitHub tickets.
+- **At least one worker CLI**, installed: the Antigravity CLI (`agy`, Gemini models, the default backend), Claude
+  Code (`claude`) or Codex (`codex`). The `claude` and `codex` backends are off until you turn them on in Settings.
+- **A lead host** with MCP: Claude Code, Claude Desktop, Codex CLI, OpenCode, the Antigravity CLI or app, Gemini CLI,
+  Cursor or Windsurf. A host without MCP can use the `seelegent` command instead.
+- Optional: the GitHub CLI (`gh`), signed in, for the GitHub features.
+
+## Install
+
+**Windows** (PowerShell):
+
+```powershell
+irm https://raw.githubusercontent.com/NovaSeele/Seelegent/main/scripts/install.ps1 | iex
+```
+
+**Linux and macOS:**
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/NovaSeele/Seelegent/main/scripts/install.sh | sh
+```
+
+The installer downloads the latest release, checks its SHA-256 against the release's `checksums.txt`, puts
+`seelegent` on your PATH (`%LOCALAPPDATA%\Programs\seelegent\bin` on Windows, `~/.local/bin` elsewhere), imports the
+old version's data if it finds any, and runs `seelegent setup` for the lead hosts on this machine. Open a new
+terminal and restart your lead hosts afterwards. Options such as `--version`, `--install-dir` and `--no-setup` (sh)
+or `-Version`, `-InstallDir` and `-NoSetup` (PowerShell) are in [docs/release.md](docs/release.md#installing). To
+build from source, see [CONTRIBUTING.md](CONTRIBUTING.md#development-setup).
+
+## Quick start
+
+1. **Check the install:** `seelegent doctor`. A `warn` is fine on a fresh install; a `fail` comes with a fix.
+2. **Connect your lead hosts:** the installer already ran `seelegent setup`, which adds the `seelegent` MCP server to
+   every lead host it finds and installs the lead skill. Run it again after installing a new host (`--dry-run`
+   shows the changes first, `--remove` undoes them), then restart the host.
+3. **Add an account:** `seelegent ui` starts the daemon if needed and opens http://127.0.0.1:47821/. On
+   **Accounts**, choose **Add account**, pick the backend and the kind, then **Sign in**: the worker CLI's own
+   sign-in runs, in your browser or a terminal window, and Seelegent never sees your password.
+4. **Delegate.** In a project folder, ask your lead something like *"Use Seelegent to add input validation to the
+   signup form, then review the diff."* The lead calls `delegate`, waits for the report, reads the diff, runs the
+   tests, and then sends a `followup` or closes the task with `review`. From a terminal:
+   `seelegent delegate --cwd . --model fast "Describe this project in five lines"`.
+
+The [usage guide](docs/usage.md) covers everyday work task by task, and
+[docs/getting-started.md](docs/getting-started.md) walks through the first run in detail.
 
 ## How it works
 
@@ -33,105 +187,42 @@ flowchart LR
 - **Workers** are the worker CLIs you already use, each account in its own profile folder. When an account runs out
   of quota in the middle of a task, it rests until its window resets and the task moves to another account with a
   handover.
-- **The dashboard** (http://127.0.0.1:47821/) shows what needs you, what runs, every task's steps and diff, accounts
-  and quota, and everything below.
+- **The dashboard** (http://127.0.0.1:47821/) has pages for Watch, Tasks, Issues, Meetings, Contests, Automations,
+  Proof, Accounts, Usage, Roles and Members, plus a searchable Settings dialog. It offers 26 colour themes, seven
+  interface languages, a command palette (`Ctrl+K`, `Cmd+K` on macOS) and keyboard shortcuts. It is embedded in the
+  binary and loads nothing from the internet.
+- **The command line.** Every MCP tool except `profiles` has a command (worker roles are edited on the **Roles**
+  page and through the `profiles` tool), and every command takes `--json`: `seelegent --help`, and
+  [docs/cli.md](docs/cli.md).
 
-## Requirements
+### What a task goes through
 
-- **OS:** Windows 10 or 11, Linux or macOS, on x64 or ARM64. Windows is the most tested platform.
-- **Git.** Seelegent needs it for snapshots, the Git view, contests and GitHub tickets.
-- **At least one worker CLI**, installed: the Antigravity CLI (`agy`, Gemini models, the default backend), Claude
-  Code (`claude`) or Codex (`codex`). The `claude` and `codex` backends are off until you turn them on in Settings.
-- **A lead host** with MCP: Claude Code, Claude Desktop, Codex CLI, OpenCode, the Antigravity CLI or app, Gemini CLI,
-  Cursor or Windsurf. A host without MCP can use the `seelegent` command instead.
-- Optional: the GitHub CLI (`gh`), signed in, for the GitHub features.
-
-## Install
-
-Windows (PowerShell):
-
-```powershell
-irm https://raw.githubusercontent.com/NovaSeele/Seelegent/main/scripts/install.ps1 | iex
-```
-
-Linux and macOS:
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/NovaSeele/Seelegent/main/scripts/install.sh | sh
-```
-
-The installer downloads the latest release, checks its SHA-256 against the release's `checksums.txt`, puts
-`seelegent` on your PATH (`%LOCALAPPDATA%\Programs\seelegent\bin` on Windows, `~/.local/bin` elsewhere), imports the
-old version's data if it finds any, and runs `seelegent setup` for the lead hosts on this machine. Open a new
-terminal and restart your lead hosts afterwards. Options such as `--version`, `--install-dir` and `--no-setup` (sh)
-or `-Version`, `-InstallDir` and `-NoSetup` (PowerShell) are in [docs/release.md](docs/release.md#installing).
-
-## First steps
-
-1. **Check the install:** `seelegent doctor`.
-2. **Open the dashboard:** `seelegent ui` starts the daemon if needed and opens http://127.0.0.1:47821/.
-3. **Add an account** on the **Accounts** page: pick the backend and the kind (its own sign-in, this computer's
-   sign-in, or an API key through a provider). Sign-in runs the worker CLI's own sign-in, in your browser or in a
-   terminal window; Seelegent never sees your password. To use `claude` or `codex`, turn the backend on and set its
-   tier models under **Settings › Backends** first.
-4. **Connect your lead host** (the installer already did this): `seelegent setup` adds the `seelegent` MCP server
-   to every lead host it finds and installs the lead skill where the host reads skills. `--host claude,codex` picks
-   hosts, `--dry-run` shows the changes first, `--remove` undoes them. Restart the host.
-5. **Delegate.** In a project folder, ask your lead something like *"Use Seelegent to add input validation to the
-   signup form, then review the diff."* The lead calls `delegate`, waits for the report, reads the diff, runs the
-   tests, and then sends a `followup` or closes the task with `review`. From a terminal:
-   `seelegent delegate --cwd . --model fast "Describe this project in five lines"`.
-
-[docs/getting-started.md](docs/getting-started.md) walks through each step in detail.
-
-## Features
-
-**Workers and accounts.** Three backends (`agy`, `claude`, `codex`) and three kinds of account: an isolated profile
-with its own sign-in, the sign-in already on this computer (`agy` only), or an API key of a provider (`claude` and
-`codex` only: Anthropic, DeepSeek, Moonshot Kimi, Z.ai GLM, OpenRouter, OpenAI, Groq, a local Ollama, or a custom
-endpoint). The pool reads each account's quota windows and prefers higher priority, fewer running tasks and more
-quota left. Model tiers `fast`, `standard`, `strong` and `max` map to real models per backend. See
-[configuration](docs/configuration.md).
+**Accounts.** Three backends (`agy`, `claude`, `codex`) and three kinds of account: an isolated profile with its own
+sign-in, the sign-in already on this computer (`agy` only), or an API key of a provider (`claude` and `codex` only:
+Anthropic, DeepSeek, Moonshot Kimi, Z.ai GLM, OpenRouter, OpenAI, Groq, a local Ollama, or a custom endpoint). The
+pool reads each account's quota windows and prefers higher priority, fewer running tasks and more quota left. Model
+tiers `fast`, `standard`, `strong` and `max` map to real models per backend.
 
 **Tasks.** A task is a conversation: `delegate`, then `followup` as often as needed, then `review` with `accepted`
 or `rejected`. Tasks run in parallel, can wait for each other (`after`), get the project's memory and review history
 in every brief, can run as a worker role (rules, output style, skills, default tier), and can take a Spec Kit feature
 folder and task ids instead of the whole spec. Tasks that stall, loop or ask a question wake the lead early, and tasks
 that need you (a sign-in, no account left) go to the top of the dashboard. You can take a task over in a console
-and hand it back. See [task engine](docs/task-engine.md).
+and hand it back.
 
 **Gates, lanes and proof.** After every worker report the daemon runs the task's gate: the lead's commands, the
 spec's `Gate:` lines or the repository's detected test, lint and build commands, the project doctrine, syntax checks
 and the hygiene check. A red gate goes back to the worker as an automatic fix turn (2 by default) before the lead is
 woken. Lanes list the files a task may change, so parallel workers stay off each other's files. An optional verifier
-reviews a green gate read-only. The Proof page shows which Spec Kit requirements are proven and runs regression
-runs. See [gates](docs/gates.md).
+reviews a green gate read-only.
 
-**Team.** Members are named workers with a backend, a model or tier, a role and a rank (`worker`, `senior`,
-`peer`). Ask a senior or peer for a second opinion on a finished task (a peer's objection blocks acceptance until
-the lead answers it), leave review notes on diff lines and send them as one followup, hold a meeting of up to six
-members before a hard decision (a peer may record a formal dissent), or run one brief as a contest of 2 to 5
-variants in separate worktrees and apply the winner. Event hooks run your own shell commands on task, account and
-daemon events (a task starts, finishes or is blocked, an account runs out or needs a sign-in, and more). See
-[team](docs/team.md).
-
-**GitHub.** Connect a repository, sync its open issues into an inbox (or add local ones), and triage each one into a
-ticket: its own worktree and branch, worked by one or more tasks. Once the work is accepted, you or the lead ask
-Seelegent to commit, push the ticket branch and open a draft pull request; it then follows the CI checks and can
-start a task to fix failing ones. It uses `gh` when it is signed in, else a token you store in the dashboard, else
-a manual mode with a compare link. See [GitHub](docs/github.md).
-
-**Automations.** Saved delegations on a schedule (hourly, daily, weekdays, weekly or cron, in a time zone), with a
-precheck command and quota rules: a run is skipped when quota is low, and an optional extra run uses a weekly quota that
-is about to reset unused. See [automations](docs/automations.md).
-
-**Dashboard.** Pages for Watch, Tasks, Issues, Meetings, Contests, Automations, Proof, Accounts, Usage, Roles and
-Members, plus a searchable Settings dialog. Each task has Terminal, Tree, Graph, Files and Git views. 26 colour
-themes, seven interface languages, a command palette (`Ctrl+K`, `Cmd+K` on macOS) and keyboard shortcuts. It is
-embedded in the binary and loads nothing from the internet.
-
-**Command line.** Every MCP tool except `profiles` has a command (worker roles are edited on the **Roles** page and
-through the `profiles` tool), and every command takes `--json`: `seelegent --help`, and [docs/cli.md](docs/cli.md).
+**Team, GitHub and automations.** Members are named workers with a backend, a model or tier, a role and a rank
+(`worker`, `senior`, `peer`); a peer's objection in a consult blocks acceptance until the lead answers it. Event
+hooks run your own shell commands on task, account and daemon events. A connected repository's issues become
+tickets; once the work is accepted, Seelegent commits, pushes the ticket branch, opens a draft pull request and
+follows its CI checks. It uses `gh` when it is signed in, else a token you store in the dashboard, else a manual
+mode with a compare link. Automations run on a schedule (hourly, daily, weekdays, weekly or cron, in a time zone)
+with a precheck command and quota rules.
 
 ### MCP tools for the lead
 
@@ -181,7 +272,8 @@ them fails a task on its own, they tell the lead and the dashboard what happened
 - **Automations start off.** Every automation is created disabled. It runs only after you confirm exactly what it
   does in the dashboard, and any change to what it runs or when turns it off again.
 
-These are guards, not a sandbox: worker CLIs run as your user. Review what they changed.
+These are guards, not a sandbox: worker CLIs run as your user. Review what they changed. To report a security
+problem, see [SECURITY.md](SECURITY.md).
 
 ## Data and privacy
 
@@ -217,7 +309,7 @@ To uninstall:
    elsewhere).
 3. Optionally delete `~/.seelegent`. It holds your account profiles (and their sign-ins), keys, tasks and history.
 
-## Migrating from the old version
+### Migrating from the old version
 
 The old Node version kept its data in the same folder. On the first install the installer runs `seelegent migrate`,
 which imports settings, providers, accounts with their profiles and API keys, project memory and review history,
@@ -229,9 +321,9 @@ what would be imported. See [docs/setup.md](docs/setup.md#seelegent-migrate).
 
 ## Troubleshooting
 
-- `seelegent doctor` checks the data folder, settings, database, daemon, git, each enabled worker CLI, accounts and
-  PATH, and says how to fix what fails. It changes nothing apart from a write test in the data folder
-  (`.doctor-write-test`, removed again).
+- `seelegent doctor` checks the data folder, settings, database, daemon, git, each enabled worker CLI, accounts,
+  PATH and free memory against the resource thresholds, and says how to fix what fails. It changes nothing apart
+  from a write test in the data folder (`.doctor-write-test`, removed again).
 - `seelegent status` shows the daemon, accounts with quota and the tasks that need you; `seelegent restart` restarts
   the daemon. Its log is `~/.seelegent/logs/daemon.log`.
 - `seelegent setup --dry-run` shows what is registered with each lead host. Restart a host after setup or update.
@@ -242,19 +334,28 @@ what would be imported. See [docs/setup.md](docs/setup.md#seelegent-migrate).
 
 ## Documentation
 
-All docs are listed in [docs/README.md](docs/README.md): a getting-started guide for users, the lead's reference,
-the command line, the HTTP API, and the contributor guide.
+- [Usage guide](docs/usage.md): everyday work, task by task.
+- [Getting started](docs/getting-started.md): the first run, step by step.
+- [Docs index](docs/README.md): setup, configuration, safety, GitHub, automations, the lead's reference (MCP tools,
+  gates, team), the command line, the HTTP API, the task engine and the contributor guide.
+
+## Contributing and security
+
+Contributions are welcome: [CONTRIBUTING.md](CONTRIBUTING.md) covers the development setup, the checks a pull request
+must pass and the commit style. Everyone taking part follows the [Code of Conduct](CODE_OF_CONDUCT.md). Please report
+security problems privately, as [SECURITY.md](SECURITY.md) describes, not in a public issue.
 
 ## License
 
 Seelegent is source-available under the
 [Functional Source License 1.1, Apache 2.0 Future License (FSL-1.1-ALv2)](LICENSE).
 
-- You may use, change and share it for any purpose, including inside a company, and build and sell your own products
-  with it.
-- You may not offer Seelegent itself, or a changed copy, to others as a commercial product or service that competes
-  with it.
-- Two years after each version is released, that version is also available under the Apache License 2.0.
+- You may use, copy, change and share it for any purpose other than a competing use, including inside a company,
+  for non-commercial education and research, and in professional services you provide to someone who uses it.
+- A competing use is making Seelegent available to others in a commercial product or service that substitutes for
+  it (or for another product or service the licensor offers with it), or that offers the same or substantially
+  similar functionality.
+- Two years after each version is made available, that version is also available under the Apache License 2.0.
 
 The [LICENSE](LICENSE) file has the exact terms. Third-party works shipped with Seelegent are listed in
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
