@@ -355,13 +355,20 @@ func TestCodexPolicyRefused(t *testing.T) {
 }
 
 func TestPolicyCommand(t *testing.T) {
+	const bt, tail = "`", "` rejected: blocked by policy"
 	for in, want := range map[string]string{
-		"x Rejected(\"`ls -la` ":                                 "ls -la",
-		`Rejected(\"` + "`" + `\"C:\\A B\\p.exe\" -C 'x'` + "` ": `"C:\A B\p.exe" -C 'x'`,
-		// Two levels of debug escaping.
-		`Rejected(\\\"` + "`" + `\\\"C:\\\\A B\\\\p.exe\\\" -C 'x'` + "` ": `"C:\A B\p.exe" -C 'x'`,
-		"no backticks ": "",
-		"only one` ":    "",
+		// The reason as is, debug-formatted once (codex 0.167's stderr) and twice.
+		"x Rejected(\"`ls -la" + tail + "\")":                             "ls -la",
+		`Rejected(\"` + bt + `\"C:\\A B\\p.exe\" -C 'x'` + tail + `\")`:   `"C:\A B\p.exe" -C 'x'`,
+		`Rejected(\\\"` + bt + `\\\"C:\\\\A B\\\\p.exe\\\" -C 'x'` + tail: `"C:\A B\p.exe" -C 'x'`,
+		// A backtick inside the command (PowerShell's escape) does not cut it.
+		`Rejected(\"` + bt + `pwsh -Command 'Write-Output \"a` + bt + `nb\"'` + tail: `pwsh -Command 'Write-Output "a` + bt + `nb"'`,
+		// A UNC path keeps its leading \\ at one and at two levels.
+		`Rejected(\"` + bt + `dir \\\\srv\\share` + tail:         `dir \\srv\share`,
+		`Rejected(\\\"` + bt + `dir \\\\\\\\srv\\\\share` + tail: `dir \\srv\share`,
+		"`ls" + tail: "ls",
+		"no backticks rejected: blocked by policy": "",
+		"only one" + tail:                          "",
 	} {
 		if got := policyCommand(in); got != want {
 			t.Errorf("policyCommand(%q) = %q, want %q", in, got, want)

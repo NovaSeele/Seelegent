@@ -290,7 +290,7 @@ func (p *codexParser) Stderr(line string) []event.Event {
 	if i < 0 {
 		return nil
 	}
-	cmd := p.mask(policyCommand(line[:i]))
+	cmd := p.mask(policyCommand(line))
 	if cmd == "" {
 		cmd = p.mask(strings.TrimSpace(line))
 	}
@@ -298,23 +298,37 @@ func (p *codexParser) Stderr(line string) []event.Event {
 	return []event.Event{p.log("codex refused a command (" + codexPolicyRejected + "): " + cmd)}
 }
 
-// policyCommand is the command quoted in backticks just before codex's "rejected: blocked by policy", with the
-// escapes of Rust's debug formatting (one level or two) undone; "" when there is none.
-func policyCommand(before string) string {
-	before = strings.TrimRight(before, " ")
-	if !strings.HasSuffix(before, "`") {
+// policyCommand is the command codex quoted in backticks in a "rejected: blocked by policy" line: from the backtick
+// that opens it (right after `Rejected(` and its quote) to the backtick before " rejected: blocked by policy", so
+// a backtick inside the command (PowerShell's escape character) does not cut it. The escape levels are read once
+// from the opening and undone that many times, so a UNC path's \\ survives. Without `Rejected(` the command runs
+// from the first backtick, unescaped. "" when the line quotes no command.
+func policyCommand(line string) string {
+	end := strings.Index(line, "` "+codexPolicyRejected)
+	if end < 0 {
 		return ""
 	}
-	before = before[:len(before)-1]
-	start := strings.LastIndexByte(before, '`')
-	if start < 0 {
-		return ""
-	}
-	cmd := before[start+1:]
-	for range 2 {
-		if !strings.Contains(cmd, `\"`) && !strings.Contains(cmd, `\\`) {
-			break
+	head := line[:end]
+	levels, start := 0, -1
+	if i := strings.Index(head, "Rejected("); i >= 0 {
+		rest := head[i+len("Rejected("):]
+		// How the quoted command opens, by levels of Rust debug escaping: the reason as is, debug-formatted once
+		// (Rejected(\"`...) or twice (Rejected(\\\"`...).
+		for n, open := range []string{"\"`", `\"` + "`", `\\\"` + "`"} {
+			if strings.HasPrefix(rest, open) {
+				levels, start = n, i+len("Rejected(")+len(open)
+				break
+			}
 		}
+	}
+	if start < 0 {
+		start = strings.IndexByte(head, '`') + 1
+		if start == 0 {
+			return ""
+		}
+	}
+	cmd := head[start:]
+	for range levels {
 		cmd = unescapeDebug(cmd)
 	}
 	return strings.TrimSpace(cmd)

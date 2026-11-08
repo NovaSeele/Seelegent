@@ -122,7 +122,9 @@ subcommand (`git stsh`) is not run as the command git guesses. git takes the las
   `read-only`) limits where it can write; the shim covers the git commands it runs through `PATH`. With
   `danger-full-access` only the shim remains. On Windows the sandbox is codex's unelevated one
   (`-c windows.sandbox=unelevated`, see [configuration.md](configuration.md)); commands it refuses are listed in the
-  turn's denied actions, and a turn whose every command was refused fails.
+  turn's denied actions, and a turn whose every command was refused fails. That includes a turn that edited files
+  with apply_patch and whose only shell command (the tests, say) was refused: the worker could not verify its
+  change, so the lead decides; the edits stay in the working tree for the lead to review.
 - The hooks do not run git, so they cannot turn off `help.autocorrect`: when the user's git config sets it, a
   misspelled subcommand (`git stsh`) passes the hook as an unknown command and git runs the command it guesses.
   The shim is not affected. A worker cannot set it itself: `git config help.autocorrect <value>` and `-c` are refused.
