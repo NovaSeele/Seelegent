@@ -790,7 +790,10 @@ func (s *Service) finishAttempt(r *run, id string, turn, n int, accountID, model
 	}
 	s.recordUsage(ctx, t, turn, n, accountID, b.Name(), model, o.Usage)
 	if s.o.QuotaRefresh != nil && accountID != "" {
-		s.o.QuotaRefresh(accountID)
+		// A run that failed on the account (quota, sign-in, transient or other error) always reads its quota
+		// again; one that ended well, waits in the background or was cancelled only when the quota is stale.
+		failed := status != AttemptOK && status != AttemptBackgroundWait && status != AttemptCancelled
+		s.o.QuotaRefresh(accountID, failed)
 	}
 	if gating {
 		return true, nil

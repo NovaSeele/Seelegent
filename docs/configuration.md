@@ -119,7 +119,7 @@ was refused fails instead of ending done.
 | Setting | Type | Default | Meaning |
 | --- | --- | --- | --- |
 | `maxConcurrentPerAccount` | integer 1–64 | `2` | Turns that may run at the same time on one account. |
-| `quotaRefreshMinutes` | integer ≥ 1 | `10` | How often quota is read from every account (each cycle ±10 % so accounts are not all read at the same instant). A change applies at once: the next cycle comes one new interval after the last one ended, or right away when that time has passed. Accounts marked signed out are read every 6 hours instead, or at once after a sign-in or a refused run. |
+| `quotaRefreshMinutes` | integer ≥ 1 | `10` | How often quota is read from every account (each cycle ±10 % so accounts are not all read at the same instant). A change applies at once: the next cycle comes one new interval after the last one ended, or right away when that time has passed. Accounts marked signed out are read every 6 hours instead, or at once after a sign-in or a refused run. When the daemon is idle (no pending task, no open dashboard, and no dashboard, CLI or MCP call for 30 minutes) the cycles stretch to 6× the interval, at most 60 minutes; the first call after that reads at once when the last cycle is older than the interval (the call does not wait for it). After a worker run that ended well the account is read only when its quota is over 2 minutes old; after a failed run, always. |
 | `minRemaining` | number 0 ≤ x < 1 | `0.03` | An account is skipped for a quota group once its remaining fraction is at or below this; it rests until the used-up windows reset. |
 | `passiveCooldownMinutes` | integer ≥ 1 | `60` | Rest after a quota error for API-key accounts whose provider cannot report the reset time. |
 | `usageHistory` | boolean | `true` | Record hourly usage snapshots (kept 30 days). The usage summary per task and account is recorded either way. |
@@ -215,7 +215,7 @@ computed from the other one you set (see the last point below).
 
 | Setting | Type | Default | Meaning |
 | --- | --- | --- | --- |
-| `githubPollMinutes` | integer ≥ 0 | `10` | How often pull request states and GitHub inboxes are polled; `0` turns polling off. |
+| `githubPollMinutes` | integer ≥ 0 | `10` | How often pull request states and GitHub inboxes are polled; `0` turns polling off. A poll with no connected GitHub repository and no open ticket does nothing (it does not even check the access, which may run `gh`). |
 | `githubEnterpriseHosts` | list of strings | `[]` | GitHub Enterprise Server hosts whose remotes count as GitHub besides `github.com`: a host name (optionally with a port) or an `https` URL; `http` only for a loopback address. Any other host is never sent the token ([github.md](github.md)). |
 | `automationsEnabled` | boolean | `true` | Master switch of scheduled automations (each automation is still created disabled). |
 

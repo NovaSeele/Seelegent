@@ -303,6 +303,12 @@ func (a *App) build(o Options) error {
 				p.Notify()
 			}
 		},
+		// The idle policy: a pending task or an open dashboard keeps the cycles at quotaRefreshMinutes.
+		Busy: func(ctx context.Context) bool {
+			clients := 0
+			a.withAPI(func(s *httpapi.Server) { clients = s.Hub().Clients() })
+			return clients > 0 || a.Tasks != nil && a.Tasks.Busy(ctx)
+		},
 	})
 	if err != nil {
 		return err
@@ -337,7 +343,7 @@ func (a *App) build(o Options) error {
 	a.slots = gate.NewSlots(func() int { return a.Limits().GateConcurrency })
 	a.Tasks, err = task.New(task.Options{
 		DB: a.DB, Accounts: a.Accounts, Pool: p, Backends: a.Backends, Settings: a.Settings,
-		TasksDir: o.Paths.Tasks, Launcher: o.Launcher, Usage: a.Usage, QuotaRefresh: a.Refresher.Request,
+		TasksDir: o.Paths.Tasks, Launcher: o.Launcher, Usage: a.Usage, QuotaRefresh: a.Refresher.AfterRun,
 		Memory: a.Memory, Roles: a.Roles, Consoles: consoles, Clock: o.Clock, Logger: a.log,
 		BaseEnv:       func() []string { return a.env },
 		Toolchains:    a.toolchains,
