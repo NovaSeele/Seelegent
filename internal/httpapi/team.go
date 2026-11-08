@@ -404,11 +404,18 @@ func (s *Server) hookRoutes() {
 		return http.StatusOK, api.NonNil(list), err
 	})
 	s.handle("PUT /hooks", func(w http.ResponseWriter, r *http.Request) (int, any, error) {
-		var req api.HooksRequest
+		// The list replaces every hook, so it must be there: a body without it ({}, null, {"hooks": null}) is
+		// refused instead of deleting them all; [] clears the list (M18 hunt H14).
+		var req struct {
+			Hooks *[]api.Hook `json:"hooks"`
+		}
 		if err := decode(w, r, &req); err != nil {
 			return 0, nil, err
 		}
-		list, err := h.Replace(r.Context(), req.Hooks)
+		if req.Hooks == nil {
+			return 0, nil, invalid("hooks is required (send [] to remove every hook)").withField("hooks")
+		}
+		list, err := h.Replace(r.Context(), *req.Hooks)
 		return http.StatusOK, api.NonNil(list), err
 	})
 	s.handle("POST /hooks/{id}/test", func(w http.ResponseWriter, r *http.Request) (int, any, error) {

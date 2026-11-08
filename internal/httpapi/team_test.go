@@ -129,6 +129,35 @@ func TestNotesConsultHooksOverHTTP(t *testing.T) {
 	e.wantError(e.post("/api/v1/hooks/h-nope/test", nil), http.StatusNotFound, api.CodeNotFound, "")
 }
 
+// A PUT /hooks without the list is refused and keeps every hook; only an explicit [] removes them all (M18 hunt
+// H14).
+func TestPutHooksWithoutTheListKeepsThem(t *testing.T) {
+	e := newEnv(t)
+	var hooks []api.Hook
+	e.must(e.req(http.MethodPut, "/api/v1/hooks", map[string]any{"hooks": []map[string]any{
+		{"name": "done", "on": []string{"task.done"}, "run": "echo ok", "enabled": true}}}, nil), http.StatusOK).
+		json(t, &hooks)
+	if len(hooks) != 1 {
+		t.Fatalf("hooks = %+v", hooks)
+	}
+	for _, body := range []string{`{}`, `null`, `{"hooks": null}`} {
+		e.wantError(e.req(http.MethodPut, "/api/v1/hooks", body, nil), http.StatusBadRequest,
+			api.CodeInvalidArgument, "hooks")
+		e.must(e.get("/api/v1/hooks"), http.StatusOK).json(t, &hooks)
+		if len(hooks) != 1 {
+			t.Fatalf("after PUT %s: hooks = %+v", body, hooks)
+		}
+	}
+	e.must(e.req(http.MethodPut, "/api/v1/hooks", `{"hooks": []}`, nil), http.StatusOK).json(t, &hooks)
+	if len(hooks) != 0 {
+		t.Fatalf("PUT [] left %+v", hooks)
+	}
+	e.must(e.get("/api/v1/hooks"), http.StatusOK).json(t, &hooks)
+	if len(hooks) != 0 {
+		t.Fatalf("after PUT []: hooks = %+v", hooks)
+	}
+}
+
 // TestMeetingsContestsValidation covers the lists and the refusals of meetings and contests.
 func TestMeetingsContestsValidation(t *testing.T) {
 	e := newEnv(t)
