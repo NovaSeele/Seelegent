@@ -12,6 +12,8 @@ import (
 
 func hideWindow(*exec.Cmd) {}
 
+func hideWindowShared(*exec.Cmd) {}
+
 func setCmdLine(*exec.Cmd, string) {}
 
 // sysProcAttr returns cmd.SysProcAttr, creating it when needed.

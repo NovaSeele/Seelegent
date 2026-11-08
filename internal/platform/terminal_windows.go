@@ -10,8 +10,6 @@ import (
 	"strconv"
 	"strings"
 
-	"golang.org/x/sys/windows"
-
 	"github.com/NovaSeele/Seelegent/internal/fsutil"
 )
 
@@ -41,9 +39,6 @@ func openTerminal(_ context.Context, spec TerminalSpec, base, exitFile string) (
 		cmd.Dir = spec.Dir
 	}
 	HideWindow(cmd)
-	// The outer cmd.exe keeps a hidden console of its own rather than sharing the caller's: it lives as long as the
-	// window, and a foreground daemon's terminal closing must not end it.
-	sysProcAttr(cmd).CreationFlags |= windows.CREATE_NO_WINDOW
 	// /s strips the outer quotes and runs the rest as written.
 	sysProcAttr(cmd).CmdLine = quoted(comspec) + ` /d /s /c "start ` + quoted(spec.Title) + " /wait " + quoted(comspec) +
 		" /d /c " + quoted(scriptPath) + `"`

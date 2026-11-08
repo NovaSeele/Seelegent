@@ -20,16 +20,27 @@ const stillActive = 259
 // setCmdLine sets the raw command line Windows passes to the program (cmd.exe parses its own).
 func setCmdLine(cmd *exec.Cmd, line string) { sysProcAttr(cmd).CmdLine = line }
 
-// hideWindow: a console program inherits the console of this process when there is one (the daemon's and the
-// launcher's are hidden; a foreground CLI's is the user's own terminal), so no window opens and no console host
-// (conhost.exe, about 8 MB) is started for it. Only a caller without a console gives it a hidden console of its own
-// (CREATE_NO_WINDOW): without one, Windows would open a new, visible console window for it.
+// hideWindow gives the process a hidden console of its own (CREATE_NO_WINDOW), which its children inherit.
 func hideWindow(cmd *exec.Cmd) {
 	attr := sysProcAttr(cmd)
 	attr.HideWindow = true
+	attr.CreationFlags |= windows.CREATE_NO_WINDOW
+}
+
+// hideWindowShared lets the process share the console of this process when there is one (the daemon's is hidden;
+// a foreground CLI's is the user's own terminal), so no window opens and no console host (conhost.exe, about 8 MB)
+// is started for it. It gets a process group of its own, so that a console control event it sends to its own
+// process id (which Windows treats as "every process on the console" when the id names no group) stays within
+// it. Without a console here it gets a hidden console of its own, as with hideWindow: Windows would otherwise
+// open a new, visible console window for it.
+func hideWindowShared(cmd *exec.Cmd) {
 	if !hasConsole() {
-		attr.CreationFlags |= windows.CREATE_NO_WINDOW
+		hideWindow(cmd)
+		return
 	}
+	attr := sysProcAttr(cmd)
+	attr.HideWindow = true
+	attr.CreationFlags |= windows.CREATE_NEW_PROCESS_GROUP
 }
 
 // hasConsole reports whether this process is attached to a console, hidden or not.
@@ -93,7 +104,7 @@ func processAlive(pid int) bool {
 
 func killTree(ctx context.Context, pid int) error {
 	cmd := exec.CommandContext(ctx, "taskkill", "/PID", strconv.Itoa(pid), "/T", "/F") //nolint:gosec // fixed program, numeric pid
-	HideWindow(cmd)
+	HideWindowShared(cmd)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		if !processAlive(pid) {
 			return nil

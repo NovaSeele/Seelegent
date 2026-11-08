@@ -33,8 +33,10 @@ type Tree struct {
 	closed bool
 }
 
-// StartTree starts cmd hidden (no console window on Windows) as the root of a new process tree. cmd must not have
-// been started. The caller must call Wait to reap the root process and Close when done with the tree.
+// StartTree starts cmd hidden (no console window on Windows; a hidden console of its own, see HideWindow) as the
+// root of a new process tree. cmd must not have been started. The caller must call Wait to reap the root process
+// and Close when done with the tree. Seelegent's own fixed helpers share the daemon's console instead through
+// StartTreeWith and TreeOptions.ShareConsole.
 func StartTree(cmd *exec.Cmd) (*Tree, error) {
 	return startTree(cmd, false, "", TreeOptions{})
 }
@@ -78,6 +80,11 @@ type TreeOptions struct {
 	// CPURatePercent hard-caps the tree's CPU to this share of the whole machine, 1-100 (Windows: Job Object CPU
 	// rate control; ignored elsewhere); 0 = no cap.
 	CPURatePercent int `json:"cpuRatePercent,omitempty"`
+	// ShareConsole starts the root with HideWindowShared instead of HideWindow (Windows; ignored elsewhere): for
+	// Seelegent's own fixed helper programs only, never for a command line from a user, a repository or a worker.
+	// It is a start option of the daemon's own trees, never stored (worker trees always get a console of their
+	// own).
+	ShareConsole bool `json:"-"`
 }
 
 // StartTreeWith is StartTree with resource limits, for commands the daemon starts itself (gate commands):

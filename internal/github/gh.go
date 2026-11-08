@@ -54,7 +54,7 @@ func (g ExecGh) Run(ctx context.Context, args []string, input []byte, env []stri
 	if input != nil {
 		cmd.Stdin = bytes.NewReader(input)
 	}
-	tree, err := platform.StartTree(cmd)
+	tree, err := platform.StartTreeWith(cmd, platform.TreeOptions{ShareConsole: true}) // a fixed helper program
 	if err != nil {
 		return nil, nil, fmt.Errorf("start gh: %w", err)
 	}

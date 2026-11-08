@@ -99,7 +99,11 @@ func (t *treeOS) start(cmd *exec.Cmd, worker bool, name string, opt TreeOptions)
 		}
 	}()
 
-	hideWindow(cmd)
+	if opt.ShareConsole && !worker {
+		hideWindowShared(cmd)
+	} else {
+		hideWindow(cmd)
+	}
 	sysProcAttr(cmd).CreationFlags |= windows.CREATE_SUSPENDED
 	if opt.Priority == PriorityLow {
 		sysProcAttr(cmd).CreationFlags |= windows.BELOW_NORMAL_PRIORITY_CLASS
