@@ -172,6 +172,9 @@ func Run(ctx context.Context, env Env, req Request) (Report, error) {
 	for _, h := range hosts {
 		switch {
 		case len(req.Hosts) > 0 && !slices.Contains(req.Hosts, h.id()):
+		case !detected[h.id()] && req.Remove && leftBehind(env, h):
+			// H22: a host that is gone (gemini uninstalled) can still hold Seelegent's entry or skill in its files.
+			selected = append(selected, h)
 		case !detected[h.id()]:
 			if len(req.Hosts) > 0 {
 				rep.Items = append(rep.Items, Item{Host: h.id(), Kind: KindMCP, Action: ActionSkipped,
@@ -183,9 +186,10 @@ func Run(ctx context.Context, env Env, req Request) (Report, error) {
 	}
 	o := op{env: env, req: req, created: made}
 	skillDone := map[string]string{} // skill folder -> host that handled it in this run
+	var cancelled error
 	for _, h := range selected {
-		if err := ctx.Err(); err != nil {
-			return rep, err
+		if cancelled = ctx.Err(); cancelled != nil {
+			break // H22: what this run created so far is still recorded below, so --remove can delete it later
 		}
 		want := desired(req.Exe, h.id())
 		if req.Remove {
@@ -204,7 +208,7 @@ func Run(ctx context.Context, env Env, req Request) (Report, error) {
 			}
 		}
 	}
-	if req.Remove {
+	if req.Remove && cancelled == nil {
 		rep.Items = append(rep.Items, made.removeFolders(req.DryRun)...)
 	}
 	if !req.DryRun {
@@ -212,7 +216,17 @@ func Run(ctx context.Context, env Env, req Request) (Report, error) {
 			rep.Warnings = append(rep.Warnings, "could not update "+req.Created+": "+err.Error())
 		}
 	}
-	return rep, nil
+	return rep, cancelled
+}
+
+// leftBehind reports whether a host that was not detected still has its config file or Seelegent's skill folder,
+// which a remove can clean up without the host's program.
+func leftBehind(env Env, h host) bool {
+	if exists(h.configPath(env)) {
+		return true
+	}
+	dir := h.skillDir(env)
+	return dir != "" && isDir(filepath.Join(dir, ServerName))
 }
 
 // op carries the run's environment and request to the host handlers.

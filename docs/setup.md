@@ -21,7 +21,7 @@ seelegent setup [--host a,b] [--dry-run] [--remove] [--no-skill] [--hooks] [--fo
 |---|---|
 | `--host` | Only these hosts (ids below). Without it, every detected host. A named host that is not installed is reported as `skipped`. |
 | `--dry-run` | Report every action without writing a file or running a host CLI. |
-| `--remove` | Remove what setup added: the MCP entry, the skill and the hook. An entry or skill that is not Seelegent's is left alone. |
+| `--remove` | Remove what setup added: the MCP entry, the skill and the hook. An entry or skill that is not Seelegent's is left alone. A host whose program is gone but whose config file or Seelegent skill is still there (Gemini CLI uninstalled) is cleaned up too. A run that is cancelled still records the files it created so far. |
 | `--no-skill` | Leave the skill alone. |
 | `--hooks` | Also install the Claude Code reminder hook. `--remove` always removes it, every copy of it. |
 | `--force` | Replace an entry or skill named `seelegent` that another program wrote (the old one is backed up first). |

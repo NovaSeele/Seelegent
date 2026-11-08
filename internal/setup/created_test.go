@@ -2,7 +2,9 @@ package setup
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -169,5 +171,59 @@ func TestUnreadableRecord(t *testing.T) {
 	if err := json.Unmarshal([]byte(`{"version": 1, "created": [{"path": "/x", "dir": true}]}`), &c); err != nil ||
 		len(c.Paths) != 1 || !c.Paths[0].Dir {
 		t.Errorf("format %+v %v", c, err)
+	}
+}
+
+// TestRemoveUninstalledHost (H22): remove cleans Seelegent's entry out of a host whose program is gone (Gemini CLI
+// uninstalled, its settings.json left).
+func TestRemoveUninstalledHost(t *testing.T) {
+	m := newMachine(t)
+	exe := m.exe()
+	m.bins["gemini"] = m.path("bin", "gemini.exe")
+	rec := recordFile(t)
+	run(t, m, Request{Exe: exe, Hosts: []string{"gemini"}, Created: rec})
+	settings := m.path(".gemini", "settings.json")
+	if !strings.Contains(read(t, settings), exe[len(exe)-len(exeBase):]) {
+		t.Fatalf("gemini entry missing: %s", read(t, settings))
+	}
+	delete(m.bins, "gemini") // the Gemini CLI is uninstalled; its files stay
+	rep := run(t, m, Request{Remove: true, Created: rec})
+	wantAction(t, rep, "gemini", KindMCP, ActionRemoved)
+	if exists(settings) && strings.Contains(read(t, settings), ServerName) {
+		t.Errorf("entry left: %s", read(t, settings))
+	}
+	// Without its files a missing host is still skipped, and an explicit --host says why.
+	rep = run(t, m, Request{Remove: true, Hosts: []string{"cursor"}, Created: rec})
+	wantAction(t, rep, "cursor", KindMCP, ActionSkipped)
+}
+
+// TestCancelledRunKeepsRecord (H22): a run cancelled after the first host still records the files that host got,
+// so a later --remove can delete them.
+func TestCancelledRunKeepsRecord(t *testing.T) {
+	m2 := newMachine(t)
+	exe2 := m2.exe()
+	fakeClaude(t, m2)
+	m2.mkdir(".claude")
+	m2.mkdir(".cursor")
+	rec2 := recordFile(t)
+	ctx, cancel := context.WithCancel(t.Context())
+	inner := m2.onRun
+	m2.onRun = func(name string, args []string) RunResult {
+		res := inner(name, args)
+		cancel()
+		return res
+	}
+	rep, err := Run(ctx, m2.env(), Request{Exe: exe2, Hosts: []string{"claude", "cursor"}, Hooks: true,
+		Created: rec2, Port: 47821, Version: "v9.9.9"})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("err = %v", err)
+	}
+	made := map[string]bool{}
+	for _, p := range recorded(t, rec2) {
+		rel, _ := filepath.Rel(m2.home, p.Path)
+		made[filepath.ToSlash(rel)] = true
+	}
+	if !made[".claude/settings.json"] || !made[".claude/skills"] || made[".cursor/mcp.json"] {
+		t.Errorf("record after cancel: %v (items %+v)", made, rep.Items)
 	}
 }
