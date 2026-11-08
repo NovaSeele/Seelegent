@@ -76,7 +76,7 @@ func (c Checker) git(args []word, depth int) Result {
 	if i >= len(args) {
 		return allow
 	}
-	sub := strings.ToLower(args[i].text)
+	sub := subcommand(args[i].text)
 	rest := args[i+1:]
 	if len(rest) == 1 && !rest[0].dynamic && (rest[0].text == "-h" || rest[0].text == "--help") {
 		return allow
@@ -207,6 +207,15 @@ func (c Checker) git(args []word, depth int) Result {
 		}
 	}
 	return allow
+}
+
+// subcommand is the git subcommand a word names: lower-case, and without the ".exe" that Git for Windows strips
+// from it before it looks up builtins and aliases (git reset.exe --hard runs reset --hard, git st.exe the alias st;
+// H1). git strips only a lower-case ".exe", once, and takes no other suffix, trailing dot or space; any case is
+// stripped here, since refusing a name git would not run costs nothing.
+func subcommand(s string) string {
+	s = strings.ToLower(s)
+	return strings.TrimSuffix(s, ".exe")
 }
 
 // alias resolves a git alias and checks what it runs.
