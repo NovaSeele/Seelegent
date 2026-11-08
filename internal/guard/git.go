@@ -147,8 +147,9 @@ func (c Checker) git(args []word, depth int) Result {
 			return deny()
 		}
 	case "reflog":
+		// The stash is a reflog: reflog drop refs/stash (or --all) deletes every stashed change at once (H2).
 		p := scan(rest, opts{})
-		if p.unknown || len(p.pos) > 0 && (p.pos[0].text == "expire" || p.pos[0].text == "delete") {
+		if p.unknown || len(p.pos) > 0 && setHas(p.pos[0].text, "expire", "delete", "drop") {
 			return deny()
 		}
 	case "worktree":

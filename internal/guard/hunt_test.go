@@ -44,3 +44,26 @@ func TestExeSuffixSubcommand(t *testing.T) {
 	expect(t, c, hook, POSIX)
 	expect(t, c, hook, PowerShell)
 }
+
+// TestReflogDrop (H2): git reflog drop deletes a whole reflog, refs/stash included (every stashed change); listing
+// and showing stay allowed.
+func TestReflogDrop(t *testing.T) {
+	c := Checker{}
+	for args, want := range map[string]bool{
+		"reflog drop refs/stash":   true,
+		"reflog drop --all":        true,
+		"reflog drop":              true,
+		"reflog.exe drop --all":    true,
+		"reflog expire --all":      true,
+		"reflog delete stash@{0}":  true,
+		"reflog":                   false,
+		"reflog show refs/stash":   false,
+		"reflog list":              false,
+		"reflog exists refs/stash": false,
+	} {
+		if got := c.Git(strings.Fields(args)); got.Deny != want {
+			t.Errorf("git %s deny = %v, want %v", args, got.Deny, want)
+		}
+	}
+	expect(t, c, map[string]bool{"git reflog drop --all": true, "git reflog show": false}, POSIX)
+}
