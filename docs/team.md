@@ -196,7 +196,9 @@ stop partway (a locked file on Windows, a read-only folder), and a retry would o
 tree. No git command runs in a folder that is no longer a worktree of its own (its `.git` went first, as NTFS
 deletes it): with a stored copy, such a folder is deleted without git, entry by entry, removing every link or
 junction as itself and never walking into one, only strictly inside the contest's folder under the worktree base,
-and then `git worktree prune` drops git's record. `POST /contests/{id}/cancel` stops the variants and the judge; the user's working tree is not touched.
+and then git's record of that one worktree is dropped: only the `.git/worktrees/<id>` folder whose `gitdir` names
+it, never `git worktree prune`, which would also drop the user's own worktrees whose folders are missing for a while
+(an unplugged drive), with their index. The same goes for a removal whose worktree folder is already gone. `POST /contests/{id}/cancel` stops the variants and the judge; the user's working tree is not touched.
 
 Every change publishes `contest.updated` with the summary. `GET /contests/{id}/variants/{label}/diff` answers the
 variant's diff against the base (cut at 400 000 bytes, `truncated` then) as text and parsed per file (`files`, for
