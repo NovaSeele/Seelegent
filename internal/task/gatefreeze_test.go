@@ -108,9 +108,9 @@ func TestFollowupNeverRunsPlantedGate(t *testing.T) {
 func stepCmds(tk *Task) []string {
 	var out []string
 	if g := tk.LastTurn().Gate; g != nil {
-		for _, s := range g.Steps {
-			if s.Cmd != "" {
-				out = append(out, s.Cmd)
+		for i := range g.Steps {
+			if c := g.Steps[i].Cmd; c != "" {
+				out = append(out, c)
 			}
 		}
 	}

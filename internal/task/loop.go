@@ -85,7 +85,7 @@ func fileMark(cwd, file string) string {
 	if err != nil || !st.Mode().IsRegular() || st.Size() > fileMarkMax {
 		return ""
 	}
-	data, err := os.ReadFile(file) //nolint:gosec // a file the worker reported editing, only hashed
+	data, err := os.ReadFile(file)
 	if err != nil {
 		return ""
 	}

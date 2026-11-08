@@ -493,7 +493,7 @@ func TestLoopPathOnlyEdits(t *testing.T) {
 	if loop, _ := detectLoop(tdd([]string{"same", "same", "same"}, file), 4); !loop {
 		t.Error("edits that change nothing between the same test runs are a loop")
 	}
-	// Without a mark the old behaviour: the same key each time, a loop.
+	// Without a mark the old behavior: the same key each time, a loop.
 	var bare []loopStep
 	for range 3 {
 		bare = addStep(addStep(bare, run, "", ""), edit(file), "", "")
