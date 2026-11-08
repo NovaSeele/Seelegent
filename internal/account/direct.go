@@ -246,22 +246,32 @@ func (r *Repo) ensureProviderTx(ctx context.Context, tx *sql.Tx, p Provider, aut
 	return out, err == nil, err
 }
 
-// listProvidersTx returns every provider ordered by id.
+// listProvidersTx returns every provider ordered by id, with its prices.
 func listProvidersTx(ctx context.Context, tx *sql.Tx) ([]Provider, error) {
 	rows, err := tx.QueryContext(ctx, "SELECT "+providerColumns+" FROM providers ORDER BY id")
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = rows.Close() }()
 	var out []Provider
 	for rows.Next() {
 		p, err := scanProvider(rows)
 		if err != nil {
+			_ = rows.Close()
 			return nil, err
 		}
 		out = append(out, p)
 	}
-	return out, rows.Err()
+	if err := errors.Join(rows.Err(), rows.Close()); err != nil {
+		return nil, err
+	}
+	prices, err := loadPricesTx(ctx, tx, "")
+	if err != nil {
+		return nil, fmt.Errorf("prices: %w", err)
+	}
+	for i := range out {
+		out[i].Prices = prices[out[i].ID]
+	}
+	return out, nil
 }
 
 // defaultLabel names a new account of the provider "<provider name> <n>", n one more than its accounts.

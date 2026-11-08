@@ -49,6 +49,9 @@ type Provider struct {
 	// CreatedAt and UpdatedAt are UTC times.
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
+	// Prices is the user's price table, by model id (Repo.SetPrices; kept apart from the other fields, which
+	// CreateProvider and UpdateProvider write).
+	Prices []Price `json:"prices,omitempty"`
 }
 
 // Preset is a provider template.

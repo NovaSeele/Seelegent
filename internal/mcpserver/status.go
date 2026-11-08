@@ -40,15 +40,25 @@ type slimAccount struct {
 	ModelPerTask bool `json:"modelPerTask,omitempty"`
 	// TestResult is an API-key account's key test state (not_tested, ok, refused, ...).
 	TestResult string `json:"testResult,omitempty"`
-	// Spend of an API-key account on its current key: spentUsd (only from a trusted spendSource, "cli"), tokens,
-	// the budget and its state (ok, warn, reached, unknown). RestReason (any account) is why it is held until the
-	// user acts: credits or budget_reached (no restingUntil then).
-	SpentUSD    *float64 `json:"spentUsd,omitempty"`
-	SpentTokens int64    `json:"spentTokens,omitempty"`
-	SpendSource string   `json:"spendSource,omitempty"`
-	BudgetUSD   *float64 `json:"budgetUsd,omitempty"`
-	BudgetState string   `json:"budgetState,omitempty"`
-	RestReason  string   `json:"restReason,omitempty"`
+	// Spend of an API-key account on its current key: spentUsd (only from a spendSource that gives a cost:
+	// service, cli or prices), tokens, the budget and its state (ok, warn, reached, unknown). Balance is what its
+	// spend service says is left (DeepSeek, Moonshot: account-wide; OpenRouter: the key's limit). RestReason (any
+	// account) is why it is held until the user acts: credits or budget_reached (no restingUntil then).
+	SpentUSD    *float64     `json:"spentUsd,omitempty"`
+	SpentTokens int64        `json:"spentTokens,omitempty"`
+	SpendSource string       `json:"spendSource,omitempty"`
+	BudgetUSD   *float64     `json:"budgetUsd,omitempty"`
+	BudgetState string       `json:"budgetState,omitempty"`
+	Balance     *slimBalance `json:"balance,omitempty"`
+	RestReason  string       `json:"restReason,omitempty"`
+}
+
+// slimBalance is an API-key account's balance at its spend service, in the service's currency.
+type slimBalance struct {
+	Amount      float64 `json:"amount"`
+	Currency    string  `json:"currency"`
+	AccountWide bool    `json:"accountWide,omitempty"`
+	Stale       bool    `json:"stale,omitempty"`
 }
 
 // slimTask is an active task in the slim status.
@@ -135,12 +145,17 @@ func slimAccountOf(a api.Account) slimAccount {
 		TestResult: a.TestResult}
 	if a.Kind == "api-key" {
 		out.Auth = "api-key"
-		if a.SpendSource == api.SpendCLI {
+		switch a.SpendSource {
+		case api.SpendCLI, api.SpendPrices, api.SpendService:
 			spent := a.SpentUSD
 			out.SpentUSD = &spent
 		}
 		out.SpentTokens, out.SpendSource, out.BudgetUSD = a.SpentTokens, a.SpendSource, a.BudgetUSD
 		out.BudgetState = a.BudgetState
+		if b := a.Balance; b != nil {
+			out.Balance = &slimBalance{Amount: b.Amount, Currency: b.Currency, AccountWide: b.AccountWide,
+				Stale: b.Stale}
+		}
 	}
 	out.RestReason = a.RestReason
 	if a.Provider != "" {

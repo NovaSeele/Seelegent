@@ -81,6 +81,7 @@ type Accounts interface {
 	GetProvider(ctx context.Context, id string) (account.Provider, error)
 	ListProviders(ctx context.Context) ([]account.Provider, error)
 	DeleteProvider(ctx context.Context, id string) error
+	SetPrices(ctx context.Context, providerID string, prices []account.Price) (account.Provider, error)
 }
 
 // Pool is the account pool (pool.Pool).
@@ -94,6 +95,14 @@ type Pool interface {
 type Quota interface {
 	Refresh(ctx context.Context, id string) (quota.Snapshot, error)
 	RefreshAll(ctx context.Context) []quota.Result
+	Request(id string)
+}
+
+// Spend reads the spend services of API-key accounts (quota.ServiceRefresher).
+type Spend interface {
+	// Refresh reads one account's service now; ErrPassive when it has none.
+	Refresh(ctx context.Context, id string) (account.ServiceSpend, error)
+	// Request asks for a read soon (a key was stored). It never blocks.
 	Request(id string)
 }
 
@@ -197,6 +206,8 @@ type Options struct {
 	Backends map[string]backend.Backend
 	// Probe configures the key tests of POST /providers/test (the zero value in production).
 	Probe backend.ProbeOptions
+	// Spend reads the spend services of API-key accounts (quota.ServiceRefresher); nil reads none.
+	Spend Spend
 	// LogDir is the folder of daemon.log and hooks.log (GET /logs).
 	LogDir string
 	// Redact masks secrets in log lines (logx.Redactor.String); identity when nil.

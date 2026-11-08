@@ -113,20 +113,23 @@ type App struct {
 	Accounts  *account.Manager
 	Quotas    *quota.Store
 	Refresher *quota.Refresher
-	Pool      *pool.Pool
-	Usage     *usage.Store
-	Memory    *memory.Store
-	Roles     *role.Store
-	Backends  map[string]backend.Backend
-	Tasks     *task.Service
-	Proof     *proof.Service
-	Git       *gitx.Repos
-	SignIn    *signin.Service
-	Members   *member.Store
-	Notes     *notes.Store
-	Meetings  *meeting.Service
-	Contests  *contest.Service
-	Hooks     *hook.Service
+	// Spend reads the spend services of API-key accounts (OpenRouter, DeepSeek, Moonshot); nil with
+	// Options.NoQuotaReaders.
+	Spend    *quota.ServiceRefresher
+	Pool     *pool.Pool
+	Usage    *usage.Store
+	Memory   *memory.Store
+	Roles    *role.Store
+	Backends map[string]backend.Backend
+	Tasks    *task.Service
+	Proof    *proof.Service
+	Git      *gitx.Repos
+	SignIn   *signin.Service
+	Members  *member.Store
+	Notes    *notes.Store
+	Meetings *meeting.Service
+	Contests *contest.Service
+	Hooks    *hook.Service
 	// GitHub, Tickets and Automations are milestone 15 (github.go).
 	GitHub      *github.Driver
 	Tickets     *ticket.Service
@@ -334,6 +337,22 @@ func (a *App) build(o Options) error {
 		return err
 	}
 	a.Pool = p
+	if !o.NoQuotaReaders {
+		reader := backend.ServiceReader{}
+		a.Spend, err = quota.NewServiceRefresher(quota.ServiceOptions{
+			Accounts: a.Accounts, Read: reader.Read, Clock: o.Clock, Logger: a.log, NoCredit: p.MarkNoCredit,
+			OnUpdate: func(_ context.Context, _ string, crossings []account.BudgetCrossing) {
+				for _, c := range crossings {
+					a.log.Info("account: budget "+c.State, "account", c.AccountID, "provider", c.Provider,
+						"message", c.Message())
+				}
+				p.Notify() // a reading changes the account frames, a reached budget what the pool may pick
+			},
+		})
+		if err != nil {
+			return err
+		}
+	}
 
 	consoles := o.Consoles
 	if consoles == nil {
@@ -355,7 +374,7 @@ func (a *App) build(o Options) error {
 	a.Tasks, err = task.New(task.Options{
 		DB: a.DB, Accounts: a.Accounts, Pool: p, Backends: a.Backends, Settings: a.Settings,
 		TasksDir: o.Paths.Tasks, DataDir: o.Paths.Home, Launcher: o.Launcher, Usage: a.Usage,
-		QuotaRefresh: a.Refresher.AfterRun, Memory: a.Memory, Roles: a.Roles, Consoles: consoles, Clock: o.Clock,
+		QuotaRefresh: a.afterRun, Memory: a.Memory, Roles: a.Roles, Consoles: consoles, Clock: o.Clock,
 		Logger:        a.log,
 		BaseEnv:       func() []string { return a.env },
 		Toolchains:    a.toolchains,
@@ -406,6 +425,15 @@ func (a *App) build(o Options) error {
 		Logger: a.log,
 	})
 	return nil
+}
+
+// afterRun asks for the reads that follow an attempt on an account: its quota (sign-in accounts) and its spend
+// service (API-key accounts of OpenRouter, DeepSeek, Moonshot; debounced).
+func (a *App) afterRun(accountID string, failed bool) {
+	a.Refresher.AfterRun(accountID, failed)
+	if a.Spend != nil {
+		a.Spend.AfterTurn(accountID)
+	}
 }
 
 // quotaReader returns the quota reader of a backend, or nil.
@@ -507,6 +535,13 @@ func (a *App) Start(ctx context.Context) error {
 		defer a.wg.Done()
 		a.Refresher.Run(runCtx)
 	}()
+	if a.Spend != nil {
+		a.wg.Add(1)
+		go func() {
+			defer a.wg.Done()
+			a.Spend.Run(runCtx)
+		}()
+	}
 	if err := a.Proof.Start(ctx); err != nil {
 		a.log.Warn("app: abandon stale proof runs", "err", err)
 	}

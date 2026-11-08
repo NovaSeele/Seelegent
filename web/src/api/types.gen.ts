@@ -44,23 +44,46 @@ export interface Account {
    */
   modelPerTask?: boolean
   /**
-   * Spend of an API-key account (absent for the others). SpentUSD is what the current key spent since SpentSince
-   * (when the key was set): a running total, counted whatever usageHistory says, from the provider's spend
-   * source (Provider.spendSource; only "cli" gives a cost today, the others count tokens only). SpentTokens is
-   * every token reported, SpentInputTokens and SpentOutputTokens its parts. BudgetUSD is the user's budget for
-   * the key; BudgetStop (default true) rests the account once it is reached. BudgetState is ok, warn (80% or
-   * more), reached, or unknown when the spend source gives no cost (the account then never rests on its budget).
+   * Spend of an API-key account (absent for the others). SpendSource says where SpentUSD comes from: service
+   * (the service's own count for this key, OpenRouter: its usage.total, the key's whole life), cli (Claude Code's
+   * own estimate, official Anthropic only), prices (tokens × the provider's prices; models without a price fall
+   * back to the CLI estimate on official Anthropic and count nothing elsewhere), free (local: 0) or none (no
+   * cost, tokens only). Without service, SpentUSD is a running total of the attempts since SpentSince (when the
+   * key was set), counted whatever usageHistory says. SpentTokens is every token reported, SpentInputTokens and
+   * SpentOutputTokens its parts, SpentUnpricedTokens the part counted without a cost (no price for the model).
+   * BudgetUSD is the user's budget for the key; BudgetStop (default true) rests the account once it is reached.
+   * BudgetState is ok, warn (80% or more), reached, or unknown when the spend source gives no cost (none, free:
+   * the account then never rests on its budget).
    */
   spentUsd?: number
   spentTokens?: number
   spentInputTokens?: number
   spentOutputTokens?: number
+  spentUnpricedTokens?: number
   spentSince?: string
-  spendSource?: string
+  spendSource?: 'service' | 'cli' | 'prices' | 'free' | 'none'
   budgetUsd?: number
   budgetStop?: boolean
   budgetState?: 'ok' | 'warn' | 'reached' | 'unknown'
   previousKey?: PreviousKey
+  /**
+   * SuggestedBudgetUSD is the spending limit set on the key at the service (OpenRouter limit), offered as the
+   * budget while the account has none; it is never applied on its own.
+   */
+  suggestedBudgetUsd?: number
+  /**
+   * Balance is what the service says is left (absent when it has no spend service or was not read yet):
+   * DeepSeek and Moonshot account balance (accountWide: shared by every key of that service account), or what
+   * is left of an OpenRouter key's limit (accountWide false).
+   */
+  balance?: Balance
+  /** ServiceUsage is what the service counted for this key (OpenRouter), in US dollars. */
+  serviceUsage?: ServiceUsage
+  /**
+   * ServiceError is the last failed read of the spend service, when it came after the last good one: Balance
+   * and ServiceUsage are then stale.
+   */
+  serviceError?: ServiceError
   twinOf?: string
   /** Busy is the number of running turns; MaxConcurrent the cap per account. */
   busy: number
@@ -98,7 +121,107 @@ export interface PreviousKey {
   spentTokens: number
   spentInputTokens: number
   spentOutputTokens: number
+  /** SpentUnpricedTokens is the part of SpentTokens counted without a cost. */
+  spentUnpricedTokens?: number
   budgetUsd?: number
+}
+
+/** Balance is what a spend service says is left, in the currency it named ("USD", "CNY"; never converted). */
+export interface Balance {
+  amount: number
+  currency: string
+  /**
+   * AccountWide: shared by every key of the service account (DeepSeek, Moonshot); it cannot tell what this key
+   * spent. False for an OpenRouter key's limit_remaining.
+   */
+  accountWide: boolean
+  /** Available is false when the service says the balance cannot pay for a request. */
+  available: boolean
+  /**
+   * Granted is the part the service gave (DeepSeek granted, Moonshot voucher); Paid the part paid for (DeepSeek
+   * topped up, Moonshot cash). Absent when not reported.
+   */
+  granted?: number
+  paid?: number
+  /** Other are the balances in other currencies (DeepSeek reports one per currency). */
+  other?: Money[]
+  /**
+   * ReadAt is when the service was read; Stale is true when a later read failed or the reading is over 2 hours
+   * old.
+   */
+  readAt: string
+  stale: boolean
+}
+
+/** Money is an amount in a currency. */
+export interface Money {
+  amount: number
+  currency: string
+}
+
+/**
+ * ServiceUsage is what a service counted for one key (OpenRouter), in US dollars, over the key's whole life
+ * (totalUsd) and the current day, week and month. LimitUSD is the key's limit at the service (absent: none),
+ * LimitRemainingUSD what is left of it, LimitReset the period it starts over ("daily", "weekly", "monthly"; absent:
+ * never).
+ */
+export interface ServiceUsage {
+  totalUsd: number
+  dailyUsd: number
+  weeklyUsd: number
+  monthlyUsd: number
+  limitUsd?: number
+  limitRemainingUsd?: number
+  limitReset?: string
+  readAt: string
+  stale: boolean
+}
+
+/**
+ * ServiceError is a failed read of a spend service. Message names the host and the failure (English), never the
+ * key or the answer's body.
+ */
+export interface ServiceError {
+  reason: 'refused' | 'no_credit' | 'unreachable' | 'redirected' | 'error'
+  message: string
+  at: string
+}
+
+/**
+ * Price is one row of a provider's price table: US dollars per million tokens for a model ("*": every model
+ * without its own row). CachedInputUSD is the price of input served from a prompt cache; absent means the input
+ * price. Seelegent ships no prices.
+ */
+export interface Price {
+  model: string
+  inputUsd: number
+  cachedInputUsd?: number
+  outputUsd: number
+  updatedAt?: string
+}
+
+/** PriceInput is one row of PUT /providers/{id}/prices (cachedInputUsd null or absent: the input price). */
+export interface PriceInput {
+  model: string
+  inputUsd: number
+  cachedInputUsd?: number
+  outputUsd: number
+}
+
+/** PricesRequest is PUT /providers/{id}/prices: the whole new table (an empty list removes every price). */
+export interface PricesRequest {
+  prices: PriceInput[]
+}
+
+/**
+ * PriceTable is GET and PUT /providers/{id}/prices: the provider's prices, sorted by model, the page where its
+ * service publishes them (absent when unknown) and its spend source with them.
+ */
+export interface PriceTable {
+  provider: string
+  prices: Price[]
+  pricingUrl?: string
+  spendSource: 'service' | 'cli' | 'prices' | 'free' | 'none'
 }
 
 /** AccountCreated is the answer to POST /accounts: the account, and the provider when the body had newProvider. */
@@ -297,11 +420,21 @@ export interface Provider {
    */
   modelPerTask?: boolean
   /**
-   * SpendSource says where its accounts' spend comes from: "cli" (the CLI's own cost estimate, official Anthropic
-   * only), "free" (local: Ollama or a localhost base URL) or "none" (tokens only). Open set: later versions add
-   * "service" and "prices".
+   * SpendSource says where its accounts' spend comes from, best first: "service" (the service counts each key's
+   * spend: OpenRouter), "free" (local: Ollama or a localhost base URL), "prices" (the user set prices),
+   * "cli" (the CLI's own cost estimate, official Anthropic only) or "none" (tokens only).
    */
-  spendSource?: string
+  spendSource?: 'service' | 'cli' | 'prices' | 'free' | 'none'
+  /**
+   * ServiceReading says what its spend service reads with each key: key_usage (OpenRouter: the key's spend, which
+   * is the accounts' spend) or account_balance (DeepSeek, Moonshot: the balance shared by the service account,
+   * shown beside the spend). Absent when it has none.
+   */
+  serviceReading?: 'key_usage' | 'account_balance'
+  /** PricingURL is the page where the service publishes its prices (absent when unknown: custom or local). */
+  pricingUrl?: string
+  /** Prices is the user's price table, sorted by model ([] when none). */
+  prices: Price[]
   createdAt?: string
   updatedAt?: string
   /**
@@ -326,6 +459,10 @@ export interface ProviderPreset {
    * absent for the others (their models come from a key test).
    */
   tiers?: TierModels
+  /** PricingURL is the page where the preset's service publishes its prices (absent when it has none). */
+  pricingUrl?: string
+  /** ServiceReading is what the preset's spend service reads (see Provider.serviceReading). */
+  serviceReading?: 'key_usage' | 'account_balance'
 }
 
 /** ProviderList is GET /providers. */
@@ -2003,8 +2140,9 @@ export interface TaskReport {
   profile?: string
   tokens_used: number
   /**
-   * TurnCostUSD is what the latest turn cost by the CLI's own estimate (Claude Code total_cost_usd), given only
-   * when that estimate is trusted: a task on the official Anthropic API (spend source cli).
+   * TurnCostUSD is what the latest turn cost as the account spend counts it: tokens times the user's prices for
+   * the model (Provider.prices), else the CLI's own estimate (Claude Code total_cost_usd) on the official Anthropic
+   * API. Absent when neither gives a cost.
    */
   turn_cost_usd?: number
   spec?: ReportSpec
