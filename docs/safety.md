@@ -246,7 +246,15 @@ writes it. Line endings are also no finding when git normalizes the file on comm
 the `text` and `eol` attributes; asked through `git hash-object --path`, which writes nothing) and the LF form keeps
 the style: those line endings never reach a commit. So an LF working copy under `core.autocrlf=true` is never
 flagged against the CRLF checkout form, while an LF file that gets CRLF lines where nothing normalizes is. A file
-that was dirty before the turn but whose start content the snapshot did not keep is not checked:
+that was dirty before the turn but whose start content the snapshot did not keep is not checked.
+
+- `hash-object` does not read the index, so it misses git's "safer autocrlf" rule: an automatic conversion
+  (`core.autocrlf`, `text=auto` with or without `eol`) is skipped when the index version of the file already has a
+  CR, and `git add` keeps the CRLF lines. The check applies that rule itself (`git check-attr text eol` and the
+  index blob read raw); an explicit `text` or an `eol` without `text=auto` still normalizes.
+- Known edge: with `core.safecrlf=true` and mixed line endings, `hash-object` reports the file as normalized while
+  `git add` refuses it (the conversion is not reversible). The check then finds nothing; the user's `git add` says
+  so instead.
 
 | Kind | Severity | When |
 |---|---|---|

@@ -20,6 +20,8 @@ import (
 type eolCase struct {
 	name     string
 	autocrlf string
+	// autocrlfAfter, when set, is core.autocrlf from after the commit on.
+	autocrlfAfter string
 	commit   map[string]string
 	checkout []string
 	// checkoutCRLF: the checkout must have written CRLF (the case is about that form).
@@ -74,6 +76,14 @@ func TestHygieneLineEndingsJudgeTheTurn(t *testing.T) {
 			commit: map[string]string{"calc.py": lf}, before: map[string]string{"calc.py": lf + "d\n"},
 			turn: map[string]string{"calc.py": lf + "d\r\ne\r\n"},
 			want: map[string][]string{"calc.py": {api.FindingEOLChanged}}},
+		// Safer autocrlf: the index version already has a CR, so git add keeps the new CRLF lines.
+		{name: "autocrlf turned on over a committed CR, file gets CRLF lines", autocrlf: "false",
+			autocrlfAfter: "true", commit: map[string]string{"calc.py": "a\nb\nc\nd\r\n"},
+			turn: map[string]string{"calc.py": "a\nb\nc\nd\r\ne\r\nf\r\ng\r\n"},
+			want: map[string][]string{"calc.py": {api.FindingEOLChanged}}},
+		{name: "autocrlf turned on over an LF file, file gets CRLF lines", autocrlf: "false",
+			autocrlfAfter: "true", commit: map[string]string{"calc.py": lf},
+			turn: map[string]string{"calc.py": lf + "e\r\nf\r\n"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) { checkEOLCase(t, tc) })
 	}
@@ -159,6 +169,9 @@ func runEOLCase(t *testing.T, tc eolCase) map[string][]string {
 	write(tc.commit)
 	gitIn(t, root, "add", ".")
 	gitIn(t, root, "commit", "-q", "-m", "init")
+	if tc.autocrlfAfter != "" {
+		gitIn(t, root, "config", "core.autocrlf", tc.autocrlfAfter)
+	}
 	for _, name := range tc.checkout {
 		if err := os.Remove(filepath.Join(root, name)); err != nil {
 			t.Fatal(err)
