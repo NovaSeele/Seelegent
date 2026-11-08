@@ -25,6 +25,7 @@ export type StartNotice =
   | { kind: 'unknown' }
   | { kind: 'unreachable'; start: string }
   | { kind: 'branchChanged'; from: string; to: string | null }
+  | { kind: 'historyUnavailable' }
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error))
 
@@ -34,7 +35,9 @@ export function startNotices(git: TaskGit | null): StartNotice[] {
   const out: StartNotice[] = []
   if (git.startState === 'unreachable')
     out.push({ kind: 'unreachable', start: git.startHead ?? '' })
-  if (git.startState === 'unknown') out.push({ kind: 'unknown' })
+  // A history that could not be read says so; the start is then not known to be missing.
+  if (git.historyState === 'history_unavailable') out.push({ kind: 'historyUnavailable' })
+  else if (git.startState === 'unknown') out.push({ kind: 'unknown' })
   if (git.branchChanged && git.startBranch)
     out.push({ kind: 'branchChanged', from: git.startBranch, to: git.branch ?? null })
   return out
@@ -45,7 +48,11 @@ export function useGitHistory(
   git: () => TaskGit | null,
   api: GitApi = gitApi,
 ) {
-  const commits = computed(() => git()?.commits ?? [])
+  // The task's own commits first (made during its turns), then the others since its start; each newest first.
+  const commits = computed(() => {
+    const all = git()?.commits ?? []
+    return [...all.filter((c) => !c.outsideTurns), ...all.filter((c) => c.outsideTurns)]
+  })
   const files = computed(() => sortFiles(git()?.committedFiles ?? []))
   const more = computed(() => git()?.commitsMore ?? 0)
   const notices = computed(() => startNotices(git()))

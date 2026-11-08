@@ -72,7 +72,8 @@
     "unknown": "Esta tarea no registró el commit desde el que empezó (es anterior a esta función o su carpeta no estaba en git entonces). Solo se muestran los cambios sin confirmar, comparados con HEAD; no se listan commits.",
     "unreachable": "El commit desde el que empezó esta tarea ({sha}) ya no está en la historia de HEAD (rebase, reset o cambio a otra rama). Solo se muestran los cambios sin confirmar, comparados con HEAD.",
     "branchChanged": "Esta tarea empezó en {from}; el repositorio está ahora en {to}. Los commits listados son todo lo que hay desde el inicio en la rama actual.",
-    "detached": "un HEAD separado"
+    "detached": "un HEAD separado",
+    "historyUnavailable": "Esta vez no se pudieron leer los commits desde que empezó la tarea (git tardó demasiado o falta un objeto). Los cambios sin confirmar se muestran como siempre; «Volver a leer» lo intenta de nuevo."
   },
   "history": {
     "title": "Confirmado en esta tarea",
@@ -94,7 +95,12 @@
     "sinceStart": "Todo el cambio desde que empezó la tarea",
     "uncommitted": "Cambios sin confirmar",
     "noUncommitted": "No queda nada por confirmar",
-    "noUncommittedDesc": "Todo lo que cambió esta tarea está en sus commits de arriba."
+    "noUncommittedDesc": "Todo lo que cambió esta tarea está en sus commits de arriba.",
+    "ownGroup": "Hechos durante los turnos de esta tarea",
+    "othersGroup": "Otros commits desde que empezó la tarea",
+    "othersHint": "Hechos mientras no corría ningún turno de esta tarea: de otra persona o entre turnos. Sus archivos no cuentan como de esta tarea.",
+    "outside": "Fuera de los turnos de la tarea",
+    "sinceStartNote": "Comparado con el inicio de la tarea, así que incluye otros commits a este archivo desde entonces."
   },
   "repo": {
     "title": "En el resto del repositorio",

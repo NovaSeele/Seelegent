@@ -7,7 +7,8 @@ import type { StartNotice } from './useGitHistory'
 
 /**
  * Says plainly when the Git view cannot follow the task's history: the start was never recorded, it is no longer
- * in the branch's history, or the repository is on another branch than the task started on.
+ * in the branch's history, the repository is on another branch than the task started on, or the commits since the
+ * start could not be read this time.
  */
 defineProps<{ notices: readonly StartNotice[] }>()
 
@@ -25,6 +26,9 @@ const { t } = useI18n()
     >
       <Icon :name="notice.kind === 'unknown' ? 'info' : 'warning'" />
       <p v-if="notice.kind === 'unknown'">{{ t('git.notice.unknown') }}</p>
+      <p v-else-if="notice.kind === 'historyUnavailable'">
+        {{ t('git.notice.historyUnavailable') }}
+      </p>
       <p v-else-if="notice.kind === 'unreachable'">
         {{ t('git.notice.unreachable', { sha: notice.start.slice(0, 10) }) }}
       </p>

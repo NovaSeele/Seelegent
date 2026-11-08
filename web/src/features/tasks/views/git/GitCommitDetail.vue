@@ -45,6 +45,9 @@ const format = useFormat()
           <span v-if="state.detail.turn">{{
             t('git.history.turn', { n: state.detail.turn })
           }}</span>
+          <span v-else-if="state.detail.outsideTurns" class="gcd__outside">{{
+            t('git.history.outside')
+          }}</span>
           <span>
             {{ state.detail.author }} ·
             <time :datetime="state.detail.authorTime">
@@ -111,6 +114,11 @@ const format = useFormat()
   gap: var(--space-0) var(--space-3);
   color: var(--text-secondary);
   font-size: var(--fs-xs);
+}
+
+.gcd__outside {
+  color: var(--text-primary);
+  font-weight: var(--fw-medium);
 }
 
 .gcd__meta code,

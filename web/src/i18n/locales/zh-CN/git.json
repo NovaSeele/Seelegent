@@ -72,7 +72,8 @@
     "unknown": "此任务没有记录开始时的提交（任务早于此功能，或当时文件夹不在 git 中）。只显示未提交的更改（与 HEAD 比较），不列出提交。",
     "unreachable": "此任务开始时的提交（{sha}）已不在 HEAD 的历史中（已变基、重置或切换到别处）。只显示未提交的更改（与 HEAD 比较）。",
     "branchChanged": "此任务开始于 {from}；仓库现在位于 {to}。列出的提交是当前分支上自开始以来的全部提交。",
-    "detached": "分离的 HEAD"
+    "detached": "分离的 HEAD",
+    "historyUnavailable": "这次无法读取自任务开始以来的提交（git 耗时过长或缺少对象）。未提交的更改照常显示；点击“重新读取”可重试。"
   },
   "history": {
     "title": "此任务中的提交",
@@ -94,7 +95,12 @@
     "sinceStart": "自任务开始以来的全部更改",
     "uncommitted": "未提交的更改",
     "noUncommitted": "没有可提交的内容",
-    "noUncommittedDesc": "此任务的所有更改都在上面的提交中。"
+    "noUncommittedDesc": "此任务的所有更改都在上面的提交中。",
+    "ownGroup": "在此任务的轮次中提交",
+    "othersGroup": "自任务开始以来的其他提交",
+    "othersHint": "在此任务没有轮次运行时提交：来自他人，或在两轮之间。它们的文件不算作此任务的文件。",
+    "outside": "在任务轮次之外",
+    "sinceStartNote": "与任务开始时比较，因此也包含此后其他提交对此文件的更改。"
   },
   "repo": {
     "title": "仓库中的其他更改",

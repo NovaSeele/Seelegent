@@ -72,7 +72,8 @@
     "unknown": "This task did not record the commit it started from (it is older than that, or its folder was not in git then). Only uncommitted changes are shown, compared with HEAD; commits are not listed.",
     "unreachable": "The commit this task started from ({sha}) is no longer in the history of HEAD (rebased, reset or switched away). Only uncommitted changes are shown, compared with HEAD.",
     "branchChanged": "This task started on {from}; the repository is now on {to}. The commits listed are everything since the start on the current branch.",
-    "detached": "a detached HEAD"
+    "detached": "a detached HEAD",
+    "historyUnavailable": "The commits since this task started could not be read this time (git took too long or an object is missing). Uncommitted changes are shown as usual; “Read again” tries again."
   },
   "history": {
     "title": "Committed in this task",
@@ -94,7 +95,12 @@
     "sinceStart": "Whole change since the task started",
     "uncommitted": "Uncommitted changes",
     "noUncommitted": "Nothing left to commit",
-    "noUncommittedDesc": "Everything this task changed is in its commits above."
+    "noUncommittedDesc": "Everything this task changed is in its commits above.",
+    "ownGroup": "Made during this task's turns",
+    "othersGroup": "Other commits since the task started",
+    "othersHint": "Made while none of this task's turns ran: someone else's, or between turns. Their files are not counted as this task's.",
+    "outside": "Outside the task's turns",
+    "sinceStartNote": "Compared with the task's start, so other commits to this file since then are included."
   },
   "repo": {
     "title": "Elsewhere in the repository",

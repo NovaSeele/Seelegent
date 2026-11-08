@@ -15,7 +15,9 @@ import type { GitHistoryModel, HistoryMode } from './useGitHistory'
 /**
  * "Committed in this task": what the worker (or anyone) committed since the task started. Two ways to look at it:
  * the commits, each with its own diff, or the files they changed with each file's whole change since the start
- * (uncommitted edits made after the commit included). View only: the commit dialog takes the uncommitted files.
+ * (uncommitted edits made after the commit included, and others' commits to the same file). Commits made outside
+ * the task's turns are listed apart and their files are not the task's. View only: the commit dialog takes the
+ * uncommitted files.
  */
 const props = defineProps<{ history: GitHistoryModel; wrap: boolean }>()
 
@@ -83,6 +85,7 @@ const options = computed(() => [
           <code>{{ h.file.value.path }}</code>
           <span>{{ t('git.history.sinceStart') }}</span>
         </p>
+        <p v-if="h.file.value" class="hist__note">{{ t('git.history.sinceStartNote') }}</p>
         <p v-if="h.fileDiff.value.status === 'loading'" class="hist__state">
           <Spinner size="sm" decorative />
           {{ t('git.diff.loading') }}
@@ -165,6 +168,12 @@ const options = computed(() => [
   font-family: var(--font-mono);
   font-size: var(--fs-sm);
   overflow-wrap: anywhere;
+}
+
+.hist__note {
+  max-width: var(--measure-prose);
+  color: var(--text-secondary);
+  font-size: var(--fs-xs);
 }
 
 .hist__state {

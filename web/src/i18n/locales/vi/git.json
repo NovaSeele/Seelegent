@@ -72,7 +72,8 @@
     "unknown": "Tác vụ này không ghi lại commit lúc bắt đầu (tác vụ cũ hơn tính năng này, hoặc thư mục khi đó chưa nằm trong git). Chỉ hiện các thay đổi chưa commit, so với HEAD; không liệt kê commit.",
     "unreachable": "Commit lúc tác vụ bắt đầu ({sha}) không còn trong lịch sử của HEAD (đã rebase, reset hoặc chuyển nhánh khác). Chỉ hiện các thay đổi chưa commit, so với HEAD.",
     "branchChanged": "Tác vụ bắt đầu trên {from}; kho hiện ở {to}. Các commit liệt kê là mọi thứ từ lúc bắt đầu trên nhánh hiện tại.",
-    "detached": "HEAD tách rời"
+    "detached": "HEAD tách rời",
+    "historyUnavailable": "Lần này không đọc được các commit từ lúc tác vụ bắt đầu (git chạy quá lâu hoặc thiếu một đối tượng). Thay đổi chưa commit vẫn hiện như thường; bấm “Đọc lại” để thử lại."
   },
   "history": {
     "title": "Đã commit trong tác vụ này",
@@ -94,7 +95,12 @@
     "sinceStart": "Toàn bộ thay đổi từ lúc tác vụ bắt đầu",
     "uncommitted": "Thay đổi chưa commit",
     "noUncommitted": "Không còn gì để commit",
-    "noUncommittedDesc": "Mọi thứ tác vụ này đổi đều nằm trong các commit ở trên."
+    "noUncommittedDesc": "Mọi thứ tác vụ này đổi đều nằm trong các commit ở trên.",
+    "ownGroup": "Tạo trong các lượt của tác vụ này",
+    "othersGroup": "Các commit khác từ lúc tác vụ bắt đầu",
+    "othersHint": "Tạo khi không có lượt nào của tác vụ đang chạy: của người khác, hoặc giữa các lượt. Tệp của chúng không được tính là của tác vụ này.",
+    "outside": "Ngoài các lượt của tác vụ",
+    "sinceStartNote": "So với lúc tác vụ bắt đầu, nên gồm cả các commit khác vào tệp này từ đó đến nay."
   },
   "repo": {
     "title": "Phần còn lại của kho",

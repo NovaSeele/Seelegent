@@ -121,6 +121,15 @@ describe('start notices', () => {
     expect(startNotices(view({ repo: false, startState: 'unknown' }))).toEqual([])
   })
 
+  it('says when the history could not be read, instead of calling the start unknown', () => {
+    expect(
+      startNotices(view({ startState: 'unknown', historyState: 'history_unavailable' })),
+    ).toEqual([{ kind: 'historyUnavailable' }])
+    expect(startNotices(view({ historyState: 'history_unavailable' }))).toEqual([
+      { kind: 'historyUnavailable' },
+    ])
+  })
+
   it('renders each notice in words', async () => {
     const { plugins } = await setupApp()
     const w = mount(GitStartNotice, {
@@ -128,12 +137,14 @@ describe('start notices', () => {
         notices: [
           { kind: 'unreachable', start: START },
           { kind: 'branchChanged', from: 'main', to: null },
+          { kind: 'historyUnavailable' },
         ],
       },
       global: { plugins },
     })
     const items = w.findAll('li')
-    expect(items).toHaveLength(2)
+    expect(items).toHaveLength(3)
+    expect(items[2]?.text()).toContain('could not be read this time')
     expect(items[0]?.text()).toContain('aaaaaaaaaa')
     expect(items[0]?.text()).toContain('no longer in the history')
     expect(items[1]?.text()).toContain('started on main')
@@ -190,6 +201,15 @@ describe('useGitHistory', () => {
     await flush(4)
     expect(m.selectedCommit.value).toBe(newest.sha)
     expect(commitDetail).toHaveBeenCalledTimes(2)
+  })
+
+  it("lists the task's own commits before the others and selects the newest own one", async () => {
+    const other = commit('e', 'someone else', { turn: 0, outsideTurns: true })
+    const mine = commit('b', 'mine')
+    const api = fakeApi({ commitDetail: vi.fn(() => Promise.resolve(detailOf(mine, ['b.ts']))) })
+    const { model } = await setup(api, view({ commits: [other, mine] }))
+    expect(model().commits.value.map((c) => c.subject)).toEqual(['mine', 'someone else'])
+    expect(model().selectedCommit.value).toBe(mine.sha)
   })
 
   it('diffs a committed file against the start, and only in the files mode', async () => {
@@ -381,6 +401,80 @@ describe('commit list and history section', () => {
     await w.findAll('[role="radio"]')[1]?.trigger('click')
     await flush(6)
     expect(w.text()).toContain('Whole change since the task started')
+    expect(w.text()).toContain('other commits to this file since then are included')
     expect(w.text()).toContain('since start')
+  })
+
+  it('groups the commits made outside the task turns apart, muted, and moves through both', async () => {
+    const { plugins } = await setupApp()
+    const own = [commit('1', 'one'), commit('2', 'two', { turn: 2 })]
+    const others = [commit('8', 'theirs', { turn: 0, outsideTurns: true })]
+    const selected = shallowRef<string | null>(own[0]?.sha ?? null)
+    const w = mount(GitCommitList, {
+      props: {
+        commits: [...own, ...others],
+        more: 0,
+        label: 'Commits',
+        selected: selected.value,
+        'onUpdate:selected': (v: string | null) => {
+          selected.value = v
+          void w.setProps({ selected: v })
+        },
+      },
+      global: { plugins },
+      attachTo: document.body,
+    })
+    const groups = w.findAll('[role="group"]')
+    expect(groups.map((g) => g.attributes('data-group'))).toEqual(['own', 'others'])
+    expect(groups[0]?.find('.gcl__title').text()).toBe("Made during this task's turns")
+    expect(groups[1]?.find('.gcl__title').text()).toBe('Other commits since the task started')
+    expect(groups[1]?.find('.gcl__hint').text()).toContain('not counted as this task')
+    const labelled = groups[1]?.attributes('aria-labelledby') ?? ''
+    expect(w.find(`#${CSS.escape(labelled)}`).text()).toBe('Other commits since the task started')
+    expect(groups[1]?.findAll('[role="option"]').map((o) => o.classes())).toEqual([
+      expect.arrayContaining(['gcl__row--other']),
+    ])
+
+    const list = w.find('[role="listbox"]').element
+    press('ArrowDown', {}, list)
+    await flush()
+    press('ArrowDown', {}, list)
+    await flush()
+    expect(selected.value).toBe(others[0]?.sha)
+    expect(document.activeElement?.textContent).toContain('theirs')
+    press('Home', {}, list)
+    await flush()
+    expect(selected.value).toBe(own[0]?.sha)
+    w.unmount()
+
+    // With only the task's own commits there are no group headings.
+    const plain = mount(GitCommitList, {
+      props: { commits: own, more: 0, label: 'Commits', selected: null },
+      global: { plugins },
+    })
+    expect(plain.findAll('[role="group"]')).toHaveLength(0)
+    expect(plain.find('.gcl__title').exists()).toBe(false)
+  })
+
+  it("marks a commit made outside the task's turns in its detail", async () => {
+    const { plugins } = await setupApp()
+    const c = commit('e', 'theirs', { turn: 0, outsideTurns: true })
+    const api = fakeApi({ commitDetail: vi.fn(() => Promise.resolve(detailOf(c, ['x.go']))) })
+    const w = mount(Host, {
+      props: {
+        make: () => {
+          const history = useGitHistory(
+            () => 't1',
+            () => view({ commits: [c] }),
+            api,
+          )
+          return () => h(GitHistory, { history, wrap: false })
+        },
+      },
+      global: { plugins },
+    })
+    await flush(6)
+    expect(w.find('.gcd__outside').text()).toBe("Outside the task's turns")
+    expect(w.find('[data-group="others"]').exists()).toBe(true)
   })
 })
