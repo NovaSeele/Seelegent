@@ -46,6 +46,8 @@ type env struct {
 	// pid and homeID identify the daemon this bench started: it never uses or stops another one.
 	pid    int
 	homeID string
+	// started is when the daemon was started.
+	started time.Time
 }
 
 func run(o *options) error {
@@ -247,7 +249,7 @@ func (e *env) startDaemon(ctx context.Context) (*exec.Cmd, <-chan error, error) 
 	}
 	exited := make(chan error, 1)
 	go func() { exited <- cmd.Wait(); _ = logf.Close() }()
-	e.pid = cmd.Process.Pid
+	e.pid, e.started = cmd.Process.Pid, time.Now()
 	deadline := time.Now().Add(60 * time.Second)
 	for {
 		select {
@@ -526,7 +528,8 @@ func (e *env) scenario(ctx context.Context) (*result, error) {
 	sctx, stopSampler := context.WithCancel(ctx)
 	var wg sync.WaitGroup
 	wg.Go(func() { s.run(sctx, e.o.interval, 250*time.Millisecond) })
-	r := &result{Scenario: e.o.scenario, Started: time.Now(), Options: optionsOf(e.o), GOOS: runtime.GOOS,
+	r := &result{Scenario: e.o.scenario, Started: time.Now(), DaemonStarted: e.started, Options: optionsOf(e.o),
+		GOOS:   runtime.GOOS,
 		GOARCH: runtime.GOARCH, NumCPU: runtime.NumCPU(), Commit: cmpOrString(e.o.commit, gitCommit(ctx, e.root))}
 	// The setup profile runs from the daemon's start; the warmup waits for it.
 	var profWG sync.WaitGroup

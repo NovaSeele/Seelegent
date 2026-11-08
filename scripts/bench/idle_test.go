@@ -6,6 +6,8 @@ import (
 	"os"
 	"sort"
 	"time"
+
+	"github.com/NovaSeele/Seelegent/internal/usage"
 )
 
 // spawnRun is one quota read or gh run, by its start time.
@@ -27,7 +29,8 @@ func spawnRuns(spawns []spawnRecord) []spawnRun {
 	return out
 }
 
-// idleSummary splits the idle CPU: the floor between quota cycles, the cost of one cycle, and the window's average.
+// idleSummary splits the idle CPU: the floor between quota cycles and the daemon's periodic work, the cost of one
+// cycle, of one quota read and of one usage recorder tick, and the window's average.
 type idleSummary struct {
 	// Cycles are the quota cycles that started inside the window (runs closer than cycleGap are one cycle).
 	Cycles       int      `json:"quotaCycles"`
@@ -39,7 +42,45 @@ type idleSummary struct {
 	BusySeconds  float64  `json:"cycleSampleSeconds"`
 	QuietSeconds float64  `json:"floorSampleSeconds"`
 	Runs         int      `json:"runsInWindow"`
-	runTimes     []time.Time
+	// QuotaReads are the quota-reader runs in the window; CPUPerRead is the daemon's CPU above the floor in the
+	// cycles' intervals per quota read (the few gh runs that fall in a cycle are included).
+	QuotaReads int     `json:"quotaReadsInWindow"`
+	CPUPerRead float64 `json:"daemonCpuSecondsPerQuotaRead"`
+	// Ticks are the usage recorder's hourly snapshot and prune runs in the window (recorderTicks); their intervals
+	// are kept out of the floor and the cycles. CPUPerTick is the daemon's CPU above the floor per tick.
+	Ticks       int      `json:"recorderTicks"`
+	TickTimes   []string `json:"recorderTickTimes,omitempty"`
+	TickSeconds float64  `json:"recorderSampleSeconds"`
+	CPUPerTick  float64  `json:"daemonCpuSecondsPerRecorderTick"`
+	runTimes    []time.Time
+	tickTimes   []time.Time
+}
+
+// recorderTicks are the usage recorder's ticks in [from, to] that do work: the first one after the daemon's start
+// and the first one after each local hour boundary (it writes the hour's snapshot and prunes; the other ticks
+// return at once). The recorder runs usage.DefaultStartDelay after the start, then every usage.DefaultCheck, so
+// its ticks are predicted from the daemon's start time. A real tick is a little later (the daemon's own start, and
+// each tick's time adds up), which near's cycleTail covers; a tick predicted less than cycleTail before an hour
+// boundary may really run after it, so both it and the next one are taken. A zero start gives none.
+func recorderTicks(start, from, to time.Time, loc *time.Location) []time.Time {
+	if start.IsZero() || !to.After(from) {
+		return nil
+	}
+	hourOf := func(t time.Time) string { return t.In(loc).Format("2006-01-02T15 -0700") }
+	var out []time.Time
+	hour := ""
+	for t := start.Add(usage.DefaultStartDelay); !t.After(to); t = t.Add(usage.DefaultCheck) {
+		key := hourOf(t)
+		edge := hourOf(t.Add(cycleTail)) != key
+		if (key != hour || edge) && !t.Before(from) {
+			out = append(out, t)
+		}
+		hour = key
+		if edge {
+			hour = ""
+		}
+	}
+	return out
 }
 
 const (
@@ -49,9 +90,10 @@ const (
 	cycleTail = 20 * time.Second
 )
 
-// idleCost computes the idle split from the samples of the window (and the one before) and the runs. A sample
-// interval is part of a cycle when a run started in it or up to cycleTail before it.
-func idleCost(base *sample, win []*sample, runs []spawnRun) *idleSummary {
+// idleCost computes the idle split from the samples of the window (and the one before), the runs and the
+// recorder's ticks. A sample interval is part of a cycle when a run started in it or up to cycleTail before it, else
+// part of a recorder tick when a tick did; the floor is the other intervals.
+func idleCost(base *sample, win []*sample, runs []spawnRun, ticks []time.Time) *idleSummary {
 	pts := win
 	if base != nil {
 		pts = append([]*sample{base}, win...)
@@ -68,14 +110,24 @@ func idleCost(base *sample, win []*sample, runs []spawnRun) *idleSummary {
 		}
 		x.Runs++
 		x.runTimes = append(x.runTimes, r.At)
+		if r.Role == "quota-reader" {
+			x.QuotaReads++
+		}
 		if last.IsZero() || r.At.Sub(last) > cycleGap {
 			x.Cycles++
 			x.CycleStarts = append(x.CycleStarts, r.At.Format("15:04:05"))
 		}
 		last = r.At
 	}
-	var busyCPU, quietCPU, busyTree, quietTree time.Duration
-	var busySecs, quietSecs float64
+	for _, t := range ticks {
+		if !t.Before(from) && !t.After(to) {
+			x.Ticks++
+			x.tickTimes = append(x.tickTimes, t)
+			x.TickTimes = append(x.TickTimes, t.Format("15:04:05"))
+		}
+	}
+	var busyCPU, quietCPU, busyTree, quietTree, tickCPU time.Duration
+	var busySecs, quietSecs, tickSecs float64
 	tree := true
 	for i := 1; i < len(pts); i++ {
 		a, b := pts[i-1], pts[i]
@@ -87,33 +139,42 @@ func idleCost(base *sample, win []*sample, runs []spawnRun) *idleSummary {
 			tree = false
 		}
 		secs := b.At.Sub(a.At).Seconds()
-		if x.busy(a.At, b.At) {
+		switch {
+		case near(x.runTimes, a.At, b.At):
 			busyCPU, busyTree, busySecs = busyCPU+cpu, busyTree+tcpu, busySecs+secs
-		} else {
+		case near(x.tickTimes, a.At, b.At):
+			tickCPU, tickSecs = tickCPU+cpu, tickSecs+secs
+		default:
 			quietCPU, quietTree, quietSecs = quietCPU+cpu, quietTree+tcpu, quietSecs+secs
 		}
 	}
-	x.BusySeconds, x.QuietSeconds = round(busySecs, 1), round(quietSecs, 1)
+	x.BusySeconds, x.QuietSeconds, x.TickSeconds = round(busySecs, 1), round(quietSecs, 1), round(tickSecs, 1)
 	if quietSecs > 0 {
 		x.FloorPercent = round(100*quietCPU.Seconds()/quietSecs, 4)
 		if tree {
 			x.TreeFloor = round(100*quietTree.Seconds()/quietSecs, 4)
 		}
 	}
+	// A cycle's (a read's, a tick's) cost is what its intervals used above the floor.
+	floor, treeFloor := x.FloorPercent/100, x.TreeFloor/100
 	if x.Cycles > 0 {
-		// A cycle's cost is what its intervals used above the floor.
-		floor, treeFloor := x.FloorPercent/100, x.TreeFloor/100
 		x.CPUPerCycle = round((busyCPU.Seconds()-floor*busySecs)/float64(x.Cycles), 3)
 		if tree {
 			x.TreePerCycle = round((busyTree.Seconds()-treeFloor*busySecs)/float64(x.Cycles), 3)
 		}
 	}
+	if x.QuotaReads > 0 {
+		x.CPUPerRead = round((busyCPU.Seconds()-floor*busySecs)/float64(x.QuotaReads), 4)
+	}
+	if x.Ticks > 0 {
+		x.CPUPerTick = round((tickCPU.Seconds()-floor*tickSecs)/float64(x.Ticks), 4)
+	}
 	return x
 }
 
-// busy reports whether a run started in (a, b] or up to cycleTail before a.
-func (x *idleSummary) busy(a, b time.Time) bool {
-	for _, t := range x.runTimes {
+// near reports whether one of times lies in (a, b] or up to cycleTail before a.
+func near(times []time.Time, a, b time.Time) bool {
+	for _, t := range times {
 		if t.After(a.Add(-cycleTail)) && !t.After(b) {
 			return true
 		}
@@ -134,7 +195,9 @@ func writeIdle(p func(string, ...any), r *result) {
 	if x.TreeFloor > 0 || x.TreePerCycle > 0 {
 		p(" Whole tree: floor %.4f %%, %.3f CPU s per cycle.", x.TreeFloor, x.TreePerCycle)
 	}
-	p("\n")
+	p("\n\nPer quota-reader spawn: %.4f daemon CPU s above the floor (%d reads). Usage recorder (hourly snapshot and "+
+		"prune, kept out of the floor): %d ticks %v, %.4f daemon CPU s each above the floor (%.0f s of samples).\n",
+		x.CPUPerRead, x.QuotaReads, x.Ticks, x.TickTimes, x.CPUPerTick, x.TickSeconds)
 	if len(r.Runs) > 0 {
 		p("\nRuns (start times): ")
 		for i, run := range r.Runs {

@@ -209,32 +209,34 @@ type loadSummary struct {
 
 // result is one bench run (result.json).
 type result struct {
-	Scenario    string            `json:"scenario"`
-	Commit      string            `json:"commit"`
-	GOOS        string            `json:"goos"`
-	GOARCH      string            `json:"goarch"`
-	NumCPU      int               `json:"numCPU"`
-	Options     map[string]string `json:"options"`
-	Started     time.Time         `json:"started"`
-	WindowStart time.Time         `json:"windowStart"`
-	WindowEnd   time.Time         `json:"windowEnd"`
-	Machine     machineSummary    `json:"machine"`
-	Setup       []setupPhase      `json:"setup"`
-	Daemon      daemonSummary     `json:"daemon"`
-	Tree        *treeSummary      `json:"tree,omitempty"`
-	TreeFinal   *jobStat          `json:"treeFinal,omitempty"`
-	Roles       []roleSummary     `json:"roles"`
-	Spawns      []spawnSummary    `json:"spawnLog"`
-	Runs        []spawnRun        `json:"runs"`
-	Idle        *idleSummary      `json:"idle,omitempty"`
-	DB          dbSummary         `json:"db"`
-	Load        *loadSummary      `json:"load,omitempty"`
-	Retained    *retainedHeap     `json:"retainedHeap,omitempty"`
-	GoSysEnd    *goSysBreakdown   `json:"goSysEnd,omitempty"`
-	Budget      []budgetCheck     `json:"budget"`
-	Errors      map[string]int    `json:"sampleErrors,omitempty"`
-	Processes   []*tracked        `json:"processes"`
-	Samples     []sample          `json:"samples"`
+	Scenario string            `json:"scenario"`
+	Commit   string            `json:"commit"`
+	GOOS     string            `json:"goos"`
+	GOARCH   string            `json:"goarch"`
+	NumCPU   int               `json:"numCPU"`
+	Options  map[string]string `json:"options"`
+	Started  time.Time         `json:"started"`
+	// DaemonStarted is when the bench started the daemon: the usage recorder's ticks are timed from it.
+	DaemonStarted time.Time       `json:"daemonStarted,omitzero"`
+	WindowStart   time.Time       `json:"windowStart"`
+	WindowEnd     time.Time       `json:"windowEnd"`
+	Machine       machineSummary  `json:"machine"`
+	Setup         []setupPhase    `json:"setup"`
+	Daemon        daemonSummary   `json:"daemon"`
+	Tree          *treeSummary    `json:"tree,omitempty"`
+	TreeFinal     *jobStat        `json:"treeFinal,omitempty"`
+	Roles         []roleSummary   `json:"roles"`
+	Spawns        []spawnSummary  `json:"spawnLog"`
+	Runs          []spawnRun      `json:"runs"`
+	Idle          *idleSummary    `json:"idle,omitempty"`
+	DB            dbSummary       `json:"db"`
+	Load          *loadSummary    `json:"load,omitempty"`
+	Retained      *retainedHeap   `json:"retainedHeap,omitempty"`
+	GoSysEnd      *goSysBreakdown `json:"goSysEnd,omitempty"`
+	Budget        []budgetCheck   `json:"budget"`
+	Errors        map[string]int  `json:"sampleErrors,omitempty"`
+	Processes     []*tracked      `json:"processes"`
+	Samples       []sample        `json:"samples"`
 }
 
 func optionsOf(o *options) map[string]string {
@@ -508,7 +510,7 @@ func (r *result) fill(s *sampler, g *loadGen, spawns []spawnRecord) {
 	sort.Slice(r.Spawns, func(i, j int) bool { return r.Spawns[i].Role < r.Spawns[j].Role })
 	r.Runs = spawnRuns(spawns)
 	if r.idleScenario() {
-		r.Idle = idleCost(base, win, r.Runs)
+		r.Idle = idleCost(base, win, r.Runs, recorderTicks(r.DaemonStarted, from, to, time.Local))
 	}
 
 	if r.Scenario == "load" || g.sseConns.Load() > 0 {
@@ -540,6 +542,9 @@ const (
 	loadPrivatePerTask = 2.5
 )
 
+// minSlopeWindow is the shortest measured window whose slopes are judged (a 5-minute load gave false OVER results).
+const minSlopeWindow = 15 * time.Minute
+
 // budget is the plan's budget (m19-resources.md §7); a violation is flagged, never a failure.
 func (r *result) budget() []budgetCheck {
 	var out []budgetCheck
@@ -551,11 +556,20 @@ func (r *result) budget() []budgetCheck {
 	// over; the limits allow for the noise of a few minutes of samples. Under load the slopes also count the state
 	// of the attempts that run all through the window, so there they are information only and the live heap
 	// retained after the load is the leak check.
+	// A window shorter than minSlopeWindow extrapolates start-up growth and GC noise to a whole hour, so its slopes
+	// are information only too.
 	add("daemon private bytes slope over the second half MB/h", 10, r.Daemon.PrivSlope)
 	add("daemon live heap slope over the second half MB/h", 5, r.Daemon.HeapSlope)
-	if r.Scenario == "load" {
+	slopeNote := ""
+	switch {
+	case r.WindowEnd.Sub(r.WindowStart) < minSlopeWindow:
+		slopeNote = "information only: window too short"
+	case r.Scenario == "load":
+		slopeNote = "information only: per-attempt state grows while tasks run; see retained heap"
+	}
+	if slopeNote != "" {
 		for i := len(out) - 2; i < len(out); i++ {
-			out[i].Info, out[i].Note = true, "information only: per-attempt state grows while tasks run; see retained heap"
+			out[i].Info, out[i].Note = true, slopeNote
 		}
 	}
 	if x := r.Retained; x.measured() {
@@ -790,7 +804,9 @@ func (r *result) metrics() []metric {
 	}
 	if x := r.Idle; x != nil {
 		m = append(m, metric{"idle floor daemon CPU % core", x.FloorPercent},
-			metric{"idle daemon CPU s per quota cycle", x.CPUPerCycle}, metric{"idle quota cycles", float64(x.Cycles)})
+			metric{"idle daemon CPU s per quota cycle", x.CPUPerCycle}, metric{"idle quota cycles", float64(x.Cycles)},
+			metric{"idle daemon CPU s per quota-reader spawn", x.CPUPerRead},
+			metric{"idle daemon CPU s per recorder tick", x.CPUPerTick})
 	}
 	for _, x := range r.Roles {
 		if x.Role != "daemon" {

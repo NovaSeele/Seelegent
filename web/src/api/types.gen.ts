@@ -1877,6 +1877,11 @@ export interface TaskReport {
   cancelling?: boolean
   error?: string
   waiting_until?: string
+  /**
+   * WaitDetail is TaskSummary.WaitDetail while the task waits for an account: why, and the free API-key
+   * accounts a provider would reach.
+   */
+  wait_detail?: string
   /** Waiting is TaskSummary.Waiting: "memory" while a waiting_quota task waits for free memory. */
   waiting?: 'memory'
   answered_by?: string
@@ -2827,9 +2832,17 @@ export interface Attempt {
   model?: string
   startedAt: string
   endedAt?: string
-  /** Status is running, ok, quota, auth, transient, background_wait, error or cancelled. */
+  /** Status is running, ok, quota, auth, credits, transient, background_wait, error or cancelled. */
   status:
-    'running' | 'ok' | 'quota' | 'auth' | 'transient' | 'background_wait' | 'error' | 'cancelled'
+    | 'running'
+    | 'ok'
+    | 'quota'
+    | 'auth'
+    | 'credits'
+    | 'transient'
+    | 'background_wait'
+    | 'error'
+    | 'cancelled'
   /** Kind is "console" for a takeover. */
   kind?: 'console'
   error?: string
@@ -3967,7 +3980,7 @@ export interface WorkerReport {
 
 /** Error is a classified failure. */
 export interface WorkerError {
-  class: 'quota_exhausted' | 'auth_required' | 'transient' | 'fatal'
+  class: 'quota_exhausted' | 'auth_required' | 'credits' | 'transient' | 'fatal'
   message: string
 }
 

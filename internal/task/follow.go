@@ -86,6 +86,7 @@ func (s *Service) follow(r *run, h *launch.Handle, b backend.Backend, m attemptM
 		tp.SetUsageBaseline(s.usageBaseline(id, turn, n))
 	}
 	f := s.newFollower(r, parser, id, turn, n, committed)
+	f.coll.Backend = b.Name()
 	ctx, cancel := context.WithCancel(s.root)
 	defer cancel()
 

@@ -77,20 +77,28 @@ func agyRules() []rule {
 const reClaudeLimit = `\bhit your (?:(?:5-hour|weekly|session|opus|sonnet|usage) )?limit\b|` +
 	`\b(?:5-hour|weekly|opus|sonnet) limit reached\b|\blimit [·\-–] resets\b|\bclaude ai usage limit reached\b`
 
-// claudeRules: auth, then transient (overloaded counts as transient), then quota (old claude.js L416-433).
+// reCredits is a key's credit balance or billing running out ("Credit balance is too low", OpenAI's
+// insufficient_quota "... check your plan and billing details", "402 Payment Required"): credits, not a quota
+// limit, since no time ends it. agy keeps its "out of credits" as quota: a Google plan's credits refill.
+const reCredits = `credits? balance|out of credits|insufficient_quota|billing|\b402\b.{0,30}payment`
+
+// claudeRules: auth, then transient (overloaded counts as transient), then credits, then quota (old claude.js
+// L416-433).
 func claudeRules() []rule {
 	return []rule{
 		newRule(event.ClassAuthRequired, `invalid\s*(x-)?api[- ]?key|not logged in|please run /login|run /login|authentication_error|oauth token (has )?expired|verify your account|log back in|permission_error|`+re401+`|`+re403),
 		newRule(event.ClassTransient, reNetwork+`|overloaded_error|\boverloaded\b|\b529\b|api_error|internal server error|`+reStatus5xx),
-		newRule(event.ClassQuotaExhausted, reClaudeLimit+`|rate_limit_error|rate[ -]?limit(ed| exceeded| reached)|usage limit|credit balance is too low|credits? balance|out of credits|insufficient_quota|exceeded your current quota|billing|`+re429+`|\b402\b.{0,30}payment`),
+		newRule(event.ClassCredits, reCredits),
+		newRule(event.ClassQuotaExhausted, reClaudeLimit+`|rate_limit_error|rate[ -]?limit(ed| exceeded| reached)|usage limit|exceeded your current quota|`+re429),
 	}
 }
 
-// codexRules: quota, then auth, then transient (old codex.js L643-657, without the bare "unauthorized" and
-// "forbidden" of B8).
+// codexRules: credits, then quota, then auth, then transient (old codex.js L643-657, without the bare
+// "unauthorized" and "forbidden" of B8).
 func codexRules() []rule {
 	return []rule{
-		newRule(event.ClassQuotaExhausted, `RESOURCE_EXHAUSTED|insufficient_quota|usage[ _]limit|rate[ -]?limit(ed| exceeded| reached)|`+re429+`|out of credits|credits? balance|capacity exceeded|exceeded your current quota|billing|\b402\b.{0,30}payment`),
+		newRule(event.ClassCredits, reCredits),
+		newRule(event.ClassQuotaExhausted, `RESOURCE_EXHAUSTED|usage[ _]limit|rate[ -]?limit(ed| exceeded| reached)|`+re429+`|capacity exceeded|exceeded your current quota`),
 		newRule(event.ClassAuthRequired, `invalid\s*(x-)?(api\s*key|token)|not logged in|please log ?in|codex login|authentication (failed|required|error)|token (has )?expired|refresh token|verify your account|`+re401+`|`+re403),
 		newRule(event.ClassTransient, reNetwork+`|\bINTERNAL\b|\bUNAVAILABLE\b|`+reStatus5xx),
 	}

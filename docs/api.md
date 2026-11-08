@@ -96,7 +96,10 @@ in the daemon.
   accounts, `acc6: 2 of 2 running`). The `waiting_quota` event carries the same as `reason` and `detail`. Both are
   absent for other statuses; events and daemons from before this addition carry only `memory` (an account wait
   had no reason), which the dashboard reads as waiting for quota. The lead's report (`TaskReport.waiting`) still
-  names only the memory wait.
+  names only the memory wait; `TaskReport.wait_detail` carries `waitDetail` while the task waits. A task without
+  `provider` whose sign-in accounts rest or are busy gets the free API-key accounts of its backend named there
+  (`; free API-key accounts: pass provider: anthropic and a model`, at most three providers, "and a model" when the
+  provider maps no tier); it never moves to them by itself, since keys cost money.
 
 - `GET /git/branches` answers `null` for a folder that does not exist, keyed by the cwd as given. A batch of 50 cwds
   should not fail because one project folder was deleted. A relative cwd is still `400`.

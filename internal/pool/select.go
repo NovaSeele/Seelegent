@@ -137,10 +137,28 @@ func (v *view) cooldown(id, group string) (Cooldown, bool) {
 	if !ok || !c.Until.After(v.now) {
 		return Cooldown{}, false
 	}
+	if group == creditsGroup {
+		for i := range v.accounts {
+			if a := &v.accounts[i]; a.ID == id {
+				return v.noCredit(a)
+			}
+		}
+		return Cooldown{}, false
+	}
 	if snap, found := v.snaps[id]; !c.Passive && found && snap.FetchedAt.After(c.CreatedAt) {
 		if _, exhausted := snap.Exhausted(v.now, group, "", v.settings.MinRemaining); !exhausted {
 			return Cooldown{}, false
 		}
+	}
+	return c, true
+}
+
+// noCredit returns account a's rest for a credit balance that ran out (MarkNoCredit), while the user has not acted
+// on the account since: a new key (KeySetAt) or any edit of the account (UpdatedAt) lifts it.
+func (v *view) noCredit(a *account.Account) (Cooldown, bool) {
+	c, ok := v.cooldowns[a.ID][creditsGroup]
+	if !ok || a.KeySetAt.After(c.CreatedAt) || a.UpdatedAt.After(c.CreatedAt) {
+		return Cooldown{}, false
 	}
 	return c, true
 }
@@ -165,6 +183,8 @@ type eval struct {
 	remaining float64
 	known     bool
 	busy      int
+	// noCredit: ineligible because its credit ran out (MarkNoCredit), not resting: no time brings it back.
+	noCredit bool
 }
 
 // evaluate decides what account a can do for req; busy is its number of running turns.
@@ -182,6 +202,10 @@ func (v *view) evaluate(a *account.Account, req *Request, busy int) eval {
 			return e
 		}
 	} else if a.Kind != account.KindAPIKey || a.Provider != req.Provider {
+		return e
+	}
+	if _, ok := v.noCredit(a); ok {
+		e.noCredit = true
 		return e
 	}
 	snap, found := v.snaps[a.ID]
@@ -243,6 +267,9 @@ func (p *Pool) choose(v *view, req *Request) (Choice, *Unavailable) {
 		}
 		switch e.state {
 		case stateIneligible:
+			if e.noCredit {
+				u.NoCredit = append(u.NoCredit, NoCredit{AccountID: a.ID, Label: a.Label, Provider: a.Provider})
+			}
 			continue
 		case statePending:
 			u.Resting++
@@ -277,10 +304,35 @@ func (p *Pool) choose(v *view, req *Request) (Choice, *Unavailable) {
 		default:
 			u.Reason = ReasonResting
 		}
+		if u.Reason != ReasonNoAccount && u.Capped == 0 {
+			u.KeyProviders = p.freeKeyProviders(v, req)
+		}
 		return Choice{}, u
 	}
 	best := pick(free, req.Prefer)
 	return Choice{Account: *best.a, Model: best.model, Remaining: best.remaining, RemainingKnown: best.known}, nil
+}
+
+// freeKeyProviders lists the providers whose API-key accounts of the request's backend would be free for it with
+// provider set, when the request names no provider and no account. The caller holds p.mu.
+func (p *Pool) freeKeyProviders(v *view, req *Request) []KeyProvider {
+	if req.Provider != "" || req.Account != "" {
+		return nil
+	}
+	var out []KeyProvider
+	for i := range v.accounts {
+		a := &v.accounts[i]
+		if a.Kind != account.KindAPIKey || a.Provider == "" || p.held[a.ID] > 0 ||
+			slices.ContainsFunc(out, func(k KeyProvider) bool { return k.ID == a.Provider }) {
+			continue
+		}
+		with := *req
+		with.Provider = a.Provider
+		if v.evaluate(a, &with, len(p.leases[a.ID])).state == stateFree {
+			out = append(out, KeyProvider{ID: a.Provider})
+		}
+	}
+	return out
 }
 
 // runningLocked counts the turns running on every account (leases, takeover consoles included). The caller holds

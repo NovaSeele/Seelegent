@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/NovaSeele/Seelegent/internal/account"
@@ -122,6 +123,40 @@ func (p *Pool) MarkAuthFailed(ctx context.Context, accountID, message string) er
 		}
 	}
 	return fmt.Errorf("mark %s signed out: %w", accountID, account.ErrNotFound)
+}
+
+// creditsGroup is the quota group of an account-wide rest for a credit balance or billing that ran out
+// (MarkNoCredit); no backend names a quota group "". creditsUntil is its end: none, since no time ends it.
+const creditsGroup = ""
+
+var creditsUntil = time.Date(9999, time.December, 31, 0, 0, 0, 0, time.UTC)
+
+// MarkNoCredit rests an account after a run reported credits (its key's credit balance or billing ran out). Unlike
+// MarkExhausted no time ends the rest: it holds until the user acts, by storing a new key or editing the account
+// (switching it off and on, say) after topping up, or by ClearCooldown. Unknown accounts give an error matching
+// account.ErrNotFound.
+func (p *Pool) MarkNoCredit(ctx context.Context, accountID, message string) error {
+	accounts, err := p.o.Accounts.List(ctx)
+	if err != nil {
+		return fmt.Errorf("rest account %s: %w", accountID, err)
+	}
+	if !slices.ContainsFunc(accounts, func(a account.Account) bool { return a.ID == accountID }) {
+		return fmt.Errorf("rest account %s: %w", accountID, account.ErrNotFound)
+	}
+	now := p.o.Clock.Now().UTC()
+	err = p.o.DB.Write(ctx, func(tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, `INSERT INTO cooldowns (account_id, quota_group, until, reason, passive, created_at)
+			VALUES (?, ?, ?, ?, 1, ?)
+			ON CONFLICT (account_id, quota_group) DO UPDATE SET until = excluded.until, reason = excluded.reason,
+				passive = excluded.passive, created_at = excluded.created_at`,
+			accountID, creditsGroup, formatTime(creditsUntil), message, formatTime(now))
+		return err
+	})
+	if err != nil {
+		return fmt.Errorf("rest account %s: %w", accountID, err)
+	}
+	p.o.Logger.Info("pool: account has no credit left", "account", accountID)
+	return nil
 }
 
 // freshSnapshot reads the account's quota now when possible, else returns the cached snapshot (zero when none).

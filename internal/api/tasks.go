@@ -320,8 +320,8 @@ type Attempt struct {
 	Model        string `json:"model,omitempty"`
 	StartedAt    string `json:"startedAt"`
 	EndedAt      string `json:"endedAt,omitempty"`
-	// Status is running, ok, quota, auth, transient, background_wait, error or cancelled.
-	Status string `json:"status" ts:"'running' | 'ok' | 'quota' | 'auth' | 'transient' | 'background_wait' | 'error' | 'cancelled'"`
+	// Status is running, ok, quota, auth, credits, transient, background_wait, error or cancelled.
+	Status string `json:"status" ts:"'running' | 'ok' | 'quota' | 'auth' | 'credits' | 'transient' | 'background_wait' | 'error' | 'cancelled'"`
 	// Kind is "console" for a takeover.
 	Kind  string `json:"kind,omitempty" ts:"'console'"`
 	Error string `json:"error,omitempty"`
