@@ -65,6 +65,34 @@ const CANNOT_RUN: ReadonlySet<AccountStatus> = new Set([
 export const showsSlots = (account: Account): boolean =>
   account.busy > 0 || (account.enabled && !CANNOT_RUN.has(account.status))
 
+/** What turning an account off changes now: the turns running on it, and whether no other account takes its work. */
+export interface OffConsequence {
+  running: number
+  only: boolean
+}
+
+/**
+ * What turning `account` off changes now, or null when the switch can flip without asking: no turn runs on it and
+ * another account of the same backend and provider is on and can take work. Accounts that cannot take work (off,
+ * signed out, no key, no plan, a second sign-in) do not count as that other account.
+ */
+export function offConsequence(account: Account, all: readonly Account[]): OffConsequence | null {
+  const provider = account.provider ?? null
+  // An account that cannot take work itself (signed out, no key, …) leaves nothing behind when it goes off.
+  const only =
+    !CANNOT_RUN.has(account.status) &&
+    !all.some(
+      (a) =>
+        a.id !== account.id &&
+        a.backend === account.backend &&
+        (a.provider ?? null) === provider &&
+        a.enabled &&
+        !CANNOT_RUN.has(a.status),
+    )
+  if (account.busy === 0 && !only) return null
+  return { running: account.busy, only }
+}
+
 export const PILL_TONE: Readonly<Record<Exclude<PillState, 'status'>, Tone>> = {
   exhausted: 'attention',
   resting: 'neutral',

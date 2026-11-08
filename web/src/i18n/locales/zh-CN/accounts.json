@@ -59,7 +59,8 @@
     "keyCleared": "已从 {name} 移除 API 密钥",
     "deleted": "已删除 {name}",
     "logout": "已退出登录",
-    "refreshedAll": "配额已刷新"
+    "refreshedAll": "配额已刷新",
+    "off": "已停止给 {name} 分配工作"
   },
   "quota": {
     "window": "{window} 窗口",
@@ -141,6 +142,21 @@
     "desc": "它的配置和登录将从 Seelegent 中移除。它运行过的任务会保留历史。",
     "confirm": "删除账号",
     "running": "它正在运行任务，现在不能删除。{error}"
+  },
+  "logout": {
+    "title": "退出 {name} 的登录？",
+    "desc": "它自己配置中保存的登录会被移除，在你重新登录之前它不接收工作。这台电脑上的登录不受影响。",
+    "confirm": "退出登录",
+    "running": "它正在运行任务，现在不能退出登录。{error}"
+  },
+  "off": {
+    "title": "停止给 {name} 分配工作？",
+    "desc": "该账号不再接收新工作。你随时可以重新打开。",
+    "confirm": "停止分配工作",
+    "running": "正在它上面运行的 {n} 个任务会跑完当前这一轮。",
+    "only": "这是唯一能接活的 {backend} 账号：新的 {backend} 任务会等待，直到你重新打开一个账号。",
+    "others": "新工作和运行中任务的下一轮会交给另一个 {backend} 账号。",
+    "withProvider": "{backend}（{provider}）"
   },
   "providers": {
     "title": "API 提供方",

@@ -8,6 +8,8 @@
   "masterLink": "Open the settings",
   "deleteTitle": "Delete {name}?",
   "deleteDesc": "The automation and its run history go. Tasks it started stay.",
+  "runTitle": "Run {name} now?",
+  "runDesc": "It hands its work to a worker right away. Its precheck and the quota are still checked, and if its last run is still going this one is skipped.",
   "state": {
     "on": "On",
     "requested": "Waiting for you",

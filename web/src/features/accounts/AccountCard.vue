@@ -12,17 +12,18 @@ import Switch from '@/components/ui/Switch.vue'
 import { useAccountsStore } from '@/stores/accounts'
 
 import AccountFacts from './AccountFacts.vue'
-import { canSignIn, useActions } from './accountView'
+import { canSignIn, offConsequence, useActions } from './accountView'
 import LoginPanel from './LoginPanel.vue'
 import QuotaGroups from './QuotaGroups.vue'
 import { useAccountState } from './useAccountState'
 
-export type AccountDialog = 'rename' | 'key' | 'delete'
+export type AccountDialog = 'rename' | 'key' | 'delete' | 'logout' | 'off'
 
 /**
  * One account: its status (contract wording), what it is doing (busy, resting, out of quota), its quota windows,
  * a running sign-in, and its controls: on/off, priority, the next step its status asks for (sign in, set a key)
- * and a menu with the rest. Dialogs (rename, API key, delete) belong to the page; the card asks for them.
+ * and a menu with the rest. Dialogs (rename, API key, delete, sign out, and turning off when that changes something
+ * now) belong to the page; the card asks for them.
  */
 const props = defineProps<{ account: Account; now: number }>()
 const emit = defineEmits<{ dialog: [kind: AccountDialog] }>()
@@ -57,7 +58,7 @@ const menu = computed<MenuItem[]>(() => {
   ]
   if (canSignIn(a)) {
     items.push({ id: 'login', label: t('accounts.action.login'), icon: 'external' })
-    if (a.status !== 'needs_login') {
+    if (a.kind === 'isolated' && a.status !== 'needs_login') {
       items.push({ id: 'logout', label: t('accounts.action.logout'), icon: 'arrowLeft' })
     }
   } else items.push({ id: 'key', label: t('accounts.action.key'), icon: 'settings' })
@@ -75,12 +76,17 @@ function onMenu(item: string) {
   const a = props.account
   if (item === 'refresh') void actions.run('refresh', () => accounts.refresh(a.id))
   else if (item === 'login') void actions.run('login', () => accounts.login(a.id))
-  else if (item === 'logout') {
-    void actions.run('logout', () => accounts.logout(a.id), t('accounts.done.logout'))
-  } else if (item === 'rename' || item === 'key' || item === 'delete') emit('dialog', item)
+  else if (item === 'rename' || item === 'key' || item === 'delete' || item === 'logout') {
+    emit('dialog', item)
+  }
 }
 
+// Turning off asks first only when it changes something now: turns run on it, or nothing else takes its work.
 function setEnabled(enabled: boolean) {
+  if (!enabled && offConsequence(props.account, accounts.accounts)) {
+    emit('dialog', 'off')
+    return
+  }
   void actions.run('enabled', () => accounts.update(props.account.id, { enabled }))
 }
 

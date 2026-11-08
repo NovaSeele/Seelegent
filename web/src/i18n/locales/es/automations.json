@@ -8,6 +8,8 @@
   "masterLink": "Abrir los ajustes",
   "deleteTitle": "¿Eliminar {name}?",
   "deleteDesc": "Se borran la automatización y su historial de ejecuciones. Las tareas que inició se quedan.",
+  "runTitle": "¿Ejecutar {name} ahora?",
+  "runDesc": "Entrega su trabajo a un worker en este momento. Se siguen comprobando su verificación previa y la cuota, y si su última ejecución sigue en curso, esta se omite.",
   "state": {
     "on": "Activada",
     "requested": "Te espera",
