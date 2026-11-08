@@ -182,7 +182,7 @@ func printWait(w io.Writer, res api.WaitResult) {
 		r := &res.Reports[i]
 		tag := ""
 		if r.Attention != nil {
-			tag = " [BLOCKED: " + r.Attention.Reason + "]"
+			tag = " [" + attentionLabel(r.Attention.State) + ": " + r.Attention.Reason + "]"
 		}
 		_, _ = fmt.Fprintf(w, "  %-19s %-14s %s%s\n", r.TaskID, r.Status, titles[r.TaskID], tag)
 	}

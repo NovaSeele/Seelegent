@@ -55,3 +55,32 @@ func TestAttentionLabels(t *testing.T) {
 		t.Errorf("ls does not show the stall:\n%s", b.String())
 	}
 }
+
+// The wait summary line and the status list name each state the lead must look at, not BLOCKED for all of them,
+// and status tags questions and stalls as well (M18 review N1).
+func TestWaitAndStatusNameTheAttentionState(t *testing.T) {
+	status := func(state string) string {
+		var b bytes.Buffer
+		printStatus(&b, statusOut{Health: &api.Health{}, ActiveTasks: []api.TaskSummary{{ID: "t1",
+			Status: api.StatusRunning, Title: "T", Attention: &api.Attention{State: state, Reason: "r"}}}})
+		return b.String()
+	}
+	for state, want := range map[string]string{
+		api.AttentionBlocked:  "[BLOCKED: r]",
+		api.AttentionQuestion: "[QUESTION: r]",
+		api.AttentionStalled:  "[STALLED: r]",
+	} {
+		var b bytes.Buffer
+		printWait(&b, api.WaitResult{Reports: []api.TaskReport{{TaskID: "t1", Status: "running",
+			Attention: &api.ReportAttention{State: state, Reason: "r"}}}})
+		if !strings.Contains(b.String(), want) {
+			t.Errorf("wait, %s: missing %q in:\n%s", state, want, b.String())
+		}
+		if out := status(state); !strings.Contains(out, want) {
+			t.Errorf("status, %s: missing %q in:\n%s", state, want, out)
+		}
+	}
+	if out := status(api.AttentionInfo); strings.Contains(out, "[") {
+		t.Errorf("status tags an info note:\n%s", out)
+	}
+}
