@@ -52,7 +52,10 @@ let request = 0
 async function read(): Promise<void> {
   const id = props.automationId
   const mine = ++request
-  if (!id) return
+  if (!id) {
+    loading.value = false
+    return
+  }
   loading.value = true
   runs.value = null
   try {
@@ -75,6 +78,7 @@ watch(
   ([now]) => {
     if (!now) {
       request++
+      loading.value = false
       return
     }
     shown.value = null
