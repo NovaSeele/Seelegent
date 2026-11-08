@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 	"time"
 
@@ -259,7 +260,9 @@ func proofRunCommand(d deps, cwd func() (string, error)) *cobra.Command {
 				return usagef("--wait must be 0 or more")
 			}
 			return proofCall(cmd, d, cwd, func(ctx context.Context, c *client.Client, dir string) error {
-				r, err := c.ProofRun(ctx, api.ProofRunRequest{Cwd: dir, Feature: feature, Force: force})
+				// From a gate command, the run shares the gate's slot (SEELEGENT_TASK is set in gate environments).
+				r, err := c.ProofRun(ctx, api.ProofRunRequest{Cwd: dir, Feature: feature, Force: force,
+					GateTask: os.Getenv(api.EnvGateTask)})
 				if err != nil {
 					return err
 				}

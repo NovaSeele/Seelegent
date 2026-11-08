@@ -95,7 +95,32 @@
     "osOnly": "Chỉ trên {os}.",
     "osOther": "Chỉ trên {os}: không có tác dụng trên hệ điều hành dịch vụ đang chạy.",
     "criticalBelowMin": "Ngưỡng RAM khẩn cấp phải nhỏ hơn RAM trống để bắt đầu khi cả hai đều bật.",
-    "mbIs": "= {size}"
+    "mbIs": "= {size}",
+    "auto": "Tự động",
+    "autoValue": "{auto}: {value} trên máy này",
+    "autoZero": {
+      "off": "{auto}: tắt trên máy này",
+      "unlimited": "{auto}: không giới hạn trên máy này"
+    },
+    "derived": {
+      "half": "{auto}: một nửa “{other}” bạn đã đặt, {value}",
+      "twice": "{auto}: gấp đôi “{other}” bạn đã đặt, {value}"
+    },
+    "set": "Đặt",
+    "setOf": "Tự đặt {name}",
+    "useAuto": "Dùng tự động",
+    "useAutoOf": "Đưa {name} về tự động, tính theo máy này",
+    "explicit": "Do bạn đặt.",
+    "explicitZero": {
+      "off": "Do bạn đặt: tắt.",
+      "unlimited": "Do bạn đặt: không giới hạn."
+    },
+    "machine": {
+      "full": "Máy này: {memory} RAM, {cpus}",
+      "withCommit": "Máy này: {memory} RAM, giới hạn commit {commit}, {cpus}",
+      "cpusOnly": "Máy này: {cpus}",
+      "cpus": "{n} CPU"
+    }
   },
   "units": {
     "min": "phút",
@@ -481,7 +506,7 @@
     },
     "criticalFreeMemory": {
       "label": "Ngưỡng RAM khẩn cấp",
-      "desc": "Khi RAM hoặc commit trống xuống dưới mức này, lệnh kiểm tra mới nhất đang chạy bị dừng và xếp hàng lại, mọi lượt mới chờ đến khi bộ nhớ trở lại trên ngưỡng bắt đầu. Worker không bao giờ bị dừng. Phải nhỏ hơn RAM trống để bắt đầu.",
+      "desc": "Khi RAM hoặc commit trống xuống dưới mức này, lệnh kiểm tra mới nhất đang chạy bị dừng và xếp hàng lại, mọi lượt mới chờ đến khi bộ nhớ trở lại trên ngưỡng bắt đầu. Worker không bao giờ bị dừng. Khi bạn đặt cả hai, phải nhỏ hơn RAM trống để bắt đầu.",
       "keywords": "khẩn cấp watchdog thiếu bộ nhớ treo máy"
     },
     "workerMemoryLimit": {

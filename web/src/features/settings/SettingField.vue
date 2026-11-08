@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, useId } from 'vue'
+import { computed, ref, useId } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import Button from '@/components/ui/Button.vue'
@@ -12,9 +12,11 @@ import { useFormat } from '@/composables/useFormat'
 import { formatMB, freeMB } from '@/lib/memory'
 import { useConnectionStore } from '@/stores/connection'
 
+import AutoValue from './AutoValue.vue'
 import CommitField from './CommitField.vue'
 import { crossFieldClash, type FieldDef } from './fields'
 import SettingRow from './SettingRow.vue'
+import { useAutoField } from './useAutoField'
 import type { SettingsForm } from './useSettingsForm'
 
 /**
@@ -23,6 +25,8 @@ import type { SettingsForm } from './useSettingsForm'
  * only says so, and that it has no effect on any other (Health.os); it stays editable and fully legible, since
  * settings may move to another machine. A memory threshold shows the machine's free memory now; an MB field says
  * what its value is in GB and gives its range in GB or TB. The notes are part of the input's description.
+ * A machine-sized setting (useAutoField) shows "Auto" and the value in use instead of the field while it is auto,
+ * with "Set" next to it; once set, its reset button is "Use auto" (null) and a note says the user set it.
  */
 const props = defineProps<{ def: FieldDef; form: SettingsForm; highlighted?: boolean }>()
 
@@ -35,6 +39,12 @@ const value = computed(() => props.form.get(props.def.path))
 const error = computed(() => props.form.errors.value[props.def.path])
 const busy = computed(() => props.form.saving.value.has(props.def.path))
 const done = computed(() => props.form.saved.value.has(props.def.path))
+const rowEl = ref<HTMLElement | null>(null)
+const auto = useAutoField(() => props.def, props.form, rowEl)
+const { autoPath, isAuto, showAuto, autoLine, startValue, explicitNote } = auto
+const { customize, onUnchanged, onEscape, useAuto } = auto
+/** The number in a number field: the saved one, or the value in use when the user sets an auto one. */
+const numberShown = computed(() => (isAuto.value ? startValue.value : Number(value.value ?? 0)))
 
 const options = computed(() =>
   props.def.kind === 'select'
@@ -48,6 +58,7 @@ const options = computed(() =>
 )
 
 const noteId = useId()
+const autoId = useId()
 
 const hint = computed(() => {
   const def = props.def
@@ -59,7 +70,7 @@ const hint = computed(() => {
     def.kind === 'number' && def.zero
       ? t(`settings.daemon.rangeZero.${def.zero}`, range)
       : t('settings.daemon.range', range)
-  const saved = Number(value.value ?? 0)
+  const saved = def.kind === 'number' ? numberShown.value : Number(value.value ?? 0)
   return mb && saved >= 1024
     ? `${text} · ${t('settings.daemon.mbIs', { size: formatMB(fmt.value, saved) })}`
     : text
@@ -75,6 +86,9 @@ const nowText = computed(() => {
   const mb = props.def.now ? freeMB(connection.health?.memory, props.def.now) : null
   return mb === null ? '' : t('settings.daemon.nowFree', { free: formatMB(fmt.value, mb) })
 })
+
+/** The row has notes under it (system, free memory now, set by the user): part of the field's description. */
+const hasNotes = computed(() => !!props.def.os || !!nowText.value || !!explicitNote.value)
 
 const percent = computed(() => Math.round(Number(value.value ?? 0) * 1000) / 10)
 const lines = computed(() => (Array.isArray(value.value) ? value.value.join('\n') : ''))
@@ -103,6 +117,16 @@ function saveInRange(shown: number, value: number) {
   save(value)
 }
 
+/** The row's action: "Set" on an auto setting, "Use auto" once set, "Default" on any other editable setting. */
+const action = computed(() => {
+  const kind = showAuto.value ? 'set' : autoPath.value ? 'useAuto' : 'reset'
+  if (kind === 'reset' && props.def.kind === 'readonly') return null
+  const run = { set: customize, useAuto, reset: () => void props.form.reset(props.def.path) }[kind]
+  const aria = t(`settings.daemon.${kind}Of`, { name: label.value })
+  return { kind, text: t(`settings.daemon.${kind}`), aria, run }
+})
+const setDescribedBy = computed(() => (hasNotes.value ? `${autoId} ${noteId}` : autoId))
+
 function saveLines(text: string) {
   save(
     text
@@ -116,22 +140,28 @@ function saveLines(text: string) {
 <template>
   <SettingRow :item="def.item" :highlighted="highlighted" :stacked="def.kind === 'lines'">
     <div class="sf-wrap">
-      <div class="sf">
-        <div class="sf__control" :class="{ 'sf__control--switch': def.kind === 'bool' }">
+      <div ref="rowEl" class="sf">
+        <div
+          class="sf__control"
+          :class="{ 'sf__control--switch': def.kind === 'bool' }"
+          @keydown.esc="onEscape"
+        >
+          <!-- A click on the box acts like "Set"; the keyboard path is the Set button (one tab stop). -->
+          <AutoValue v-if="showAuto" :id="autoId" :line="autoLine" data-auto @click="customize" />
           <NumberField
-            v-if="def.kind === 'number'"
-            :model-value="Number(value ?? 0)"
+            v-else-if="def.kind === 'number'"
+            :model-value="numberShown"
             :label="label"
             hide-label
             size="sm"
             :unit="def.unit ? t(`settings.units.${def.unit}`) : undefined"
             :hint="hint"
             :error="error"
-            :describedby="def.os || nowText ? noteId : undefined"
+            :describedby="hasNotes ? noteId : undefined"
             :debounce="500"
             integer
             @commit="saveInRange($event, $event)"
-            @unchanged="form.clear(def.path)"
+            @unchanged="onUnchanged"
           />
           <NumberField
             v-else-if="def.kind === 'percent'"
@@ -177,15 +207,21 @@ function saveLines(text: string) {
           />
           <code v-else class="sf__readonly">{{ value }}</code>
         </div>
+        <!-- Keyed: a click that closes a field opened from Auto must not land on the "Set" that replaces it. -->
         <Button
-          v-if="def.kind !== 'readonly'"
+          v-if="action"
+          :key="action.kind"
+          class="sf__action"
+          :data-auto-set="action.kind === 'set' ? '' : undefined"
+          :data-auto-reset="action.kind === 'useAuto' ? '' : undefined"
           size="sm"
           variant="ghost"
-          :aria-label="t('settings.daemon.resetOf', { name: label })"
+          :aria-label="action.aria"
+          :aria-describedby="action.kind === 'set' ? setDescribedBy : undefined"
           :disabled="busy"
-          @click="form.reset(def.path)"
+          @click="action.run"
         >
-          {{ t('settings.daemon.reset') }}
+          {{ action.text }}
         </Button>
         <span class="sf__state" aria-live="polite">
           <Spinner v-if="busy" size="sm" :label="t('settings.daemon.saving')" />
@@ -202,7 +238,8 @@ function saveLines(text: string) {
         {{ error }}
       </p>
       <p v-if="def.kind === 'readonly'" class="sf__note">{{ t('settings.daemon.readonly') }}</p>
-      <p v-if="def.os || nowText" :id="noteId" class="sf__notes">
+      <p v-if="hasNotes" :id="noteId" class="sf__notes">
+        <span v-if="explicitNote" class="sf__note" data-explicit>{{ explicitNote }}</span>
         <span v-if="def.os" class="sf__note" :data-os-note="otherOs ? 'other' : 'this'">
           {{
             t(otherOs ? 'settings.daemon.osOther' : 'settings.daemon.osOnly', {
@@ -216,70 +253,4 @@ function saveLines(text: string) {
   </SettingRow>
 </template>
 
-<style scoped>
-.sf-wrap {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  width: 100%;
-}
-
-.sf {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--space-2);
-  width: 100%;
-}
-
-/* The control fills the row's fixed column (SettingRow) next to its reset button and state. */
-.sf__control {
-  flex: 1 1 0;
-  min-width: 0;
-}
-
-/* A switch is narrow: its reset button sits right next to it. */
-.sf__control--switch {
-  flex: 0 0 auto;
-  min-width: 0;
-}
-
-.sf__state {
-  display: inline-flex;
-  align-items: center;
-  min-width: 64px;
-  min-height: var(--control-sm);
-}
-
-.sf__saved {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  color: var(--text-secondary);
-  font-size: var(--fs-xs);
-}
-
-.sf__readonly {
-  font-family: var(--font-mono);
-  font-size: var(--fs-sm);
-}
-
-.sf__error {
-  color: var(--status-danger-fg);
-  font-size: var(--fs-xs);
-}
-
-.sf__note {
-  color: var(--text-muted);
-  font-size: var(--fs-xs);
-}
-
-.sf__note[data-os-note='other'] {
-  color: var(--text-secondary);
-}
-
-.sf__notes {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-}
-</style>
+<style scoped src="./settingField.css"></style>

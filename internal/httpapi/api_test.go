@@ -97,7 +97,9 @@ func newEnvWith(t *testing.T, adjust func(*envOptions)) *env {
 	set := config.Defaults()
 	set.Port = 47831
 	// The engine tests must not depend on this machine's free memory.
-	set.MinFreeMemoryMB, set.MinFreeCommitMB, set.CriticalFreeMemoryMB = 0, 0, 0
+	set.MinFreeMemoryMB, set.MinFreeCommitMB, set.CriticalFreeMemoryMB = config.Int(0), config.Int(0), config.Int(0)
+	// Nor on its CPUs: the gate slots and the test hint the tests were written for.
+	set.GateConcurrency, set.TestParallelism = config.Int(2), config.Int(4)
 	a, err := app.New(t.Context(), app.Options{
 		Paths: paths, Settings: &set, Env: e.queue.Env(os.Environ()), RealHome: filepath.Join(home, "home"),
 		Launcher: fakecli.Launcher(t), NoQuotaReaders: true, NoGh: true,

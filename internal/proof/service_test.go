@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -30,7 +31,7 @@ func newService(t *testing.T, root string, exec func(cmd string) CmdResult, acti
 	var mu sync.Mutex
 	var published []api.ProofRun
 	s := New(Options{Ledger: NewLedger(st, nil), Git: fakeGit{root: root},
-		Exec: func(_ context.Context, cmd, dir, _ string) CmdResult {
+		Exec: func(_ context.Context, cmd, dir, _, _ string) CmdResult {
 			if same, _ := fsutil.SamePath(dir, root); !same {
 				t.Errorf("dir = %s", dir)
 			}
@@ -172,7 +173,7 @@ func TestCancelRun(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = st.Close() })
 	s := New(Options{Ledger: NewLedger(st, nil), Git: fakeGit{root: root}, LogDir: t.TempDir(),
-		Exec: func(ctx context.Context, _, _, _ string) CmdResult {
+		Exec: func(ctx context.Context, _, _, _, _ string) CmdResult {
 			started <- struct{}{}
 			<-ctx.Done()
 			return CmdResult{}
@@ -204,7 +205,7 @@ func TestRunNotStuckOnWriteError(t *testing.T) {
 	t.Cleanup(func() { _ = st.Close() })
 	db := &failingDB{DB: st, fail: true}
 	s := New(Options{Ledger: NewLedger(db, nil), Git: fakeGit{root: root}, LogDir: t.TempDir(),
-		Exec: func(context.Context, string, string, string) CmdResult { return CmdResult{Exit: code(0)} }})
+		Exec: func(context.Context, string, string, string, string) CmdResult { return CmdResult{Exit: code(0)} }})
 	t.Cleanup(s.Close)
 	ctx := context.Background()
 	if _, err := s.StartRun(ctx, api.ProofRunRequest{Cwd: root}); err == nil {
@@ -216,6 +217,117 @@ func TestRunNotStuckOnWriteError(t *testing.T) {
 		t.Fatalf("the project is stuck: %v", err)
 	}
 	waitRun(t, s, root, run.ID)
+}
+
+// gateService is a proof service whose repository has the active task t-gate; holds says whether its gate holds
+// a gate slot now.
+func gateService(t *testing.T, root string, holds *atomic.Bool,
+	exec func(ctx context.Context, gateTask string) CmdResult) *Service {
+	t.Helper()
+	write(t, filepath.Join(root, "specs", "001-p", "spec.md"), specMD)
+	write(t, filepath.Join(root, "specs", "001-p", "tasks.md"), tasksMD)
+	st, err := store.Open(context.Background(), filepath.Join(t.TempDir(), "seelegent.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	s := New(Options{Ledger: NewLedger(st, nil), Git: fakeGit{root: root}, LogDir: t.TempDir(),
+		Active:        func(context.Context, string) ([]string, error) { return []string{"t-gate"}, nil },
+		HoldsGateSlot: func(id string) bool { return id == "t-gate" && holds.Load() },
+		Exec: func(ctx context.Context, _, _, _, gateTask string) CmdResult {
+			return exec(ctx, gateTask)
+		}})
+	t.Cleanup(s.Close)
+	return s
+}
+
+// TestRunPassesGateTask: a run asked for from a gate that holds a gate slot does not count the gate's own task as
+// active, and the gate's task id reaches every command's Exec, so the daemon lets it share that slot.
+func TestRunPassesGateTask(t *testing.T) {
+	root := t.TempDir()
+	var holds atomic.Bool
+	holds.Store(true)
+	got := make(chan string, 10)
+	s := gateService(t, root, &holds, func(_ context.Context, gateTask string) CmdResult {
+		got <- gateTask
+		return CmdResult{Exit: code(0)}
+	})
+	run, err := s.StartRun(context.Background(), api.ProofRunRequest{Cwd: root, GateTask: "t-gate"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if run.Noisy {
+		t.Error("the asking gate's own task made the run noisy")
+	}
+	waitRun(t, s, root, run.ID)
+	if n := len(got); n == 0 {
+		t.Fatal("no command ran")
+	}
+	for range len(got) {
+		if id := <-got; id != "t-gate" {
+			t.Errorf("Exec got gateTask %q", id)
+		}
+	}
+}
+
+// TestGateTaskWithoutSlotConflicts: a gate task id only counts as the asking gate while that gate holds a slot: the
+// id of a running task whose gate holds none (or an unknown id) is refused like any other active task.
+func TestGateTaskWithoutSlotConflicts(t *testing.T) {
+	root := t.TempDir()
+	var holds atomic.Bool // the gate holds no slot
+	s := gateService(t, root, &holds, func(context.Context, string) CmdResult { return CmdResult{Exit: code(0)} })
+	for _, id := range []string{"t-gate", "t-other", ""} {
+		var conflict *ConflictError
+		if _, err := s.StartRun(context.Background(), api.ProofRunRequest{Cwd: root, GateTask: id}); !errors.As(err,
+			&conflict) {
+			t.Errorf("gateTask %q: %v, want a conflict for the active task", id, err)
+		}
+	}
+}
+
+// TestRunOutlivesItsGate: a gate starts a run without waiting for it (proof run without --wait) and ends; the run
+// is not tied to the gate: it completes and its results are recorded in the ledger.
+func TestRunOutlivesItsGate(t *testing.T) {
+	root := t.TempDir()
+	var holds atomic.Bool
+	holds.Store(true)
+	gateEnded := make(chan struct{})
+	var once sync.Once
+	s := gateService(t, root, &holds, func(ctx context.Context, _ string) CmdResult {
+		once.Do(func() {
+			<-gateEnded // the first command is still running when the gate ends
+		})
+		if ctx.Err() != nil {
+			return CmdResult{}
+		}
+		return CmdResult{Exit: code(0)}
+	})
+	ctx := context.Background()
+	run, err := s.StartRun(ctx, api.ProofRunRequest{Cwd: root, GateTask: "t-gate"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	holds.Store(false) // the gate gives its slot back and ends
+	close(gateEnded)
+	run = waitRun(t, s, root, run.ID)
+	if run.State != api.RunGreen || run.Counts.Green != run.Total || run.Total == 0 {
+		t.Fatalf("run after its gate ended = %+v", run)
+	}
+	m, err := s.Matrix(ctx, root, "specs/001-p")
+	if err != nil {
+		t.Fatal(err)
+	}
+	recorded := 0
+	for _, row := range m.Rows {
+		for _, tk := range row.Tasks {
+			if tk.Source == SourceRegression {
+				recorded++
+			}
+		}
+	}
+	if recorded == 0 {
+		t.Fatalf("nothing recorded in the ledger: %+v", m.Rows)
+	}
 }
 
 type failingDB struct {
@@ -268,5 +380,80 @@ func TestLedgerRecord(t *testing.T) {
 	}
 	if r, err := l.Run(ctx, "p", "r1"); err != nil || r.State != api.RunError {
 		t.Errorf("abandoned run = %+v, %v", r, err)
+	}
+}
+
+// TestStoppedCommandRunsAgain: a command the memory watchdog stopped is no result: it runs again, and only the
+// run that ended by itself counts and reaches the ledger.
+func TestStoppedCommandRunsAgain(t *testing.T) {
+	root := t.TempDir()
+	write(t, filepath.Join(root, "specs", "001-p", "spec.md"), specMD)
+	write(t, filepath.Join(root, "specs", "001-p", "tasks.md"), tasksMD)
+	var mu sync.Mutex
+	ran := map[string]int{}
+	s, _ := newService(t, root, func(cmd string) CmdResult {
+		mu.Lock()
+		defer mu.Unlock()
+		ran[cmd]++
+		if cmd == "go test ./internal/p" && ran[cmd] == 1 {
+			return CmdResult{Stopped: true, Tail: "stopped: machine low on memory"}
+		}
+		return CmdResult{Exit: code(0)}
+	}, nil)
+	ctx := context.Background()
+	run, err := s.StartRun(ctx, api.ProofRunRequest{Cwd: root, Feature: "specs/001-p"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	run = waitRun(t, s, root, run.ID)
+	if run.State != api.RunGreen || run.Counts.Green != run.Total || run.Counts.Error != 0 ||
+		len(run.Results) != run.Total || ran["go test ./internal/p"] != 2 {
+		t.Fatalf("run = %+v, ran %v", run, ran)
+	}
+	m, err := s.Matrix(ctx, root, "specs/001-p")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r := m.Rows[0]; r.ID != "FR-001" || r.Status != api.ProofProven || r.Tasks[0].Source != SourceRegression {
+		t.Fatalf("row = %+v", r)
+	}
+}
+
+// TestStoppedCommandGivesUp: a command stopped api.GateLowMemoryStopsMax times ends the run as cancelled with the
+// reason, records nothing for its spec task and runs nothing after it.
+func TestStoppedCommandGivesUp(t *testing.T) {
+	root := t.TempDir()
+	write(t, filepath.Join(root, "specs", "001-p", "spec.md"), specMD)
+	write(t, filepath.Join(root, "specs", "001-p", "tasks.md"), tasksMD)
+	var mu sync.Mutex
+	ran := map[string]int{}
+	s, _ := newService(t, root, func(cmd string) CmdResult {
+		mu.Lock()
+		defer mu.Unlock()
+		ran[cmd]++
+		if cmd == "go build ./..." {
+			return CmdResult{Stopped: true, Tail: "stopped: machine low on memory"}
+		}
+		return CmdResult{Exit: code(0)}
+	}, nil)
+	ctx := context.Background()
+	run, err := s.StartRun(ctx, api.ProofRunRequest{Cwd: root, Feature: "specs/001-p"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	run = waitRun(t, s, root, run.ID)
+	if run.State != api.RunCancelled || run.Counts.Error != 0 || run.Counts.Green != 1 || len(run.Results) != 1 ||
+		!strings.Contains(run.Error, "out of memory") {
+		t.Fatalf("run = %+v", run)
+	}
+	if ran["go build ./..."] != api.GateLowMemoryStopsMax || ran["echo ok"] != 0 || ran["go vet ./..."] != 0 {
+		t.Fatalf("ran %v", ran)
+	}
+	m, err := s.Matrix(ctx, root, "specs/001-p")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r := m.Rows[0]; r.ID != "FR-001" || r.Status == api.ProofFailing || r.Tasks[0].Source == SourceRegression {
+		t.Fatalf("T001 was recorded: %+v", r)
 	}
 }

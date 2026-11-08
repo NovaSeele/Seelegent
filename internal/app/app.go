@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"runtime/debug"
 	"sync"
 	"sync/atomic"
@@ -98,6 +99,9 @@ type Options struct {
 	// never run).
 	Gh   string
 	NoGh bool
+	// ReadMachine reads the machine profile the auto resource settings are computed from (the system's, from
+	// platform.Memory, platform.CPUs and runtime.GOOS, when nil). It is read at start and when the settings change.
+	ReadMachine func() config.Machine
 }
 
 // App holds the daemon's services.
@@ -148,6 +152,10 @@ type App struct {
 	// (gateConcurrency) of task gates and regression runs.
 	sampler *task.Sampler
 	slots   *gate.Slots
+	// machine is the machine profile (readMachine at start and on each settings change), never read per sample, so
+	// the auto thresholds hold still between readings.
+	machine     atomic.Pointer[config.Machine]
+	readMachine func() config.Machine
 	// setMemoryLimit is debug.SetMemoryLimit (a fake in tests); memoryLimitSet says daemonMemoryLimitMB set it.
 	setMemoryLimit func(int64) int64
 	memoryLimitMu  sync.Mutex
@@ -208,7 +216,11 @@ func New(ctx context.Context, o Options) (*App, error) {
 	a := &App{Paths: o.Paths, log: o.Logger, env: o.Env, info: o.Info, web: o.Web, classifier: o.Classifier,
 		devOrigins: o.DevOrigins,
 		redact:     logx.NewRedactor().String, started0: o.Clock.Now(), pid: os.Getpid(), stopCh: make(chan struct{}),
-		setMemoryLimit: debug.SetMemoryLimit}
+		setMemoryLimit: debug.SetMemoryLimit, readMachine: o.ReadMachine}
+	if a.readMachine == nil {
+		a.readMachine = systemMachine
+	}
+	a.refreshMachine()
 	if o.Settings != nil {
 		s := *o.Settings
 		a.settings.Store(&s)
@@ -327,8 +339,8 @@ func (a *App) build(o Options) error {
 	// One toolchain probe for the daemon: worker turns, task gates and regression runs get the same pin (cached
 	// per folder).
 	a.toolchains = account.NewToolchains(o.RealHome, nil, now)
-	a.sampler = task.NewSampler(platform.Memory, o.Clock, a.Settings)
-	a.slots = gate.NewSlots(func() int { return a.Settings().GateConcurrency })
+	a.sampler = task.NewSampler(platform.Memory, o.Clock, a.Limits)
+	a.slots = gate.NewSlots(func() int { return a.Limits().GateConcurrency })
 	a.Tasks, err = task.New(task.Options{
 		DB: a.DB, Accounts: a.Accounts, Pool: p, Backends: a.Backends, Settings: a.Settings,
 		TasksDir: o.Paths.Tasks, Launcher: o.Launcher, Usage: a.Usage, QuotaRefresh: a.Refresher.AfterRun,
@@ -347,6 +359,7 @@ func (a *App) build(o Options) error {
 		ContestEnded:  a.contestEnded,
 		Resources:     a.sampler,
 		GateSlots:     a.slots,
+		Machine:       a.Machine,
 		OnLowMemory: func(low bool, m platform.MemoryStatus) {
 			a.withAPI(func(s *httpapi.Server) { s.PublishResourcesChanged(low, m) })
 		},
@@ -355,7 +368,8 @@ func (a *App) build(o Options) error {
 		return err
 	}
 	a.Proof = proof.New(proof.Options{Ledger: ledger, Git: proofGit{a.Git}, Exec: a.proofExec, Active: a.Tasks.ActiveIn,
-		TaskFeatures: a.Tasks.SpecFeatures, Publish: a.publishProofRun, LogDir: o.Paths.Logs, Now: now, Logger: a.log})
+		HoldsGateSlot: a.Tasks.HoldsGateSlot, TaskFeatures: a.Tasks.SpecFeatures, Publish: a.publishProofRun,
+		LogDir: o.Paths.Logs, Now: now, Logger: a.log})
 	if err := a.buildTeam(now); err != nil {
 		return err
 	}
@@ -434,6 +448,25 @@ func scopeAllowed(profiles string, env []string) []string {
 
 // Settings returns the current settings.
 func (a *App) Settings() config.Settings { return *a.settings.Load() }
+
+// Machine is the machine profile the auto resource settings are computed from.
+func (a *App) Machine() config.Machine { return *a.machine.Load() }
+
+// Limits are the effective values of the machine-sized settings (config.EffectiveResources).
+func (a *App) Limits() config.Resources { return config.EffectiveResources(a.Settings(), a.Machine()) }
+
+// refreshMachine reads the machine profile again.
+func (a *App) refreshMachine() {
+	m := a.readMachine()
+	a.machine.Store(&m)
+}
+
+// systemMachine is this machine's profile: total memory (the cgroup limit when lower), total commit (Windows) and
+// the CPUs the daemon may use.
+func systemMachine() config.Machine {
+	m := platform.Memory()
+	return config.NewMachine(m.TotalPhysMB, m.TotalCommitMB, platform.CPUs(), runtime.GOOS)
+}
 
 // dashboardLink is the deep link to a task in the dashboard.
 func (a *App) dashboardLink(id string) string {

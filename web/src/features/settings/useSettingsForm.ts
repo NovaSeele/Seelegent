@@ -6,7 +6,9 @@
  * that is not being typed in (the fields keep their own text while focused).
  *
  * Settings checked against each other (LINKED_FIELDS) share their error: the daemon names one field, the message
- * shows on every field that can fix it, and it goes from all of them once one is saved or typed back.
+ * shows on every field that can fix it (one the user set; an auto one is derived by the daemon), and it goes from
+ * all of them once one is saved or typed back. Every save patches only the field it saves: the effective values
+ * of the auto settings (Health.resources) are shown, never sent.
  */
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -69,8 +71,10 @@ export function useSettingsForm() {
       for (const problem of problems) {
         next[problem.field] = problem.message
         // A rule between two settings names the other one in its message ("must be below minFreeMemoryMB").
+        // An auto one (null or absent) is not the user's to fix: the daemon derives it, so it gets no error.
         for (const other of LINKED_FIELDS[problem.field] ?? []) {
-          if (problem.message.includes(other)) next[other] = problem.message
+          const isSet = valueAt(settings.value, other) != null
+          if (isSet && problem.message.includes(other)) next[other] = problem.message
         }
       }
       if (!problems.some((p) => p.field === path)) {
