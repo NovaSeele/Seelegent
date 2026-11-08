@@ -98,14 +98,20 @@ func consoleGuard(mode, out string) {
 		_ = tree.Wait() // a child that a ctrl event ended still counts
 		_ = tree.Close()
 	}
-	reached := func() bool {
+	// reached waits for an interrupt: up to 5 s where one is expected (a slow machine still sees it), 1 s where
+	// none is (each one is a second of waiting).
+	reached := func(expected bool) bool {
+		wait := time.Second
+		if expected {
+			wait = 5 * time.Second
+		}
 		select {
 		case <-interrupts:
 			for len(interrupts) > 0 {
 				<-interrupts
 			}
 			return true
-		case <-time.After(time.Second):
+		case <-time.After(wait):
 			return false
 		}
 	}
@@ -121,9 +127,9 @@ func consoleGuard(mode, out string) {
 		return cmd
 	}
 	run(breaker("0"))
-	group0 := reached()
+	group0 := reached(opt.ShareConsole)
 	run(breaker("self"))
-	self := reached()
+	self := reached(false)
 	result := fmt.Sprintf("cp %d/%d group0 %v self %v", in, outCP, group0, self)
 	if err := os.WriteFile(out, []byte(result), 0o600); err != nil {
 		os.Exit(6)

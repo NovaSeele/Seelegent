@@ -171,7 +171,8 @@ func (r *Repos) runGit(ctx context.Context, git, dir string, env []string, stdin
 	errBuf := &limitedBuffer{limit: 64 << 10}
 	cmd.Stdout = out
 	cmd.Stderr = errBuf
-	tree, err := platform.StartTreeWith(cmd, platform.TreeOptions{ShareConsole: true}) // a fixed helper program
+	// git is a fixed helper program; one that can run hooks, filters or credential helpers gets a console of its own.
+	tree, err := platform.StartTreeWith(cmd, platform.TreeOptions{ShareConsole: !runsUserCode(args)})
 	if err != nil {
 		return nil, false, &Error{Args: args, Err: err}
 	}
