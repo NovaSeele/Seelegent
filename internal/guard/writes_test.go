@@ -21,6 +21,8 @@ func TestWrites(t *testing.T) {
 		{`bash -c "mv /a/b /c/d"`, []string{"/a/b", "/c/d"}, nil},
 		{`cmd /c del /q C:\x\y.txt`, []string{`C:\x\y.txt`}, []string{"/q"}},
 		{`ls -la /etc && git status`, nil, []string{"/etc"}},
+		// A lone apostrophe is no POSIX quoting: cmd still reads the line.
+		{`echo don't > C:\notes.txt`, []string{`C:\notes.txt`}, nil},
 		// sed and perl write only when they edit in place, and never their script.
 		{`sed -n 5p /etc/hosts`, nil, []string{"/etc/hosts", "5p"}},
 		{`sed 's/a/b/' /etc/hosts > /tmp/out`, []string{"/tmp/out"}, []string{"/etc/hosts"}},
@@ -47,6 +49,41 @@ func TestWrites(t *testing.T) {
 			if slices.Contains(got, w) {
 				t.Errorf("Writes(%q) = %q, has %q", tc.line, got, w)
 			}
+		}
+	}
+}
+
+// TestWritesSed: sed writes only the file operands after its script, and only with -i; nothing inside the script is
+// a path (field report 3, B2: `\/` in a script was reported as a write outside the repository).
+func TestWritesSed(t *testing.T) {
+	for _, tc := range []struct {
+		line string
+		want []string
+	}{
+		// The two commands of the field report.
+		{`sed -i '/<Button v-if="false" \/>/d; /<Toggle :x="1" \/>/d' src/components/advanced/PairEditor.vue`,
+			[]string{"src/components/advanced/PairEditor.vue"}},
+		{`sed -i 's/^const STEM_TRAVEL = 64;/const STEM_TRAVEL = 48; \/\/ cap at 48/' src/components/live/SwitchSim.vue`,
+			[]string{"src/components/live/SwitchSim.vue"}},
+		// Without -i sed only prints.
+		{`sed 's/a/b/' src/a.vue`, nil},
+		{`sed -n '/<a \/>/p' src/a.vue`, nil},
+		{`sed -e 's/a/b/' -e 's/c/d/' src/a.vue`, nil},
+		// In-place forms.
+		{`sed -i.bak 's/a/b/' src/a.vue`, []string{"src/a.vue"}},
+		{`sed -i '' 's/a/b/' src/a.vue`, []string{"src/a.vue"}},
+		{`sed -i -e 's/a/b/' -e 's/c\/d/e/' src/a.vue src/b.vue`, []string{"src/a.vue", "src/b.vue"}},
+		{`sed -i -f /home/u/fix.sed src/a.vue`, []string{"src/a.vue"}},
+		{`sed -E -s -n -r -i 's/(a)/\1b/p' src/a.vue`, []string{"src/a.vue"}},
+		{`sed --in-place=.orig --expression='s/a/b/' src/a.vue`, []string{"src/a.vue"}},
+		{`sed --in-place --line-length 80 's/a/b/' src/a.vue`, []string{"src/a.vue"}},
+		// A script holding real-looking absolute paths.
+		{`sed -i 's|/etc/hosts|/tmp/hosts|; s/\/usr\/local\/bin/\/opt\/bin/' conf/app.conf`, []string{"conf/app.conf"}},
+		{`sed -i "s|C:\Tools|D:\Tools|" conf/app.conf`, []string{"conf/app.conf"}},
+		{`cd web && sed -i 's/<b \/>/<i \/>/' src/x.vue && npm test`, []string{"src/x.vue"}},
+	} {
+		if got := Writes(tc.line); !slices.Equal(got, tc.want) {
+			t.Errorf("Writes(%q) = %q, want %q", tc.line, got, tc.want)
 		}
 	}
 }

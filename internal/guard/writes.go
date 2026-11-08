@@ -31,10 +31,26 @@ func Writes(line string) []string {
 			out = append(out, p)
 		}
 	}
+	posixQuotes := singleQuoted(line)
 	for _, sh := range allShells {
+		if sh == Cmd && posixQuotes {
+			continue
+		}
 		lineWrites(line, sh, 0, add)
 	}
 	return out
+}
+
+// singleQuoted reports whether line uses single quotes the way POSIX shells and PowerShell do: it holds one and
+// reads as a POSIX line, so its single quotes pair up. Such a line was not written for cmd, which has no single
+// quotes: cmd's reading splits the quoted text into words and takes a '<' or '>' inside it for a redirection, so the
+// sed script in `sed -i '/<a \/>/d' f.vue` would give the paths "\/" and "/d" (field report 3, B2).
+func singleQuoted(line string) bool {
+	if !strings.Contains(line, "'") {
+		return false
+	}
+	_, err := parseState(line, POSIX, 0)
+	return err == nil
 }
 
 func lineWrites(line string, sh Shell, depth int, add func(string)) {
@@ -109,8 +125,8 @@ func segmentWrites(ws []word, sh Shell, depth int, add func(string)) {
 	}
 }
 
-// inPlaceFiles returns the files sed or perl edits in place (-i, -i.bak, --in-place[=suffix], perl -pi): its file
-// arguments, without the script. Without in-place editing they only read their files: nothing.
+// inPlaceFiles returns the files sed or perl edits in place (sed -i, -i.bak, BSD's -i "", --in-place[=suffix];
+// perl -pi): its file arguments, without the script. Without in-place editing they only read their files: nothing.
 func inPlaceFiles(name string, args []word) []string {
 	inPlace, script := false, false
 	var pos []word
@@ -128,6 +144,10 @@ func inPlaceFiles(name string, args []word) []string {
 			switch {
 			case name == "sed" && long == "--in-place":
 				inPlace = true
+			case name == "sed" && long == "--line-length":
+				if !valued {
+					i++
+				}
 			case name == "sed" && (long == "--expression" || long == "--file"):
 				script = true
 				if !valued {
@@ -140,6 +160,9 @@ func inPlaceFiles(name string, args []word) []string {
 				c := t[j]
 				if c == 'i' {
 					inPlace = true // the rest of the word is the backup suffix
+					if name == "sed" && j == len(t)-1 && i+1 < len(args) && args[i+1].quoted && args[i+1].text == "" {
+						i++ // BSD sed: -i '' is an empty suffix, not the script
+					}
 					break
 				}
 				if name == "sed" && (c == 'e' || c == 'f' || c == 'l') || name == "perl" && (c == 'e' || c == 'E') {
