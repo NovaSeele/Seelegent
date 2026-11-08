@@ -75,6 +75,7 @@ func pprofHostAllowed(host string, listen *net.TCPAddr) bool {
 func runtimeSamples() []struct{ key, name string } {
 	return []struct{ key, name string }{
 		{"heapObjectsBytes", "/memory/classes/heap/objects:bytes"},
+		{"heapLiveBytes", "/gc/heap/live:bytes"},
 		{"heapAllocBytesTotal", "/gc/heap/allocs:bytes"},
 		{"heapAllocObjectsTotal", "/gc/heap/allocs:objects"},
 		{"gcCycles", "/gc/cycles/total:gc-cycles"},

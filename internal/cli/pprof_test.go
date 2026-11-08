@@ -89,7 +89,8 @@ func TestPprofServer(t *testing.T) {
 		Memstats   json.RawMessage   `json:"memstats"`
 	}
 	if code != http.StatusOK || json.Unmarshal([]byte(body), &light) != nil || light.Goroutines < 1 ||
-		light.Memstats != nil || light.Runtime["heapAllocBytesTotal"] == 0 || light.Runtime["gcCycles"] == 0 &&
+		light.Memstats != nil || light.Runtime["heapAllocBytesTotal"] == 0 ||
+		light.Runtime["heapLiveBytes"] == 0 && light.Runtime["gcCycles"] > 0 || light.Runtime["gcCycles"] == 0 &&
 		light.Runtime["heapObjectsBytes"] == 0 {
 		t.Fatalf("/debug/vars?light=1 = %d %.200q", code, body)
 	}
@@ -126,7 +127,8 @@ func TestPprofServerOtherLoopback(t *testing.T) {
 		t.Fatalf("own address = %d", code)
 	}
 	_, port, _ := strings.Cut(p.Addr(), ":")
-	if code, _ := pprofGet(t, "http://"+p.Addr()+"/debug/pprof/", "127.0.0.3:"+port); code != http.StatusMisdirectedRequest {
+	code, _ := pprofGet(t, "http://"+p.Addr()+"/debug/pprof/", "127.0.0.3:"+port)
+	if code != http.StatusMisdirectedRequest {
 		t.Fatalf("another loopback address = %d, want 421", code)
 	}
 }
