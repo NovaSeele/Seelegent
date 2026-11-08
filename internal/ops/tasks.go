@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/NovaSeele/Seelegent/internal/account"
 	"github.com/NovaSeele/Seelegent/internal/api"
 	"github.com/NovaSeele/Seelegent/internal/client"
 )
@@ -157,11 +158,17 @@ func ReportSummary(r api.TaskReport) string {
 	if n := len(r.FilesChanged); n > 0 {
 		fmt.Fprintf(&b, ", %d file%s changed", n, Plural(n))
 	}
+	if r.TurnCostUSD > 0 {
+		fmt.Fprintf(&b, ", turn cost ≈ %s", account.FormatUSD(r.TurnCostUSD))
+	}
 	if r.Attention != nil {
 		fmt.Fprintf(&b, ", needs you: %s", r.Attention.Reason)
 	}
 	if r.Error != "" {
 		b.WriteString(", with an error")
+	}
+	if r.WaitDetail != "" {
+		fmt.Fprintf(&b, ", waiting: %s", r.WaitDetail)
 	}
 	b.WriteString(".")
 	return b.String()

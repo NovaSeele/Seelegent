@@ -59,6 +59,9 @@ append the events in **one transaction**, then publish on the bus. The log and t
    after a minute. Every account resting or busy: `waiting: resting` (with `waitingUntil`) or `waiting: busy`, with
    the pool's line in `waitDetail` (for busy the full accounts, `acc6: 2 of 2 running`); the `waiting_quota` event
    carries both as `reason` and `detail`, and is written again only when one of them or the time changes.
+   A task without `provider` never takes an API-key account (keys cost money), but when one of its backend would be
+   free with `provider` set, `waitDetail` names that provider (at most three, each once; "and a model" when the
+   provider maps no tier), and the report carries it as `wait_detail`.
    A hand-back turn waits for the conversation's own account while it rests or is busy instead of moving. When that
    account cannot run at all any more (signed out, disabled, removed, its models no longer allowed), the hand-back
    runs on another account in a new conversation, whose brief says plainly that the console's context is not
@@ -72,7 +75,9 @@ append the events in **one transaction**, then publish on the bus. The log and t
    turn in its `read-only` sandbox, where shell commands that only read (`rg -n`, `Get-Content`, `git diff`, tests
    that write nothing) work and every write is refused, so it reads with the shell. A hidden run (consult, meeting,
    judge, verifier) gets the same rule at the top of each fresh conversation (`brief.ReadOnlyRun`), and on codex
-   also the advice to take its citation line numbers from `rg -n` or `Select-String`. Before the first attempt of a
+   also the advice to take its citation line numbers from `rg -n` or `Select-String`; below it comes the worker
+   brief's data-folder rule (`brief.DataRule`: do not explore the data folder or Seelegent's processes, with the
+   run's folder as the exception when it lies inside the data folder). Before the first attempt of a
    task the baseline is taken:
    `git status --porcelain` (literal pathspecs, `core.fsmonitor` off, no shell, 20 s timeout) lists the files under
    the task folder that already have uncommitted changes, and the brief tells the worker not to revert them. With it
@@ -108,15 +113,18 @@ append the events in **one transaction**, then publish on the bus. The log and t
 | ok | turn `ok`, task `done` (a hand-back turn also logs `handback`); a gated task stays `running` in its gate phase first (below) |
 | quota | the account rests for that quota group (`pool.MarkExhausted`), next attempt |
 | auth | the account is marked signed out (`pool.MarkAuthFailed`), next attempt on another account |
+| credits | the key's credit or billing ran out (class `credits`, never a quota rest): the account is held with no end time (`pool.MarkNoCredit`, `restReason: credits`) until the user stores a new key, a key test passes or the user edits the account (switches it off and on after a top-up); next attempt on another account, or, when no other account can run the task, the task fails at once naming the key ("the anthropic key has no credit left; top up or change the key") instead of waiting |
 | transient | `retry` event, wait 15 s then 45 s on the same account (only its own timer wakes it), then another account |
 | background_wait | continue once with the background-wait prompt; the second time the turn ends `ok` |
 | error / timeout | turn and task `failed` |
 | cancelled | turn and task `cancelled` |
 
-A turn makes at most one attempt per account of the backend plus three. After every attempt the usage is recorded
-and a background quota read of the account is requested. Codex reports the thread's running total at
-`turn.completed`, so a resumed codex attempt records what it added to the total the conversation's previous attempt
-reported (kept as the outcome's `threadUsage`); a total below that one is taken as is.
+A turn makes at most one attempt per account of the backend plus three, not counting attempts that ended on a quota
+limit: those rest the account and resume or hand over, so the turn waits rather than fails. A runaway loop of limits
+ends the turn after 50 of them. After every attempt the usage is recorded and a background quota read of the account
+is requested. Codex reports the thread's running total at `turn.completed`, so a resumed codex attempt records what
+it added to the total the conversation's previous attempt reported (kept as the outcome's `threadUsage`); a total
+below that one is taken as is.
 
 6. **Gate.** An edit task whose turn ended `ok` keeps its run: the task stays `running` with `gatePhase` set while
    the gate runs, settles, or the verifier child works ([gates.md](gates.md)). A red gate or a verifier reject with
@@ -202,7 +210,9 @@ settings change.
 `computeAttention` maps the task and what the run knows about its worker onto the contract's states:
 
 - `blocked`: prerequisites failed (`deps_blocked`), no account can run it (`no_accounts`, for the user), every
-  account needs a sign-in (`auth`, for the user), the worker repeats itself (`looping`: the same call `loopRepeat`
+  account needs a sign-in (`auth`, for the user), every account that could run it rests on its budget
+  (`budget_reached`, for the user: waiting reason `budget_reached`, detail "acc9 reached its $200 budget: raise the
+  budget or change the key"; raising the budget, switching its stop off or a new key wakes the task), the worker repeats itself (`looping`: the same call `loopRepeat`
   times in its last 12 without progress, or five failed calls in a row; an edit that reports only its file is told
   apart by the file's content hash, or counts as new when the file cannot be read), a done turn with no answer
   (`no_response`), red hygiene findings (`hygiene`), files at risk not restored (`work_at_risk`), a failed task

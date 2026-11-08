@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/NovaSeele/Seelegent/internal/api"
+	"github.com/NovaSeele/Seelegent/internal/brief"
 )
 
 // Other is another active task of the same repository, named in a fix prompt.
@@ -41,20 +42,23 @@ func Fixable(res api.GateResult) *api.GateStep {
 	return nil
 }
 
-// Fix prompt lines that keep a worker from destroying its own work (field report 4, F4 and F10).
-const (
-	// NoDeleteLine tells the worker to leave the files outside its lane alone.
-	NoDeleteLine = "Do NOT delete, revert or move any file to get back inside the lane: the lead decides about " +
-		"those files. Leave them as they are and name them under ## Open issues."
-	// NoLookingLine keeps the worker out of Seelegent's own data and processes.
-	NoLookingLine = "Do not read or search Seelegent's data folder or its processes: everything you need is in " +
-		"this message."
-)
+// NoDeleteLine is the fix prompt line that keeps a worker from destroying its own work (field report 4, F4): it
+// tells the worker to leave the files outside its lane alone.
+const NoDeleteLine = "Do NOT delete, revert or move any file to get back inside the lane: the lead decides about " +
+	"those files. Leave them as they are and name them under ## Open issues."
+
+// Folders locate a task for the fix prompt's data-folder line (brief.DataRule, field report 4, F10): Seelegent's
+// data folder ("" names it ~/.seelegent), the task's folder, and its spec folder outside the repository (absolute;
+// "" for none).
+type Folders struct {
+	Data, Cwd, Spec string
+}
 
 // FixPrompt is the message of an automatic fix turn after a failed gate (attempt of budget). lane is the task's lane:
 // when the lane step lists files outside it, the prompt names the lane and those files as information only, and
-// tells the worker not to delete, revert or move them.
-func FixPrompt(res api.GateResult, lane []string, attempt, budget int, others []Other) string {
+// tells the worker not to delete, revert or move them. It ends with the worker brief's data-folder rule, with the
+// same exception for a Spec Kit workspace in the data folder.
+func FixPrompt(res api.GateResult, lane []string, attempt, budget int, others []Other, where Folders) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "Seelegent ran the gate for your work and it failed (automatic fix %d/%d).\n", attempt, budget)
 	s := Fixable(res)
@@ -131,7 +135,7 @@ func FixPrompt(res api.GateResult, lane []string, attempt, budget int, others []
 		fmt.Fprintf(&b, "\nOther workers are active in this repository: %s; failures in their files are not yours "+
 			"to fix.\n", strings.Join(parts, "; "))
 	}
-	b.WriteString("\n" + NoLookingLine + "\n")
+	b.WriteString("\n" + brief.DataRule(where.Data, where.Cwd, where.Spec) + "\n")
 	return strings.TrimRight(b.String(), "\n")
 }
 

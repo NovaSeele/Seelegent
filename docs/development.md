@@ -80,8 +80,10 @@ went at full width together. The commands here therefore run narrow by default:
   to `-parallel` at a time, which defaults to GOMAXPROCS (every CPU). On a busy machine add `-parallel 4`, or set
   `GOMAXPROCS=8` for the whole run (it also caps each test binary's own threads): `GOMAXPROCS=8 go test -p 4
   -parallel 4 ./...`.
-- `make lint` also vets the bench (`go vet -tags bench ./scripts/bench/`), and `.golangci.yml` sets
-  `run.build-tags: [bench]`, so the linter checks it too (CI does both).
+- `make lint` also vets the bench (`go vet -tags bench ./scripts/bench/`, then again with `GOOS=windows` and
+  `GOOS=darwin` so every OS's files compile), and `.golangci.yml` sets `run.build-tags: [bench]`, so the linter
+  checks it too (CI does both). `go test -tags bench -run Test ./scripts/bench` runs the report's unit tests (made-up
+  numbers, no daemon); without `-run` the test binary runs the bench itself.
 - Never run the tests and the linter at the same time; test only the packages you changed while iterating
   (`go test -p 4 ./internal/task`).
 - Run long checks at low priority, so the desktop and the workers stay responsive:
@@ -124,7 +126,9 @@ lists are not empty, and then:
 
 - `-scenario idle` (default, `-duration 22m`, at least two quota cycles): nothing happens; this is the daemon
   left running all day. The result splits the idle CPU into the floor (between quota cycles), the CPU per quota
-  cycle and the window's average, and lists the start of every quota read and gh run.
+  cycle and per quota-reader spawn, and the window's average, and lists the start of every quota read and gh run.
+  The usage recorder's hourly snapshot and prune (the first of its 5-minute ticks after each hour, predicted from
+  the daemon's start) is kept out of the floor and reported as CPU per tick.
 - `-scenario idle-sse`: the same with one SSE client connected, a dashboard tab left open.
 - `-scenario load` (`-duration 5m`): 8 tasks (`-tasks`) whose fake workers stream `-rate 100` lines a second
   together, 3 SSE clients, and a list and a detail request every 250 ms (p50/p95/p99 recorded). The bench daemon's
@@ -195,7 +199,9 @@ reading; that is not a leak. The result shows the start, the end and the raw del
 readings, and the delta without the ring, which is the budgeted value: at most 3 MB. A daemon that does not report
 its ring (an older build) is judged on the raw delta, with a note.
 `go tool pprof -top -sample_index=inuse_space -base heap-before-load.pprof heap-after-load.pprof` shows what
-stayed. The idle scenarios keep the slopes as budgets.
+stayed. The idle scenarios keep the slopes as budgets, except over a window under 15 minutes: a few
+minutes extrapolated to an hour give false results, so a shorter window shows them as information only
+(window too short), with the raw numbers.
 
 Every result carries the machine profile (OS, CPUs, RAM and commit, free memory and commit over the window, system
 threads, the three other programs that used the most CPU), so runs on different machines or on a busy one can be
@@ -233,6 +239,12 @@ SSE hub and the task bus): `go test -p 4 -run '^$' -bench . ./internal/backend .
 - The HTTP API is described in [api.md](api.md); the binding contract is `contracts/api-v1.md` in the spec
   workspace.
 - `pnpm build` writes `web/dist`; the next `go build` embeds it (package `web`, `web.FS()`).
+
+## Database migrations
+
+Migrations live in `internal/store/migrations/NNNN_name.sql`, numbered without gaps. Never rewrite a migration
+that has run anywhere (an installed daemon, a release, a user's data folder): change the schema with a new one.
+Only a migration that never left an unmerged branch may still be renamed or changed.
 
 ## Toolchain decisions
 

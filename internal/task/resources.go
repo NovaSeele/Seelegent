@@ -354,6 +354,7 @@ func (s *Service) setMemoryWaiting(id string, h memHold) {
 			since = mw.Since
 		}
 		t.Waiting, t.WaitDetail, t.WaitingUntil = api.WaitingMemory, h.detail(), time.Time{}
+		t.WaitBudget = nil
 		t.MemoryWait = &MemoryWait{Since: since, AvailableMB: h.avail, NeedMB: h.need}
 		if mw != nil && mw.NeedMB == h.need {
 			return nil, nil
@@ -382,6 +383,14 @@ func abs64(n int64) int64 {
 func waitingOf(t *Task) string {
 	if t.Status == StatusWaitingQuota && t.Waiting == api.WaitingMemory {
 		return api.WaitingMemory
+	}
+	return ""
+}
+
+// waitDetailOf is the report's WaitDetail: TaskSummary.WaitDetail while the task waits for an account or memory.
+func waitDetailOf(t *Task) string {
+	if t.Status == StatusWaitingQuota {
+		return t.WaitDetail
 	}
 	return ""
 }

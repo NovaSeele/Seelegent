@@ -2,10 +2,12 @@ package task
 
 import (
 	"context"
+	"math"
 	"path/filepath"
 	"regexp"
 	"slices"
 
+	"github.com/NovaSeele/Seelegent/internal/account"
 	"github.com/NovaSeele/Seelegent/internal/api"
 	"github.com/NovaSeele/Seelegent/internal/usage"
 )
@@ -37,6 +39,7 @@ func (s *Service) report(ctx context.Context, t *Task, cwd string) api.TaskRepor
 	}
 	rep := api.TaskReport{TaskID: t.ID, Status: string(t.Status), TokensUsed: t.TokensUsed(), Error: t.Error,
 		FilesChanged: []string{}, WaitingUntil: api.FormatTime(t.WaitingUntil), Waiting: waitingOf(t),
+		WaitDetail: waitDetailOf(t),
 		DepsReason: t.DepsReason,
 		Cancelling: t.CancelRequested && Active(t.Status)}
 	if s.o.Dashboard != nil {
@@ -55,6 +58,7 @@ func (s *Service) report(ctx context.Context, t *Task, cwd string) api.TaskRepor
 	tu := t.LastTurn()
 	if tu != nil {
 		rep.Turn = tu.N
+		rep.TurnCostUSD = s.turnCost(ctx, t, tu)
 		if tu.Model != "" {
 			rep.Model = tu.Model
 		}
@@ -140,4 +144,23 @@ func relTo(cwd, taskCwd, f string) string {
 		return filepath.ToSlash(rel)
 	}
 	return filepath.ToSlash(p)
+}
+
+// turnCost is the CLI's cost estimate of the turn's attempts, when the task's provider makes it trustworthy (spend
+// source cli: the official Anthropic API); 0 otherwise.
+func (s *Service) turnCost(ctx context.Context, t *Task, tu *Turn) float64 {
+	if t.Provider == "" {
+		return 0
+	}
+	p, err := s.o.Accounts.GetProvider(ctx, t.Provider)
+	if err != nil || p.SpendSource() != account.SpendCLI {
+		return 0
+	}
+	cost := 0.0
+	for _, a := range tu.Attempts {
+		if a.Usage != nil {
+			cost += a.Usage.CostUSD
+		}
+	}
+	return math.Round(cost*1e6) / 1e6
 }

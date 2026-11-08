@@ -17,6 +17,7 @@ import (
 	"github.com/NovaSeele/Seelegent/internal/api"
 	"github.com/NovaSeele/Seelegent/internal/backend"
 	"github.com/NovaSeele/Seelegent/internal/brief"
+	"github.com/NovaSeele/Seelegent/internal/config"
 	"github.com/NovaSeele/Seelegent/internal/event"
 	"github.com/NovaSeele/Seelegent/internal/fsutil"
 	"github.com/NovaSeele/Seelegent/internal/launch"
@@ -32,8 +33,18 @@ func retryDelays() []time.Duration { return []time.Duration{15 * time.Second, 45
 // noAccountRecheck is how often a task that no account can run looks again (account changes wake it sooner).
 const noAccountRecheck = time.Minute
 
-// extraAttempts is how many attempts a turn may make beyond one per account.
+// extraAttempts is how many attempts a turn may make beyond one per account. Quota attempts do not count (see
+// maxQuotaRests).
 const extraAttempts = 3
+
+// maxQuotaRests is how many attempts of one turn may end on a quota limit. Such an attempt is followed by a rest and a
+// resume, or a handover: the turn waits for quota, it does not fail, so these attempts stay out of maxAttempts (a
+// one-account task that rested four times in a turn used to end failed). This cap only stops a runaway loop, such as
+// a CLI that reports a limit on every start: each limit rests the account (an hour by default when the CLI gives no
+// reset time ahead), so 50 is about two days of such a loop on one account, while a real turn needs a handful (a
+// 5-hour window resets at most about five times a day). A count rather than a time limit, because a turn has no
+// deadline of its own and a weekly limit legitimately rests for days.
+const maxQuotaRests = 50
 
 // errStop tells the runner that the task was cancelled or taken over while it prepared an attempt.
 var errStop = errors.New("stopped")
@@ -450,6 +461,10 @@ func (s *Service) newAttempt(r *run, t *Task, tu *Turn) (bool, error) {
 			} else if moved {
 				return true, nil
 			}
+			if u := (*pool.Unavailable)(nil); errors.As(err, &u) && len(u.NoCredit) > 0 {
+				// Only accounts without credit are left: no time brings them back, so fail now (never wait).
+				return s.giveUp(t.ID, tu.N, u.Error())
+			}
 			if excludedBefore {
 				return s.giveUp(t.ID, tu.N, "no other account can run this task: "+lastError(tu))
 			}
@@ -504,6 +519,7 @@ func (s *Service) newAttempt(r *run, t *Task, tu *Turn) (bool, error) {
 			}
 		}
 		t.Waiting, t.WaitDetail, t.WaitingUntil, t.MemoryWait = "", "", time.Time{}, nil
+		t.WaitBudget = nil
 		a := &Attempt{N: n, AccountID: acc.ID, AccountLabel: label, Backend: t.Backend, Model: attemptModel,
 			Continuing: continuing, StartedAt: s.now(), Status: AttemptRunning, LaunchDir: launchDir, Prompt: prompt}
 		if continuing {
@@ -675,6 +691,8 @@ func classify(o backend.Outcome, exit launch.Exit, timeoutMinutes int) (status, 
 		return AttemptQuota, o.Error
 	case event.ClassAuthRequired:
 		return AttemptAuth, o.Error
+	case event.ClassCredits:
+		return AttemptCredits, o.Error
 	case event.ClassTransient:
 		return AttemptTransient, o.Error
 	case event.ClassFatal:
@@ -710,9 +728,26 @@ func (s *Service) finishAttempt(r *run, id string, turn, n int, accountID, model
 		if err := s.o.Pool.MarkAuthFailed(ctx, accountID, errText); err != nil {
 			s.log.Warn("task: mark the account signed out", "account", accountID, "err", err)
 		}
+	case AttemptCredits:
+		// Not a quota rest: the account is left out until the user acts; the next pick moves on, or fails at once
+		// when no other account can run the task (pool.Unavailable.NoCredit).
+		if err := s.o.Pool.MarkNoCredit(ctx, accountID, errText); err != nil {
+			s.log.Warn("task: rest the account without credit", "account", accountID, "err", err)
+		}
 	}
 	maxAttempts := s.maxAttempts(ctx, b.Name())
-	check := s.preCheck(ctx, id, turn, status, &o, n, maxAttempts)
+	// preCheck runs the post-turn checks only when this attempt may end the turn: when its budget is used up.
+	used, limit := n, maxAttempts
+	if cur, err := s.repo.Get(ctx, id); err == nil {
+		if tu := cur.TurnN(turn); tu != nil {
+			counted, rests := attemptBudget(tu, n, status)
+			used = counted
+			if status == AttemptQuota {
+				used, limit = rests, maxQuotaRests
+			}
+		}
+	}
+	check := s.preCheck(ctx, id, turn, status, &o, used, limit)
 	now := s.now()
 	var retry time.Duration
 	more, gating := false, false
@@ -781,7 +816,7 @@ func (s *Service) finishAttempt(r *run, id string, turn, n int, accountID, model
 		case status == AttemptBackgroundWait:
 			evs = append(evs, s.endTurnChecked(t, tu, TurnOK, o, check))
 			t.Status, t.Error = StatusDone, ""
-		case status == AttemptQuota || status == AttemptAuth:
+		case status == AttemptQuota || status == AttemptAuth || status == AttemptCredits:
 			more = true
 		case status == AttemptTransient:
 			k := 0
@@ -800,11 +835,19 @@ func (s *Service) finishAttempt(r *run, id string, turn, n int, accountID, model
 			evs = append(evs, s.endTurnChecked(t, tu, TurnFailed, o, check))
 			t.Status, t.Error = StatusFailed, errText
 		}
-		if more && len(tu.Attempts) >= maxAttempts {
-			more, retry = false, 0
-			msg := fmt.Sprintf("gave up after %d attempts: %s", len(tu.Attempts), errText)
-			evs = append(evs, s.endTurnChecked(t, tu, TurnFailed, o, check))
-			t.Status, t.Error = StatusFailed, msg
+		if more {
+			msg := ""
+			switch counted, rests := attemptBudget(tu, n, status); {
+			case status == AttemptQuota && rests >= maxQuotaRests:
+				msg = fmt.Sprintf("gave up after %d quota limits in one turn: %s", rests, errText)
+			case status != AttemptQuota && counted >= maxAttempts:
+				msg = fmt.Sprintf("gave up after %d attempts: %s", counted, errText)
+			}
+			if msg != "" {
+				more, retry = false, 0
+				evs = append(evs, s.endTurnChecked(t, tu, TurnFailed, o, check))
+				t.Status, t.Error = StatusFailed, msg
+			}
 		}
 		if tu.Status != TurnRunning {
 			evs = append(evs, applyCheck(t, tu, check)...)
@@ -821,6 +864,12 @@ func (s *Service) finishAttempt(r *run, id string, turn, n int, accountID, model
 		return false, err
 	}
 	s.recordUsage(ctx, t, turn, n, accountID, b.Name(), model, o.Usage)
+	if (status == AttemptOK || status == AttemptBackgroundWait) && accountID != "" {
+		// The account's key and provider work: an API-key account that was not tested counts as working now.
+		if err := s.o.Pool.MarkSucceeded(ctx, accountID, attemptStart(t, turn, n)); err != nil {
+			s.log.Warn("task: record the account's good run", "account", accountID, "err", err)
+		}
+	}
 	if s.o.QuotaRefresh != nil && accountID != "" {
 		// A run that failed on the account (quota, sign-in, transient or other error) always reads its quota
 		// again; one that ended well, waits in the background or was cancelled only when the quota is stale.
@@ -888,6 +937,7 @@ func (s *Service) giveUp(id string, turn int, message string) (bool, error) {
 		ev := s.endTurn(t, tu, TurnFailed)
 		t.Status, t.Error = StatusFailed, message
 		t.Waiting, t.WaitDetail, t.WaitingUntil, t.MemoryWait = "", "", time.Time{}, nil
+		t.WaitBudget = nil
 		return []NewEvent{ev}, nil
 	})
 	if err == nil {
@@ -914,6 +964,7 @@ func (s *Service) finishCancel(id string) {
 			evs = append(evs, cancelGate(t, ph, s.now())...)
 		}
 		t.CancelRequested, t.Waiting, t.WaitDetail, t.WaitingUntil, t.MemoryWait = false, "", "", time.Time{}, nil
+		t.WaitBudget = nil
 		if t.Status != StatusCancelled {
 			if err := t.SetStatus(StatusCancelled); err != nil {
 				return nil, err
@@ -938,6 +989,7 @@ func (s *Service) finishCancel(id string) {
 
 // setWaiting shows a task as waiting for an account.
 func (s *Service) setWaiting(id string, u *pool.Unavailable) {
+	u = s.keyProviders(u)
 	_, err := s.mutate(s.background(), id, func(t *Task) ([]NewEvent, error) {
 		if t.CancelRequested || t.Manual || !Active(t.Status) {
 			return nil, errNoChange
@@ -952,6 +1004,10 @@ func (s *Service) setWaiting(id string, u *pool.Unavailable) {
 		}
 		// MemoryWait stays: a pool wait that ends back in a memory wait keeps its start (resources_wait).
 		t.Waiting, t.WaitDetail, t.WaitingUntil = string(u.Reason), detail, u.Until.UTC()
+		t.WaitBudget = nil
+		if u.Reason == pool.ReasonBudget {
+			t.WaitBudget = slices.Clone(u.BudgetReached)
+		}
 		turn := 0
 		if tu := t.LastTurn(); tu != nil {
 			turn = tu.N
@@ -962,6 +1018,26 @@ func (s *Service) setWaiting(id string, u *pool.Unavailable) {
 	if err != nil && s.root.Err() == nil {
 		s.log.Warn("task: set waiting", "task", id, "err", err)
 	}
+}
+
+// keyProviders returns u with its free API-key providers checked (field report F14): a disabled or unreadable
+// provider is dropped, since delegate refuses it, and one that maps no tier to a model needs an explicit model. The
+// task never moves to them by itself: keys cost money, the lead decides.
+func (s *Service) keyProviders(u *pool.Unavailable) *pool.Unavailable {
+	if len(u.KeyProviders) == 0 {
+		return u
+	}
+	c := *u
+	c.KeyProviders = nil
+	for _, kp := range u.KeyProviders {
+		p, err := s.o.Accounts.GetProvider(s.background(), kp.ID)
+		if err != nil || !p.Enabled {
+			continue
+		}
+		kp.NeedsModel = p.Tiers == (config.TierModels{})
+		c.KeyProviders = append(c.KeyProviders, kp)
+	}
+	return &c
 }
 
 // sleep waits d, until wake is closed (nil: never), or until ctx ends.
@@ -975,7 +1051,25 @@ func (s *Service) sleep(ctx context.Context, d time.Duration, wake <-chan struct
 	}
 }
 
-// maxAttempts is how many attempts one turn may make: one per account of the backend plus extraAttempts.
+// attemptBudget returns how much of its budgets turn tu has used once attempt n ends as status: counted is the
+// number of its attempts that count toward maxAttempts (all but quota attempts), rests the number of quota attempts.
+func attemptBudget(tu *Turn, n int, status string) (counted, rests int) {
+	for i, a := range tu.Attempts {
+		st := a.Status
+		if i == n-1 {
+			st = status
+		}
+		if st == AttemptQuota {
+			rests++
+		} else {
+			counted++
+		}
+	}
+	return counted, rests
+}
+
+// maxAttempts is how many attempts one turn may make, quota attempts aside: one per account of the backend plus
+// extraAttempts.
 func (s *Service) maxAttempts(ctx context.Context, backendName string) int {
 	n := 0
 	if accs, err := s.o.Accounts.List(ctx); err == nil {
@@ -1002,6 +1096,17 @@ func (s *Service) recordUsage(ctx context.Context, t *Task, turn, n int, account
 		StartedAt: started, EndedAt: s.now(), Usage: u}); err != nil {
 		s.log.Warn("task: record usage", "task", t.ID, "err", err)
 	}
+}
+
+// attemptStart returns when attempt n of the turn started (zero when the task does not have it).
+func attemptStart(t *Task, turn, n int) time.Time {
+	if t == nil {
+		return time.Time{}
+	}
+	if tu := t.TurnN(turn); tu != nil && n >= 1 && n <= len(tu.Attempts) {
+		return tu.Attempts[n-1].StartedAt
+	}
+	return time.Time{}
 }
 
 func (s *Service) attemptDir(id string, turn, n int) string {
@@ -1042,6 +1147,8 @@ func classOf(a *Attempt) event.Class {
 		return event.ClassQuotaExhausted
 	case AttemptAuth:
 		return event.ClassAuthRequired
+	case AttemptCredits:
+		return event.ClassCredits
 	case AttemptTransient:
 		return event.ClassTransient
 	}
@@ -1077,7 +1184,7 @@ func (s *Service) prompt(ctx context.Context, t *Task, tu *Turn, continuing, pla
 		if t.Mode != ModePlan {
 			return msg
 		}
-		return brief.ReadOnlyRun(msg, planShell)
+		return brief.ReadOnlyRun(msg, planShell, s.o.DataDir, t.Cwd)
 	}
 	spec := s.briefSpec(t)
 	if continuing {
@@ -1104,7 +1211,7 @@ func (s *Service) prompt(ctx context.Context, t *Task, tu *Turn, continuing, pla
 	}
 	in := brief.Input{Cwd: t.Cwd, Plan: t.Mode == ModePlan, PlanShell: planShell, Spec: spec, Deps: t.DepsContext,
 		Interrupted: len(tu.Attempts) > 0, Message: tu.Message, Baseline: displayPaths(t.Cwd, t.Baseline),
-		TestParallelism: s.limits().TestParallelism}
+		TestParallelism: s.limits().TestParallelism, DataDir: s.o.DataDir}
 	in.Lane, in.Gate = s.briefGate(t)
 	if tu.Handback {
 		in.Message = brief.HandbackElsewhere // a new conversation: the console's context is not available

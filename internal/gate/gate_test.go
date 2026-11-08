@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/NovaSeele/Seelegent/internal/api"
+	"github.com/NovaSeele/Seelegent/internal/brief"
 	"github.com/NovaSeele/Seelegent/internal/envx"
 	"github.com/NovaSeele/Seelegent/internal/proof"
 )
@@ -185,15 +186,39 @@ func TestDetect(t *testing.T) {
 	}
 }
 
+// A fix turn ends with the worker brief's data-folder rule, the same exception included: the spec folder or the
+// task's folder when it lies in the data folder (a Spec Kit workspace).
+func TestFixPromptDataFolder(t *testing.T) {
+	exit := 1
+	res := api.GateResult{State: api.GateRed, Steps: []api.GateStep{
+		{Kind: api.StepTask, Label: "T001", Cmd: "go test ./...", State: api.StepRed, Exit: &exit, Tail: "FAIL"},
+	}}
+	data := "/home/u/.seelegent"
+	ws := data + "/specs/app-spec"
+	for where, want := range map[Folders]string{
+		{Data: data, Cwd: "/work/app", Spec: ws + "/specs/001-x"}: "read only " + ws + "/specs/001-x (your spec folder)",
+		{Data: data, Cwd: ws}: "work only in " + ws + ".",
+		{Data: data, Cwd: "/work/app", Spec: "/work/specs/001-x"}: "read only the paths this brief names",
+	} {
+		p := FixPrompt(res, nil, 1, 2, nil, where)
+		rule := brief.DataRule(where.Data, where.Cwd, where.Spec)
+		if !strings.HasSuffix(p, "\n"+rule) || !strings.HasPrefix(rule, "Do not explore "+data+" ") ||
+			!strings.Contains(rule, want) {
+			t.Errorf("%+v: the fix prompt does not end with the rule naming %q:\n%s", where, want, p)
+		}
+	}
+}
+
 func TestFixPromptAndForeign(t *testing.T) {
 	exit := 1
 	res := api.GateResult{State: api.GateRed, Steps: []api.GateStep{
 		{Kind: api.StepLane, Label: "lane", State: api.StepGreen},
 		{Kind: api.StepTask, Label: "T001", Cmd: "go test ./...", State: api.StepRed, Exit: &exit, Tail: "FAIL x_test.go:3"},
 	}}
-	p := FixPrompt(res, nil, 1, 2, []Other{{ID: "t2", Title: "Other", Lane: []string{"web/"}}})
+	noLooking := brief.DataRule("", "/repo", "")
+	p := FixPrompt(res, nil, 1, 2, []Other{{ID: "t2", Title: "Other", Lane: []string{"web/"}}}, Folders{Cwd: "/repo"})
 	for _, want := range []string{"automatic fix 1/2", "Command: go test ./...", "Exit: 1", "FAIL x_test.go:3",
-		"Do not weaken", "t2 (Other) on web/", NoLookingLine} {
+		"Do not weaken", "t2 (Other) on web/", noLooking} {
 		if !strings.Contains(p, want) {
 			t.Errorf("prompt misses %q:\n%s", want, p)
 		}
@@ -214,9 +239,9 @@ func TestFixPromptAndForeign(t *testing.T) {
 	if s := Fixable(both); s == nil || s.Kind != api.StepTask {
 		t.Fatalf("fixable = %+v", s)
 	}
-	p = FixPrompt(both, []string{"src/x/"}, 1, 2, nil)
+	p = FixPrompt(both, []string{"src/x/"}, 1, 2, nil, Folders{Cwd: "/repo"})
 	for _, want := range []string{"Step: T001 (task)", "your lane is src/x/", "outside it: src/xy.ts, README.md",
-		NoDeleteLine, NoLookingLine} {
+		NoDeleteLine, noLooking} {
 		if !strings.Contains(p, want) {
 			t.Errorf("lane and command prompt misses %q:\n%s", want, p)
 		}
@@ -228,7 +253,7 @@ func TestFixPromptAndForeign(t *testing.T) {
 	}
 	hyg := api.GateResult{Steps: []api.GateStep{{Kind: api.StepHygiene, Label: "hygiene", State: api.StepRed,
 		Findings: []api.Finding{{Kind: api.FindingEOLChanged, Path: "a.txt"}, {Kind: api.FindingJunkFile, Path: "x.log"}}}}}
-	if p := FixPrompt(hyg, nil, 1, 1, nil); !strings.Contains(p, "line endings") || !strings.Contains(p, "a.txt (eol_changed)") ||
+	if p := FixPrompt(hyg, nil, 1, 1, nil, Folders{}); !strings.Contains(p, "line endings") || !strings.Contains(p, "a.txt (eol_changed)") ||
 		!strings.Contains(p, "Remove one only when you are sure your own commands left it") {
 		t.Errorf("hygiene prompt:\n%s", p)
 	}

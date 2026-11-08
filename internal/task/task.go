@@ -7,6 +7,7 @@ import (
 	"github.com/NovaSeele/Seelegent/internal/api"
 	"github.com/NovaSeele/Seelegent/internal/backend"
 	"github.com/NovaSeele/Seelegent/internal/event"
+	"github.com/NovaSeele/Seelegent/internal/pool"
 )
 
 // Status is where a task stands (see the transition table in state.go).
@@ -80,6 +81,7 @@ const (
 	AttemptOK             = "ok"
 	AttemptQuota          = "quota"
 	AttemptAuth           = "auth"
+	AttemptCredits        = "credits"
 	AttemptTransient      = "transient"
 	AttemptBackgroundWait = "background_wait"
 	AttemptError          = "error"
@@ -166,6 +168,8 @@ type Task struct {
 	// while it waits for free memory (resources.go, with MemoryWait); WaitDetail says more.
 	Waiting    string `json:"waiting,omitempty"`
 	WaitDetail string `json:"waitDetail,omitempty"`
+	// WaitBudget are the accounts at their budget while Waiting is api.WaitingBudget (nil otherwise).
+	WaitBudget []pool.BudgetHold `json:"waitBudget,omitempty"`
 	// MemoryWait is set by a memory wait: since when, and the last reading against its threshold. A pool wait in
 	// between keeps it (so the wait's start survives); a launch or the end of the run clears it. Attention reads it
 	// only while Waiting is api.WaitingMemory.

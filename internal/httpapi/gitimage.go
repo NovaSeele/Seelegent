@@ -11,13 +11,18 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/NovaSeele/Seelegent/internal/api"
 	"github.com/NovaSeele/Seelegent/internal/gitx"
 )
 
-// maxImageBytes caps an image GET /tasks/{id}/git/image serves.
-const maxImageBytes = 10 << 20
+// maxImageBytes caps an image GET /tasks/{id}/git/image serves. An image up to smallImageBytes is read whole and
+// its file closed before the answer is written; a larger one streams under Options.ImageWriteTimeout.
+const (
+	maxImageBytes   = 10 << 20
+	smallImageBytes = 1 << 20
+)
 
 // imageCSP keeps an image answer inert when it is opened as a page: an SVG's scripts never run on the daemon's
 // origin, past the checks the API's other routes rely on, and no page may frame it.
@@ -81,6 +86,21 @@ func (s *Server) taskImage(w http.ResponseWriter, r *http.Request) (code int, bo
 	if err != nil {
 		return 0, nil, err
 	}
+	if size <= smallImageBytes {
+		// Read whole and closed before the answer: a client that stops reading (a sleeping tab) never keeps the
+		// file open.
+		data, err := io.ReadAll(io.LimitReader(f, size))
+		_ = f.Close()
+		switch {
+		case err != nil:
+			return 0, nil, err
+		case bytes.HasPrefix(data, lfsPointer):
+			return 0, nil, lfsRefusal(rel)
+		}
+		writeImageHeaders(w, ctype, int64(len(data)))
+		_, _ = w.Write(data) //nolint:gosec // an image of an allowed type, sent as that type with nosniff and a sandbox CSP
+		return 0, nil, nil
+	}
 	defer func() { _ = f.Close() }()
 	// The first bytes say whether the file is an LFS pointer; the rest is copied as it is read, never held whole.
 	peek := make([]byte, len(lfsPointer))
@@ -91,6 +111,12 @@ func (s *Server) taskImage(w http.ResponseWriter, r *http.Request) (code int, bo
 	if peek = peek[:n]; bytes.Equal(peek, lfsPointer) {
 		return 0, nil, lfsRefusal(rel)
 	}
+	// The server has no WriteTimeout (the event stream runs for hours): this answer gets its own, so a client that
+	// stops reading fails the copy and the file is closed. The deadline is lifted again afterwards, since the
+	// connection may serve further requests.
+	rc := http.NewResponseController(w)
+	_ = rc.SetWriteDeadline(time.Now().Add(s.o.ImageWriteTimeout))
+	defer func() { _ = rc.SetWriteDeadline(time.Time{}) }()
 	writeImageHeaders(w, ctype, size)
 	// A client that goes away fails the next write, which ends the copy. A file that changed size since the Stat
 	// sends at most Content-Length bytes; a short answer closes the connection.

@@ -62,9 +62,10 @@ type TaskSummary struct {
 	// Waiting says why a waiting_quota task waits: WaitingBusy (every account that could run it has no free
 	// slot), WaitingResting (they rest; WaitingUntil is when one is back), WaitingNoAccount (none can run it), or
 	// WaitingMemory while free memory or free commit is below minFreeMemoryMB / minFreeCommitMB (that wait never
-	// raises an attention flag: the lead cannot act on it). Absent for other statuses, and from older daemons,
-	// which reported only the memory wait.
-	Waiting string `json:"waiting,omitempty" ts:"'memory' | 'no_account' | 'resting' | 'busy'"`
+	// raises an attention flag: the lead cannot act on it), or WaitingBudget (every account rests on its budget;
+	// raises a budget_reached flag for the user). Absent for other statuses, and from older daemons, which reported
+	// only the memory wait.
+	Waiting string `json:"waiting,omitempty" ts:"'memory' | 'no_account' | 'resting' | 'busy' | 'budget_reached'"`
 	// WaitDetail is the daemon's English explanation of Waiting, for example "acc6: 2 of 2 running" for busy.
 	WaitDetail string `json:"waitDetail,omitempty"`
 	// NeedsSince is since when the task waits for the lead or the user.
@@ -195,7 +196,7 @@ const (
 // AttentionParams are the values an attention flag's text is made of. Only the fields of the reason are set:
 // stalled (Kind, Minutes, Tool, Command), looping (Kind, Count, Tool, Steps), no_accounts and auth (Backend),
 // deps_blocked (Kind, Task, Title), no_response (Denied), hygiene and work_at_risk (Count), question (Options),
-// resources_wait (Minutes, AvailableMB, NeedMB).
+// resources_wait (Minutes, AvailableMB, NeedMB), budget_reached (Account, BudgetUSD, Count: how many accounts).
 type AttentionParams struct {
 	Kind string `json:"kind,omitempty" ts:"'not_started' | 'no_output' | 'tool' | 'failed_calls' | 'repeated' | 'missing' | 'rejected' | 'failed' | 'cancelled' | 'timeout' | 'process_canceled' | 'start_failed' | 'launcher_lost' | 'exit_error' | 'no_result'"`
 	// ExitCode is the worker process's exit code of a failed flag whose kind is exit_error or no_result.
@@ -219,6 +220,9 @@ type AttentionParams struct {
 	// Minutes: how long the task has waited).
 	AvailableMB int64 `json:"availableMB,omitempty"`
 	NeedMB      int64 `json:"needMB,omitempty"`
+	// Account and BudgetUSD name the first account at its budget and that budget (budget_reached).
+	Account   string  `json:"account,omitempty"`
+	BudgetUSD float64 `json:"budgetUsd,omitempty"`
 }
 
 // Review is the lead's verdict on a task.
@@ -320,8 +324,8 @@ type Attempt struct {
 	Model        string `json:"model,omitempty"`
 	StartedAt    string `json:"startedAt"`
 	EndedAt      string `json:"endedAt,omitempty"`
-	// Status is running, ok, quota, auth, transient, background_wait, error or cancelled.
-	Status string `json:"status" ts:"'running' | 'ok' | 'quota' | 'auth' | 'transient' | 'background_wait' | 'error' | 'cancelled'"`
+	// Status is running, ok, quota, auth, credits, transient, background_wait, error or cancelled.
+	Status string `json:"status" ts:"'running' | 'ok' | 'quota' | 'auth' | 'credits' | 'transient' | 'background_wait' | 'error' | 'cancelled'"`
 	// Kind is "console" for a takeover.
 	Kind  string `json:"kind,omitempty" ts:"'console'"`
 	Error string `json:"error,omitempty"`

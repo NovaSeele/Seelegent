@@ -118,6 +118,7 @@
     "noResponse": "工人无响应",
     "auth": "需要登录",
     "noAccounts": "没有可用账号",
+    "budgetReached": "已达预算",
     "failed": "失败",
     "review": "等待审核",
     "quotaWait": "等待配额",

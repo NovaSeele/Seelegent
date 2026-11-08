@@ -46,6 +46,7 @@
       "callsFailed": "Las últimas {count} llamadas a herramientas fallaron.",
       "repeated": "El worker repitió la misma llamada {tool} {count} veces en sus últimos {steps} pasos.",
       "noAccounts": "Ninguna cuenta de {backend} puede trabajar. Inicia sesión en una o activa una.",
+      "budgetReached": "{account} agotó su presupuesto de {budget}. Sube el presupuesto o cambia la clave.",
       "auth": "Todas las cuentas de {backend} activas necesitan iniciar sesión.",
       "depMissing": "La tarea previa {task} ya no existe.",
       "depRejected": "La tarea previa {title} ({task}) fue rechazada.",

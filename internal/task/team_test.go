@@ -452,12 +452,12 @@ func TestHiddenRunFreshConversation(t *testing.T) {
 		t.Errorf("continuing = %q", got)
 	}
 	got := s.prompt(t.Context(), tk, tk.Turns[1], false, false)
-	if !strings.HasPrefix(got, brief.PlanRule(false)+"\n\n## Your brief\n") ||
+	if !strings.HasPrefix(got, brief.ReadOnlyRun("## Your brief\n", false, "", "")) ||
 		!strings.Contains(got, "You are P1, a peer.") || !strings.HasSuffix(got, "Round 2 of 3.") {
 		t.Errorf("fresh conversation = %q", got)
 	}
 	if got := s.prompt(t.Context(), tk, tk.Turns[0], false, false); got != brief.ReadOnlyRun("You are P1, a peer.",
-		false) {
+		false, "", "") {
 		t.Errorf("first turn = %q", got)
 	}
 }

@@ -13,7 +13,7 @@ import { useAccountState } from './useAccountState'
 const props = defineProps<{ account: Account; now: number; hasSession: boolean }>()
 
 const { t } = useI18n()
-const { twinLabel, exhaustedLabel, restingLabel, pill } = useAccountState(props)
+const { twinLabel, exhaustedLabel, restingLabel, holdHint, pill } = useAccountState(props)
 </script>
 
 <template>
@@ -36,6 +36,8 @@ const { twinLabel, exhaustedLabel, restingLabel, pill } = useAccountState(props)
     </li>
   </ul>
 
+  <!-- A hold says what to do: no time ends it. -->
+  <p v-if="holdHint" class="facts__note">{{ holdHint }}</p>
   <!-- A failed read with a reason is said once, in the quota box below. -->
   <p v-if="account.status === 'error' && !account.quota.error" class="facts__note">
     {{ t('accounts.errorNote') }}

@@ -29,20 +29,169 @@ type Account struct {
 	// KeyHint shows the last four characters of an API key ("…abcd"); the key itself is never sent.
 	KeyHint string        `json:"keyHint,omitempty"`
 	Status  AccountStatus `json:"status"`
-	TwinOf  string        `json:"twinOf,omitempty"`
+	// TestResult is the test state of an API-key account (absent for the others): not_tested until a key test or
+	// a turn on the current key and provider endpoint succeeds, then ok, or the reason of the last failed test.
+	// Storing a key or changing the provider's endpoint makes it not_tested again. It never changes Status or
+	// selection: a not_tested account is picked like any other. TestedAt is when it was set (absent while
+	// not_tested).
+	TestResult string `json:"testResult,omitempty" ts:"'not_tested' | 'ok' | 'refused' | 'not_found' | 'no_models_endpoint' | 'unreachable' | 'redirected' | 'error'"`
+	TestedAt   string `json:"testedAt,omitempty"`
+	// ModelPerTask is true for an API-key account whose provider has no tier models: a delegate on it must name
+	// its model (shown as "Model: chosen per task").
+	ModelPerTask bool `json:"modelPerTask,omitempty"`
+	// Spend of an API-key account (absent for the others). SpentUSD is what the current key spent since SpentSince
+	// (when the key was set): a running total, counted whatever usageHistory says, from the provider's spend
+	// source (Provider.spendSource; only "cli" gives a cost today, the others count tokens only). SpentTokens is
+	// every token reported, SpentInputTokens and SpentOutputTokens its parts. BudgetUSD is the user's budget for
+	// the key; BudgetStop (default true) rests the account once it is reached. BudgetState is ok, warn (80% or
+	// more), reached, or unknown when the spend source gives no cost (the account then never rests on its budget).
+	SpentUSD          float64      `json:"spentUsd,omitempty"`
+	SpentTokens       int64        `json:"spentTokens,omitempty"`
+	SpentInputTokens  int64        `json:"spentInputTokens,omitempty"`
+	SpentOutputTokens int64        `json:"spentOutputTokens,omitempty"`
+	SpentSince        string       `json:"spentSince,omitempty"`
+	SpendSource       string       `json:"spendSource,omitempty"`
+	BudgetUSD         *float64     `json:"budgetUsd,omitempty"`
+	BudgetStop        *bool        `json:"budgetStop,omitempty"`
+	BudgetState       string       `json:"budgetState,omitempty" ts:"'ok' | 'warn' | 'reached' | 'unknown'"`
+	PreviousKey       *PreviousKey `json:"previousKey,omitempty"`
+	TwinOf            string       `json:"twinOf,omitempty"`
 	// Busy is the number of running turns; MaxConcurrent the cap per account.
 	Busy          int `json:"busy"`
 	MaxConcurrent int `json:"maxConcurrent"`
 	// Resting is true during a cooldown or while a quota window is at or below minRemaining.
 	Resting      bool   `json:"resting"`
 	RestingUntil string `json:"restingUntil,omitempty"`
-	SigningIn    bool   `json:"signingIn"`
+	// RestReason says why the account is held until the user acts, never as a date (no restingUntil then):
+	// credits (a run reported that its credit or billing ran out; a new key, a passing key test or an edit such
+	// as switching it off and on lifts it) or budget_reached (an API-key account at its budget with budgetStop on;
+	// raising the budget, switching the stop off or a new key lifts it).
+	RestReason string `json:"restReason,omitempty" ts:"'credits' | 'budget_reached'"`
+	SigningIn  bool   `json:"signingIn"`
 	// Email is shown in the local UI only and never logged.
 	Email     string        `json:"email,omitempty"`
 	Quota     QuotaSnapshot `json:"quota"`
 	Models    []string      `json:"models"`
 	CreatedAt string        `json:"createdAt"`
 	UpdatedAt string        `json:"updatedAt"`
+	// Notices are set only in the answers to POST /accounts and PUT /accounts/{id}/key: what the call changed on
+	// its own (key cleaned, base URL trimmed, preset switched, provider reused) and advice about the key.
+	Notices []Notice `json:"notices,omitempty"`
+}
+
+// PreviousKey is what the key before an account's current one spent (kept when the key was replaced or removed).
+type PreviousKey struct {
+	KeyHint           string   `json:"keyHint,omitempty"`
+	Since             string   `json:"since,omitempty"`
+	Until             string   `json:"until"`
+	SpentUSD          float64  `json:"spentUsd"`
+	SpentTokens       int64    `json:"spentTokens"`
+	SpentInputTokens  int64    `json:"spentInputTokens"`
+	SpentOutputTokens int64    `json:"spentOutputTokens"`
+	BudgetUSD         *float64 `json:"budgetUsd,omitempty"`
+}
+
+// Spend sources (Account.spendSource, Provider.spendSource). The set is open: later versions add "service" and
+// "prices"; a client shows an unknown one like "none".
+const (
+	SpendCLI  = "cli"
+	SpendFree = "free"
+	SpendNone = "none"
+)
+
+// Budget states (Account.budgetState) and the budget rest reason.
+const (
+	BudgetOK      = "ok"
+	BudgetWarn    = "warn"
+	BudgetReached = "reached"
+	BudgetUnknown = "unknown"
+	// RestBudgetReached is Account.restReason while the account rests on its budget.
+	RestBudgetReached = "budget_reached"
+	// RestCredits is Account.restReason while the account's credit or billing has run out.
+	RestCredits = "credits"
+)
+
+// RestReasons lists the values of Account.restReason.
+func RestReasons() []string { return []string{RestCredits, RestBudgetReached} }
+
+// BudgetStates lists the budget states.
+func BudgetStates() []string { return []string{BudgetOK, BudgetWarn, BudgetReached, BudgetUnknown} }
+
+// AccountCreated is the answer to POST /accounts: the account, and the provider when the body had newProvider.
+type AccountCreated struct {
+	Account
+	// NewProvider is the provider the call created or reused for newProvider (absent otherwise);
+	// ProviderCreated is true when it was created.
+	NewProvider     *Provider `json:"newProvider,omitempty"`
+	ProviderCreated bool      `json:"providerCreated,omitempty"`
+}
+
+// Notice codes (Notice.Code).
+const (
+	NoticeBaseURLTrimmed   = "base_url_trimmed"
+	NoticeOfficialPreset   = "official_preset"
+	NoticeKeyNameRemoved   = "key_name_removed"
+	NoticeKeyQuotesRemoved = "key_quotes_removed"
+	NoticeKeyAssignment    = "key_assignment"
+	NoticeKeyPrefix        = "key_prefix"
+	NoticeProviderReused   = "provider_reused"
+)
+
+// NoticeCodes lists every notice code.
+func NoticeCodes() []string {
+	return []string{NoticeBaseURLTrimmed, NoticeOfficialPreset, NoticeKeyNameRemoved, NoticeKeyQuotesRemoved,
+		NoticeKeyAssignment, NoticeKeyPrefix, NoticeProviderReused}
+}
+
+// Notice is something a save changed on its own, or advice that did not block it. Code names it for translation,
+// Field the request field it is about (when any), Message is the English text.
+type Notice struct {
+	Code    string `json:"code" ts:"'base_url_trimmed' | 'official_preset' | 'key_name_removed' | 'key_quotes_removed' | 'key_assignment' | 'key_prefix' | 'provider_reused'"`
+	Field   string `json:"field,omitempty"`
+	Message string `json:"message"`
+}
+
+// Key test reasons (KeyTestResult.Reason, Account.TestResult besides not_tested).
+const (
+	TestOK               = "ok"
+	TestRefused          = "refused"
+	TestNotFound         = "not_found"
+	TestNoModelsEndpoint = "no_models_endpoint"
+	TestUnreachable      = "unreachable"
+	TestRedirected       = "redirected"
+	TestError            = "error"
+	// TestNotTested is only an Account.TestResult.
+	TestNotTested = "not_tested"
+)
+
+// TestReasons lists every KeyTestResult reason.
+func TestReasons() []string {
+	return []string{TestOK, TestRefused, TestNotFound, TestNoModelsEndpoint, TestUnreachable, TestRedirected, TestError}
+}
+
+// KeyTestRequest is POST /providers/test: the provider (an existing id, or newProvider as in POST /providers,
+// id optional) and the key (apiKey, or accountId to use that account's stored key; then provider may be left out
+// and the result is saved on the account).
+type KeyTestRequest struct {
+	Provider    string         `json:"provider,omitempty"`
+	NewProvider *ProviderInput `json:"newProvider,omitempty"`
+	APIKey      string         `json:"apiKey,omitempty"`
+	AccountID   string         `json:"accountId,omitempty"`
+}
+
+// KeyTestResult is the answer to POST /providers/test (status 200 also when the key is refused: the call worked).
+type KeyTestResult struct {
+	OK bool `json:"ok"`
+	// Status is the HTTP status the service answered (0 when it could not be reached).
+	Status    int      `json:"status"`
+	Reason    string   `json:"reason" ts:"'ok' | 'refused' | 'not_found' | 'no_models_endpoint' | 'unreachable' | 'redirected' | 'error'"`
+	Message   string   `json:"message"`
+	Models    []string `json:"models"`
+	LatencyMs int64    `json:"latencyMs"`
+	// Notices are what the request's key or provider needed cleaning, and advice about the key.
+	Notices []Notice `json:"notices,omitempty"`
+	// Saved is true when the result was stored on the account (accountId).
+	Saved bool `json:"saved,omitempty"`
 }
 
 // QuotaSnapshot mirrors internal/quota.Snapshot (times as RFC 3339 strings, without the account id, backend,
@@ -112,15 +261,25 @@ type LoginSession struct {
 	Message   string `json:"message,omitempty"`
 }
 
-// NewAccount is POST /accounts.
+// NewAccount is POST /accounts. A sign-in account needs backend and kind. An API-key account names an existing
+// provider, or gives newProvider (a provider to create, or to reuse unchanged when an enabled one has the same
+// preset, backend, base URL, wire API, models, allow-list and tiers; its id is optional), and may give apiKey and a
+// budget; it is all done in one transaction, so a failure leaves nothing behind. backend may then be left out (the
+// provider's), kind too (api-key), and label ("<provider name> <n>").
 type NewAccount struct {
-	Backend  string `json:"backend" ts:"'agy' | 'claude' | 'codex'"`
-	Kind     string `json:"kind" ts:"'isolated' | 'system' | 'api-key'"`
-	Label    string `json:"label"`
-	Provider string `json:"provider,omitempty"`
+	Backend     string         `json:"backend,omitempty" ts:"'agy' | 'claude' | 'codex'"`
+	Kind        string         `json:"kind,omitempty" ts:"'isolated' | 'system' | 'api-key'"`
+	Label       string         `json:"label,omitempty"`
+	Provider    string         `json:"provider,omitempty"`
+	NewProvider *ProviderInput `json:"newProvider,omitempty"`
+	// APIKey is cleaned and checked like PUT /accounts/{id}/key.
+	APIKey string `json:"apiKey,omitempty"`
 	// Enabled defaults to true.
 	Enabled  *bool `json:"enabled,omitempty"`
 	Priority *int  `json:"priority,omitempty"`
+	// BudgetUSD is the key's budget in US dollars (API-key accounts; absent: none); BudgetStop defaults to true.
+	BudgetUSD  *float64 `json:"budgetUsd,omitempty"`
+	BudgetStop *bool    `json:"budgetStop,omitempty"`
 }
 
 // AccountPatch is PATCH /accounts/{id}; absent fields stay as they are.
@@ -128,6 +287,10 @@ type AccountPatch struct {
 	Label    *string `json:"label,omitempty"`
 	Enabled  *bool   `json:"enabled,omitempty"`
 	Priority *int    `json:"priority,omitempty"`
+	// BudgetUSD sets an API-key account's budget in US dollars; 0 removes it. BudgetStop: rest the account once
+	// the budget is reached.
+	BudgetUSD  *float64 `json:"budgetUsd,omitempty"`
+	BudgetStop *bool    `json:"budgetStop,omitempty"`
 }
 
 // KeyRequest is PUT /accounts/{id}/key. The key never appears in a response, an error or a log.
@@ -163,8 +326,18 @@ type Provider struct {
 	// The tier models are always allowed on top of the allow-list.
 	AllowedModels string     `json:"allowedModels"`
 	Tiers         TierModels `json:"tiers"`
-	CreatedAt     string     `json:"createdAt,omitempty"`
-	UpdatedAt     string     `json:"updatedAt,omitempty"`
+	// ModelPerTask is true when no tier has a model: every delegate on the provider must name its model ("Model:
+	// chosen per task"). A valid set-up, not an error. Absent when false.
+	ModelPerTask bool `json:"modelPerTask,omitempty"`
+	// SpendSource says where its accounts' spend comes from: "cli" (the CLI's own cost estimate, official Anthropic
+	// only), "free" (local: Ollama or a localhost base URL) or "none" (tokens only). Open set: later versions add
+	// "service" and "prices".
+	SpendSource string `json:"spendSource,omitempty"`
+	CreatedAt   string `json:"createdAt,omitempty"`
+	UpdatedAt   string `json:"updatedAt,omitempty"`
+	// Notices are set only in the answers to POST and PATCH /providers: what the save changed on its own
+	// (base_url_trimmed, official_preset).
+	Notices []Notice `json:"notices,omitempty"`
 }
 
 // ProviderPreset is a provider template (Provider without accounts and times).
@@ -177,6 +350,9 @@ type ProviderPreset struct {
 	Models   []string `json:"models"`
 	WireAPI  string   `json:"wireApi,omitempty"`
 	Official bool     `json:"official"`
+	// Tiers are suggested tier models: for "anthropic" the claude backend's tiers from the settings, when set;
+	// absent for the others (their models come from a key test).
+	Tiers TierModels `json:"tiers,omitzero"`
 }
 
 // ProviderList is GET /providers.

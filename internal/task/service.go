@@ -52,6 +52,9 @@ type Pool interface {
 	Handover(ctx context.Context, in pool.HandoverInput) (pool.Handover, error)
 	MarkExhausted(ctx context.Context, accountID string, ex pool.Exhaustion) (pool.Cooldown, error)
 	MarkAuthFailed(ctx context.Context, accountID, message string) error
+	MarkSucceeded(ctx context.Context, accountID string, started time.Time) error
+	MarkNoCredit(ctx context.Context, accountID, message string) error
+	ProviderResting(ctx context.Context, providerID string) error
 	Changed() <-chan struct{}
 }
 
@@ -163,6 +166,9 @@ type Options struct {
 	Settings func() config.Settings
 	// TasksDir holds one folder per task with its attempt folders (config.Paths.Tasks).
 	TasksDir string
+	// DataDir is the data folder (config.Paths.Home) for the worker brief's data-folder rule (brief.Input.DataDir);
+	// "" names it ~/.seelegent.
+	DataDir string
 	// Launcher is the command that runs the detached launcher ({os.Executable(), "__launch"}).
 	Launcher []string
 

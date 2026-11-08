@@ -6,6 +6,7 @@
  */
 import type { Attention, TaskSummary } from '@/api/types'
 import { distinctMB, type FormatMB } from '@/lib/memory'
+import { formatUSD } from '@/lib/usd'
 
 import { reasonKey } from './question'
 
@@ -153,6 +154,12 @@ export function attentionText(
       break
     case 'no_accounts':
       out.why = why('noAccounts', { backend: p.backend ?? '' })
+      break
+    case 'budget_reached':
+      out.why = why('budgetReached', {
+        account: p.account ?? '',
+        budget: formatUSD(p.budgetUsd ?? 0),
+      })
       break
     case 'auth':
       out.why = why('auth', { backend: p.backend ?? '' })

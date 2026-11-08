@@ -688,6 +688,45 @@ func TestStatusQuota(t *testing.T) {
 	}
 }
 
+// TestStatusModelPerTask: an API-key account whose provider has no tier models is marked "model per task", and the
+// summary names each such provider once, so the lead passes model in delegate.
+func TestStatusModelPerTask(t *testing.T) {
+	budget := 200.0
+	perTask := func(id, provider string) api.Account {
+		return api.Account{ID: id, Backend: "claude", Kind: "api-key", Label: id, Status: api.AccountOK, KeyHint: "…abcd",
+			Provider: provider, ModelPerTask: true, TestResult: api.TestNotTested, SpendSource: api.SpendCLI,
+			SpentUSD: 0.155, SpentTokens: 1200, BudgetUSD: &budget, BudgetState: api.BudgetOK}
+	}
+	tiered := api.Account{ID: "a3", Backend: "claude", Kind: "api-key", Label: "a3", Status: api.AccountOK,
+		KeyHint: "…wxyz", Provider: "zai", TestResult: api.TestOK, SpendSource: api.SpendNone, SpentUSD: 3,
+		SpentTokens: 50, BudgetUSD: &budget, BudgetState: api.BudgetUnknown}
+	_, c := newStub(t, map[string]http.HandlerFunc{
+		"GET /accounts": answer(http.StatusOK, []api.Account{perTask("a1", "anthropic"), perTask("a2", "anthropic"), tiered}),
+		"GET /tasks":    answer(http.StatusOK, api.TaskPage{Items: []api.TaskSummary{}}),
+		"GET /backends": answer(http.StatusOK, []api.Backend{}),
+	})
+	cs := stubSession(t, c, nil)
+	var out struct {
+		Accounts []map[string]any `json:"accounts"`
+	}
+	sum := ok(t, cs, "status", nil, &out)
+	if len(out.Accounts) != 3 || out.Accounts[0]["modelPerTask"] != true || out.Accounts[0]["testResult"] != "not_tested" ||
+		out.Accounts[2]["modelPerTask"] != nil || out.Accounts[2]["testResult"] != "ok" {
+		t.Fatalf("accounts = %v", out.Accounts)
+	}
+	// Spend per API-key account: the dollar amount only from a trusted source, tokens and the budget always.
+	a0, a2 := out.Accounts[0], out.Accounts[2]
+	if a0["spentUsd"] != 0.155 || a0["budgetUsd"] != float64(200) || a0["budgetState"] != "ok" ||
+		a0["spendSource"] != "cli" || a2["spentUsd"] != nil || a2["spentTokens"] != float64(50) ||
+		a2["budgetState"] != "unknown" {
+		t.Fatalf("spend = %v / %v", a0, a2)
+	}
+	if !strings.Contains(sum, "Model per task (pass model in delegate): provider anthropic.") ||
+		strings.Count(sum, "anthropic") != 1 || strings.Contains(sum, "zai") {
+		t.Fatalf("summary = %q", sum)
+	}
+}
+
 // TestWorkerGuard: with SEELEGENT_WORKER=1 the server refuses mutating calls itself, with the old text and without
 // calling the daemon, and lets read calls through to the daemon (which stays the authority).
 func TestWorkerGuard(t *testing.T) {

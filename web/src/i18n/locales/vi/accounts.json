@@ -204,6 +204,35 @@
     "enabled": "Tài khoản được dùng",
     "save": "Lưu nhà cung cấp"
   },
+  "testResult": {
+    "not_tested": "Chưa kiểm tra",
+    "ok": "Khóa dùng được",
+    "refused": "Khóa bị từ chối",
+    "not_found": "Sai địa chỉ",
+    "no_models_endpoint": "Chưa xác minh: lượt chạy đầu sẽ kiểm tra",
+    "unreachable": "Không kết nối được dịch vụ",
+    "redirected": "Bị chuyển hướng sang nơi khác",
+    "error": "Kiểm tra thất bại",
+    "testedAt": "Đã kiểm tra {time}"
+  },
+  "notice": {
+    "base_url_trimmed": "Đã rút gọn base URL",
+    "official_preset": "Đã chuyển sang mẫu Anthropic",
+    "key_name_removed": "Đã bỏ tên biến khỏi khóa",
+    "key_quotes_removed": "Đã bỏ dấu ngoặc khỏi khóa",
+    "key_assignment": "Trông giống NAME=giá trị: chỉ dán phần sau dấu =",
+    "key_prefix": "Khóa trông như của dịch vụ khác",
+    "provider_reused": "Dùng lại nhà cung cấp đã có"
+  },
+  "keyError": {
+    "empty": "Hãy dán khóa API",
+    "too_long": "Khóa này quá dài",
+    "url": "Đây giống một URL, không phải khóa API",
+    "whitespace": "Khóa không được chứa dấu cách hay xuống dòng",
+    "control": "Khóa chứa ký tự ẩn"
+  },
+  "modelPerTask": "Chọn mô hình theo từng tác vụ",
+  "modelPerTaskHint": "Nhà cung cấp này không có mô hình mặc định: mỗi tác vụ tự ghi mô hình nó chạy.",
   "view": {
     "label": "Kiểu xem tài khoản",
     "list": "Danh sách",
@@ -241,5 +270,21 @@
       "passive": "Không có hạn mức để đọc",
       "checking": "Đang đọc hạn mức…"
     }
+  },
+  "budgetState": {
+    "ok": "Trong ngân sách",
+    "warn": "Đã dùng 80% ngân sách",
+    "reached": "Đã hết ngân sách",
+    "unknown": "Không biết chi phí của dịch vụ này"
+  },
+  "restReason": {
+    "budget_reached": "Đã hết ngân sách ({spent} / {budget})",
+    "credits": "Hết tín dụng",
+    "creditsHint": "Hãy nạp thêm, rồi kiểm tra khóa hoặc tắt rồi bật lại tài khoản."
+  },
+  "spendSource": {
+    "cli": "Ước tính của Claude Code",
+    "free": "Cục bộ · miễn phí",
+    "none": "Dịch vụ này không báo chi phí"
   }
 }

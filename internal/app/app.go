@@ -95,6 +95,8 @@ type Options struct {
 	Classifier httpapi.Classifier
 	// DevOrigins are extra loopback browser origins the HTTP API accepts (the Vite dev server); see httpapi.Options.
 	DevOrigins []string
+	// ImageWriteTimeout is httpapi.Options.ImageWriteTimeout (30 s when 0); tests shorten it.
+	ImageWriteTimeout time.Duration
 	// Gh is the gh CLI (looked up on Env's PATH when empty); NoGh means there is none (tests: the real gh must
 	// never run).
 	Gh   string
@@ -146,6 +148,8 @@ type App struct {
 	started0   time.Time
 	pid        int
 	patchMu    sync.Mutex
+	// imageWriteTimeout is Options.ImageWriteTimeout.
+	imageWriteTimeout time.Duration
 	// rescheduler re-arms the quota refresher when quotaRefreshMinutes changes (the Refresher; a fake in tests).
 	rescheduler interface{ Reschedule() }
 	// sampler is the cached memory reading the task engine and GET /health share; slots are the gate slots
@@ -214,8 +218,8 @@ func New(ctx context.Context, o Options) (*App, error) {
 		o.GuardExe = exe
 	}
 	a := &App{Paths: o.Paths, log: o.Logger, env: o.Env, info: o.Info, web: o.Web, classifier: o.Classifier,
-		devOrigins: o.DevOrigins,
-		redact:     logx.NewRedactor().String, started0: o.Clock.Now(), pid: os.Getpid(), stopCh: make(chan struct{}),
+		devOrigins: o.DevOrigins, imageWriteTimeout: o.ImageWriteTimeout,
+		redact: logx.NewRedactor().String, started0: o.Clock.Now(), pid: os.Getpid(), stopCh: make(chan struct{}),
 		setMemoryLimit: debug.SetMemoryLimit, readMachine: o.ReadMachine}
 	if a.readMachine == nil {
 		a.readMachine = systemMachine
@@ -252,6 +256,13 @@ func (a *App) build(o Options) error {
 	a.Accounts = account.NewManager(a.DB, account.NewProfiles(o.Paths.Profiles, o.RealHome), now)
 	a.Quotas = quota.NewStore(a.DB)
 	a.Usage = usage.NewStore(a.DB, o.Clock, time.Local)
+	a.Usage.OnBudget(func(_ context.Context, c account.BudgetCrossing) {
+		// The dashboard shows the state from the account (budgetState); the log keeps the moment it was crossed.
+		a.log.Info("account: budget "+c.State, "account", c.AccountID, "provider", c.Provider, "message", c.Message())
+		if a.Pool != nil {
+			a.Pool.Notify() // a reached budget changes what the pool may pick, and wakes the account frames
+		}
+	})
 	a.Memory = memory.New(a.DB, now)
 	a.Roles = role.New(role.Options{DB: a.DB, Home: o.RealHome, Now: now})
 	a.Members = member.New(member.Options{DB: a.DB, Providers: a.Accounts, Now: now,
@@ -343,8 +354,9 @@ func (a *App) build(o Options) error {
 	a.slots = gate.NewSlots(func() int { return a.Limits().GateConcurrency })
 	a.Tasks, err = task.New(task.Options{
 		DB: a.DB, Accounts: a.Accounts, Pool: p, Backends: a.Backends, Settings: a.Settings,
-		TasksDir: o.Paths.Tasks, Launcher: o.Launcher, Usage: a.Usage, QuotaRefresh: a.Refresher.AfterRun,
-		Memory: a.Memory, Roles: a.Roles, Consoles: consoles, Clock: o.Clock, Logger: a.log,
+		TasksDir: o.Paths.Tasks, DataDir: o.Paths.Home, Launcher: o.Launcher, Usage: a.Usage,
+		QuotaRefresh: a.Refresher.AfterRun, Memory: a.Memory, Roles: a.Roles, Consoles: consoles, Clock: o.Clock,
+		Logger:        a.log,
 		BaseEnv:       func() []string { return a.env },
 		Toolchains:    a.toolchains,
 		Dashboard:     a.dashboardLink,

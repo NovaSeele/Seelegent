@@ -197,12 +197,27 @@ func language(r *http.Request) string {
 	return "en"
 }
 
-// toAPIError maps a domain error to its API error. Anything unknown is 500 internal (old B9: never 400).
+// toAPIError maps a domain error to its API error. Anything unknown is 500 internal (old B9: never 400). An account
+// error that names its request field (account.FieldError) gets details.field (and details.reason for keys).
 func toAPIError(err error) *apiError {
 	var ae *apiError
 	if errors.As(err, &ae) {
 		return ae
 	}
+	out := domainError(err)
+	var fe *account.FieldError
+	if errors.As(err, &fe) && out.code != api.CodeInternal {
+		for k, v := range fe.APIDetails() {
+			if _, ok := out.details[k]; !ok {
+				out = out.with(k, v)
+			}
+		}
+	}
+	return out
+}
+
+// domainError is toAPIError without the field details.
+func domainError(err error) *apiError {
 	var ve *config.ValidationError
 	if errors.As(err, &ve) {
 		fields := make([]api.FieldError, 0, len(ve.Fields))

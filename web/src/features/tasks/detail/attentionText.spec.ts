@@ -21,6 +21,20 @@ describe('attention text (F14)', () => {
     await activateLocale('en')
   })
 
+  it('names the account at its budget and what to do (budget_reached)', async () => {
+    const view = await text(
+      at({
+        reason: 'budget_reached',
+        state: 'blocked',
+        detail: 'acc9 reached its $200 budget: raise the budget or change the key',
+        params: { account: 'acc9', budgetUsd: 200, count: 1 },
+      }),
+    )
+    expect(view.title).toBe('Budget reached')
+    expect(view.why).toBe('acc9 reached its $200 budget. Raise the budget or change the key.')
+    expect(view.said).toBe('')
+  })
+
   it('says how long a task waited for resources and how much memory it needs', async () => {
     const view = await text(
       at({

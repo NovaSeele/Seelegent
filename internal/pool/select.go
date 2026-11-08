@@ -137,12 +137,55 @@ func (v *view) cooldown(id, group string) (Cooldown, bool) {
 	if !ok || !c.Until.After(v.now) {
 		return Cooldown{}, false
 	}
+	if group == creditsGroup {
+		for i := range v.accounts {
+			if a := &v.accounts[i]; a.ID == id {
+				return v.noCredit(a)
+			}
+		}
+		return Cooldown{}, false
+	}
 	if snap, found := v.snaps[id]; !c.Passive && found && snap.FetchedAt.After(c.CreatedAt) {
 		if _, exhausted := snap.Exhausted(v.now, group, "", v.settings.MinRemaining); !exhausted {
 			return Cooldown{}, false
 		}
 	}
 	return c, true
+}
+
+// noCredit returns account a's rest for a credit balance that ran out (MarkNoCredit), while the user has not acted
+// on the account since: a new key (KeySetAt), any edit of the account (UpdatedAt) or a key test that passed
+// (TestedAt with TestOK) lifts it. Spend updates never touch UpdatedAt, so a turn's cost does not lift it.
+func (v *view) noCredit(a *account.Account) (Cooldown, bool) {
+	c, ok := v.cooldowns[a.ID][creditsGroup]
+	if !ok || a.KeySetAt.After(c.CreatedAt) || a.UpdatedAt.After(c.CreatedAt) ||
+		(a.TestState() == account.TestOK && a.TestedAt.After(c.CreatedAt)) {
+		return Cooldown{}, false
+	}
+	return c, true
+}
+
+// Rest reasons: why an account rests until the user acts (AccountState.RestReason, the account's restReason in the
+// API). No time ends such a rest, so it is never shown as a date. Not to be confused with Hold (a sign-out).
+const (
+	// RestCredits: a run reported that the account's credit balance or billing ran out (MarkNoCredit) and the user
+	// has not acted on the account since (noCredit). A request with nothing else fails at once.
+	RestCredits = "credits"
+	// RestBudget: an API-key account reached its budget with budgetStop on (account.Account.BudgetStopped). It
+	// rests: a request waits (ReasonBudget) until the budget is raised, the stop is switched off or the key changes.
+	RestBudget = "budget_reached"
+)
+
+// restReason returns why account a rests until the user acts (RestCredits first), or "". It is the one test of
+// both: the selection, the account state and the delegate's refusal (ProviderResting) all use it.
+func (v *view) restReason(a *account.Account) string {
+	if _, ok := v.noCredit(a); ok {
+		return RestCredits
+	}
+	if a.BudgetStopped() {
+		return RestBudget
+	}
+	return ""
 }
 
 // state is what an account can do for a request.
@@ -165,6 +208,10 @@ type eval struct {
 	remaining float64
 	known     bool
 	busy      int
+	// noCredit: ineligible because its credit ran out (MarkNoCredit), not resting: no time brings it back.
+	noCredit bool
+	// budget: resting because it reached its budget (RestBudget); no time brings it back either.
+	budget bool
 }
 
 // evaluate decides what account a can do for req; busy is its number of running turns.
@@ -184,6 +231,11 @@ func (v *view) evaluate(a *account.Account, req *Request, busy int) eval {
 	} else if a.Kind != account.KindAPIKey || a.Provider != req.Provider {
 		return e
 	}
+	why := v.restReason(a)
+	if why == RestCredits {
+		e.noCredit = true
+		return e
+	}
 	snap, found := v.snaps[a.ID]
 	model, ok := backend.FitModel(a.Backend, req.Model, snap.Models, req.Allowed)
 	if !ok {
@@ -192,6 +244,11 @@ func (v *view) evaluate(a *account.Account, req *Request, busy int) eval {
 	e.model = model
 	if st == StatusNew {
 		e.state = statePending
+		return e
+	}
+	if why == RestBudget {
+		// Rests until the user raises the budget, switches the stop off or replaces the key (not an error).
+		e.state, e.budget = stateResting, true
 		return e
 	}
 	if c, ok := v.cooldown(a.ID, req.Group); ok {
@@ -243,11 +300,17 @@ func (p *Pool) choose(v *view, req *Request) (Choice, *Unavailable) {
 		}
 		switch e.state {
 		case stateIneligible:
+			if e.noCredit {
+				u.NoCredit = append(u.NoCredit, NoCredit{AccountID: a.ID, Label: a.Label, Provider: a.Provider})
+			}
 			continue
 		case statePending:
 			u.Resting++
 		case stateResting:
 			u.Resting++
+			if e.budget {
+				u.BudgetReached = append(u.BudgetReached, budgetHold(a))
+			}
 			if !e.until.IsZero() && (u.Until.IsZero() || e.until.Before(u.Until)) {
 				u.Until = e.until
 			}
@@ -275,12 +338,37 @@ func (p *Pool) choose(v *view, req *Request) (Choice, *Unavailable) {
 		case u.Busy > 0:
 			u.Reason = ReasonBusy
 		default:
-			u.Reason = ReasonResting
+			u.Reason = u.restingReason()
+		}
+		if u.Reason != ReasonNoAccount && u.Capped == 0 {
+			u.KeyProviders = p.freeKeyProviders(v, req)
 		}
 		return Choice{}, u
 	}
 	best := pick(free, req.Prefer)
 	return Choice{Account: *best.a, Model: best.model, Remaining: best.remaining, RemainingKnown: best.known}, nil
+}
+
+// freeKeyProviders lists the providers whose API-key accounts of the request's backend would be free for it with
+// provider set, when the request names no provider and no account. The caller holds p.mu.
+func (p *Pool) freeKeyProviders(v *view, req *Request) []KeyProvider {
+	if req.Provider != "" || req.Account != "" {
+		return nil
+	}
+	var out []KeyProvider
+	for i := range v.accounts {
+		a := &v.accounts[i]
+		if a.Kind != account.KindAPIKey || a.Provider == "" || p.held[a.ID] > 0 ||
+			slices.ContainsFunc(out, func(k KeyProvider) bool { return k.ID == a.Provider }) {
+			continue
+		}
+		with := *req
+		with.Provider = a.Provider
+		if v.evaluate(a, &with, len(p.leases[a.ID])).state == stateFree {
+			out = append(out, KeyProvider{ID: a.Provider})
+		}
+	}
+	return out
 }
 
 // runningLocked counts the turns running on every account (leases, takeover consoles included). The caller holds
@@ -355,8 +443,10 @@ type AccountState struct {
 	// Quota is the last quota snapshot (HasQuota is false when there is none).
 	Quota    quota.Snapshot `json:"quota"`
 	HasQuota bool           `json:"hasQuota"`
-	// Cooldowns are the rests in force.
+	// Cooldowns are the rests in force that time ends (RestReason's rests are not among them).
 	Cooldowns []Cooldown `json:"cooldowns"`
+	// RestReason is why the account rests until the user acts (RestCredits, RestBudget), "" when it does not.
+	RestReason string `json:"restReason,omitempty"`
 }
 
 // States returns the state of every account, in the order of Accounts.List.
@@ -372,10 +462,12 @@ func (p *Pool) States(ctx context.Context) ([]AccountState, error) {
 		a := &v.accounts[i]
 		snap, found := v.snaps[a.ID]
 		st := AccountState{Account: *a, Status: v.status[a.ID], TwinOf: v.twinOf[a.ID], Busy: len(p.leases[a.ID]),
-			Quota: snap, HasQuota: found, Cooldowns: []Cooldown{}}
+			Quota: snap, HasQuota: found, Cooldowns: []Cooldown{}, RestReason: v.restReason(a)}
 		groups := make([]string, 0, len(v.cooldowns[a.ID]))
 		for g := range v.cooldowns[a.ID] {
-			groups = append(groups, g)
+			if g != creditsGroup { // no end: RestReason says it
+				groups = append(groups, g)
+			}
 		}
 		sort.Strings(groups)
 		for _, g := range groups {

@@ -46,6 +46,7 @@
       "callsFailed": "최근 도구 호출 {count}번이 실패했습니다.",
       "repeated": "워커가 최근 {steps}단계에서 같은 {tool} 호출을 {count}번 반복했습니다.",
       "noAccounts": "작업할 수 있는 {backend} 계정이 없습니다. 로그인하거나 계정을 켜세요.",
+      "budgetReached": "{account} 계정이 예산 {budget}에 도달했습니다. 예산을 올리거나 키를 바꾸세요.",
       "auth": "켜져 있는 {backend} 계정 모두 로그인이 필요합니다.",
       "depMissing": "앞선 작업 {task}이(가) 더 이상 없습니다.",
       "depRejected": "앞선 작업 {title}({task})이(가) 거절되었습니다.",
