@@ -218,6 +218,10 @@ func TestAutomationRoutes(t *testing.T) {
 	if len(runs) != 1 {
 		t.Fatalf("runs = %+v", runs)
 	}
+	// The limit is the contract's 1..200 (M18 hunt H24: the daemon took up to 500).
+	e.must(e.get("/api/v1/automations/"+a.ID+"/runs?limit=200"), http.StatusOK)
+	e.wantError(e.get("/api/v1/automations/"+a.ID+"/runs?limit=201"), http.StatusBadRequest,
+		api.CodeInvalidArgument, "limit")
 	var list []api.Automation
 	e.must(e.get("/api/v1/automations"), http.StatusOK).json(t, &list)
 	if len(list) != 1 || list[0].LastRun == nil {

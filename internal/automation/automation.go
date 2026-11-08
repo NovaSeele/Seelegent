@@ -737,7 +737,7 @@ func (s *Service) Confirm(ctx context.Context, id, token string) (api.Automation
 // Runs returns the newest runs of an automation (limit 1-500, default 50).
 func (s *Service) Runs(ctx context.Context, id string, limit int) ([]api.AutomationRun, error) {
 	if limit <= 0 {
-		limit = 50
+		limit = 20
 	}
 	limit = min(limit, maxRunsKept)
 	out := []api.AutomationRun{}
