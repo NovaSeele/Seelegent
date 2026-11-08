@@ -57,5 +57,10 @@ export const useProvidersStore = defineStore('providers', () => {
     items.value = items.value.filter((p) => p.id !== id)
   }
 
-  return { items, presets, status, error, setApi, ensure, load, create, update, remove }
+  /** A provider's display name ("DeepSeek" for deepseek); its id until the list is read or when it is gone. */
+  function nameOf(id: string): string {
+    return items.value.find((p) => p.id === id)?.name || id
+  }
+
+  return { items, presets, status, error, setApi, ensure, load, create, update, remove, nameOf }
 })
