@@ -156,9 +156,14 @@ the repository has none). The worker's commits stay in the local worktree.
    read again; a branch that changed meanwhile is refused as above. The push runs on the daemon's own context with
    a 5 minute limit, not the request's: a caller that goes away does not cut it off half way. The commit it sent is
    recorded on the ticket (`pushedSha`, `pushedBase`) in the same transaction that marks its outbox row `done`.
-   The push signs in with the user's own git credentials (credential helper, SSH key), never with the stored token
-   or the gh sign-in (old D18); a push git cannot sign in for fails with the cause `git_auth`, and the dashboard
-   says to set up git's credentials (for example `gh auth setup-git`).
+   In the `token` tier the push, and the `ls-remote` and `fetch` before it, sign in with the stored token (old
+   D18): when origin's push URL is an `https` URL of the repository's GitHub host (`http` only on loopback), that
+   one git command gets an `Authorization` header for that host only, through `GIT_CONFIG_COUNT`/`KEY`/`VALUE` in
+   its environment. The token is never in a command line and never written to a git config file; an extra header
+   the user's config sets for the same host is dropped for that command. An `ssh` remote, a remote on another host
+   and the `gh` and `manual` tiers sign in with the user's own git credentials (credential helper, SSH key). A push
+   git cannot sign in for fails with the cause `git_auth`, and the dashboard says to set up git's credentials (for
+   example `gh auth setup-git`) or check the token.
 5. **Open** a draft pull request (or adopt the one the branch already has). Its body is generated from the tasks'
    summaries with local paths removed (`file://` links, the worktree, the repository and the home folder in every
    spelling: either slash, the 8.3 short form such as `C:\Users\JOHNSM~1`, and WSL's `/mnt/c/...`). In the manual tier the

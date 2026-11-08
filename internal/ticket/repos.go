@@ -528,8 +528,8 @@ func (s *Service) CreateRemote(ctx context.Context, id string, req api.RemoteReq
 	if local != "" && !pushed {
 		// The first publish of a new, empty repository: the only push of a branch other than a ticket's. The
 		// commit scanned above is the one pushed, whatever the branch became meanwhile.
-		if _, err := s.git(ctx, r.Path, gitx.ExecOptions{PushBranch: b, Timeout: 5 * time.Minute}, "push", "origin",
-			local+":refs/heads/"+b); err != nil {
+		if _, err := s.git(ctx, r.Path, gitx.ExecOptions{PushBranch: b, Timeout: 5 * time.Minute,
+			Env: s.authEnv(ctx, s.pushTarget(ctx, r.Path))}, "push", "origin", local+":refs/heads/"+b); err != nil {
 			return fail(err)
 		}
 	}

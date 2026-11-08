@@ -419,8 +419,9 @@ func (s *Service) PR(ctx context.Context, id string, req api.PRRequest) (api.Tic
 			} else if tip != plan.tip {
 				return nil, divergedErr(t.Branch, plan.prev, tip)
 			}
-			_, err := s.git(pctx, t.Worktree, gitx.ExecOptions{PushBranch: t.Branch, Timeout: pushTimeout},
-				"push", "--porcelain", "origin", sha+":refs/heads/"+t.Branch)
+			// "origin" is plan.target, origin's push URL: its token (token tier) is set for this command only.
+			_, err := s.git(pctx, t.Worktree, gitx.ExecOptions{PushBranch: t.Branch, Timeout: pushTimeout,
+				Env: s.authEnv(pctx, plan.target)}, "push", "--porcelain", "origin", sha+":refs/heads/"+t.Branch)
 			// runStepWith records sha and base as the ticket's pushed commit in the transaction that finishes the step.
 			return map[string]any{"sha": sha, "base": plan.base}, err
 		}); err != nil {
