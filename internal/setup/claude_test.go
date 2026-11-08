@@ -143,7 +143,7 @@ func TestClaudeBatchShimRefusesMetacharacters(t *testing.T) {
 		manual bool
 	}{{"a&b", true}, {"%USERPROFILE%", true}, {"x^y", true}, {"it!s", true}, {"Program Files (x86)", false}} {
 		m := newMachine(t)
-		exe := m.write(c.dir+"/"+exeBase, "binary")
+		exe := m.write(c.dir+"/seelegent.exe", "binary") // the name setup wants on Windows
 		cfg := fakeClaude(t, m)
 		m.bins["claude"] = m.path("npm", "claude.cmd")
 		env := m.env()
