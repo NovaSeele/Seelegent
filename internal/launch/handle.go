@@ -387,7 +387,8 @@ func (h *Handle) watchLauncher() (done <-chan struct{}, release func()) {
 		once.Do(func() {
 			h.watchMu.Lock()
 			defer h.watchMu.Unlock()
-			if w.refs--; w.refs == 0 {
+			w.refs--
+			if w.refs == 0 {
 				w.cancel()
 				if h.watch == w {
 					h.watch = nil

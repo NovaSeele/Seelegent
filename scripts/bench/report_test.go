@@ -190,15 +190,6 @@ func breakdown(m memStatsSys) *goSysBreakdown {
 		MCacheSysMB: f(m.MCacheSys), GCSysMB: f(m.GCSys), BuckHashSysMB: f(m.BuckHashSys), OtherSysMB: f(m.OtherSys)}
 }
 
-// eventDelay returns the event delay statistics of a load run that measured them.
-func (l *loadSummary) eventDelay() (latencyStats, bool) {
-	if l == nil {
-		return latencyStats{}, false
-	}
-	ev, ok := l.API["event"]
-	return ev, ok && ev.Count > 0
-}
-
 // measured reports whether both ends were read.
 func (x *retainedHeap) measured() bool { return x != nil && x.Error == "" }
 
@@ -214,6 +205,15 @@ type loadSummary struct {
 	API            map[string]latencyStats `json:"api"`
 	WSMBPer10kEvts float64                 `json:"daemonWSGrowthMBPer10kEvents"`
 	PrivPer10kEvts float64                 `json:"daemonPrivateGrowthMBPer10kEvents"`
+}
+
+// eventDelay returns the event delay statistics of a load run that measured them.
+func (l *loadSummary) eventDelay() (latencyStats, bool) {
+	if l == nil {
+		return latencyStats{}, false
+	}
+	ev, ok := l.API["event"]
+	return ev, ok && ev.Count > 0
 }
 
 // result is one bench run (result.json).

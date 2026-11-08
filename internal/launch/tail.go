@@ -35,7 +35,7 @@ func (h *Handle) tail(ctx context.Context, path string, offset int64, fn func([]
 	defer t.close()
 	var launcherDone <-chan struct{}
 	release := func() {}
-	defer func() { release() }()
+	defer func() { release() }() //nolint:gocritic // release is replaced once the watch starts
 	p := newTailPace()
 	ended, fired := false, false
 	for {

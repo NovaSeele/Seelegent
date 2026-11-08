@@ -61,7 +61,7 @@ import (
 const EnvQueue = "FAKECLI_QUEUE"
 
 // NowToken in a script's output line is replaced by the time the line is written (Unix nanoseconds).
-const NowToken = "{{fakecli.now}}"
+const NowToken = "{{fakecli.now}}" //nolint:gosec // a placeholder in test scripts, not a credential
 
 // launchArg is the launcher's command name, as the daemon passes it.
 const launchArg = "__launch"
