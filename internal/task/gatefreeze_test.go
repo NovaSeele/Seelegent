@@ -55,7 +55,7 @@ func TestFollowupNeverRunsPlantedGate(t *testing.T) {
 				req.Lane = []string{"b.txt"}
 				w.cmds = []string{frozen}
 			case "gateCommands":
-				req.GateCommands = []string{lead}
+				req.GateCommands = &[]string{lead}
 				w.cmds = []string{lead}
 			case "gate":
 				on := true
@@ -161,6 +161,49 @@ func TestFollowupAddedTaskGate(t *testing.T) {
 			}
 			if !slices.Contains(last, key) {
 				t.Errorf("turn 2's gate result reports barChanged %q, want %s in it", last, key)
+			}
+		})
+	}
+}
+
+// TestFollowupClearsLeadCommands: a followup with an empty gateCommands list (not left out) clears the lead's
+// commands, so the spec task's Gate: line runs again, as frozen, never as the worker edited it; a followup that
+// leaves gateCommands out keeps the lead's commands.
+func TestFollowupClearsLeadCommands(t *testing.T) {
+	for _, clear := range []bool{true, false} {
+		t.Run(fmt.Sprint("clear=", clear), func(t *testing.T) {
+			h := newHarness(t)
+			h.agy("w", 1)
+			frozen := gateCmd(t, "b.txt", "ok")
+			planted := gateCmd(t, "--sleep", "0")
+			lead := gateCmd(t, "b.txt", "o")
+			if err := mkdir(filepath.Join(h.cwd, "specs", "001-x")); err != nil {
+				t.Fatal(err)
+			}
+			tasksMD := "# Tasks\n\n- [ ] T001 Check `b.txt` Gate: `%s`\n"
+			h.initRepo(map[string]string{"b.txt": "ok\n", "specs/001-x/tasks.md": fmt.Sprintf(tasksMD, frozen)})
+			h.queue.Push(t, editScript("conv-c", filepath.Join(h.cwd, "specs", "001-x", "tasks.md"),
+				fmt.Sprintf(tasksMD, planted), "Updated the gate."))
+			sum := h.delegate(api.DelegateRequest{Title: "lead gate", GateCommands: []string{lead},
+				Spec: &api.SpecRequest{Dir: "specs/001-x", TaskIDs: []string{"T001"}}})
+			tk := h.waitStatus(sum.ID, StatusDone)
+			if got := stepCmds(tk); !slices.Equal(got, []string{lead}) {
+				t.Fatalf("turn 1 ran %q", got)
+			}
+			h.queue.Push(t, editScript("conv-c", filepath.Join(h.cwd, "b.txt"), "ok\n", "Again."))
+			req, want := api.FollowupRequest{Message: "One more."}, []string{lead}
+			if clear {
+				req.GateCommands, want = &[]string{}, []string{frozen}
+			}
+			if _, err := h.s.Followup(t.Context(), sum.ID, req); err != nil {
+				t.Fatal(err)
+			}
+			tk = h.waitStatus(sum.ID, StatusDone)
+			if got := stepCmds(tk); !slices.Equal(got, want) {
+				t.Errorf("turn 2 ran %q, want %q", got, want)
+			}
+			if clear && len(tk.Proof.LeadCommands) != 0 {
+				t.Errorf("leadCommands = %q after clearing", tk.Proof.LeadCommands)
 			}
 		})
 	}

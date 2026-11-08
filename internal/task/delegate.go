@@ -255,8 +255,8 @@ func (s *Service) Followup(ctx context.Context, id string, req api.FollowupReque
 	if by != ByLead && by != ByUser {
 		return api.TaskSummary{}, invalidf("by %q must be lead or user", req.By)
 	}
-	preq := proofRequest{gate: req.Gate, gateCommands: req.GateCommands, lane: req.Lane, noLane: req.NoLane,
-		forceLane: req.ForceLane, verify: req.Verify}
+	preq := proofRequest{gate: req.Gate, gateCommands: listOf(req.GateCommands), lane: req.Lane,
+		noLane: req.NoLane, forceLane: req.ForceLane, verify: req.Verify}
 	var mem *api.Member
 	if req.Member != "" {
 		m, err := s.usableMember(ctx, req.Member)

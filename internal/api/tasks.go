@@ -315,13 +315,14 @@ type FollowupRequest struct {
 	Profile  string   `json:"profile,omitempty"`
 	AllowGit *bool    `json:"allowGit,omitempty"`
 	// Gate, GateCommands, Lane, NoLane, ForceLane and Verify change the task's gate from this turn on (see
-	// DelegateRequest); left out, the task keeps what it had.
-	Gate         *bool    `json:"gate,omitempty"`
-	GateCommands []string `json:"gateCommands,omitempty"`
-	Lane         []string `json:"lane,omitempty"`
-	NoLane       bool     `json:"noLane,omitempty"`
-	ForceLane    bool     `json:"forceLane,omitempty"`
-	Verify       *bool    `json:"verify,omitempty"`
+	// DelegateRequest); left out, the task keeps what it had. An empty GateCommands list (not left out) clears the
+	// lead's commands, so the spec's Gate: lines (as frozen) or the detected commands run again.
+	Gate         *bool     `json:"gate,omitempty"`
+	GateCommands *[]string `json:"gateCommands,omitempty"`
+	Lane         []string  `json:"lane,omitempty"`
+	NoLane       bool      `json:"noLane,omitempty"`
+	ForceLane    bool      `json:"forceLane,omitempty"`
+	Verify       *bool     `json:"verify,omitempty"`
 	// Force starts a task that waits for (or is blocked by) its prerequisites anyway.
 	Force bool `json:"force,omitempty"`
 	// Member moves the task to that department member from this turn on (its backend, provider, model or tier,

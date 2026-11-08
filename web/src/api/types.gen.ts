@@ -2459,7 +2459,8 @@ export interface FollowupRequest {
   allowGit?: boolean
   /**
    * Gate, GateCommands, Lane, NoLane, ForceLane and Verify change the task's gate from this turn on (see
-   * DelegateRequest); left out, the task keeps what it had.
+   * DelegateRequest); left out, the task keeps what it had. An empty GateCommands list (not left out) clears the
+   * lead's commands, so the spec's Gate: lines (as frozen) or the detected commands run again.
    */
   gate?: boolean
   gateCommands?: string[]

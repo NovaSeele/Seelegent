@@ -73,7 +73,8 @@ type GatePhase struct {
 	ChildID string `json:"childId,omitempty"`
 }
 
-// proofRequest is the gate part of a delegate or followup.
+// proofRequest is the gate part of a delegate or followup. gateCommands nil leaves the lead's commands as they are;
+// an empty, non-nil list clears them.
 type proofRequest struct {
 	gate         *bool
 	gateCommands []string
@@ -84,8 +85,19 @@ type proofRequest struct {
 }
 
 func (r proofRequest) empty() bool {
-	return r.gate == nil && len(r.gateCommands) == 0 && len(r.lane) == 0 && !r.noLane && !r.forceLane &&
+	return r.gate == nil && r.gateCommands == nil && len(r.lane) == 0 && !r.noLane && !r.forceLane &&
 		r.verify == nil
+}
+
+// listOf is the list p points to: non-nil when p is set (an explicit empty list stays empty), nil when p is nil.
+func listOf(p *[]string) []string {
+	switch {
+	case p == nil:
+		return nil
+	case *p == nil:
+		return []string{}
+	}
+	return *p
 }
 
 // asksGate reports whether the request turns on something only an edit task has.

@@ -96,8 +96,8 @@ func newFollowupCommand(d deps) *cobra.Command {
 				return usagef("--wait must be 0 or more")
 			}
 			req := api.FollowupRequest{Message: msg, By: by, Model: model, Effort: effort, TaskIDs: splitList([]string{task}),
-				Profile: profile, Gate: g.gate, GateCommands: g.commands, Lane: g.lane, NoLane: g.noLane,
-				ForceLane: g.forceLane, Verify: g.verify, Force: force, Member: member}
+				Profile: profile, Gate: g.gate, GateCommands: optList(g.commands), Lane: g.lane,
+				NoLane: g.noLane, ForceLane: g.forceLane, Verify: g.verify, Force: force, Member: member}
 			if cmd.Flags().Changed("allow-git") {
 				req.AllowGit = &allowGit
 			}

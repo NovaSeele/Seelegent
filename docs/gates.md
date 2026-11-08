@@ -48,7 +48,8 @@ A followup that changes `gate`, `gateCommands`, `lane`, `verify` or the spec tas
 lane is checked like a new claim) and the next worker prompt starts with the new gate and lane. A followup never
 takes gate commands from the working tree, which the worker can edit: one that leaves `gate`, `gateCommands` and
 the task ids alone runs exactly the frozen commands; a new `gate` or `gateCommands` runs what the lead asked for,
-with the spec tasks' `Gate:` lines and feature gate as they were frozen; new task ids read `tasks.md` only for the
+with the spec tasks' `Gate:` lines and feature gate as they were frozen (an empty `gateCommands` list, which is
+not the same as leaving it out, clears the lead's commands, so those lines run again); new task ids read `tasks.md` only for the
 tasks they add. The first proof also freezes a hash of every `tasks.md` line of the feature, so an added task is
 taken only while its line is the one frozen: a line changed since gives no commands and no paths and shows as
 `tasks.md#<id>` in `barChanged`; a task `tasks.md` did not have at the freeze is read now and shows in `barChanged`
