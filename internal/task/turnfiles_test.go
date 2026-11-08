@@ -83,19 +83,21 @@ func TestTurnFilesWithoutSnapshots(t *testing.T) {
 	}
 }
 
-// A truncated snapshot may miss files: the edit-tool list is added, and deleted files are left out.
+// A truncated snapshot may miss files: the edit-tool list is added. The tracked deletion the snapshots saw
+// (gone.txt) stays: only the edit-tool list is checked on disk, before it gets here.
 func TestCheckedFilesTruncated(t *testing.T) {
-	c := &turnCheck{files: []string{"a.txt", "gone.txt", "z.txt"}, deleted: map[string]bool{"gone.txt": true}}
+	c := &turnCheck{files: []string{"a.txt", "gone.txt", "z.txt"}}
 	if got := checkedFiles(&TurnSnap{}, c, []string{"b.txt"}); !slices.Equal(got, c.files) {
 		t.Fatalf("whole snapshots: %v", got)
 	}
 	c.truncated = true
 	if got := checkedFiles(&TurnSnap{}, c, []string{"b.txt", "z.txt"}); !slices.Equal(got,
-		[]string{"a.txt", "b.txt", "z.txt"}) {
+		[]string{"a.txt", "b.txt", "gone.txt", "z.txt"}) {
 		t.Fatalf("truncated end: %v", got)
 	}
 	c.truncated = false
-	if got := checkedFiles(&TurnSnap{Truncated: true}, c, nil); !slices.Equal(got, []string{"a.txt", "z.txt"}) {
+	if got := checkedFiles(&TurnSnap{Truncated: true}, c, nil); !slices.Equal(got,
+		[]string{"a.txt", "gone.txt", "z.txt"}) {
 		t.Fatalf("truncated start: %v", got)
 	}
 }
@@ -109,12 +111,12 @@ func TestSnapshotFilesDisplay(t *testing.T) {
 		{Path: "web/draft.txt", Missing: true},
 		{Path: "go.mod", Status: api.GitModified},
 	}}
-	files, deleted := snapshotFiles(filepath.Join(root, "web"), root,
+	files := snapshotFiles(filepath.Join(root, "web"), root,
 		end, []string{"go.mod", "web/draft.txt", "web/old.ts", "web/src/a.ts"})
 	want := []string{filepath.ToSlash(filepath.Join(root, "go.mod")), "old.ts", "src/a.ts"}
 	slices.Sort(want)
-	if !slices.Equal(files, want) || !deleted["old.ts"] || len(deleted) != 1 {
-		t.Fatalf("files %v deleted %v, want %v", files, deleted, want)
+	if !slices.Equal(files, want) {
+		t.Fatalf("files %v, want %v", files, want)
 	}
 }
 
@@ -131,6 +133,7 @@ func TestTurnChecksOnUnbornHead(t *testing.T) {
 		agyEdit(1, filepath.Join(cwd, "src", "App.vue")),
 		fakeWrite(filepath.Join(cwd, "src", "App.vue"), "<template/>\n"),
 		fakeWrite(filepath.Join(cwd, "src", "pages", "About.vue"), "\uFEFF<template/>\n"),
+		agyTool(2, "DONE", "echo {} > package.json"),
 		fakeWrite(filepath.Join(cwd, "package.json"), "{}\n"),
 		fakeWrite(filepath.Join(cwd, "notes.orig"), "x\n"),
 		fakeWrite(filepath.Join(cwd, "README.md"), "draft\r\nmore\r\n"),
