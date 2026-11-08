@@ -163,8 +163,10 @@ report name the tasks it may be caused by.
 
 **Red.** While `autoFixes < budget` and a step other than the lane failed, the daemon opens an automatic fix turn
 (`by: "gate"`) whose message gives the first such step with its output tail and the files other tasks are
-changing, and ends with "Do not read or search Seelegent's data folder or its processes: everything you need is in
-this message." The worker fixes, the gate runs again. The lane never gets a fix turn: the lead decides about files
+changing, and ends with the worker brief's data-folder rule ("Do not explore ~/.seelegent or Seelegent's processes;
+inside it, read only the paths this brief names, such as the spec folder.", naming the actual data folder), left out
+like in the brief when the task's folder or its spec folder lies in the data folder (a Spec Kit workspace in
+`~/.seelegent/specs/`). The worker fixes, the gate runs again. The lane never gets a fix turn: the lead decides about files
 outside it. A gate red only on its lane ends at once, whatever budget is left: the task is `done` with the attention
 reason `gate_red` (who: lead), its detail and the gate warning name the files ("files outside the lane: ... No
 automatic fix turn for the lane: the lead decides"), and the lead widens the lane with a followup's `lane`, accepts

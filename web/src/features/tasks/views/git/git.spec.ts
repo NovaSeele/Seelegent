@@ -255,6 +255,22 @@ describe('useGit', () => {
     expect(model.selected.value).toBe('gen/a.png')
   })
 
+  it('applies the path asked for once: a reload keeps the file picked since', async () => {
+    const status = vi
+      .fn<GitApi['status']>()
+      .mockImplementation(() => Promise.resolve(repo([file('a.ts'), file('b.ts')])))
+    const task = await setup(fakeGitApi({ status }), {}, 'a.ts')
+    expect(model.selected.value).toBe('a.ts')
+    model.selected.value = 'b.ts'
+    task.value = { ...task.value, filesChanged: 5 }
+    await flush(4)
+    expect(status).toHaveBeenCalledTimes(2)
+    expect(model.selected.value).toBe('b.ts')
+    await model.reload()
+    await flush(4)
+    expect(model.selected.value).toBe('b.ts')
+  })
+
   it('re-reads while a suggestion is being written, on task updates only', async () => {
     const running = repo([file('a.ts')], { suggestion: { state: 'running' } })
     const ready = repo([file('a.ts')], { suggestion: { state: 'ready', message: 'fix: a' } })

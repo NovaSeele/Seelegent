@@ -82,6 +82,46 @@ func TestWorkerFull(t *testing.T) {
 	}
 }
 
+// A Spec Kit workspace lives in Seelegent's data folder (<data>/specs/<repo>-spec/): the brief names its spec
+// paths and its data-folder rule lets the worker read them, so the two never contradict each other. A task whose
+// folder lies inside the data folder (speckit-specify in the workspace) gets no data-folder rule at all.
+// A Spec Kit workspace lives in the data folder (<data>/specs/<repo>-spec/): a task whose spec folder or working
+// folder is there gets no data-folder rule, which would contradict the paths the brief names; any other task gets
+// it, naming the data folder.
+func TestWorkerDataFolder(t *testing.T) {
+	data := "/home/u/.seelegent"
+	feature := data + "/specs/app-spec/specs/001-x"
+	outside := Worker(Input{Cwd: "/work/app", DataDir: data, Message: "Go.", Spec: &Spec{Dir: feature, Outside: true,
+		TaskIDs: []string{"T1"}, ImplementSkill: data + "/specs/app-spec/.agents/skills/speckit-implement/SKILL.md"}})
+	golden(t, "spec-outside", outside)
+	for _, want := range []string{feature + "/spec.md", feature + "/tasks.md", "speckit-implement/SKILL.md"} {
+		if !strings.Contains(outside, want) {
+			t.Errorf("the brief lacks %q:\n%s", want, outside)
+		}
+	}
+	inside := Worker(Input{Cwd: data + "/specs/app-spec", DataDir: data, Message: "Run speckit-specify."})
+	golden(t, "cwd-in-data-dir", inside)
+	for name, b := range map[string]string{"spec folder": outside, "working folder": inside} {
+		if strings.Contains(b, "Do not explore") || strings.Contains(b, "Never read") {
+			t.Errorf("%s in the data folder, yet the brief keeps the worker out of it:\n%s", name, b)
+		}
+	}
+
+	plain := Worker(Input{Cwd: "/work/app", DataDir: data, Message: "Go."})
+	if want := "- " + DataRule(data, "/work/app", "") + "\n"; !strings.Contains(plain, want) ||
+		!strings.Contains(want, "Do not explore "+data+" or Seelegent's processes") {
+		t.Errorf("a task outside the data folder lacks %q:\n%s", want, plain)
+	}
+	if got := DataRule("", "/work/app", ""); !strings.HasPrefix(got, "Do not explore ~/.seelegent ") {
+		t.Errorf("DataRule without a data folder = %q", got)
+	}
+	for _, b := range []string{outside, inside, plain} {
+		if p := Preview(b); !strings.HasPrefix(p, "Working directory: ") {
+			t.Errorf("the preview does not skip the rules: %q", p)
+		}
+	}
+}
+
 func TestWorkerInsideSpecAndOneBaselineFile(t *testing.T) {
 	got := Worker(Input{Cwd: "/p", Spec: &Spec{Dir: "specs/002-y"}, Baseline: []string{"go.mod"}, Message: "Go."})
 	golden(t, "spec-inside", got)
