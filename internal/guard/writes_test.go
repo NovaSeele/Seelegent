@@ -2,6 +2,7 @@ package guard
 
 import (
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -92,10 +93,67 @@ func TestWritesSed(t *testing.T) {
 		// A script holding real-looking absolute paths.
 		{`sed -i 's|/etc/hosts|/tmp/hosts|; s/\/usr\/local\/bin/\/opt\/bin/' conf/app.conf`, []string{"conf/app.conf"}},
 		{`sed -i "s|C:\Tools|D:\Tools|" conf/app.conf`, []string{"conf/app.conf"}},
-		{`cd web && sed -i 's/<b \/>/<i \/>/' src/x.vue && npm test`, []string{"src/x.vue"}},
+		{`cd web && sed -i 's/<b \/>/<i \/>/' src/x.vue && npm test`, []string{"web/src/x.vue"}},
 	} {
 		if got := Writes(tc.line); !slices.Equal(got, tc.want) {
 			t.Errorf("Writes(%q) = %q, want %q", tc.line, got, tc.want)
+		}
+	}
+}
+
+// TestWriteTargets: a write is joined to the folder the line moved to before it (cd, Set-Location, sl, chdir,
+// pushd/popd, over &&, ; and |), and a write whose place an expansion names is unknown, or its written-out folder
+// (field report 4, F6 review).
+func TestWriteTargets(t *testing.T) {
+	type tg = Target
+	unknown := tg{Unknown: true}
+	for _, tc := range []struct {
+		line string
+		want []Target
+	}{
+		{`cd app && rm -rf dist`, []Target{{Path: "app/dist"}}},
+		{`cd app; touch a.txt`, []Target{{Path: "app/a.txt"}}},
+		{`cd app | rm x`, []Target{{Path: "app/x"}}},
+		{`cd app && cd src && rm x`, []Target{{Path: "app/src/x"}}},
+		{`cd app && echo hi > out.txt`, []Target{{Path: "app/out.txt"}}},
+		{`cd /tmp && rm x`, []Target{{Path: "/tmp/x"}}},
+		{`cd D:\Other && del x.txt`, []Target{{Path: `D:\Other/x.txt`}}},
+		{`cd /d D:\Other && del x.txt`, []Target{{Path: `D:\Other/x.txt`}}},
+		{`Set-Location src; Remove-Item x -Recurse`, []Target{{Path: "src/x"}}},
+		{`Set-Location -Path src; Remove-Item x`, []Target{{Path: "src/x"}}},
+		{`sl lib; ni b.ts`, []Target{{Path: "lib/b.ts"}}},
+		{`chdir lib && del b.ts`, []Target{{Path: "lib/b.ts"}}},
+		{`pushd lib && rm a && popd && rm b`, []Target{{Path: "lib/a"}, {Path: "b"}}},
+		{`Push-Location lib; Remove-Item a; Pop-Location; Remove-Item b`, []Target{{Path: "lib/a"}, {Path: "b"}}},
+		{`bash -c "cd x && rm y" && rm z`, []Target{{Path: "x/y"}, {Path: "z"}}},
+		{`cd app && bash -c "rm y"`, []Target{{Path: "app/y"}}},
+		// Expansions: unknown, or the folder written before them.
+		{`rm -rf $DIR`, []Target{unknown}},
+		{`Remove-Item -Path $env:X\dist -Recurse`, []Target{unknown}},
+		{`del %OUT%\x.txt`, []Target{unknown}},
+		{`cd $env:X; Remove-Item dist`, []Target{unknown}},
+		{`cd $(mktemp -d) && rm x`, []Target{unknown}},
+		{`echo hi > "$LOG"`, []Target{unknown}},
+		{`rm src/$name.ts`, []Target{{Path: "src"}, {Path: "src/$name.ts"}}}, // cmd: a literal name
+		{`cd $X && rm /abs/y`, []Target{{Path: "/abs/y"}}},
+		// The temporary folder and the null devices are no write in the repository.
+		{`echo hi > $env:TEMP\x.txt`, nil},
+		{`rm -f $TMPDIR/x`, nil},
+		{`npm test > $null 2>&1`, nil},
+		{`npm test > /dev/null`, nil},
+		{`npm test > nul`, nil},
+	} {
+		// Each dialect that reads the line adds its reading: cmd takes $X literally, POSIX reads D:\\x as D:x. The
+		// callers drop a path that starts with $ or %, as the start of a variable; the other readings must match.
+		var got []Target
+		for _, x := range WriteTargets(tc.line) {
+			if x.Unknown || !strings.HasPrefix(x.Path, "$") && !strings.HasPrefix(x.Path, "%") &&
+				!strings.HasPrefix(x.Path, "D:O") {
+				got = append(got, x)
+			}
+		}
+		if !slices.Equal(got, tc.want) {
+			t.Errorf("WriteTargets(%q) = %+v, want %+v", tc.line, got, tc.want)
 		}
 	}
 }

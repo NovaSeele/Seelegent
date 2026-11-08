@@ -300,8 +300,9 @@ A red finding makes a done task's attention `hygiene`.
 ### Scope warnings
 
 - `outside_repo_write` (warn): an edit tool, or a shell command's redirection, copy or move target or a file
-  `sed -i`/`perl -i` edits in place (`guard.Writes`), wrote outside the task's folder, the repository, the temp folder and the worker's profile
-  folders. Git Bash paths (`/c/...`) are mapped on Windows; dynamic words and `~` are skipped. At most 20.
+  `sed -i`/`perl -i` edits in place (`guard.Writes`, joined to the folder a `cd` of the same line moved to), wrote
+  outside the task's folder, the repository, the temp folder and the worker's profile folders. Git Bash paths
+  (`/c/...`) are mapped on Windows; dynamic words and `~` are skipped. At most 20.
 - `outside_lane` (warn): a task whose gate is off (`gate: false`) has no lane step; its lane is checked after each
   turn with the gate's rules ([gates.md](gates.md#the-lane-check)) and each file outside it is a warning, with the
   detail `outside the lane` (a worker touched it) or `outside the lane, changed during the turn but not by a worker
