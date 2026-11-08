@@ -82,6 +82,7 @@ func (s *Service) follow(r *run, h *launch.Handle, b backend.Backend, m attemptM
 		parser.MaskPatterns(logx.NewRedactor().String)
 	}
 	f := s.newFollower(r, parser, id, turn, n, committed)
+	f.coll.Backend = b.Name()
 	ctx, cancel := context.WithCancel(s.root)
 	defer cancel()
 

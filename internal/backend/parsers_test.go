@@ -78,7 +78,7 @@ func replay(t *testing.T, b Backend, file string, secrets ...string) ([]event.Ev
 	}
 	exit := launch.Exit{Reason: launch.ReasonExited, Code: code}
 	events = append(events, p.Finish(exit, strings.Join(stderr, "\n"))...)
-	var c Collector
+	c := Collector{Backend: b.Name()}
 	for _, ev := range events {
 		c.Add(ev)
 	}

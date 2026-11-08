@@ -4,6 +4,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/NovaSeele/Seelegent/internal/config"
 	"github.com/NovaSeele/Seelegent/internal/event"
 	"github.com/NovaSeele/Seelegent/internal/launch"
 )
@@ -30,8 +31,8 @@ type Outcome struct {
 	Class event.Class `json:"class,omitempty"`
 	// Error is the failure message (secrets masked).
 	Error string `json:"error,omitempty"`
-	// ResetAt is when the limit resets, when Class is quota_exhausted and Error says so ("resets 3:10am
-	// (Asia/Ho_Chi_Minh)"); zero otherwise. The task engine passes it to the pool as the rest's hint.
+	// ResetAt is when the limit resets, when Class is quota_exhausted and the claude CLI's Error says so ("resets
+	// 3:10am (Asia/Ho_Chi_Minh)"); zero otherwise. The task engine passes it to the pool as the rest's hint.
 	ResetAt time.Time `json:"resetAt,omitzero"`
 	// Response is the agent's final answer.
 	Response string `json:"response,omitempty"`
@@ -57,6 +58,11 @@ type Outcome struct {
 
 // Collector folds a turn's events into its Outcome. Feed it every event the parser emits, in order.
 type Collector struct {
+	// Backend is the name of the backend whose events these are. Only Claude Code's limit messages are read for a
+	// reset time: the grammar is its own, and agy's and codex's wordings ("will reset after 7h44m", zone
+	// abbreviations such as PT) could be misread; their quota readers give the reset times instead.
+	Backend string
+
 	o         Outcome
 	report    *event.Report
 	failure   *event.Error
@@ -130,7 +136,7 @@ func (c *Collector) Outcome(exit launch.Exit) Outcome {
 		o.Status = OutcomeFailed
 		o.Class = c.failure.Class
 		o.Error = c.failure.Message
-		if o.Class == event.ClassQuotaExhausted {
+		if o.Class == event.ClassQuotaExhausted && c.Backend == config.BackendClaude {
 			o.ResetAt = resetHint(o.Error, exit.EndedAt)
 		}
 	case c.waiting != "":
