@@ -70,12 +70,19 @@ func agyRules() []rule {
 	}
 }
 
+// reClaudeLimit is Claude Code's wording when a sign-in account reaches one of its limits: "You've hit your 5-hour
+// limit · resets 3:10am (Asia/Ho_Chi_Minh)", "Weekly limit reached", "Claude AI usage limit reached|1762459200".
+// Each form names the limit and says hit, reached or resets, so "time limit" or "rate limiter" in other text does not
+// match.
+const reClaudeLimit = `\bhit your (?:(?:5-hour|weekly|session|opus|sonnet|usage) )?limit\b|` +
+	`\b(?:5-hour|weekly|opus|sonnet) limit reached\b|\blimit [·\-–] resets\b|\bclaude ai usage limit reached\b`
+
 // claudeRules: auth, then transient (overloaded counts as transient), then quota (old claude.js L416-433).
 func claudeRules() []rule {
 	return []rule{
 		newRule(event.ClassAuthRequired, `invalid\s*(x-)?api[- ]?key|not logged in|please run /login|run /login|authentication_error|oauth token (has )?expired|verify your account|log back in|permission_error|`+re401+`|`+re403),
 		newRule(event.ClassTransient, reNetwork+`|overloaded_error|\boverloaded\b|\b529\b|api_error|internal server error|`+reStatus5xx),
-		newRule(event.ClassQuotaExhausted, `rate_limit_error|rate[ -]?limit(ed| exceeded| reached)|usage limit|credit balance is too low|credits? balance|out of credits|insufficient_quota|exceeded your current quota|billing|`+re429+`|\b402\b.{0,30}payment`),
+		newRule(event.ClassQuotaExhausted, reClaudeLimit+`|rate_limit_error|rate[ -]?limit(ed| exceeded| reached)|usage limit|credit balance is too low|credits? balance|out of credits|insufficient_quota|exceeded your current quota|billing|`+re429+`|\b402\b.{0,30}payment`),
 	}
 }
 

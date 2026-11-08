@@ -149,6 +149,8 @@ func TestStreamClassification(t *testing.T) {
 		{"agy", "fatal.jsonl", OutcomeFailed, event.ClassFatal, "empty response"},
 		{"agy", "background.jsonl", OutcomeBackgroundWait, "", ""},
 		{"claude", "quota.jsonl", OutcomeFailed, event.ClassQuotaExhausted, "usage limit"},
+		// The 5-hour limit in the middle of a turn whose tool output says "time limit" and "rate limiter".
+		{"claude", "limit.jsonl", OutcomeFailed, event.ClassQuotaExhausted, "You've hit your 5-hour limit"},
 		{"claude", "auth.jsonl", OutcomeFailed, event.ClassAuthRequired, "Invalid API key"},
 		{"claude", "overloaded.jsonl", OutcomeFailed, event.ClassTransient, "overloaded"},
 		{"codex", "quota.jsonl", OutcomeFailed, event.ClassQuotaExhausted, "usage limit"},

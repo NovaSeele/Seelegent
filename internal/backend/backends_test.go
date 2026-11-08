@@ -710,6 +710,29 @@ func TestClassifyRules(t *testing.T) {
 		{codexRules(), "Your access token could not be refreshed: refresh token was already used", event.ClassAuthRequired},
 		{codexRules(), "unexpected status 502 Bad Gateway", event.ClassTransient},
 		{codexRules(), "", ""},
+		// Claude Code's limit messages (field report 3, B1).
+		{claudeRules(), "You've hit your 5-hour limit · resets 3:10am (Asia/Ho_Chi_Minh)", event.ClassQuotaExhausted},
+		{claudeRules(), "You’ve hit your weekly limit · resets Nov 10, 3pm (Europe/Paris)", event.ClassQuotaExhausted},
+		{claudeRules(), "You've hit your session limit", event.ClassQuotaExhausted},
+		{claudeRules(), "You've hit your Opus limit", event.ClassQuotaExhausted},
+		{claudeRules(), "You've hit your sonnet limit", event.ClassQuotaExhausted},
+		{claudeRules(), "You've hit your usage limit", event.ClassQuotaExhausted},
+		{claudeRules(), "You've hit your limit", event.ClassQuotaExhausted},
+		{claudeRules(), "5-hour limit reached", event.ClassQuotaExhausted},
+		{claudeRules(), "Weekly limit reached ∙ resets Monday", event.ClassQuotaExhausted},
+		{claudeRules(), "Opus limit reached, now using Sonnet", event.ClassQuotaExhausted},
+		{claudeRules(), "Sonnet limit reached", event.ClassQuotaExhausted},
+		{claudeRules(), "5-hour limit - resets 9pm", event.ClassQuotaExhausted},
+		{claudeRules(), "Session limit · resets 4am", event.ClassQuotaExhausted},
+		{claudeRules(), "Claude AI usage limit reached|1762459200", event.ClassQuotaExhausted},
+		// Ordinary text in tool output or answers is not a limit.
+		{claudeRules(), "--- FAIL: TestBurst: time limit exceeded", ""},
+		{claudeRules(), "the rate limiter code drops the third call", ""},
+		{claudeRules(), "hit your timeout limit in the test", ""},
+		{claudeRules(), "the weekly limit is configurable", ""},
+		{claudeRules(), "the session limiter resets every minute", ""},
+		{claudeRules(), "limit-resets.go: added the weekly window", ""},
+		{claudeRules(), "white-hit your limiter", ""},
 	}
 	for _, c := range cases {
 		got, ok := classifyText(c.rules, c.text)
