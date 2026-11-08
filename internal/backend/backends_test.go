@@ -215,6 +215,9 @@ func TestClaudeEnv(t *testing.T) {
 	env := envOf(t, b, prof,
 		"ANTHROPIC_API_KEY=lead", "anthropic_base_url=https://proxy", "CLAUDE_CODE_SESSION_ID=s", "CLAUDE_CONFIG_DIR=x",
 		"ANTHROPIC_DEFAULT_OPUS_MODEL=o", "SEELEGENT_PROVIDER_KEY=k",
+		// The lead's Claude Code session markers (M18 hunt H25): a worker that sees them takes itself for a
+		// session nested in the lead's.
+		"CLAUDECODE=1", "CLAUDE_CODE_ENTRYPOINT=cli", "CLAUDE_CODE_SSE_PORT=1234",
 		"PATH="+strings.Join([]string{"/bin", filepath.Join(claudeDir, "bin"), "/usr/bin"}, sep),
 		"HOOK_FILE="+filepath.Join(claudeDir, "hooks", "x.js"), "OTHER="+claudeDir+"-router", "KEEP=1")
 	want := map[string]string{
