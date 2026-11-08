@@ -8,6 +8,7 @@
   "stale": "前回の数値を表示しています。更新に失敗：{error}",
   "historyFailed": "クォータの履歴を読み込めませんでした：{error}",
   "dataSince": "使用量は {date} から保存されています。",
+  "tokensNote": "トークン数には、CLI が別に報告するキャッシュ読み取り（Claude Code など）は含まれません。",
   "noCost": "報告なし",
   "showTable": "表で表示",
   "showChart": "グラフで表示",

@@ -59,10 +59,14 @@ type TaskSummary struct {
 	LastEventAt string `json:"lastEventAt,omitempty"`
 	// WaitingUntil is when an account is expected back (waiting_quota).
 	WaitingUntil string `json:"waitingUntil,omitempty"`
-	// Waiting says what a waiting_quota task waits for besides an account: WaitingMemory while free memory or
-	// free commit is below minFreeMemoryMB / minFreeCommitMB. Empty (absent) while it waits for an account. Such a
-	// wait never raises an attention flag: the lead cannot act on it.
-	Waiting string `json:"waiting,omitempty" ts:"'memory'"`
+	// Waiting says why a waiting_quota task waits: WaitingBusy (every account that could run it has no free
+	// slot), WaitingResting (they rest; WaitingUntil is when one is back), WaitingNoAccount (none can run it), or
+	// WaitingMemory while free memory or free commit is below minFreeMemoryMB / minFreeCommitMB (that wait never
+	// raises an attention flag: the lead cannot act on it). Absent for other statuses, and from older daemons,
+	// which reported only the memory wait.
+	Waiting string `json:"waiting,omitempty" ts:"'memory' | 'no_account' | 'resting' | 'busy'"`
+	// WaitDetail is the daemon's English explanation of Waiting, for example "acc6: 2 of 2 running" for busy.
+	WaitDetail string `json:"waitDetail,omitempty"`
 	// NeedsSince is since when the task waits for the lead or the user.
 	NeedsSince string `json:"needsSince,omitempty"`
 

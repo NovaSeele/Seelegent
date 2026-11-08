@@ -655,21 +655,23 @@ func TestMemoryLimitHitFailsTheTurn(t *testing.T) {
 	}
 }
 
-// TestWaitingOnlyForMemory: the summary and the report show Waiting only for a memory wait (lead decision 3).
-func TestWaitingOnlyForMemory(t *testing.T) {
+// TestWaitingReasons: the summary carries every reason with its detail, so the dashboard can tell a full account
+// from a used-up quota; the lead's report shows only the memory wait (lead decision 3).
+func TestWaitingReasons(t *testing.T) {
 	s := &Service{runs: map[string]*run{}}
-	for waiting, want := range map[string]string{"busy": "", "resting": "", "no_account": "",
-		api.WaitingMemory: api.WaitingMemory} {
-		tk := &Task{ID: "t1", Status: StatusWaitingQuota, Waiting: waiting}
-		if got := s.summary(tk).Waiting; got != want {
-			t.Errorf("summary waiting for %q = %q, want %q", waiting, got, want)
+	for waiting, report := range map[string]string{api.WaitingBusy: "", api.WaitingResting: "",
+		api.WaitingNoAccount: "", api.WaitingMemory: api.WaitingMemory} {
+		tk := &Task{ID: "t1", Status: StatusWaitingQuota, Waiting: waiting, WaitDetail: "why " + waiting}
+		if got := s.summary(tk); got.Waiting != waiting || got.WaitDetail != "why "+waiting {
+			t.Errorf("summary for %q = %q, %q", waiting, got.Waiting, got.WaitDetail)
 		}
-		if got := waitingOf(tk); got != want {
-			t.Errorf("report waiting for %q = %q, want %q", waiting, got, want)
+		if got := waitingOf(tk); got != report {
+			t.Errorf("report waiting for %q = %q, want %q", waiting, got, report)
 		}
 	}
-	if got := waitingOf(&Task{Status: StatusRunning, Waiting: api.WaitingMemory}); got != "" {
-		t.Errorf("a running task shows waiting %q", got)
+	running := &Task{Status: StatusRunning, Waiting: api.WaitingMemory, WaitDetail: "stale"}
+	if got := s.summary(running); got.Waiting != "" || got.WaitDetail != "" || waitingOf(running) != "" {
+		t.Errorf("a running task shows waiting %q (%q)", got.Waiting, got.WaitDetail)
 	}
 }
 

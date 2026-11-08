@@ -69,6 +69,8 @@
     "quotaExhausted": "アカウントのクォータが切れました",
     "authFailed": "アカウントの再ログインが必要です",
     "waitingQuota": "クォータの回復待ち",
+    "waitingSlot": "空きスロット待ち",
+    "noAccounts": "使えるアカウントがありません",
     "retry": "{seconds} 秒後に再試行",
     "handoff": "{from} から {to} へ移動",
     "reattach": "実行中のワーカーに再接続しました",

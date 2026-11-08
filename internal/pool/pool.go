@@ -219,7 +219,21 @@ type Unavailable struct {
 	// Running is how many worker turns run then.
 	Capped  int `json:"capped,omitempty"`
 	Running int `json:"running,omitempty"`
+	// Slots are the busy accounts with their running turns, in the order of the accounts (ReasonBusy).
+	Slots []BusySlot `json:"slots,omitempty"`
 }
+
+// BusySlot is a matching account that has no free slot: Running of Limit (maxConcurrentPerAccount) turns run on
+// it, or a sign-out holds it (Held).
+type BusySlot struct {
+	AccountID string `json:"accountId"`
+	Running   int    `json:"running"`
+	Limit     int    `json:"limit"`
+	Held      bool   `json:"held,omitempty"`
+}
+
+// maxSlotsShown is how many busy accounts Unavailable.Error names.
+const maxSlotsShown = 3
 
 // Error implements error.
 func (u *Unavailable) Error() string {
@@ -237,7 +251,27 @@ func (u *Unavailable) Error() string {
 			fmt.Fprintf(&b, "%d worker turns run already (maxConcurrentWorkers %d)", u.Running, u.Capped)
 			break
 		}
-		fmt.Fprintf(&b, "all %s accounts are busy (%d busy, %d resting)", u.Backend, u.Busy, u.Resting)
+		if len(u.Slots) == 0 {
+			fmt.Fprintf(&b, "all %s accounts are busy (%d busy, %d resting)", u.Backend, u.Busy, u.Resting)
+			break
+		}
+		// "acc6: 2 of 2 running": which accounts are full, the reason a task waits although quota is left.
+		for i, sl := range u.Slots {
+			if i == maxSlotsShown {
+				fmt.Fprintf(&b, "; %d more busy", len(u.Slots)-i)
+				break
+			}
+			if i > 0 {
+				b.WriteString("; ")
+			}
+			fmt.Fprintf(&b, "%s: %d of %d running", sl.AccountID, sl.Running, sl.Limit)
+			if sl.Held {
+				b.WriteString(", signing out")
+			}
+		}
+		if u.Resting > 0 {
+			fmt.Fprintf(&b, "; %d resting", u.Resting)
+		}
 	}
 	if u.Group != "" {
 		fmt.Fprintf(&b, " (quota group %s)", u.Group)

@@ -235,8 +235,10 @@ func (p *Pool) choose(v *view, req *Request) (Choice, *Unavailable) {
 		if req.Account != "" && a.ID != req.Account {
 			continue
 		}
-		e := v.evaluate(a, req, len(p.leases[a.ID]))
-		if p.held[a.ID] > 0 && e.state != stateIneligible {
+		running := len(p.leases[a.ID])
+		e := v.evaluate(a, req, running)
+		held := p.held[a.ID] > 0 && e.state != stateIneligible
+		if held {
 			e.state = stateBusy // held by a sign-out (Hold)
 		}
 		switch e.state {
@@ -251,6 +253,8 @@ func (p *Pool) choose(v *view, req *Request) (Choice, *Unavailable) {
 			}
 		case stateBusy:
 			u.Busy++
+			u.Slots = append(u.Slots, BusySlot{AccountID: a.ID, Running: running, Limit: maxConcurrent(v.settings),
+				Held: held})
 		case stateFree:
 			free = append(free, e)
 		}

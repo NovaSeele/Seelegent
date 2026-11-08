@@ -71,8 +71,8 @@
       "short": "Quota"
     },
     "waitingWorker": {
-      "label": "Waiting for a worker",
-      "short": "No worker"
+      "label": "Waiting for a free slot",
+      "short": "No slot"
     },
     "blocked": {
       "label": "Needs action",

@@ -248,7 +248,9 @@ More: [follow up and review](getting-started.md#6-follow-up-and-review), [review
 - An account at or below 3% of a window (`minRemaining`) rests until that window resets. When an account runs out
   in the middle of a task, the task moves to another account with a handover of what happened so far.
 - When no account can run a task, it shows **Waiting for quota** (it starts by itself after a reset) or **No
-  accounts left** (add or turn on an account).
+  accounts left** (add or turn on an account). It shows **Waiting for a free slot** when every account that could
+  run it is at its per-account limit (`maxConcurrentPerAccount`, or the `maxConcurrentWorkers` cap) although quota
+  is left, with the full accounts (`acc6: 2 of 2 running`); it starts when one of their tasks ends.
 - `seelegent status` (or the lead's `status`) shows each account's quota and every queued, running or waiting
   task, the ones that need you first; **Usage** shows
   tokens, cost, tasks and turns over 7 or 30 days, and each account's quota over time.

@@ -8,6 +8,7 @@
   "stale": "Showing the last numbers; the refresh failed: {error}",
   "historyFailed": "Quota history could not be loaded: {error}",
   "dataSince": "Usage is kept since {date}.",
+  "tokensNote": "Tokens leave out cache reads that the CLI reports separately, as Claude Code does.",
   "noCost": "Not reported",
   "showTable": "Show as table",
   "showChart": "Show as chart",

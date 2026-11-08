@@ -511,13 +511,16 @@ export interface AccountFailureData {
 }
 
 /**
- * WaitingQuotaData is the data of a waiting_quota event. Without Reason the task waits for an account (Until is
- * when one is expected back); with Reason WaitingMemory it waits for memory: AvailableMB is what the last reading
- * found and NeedMB the threshold it is below (of physical memory or of commit, whichever holds the task).
+ * WaitingQuotaData is the data of a waiting_quota event. Reason says what the task waits for; events written
+ * before it was set for account waits have none, which reads as an account wait (Until is when one is expected
+ * back). Detail is the daemon's English explanation (for busy: which accounts are full, "acc6: 2 of 2 running").
+ * With Reason WaitingMemory, AvailableMB is what the last reading found and NeedMB the threshold it is below (of
+ * physical memory or of commit, whichever holds the task).
  */
 export interface WaitingQuotaData {
   until?: string
-  reason?: 'memory'
+  reason?: 'memory' | 'no_account' | 'resting' | 'busy'
+  detail?: string
   availableMB?: number
   needMB?: number
 }
@@ -2542,11 +2545,15 @@ export interface TaskSummary {
   /** WaitingUntil is when an account is expected back (waiting_quota). */
   waitingUntil?: string
   /**
-   * Waiting says what a waiting_quota task waits for besides an account: WaitingMemory while free memory or
-   * free commit is below minFreeMemoryMB / minFreeCommitMB. Empty (absent) while it waits for an account. Such a
-   * wait never raises an attention flag: the lead cannot act on it.
+   * Waiting says why a waiting_quota task waits: WaitingBusy (every account that could run it has no free
+   * slot), WaitingResting (they rest; WaitingUntil is when one is back), WaitingNoAccount (none can run it), or
+   * WaitingMemory while free memory or free commit is below minFreeMemoryMB / minFreeCommitMB (that wait never
+   * raises an attention flag: the lead cannot act on it). Absent for other statuses, and from older daemons,
+   * which reported only the memory wait.
    */
-  waiting?: 'memory'
+  waiting?: 'memory' | 'no_account' | 'resting' | 'busy'
+  /** WaitDetail is the daemon's English explanation of Waiting, for example "acc6: 2 of 2 running" for busy. */
+  waitDetail?: string
   /** NeedsSince is since when the task waits for the lead or the user. */
   needsSince?: string
   attention: Attention | null

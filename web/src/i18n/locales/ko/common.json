@@ -71,8 +71,8 @@
       "short": "할당량"
     },
     "waitingWorker": {
-      "label": "작업자 대기",
-      "short": "작업자"
+      "label": "빈 슬롯 대기",
+      "short": "슬롯 대기"
     },
     "blocked": {
       "label": "조치 필요",

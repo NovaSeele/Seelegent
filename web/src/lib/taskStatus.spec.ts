@@ -9,6 +9,7 @@ import {
   isVisibleTask,
   NEED_WORD_KEY,
   needKind,
+  slotWaitDetail,
   statusWordKey,
 } from './taskStatus'
 
@@ -65,6 +66,49 @@ describe('task status', () => {
     expect(canFollowup(makeTask({ status: 'done', manual: true }))).toBe(false)
     expect(canCancel(makeTask({ status: 'waiting_deps' }))).toBe(true)
     expect(canCancel(makeTask({ status: 'done' }))).toBe(false)
+  })
+})
+
+describe('waiting_quota by reason', () => {
+  const noAccounts = {
+    state: 'blocked' as const,
+    reason: 'no_accounts',
+    who: 'user' as const,
+    since: iso(),
+  }
+  it.each([
+    // A full account with quota left (field report: this read "Waiting for quota").
+    [{ waiting: 'busy' as const }, 'waitingWorker', 'common.status.waitingWorker.label'],
+    [{ waiting: 'resting' as const }, 'waiting', 'common.status.waiting.label'],
+    [{ waiting: 'memory' as const }, 'waitingResources', 'common.status.waitingResources.label'],
+    [
+      { waiting: 'no_account' as const, attention: noAccounts },
+      'blocked',
+      'common.attention.noAccounts',
+    ],
+    [{ waiting: 'no_account' as const }, 'waiting', 'common.attention.noAccounts'],
+    // An older daemon sends no reason: quota, as before.
+    [{}, 'waiting', 'common.status.waiting.label'],
+  ])('%o shows %s with %s', (fields, display, key) => {
+    const task = makeTask({ status: 'waiting_quota', ...fields })
+    expect(displayStatus(task)).toBe(display)
+    expect(statusWordKey(task)).toBe(key)
+  })
+
+  it('keeps a sign-in flag on a no_account wait', () => {
+    const auth = { ...noAccounts, reason: 'auth' }
+    const task = makeTask({ status: 'waiting_quota', waiting: 'no_account', attention: auth })
+    expect(statusWordKey(task)).toBe(NEED_WORD_KEY.blocked)
+  })
+
+  it('gives the full accounts only for a slot wait', () => {
+    const busy = { status: 'waiting_quota' as const, waiting: 'busy' as const }
+    expect(slotWaitDetail({ ...busy, waitDetail: 'acc6: 2 of 2 running' })).toBe(
+      'acc6: 2 of 2 running',
+    )
+    expect(slotWaitDetail(busy)).toBe('')
+    expect(slotWaitDetail({ ...busy, waiting: 'resting', waitDetail: 'all resting' })).toBe('')
+    expect(slotWaitDetail({ ...busy, status: 'running', waitDetail: 'stale' })).toBe('')
   })
 })
 

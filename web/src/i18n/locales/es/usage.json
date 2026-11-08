@@ -8,6 +8,7 @@
   "stale": "Se muestran los últimos números; la actualización falló: {error}",
   "historyFailed": "No se pudo cargar el historial de cuota: {error}",
   "dataSince": "El uso se guarda desde el {date}.",
+  "tokensNote": "Los tokens no incluyen las lecturas de caché que la CLI informa por separado, como hace Claude Code.",
   "noCost": "Sin datos",
   "showTable": "Ver como tabla",
   "showChart": "Ver como gráfico",

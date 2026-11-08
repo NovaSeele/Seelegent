@@ -71,8 +71,8 @@
       "short": "Cuota"
     },
     "waitingWorker": {
-      "label": "Esperando un worker libre",
-      "short": "Sin worker"
+      "label": "Esperando un hueco libre",
+      "short": "Sin hueco"
     },
     "blocked": {
       "label": "Requiere acción",

@@ -69,6 +69,8 @@
     "quotaExhausted": "La cuenta se quedó sin cuota",
     "authFailed": "La cuenta debe volver a iniciar sesión",
     "waitingQuota": "Esperando cuota",
+    "waitingSlot": "Esperando un hueco libre",
+    "noAccounts": "No quedan cuentas",
     "retry": "Reintento en {seconds} s",
     "handoff": "Pasó de {from} a {to}",
     "reattach": "Reconectado al worker en curso",

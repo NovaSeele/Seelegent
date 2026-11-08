@@ -46,8 +46,12 @@ export function displayStatus(task: TaskSummary): DisplayStatus {
     case 'running':
       return 'running'
     case 'waiting_quota':
-      // The same daemon status covers both waits; "memory" means free memory or commit, not quota.
-      return task.waiting === 'memory' ? 'waitingResources' : 'waiting'
+      // One daemon status covers several waits: "memory" is free memory or commit, "busy" a free slot on a full
+      // account (quota is left); resting, no reason (an older daemon) and no_account (shown blocked, see
+      // statusWordKey) read as quota.
+      if (task.waiting === 'memory') return 'waitingResources'
+      if (task.waiting === 'busy') return 'waitingWorker'
+      return 'waiting'
     case 'waiting_deps':
       return 'waitingDeps'
     case 'blocked_deps':
@@ -68,6 +72,13 @@ export function displayStatus(task: TaskSummary): DisplayStatus {
  * the banner and the Watch board use one name per state.
  */
 export function statusWordKey(task: TaskSummary): string {
+  if (
+    task.status === 'waiting_quota' &&
+    task.waiting === 'no_account' &&
+    (!task.attention || task.attention.reason === 'no_accounts')
+  ) {
+    return 'common.attention.noAccounts'
+  }
   const status = displayStatus(task)
   if (status === 'blocked') {
     const state = task.attention?.state
@@ -115,6 +126,16 @@ export function needKind(task: TaskSummary, now = Date.now()): NeedKind | null {
   if (task.status === 'blocked_deps') return 'depsBlocked'
   if (awaitsReview(task)) return 'review'
   return null
+}
+
+/**
+ * Which accounts are full while a task waits for a free slot ("acc6: 2 of 2 running"): the daemon's own line,
+ * mostly account ids and numbers. Empty for every other wait.
+ */
+export function slotWaitDetail(
+  task: Pick<TaskSummary, 'status' | 'waiting' | 'waitDetail'>,
+): string {
+  return task.status === 'waiting_quota' && task.waiting === 'busy' ? (task.waitDetail ?? '') : ''
 }
 
 /** Since when the task has been waiting: the daemon's needsSince, else the attention or last update time. */

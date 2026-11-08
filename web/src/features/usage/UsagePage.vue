@@ -84,6 +84,7 @@ const period = computed(() => {
           {{ t('usage.stale', { error: usage.summaryError }) }}
         </p>
         <UsageTotals :summary="usage.summary" />
+        <p class="usage__note">{{ t('usage.tokensNote') }}</p>
         <DailyChart :daily="usage.summary.daily" :has-cost="usage.summary.totals.hasCost" />
         <div class="usage__pair">
           <UsageProjects :summary="usage.summary" />

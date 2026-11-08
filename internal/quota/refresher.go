@@ -69,7 +69,8 @@ type RefresherOptions struct {
 	Clock clock.Clock
 	// Jitter returns a random number in [0, n) (math/rand/v2 when nil).
 	Jitter func(n int64) int64
-	// Logger receives one line per failed read (discarded when nil).
+	// Logger receives a line when an account's read starts failing, fails differently or recovers, and Debug lines
+	// while a failure repeats (discarded when nil).
 	Logger *slog.Logger
 	// OnUpdate is called with every stored snapshot (the pool uses it to wake waiting tasks).
 	OnUpdate func(Snapshot)
@@ -503,14 +504,37 @@ func (r *Refresher) readAndStore(ctx context.Context, a account.Account) Result 
 		return res
 	}
 	res.Snapshot, res.Err = snap, readErr
-	if readErr != nil {
-		r.o.Logger.Warn("quota refresh failed", "account", a.ID, "backend", a.Backend, "kind", KindOf(readErr),
-			"err", snap.Error.Message)
-	}
+	r.logRead(a, prev, found, snap, readErr)
 	if r.o.OnUpdate != nil {
 		r.o.OnUpdate(snap)
 	}
 	return res
+}
+
+// logRead logs the outcome of a read against the previous stored snapshot, so a state that lasts is logged once:
+// Warn when the error kind changes (none to a kind, or one kind to another), Debug when the same kind repeats
+// (an expired token, for example, fails every cycle until the CLI's next run renews it), and one Info line when an
+// account that had an error reads again. The last kind comes from the store, not from memory: reads of one account
+// never overlap, so prev is the previous read, and a restart does not log a known state again.
+func (r *Refresher) logRead(a account.Account, prev Snapshot, found bool, snap Snapshot, readErr error) {
+	var was Kind
+	if found {
+		was = prev.ErrorKind()
+	}
+	switch {
+	case readErr == nil:
+		if was != "" {
+			r.o.Logger.Info("quota refresh recovered", "account", a.ID, "backend", a.Backend, "was", was)
+		}
+	case errors.Is(readErr, ErrPassive):
+		// Nothing to read is not a failure (Merge records no error).
+	case snap.ErrorKind() == was:
+		r.o.Logger.Debug("quota refresh failed again", "account", a.ID, "backend", a.Backend, "kind", was,
+			"err", snap.Error.Message)
+	default:
+		r.o.Logger.Warn("quota refresh failed", "account", a.ID, "backend", a.Backend, "kind", snap.ErrorKind(),
+			"err", snap.Error.Message)
+	}
 }
 
 // read runs the account's reader with the time limit, turning a panic into an error.
