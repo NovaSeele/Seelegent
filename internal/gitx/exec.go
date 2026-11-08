@@ -330,8 +330,9 @@ func subcommand(args []string) string {
 
 // runsUserCode reports whether git with args can run a program the repository or its configuration names: a
 // hook (commit, merge, checkout, push, a fetch's automatic gc, ...), a clean or smudge filter (add, checkout,
-// reset, stash, `hash-object --path`, ...; Git LFS is one) or a credential helper (fetch, push, clone, ls-remote). Such a
-// git gets a console of its own: what it runs must not change the daemon's console or send it a console event.
+// reset, stash, `hash-object --path`, ...; Git LFS is one) or a credential helper (fetch, push, clone,
+// ls-remote). Such a git gets a console of its own: what it runs must not change the daemon's console or send it a
+// console event.
 // The read-only commands the daemon runs all the time (status, diff with --no-ext-diff --no-textconv, rev-parse,
 // ls-files, show, cat-file, ...) share it; a configured clean filter is the one thing status or diff may still
 // start, for a file whose timestamps changed, and it comes from git's configuration, not from the checked-out
@@ -340,8 +341,7 @@ func runsUserCode(args []string) bool {
 	switch subcommand(args) {
 	case "add", "am", "apply", "bisect", "checkout", "checkout-index", "cherry-pick", "clone", "commit", "fetch",
 		"filter-branch", "gc", "ls-remote", "maintenance", "merge", "notes", "pull", "push", "read-tree", "rebase",
-		"remote",
-		"reset", "restore", "revert", "stash", "submodule", "switch", "update-index", "worktree":
+		"remote", "reset", "restore", "revert", "stash", "submodule", "switch", "update-index", "worktree":
 		return true
 	case "hash-object":
 		// Filters apply to a named file, or to stdin given a --path; --no-filters turns them off.
