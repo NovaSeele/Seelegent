@@ -8,7 +8,9 @@ import (
 // in the working tree, the index or the branches others use.
 var alwaysDenied = set("reset", "restore", "switch", "revert", "rebase", "merge", "pull", "push", "cherry-pick",
 	"am", "rm", "filter-branch", "filter-repo", "update-ref", "prune", "mv", "update-index", "read-tree",
-	"checkout-index", "merge-file", "replace")
+	"checkout-index", "merge-file", "replace",
+	// send-pack . :refs/heads/x deletes a branch, +x:refs/heads/y moves one (H3).
+	"send-pack")
 
 // builtins are git's own commands; any other name may be an alias (resolved through Checker.Alias).
 var builtins = set("add", "am", "annotate", "apply", "archive", "bisect", "blame", "branch", "bugreport", "bundle",
@@ -108,8 +110,8 @@ func (c Checker) git(args []word, depth int) Result {
 			"--pathspec-from-file", "--orphan"}
 		p := scan(rest, opts{short: "bB", long: set("--orphan", "--conflict", "--pathspec-from-file"),
 			danger: danger})
-		create := p.has("-b", "-B")
-		if p.unknown || !create || p.dashdash || len(p.pos) > 1 || p.has(danger...) {
+		// -b creates a branch and fails on an existing one; -B resets an existing one to the start point (H3).
+		if p.unknown || !p.has("-b") || p.has("-B") || p.dashdash || len(p.pos) > 1 || p.has(danger...) {
 			return deny()
 		}
 	case "branch":
@@ -153,8 +155,41 @@ func (c Checker) git(args []word, depth int) Result {
 			return deny()
 		}
 	case "worktree":
-		p := scan(rest, opts{})
+		p := scan(rest, opts{short: "bB", long: set("--reason")})
 		if p.unknown || len(p.pos) > 0 && setHas(p.pos[0].text, "remove", "prune", "move") {
+			return deny()
+		}
+		// worktree add -B resets an existing branch to the start point (H3).
+		if len(p.pos) > 0 && p.pos[0].text == "add" && p.has("-B") {
+			return deny()
+		}
+	case "replay":
+		// git replay updates the branches it rewrites unless told only to print the updates (H3).
+		if !replayPrintsOnly(rest) {
+			return deny()
+		}
+	case "fetch":
+		// --update-head-ok lets fetch move the checked-out branch under the working tree; a forced refspec (+src:dst,
+		// or any refspec with --force) that writes a branch moves it anywhere, back in history included (H3).
+		p := scan(rest, opts{short: "jo", long: set("--depth", "--deepen", "--shallow-since", "--shallow-exclude",
+			"--jobs", "--upload-pack", "--server-option", "--refmap", "--negotiation-tip", "--filter",
+			"--recurse-submodules-default", "--submodule-prefix"), danger: []string{"--update-head-ok", "--force"}})
+		if p.unknown || p.has("-u", "--update-head-ok") {
+			return deny()
+		}
+		force := p.has("-f", "--force")
+		for i, r := range p.pos {
+			if i > 0 && forcedBranchWrite(r.text, force) {
+				return deny()
+			}
+		}
+	case "repack":
+		// repack -a -d drops the unreachable objects of the old packs, where lost work still is (a dropped stash, a
+		// commit a reset left behind); -A and --cruft keep them.
+		p := scan(rest, opts{short: "g", long: set("--window", "--depth", "--threads", "--window-memory",
+			"--max-pack-size", "--filter", "--filter-to", "--expire-to", "--cruft-expiration", "--max-cruft-size",
+			"--geometric", "--keep-pack", "--name-hash-version")})
+		if p.unknown || p.has("-a") && p.has("-d") && !p.has("-A", "--cruft") {
 			return deny()
 		}
 	case "config":
@@ -217,6 +252,51 @@ func (c Checker) git(args []word, depth int) Result {
 func subcommand(s string) string {
 	s = strings.ToLower(s)
 	return strings.TrimSuffix(s, ".exe")
+}
+
+// replayPrintsOnly reports whether git replay is told to print the ref updates instead of making them
+// (--ref-action=print, the last one given; git takes an unambiguous prefix of the option).
+func replayPrintsOnly(args []word) bool {
+	prints := false
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if a.dynamic {
+			return false
+		}
+		name, value, eq := strings.Cut(a.text, "=")
+		if name == "--no-ref-action" {
+			prints = false
+			continue
+		}
+		if len(name) < len("--ref") || !strings.HasPrefix("--ref-action", name) {
+			continue
+		}
+		if !eq {
+			if i+1 >= len(args) || args[i+1].dynamic {
+				return false
+			}
+			i++
+			value = args[i].text
+		}
+		prints = value == "print"
+	}
+	return prints
+}
+
+// forcedBranchWrite reports whether a fetch refspec forcibly writes a branch: +src:dst (or src:dst under --force)
+// whose dst is under refs/heads/ or a short name, which git resolves to a branch (+old:main moves main).
+func forcedBranchWrite(spec string, force bool) bool {
+	if strings.HasPrefix(spec, "+") {
+		force, spec = true, spec[1:]
+	}
+	if !force || strings.HasPrefix(spec, "^") {
+		return false
+	}
+	_, dst, ok := strings.Cut(spec, ":")
+	if !ok || dst == "" {
+		return false
+	}
+	return !strings.HasPrefix(dst, "refs/") || strings.HasPrefix(dst, "refs/heads/")
 }
 
 // alias resolves a git alias and checks what it runs.
@@ -305,7 +385,9 @@ func riskyConfigKey(k string) bool {
 		}
 	}
 	for _, suffix := range []string{".clean", ".smudge", ".process", ".textconv", ".command", ".driver",
-		".program", ".cmd", ".helper", ".uploadpack", ".receivepack", ".proxy"} {
+		".program", ".cmd", ".helper", ".uploadpack", ".receivepack", ".proxy",
+		// gc.reflogExpire=now (or gc.<pattern>.reflogExpire) makes gc drop reflogs at once, refs/stash included.
+		".reflogexpire", ".reflogexpireunreachable"} {
 		if strings.HasSuffix(k, suffix) {
 			return true
 		}

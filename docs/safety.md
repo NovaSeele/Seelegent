@@ -25,19 +25,24 @@ where `<<` starts no here-document and the next lines run as commands, so there 
 command lines only when the code can start a program (`os.system`, `subprocess`, `child_process`, `exec*`,
 `spawn*`, `popen`, Perl's and Ruby's backticks, `qx`, `%x` and pipe `open`, ...); code that cannot, such as a
 script that edits a file mentioning `git stash`, is data. Long options count by any prefix git accepts
-(`commit --amen`, `branch --d`). It refuses:
+(`commit --amen`, `branch --d`). The subcommand is read without a trailing `.exe`, which Git for Windows strips
+(`git reset.exe --hard` runs `reset --hard`). It refuses:
 
 - always: `reset`, `restore`, `switch`, `revert`, `rebase`, `merge`, `pull`, `push`, `cherry-pick`, `am`, `rm`,
   `mv`, `prune`, `filter-branch`, `filter-repo`, `update-ref`, `update-index`, `read-tree`, `checkout-index`,
-  `merge-file`, `replace`;
-- `stash` except `list` and `show`; `clean` without `-n`; `checkout` except `checkout -b|-B <new> [<start>]`;
-  `commit -a|--all|--amend`; `branch` and `tag` deletes, moves and forced writes; `apply` unless it only checks;
-  `reflog expire|delete`; `worktree remove|prune|move`; `submodule deinit|update|absorbgitdirs`; `config` writes
-  of keys that run programs or redirect git (aliases, includes, `core.hooksPath`, `core.editor`, filters and
-  drivers, ...) and of `gc.pruneExpire` and `help.autocorrect` (also as `-c`/`--config-env`; `git config <key>`
-  and `git config get <key>` only read and pass), `config --edit` and `--rename-section` (the editor or the
-  renamed section can bring any key); `sparse-checkout` writes; `bisect` steps; `rerere forget|clear|gc`; `notes remove|prune`; `refs migrate`; `symbolic-ref -d`;
-  `gc --prune=<date>` (plain `gc` and `gc --prune` keep the default expiry);
+  `merge-file`, `replace`, `send-pack`;
+- `stash` except `list` and `show`; `clean` without `-n`; `checkout` except `checkout -b <new> [<start>]` (`-B`
+  resets an existing branch); `commit -a|--all|--amend`; `branch` and `tag` deletes, moves and forced writes;
+  `apply` unless it only checks; `reflog expire|delete|drop` (the stash is a reflog); `worktree remove|prune|move`
+  and `worktree add -B`; `replay` unless `--ref-action=print`; `fetch --update-head-ok` and a forced refspec
+  (`+src:dst`, or any with `--force`) whose destination is a branch (`refs/heads/...` or a short name);
+  `repack -a -d` without `-A` or `--cruft` (it drops unreachable objects); `submodule deinit|update|absorbgitdirs`;
+  `config` writes of keys that run programs or redirect git (aliases, includes, `core.hooksPath`, `core.editor`,
+  filters and drivers, ...) and of `gc.pruneExpire`, `gc[.<pattern>].reflogExpire[Unreachable]` and
+  `help.autocorrect` (also as `-c`/`--config-env`; `git config <key>` and `git config get <key>` only read and
+  pass), `config --edit` and `--rename-section` (the editor or the renamed section can bring any key);
+  `sparse-checkout` writes; `bisect` steps; `rerere forget|clear|gc`; `notes remove|prune`; `refs migrate`;
+  `symbolic-ref -d`; `gc --prune=<date>` (plain `gc` and `gc --prune` keep the default expiry);
 - an alias that expands to any of the above (read with `git config --get alias.<name>` in the command's folder);
 - a command that sets `GIT_CONFIG_PARAMETERS`, `GIT_CONFIG_COUNT`, `GIT_CONFIG_KEY_<n>`, `GIT_CONFIG_GLOBAL` or
   `GIT_CONFIG_SYSTEM` (`NAME=value git ...`, `env NAME=value`, `export`/`declare`, PowerShell's `$env:NAME = ...`,
