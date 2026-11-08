@@ -168,12 +168,17 @@ func TestPathUnexpanded(t *testing.T) {
 		return []string{"APPDATA=C:\\Users\\me\\AppData\\Roaming", "LOCALAPPDATA=C:\\Users\\me\\AppData\\Local",
 			"PATH=" + strings.Join(entries, string(filepath.ListSeparator))}
 	}
-	// An unexpanded variable on Windows: the REG_SZ message, with the expanded path in the fix.
+	// An unexpanded variable on Windows: both usual causes (a REG_SZ value; a per-user variable in the system
+	// PATH) and both registry places, never a claim that it is one of them; the expanded path is in the fix.
 	c := pathEntries(env(abs, `%APPDATA%\npm`, `%LOCALAPPDATA%\Programs\x\%APPDATA%`), "windows")
 	if c.Status != Warn || !strings.Contains(c.Message, `never expanded: %APPDATA%\npm, `+
-		`%LOCALAPPDATA%\Programs\x\%APPDATA%`) || !strings.Contains(c.Message, "REG_SZ instead of REG_EXPAND_SZ") ||
-		!strings.Contains(c.Message, "literal text") || strings.Contains(c.Message, "relative") ||
-		!strings.Contains(c.Fix, "store PATH as REG_EXPAND_SZ") ||
+		`%LOCALAPPDATA%\Programs\x\%APPDATA%`) || !strings.Contains(c.Message, "literal text") ||
+		!strings.Contains(c.Message, "one of two causes") ||
+		!strings.Contains(c.Message, "REG_SZ instead of REG_EXPAND_SZ") ||
+		!strings.Contains(c.Message, "system PATH but uses a per-user variable such as %APPDATA% or %USERPROFILE%") ||
+		strings.Contains(c.Message, "is stored as") || strings.Contains(c.Message, "relative") ||
+		!strings.Contains(c.Fix, `HKCU\Environment`) ||
+		!strings.Contains(c.Fix, `HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment`) ||
 		!strings.Contains(c.Fix, `(C:\Users\me\AppData\Roaming\npm, `+
 			`C:\Users\me\AppData\Local\Programs\x\C:\Users\me\AppData\Roaming)`) ||
 		strings.Contains(c.Fix, "project folder") {
@@ -186,7 +191,7 @@ func TestPathUnexpanded(t *testing.T) {
 	}
 	// Both kinds: each gets its own message and fix.
 	c = pathEntries(env(`%APPDATA%\npm`, "bin"), "windows")
-	if c.Status != Warn || !strings.Contains(c.Message, `never expanded: %APPDATA%\npm.`) ||
+	if c.Status != Warn || !strings.Contains(c.Message, `never expanded: %APPDATA%\npm,`) ||
 		!strings.Contains(c.Message, "PATH has relative entries: bin") ||
 		!strings.Contains(c.Fix, "REG_EXPAND_SZ") || !strings.Contains(c.Fix, "inside the project folder") {
 		t.Errorf("both = %+v", c)
@@ -204,5 +209,34 @@ func TestPathUnexpanded(t *testing.T) {
 	if c.Status != Warn || !strings.Contains(c.Message, "relative entries: %APPDATA%/npm") ||
 		strings.Contains(c.Message, "REG_SZ") {
 		t.Errorf("linux = %+v", c)
+	}
+}
+
+// TestOldNodeScript: only the old install layout counts, in any case and with either slash; other cli.js files
+// inside a folder named seelegent (node_modules tools of a checkout) do not.
+func TestOldNodeScript(t *testing.T) {
+	for arg, want := range map[string]bool{
+		`C:\Users\me\AppData\Local\Programs\seelegent\src\cli.js`:                true,
+		`C:/Users/me/AppData/Local/Programs/Seelegent/SRC/CLI.JS`:                true,
+		`C:\Users\me\AppData\Local\Programs\seelegent\versions\0.3.0\src\cli.js`: true,
+		`/home/me/.local/share/seelegent/src/cli.js`:                             true,
+		`seelegent\src\cli.js`:                                                 true,
+		`D:\Work\Seelegent\web\node_modules\vite\bin\cli.js`:                   false,
+		`D:\Work\Seelegent\web\node_modules\.pnpm\x\node_modules\x\src\cli.js`: false,
+		`D:\Work\Seelegent\node_modules\typescript\lib\cli.js`:                 false,
+		`D:\Work\Seelegent\scripts\cli.js`:                                     false,
+		`C:\tools\app\src\cli.js`:                                              false,
+		`C:\tools\not-seelegent\src\cli.js`:                                    false,
+		`C:\Programs\seelegent\versions\src\cli.js`:                            false,
+		`C:\Programs\seelegent\versions\0.3.0\lib\cli.js`:                      false,
+		`C:\Programs\seelegent\src\cli.json`:                                   false,
+	} {
+		if got := oldNodeScript(arg); got != want {
+			t.Errorf("oldNodeScript(%q) = %v, want %v", arg, got, want)
+		}
+	}
+	if old, mcp := oldNodeArgs([]string{"node", `D:\Work\Seelegent\web\node_modules\vite\bin\cli.js`, "mcp"}); old ||
+		mcp {
+		t.Error("a node_modules cli.js inside a Seelegent checkout counted as the old version")
 	}
 }

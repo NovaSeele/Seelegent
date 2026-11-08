@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path"
 	"strconv"
 	"strings"
 
@@ -87,7 +88,7 @@ func IsNode(name string) bool {
 	return strings.EqualFold(name, "node.exe") || strings.EqualFold(name, "node")
 }
 
-// oldNode looks for processes of the old Node version (node <...>\seelegent\<...>\cli.js). Its MCP servers, kept
+// oldNode looks for processes of the old Node version (node <...>\seelegent\src\cli.js). Its MCP servers, kept
 // by lead hosts that were not restarted after the update, can start the old daemon on the migrated data folder.
 // It never stops anything. ok is false when processes cannot be listed on this system.
 func oldNode(ctx context.Context, list func(context.Context) ([]platform.Process, error)) (c Check, ok bool) {
@@ -133,14 +134,29 @@ func oldNode(ctx context.Context, list func(context.Context) ([]platform.Process
 	return c, true
 }
 
-// oldNodeArgs reports whether args run the old Node version (an argument ending in cli.js inside a folder named
-// seelegent) and whether they run it as the MCP server (cli.js mcp).
+// oldNodeArgs reports whether args run the old Node version and whether they run it as the MCP server (cli.js
+// mcp). Only the old install layout counts: a script path ending in seelegent/src/cli.js, or
+// seelegent/versions/<version>/src/cli.js (in any case, with either slash); any other cli.js, such as a
+// node_modules tool inside a checkout of Seelegent, is not the old version.
 func oldNodeArgs(args []string) (old, mcp bool) {
 	for i, a := range args {
-		n := strings.ToLower(strings.ReplaceAll(a, `\`, "/"))
-		if strings.HasSuffix(n, "/cli.js") && strings.Contains(n, "/seelegent/") {
+		if oldNodeScript(a) {
 			return true, i+1 < len(args) && strings.EqualFold(args[i+1], "mcp")
 		}
 	}
 	return false, false
+}
+
+func oldNodeScript(arg string) bool {
+	n := strings.ToLower(strings.ReplaceAll(arg, `\`, "/"))
+	dir, ok := strings.CutSuffix(n, "/src/cli.js")
+	if !ok {
+		return false
+	}
+	if strings.HasSuffix(dir, "/seelegent") || dir == "seelegent" {
+		return true
+	}
+	// <...>/seelegent/versions/<version>
+	parent, version := path.Split(dir)
+	return version != "" && (strings.HasSuffix(parent, "/seelegent/versions/") || parent == "seelegent/versions/")
 }

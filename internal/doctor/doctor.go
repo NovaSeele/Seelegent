@@ -366,8 +366,8 @@ func plural(n int) string {
 }
 
 // pathEntries warns about relative PATH entries: a worker started in a project folder would run programs from it.
-// On Windows an entry with a %NAME% left in it is told apart: the variable was never expanded (PATH was stored as
-// REG_SZ, not REG_EXPAND_SZ), so no program finds anything there.
+// On Windows an entry with a %NAME% left in it is told apart: the variable was never expanded (a REG_SZ PATH
+// value, or a per-user variable in the system PATH), so no program finds anything there.
 func pathEntries(env []string, goos string) Check {
 	path := ""
 	for _, kv := range env {
@@ -394,14 +394,17 @@ func pathEntries(env []string, goos string) Check {
 	var msgs, fixes []string
 	if len(unexpanded) > 0 {
 		msgs = append(msgs, "PATH has entries whose variable was never expanded: "+strings.Join(unexpanded, ", ")+
-			". PATH is stored as REG_SZ instead of REG_EXPAND_SZ, so every program sees the literal text and finds "+
-			"nothing there")
-		fix := "store PATH as REG_EXPAND_SZ (in HKCU\\Environment or the system Environment key) or write the " +
-			"expanded path"
+			", so every program sees the literal text and finds nothing there. This usually has one of two causes: "+
+			"the PATH value is REG_SZ instead of REG_EXPAND_SZ, or the entry is in the system PATH but uses a "+
+			"per-user variable such as %APPDATA% or %USERPROFILE%, which does not exist when Windows expands the "+
+			"system PATH")
+		fix := "look at the Path value in HKCU\\Environment and in HKLM\\SYSTEM\\CurrentControlSet\\Control\\" +
+			"Session Manager\\Environment: make it REG_EXPAND_SZ, move per-user entries to the user PATH, or write " +
+			"the expanded path"
 		if len(expanded) == len(unexpanded) {
 			fix += " (" + strings.Join(expanded, ", ") + ")"
 		}
-		fixes = append(fixes, fix+", then restart the programs that read PATH")
+		fixes = append(fixes, fix+"; then restart the programs that read PATH")
 	}
 	if len(rel) > 0 {
 		msgs = append(msgs, "PATH has relative entries: "+strings.Join(rel, ", "))
