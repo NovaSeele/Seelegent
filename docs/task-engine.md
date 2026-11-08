@@ -113,7 +113,9 @@ append the events in **one transaction**, then publish on the bus. The log and t
 | cancelled | turn and task `cancelled` |
 
 A turn makes at most one attempt per account of the backend plus three. After every attempt the usage is recorded
-and a background quota read of the account is requested.
+and a background quota read of the account is requested. Codex reports the thread's running total at
+`turn.completed`, so a resumed codex attempt records what it added to the total the conversation's previous attempt
+reported (kept as the outcome's `threadUsage`); a total below that one is taken as is.
 
 6. **Gate.** An edit task whose turn ended `ok` keeps its run: the task stays `running` with `gatePhase` set while
    the gate runs, settles, or the verifier child works ([gates.md](gates.md)). A red gate or a verifier reject with
