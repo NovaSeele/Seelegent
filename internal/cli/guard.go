@@ -111,16 +111,25 @@ func fetchConfig(ctx context.Context, env []string, dir string) func(globals []s
 		if err != nil {
 			return nil, err
 		}
-		var entries []guard.ConfigEntry
-		for _, rec := range strings.Split(string(out), "\x00") {
-			if rec == "" {
-				continue
-			}
-			key, value, _ := strings.Cut(rec, "\n")
-			entries = append(entries, guard.ConfigEntry{Key: key, Value: value})
-		}
-		return entries, nil
+		return configEntries(out), nil
 	}
+}
+
+// configEntries reads the output of git config --null --get-regexp: "key\nvalue\0" records, and "key\0" for a key
+// written with no value ([fetch] prune), which git reads as true.
+func configEntries(out []byte) []guard.ConfigEntry {
+	var entries []guard.ConfigEntry
+	for _, rec := range strings.Split(string(out), "\x00") {
+		if rec == "" {
+			continue
+		}
+		key, value, ok := strings.Cut(rec, "\n")
+		if !ok {
+			value = "true"
+		}
+		entries = append(entries, guard.ConfigEntry{Key: key, Value: value})
+	}
+	return entries
 }
 
 // foldsCase reports an OS whose disks ignore case by default (NTFS, APFS): there the branches are compared whatever

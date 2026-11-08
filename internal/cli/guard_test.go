@@ -324,6 +324,44 @@ func TestGuardSlashRemote(t *testing.T) {
 	}
 }
 
+// TestGuardValuelessPrune (review of fix/m18-open-items, item 3): "[fetch] prune" with no value is true for git; the
+// reader took it for an empty value, false, and let a fetch prune into a branch. An empty value stays false.
+func TestGuardValuelessPrune(t *testing.T) {
+	got := configEntries([]byte("fetch.prune\x00remote.old.fetch\nrefs/heads/main:refs/heads/copy\x00fetch.prunetags\n\x00"))
+	want := []guard.ConfigEntry{{Key: "fetch.prune", Value: "true"},
+		{Key: "remote.old.fetch", Value: "refs/heads/main:refs/heads/copy"}, {Key: "fetch.prunetags", Value: ""}}
+	if fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Errorf("entries %q, want %q", got, want)
+	}
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not installed")
+	}
+	root := t.TempDir()
+	t.Setenv("GIT_CONFIG_GLOBAL", filepath.Join(root, "no-global"))
+	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
+	repo := filepath.Join(root, "repo")
+	for _, args := range [][]string{{"init", "-q", "-b", "main", repo},
+		{"-C", repo, "config", "remote.old.url", repo},
+		{"-C", repo, "config", "remote.old.fetch", "refs/heads/main:refs/heads/copy"}} {
+		if b, err := exec.CommandContext(t.Context(), "git", args...).CombinedOutput(); err != nil {
+			t.Fatalf("git %q: %v\n%s", args, err, b)
+		}
+	}
+	cfg := filepath.Join(repo, ".git", "config")
+	data, err := os.ReadFile(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(cfg, append(data, []byte("[fetch]\n\tprune\n")...), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var out, errOut bytes.Buffer
+	if code := runGitShim(t.Context(), "", []string{"-C", repo, "fetch", "old"}, strings.NewReader(""), &out,
+		&errOut); code != 1 || !strings.HasPrefix(errOut.String(), guard.Marker) {
+		t.Errorf("fetch old with a valueless fetch.prune: code %d, stderr %q", code, errOut.String())
+	}
+}
+
 // TestGuardBranchCase runs real git through the shim and the hook (review of fix/m18-open-items, item 1): on a disk
 // that ignores case, git branch Main old (or checkout -b, worktree add -b, fetch . old:Main) wrote the loose ref
 // refs/heads/Main over main, packed or not, and main moved back. Those are refused and main stays; a new name
