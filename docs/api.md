@@ -133,7 +133,10 @@ in the daemon.
   the `path` (ending in `/`), the file `count`, their total `bytes` and the first 200 `files`; those files are left
   out of `files`. Only this view groups: the snapshots, the safety checks and a commit still see every file, and a
   commit may name a grouped file one by one (never the folder). The extra `git ls-files --others --directory` call
-  runs only when a top-level folder holds more than 20 untracked files, and only over those folders.
+  runs only when a top-level folder holds more than 20 untracked files, and only over those folders. The view's
+  images (in `files` and in the rows' `files`) carry a `stamp`: the working-tree file's size and modification time
+  (one `Lstat`) and its blob id at HEAD from the status line, so a rewritten image gets a new URL although its
+  status and counts stay the same.
 - When the commits since the start cannot be read (git times out on a big repository, an object is missing), the
   error is logged and `TaskGit` still answers with `files`: `historyState` is `history_unavailable`, `commits` and
   `committedFiles` are empty, and a later read tries again.
@@ -159,8 +162,9 @@ in the daemon.
   "cross_site"`; a request without the header (the CLI, MCP) is served. The answer's `Content-Type` comes from the
   extension (never sniffed), with `X-Content-Type-Options: nosniff`, `Content-Security-Policy: default-src 'none';
   style-src 'unsafe-inline'; sandbox; frame-ancestors 'none'` (an SVG opened as a page runs no script on the
-  daemon's origin) and `Cache-Control: no-store`. It is a GET for the dashboard and the lead: it is not on the
-  worker allow-list, so a worker is refused it.
+  daemon's origin) and `Cache-Control: no-store`. The Git view adds `v=<stamp>` (`GitFile.stamp`) to the URL; the
+  endpoint ignores it. It is a GET for the dashboard and the lead: it is not on the worker allow-list, so a worker
+  is refused it.
 - `GET /tasks/{id}/git/commits/{sha}` (an addition to the contract) answers `GitCommitDetail`: the commit's files and
   parsed diffs against its first parent, 1 MiB in all (`truncated`), with `--no-textconv` and `--no-ext-diff` like
   the other diffs. The sha is checked as 4–64 hex digits before git sees it (`400`, field `sha`), resolved with

@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { GitFile } from '@/api/types'
 import { flush, setupApp } from '@/test/app'
 
-import { imageSides, isImagePath } from './git'
+import { fileSignature, imageSides, isImagePath } from './git'
 import ImageDiff from './ImageDiff.vue'
 import ImagePreview from './ImagePreview.vue'
 
@@ -49,6 +49,22 @@ describe('ImageDiff', () => {
     expect(wrapper.text()).toContain('Before (HEAD)')
     expect(wrapper.text()).toContain('After (working tree)')
     expect(imgs[0]?.attributes('alt')).toBe('img/logo.png, Before (HEAD)')
+  })
+
+  it('reads a rewritten image again: its stamp changes the URL, its status and counts do not', async () => {
+    const first = file('img/logo.png', 'modified')
+    const wrapper = await mountDiff({ ...first, stamp: 'a-1.abc' })
+    const srcs = () => wrapper.findAll('img').map((i) => i.attributes('src'))
+    expect(srcs()).toEqual([
+      `${url('img/logo.png', 'head')}&v=a-1.abc`,
+      `${url('img/logo.png', 'worktree')}&v=a-1.abc`,
+    ])
+    const before = srcs()
+    await wrapper.setProps({ file: { ...first, stamp: 'a-2.abc' } })
+    expect(srcs().every((src, i) => src !== before[i])).toBe(true)
+    expect(fileSignature({ ...first, stamp: 'a-1.abc' })).not.toBe(
+      fileSignature({ ...first, stamp: 'a-2.abc' }),
+    )
   })
 
   it('shows after only for a new image and before only for a deleted one', async () => {

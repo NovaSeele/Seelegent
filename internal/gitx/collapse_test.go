@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/NovaSeele/Seelegent/internal/api"
 )
@@ -164,5 +165,68 @@ func TestUnbornHead(t *testing.T) {
 	}
 	if _, err := r.Commit(ctx, tf, "first", []string{"index.html", "staged.txt"}); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// An image's stamp changes when the file is rewritten, also when its status and line counts do not (a binary is
+// always 0/0), so the view's image URLs change and the preview is read again. Other files have none.
+func TestImageStamps(t *testing.T) {
+	dir := newRepo(t)
+	ctx := context.Background()
+	r := New(nil, nil)
+	logo := filepath.Join(dir, "img", "logo.png")
+	write(t, logo, "PNG\x00one")
+	git(t, dir, "add", ".")
+	git(t, dir, "commit", "-q", "-m", "logo")
+	blob := strings.TrimSpace(git(t, dir, "rev-parse", "HEAD:img/logo.png"))
+	write(t, logo, "PNG\x00two")
+	write(t, filepath.Join(dir, "new.svg"), "<svg/>")
+	write(t, filepath.Join(dir, "a.txt"), "changed\n")
+	tf := TaskFiles{Cwd: dir}
+	stamps := func() map[string]api.GitFile {
+		t.Helper()
+		view, err := r.TaskGitView(ctx, tf)
+		if err != nil {
+			t.Fatal(err)
+		}
+		out := map[string]api.GitFile{}
+		for _, f := range view.Files {
+			out[f.Path] = f
+		}
+		return out
+	}
+	first := stamps()
+	before := first["img/logo.png"]
+	if !strings.HasSuffix(before.Stamp, "."+blob) || strings.HasPrefix(before.Stamp, ".") || !before.Binary {
+		t.Fatalf("logo: %+v (HEAD blob %s)", before, blob)
+	}
+	if s := first["new.svg"].Stamp; s == "" || !strings.HasSuffix(s, ".") {
+		t.Fatalf("a new image has no HEAD half: %q", s)
+	}
+	if s := first["a.txt"].Stamp; s != "" {
+		t.Fatalf("a text file has a stamp: %q", s)
+	}
+	// The same size, the same status and counts: only the content and the time differ.
+	write(t, logo, "PNG\x00six")
+	later := time.Now().Add(2 * time.Second)
+	if err := os.Chtimes(logo, later, later); err != nil {
+		t.Fatal(err)
+	}
+	after := stamps()["img/logo.png"]
+	if after.Status != before.Status || after.Additions != before.Additions || after.Deletions != before.Deletions {
+		t.Fatalf("the rewrite changed more than the content: %+v, %+v", before, after)
+	}
+	if after.Stamp == before.Stamp {
+		t.Fatalf("the stamp stayed %q after the image was rewritten", after.Stamp)
+	}
+	// TaskGit (what a commit reads) does not stamp.
+	full, err := r.TaskGit(ctx, tf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range full.Files {
+		if f.Stamp != "" {
+			t.Fatalf("TaskGit stamped %s", f.Path)
+		}
 	}
 }

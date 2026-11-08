@@ -101,7 +101,9 @@ func (r *Repos) taskGit(ctx context.Context, tf TaskFiles, view bool) (api.TaskG
 		}
 		for i := range out.UntrackedDirs {
 			countUntracked(root, out.UntrackedDirs[i].Files)
+			stampImages(root, st.heads, out.UntrackedDirs[i].Files)
 		}
+		stampImages(root, st.heads, out.Files)
 	}
 	countUntracked(root, out.Files)
 	out.Head = st.oid

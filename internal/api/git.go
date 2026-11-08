@@ -149,6 +149,10 @@ type GitFile struct {
 	// Turn is the turn that last changed the file, when known.
 	Turn   int  `json:"turn,omitempty"`
 	Binary bool `json:"binary"`
+	// Stamp changes whenever an image's preview would (TaskGit.Files and UntrackedDirs of the Git tab view only,
+	// images only): the working tree file's size and modification time, and its blob id at HEAD. The view adds it
+	// to the image URLs, so a rewritten image is read again although its status and line counts stay the same.
+	Stamp string `json:"stamp,omitempty"`
 }
 
 // GitImageType returns the Content-Type of an image the Git view previews by its extension (lower case, with the
