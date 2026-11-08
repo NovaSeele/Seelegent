@@ -67,5 +67,49 @@
     "turn": "Lượt",
     "error": "Không đọc được thay đổi: {error}",
     "empty": "Không có thay đổi nào ngoài công cụ sửa."
+  },
+  "notice": {
+    "unknown": "Tác vụ này không ghi lại commit lúc bắt đầu (tác vụ cũ hơn tính năng này, hoặc thư mục khi đó chưa nằm trong git). Chỉ hiện các thay đổi chưa commit, so với HEAD; không liệt kê commit.",
+    "unreachable": "Commit lúc tác vụ bắt đầu ({sha}) không còn trong lịch sử của HEAD (đã rebase, reset hoặc chuyển nhánh khác). Chỉ hiện các thay đổi chưa commit, so với HEAD.",
+    "branchChanged": "Tác vụ bắt đầu trên {from}; kho hiện ở {to}. Các commit liệt kê là mọi thứ từ lúc bắt đầu trên nhánh hiện tại.",
+    "detached": "HEAD tách rời"
+  },
+  "history": {
+    "title": "Đã commit trong tác vụ này",
+    "desc": "Các commit từ lúc tác vụ bắt đầu. Chỉ để xem: phần việc này đã được commit.",
+    "mode": "Xem theo",
+    "commits": "{n} commit",
+    "files": "{n} tệp",
+    "commitsLabel": "Các commit từ lúc tác vụ bắt đầu",
+    "filesLabel": "Các tệp mà commit của tác vụ đã đổi",
+    "commitLabel": "Commit đang chọn",
+    "commitFiles": "Các tệp trong commit này",
+    "more": "Còn {n} commit cũ hơn không hiện",
+    "turn": "Lượt {n}",
+    "fileCount": "{n} tệp",
+    "loading": "Đang tải commit…",
+    "error": "Không tải được commit: {error}",
+    "noFiles": "Commit này không đổi tệp nào so với commit cha đầu tiên.",
+    "diffSkipped": "Diff của tệp này vượt giới hạn kích thước nên không hiện.",
+    "sinceStart": "Toàn bộ thay đổi từ lúc tác vụ bắt đầu",
+    "uncommitted": "Thay đổi chưa commit",
+    "noUncommitted": "Không còn gì để commit",
+    "noUncommittedDesc": "Mọi thứ tác vụ này đổi đều nằm trong các commit ở trên."
+  },
+  "repo": {
+    "title": "Phần còn lại của kho",
+    "summary": "{n} tệp khác có thay đổi",
+    "desc": "Các thay đổi chưa commit trong kho này không phải việc của tác vụ. Chúng không bao giờ được đưa vào commit ở đây.",
+    "preexisting": "Đã đổi trước tác vụ",
+    "untouched": "Không do tác vụ này",
+    "error": "Không đọc được kho: {error}",
+    "listLabel": "Các tệp khác có thay đổi"
+  },
+  "upstream": {
+    "label": "So với {name}",
+    "ahead": "đi trước {n} commit",
+    "behind": "đi sau {n} commit",
+    "synced": "Đã đồng bộ với {name}",
+    "gone": "{name} không còn tồn tại"
   }
 }

@@ -978,6 +978,10 @@ export type RepoStatus =
       detached: boolean
       dirty: boolean
       files: GitFile[]
+      upstream?: string
+      ahead?: number
+      behind?: number
+      upstreamGone?: boolean
     }
 
 /**

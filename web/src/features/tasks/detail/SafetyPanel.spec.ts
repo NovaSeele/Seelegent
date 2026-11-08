@@ -66,6 +66,8 @@ function fakeApi(overrides: Partial<GitApi> = {}): GitApi {
     commit: vi.fn(missing),
     outsideDiff: vi.fn(missing),
     restore: vi.fn(missing),
+    commitDetail: vi.fn(missing),
+    repoStatus: vi.fn(missing),
     ...overrides,
   }
 }

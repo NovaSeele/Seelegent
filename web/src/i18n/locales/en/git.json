@@ -67,5 +67,49 @@
     "turn": "Turn",
     "error": "Could not read the changes: {error}",
     "empty": "Nothing changed outside the edit tools."
+  },
+  "notice": {
+    "unknown": "This task did not record the commit it started from (it is older than that, or its folder was not in git then). Only uncommitted changes are shown, compared with HEAD; commits are not listed.",
+    "unreachable": "The commit this task started from ({sha}) is no longer in the history of HEAD (rebased, reset or switched away). Only uncommitted changes are shown, compared with HEAD.",
+    "branchChanged": "This task started on {from}; the repository is now on {to}. The commits listed are everything since the start on the current branch.",
+    "detached": "a detached HEAD"
+  },
+  "history": {
+    "title": "Committed in this task",
+    "desc": "Commits made since the task started. View only: this work is already committed.",
+    "mode": "Show",
+    "commits": "{n} commit | {n} commits",
+    "files": "{n} file | {n} files",
+    "commitsLabel": "Commits since the task started",
+    "filesLabel": "Files the task's commits changed",
+    "commitLabel": "The selected commit",
+    "commitFiles": "Files in this commit",
+    "more": "{n} older commit not shown | {n} older commits not shown",
+    "turn": "Turn {n}",
+    "fileCount": "{n} file | {n} files",
+    "loading": "Loading the commit…",
+    "error": "Could not load the commit: {error}",
+    "noFiles": "This commit changes no files compared with its first parent.",
+    "diffSkipped": "This file's diff is past the size limit and is not shown.",
+    "sinceStart": "Whole change since the task started",
+    "uncommitted": "Uncommitted changes",
+    "noUncommitted": "Nothing left to commit",
+    "noUncommittedDesc": "Everything this task changed is in its commits above."
+  },
+  "repo": {
+    "title": "Elsewhere in the repository",
+    "summary": "{n} other changed file | {n} other changed files",
+    "desc": "Uncommitted changes in this repository that are not this task's work. They are never offered for commit here.",
+    "preexisting": "Changed before this task",
+    "untouched": "Not from this task",
+    "error": "Could not read the repository: {error}",
+    "listLabel": "Other changed files"
+  },
+  "upstream": {
+    "label": "Compared with {name}",
+    "ahead": "{n} commit ahead | {n} commits ahead",
+    "behind": "{n} commit behind | {n} commits behind",
+    "synced": "Up to date with {name}",
+    "gone": "{name} no longer exists"
   }
 }
