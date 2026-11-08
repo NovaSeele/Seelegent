@@ -77,6 +77,8 @@ export default defineConfig({
     // Each test file gets its own VM context in a reused worker instead of a new process with a new jsdom
     // (measured with --maxWorkers=2: 50-58 s wall and 123-140 CPU-s before, 7-10 s and 18-26 CPU-s after).
     pool: 'vmThreads',
+    // A light default on a shared machine (the default is one worker per CPU but one); --maxWorkers overrides it.
+    maxWorkers: 4,
     // dev/*.spec.mjs test the mock daemon's pure helpers, so dev mode keeps matching the daemon.
     include: ['src/**/*.spec.ts', 'dev/**/*.spec.mjs'],
   },
