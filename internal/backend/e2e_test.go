@@ -184,6 +184,29 @@ func TestEndToEndStreams(t *testing.T) {
 	}
 }
 
+// TestEndToEndClaudeLimit runs Claude Code's 5-hour limit message through the launcher (field report 3, B1): the
+// turn is quota_exhausted with the reset time of the message, the next 3:10am in Ho Chi Minh City after the exit,
+// and keeps the conversation and the tokens of the work done before the limit.
+func TestEndToEndClaudeLimit(t *testing.T) {
+	r := startE2E(t, "claude", filepath.Join("testdata", "streams", "claude", "limit.jsonl"), testProfile(t),
+		Turn{Prompt: "add the limiter", Model: "claude-opus-5", Timeout: time.Minute}, nil)
+	r.finish(t)
+	o := r.outcome
+	if o.Status != OutcomeFailed || o.Class != event.ClassQuotaExhausted ||
+		o.ConversationID != "7e5d1c3b-2a4f-4b6e-8c9d-0f1e2d3c4b5a" || o.Usage.TotalTokens == 0 {
+		t.Fatalf("outcome = %+v", o)
+	}
+	hcm, err := time.LoadLocation("Asia/Ho_Chi_Minh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	reset := o.ResetAt.In(hcm)
+	if r.exit.EndedAt.IsZero() || reset.Hour() != 3 || reset.Minute() != 10 ||
+		reset.Before(r.exit.EndedAt.Add(-resetGrace)) || reset.After(r.exit.EndedAt.Add(24*time.Hour)) {
+		t.Errorf("reset = %v for an exit at %v", o.ResetAt, r.exit.EndedAt)
+	}
+}
+
 // TestEndToEndCancelKillsTree is the guard for bug B1: canceling a turn must stop the CLI and everything it started,
 // for every backend.
 func TestEndToEndCancelKillsTree(t *testing.T) {

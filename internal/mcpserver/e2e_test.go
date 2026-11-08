@@ -426,8 +426,11 @@ func TestStatusMemoryProfiles(t *testing.T) {
 func TestWorkerRefusedByDaemon(t *testing.T) {
 	d := newDaemon(t)
 	d.cls.worker.Store(true)
-	for _, name := range []string{"delegate", "status", "memory"} {
-		args := map[string]any{"prompt": "x", "cwd": d.cwd, "action": "append", "text": "x"}
+	for name, args := range map[string]map[string]any{
+		"delegate": {"prompt": "x", "cwd": d.cwd},
+		"status":   {},
+		"memory":   {"cwd": d.cwd, "action": "append", "text": "x"},
+	} {
 		if msg := fails(t, d.cs, name, args); msg != "Seelegent is not available inside a Seelegent worker." {
 			t.Fatalf("%s as a worker = %q", name, msg)
 		}

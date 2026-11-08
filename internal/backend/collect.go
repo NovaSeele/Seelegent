@@ -2,6 +2,7 @@ package backend
 
 import (
 	"slices"
+	"time"
 
 	"github.com/NovaSeele/Seelegent/internal/event"
 	"github.com/NovaSeele/Seelegent/internal/launch"
@@ -29,6 +30,9 @@ type Outcome struct {
 	Class event.Class `json:"class,omitempty"`
 	// Error is the failure message (secrets masked).
 	Error string `json:"error,omitempty"`
+	// ResetAt is when the limit resets, when Class is quota_exhausted and Error says so ("resets 3:10am
+	// (Asia/Ho_Chi_Minh)"); zero otherwise. The task engine passes it to the pool as the rest's hint.
+	ResetAt time.Time `json:"resetAt,omitzero"`
 	// Response is the agent's final answer.
 	Response string `json:"response,omitempty"`
 	// ConversationID resumes the conversation.
@@ -126,6 +130,9 @@ func (c *Collector) Outcome(exit launch.Exit) Outcome {
 		o.Status = OutcomeFailed
 		o.Class = c.failure.Class
 		o.Error = c.failure.Message
+		if o.Class == event.ClassQuotaExhausted {
+			o.ResetAt = resetHint(o.Error, exit.EndedAt)
+		}
 	case c.waiting != "":
 		o.Status = OutcomeBackgroundWait
 		o.BackgroundWait = c.waiting

@@ -670,7 +670,8 @@ func (s *Service) finishAttempt(r *run, id string, turn, n int, accountID, model
 	var until time.Time
 	switch status {
 	case AttemptQuota:
-		cd, err := s.o.Pool.MarkExhausted(ctx, accountID, pool.Exhaustion{Group: group, Model: model, Reason: errText})
+		cd, err := s.o.Pool.MarkExhausted(ctx, accountID, pool.Exhaustion{Group: group, Model: model,
+			ResetAt: o.ResetAt, Reason: errText})
 		if err != nil {
 			s.log.Warn("task: rest the account", "account", accountID, "err", err)
 		}

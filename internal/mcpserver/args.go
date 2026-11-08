@@ -6,13 +6,15 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"slices"
 	"strconv"
 	"strings"
 )
 
-// Tool arguments are decoded leniently, as the old server read them: unknown fields are ignored (hosts and leads
-// add their own), numbers and booleans may come as strings ("600", "true"), and null means "not given". The input
-// schemas tell the lead what to send; they are not enforced beyond what each handler needs.
+// Tool arguments are decoded leniently, as the old server read them: numbers and booleans may come as strings
+// ("600", "true"), and null means "not given". An argument the tool's input schema does not have is refused
+// (checkArgs): the old server ignored it, so a lead that wrote `tier: "strong"` ran on the default tier without a
+// word (field report 3, B3). The schemas are not enforced beyond that and what each handler needs.
 
 // decodeArgs decodes the raw arguments of a call into dst. Missing or null arguments are {}.
 func decodeArgs(raw json.RawMessage, dst any) error {
@@ -28,6 +30,56 @@ func decodeArgs(raw json.RawMessage, dst any) error {
 		return fmt.Errorf("invalid arguments: %w", err)
 	}
 	return nil
+}
+
+// unknownArgsError is a call with arguments its tool does not have.
+type unknownArgsError struct {
+	tool    string
+	unknown []string
+	valid   []string
+}
+
+func (e *unknownArgsError) Error() string {
+	quoted := make([]string, len(e.unknown))
+	for i, u := range e.unknown {
+		quoted[i] = strconv.Quote(u)
+	}
+	noun := "argument"
+	if len(e.unknown) > 1 {
+		noun = "arguments"
+	}
+	msg := fmt.Sprintf("%s has no %s %s", e.tool, noun, strings.Join(quoted, ", "))
+	if slices.Contains(e.unknown, "tier") && slices.Contains(e.valid, "model") {
+		msg += `: tiers go in "model", e.g. model: "strong"`
+	}
+	if len(e.valid) == 0 {
+		return msg + ". It takes no arguments."
+	}
+	return msg + ". Valid arguments: " + strings.Join(e.valid, ", ") + "."
+}
+
+// checkArgs refuses the top-level arguments of raw that are not in valid (the tool's input schema properties,
+// sorted). Arguments that are not an object are left to decodeArgs.
+func checkArgs(tool string, raw json.RawMessage, valid []string) error {
+	raw = bytes.TrimSpace(raw)
+	if len(raw) == 0 || raw[0] != '{' {
+		return nil
+	}
+	var args map[string]json.RawMessage
+	if json.Unmarshal(raw, &args) != nil {
+		return nil
+	}
+	var unknown []string
+	for name := range args {
+		if _, ok := slices.BinarySearch(valid, name); !ok {
+			unknown = append(unknown, name)
+		}
+	}
+	if len(unknown) == 0 {
+		return nil
+	}
+	slices.Sort(unknown)
+	return &unknownArgsError{tool: tool, unknown: unknown, valid: valid}
 }
 
 func jsonKind(goKind string) string {

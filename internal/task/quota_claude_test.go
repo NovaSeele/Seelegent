@@ -1,0 +1,170 @@
+package task
+
+import (
+	"slices"
+	"testing"
+	"time"
+
+	"github.com/NovaSeele/Seelegent/internal/account"
+	"github.com/NovaSeele/Seelegent/internal/api"
+	"github.com/NovaSeele/Seelegent/internal/backend"
+	"github.com/NovaSeele/Seelegent/internal/config"
+	"github.com/NovaSeele/Seelegent/internal/pool"
+	"github.com/NovaSeele/Seelegent/internal/testutil/fakecli"
+)
+
+// claudeLimitMessage is what Claude Code printed when a sign-in account reached its 5-hour limit in the middle of a
+// turn (field report 3, B1).
+const claudeLimitMessage = "You've hit your 5-hour limit · resets 3:10am (Asia/Ho_Chi_Minh)"
+
+// useClaude gives the harness the claude backend (its binary is the fake CLI) and enables it.
+func (h *harness) useClaude() {
+	h.t.Helper()
+	h.backends = []string{config.BackendClaude}
+	cl, err := backend.New(config.BackendClaude, fakecli.Exe(h.t))
+	if err != nil {
+		h.t.Fatal(err)
+	}
+	h.s.o.Backends[config.BackendClaude] = cl
+	set := h.config()
+	set.Backends.Claude.Enabled = true
+	h.settings.Store(&set)
+}
+
+// claude adds an enabled claude sign-in account; accounts with a higher priority are chosen first.
+func (h *harness) claude(label string, priority int) account.Account {
+	h.t.Helper()
+	a, _, err := h.accounts.Add(h.t.Context(), account.New{Backend: config.BackendClaude, Kind: account.KindIsolated,
+		Label: label, Priority: priority, Enabled: true}, nil)
+	if err != nil {
+		h.t.Fatal(err)
+	}
+	h.clk.Advance(time.Second)
+	h.pool.Notify()
+	return a
+}
+
+func claudeInit(sess string) string {
+	return claudeLine(map[string]any{"type": "system", "subtype": "init", "session_id": sess, "model": "claude-opus-5"})
+}
+
+// claudeLimitScript does part of the work, then stops on the 5-hour limit, as Claude Code does.
+func claudeLimitScript(sess string) string {
+	return script(claudeInit(sess), claudeText(sess, "Half of the limiter is written."),
+		claudeLine(map[string]any{"type": "result", "subtype": "success", "is_error": true, "result": claudeLimitMessage,
+			"session_id": sess, "usage": map[string]any{"input_tokens": 76000, "output_tokens": 1000}}),
+		"#!exit 1")
+}
+
+func claudeOKScript(sess, response string) string {
+	return script(claudeInit(sess), claudeText(sess, response),
+		claudeLine(map[string]any{"type": "result", "subtype": "success", "is_error": false, "result": response,
+			"session_id": sess, "usage": map[string]any{"input_tokens": 100, "output_tokens": 20}}))
+}
+
+// checkLimitAttempt checks the first attempt of tk: quota exhausted with the message's reset time, and acc resting
+// until that time.
+func (h *harness) checkLimitAttempt(tk *Task, acc account.Account) {
+	h.t.Helper()
+	a := tk.Turns[0].Attempts[0]
+	if a.AccountID != acc.ID || a.Status != AttemptQuota || a.Error != claudeLimitMessage || a.Outcome == nil ||
+		a.Outcome.ResetAt.IsZero() || a.Usage == nil || a.Usage.InputTokens != 76000 {
+		h.t.Fatalf("first attempt = %+v (outcome %+v)", a, a.Outcome)
+	}
+	states, err := h.pool.States(h.t.Context())
+	if err != nil {
+		h.t.Fatal(err)
+	}
+	var rest *pool.Cooldown
+	for i := range states {
+		if states[i].Account.ID == acc.ID && len(states[i].Cooldowns) == 1 {
+			rest = &states[i].Cooldowns[0]
+		}
+	}
+	if rest == nil || rest.Group != "Claude" || rest.Reason != claudeLimitMessage {
+		h.t.Fatalf("the account does not rest: %+v", rest)
+	}
+	// The reset time is read relative to the attempt's real end; the engine's clock is fake. When the reset is after
+	// the fake now, the account rests exactly until it.
+	if reset := a.Outcome.ResetAt; reset.After(rest.CreatedAt) && !rest.Until.Equal(reset) {
+		h.t.Errorf("rest until %v, want the message's reset %v", rest.Until, reset)
+	}
+	evs := h.events(tk.ID)
+	if len(eventsOf(evs, api.EventQuotaExhausted)) != 1 {
+		h.t.Errorf("events = %v", types(evs))
+	}
+}
+
+// TestClaudeLimitWaitsAndResumes: the only claude account reaches its 5-hour limit in the middle of a turn. The
+// task waits for the reset instead of failing, then resumes the same conversation on the same account.
+func TestClaudeLimitWaitsAndResumes(t *testing.T) {
+	h := newHarness(t)
+	h.useClaude()
+	acc := h.claude("solo", 0)
+	const sess = "sess-limit"
+	h.queue.Push(t, claudeLimitScript(sess))
+	h.queue.Push(t, claudeOKScript(sess, "Finished the limiter after the reset."))
+	sum := h.delegate(api.DelegateRequest{Backend: config.BackendClaude, Model: "claude-opus-5"})
+
+	h.waitFor("the task to wait for the reset", func() bool {
+		tk := h.task(sum.ID)
+		return tk.Status == StatusWaitingQuota && tk.Waiting == string(pool.ReasonResting)
+	})
+	tk := h.task(sum.ID)
+	if tk.AccountID != acc.ID || tk.ConversationID != sess {
+		t.Fatalf("owner = %s %s", tk.AccountID, tk.ConversationID)
+	}
+	h.checkLimitAttempt(tk, acc)
+
+	// The rest ends: the same conversation goes on.
+	if until := tk.WaitingUntil; until.After(h.clk.Now()) {
+		h.clk.Advance(until.Sub(h.clk.Now()))
+	}
+	h.waitFor("the task to resume and finish", func() bool {
+		if h.task(sum.ID).Status == StatusWaitingQuota {
+			h.clk.Advance(time.Minute)
+		}
+		return h.task(sum.ID).Status == StatusDone && !h.s.hasRun(sum.ID)
+	})
+	tk = h.task(sum.ID)
+	at := tk.LastTurn().Attempts
+	if len(at) != 2 || at[1].AccountID != acc.ID || at[1].Status != AttemptOK || !at[1].Continuing ||
+		tk.ConversationID != sess || tk.Error != "" {
+		t.Fatalf("task %s (%q), attempts %+v", tk.Status, tk.Error, at)
+	}
+	recs := h.queue.Records(t)
+	if len(recs) != 2 {
+		t.Fatalf("runs = %d", len(recs))
+	}
+	if i := slices.Index(recs[1].Args, "--resume"); i < 0 || i+1 >= len(recs[1].Args) || recs[1].Args[i+1] != sess {
+		t.Errorf("the second run did not resume the conversation: %q", recs[1].Args)
+	}
+	if slices.Contains(recs[0].Args, "--resume") {
+		t.Errorf("the first run resumed something: %q", recs[0].Args)
+	}
+	// The tokens of the work done before the limit stay counted.
+	if u := tk.LastTurn().Usage; u == nil || u.InputTokens != 76100 {
+		t.Errorf("turn usage = %+v", u)
+	}
+}
+
+// TestClaudeLimitHandsOver: with a second claude account free, the turn moves on to it at once.
+func TestClaudeLimitHandsOver(t *testing.T) {
+	h := newHarness(t)
+	h.useClaude()
+	first := h.claude("first", 10)
+	second := h.claude("second", 0)
+	h.queue.Push(t, claudeLimitScript("sess-a"))
+	h.queue.Push(t, claudeOKScript("sess-b", "Finished the limiter on the second account."))
+	sum := h.delegate(api.DelegateRequest{Backend: config.BackendClaude, Model: "claude-opus-5"})
+	tk := h.waitStatus(sum.ID, StatusDone)
+	h.checkLimitAttempt(tk, first)
+	at := tk.LastTurn().Attempts
+	if len(at) != 2 || at[1].AccountID != second.ID || at[1].Status != AttemptOK || at[1].Continuing ||
+		tk.AccountID != second.ID || tk.ConversationID != "sess-b" {
+		t.Fatalf("attempts = %+v", at)
+	}
+	if len(eventsOf(h.events(sum.ID), api.EventHandoff)) != 1 {
+		t.Errorf("events = %v", types(h.events(sum.ID)))
+	}
+}
