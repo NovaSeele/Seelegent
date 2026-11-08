@@ -181,7 +181,7 @@ the new values (the "Applies" column). A memory reading the system cannot give n
 
 | Setting | Type | Default | Meaning |
 | --- | --- | --- | --- |
-| `githubPollMinutes` | integer ≥ 0 | `10` | How often pull request states and GitHub inboxes are polled; `0` turns polling off. |
+| `githubPollMinutes` | integer ≥ 0 | `10` | How often pull request states and GitHub inboxes are polled; `0` turns polling off. A poll with no connected GitHub repository and no open ticket does nothing (it does not even check the access, which may run `gh`). |
 | `githubEnterpriseHosts` | list of strings | `[]` | GitHub Enterprise Server hosts whose remotes count as GitHub besides `github.com`: a host name (optionally with a port) or an `https` URL; `http` only for a loopback address. Any other host is never sent the token ([github.md](github.md)). |
 | `automationsEnabled` | boolean | `true` | Master switch of scheduled automations (each automation is still created disabled). |
 
