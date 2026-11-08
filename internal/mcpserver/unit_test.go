@@ -688,6 +688,35 @@ func TestStatusQuota(t *testing.T) {
 	}
 }
 
+// TestStatusModelPerTask: an API-key account whose provider has no tier models is marked "model per task", and the
+// summary names each such provider once, so the lead passes model in delegate.
+func TestStatusModelPerTask(t *testing.T) {
+	perTask := func(id, provider string) api.Account {
+		return api.Account{ID: id, Backend: "claude", Kind: "api-key", Label: id, Status: api.AccountOK, KeyHint: "…abcd",
+			Provider: provider, ModelPerTask: true, TestResult: api.TestNotTested}
+	}
+	tiered := api.Account{ID: "a3", Backend: "claude", Kind: "api-key", Label: "a3", Status: api.AccountOK,
+		KeyHint: "…wxyz", Provider: "zai", TestResult: api.TestOK}
+	_, c := newStub(t, map[string]http.HandlerFunc{
+		"GET /accounts": answer(http.StatusOK, []api.Account{perTask("a1", "anthropic"), perTask("a2", "anthropic"), tiered}),
+		"GET /tasks":    answer(http.StatusOK, api.TaskPage{Items: []api.TaskSummary{}}),
+		"GET /backends": answer(http.StatusOK, []api.Backend{}),
+	})
+	cs := stubSession(t, c, nil)
+	var out struct {
+		Accounts []map[string]any `json:"accounts"`
+	}
+	sum := ok(t, cs, "status", nil, &out)
+	if len(out.Accounts) != 3 || out.Accounts[0]["modelPerTask"] != true || out.Accounts[0]["testResult"] != "not_tested" ||
+		out.Accounts[2]["modelPerTask"] != nil || out.Accounts[2]["testResult"] != "ok" {
+		t.Fatalf("accounts = %v", out.Accounts)
+	}
+	if !strings.Contains(sum, "Model per task (pass model in delegate): provider anthropic.") ||
+		strings.Count(sum, "anthropic") != 1 || strings.Contains(sum, "zai") {
+		t.Fatalf("summary = %q", sum)
+	}
+}
+
 // TestWorkerGuard: with SEELEGENT_WORKER=1 the server refuses mutating calls itself, with the old text and without
 // calling the daemon, and lets read calls through to the daemon (which stays the authority).
 func TestWorkerGuard(t *testing.T) {

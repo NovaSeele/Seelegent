@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"slices"
+	"strings"
 
 	"github.com/NovaSeele/Seelegent/internal/api"
 	"github.com/NovaSeele/Seelegent/internal/ops"
@@ -34,6 +36,10 @@ type slimAccount struct {
 	Provider     *string        `json:"provider"`
 	Auth         string         `json:"auth"`
 	KeyHint      *string        `json:"keyHint"`
+	// ModelPerTask marks an API-key account whose provider has no tier models: a delegate on it must pass model.
+	ModelPerTask bool `json:"modelPerTask,omitempty"`
+	// TestResult is an API-key account's key test state (not_tested, ok, refused, ...).
+	TestResult string `json:"testResult,omitempty"`
 }
 
 // slimTask is an active task in the slim status.
@@ -116,7 +122,8 @@ func (s *Server) status(ctx context.Context, k *call) (result, error) {
 // slimAccountOf builds the slim view of an account.
 func slimAccountOf(a api.Account) slimAccount {
 	out := slimAccount{ID: a.ID, Label: a.Label, Status: string(a.Status), Running: a.Busy, Backend: a.Backend,
-		Auth: "login", Resting: a.Resting, RestingUntil: a.RestingUntil}
+		Auth: "login", Resting: a.Resting, RestingUntil: a.RestingUntil, ModelPerTask: a.ModelPerTask,
+		TestResult: a.TestResult}
 	if a.Kind == "api-key" {
 		out.Auth = "api-key"
 	}
@@ -171,5 +178,21 @@ func statusSummary(accounts []api.Account, tasks []api.TaskSummary) string {
 		}
 		s += fmt.Sprintf(", %d %s the lead", need, verb)
 	}
-	return s + "."
+	s += "."
+	if perTask := modelPerTaskProviders(accounts); len(perTask) > 0 {
+		s += fmt.Sprintf(" Model per task (pass model in delegate): provider %s.", strings.Join(perTask, ", "))
+	}
+	return s
+}
+
+// modelPerTaskProviders lists the providers, once each and in account order, whose API-key accounts have no
+// default model: a delegate with that provider must name its model.
+func modelPerTaskProviders(accounts []api.Account) []string {
+	var out []string
+	for i := range accounts {
+		if a := &accounts[i]; a.ModelPerTask && a.Provider != "" && !slices.Contains(out, a.Provider) {
+			out = append(out, a.Provider)
+		}
+	}
+	return out
 }
