@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -69,7 +70,8 @@ func TestTaskImage(t *testing.T) {
 		r := e.must(e.get(imageURL(id, path, version)), http.StatusOK)
 		h := r.header
 		if string(r.body) != want || h.Get("Content-Type") != ctype || h.Get("X-Content-Type-Options") != "nosniff" ||
-			h.Get("Content-Security-Policy") != "default-src 'none'; style-src 'unsafe-inline'; sandbox" ||
+			h.Get("Content-Security-Policy") != "default-src 'none'; style-src 'unsafe-inline'; sandbox; frame-ancestors 'none'" ||
+			h.Get("Cross-Origin-Resource-Policy") != "same-origin" ||
 			h.Get("Cache-Control") != "no-store" {
 			t.Fatalf("%s@%s: %q, headers %v", path, version, r.body, h)
 		}
@@ -119,4 +121,63 @@ func TestTaskImageUnbornHead(t *testing.T) {
 		t.Fatalf("worktree: %q", r.body)
 	}
 	e.wantError(e.get(imageURL(sum.ID, "a.png", "head")), http.StatusNotFound, api.CodeNotFound, "")
+}
+
+// The image endpoint is for the dashboard's own page and for programs: a page of another site (another port on
+// localhost is the same site) is refused, the dashboard's same-origin request and a request without
+// Sec-Fetch-Site (the CLI, MCP) are served. Every answer carries Cross-Origin-Resource-Policy: same-origin.
+func TestTaskImageFetchSite(t *testing.T) {
+	e := newEnv(t)
+	initRepo(t, e.cwd)
+	writeFile(t, filepath.Join(e.cwd, "a.png"), []byte("png"))
+	e.addAccount("first")
+	e.queue.Push(t, ok("c1", "done"))
+	sum := e.delegate("Draw.")
+	e.wait(sum.ID)
+	u := imageURL(sum.ID, "a.png", "")
+	for _, site := range []string{"", "same-origin", "none"} {
+		r := e.must(e.req(http.MethodGet, u, nil, map[string]string{"Sec-Fetch-Site": site}), http.StatusOK)
+		if string(r.body) != "png" || r.header.Get("Cross-Origin-Resource-Policy") != "same-origin" {
+			t.Fatalf("Sec-Fetch-Site %q: %q, headers %v", site, r.body, r.header)
+		}
+	}
+	for _, site := range []string{"cross-site", "same-site"} {
+		r := e.req(http.MethodGet, u, nil, map[string]string{"Sec-Fetch-Site": site})
+		info := e.wantError(r, http.StatusForbidden, api.CodeForbidden, "")
+		if info.Details["reason"] != "cross_site" || r.header.Get("Cross-Origin-Resource-Policy") != "same-origin" {
+			t.Fatalf("Sec-Fetch-Site %q: %+v, headers %v", site, info, r.header)
+		}
+	}
+}
+
+// The working tree is read through os.Root. A link or junction leading out of the repository is refused, also
+// below a folder that is itself inside (dirLink: a junction on Windows, an absolute symbolic link elsewhere). An
+// absolute target counts as leaving even when it points back inside, so every junction is refused; a relative
+// symbolic link that stays inside is followed (Unix: Windows needs a privilege to make one).
+func TestTaskImageLinks(t *testing.T) {
+	e := newEnv(t)
+	initRepo(t, e.cwd)
+	writeFile(t, filepath.Join(e.cwd, "art", "in.png"), []byte("inside"))
+	outside := t.TempDir()
+	writeFile(t, filepath.Join(outside, "secret.png"), []byte("secret"))
+	dirLink(t, filepath.Join(e.cwd, "art"), filepath.Join(e.cwd, "inner"))
+	dirLink(t, outside, filepath.Join(e.cwd, "outer"))
+	dirLink(t, outside, filepath.Join(e.cwd, "art", "deep"))
+	if runtime.GOOS != "windows" {
+		if err := os.Symlink("art", filepath.Join(e.cwd, "rel")); err != nil {
+			t.Fatal(err)
+		}
+	}
+	e.addAccount("first")
+	e.queue.Push(t, ok("c1", "done"))
+	sum := e.delegate("Draw.")
+	e.wait(sum.ID)
+	if runtime.GOOS != "windows" {
+		if r := e.must(e.get(imageURL(sum.ID, "rel/in.png", "")), http.StatusOK); string(r.body) != "inside" {
+			t.Fatalf("relative link inside the repository: %q", r.body)
+		}
+	}
+	for _, p := range []string{"outer/secret.png", "art/deep/secret.png", "inner/deep/secret.png", "inner/in.png"} {
+		e.wantError(e.get(imageURL(sum.ID, p, "")), http.StatusBadRequest, api.CodeInvalidArgument, "path")
+	}
 }

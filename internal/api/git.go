@@ -151,6 +151,30 @@ type GitFile struct {
 	Binary bool `json:"binary"`
 }
 
+// GitImageType returns the Content-Type of an image the Git view previews by its extension (lower case, with the
+// dot), or false for any other extension.
+func GitImageType(ext string) (string, bool) {
+	switch ext {
+	case ".png":
+		return "image/png", true
+	case ".jpg", ".jpeg":
+		return "image/jpeg", true
+	case ".gif":
+		return "image/gif", true
+	case ".webp":
+		return "image/webp", true
+	case ".avif":
+		return "image/avif", true
+	case ".bmp":
+		return "image/bmp", true
+	case ".ico":
+		return "image/x-icon", true
+	case ".svg":
+		return "image/svg+xml", true
+	}
+	return "", false
+}
+
 // RepoStatus is GET /git/status. Repo false means cwd is not inside a git repository (the other fields are then
 // absent).
 type RepoStatus struct {

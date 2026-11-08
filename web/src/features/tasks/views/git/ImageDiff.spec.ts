@@ -113,14 +113,21 @@ describe('ImagePreview', () => {
     }
   })
 
-  it('keeps a plain message when the image loads but cannot be drawn', async () => {
+  it('keeps a plain message when the image loads but cannot be drawn, and stops that download', async () => {
+    const signals: AbortSignal[] = []
     vi.stubGlobal(
       'fetch',
-      vi.fn(() => Promise.resolve(new Response('png', { status: 200 }))),
+      vi.fn((_url: string, init?: RequestInit) => {
+        if (init?.signal) signals.push(init.signal)
+        return Promise.resolve(new Response('png', { status: 200 }))
+      }),
     )
     const wrapper = await mountPreview()
     await wrapper.get('img').trigger('error')
     await flush(4)
     expect(wrapper.get('[role="status"]').text()).toBe('The image could not be shown.')
+    // Only the status was needed: the probe's body is not downloaded a second time.
+    expect(signals).toHaveLength(1)
+    expect(signals[0]?.aborted).toBe(true)
   })
 })
