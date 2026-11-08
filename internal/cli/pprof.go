@@ -84,10 +84,21 @@ func runtimeSamples() []struct{ key, name string } {
 	}
 }
 
-// debugVars writes the expvar-style JSON of /debug/vars: "pid", "goroutines" and "runtime" (runtime/metrics) always,
-// "cmdline" and "memstats" (runtime.ReadMemStats, which stops the world briefly) unless the query has light=1.
-// The values are built per request, never published in expvar's process-wide registry.
-func debugVars(w http.ResponseWriter, r *http.Request) {
+// debugVarsSource adds the daemon's own values to /debug/vars (app.App: the SSE replay ring). The cli builds the
+// debug server and the app owns the values, so the server never reaches into httpapi.
+type debugVarsSource interface {
+	DebugVars() map[string]any
+}
+
+// debugVars returns the handler of /debug/vars. It writes expvar-style JSON: "pid", "goroutines", "runtime"
+// (runtime/metrics) and "daemon" (src's values, when src is set) always, "cmdline" and "memstats"
+// (runtime.ReadMemStats, which stops the world briefly) unless the query has light=1. The values are built per
+// request, never published in expvar's process-wide registry.
+func debugVars(src debugVarsSource) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) { writeDebugVars(w, r, src) }
+}
+
+func writeDebugVars(w http.ResponseWriter, r *http.Request, src debugVarsSource) {
 	names := runtimeSamples()
 	samples := make([]metrics.Sample, len(names))
 	for i, s := range names {
@@ -101,6 +112,9 @@ func debugVars(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	out := map[string]any{"pid": os.Getpid(), "goroutines": runtime.NumGoroutine(), "runtime": rt}
+	if src != nil {
+		out["daemon"] = src.DebugVars()
+	}
 	if r.URL.Query().Get("light") != "1" {
 		var m runtime.MemStats
 		runtime.ReadMemStats(&m)
@@ -111,14 +125,14 @@ func debugVars(w http.ResponseWriter, r *http.Request) {
 }
 
 // pprofHandler serves /debug/pprof/... and /debug/vars behind the Host check for the listen address.
-func pprofHandler(listen *net.TCPAddr) http.Handler {
+func pprofHandler(listen *net.TCPAddr, src debugVarsSource) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/debug/pprof/", pprof.Index)
 	mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
 	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
 	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
 	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
-	mux.HandleFunc("/debug/vars", debugVars)
+	mux.HandleFunc("/debug/vars", debugVars(src))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !pprofHostAllowed(r.Host, listen) {
 			http.Error(w, "misdirected request: the Host header must name this loopback address",
@@ -129,8 +143,9 @@ func pprofHandler(listen *net.TCPAddr) http.Handler {
 	})
 }
 
-// startPprof checks addr, listens on it and serves the debug handlers until Close.
-func startPprof(ctx context.Context, addr string, log *slog.Logger) (*pprofServer, error) {
+// startPprof checks addr, listens on it and serves the debug handlers until Close; src adds the daemon's own values
+// to /debug/vars (nil for none).
+func startPprof(ctx context.Context, addr string, log *slog.Logger, src debugVarsSource) (*pprofServer, error) {
 	if err := checkPprofAddr(addr); err != nil {
 		return nil, err
 	}
@@ -147,7 +162,7 @@ func startPprof(ctx context.Context, addr string, log *slog.Logger) (*pprofServe
 	}
 	p := &pprofServer{addr: ln.Addr().String(), done: make(chan error, 1)}
 	p.srv = &http.Server{
-		Handler:           pprofHandler(tcp),
+		Handler:           pprofHandler(tcp, src),
 		ReadHeaderTimeout: 10 * time.Second,
 		// No write timeout: /debug/pprof/profile and /trace stream for as many seconds as asked.
 		BaseContext: func(net.Listener) context.Context { return context.WithoutCancel(ctx) },
