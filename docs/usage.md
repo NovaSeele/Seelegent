@@ -88,17 +88,17 @@ and hand it back.
 
 **Gates, lanes and proof.** After every worker report the daemon runs the task's gate: the lead's commands and the
 spec's `Gate:` lines, plus, with `--gate-detect` (`gate: true`), the repository's detected test, lint and build
-commands, then the project doctrine, syntax checks and the hygiene check. A red gate goes back to the worker as an automatic fix turn (2 by default) before the lead is
-woken. Lanes list the files a task may change, so parallel workers stay off each other's files. An optional verifier
-reviews a green gate read-only.
+commands, then the project doctrine, syntax checks and the hygiene check. A red gate goes back to the worker as an
+automatic fix turn (2 by default) before the lead is woken. Lanes list the files a task may change, so parallel
+workers stay off each other's files. An optional verifier reviews a green gate read-only.
 
 **Team, GitHub and automations.** Members are named workers with a backend, a model or tier, a role and a rank
 (`worker`, `senior`, `peer`); a peer's objection in a consult blocks acceptance until the lead answers it. Event
-hooks run your own shell commands on task, account and daemon events. A connected repository's issues become
-tickets; once the work is accepted and you or the lead ask for it, Seelegent commits, pushes the ticket branch,
-opens a draft pull request and follows its CI checks. It uses `gh` when it is signed in, else a token you store in the dashboard, else a manual
-mode with a compare link. Automations run on a schedule (hourly, daily, weekdays, weekly or cron, in a time zone)
-with a precheck command and quota rules.
+hooks run your own shell commands on task, account and daemon events. A connected repository's issues become tickets;
+once the work is accepted and you or the lead ask for it, Seelegent commits, pushes the ticket branch, opens a draft
+pull request and follows its CI checks. It uses `gh` when it is signed in, else a token you store in the dashboard,
+else a manual mode with a compare link. Automations run on a schedule (hourly, daily, weekdays, weekly or cron, in a
+time zone) with a precheck command and quota rules.
 
 More: [task engine](task-engine.md), [gates](gates.md), [team](team.md).
 
@@ -204,8 +204,8 @@ More: [every MCP tool and its arguments](mcp.md), [every command](cli.md), [the 
 - **Take over** opens the worker's conversation in a console on the same account; when you close it, the worker
   writes a hand-back report.
 
-`Ctrl+K` opens the command palette and `Ctrl+,` the settings (`Cmd+K` and `Cmd+,` on macOS). The dashboard comes in seven
-languages (English, Tiếng Việt, 简体中文, Español, 한국어, 日本語, Русский) and follows your browser's language unless
+`Ctrl+K` opens the command palette and `Ctrl+,` the settings (`Cmd+K` and `Cmd+,` on macOS). The dashboard comes in
+seven languages (English, Tiếng Việt, 简体中文, Español, 한국어, 日本語, Русский) and follows your browser's language unless
 you pick one in **Settings › Language**.
 
 <table>
@@ -310,8 +310,8 @@ More: [safety](safety.md).
 ## Work as a team
 
 - **Members** are named workers with a backend, a model or tier, a role and a rank (`worker`, `senior`, `peer`).
-  Add them with **New member** on the **Members** page or with `seelegent members add`; delegate to one with `--member` (the `member`
-  argument).
+  Add them with **New member** on the **Members** page or with `seelegent members add`; delegate to one with
+  `--member` (the `member` argument).
 - **Consult**: ask a senior or peer for a second opinion on a finished task (`consult`,
   `seelegent consult <id> --member M`). A peer's objection blocks acceptance until the lead answers it.
 - **Meeting**: before a hard decision, up to six members answer the same question; the lead decides and can turn
@@ -410,11 +410,11 @@ More: [when something is stuck](getting-started.md#7-when-something-is-stuck), [
 - Everything runs on your machine. The daemon listens on `127.0.0.1` only. Seelegent itself sends no telemetry; the
   worker CLIs follow their own settings.
 - Data lives in `~/.seelegent` (set `SEELEGENT_HOME` to move it): `config.json` (settings), `seelegent.db` (tasks,
-  accounts, usage, team, tickets, automations), `tasks/` (each attempt's prompt, stream, stderr and gate logs: the
-  workers' full transcripts, the most sensitive files here), `profiles/` (one isolated profile per account, with
-  its API key), `github/` (the token), `snapshots/` and `backups/` (turn snapshots and the backups taken before a
-  restore), `guard/` (the git guard's files), `contests/` (stored contest diffs), `worktrees/` (only for contests
-  and tickets), `run/` and `logs/`.
+  accounts, usage, team, tickets, automations), `tasks/` (each attempt's prompt, stream, stderr and gate logs; as
+  sensitive as your code: the workers' full transcripts), `profiles/` (one isolated profile per account, with its
+  API key), `github/` (the token), `snapshots/` (turn snapshots, including the backup taken before a restore),
+  `backups/` (copies taken before migrations and imports), `guard/` (the git guard's files), `contests/` (stored
+  contest diffs), `worktrees/` (only for contests and tickets), `run/` and `logs/`.
 - Seelegent never asks for passwords. Each worker CLI signs in with its own flow and keeps its tokens in the account's
   profile. API keys and the GitHub token are each stored in their own file, encrypted with DPAPI on Windows and as
   owner-only (0600) plain text elsewhere; the dashboard shows only their last four characters, and logs mask secrets.
