@@ -535,6 +535,11 @@ export interface HandoffData {
 export interface ReattachData {
   accountId: string
   offset?: number
+  /**
+   * Notice says what the lead should know about the recovery, such as an attempt whose mask list could not be
+   * read, so its output is masked by key patterns.
+   */
+  notice?: string
 }
 
 /**

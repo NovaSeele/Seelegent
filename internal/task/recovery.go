@@ -100,6 +100,23 @@ func (s *Service) resumeAttempt(r *run, t *Task, tu *Turn, a *Attempt) (bool, er
 	if err != nil {
 		return false, err
 	}
+	// Mask what the worker was started with (kept with the attempt) and what the account has now. A mask list that
+	// exists but cannot be read fails closed: the attempt's output is also masked by key patterns, and the recovery
+	// event says so.
+	var m attemptMask
+	var notice string
+	secrets, err := loadMask(s.attemptDir(t.ID, tu.N, a.N))
+	if err != nil {
+		s.log.Warn("task: read the mask list", "task", t.ID, "err", err)
+		m.patterns = true
+		notice = maskNotice
+	}
+	if acc, err := s.o.Accounts.Get(ctx, a.AccountID); err == nil {
+		if env, err := s.o.Accounts.Env(ctx, acc, b, account.EnvOptions{Base: []string{}, Model: a.Model}); err == nil {
+			secrets = mergeSecrets(secrets, env.Secrets)
+		}
+	}
+	m.secrets = secrets
 	typ := api.EventResumed
 	if !ended {
 		lease := s.o.Pool.Reattach(a.AccountID, t.ID)
@@ -107,25 +124,15 @@ func (s *Service) resumeAttempt(r *run, t *Task, tu *Turn, a *Attempt) (bool, er
 		typ = api.EventReattach
 	}
 	if err := s.appendEvents(ctx, t.ID, []NewEvent{{Type: typ, Turn: tu.N, Attempt: a.N,
-		Data: api.RecoveryData{AccountID: a.AccountID, Offset: a.StreamOffset}}}, nil); err != nil {
+		Data: api.RecoveryData{AccountID: a.AccountID, Offset: a.StreamOffset, Notice: notice}}}, nil); err != nil {
 		return false, err
-	}
-	// Mask what the worker was started with (kept with the attempt) and what the account has now.
-	secrets, err := loadMask(s.attemptDir(t.ID, tu.N, a.N))
-	if err != nil {
-		s.log.Warn("task: read the mask list", "task", t.ID, "err", err)
-	}
-	if acc, err := s.o.Accounts.Get(ctx, a.AccountID); err == nil {
-		if env, err := s.o.Accounts.Env(ctx, acc, b, account.EnvOptions{Base: []string{}, Model: a.Model}); err == nil {
-			secrets = mergeSecrets(secrets, env.Secrets)
-		}
 	}
 	r.setHandle(h, a.AccountID, a.StartedAt)
 	defer r.clearHandle()
 	if t.CancelRequested {
 		_ = h.Cancel()
 	}
-	res, err := s.follow(r, h, b, secrets, t.ID, tu.N, a.N, Offsets{Stream: a.StreamOffset, Stderr: a.StderrOffset})
+	res, err := s.follow(r, h, b, m, t.ID, tu.N, a.N, Offsets{Stream: a.StreamOffset, Stderr: a.StderrOffset})
 	if err != nil {
 		return false, err
 	}

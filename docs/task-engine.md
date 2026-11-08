@@ -191,7 +191,10 @@ exits with an error within 3 s is reported at once as no terminal.
   before the committed offsets are not logged again. The output is masked for the secrets the worker was started
   with (an API-key account's key, kept in the attempt folder's `mask` file until the attempt ends: a DPAPI blob on
   Windows like the stored keys, a plain 0600 file elsewhere, see [configuration.md](configuration.md)) and for the account's current ones, so removing or changing the key while no daemon runs never
-  unmasks it. A worker whose mask list cannot be written is not started.
+  unmasks it. A worker whose mask list cannot be written is not started. A mask list that exists but cannot be
+  read fails closed: that attempt's output is also masked by the key patterns of the log redaction (`sk-…`,
+  `AIza…`, GitHub and Slack tokens, bearer credentials, `token=…` and the like, and email addresses), and the
+  `reattach` or `resumed` event carries a `notice` saying so.
 - An attempt whose worker never started is closed as interrupted; the turn goes on with a new attempt and the full
   brief.
 - A cancel the earlier daemon recorded is carried out; takeover consoles are watched again; dependents are

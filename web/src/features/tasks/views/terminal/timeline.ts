@@ -188,9 +188,15 @@ function fold(f: Fold, event: TaskEvent): Draft | null {
         { detail: event.data.reason },
       )
     case 'reattach':
-      return notice('dim', 'refresh', 'terminal.ev.reattach')
     case 'resumed':
-      return notice('dim', 'refresh', 'terminal.ev.resumed')
+      // A notice (the mask list could not be read, so the output is masked by key patterns) makes it a warning.
+      return notice(
+        event.data.notice ? 'warn' : 'dim',
+        'refresh',
+        `terminal.ev.${event.type}`,
+        {},
+        { detail: event.data.notice },
+      )
     case 'attention':
       return foldAttention(f, event, base)
     case 'deps':

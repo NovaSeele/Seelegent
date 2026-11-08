@@ -13,14 +13,24 @@ import (
 	"github.com/NovaSeele/Seelegent/internal/fsutil"
 )
 
-// The mask list of an attempt: the secrets (an API-key account's key) its output is masked for. It is kept, encrypted
-// like the stored API keys (account.ProtectSecret), in the attempt's folder while the worker runs, so a daemon that
-// reattaches after a restart masks the same values even when the account's key was removed or changed meanwhile
-// (bugs.md B15.11). It is removed when the attempt ends.
+// The mask list of an attempt: the secrets (an API-key account's key) its output is masked for. It is kept like the
+// stored API keys (account.ProtectSecret: DPAPI on Windows, a plain 0600 file elsewhere) in the attempt's folder
+// while the worker runs, so a daemon that reattaches after a restart masks the same values even when the account's
+// key was removed or changed meanwhile (bugs.md B15.11). It is removed when the attempt ends.
 const (
 	maskFile    = "mask"
 	maskPurpose = "attempt-mask"
 )
+
+// maskNotice is the recovery event's notice for an attempt whose mask list could not be read.
+const maskNotice = "the attempt's mask list could not be read; its output is masked by key patterns as well"
+
+// attemptMask is what an attempt's output is masked for: literal secrets and, when its mask list could not be read
+// after a restart, the key patterns of logx.Redactor as well (fail closed).
+type attemptMask struct {
+	secrets  []string
+	patterns bool
+}
 
 // saveMask stores the mask list of the attempt in dir; nothing is written for an empty list.
 func saveMask(dir string, secrets []string) error {

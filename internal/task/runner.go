@@ -571,7 +571,7 @@ func (s *Service) launchAndFollow(r *run, t *Task, turn, n int, acc account.Acco
 	}
 	r.setHandle(h, acc.ID, s.clk.Now())
 	defer r.clearHandle()
-	return s.follow(r, h, b, env.Secrets, t.ID, turn, n, Offsets{Turn: turn, Attempt: n})
+	return s.follow(r, h, b, attemptMask{secrets: env.Secrets}, t.ID, turn, n, Offsets{Turn: turn, Attempt: n})
 }
 
 // classify maps an outcome to an attempt status and its error text.

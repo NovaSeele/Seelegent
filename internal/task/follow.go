@@ -11,6 +11,7 @@ import (
 	"github.com/NovaSeele/Seelegent/internal/backend"
 	"github.com/NovaSeele/Seelegent/internal/event"
 	"github.com/NovaSeele/Seelegent/internal/launch"
+	"github.com/NovaSeele/Seelegent/internal/logx"
 )
 
 // coalesceWindow is how long consecutive message deltas of one step are buffered before they are written as one
@@ -41,10 +42,14 @@ type follower struct {
 
 // follow follows attempt n of turn until the worker exited and every line was read, then returns the outcome. It
 // fails only when the daemon shuts down (the worker keeps running) or the log cannot be written.
-func (s *Service) follow(r *run, h *launch.Handle, b backend.Backend, secrets []string, id string, turn, n int,
+func (s *Service) follow(r *run, h *launch.Handle, b backend.Backend, m attemptMask, id string, turn, n int,
 	committed Offsets) (attemptResult, error) {
 	committed.Turn, committed.Attempt = turn, n
-	f := &follower{s: s, r: r, id: id, turn: turn, n: n, parser: b.NewParser(secrets), committed: committed,
+	parser := b.NewParser(m.secrets)
+	if m.patterns {
+		parser.MaskPatterns(logx.NewRedactor().String)
+	}
+	f := &follower{s: s, r: r, id: id, turn: turn, n: n, parser: parser, committed: committed,
 		pos: Offsets{Turn: turn, Attempt: n}, kick: make(chan struct{}, 1)}
 	ctx, cancel := context.WithCancel(s.root)
 	defer cancel()

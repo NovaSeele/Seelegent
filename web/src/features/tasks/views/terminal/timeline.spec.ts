@@ -33,6 +33,26 @@ describe('terminal timeline', () => {
     })
   })
 
+  it('shows a recovery notice as a warning with its detail', () => {
+    seq = 0
+    const items = buildTimeline([
+      ev('reattach', { accountId: 'a1' }),
+      ev('resumed', { accountId: 'a1', notice: 'masked by key patterns' }),
+    ])
+    expect(items).toHaveLength(2)
+    expect(items[0]).toMatchObject({
+      kind: 'notice',
+      tone: 'dim',
+      message: { key: 'terminal.ev.reattach' },
+    })
+    expect(items[1]).toMatchObject({
+      kind: 'notice',
+      tone: 'warn',
+      message: { key: 'terminal.ev.resumed' },
+      detail: 'masked by key patterns',
+    })
+  })
+
   it('pairs a tool call with its result and the file it touched', () => {
     seq = 0
     const items = buildTimeline([

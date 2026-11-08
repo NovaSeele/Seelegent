@@ -2,6 +2,7 @@ package task
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -25,8 +26,15 @@ func claudeText(sess, text string) string {
 
 // TestRestartMasksKeyOfRemovedKey: a worker of an API-key account reattached after a daemon restart is still masked
 // for its key when the key was removed (or can no longer be read) while no daemon ran (bugs.md B15.11): the mask
-// list is kept with the attempt, never rebuilt from an environment that may fail.
+// list is kept with the attempt, never rebuilt from an environment that may fail. damaged: the mask list cannot be
+// read either; the attempt's output is masked by key patterns and the reattach event says so (fail closed).
 func TestRestartMasksKeyOfRemovedKey(t *testing.T) {
+	for _, damaged := range []bool{false, true} {
+		t.Run(fmt.Sprint("damaged=", damaged), func(t *testing.T) { restartMasksKey(t, damaged) })
+	}
+}
+
+func restartMasksKey(t *testing.T, damaged bool) {
 	h := newHarness(t)
 	h.backends = []string{config.BackendClaude}
 	cl, err := backend.New(config.BackendClaude, fakecli.Exe(t))
@@ -48,7 +56,10 @@ func TestRestartMasksKeyOfRemovedKey(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	const key = "qz7Kp2mWx9Rt4Lb8Nc3Vd6Fh1Jg5Ty0Ue"
+	key := "qz7Kp2mWx9Rt4Lb8Nc3Vd6Fh1Jg5Ty0Ue"
+	if damaged {
+		key = "sk-ant-api03-" + key // a shape the key patterns know
+	}
 	if _, err := h.accounts.SetKey(ctx, acc.ID, key); err != nil {
 		t.Fatal(err)
 	}
@@ -74,6 +85,11 @@ func TestRestartMasksKeyOfRemovedKey(t *testing.T) {
 	if got, err := loadMask(filepath.Dir(mask)); err != nil || len(got) != 1 || got[0] != key {
 		t.Fatalf("mask list kept with the attempt = %d values, %v", len(got), err)
 	}
+	if damaged {
+		if err := os.WriteFile(mask, []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
 
 	// The key goes while no daemon runs.
 	if _, err := h.accounts.ClearKey(ctx, acc.ID); err != nil {
@@ -81,6 +97,13 @@ func TestRestartMasksKeyOfRemovedKey(t *testing.T) {
 	}
 	h.start()
 	h.waitEvent(sum.ID, api.EventReattach)
+	var rec api.RecoveryData
+	for _, e := range eventsOf(h.events(sum.ID), api.EventReattach) {
+		decode(t, e, &rec)
+	}
+	if (rec.Notice != "") != damaged {
+		t.Errorf("reattach notice = %q", rec.Notice)
+	}
 	if err := os.WriteFile(release, nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
