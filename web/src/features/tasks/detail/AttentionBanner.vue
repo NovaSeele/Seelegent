@@ -8,7 +8,7 @@ import Button from '@/components/ui/Button.vue'
 import Icon from '@/components/ui/Icon.vue'
 import { useFormat } from '@/composables/useFormat'
 import { useNow } from '@/composables/useNow'
-import { canCancel, canTakeOver, isFinished } from '@/lib/taskStatus'
+import { canCancel, canTakeOver } from '@/lib/taskStatus'
 import { useTeamStore } from '@/stores/team'
 
 import { attentionText } from './attentionText'
@@ -38,7 +38,11 @@ const attention = computed(() => {
   const value = props.task.attention
   return value && value.state !== 'info' ? value : null
 })
-const question = computed(() => attention.value?.state === 'question' && !isFinished(props.task))
+/**
+ * A worker's question gets its answer card while the task runs and after the turn ended on it (the usual case: the
+ * worker finished with a question for the lead); answering a finished task starts the next turn.
+ */
+const question = computed(() => attention.value?.state === 'question')
 /** The flag in the reader's language, from its reason code and params (F14). */
 const text = computed(() => (attention.value ? attentionText(attention.value, t, te) : null))
 const reason = computed(() => text.value?.title ?? '')
