@@ -157,7 +157,7 @@ describe('task view scroll frames', () => {
     const missing: string[] = []
     for (const [path, source] of Object.entries(sources)) {
       if (!path.startsWith('src/features/tasks/views/process/') || !path.endsWith('.vue')) continue
-      const css = [...source.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/g)].map((m) => m[1]).join('\n')
+      const css = styleText(path, source)
       for (const m of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
         const body = m[2] ?? ''
         const scrolls = /overflow(-x|-y)?:\s*(auto|scroll)/.test(body)
