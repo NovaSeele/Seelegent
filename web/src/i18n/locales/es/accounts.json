@@ -154,7 +154,7 @@
     "desc": "La cuenta no recibe trabajo nuevo. Puedes volver a activarla cuando quieras.",
     "confirm": "Dejar de dar trabajo",
     "running": "{n} tarea que se ejecuta en ella termina su turno. | Las {n} tareas que se ejecutan en ella terminan sus turnos.",
-    "only": "Es la única cuenta de {backend} que puede trabajar: las tareas nuevas de {backend} esperan hasta que vuelvas a activar una.",
+    "only": "Es la única cuenta de {backend} que puede trabajar ahora: las tareas nuevas de {backend} esperan hasta que vuelvas a activar una u otra pueda volver a trabajar.",
     "others": "El trabajo nuevo y los próximos turnos de las tareas en curso pasan a otra cuenta de {backend}.",
     "withProvider": "{backend} ({provider})"
   },

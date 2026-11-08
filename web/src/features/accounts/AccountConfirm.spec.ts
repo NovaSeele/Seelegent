@@ -17,13 +17,17 @@ import AccountDialogs from './AccountDialogs.vue'
 import { offConsequence } from './accountView'
 
 describe('offConsequence', () => {
+  const now = Date.parse('2026-11-08T10:00:00Z')
   const work = makeAccount({ id: 'a1' })
+  const outOfQuota: Partial<Account> = {
+    quota: { source: 'active', groups: [], exhaustedUntil: '2026-11-08T11:00:00Z' },
+  }
   it('lets the switch flip when nothing runs and another account takes the work', () => {
-    expect(offConsequence(work, [work, makeAccount({ id: 'a2' })])).toBeNull()
+    expect(offConsequence(work, [work, makeAccount({ id: 'a2' })], now)).toBeNull()
   })
   it('asks while turns run on the account', () => {
     const busy = { ...work, busy: 2 }
-    expect(offConsequence(busy, [busy, makeAccount({ id: 'a2' })])).toEqual({
+    expect(offConsequence(busy, [busy, makeAccount({ id: 'a2' })], now)).toEqual({
       running: 2,
       only: false,
     })
@@ -34,13 +38,22 @@ describe('offConsequence', () => {
     ['an account that is off', { enabled: false }],
     ['a signed-out account', { status: 'needs_login' }],
     ['a second sign-in', { status: 'twin' }],
+    ['a resting account', { resting: true }],
+    ['an account out of quota', outOfQuota],
   ] as const)('does not count %s as the other account', (_, other) => {
     const peer = makeAccount({ id: 'a2', ...other })
-    expect(offConsequence(work, [work, peer])).toEqual({ running: 0, only: true })
+    expect(offConsequence(work, [work, peer], now)).toEqual({ running: 0, only: true })
+  })
+  it('counts an account whose quota came back', () => {
+    const peer = makeAccount({
+      id: 'a2',
+      quota: { source: 'active', groups: [], exhaustedUntil: '2026-11-08T09:00:00Z' },
+    })
+    expect(offConsequence(work, [work, peer], now)).toBeNull()
   })
   it('does not ask for an account that cannot take work anyway', () => {
     const out = makeAccount({ id: 'a1', status: 'no_plan' })
-    expect(offConsequence(out, [out])).toBeNull()
+    expect(offConsequence(out, [out], now)).toBeNull()
   })
 })
 

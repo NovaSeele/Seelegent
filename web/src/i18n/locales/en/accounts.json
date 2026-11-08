@@ -154,7 +154,7 @@
     "desc": "The account takes no new work. You can turn it back on any time.",
     "confirm": "Turn off work",
     "running": "The task running on it finishes its turn. | The {n} tasks running on it finish their turns.",
-    "only": "It is the only {backend} account that can take work: new {backend} tasks wait until you turn one back on.",
+    "only": "It is the only {backend} account that can take work now: new {backend} tasks wait until you turn one back on or another one can take work again.",
     "others": "New work and the next turns of running tasks go to another {backend} account.",
     "withProvider": "{backend} ({provider})"
   },

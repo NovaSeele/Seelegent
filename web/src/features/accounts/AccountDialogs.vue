@@ -8,6 +8,7 @@ import Button from '@/components/ui/Button.vue'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import Dialog from '@/components/ui/Dialog.vue'
 import TextField from '@/components/ui/TextField.vue'
+import { useNow } from '@/composables/useNow'
 import { useAccountsStore } from '@/stores/accounts'
 import { useToastStore } from '@/stores/toast'
 
@@ -49,8 +50,9 @@ watch(
 const name = computed(() => props.account?.label ?? '')
 
 // Read while the dialog is open, so a turn that ends meanwhile updates the wording.
+const now = useNow(30_000)
 const off = computed(() =>
-  props.account ? offConsequence(props.account, accounts.accounts) : null,
+  props.account ? offConsequence(props.account, accounts.accounts, now.value) : null,
 )
 const backendName = computed(() => {
   const a = props.account

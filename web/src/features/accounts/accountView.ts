@@ -73,10 +73,15 @@ export interface OffConsequence {
 
 /**
  * What turning `account` off changes now, or null when the switch can flip without asking: no turn runs on it and
- * another account of the same backend and provider is on and can take work. Accounts that cannot take work (off,
- * signed out, no key, no plan, a second sign-in) do not count as that other account.
+ * another account of the same backend and provider is on and can take work now. Accounts that cannot take work
+ * (off, signed out, no key, no plan, a second sign-in) or cannot take it now (out of quota, resting) do not count as
+ * that other account.
  */
-export function offConsequence(account: Account, all: readonly Account[]): OffConsequence | null {
+export function offConsequence(
+  account: Account,
+  all: readonly Account[],
+  now: number,
+): OffConsequence | null {
   const provider = account.provider ?? null
   // An account that cannot take work itself (signed out, no key, …) leaves nothing behind when it goes off.
   const only =
@@ -87,7 +92,9 @@ export function offConsequence(account: Account, all: readonly Account[]): OffCo
         a.backend === account.backend &&
         (a.provider ?? null) === provider &&
         a.enabled &&
-        !CANNOT_RUN.has(a.status),
+        !CANNOT_RUN.has(a.status) &&
+        !a.resting &&
+        !isExhausted(a, now),
     )
   if (account.busy === 0 && !only) return null
   return { running: account.busy, only }

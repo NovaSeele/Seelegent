@@ -154,7 +154,7 @@
     "desc": "Tài khoản sẽ không nhận việc mới. Bạn bật lại được bất cứ lúc nào.",
     "confirm": "Tắt nhận việc",
     "running": "{n} tác vụ đang chạy trên tài khoản này vẫn chạy tới hết lượt.",
-    "only": "Đây là tài khoản {backend} duy nhất nhận việc được: tác vụ {backend} mới sẽ chờ tới khi bạn bật lại một tài khoản.",
+    "only": "Đây là tài khoản {backend} duy nhất nhận việc được lúc này: tác vụ {backend} mới sẽ chờ tới khi bạn bật lại một tài khoản hoặc một tài khoản khác nhận việc được trở lại.",
     "others": "Việc mới và lượt sau của các tác vụ đang chạy sẽ sang tài khoản {backend} khác.",
     "withProvider": "{backend} ({provider})"
   },

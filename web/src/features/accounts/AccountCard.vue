@@ -83,7 +83,7 @@ function onMenu(item: string) {
 
 // Turning off asks first only when it changes something now: turns run on it, or nothing else takes its work.
 function setEnabled(enabled: boolean) {
-  if (!enabled && offConsequence(props.account, accounts.accounts)) {
+  if (!enabled && offConsequence(props.account, accounts.accounts, props.now)) {
     emit('dialog', 'off')
     return
   }
