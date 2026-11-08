@@ -13,14 +13,17 @@ import (
 // that setting to its default; an object merges into the setting's object; anything else replaces the value
 // (arrays included). The patch is all-or-nothing: unknown keys, values of the wrong type, a changed port and every
 // out-of-range value are reported together as a *ValidationError (matching ErrInvalid), and s is left as it was.
-// A body that is not a JSON object matches ErrParse.
+// A body that is not a JSON object (null, an array, broken JSON) matches ErrBadPatch.
 func MergePatch(s Settings, patch []byte) (Settings, error) {
 	if len(bytes.TrimSpace(patch)) == 0 {
 		patch = []byte("{}")
 	}
 	var p map[string]any
-	if err := decodeNumbers(patch, &p); err != nil || p == nil {
-		return s, fmt.Errorf("%w: the patch must be a JSON object", ErrParse)
+	if err := decodeNumbers(patch, &p); err != nil {
+		return s, fmt.Errorf("%w (%w)", ErrBadPatch, err)
+	}
+	if p == nil {
+		return s, ErrBadPatch
 	}
 	cur, err := toTree(s)
 	if err != nil {

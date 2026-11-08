@@ -208,7 +208,8 @@ func toAPIError(err error) *apiError {
 	case errors.Is(err, task.ErrInvalid), errors.Is(err, account.ErrInvalid), errors.Is(err, account.ErrNoKey),
 		errors.Is(err, account.ErrProviderUnavailable), errors.Is(err, role.ErrInvalid),
 		errors.Is(err, memory.ErrInvalid), errors.Is(err, usage.ErrInvalid), errors.Is(err, gitx.ErrInvalid),
-		errors.Is(err, signin.ErrInvalid), errors.Is(err, config.ErrParse), errors.Is(err, gitx.ErrNotRepo),
+		errors.Is(err, signin.ErrInvalid), errors.Is(err, config.ErrParse), errors.Is(err, config.ErrBadPatch),
+		errors.Is(err, gitx.ErrNotRepo),
 		errors.Is(err, proof.ErrInvalid), errors.Is(err, member.ErrInvalid), errors.Is(err, notes.ErrInvalid),
 		errors.Is(err, meeting.ErrInvalid), errors.Is(err, contest.ErrInvalid), errors.Is(err, hook.ErrInvalid),
 		errors.Is(err, ticket.ErrInvalid), errors.Is(err, automation.ErrInvalid), errors.Is(err, github.ErrInvalid):

@@ -116,7 +116,7 @@ in the daemon.
   the dashboard's own requests: `403 forbidden` with `details.reason: "dashboard_only"` otherwise.
 - A `POST /tasks` body with `ticketId` is a `400` (C-B21): ticket tasks start only through the ticket routes.
 - `PATCH /settings` applies the JSON merge patch to the daemon's in-memory settings and writes `config.json`
-  atomically. Unknown keys, type errors and validation errors are reported together in one `400`.
+  atomically. Unknown keys, type errors and validation errors are reported together in one `400`. A body that is not a JSON object (`null`, an array, broken JSON) is a `400 invalid_argument` "the settings patch must be a JSON object", never "config file cannot be parsed".
 - `/state` reads `lastEventId` before the snapshot. A frame newer than the id can repeat a change the snapshot holds
   (harmless), but no change can be missing from both.
 - SSE: the `hello` frame carries an id like every frame (contract §7: "every frame"). On a fresh connect it is the
