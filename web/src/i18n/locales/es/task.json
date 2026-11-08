@@ -32,7 +32,7 @@
       "failed": "La tarea falló. Revisa el último turno y luego haz un seguimiento o iníciala de nuevo.",
       "exit": {
         "timeout": "{backend} se detuvo al llegar al límite de tiempo del turno.",
-        "canceled": "{backend} se canceló.",
+        "process_canceled": "{backend} se canceló.",
         "start_failed": "No se pudo iniciar {backend}.",
         "launcher_lost": "El proceso que ejecutaba {backend} desapareció antes de registrar cómo terminó el turno.",
         "exit_error": "{backend} se detuvo con el código de salida {code}.",

@@ -2483,7 +2483,7 @@ export interface AttentionParams {
     | 'failed'
     | 'cancelled'
     | 'timeout'
-    | 'canceled'
+    | 'process_canceled'
     | 'start_failed'
     | 'launcher_lost'
     | 'exit_error'

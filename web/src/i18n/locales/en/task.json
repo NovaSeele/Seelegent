@@ -32,7 +32,7 @@
       "failed": "The task failed. Look at the last turn, then follow up or start it again.",
       "exit": {
         "timeout": "{backend} was stopped at the turn's time limit.",
-        "canceled": "{backend} was cancelled.",
+        "process_canceled": "{backend} was cancelled.",
         "start_failed": "{backend} could not be started.",
         "launcher_lost": "The process that ran {backend} disappeared before it recorded how the turn ended.",
         "exit_error": "{backend} stopped with exit code {code}.",

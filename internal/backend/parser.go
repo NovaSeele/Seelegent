@@ -277,7 +277,7 @@ func exitText(name string, exit launch.Exit) string {
 // Kinds of an ended process (ExitFailure.Kind), as exitText words them.
 const (
 	ExitTimeout      = "timeout"
-	ExitCanceled     = "canceled"
+	ExitCanceled     = "process_canceled"
 	ExitStartFailed  = "start_failed"
 	ExitLauncherLost = "launcher_lost"
 	ExitError        = "exit_error"

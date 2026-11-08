@@ -32,7 +32,7 @@
       "failed": "任务失败了。先查看最后一轮，再追加说明或重新开始。",
       "exit": {
         "timeout": "{backend} 到达本轮时间上限，已被停止。",
-        "canceled": "{backend} 已取消。",
+        "process_canceled": "{backend} 已取消。",
         "start_failed": "无法启动 {backend}。",
         "launcher_lost": "运行 {backend} 的进程在记录本轮如何结束之前消失了。",
         "exit_error": "{backend} 以退出码 {code} 停止。",
