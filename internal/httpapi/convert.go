@@ -38,10 +38,32 @@ func (v *accountView) account(st *pool.AccountState) api.Account {
 	until, resting := v.resting(st)
 	out.Resting, out.RestingUntil = resting, api.FormatTime(until)
 	out.Models = v.models(st)
-	if p, ok := v.providers[a.Provider]; ok && a.Kind == account.KindAPIKey {
-		out.ModelPerTask = p.ModelPerTask()
+	if a.Kind == account.KindAPIKey {
+		source := account.SpendNone
+		if p, ok := v.providers[a.Provider]; ok {
+			out.ModelPerTask = p.ModelPerTask()
+			source = p.SpendSource()
+		}
+		spendDTO(&out, &a, source)
+		if a.BudgetStopped() {
+			out.Resting, out.RestReason = true, api.RestBudgetReached
+		}
 	}
 	return out
+}
+
+// spendDTO fills an API-key account's spend and budget fields.
+func spendDTO(out *api.Account, a *account.Account, source string) {
+	stop := a.BudgetStop
+	out.SpentUSD, out.SpentTokens = a.Spent.USD, a.Spent.Tokens
+	out.SpentInputTokens, out.SpentOutputTokens = a.Spent.Input, a.Spent.Output
+	out.SpentSince, out.SpendSource, out.BudgetStop = api.FormatTime(a.KeySetAt), source, &stop
+	out.BudgetUSD, out.BudgetState = a.BudgetUSD, account.BudgetLevel(source, a.Spent.USD, a.BudgetUSD)
+	if pk := a.PreviousKey; pk != nil {
+		out.PreviousKey = &api.PreviousKey{KeyHint: pk.KeyHint, Since: api.FormatTime(pk.Since),
+			Until: api.FormatTime(pk.Until), SpentUSD: pk.Spent.USD, SpentTokens: pk.Spent.Tokens,
+			SpentInputTokens: pk.Spent.Input, SpentOutputTokens: pk.Spent.Output, BudgetUSD: pk.BudgetUSD}
+	}
 }
 
 // quota maps the account's quota snapshot; an account never read gets an empty one of the right source.
@@ -166,7 +188,7 @@ func providerDTO(p account.Provider, accounts int) api.Provider {
 	return api.Provider{
 		ID: p.ID, Name: p.Name, Backend: p.Backend, BaseURL: p.BaseURL, Enabled: p.Enabled, Models: modelList(p.Models),
 		Accounts: accounts, Preset: p.Preset, WireAPI: p.WireAPI, Official: p.Official, AllowedModels: p.AllowedModels,
-		Tiers: p.Tiers, ModelPerTask: p.ModelPerTask(), CreatedAt: api.FormatTime(p.CreatedAt),
+		Tiers: p.Tiers, ModelPerTask: p.ModelPerTask(), SpendSource: p.SpendSource(), CreatedAt: api.FormatTime(p.CreatedAt),
 		UpdatedAt: api.FormatTime(p.UpdatedAt),
 	}
 }

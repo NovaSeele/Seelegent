@@ -263,5 +263,19 @@
     "control": "密钥包含不可见字符"
   },
   "modelPerTask": "每个任务自选模型",
-  "modelPerTaskHint": "此提供方没有默认模型：每个任务自行指定所用模型。"
+  "modelPerTaskHint": "此提供方没有默认模型：每个任务自行指定所用模型。",
+  "budgetState": {
+    "ok": "在预算内",
+    "warn": "已用预算的 80%",
+    "reached": "已达预算",
+    "unknown": "此服务的花费未知"
+  },
+  "restReason": {
+    "budget_reached": "暂停中：已达预算"
+  },
+  "spendSource": {
+    "cli": "Claude Code 的估算",
+    "free": "本地 · 免费",
+    "none": "此服务不报告费用"
+  }
 }

@@ -29,7 +29,7 @@ func (s *Server) accountRoutes() {
 		}
 		id := r.PathValue("id")
 		if _, err := s.o.Accounts.Update(r.Context(), id, account.Patch{Label: req.Label, Enabled: req.Enabled,
-			Priority: req.Priority}); err != nil {
+			Priority: req.Priority, BudgetUSD: req.BudgetUSD, BudgetStop: req.BudgetStop}); err != nil {
 			return 0, nil, err
 		}
 		if req.Enabled != nil && *req.Enabled {
@@ -110,10 +110,12 @@ func (s *Server) accountRoutes() {
 		if err != nil {
 			return 0, nil, account.KeyFieldAs("key", err)
 		}
+		start := s.clock()
 		a, err := s.o.Accounts.SetKey(r.Context(), id, key)
 		if err != nil {
 			return 0, nil, keyError(err)
 		}
+		s.logPreviousKey(a, start)
 		if p, err := s.o.Accounts.GetProvider(r.Context(), a.Provider); err == nil {
 			notices = append(notices, account.KeyNotices(p, key)...)
 		}
@@ -126,14 +128,32 @@ func (s *Server) accountRoutes() {
 	})
 	s.handle("DELETE /accounts/{id}/key", func(_ http.ResponseWriter, r *http.Request) (int, any, error) {
 		id := r.PathValue("id")
-		if _, err := s.o.Accounts.ClearKey(r.Context(), id); err != nil {
+		start := s.clock()
+		a, err := s.o.Accounts.ClearKey(r.Context(), id)
+		if err != nil {
 			return 0, nil, err
 		}
+		s.logPreviousKey(a, start)
 		return s.accountChanged(r.Context(), id, http.StatusOK)
 	})
 	s.providerRoutes()
 	s.handle("GET /usage/summary", s.usageSummary)
 	s.handle("GET /usage/history", s.usageHistory)
+}
+
+// logPreviousKey records in the log what the key an account just replaced or removed had spent (also kept on the
+// account as previousKey), when the change archived one.
+func (s *Server) logPreviousKey(a account.Account, since time.Time) {
+	pk := a.PreviousKey
+	if pk == nil || pk.Until.Before(since.Add(-time.Second)) {
+		return
+	}
+	budget := "none"
+	if pk.BudgetUSD != nil {
+		budget = account.FormatUSD(*pk.BudgetUSD)
+	}
+	s.log.Info("account: key replaced; the old key's spend is kept", "account", a.ID, "oldKey", pk.KeyHint,
+		"spentUsd", pk.Spent.USD, "spentTokens", pk.Spent.Tokens, "budget", budget)
 }
 
 // keyError keeps the submitted key out of an error message: only the error's kind is passed on.
@@ -171,7 +191,7 @@ func (s *Server) addAccount(w http.ResponseWriter, r *http.Request) (code int, b
 		return 0, nil, err
 	}
 	if req.NewProvider != nil || req.APIKey != "" || req.Kind == string(account.KindAPIKey) ||
-		(req.Kind == "" && req.Provider != "") {
+		(req.Kind == "" && req.Provider != "") || req.BudgetUSD != nil || req.BudgetStop != nil {
 		return s.addDirect(r.Context(), &req)
 	}
 	if err := oneOf("backend", req.Backend, false, backend.Names()...); err != nil {
@@ -238,7 +258,7 @@ func (s *Server) addDirect(ctx context.Context, req *api.NewAccount) (code int, 
 		return 0, nil, err
 	}
 	in := account.DirectNew{New: account.New{Backend: req.Backend, Kind: account.Kind(req.Kind), Label: req.Label,
-		Enabled: true, Provider: req.Provider}, Key: req.APIKey}
+		Enabled: true, Provider: req.Provider}, Key: req.APIKey, BudgetUSD: req.BudgetUSD, BudgetStop: req.BudgetStop}
 	if req.Enabled != nil {
 		in.Enabled = *req.Enabled
 	}

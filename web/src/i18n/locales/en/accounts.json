@@ -263,5 +263,19 @@
       "passive": "No quota to read",
       "checking": "Reading quota…"
     }
+  },
+  "budgetState": {
+    "ok": "Within budget",
+    "warn": "80% of the budget used",
+    "reached": "Budget reached",
+    "unknown": "Spend not known for this service"
+  },
+  "restReason": {
+    "budget_reached": "Resting: budget reached"
+  },
+  "spendSource": {
+    "cli": "Claude Code's estimate",
+    "free": "Local · free",
+    "none": "Cost not reported by this service"
   }
 }

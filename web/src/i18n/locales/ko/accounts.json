@@ -263,5 +263,19 @@
     "control": "키에 보이지 않는 문자가 있습니다"
   },
   "modelPerTask": "작업마다 모델 지정",
-  "modelPerTaskHint": "이 공급자에는 기본 모델이 없습니다. 각 작업이 사용할 모델을 지정합니다."
+  "modelPerTaskHint": "이 공급자에는 기본 모델이 없습니다. 각 작업이 사용할 모델을 지정합니다.",
+  "budgetState": {
+    "ok": "예산 이내",
+    "warn": "예산의 80% 사용",
+    "reached": "예산 도달",
+    "unknown": "이 서비스의 지출은 알 수 없음"
+  },
+  "restReason": {
+    "budget_reached": "쉬는 중: 예산 도달"
+  },
+  "spendSource": {
+    "cli": "Claude Code 추정치",
+    "free": "로컬 · 무료",
+    "none": "이 서비스는 비용을 알려 주지 않음"
+  }
 }

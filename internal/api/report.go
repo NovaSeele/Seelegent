@@ -9,12 +9,15 @@ type TaskReport struct {
 	Status string `json:"status"`
 	Turn   int    `json:"turn"`
 	// Worker is the account label (never an email address).
-	Worker     string      `json:"worker,omitempty"`
-	Model      string      `json:"model,omitempty"`
-	Effort     string      `json:"effort,omitempty"`
-	Profile    string      `json:"profile,omitempty"`
-	TokensUsed int64       `json:"tokens_used"`
-	Spec       *ReportSpec `json:"spec,omitempty"`
+	Worker     string `json:"worker,omitempty"`
+	Model      string `json:"model,omitempty"`
+	Effort     string `json:"effort,omitempty"`
+	Profile    string `json:"profile,omitempty"`
+	TokensUsed int64  `json:"tokens_used"`
+	// TurnCostUSD is what the latest turn cost by the CLI's own estimate (Claude Code total_cost_usd), given only
+	// when that estimate is trusted: a task on the official Anthropic API (spend source cli).
+	TurnCostUSD float64     `json:"turn_cost_usd,omitempty"`
+	Spec        *ReportSpec `json:"spec,omitempty"`
 	// Response is the worker's last report, with markdown links to file:// targets reduced to their text.
 	Response string `json:"response,omitempty"`
 	// FilesChanged are relative to the caller's folder with '/' separators (absolute when outside it).

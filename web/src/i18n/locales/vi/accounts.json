@@ -263,5 +263,19 @@
       "passive": "Không có hạn mức để đọc",
       "checking": "Đang đọc hạn mức…"
     }
+  },
+  "budgetState": {
+    "ok": "Trong ngân sách",
+    "warn": "Đã dùng 80% ngân sách",
+    "reached": "Đã hết ngân sách",
+    "unknown": "Không biết chi phí của dịch vụ này"
+  },
+  "restReason": {
+    "budget_reached": "Đang nghỉ: đã hết ngân sách"
+  },
+  "spendSource": {
+    "cli": "Ước tính của Claude Code",
+    "free": "Cục bộ · miễn phí",
+    "none": "Dịch vụ này không báo chi phí"
   }
 }

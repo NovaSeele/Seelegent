@@ -263,5 +263,19 @@
     "control": "キーに見えない文字が含まれています"
   },
   "modelPerTask": "モデルはタスクごとに指定",
-  "modelPerTaskHint": "このプロバイダーには既定のモデルがありません。各タスクが使うモデルを指定します。"
+  "modelPerTaskHint": "このプロバイダーには既定のモデルがありません。各タスクが使うモデルを指定します。",
+  "budgetState": {
+    "ok": "予算内",
+    "warn": "予算の 80% を使用",
+    "reached": "予算に達しました",
+    "unknown": "このサービスの支出は不明"
+  },
+  "restReason": {
+    "budget_reached": "休止中: 予算に達しました"
+  },
+  "spendSource": {
+    "cli": "Claude Code の推定",
+    "free": "ローカル · 無料",
+    "none": "このサービスは費用を報告しません"
+  }
 }

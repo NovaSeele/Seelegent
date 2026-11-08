@@ -263,5 +263,19 @@
     "control": "La clave contiene caracteres invisibles"
   },
   "modelPerTask": "Modelo elegido por tarea",
-  "modelPerTaskHint": "Este proveedor no tiene modelo predeterminado: cada tarea indica el modelo que usa."
+  "modelPerTaskHint": "Este proveedor no tiene modelo predeterminado: cada tarea indica el modelo que usa.",
+  "budgetState": {
+    "ok": "Dentro del presupuesto",
+    "warn": "80% del presupuesto usado",
+    "reached": "Presupuesto agotado",
+    "unknown": "Gasto desconocido para este servicio"
+  },
+  "restReason": {
+    "budget_reached": "En pausa: presupuesto agotado"
+  },
+  "spendSource": {
+    "cli": "Estimación de Claude Code",
+    "free": "Local · gratis",
+    "none": "Este servicio no informa el coste"
+  }
 }

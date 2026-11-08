@@ -38,15 +38,34 @@ type Account struct {
 	TestedAt   string `json:"testedAt,omitempty"`
 	// ModelPerTask is true for an API-key account whose provider has no tier models: a delegate on it must name
 	// its model (shown as "Model: chosen per task").
-	ModelPerTask bool   `json:"modelPerTask,omitempty"`
-	TwinOf       string `json:"twinOf,omitempty"`
+	ModelPerTask bool `json:"modelPerTask,omitempty"`
+	// Spend of an API-key account (absent for the others). SpentUSD is what the current key spent since SpentSince
+	// (when the key was set): a running total, counted whatever usageHistory says, from the provider's spend
+	// source (Provider.spendSource; only "cli" gives a cost today, the others count tokens only). SpentTokens is
+	// every token reported, SpentInputTokens and SpentOutputTokens its parts. BudgetUSD is the user's budget for
+	// the key; BudgetStop (default true) rests the account once it is reached. BudgetState is ok, warn (80% or
+	// more), reached, or unknown when the spend source gives no cost (the account then never rests on its budget).
+	SpentUSD          float64      `json:"spentUsd,omitempty"`
+	SpentTokens       int64        `json:"spentTokens,omitempty"`
+	SpentInputTokens  int64        `json:"spentInputTokens,omitempty"`
+	SpentOutputTokens int64        `json:"spentOutputTokens,omitempty"`
+	SpentSince        string       `json:"spentSince,omitempty"`
+	SpendSource       string       `json:"spendSource,omitempty"`
+	BudgetUSD         *float64     `json:"budgetUsd,omitempty"`
+	BudgetStop        *bool        `json:"budgetStop,omitempty"`
+	BudgetState       string       `json:"budgetState,omitempty" ts:"'ok' | 'warn' | 'reached' | 'unknown'"`
+	PreviousKey       *PreviousKey `json:"previousKey,omitempty"`
+	TwinOf            string       `json:"twinOf,omitempty"`
 	// Busy is the number of running turns; MaxConcurrent the cap per account.
 	Busy          int `json:"busy"`
 	MaxConcurrent int `json:"maxConcurrent"`
 	// Resting is true during a cooldown or while a quota window is at or below minRemaining.
 	Resting      bool   `json:"resting"`
 	RestingUntil string `json:"restingUntil,omitempty"`
-	SigningIn    bool   `json:"signingIn"`
+	// RestReason is budget_reached while an API-key account rests on its budget (no restingUntil: it rests until
+	// the budget is raised or the key replaced).
+	RestReason string `json:"restReason,omitempty" ts:"'budget_reached'"`
+	SigningIn  bool   `json:"signingIn"`
 	// Email is shown in the local UI only and never logged.
 	Email     string        `json:"email,omitempty"`
 	Quota     QuotaSnapshot `json:"quota"`
@@ -57,6 +76,39 @@ type Account struct {
 	// its own (key cleaned, base URL trimmed, preset switched, provider reused) and advice about the key.
 	Notices []Notice `json:"notices,omitempty"`
 }
+
+// PreviousKey is what the key before an account's current one spent (kept when the key was replaced or removed).
+type PreviousKey struct {
+	KeyHint           string   `json:"keyHint,omitempty"`
+	Since             string   `json:"since,omitempty"`
+	Until             string   `json:"until"`
+	SpentUSD          float64  `json:"spentUsd"`
+	SpentTokens       int64    `json:"spentTokens"`
+	SpentInputTokens  int64    `json:"spentInputTokens"`
+	SpentOutputTokens int64    `json:"spentOutputTokens"`
+	BudgetUSD         *float64 `json:"budgetUsd,omitempty"`
+}
+
+// Spend sources (Account.spendSource, Provider.spendSource). The set is open: later versions add "service" and
+// "prices"; a client shows an unknown one like "none".
+const (
+	SpendCLI  = "cli"
+	SpendFree = "free"
+	SpendNone = "none"
+)
+
+// Budget states (Account.budgetState) and the budget rest reason.
+const (
+	BudgetOK      = "ok"
+	BudgetWarn    = "warn"
+	BudgetReached = "reached"
+	BudgetUnknown = "unknown"
+	// RestBudgetReached is Account.restReason while the account rests on its budget.
+	RestBudgetReached = "budget_reached"
+)
+
+// BudgetStates lists the budget states.
+func BudgetStates() []string { return []string{BudgetOK, BudgetWarn, BudgetReached, BudgetUnknown} }
 
 // AccountCreated is the answer to POST /accounts: the account, and the provider when the body had newProvider.
 type AccountCreated struct {
@@ -202,10 +254,10 @@ type LoginSession struct {
 }
 
 // NewAccount is POST /accounts. A sign-in account needs backend and kind. An API-key account names an existing
-// provider, or gives newProvider (a provider to create, or to reuse when an enabled one has the same preset,
-// backend, base URL and models; its id is optional), and may give apiKey; it is all done in one transaction, so a
-// failure leaves nothing behind. backend may then be left out (the provider's), kind too (api-key), and label
-// ("<provider name> <n>").
+// provider, or gives newProvider (a provider to create, or to reuse unchanged when an enabled one has the same
+// preset, backend, base URL, wire API, models, allow-list and tiers; its id is optional), and may give apiKey and a
+// budget; it is all done in one transaction, so a failure leaves nothing behind. backend may then be left out (the
+// provider's), kind too (api-key), and label ("<provider name> <n>").
 type NewAccount struct {
 	Backend     string         `json:"backend,omitempty" ts:"'agy' | 'claude' | 'codex'"`
 	Kind        string         `json:"kind,omitempty" ts:"'isolated' | 'system' | 'api-key'"`
@@ -217,6 +269,9 @@ type NewAccount struct {
 	// Enabled defaults to true.
 	Enabled  *bool `json:"enabled,omitempty"`
 	Priority *int  `json:"priority,omitempty"`
+	// BudgetUSD is the key's budget in US dollars (API-key accounts; absent: none); BudgetStop defaults to true.
+	BudgetUSD  *float64 `json:"budgetUsd,omitempty"`
+	BudgetStop *bool    `json:"budgetStop,omitempty"`
 }
 
 // AccountPatch is PATCH /accounts/{id}; absent fields stay as they are.
@@ -224,6 +279,10 @@ type AccountPatch struct {
 	Label    *string `json:"label,omitempty"`
 	Enabled  *bool   `json:"enabled,omitempty"`
 	Priority *int    `json:"priority,omitempty"`
+	// BudgetUSD sets an API-key account's budget in US dollars; 0 removes it. BudgetStop: rest the account once
+	// the budget is reached.
+	BudgetUSD  *float64 `json:"budgetUsd,omitempty"`
+	BudgetStop *bool    `json:"budgetStop,omitempty"`
 }
 
 // KeyRequest is PUT /accounts/{id}/key. The key never appears in a response, an error or a log.
@@ -261,9 +320,13 @@ type Provider struct {
 	Tiers         TierModels `json:"tiers"`
 	// ModelPerTask is true when no tier has a model: every delegate on the provider must name its model ("Model:
 	// chosen per task"). A valid set-up, not an error. Absent when false.
-	ModelPerTask bool   `json:"modelPerTask,omitempty"`
-	CreatedAt    string `json:"createdAt,omitempty"`
-	UpdatedAt    string `json:"updatedAt,omitempty"`
+	ModelPerTask bool `json:"modelPerTask,omitempty"`
+	// SpendSource says where its accounts' spend comes from: "cli" (the CLI's own cost estimate, official Anthropic
+	// only), "free" (local: Ollama or a localhost base URL) or "none" (tokens only). Open set: later versions add
+	// "service" and "prices".
+	SpendSource string `json:"spendSource,omitempty"`
+	CreatedAt   string `json:"createdAt,omitempty"`
+	UpdatedAt   string `json:"updatedAt,omitempty"`
 	// Notices are set only in the answers to POST and PATCH /providers: what the save changed on its own
 	// (base_url_trimmed, official_preset).
 	Notices []Notice `json:"notices,omitempty"`
