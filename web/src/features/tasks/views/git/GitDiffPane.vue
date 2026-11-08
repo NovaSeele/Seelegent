@@ -10,6 +10,8 @@ import Spinner from '@/components/ui/Spinner.vue'
 import Switch from '@/components/ui/Switch.vue'
 import TextArea from '@/components/ui/TextArea.vue'
 
+import { isImagePath } from './git'
+import ImageDiff from './ImageDiff.vue'
 import NoteItem from './NoteItem.vue'
 import type { DiffState } from './useGit'
 import type { NotesModel } from './useNotes'
@@ -18,8 +20,10 @@ import type { NotesModel } from './useNotes'
  * The diff of the file selected in the Git view, with its path and the line-wrap switch. Choosing a new-side line
  * number offers "Add a note on line N"; the composer then opens right under that line with the focus in it, and
  * the focus goes back to the line number when it closes (Escape cancels). The file's notes show under their lines.
+ * An image shows its preview (ImageDiff) in place of "binary"; an SVG keeps its text diff under the preview.
  */
 const props = defineProps<{
+  taskId: string
   file: GitFile | null | undefined
   diff: DiffState
   notes: NotesModel
@@ -34,6 +38,7 @@ const adding = ref(false)
 const failure = ref('')
 const composer = ref<HTMLFormElement | null>(null)
 
+const image = computed(() => !!props.file && isImagePath(props.file.path))
 const fileNotes = computed(() =>
   props.file ? props.notes.notes.value.filter((n) => n.file === props.file?.path) : [],
 )
@@ -86,8 +91,9 @@ async function add() {
       <span>{{ t('git.diff.error', { error: diff.error }) }}</span>
       <Button size="sm" @click="emit('retry')">{{ t('common.action.retry') }}</Button>
     </div>
+    <ImageDiff v-if="file && image" :task-id="taskId" :file="file" />
     <DiffView
-      v-if="diff.status === 'ready'"
+      v-if="diff.status === 'ready' && !(image && diff.diff.binary)"
       :diff="diff.diff"
       :wrap="wrap"
       annotatable

@@ -15,6 +15,7 @@ import { isActive } from '@/lib/taskStatus'
 import CommitDialog from './CommitDialog.vue'
 import { isDrafts, putDraft, stepFile, totals, type Drafts } from './git'
 import GitDiffPane from './GitDiffPane.vue'
+import GitDirList from './GitDirList.vue'
 import GitFileList from './GitFileList.vue'
 import GitHistory from './GitHistory.vue'
 import GitRepoPanel from './GitRepoPanel.vue'
@@ -43,7 +44,7 @@ const props = defineProps<{
 const { t } = useI18n()
 const format = useFormat()
 const model = useGit(() => props.task)
-const { git, files, selected, selectedFile, diff } = model
+const { git, files, dirs, expanded, shown, selected, selectedFile, diff } = model
 const history = useGitHistory(
   () => props.task.id,
   () => git.value,
@@ -52,12 +53,16 @@ const repo = useRepoStatus(() => git.value)
 
 const list = ref<InstanceType<typeof GitFileList> | null>(null)
 const sums = computed(() => totals(files.value))
+const count = computed(() => files.value.length + dirs.value.reduce((n, d) => n + d.count, 0))
 const active = computed(() => isActive(props.task))
 
 watch(
-  () => [props.path, files.value] as const,
-  ([path, list]) => {
-    if (path && list.some((f) => f.path === path)) selected.value = path
+  () => [props.path, files.value, dirs.value] as const,
+  ([path, list, folders]) => {
+    if (!path) return
+    const dir = folders.find((d) => d.files.some((f) => f.path === path))
+    if (dir) expanded.value = new Set([...expanded.value, dir.path])
+    if (dir || list.some((f) => f.path === path)) selected.value = path
   },
   { immediate: true },
 )
@@ -79,7 +84,7 @@ const notes = useNotes(
 )
 
 function step(delta: number) {
-  const next = stepFile(files.value, selected.value, delta)
+  const next = stepFile(shown.value, selected.value, delta)
   if (next) {
     selected.value = next
     list.value?.focusSelected()
@@ -87,7 +92,7 @@ function step(delta: number) {
 }
 
 useGitCommands(
-  () => files.value.length > 0,
+  () => shown.value.length > 0,
   step,
   () => (committing.value = true),
 )
@@ -118,7 +123,7 @@ useGitCommands(
         </span>
         <GitUpstream :upstream="repo.upstream.value" />
         <span class="git__sum">
-          {{ t('git.uncommittedCount', { n: files.length }, files.length) }}
+          {{ t('git.uncommittedCount', { n: count }, count) }}
           <span class="git__add">+{{ format.number(sums.additions) }}</span>
           <span class="git__del">−{{ format.number(sums.deletions) }}</span>
         </span>
@@ -132,7 +137,7 @@ useGitCommands(
         <span class="git__actions">
           <IconButton icon="refresh" size="sm" :label="t('git.refresh')" @click="model.reload" />
           <OutsideDiffButton :task-id="task.id" :detail="detail" />
-          <Button size="sm" variant="primary" :disabled="!files.length" @click="committing = true">
+          <Button size="sm" variant="primary" :disabled="!count" @click="committing = true">
             {{ t('git.commit.open') }}
           </Button>
         </span>
@@ -144,7 +149,7 @@ useGitCommands(
         {{ t('git.history.uncommitted') }}
       </h3>
       <EmptyState
-        v-if="!files.length"
+        v-if="!count"
         icon="git"
         :level="3"
         :title="history.hasHistory.value ? t('git.history.noUncommitted') : t('git.empty')"
@@ -155,21 +160,24 @@ useGitCommands(
       <div v-else class="git__body">
         <nav class="git__list">
           <GitFileList
+            v-if="files.length"
             ref="list"
             v-model:selected="selected"
             :files="files"
             :label="t('git.listLabel')"
           />
+          <GitDirList v-model:selected="selected" v-model:expanded="expanded" :dirs="dirs" />
         </nav>
         <GitDiffPane
           v-model:wrap="wrap"
+          :task-id="task.id"
           :file="selectedFile"
           :diff="diff"
           :notes="notes"
           @retry="model.reloadDiff"
         />
       </div>
-      <NotesPanel v-if="files.length" :notes="notes" :busy="active" @open="selected = $event" />
+      <NotesPanel v-if="count" :notes="notes" :busy="active" @open="selected = $event" />
 
       <GitRepoPanel
         :state="repo.state.value"
@@ -180,7 +188,8 @@ useGitCommands(
       <CommitDialog
         v-model:open="committing"
         v-model:message="message"
-        :files="files"
+        :files="shown"
+        :hidden="model.hidden.value"
         :suggestion="git.suggestion"
         :busy="model.busy.value"
         :active="active"

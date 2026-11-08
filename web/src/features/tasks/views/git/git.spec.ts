@@ -36,6 +36,7 @@ const repo = (files: GitFile[], extra: Partial<TaskGit> = {}): TaskGit => ({
   branch: 'main',
   dirty: files.length > 0,
   files,
+  untrackedDirs: [],
   preexisting: [],
   suggestion: null,
   startState: 'unknown',
@@ -139,6 +140,7 @@ describe('useGit', () => {
         repo: false,
         dirty: false,
         files: [],
+        untrackedDirs: [],
         preexisting: [],
         suggestion: null,
         startState: 'unknown',
@@ -188,6 +190,27 @@ describe('useGit', () => {
       expect.any(AbortSignal),
       'head',
     )
+  })
+
+  it('shows large untracked folders as rows whose open files select and commit', async () => {
+    const listed = [
+      file('gen/a.png', { status: 'untracked' }),
+      file('gen/b.png', { status: 'untracked' }),
+    ]
+    const status = vi.fn<GitApi['status']>().mockResolvedValue(
+      repo([file('src/a.ts')], {
+        untrackedDirs: [{ path: 'gen/', count: 30, bytes: 4096, files: listed }],
+      }),
+    )
+    await setup(fakeGitApi({ status }))
+    expect(model.shown.value.map((f) => f.path)).toEqual(['src/a.ts'])
+    expect(model.hidden.value).toBe(30)
+    model.expanded.value = new Set(['gen/'])
+    expect(model.shown.value.map((f) => f.path)).toEqual(['src/a.ts', 'gen/a.png', 'gen/b.png'])
+    expect(model.hidden.value).toBe(28)
+    model.selected.value = 'gen/b.png'
+    await flush(4)
+    expect(model.selectedFile.value?.path).toBe('gen/b.png')
   })
 
   it('re-reads while a suggestion is being written, on task updates only', async () => {

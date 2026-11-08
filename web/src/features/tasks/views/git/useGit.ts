@@ -38,6 +38,19 @@ export function useGit(task: () => TaskSummary, api: GitApi = gitApi) {
   const state = shallowRef<GitState>({ status: 'loading' })
   const git = computed(() => (state.value.status === 'ready' ? state.value.git : null))
   const files = computed(() => sortFiles(git.value?.files ?? []))
+  // Large untracked folders are one row each; an open one lists its first files, which select and commit like
+  // the others (`shown`). A folder is never committed as a whole.
+  const dirs = computed(() => git.value?.untrackedDirs ?? [])
+  const expanded = shallowRef<ReadonlySet<string>>(new Set())
+  const dirFiles = computed(() => dirs.value.flatMap((d) => d.files))
+  const shown = computed(() => [
+    ...files.value,
+    ...dirs.value.filter((d) => expanded.value.has(d.path)).flatMap((d) => d.files),
+  ])
+  /** Files of the task left out of `shown`: in closed folders, or past an open folder's list. */
+  const hidden = computed(
+    () => dirs.value.reduce((n, d) => n + d.count, 0) - (shown.value.length - files.value.length),
+  )
   const suggestion = computed(() => git.value?.suggestion ?? null)
 
   let statusCall: AbortController | null = null
@@ -74,11 +87,18 @@ export function useGit(task: () => TaskSummary, api: GitApi = gitApi) {
 
   // The selected file and its diff, re-read when the file itself changes.
   const selected = shallowRef<string | null>(null)
-  const selectedFile = computed(() => files.value.find((f) => f.path === selected.value) ?? null)
+  const selectedFile = computed(
+    () => [...files.value, ...dirFiles.value].find((f) => f.path === selected.value) ?? null,
+  )
   const diff = shallowRef<DiffState>({ status: 'idle' })
 
-  watch(files, (list) => {
-    if (!list.some((f) => f.path === selected.value)) selected.value = list[0]?.path ?? null
+  watch([files, dirFiles], ([list, more]) => {
+    if (
+      !list.some((f) => f.path === selected.value) &&
+      !more.some((f) => f.path === selected.value)
+    ) {
+      selected.value = list[0]?.path ?? null
+    }
   })
 
   let diffCall: AbortController | null = null
@@ -154,6 +174,10 @@ export function useGit(task: () => TaskSummary, api: GitApi = gitApi) {
     state,
     git,
     files,
+    dirs,
+    expanded,
+    shown,
+    hidden,
     suggestion,
     selected,
     selectedFile,

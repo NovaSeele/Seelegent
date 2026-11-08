@@ -30,6 +30,7 @@ func (r *Repos) Status(ctx context.Context, cwd string) (api.RepoStatus, error) 
 	if err != nil {
 		return api.RepoStatus{}, err
 	}
+	countUntracked(root, st.files)
 	return api.RepoStatus{Repo: true, Root: root, Branch: st.branch, Detached: st.detached,
 		Dirty: len(st.files) > 0, Files: api.NonNil(st.files), Upstream: st.upstream, Ahead: st.ahead,
 		Behind: st.behind, UpstreamGone: st.upstream != "" && !st.ab}, nil
@@ -75,7 +76,8 @@ type repoState struct {
 	ab            bool
 }
 
-// state reads `git status` of the repository at root, with line counts when numstat is set.
+// state reads `git status` of the repository at root, with the line counts of the changed tracked files when
+// numstat is set (countUntracked counts the untracked ones, for the files a caller shows).
 func (r *Repos) state(ctx context.Context, root string, numstat bool) (repoState, error) {
 	out, _, err := r.run(ctx, root, ReadTimeout, 0, "status", "--porcelain=v2", "--branch", "-z",
 		"--untracked-files=all")
@@ -98,11 +100,7 @@ func (r *Repos) state(ctx context.Context, root string, numstat bool) (repoState
 	stats := parseNumstat(diff)
 	for i := range st.files {
 		f := &st.files[i]
-		if f.Status == api.GitUntracked {
-			f.Additions, f.Binary = countLines(filepath.Join(root, filepath.FromSlash(f.Path)))
-			continue
-		}
-		if s, ok := stats[f.Path]; ok {
+		if s, ok := stats[f.Path]; ok && f.Status != api.GitUntracked {
 			f.Additions, f.Deletions, f.Binary = s.add, s.del, s.binary
 		}
 	}
@@ -181,6 +179,15 @@ func statusOf(xy string) string {
 		return api.GitAdded
 	}
 	return api.GitModified
+}
+
+// countUntracked sets the line counts of the untracked files among files (paths relative to root).
+func countUntracked(root string, files []api.GitFile) {
+	for i := range files {
+		if f := &files[i]; f.Status == api.GitUntracked {
+			f.Additions, f.Binary = countLines(filepath.Join(root, filepath.FromSlash(f.Path)))
+		}
+	}
 }
 
 type lineStat struct {

@@ -382,15 +382,29 @@ func (t *Task) projectDir() string {
 	return t.Cwd
 }
 
-// FilesChanged returns the files edited in any turn, without duplicates, in first-seen order.
+// FilesChanged returns the files changed in any turn, without duplicates, in first-seen order.
 func (t *Task) FilesChanged() []string {
 	var out []string
+	seen := map[string]bool{}
 	for _, tu := range t.Turns {
 		for _, f := range tu.Files {
-			if !slices.Contains(out, f) {
+			if !seen[f] {
+				seen[f] = true
 				out = append(out, f)
 			}
 		}
 	}
 	return out
+}
+
+// lastEdits lists the files the edit tools of a turn's last finished attempt changed, as display paths. The
+// verifier is judged by them: its Files also hold what its test runs wrote (caches, build output), which is not
+// an edit of the code it reviews.
+func lastEdits(t *Task, tu *Turn) []string {
+	for i := len(tu.Attempts) - 1; i >= 0; i-- {
+		if o := tu.Attempts[i].Outcome; o != nil {
+			return displayPaths(t.Cwd, o.FilesEdited)
+		}
+	}
+	return nil
 }

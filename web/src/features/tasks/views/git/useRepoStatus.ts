@@ -36,9 +36,10 @@ const messageOf = (error: unknown) => (error instanceof Error ? error.message : 
 export function otherFiles(repo: RepoStatus | null, git: TaskGit | null): OtherFile[] {
   if (!repo?.repo || !git?.repo) return []
   const own = new Set([...git.files, ...git.committedFiles].map((f) => f.path))
+  const ownDirs = (git.untrackedDirs ?? []).map((d) => d.path)
   const before = new Set(git.preexisting)
   return sortFiles(repo.files ?? [])
-    .filter((f) => !own.has(f.path))
+    .filter((f) => !own.has(f.path) && !ownDirs.some((dir) => f.path.startsWith(dir)))
     .map((file) => ({
       file,
       mark:

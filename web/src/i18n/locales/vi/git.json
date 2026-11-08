@@ -44,6 +44,7 @@
     "files": "Tệp",
     "all": "Tất cả ({n})",
     "renameNote": "Tệp đổi tên được commit cùng việc xoá đường dẫn cũ.",
+    "hiddenNote": "{n} tệp trong thư mục chưa theo dõi không hiện ở đây. Mở thư mục trong danh sách tệp để commit các tệp của nó.",
     "active": "Worker vẫn đang chạy. Hãy commit khi tác vụ xong.",
     "confirm": "Commit {n} tệp",
     "done": "Đã commit {sha}: {summary}",
@@ -119,5 +120,23 @@
     "synced": "Đã đồng bộ với {name}",
     "gone": "{name} không còn tồn tại",
     "goneShort": "(đã mất)"
+  },
+  "dir": {
+    "label": "Thư mục chưa theo dõi",
+    "files": "{n} tệp",
+    "more": "và {n} tệp nữa",
+    "listLabel": "Các tệp trong {path}"
+  },
+  "image": {
+    "before": "Trước (HEAD)",
+    "after": "Sau (thư mục làm việc)",
+    "alt": "{path}, {side}",
+    "pixels": "{width} × {height} px",
+    "tooLarge": "Quá lớn để xem trước ({size}).",
+    "lfs": "Tệp lưu bằng Git LFS: kho chỉ giữ con trỏ, không phải ảnh.",
+    "unsupported": "Không xem trước được tệp này.",
+    "missing": "Phiên bản này của tệp không tồn tại.",
+    "failed": "Không tải được ảnh: {error}",
+    "broken": "Không hiển thị được ảnh."
   }
 }

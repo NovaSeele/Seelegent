@@ -932,8 +932,17 @@ export interface TaskGit {
   root?: string
   branch?: string
   dirty: boolean
-  /** Files are the task's uncommitted changes, counted against HEAD; a commit may only name these. */
+  /**
+   * Files are the task's uncommitted changes, counted against HEAD; a commit may only name these. The files of
+   * UntrackedDirs are not among them.
+   */
   files: GitFile[]
+  /**
+   * UntrackedDirs are the untracked folders (no tracked file inside) holding more than GitCollapseOver of the
+   * task's untracked files, each shown as one row; their files are left out of Files. A commit may still name
+   * them, one by one.
+   */
+  untrackedDirs: GitDir[]
   /** Preexisting lists files that were already dirty when the task started. */
   preexisting: string[]
   suggestion: Suggestion | null
@@ -1012,6 +1021,17 @@ export interface GitCommitDetail extends GitCommit {
 export interface Suggestion {
   state: 'idle' | 'running' | 'ready' | 'failed'
   message?: string
+}
+
+/** GitDir is an untracked folder of TaskGit.UntrackedDirs. */
+export interface GitDir {
+  /** Path is relative to the repository root and ends with '/'. */
+  path: string
+  /** Count counts its untracked files; Bytes is their total size. */
+  count: number
+  bytes: number
+  /** Files are its first GitDirFiles files by path; Count minus their number are left out. */
+  files: GitFile[]
 }
 
 /** GitFile is one changed file. */
@@ -2233,6 +2253,7 @@ export type ErrorCode =
   | 'conflict'
   | 'bad_state'
   | 'too_large'
+  | 'unsupported_media_type'
   | 'misdirected_request'
   | 'upstream'
   | 'unavailable'

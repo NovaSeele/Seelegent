@@ -26,9 +26,11 @@ const (
 	CodeConflict        ErrorCode = "conflict"
 	CodeBadState        ErrorCode = "bad_state"
 	CodeTooLarge        ErrorCode = "too_large"
-	CodeMisdirected     ErrorCode = "misdirected_request"
-	CodeUpstream        ErrorCode = "upstream"
-	CodeUnavailable     ErrorCode = "unavailable"
+	// CodeUnsupportedMedia (415): a file of a type the endpoint does not serve.
+	CodeUnsupportedMedia ErrorCode = "unsupported_media_type"
+	CodeMisdirected      ErrorCode = "misdirected_request"
+	CodeUpstream         ErrorCode = "upstream"
+	CodeUnavailable      ErrorCode = "unavailable"
 	// CodeDaemonStopping (503) ends a request the daemon cut short because it is shutting down (POST /wait):
 	// unlike a lost connection it tells the caller not to start the daemon again.
 	CodeDaemonStopping ErrorCode = "daemon_stopping"
@@ -50,6 +52,8 @@ func (c ErrorCode) HTTPStatus() int {
 		return 409
 	case CodeTooLarge:
 		return 413
+	case CodeUnsupportedMedia:
+		return 415
 	case CodeMisdirected:
 		return 421
 	case CodeUpstream:

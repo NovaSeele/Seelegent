@@ -45,6 +45,7 @@ const view = (extra: Partial<TaskGit> = {}): TaskGit => ({
   branch: 'main',
   dirty: false,
   files: [],
+  untrackedDirs: [],
   preexisting: [],
   suggestion: null,
   head: 'c'.repeat(40),
@@ -273,6 +274,18 @@ describe('repository status', () => {
       ['z/other.ts', 'untouched'],
     ])
     expect(otherFiles({ repo: false }, git)).toEqual([])
+  })
+
+  it("leaves out the files of the task's untracked folders", () => {
+    const git = view({
+      untrackedDirs: [{ path: 'z/', count: 25, bytes: 1, files: [] }],
+      preexisting: ['old.ts'],
+    })
+    expect(otherFiles(repo(), git).map((o) => o.file.path)).toEqual([
+      'done.ts',
+      'mine.ts',
+      'old.ts',
+    ])
   })
 
   it('reads the upstream, ahead and behind', () => {

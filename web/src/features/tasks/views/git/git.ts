@@ -54,6 +54,31 @@ export function stepFile(
 export const committable = (files: readonly GitFile[], selected: ReadonlySet<string>) =>
   files.filter((file) => selected.has(file.path)).map((file) => file.path)
 
+/** Extensions the Git view previews as images (the image endpoint's allow-list). */
+const IMAGE_EXT = /\.(png|jpe?g|gif|webp|avif|bmp|ico|svg)$/i
+
+export const isImagePath = (path: string) => IMAGE_EXT.test(path)
+
+/** One side of an image preview: the file at HEAD (before) or in the working tree (after). */
+export interface ImageSide {
+  side: 'before' | 'after'
+  version: 'head' | 'worktree'
+  path: string
+}
+
+/**
+ * The sides an image change shows, against HEAD: before and after for a change (a rename's before is its old
+ * path), after only for a new file, before only for a deleted one; none for a file that is not an image.
+ */
+export function imageSides(file: GitFile): ImageSide[] {
+  if (!isImagePath(file.path)) return []
+  const before: ImageSide = { side: 'before', version: 'head', path: file.oldPath ?? file.path }
+  const after: ImageSide = { side: 'after', version: 'worktree', path: file.path }
+  if (file.status === 'added' || file.status === 'untracked') return [after]
+  if (file.status === 'deleted') return [before]
+  return [before, after]
+}
+
 /** Commit message drafts by task id, newest kept: a draft survives switching views or reloading the page. */
 export type Drafts = Record<string, { message: string; at: number }>
 

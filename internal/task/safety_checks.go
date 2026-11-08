@@ -34,12 +34,13 @@ var utf8BOM = []byte{0xEF, 0xBB, 0xBF}
 
 // hygiene checks the files the turn changed. For those that were clean when the turn started: junk files, a BOM in
 // a new file of a repository that uses none, and new files the report never mentions (old hygiene.js;
-// test_scaffold is left out). For every changed file whose start is known: line endings and BOM against the styles
+// test_scaffold is left out; only when reported, the turn ended with a report: a worker cut off before writing one
+// names nothing). For every changed file whose start is known: line endings and BOM against the styles
 // the file may keep (styleRefs), so only what the turn did is judged.
 func (s *Service) hygiene(ctx context.Context, root string, start, end snapshot.Manifest, changed []string,
-	response string) []api.Finding {
+	response string, reported bool) []api.Finding {
 	var out []api.Finding
-	report := strings.ToLower(response)
+	report := newMentions(response)
 	for _, rel := range changed {
 		b, inStart := start.Find(rel)
 		dirty := inStart && b.Status != "" // already changed before the turn: those changes are not the worker's
@@ -64,8 +65,7 @@ func (s *Service) hygiene(ctx context.Context, root string, start, end snapshot.
 				out = append(out, api.Finding{Kind: api.FindingBOMNewFile, Severity: api.SeverityRed, Path: rel})
 				continue
 			}
-			if !strings.Contains(report, strings.ToLower(rel)) &&
-				!strings.Contains(report, strings.ToLower(path.Base(rel))) {
+			if reported && !report.names(rel) {
 				out = append(out, api.Finding{Kind: api.FindingUnreported, Severity: api.SeverityWarn, Path: rel})
 			}
 			continue
@@ -89,6 +89,71 @@ func (s *Service) hygiene(ctx context.Context, root string, start, end snapshot.
 		}
 	}
 	return out
+}
+
+// mentions answers whether a report names a new file, directly or in grouped form ("`src/pages/`: AboutPage, ...").
+type mentions struct {
+	text string
+	// dirs caches the answer per ancestor directory: the files of one folder share them.
+	dirs map[string]bool
+}
+
+// newMentions prepares a report for matching: lower case, '/' separators.
+func newMentions(response string) *mentions {
+	return &mentions{text: strings.ReplaceAll(strings.ToLower(response), `\`, "/"), dirs: map[string]bool{}}
+}
+
+// names reports whether the report mentions rel (relative, '/' separators): its path, its base name, its stem (the
+// base name without its last extension, at least 3 characters, as a whole word) or one of its folders written as a
+// path ("src/pages/", or "src/pages" with two or more segments; a bare "src" does not count).
+func (m *mentions) names(rel string) bool {
+	rel = strings.ToLower(rel)
+	base := path.Base(rel)
+	if strings.Contains(m.text, rel) || strings.Contains(m.text, base) {
+		return true
+	}
+	if stem := strings.TrimSuffix(base, path.Ext(base)); len(stem) >= 3 && m.word(stem, false) {
+		return true
+	}
+	for dir := path.Dir(rel); dir != "." && dir != "/" && dir != ""; dir = path.Dir(dir) {
+		said, ok := m.dirs[dir]
+		if !ok {
+			said = m.word(dir+"/", true) || strings.Contains(dir, "/") && m.word(dir, true)
+			m.dirs[dir] = said
+		}
+		if said {
+			return true
+		}
+	}
+	return false
+}
+
+// word reports whether s appears in the report as a whole name: not continued after it by a word character, a '/'
+// or an extension ("keycap/" is a folder, "vite.config.js" another file), and for a path (asPath) not continued
+// before it by a word character, '/' or '.' ("other/src/" does not name "src/").
+func (m *mentions) word(s string, asPath bool) bool {
+	t := m.text
+	for from := 0; ; {
+		i := strings.Index(t[from:], s)
+		if i < 0 {
+			return false
+		}
+		i += from
+		before := i == 0 || !wordByte(t[i-1]) && (!asPath || t[i-1] != '/' && t[i-1] != '.')
+		end := i + len(s)
+		after := end == len(t) || !wordByte(t[end]) && t[end] != '/' &&
+			(t[end] != '.' || end+1 == len(t) || !wordByte(t[end+1]))
+		if before && after {
+			return true
+		}
+		from = i + 1
+	}
+}
+
+// wordByte reports a byte that continues a word or a file name: letters, digits, '_' and '-' (and any byte of a
+// non-ASCII character).
+func wordByte(c byte) bool {
+	return c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '_' || c == '-' || c >= 0x80
 }
 
 // committedKeeps reports whether git normalizes data on commit (every CRLF to LF: core.autocrlf true or input, the

@@ -18,6 +18,8 @@ import type { GitBusy, GitModel } from './useGit'
  */
 const props = defineProps<{
   files: readonly GitFile[]
+  /** The task's files not offered: in untracked folders left closed in the list, or past an open one's list. */
+  hidden?: number
   suggestion: TaskGit['suggestion']
   busy: GitBusy
   /** The task is still working: committing waits until it finishes. */
@@ -117,6 +119,9 @@ const fileLabel = (file: GitFile) => (file.oldPath ? `${file.oldPath} → ${file
           </li>
         </ul>
         <p v-if="hasRename" class="cd__hint">{{ t('git.commit.renameNote') }}</p>
+        <p v-if="hidden" class="cd__hint">
+          {{ t('git.commit.hiddenNote', { n: hidden }, hidden) }}
+        </p>
       </fieldset>
 
       <p v-if="active" class="cd__hint cd__hint--warn">{{ t('git.commit.active') }}</p>

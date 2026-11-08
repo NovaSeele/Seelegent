@@ -75,3 +75,13 @@ export function createGitApi(client: ApiClient) {
 }
 
 export type GitApi = ReturnType<typeof createGitApi>
+
+/** Which version of a file the image endpoint serves: the working tree or the blob at HEAD. */
+export type ImageVersion = 'worktree' | 'head'
+
+/**
+ * The URL of an image of the task's repository (GET /tasks/{id}/git/image), for an `<img src>`: a GET needs no
+ * header, and the answer carries nosniff and a sandbox CSP, so an SVG never runs as a page.
+ */
+export const gitImageUrl = (taskId: string, path: string, version: ImageVersion) =>
+  `/api/v1/tasks/${enc(taskId)}/git/image?path=${enc(path)}&version=${version}`

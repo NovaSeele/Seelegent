@@ -47,8 +47,13 @@ type TaskGit struct {
 	Root   string `json:"root,omitempty"`
 	Branch string `json:"branch,omitempty"`
 	Dirty  bool   `json:"dirty"`
-	// Files are the task's uncommitted changes, counted against HEAD; a commit may only name these.
+	// Files are the task's uncommitted changes, counted against HEAD; a commit may only name these. The files of
+	// UntrackedDirs are not among them.
 	Files []GitFile `json:"files"`
+	// UntrackedDirs are the untracked folders (no tracked file inside) holding more than GitCollapseOver of the
+	// task's untracked files, each shown as one row; their files are left out of Files. A commit may still name
+	// them, one by one.
+	UntrackedDirs []GitDir `json:"untrackedDirs"`
 	// Preexisting lists files that were already dirty when the task started.
 	Preexisting []string    `json:"preexisting"`
 	Suggestion  *Suggestion `json:"suggestion"`
@@ -114,6 +119,24 @@ type GitCommitDetail struct {
 type Suggestion struct {
 	State   string `json:"state" ts:"'idle' | 'running' | 'ready' | 'failed'"`
 	Message string `json:"message,omitempty"`
+}
+
+// GitCollapseOver: an untracked folder with more of a task's files than this is one row of TaskGit
+// (UntrackedDirs); GitDirFiles is how many of its files the row lists.
+const (
+	GitCollapseOver = 20
+	GitDirFiles     = 200
+)
+
+// GitDir is an untracked folder of TaskGit.UntrackedDirs.
+type GitDir struct {
+	// Path is relative to the repository root and ends with '/'.
+	Path string `json:"path"`
+	// Count counts its untracked files; Bytes is their total size.
+	Count int   `json:"count"`
+	Bytes int64 `json:"bytes"`
+	// Files are its first GitDirFiles files by path; Count minus their number are left out.
+	Files []GitFile `json:"files"`
 }
 
 // GitFile is one changed file.

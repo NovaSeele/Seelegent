@@ -44,6 +44,7 @@
     "files": "파일",
     "all": "모든 파일({n})",
     "renameNote": "이름이 바뀐 파일은 이전 경로 삭제와 함께 커밋됩니다.",
+    "hiddenNote": "추적되지 않는 폴더의 파일 {n}개는 여기에 표시되지 않습니다. 커밋하려면 파일 목록에서 폴더를 여세요.",
     "active": "워커가 아직 실행 중입니다. 작업이 끝난 뒤 커밋하세요.",
     "confirm": "파일 {n}개 커밋",
     "done": "{sha} 커밋됨: {summary}",
@@ -119,5 +120,23 @@
     "synced": "{name}과 최신 상태",
     "gone": "{name}이(가) 더 이상 없음",
     "goneShort": "(삭제됨)"
+  },
+  "dir": {
+    "label": "추적되지 않는 폴더",
+    "files": "파일 {n}개",
+    "more": "외 {n}개",
+    "listLabel": "{path}의 파일"
+  },
+  "image": {
+    "before": "변경 전 (HEAD)",
+    "after": "변경 후 (작업 트리)",
+    "alt": "{path}, {side}",
+    "pixels": "{width} × {height} px",
+    "tooLarge": "미리 보기에는 너무 큽니다({size}).",
+    "lfs": "Git LFS로 저장된 파일입니다. 저장소에는 이미지가 아니라 포인터가 있습니다.",
+    "unsupported": "이 파일은 미리 볼 수 없습니다.",
+    "missing": "이 버전의 파일이 없습니다.",
+    "failed": "이미지를 불러오지 못했습니다: {error}",
+    "broken": "이미지를 표시하지 못했습니다."
   }
 }

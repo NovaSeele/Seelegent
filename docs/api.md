@@ -127,12 +127,33 @@ in the daemon.
   its turns touched, or a file under the task's folder that a commit made during one of its turns changed. A file
   only commits outside the turns changed is never listed. A committed file's diff compares the working tree with
   the start, so it also holds others' commits to that same file.
+- `TaskGit.untrackedDirs` groups the task's untracked files of a folder git itself shows as one entry (no tracked
+  file inside, `dir/` under `--untracked-files=normal`) when it holds more than 20 of them: one `GitDir` row with
+  the `path` (ending in `/`), the file `count`, their total `bytes` and the first 200 `files`; those files are left
+  out of `files`. Only this view groups: the snapshots, the safety checks and a commit still see every file, and a
+  commit may name a grouped file one by one (never the folder). The extra `git ls-files --others --directory` call
+  runs only when a top-level folder holds more than 20 untracked files, and only over those folders.
 - When the commits since the start cannot be read (git times out on a big repository, an object is missing), the
   error is logged and `TaskGit` still answers with `files`: `historyState` is `history_unavailable`, `commits` and
   `committedFiles` are empty, and a later read tries again.
 - `GET /tasks/{id}/git/diff` takes `base=start` (the default: the working tree against the task's start, or the
   empty tree when the repository had no commit then) or `base=head` (the uncommitted list); any other `base` is
   `400`. It accepts `turn` but does not use it; per-turn changes come from the turn snapshots (`outside-diff`).
+- `GET /tasks/{id}/git/image?path=&version=` (an addition to the contract) answers one image of the task's
+  repository for the Git view's previews: `version=worktree` (the default) reads the working tree, `version=head`
+  the blob at HEAD (`404` when HEAD is unborn or has no such file); any other version is `400`. `path` is
+  repository-relative (`\` reads as `/`); an empty or absolute path, a `..` segment, any `:` (a drive or a Windows
+  alternate data stream), a control character, a Windows device name as any segment (`CON`, `PRN`, `AUX`, `NUL`,
+  `COM1`–`9`, `LPT1`–`9`, with or without an extension), or a working-tree path that leaves the repository once
+  links and junctions are resolved (`filepath.EvalSymlinks` on the file and the root, compared through
+  `fsutil.Key`) is `400` with field `path`. Only `png`, `jpg`, `jpeg`, `gif`, `webp`, `avif`, `bmp`, `ico` and `svg`
+  are served; any other extension is `415 unsupported_media_type` (`details.reason: "not_image"`), and so is a Git
+  LFS pointer (`details.reason: "lfs_pointer"`). An image over 10 MiB is `413 too_large` with `details.size` (and
+  the size in the message), checked before reading: `os.Stat` (then a capped read) for the working tree,
+  `git cat-file --batch-check` for HEAD. The answer's `Content-Type` comes from the extension (never sniffed), with
+  `X-Content-Type-Options: nosniff`, `Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline';
+  sandbox` (an SVG opened as a page runs no script on the daemon's origin) and `Cache-Control: no-store`. It is a
+  GET for the dashboard and the lead: it is not on the worker allow-list, so a worker is refused it.
 - `GET /tasks/{id}/git/commits/{sha}` (an addition to the contract) answers `GitCommitDetail`: the commit's files and
   parsed diffs against its first parent, 1 MiB in all (`truncated`), with `--no-textconv` and `--no-ext-diff` like
   the other diffs. The sha is checked as 4–64 hex digits before git sees it (`400`, field `sha`), resolved with
