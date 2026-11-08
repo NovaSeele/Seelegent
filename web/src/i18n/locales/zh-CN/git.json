@@ -5,6 +5,7 @@
   "notRepoDesc": "{cwd} 不在任何 git 仓库中，没有可提交的内容。",
   "noBranch": "分离头指针",
   "uncommittedCount": "{n} 个未提交的文件",
+  "sumShown": "（仅已列出的文件）",
   "refresh": "重新读取",
   "empty": "此任务没有改动",
   "emptyDesc": "worker 修改的文件会显示在这里，可供审阅和提交。",
@@ -125,7 +126,8 @@
     "label": "未跟踪的文件夹",
     "files": "{n} 个文件",
     "more": "还有 {n} 个",
-    "listLabel": "{path} 中的文件"
+    "listLabel": "{path} 中的文件",
+    "others": "此处另有 {n} 个文件不属于此任务"
   },
   "image": {
     "before": "修改前 (HEAD)",

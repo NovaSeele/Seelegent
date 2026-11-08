@@ -278,11 +278,23 @@ func computeAttention(t *Task, live liveState, acc accountHealth, now time.Time,
 			return att(api.AttentionBlocked, ReasonWorkAtRisk, WhoLead, fmt.Sprintf("%d file(s) at risk", n),
 				&api.AttentionParams{Count: n})
 		}
-		return att(api.AttentionInfo, ReasonReview, WhoLead, "")
+		return att(api.AttentionInfo, ReasonReview, WhoLead, backgroundTimeout(tu))
 	case StatusFailed:
 		return att(api.AttentionBlocked, ReasonFailed, WhoLead, t.Error, failedParams(t.Error))
 	}
 	return nil
+}
+
+// backgroundTimeout is backend.BackgroundWaitTimeout when the turn's time limit ended one of its attempts while the
+// CLI only waited for a background command (its dev server and other commands are gone), else "" (field report 4,
+// F8).
+func backgroundTimeout(tu *Turn) string {
+	for _, a := range tu.Attempts {
+		if a.Status == AttemptBackgroundWait && a.Outcome != nil && a.Outcome.Error == backend.BackgroundWaitTimeout {
+			return backend.BackgroundWaitTimeout
+		}
+	}
+	return ""
 }
 
 // failedParams are the params of a failed flag whose error says how the worker process ended (backend.exitText):

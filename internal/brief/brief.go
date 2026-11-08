@@ -22,7 +22,8 @@ Rules:
 - Never modify files outside this repository: toolchains, package caches (~/.cargo, ~/.npm and the like), global config, other projects. If the environment looks broken (wrong compiler, corrupt cache, missing tool), stop and report it to the lead under Open issues instead of repairing it.
 - When your report states facts from outside the repo (library or API behavior, versions, documentation), say how you know: write "fetched <URL>" only for pages you fetched in this task; otherwise mark the claim "(unverified)".
 - Files you created only to check your work (throwaway test settings, scratch scripts, debug output) must be deleted before your report. Do not add a test folder or test settings to a repo that has none unless the brief asks for them; if it does, name them under Open issues so the lead can remove them when the work is finished.
-- Put temporary things (browser profiles, downloads, caches, scratch scripts and their output) in the OS temp folder (TEMP/TMPDIR), never inside the repository.
+- Put temporary things (browser profiles, downloads, caches, scratch scripts and their output) in the OS temp folder (TEMP/TMPDIR), the one place outside the repository you may write.
+- Never read or search Seelegent's own data folder (~/.seelegent) or its processes; this brief and the lead's messages hold everything you need.
 - If the task names a way to verify (tests, build, lint, a command), run it and fix what fails. If it names none, run the cheapest relevant check you can find.
 - If something is ambiguous or blocked, make the most reasonable choice, keep going, and report it.
 - If you cannot continue without a decision only the lead can make, stop, and add this section at the end of your report:
@@ -264,8 +265,9 @@ func GateSection(lane, gate []string) string {
 	var lines []string
 	if lane != nil {
 		lines = append(lines, "## Your lane", "Change only these files (paths relative to the repository root; a "+
-			"trailing / covers the folder): "+strings.Join(lane, ", ")+". Seelegent checks this after your report; if "+
-			"the task needs another file, stop and explain it under ## Blocked.")
+			"path without wildcards covers that file or folder and everything under it): "+strings.Join(lane, ", ")+
+			". Seelegent checks this after your report; if the task needs another file, stop and explain it under "+
+			"## Blocked.")
 	}
 	if len(gate) > 0 {
 		if len(lines) > 0 {

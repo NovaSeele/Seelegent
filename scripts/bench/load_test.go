@@ -140,9 +140,6 @@ type loadGen struct {
 	sseBytes  atomic.Int64
 	sseConns  atomic.Int64
 	events    int64
-	// heapStart and heapEnd are the in-use heap after a forced GC (bytes), heapMeasured whether both were read.
-	heapStart, heapEnd int64
-	heapMeasured       bool
 }
 
 // delegateAll queues one long script per task and delegates the tasks.
@@ -249,8 +246,9 @@ func (g *loadGen) sse(ctx context.Context) {
 	}
 }
 
-// finish counts the events the load tasks stored and cancels the tasks that are still running.
-func (g *loadGen) finish(ctx context.Context) {
+// finish counts the events the load tasks stored, cancels the tasks that are still running and waits until every
+// load task ended; the error says how many did not.
+func (g *loadGen) finish(ctx context.Context) error {
 	for _, id := range g.ids {
 		var sum api.TaskSummary
 		if _, err := g.e.call(ctx, http.MethodGet, "/tasks/"+id, nil, &sum); err != nil {
@@ -264,9 +262,12 @@ func (g *loadGen) finish(ctx context.Context) {
 			}
 		}
 	}
-	if len(g.ids) > 0 {
-		if err := g.e.waitTerminal(ctx, g.ids, time.Minute); err != nil {
-			fmt.Fprintln(os.Stderr, "bench:", err)
-		}
+	if len(g.ids) == 0 {
+		return nil
 	}
+	err := g.e.waitTerminal(ctx, g.ids, time.Minute)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "bench:", err)
+	}
+	return err
 }

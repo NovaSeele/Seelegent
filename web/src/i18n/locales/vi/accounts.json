@@ -50,7 +50,8 @@
     "logout": "Đăng xuất",
     "key": "Đặt khóa API",
     "delete": "Xóa tài khoản",
-    "more": "Thêm thao tác cho {name}"
+    "more": "Thêm thao tác cho {name}",
+    "priority": "Ưu tiên: {n}…"
   },
   "done": {
     "added": "Đã thêm {name}",
@@ -60,7 +61,8 @@
     "deleted": "Đã xóa {name}",
     "logout": "Đã đăng xuất",
     "refreshedAll": "Đã làm mới hạn mức",
-    "off": "Đã tắt nhận việc cho {name}"
+    "off": "Đã tắt nhận việc cho {name}",
+    "priority": "Đã đặt ưu tiên của {name} là {n}"
   },
   "quota": {
     "window": "Khung {window}",
@@ -138,6 +140,10 @@
     "title": "Đổi tên tài khoản",
     "submit": "Đổi tên"
   },
+  "priorityDialog": {
+    "title": "Ưu tiên của {name}",
+    "submit": "Lưu ưu tiên"
+  },
   "delete": {
     "title": "Xóa {name}?",
     "desc": "Hồ sơ và lượt đăng nhập của nó bị gỡ khỏi Seelegent. Các tác vụ nó đã chạy vẫn giữ lịch sử.",
@@ -197,5 +203,43 @@
     "tierModels": "Luôn được dùng (mô hình theo cấp): {models}",
     "enabled": "Tài khoản được dùng",
     "save": "Lưu nhà cung cấp"
+  },
+  "view": {
+    "label": "Kiểu xem tài khoản",
+    "list": "Danh sách",
+    "cards": "Thẻ"
+  },
+  "list": {
+    "col": {
+      "account": "Tài khoản",
+      "status": "Trạng thái",
+      "slots": "Chỗ",
+      "quota": "Hạn mức",
+      "controls": "Dùng để làm việc · Ưu tiên"
+    },
+    "slots": "Đang dùng {busy}/{max}",
+    "expand": "Xem chi tiết {name}",
+    "collapse": "Ẩn chi tiết {name}",
+    "enabledFor": "Dùng {name} để làm việc",
+    "span": {
+      "hours": "{n} giờ",
+      "day": "Theo ngày",
+      "week": "Theo tuần",
+      "month": "Theo tháng"
+    },
+    "spanShort": {
+      "hours": "{n} giờ",
+      "day": "1 ngày",
+      "week": "7 ngày",
+      "month": "30 ngày"
+    },
+    "quota": {
+      "tip": "{group} · {window}",
+      "lowestTip": "Thấp nhất trong mọi khung: {group} · {window}",
+      "more": "Còn {n} khung khác, hiện khi mở hàng",
+      "moreShort": "+{n}",
+      "passive": "Không có hạn mức để đọc",
+      "checking": "Đang đọc hạn mức…"
+    }
   }
 }

@@ -91,9 +91,11 @@ func run(o *options) error {
 		}
 	}
 	// The bench measures the daemon's own cost: the memory thresholds are off, so a busy machine cannot hold the
-	// bench's tasks (missing keys keep their defaults).
-	off := []byte(`{"minFreeMemoryMB": 0, "minFreeCommitMB": 0, "criticalFreeMemoryMB": 0}` + "\n")
-	if err := os.WriteFile(filepath.Join(e.home, "config.json"), off, 0o600); err != nil {
+	// bench's tasks, and the slots fit every load task at once: no cap over all accounts, and enough turns per
+	// account for -tasks (missing keys keep their defaults).
+	cfg := fmt.Sprintf(`{"minFreeMemoryMB": 0, "minFreeCommitMB": 0, "criticalFreeMemoryMB": 0, `+
+		`"maxConcurrentWorkers": 0, "maxConcurrentPerAccount": %d}`+"\n", o.perAccount())
+	if err := os.WriteFile(filepath.Join(e.home, "config.json"), []byte(cfg), 0o600); err != nil {
 		return err
 	}
 	if err := e.build(ctx); err != nil {
@@ -574,12 +576,12 @@ func (e *env) scenario(ctx context.Context) (*result, error) {
 		return fail(err)
 	}
 	_ = s.saveProfile(ctx, "/debug/pprof/allocs", filepath.Join(e.out, "allocs-start.pprof"), time.Minute)
+	// The retained-heap check's start: the live heap after forced GCs, before any load task exists.
+	if e.o.scenario == "load" {
+		r.Retained = e.retainedStart(ctx, s)
+	}
 
 	gen := &loadGen{e: e, lat: map[string]*latencies{"list": {}, "detail": {}}}
-	var heapStartErr error
-	if e.o.scenario == "load" {
-		gen.heapStart, heapStartErr = e.heapAfterGC(ctx, s, heapStartFile)
-	}
 	lctx, stopLoad := context.WithCancel(ctx)
 	var lwg sync.WaitGroup
 	if e.o.scenario == "load" {
@@ -622,15 +624,15 @@ func (e *env) scenario(ctx context.Context) (*result, error) {
 	s.sampleNow(context.WithoutCancel(ctx), time.Now())
 	stopLoad()
 	lwg.Wait()
-	gen.finish(context.WithoutCancel(ctx))
-	if e.o.scenario == "load" && heapStartErr == nil {
-		// What the load left behind: the tasks are over, their goroutines and buffers should be gone.
-		if serr := sleep(ctx, retainedSettle); serr == nil {
-			var herr error
-			gen.heapEnd, herr = e.heapAfterGC(context.WithoutCancel(ctx), s, heapEndFile)
-			gen.heapMeasured = herr == nil
-		}
+	ferr := gen.finish(context.WithoutCancel(ctx))
+	switch {
+	case r.Retained != nil && err == nil:
+		s.setPhase("retained")
+		e.retainedEnd(ctx, s, r.Retained, ferr)
+	case r.Retained != nil:
+		r.Retained.Error = "the run was cut short: " + err.Error()
 	}
+	r.GoSysEnd = e.goSysEnd(context.WithoutCancel(ctx), s)
 	stopAll()
 	r.fill(s, gen, readSpawnLog(e.spawns))
 	r.Machine.TopOther = topOther(cpuStart, cpuEnd, s.treePIDs(), r.WindowEnd.Sub(r.WindowStart), 3)
@@ -638,22 +640,73 @@ func (e *env) scenario(ctx context.Context) (*result, error) {
 	return r, err
 }
 
-// retainedSettle is how long after the load stops the second heap profile is taken.
-const retainedSettle = 30 * time.Second
+// retainSettle is how long the retained-heap check waits after the load tasks ended before it forces a GC, so the
+// attempts' goroutines, pipes and buffers wind down.
+const retainSettle = 5 * time.Second
 
-// heapAfterGC saves the daemon's heap profile after a forced GC as file in the output folder and returns its
-// inuse_space total in bytes.
-func (e *env) heapAfterGC(ctx context.Context, s *sampler, file string) (int64, error) {
-	path := filepath.Join(e.out, file)
-	if err := s.saveProfile(ctx, heapGCPath, path, time.Minute); err != nil {
-		fmt.Fprintln(os.Stderr, "bench: heap profile after GC:", err)
-		return 0, err
-	}
-	n, err := inuseSpaceFile(path)
+// retainedStart reads the live heap after forced GCs before the load starts (heap-before-load.pprof); nil when it
+// cannot be read, and then the check is skipped.
+func (e *env) retainedStart(ctx context.Context, s *sampler) *retainedHeap {
+	h, err := s.liveAfterGC(ctx, filepath.Join(e.out, "heap-before-load.pprof"))
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "bench:", err)
+		fmt.Fprintln(os.Stderr, "bench: live heap before the load:", err)
+		s.noteErr("retained heap start: " + err.Error())
+		return nil
 	}
-	return n, err
+	rh := &retainedHeap{StartMB: round(mb(h.live), 2), SettleSeconds: retainSettle.Seconds(), start: h}
+	if h.ring != nil {
+		rh.StartRingMB, rh.StartRingFrames = round(mb(h.ring.HeapBytes), 2), h.ring.Frames
+	}
+	return rh
+}
+
+// retainedEnd reads the live heap after forced GCs once every load task ended and the SSE clients and pollers
+// stopped (heap-after-load.pprof), and fills the delta. notEnded is finish's error: load tasks still running.
+func (e *env) retainedEnd(ctx context.Context, s *sampler, rh *retainedHeap, notEnded error) {
+	if notEnded != nil {
+		rh.Note = "not every load task ended: " + notEnded.Error()
+	}
+	if err := sleep(ctx, retainSettle); err != nil {
+		rh.Error = err.Error()
+		return
+	}
+	h, err := s.liveAfterGC(ctx, filepath.Join(e.out, "heap-after-load.pprof"))
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "bench: live heap after the load:", err)
+		s.noteErr("retained heap end: " + err.Error())
+		rh.Error = err.Error()
+		return
+	}
+	rh.EndMB = round(mb(h.live), 2)
+	rh.DeltaMB = round(rh.EndMB-rh.StartMB, 2)
+	// The ring is not a leak: it keeps the last frames for RingAge (10 min), so it is taken out of the budgeted
+	// delta. Bytes, not MB, so the rounding does not add up.
+	rh.ExRingDeltaMB, rh.RingUnknown = rh.DeltaMB, true
+	if s0, s1 := rh.start.ring, h.ring; s0 != nil && s1 != nil {
+		rh.EndRingMB, rh.EndRingFrames, rh.RingUnknown = round(mb(s1.HeapBytes), 2), s1.Frames, false
+		ex := (float64(h.live) - float64(s1.HeapBytes)) - (float64(rh.start.live) - float64(s0.HeapBytes))
+		rh.ExRingDeltaMB = round(ex/mib, 2)
+	}
+}
+
+// goSysEnd reads the daemon's full runtime.MemStats (/debug/vars without light=1) at the end of the run, after the
+// load's retained-heap reading, saves it as memstats-end.json and returns the breakdown of Go's Sys; nil when it
+// cannot be read.
+func (e *env) goSysEnd(ctx context.Context, s *sampler) *goSysBreakdown {
+	m, raw, err := s.memStats(ctx)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "bench: memstats at the end:", err)
+		s.noteErr("memstats end: " + err.Error())
+		return nil
+	}
+	var b bytes.Buffer
+	if json.Indent(&b, raw, "", "  ") == nil {
+		raw = b.Bytes()
+	}
+	if err := os.WriteFile(filepath.Join(e.out, "memstats-end.json"), raw, 0o600); err != nil {
+		fmt.Fprintln(os.Stderr, "bench: memstats-end.json:", err)
+	}
+	return breakdown(m)
 }
 
 func copyFile(from, to string) {

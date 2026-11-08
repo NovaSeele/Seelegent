@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 
 import type { Summary } from '@/api/types'
 import Icon from '@/components/ui/Icon.vue'
+import ProviderMark from '@/components/ui/ProviderMark.vue'
 import { useFormat } from '@/composables/useFormat'
 
 /** The accounts that used the most tokens, each opening to the models it ran. Labels never carry an email. */
@@ -52,7 +53,7 @@ const cost = (n: number) =>
               >
                 <Icon :name="open.has(account.id) ? 'chevronDown' : 'chevronRight'" />
                 {{ account.label }}
-                <span class="backend">{{ t(`accounts.backend.${account.backend}`) }}</span>
+                <ProviderMark :backend="account.backend" size="sm" class="backend" />
               </button>
             </th>
             <td>{{ fmt.compact(account.tokens) }}</td>

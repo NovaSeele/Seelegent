@@ -221,7 +221,8 @@ func runEOLCase(t *testing.T, tc eolCase) map[string][]string {
 		t.Fatalf("changed %v, the turn wrote %d files", changed, len(turn))
 	}
 	got := map[string][]string{}
-	for _, f := range s.hygiene(ctx, root, start, end, changed, "changed the files", true) {
+	for _, f := range s.hygiene(ctx, root, root, start, end, changed, "changed the files", true,
+		func(string) bool { return true }) {
 		got[f.Path] = append(got[f.Path], f.Kind)
 	}
 	return got

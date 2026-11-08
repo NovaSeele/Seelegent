@@ -4,9 +4,11 @@ import { useI18n } from 'vue-i18n'
 
 import type { TaskSummary, Turn } from '@/api/types'
 import Button from '@/components/ui/Button.vue'
+import ProviderMark from '@/components/ui/ProviderMark.vue'
 import StatusPill from '@/components/ui/StatusPill.vue'
 import { useFormat } from '@/composables/useFormat'
 import { useNow } from '@/composables/useNow'
+import { useProviderNames } from '@/composables/useProviderNames'
 import { displayStatus, isActive, isBlocked, slotWaitDetail, statusWordKey } from '@/lib/taskStatus'
 
 import DepLinks from './DepLinks.vue'
@@ -38,6 +40,7 @@ const emit = defineEmits<{
 const { t } = useI18n()
 const fmt = useFormat()
 const now = useNow(1000)
+const providerName = useProviderNames(() => [props.task.provider])
 
 const status = computed(() => displayStatus(props.task))
 /** Which accounts are full while the task waits for a free slot. */
@@ -84,6 +87,11 @@ const age = computed(() => {
       <span
         >{{ task.model }}<template v-if="task.tier"> · {{ task.tier }}</template></span
       >
+      <ProviderMark
+        :backend="task.backend"
+        :provider-name="providerName(task.provider)"
+        size="sm"
+      />
       <span>{{ task.accountLabel ?? t('common.worker.unassigned') }}</span>
       <span v-if="task.turnCount">{{ t('task.header.turn', { n: task.turnCount }) }}</span>
       <span v-if="task.tokensUsed">

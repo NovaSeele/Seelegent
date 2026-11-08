@@ -174,6 +174,7 @@
       "junkFile": "Tệp rác",
       "unreportedFile": "Có thay đổi nhưng không có trong báo cáo",
       "outsideRepoWrite": "Ghi ra ngoài repo",
+      "outsideLane": "Thay đổi ngoài làn",
       "unfetchedUrl": "URL worker chưa từng mở",
       "skipped": "Bỏ qua kiểm tra"
     },
@@ -277,7 +278,7 @@
       "forced": "đã giành chỗ của {tasks}"
     },
     "commands": "Lệnh",
-    "off": "Đã tắt (vẫn kiểm tra làn và vệ sinh mã)",
+    "off": "Đã tắt (vẫn kiểm tra làn, chỉ để tham khảo)",
     "noCommands": "Không có lệnh",
     "detected": "tự phát hiện",
     "doctrine": "Nguyên tắc dự án",

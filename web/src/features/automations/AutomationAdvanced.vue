@@ -43,7 +43,7 @@ const members = computed<SelectOption<string>[]>(() => [
 ])
 const backends = computed<SelectOption<string>[]>(() => [
   { value: '', label: t('automations.editor.defaultBackend') },
-  ...BACKENDS.map((value) => ({ value, label: value })),
+  ...BACKENDS.map((value) => ({ value, label: t(`accounts.backend.${value}`) })),
 ])
 const gates = computed<SelectOption<GateChoice>[]>(() =>
   (['default', 'on', 'off'] as const)

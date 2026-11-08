@@ -79,6 +79,9 @@ type Repos struct {
 	mu       sync.Mutex
 	locks    map[string]*sync.Mutex
 	branches map[string]branchEntry
+
+	// collapse replaces collapseUntracked when set (tests make it fail).
+	collapse func(ctx context.Context, root string, files []api.GitFile) ([]api.GitFile, []api.GitDir, error)
 }
 
 type branchEntry struct {

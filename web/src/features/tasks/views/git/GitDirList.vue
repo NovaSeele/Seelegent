@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useId } from 'vue'
+import { nextTick, ref, useId } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import type { GitDir } from '@/api/types'
@@ -13,7 +13,9 @@ import GitFileList from './GitFileList.vue'
 /**
  * The task's large untracked folders (TaskGit.untrackedDirs), each one row: "dir/ · N files · size". A row opens
  * (click, Enter, Space) to list the folder's first files, which select like the other changed files; the rest
- * are counted. A folder is never committed as a whole: its listed files are offered one by one once it is open.
+ * are counted, and so are the folder's files that are not the task's. A folder is never committed as a whole: its
+ * listed files are offered one by one once it is open. focusSelected focuses the selected file when an open
+ * folder lists it (j/k stepping into a folder).
  */
 const props = defineProps<{ dirs: readonly GitDir[] }>()
 const selected = defineModel<string | null>('selected', { required: true })
@@ -31,10 +33,18 @@ function toggle(path: string) {
 
 const base = useId()
 const listId = (dir: GitDir) => `${base}-${props.dirs.indexOf(dir)}`
+
+const root = ref<HTMLElement | null>(null)
+function focusSelected() {
+  void nextTick(() =>
+    root.value?.querySelector<HTMLElement>('[role="option"][aria-selected="true"]')?.focus(),
+  )
+}
+defineExpose({ focusSelected })
 </script>
 
 <template>
-  <ul class="gdl" :aria-label="t('git.dir.label')">
+  <ul ref="root" class="gdl" :aria-label="t('git.dir.label')">
     <li v-for="dir in dirs" :key="dir.path" class="gdl__item">
       <button
         type="button"
@@ -72,6 +82,9 @@ const listId = (dir: GitDir) => `${base}-${props.dirs.indexOf(dir)}`
               dir.count - dir.files.length,
             )
           }}
+        </p>
+        <p v-if="dir.others" class="gdl__more">
+          {{ t('git.dir.others', { n: format.number(dir.others) }, dir.others) }}
         </p>
       </div>
     </li>

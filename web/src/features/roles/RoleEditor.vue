@@ -7,10 +7,12 @@ import type { Role, RoleScope } from '@/api/types'
 import Button from '@/components/ui/Button.vue'
 import Checkbox from '@/components/ui/Checkbox.vue'
 import Dialog from '@/components/ui/Dialog.vue'
+import ProviderMark from '@/components/ui/ProviderMark.vue'
 import SegmentedControl from '@/components/ui/SegmentedControl.vue'
 import Select from '@/components/ui/Select.vue'
 import TextArea from '@/components/ui/TextArea.vue'
 import TextField from '@/components/ui/TextField.vue'
+import { useProviderNames } from '@/composables/useProviderNames'
 import { useAccountsStore } from '@/stores/accounts'
 import { useConnectionStore } from '@/stores/connection'
 import {
@@ -47,6 +49,7 @@ const roles = useRolesStore()
 const accounts = useAccountsStore()
 const connection = useConnectionStore()
 const toast = useToastStore()
+const providerName = useProviderNames(() => accounts.accounts.map((a) => a.provider))
 
 const draft = ref(draftOf(undefined))
 const idTouched = ref(false)
@@ -231,7 +234,15 @@ async function save() {
             :label="account.label"
             :description="t(`accounts.backend.${account.backend}`)"
             @update:model-value="toggleAccount(account.id, $event)"
-          />
+          >
+            <template #description>
+              <ProviderMark
+                :backend="account.backend"
+                :provider-name="providerName(account.provider)"
+                size="sm"
+              />
+            </template>
+          </Checkbox>
         </div>
       </fieldset>
       <p v-if="failure" class="editor__error" role="alert">{{ failure }}</p>

@@ -42,7 +42,10 @@ watchEffect(() => {
     </span>
     <span v-if="!hideLabel" class="check__text">
       <label :for="id" class="check__label">{{ label }}</label>
-      <span v-if="description" :id="`${id}-desc`" class="check__desc">{{ description }}</span>
+      <!-- The description slot may draw it richer (a provider mark); the prop stays its plain text. -->
+      <span v-if="description" :id="`${id}-desc`" class="check__desc">
+        <slot name="description">{{ description }}</slot>
+      </span>
     </span>
   </div>
 </template>

@@ -5,9 +5,11 @@ import { useI18n } from 'vue-i18n'
 import type { Member, MemberTrack } from '@/api/types'
 import IconButton from '@/components/ui/IconButton.vue'
 import Icon from '@/components/ui/Icon.vue'
+import ProviderMark from '@/components/ui/ProviderMark.vue'
 import StatusPill from '@/components/ui/StatusPill.vue'
 import Switch from '@/components/ui/Switch.vue'
 import { useFormat } from '@/composables/useFormat'
+import { useProviderNames } from '@/composables/useProviderNames'
 
 import { RANK_TONE, trackFacts } from './memberModel'
 
@@ -26,17 +28,13 @@ const emit = defineEmits<{ edit: []; remove: []; toggle: [enabled: boolean] }>()
 
 const { t } = useI18n()
 const fmt = useFormat()
+const providerName = useProviderNames(() => [props.member.provider])
 
-const runsOn = computed(() => {
+/** The model or tier the member runs, after its backend (and provider) mark. */
+const runsModel = computed(() => {
   const m = props.member
-  const parts = [
-    m.provider
-      ? `${m.provider} (${t(`accounts.backend.${m.backend}`)})`
-      : t(`accounts.backend.${m.backend}`),
-  ]
-  if (m.model) parts.push(m.model)
-  else if (m.tier) parts.push(t(`roles.tier.${m.tier}`))
-  return parts.join(' · ')
+  if (m.model) return m.model
+  return m.tier ? t(`roles.tier.${m.tier}`) : ''
 })
 const facts = computed(() => trackFacts(props.track))
 </script>
@@ -64,7 +62,14 @@ const facts = computed(() => trackFacts(props.track))
     <dl class="member__facts">
       <div>
         <dt>{{ t('team.members.runsOn') }}</dt>
-        <dd>{{ runsOn }}</dd>
+        <dd>
+          <ProviderMark
+            :backend="member.backend"
+            :provider-name="providerName(member.provider)"
+            size="sm"
+          />
+          <template v-if="runsModel"> · {{ runsModel }}</template>
+        </dd>
       </div>
       <div v-if="member.role">
         <dt>{{ t('team.members.role') }}</dt>

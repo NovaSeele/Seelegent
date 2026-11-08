@@ -174,6 +174,7 @@
       "junkFile": "垃圾文件",
       "unreportedFile": "已修改但不在报告中",
       "outsideRepoWrite": "写入仓库之外",
+      "outsideLane": "通道之外的修改",
       "unfetchedUrl": "工作者从未打开的 URL",
       "skipped": "已跳过检查"
     },
@@ -277,7 +278,7 @@
       "forced": "已强占 {tasks} 的通道"
     },
     "commands": "命令",
-    "off": "已关闭（仍检查通道和卫生）",
+    "off": "已关闭（仍检查通道，仅供参考）",
     "noCommands": "没有命令",
     "detected": "自动发现",
     "doctrine": "项目准则",

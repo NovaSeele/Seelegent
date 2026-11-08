@@ -2,8 +2,10 @@ package task
 
 import (
 	"slices"
+	"strings"
 
 	"github.com/NovaSeele/Seelegent/internal/api"
+	"github.com/NovaSeele/Seelegent/internal/gate"
 	"github.com/NovaSeele/Seelegent/internal/proof"
 )
 
@@ -64,12 +66,12 @@ func gateReport(t *Task, rep *api.TaskReport) {
 	}
 	if p.Lane != nil && len(p.Lane.Paths) > 0 {
 		rl := &api.ReportLane{Paths: p.Lane.Paths, Forced: p.Lane.Forced}
-		if g != nil {
-			if st := laneStep(*g); st != nil && len(st.Files) > 0 {
-				rl.OutOfLane = st.Files
-				if st.State == api.StepWarn {
-					rl.Warnings = append(rl.Warnings, "changed files outside the lane (lanes: warn)")
-				}
+		if st := reportLaneStep(t, g, last); st != nil {
+			rl.OutOfLane = st.Files
+			rl.Warnings = gate.LaneWarnings(*st)
+			if p.GateOff && len(st.Files) > 0 {
+				rl.Warnings = append(rl.Warnings, "outside the lane (gate off, information only): "+
+					strings.Join(st.Files, ", "))
 			}
 		}
 		rep.Lane = rl
@@ -86,4 +88,30 @@ func gateReport(t *Task, rep *api.TaskReport) {
 		}
 		rep.Verifier = rv
 	}
+}
+
+// reportLaneStep is the lane result the report shows: the lane step of the last gate, or, for a task whose gate is
+// off, the lane findings of its last turn (laneOffFindings) as a step. nil when there is neither.
+func reportLaneStep(t *Task, g *api.GateResult, last *Turn) *api.GateStep {
+	if g != nil {
+		return laneStep(*g)
+	}
+	if t.Proof == nil || !t.Proof.GateOff {
+		return nil
+	}
+	st := &api.GateStep{Kind: api.StepLane, Label: "lane", State: api.StepGreen}
+	for _, f := range last.Scope {
+		if f.Kind != api.FindingOutsideLane {
+			continue
+		}
+		if strings.HasSuffix(f.Detail, gate.UnseenNote) {
+			st.Unseen = append(st.Unseen, f.Path)
+		} else {
+			st.Files = append(st.Files, f.Path)
+		}
+	}
+	if len(st.Files)+len(st.Unseen) == 0 {
+		return nil
+	}
+	return st
 }

@@ -1,13 +1,14 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, useId } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue'
 
 import { useFloating, type Placement } from '@/composables/useFloating'
 
 import Kbd from './Kbd.vue'
 
 /**
- * A short hint shown on hover (after a delay) and on keyboard focus, hidden by Esc, pointer leave or blur.
- * Not shown for touch. With `describe`, the hint is linked to the trigger via aria-describedby; leave it off
+ * A short hint shown on hover (after a delay) and on keyboard focus, hidden by Esc, pointer leave or blur, and by
+ * a scroll that moves its trigger (it would point at the wrong place; a log scrolling elsewhere leaves it be).
+ * Not shown for touch. It stays unseen until useFloating has placed it. With `describe`, the hint is linked to the trigger via aria-describedby; leave it off
  * when the text repeats the trigger's accessible name (icon buttons already carry it as aria-label).
  */
 const props = withDefaults(
@@ -29,7 +30,11 @@ const visible = ref(false)
 let timer: ReturnType<typeof setTimeout> | undefined
 
 const placementRef = computed(() => props.placement)
-const { style } = useFloating(anchor, tip, visible, { placement: placementRef, offset: 6 })
+const { style } = useFloating(anchor, tip, visible, {
+  placement: placementRef,
+  offset: 6,
+  onLost: () => hide(),
+})
 
 function show(after: number) {
   if (props.disabled || !props.text) return
@@ -64,7 +69,29 @@ onMounted(() => {
   trigger?.setAttribute('aria-describedby', id)
 })
 
-onBeforeUnmount(() => clearTimeout(timer))
+let shownAt: { top: number; left: number } | null = null
+
+function onScroll() {
+  const rect = anchor.value?.getBoundingClientRect()
+  if (!rect || !shownAt) return
+  if (Math.abs(rect.top - shownAt.top) > 1 || Math.abs(rect.left - shownAt.left) > 1) hide()
+}
+
+watch(visible, (isVisible) => {
+  if (isVisible) {
+    const rect = anchor.value?.getBoundingClientRect()
+    shownAt = rect ? { top: rect.top, left: rect.left } : null
+    window.addEventListener('scroll', onScroll, { capture: true, passive: true })
+  } else {
+    shownAt = null
+    window.removeEventListener('scroll', onScroll, { capture: true })
+  }
+})
+
+onBeforeUnmount(() => {
+  clearTimeout(timer)
+  window.removeEventListener('scroll', onScroll, { capture: true })
+})
 </script>
 
 <template>

@@ -6,6 +6,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -372,6 +373,81 @@ func (s *sampler) get(ctx context.Context, path string) ([]byte, error) {
 		return nil, fmt.Errorf("%s: %s", path, resp.Status)
 	}
 	return io.ReadAll(resp.Body)
+}
+
+// ringStat is the daemon's SSE replay ring as /debug/vars reports it (daemon.sseRing): frames, encoded bytes and
+// the heap they hold (an estimate: the frames' buffers by capacity and the ring's backing array).
+type ringStat struct {
+	Frames    int    `json:"frames"`
+	Bytes     uint64 `json:"bytes"`
+	HeapBytes uint64 `json:"heapBytes"`
+}
+
+// heapReading is one retained-heap reading: the live heap after forced GCs and the SSE replay ring at that moment
+// (nil from a daemon that does not report it).
+type heapReading struct {
+	live uint64
+	ring *ringStat
+}
+
+// liveAfterGC is the daemon's live heap right after forced garbage collections. Each GET of
+// /debug/pprof/heap?gc=1 runs runtime.GC first; it is fetched twice, so what sync.Pool keeps for one more cycle is
+// gone too, and the second profile is saved to file. The live heap is then /gc/heap/live:bytes from
+// /debug/vars?light=1: the bytes the last (forced) GC marked live; the same answer carries the SSE replay ring.
+func (s *sampler) liveAfterGC(ctx context.Context, file string) (heapReading, error) {
+	if _, err := s.get(ctx, "/debug/pprof/heap?gc=1"); err != nil {
+		return heapReading{}, err
+	}
+	if err := s.saveProfile(ctx, "/debug/pprof/heap?gc=1", file, time.Minute); err != nil {
+		return heapReading{}, err
+	}
+	body, err := s.get(ctx, "/debug/vars?light=1")
+	if err != nil {
+		return heapReading{}, err
+	}
+	var vars struct {
+		Runtime struct {
+			HeapLiveBytes uint64
+		} `json:"runtime"`
+		Daemon struct {
+			SSERing *ringStat `json:"sseRing"`
+		} `json:"daemon"`
+	}
+	if err := json.Unmarshal(body, &vars); err != nil {
+		return heapReading{}, err
+	}
+	if vars.Runtime.HeapLiveBytes == 0 {
+		return heapReading{}, errors.New("/debug/vars has no heapLiveBytes")
+	}
+	return heapReading{live: vars.Runtime.HeapLiveBytes, ring: vars.Daemon.SSERing}, nil
+}
+
+// memStatsSys are the runtime.MemStats fields of the Sys breakdown.
+type memStatsSys struct {
+	Sys, HeapSys, HeapInuse, HeapReleased, StackSys, MSpanSys, MCacheSys, GCSys, BuckHashSys, OtherSys uint64
+}
+
+// memStats reads the full /debug/vars (runtime.ReadMemStats, a short stop-the-world) and returns the Sys fields and
+// the memstats object as the daemon wrote it.
+func (s *sampler) memStats(ctx context.Context) (memStatsSys, json.RawMessage, error) {
+	body, err := s.get(ctx, "/debug/vars")
+	if err != nil {
+		return memStatsSys{}, nil, err
+	}
+	var vars struct {
+		Memstats json.RawMessage `json:"memstats"`
+	}
+	if err := json.Unmarshal(body, &vars); err != nil {
+		return memStatsSys{}, nil, err
+	}
+	if len(vars.Memstats) == 0 || string(vars.Memstats) == "null" {
+		return memStatsSys{}, nil, errors.New("/debug/vars has no memstats")
+	}
+	var m memStatsSys
+	if err := json.Unmarshal(vars.Memstats, &m); err != nil {
+		return memStatsSys{}, nil, err
+	}
+	return m, vars.Memstats, nil
 }
 
 // saveProfile writes a pprof endpoint's answer to a file of dir.

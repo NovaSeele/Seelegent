@@ -50,6 +50,69 @@ func TestMatchAndOverlap(t *testing.T) {
 	}
 }
 
+// TestPlainLaneCoversFolder: a lane entry without glob characters covers the path itself and everything under it,
+// whether or not the folder exists (field report 4, F4: lane src/components/lighting called the seven components in
+// that folder out of lane, and the automatic fix turn deleted them).
+func TestPlainLaneCoversFolder(t *testing.T) {
+	for _, c := range []struct {
+		pattern, file string
+		want          bool
+	}{
+		{"src/x", "src/x/a.vue", true},
+		{"src/x", "src/x/deep/b.ts", true},
+		{"src/x", "src/x", true},
+		{"src/x", "src/xy.ts", false},
+		{"src/x", "src/x.ts", false},
+		{"src/x", "src", false},
+		{`src\x`, "src/x/a.vue", true},
+		{"./src/x/", "src/x/a.vue", true},
+		{"src/components/lighting", "src/components/lighting/LightPanel.vue", true},
+	} {
+		if got := Match(c.pattern, c.file); got != c.want {
+			t.Errorf("Match(%q, %q) = %v, want %v", c.pattern, c.file, got, c.want)
+		}
+	}
+	if out := Outside([]string{"src/x"}, []string{"src/x/a.vue", "src/xy.ts"}); !reflect.DeepEqual(out,
+		[]string{"src/xy.ts"}) {
+		t.Errorf("Outside = %v, want [src/xy.ts]", out)
+	}
+}
+
+// TestOverlapPlainEntries: overlapping lanes are found in both directions, for two plain entries, a plain entry
+// against a glob and two globs.
+func TestOverlapPlainEntries(t *testing.T) {
+	for _, c := range []struct {
+		a, b string
+		want bool
+	}{
+		// plain, plain
+		{"src/x", "src/x/a.ts", true},
+		{"src/x", "src/x", true},
+		{"src/x", "src/xy.ts", false},
+		{"src/x", "lib/x", false},
+		// plain, glob
+		{"src/x", "src/x/*.ts", true},
+		{"src/x", "src/*/a.ts", true},
+		{"src/x", "src/**", true},
+		{"src/x", "src/x/", true},
+		{"src/x/a.ts", "src/x/", true},
+		{"src/x/a.ts", "src/*.ts", false},
+		{"src/x", "src/*.ts", false},
+		{"src/x", "*.md", false},
+		{"src/x", "lib/**", false},
+		// glob, glob
+		{"src/**", "src/x/", true},
+		{"src/*.go", "docs/", false},
+	} {
+		for _, pair := range [][2]string{{c.a, c.b}, {c.b, c.a}} {
+			got := len(Overlap([]string{pair[0]}, []string{pair[1]})) > 0
+			if got != c.want {
+				t.Errorf("Overlap(%q, %q) = %v, want %v", pair[0], pair[1], got, c.want)
+			}
+		}
+	}
+}
+
 func TestNormalizeLane(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(dir, "src"), 0o755); err != nil {

@@ -3,11 +3,6 @@
 package bench
 
 import (
-	"bytes"
-	"compress/gzip"
-	"encoding/binary"
-	"runtime"
-	"runtime/pprof"
 	"strings"
 	"testing"
 	"time"
@@ -32,150 +27,45 @@ func markdown(r *result) string {
 	return b.String()
 }
 
-// TestBudgetShortWindow: under minSlopeWindow the slope budgets are reported, not judged; the per-10k-events
-// growth is judged whatever the window.
+// TestBudgetShortWindow: under minSlopeWindow the slope budgets are information only, with their raw value; a long
+// enough idle window judges them. The per-10k-events growth is judged whatever the window.
 func TestBudgetShortWindow(t *testing.T) {
 	start := time.Date(2026, 11, 8, 10, 0, 0, 0, time.UTC)
+	const short = "information only: window too short"
 	r := &result{Scenario: "load", WindowStart: start, WindowEnd: start.Add(5 * time.Minute),
 		Daemon: daemonSummary{PrivSlope: 42.5, HeapSlope: 17.25, PeakPrivMB: 60},
-		Load:   &loadSummary{EventsStored: 30000, PrivPer10kEvts: 7}}
+		Load:   &loadSummary{Tasks: 8, EventsStored: 30000, PrivPer10kEvts: 7}}
 	r.Budget = r.budget()
 	for _, part := range []string{"private bytes slope", "live heap slope"} {
-		c := checkNamed(t, r, part)
-		if c == nil || !c.OK || c.Verdict != "n/a: window too short" {
+		if c := checkNamed(t, r, part); c == nil || !c.Info || c.Note != short {
 			t.Fatalf("%s = %+v", part, c)
 		}
 	}
 	if c := checkNamed(t, r, "private bytes slope"); c.Value != 42.5 {
 		t.Errorf("raw slope not kept: %+v", c)
 	}
-	if c := checkNamed(t, r, "per 10k events"); c == nil || c.OK || c.Verdict != "over" {
+	if c := checkNamed(t, r, "per 10k events"); c == nil || c.OK || c.Info {
 		t.Errorf("growth per 10k events = %+v", c)
 	}
 	md := markdown(r)
-	if !strings.Contains(md, "| 42.5 | n/a: window too short |") || !strings.Contains(md, "| 7 | **over** |") {
+	if !strings.Contains(md, "("+short+") | 10 | 42.5 | info |") || !strings.Contains(md, "| 7 | **over** |") {
 		_, table, _ := strings.Cut(md, "## Budget")
 		t.Errorf("budget table:%s", table)
 	}
 
-	// A long enough window judges the slopes.
-	r.WindowEnd = start.Add(20 * time.Minute)
+	// A long enough idle window judges the slopes; a long load window keeps them as information (retained heap).
+	r.Scenario, r.Load, r.WindowEnd = "idle", nil, start.Add(20*time.Minute)
 	r.Budget = r.budget()
-	if c := checkNamed(t, r, "private bytes slope"); c == nil || c.OK || c.Verdict != "over" {
-		t.Errorf("20-minute window: %+v", c)
-	}
-	if c := checkNamed(t, r, "live heap slope"); c == nil || c.OK || c.Verdict != "over" {
-		t.Errorf("20-minute window: %+v", c)
-	}
-}
-
-// TestRetainedHeap: end - start after a forced GC, per 10k events, against 1 MB.
-func TestRetainedHeap(t *testing.T) {
-	start := time.Date(2026, 11, 8, 10, 0, 0, 0, time.UTC)
-	newResult := func(startHeap, endHeap int64, ok bool) *result {
-		r := &result{Scenario: "load", WindowStart: start, WindowEnd: start.Add(20 * time.Minute),
-			Load: &loadSummary{EventsStored: 20000}}
-		r.Load.setRetained(startHeap, endHeap, ok)
-		r.Budget = r.budget()
-		return r
-	}
-	r := newResult(10*mib, 13*mib, true)
-	if l := r.Load; !l.RetainedMeasured || l.RetainedHeapMB != 3 || l.RetainedPer10k != 1.5 ||
-		l.HeapAfterGCStartMB != 10 || l.HeapAfterGCEndMB != 13 {
-		t.Fatalf("load = %+v", l)
-	}
-	if c := checkNamed(t, r, "retained heap"); c == nil || c.OK || c.Limit != 1 || c.Value != 1.5 {
-		t.Fatalf("over budget = %+v", c)
-	}
-	md := markdown(r)
-	if !strings.Contains(md, "+3.00 MB retained = 1.500 MB per 10k events") ||
-		!strings.Contains(md, heapStartFile) || !strings.Contains(md, "| 1.5 | **over** |") {
-		t.Errorf("report:\n%s", md)
-	}
-
-	if c := checkNamed(t, newResult(10*mib, 11*mib, true), "retained heap"); c == nil || !c.OK || c.Value != 0.5 {
-		t.Errorf("within budget = %+v", c)
-	}
-	r = newResult(0, 0, false)
-	if c := checkNamed(t, r, "retained heap"); c != nil || r.Load.RetainedMeasured {
-		t.Errorf("unmeasured = %+v, %+v", c, r.Load)
-	}
-	if md := markdown(r); !strings.Contains(md, "Retained heap after a forced GC: not measured") {
-		t.Errorf("report without the profiles:\n%s", md)
-	}
-}
-
-// heapProfile encodes a minimal heap profile.proto: the four heap sample types and samples of [alloc_objects,
-// alloc_space, inuse_objects, inuse_space]; packed false writes the values unpacked.
-func heapProfile(samples [][4]int64, packed bool) []byte {
-	key := func(b []byte, field, wire int) []byte { return binary.AppendUvarint(b, uint64(field<<3|wire)) }
-	bytesField := func(b []byte, field int, v []byte) []byte {
-		b = key(b, field, 2)
-		return append(binary.AppendUvarint(b, uint64(len(v))), v...)
-	}
-	strs := []string{"", "alloc_objects", "count", "alloc_space", "bytes", "inuse_objects", "inuse_space"}
-	var p []byte
-	for _, st := range [][2]uint64{{1, 2}, {3, 4}, {5, 2}, {6, 4}} {
-		var vt []byte
-		vt = binary.AppendUvarint(key(vt, 1, 0), st[0])
-		vt = binary.AppendUvarint(key(vt, 2, 0), st[1])
-		p = bytesField(p, 1, vt)
-	}
-	for i, s := range samples {
-		var sm []byte
-		sm = bytesField(sm, 1, binary.AppendUvarint(nil, uint64(i+1)))
-		if packed {
-			var vals []byte
-			for _, v := range s {
-				vals = binary.AppendUvarint(vals, uint64(v))
-			}
-			sm = bytesField(sm, 2, vals)
-		} else {
-			for _, v := range s {
-				sm = binary.AppendUvarint(key(sm, 2, 0), uint64(v))
-			}
+	for _, part := range []string{"private bytes slope", "live heap slope"} {
+		if c := checkNamed(t, r, part); c == nil || c.OK || c.Info {
+			t.Errorf("20-minute idle window, %s = %+v", part, c)
 		}
-		p = bytesField(p, 2, sm)
 	}
-	p = binary.AppendUvarint(key(p, 9, 0), 1762560000) // time_nanos: a field the reader skips
-	for _, s := range strs {
-		p = bytesField(p, 6, []byte(s))
+	r.Scenario = "load"
+	r.Budget = r.budget()
+	if c := checkNamed(t, r, "live heap slope"); c == nil || !c.Info || !strings.Contains(c.Note, "retained heap") {
+		t.Errorf("20-minute load window = %+v", c)
 	}
-	return p
-}
-
-func TestInuseSpace(t *testing.T) {
-	samples := [][4]int64{{10, 4096, 2, 1000}, {7, 9000, 3, 2500}}
-	var gz bytes.Buffer
-	zw := gzip.NewWriter(&gz)
-	_, _ = zw.Write(heapProfile(samples, true))
-	_ = zw.Close()
-	if n, err := inuseSpace(gz.Bytes()); err != nil || n != 3500 {
-		t.Errorf("gzipped, packed = %d, %v", n, err)
-	}
-	if n, err := inuseSpace(heapProfile(samples, false)); err != nil || n != 3500 {
-		t.Errorf("plain, unpacked = %d, %v", n, err)
-	}
-	if _, err := inuseSpace([]byte{0x0a, 0x05, 0x01}); err == nil {
-		t.Error("a cut profile was read")
-	}
-	if _, err := inuseSpace(nil); err == nil {
-		t.Error("an empty profile has inuse_space")
-	}
-	// A real heap profile, as the daemon's /debug/pprof/heap writes it.
-	keep := make([][]byte, 64)
-	for i := range keep {
-		keep[i] = make([]byte, 64<<10)
-	}
-	runtime.GC()
-	var prof bytes.Buffer
-	if err := pprof.Lookup("heap").WriteTo(&prof, 0); err != nil {
-		t.Fatal(err)
-	}
-	if n, err := inuseSpace(prof.Bytes()); err != nil || n <= 0 {
-		t.Errorf("runtime heap profile = %d, %v", n, err)
-	}
-	runtime.KeepAlive(keep)
 }
 
 // TestRecorderTicks: the first tick after the start and the first after each hour boundary; a tick predicted just

@@ -3,9 +3,11 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import type { ContestVariant } from '@/api/types'
+import ProviderMark from '@/components/ui/ProviderMark.vue'
 import StatusPill from '@/components/ui/StatusPill.vue'
+import { useProviderNames } from '@/composables/useProviderNames'
 
-import { variantRunsOn, variantStatus } from './contestModel'
+import { runsOn, variantRunsOn, variantStatus } from './contestModel'
 
 /**
  * One row per variant: its label, what it runs on, its task's status and a link to the task; a removed worktree
@@ -14,16 +16,32 @@ import { variantRunsOn, variantStatus } from './contestModel'
 const props = defineProps<{ variants: readonly ContestVariant[] }>()
 
 const { t } = useI18n()
+const providerName = useProviderNames(() => props.variants.map((v) => v.spec.provider))
 const rows = computed(() =>
-  props.variants.map((v) => ({ v, s: variantStatus(v.taskId ? v.status : undefined) })),
+  props.variants.map((v) => {
+    const backend = v.backend ?? v.spec.backend
+    // With a backend, its ProviderMark names it (and the provider); the text keeps the member and model.
+    const text = backend
+      ? runsOn({ member: v.member ?? v.spec.member, model: v.model ?? v.spec.model })
+      : variantRunsOn(v)
+    return { v, s: variantStatus(v.taskId ? v.status : undefined), backend, text }
+  }),
 )
 </script>
 
 <template>
   <ul class="variants">
-    <li v-for="{ v, s } in rows" :key="v.label" class="variant">
+    <li v-for="{ v, s, backend, text } in rows" :key="v.label" class="variant">
       <strong class="variant__label">{{ v.label }}</strong>
-      <span class="variant__runs">{{ variantRunsOn(v) }}</span>
+      <span class="variant__runs">
+        <ProviderMark
+          v-if="backend"
+          :backend="backend"
+          :provider-name="providerName(v.spec.provider)"
+          size="sm"
+        />
+        {{ text }}
+      </span>
       <StatusPill v-if="'status' in s" size="sm" :status="s.status" />
       <StatusPill v-else size="sm" :tone="s.tone" :label="t(s.key)" />
       <RouterLink

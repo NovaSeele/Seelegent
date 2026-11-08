@@ -9,7 +9,6 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
-	"runtime"
 	"strings"
 
 	"github.com/NovaSeele/Seelegent/internal/api"
@@ -35,12 +34,18 @@ var utf8BOM = []byte{0xEF, 0xBB, 0xBF}
 // hygiene checks the files the turn changed. For those that were clean when the turn started: junk files, a BOM in
 // a new file of a repository that uses none, and new files the report never mentions (old hygiene.js;
 // test_scaffold is left out; only when reported, the turn ended with a report: a worker cut off before writing one
-// names nothing). For every changed file whose start is known: line endings and BOM against the styles
-// the file may keep (styleRefs), so only what the turn did is judged.
-func (s *Service) hygiene(ctx context.Context, root string, start, end snapshot.Manifest, changed []string,
-	response string, reported bool) []api.Finding {
+// names nothing; a path counts relative to the repository root or to the task's folder cwd; and only for a file
+// the worker plausibly made, wrote(rel): a file only the snapshots show, such as one the lead edited by hand
+// during the turn, is not the report's to name). For every changed file whose start is known: line endings and
+// BOM against the styles the file may keep (styleRefs), so only what the turn did is judged.
+func (s *Service) hygiene(ctx context.Context, root, cwd string, start, end snapshot.Manifest, changed []string,
+	response string, reported bool, wrote func(rel string) bool) []api.Finding {
 	var out []api.Finding
 	report := newMentions(response)
+	cwdRel := ""
+	if under, ok := relInside(root, cwd); ok && under != "." {
+		cwdRel = filepath.ToSlash(under)
+	}
 	for _, rel := range changed {
 		b, inStart := start.Find(rel)
 		dirty := inStart && b.Status != "" // already changed before the turn: those changes are not the worker's
@@ -65,7 +70,7 @@ func (s *Service) hygiene(ctx context.Context, root string, start, end snapshot.
 				out = append(out, api.Finding{Kind: api.FindingBOMNewFile, Severity: api.SeverityRed, Path: rel})
 				continue
 			}
-			if reported && !report.names(rel) {
+			if reported && wrote(rel) && !report.namesUnder(rel, cwdRel) {
 				out = append(out, api.Finding{Kind: api.FindingUnreported, Severity: api.SeverityWarn, Path: rel})
 			}
 			continue
@@ -101,6 +106,20 @@ type mentions struct {
 // newMentions prepares a report for matching: lower case, '/' separators.
 func newMentions(response string) *mentions {
 	return &mentions{text: strings.ReplaceAll(strings.ToLower(response), `\`, "/"), dirs: map[string]bool{}}
+}
+
+// namesUnder reports whether the report mentions rel (relative to the repository root) as names does, either as
+// that path or as the path relative to the task's folder: a worker in app/ writes "src/pages/" for
+// app/src/pages/x.vue. cwdRel is the task's folder relative to the root ("" for the root itself or a folder
+// outside it).
+func (m *mentions) namesUnder(rel, cwdRel string) bool {
+	if m.names(rel) {
+		return true
+	}
+	if cwdRel != "" && strings.HasPrefix(rel, cwdRel+"/") {
+		return m.names(rel[len(cwdRel)+1:])
+	}
+	return false
 }
 
 // names reports whether the report mentions rel (relative, '/' separators): its path, its base name, its stem (the
@@ -318,25 +337,11 @@ func (s *Service) allowedKeys(t *Task, root string) []string {
 	return out
 }
 
-// gitBashDrive matches a Git Bash drive path (/c/Users/...).
-var gitBashDrive = regexp.MustCompile(`^/([A-Za-z])(/.*)?$`)
-
 // outside reports whether p (absolute, or relative to cwd) lies outside every allowed folder, with its key.
 func (s *Service) outside(cwd, p string, allowed []string) (string, bool) {
-	if p == "" || strings.HasPrefix(p, "~") || strings.HasPrefix(p, "$") || strings.HasPrefix(p, "%") {
-		return "", false // the worker's own home, or a variable
-	}
-	slash := filepath.ToSlash(p)
-	if strings.HasPrefix(slash, "/dev/") || strings.HasPrefix(slash, "/proc/") || slash == "/dev/null" {
+	p, ok := commandPath(cwd, p)
+	if !ok {
 		return "", false
-	}
-	if runtime.GOOS == "windows" {
-		if m := gitBashDrive.FindStringSubmatch(slash); m != nil {
-			p = strings.ToUpper(m[1]) + ":" + filepath.FromSlash(m[2]+"/")
-		}
-	}
-	if !filepath.IsAbs(p) {
-		p = filepath.Join(cwd, p)
 	}
 	k, err := fsutil.Key(p)
 	if err != nil {

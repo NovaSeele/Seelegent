@@ -1,10 +1,11 @@
 import { mount } from '@vue/test-utils'
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { Account } from '@/api/types'
 import { useAccountsStore } from '@/stores/accounts'
 import { setupApp } from '@/test/app'
 import { makeAccount } from '@/test/fixtures'
+import { storageKey } from '@/lib/storage'
 
 import AccountsPage from './AccountsPage.vue'
 import { readyForWork } from './accountView'
@@ -70,5 +71,70 @@ describe('readyForWork', () => {
     ],
   ] as const)('%s', (_, account, want) => {
     expect(readyForWork(account, now)).toBe(want)
+  })
+})
+
+describe('AccountsPage view', () => {
+  beforeEach(() => localStorage.clear())
+  afterEach(() => vi.restoreAllMocks())
+
+  async function page() {
+    const { plugins } = await setupApp()
+    useAccountsStore().replaceAll([makeAccount({ id: 'a1' })])
+    return mount(AccountsPage, {
+      global: {
+        plugins,
+        stubs: {
+          AccountCard: true,
+          AccountList: true,
+          AccountDialogs: true,
+          AddAccountDialog: true,
+          ProvidersPanel: true,
+        },
+      },
+    })
+  }
+
+  const radio = (w: Awaited<ReturnType<typeof page>>, name: string) =>
+    w.findAll('[role="radio"]').find((r) => r.text() === name)
+
+  it('defaults to the list, next to "Refresh all quota"', async () => {
+    const w = await page()
+    expect(w.find('[role="radiogroup"]').attributes('aria-label')).toBe('Accounts view')
+    expect(radio(w, 'List')?.attributes('aria-checked')).toBe('true')
+    expect(w.findComponent({ name: 'AccountList' }).exists()).toBe(true)
+    expect(w.findComponent({ name: 'AccountCard' }).exists()).toBe(false)
+  })
+
+  it('switches to cards and remembers it', async () => {
+    const w = await page()
+    await radio(w, 'Cards')?.trigger('click')
+    expect(w.findComponent({ name: 'AccountCard' }).exists()).toBe(true)
+    expect(w.findComponent({ name: 'AccountList' }).exists()).toBe(false)
+    expect(localStorage.getItem(storageKey('accounts.view'))).toBe('"cards"')
+
+    const again = await page()
+    expect(radio(again, 'Cards')?.attributes('aria-checked')).toBe('true')
+    expect(again.findComponent({ name: 'AccountCard' }).exists()).toBe(true)
+  })
+
+  it('ignores a stored value it does not know', async () => {
+    localStorage.setItem(storageKey('accounts.view'), '"table"')
+    const w = await page()
+    expect(radio(w, 'List')?.attributes('aria-checked')).toBe('true')
+  })
+
+  it('works when storage throws on every read and write', async () => {
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new DOMException('denied', 'SecurityError')
+    })
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new DOMException('full', 'QuotaExceededError')
+    })
+    const w = await page()
+    expect(radio(w, 'List')?.attributes('aria-checked')).toBe('true')
+    await radio(w, 'Cards')?.trigger('click')
+    expect(radio(w, 'Cards')?.attributes('aria-checked')).toBe('true')
+    expect(w.findComponent({ name: 'AccountCard' }).exists()).toBe(true)
   })
 })

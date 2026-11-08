@@ -62,9 +62,16 @@ func pprofGet(t *testing.T, url, host string) (code int, body string) {
 	return resp.StatusCode, string(data)
 }
 
+// fakeVars is the daemon's own /debug/vars values in tests.
+type fakeVars struct{}
+
+func (fakeVars) DebugVars() map[string]any {
+	return map[string]any{"sseRing": map[string]int{"frames": 3, "bytes": 200, "heapBytes": 400}}
+}
+
 // The debug server serves pprof and expvar on loopback and refuses a foreign Host header (DNS rebinding).
 func TestPprofServer(t *testing.T) {
-	p, err := startPprof(t.Context(), "127.0.0.1:0", slog.New(slog.DiscardHandler))
+	p, err := startPprof(t.Context(), "127.0.0.1:0", slog.New(slog.DiscardHandler), fakeVars{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,12 +96,19 @@ func TestPprofServer(t *testing.T) {
 		Goroutines int               `json:"goroutines"`
 		Runtime    map[string]uint64 `json:"runtime"`
 		Memstats   json.RawMessage   `json:"memstats"`
+		Daemon     struct {
+			SSERing struct{ Frames, Bytes int } `json:"sseRing"`
+		} `json:"daemon"`
 	}
 	if code != http.StatusOK || json.Unmarshal([]byte(body), &light) != nil || light.Goroutines < 1 || light.PID != os.Getpid() ||
 		light.Memstats != nil || light.Runtime["heapAllocBytesTotal"] == 0 ||
 		light.Runtime["heapLiveBytes"] == 0 && light.Runtime["gcCycles"] > 0 || light.Runtime["gcCycles"] == 0 &&
 		light.Runtime["heapObjectsBytes"] == 0 {
 		t.Fatalf("/debug/vars?light=1 = %d %.200q", code, body)
+	}
+	// The daemon's own values (the SSE replay ring) come in the light answer too.
+	if light.Daemon.SSERing.Frames != 3 || light.Daemon.SSERing.Bytes != 200 {
+		t.Fatalf("/debug/vars?light=1 daemon = %+v", light.Daemon)
 	}
 	_, port, _ := strings.Cut(p.Addr(), ":")
 	if code, _ := pprofGet(t, base+"/debug/pprof/", "localhost:"+port); code != http.StatusOK {
@@ -120,7 +134,7 @@ func TestPprofServer(t *testing.T) {
 // The Host check accepts the loopback address the server listens on, not only 127.0.0.1 (M19 review: a server on
 // 127.0.0.2 answered 421 to every request).
 func TestPprofServerOtherLoopback(t *testing.T) {
-	p, err := startPprof(t.Context(), "127.0.0.2:0", slog.New(slog.DiscardHandler))
+	p, err := startPprof(t.Context(), "127.0.0.2:0", slog.New(slog.DiscardHandler), nil)
 	if err != nil {
 		t.Skipf("127.0.0.2 is not usable here: %v", err)
 	}
@@ -137,7 +151,7 @@ func TestPprofServerOtherLoopback(t *testing.T) {
 
 // startPprof refuses a public address itself too, not only the flag check.
 func TestStartPprofRefusesPublic(t *testing.T) {
-	if _, err := startPprof(t.Context(), "0.0.0.0:0", slog.New(slog.DiscardHandler)); err == nil {
+	if _, err := startPprof(t.Context(), "0.0.0.0:0", slog.New(slog.DiscardHandler), nil); err == nil {
 		t.Fatal("startPprof(0.0.0.0:0) = nil error")
 	}
 }
