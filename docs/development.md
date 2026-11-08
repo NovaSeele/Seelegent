@@ -180,7 +180,10 @@ and `OtherSys`. Compare allocation profiles with `go tool pprof -top -sample_ind
 allocs-start.pprof allocs-end.pprof`. The budget is judged on private bytes (commit), not the working set, which
 jumps with what the OS keeps resident: under 0.1% of one core and under 100 MB private when idle; under load a
 peak under 80 MB plus 2.5 MB per task running at once (100 MB for the default 8 tasks), since each running attempt
-holds its own state; growth under load not linear in the events; a private-bytes slope under 10 MB/h and a
+holds its own state; daemon CPU under 8% of one core plus 0.25% per task (10% for 8 tasks: the stream lines are
+shared by the tasks, so the base carries the events, the SSE clients and the pollers, and the per-task part what
+one attempt adds by itself, measured at about 0.03%); an event delay (worker line to SSE frame) under 1 s at the
+95th percentile; growth under load not linear in the events; a private-bytes slope under 10 MB/h and a
 live-heap slope under 5 MB/h over the second half of the window, so a leak shows once the start-up growth is over.
 It is printed and flagged, never a failure.
 
@@ -211,8 +214,10 @@ On Windows a CPU profile counts goroutines blocked in a system call as CPU: a la
 `ReadFile` on a pipe shows up as `os.(*File).Read`, `bytes.Buffer.ReadFrom` or `io.Copy` with large sample counts
 while the process is idle. Do not chase those; take the cost from the CPU seconds of the process counters (the
 result's tables), and read Windows profiles for the code that does run (for example the thread walk in
-`platform.resumeThreads`). Run it at low priority and
-on an otherwise quiet machine; the latency numbers depend on what else runs.
+`platform.resumeThreads`). Run it at low priority and on an otherwise quiet machine; the latency numbers depend on
+what else runs. The CPU seconds of one build vary by about a point of one core between runs, and on a hybrid CPU
+(performance and efficiency cores) a run whose daemon lands on efficiency cores can cost half as much again:
+compare builds over two runs each, alternating them.
 
 Hot paths have plain Go benchmarks (stream parsers, launcher line delivery, task repository writes and reads, the
 SSE hub and the task bus): `go test -p 4 -run '^$' -bench . ./internal/backend ./internal/launch ./internal/task

@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/NovaSeele/Seelegent/internal/fsutil"
@@ -18,10 +19,13 @@ import (
 
 // Polling intervals of the daemon side.
 const (
-	// pollInterval is how often Tail looks for new output while the worker writes, and how often Wait first looks
-	// for the exit record. A Tail that finds nothing waits twice as long each time, up to maxPollInterval, and goes
-	// back to pollInterval as soon as it reads something: a quiet worker costs one wake-up a second, not ten.
+	// pollInterval is how often Wait first looks for the exit record (and a quarter of it how often Start looks
+	// for the ready record).
 	pollInterval = 100 * time.Millisecond
+	// tailPollInterval is how often Tail looks for new output while the worker writes. A Tail that finds nothing
+	// waits twice as long each time, up to maxPollInterval, and goes back to tailPollInterval as soon as it reads
+	// something: a quiet worker costs one wake-up a second, not ten.
+	tailPollInterval = 100 * time.Millisecond
 	// maxPollInterval bounds the backoff of Tail: a line written after a long quiet stretch is read within it.
 	maxPollInterval = time.Second
 	// ReadDelay bounds how long after the worker writes a line Tail reads it (maxPollInterval). The daemon stamps
@@ -29,10 +33,21 @@ const (
 	ReadDelay = maxPollInterval
 	// maxWaitInterval bounds the backoff of Wait.
 	maxWaitInterval = 500 * time.Millisecond
-	// exitCheckInterval is how often at most Tail looks for the exit record (Exited: a file open, a stat and a lock
-	// probe), also while lines keep coming. The end of a launch is therefore seen within exitCheckInterval plus one
-	// poll interval (at most 1.5 s) after its exit record is written, and every byte written before it is read.
-	exitCheckInterval = 500 * time.Millisecond
+	// exitCheckIdle is how often at most Tail looks for the exit record (Exited: a file open and a lock probe)
+	// after a poll that read nothing, and exitCheckBusy how often at most while every poll reads lines: a worker
+	// that writes is rarely ending, so a busy tail spends little on the check. The worker writes nothing after it
+	// ended, so the polls after its last line read nothing: the end of a launch is seen within exitCheckIdle plus
+	// one poll interval (at most 1.5 s) after its exit record is written, and every byte written before the record
+	// is read (Tail reads until nothing is left once it saw the record). While Tail watches the launcher process
+	// (watchLauncher), these looks cost nothing and the launcher's exit wakes Tail at once: the end is then seen
+	// right after the launcher exits (it writes the record first), and within watchedCheckInterval when a launcher
+	// lingers after writing it.
+	exitCheckIdle = 500 * time.Millisecond
+	exitCheckBusy = 2 * time.Second
+	// watchedCheckInterval is how often Exited still looks at the files and the lock while the launcher process is
+	// watched (watchLauncher) and runs: the watch says when the launcher ends, so these looks only catch a launch
+	// directory removed under a running launcher (gone) and keep the tree of an attached launch.
+	watchedCheckInterval = 5 * time.Second
 	// livenessInterval is how often the launcher lock is probed while no exit record exists.
 	livenessInterval = 500 * time.Millisecond
 	// defaultReadyTimeout bounds how long Start waits for the launcher to report the worker running.
@@ -87,6 +102,15 @@ type Handle struct {
 
 	exitMu sync.Mutex
 	exit   *Exit // the exit record once found: it never changes, so it is read only once
+	// ready is set once the ready record was seen: it is never removed while the launch directory exists, so
+	// Exited stops looking for it.
+	ready atomic.Bool
+
+	// watch waits on the launcher process while a tail runs (watchLauncher); lastFull is when Exited last looked
+	// at the files while the watch said the launcher runs.
+	watchMu  sync.Mutex
+	watch    *launcherWatch
+	lastFull time.Time
 
 	treeMu     sync.Mutex
 	tree       *platform.WorkerTree // set by Start, or by Tree once a record checks out
@@ -268,12 +292,20 @@ func (h *Handle) Cancel() error {
 
 // Exited returns the exit record if the launch has ended. A launcher that died without writing one is reported as
 // ReasonLost (and the record is written so later readers agree). Once a record was found, the handle keeps it.
+//
+// While a tail watches the launcher process (watchLauncher) and it runs, the launch has not ended (the launcher
+// writes the exit record before it exits): Exited then answers without reading anything, and looks at the files
+// and the lock only every watchedCheckInterval. The exit record stays the answer; the watch only says when to
+// look.
 func (h *Handle) Exited() (Exit, bool, error) {
 	h.exitMu.Lock()
 	known := h.exit
 	h.exitMu.Unlock()
 	if known != nil {
 		return *known, true, nil
+	}
+	if h.launcherRuns() {
+		return Exit{}, false, nil
 	}
 	ex, ok, err := h.exited()
 	if err == nil && ok {
@@ -290,7 +322,7 @@ func (h *Handle) exited() (Exit, bool, error) {
 	if err != nil || ok {
 		return ex, ok, err
 	}
-	if !exists(h.files.Ready) {
+	if !h.ready.Load() && !h.readyExists() {
 		// Still starting: do not even probe the lock, the launcher may be about to take it.
 		if st, err := os.Stat(h.files.Spec); err == nil && time.Since(st.ModTime()) < startGrace {
 			return Exit{}, false, nil
@@ -319,6 +351,79 @@ func (h *Handle) exited() (Exit, bool, error) {
 		return Exit{}, false, fmt.Errorf("record lost launch: %w", err)
 	}
 	return lost, true, nil
+}
+
+// launcherWatch is one wait on the launcher process, shared by the tails of a handle.
+type launcherWatch struct {
+	done   <-chan struct{}
+	refs   int
+	cancel context.CancelFunc
+}
+
+// watchLauncher starts (or joins) a wait on the launcher process; release ends the caller's share, and the wait
+// ends with the last one. done is nil when the launcher cannot be waited for (its tree is not known or not
+// checked yet, or the system cannot wait for it): the caller looks for the end by polling then, and may try again
+// later.
+func (h *Handle) watchLauncher() (done <-chan struct{}, release func()) {
+	h.watchMu.Lock()
+	defer h.watchMu.Unlock()
+	if h.watch == nil {
+		tree, ok := h.Tree()
+		if !ok || tree.RootPID <= 0 || tree.RootStart == 0 {
+			return nil, func() {}
+		}
+		ctx, cancel := context.WithCancel(context.Background())
+		ch, err := platform.WatchProcess(ctx, tree.RootPID, tree.RootStart)
+		if err != nil {
+			cancel()
+			return nil, func() {}
+		}
+		h.watch = &launcherWatch{done: ch, cancel: cancel}
+	}
+	w := h.watch
+	w.refs++
+	var once sync.Once
+	return w.done, func() {
+		once.Do(func() {
+			h.watchMu.Lock()
+			defer h.watchMu.Unlock()
+			if w.refs--; w.refs == 0 {
+				w.cancel()
+				if h.watch == w {
+					h.watch = nil
+				}
+			}
+		})
+	}
+}
+
+// launcherRuns reports whether a watch says the launcher still runs and the files were looked at within
+// watchedCheckInterval; when it is time to look again, it counts the look as done.
+func (h *Handle) launcherRuns() bool {
+	h.watchMu.Lock()
+	defer h.watchMu.Unlock()
+	if h.watch == nil {
+		return false
+	}
+	select {
+	case <-h.watch.done:
+		return false
+	default:
+	}
+	if now := time.Now(); h.lastFull.IsZero() || now.Sub(h.lastFull) >= watchedCheckInterval {
+		h.lastFull = now
+		return false
+	}
+	return true
+}
+
+// readyExists reports whether the ready record exists, and keeps a yes.
+func (h *Handle) readyExists() bool {
+	if !exists(h.files.Ready) {
+		return false
+	}
+	h.ready.Store(true)
+	return true
 }
 
 // keepTree makes an attached handle learn its launcher while the launch directory still exists, so that a

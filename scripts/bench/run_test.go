@@ -581,7 +581,7 @@ func (e *env) scenario(ctx context.Context) (*result, error) {
 		r.Retained = e.retainedStart(ctx, s)
 	}
 
-	gen := &loadGen{e: e, lat: map[string]*latencies{"list": {}, "detail": {}}}
+	gen := &loadGen{e: e, lat: map[string]*latencies{"list": {}, "detail": {}, "event": {}}}
 	lctx, stopLoad := context.WithCancel(ctx)
 	var lwg sync.WaitGroup
 	if e.o.scenario == "load" {

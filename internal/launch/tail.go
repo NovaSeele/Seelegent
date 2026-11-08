@@ -18,54 +18,104 @@ const (
 	maxLine = 32 << 20
 )
 
-// tail implements Handle.Tail for one file. It reads whatever is there on every poll; it polls every
-// pollInterval while lines come and backs off up to maxPollInterval while none do, and it looks for the end of the
-// launch at most every exitCheckInterval (see the constants for the bounds).
+// tail implements Handle.Tail for one file. Every poll reads whatever is there (readAvailable reads to the end of
+// the file); it polls every tailPollInterval while lines come and backs off up to maxPollInterval while none do. It
+// looks for the end of the launch at most every exitCheckIdle after a poll that read nothing and every
+// exitCheckBusy while lines keep coming (see the constants for the bounds). Once it saw the exit record it reads
+// until nothing is left: every byte written before the record is read.
+//
+// It also watches the launcher process (watchLauncher): while it runs, the checks cost nothing (Exited answers
+// from the watch), and its end wakes the tail at once, so the end of a launch is seen right after the launcher
+// exits. Without a watch the bounds of the constants apply.
 func (h *Handle) tail(ctx context.Context, path string, offset int64, fn func([]byte, int64) error) error {
 	if offset < 0 {
 		return fmt.Errorf("tail %s: negative offset %d", path, offset)
 	}
 	t := tailer{path: path, next: offset, fn: fn, buf: make([]byte, tailChunk)}
 	defer t.close()
-	p := tailPace{poll: backoff{min: pollInterval, max: maxPollInterval}, every: exitCheckInterval}
-	ended := false
+	var launcherDone <-chan struct{}
+	release := func() {}
+	defer func() { release() }()
+	p := newTailPace()
+	ended, fired := false, false
 	for {
-		// Look at the end state before reading, so that bytes written before the exit record are always read.
-		if !ended && p.checkDue(time.Now()) {
-			_, done, err := h.Exited()
-			if err != nil {
-				return err
-			}
-			ended = done
-		}
 		read, err := t.readAvailable()
 		if err != nil {
 			return err
 		}
+		if ended {
+			if read == 0 {
+				return t.flush()
+			}
+			continue
+		}
+		now := time.Now()
+		woke := false
+		if launcherDone != nil && !fired {
+			select {
+			case <-launcherDone:
+				fired, woke = true, true // look now
+			default:
+			}
+		}
+		if woke || p.checkDue(now, read == 0) {
+			if launcherDone == nil {
+				launcherDone, release = h.watchLauncher()
+			}
+			_, done, err := h.Exited()
+			if err != nil {
+				return err
+			}
+			if ended = done; ended {
+				continue // read what was written before the record
+			}
+		}
 		if read > 0 {
 			p.poll.reset()
-			continue // there may be more right away
 		}
-		if ended {
-			return t.flush()
+		wake := launcherDone
+		if fired {
+			wake = nil
 		}
-		if err := sleep(ctx, p.poll.next()); err != nil {
+		if err := sleepOr(ctx, p.poll.next(), wake); err != nil {
 			return fmt.Errorf("tail: %w", err)
 		}
 	}
 }
 
-// tailPace paces a tail: poll is its wait while nothing comes, and checkDue says when to look for the exit record.
-type tailPace struct {
-	poll      backoff
-	every     time.Duration
-	lastCheck time.Time // zero: never looked
+// sleepOr is sleep that also ends when wake is closed.
+func sleepOr(ctx context.Context, d time.Duration, wake <-chan struct{}) error {
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-ctx.Done():
+		return context.Cause(ctx)
+	case <-t.C:
+	case <-wake:
+	}
+	return nil
 }
 
-// checkDue reports whether to look for the exit record at now (the first time always) and, if so, counts the look
-// as done.
-func (p *tailPace) checkDue(now time.Time) bool {
-	if !p.lastCheck.IsZero() && now.Sub(p.lastCheck) < p.every {
+// tailPace paces a tail: poll is its wait while nothing comes, and checkDue says when to look for the exit record.
+type tailPace struct {
+	poll       backoff
+	idle, busy time.Duration
+	lastCheck  time.Time // zero: never looked
+}
+
+func newTailPace() tailPace {
+	return tailPace{poll: backoff{min: tailPollInterval, max: maxPollInterval}, idle: exitCheckIdle,
+		busy: exitCheckBusy}
+}
+
+// checkDue reports whether to look for the exit record at now (the first time always) after a poll that read
+// nothing (idle) or read lines and, if so, counts the look as done.
+func (p *tailPace) checkDue(now time.Time, idle bool) bool {
+	every := p.busy
+	if idle {
+		every = p.idle
+	}
+	if !p.lastCheck.IsZero() && now.Sub(p.lastCheck) < every {
 		return false
 	}
 	p.lastCheck = now
