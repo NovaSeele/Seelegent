@@ -16,15 +16,31 @@ import (
 
 // Price is what a provider charges for one model, in US dollars per million tokens, as the user set it: Seelegent
 // ships no prices (they change too often). CachedInputUSD is the price of input served from a prompt cache; nil
-// means the input price.
+// means the input price. CacheWriteUSD is the price of input written to the prompt cache for five minutes; nil
+// means Anthropic's rule, 1.25 × the input price. Writes cached for one hour cost CacheWrite1hFactor /
+// CacheWriteFactor (1.6) × CacheWriteUSD, or 2 × the input price when it is nil.
 type Price struct {
 	// Model is the model id, or AnyModel for every model of the provider without a row of its own.
 	Model          string    `json:"model"`
 	InputUSD       float64   `json:"inputUsd"`
 	CachedInputUSD *float64  `json:"cachedInputUsd,omitempty"`
+	CacheWriteUSD  *float64  `json:"cacheWriteUsd,omitempty"`
 	OutputUSD      float64   `json:"outputUsd"`
 	UpdatedAt      time.Time `json:"updatedAt,omitzero"`
 }
+
+// Tokens is one attempt's usage as a price counts it. Input, Cached and Output are what the CLI of the backend
+// reports: Claude Code counts cache reads (Cached) and cache writes (CacheWrite) apart from Input, Codex counts
+// cache reads inside Input and reports no cache writes. CacheWrite1h is the part of CacheWrite cached for one hour.
+type Tokens struct {
+	Input, Cached, CacheWrite, CacheWrite1h, Output int64
+}
+
+// Anthropic's prompt-cache write prices, as factors of the input price: five-minute and one-hour writes.
+const (
+	CacheWriteFactor   = 1.25
+	CacheWrite1hFactor = 2.0
+)
 
 // Price table limits.
 const (
@@ -38,11 +54,12 @@ const (
 	maxPriceModel = 200
 )
 
-// Cost returns what tokens cost at this price. input, cached and output are the usage the CLI of backend reports:
-// Claude Code counts cache reads apart from input_tokens, Codex counts them inside input_tokens. Cache writes
-// (Claude Code's cache_creation_input_tokens) are not reported to Seelegent and cost nothing here.
-func (pr Price) Cost(backend string, input, cached, output int64) float64 {
-	input, cached, output = max(0, input), max(0, cached), max(0, output)
+// Cost returns what an attempt's tokens cost at this price on backend (see Tokens): uncached input, cache reads,
+// cache writes (five-minute and one-hour apart) and output, each at its rate.
+func (pr Price) Cost(backend string, t Tokens) float64 {
+	input, cached, output := max(0, t.Input), max(0, t.Cached), max(0, t.Output)
+	writes := max(0, t.CacheWrite)
+	writes1h := min(max(0, t.CacheWrite1h), writes)
 	uncached := input
 	if backend != config.BackendClaude {
 		uncached = max(0, input-cached)
@@ -51,7 +68,13 @@ func (pr Price) Cost(backend string, input, cached, output int64) float64 {
 	if pr.CachedInputUSD != nil {
 		cachedRate = *pr.CachedInputUSD
 	}
-	return roundUSD((float64(uncached)*pr.InputUSD + float64(cached)*cachedRate + float64(output)*pr.OutputUSD) / 1e6)
+	writeRate, write1hRate := pr.InputUSD*CacheWriteFactor, pr.InputUSD*CacheWrite1hFactor
+	if pr.CacheWriteUSD != nil {
+		writeRate = *pr.CacheWriteUSD
+		write1hRate = *pr.CacheWriteUSD * CacheWrite1hFactor / CacheWriteFactor
+	}
+	return roundUSD((float64(uncached)*pr.InputUSD + float64(cached)*cachedRate +
+		float64(writes-writes1h)*writeRate + float64(writes1h)*write1hRate + float64(output)*pr.OutputUSD) / 1e6)
 }
 
 // PriceFor returns the provider's price for model: its own row (case does not matter), else the AnyModel row.
@@ -104,6 +127,13 @@ func CheckPrices(in []Price) ([]Price, error) {
 			v := *pr.CachedInputUSD
 			pr.CachedInputUSD = &v
 		}
+		if pr.CacheWriteUSD != nil {
+			if err := checkPrice(*pr.CacheWriteUSD); err != nil {
+				return nil, withField(field("cacheWriteUsd"), err)
+			}
+			v := *pr.CacheWriteUSD
+			pr.CacheWriteUSD = &v
+		}
 		pr.UpdatedAt = time.Time{}
 		out = append(out, pr)
 	}
@@ -135,13 +165,9 @@ func (r *Repo) SetPrices(ctx context.Context, providerID string, prices []Price)
 		}
 		now := formatTime(r.stamp())
 		for _, pr := range prices {
-			var cached any
-			if pr.CachedInputUSD != nil {
-				cached = *pr.CachedInputUSD
-			}
 			if _, err := tx.ExecContext(ctx, `INSERT INTO provider_prices (provider, model, input_usd, cached_input_usd,
-				output_usd, updated_at) VALUES (?, ?, ?, ?, ?, ?)`, providerID, pr.Model, pr.InputUSD, cached,
-				pr.OutputUSD, now); err != nil {
+				cache_write_usd, output_usd, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`, providerID, pr.Model,
+				pr.InputUSD, nullFloat(pr.CachedInputUSD), nullFloat(pr.CacheWriteUSD), pr.OutputUSD, now); err != nil {
 				return err
 			}
 		}
@@ -163,9 +189,27 @@ func (m *Manager) SetPrices(ctx context.Context, providerID string, prices []Pri
 	return m.repo.SetPrices(ctx, providerID, prices)
 }
 
+// nullFloat is v for a nullable column: NULL when nil.
+func nullFloat(v *float64) any {
+	if v == nil {
+		return nil
+	}
+	return *v
+}
+
+// floatPtr is a nullable column as a pointer: nil for NULL.
+func floatPtr(v sql.NullFloat64) *float64 {
+	if !v.Valid {
+		return nil
+	}
+	f := v.Float64
+	return &f
+}
+
 // loadPricesTx returns the price tables of the providers, by provider id (only the named one when id is not "").
 func loadPricesTx(ctx context.Context, tx *sql.Tx, id string) (map[string][]Price, error) {
-	query := `SELECT provider, model, input_usd, cached_input_usd, output_usd, updated_at FROM provider_prices`
+	query := `SELECT provider, model, input_usd, cached_input_usd, cache_write_usd, output_usd, updated_at
+		FROM provider_prices`
 	var args []any
 	if id != "" {
 		query += " WHERE provider = ?"
@@ -180,16 +224,14 @@ func loadPricesTx(ctx context.Context, tx *sql.Tx, id string) (map[string][]Pric
 		var (
 			provider, updated string
 			pr                Price
-			cached            sql.NullFloat64
+			cached, write     sql.NullFloat64
 		)
-		if err := rows.Scan(&provider, &pr.Model, &pr.InputUSD, &cached, &pr.OutputUSD, &updated); err != nil {
+		if err := rows.Scan(&provider, &pr.Model, &pr.InputUSD, &cached, &write, &pr.OutputUSD,
+			&updated); err != nil {
 			_ = rows.Close()
 			return nil, err
 		}
-		if cached.Valid {
-			v := cached.Float64
-			pr.CachedInputUSD = &v
-		}
+		pr.CachedInputUSD, pr.CacheWriteUSD = floatPtr(cached), floatPtr(write)
 		if pr.UpdatedAt, err = parseTime(updated); err != nil {
 			_ = rows.Close()
 			return nil, fmt.Errorf("price of %s on %s: %w", pr.Model, provider, err)

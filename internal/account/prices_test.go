@@ -3,6 +3,7 @@ package account
 import (
 	"database/sql"
 	"errors"
+	"math"
 	"testing"
 	"time"
 
@@ -27,6 +28,9 @@ func TestCheckPrices(t *testing.T) {
 		{[]Price{{Model: "m", InputUSD: -1}}, "prices[0].inputUsd"},
 		{[]Price{{Model: "m", OutputUSD: MaxPriceUSD + 1}}, "prices[0].outputUsd"},
 		{[]Price{{Model: "m", CachedInputUSD: ptr(-0.1)}}, "prices[0].cachedInputUsd"},
+		{[]Price{{Model: "m", CacheWriteUSD: ptr(-0.1)}}, "prices[0].cacheWriteUsd"},
+		{[]Price{{Model: "m", CacheWriteUSD: ptr(math.Inf(1))}}, "prices[0].cacheWriteUsd"},
+		{[]Price{{Model: "m", CacheWriteUSD: ptr(math.NaN())}}, "prices[0].cacheWriteUsd"},
 		{make([]Price, MaxPrices+1), "prices"},
 	} {
 		_, err := CheckPrices(c.in)
@@ -37,21 +41,49 @@ func TestCheckPrices(t *testing.T) {
 	}
 }
 
-// Claude Code counts cache reads apart from input_tokens; Codex counts them inside input_tokens. A missing cached
-// price is the input price.
+// Claude Code counts cache reads and cache writes apart from input_tokens; Codex counts reads inside input_tokens.
+// A missing cached price is the input price; a missing cache-write price is Anthropic's rule (1.25 × input for
+// five-minute writes, 2 × for one-hour writes); a set one prices one-hour writes at 1.6 × it.
 func TestPriceCost(t *testing.T) {
 	pr := Price{InputUSD: 3, CachedInputUSD: ptr(0.3), OutputUSD: 15}
 	// claude: 1M input + 2M cache reads + 0.1M output = 3 + 0.6 + 1.5
-	if got := pr.Cost(config.BackendClaude, 1_000_000, 2_000_000, 100_000); got != 5.1 {
+	if got := pr.Cost(config.BackendClaude, Tokens{Input: 1_000_000, Cached: 2_000_000, Output: 100_000}); got != 5.1 {
 		t.Errorf("claude cost = %v", got)
 	}
 	// codex: 3M input of which 2M cached + 0.1M output = 3 + 0.6 + 1.5
-	if got := pr.Cost(config.BackendCodex, 3_000_000, 2_000_000, 100_000); got != 5.1 {
+	if got := pr.Cost(config.BackendCodex, Tokens{Input: 3_000_000, Cached: 2_000_000, Output: 100_000}); got != 5.1 {
 		t.Errorf("codex cost = %v", got)
 	}
 	noCache := Price{InputUSD: 2, OutputUSD: 8}
-	if got := noCache.Cost(config.BackendCodex, 1000, 400, 500); got != 0.006 {
+	if got := noCache.Cost(config.BackendCodex, Tokens{Input: 1000, Cached: 400, Output: 500}); got != 0.006 {
 		t.Errorf("cached at the input price = %v", got)
+	}
+	// Cache writes at the default rule: 1M five-minute writes = 3.75, 1M one-hour writes = 6.
+	writes := Tokens{CacheWrite: 2_000_000, CacheWrite1h: 1_000_000}
+	if got := pr.Cost(config.BackendClaude, writes); got != 9.75 {
+		t.Errorf("cache writes at the default rule = %v", got)
+	}
+	if got := pr.Cost(config.BackendClaude, Tokens{CacheWrite: 1_000_000}); got != 3.75 {
+		t.Errorf("five-minute writes = %v", got)
+	}
+	// A set cache-write price: 1M five-minute writes = 5, 1M one-hour writes = 8.
+	set := Price{InputUSD: 3, CacheWriteUSD: ptr(5), OutputUSD: 15}
+	if got := set.Cost(config.BackendClaude, writes); got != 13 {
+		t.Errorf("cache writes at a set price = %v", got)
+	}
+	// A one-hour part larger than the writes is clamped to them.
+	if got := pr.Cost(config.BackendClaude, Tokens{CacheWrite: 1_000_000, CacheWrite1h: 5_000_000}); got != 6 {
+		t.Errorf("clamped one-hour writes = %v", got)
+	}
+	// Claude Code's success.jsonl result (internal/backend/testdata/streams/claude): input 2150, cache writes 4100,
+	// cache reads 18000, output 920 at Sonnet-like prices = 0.00645 + 0.015375 + 0.0054 + 0.0138.
+	fixture := Tokens{Input: 2150, CacheWrite: 4100, Cached: 18000, Output: 920}
+	if got := pr.Cost(config.BackendClaude, fixture); got != 0.041025 {
+		t.Errorf("fixture = %v", got)
+	}
+	if got := (Price{InputUSD: 3, CachedInputUSD: ptr(0.3), CacheWriteUSD: ptr(3.75), OutputUSD: 15}).Cost(
+		config.BackendClaude, fixture); got != 0.041025 {
+		t.Errorf("fixture at an explicit cache-write price = %v", got)
 	}
 	p := Provider{Prices: []Price{{Model: "glm-5", InputUSD: 1}, {Model: AnyModel, InputUSD: 9}}}
 	if got, ok := p.PriceFor("GLM-5"); !ok || got.InputUSD != 1 {
@@ -118,13 +150,13 @@ func TestSetPrices(t *testing.T) {
 		t.Fatalf("unknown provider: %v", err)
 	}
 	p, err := f.m.SetPrices(ctx, a.Provider, []Price{{Model: "glm-5", InputUSD: 1, CachedInputUSD: ptr(0.2),
-		OutputUSD: 3.2}})
-	if err != nil || len(p.Prices) != 1 || p.Prices[0].UpdatedAt.IsZero() || *p.Prices[0].CachedInputUSD != 0.2 ||
-		p.SpendSource() != SpendPrices {
+		CacheWriteUSD: ptr(1.5), OutputUSD: 3.2}, {Model: AnyModel, InputUSD: 1, OutputUSD: 2}})
+	if err != nil || len(p.Prices) != 2 || p.Prices[1].UpdatedAt.IsZero() || *p.Prices[1].CachedInputUSD != 0.2 ||
+		*p.Prices[1].CacheWriteUSD != 1.5 || p.Prices[0].CacheWriteUSD != nil || p.SpendSource() != SpendPrices {
 		t.Fatalf("set: %+v, %v", p, err)
 	}
 	list, err := f.m.ListProviders(ctx)
-	if err != nil || len(list) != 1 || len(list[0].Prices) != 1 {
+	if err != nil || len(list) != 1 || len(list[0].Prices) != 2 {
 		t.Fatalf("list: %+v, %v", list, err)
 	}
 	p.Name = "Z.ai renamed"
@@ -132,7 +164,7 @@ func TestSetPrices(t *testing.T) {
 	if _, err := f.m.UpdateProvider(ctx, p); err != nil {
 		t.Fatal(err)
 	}
-	if got, _ := f.m.GetProvider(ctx, p.ID); len(got.Prices) != 1 {
+	if got, _ := f.m.GetProvider(ctx, p.ID); len(got.Prices) != 2 {
 		t.Fatalf("an update dropped the prices: %+v", got)
 	}
 	if _, err := f.m.SetPrices(ctx, p.ID, []Price{}); err != nil {

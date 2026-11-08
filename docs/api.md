@@ -297,14 +297,19 @@ in the daemon.
     is counted from its attempts, at the user's prices (`prices`) or as tokens (`none`). A budget on such an account
     is `unknown` until prices are set.
   - `prices`: `GET /providers/{id}/prices` and `PUT /providers/{id}/prices` (`PricesRequest {prices:
-    [{model, inputUsd, cachedInputUsd?, outputUsd}]}`, the whole table; `[]` removes it; `prices` absent is `400`)
-    answer `PriceTable {provider, prices, pricingUrl?, spendSource}`. Prices are USD per 1M tokens, 0..10000, at
+    [{model, inputUsd, cachedInputUsd?, cacheWriteUsd?, outputUsd}]}`, the whole table; `[]` removes it; `prices`
+    absent is `400`) answer `PriceTable {provider, prices, pricingUrl?, spendSource}`. Prices are USD per 1M tokens, 0..10000, at
     most 200 rows, models unique ignoring case; `model: "*"` prices any model without its own row;
-    `cachedInputUsd` absent or null means the input price. A bad row is `400 invalid_argument` with
-    `details.field` `prices[i].model|inputUsd|cachedInputUsd|outputUsd`. Cost of an attempt = uncached input ×
-    input + cached × cached input + output × output, over 1M; uncached input is Claude Code's `input_tokens`
-    (it excludes cache reads) and Codex's `input_tokens − cached`. Cache-write tokens are not reported, so not
-    priced. Prices are stored in `provider_prices` (migration 0014), deleted with their provider, and shown on
+    `cachedInputUsd` absent or null means the input price; `cacheWriteUsd` is the price of a five-minute
+    prompt-cache write, absent or null meaning Anthropic's rule (1.25 × input; one-hour writes 2 × input), and
+    one-hour writes cost 1.6 × a set `cacheWriteUsd`. A bad row is `400 invalid_argument` with `details.field`
+    `prices[i].model|inputUsd|cachedInputUsd|cacheWriteUsd|outputUsd`. Cost of an attempt = uncached input ×
+    input + cache reads × cached input + five-minute cache writes × cache write + one-hour cache writes × its
+    rate + output × output, over 1M. Uncached input is Claude Code's `input_tokens` (it excludes cache reads and
+    writes) and Codex's `input_tokens − cached`; cache writes are Claude Code's `cache_creation_input_tokens`,
+    split by `cache_creation.ephemeral_5m_input_tokens` / `ephemeral_1h_input_tokens` when present (all
+    five-minute otherwise; `event.Usage.cacheWriteTokens`, `cacheWrite1hTokens`); Codex reports none. Prices are
+    stored in `provider_prices` (migration 0014; `cache_write_usd` from 0015), deleted with their provider, and shown on
     `Provider.prices`; a change judges the budgets of the provider's accounts again and is followed by
     `providers.changed`. No price is shipped: `Provider.pricingUrl` and `ProviderPreset.pricingUrl` link the
     service's own price page. On the official Anthropic API a model with a price is counted at it and the others

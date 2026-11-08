@@ -330,17 +330,23 @@ func ReadExitText(msg string) (f ExitFailure, ok bool) {
 
 // usageJSON is the union of the usage field names the CLIs use.
 type usageJSON struct {
-	InputTokens       *int64   `json:"input_tokens"`
-	InputTokensC      *int64   `json:"inputTokens"`
-	OutputTokens      *int64   `json:"output_tokens"`
-	OutputTokensC     *int64   `json:"outputTokens"`
-	TotalTokens       *int64   `json:"total_tokens"`
-	TotalTokensC      *int64   `json:"totalTokens"`
-	CacheRead         *int64   `json:"cache_read_input_tokens"`
-	CachedInput       *int64   `json:"cached_input_tokens"`
-	CachedTokensC     *int64   `json:"cachedTokens"`
-	CachedContentToks *int64   `json:"cached_content_token_count"`
-	Cost              *float64 `json:"cost_usd"`
+	InputTokens       *int64 `json:"input_tokens"`
+	InputTokensC      *int64 `json:"inputTokens"`
+	OutputTokens      *int64 `json:"output_tokens"`
+	OutputTokensC     *int64 `json:"outputTokens"`
+	TotalTokens       *int64 `json:"total_tokens"`
+	TotalTokensC      *int64 `json:"totalTokens"`
+	CacheRead         *int64 `json:"cache_read_input_tokens"`
+	CachedInput       *int64 `json:"cached_input_tokens"`
+	CachedTokensC     *int64 `json:"cachedTokens"`
+	CachedContentToks *int64 `json:"cached_content_token_count"`
+	CacheCreation     *int64 `json:"cache_creation_input_tokens"`
+	// CacheCreationTTL is Claude Code's split of the cache writes by lifetime.
+	CacheCreationTTL *struct {
+		Ephemeral5m *int64 `json:"ephemeral_5m_input_tokens"`
+		Ephemeral1h *int64 `json:"ephemeral_1h_input_tokens"`
+	} `json:"cache_creation"`
+	Cost *float64 `json:"cost_usd"`
 }
 
 // parseUsage reads a usage object; ok is false when raw holds none.
@@ -370,10 +376,32 @@ func parseUsage(raw json.RawMessage) (event.Usage, bool) {
 	if out.TotalTokens == 0 {
 		out.TotalTokens = out.InputTokens + out.OutputTokens
 	}
+	out.CacheWriteTokens, out.CacheWrite1hTokens = cacheWrites(u)
 	if u.Cost != nil {
 		out.CostUSD = *u.Cost
 	}
 	return out, true
+}
+
+// cacheWrites returns the prompt-cache writes of a usage object and their one-hour part: cache_creation_input_tokens,
+// split by cache_creation.ephemeral_5m/1h_input_tokens when present (the split's sum when the total is missing).
+func cacheWrites(u usageJSON) (total, oneHour int64) {
+	if u.CacheCreation != nil {
+		total = max(0, *u.CacheCreation)
+	}
+	if s := u.CacheCreationTTL; s != nil {
+		var fiveMin int64
+		if s.Ephemeral5m != nil {
+			fiveMin = max(0, *s.Ephemeral5m)
+		}
+		if s.Ephemeral1h != nil {
+			oneHour = max(0, *s.Ephemeral1h)
+		}
+		if u.CacheCreation == nil {
+			total = fiveMin + oneHour
+		}
+	}
+	return total, min(oneHour, total)
 }
 
 // seconds converts a duration in (fractional) seconds to milliseconds.
