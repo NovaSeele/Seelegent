@@ -79,9 +79,13 @@ const facts = computed(() => trackFacts(props.track))
     </p>
     <div class="member__track">
       <span class="member__track-title">{{ t('team.members.track.title') }}</span>
-      <span v-if="trackFailed && !facts.length" class="member__muted">{{
-        t('team.members.track.failed')
-      }}</span>
+      <!-- The page says the records could not be read; the card only shows a dash (its label for screen readers). -->
+      <span
+        v-if="trackFailed && !facts.length"
+        class="member__muted"
+        :aria-label="t('team.members.track.failed')"
+        >—</span
+      >
       <span v-else-if="!facts.length" class="member__muted">{{
         t('team.members.track.none')
       }}</span>

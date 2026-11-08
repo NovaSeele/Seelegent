@@ -82,7 +82,7 @@
     "name": "Ponle un nombre al rol.",
     "id": "Usa a-z, 0-9 y -, empezando por una letra o un dígito, como máximo 40 caracteres.",
     "project": "Elige un proyecto.",
-    "bothPlaces": "No se pudo borrar la copia antigua ({error}) y quitar la nueva también falló ({rollback}): el rol está ahora en los dos sitios. Borra el que no quieras.",
+    "bothPlaces": "No se pudo borrar la copia antigua en {from}: {error}. Quitar la copia nueva en {to} también falló: {rollback}. El rol está ahora en los dos sitios; borra el que no quieras.",
     "taken": "Ya existe allí un rol con este id."
   },
   "templates": {

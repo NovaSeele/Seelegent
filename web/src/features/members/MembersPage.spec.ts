@@ -38,7 +38,8 @@ describe('MembersPage track records (E-B11)', () => {
       .mockResolvedValueOnce([{ member: 'rev', meetings: 2 } as MemberTrack])
     const { wrapper } = await render(memberTrack)
     expect(wrapper.text()).toContain('Track records could not be read: database is locked')
-    expect(wrapper.text()).toContain('Could not be read.')
+    expect(wrapper.find('[aria-label="Could not be read."]').text()).toBe('—')
+    expect(wrapper.find('[role="alert"]').classes()).toContain('members__note--error')
     expect(wrapper.text()).not.toContain('No meetings or consults yet')
     expect(wrapper.text()).toContain('Reviewer')
 

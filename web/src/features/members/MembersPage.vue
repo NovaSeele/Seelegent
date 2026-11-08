@@ -83,7 +83,11 @@ async function remove() {
 
     <div class="pad">
       <Spinner v-if="team.membersStatus === 'loading'" :label="t('team.members.loading')" />
-      <div v-else-if="team.membersStatus === 'error'" class="members__note" role="alert">
+      <div
+        v-else-if="team.membersStatus === 'error'"
+        class="members__note members__note--error"
+        role="alert"
+      >
         {{ t('team.members.loadFailed', { error: team.membersError }) }}
         <Button size="sm" variant="ghost" @click="team.loadMembers()">
           {{ t('common.action.retry') }}
@@ -97,7 +101,7 @@ async function remove() {
       />
       <template v-else>
         <!-- The members are there but their track records are not: say so, never "none yet" (E-B11). -->
-        <div v-if="team.trackError" class="members__note" role="alert">
+        <div v-if="team.trackError" class="members__note members__note--error" role="alert">
           {{ t('team.members.trackFailed', { error: team.trackError }) }}
           <Button size="sm" variant="ghost" @click="team.loadMembers()">
             {{ t('common.action.retry') }}
@@ -169,5 +173,14 @@ async function remove() {
   gap: var(--space-2);
   color: var(--text-secondary);
   font-size: var(--fs-sm);
+}
+
+.members__note--error {
+  margin-bottom: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: var(--border-width) solid var(--status-danger-border);
+  border-radius: var(--radius-lg);
+  background: var(--status-danger-bg);
+  color: var(--status-danger-fg);
 }
 </style>
