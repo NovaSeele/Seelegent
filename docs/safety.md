@@ -53,8 +53,9 @@ script that edits a file mentioning `git stash`, is data. Long options count by 
 - an alias that expands to any of the above (read with `git config --get alias.<name>` in the command's folder);
 - a command that sets `GIT_CONFIG_PARAMETERS`, `GIT_CONFIG_COUNT`, `GIT_CONFIG_KEY_<n>`, `GIT_CONFIG_GLOBAL`,
   `GIT_CONFIG_SYSTEM` or a variable whose value git runs (`GIT_ALLOW_PROTOCOL`, `GIT_SSH_COMMAND`, `GIT_SSH`,
-  `GIT_PROXY_COMMAND`, `GIT_EXTERNAL_DIFF`, `GIT_EXEC_PATH`; `GIT_PAGER` and `GIT_EDITOR` stay allowed, as their
-  usual values are `cat` and `true`) (`NAME=value git ...`, `env NAME=value`, `export`/`declare`, PowerShell's `$env:NAME = ...`,
+  `GIT_PROXY_COMMAND`, `GIT_EXTERNAL_DIFF`, `GIT_EXEC_PATH`), or an editor, pager or password prompt git runs
+  (`GIT_EDITOR`, `GIT_SEQUENCE_EDITOR`, `GIT_PAGER`, `GIT_ASKPASS`, `EDITOR`, `VISUAL`, `PAGER`, `SSH_ASKPASS`) to
+  anything but empty, `cat`, `less`, `more` or `true` with options (`NAME=value git ...`, `env NAME=value`, `export`/`declare`, PowerShell's `$env:NAME = ...`,
   `Set-Item env:NAME` and `[Environment]::SetEnvironmentVariable`, cmd's `set` and `setx`, the environment of
   inline code that starts programs), whether or not the same line runs git: they define aliases and settings that
   the alias lookup above does not see, for that command and every later git command of the same shell;
