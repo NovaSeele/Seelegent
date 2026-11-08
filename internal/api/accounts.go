@@ -29,7 +29,17 @@ type Account struct {
 	// KeyHint shows the last four characters of an API key ("…abcd"); the key itself is never sent.
 	KeyHint string        `json:"keyHint,omitempty"`
 	Status  AccountStatus `json:"status"`
-	TwinOf  string        `json:"twinOf,omitempty"`
+	// TestResult is the test state of an API-key account (absent for the others): not_tested until a key test or
+	// a turn on the current key and provider endpoint succeeds, then ok, or the reason of the last failed test.
+	// Storing a key or changing the provider's endpoint makes it not_tested again. It never changes Status or
+	// selection: a not_tested account is picked like any other. TestedAt is when it was set (absent while
+	// not_tested).
+	TestResult string `json:"testResult,omitempty" ts:"'not_tested' | 'ok' | 'refused' | 'not_found' | 'no_models_endpoint' | 'unreachable' | 'redirected' | 'error'"`
+	TestedAt   string `json:"testedAt,omitempty"`
+	// ModelPerTask is true for an API-key account whose provider has no tier models: a delegate on it must name
+	// its model (shown as "Model: chosen per task").
+	ModelPerTask bool   `json:"modelPerTask,omitempty"`
+	TwinOf       string `json:"twinOf,omitempty"`
 	// Busy is the number of running turns; MaxConcurrent the cap per account.
 	Busy          int `json:"busy"`
 	MaxConcurrent int `json:"maxConcurrent"`
@@ -43,6 +53,85 @@ type Account struct {
 	Models    []string      `json:"models"`
 	CreatedAt string        `json:"createdAt"`
 	UpdatedAt string        `json:"updatedAt"`
+	// Notices are set only in the answers to POST /accounts and PUT /accounts/{id}/key: what the call changed on
+	// its own (key cleaned, base URL trimmed, preset switched, provider reused) and advice about the key.
+	Notices []Notice `json:"notices,omitempty"`
+}
+
+// AccountCreated is the answer to POST /accounts: the account, and the provider when the body had newProvider.
+type AccountCreated struct {
+	Account
+	// NewProvider is the provider the call created or reused for newProvider (absent otherwise);
+	// ProviderCreated is true when it was created.
+	NewProvider     *Provider `json:"newProvider,omitempty"`
+	ProviderCreated bool      `json:"providerCreated,omitempty"`
+}
+
+// Notice codes (Notice.Code).
+const (
+	NoticeBaseURLTrimmed   = "base_url_trimmed"
+	NoticeOfficialPreset   = "official_preset"
+	NoticeKeyNameRemoved   = "key_name_removed"
+	NoticeKeyQuotesRemoved = "key_quotes_removed"
+	NoticeKeyPrefix        = "key_prefix"
+	NoticeProviderReused   = "provider_reused"
+)
+
+// NoticeCodes lists every notice code.
+func NoticeCodes() []string {
+	return []string{NoticeBaseURLTrimmed, NoticeOfficialPreset, NoticeKeyNameRemoved, NoticeKeyQuotesRemoved,
+		NoticeKeyPrefix, NoticeProviderReused}
+}
+
+// Notice is something a save changed on its own, or advice that did not block it. Code names it for translation,
+// Field the request field it is about (when any), Message is the English text.
+type Notice struct {
+	Code    string `json:"code" ts:"'base_url_trimmed' | 'official_preset' | 'key_name_removed' | 'key_quotes_removed' | 'key_prefix' | 'provider_reused'"`
+	Field   string `json:"field,omitempty"`
+	Message string `json:"message"`
+}
+
+// Key test reasons (KeyTestResult.Reason, Account.TestResult besides not_tested).
+const (
+	TestOK               = "ok"
+	TestRefused          = "refused"
+	TestNotFound         = "not_found"
+	TestNoModelsEndpoint = "no_models_endpoint"
+	TestUnreachable      = "unreachable"
+	TestRedirected       = "redirected"
+	TestError            = "error"
+	// TestNotTested is only an Account.TestResult.
+	TestNotTested = "not_tested"
+)
+
+// TestReasons lists every KeyTestResult reason.
+func TestReasons() []string {
+	return []string{TestOK, TestRefused, TestNotFound, TestNoModelsEndpoint, TestUnreachable, TestRedirected, TestError}
+}
+
+// KeyTestRequest is POST /providers/test: the provider (an existing id, or newProvider as in POST /providers,
+// id optional) and the key (apiKey, or accountId to use that account's stored key; then provider may be left out
+// and the result is saved on the account).
+type KeyTestRequest struct {
+	Provider    string         `json:"provider,omitempty"`
+	NewProvider *ProviderInput `json:"newProvider,omitempty"`
+	APIKey      string         `json:"apiKey,omitempty"`
+	AccountID   string         `json:"accountId,omitempty"`
+}
+
+// KeyTestResult is the answer to POST /providers/test (status 200 also when the key is refused: the call worked).
+type KeyTestResult struct {
+	OK bool `json:"ok"`
+	// Status is the HTTP status the service answered (0 when it could not be reached).
+	Status    int      `json:"status"`
+	Reason    string   `json:"reason" ts:"'ok' | 'refused' | 'not_found' | 'no_models_endpoint' | 'unreachable' | 'redirected' | 'error'"`
+	Message   string   `json:"message"`
+	Models    []string `json:"models"`
+	LatencyMs int64    `json:"latencyMs"`
+	// Notices are what the request's key or provider needed cleaning, and advice about the key.
+	Notices []Notice `json:"notices,omitempty"`
+	// Saved is true when the result was stored on the account (accountId).
+	Saved bool `json:"saved,omitempty"`
 }
 
 // QuotaSnapshot mirrors internal/quota.Snapshot (times as RFC 3339 strings, without the account id, backend,
@@ -112,12 +201,19 @@ type LoginSession struct {
 	Message   string `json:"message,omitempty"`
 }
 
-// NewAccount is POST /accounts.
+// NewAccount is POST /accounts. A sign-in account needs backend and kind. An API-key account names an existing
+// provider, or gives newProvider (a provider to create, or to reuse when an enabled one has the same preset,
+// backend, base URL and models; its id is optional), and may give apiKey; it is all done in one transaction, so a
+// failure leaves nothing behind. backend may then be left out (the provider's), kind too (api-key), and label
+// ("<provider name> <n>").
 type NewAccount struct {
-	Backend  string `json:"backend" ts:"'agy' | 'claude' | 'codex'"`
-	Kind     string `json:"kind" ts:"'isolated' | 'system' | 'api-key'"`
-	Label    string `json:"label"`
-	Provider string `json:"provider,omitempty"`
+	Backend     string         `json:"backend,omitempty" ts:"'agy' | 'claude' | 'codex'"`
+	Kind        string         `json:"kind,omitempty" ts:"'isolated' | 'system' | 'api-key'"`
+	Label       string         `json:"label,omitempty"`
+	Provider    string         `json:"provider,omitempty"`
+	NewProvider *ProviderInput `json:"newProvider,omitempty"`
+	// APIKey is cleaned and checked like PUT /accounts/{id}/key.
+	APIKey string `json:"apiKey,omitempty"`
 	// Enabled defaults to true.
 	Enabled  *bool `json:"enabled,omitempty"`
 	Priority *int  `json:"priority,omitempty"`
@@ -163,8 +259,14 @@ type Provider struct {
 	// The tier models are always allowed on top of the allow-list.
 	AllowedModels string     `json:"allowedModels"`
 	Tiers         TierModels `json:"tiers"`
-	CreatedAt     string     `json:"createdAt,omitempty"`
-	UpdatedAt     string     `json:"updatedAt,omitempty"`
+	// ModelPerTask is true when no tier has a model: every delegate on the provider must name its model ("Model:
+	// chosen per task"). A valid set-up, not an error.
+	ModelPerTask bool   `json:"modelPerTask"`
+	CreatedAt    string `json:"createdAt,omitempty"`
+	UpdatedAt    string `json:"updatedAt,omitempty"`
+	// Notices are set only in the answers to POST and PATCH /providers: what the save changed on its own
+	// (base_url_trimmed, official_preset).
+	Notices []Notice `json:"notices,omitempty"`
 }
 
 // ProviderPreset is a provider template (Provider without accounts and times).
@@ -177,6 +279,9 @@ type ProviderPreset struct {
 	Models   []string `json:"models"`
 	WireAPI  string   `json:"wireApi,omitempty"`
 	Official bool     `json:"official"`
+	// Tiers are suggested tier models: for "anthropic" the claude backend's tiers from the settings, when set;
+	// empty for the others (their models come from a key test).
+	Tiers TierModels `json:"tiers"`
 }
 
 // ProviderList is GET /providers.

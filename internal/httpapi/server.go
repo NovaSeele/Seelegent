@@ -67,6 +67,9 @@ type Tasks interface {
 // Accounts is the account store (account.Manager).
 type Accounts interface {
 	Add(ctx context.Context, n account.New, links []string) (account.Account, []string, error)
+	AddDirect(ctx context.Context, in account.DirectNew, links []string) (account.DirectResult, error)
+	StoredKey(ctx context.Context, id string) (account.Account, string, error)
+	RecordTest(ctx context.Context, id, result string, started time.Time) (bool, error)
 	Get(ctx context.Context, id string) (account.Account, error)
 	List(ctx context.Context) ([]account.Account, error)
 	Update(ctx context.Context, id string, p account.Patch) (account.Account, error)
@@ -192,6 +195,8 @@ type Options struct {
 	Automations Automations
 	// Backends are the worker CLIs by name.
 	Backends map[string]backend.Backend
+	// Probe configures the key tests of POST /providers/test (the zero value in production).
+	Probe backend.ProbeOptions
 	// LogDir is the folder of daemon.log and hooks.log (GET /logs).
 	LogDir string
 	// Redact masks secrets in log lines (logx.Redactor.String); identity when nil.

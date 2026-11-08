@@ -197,5 +197,33 @@
     "tierModels": "Luôn được dùng (mô hình theo cấp): {models}",
     "enabled": "Tài khoản được dùng",
     "save": "Lưu nhà cung cấp"
-  }
+  },
+  "testResult": {
+    "not_tested": "Chưa kiểm tra",
+    "ok": "Khóa dùng được",
+    "refused": "Khóa bị từ chối",
+    "not_found": "Sai địa chỉ",
+    "no_models_endpoint": "Không liệt kê được mô hình ở đây",
+    "unreachable": "Không kết nối được dịch vụ",
+    "redirected": "Bị chuyển hướng sang nơi khác",
+    "error": "Kiểm tra thất bại",
+    "testedAt": "Đã kiểm tra {time}"
+  },
+  "notice": {
+    "base_url_trimmed": "Đã rút gọn base URL",
+    "official_preset": "Đã chuyển sang mẫu Anthropic",
+    "key_name_removed": "Đã bỏ tên biến khỏi khóa",
+    "key_quotes_removed": "Đã bỏ dấu ngoặc khỏi khóa",
+    "key_prefix": "Khóa trông như của dịch vụ khác",
+    "provider_reused": "Dùng lại nhà cung cấp đã có"
+  },
+  "keyError": {
+    "empty": "Hãy dán khóa API",
+    "too_long": "Khóa này quá dài",
+    "url": "Đây giống một URL, không phải khóa API",
+    "whitespace": "Khóa không được chứa dấu cách hay xuống dòng",
+    "control": "Khóa chứa ký tự ẩn"
+  },
+  "modelPerTask": "Chọn mô hình theo từng task",
+  "modelPerTaskHint": "Nhà cung cấp này không có mô hình mặc định: mỗi task tự ghi mô hình nó chạy."
 }

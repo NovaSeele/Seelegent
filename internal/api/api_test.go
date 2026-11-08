@@ -54,3 +54,34 @@ func TestLoginStatesMatchTSUnion(t *testing.T) {
 		t.Errorf("ts tag %q, want %q", got, want)
 	}
 }
+
+// tsUnion is the TypeScript union of the given values.
+func tsUnion(values []string) string {
+	quoted := make([]string, 0, len(values))
+	for _, s := range values {
+		quoted = append(quoted, "'"+s+"'")
+	}
+	return strings.Join(quoted, " | ")
+}
+
+// The TypeScript unions of notice codes and key test reasons are exactly the Go constants.
+func TestNoticeAndTestUnions(t *testing.T) {
+	cases := []struct {
+		typ   reflect.Type
+		field string
+		want  []string
+	}{
+		{reflect.TypeFor[Notice](), "Code", NoticeCodes()},
+		{reflect.TypeFor[KeyTestResult](), "Reason", TestReasons()},
+		{reflect.TypeFor[Account](), "TestResult", append([]string{TestNotTested}, TestReasons()...)},
+	}
+	for _, c := range cases {
+		f, ok := c.typ.FieldByName(c.field)
+		if !ok {
+			t.Fatalf("%s has no %s", c.typ, c.field)
+		}
+		if got, want := f.Tag.Get("ts"), tsUnion(c.want); got != want {
+			t.Errorf("%s.%s ts tag %q, want %q", c.typ.Name(), c.field, got, want)
+		}
+	}
+}
