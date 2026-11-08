@@ -7,6 +7,7 @@ import type { Role, RoleScope } from '@/api/types'
 import Button from '@/components/ui/Button.vue'
 import Checkbox from '@/components/ui/Checkbox.vue'
 import Dialog from '@/components/ui/Dialog.vue'
+import ProviderMark from '@/components/ui/ProviderMark.vue'
 import SegmentedControl from '@/components/ui/SegmentedControl.vue'
 import Select from '@/components/ui/Select.vue'
 import TextArea from '@/components/ui/TextArea.vue'
@@ -231,7 +232,11 @@ async function save() {
             :label="account.label"
             :description="t(`accounts.backend.${account.backend}`)"
             @update:model-value="toggleAccount(account.id, $event)"
-          />
+          >
+            <template #description>
+              <ProviderMark :backend="account.backend" :provider="account.provider" size="sm" />
+            </template>
+          </Checkbox>
         </div>
       </fieldset>
       <p v-if="failure" class="editor__error" role="alert">{{ failure }}</p>

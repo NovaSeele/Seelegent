@@ -50,7 +50,8 @@
     "logout": "Cerrar sesión",
     "key": "Poner clave de API",
     "delete": "Eliminar cuenta",
-    "more": "Más acciones para {name}"
+    "more": "Más acciones para {name}",
+    "priority": "Prioridad: {n}…"
   },
   "done": {
     "added": "Se añadió {name}",
@@ -60,7 +61,8 @@
     "deleted": "Se eliminó {name}",
     "logout": "Sesión cerrada",
     "refreshedAll": "Cuota actualizada",
-    "off": "{name} ya no recibe trabajo"
+    "off": "{name} ya no recibe trabajo",
+    "priority": "Prioridad de {name} fijada en {n}"
   },
   "quota": {
     "window": "Ventana de {window}",
@@ -138,6 +140,10 @@
     "title": "Renombrar cuenta",
     "submit": "Renombrar"
   },
+  "priorityDialog": {
+    "title": "Prioridad de {name}",
+    "submit": "Guardar prioridad"
+  },
   "delete": {
     "title": "¿Eliminar {name}?",
     "desc": "Su perfil y su sesión se quitan de Seelegent. Las tareas que ejecutó conservan su historial.",
@@ -197,5 +203,37 @@
     "tierModels": "Siempre permitidos (modelos de nivel): {models}",
     "enabled": "Las cuentas pueden usarlo",
     "save": "Guardar proveedor"
+  },
+  "view": {
+    "label": "Vista de cuentas",
+    "list": "Lista",
+    "cards": "Tarjetas"
+  },
+  "list": {
+    "col": {
+      "account": "Cuenta",
+      "status": "Estado",
+      "slots": "Huecos",
+      "quota": "Cuota",
+      "controls": "Trabajo · Prioridad"
+    },
+    "slots": "{busy}/{max} ocupados",
+    "expand": "Mostrar detalles de {name}",
+    "collapse": "Ocultar detalles de {name}",
+    "enabledFor": "Usar {name} para trabajar",
+    "span": {
+      "hours": "{n} h",
+      "day": "Diaria",
+      "week": "Semanal",
+      "month": "Mensual"
+    },
+    "quota": {
+      "tip": "{group} · {window}",
+      "lowestTip": "La más baja de todas las ventanas: {group} · {window}",
+      "more": "{n} ventana más, visible al abrir la fila | {n} ventanas más, visibles al abrir la fila",
+      "moreShort": "+{n}",
+      "passive": "Sin cuota que leer",
+      "checking": "Leyendo la cuota…"
+    }
   }
 }

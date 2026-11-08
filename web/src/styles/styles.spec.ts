@@ -108,8 +108,9 @@ describe('style gates', () => {
     .filter(([path]) => !path.startsWith(THEMES_DIR))
     .map(([path, source]) => [path, styleText(path, source)] as const)
 
-  // File-type glyph colours are fixed per type (like VS Code), not themed, so they live in one table of their own.
-  const COLOUR_TABLES = ['src/styles/fileicons.css']
+  // File-type glyph colours are fixed per type (like VS Code) and provider hues per backend, not themed, so each
+  // lives in a table of its own.
+  const COLOUR_TABLES = ['src/styles/fileicons.css', 'src/styles/providers.css']
 
   it('keeps colour literals inside theme files', () => {
     const literal =
@@ -156,7 +157,7 @@ describe('task view scroll frames', () => {
     const missing: string[] = []
     for (const [path, source] of Object.entries(sources)) {
       if (!path.startsWith('src/features/tasks/views/process/') || !path.endsWith('.vue')) continue
-      const css = [...source.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/g)].map((m) => m[1]).join('\n')
+      const css = styleText(path, source)
       for (const m of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
         const body = m[2] ?? ''
         const scrolls = /overflow(-x|-y)?:\s*(auto|scroll)/.test(body)

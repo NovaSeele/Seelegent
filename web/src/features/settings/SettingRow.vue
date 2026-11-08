@@ -5,7 +5,8 @@ import { useI18n } from 'vue-i18n'
  * One setting: its name and description (settings.items.<item>) and the control. `stacked` puts the control under
  * the text (wide controls such as the theme grid); otherwise it sits on the right and wraps under on narrow
  * screens. `data-setting` lets search results scroll to and highlight the row. `bare` leaves out the name and
- * description, for a section that is only this one setting (its section heading already says it).
+ * description, for a section that is only this one setting (its section heading already says it). The `mark` slot
+ * draws something small before the name (a backend's provider dot).
  */
 withDefaults(
   defineProps<{ item: string; stacked?: boolean; highlighted?: boolean; bare?: boolean }>(),
@@ -23,7 +24,7 @@ const { t } = useI18n()
   >
     <div v-if="!bare" class="setting__text">
       <h3 :id="`setting-${item}`" class="setting__label">
-        {{ t(`settings.items.${item}.label`) }}
+        <slot name="mark" />{{ t(`settings.items.${item}.label`) }}
       </h3>
       <p class="setting__desc">{{ t(`settings.items.${item}.desc`) }}</p>
     </div>

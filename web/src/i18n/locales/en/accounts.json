@@ -50,7 +50,8 @@
     "logout": "Sign out",
     "key": "Set API key",
     "delete": "Delete account",
-    "more": "More actions for {name}"
+    "more": "More actions for {name}",
+    "priority": "Priority: {n}…"
   },
   "done": {
     "added": "Added {name}",
@@ -60,7 +61,8 @@
     "deleted": "Deleted {name}",
     "logout": "Signed out",
     "refreshedAll": "Quota refreshed",
-    "off": "Work turned off for {name}"
+    "off": "Work turned off for {name}",
+    "priority": "Priority of {name} set to {n}"
   },
   "quota": {
     "window": "{window} window",
@@ -137,6 +139,10 @@
   "rename": {
     "title": "Rename account",
     "submit": "Rename"
+  },
+  "priorityDialog": {
+    "title": "Priority of {name}",
+    "submit": "Save priority"
   },
   "delete": {
     "title": "Delete {name}?",
@@ -225,5 +231,37 @@
     "control": "The key contains invisible characters"
   },
   "modelPerTask": "Model chosen per task",
-  "modelPerTaskHint": "This provider has no default model: each task names the model it runs."
+  "modelPerTaskHint": "This provider has no default model: each task names the model it runs.",
+  "view": {
+    "label": "Accounts view",
+    "list": "List",
+    "cards": "Cards"
+  },
+  "list": {
+    "col": {
+      "account": "Account",
+      "status": "Status",
+      "slots": "Slots",
+      "quota": "Quota",
+      "controls": "Use for work · Priority"
+    },
+    "slots": "{busy}/{max} busy",
+    "expand": "Show details of {name}",
+    "collapse": "Hide details of {name}",
+    "enabledFor": "Use {name} for work",
+    "span": {
+      "hours": "{n}h",
+      "day": "Daily",
+      "week": "Weekly",
+      "month": "Monthly"
+    },
+    "quota": {
+      "tip": "{group} · {window}",
+      "lowestTip": "Lowest of all windows: {group} · {window}",
+      "more": "{n} more window, shown when the row is open | {n} more windows, shown when the row is open",
+      "moreShort": "+{n}",
+      "passive": "No quota to read",
+      "checking": "Reading quota…"
+    }
+  }
 }
