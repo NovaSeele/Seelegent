@@ -38,8 +38,8 @@ func (s *Service) watchSweep() {
 // t<turn>-a<n> (attemptDir), console folders console-<ms> (takeover) and gate step logs gate-t<turn>-<step>.log
 // (gatephase).
 var (
-	ownFolder = regexp.MustCompile(`^(t[0-9]+-a[0-9]+|console-[0-9]+)$`)
-	ownFile   = regexp.MustCompile(`^gate-t[0-9]+-[0-9]+\.log$`)
+	ownFolder = regexp.MustCompile(`^(t\d+-a\d+|console-\d+)$`)
+	ownFile   = regexp.MustCompile(`^gate-t\d+-\d+\.log$`)
 )
 
 // sweep removes the attempt and launch folders (TasksDir/<id>) and the snapshots of tasks that no longer exist, and
