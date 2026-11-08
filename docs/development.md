@@ -76,6 +76,12 @@ went at full width together. The commands here therefore run narrow by default:
   golangci-lint with `--concurrency $(LINT_J)` (`LINT_J ?= 4`) and `GOMEMLIMIT=2GiB`, and `.golangci.yml` sets
   `run.concurrency: 4` for a plain `golangci-lint run`. On an idle machine raise them: `make test TEST_P=12`.
 - Without make: `go test -p 4 ./...`, and `GOMEMLIMIT=2GiB golangci-lint run -j 4 ./...`.
+- `-p` caps the packages tested at once, not the tests inside one package: a package's `t.Parallel` tests run up
+  to `-parallel` at a time, which defaults to GOMAXPROCS (every CPU). On a busy machine add `-parallel 4`, or set
+  `GOMAXPROCS=8` for the whole run (it also caps each test binary's own threads): `GOMAXPROCS=8 go test -p 4
+  -parallel 4 ./...`.
+- `make lint` also vets the bench (`go vet -tags bench ./scripts/bench/`), and `.golangci.yml` sets
+  `run.build-tags: [bench]`, so the linter checks it too (CI does both).
 - Never run the tests and the linter at the same time; test only the packages you changed while iterating
   (`go test -p 4 ./internal/task`).
 - Run long checks at low priority, so the desktop and the workers stay responsive:
@@ -89,10 +95,14 @@ went at full width together. The commands here therefore run narrow by default:
 
 ### Profiling the daemon (pprof)
 
-`seelegent daemon --pprof-addr 127.0.0.1:6060` serves `net/http/pprof` and `expvar` on that address, on a server
-and a mux of their own (never the API's port, never `http.DefaultServeMux`). The flag is hidden, off by default
-and never a setting. It takes loopback addresses only (`127.0.0.1`, `[::1]`, `localhost`) and refuses requests
-whose `Host` header is not that address (the API's DNS-rebinding check). It is a development tool: heap and
+`seelegent daemon --pprof-addr 127.0.0.1:6060` serves `net/http/pprof` and `/debug/vars` on that address, on a
+server and a mux of their own (never the API's port, never `http.DefaultServeMux`). The flag is hidden, off by
+default and never a setting. It takes loopback addresses only (`127.0.0.1`, `[::1]`, `localhost`; a `localhost`
+that resolves to anything else is refused once it listens) and refuses requests whose `Host` header is not
+`127.0.0.1`, `localhost`, `[::1]` or the address it listens on, with its port (the API's DNS-rebinding check).
+`/debug/vars` is expvar-style JSON: `goroutines` and `runtime` (runtime/metrics: heap, allocations, GC cycles)
+always, `memstats` and `cmdline` unless the query has `light=1` (`runtime.ReadMemStats` stops the world, so a
+sampler polls `?light=1`). It is a development tool: heap and
 goroutine profiles can hold secrets (API keys, prompts, tokens in memory), so never share them or start a daemon
 with it on a machine others use.
 
@@ -101,7 +111,8 @@ SEELEGENT_HOME=$(mktemp -d) go run ./cmd/seelegent daemon --port 47831 --pprof-a
 go tool pprof -top http://127.0.0.1:6060/debug/pprof/profile?seconds=30   # CPU
 go tool pprof -top -sample_index=alloc_space http://127.0.0.1:6060/debug/pprof/allocs
 curl -s 'http://127.0.0.1:6060/debug/pprof/goroutine?debug=1' | head      # goroutines
-curl -s http://127.0.0.1:6060/debug/vars                                  # memstats (expvar)
+curl -s http://127.0.0.1:6060/debug/vars                                  # memstats, runtime metrics
+curl -s 'http://127.0.0.1:6060/debug/vars?light=1'                        # goroutines, runtime metrics
 ```
 
 ### Benchmark
@@ -116,10 +127,25 @@ agy accounts with their quota readers on, runs 20 short tasks so the lists are n
 
 Every 5 s it samples the daemon's whole process tree (daemon, launchers, workers, quota readers, git and their
 consoles): working set, private bytes, CPU seconds and handles per role (Windows: toolhelp snapshot and process
-counters; Linux: `/proc`), spawns per hour by name, the daemon's goroutines and heap (expvar) and the database and
-WAL sizes. A CPU profile is taken after the measured window (`-cpuprofile 60s`, kept out of the CPU numbers),
-together with allocation profiles at the start and the end of the window. The fake CLI is the test binary itself
-(`internal/testutil/fakecli`); it logs each run, so quota reads are counted exactly.
+counters; Linux: `/proc`), spawns per hour by name, the daemon's goroutines and heap (`/debug/vars?light=1`, with
+memstats once a minute) and the database and WAL sizes. On Windows the daemon also runs in a Job Object of the
+bench's, whose accounting gives the exact CPU of the whole tree and every process started, short-lived ones
+included. Each sample records the machine too (free memory and commit, processes and threads on the system), and
+the result carries a machine profile (OS, logical CPUs, RAM, commit limit): the cost of starting a process tree on
+Windows grows with the system's thread count, and the defaults are computed per machine.
+
+The setup is measured on its own: the daemon's and the tree's CPU per account, per seed task and per load task
+start, with a CPU profile from the daemon's start (`-setup-profile 90s`, `setup-cpu.pprof`; the warmup waits for
+it). A CPU profile is taken after the measured window (`-cpuprofile 60s`, kept out of the CPU numbers), together
+with allocation profiles at the start and the end of the window.
+
+The bench is hermetic: the fake agy is the test binary itself (`internal/testutil/fakecli`), which logs each run so
+quota reads are counted exactly and answers a quota read instantly (a real agy costs far more); gh is a copy of the
+test binary named `gh`, first on the daemon's PATH, answering the access check offline; the daemon gets temp
+folders for `HOME`/`USERPROFILE`, `APPDATA`, `LOCALAPPDATA` and `GH_CONFIG_DIR`, and none of the machine's
+`GH_TOKEN`, `GITHUB_TOKEN`, `GH_ENTERPRISE_TOKEN`, `GITHUB_ENTERPRISE_TOKEN` or `GH_HOST`. It never uses this
+machine's GitHub sign-in or reaches the network. Its config turns the memory thresholds off, so a busy machine
+does not hold its tasks.
 
 ```sh
 make bench                                            # idle, 10 minutes
@@ -129,10 +155,12 @@ bin/seelegent-bench -scenario load -baseline <dir>/result.json   # prints the de
 ```
 
 Results go to `-out` (default `<temp>/seelegent-bench/<time>-<scenario>`, outside the repository): `result.json`,
-`result.md` (the tables), `cpu.pprof`, `allocs-start.pprof`, `allocs-end.pprof`, `heap.pprof`, `goroutine.txt` and
+`result.md` (the tables), `setup-cpu.pprof`, `cpu.pprof`, `allocs-start.pprof`, `allocs-end.pprof`, `heap.pprof`, `goroutine.txt` and
 the daemon's log. Compare allocation profiles with `go tool pprof -top -sample_index=alloc_space -base
 allocs-start.pprof allocs-end.pprof`. The budget (under 0.1% of one core and under 100 MB working set when idle;
-growth under load not linear in the events) is printed and flagged, never a failure. Run it at low priority and
+growth under load not linear in the events; a working-set slope under 10 MB/h and a heap slope under 5 MB/h over
+the second half of the window, so a leak shows once the start-up growth is over) is printed and flagged, never a
+failure. Run it at low priority and
 on an otherwise quiet machine; the latency numbers depend on what else runs.
 
 Hot paths have plain Go benchmarks (stream parsers, launcher line delivery, task repository writes and reads, the

@@ -4,6 +4,9 @@ version: "2"
 run:
   # Light mode (docs/development.md): at most 4 packages are checked at once; `make lint LINT_J=n` overrides it.
   concurrency: 4
+  # The resource bench (scripts/bench) is behind the bench build tag; lint it with everything else (make lint, CI).
+  build-tags:
+    - bench
 
 linters:
   # standard = errcheck, govet, ineffassign, staticcheck, unused
