@@ -103,8 +103,19 @@ in the daemon.
   baseline at the first turn, and `commits`, `commitsMore`, `committedFiles`, `startState`, `startHead`,
   `startBranch`, `branchChanged` and `head` describe what it committed since. `files` stays the uncommitted changes
   counted against HEAD, and only those can be committed; `committedFiles` are view only. A task from before
-  `gitStart` uses its turn-1 snapshot head, else `startState` is `unknown`. `unreachable` means the start is gone or
-  no longer an ancestor of HEAD (a rebase or a reset); then no commits are listed and diffs compare with HEAD.
+  `gitStart` uses its turn-1 snapshot head, but only in the repository that snapshot was taken in and only when it
+  names a head; else `startState` is `unknown`. `unreachable` means the start is gone or no longer an ancestor of
+  HEAD (a rebase or a reset); then no commits are listed and diffs compare with HEAD.
+- `commits` lists every commit in start..HEAD, the task's or not. Each gets the `turn` that was running when it was
+  committed (by committer time); one made while none of the task's turns ran (someone else's, or between turns) has
+  no turn and `outsideTurns: true`. Attribution is by time only: another task's commit made while this task's turn
+  `n` ran is also given turn `n`. `committedFiles` keeps only the task's files among those the range changed: a file
+  its turns touched, or a file under the task's folder that a commit made during one of its turns changed. A file
+  only commits outside the turns changed is never listed. A committed file's diff compares the working tree with
+  the start, so it also holds others' commits to that same file.
+- When the commits since the start cannot be read (git times out on a big repository, an object is missing), the
+  error is logged and `TaskGit` still answers with `files`: `historyState` is `history_unavailable`, `commits` and
+  `committedFiles` are empty, and a later read tries again.
 - `GET /tasks/{id}/git/diff` takes `base=start` (the default: the working tree against the task's start, or the
   empty tree when the repository had no commit then) or `base=head` (the uncommitted list); any other `base` is
   `400`. It accepts `turn` but does not use it; per-turn changes come from the turn snapshots (`outside-diff`).
