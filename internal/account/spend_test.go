@@ -82,15 +82,22 @@ func spendFixture(t *testing.T, f *fixture, presetID string) Account {
 
 func (f *fixture) apply(t *testing.T, prev *SpendRow, next SpendRow) []BudgetCrossing {
 	t.Helper()
+	_, out := f.record(t, prev, next)
+	return out
+}
+
+// record applies an attempt and returns it as the usage table stores it (with how it was counted).
+func (f *fixture) record(t *testing.T, prev *SpendRow, next SpendRow) (SpendRow, []BudgetCrossing) {
+	t.Helper()
 	var out []BudgetCrossing
 	if err := f.db.Write(ctxT(t), func(tx *sql.Tx) error {
-		var err error
-		out, err = ApplySpendTx(ctxT(t), tx, prev, next)
+		counted, crossings, err := ApplySpendTx(ctxT(t), tx, prev, next)
+		next.Source, next.USD, out = counted.Source, counted.USD, crossings
 		return err
 	}); err != nil {
 		t.Fatal(err)
 	}
-	return out
+	return next, out
 }
 
 func (f *fixture) get(t *testing.T, id string) Account {
@@ -112,11 +119,14 @@ func TestApplySpendDelta(t *testing.T) {
 	after := formatTime(f.clock.t.Add(time.Minute))
 	before := formatTime(a.KeySetAt.Add(-time.Hour))
 
-	first := SpendRow{AccountID: a.ID, StartedAt: after, CostUSD: 0.01, Input: 100, Output: 20, Total: 120}
-	f.apply(t, nil, first)
+	first, _ := f.record(t, nil, SpendRow{AccountID: a.ID, StartedAt: after, CostUSD: 0.01, Input: 100, Output: 20,
+		Total: 120})
+	if first.Source != SpendCLI || first.USD != 0.01 {
+		t.Fatalf("counted as %q %v", first.Source, first.USD)
+	}
 	again := first
 	again.CostUSD, again.Input, again.Output, again.Total = 0.03, 300, 50, 350
-	f.apply(t, &first, again)
+	again, _ = f.record(t, &first, again)
 	got := f.get(t, a.ID).Spent
 	if got != (Spend{USD: 0.03, Tokens: 350, Input: 300, Output: 50}) {
 		t.Fatalf("after the same attempt twice: %+v", got)
@@ -136,7 +146,7 @@ func TestApplySpendDelta(t *testing.T) {
 	d := spendFixture(t, f, "deepseek")
 	f.apply(t, nil, SpendRow{AccountID: d.ID, StartedAt: formatTime(f.clock.t.Add(time.Minute)), CostUSD: 0.5,
 		Input: 10, Output: 5, Total: 15})
-	if got := f.get(t, d.ID).Spent; got != (Spend{Tokens: 15, Input: 10, Output: 5}) {
+	if got := f.get(t, d.ID).Spent; got != (Spend{Tokens: 15, Input: 10, Output: 5, Unpriced: 15}) {
 		t.Fatalf("deepseek spend: %+v", got)
 	}
 	// Sign-in accounts have no spend.

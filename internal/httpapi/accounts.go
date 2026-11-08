@@ -43,7 +43,13 @@ func (s *Server) accountRoutes() {
 			return 0, nil, err
 		}
 		id := r.PathValue("id")
-		if _, err := s.o.Quota.Refresh(r.Context(), id); err != nil {
+		_, err := s.o.Quota.Refresh(r.Context(), id)
+		if errors.Is(err, quota.ErrPassive) && s.o.Spend != nil {
+			// An API-key account: its spend service, when it has one (a failed read is recorded on the account as
+			// serviceError).
+			_, err = s.o.Spend.Refresh(r.Context(), id)
+		}
+		if err != nil {
 			if errors.Is(err, account.ErrNotFound) {
 				return 0, nil, err
 			}
@@ -116,6 +122,7 @@ func (s *Server) accountRoutes() {
 			return 0, nil, keyError(err)
 		}
 		s.logPreviousKey(a, start)
+		s.requestSpend(id)
 		if p, err := s.o.Accounts.GetProvider(r.Context(), a.Provider); err == nil {
 			notices = append(notices, account.KeyNotices(p, key)...)
 		}
@@ -282,6 +289,9 @@ func (s *Server) addDirect(ctx context.Context, req *api.NewAccount) (code int, 
 	if req.NewProvider != nil {
 		s.providersChanged()
 	}
+	if res.Account.KeyHint != "" {
+		s.requestSpend(res.Account.ID)
+	}
 	status, body, err := s.accountChanged(ctx, res.Account.ID, http.StatusCreated)
 	if err != nil {
 		return 0, nil, err
@@ -347,6 +357,14 @@ func (s *Server) providerRoutes() {
 	s.handle("POST /providers", s.createProvider)
 	s.handle("POST /providers/test", s.testKey)
 	s.handle("PATCH /providers/{id}", s.updateProvider)
+	s.handle("GET /providers/{id}/prices", func(_ http.ResponseWriter, r *http.Request) (int, any, error) {
+		p, err := s.o.Accounts.GetProvider(r.Context(), r.PathValue("id"))
+		if err != nil {
+			return 0, nil, err
+		}
+		return http.StatusOK, priceTableDTO(&p), nil
+	})
+	s.handle("PUT /providers/{id}/prices", s.setPrices)
 	s.handle("DELETE /providers/{id}", func(_ http.ResponseWriter, r *http.Request) (int, any, error) {
 		if err := s.o.Accounts.DeleteProvider(r.Context(), r.PathValue("id")); err != nil {
 			return 0, nil, err
@@ -354,6 +372,42 @@ func (s *Server) providerRoutes() {
 		s.providersChanged()
 		return http.StatusNoContent, nil, nil
 	})
+}
+
+// setPrices is PUT /providers/{id}/prices: the whole price table of the provider ([] removes every price). The
+// budgets of its accounts are judged again; spend already counted keeps the prices it was counted at.
+func (s *Server) setPrices(w http.ResponseWriter, r *http.Request) (code int, body any, err error) {
+	var req api.PricesRequest
+	if err := decode(w, r, &req); err != nil {
+		return 0, nil, err
+	}
+	if req.Prices == nil {
+		return 0, nil, invalid("prices is required (an empty list removes every price)").withField("prices")
+	}
+	in := make([]account.Price, 0, len(req.Prices))
+	for _, pr := range req.Prices {
+		in = append(in, account.Price{Model: pr.Model, InputUSD: pr.InputUSD, CachedInputUSD: pr.CachedInputUSD,
+			OutputUSD: pr.OutputUSD})
+	}
+	p, err := s.o.Accounts.SetPrices(r.Context(), r.PathValue("id"), in)
+	if err != nil {
+		return 0, nil, err
+	}
+	s.providersChanged()
+	return http.StatusOK, priceTableDTO(&p), nil
+}
+
+// priceTableDTO is the answer of GET and PUT /providers/{id}/prices.
+func priceTableDTO(p *account.Provider) api.PriceTable {
+	return api.PriceTable{Provider: p.ID, Prices: priceDTOs(p.Prices), PricingURL: p.PricingURL(),
+		SpendSource: p.SpendSource()}
+}
+
+// requestSpend asks for a read of the account's spend service soon (a key was stored); nothing without one.
+func (s *Server) requestSpend(id string) {
+	if s.o.Spend != nil {
+		s.o.Spend.Request(id)
+	}
 }
 
 func (s *Server) providersChanged() {

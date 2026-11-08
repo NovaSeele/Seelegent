@@ -159,7 +159,7 @@ func accountExists(ctx context.Context, tx *sql.Tx, id string) (bool, error) {
 
 const accountColumns = `id, backend, kind, label, enabled, priority, provider, key_hint, key_set_at, test_result,
 	tested_at, budget_usd, budget_stop, budget_level, spent_usd, spent_tokens, spent_input_tokens, spent_output_tokens,
-	previous_key, created_at, updated_at`
+	spent_unpriced_tokens, previous_key, service_spend, created_at, updated_at`
 
 // Get returns the account with the id, or an error matching ErrNotFound.
 func (r *Repo) Get(ctx context.Context, id string) (Account, error) {
@@ -392,12 +392,16 @@ func scanAccount(s scanner) (Account, error) {
 		keySet, tested, created, updated string
 		enabled, priority, stop          int64
 		budget                           sql.NullFloat64
-		previous                         string
+		previous, service                string
 	)
 	if err := s.Scan(&a.ID, &a.Backend, &kind, &a.Label, &enabled, &priority, &provider, &a.KeyHint,
 		&keySet, &a.TestResult, &tested, &budget, &stop, &a.budgetLevel, &a.Spent.USD, &a.Spent.Tokens,
-		&a.Spent.Input, &a.Spent.Output, &previous, &created, &updated); err != nil {
+		&a.Spent.Input, &a.Spent.Output, &a.Spent.Unpriced, &previous, &service, &created, &updated); err != nil {
 		return Account{}, err
+	}
+	var err error
+	if a.Service, err = parseServiceSpend(service); err != nil {
+		return Account{}, fmt.Errorf("account %s: %w", a.ID, err)
 	}
 	if budget.Valid {
 		v := budget.Float64
@@ -415,7 +419,6 @@ func scanAccount(s scanner) (Account, error) {
 	a.Enabled = enabled != 0
 	a.Priority = int(priority)
 	a.Provider = provider.String
-	var err error
 	if keySet != "" {
 		if a.KeySetAt, err = parseTime(keySet); err != nil {
 			return Account{}, fmt.Errorf("account %s: %w", a.ID, err)
@@ -455,6 +458,7 @@ func (r *Repo) CreateProvider(ctx context.Context, p Provider) (Provider, error)
 func (r *Repo) insertProviderTx(ctx context.Context, tx *sql.Tx, p Provider) (Provider, error) {
 	now := r.stamp()
 	p.CreatedAt, p.UpdatedAt = now, now
+	p.Prices = nil // a new provider has no prices: SetPrices sets them
 	if _, err := getProvider(ctx, tx, p.ID); err == nil {
 		return Provider{}, withField("id", fmt.Errorf("%w: provider %s already exists", ErrConflict, p.ID))
 	} else if !errors.Is(err, ErrNotFound) {
@@ -495,10 +499,12 @@ func (r *Repo) UpdateProvider(ctx context.Context, p Provider) (Provider, error)
 		}
 		p.CreatedAt = old.CreatedAt
 		p.UpdatedAt = r.stamp()
+		p.Prices = old.Prices // the price table is kept apart (SetPrices)
 		if old.endpoint() != p.endpoint() {
-			// Its accounts send their keys elsewhere, or another way, now: a test of the old endpoint says nothing.
-			if _, err := tx.ExecContext(ctx, `UPDATE accounts SET test_result = '', tested_at = '', test_reset_at = ?
-				WHERE provider = ?`, formatTime(p.UpdatedAt), p.ID); err != nil {
+			// Its accounts send their keys elsewhere, or another way, now: a test of the old endpoint says nothing,
+			// and neither does what the old endpoint's service read.
+			if _, err := tx.ExecContext(ctx, `UPDATE accounts SET test_result = '', tested_at = '', test_reset_at = ?,
+				service_spend = '' WHERE provider = ?`, formatTime(p.UpdatedAt), p.ID); err != nil {
 				return err
 			}
 		}
@@ -507,10 +513,11 @@ func (r *Repo) UpdateProvider(ctx context.Context, p Provider) (Provider, error)
 			tier_standard = ?, tier_strong = ?, tier_max = ?, updated_at = ? WHERE id = ?`,
 			p.Name, p.Backend, p.Preset, p.BaseURL, p.WireAPI, p.Official, p.Enabled, p.AllowedModels,
 			modelsJSON(p.Models), p.Tiers.Fast, p.Tiers.Standard, p.Tiers.Strong, p.Tiers.Max, formatTime(p.UpdatedAt), p.ID)
-		if err != nil || old.SpendSource() == p.SpendSource() {
+		if err != nil || (old.SpendSource() == p.SpendSource() && old.endpoint() == p.endpoint()) {
 			return err
 		}
-		// The spend source changed: the budgets of its accounts are judged again (a cost may no longer count).
+		// The spend source or the service changed: the budgets of its accounts are judged again (a cost may no
+		// longer count).
 		return refreshProviderBudgetsTx(ctx, tx, p.ID)
 	})
 	if err != nil {
@@ -536,12 +543,21 @@ func (r *Repo) GetProvider(ctx context.Context, id string) (Provider, error) {
 const providerColumns = `id, name, backend, preset, base_url, wire_api, official, enabled, allowed_models, models,
 	tier_fast, tier_standard, tier_strong, tier_max, created_at, updated_at`
 
+// getProvider returns the provider with its prices.
 func getProvider(ctx context.Context, tx *sql.Tx, id string) (Provider, error) {
 	p, err := scanProvider(tx.QueryRowContext(ctx, "SELECT "+providerColumns+" FROM providers WHERE id = ?", id))
 	if errors.Is(err, sql.ErrNoRows) {
 		return Provider{}, fmt.Errorf("provider %s: %w", id, ErrNotFound)
 	}
-	return p, err
+	if err != nil {
+		return Provider{}, err
+	}
+	prices, err := loadPricesTx(ctx, tx, id)
+	if err != nil {
+		return Provider{}, fmt.Errorf("provider %s: prices: %w", id, err)
+	}
+	p.Prices = prices[id]
+	return p, nil
 }
 
 // ListProviders returns every provider ordered by id.

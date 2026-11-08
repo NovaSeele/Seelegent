@@ -2,6 +2,7 @@ package usage
 
 import (
 	"context"
+	"database/sql"
 	"os"
 	"path/filepath"
 	"testing"
@@ -84,5 +85,66 @@ func TestRecordAttemptSpend(t *testing.T) {
 	}
 	if len(crossings) != 2 || crossings[1].State != account.BudgetReached {
 		t.Fatalf("crossings = %+v", crossings)
+	}
+}
+
+// With prices, the attempt's cost is tokens × the model's price (cached input at its own price), stored with the
+// attempt; recording the attempt again after the prices changed takes back exactly what it added the first time.
+func TestRecordAttemptPrices(t *testing.T) {
+	f := newFixture(t)
+	ctx := t.Context()
+	dir := t.TempDir()
+	m := account.NewManager(f.db, account.NewProfiles(filepath.Join(dir, "profiles"), filepath.Join(dir, "home")),
+		f.clk.Now)
+	p, err := account.FromPreset("zai", "zai")
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := m.AddDirect(ctx, account.DirectNew{New: account.New{Enabled: true}, NewProvider: &p,
+		Key: "zai-test-0123456789"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := res.Account.ID
+	cached := 0.1
+	setPrices := func(in, out float64) {
+		t.Helper()
+		if _, err := m.SetPrices(ctx, res.Provider.ID, []account.Price{{Model: "glm-5", InputUSD: in,
+			CachedInputUSD: &cached, OutputUSD: out}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	stored := func() (string, float64) {
+		t.Helper()
+		var src string
+		var usd float64
+		if err := f.db.Read(ctx, func(tx *sql.Tx) error {
+			return tx.QueryRowContext(ctx, `SELECT spend_source, spend_usd FROM usage_turns WHERE task_id = 't1'`).Scan(
+				&src, &usd)
+		}); err != nil {
+			t.Fatal(err)
+		}
+		return src, usd
+	}
+	setPrices(1, 4)
+	f.clk.Advance(time.Minute)
+	attempt := Attempt{TaskID: "t1", Turn: 1, Attempt: 1, AccountID: id, Backend: config.BackendClaude,
+		Model: "glm-5", StartedAt: f.clk.Now(), EndedAt: f.clk.Now().Add(time.Minute),
+		Usage: event.Usage{InputTokens: 200_000, CachedTokens: 1_000_000, OutputTokens: 50_000, CostUSD: 7}}
+	f.record(attempt)
+	if src, usd := stored(); src != account.SpendPrices || usd != 0.5 {
+		t.Fatalf("stored %s %v", src, usd)
+	}
+	setPrices(2, 8)
+	f.record(attempt) // the same attempt again, at the new prices: 0.5 is taken back, 0.9 added
+	a, err := m.Get(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a.Spent.USD != 0.9 || a.Spent.Tokens != 250_000 {
+		t.Fatalf("after the same attempt twice: %+v", a.Spent)
+	}
+	if src, usd := stored(); src != account.SpendPrices || usd != 0.9 {
+		t.Fatalf("stored again %s %v", src, usd)
 	}
 }

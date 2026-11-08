@@ -64,6 +64,9 @@ type ProbeOptions struct {
 	AnthropicURL string
 	// Timeout replaces ProbeTimeout (tests).
 	Timeout time.Duration
+	// ServiceBase replaces the scheme and host of a spend service's endpoint, by its official host
+	// ("openrouter.ai" → "http://127.0.0.1:1234"; tests).
+	ServiceBase map[string]string
 }
 
 // ProbeResult is the answer of a key test. Message never holds the key.
@@ -94,19 +97,7 @@ func ProbeKey(ctx context.Context, p account.Provider, key string, o ProbeOption
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	req = req.WithContext(ctx)
-	transport := o.Transport
-	if transport == nil {
-		transport = http.DefaultTransport
-	}
-	client := &http.Client{Transport: transport, CheckRedirect: func(next *http.Request, via []*http.Request) error {
-		if len(via) > probeMaxRedirects {
-			return errors.New("too many redirects")
-		}
-		if first := via[0].URL; next.URL.Scheme != first.Scheme || !strings.EqualFold(next.URL.Host, first.Host) {
-			return http.ErrUseLastResponse // the key stays with the host it was meant for
-		}
-		return nil
-	}}
+	client := keyClient(o.Transport)
 	start := time.Now()
 	resp, err := client.Do(req)
 	latency := time.Since(start)
@@ -143,6 +134,24 @@ func ProbeKey(ctx context.Context, p account.Provider, key string, o ProbeOption
 		out.Reason, out.Message = ProbeError, fmt.Sprintf("the service answered HTTP %d", code)
 	}
 	return out
+}
+
+// keyClient is the HTTP client of every call that carries a key: it follows redirects only on the same scheme and
+// host (at most probeMaxRedirects), so the key never reaches another host; a redirect elsewhere comes back as the
+// 3xx answer.
+func keyClient(transport http.RoundTripper) *http.Client {
+	if transport == nil {
+		transport = http.DefaultTransport
+	}
+	return &http.Client{Transport: transport, CheckRedirect: func(next *http.Request, via []*http.Request) error {
+		if len(via) > probeMaxRedirects {
+			return errors.New("too many redirects")
+		}
+		if first := via[0].URL; next.URL.Scheme != first.Scheme || !strings.EqualFold(next.URL.Host, first.Host) {
+			return http.ErrUseLastResponse // the key stays with the host it was meant for
+		}
+		return nil
+	}}
 }
 
 // probeRequest builds the test request from the backend's environment rules.

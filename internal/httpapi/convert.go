@@ -39,12 +39,12 @@ func (v *accountView) account(st *pool.AccountState) api.Account {
 	out.Resting, out.RestingUntil = resting, api.FormatTime(until)
 	out.Models = v.models(st)
 	if a.Kind == account.KindAPIKey {
-		source := account.SpendNone
+		var prov *account.Provider
 		if p, ok := v.providers[a.Provider]; ok {
 			out.ModelPerTask = p.ModelPerTask()
-			source = p.SpendSource()
+			prov = &p
 		}
-		spendDTO(&out, &a, source)
+		spendDTO(&out, &a, prov, v.now)
 	}
 	if st.RestReason != "" {
 		// Rests until the user acts (pool.RestCredits, pool.RestBudget): a reason, never a date.
@@ -53,18 +53,52 @@ func (v *accountView) account(st *pool.AccountState) api.Account {
 	return out
 }
 
-// spendDTO fills an API-key account's spend and budget fields.
-func spendDTO(out *api.Account, a *account.Account, source string) {
+// spendDTO fills an API-key account's spend, budget and spend-service fields; p is its provider (nil when gone).
+func spendDTO(out *api.Account, a *account.Account, p *account.Provider, now time.Time) {
+	source, usd := a.SpendOf(p)
 	stop := a.BudgetStop
-	out.SpentUSD, out.SpentTokens = a.Spent.USD, a.Spent.Tokens
+	out.SpentUSD, out.SpentTokens = usd, a.Spent.Tokens
 	out.SpentInputTokens, out.SpentOutputTokens = a.Spent.Input, a.Spent.Output
+	out.SpentUnpricedTokens = a.Spent.Unpriced
 	out.SpentSince, out.SpendSource, out.BudgetStop = api.FormatTime(a.KeySetAt), source, &stop
-	out.BudgetUSD, out.BudgetState = a.BudgetUSD, account.BudgetLevel(source, a.Spent.USD, a.BudgetUSD)
+	out.BudgetUSD, out.BudgetState = a.BudgetUSD, account.BudgetLevel(source, usd, a.BudgetUSD)
+	out.SuggestedBudgetUSD = a.SuggestedBudget()
 	if pk := a.PreviousKey; pk != nil {
 		out.PreviousKey = &api.PreviousKey{KeyHint: pk.KeyHint, Since: api.FormatTime(pk.Since),
 			Until: api.FormatTime(pk.Until), SpentUSD: pk.Spent.USD, SpentTokens: pk.Spent.Tokens,
-			SpentInputTokens: pk.Spent.Input, SpentOutputTokens: pk.Spent.Output, BudgetUSD: pk.BudgetUSD}
+			SpentInputTokens: pk.Spent.Input, SpentOutputTokens: pk.Spent.Output,
+			SpentUnpricedTokens: pk.Spent.Unpriced, BudgetUSD: pk.BudgetUSD}
 	}
+	svc := a.Service
+	if svc == nil || p == nil || p.ServiceReading() == "" {
+		return
+	}
+	readAt, stale := api.FormatTime(svc.ReadAt), svc.Stale(now, quota.ServiceStaleAfter)
+	if b := svc.Balance; b != nil {
+		out.Balance = &api.Balance{Amount: b.Amount, Currency: b.Currency, AccountWide: b.AccountWide,
+			Available: b.Available, Granted: b.Granted, Paid: b.Paid, ReadAt: readAt, Stale: stale}
+		for _, m := range b.Other {
+			out.Balance.Other = append(out.Balance.Other, api.Money{Amount: m.Amount, Currency: m.Currency})
+		}
+	}
+	if u := svc.Usage; u != nil {
+		out.ServiceUsage = &api.ServiceUsage{TotalUSD: u.TotalUSD, DailyUSD: u.DailyUSD, WeeklyUSD: u.WeeklyUSD,
+			MonthlyUSD: u.MonthlyUSD, LimitUSD: u.LimitUSD, LimitRemainingUSD: u.LimitRemainingUSD,
+			LimitReset: u.LimitReset, ReadAt: readAt, Stale: stale}
+	}
+	if e := svc.Error; e != nil && e.At.After(svc.ReadAt) {
+		out.ServiceError = &api.ServiceError{Reason: e.Reason, Message: e.Message, At: api.FormatTime(e.At)}
+	}
+}
+
+// priceDTOs maps a price table ([] for none).
+func priceDTOs(in []account.Price) []api.Price {
+	out := make([]api.Price, 0, len(in))
+	for _, pr := range in {
+		out = append(out, api.Price{Model: pr.Model, InputUSD: pr.InputUSD, CachedInputUSD: pr.CachedInputUSD,
+			OutputUSD: pr.OutputUSD, UpdatedAt: api.FormatTime(pr.UpdatedAt)})
+	}
+	return out
 }
 
 // quota maps the account's quota snapshot; an account never read gets an empty one of the right source.
@@ -190,7 +224,8 @@ func providerDTO(p account.Provider, accounts int) api.Provider {
 		ID: p.ID, Name: p.Name, Backend: p.Backend, BaseURL: p.BaseURL, Enabled: p.Enabled, Models: modelList(p.Models),
 		Accounts: accounts, Preset: p.Preset, WireAPI: p.WireAPI, Official: p.Official, AllowedModels: p.AllowedModels,
 		Tiers: p.Tiers, ModelPerTask: p.ModelPerTask(), SpendSource: p.SpendSource(), CreatedAt: api.FormatTime(p.CreatedAt),
-		UpdatedAt: api.FormatTime(p.UpdatedAt),
+		UpdatedAt: api.FormatTime(p.UpdatedAt), ServiceReading: p.ServiceReading(), PricingURL: p.PricingURL(),
+		Prices: priceDTOs(p.Prices),
 	}
 }
 
@@ -228,7 +263,11 @@ func presetDTOs(set config.Settings) []api.ProviderPreset {
 	for _, id := range ids {
 		p := presets[id]
 		pr := api.ProviderPreset{ID: id, Name: p.Name, Backend: p.Backend, BaseURL: p.BaseURL,
-			Enabled: true, Models: []string{}, WireAPI: p.WireAPI, Official: p.Official}
+			Enabled: true, Models: []string{}, WireAPI: p.WireAPI, Official: p.Official,
+			PricingURL: account.PresetPricingURL(id)}
+		if prov, err := account.FromPreset(id, id); err == nil {
+			pr.ServiceReading = prov.ServiceReading()
+		}
 		if id == "anthropic" {
 			pr.Tiers = claudeTiers
 		}

@@ -15,18 +15,27 @@ import (
 	"github.com/NovaSeele/Seelegent/internal/config"
 )
 
-// Spend sources (Provider.SpendSource): where an API-key account's spentUsd comes from. The set is open: a later
-// version adds "service" (the service's own balance or usage endpoint) and "prices" (tokens times prices the user
-// sets), so clients treat an unknown value like SpendNone.
+// Spend sources: where an API-key account's spentUsd comes from (Account.SpendOf) and the best one its provider
+// offers (Provider.SpendSource). Clients treat an unknown value like SpendNone.
 const (
+	// SpendService: the service's own count of what the key spent, read with the key (OpenRouter). Authoritative.
+	SpendService = "service"
 	// SpendCLI: the cost the CLI reports per run (Claude Code total_cost_usd). Only the official Anthropic API: the
 	// CLI's price table does not know the models of other services.
 	SpendCLI = "cli"
+	// SpendPrices: tokens times the prices the user set for the provider's models (Provider.Prices). Set for the
+	// official Anthropic API too, they replace the CLI's estimate for the models they cover.
+	SpendPrices = "prices"
 	// SpendFree: a local service (Ollama, a localhost base URL); nothing is spent.
 	SpendFree = "free"
 	// SpendNone: no trusted cost; only tokens are counted.
 	SpendNone = "none"
 )
+
+// SpendSources lists the spend sources, best first.
+func SpendSources() []string {
+	return []string{SpendService, SpendCLI, SpendPrices, SpendFree, SpendNone}
+}
 
 // Budget states (Account.BudgetState).
 const (
@@ -36,7 +45,7 @@ const (
 	BudgetWarn = "warn"
 	// BudgetReached: the budget is used up; with BudgetStop the pool rests the account.
 	BudgetReached = "reached"
-	// BudgetUnknown: a budget is set but the provider's spend source gives no cost, so it cannot be judged.
+	// BudgetUnknown: a budget is set but the account's spend source gives no cost, so it cannot be judged.
 	BudgetUnknown = "unknown"
 )
 
@@ -46,22 +55,50 @@ const budgetWarnShare = 0.8
 // MaxBudgetUSD bounds a budget.
 const MaxBudgetUSD = 1e7
 
-// SpendSource says where the spend of the provider's accounts comes from: SpendCLI for the official Anthropic API
-// (also a legacy row that points at api.anthropic.com), SpendFree for Ollama and local base URLs, SpendNone
-// otherwise. It is the one place that decides; Spend.add is the one place that adds.
+// SpendSource says where the spend of the provider's accounts comes from, best source first: SpendService for a
+// service that counts what each key spent (OpenRouter), SpendFree for Ollama and local base URLs, SpendPrices when
+// the user set prices, SpendCLI for the official Anthropic API (also a legacy row that points at api.anthropic.com),
+// SpendNone otherwise. An account reads SpendService only once its service was read (Account.SpendOf). It is the
+// one place that decides for an account; AttemptCost decides for each attempt.
 func (p Provider) SpendSource() string {
+	switch {
+	case p.ServiceReading() == ReadingKeyUsage:
+		return SpendService
+	case p.local():
+		return SpendFree
+	case len(p.Prices) > 0:
+		return SpendPrices
+	case p.cliCost():
+		return SpendCLI
+	}
+	return SpendNone
+}
+
+// attemptsSource is the source of the running total of the attempts: SpendSource without the service.
+func (p Provider) attemptsSource() string {
+	switch {
+	case p.local():
+		return SpendFree
+	case len(p.Prices) > 0:
+		return SpendPrices
+	case p.cliCost():
+		return SpendCLI
+	}
+	return SpendNone
+}
+
+// cliCost reports a provider whose CLI cost can be trusted: the official Anthropic API, also a legacy custom row
+// that points at api.anthropic.com.
+func (p Provider) cliCost() bool {
 	q := p
 	if q.Official || isAnthropicHost(q.BaseURL) {
 		q.normalizeEndpoint()
 	}
-	switch {
-	case q.Backend == config.BackendClaude && q.Official:
-		return SpendCLI
-	case q.Preset == "ollama" || isLocalURL(q.BaseURL):
-		return SpendFree
-	}
-	return SpendNone
+	return q.Backend == config.BackendClaude && q.Official
 }
+
+// local reports a provider on this computer (Ollama, a localhost or loopback base URL).
+func (p Provider) local() bool { return p.Preset == "ollama" || isLocalURL(p.BaseURL) }
 
 // isLocalURL reports a base URL on this computer (localhost, a loopback address).
 func isLocalURL(raw string) bool {
@@ -77,14 +114,73 @@ func isLocalURL(raw string) bool {
 	return ip != nil && ip.IsLoopback()
 }
 
-// Spend is what an API-key account spent on its current key.
+// AttemptCost returns how one attempt on the provider counts in its account's spend and what it cost: SpendFree
+// (nothing) on a local service; SpendPrices with tokens times the model's price when the user set one (it also
+// replaces the CLI's estimate on the official Anthropic API); SpendCLI with the CLI's own cost on the official
+// Anthropic API; SpendNone (tokens only) otherwise, also when p is nil. backend and model are the attempt's, cost
+// is what the CLI reported.
+func AttemptCost(p *Provider, backend, model string, input, cached, output int64, cost float64) (source string,
+	usd float64) {
+	switch {
+	case p == nil:
+		return SpendNone, 0
+	case p.local():
+		return SpendFree, 0
+	}
+	if pr, ok := p.PriceFor(model); ok {
+		return SpendPrices, pr.Cost(backend, input, cached, output)
+	}
+	if p.cliCost() {
+		return SpendCLI, roundUSD(max(0, cost))
+	}
+	return SpendNone, 0
+}
+
+// SpendOf returns where the API-key account's spend comes from and its amount in US dollars, with its provider p
+// (nil when unknown): the service's own count once it was read (SpendService), else the running total of the
+// attempts, marked with how the provider counts them (SpendFree, SpendPrices, SpendCLI or SpendNone).
+func (a *Account) SpendOf(p *Provider) (source string, usd float64) {
+	return effectiveSpend(p, a.Spent, a.Service)
+}
+
+// effectiveSpend is SpendOf on stored values.
+func effectiveSpend(p *Provider, spent Spend, svc *ServiceSpend) (source string, usd float64) {
+	switch {
+	case p == nil:
+		return SpendNone, spent.USD
+	case p.SpendSource() == SpendService && svc != nil && svc.Usage != nil:
+		return SpendService, svc.Usage.TotalUSD
+	}
+	source = p.attemptsSource()
+	if source == SpendFree {
+		return SpendFree, 0
+	}
+	return source, spent.USD
+}
+
+// SuggestedBudget is the budget the service suggests for an account without one: the spending limit set on its
+// OpenRouter key (nil when there is none, or when the account has a budget). It is never set on its own.
+func (a *Account) SuggestedBudget() *float64 {
+	if a.BudgetUSD != nil || a.Service == nil || a.Service.Usage == nil || a.Service.Usage.LimitUSD == nil {
+		return nil
+	}
+	v := *a.Service.Usage.LimitUSD
+	if v <= 0 || v > MaxBudgetUSD {
+		return nil
+	}
+	return &v
+}
+
+// Spend is what an API-key account's attempts spent on its current key.
 type Spend struct {
-	// USD is the cost counted from the spend source (0 when the source gives none).
+	// USD is the cost of the attempts, each counted by AttemptCost (nothing for those without a cost).
 	USD float64 `json:"usd"`
 	// Tokens is every token the CLI reported; Input and Output are its parts when reported.
 	Tokens int64 `json:"tokens"`
 	Input  int64 `json:"input"`
 	Output int64 `json:"output"`
+	// Unpriced is the part of Tokens counted without a cost (SpendNone: no price for the model).
+	Unpriced int64 `json:"unpriced,omitempty"`
 }
 
 // PreviousKey is what the key before the current one spent, kept when the key is replaced or removed.
@@ -97,12 +193,12 @@ type PreviousKey struct {
 }
 
 // BudgetLevel returns the budget state of spent against budget for a spend source: "" without a budget,
-// BudgetUnknown when the source gives no cost, else BudgetOK, BudgetWarn or BudgetReached.
+// BudgetUnknown when the source gives no cost (SpendNone, SpendFree), else BudgetOK, BudgetWarn or BudgetReached.
 func BudgetLevel(source string, spentUSD float64, budget *float64) string {
 	switch {
 	case budget == nil:
 		return ""
-	case source != SpendCLI:
+	case source != SpendCLI && source != SpendPrices && source != SpendService:
 		return BudgetUnknown
 	case spentUSD >= *budget:
 		return BudgetReached
@@ -113,7 +209,7 @@ func BudgetLevel(source string, spentUSD float64, budget *float64) string {
 }
 
 // BudgetStopped reports an API-key account the pool must not use: its budget is reached (as last judged with its
-// provider's spend source) and BudgetStop is on.
+// spend source) and BudgetStop is on.
 func (a *Account) BudgetStopped() bool {
 	return a.Kind == KindAPIKey && a.BudgetStop && a.BudgetUSD != nil && a.budgetLevel == BudgetReached
 }
@@ -130,10 +226,26 @@ func validateBudget(v float64) error {
 type SpendRow struct {
 	AccountID string
 	StartedAt string
-	CostUSD   float64
-	Input     int64
-	Output    int64
-	Total     int64
+	Backend   string
+	Model     string
+	// CostUSD is the cost the CLI reported.
+	CostUSD float64
+	Input   int64
+	Output  int64
+	Cached  int64
+	Total   int64
+	// Source and USD are how the attempt was counted in its account's spend (Counted): set on a stored row,
+	// Source "" when it was not counted.
+	Source string
+	USD    float64
+}
+
+// Counted is how ApplySpendTx counted an attempt: its spend source (AttemptCost; "" when it was not counted) and
+// the dollars added. The usage table stores it with the attempt, so a later record of the same attempt takes back
+// exactly that.
+type Counted struct {
+	Source string
+	USD    float64
 }
 
 // BudgetCrossing is an account whose budget state rose to BudgetWarn or BudgetReached.
@@ -179,7 +291,7 @@ func FormatUSD(v float64) string {
 // roundUSD rounds a running total to a billionth of a dollar, so repeated deltas do not drift.
 func roundUSD(v float64) float64 { return math.Round(v*1e9) / 1e9 }
 
-// spendState is what ApplySpendTx and refreshBudgetTx read of an account.
+// spendState is what ApplySpendTx and judgeBudgetTx read of an account.
 type spendState struct {
 	kind     Kind
 	label    string
@@ -188,6 +300,7 @@ type spendState struct {
 	spent    Spend
 	budget   *float64
 	level    string
+	service  *ServiceSpend
 }
 
 func readSpendState(ctx context.Context, tx *sql.Tx, id string) (spendState, bool, error) {
@@ -196,11 +309,12 @@ func readSpendState(ctx context.Context, tx *sql.Tx, id string) (spendState, boo
 		kind     string
 		provider sql.NullString
 		budget   sql.NullFloat64
+		service  string
 	)
 	err := tx.QueryRowContext(ctx, `SELECT kind, label, provider, key_set_at, spent_usd, spent_tokens,
-		spent_input_tokens, spent_output_tokens, budget_usd, budget_level FROM accounts WHERE id = ?`, id).Scan(
-		&kind, &st.label, &provider, &st.keySetAt, &st.spent.USD, &st.spent.Tokens, &st.spent.Input,
-		&st.spent.Output, &budget, &st.level)
+		spent_input_tokens, spent_output_tokens, spent_unpriced_tokens, budget_usd, budget_level, service_spend
+		FROM accounts WHERE id = ?`, id).Scan(&kind, &st.label, &provider, &st.keySetAt, &st.spent.USD,
+		&st.spent.Tokens, &st.spent.Input, &st.spent.Output, &st.spent.Unpriced, &budget, &st.level, &service)
 	if errors.Is(err, sql.ErrNoRows) {
 		return spendState{}, false, nil
 	}
@@ -212,47 +326,63 @@ func readSpendState(ctx context.Context, tx *sql.Tx, id string) (spendState, boo
 		v := budget.Float64
 		st.budget = &v
 	}
+	if st.service, err = parseServiceSpend(service); err != nil {
+		return spendState{}, false, fmt.Errorf("account %s: %w", id, err)
+	}
 	return st, true, nil
 }
 
-// spendSourceTx returns the spend source of an account's provider (SpendNone when it cannot be read).
-func spendSourceTx(ctx context.Context, tx *sql.Tx, providerID string) (string, error) {
+// providerTx returns an account's provider with its prices; found is false when it has none or it is gone.
+func providerTx(ctx context.Context, tx *sql.Tx, providerID string) (p Provider, found bool, err error) {
 	if providerID == "" {
-		return SpendNone, nil
+		return Provider{}, false, nil
 	}
-	p, err := getProvider(ctx, tx, providerID)
+	p, err = getProvider(ctx, tx, providerID)
 	if errors.Is(err, ErrNotFound) {
-		return SpendNone, nil
+		return Provider{}, false, nil
 	}
 	if err != nil {
-		return "", err
+		return Provider{}, false, err
 	}
-	return p.SpendSource(), nil
+	return p, true, nil
 }
 
-// add returns the spend with what row adds for an account whose source is given: the cost only from SpendCLI,
-// tokens always. sign is +1 or -1 (taking back an attempt's earlier record).
-func (s Spend) add(row SpendRow, source string, sign int64) Spend {
-	if source == SpendCLI {
-		s.USD = roundUSD(max(0, s.USD+float64(sign)*row.CostUSD))
+// orNil returns &p when found, else nil.
+func orNil(p Provider, found bool) *Provider {
+	if !found {
+		return nil
 	}
+	return &p
+}
+
+// with returns the spend with an attempt's usage added (sign +1) or taken back (sign -1), counted as source with
+// usd dollars.
+func (s Spend) with(row SpendRow, source string, usd float64, sign int64) Spend {
+	s.USD = roundUSD(max(0, s.USD+float64(sign)*usd))
 	s.Tokens = max(0, s.Tokens+sign*row.Total)
 	s.Input = max(0, s.Input+sign*row.Input)
 	s.Output = max(0, s.Output+sign*row.Output)
+	if source == SpendNone {
+		s.Unpriced = max(0, s.Unpriced+sign*row.Total)
+	}
 	return s
 }
 
 // ApplySpendTx adds an attempt's usage to the spend of its API-key account, in the transaction that records the
-// attempt. prev is the attempt's earlier record (nil when it is new): what it added is taken back first, so an
-// attempt recorded twice counts once, also when it moved to another account. Only usage of attempts that started
-// on the current key counts (started at or after the key was set). It returns the accounts whose budget state rose
-// to BudgetWarn or BudgetReached.
-func ApplySpendTx(ctx context.Context, tx *sql.Tx, prev *SpendRow, next SpendRow) ([]BudgetCrossing, error) {
+// attempt, and returns how it counted it (stored with the attempt). prev is the attempt's earlier record (nil when
+// it is new): what it added (prev.Source, prev.USD) is taken back first, so an attempt recorded twice counts once,
+// also when it moved to another account or the prices changed in between. Only usage of attempts that started on
+// the current key counts (started at or after the key was set). It returns the accounts whose budget state rose to
+// BudgetWarn or BudgetReached.
+func ApplySpendTx(ctx context.Context, tx *sql.Tx, prev *SpendRow, next SpendRow) (Counted, []BudgetCrossing, error) {
 	ids := []string{next.AccountID}
 	if prev != nil && prev.AccountID != next.AccountID {
 		ids = append(ids, prev.AccountID)
 	}
-	var out []BudgetCrossing
+	var (
+		out     []BudgetCrossing
+		counted Counted
+	)
 	for _, id := range ids {
 		if id == "" {
 			continue
@@ -260,36 +390,40 @@ func ApplySpendTx(ctx context.Context, tx *sql.Tx, prev *SpendRow, next SpendRow
 		st, found, err := readSpendState(ctx, tx, id)
 		if err != nil || !found || st.kind != KindAPIKey {
 			if err != nil {
-				return nil, fmt.Errorf("spend of %s: %w", id, err)
+				return Counted{}, nil, fmt.Errorf("spend of %s: %w", id, err)
 			}
 			continue
 		}
-		source, err := spendSourceTx(ctx, tx, st.provider)
+		prov, ok, err := providerTx(ctx, tx, st.provider)
 		if err != nil {
-			return nil, fmt.Errorf("spend of %s: %w", id, err)
+			return Counted{}, nil, fmt.Errorf("spend of %s: %w", id, err)
 		}
+		p := orNil(prov, ok)
 		spent := st.spent
-		if prev != nil && prev.AccountID == id && prev.StartedAt >= st.keySetAt {
-			spent = spent.add(*prev, source, -1)
+		if prev != nil && prev.AccountID == id && prev.Source != "" && prev.StartedAt >= st.keySetAt {
+			spent = spent.with(*prev, prev.Source, prev.USD, -1)
 		}
 		if next.AccountID == id && next.StartedAt >= st.keySetAt {
-			spent = spent.add(next, source, 1)
+			counted.Source, counted.USD = AttemptCost(p, next.Backend, next.Model, next.Input, next.Cached,
+				next.Output, next.CostUSD)
+			spent = spent.with(next, counted.Source, counted.USD, 1)
 		}
 		if spent == st.spent {
 			continue
 		}
-		level := BudgetLevel(source, spent.USD, st.budget)
+		source, usd := effectiveSpend(p, spent, st.service)
+		level := BudgetLevel(source, usd, st.budget)
 		if _, err := tx.ExecContext(ctx, `UPDATE accounts SET spent_usd = ?, spent_tokens = ?, spent_input_tokens = ?,
-			spent_output_tokens = ?, budget_level = ? WHERE id = ?`, spent.USD, spent.Tokens, spent.Input, spent.Output,
-			level, id); err != nil {
-			return nil, fmt.Errorf("spend of %s: %w", id, err)
+			spent_output_tokens = ?, spent_unpriced_tokens = ?, budget_level = ? WHERE id = ?`, spent.USD, spent.Tokens,
+			spent.Input, spent.Output, spent.Unpriced, level, id); err != nil {
+			return Counted{}, nil, fmt.Errorf("spend of %s: %w", id, err)
 		}
 		if budgetRank(level) > budgetRank(st.level) {
 			out = append(out, BudgetCrossing{AccountID: id, Label: st.label, Provider: st.provider, State: level,
-				SpentUSD: spent.USD, BudgetUSD: *st.budget})
+				SpentUSD: usd, BudgetUSD: *st.budget})
 		}
 	}
-	return out, nil
+	return counted, out, nil
 }
 
 // budgetRank orders the states that can rise: warn below reached; the others are 0.
@@ -303,34 +437,55 @@ func budgetRank(level string) int {
 	return 0
 }
 
-// refreshBudgetTx judges the account's budget again (after the budget, the key or the provider changed).
+// refreshBudgetTx judges the account's budget again (after the budget, the key, the provider or its prices
+// changed).
 func refreshBudgetTx(ctx context.Context, tx *sql.Tx, id string) error {
-	st, found, err := readSpendState(ctx, tx, id)
-	if err != nil || !found {
-		return err
-	}
-	source, err := spendSourceTx(ctx, tx, st.provider)
-	if err != nil {
-		return err
-	}
-	level := BudgetLevel(source, st.spent.USD, st.budget)
-	if level == st.level {
-		return nil
-	}
-	_, err = tx.ExecContext(ctx, "UPDATE accounts SET budget_level = ? WHERE id = ?", level, id)
+	_, err := judgeBudgetTx(ctx, tx, id)
 	return err
 }
 
+// judgeBudgetTx judges the account's budget with its current spend and source, stores the state when it changed,
+// and returns its rise to BudgetWarn or BudgetReached, if any.
+func judgeBudgetTx(ctx context.Context, tx *sql.Tx, id string) ([]BudgetCrossing, error) {
+	st, found, err := readSpendState(ctx, tx, id)
+	if err != nil || !found {
+		return nil, err
+	}
+	prov, ok, err := providerTx(ctx, tx, st.provider)
+	if err != nil {
+		return nil, err
+	}
+	source, usd := effectiveSpend(orNil(prov, ok), st.spent, st.service)
+	level := BudgetLevel(source, usd, st.budget)
+	if level == st.level {
+		return nil, nil
+	}
+	if _, err := tx.ExecContext(ctx, "UPDATE accounts SET budget_level = ? WHERE id = ?", level, id); err != nil {
+		return nil, err
+	}
+	if budgetRank(level) <= budgetRank(st.level) {
+		return nil, nil
+	}
+	return []BudgetCrossing{{AccountID: id, Label: st.label, Provider: st.provider, State: level, SpentUSD: usd,
+		BudgetUSD: *st.budget}}, nil
+}
+
 // archiveSpendTx keeps what the current key spent as the account's previous key and starts the count again, when
-// the key is replaced or removed. It returns the archived record (nil when nothing was spent).
+// the key is replaced or removed. It returns the archived record (nil when nothing was spent). The service's
+// reading belonged to the old key, so it is dropped too: the new key is read again.
 func archiveSpendTx(ctx context.Context, tx *sql.Tx, id, oldHint string, until time.Time) (*PreviousKey, error) {
 	st, found, err := readSpendState(ctx, tx, id)
 	if err != nil || !found {
 		return nil, err
 	}
 	var prev *PreviousKey
-	if st.spent != (Spend{}) {
-		prev = &PreviousKey{KeyHint: oldHint, Until: until, Spent: st.spent, BudgetUSD: st.budget}
+	spent := st.spent
+	if st.service != nil && st.service.Usage != nil {
+		// What the service counted for the old key is its spend (OpenRouter).
+		spent.USD = st.service.Usage.TotalUSD
+	}
+	if spent != (Spend{}) {
+		prev = &PreviousKey{KeyHint: oldHint, Until: until, Spent: spent, BudgetUSD: st.budget}
 		if st.keySetAt != "" {
 			if prev.Since, err = parseTime(st.keySetAt); err != nil {
 				return nil, err
@@ -346,7 +501,7 @@ func archiveSpendTx(ctx context.Context, tx *sql.Tx, id, oldHint string, until t
 		}
 	}
 	_, err = tx.ExecContext(ctx, `UPDATE accounts SET spent_usd = 0, spent_tokens = 0, spent_input_tokens = 0,
-		spent_output_tokens = 0 WHERE id = ?`, id)
+		spent_output_tokens = 0, spent_unpriced_tokens = 0, service_spend = '' WHERE id = ?`, id)
 	return prev, err
 }
 

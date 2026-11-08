@@ -39,23 +39,40 @@ type Account struct {
 	// ModelPerTask is true for an API-key account whose provider has no tier models: a delegate on it must name
 	// its model (shown as "Model: chosen per task").
 	ModelPerTask bool `json:"modelPerTask,omitempty"`
-	// Spend of an API-key account (absent for the others). SpentUSD is what the current key spent since SpentSince
-	// (when the key was set): a running total, counted whatever usageHistory says, from the provider's spend
-	// source (Provider.spendSource; only "cli" gives a cost today, the others count tokens only). SpentTokens is
-	// every token reported, SpentInputTokens and SpentOutputTokens its parts. BudgetUSD is the user's budget for
-	// the key; BudgetStop (default true) rests the account once it is reached. BudgetState is ok, warn (80% or
-	// more), reached, or unknown when the spend source gives no cost (the account then never rests on its budget).
-	SpentUSD          float64      `json:"spentUsd,omitempty"`
-	SpentTokens       int64        `json:"spentTokens,omitempty"`
-	SpentInputTokens  int64        `json:"spentInputTokens,omitempty"`
-	SpentOutputTokens int64        `json:"spentOutputTokens,omitempty"`
-	SpentSince        string       `json:"spentSince,omitempty"`
-	SpendSource       string       `json:"spendSource,omitempty"`
-	BudgetUSD         *float64     `json:"budgetUsd,omitempty"`
-	BudgetStop        *bool        `json:"budgetStop,omitempty"`
-	BudgetState       string       `json:"budgetState,omitempty" ts:"'ok' | 'warn' | 'reached' | 'unknown'"`
-	PreviousKey       *PreviousKey `json:"previousKey,omitempty"`
-	TwinOf            string       `json:"twinOf,omitempty"`
+	// Spend of an API-key account (absent for the others). SpendSource says where SpentUSD comes from: service
+	// (the service's own count for this key, OpenRouter: its usage.total, the key's whole life), cli (Claude Code's
+	// own estimate, official Anthropic only), prices (tokens × the provider's prices; models without a price fall
+	// back to the CLI estimate on official Anthropic and count nothing elsewhere), free (local: 0) or none (no
+	// cost, tokens only). Without service, SpentUSD is a running total of the attempts since SpentSince (when the
+	// key was set), counted whatever usageHistory says. SpentTokens is every token reported, SpentInputTokens and
+	// SpentOutputTokens its parts, SpentUnpricedTokens the part counted without a cost (no price for the model).
+	// BudgetUSD is the user's budget for the key; BudgetStop (default true) rests the account once it is reached.
+	// BudgetState is ok, warn (80% or more), reached, or unknown when the spend source gives no cost (none, free:
+	// the account then never rests on its budget).
+	SpentUSD            float64      `json:"spentUsd,omitempty"`
+	SpentTokens         int64        `json:"spentTokens,omitempty"`
+	SpentInputTokens    int64        `json:"spentInputTokens,omitempty"`
+	SpentOutputTokens   int64        `json:"spentOutputTokens,omitempty"`
+	SpentUnpricedTokens int64        `json:"spentUnpricedTokens,omitempty"`
+	SpentSince          string       `json:"spentSince,omitempty"`
+	SpendSource         string       `json:"spendSource,omitempty" ts:"'service' | 'cli' | 'prices' | 'free' | 'none'"`
+	BudgetUSD           *float64     `json:"budgetUsd,omitempty"`
+	BudgetStop          *bool        `json:"budgetStop,omitempty"`
+	BudgetState         string       `json:"budgetState,omitempty" ts:"'ok' | 'warn' | 'reached' | 'unknown'"`
+	PreviousKey         *PreviousKey `json:"previousKey,omitempty"`
+	// SuggestedBudgetUSD is the spending limit set on the key at the service (OpenRouter limit), offered as the
+	// budget while the account has none; it is never applied on its own.
+	SuggestedBudgetUSD *float64 `json:"suggestedBudgetUsd,omitempty"`
+	// Balance is what the service says is left (absent when it has no spend service or was not read yet):
+	// DeepSeek and Moonshot account balance (accountWide: shared by every key of that service account), or what
+	// is left of an OpenRouter key's limit (accountWide false).
+	Balance *Balance `json:"balance,omitempty"`
+	// ServiceUsage is what the service counted for this key (OpenRouter), in US dollars.
+	ServiceUsage *ServiceUsage `json:"serviceUsage,omitempty"`
+	// ServiceError is the last failed read of the spend service, when it came after the last good one: Balance
+	// and ServiceUsage are then stale.
+	ServiceError *ServiceError `json:"serviceError,omitempty"`
+	TwinOf       string        `json:"twinOf,omitempty"`
 	// Busy is the number of running turns; MaxConcurrent the cap per account.
 	Busy          int `json:"busy"`
 	MaxConcurrent int `json:"maxConcurrent"`
@@ -81,23 +98,135 @@ type Account struct {
 
 // PreviousKey is what the key before an account's current one spent (kept when the key was replaced or removed).
 type PreviousKey struct {
-	KeyHint           string   `json:"keyHint,omitempty"`
-	Since             string   `json:"since,omitempty"`
-	Until             string   `json:"until"`
-	SpentUSD          float64  `json:"spentUsd"`
-	SpentTokens       int64    `json:"spentTokens"`
-	SpentInputTokens  int64    `json:"spentInputTokens"`
-	SpentOutputTokens int64    `json:"spentOutputTokens"`
-	BudgetUSD         *float64 `json:"budgetUsd,omitempty"`
+	KeyHint           string  `json:"keyHint,omitempty"`
+	Since             string  `json:"since,omitempty"`
+	Until             string  `json:"until"`
+	SpentUSD          float64 `json:"spentUsd"`
+	SpentTokens       int64   `json:"spentTokens"`
+	SpentInputTokens  int64   `json:"spentInputTokens"`
+	SpentOutputTokens int64   `json:"spentOutputTokens"`
+	// SpentUnpricedTokens is the part of SpentTokens counted without a cost.
+	SpentUnpricedTokens int64    `json:"spentUnpricedTokens,omitempty"`
+	BudgetUSD           *float64 `json:"budgetUsd,omitempty"`
 }
 
-// Spend sources (Account.spendSource, Provider.spendSource). The set is open: later versions add "service" and
-// "prices"; a client shows an unknown one like "none".
+// Balance is what a spend service says is left, in the currency it named ("USD", "CNY"; never converted).
+type Balance struct {
+	Amount   float64 `json:"amount"`
+	Currency string  `json:"currency"`
+	// AccountWide: shared by every key of the service account (DeepSeek, Moonshot); it cannot tell what this key
+	// spent. False for an OpenRouter key's limit_remaining.
+	AccountWide bool `json:"accountWide"`
+	// Available is false when the service says the balance cannot pay for a request.
+	Available bool `json:"available"`
+	// Granted is the part the service gave (DeepSeek granted, Moonshot voucher); Paid the part paid for (DeepSeek
+	// topped up, Moonshot cash). Absent when not reported.
+	Granted *float64 `json:"granted,omitempty"`
+	Paid    *float64 `json:"paid,omitempty"`
+	// Other are the balances in other currencies (DeepSeek reports one per currency).
+	Other []Money `json:"other,omitempty"`
+	// ReadAt is when the service was read; Stale is true when a later read failed or the reading is over 2 hours
+	// old.
+	ReadAt string `json:"readAt"`
+	Stale  bool   `json:"stale"`
+}
+
+// Money is an amount in a currency.
+type Money struct {
+	Amount   float64 `json:"amount"`
+	Currency string  `json:"currency"`
+}
+
+// ServiceUsage is what a service counted for one key (OpenRouter), in US dollars, over the key's whole life
+// (totalUsd) and the current day, week and month. LimitUSD is the key's limit at the service (absent: none),
+// LimitRemainingUSD what is left of it, LimitReset the period it starts over ("daily", "weekly", "monthly"; absent:
+// never).
+type ServiceUsage struct {
+	TotalUSD          float64  `json:"totalUsd"`
+	DailyUSD          float64  `json:"dailyUsd"`
+	WeeklyUSD         float64  `json:"weeklyUsd"`
+	MonthlyUSD        float64  `json:"monthlyUsd"`
+	LimitUSD          *float64 `json:"limitUsd,omitempty"`
+	LimitRemainingUSD *float64 `json:"limitRemainingUsd,omitempty"`
+	LimitReset        string   `json:"limitReset,omitempty"`
+	ReadAt            string   `json:"readAt"`
+	Stale             bool     `json:"stale"`
+}
+
+// ServiceError is a failed read of a spend service. Message names the host and the failure (English), never the
+// key or the answer's body.
+type ServiceError struct {
+	Reason  string `json:"reason" ts:"'refused' | 'no_credit' | 'unreachable' | 'redirected' | 'error'"`
+	Message string `json:"message"`
+	At      string `json:"at"`
+}
+
+// Service read failure reasons (ServiceError.reason).
 const (
-	SpendCLI  = "cli"
-	SpendFree = "free"
-	SpendNone = "none"
+	ServiceRefused     = "refused"
+	ServiceNoCredit    = "no_credit"
+	ServiceUnreachable = "unreachable"
+	ServiceRedirected  = "redirected"
+	ServiceFailed      = "error"
 )
+
+// ServiceReasons lists the reasons of ServiceError.
+func ServiceReasons() []string {
+	return []string{ServiceRefused, ServiceNoCredit, ServiceUnreachable, ServiceRedirected, ServiceFailed}
+}
+
+// Spend sources (Account.spendSource, Provider.spendSource). A client shows an unknown one like "none".
+const (
+	SpendService = "service"
+	SpendCLI     = "cli"
+	SpendPrices  = "prices"
+	SpendFree    = "free"
+	SpendNone    = "none"
+)
+
+// SpendSources lists the spend sources, best first.
+func SpendSources() []string {
+	return []string{SpendService, SpendCLI, SpendPrices, SpendFree, SpendNone}
+}
+
+// What a provider's spend service reads (Provider.serviceReading).
+const (
+	ReadingKeyUsage       = "key_usage"
+	ReadingAccountBalance = "account_balance"
+)
+
+// Price is one row of a provider's price table: US dollars per million tokens for a model ("*": every model
+// without its own row). CachedInputUSD is the price of input served from a prompt cache; absent means the input
+// price. Seelegent ships no prices.
+type Price struct {
+	Model          string   `json:"model"`
+	InputUSD       float64  `json:"inputUsd"`
+	CachedInputUSD *float64 `json:"cachedInputUsd,omitempty"`
+	OutputUSD      float64  `json:"outputUsd"`
+	UpdatedAt      string   `json:"updatedAt,omitempty"`
+}
+
+// PriceInput is one row of PUT /providers/{id}/prices (cachedInputUsd null or absent: the input price).
+type PriceInput struct {
+	Model          string   `json:"model"`
+	InputUSD       float64  `json:"inputUsd"`
+	CachedInputUSD *float64 `json:"cachedInputUsd,omitempty"`
+	OutputUSD      float64  `json:"outputUsd"`
+}
+
+// PricesRequest is PUT /providers/{id}/prices: the whole new table (an empty list removes every price).
+type PricesRequest struct {
+	Prices []PriceInput `json:"prices"`
+}
+
+// PriceTable is GET and PUT /providers/{id}/prices: the provider's prices, sorted by model, the page where its
+// service publishes them (absent when unknown) and its spend source with them.
+type PriceTable struct {
+	Provider    string  `json:"provider"`
+	Prices      []Price `json:"prices"`
+	PricingURL  string  `json:"pricingUrl,omitempty"`
+	SpendSource string  `json:"spendSource" ts:"'service' | 'cli' | 'prices' | 'free' | 'none'"`
+}
 
 // Budget states (Account.budgetState) and the budget rest reason.
 const (
@@ -333,12 +462,20 @@ type Provider struct {
 	// ModelPerTask is true when no tier has a model: every delegate on the provider must name its model ("Model:
 	// chosen per task"). A valid set-up, not an error. Absent when false.
 	ModelPerTask bool `json:"modelPerTask,omitempty"`
-	// SpendSource says where its accounts' spend comes from: "cli" (the CLI's own cost estimate, official Anthropic
-	// only), "free" (local: Ollama or a localhost base URL) or "none" (tokens only). Open set: later versions add
-	// "service" and "prices".
-	SpendSource string `json:"spendSource,omitempty"`
-	CreatedAt   string `json:"createdAt,omitempty"`
-	UpdatedAt   string `json:"updatedAt,omitempty"`
+	// SpendSource says where its accounts' spend comes from, best first: "service" (the service counts each key's
+	// spend: OpenRouter), "free" (local: Ollama or a localhost base URL), "prices" (the user set prices),
+	// "cli" (the CLI's own cost estimate, official Anthropic only) or "none" (tokens only).
+	SpendSource string `json:"spendSource,omitempty" ts:"'service' | 'cli' | 'prices' | 'free' | 'none'"`
+	// ServiceReading says what its spend service reads with each key: key_usage (OpenRouter: the key's spend, which
+	// is the accounts' spend) or account_balance (DeepSeek, Moonshot: the balance shared by the service account,
+	// shown beside the spend). Absent when it has none.
+	ServiceReading string `json:"serviceReading,omitempty" ts:"'key_usage' | 'account_balance'"`
+	// PricingURL is the page where the service publishes its prices (absent when unknown: custom or local).
+	PricingURL string `json:"pricingUrl,omitempty"`
+	// Prices is the user's price table, sorted by model ([] when none).
+	Prices    []Price `json:"prices"`
+	CreatedAt string  `json:"createdAt,omitempty"`
+	UpdatedAt string  `json:"updatedAt,omitempty"`
 	// Notices are set only in the answers to POST and PATCH /providers: what the save changed on its own
 	// (base_url_trimmed, official_preset).
 	Notices []Notice `json:"notices,omitempty"`
@@ -357,6 +494,10 @@ type ProviderPreset struct {
 	// Tiers are suggested tier models: for "anthropic" the claude backend's tiers from the settings, when set;
 	// absent for the others (their models come from a key test).
 	Tiers TierModels `json:"tiers,omitzero"`
+	// PricingURL is the page where the preset's service publishes its prices (absent when it has none).
+	PricingURL string `json:"pricingUrl,omitempty"`
+	// ServiceReading is what the preset's spend service reads (see Provider.serviceReading).
+	ServiceReading string `json:"serviceReading,omitempty" ts:"'key_usage' | 'account_balance'"`
 }
 
 // ProviderList is GET /providers.

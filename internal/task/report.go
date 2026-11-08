@@ -146,21 +146,25 @@ func relTo(cwd, taskCwd, f string) string {
 	return filepath.ToSlash(p)
 }
 
-// turnCost is the CLI's cost estimate of the turn's attempts, when the task's provider makes it trustworthy (spend
-// source cli: the official Anthropic API); 0 otherwise.
+// turnCost is the cost of the turn's attempts as the account spend counts them (account.AttemptCost): tokens ×
+// the user's prices for the model, else the CLI's estimate on the official Anthropic API; 0 when no attempt has a
+// cost it can trust.
 func (s *Service) turnCost(ctx context.Context, t *Task, tu *Turn) float64 {
 	if t.Provider == "" {
 		return 0
 	}
 	p, err := s.o.Accounts.GetProvider(ctx, t.Provider)
-	if err != nil || p.SpendSource() != account.SpendCLI {
+	if err != nil {
 		return 0
 	}
 	cost := 0.0
 	for _, a := range tu.Attempts {
-		if a.Usage != nil {
-			cost += a.Usage.CostUSD
+		if a.Usage == nil {
+			continue
 		}
+		u := a.Usage
+		_, usd := account.AttemptCost(&p, a.Backend, a.Model, u.InputTokens, u.CachedTokens, u.OutputTokens, u.CostUSD)
+		cost += usd
 	}
 	return math.Round(cost*1e6) / 1e6
 }
