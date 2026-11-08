@@ -1,4 +1,5 @@
 Shell commands are refused in this mode, so read files with the file tools, and always end with a text answer.
+Do not explore /home/u/.seelegent or Seelegent's processes; inside it, work only in /home/u/.seelegent/specs/app-spec.
 
 You are P1, a peer.
 

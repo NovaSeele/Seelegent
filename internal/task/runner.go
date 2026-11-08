@@ -1160,7 +1160,7 @@ func (s *Service) prompt(ctx context.Context, t *Task, tu *Turn, continuing, pla
 		if t.Mode != ModePlan {
 			return msg
 		}
-		return brief.ReadOnlyRun(msg, planShell)
+		return brief.ReadOnlyRun(msg, planShell, s.o.DataDir, t.Cwd)
 	}
 	spec := s.briefSpec(t)
 	if continuing {
