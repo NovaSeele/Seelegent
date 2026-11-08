@@ -90,14 +90,17 @@ type Account struct {
 	TestResult string    `json:"testResult,omitempty"`
 	TestedAt   time.Time `json:"testedAt,omitzero"`
 	// BudgetUSD is the user's budget for the current key (nil: none); BudgetStop rests the account once it is
-	// reached. Spent is what the current key spent since KeySetAt: a running total kept with every recorded
-	// attempt (never summed from the usage table, which is pruned), counted whatever usageHistory says. The cost
-	// counts only when the provider's spend source gives one (Provider.SpendSource); tokens always.
+	// reached. Spent is what the current key's attempts spent since KeySetAt: a running total kept with every
+	// recorded attempt (never summed from the usage table, which is pruned), counted whatever usageHistory says.
+	// Each attempt's cost is counted by AttemptCost (CLI cost, prices or none); tokens always.
 	BudgetUSD  *float64 `json:"budgetUsd,omitempty"`
 	BudgetStop bool     `json:"budgetStop"`
 	Spent      Spend    `json:"spent"`
 	// PreviousKey is what the key before the current one spent (nil when none was archived).
 	PreviousKey *PreviousKey `json:"previousKey,omitempty"`
+	// Service is what the provider's spend service last read with the key (nil when it has none or was not read
+	// yet): OpenRouter usage, DeepSeek or Moonshot balance. SpendOf says which spend counts.
+	Service *ServiceSpend `json:"service,omitempty"`
 	// budgetLevel is the budget state last judged with the provider's spend source (BudgetStopped).
 	budgetLevel string
 	// CreatedAt and UpdatedAt are UTC times.

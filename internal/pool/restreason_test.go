@@ -34,7 +34,7 @@ func (f *fixture) spend(id string, cost float64) {
 	f.t.Helper()
 	ctx := f.t.Context()
 	if err := f.db.Write(ctx, func(tx *sql.Tx) error {
-		_, err := account.ApplySpendTx(ctx, tx, nil, account.SpendRow{AccountID: id,
+		_, _, err := account.ApplySpendTx(ctx, tx, nil, account.SpendRow{AccountID: id,
 			StartedAt: f.clk.Now().UTC().Add(time.Minute).Format("2006-01-02T15:04:05.000000000Z"), CostUSD: cost,
 			Total: 1})
 		return err

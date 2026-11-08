@@ -248,9 +248,10 @@ in the daemon.
   the difference when an attempt is recorded again. It is never summed from `usage_turns` (pruned after
   `TurnRetentionDays`) and it counts whatever `usageHistory` says (that setting only stops the hourly snapshots).
   The dollar amount comes from the provider's `spendSource` (`Provider.spendSource`, `account.Provider.SpendSource`,
-  the one place that decides): `cli` (the CLI's own estimate, Claude Code `total_cost_usd`) only for the official
-  Anthropic API, `free` for Ollama and localhost base URLs, `none` otherwise (tokens only: the CLI's price table does
-  not know other services' models). The set is open (`service` and `prices` come later). Replacing or removing the
+  the one place that decides; the next bullet has the details): `service` (OpenRouter: the key's usage as the
+  service counts it), `free` (Ollama, localhost/127.0.0.1/::1 base URLs), `prices` (the user's price table for the
+  provider), `cli` (the CLI's own estimate, Claude Code `total_cost_usd`, only for the official Anthropic API and
+  models without a price) or `none` (tokens only, counted in `spentUnpricedTokens`). Replacing or removing the
   key resets the total and keeps the old one as `previousKey` (also logged). `budgetUsd` (`PATCH /accounts/{id}`,
   or with `POST /accounts`; `0` removes it) and `budgetStop` (default true) set the budget; `budgetState` is `ok`,
   `warn` (80%), `reached` or `unknown` (a budget on a source without cost: never enforced). A reached budget with
@@ -265,7 +266,55 @@ in the daemon.
   holds. `POST /tasks` and followups on a provider whose every usable key is held are `400 invalid_argument`:
   `details.reason: "budget_reached"`, "anthropic keys reached their budget ($200); raise it in Accounts", or
   `details.reason: "credits"`, "the anthropic key has no credit left; top up or change the key". Migration 0013 back-fills the totals from the attempts still stored since
-  the key was set. The task report adds `turn_cost_usd` for a task on a `cli` provider.
+  the key was set. The task report adds `turn_cost_usd` for a task whose attempts have a cost (`prices` or `cli`).
+- Spend sources (`internal/account/spend.go`, `prices.go`, `service.go`; reader `internal/backend/spendread.go`,
+  cadence `internal/quota/service.go`). Every attempt stores how it was counted (`usage_turns.spend_source`,
+  `spend_usd`, from `account.AttemptCost`), and recording it again takes back exactly that before adding the new
+  count, so a replaced attempt is never counted twice and a later price change never rewrites spend already counted.
+  - `service`: a provider whose base URL is an official host on https (`openrouter.ai`, `api.deepseek.com`,
+    `api.moonshot.ai`, `api.moonshot.cn`; any preset) has a spend service (`Provider.serviceReading`:
+    `key_usage` for OpenRouter, `account_balance` for DeepSeek and Moonshot). The daemon reads it with the account's
+    key (`GET https://openrouter.ai/api/v1/key`, `GET https://api.deepseek.com/user/balance`,
+    `GET https://api.moonshot.{ai,cn}/v1/users/me/balance`): 30 s after a turn on the key (turns meanwhile share the
+    read), right after a key is stored, and otherwise at most once an hour; `POST /accounts/{id}/refresh` reads it
+    at once. Same safety as the key test: 10 s, 1 MiB, redirects only to the same scheme and host (another host is
+    `serviceError.reason: "redirected"` and never gets the key); key and body are never logged or stored. A failed
+    read keeps the last values and records `serviceError` (`refused`, `no_credit`, `unreachable`, `redirected`,
+    `error`, with `message` and `at`); `balance.stale` and `serviceUsage.stale` are true when a read failed after
+    the last good one or the last good one is over 2 h old. A `402`, `is_available: false` (DeepSeek) or an
+    available balance at or below 0 (Moonshot) holds the account like a run's credit error (`restReason:
+    "credits"`), once per hold: a later read does not hold it again until the user acted (edit, key, passing test),
+    and a read with credit does not lift it. Currency is the service's (`USD`, `CNY`), never converted.
+  - OpenRouter's reading is the key's own: `spentUsd` is `serviceUsage.totalUsd` (the key's whole life, including
+    use outside Seelegent) with `spendSource: "service"`, and budgets are judged against it. `serviceUsage` adds
+    `dailyUsd`, `weeklyUsd`, `monthlyUsd`, `limitUsd`, `limitRemainingUsd`, `limitReset`; `balance` is the key's
+    limit left (`accountWide: false`) when it has a limit. The limit is offered as `suggestedBudgetUsd` while the
+    account has no budget, never set by itself. Before the first read the account counts its attempts like any
+    other (prices, else none).
+  - DeepSeek and Moonshot balances belong to the whole service account: other keys and apps draw from it and a
+    top-up raises it, so it is never the key's spend. It is shown as `balance` with `accountWide: true` (DeepSeek's
+    other currencies in `balance.other`, `granted`/`paid` from its `granted_balance`/`topped_up_balance`; Moonshot's `voucher_balance`/`cash_balance` likewise); the key's spend
+    is counted from its attempts, at the user's prices (`prices`) or as tokens (`none`). A budget on such an account
+    is `unknown` until prices are set.
+  - `prices`: `GET /providers/{id}/prices` and `PUT /providers/{id}/prices` (`PricesRequest {prices:
+    [{model, inputUsd, cachedInputUsd?, outputUsd}]}`, the whole table; `[]` removes it; `prices` absent is `400`)
+    answer `PriceTable {provider, prices, pricingUrl?, spendSource}`. Prices are USD per 1M tokens, 0..10000, at
+    most 200 rows, models unique ignoring case; `model: "*"` prices any model without its own row;
+    `cachedInputUsd` absent or null means the input price. A bad row is `400 invalid_argument` with
+    `details.field` `prices[i].model|inputUsd|cachedInputUsd|outputUsd`. Cost of an attempt = uncached input ×
+    input + cached × cached input + output × output, over 1M; uncached input is Claude Code's `input_tokens`
+    (it excludes cache reads) and Codex's `input_tokens − cached`. Cache-write tokens are not reported, so not
+    priced. Prices are stored in `provider_prices` (migration 0014), deleted with their provider, and shown on
+    `Provider.prices`; a change judges the budgets of the provider's accounts again and is followed by
+    `providers.changed`. No price is shipped: `Provider.pricingUrl` and `ProviderPreset.pricingUrl` link the
+    service's own price page. On the official Anthropic API a model with a price is counted at it and the others
+    keep the CLI's estimate.
+  - `free`: Ollama and loopback base URLs count 0 USD; tokens are still counted.
+  - Without a reading or prices (Z.ai, OpenAI, Groq, custom services) the source is `none`: `spentUsd` 0,
+    `spentUnpricedTokens` the tokens counted without a price, `budgetState: "unknown"`.
+  - The service reading is not a usage snapshot: it is read and stored whatever `usageHistory` says. It is
+    cleared with the key (the old key's spend goes to `previousKey`) and when the provider's endpoint changes. A
+    read that started before the key was replaced is dropped.
 - `POST /automations/{id}/confirm-token` takes `{revision}`, the `Automation.revision` the dashboard shows, and
   answers `409 bad_state` when the automation changed since (`400` without it), so a token enables exactly what
   the user read (F34). It and `POST /automations/{id}/confirm`, `PUT` and `DELETE /github/token` answer only

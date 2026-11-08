@@ -58,41 +58,44 @@ func (s *Store) RecordAttempt(ctx context.Context, a Attempt) error {
 	if u.CostUSD > 0 {
 		cost = u.CostUSD
 	}
-	next := account.SpendRow{AccountID: a.AccountID, StartedAt: formatTime(started), CostUSD: max(0, u.CostUSD),
-		Input: max(0, u.InputTokens), Output: max(0, u.OutputTokens), Total: total}
+	next := account.SpendRow{AccountID: a.AccountID, StartedAt: formatTime(started), Backend: a.Backend,
+		Model: a.Model, CostUSD: max(0, u.CostUSD), Input: max(0, u.InputTokens), Output: max(0, u.OutputTokens),
+		Cached: max(0, u.CachedTokens), Total: total}
 	var crossings []account.BudgetCrossing
 	err := s.db.Write(ctx, func(tx *sql.Tx) error {
-		// The attempt's earlier record, if any: its spend is taken back before the new one is added.
+		// The attempt's earlier record, if any: what it added to the spend is taken back before the new one is
+		// added.
 		var prev *account.SpendRow
 		var old account.SpendRow
-		var oldCost sql.NullFloat64
-		err := tx.QueryRowContext(ctx, `SELECT account_id, started_at, cost_usd, input_tokens, output_tokens, total_tokens
-			FROM usage_turns WHERE task_id = ? AND turn = ? AND attempt = ?`, a.TaskID, a.Turn, a.Attempt).Scan(
-			&old.AccountID, &old.StartedAt, &oldCost, &old.Input, &old.Output, &old.Total)
+		err := tx.QueryRowContext(ctx, `SELECT account_id, started_at, input_tokens, output_tokens, total_tokens,
+			spend_source, spend_usd FROM usage_turns WHERE task_id = ? AND turn = ? AND attempt = ?`, a.TaskID, a.Turn,
+			a.Attempt).Scan(&old.AccountID, &old.StartedAt, &old.Input, &old.Output, &old.Total, &old.Source, &old.USD)
 		switch {
 		case err == nil:
-			old.CostUSD = max(0, oldCost.Float64)
 			prev = &old
 		case !errors.Is(err, sql.ErrNoRows):
 			return err
 		}
+		// The running spend of API-key accounts: kept here, in the same transaction, never summed from this table
+		// (it is pruned), and whatever the usageHistory setting says. How the attempt counted is stored with it.
+		var counted account.Counted
+		counted, crossings, err = account.ApplySpendTx(ctx, tx, prev, next)
+		if err != nil {
+			return err
+		}
 		_, err = tx.ExecContext(ctx, `INSERT INTO usage_turns (task_id, turn, attempt, account_id, backend, model,
-			project_key, project_name, started_at, ended_at, input_tokens, output_tokens, cached_tokens, total_tokens, cost_usd)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			project_key, project_name, started_at, ended_at, input_tokens, output_tokens, cached_tokens, total_tokens,
+			cost_usd, spend_source, spend_usd)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 			ON CONFLICT (task_id, turn, attempt) DO UPDATE SET account_id = excluded.account_id,
 				backend = excluded.backend, model = excluded.model, project_key = excluded.project_key,
 				project_name = excluded.project_name, started_at = excluded.started_at, ended_at = excluded.ended_at,
 				input_tokens = excluded.input_tokens, output_tokens = excluded.output_tokens,
-				cached_tokens = excluded.cached_tokens, total_tokens = excluded.total_tokens, cost_usd = excluded.cost_usd`,
+				cached_tokens = excluded.cached_tokens, total_tokens = excluded.total_tokens, cost_usd = excluded.cost_usd,
+				spend_source = excluded.spend_source, spend_usd = excluded.spend_usd`,
 			a.TaskID, a.Turn, a.Attempt, a.AccountID, a.Backend, a.Model, a.ProjectKey, a.ProjectName,
 			formatTime(started), formatTime(a.EndedAt), max(0, u.InputTokens), max(0, u.OutputTokens),
-			max(0, u.CachedTokens), total, cost)
-		if err != nil {
-			return err
-		}
-		// The running spend of API-key accounts: kept here, in the same transaction, never summed from this table
-		// (it is pruned), and whatever the usageHistory setting says.
-		crossings, err = account.ApplySpendTx(ctx, tx, prev, next)
+			max(0, u.CachedTokens), total, cost, counted.Source, counted.USD)
 		return err
 	})
 	if err != nil {

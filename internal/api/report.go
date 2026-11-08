@@ -14,8 +14,9 @@ type TaskReport struct {
 	Effort     string `json:"effort,omitempty"`
 	Profile    string `json:"profile,omitempty"`
 	TokensUsed int64  `json:"tokens_used"`
-	// TurnCostUSD is what the latest turn cost by the CLI's own estimate (Claude Code total_cost_usd), given only
-	// when that estimate is trusted: a task on the official Anthropic API (spend source cli).
+	// TurnCostUSD is what the latest turn cost as the account spend counts it: tokens times the user's prices for
+	// the model (Provider.prices), else the CLI's own estimate (Claude Code total_cost_usd) on the official Anthropic
+	// API. Absent when neither gives a cost.
 	TurnCostUSD float64     `json:"turn_cost_usd,omitempty"`
 	Spec        *ReportSpec `json:"spec,omitempty"`
 	// Response is the worker's last report, with markdown links to file:// targets reduced to their text.
