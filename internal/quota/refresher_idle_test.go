@@ -145,7 +145,24 @@ func TestAfterRunSkipsFreshQuota(t *testing.T) {
 			t.Fatalf("reads = %d, want %d", n, want)
 		}
 	}
+	// stored waits until the account's snapshot satisfies ok: a read is counted when the reader is called, and
+	// stored a little later, and AfterRun judges the age of what is stored.
+	stored := func(ok func(Snapshot) bool) {
+		t.Helper()
+		deadline := time.Now().Add(5 * time.Second)
+		for {
+			snap, _, err := f.store.Get(ctx, a.ID)
+			if err == nil && ok(snap) {
+				return
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("snapshot not stored: %+v, %v", snap, err)
+			}
+			time.Sleep(time.Millisecond)
+		}
+	}
 	waitReads(1) // the first cycle
+	stored(func(s Snapshot) bool { return s.Known() && s.Error == nil })
 	f.clk.Advance(time.Minute)
 	f.r.AfterRun(a.ID, false)
 	quiet(1) // one minute old: kept
@@ -158,17 +175,7 @@ func TestAfterRunSkipsFreshQuota(t *testing.T) {
 	fail.Store(true)
 	f.r.Request(a.ID)
 	waitReads(4) // this read fails
-	deadline := time.Now().Add(5 * time.Second)
-	for {
-		snap, _, err := f.store.Get(ctx, a.ID)
-		if err == nil && snap.Error != nil {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("the failed read was not stored")
-		}
-		time.Sleep(time.Millisecond)
-	}
+	stored(func(s Snapshot) bool { return s.Error != nil })
 	f.r.AfterRun(a.ID, false)
 	waitReads(5) // the cache holds an error: read even though the last good read is recent
 }
