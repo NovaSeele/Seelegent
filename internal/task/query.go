@@ -170,7 +170,7 @@ func (s *Service) summary(t *Task) api.TaskSummary {
 		Tier: t.Tier, AccountID: t.AccountID, Member: t.Member, Role: t.Role, Profile: t.Profile, Session: t.Session,
 		TurnCount: len(t.Turns), TokensUsed: t.TokensUsed(), FilesChanged: len(t.FilesChanged()),
 		CreatedAt: api.FormatTime(t.CreatedAt), UpdatedAt: api.FormatTime(t.UpdatedAt),
-		LastEventAt: api.FormatTime(t.LastEventAt), WaitingUntil: api.FormatTime(t.WaitingUntil),
+		LastEventAt: api.FormatTime(t.LastEventAt), WaitingUntil: api.FormatTime(t.WaitingUntil), Waiting: waitingOf(t),
 		NeedsSince: api.FormatTime(t.NeedsSince), Attention: t.Attention, Review: t.Review, Spec: t.Spec,
 		After: api.NonNil(t.After), AfterMode: t.AfterMode, DepsReason: t.DepsReason, Manual: t.Manual,
 		ParentID: t.ParentID, ContestID: t.ContestID, TicketID: t.TicketID, MeetingID: t.MeetingID,

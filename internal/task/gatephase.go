@@ -145,18 +145,26 @@ func (s *Service) othersWorking(ctx context.Context, t *Task) bool {
 // variables are never inherited: a SEELEGENT_TURN_FILES from the daemon's environment would name other files when
 // this list is too long to pass (as the old version did). Commands run in root get the same Rust toolchain pin as
 // the worker (Toolchains): only set when the daemon's environment does not pin one itself.
+//
+// testParallelism adds GOFLAGS=-p=N (after the GOFLAGS the daemon has), CARGO_BUILD_JOBS=N and
+// PYTEST_XDIST_AUTO_NUM_WORKERS=N (unless the daemon's environment sets them): ParallelVars.
 func (s *Service) gateEnv(ctx context.Context, t *Task, root string, files []string) []string {
+	base := s.o.BaseEnv()
+	extra := ParallelVars(base, s.settings().TestParallelism)
+	maps.Copy(extra, s.toolEnv(ctx, root))
 	own := []string{"CI", "SEELEGENT_GATE", "SEELEGENT_TASK", "SEELEGENT_TURN_FILES"}
+	for k := range extra {
+		own = append(own, k)
+	}
 	var env []string
-	for _, kv := range s.o.BaseEnv() {
+	for _, kv := range base {
 		name, _, _ := strings.Cut(kv, "=")
 		if !slices.ContainsFunc(own, func(n string) bool { return strings.EqualFold(n, name) }) {
 			env = append(env, kv)
 		}
 	}
-	pin := s.toolEnv(ctx, root)
-	for _, k := range slices.Sorted(maps.Keys(pin)) {
-		env = append(env, k+"="+pin[k])
+	for _, k := range slices.Sorted(maps.Keys(extra)) {
+		env = append(env, k+"="+extra[k])
 	}
 	env = append(env, "CI=1", "SEELEGENT_GATE=1", "SEELEGENT_TASK="+t.ID)
 	if v := strings.Join(files, "\n"); len(v) <= turnFilesEnvMax {
@@ -203,10 +211,19 @@ func (s *Service) gatePhase(r *run, t *Task) (bool, error) {
 		Timeout:   time.Duration(max(set.GateTimeoutSec, 1)) * time.Second,
 		TailBytes: max(set.GateOutputTailBytes, 1),
 		LogPrefix: filepath.Join(s.o.TasksDir, t.ID, fmt.Sprintf("gate-t%d-", ph.Turn)),
-		Checker:   gate.Checker{Env: s.o.BaseEnv(), Head: s.headBlob(t)}}
+		Checker:   gate.Checker{Env: s.o.BaseEnv(), Head: s.headBlob(t)},
+		Tree:      GateTree(set)}
+	// A gate the watchdog kept stopping ends at once: no settling, no fix turn (the worker cannot fix it).
+	outOfMemory := func(res api.GateResult) (bool, error) {
+		res.EndedAt = api.FormatTime(s.now())
+		return false, s.endGate(t.ID, ph.Turn, &res, s.barChanges(t))
+	}
 	res, ok := s.runGate(r, t.ID, ph.Turn, runner, steps)
 	if !ok {
 		return s.gateStopped(t.ID)
+	}
+	if res.Reason == api.GateReasonLowMemory {
+		return outOfMemory(res)
 	}
 	if failedGate(res) && s.othersWorking(r.ctx, t) {
 		// Another worker may be half way through a change the gate trips over: wait for it, then run again.
@@ -215,6 +232,9 @@ func (s *Service) gatePhase(r *run, t *Task) (bool, error) {
 		}
 		if res, ok = s.runGate(r, t.ID, ph.Turn, runner, steps); !ok {
 			return s.gateStopped(t.ID)
+		}
+		if res.Reason == api.GateReasonLowMemory {
+			return outOfMemory(res)
 		}
 		res.Settled = true
 	}
@@ -225,6 +245,9 @@ func (s *Service) gatePhase(r *run, t *Task) (bool, error) {
 		rest, ok := s.runGate(r, t.ID, ph.Turn, runner, pastHygiene(steps))
 		if !ok {
 			return s.gateStopped(t.ID)
+		}
+		if rest.Reason == api.GateReasonLowMemory {
+			return outOfMemory(rest)
 		}
 		res = withHygieneOf(rest, res)
 	}
@@ -367,7 +390,125 @@ func (s *Service) headBlob(t *Task) func(ctx context.Context, rel string) ([]byt
 
 // runGate runs the steps once, recording the progress on the turn and in gate events. ok is false when the run
 // was cut short (cancel, takeover, shutdown).
+//
+// Before it runs, the gate takes a gate slot (gateConcurrency) and then checks memory; while it waits for either
+// the phase is queued (gateAdmit). A run the memory watchdog stopped (gate.StoppedAt) is counted on the phase and
+// run again as a whole once memory is back; after api.GateLowMemoryStopsMax stops the result is an error with
+// api.GateReasonLowMemory, which the phase ends with.
 func (s *Service) runGate(r *run, id string, turn int, runner gate.Runner, steps []api.GateStep) (api.GateResult, bool) {
+	for {
+		release, ok := s.gateAdmit(r, id, turn)
+		if !ok {
+			return api.GateResult{}, false
+		}
+		res, ok := s.runGateOnce(r, id, turn, runner, steps)
+		release()
+		at := gate.StoppedAt(res)
+		if !ok || at < 0 {
+			return res, ok
+		}
+		stops := s.countGateStop(id, turn, &res, at)
+		if stops >= api.GateLowMemoryStopsMax {
+			res.State, res.Reason = api.GateError, api.GateReasonLowMemory
+			res.Warnings = append(res.Warnings, fmt.Sprintf("the machine kept running out of memory: the gate was "+
+				"stopped %d times", stops))
+			return res, true
+		}
+		if r.ctx.Err() != nil {
+			return res, false
+		}
+	}
+}
+
+// gateAdmit waits for a gate slot, then for memory, showing the phase queued meanwhile. A gate never holds its slot
+// while it waits for memory: it gives the slot back and queues again. It returns the slot's release, or false
+// when the run was stopped meanwhile.
+func (s *Service) gateAdmit(r *run, id string, turn int) (func(), bool) {
+	for {
+		release := func() {}
+		if sl := s.o.GateSlots; sl != nil {
+			rel, err := sl.Acquire(r.ctx, func(pos int) {
+				s.gateQueued(id, turn, api.GateWaitSlot, pos, sl.Limit())
+			})
+			if rel != nil {
+				release = rel
+			}
+			if err != nil || r.ctx.Err() != nil {
+				release()
+				return nil, false
+			}
+		}
+		wake := s.memoryWake()
+		if s.memoryHold(s.settings()) == nil {
+			return release, true
+		}
+		release()
+		s.gateQueued(id, turn, api.GateWaitMemory, 0, 0)
+		s.waitMemory(r.ctx, wake)
+		if r.ctx.Err() != nil {
+			return nil, false
+		}
+	}
+}
+
+// gateQueued shows the gate phase of turn queued, waiting for wait, with a queued gate event (again when the slot
+// queue position changes).
+func (s *Service) gateQueued(id string, turn int, wait string, pos, limit int) {
+	_, err := s.mutate(s.background(), id, func(t *Task) ([]NewEvent, error) {
+		ph := t.GatePhase
+		if ph == nil || ph.Turn != turn || t.CancelRequested {
+			return nil, errNoChange
+		}
+		if ph.State == api.GatePhaseQueued && ph.Wait == wait && (wait == api.GateWaitMemory || ph.Position == pos) {
+			return nil, errNoChange
+		}
+		ph.State, ph.Wait, ph.Position = api.GatePhaseQueued, wait, pos
+		return []NewEvent{{Type: api.EventGate, Turn: turn, Data: api.GateEventData{Phase: api.GateEventQueued,
+			Wait: wait, Position: pos, Limit: limit}}}, nil
+	})
+	if err != nil && s.root.Err() == nil {
+		s.log.Warn("task: queue the gate", "task", id, "err", err)
+	}
+}
+
+// countGateStop counts a watchdog stop of the gate phase of turn (GatePhase.Stops survives a restart), copies the
+// count onto the stopped step at and stores the stopped run on the turn. It returns the count.
+func (s *Service) countGateStop(id string, turn int, res *api.GateResult, at int) int {
+	stops := 0
+	_, err := s.mutate(s.background(), id, func(t *Task) ([]NewEvent, error) {
+		ph := t.GatePhase
+		if ph == nil || ph.Turn != turn {
+			return nil, errNoChange
+		}
+		ph.Stops++
+		stops = ph.Stops
+		res.Steps[at].Stops = stops
+		if tu := t.TurnN(turn); tu != nil {
+			cp := *res
+			cp.Steps = slices.Clone(res.Steps)
+			tu.Gate = &cp
+		}
+		st := res.Steps[at]
+		return []NewEvent{{Type: api.EventGate, Turn: turn, Data: api.GateEventData{Phase: api.GateEventStep,
+			Index: at, Step: &st}}}, nil
+	})
+	if err != nil && s.root.Err() == nil {
+		s.log.Warn("task: count the gate's memory stop", "task", id, "err", err)
+	}
+	if stops == 0 {
+		// The phase is gone (cancelled meanwhile): the caller stops anyway.
+		stops = 1
+	}
+	return stops
+}
+
+// runGateOnce runs the steps once in a context the memory watchdog may stop (gate.ErrLowMemory).
+func (s *Service) runGateOnce(r *run, id string, turn int, runner gate.Runner, steps []api.GateStep) (
+	api.GateResult, bool) {
+	ctx, cancel := context.WithCancelCause(r.ctx)
+	defer cancel(nil)
+	untrack := s.trackGate(cancel)
+	defer untrack()
 	started := api.FormatTime(s.now())
 	labels := make([]string, len(steps))
 	plan := make([]api.GatePlanStep, len(steps))
@@ -381,7 +522,7 @@ func (s *Service) runGate(r *run, id string, turn int, runner gate.Runner, steps
 		StartedAt: started}
 	s.saveGate(id, turn, live, NewEvent{Type: api.EventGate, Turn: turn,
 		Data: api.GateEventData{Phase: api.GateEventStart, Steps: labels, Plan: plan}})
-	res, ok := runner.Run(r.ctx, steps, func(i int, st api.GateStep) {
+	res, ok := runner.Run(ctx, steps, func(i int, st api.GateStep) {
 		live.Steps[i] = st
 		s.saveGate(id, turn, live, NewEvent{Type: api.EventGate, Turn: turn,
 			Data: api.GateEventData{Phase: api.GateEventStep, Index: i, Step: &st}})
@@ -401,7 +542,7 @@ func (s *Service) saveGate(id string, turn int, res api.GateResult, ev NewEvent)
 		cp.Steps = slices.Clone(res.Steps)
 		tu.Gate = &cp
 		if t.GatePhase.State != api.GatePhaseRunning {
-			t.GatePhase.State = api.GatePhaseRunning
+			t.GatePhase.State, t.GatePhase.Wait, t.GatePhase.Position = api.GatePhaseRunning, "", 0
 		}
 		return []NewEvent{ev}, nil
 	})

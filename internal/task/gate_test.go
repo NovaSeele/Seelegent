@@ -20,6 +20,15 @@ import (
 // gateCheck is the fake gate command (the test binary run as "gate-check"): "<file> <want>" passes when the file
 // (relative to the working folder) contains want; "--sleep <seconds>" waits.
 func gateCheck(args []string) int {
+	if len(args) == 2 && args[0] == "--wait" {
+		// Wait (up to a minute) until the file exists: a gate command that runs until the test lets it end.
+		for deadline := time.Now().Add(time.Minute); time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+			if _, err := os.Stat(args[1]); err == nil {
+				return 0
+			}
+		}
+		return 1
+	}
 	if len(args) == 2 && args[0] == "--sleep" {
 		n, _ := strconv.Atoi(args[1])
 		time.Sleep(time.Duration(n) * time.Second)
