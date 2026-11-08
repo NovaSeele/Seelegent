@@ -13,11 +13,11 @@ import type { TaskActions } from './useTaskActions'
  * The worker's question with its numbered choices and a free answer. While focus is in the card (outside the
  * text box), 1-9 send that choice at once; Mod+Enter sends the typed answer.
  */
-const props = defineProps<{ detail?: string; actions: TaskActions }>()
+const props = defineProps<{ detail?: string; options?: string[]; actions: TaskActions }>()
 
 const { t } = useI18n()
 const id = useId()
-const parsed = computed(() => parseQuestion(props.detail))
+const parsed = computed(() => parseQuestion(props.detail, props.options))
 const answer = ref('')
 const sending = computed(() => props.actions.busy.value === 'answer')
 

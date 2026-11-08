@@ -29,6 +29,9 @@ func TestReadExitText(t *testing.T) {
 		{launch.Exit{Code: -1}, ExitFailure{Kind: ExitNoResult, Backend: "agy", Code: -1}},
 		{launch.Exit{Code: 2, Error: "boom"}, ExitFailure{Kind: ExitError, Backend: "agy", Code: 2}},
 	} {
+		if tc.want.Kind == "canceled" || tc.want.Kind == "cancelled" {
+			t.Errorf("kind %q is also a deps_blocked kind (review item 5)", tc.want.Kind)
+		}
 		msg := exitText("agy", tc.exit)
 		if got, ok := ReadExitText(msg); !ok || got != tc.want {
 			t.Errorf("%q: got %+v %v, want %+v", msg, got, ok, tc.want)

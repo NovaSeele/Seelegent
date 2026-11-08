@@ -183,9 +183,9 @@ const (
 
 // AttentionParams are the values an attention flag's text is made of. Only the fields of the reason are set:
 // stalled (Kind, Minutes, Tool, Command), looping (Kind, Count, Tool, Steps), no_accounts and auth (Backend),
-// deps_blocked (Kind, Task, Title), no_response (Denied), hygiene and work_at_risk (Count).
+// deps_blocked (Kind, Task, Title), no_response (Denied), hygiene and work_at_risk (Count), question (Options).
 type AttentionParams struct {
-	Kind string `json:"kind,omitempty" ts:"'not_started' | 'no_output' | 'tool' | 'failed_calls' | 'repeated' | 'missing' | 'rejected' | 'failed' | 'cancelled' | 'timeout' | 'canceled' | 'start_failed' | 'launcher_lost' | 'exit_error' | 'no_result'"`
+	Kind string `json:"kind,omitempty" ts:"'not_started' | 'no_output' | 'tool' | 'failed_calls' | 'repeated' | 'missing' | 'rejected' | 'failed' | 'cancelled' | 'timeout' | 'process_canceled' | 'start_failed' | 'launcher_lost' | 'exit_error' | 'no_result'"`
 	// ExitCode is the worker process's exit code of a failed flag whose kind is exit_error or no_result.
 	ExitCode *int `json:"exitCode,omitempty"`
 	Minutes  int  `json:"minutes,omitempty"`
@@ -200,6 +200,9 @@ type AttentionParams struct {
 	Title string `json:"title,omitempty"`
 	// Denied are the actions the worker was refused before it ended without a report.
 	Denied []string `json:"denied,omitempty"`
+	// Options are the choices a worker's question lists (its "## Blocked" options), which the question card offers;
+	// the question itself is the flag's detail.
+	Options []string `json:"options,omitempty"`
 }
 
 // Review is the lead's verdict on a task.

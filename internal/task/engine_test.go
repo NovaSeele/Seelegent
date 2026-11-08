@@ -589,15 +589,16 @@ func TestAnswerQuestion(t *testing.T) {
 	h.queue.Push(t, okScript("conv-q", "## Blocked\n\nWhich database?\n\n- SQLite\n- Postgres"))
 	sum := h.delegate(api.DelegateRequest{})
 	tk := h.waitStatus(sum.ID, StatusDone)
-	// The options follow the question as a numbered list, which the dashboard offers as choices (design review).
-	if a := tk.Attention; a == nil || a.State != api.AttentionQuestion ||
-		a.Detail != "Which database?\n1. SQLite\n2. Postgres" {
+	// The detail is the question alone; the options, which the dashboard offers as choices (design review), are in
+	// the params, so the CLI and MCP do not show them twice (review of fix/m18-open-items, item 4).
+	if a := tk.Attention; a == nil || a.State != api.AttentionQuestion || a.Detail != "Which database?" ||
+		a.Params == nil || !slices.Equal(a.Params.Options, []string{"SQLite", "Postgres"}) {
 		t.Fatalf("attention = %+v", tk.Attention)
 	}
 	rep, _ := h.s.Report(t.Context(), sum.ID, "")
 	if rep.Question == nil || !slices.Equal(rep.Question.Options, []string{"SQLite", "Postgres"}) ||
-		rep.Attention == nil {
-		t.Fatalf("report question = %+v", rep.Question)
+		rep.Attention == nil || rep.Attention.Detail != "Which database?" {
+		t.Fatalf("report question = %+v, attention %+v", rep.Question, rep.Attention)
 	}
 	h.queue.Push(t, okScript("conv-q", "Used SQLite."))
 	if _, err := h.s.Answer(t.Context(), sum.ID, api.AnswerRequest{Answer: "SQLite"}); err != nil {

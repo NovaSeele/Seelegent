@@ -32,7 +32,7 @@
       "failed": "タスクが失敗しました。最後のターンを確認してから、フォローアップするか再実行してください。",
       "exit": {
         "timeout": "{backend} はターンの制限時間で停止されました。",
-        "canceled": "{backend} はキャンセルされました。",
+        "process_canceled": "{backend} はキャンセルされました。",
         "start_failed": "{backend} を起動できませんでした。",
         "launcher_lost": "{backend} を実行していたプロセスが、ターンの終わり方を記録する前に消えました。",
         "exit_error": "{backend} は終了コード {code} で停止しました。",

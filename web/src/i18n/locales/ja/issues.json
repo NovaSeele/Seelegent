@@ -71,6 +71,8 @@
     "loadFailed": "issue を読み込めませんでした: {error}",
     "empty": "issue はありません",
     "emptyDesc": "同期して GitHub からリポジトリの issue を取得するか、ローカル issue を追加してください。",
+    "syncFailed": "前回の同期は完了しませんでした",
+    "syncFailedDesc": "issue はまだ取得されていません。上の同期エラーに原因と次にすることが書かれています。",
     "closed": "クローズ",
     "by": "作成者: {author}",
     "suggested": "提案: {action}",

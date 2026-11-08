@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -65,6 +66,7 @@ func hookDecision(ctx context.Context, kind string, stdin io.Reader) guard.Resul
 	}
 	c := h.Checker(gitAlias(ctx, os.Environ(), h.Cwd))
 	c.Config = fetchConfig(ctx, os.Environ(), h.Cwd)
+	c.Branches = gitBranches(ctx, os.Environ(), h.Cwd, runtime.GOOS)
 	return c.Command(h.Command, h.Shells...)
 }
 
@@ -101,24 +103,7 @@ func gitAlias(ctx context.Context, env []string, dir string) func(string) (strin
 func fetchConfig(ctx context.Context, env []string, dir string) func(globals []string) ([]guard.ConfigEntry, error) {
 	bin := gitx.NewBinary(func() []string { return env }, nil)
 	return func(globals []string) ([]guard.ConfigEntry, error) {
-		var out []byte
-		err := bin.Run(func(git string) error {
-			cctx, cancel := context.WithTimeout(ctx, aliasTimeout)
-			defer cancel()
-			args := append(append([]string{"-c", "core.fsmonitor=false"}, globals...),
-				"config", "--null", "--get-regexp", guard.FetchConfigPattern)
-			c := exec.CommandContext(cctx, git, args...)
-			if dir != "" {
-				if st, err := os.Stat(dir); err == nil && st.IsDir() {
-					c.Dir = dir
-				}
-			}
-			c.Env = gitx.Env(env, "GIT_OPTIONAL_LOCKS=0", "GIT_TERMINAL_PROMPT=0")
-			platform.HideWindow(c)
-			var err error
-			out, err = c.Output()
-			return err
-		})
+		out, err := guardGit(ctx, bin, env, dir, globals, "config", "--null", "--get-regexp", guard.FetchConfigPattern)
 		var ee *exec.ExitError
 		if errors.As(err, &ee) && ee.ExitCode() == 1 {
 			return nil, nil
@@ -126,16 +111,92 @@ func fetchConfig(ctx context.Context, env []string, dir string) func(globals []s
 		if err != nil {
 			return nil, err
 		}
-		var entries []guard.ConfigEntry
-		for _, rec := range strings.Split(string(out), "\x00") {
-			if rec == "" {
-				continue
-			}
-			key, value, _ := strings.Cut(rec, "\n")
-			entries = append(entries, guard.ConfigEntry{Key: key, Value: value})
-		}
-		return entries, nil
+		return configEntries(out), nil
 	}
+}
+
+// configEntries reads the output of git config --null --get-regexp: "key\nvalue\0" records, and "key\0" for a key
+// written with no value ([fetch] prune), which git reads as true.
+func configEntries(out []byte) []guard.ConfigEntry {
+	var entries []guard.ConfigEntry
+	for _, rec := range strings.Split(string(out), "\x00") {
+		if rec == "" {
+			continue
+		}
+		key, value, ok := strings.Cut(rec, "\n")
+		if !ok {
+			value = "true"
+		}
+		entries = append(entries, guard.ConfigEntry{Key: key, Value: value})
+	}
+	return entries
+}
+
+// foldsCase reports an OS whose disks ignore case by default (NTFS, APFS): there the branches are compared whatever
+// core.ignorecase says, since `git -c core.ignorecase=false` does not change the disk.
+func foldsCase(goos string) bool { return goos == "windows" || goos == "darwin" }
+
+// gitBranches returns a reader of the branches (guard.Checker.Branches) of the repository a git command works in,
+// when its disk ignores case: on Windows and macOS always, elsewhere when core.ignorecase is true. Outside a
+// repository there are none.
+func gitBranches(ctx context.Context, env []string, dir, goos string) func(globals []string) ([]string, error) {
+	bin := gitx.NewBinary(func() []string { return env }, nil)
+	return func(globals []string) ([]string, error) {
+		var ee *exec.ExitError
+		if !foldsCase(goos) {
+			out, err := guardGit(ctx, bin, env, dir, globals, "config", "--bool", "core.ignorecase")
+			if errors.As(err, &ee) && ee.ExitCode() == 1 {
+				return nil, nil // unset
+			}
+			if err != nil {
+				return nil, err
+			}
+			if strings.TrimSpace(string(out)) != "true" {
+				return nil, nil
+			}
+		}
+		out, err := guardGit(ctx, bin, env, dir, globals, "for-each-ref", "--format=%(refname)", "refs/heads/")
+		if errors.As(err, &ee) && strings.Contains(string(ee.Stderr), "not a git repository") {
+			return nil, nil
+		}
+		if err != nil {
+			return nil, err
+		}
+		var refs []string
+		for _, line := range strings.Split(string(out), "\n") {
+			if line = strings.TrimSpace(line); line != "" {
+				refs = append(refs, line)
+			}
+		}
+		if refs == nil {
+			refs = []string{}
+		}
+		return refs, nil
+	}
+}
+
+// guardGit runs `git -c core.fsmonitor=false <globals> <args>` in dir (when it is a folder) for the guard, with
+// English messages, no optional locks and no prompts, and returns its output (stderr is in an *exec.ExitError).
+func guardGit(ctx context.Context, bin *gitx.Binary, env []string, dir string, globals []string,
+	args ...string) ([]byte, error) {
+	var out []byte
+	err := bin.Run(func(git string) error {
+		cctx, cancel := context.WithTimeout(ctx, aliasTimeout)
+		defer cancel()
+		full := append(append([]string{"-c", "core.fsmonitor=false"}, globals...), args...)
+		c := exec.CommandContext(cctx, git, full...)
+		if dir != "" {
+			if st, err := os.Stat(dir); err == nil && st.IsDir() {
+				c.Dir = dir
+			}
+		}
+		c.Env = gitx.Env(env, "GIT_OPTIONAL_LOCKS=0", "GIT_TERMINAL_PROMPT=0", "LC_ALL=C", "LANGUAGE=C")
+		platform.HideWindow(c)
+		var err error
+		out, err = c.Output()
+		return err
+	})
+	return out, err
 }
 
 // gitShimArgs splits the arguments of `seelegent __git [--shim-dir=DIR] <git args>`, which the POSIX git shim runs.
@@ -158,7 +219,8 @@ func runGitShim(ctx context.Context, shimDir string, args []string, stdin io.Rea
 	if shimDir != "" {
 		search = guard.WithoutDir(env, shimDir)
 	}
-	check := guard.Checker{Alias: gitAlias(ctx, search, ""), Config: fetchConfig(ctx, search, "")}
+	check := guard.Checker{Alias: gitAlias(ctx, search, ""), Config: fetchConfig(ctx, search, ""),
+		Branches: gitBranches(ctx, search, "", runtime.GOOS)}
 	if r := check.Git(args); r.Deny {
 		_, _ = fmt.Fprintln(stderr, r.Reason)
 		return 1

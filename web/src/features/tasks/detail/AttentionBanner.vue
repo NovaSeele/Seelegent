@@ -127,7 +127,12 @@ onMounted(() => team.ensureMembers())
           </Button>
         </div>
       </div>
-      <QuestionCard v-if="question" :detail="attention.detail" :actions="actions" />
+      <QuestionCard
+        v-if="question"
+        :detail="attention.detail"
+        :options="attention.params?.options"
+        :actions="actions"
+      />
       <ul v-else-if="gateSteps" class="banner__detail banner__steps">
         <li v-for="(s, i) in gateSteps" :key="i">
           {{ t(s.kindKey)

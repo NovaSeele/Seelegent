@@ -71,6 +71,8 @@
     "loadFailed": "Không tải được issue: {error}",
     "empty": "Không có issue nào",
     "emptyDesc": "Đồng bộ để lấy issue của kho từ GitHub, hoặc thêm một issue cục bộ.",
+    "syncFailed": "Lần đồng bộ gần nhất chưa xong",
+    "syncFailedDesc": "Các issue của kho chưa có ở đây. Lỗi đồng bộ ở trên cho biết chuyện gì xảy ra và cần làm gì.",
     "closed": "Đã đóng",
     "by": "của {author}",
     "suggested": "Gợi ý: {action}",

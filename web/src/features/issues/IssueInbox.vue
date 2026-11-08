@@ -20,7 +20,8 @@ import TriageDialog from './TriageDialog.vue'
 
 /**
  * The chosen repo's inbox: GitHub issues from the last sync and local ones, undecided first. Issue text is shown
- * as plain text (it is untrusted); a decision is made in the triage dialog.
+ * as plain text (it is untrusted); a decision is made in the triage dialog. Empty after a failed sync, it says so
+ * and points at the repo bar's error above (the cause, its next step and the daemon's message), not "sync to fetch".
  */
 const { t } = useI18n()
 const fmt = useFormat()
@@ -66,6 +67,12 @@ function decide(issue: Issue) {
         t('common.action.retry')
       }}</Button>
     </p>
+    <EmptyState
+      v-else-if="!shown.length && gh.repo?.syncError"
+      icon="warning"
+      :title="t('issues.inbox.syncFailed')"
+      :description="t('issues.inbox.syncFailedDesc')"
+    />
     <EmptyState
       v-else-if="!shown.length"
       icon="issues"

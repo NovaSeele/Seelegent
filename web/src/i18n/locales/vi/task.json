@@ -32,7 +32,7 @@
       "failed": "Tác vụ đã thất bại. Xem lượt cuối, rồi gửi tiếp yêu cầu hoặc chạy lại.",
       "exit": {
         "timeout": "{backend} đã bị dừng khi hết thời gian của lượt.",
-        "canceled": "{backend} đã bị huỷ.",
+        "process_canceled": "{backend} đã bị huỷ.",
         "start_failed": "Không khởi động được {backend}.",
         "launcher_lost": "Tiến trình chạy {backend} đã biến mất trước khi ghi lại lượt kết thúc thế nào.",
         "exit_error": "{backend} đã dừng với mã thoát {code}.",

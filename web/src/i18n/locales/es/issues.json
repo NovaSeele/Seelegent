@@ -71,6 +71,8 @@
     "loadFailed": "No se pudieron cargar los issues: {error}",
     "empty": "No hay issues aquí",
     "emptyDesc": "Sincroniza para traer los issues del repositorio desde GitHub, o añade un issue local.",
+    "syncFailed": "La última sincronización no terminó",
+    "syncFailedDesc": "Sus issues aún no están aquí. El error de sincronización de arriba dice qué falló y qué hacer.",
     "closed": "Cerrado",
     "by": "de {author}",
     "suggested": "Sugerencia: {action}",

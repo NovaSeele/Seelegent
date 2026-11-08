@@ -71,6 +71,8 @@
     "loadFailed": "无法加载 issue：{error}",
     "empty": "这里没有 issue",
     "emptyDesc": "同步以从 GitHub 获取仓库的 issue，或添加本地 issue。",
+    "syncFailed": "上次同步未完成",
+    "syncFailedDesc": "仓库的 issue 尚未获取。上方的同步错误说明了原因和下一步。",
     "closed": "已关闭",
     "by": "作者 {author}",
     "suggested": "建议：{action}",

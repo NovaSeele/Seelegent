@@ -20,7 +20,8 @@ const question = {
   reason: 'question',
   who: 'lead',
   since: iso(),
-  detail: 'Which redirect should the old URL get?\n1. 301\n2. 302',
+  detail: 'Which redirect should the old URL get?',
+  params: { options: ['301', '302'] as string[] },
 } as const
 
 describe('AttentionBanner', () => {

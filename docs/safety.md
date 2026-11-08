@@ -36,7 +36,8 @@ script that edits a file mentioning `git stash`, is data. Long options count by 
   `apply` unless it only checks; `reflog expire|delete|drop` (the stash is a reflog); `worktree remove|prune|move`
   and `worktree add -B`; `replay` unless `--ref-action=print`; `fetch --update-head-ok` and `--stdin`, and a fetch
   with a refspec that can move a branch back or delete one. Every refspec that applies is checked: the command
-  line's, the `--refmap` values, or else the `remote.<name>.fetch` refspecs of the remotes it reads (read with
+  line's, the `--refmap` values, or else the `remote.<name>.fetch` refspecs of the remotes it reads (a name is a
+  remote group, then a configured remote, even `a/b`, and only then a URL or a path, as git reads it; read with
   `git config --get-regexp` in the command's folder, with its `-C`/`--git-dir`/`--work-tree`; a configuration that
   cannot be read refuses the fetch). A destination (compared in lower case, as on a disk that ignores case) that is
   empty, `FETCH_HEAD` or under `refs/remotes/` or `refs/tags/` passes; any other is refused when it has a
@@ -52,6 +53,14 @@ script that edits a file mentioning `git stash`, is data. Long options count by 
   pass), `config --edit` and `--rename-section` (the editor or the renamed section can bring any key);
   `sparse-checkout` writes; `bisect` steps; `rerere forget|clear|gc`; `notes remove|prune`; `refs migrate`;
   `symbolic-ref -d`; `gc --prune=<date>` (plain `gc` and `gc --prune` keep the default expiry);
+- on a disk that ignores case, a new branch whose name matches an existing one in all but case (`Main` beside
+  `main`): git writes the loose ref `refs/heads/Main`, which is the file of `main`, and `main` moves to the new
+  branch's commit, packed or not. Checked for `branch <new>`, `checkout -b`, `worktree add -b` (and the branch
+  `worktree add <path> [<branch>]` creates without `-b`) and every fetch destination under `refs/heads/` (also the
+  short `src:Main`); `switch` and the `-B`, `-c`, `-m` forms are refused anyway. The branches are read with
+  `git for-each-ref refs/heads/` in the command's folder: always on Windows and macOS (`core.ignorecase=false`
+  does not change the disk), elsewhere when `core.ignorecase` is true. A list that cannot be read, or a branch
+  name the hook cannot see (`git checkout -b $NAME`), is refused there;
 - options, settings and URLs that make git run a command of the caller's choosing: `grep -O|--open-files-in-pager`,
   `difftool -x|--extcmd`, `--upload-pack`, `--receive-pack` and `--exec` on the transport commands (and `clone
   -u`), an `ext::` URL (also as a config value), `protocol.allow` and `protocol.<name>.allow`,

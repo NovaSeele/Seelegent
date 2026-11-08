@@ -1,6 +1,7 @@
 /**
- * A worker's question as the daemon passes it in attention.detail: free text, optionally followed by numbered
- * choices ("1. Redirect with 301"). The card shows the text and one button per choice.
+ * A worker's question: the text in attention.detail and its choices in attention.params.options. A flag raised before
+ * the options moved to the params lists them in the detail as numbered lines ("1. Redirect with 301"). The card
+ * shows the text and one button per choice.
  */
 export interface ParsedQuestion {
   text: string
@@ -9,7 +10,13 @@ export interface ParsedQuestion {
 
 const OPTION = /^\s*(\d{1,2})[.)]\s+(.+?)\s*$/
 
-export function parseQuestion(detail: string | undefined): ParsedQuestion {
+export function parseQuestion(detail: string | undefined, choices?: string[]): ParsedQuestion {
+  if (choices?.length) {
+    return {
+      text: (detail ?? '').trim(),
+      options: choices.map((label, i) => ({ n: i + 1, label })),
+    }
+  }
   const text: string[] = []
   const options: ParsedQuestion['options'] = []
   for (const line of (detail ?? '').split('\n')) {

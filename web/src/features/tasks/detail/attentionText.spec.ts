@@ -61,6 +61,20 @@ describe('attention text (F14)', () => {
     expect(other.said).toBe('agy exited with code 0 and no result')
   })
 
+  it('keeps a canceled process apart from a cancelled dependency (review item 5)', async () => {
+    const proc = await text(
+      at({ reason: 'failed', params: { kind: 'process_canceled', backend: 'agy' } }),
+    )
+    expect(proc.why).toContain('agy was cancelled.')
+    const dep = await text(
+      at({
+        reason: 'deps_blocked',
+        params: { kind: 'cancelled', task: 't-1', title: 'Add login' },
+      }),
+    )
+    expect(dep.why).toBe('The earlier task Add login (t-1) was cancelled.')
+  })
+
   it('does not stop twice after a title that is a sentence (design review)', async () => {
     const view = await text(
       at({

@@ -83,6 +83,9 @@ type Checker struct {
 	// settings) of the repository a git command with the global options globals (-C, --git-dir, --work-tree) works
 	// in; an error refuses the fetch. nil: no configuration is read, and only the command's own refspecs are checked.
 	Config func(globals []string) ([]ConfigEntry, error)
+	// Branches returns the branches (full names, refs/heads/...) of that repository when its disk ignores case, and
+	// nil when it does not; an error refuses a command that creates a branch. nil: names are not compared.
+	Branches func(globals []string) ([]string, error)
 	// HeredocAsCommands keeps the lines of a POSIX here-document in the PowerShell and cmd readings of a line read in
 	// every dialect, where they are commands. Set for agy on Windows: its run_command runs PowerShell, where
 	// cat <<'EOF' starts no here-document and the next lines run. Unset, those lines are read as POSIX only.
