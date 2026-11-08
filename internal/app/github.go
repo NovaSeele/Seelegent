@@ -12,6 +12,8 @@ import (
 	"github.com/NovaSeele/Seelegent/internal/envx"
 	"github.com/NovaSeele/Seelegent/internal/github"
 	"github.com/NovaSeele/Seelegent/internal/httpapi"
+	"github.com/NovaSeele/Seelegent/internal/platform"
+	"github.com/NovaSeele/Seelegent/internal/task"
 	"github.com/NovaSeele/Seelegent/internal/ticket"
 )
 
@@ -40,6 +42,7 @@ func (a *App) buildGitHub(o Options) {
 		Quota: automation.PoolQuota{States: a.Pool.States, Model: a.defaultModel, Group: a.quotaGroup},
 		Clock: o.Clock, MasterOn: func() bool { return a.Settings().AutomationsEnabled },
 		ConfirmURL: a.automationLink, Logger: a.log,
+		Tree:    func() platform.TreeOptions { return task.GateTree(a.Settings()) },
 		Changed: func(x api.Automation) { a.withAPI(func(s *httpapi.Server) { s.PublishAutomation(x) }) },
 		Deleted: func(id string) { a.withAPI(func(s *httpapi.Server) { s.PublishAutomationDeleted(id) }) }})
 }

@@ -60,8 +60,8 @@ lead or the user resets the automatic fix count.
 
 ## The gate phase
 
-When a turn of a gated task ends well, the task stays `running` with `gatePhase {state, turn, since, childId?}`
-while the daemon runs the gate. The phase survives a daemon restart (the new daemon runs the gate again) and ends
+When a turn of a gated task ends well, the task stays `running` with `gatePhase {state, turn, since, childId?,
+wait?, position?, stops?}` while the daemon runs the gate. The phase survives a daemon restart (the new daemon runs the gate again) and ends
 on cancel (a running step becomes `not_run`). Takeover is refused during the phase.
 
 Steps, in order (`GateResult.steps`):
@@ -86,7 +86,10 @@ process tree (killed on timeout or cancel). In a Rust repository they also get t
 got: when every Cargo folder within three levels picks the same toolchain (`rustup show active-toolchain`, run
 with the real home and `RUSTUP_AUTO_INSTALL=0`) and the daemon's environment does not set one, that toolchain is
 pinned, so a dependency's own `rust-toolchain.toml` cannot switch compilers mid-build (error E0514). Regression
-runs get the same pin. The full output goes to `tasks/<id>/gate-t<turn>-<n>.log`; the step
+runs get the same pin. With `testParallelism` N above 0 they also get `-p=N` appended to `GOFLAGS` (unless the
+daemon's `GOFLAGS` sets `-p` already), `CARGO_BUILD_JOBS=N` and `PYTEST_XDIST_AUTO_NUM_WORKERS=N` (unless the
+daemon's environment sets them); a `-p`, `-j` or `-n` on the command line still wins. Worker turns and regression
+runs get the same variables. The full output goes to `tasks/<id>/gate-t<turn>-<n>.log`; the step
 keeps the last `gateOutputTailBytes`.
 
 Gate commands run outside the git guard and without `SEELEGENT_WORKER=1`: test suites legitimately run
@@ -105,6 +108,16 @@ its tail when the command printed nothing) instead of a cancel, the steps after 
 counts as finished, not cut short. The task then runs the whole gate again once memory is back; after
 `GateLowMemoryStopsMax` (3) stops in one gate phase the gate ends in `error` with `reason: "low_memory"`. A run
 that only shows a stopped step therefore never reads as green.
+
+**Slots and memory.** Each gate run (all its commands, one after the other) and each regression run command takes
+one of `gateConcurrency` slots (`gate.Slots`, shared by every task; `0` = no limit). Slots are given in the order
+they were asked for; while a gate waits for one its phase is `queued` with `wait: "slot"` and its place in line
+(`position`, 1 = next), published as a `gate` event with `phase: "queued"`. With a slot in hand, a gate checks memory
+next: below `minFreeMemoryMB` / `minFreeCommitMB` (or, while the machine is low on memory, below the resume level)
+it gives the slot back and waits with `wait: "memory"`, so a gate that cannot start never blocks one that could.
+`gateTimeoutSec` counts from the moment a command starts, never while it is queued. A lowered `gateConcurrency`
+stops nothing: the runs that hold a slot finish and the next ones wait. A queued phase is no attention flag; the
+dashboard shows the wait. Regression runs take a slot per command but do not wait for memory.
 
 Each step is published as a `gate` task event (`phase: start | step | settling | result`) and stored on the turn
 (`Turn.gate`), so the dashboard shows it live. The `start` event carries the plan (each step's kind, command and

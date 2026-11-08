@@ -71,6 +71,12 @@ type GatePhase struct {
 	Since time.Time `json:"since"`
 	// ChildID is the verify task while State is verifying.
 	ChildID string `json:"childId,omitempty"`
+	// Wait is what a queued gate waits for (api.GateWaitSlot or api.GateWaitMemory), Position its place in the
+	// slot queue; both only while State is api.GatePhaseQueued.
+	Wait     string `json:"wait,omitempty"`
+	Position int    `json:"position,omitempty"`
+	// Stops counts the memory watchdog's stops of this phase's gate runs (api.GateLowMemoryStopsMax ends it).
+	Stops int `json:"stops,omitempty"`
 }
 
 // proofRequest is the gate part of a delegate or followup. gateCommands nil leaves the lead's commands as they are;
@@ -793,7 +799,11 @@ func gateSummary(t *Task) *api.Gate {
 		fixes = t.Proof.AutoFixes
 	}
 	if ph := t.GatePhase; ph != nil {
-		return &api.Gate{State: api.GateRunning, Phase: ph.State, AutoFixes: fixes, Turn: ph.Turn}
+		g := &api.Gate{State: api.GateRunning, Phase: ph.State, AutoFixes: fixes, Turn: ph.Turn}
+		if ph.State == api.GatePhaseQueued {
+			g.Wait = ph.Wait
+		}
+		return g
 	}
 	if len(t.Turns) == 0 {
 		return nil

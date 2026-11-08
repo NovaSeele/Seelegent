@@ -212,6 +212,9 @@ type Options struct {
 	Resources Resources
 	// GateSlots is shared with the proof regression runs (gateConcurrency); nil runs every gate command at once.
 	GateSlots GateSlots
+	// OnLowMemory is told when the watchdog starts (low) or stops holding every new start, with the reading that
+	// flipped it (the resources.changed frame); nil tells nobody. It must not block.
+	OnLowMemory func(low bool, m platform.MemoryStatus)
 	// Clock is the time source (the system clock when nil).
 	Clock clock.Clock
 	// Logger receives engine logs (discarded when nil). Use a logx logger so secrets are masked.
@@ -255,6 +258,16 @@ type Service struct {
 	// overlaps caches the contention view of each repository for a few seconds.
 	overlapMu sync.Mutex
 	overlaps  map[string]overlapCache
+
+	// resMu guards the resource state (resources.go): the watchdog's hold (low), whether it stopped a gate in
+	// this low-memory episode (stopped), the gate runs in flight (newest last), the last spaced start, and lowWake,
+	// closed and replaced whenever low flips.
+	resMu     sync.Mutex
+	low       bool
+	stopped   bool
+	gateRuns  []*gateRun
+	lastAdmit time.Time
+	lowWake   chan struct{}
 }
 
 // toolEnv is the toolchain pin for commands run in dir with the daemon's environment.
@@ -293,7 +306,7 @@ func New(o Options) (*Service, error) {
 	return &Service{
 		o: o, repo: NewRepo(o.DB, o.Clock.Now), bus: NewBus(), clk: o.Clock, log: o.Logger,
 		locks: map[string]*taskLock{}, runs: map[string]*run{}, watches: map[string]*consoleWatch{},
-		root: root, cancel: cancel, overlaps: map[string]overlapCache{},
+		root: root, cancel: cancel, overlaps: map[string]overlapCache{}, lowWake: make(chan struct{}),
 	}, nil
 }
 
@@ -328,6 +341,9 @@ func (s *Service) Start(ctx context.Context) error {
 	s.refreshHealth(ctx)
 	s.spawn("attention", "", s.watchAttention)
 	s.spawn("sweep", "", s.watchSweep)
+	if s.o.Resources != nil {
+		s.spawn("memory", "", s.watchMemory)
+	}
 	return nil
 }
 

@@ -74,7 +74,7 @@ func (s *Service) Takeover(ctx context.Context, id string) (api.TaskSummary, err
 		}
 		t.Manual = true
 		t.Console = &Console{AccountID: owner, Since: s.now(), From: prev}
-		t.Waiting, t.WaitDetail, t.WaitingUntil = "", "", time.Time{}
+		t.Waiting, t.WaitDetail, t.WaitingUntil, t.MemoryWait = "", "", time.Time{}, nil
 		turn := 0
 		if tu := t.LastTurn(); tu != nil {
 			turn = tu.N

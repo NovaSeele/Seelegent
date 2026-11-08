@@ -163,9 +163,12 @@ type Task struct {
 
 	Error        string    `json:"error,omitempty"`
 	WaitingUntil time.Time `json:"waitingUntil,omitzero"`
-	// Waiting is why a waiting_quota task waits (pool reason no_account, resting or busy); WaitDetail says more.
-	Waiting              string         `json:"waiting,omitempty"`
-	WaitDetail           string         `json:"waitDetail,omitempty"`
+	// Waiting is why a waiting_quota task waits: a pool reason (no_account, resting or busy), or api.WaitingMemory
+	// while it waits for free memory (resources.go, with MemoryWait); WaitDetail says more.
+	Waiting    string `json:"waiting,omitempty"`
+	WaitDetail string `json:"waitDetail,omitempty"`
+	// MemoryWait is set while Waiting is api.WaitingMemory: since when, and the last reading against its threshold.
+	MemoryWait           *MemoryWait    `json:"memoryWait,omitempty"`
 	NeedsSince           time.Time      `json:"needsSince,omitzero"`
 	Attention            *api.Attention `json:"attention,omitempty"`
 	AttentionDismissedAt time.Time      `json:"attentionDismissedAt,omitzero"`

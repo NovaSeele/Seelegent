@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -441,6 +442,10 @@ func (s *Service) newAttempt(r *run, t *Task, tu *Turn) (bool, error) {
 		return false, err
 	}
 	defer lease.Release()
+	if s.holdStart(r, t.ID, lease.Release) {
+		// Low memory: the account is free again for another task while this one waits (resources.go).
+		return true, nil
+	}
 
 	acc := choice.Account
 	attemptModel := choice.Model
@@ -463,7 +468,7 @@ func (s *Service) newAttempt(r *run, t *Task, tu *Turn) (bool, error) {
 				return nil, err
 			}
 		}
-		t.Waiting, t.WaitDetail, t.WaitingUntil = "", "", time.Time{}
+		t.Waiting, t.WaitDetail, t.WaitingUntil, t.MemoryWait = "", "", time.Time{}, nil
 		a := &Attempt{N: n, AccountID: acc.ID, AccountLabel: label, Backend: t.Backend, Model: attemptModel,
 			Continuing: continuing, StartedAt: s.now(), Status: AttemptRunning, LaunchDir: launchDir, Prompt: prompt}
 		if continuing {
@@ -518,8 +523,11 @@ func (s *Service) launchAndFollow(r *run, t *Task, turn, n int, acc account.Acco
 	}
 	set := s.settings()
 	tu := t.TurnN(turn)
-	env, err := s.o.Accounts.Env(ctx, acc, b, account.EnvOptions{Base: s.o.BaseEnv(), Model: model,
-		AllowGit: t.AllowGit, Extra: s.toolEnv(ctx, t.Cwd)})
+	base := s.o.BaseEnv()
+	extra := ParallelVars(base, set.TestParallelism)
+	maps.Copy(extra, s.toolEnv(ctx, t.Cwd))
+	env, err := s.o.Accounts.Env(ctx, acc, b, account.EnvOptions{Base: base, Model: model,
+		AllowGit: t.AllowGit, Extra: extra})
 	if err != nil {
 		if errors.Is(err, account.ErrNoKey) || errors.Is(err, account.ErrProviderUnavailable) {
 			return failed(event.ClassAuthRequired, err)
@@ -561,6 +569,7 @@ func (s *Service) launchAndFollow(r *run, t *Task, turn, n int, acc account.Acco
 	if err != nil {
 		return failed(event.ClassFatal, err)
 	}
+	spec.Tree = WorkerTree(set)
 	// Fail closed: a worker whose output could not be masked after a daemon restart is never started.
 	if err := saveMask(dir, env.Secrets); err != nil {
 		return failed(event.ClassFatal, fmt.Errorf("keep the mask list: %w", err))
@@ -612,6 +621,11 @@ func classify(o backend.Outcome, exit launch.Exit, timeoutMinutes int) (status, 
 	case backend.OutcomeBackgroundWait:
 		return AttemptBackgroundWait, ""
 	case backend.OutcomeFailed:
+	}
+	if exit.MemoryLimitHit {
+		// The launcher saw the worker tree reach its Job Object cap (Spec.Tree.MemoryLimitMB).
+		return AttemptError, "the worker hit the memory cap (workerMemoryLimitMB): raise the cap or test fewer " +
+			"packages at once"
 	}
 	switch exit.Reason {
 	case launch.ReasonTimeout:
@@ -821,7 +835,7 @@ func (s *Service) giveUp(id string, turn int, message string) (bool, error) {
 		}
 		ev := s.endTurn(t, tu, TurnFailed, backend.Outcome{})
 		t.Status, t.Error = StatusFailed, message
-		t.Waiting, t.WaitDetail, t.WaitingUntil = "", "", time.Time{}
+		t.Waiting, t.WaitDetail, t.WaitingUntil, t.MemoryWait = "", "", time.Time{}, nil
 		return []NewEvent{ev}, nil
 	})
 	if err == nil {
@@ -847,7 +861,7 @@ func (s *Service) finishCancel(id string) {
 			child = ph.ChildID
 			evs = append(evs, cancelGate(t, ph, s.now())...)
 		}
-		t.CancelRequested, t.Waiting, t.WaitDetail, t.WaitingUntil = false, "", "", time.Time{}
+		t.CancelRequested, t.Waiting, t.WaitDetail, t.WaitingUntil, t.MemoryWait = false, "", "", time.Time{}, nil
 		if t.Status != StatusCancelled {
 			if err := t.SetStatus(StatusCancelled); err != nil {
 				return nil, err
@@ -884,7 +898,7 @@ func (s *Service) setWaiting(id string, u *pool.Unavailable) {
 		if err := t.SetStatus(StatusWaitingQuota); err != nil {
 			return nil, err
 		}
-		t.Waiting, t.WaitDetail, t.WaitingUntil = string(u.Reason), detail, u.Until.UTC()
+		t.Waiting, t.WaitDetail, t.WaitingUntil, t.MemoryWait = string(u.Reason), detail, u.Until.UTC(), nil
 		turn := 0
 		if tu := t.LastTurn(); tu != nil {
 			turn = tu.N
@@ -1036,7 +1050,8 @@ func (s *Service) prompt(ctx context.Context, t *Task, tu *Turn, continuing, pla
 		return request
 	}
 	in := brief.Input{Cwd: t.Cwd, Plan: t.Mode == ModePlan, PlanShell: planShell, Spec: spec, Deps: t.DepsContext,
-		Interrupted: len(tu.Attempts) > 0, Message: tu.Message, Baseline: displayPaths(t.Cwd, t.Baseline)}
+		Interrupted: len(tu.Attempts) > 0, Message: tu.Message, Baseline: displayPaths(t.Cwd, t.Baseline),
+		TestParallelism: s.settings().TestParallelism}
 	in.Lane, in.Gate = s.briefGate(t)
 	if tu.Handback {
 		in.Message = brief.HandbackElsewhere // a new conversation: the console's context is not available

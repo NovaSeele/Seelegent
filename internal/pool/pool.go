@@ -215,6 +215,8 @@ type Unavailable struct {
 	Busy       int    `json:"busy"`
 	Backend    string `json:"backend"`
 	Group      string `json:"group,omitempty"`
+	// Capped is the maxConcurrentWorkers cap that holds the request although an account is free (0 when none does).
+	Capped int `json:"capped,omitempty"`
 }
 
 // Error implements error.
@@ -229,6 +231,10 @@ func (u *Unavailable) Error() string {
 			fmt.Fprintf(&b, " until %s", u.Until.UTC().Format(time.RFC3339))
 		}
 	default:
+		if u.Capped > 0 {
+			fmt.Fprintf(&b, "%d worker turns run already (maxConcurrentWorkers %d)", u.Capped, u.Capped)
+			break
+		}
 		fmt.Fprintf(&b, "all %s accounts are busy (%d busy, %d resting)", u.Backend, u.Busy, u.Resting)
 	}
 	if u.Group != "" {

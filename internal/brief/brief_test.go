@@ -51,21 +51,23 @@ func TestWorkerFull(t *testing.T) {
 			OutputStyle: "Terse.", Skills: []Skill{{Name: "go-style", Description: "Go conventions",
 				File: "C:/skills/go-style/SKILL.md"}, {Name: "bare", File: "C:/skills/bare/SKILL.md"}},
 			Missing: []string{"nope"}},
-		Memory:       "Use pnpm.",
-		Constitution: "Write tests first.",
-		History:      []string{`- 2026-11-06T10:00 t1 "Fix": accepted`},
-		Spec:         &Spec{Dir: "C:/specs/app-spec/specs/001-x", Outside: true, TaskIDs: []string{"T001", "T002"}, ImplementSkill: "C:/specs/app-spec/.agents/skills/speckit-implement/SKILL.md"},
-		Baseline:     baseline,
-		Deps:         DepsContext([]Dep{{ID: "t1", Title: "Schema", Status: "done", Response: strings.Repeat("r", DepChars+5)}, {ID: "t2", Status: "done"}}),
-		Earlier:      []Turn{{N: 1, Message: "First", Response: "Did it", Files: []string{"a.go", "b.go"}}, {N: 2, Message: "Second"}},
-		Interrupted:  true,
-		Message:      "Third request.",
+		Memory:          "Use pnpm.",
+		Constitution:    "Write tests first.",
+		History:         []string{`- 2026-11-06T10:00 t1 "Fix": accepted`},
+		Spec:            &Spec{Dir: "C:/specs/app-spec/specs/001-x", Outside: true, TaskIDs: []string{"T001", "T002"}, ImplementSkill: "C:/specs/app-spec/.agents/skills/speckit-implement/SKILL.md"},
+		Baseline:        baseline,
+		Deps:            DepsContext([]Dep{{ID: "t1", Title: "Schema", Status: "done", Response: strings.Repeat("r", DepChars+5)}, {ID: "t2", Status: "done"}}),
+		Earlier:         []Turn{{N: 1, Message: "First", Response: "Did it", Files: []string{"a.go", "b.go"}}, {N: 2, Message: "Second"}},
+		Interrupted:     true,
+		Message:         "Third request.",
+		TestParallelism: 4,
 	}
 	got := Worker(in)
 	golden(t, "full", got)
 	for _, want := range []string{"The lead for this task is Claude Code.", "## Your role: Backend (backend)",
 		"(Missing skills: nope)", "... and 2 more", "## Current request from the lead\nThird request.",
-		"was interrupted before it finished", "### t2: (untitled) (done)\n(no report)"} {
+		"was interrupted before it finished", "### t2: (untitled) (done)\n(no report)", "## Shared machine",
+		"`go test -p 4`", "`pytest -n 4`"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("brief lacks %q", want)
 		}

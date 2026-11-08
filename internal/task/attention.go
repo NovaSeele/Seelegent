@@ -213,6 +213,17 @@ func computeAttention(t *Task, live liveState, acc accountHealth, now time.Time,
 		if acc.known && acc.usable == 0 {
 			return noAccounts(noAccountDetail(t.Backend))
 		}
+		if t.Waiting == api.WaitingMemory {
+			// The lead cannot act on a memory wait: only a long one is shown, to the user, and it never needs the
+			// lead (needsLead: info).
+			if mw := t.MemoryWait; mw != nil && now.Sub(mw.Since) >= ResourcesWaitAfter {
+				return att(api.AttentionInfo, ReasonResourcesWait, WhoUser,
+					fmt.Sprintf("free %d MB < threshold %d MB", mw.AvailableMB, mw.NeedMB),
+					&api.AttentionParams{Minutes: int(now.Sub(mw.Since).Minutes()), AvailableMB: mw.AvailableMB,
+						NeedMB: mw.NeedMB})
+			}
+			return nil
+		}
 		if t.Waiting == string(pool.ReasonNoAccount) {
 			return noAccounts(t.WaitDetail)
 		}
@@ -294,6 +305,10 @@ func failedParams(msg string) *api.AttentionParams {
 // a.json"), and which other tasks a foreign failure may be caused by. The dashboard builds its own text from the
 // turn's steps; this one is for the lead (MCP, CLI).
 func gateDetail(g *api.GateResult) string {
+	if g.Reason == api.GateReasonLowMemory {
+		return "the machine kept running out of memory: the watchdog stopped the gate's commands " +
+			fmt.Sprint(api.GateLowMemoryStopsMax) + " times"
+	}
 	var parts []string
 	for i := range g.Steps {
 		s := &g.Steps[i]
@@ -479,6 +494,7 @@ func sameParams(a, b *api.AttentionParams) bool {
 	return a.Kind == b.Kind && a.Minutes == b.Minutes && a.Count == b.Count && a.Steps == b.Steps &&
 		a.Tool == b.Tool && a.Command == b.Command && a.Backend == b.Backend && a.Task == b.Task &&
 		a.Title == b.Title && slices.Equal(a.Denied, b.Denied) && slices.Equal(a.Options, b.Options) &&
+		a.AvailableMB == b.AvailableMB && a.NeedMB == b.NeedMB &&
 		(a.ExitCode == nil) == (b.ExitCode == nil) && (a.ExitCode == nil || *a.ExitCode == *b.ExitCode)
 }
 
