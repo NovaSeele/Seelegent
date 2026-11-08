@@ -162,6 +162,19 @@ func TestWriteTargets(t *testing.T) {
 		// A variable from anywhere else stays unknown.
 		{`$f = Join-Path $root x.log; npm test > $f`, []Target{unknown}},
 		{`t=$(pwd)/x; echo hi > $t`, []Target{unknown}},
+		// A temp variable counts only as a whole name; ${t} ends at its brace (review G2, round 3).
+		{`echo x > $template_dir/x`, []Target{unknown}},
+		{`echo x > $tmpl/out`, []Target{unknown}},
+		{`echo x > $TEMPLATE`, []Target{unknown}},
+		{`echo x > $env:TEMPLATES\x`, []Target{unknown}},
+		{`echo x > ${TMPDIR}x/out`, nil},
+		{`echo x > $TMP.log`, nil},
+		{`tmpl=$(pwd); echo x > $tmpl/out`, []Target{unknown}},
+		{`d=$template_dir/x; echo x > $d`, []Target{unknown}},
+		{`$d = Join-Path $env:TEMPLATES x; Set-Content $d -Value x`, []Target{unknown}},
+		{`t=$(mktemp); tx=$(pwd); echo x > $tx/out`, []Target{unknown}},
+		{`t=$(mktemp); u=${t}x; echo x > $u`, nil},
+		{`t=$(mktemp) && echo x > ${t}x`, nil},
 	} {
 		// Each dialect that reads the line adds its reading: cmd takes $X literally, POSIX reads D:\\x as D:x. The
 		// callers drop a path that starts with $ or %, as the start of a variable; the other readings must match.

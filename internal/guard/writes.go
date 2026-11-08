@@ -31,18 +31,20 @@ var (
 // nullTargets are the redirection targets that write nowhere.
 var nullTargets = set("$null", "nul", "/dev/null", "nul:")
 
-// tempVars are the variables that name the temporary folder, and tempMakers the commands that make a temporary file
-// or name the folder: a write under one is not in a repository.
+// tempNames are the variables that name the temporary folder (in lower case, as leadingVar returns them), tempCmd the
+// cmd spellings of them, and tempMakers the commands that make a temporary file or name the folder: a write under one
+// is not in a repository.
 var (
-	tempVars   = []string{"$env:temp", "$env:tmp", "%temp%", "%tmp%", "$tmpdir", "${tmpdir}", "$temp", "$tmp"}
+	tempNames  = set("env:temp", "env:tmp", "tmpdir", "temp", "tmp")
+	tempCmd    = []string{"%temp%", "%tmp%"}
 	tempMakers = []string{"mktemp", "new-temporaryfile", "gettempfilename", "gettemppath"}
 )
 
 // tempTarget reports whether a target with an expansion (its text in lower case) names a temporary file or folder:
 // a temp folder variable, the output of mktemp, New-TemporaryFile or [IO.Path]::GetTempFileName(), or a variable
 // this line assigned from one of those (temps).
-func tempTarget(lower string, temps map[string]bool) bool {
-	for _, v := range tempVars {
+func tempTarget(lower string, temps map[string]bool, sh Shell) bool {
+	for _, v := range tempCmd {
 		if strings.HasPrefix(lower, v) {
 			return true
 		}
@@ -55,8 +57,22 @@ func tempTarget(lower string, temps map[string]bool) bool {
 			}
 		}
 	}
-	name, ok := leadingVar(lower)
-	return ok && temps[name]
+	return tempVar(lower, temps, sh)
+}
+
+// tempVar reports whether t starts with a whole temp folder variable or one this line assigned from a temporary source:
+// $tmp/x and ${tmp}x do, $tmpl/x and $template_dir/x do not. The POSIX reading of $env:TEMP\x.txt takes the backslash
+// out ($env:TEMPx.txt), so there a PowerShell temp variable may run on into the next name; the PowerShell reading
+// still tells $env:TEMPLATES\x apart, and a write any reading cannot place stays unknown.
+func tempVar(t string, temps map[string]bool, sh Shell) bool {
+	name, ok := leadingVar(t)
+	if !ok {
+		return false
+	}
+	if tempNames[name] || temps[name] {
+		return true
+	}
+	return sh == POSIX && (strings.HasPrefix(name, "env:temp") || strings.HasPrefix(name, "env:tmp"))
 }
 
 // leadingVar returns the variable an expansion starts with ($name, ${name}, $env:name), in lower case.
@@ -80,16 +96,21 @@ func leadingVar(t string) (string, bool) {
 }
 
 // tempValue reports whether an assigned value (in lower case) comes from a temporary source.
-func tempValue(lower string, temps map[string]bool) bool {
-	for _, v := range append(slices.Clone(tempVars), tempMakers...) {
+func tempValue(lower string, temps map[string]bool, sh Shell) bool {
+	for _, v := range append(slices.Clone(tempCmd), tempMakers...) {
 		if strings.Contains(lower, v) {
 			return true
 		}
 	}
-	for name := range temps {
-		if strings.Contains(lower, "$"+name) || strings.Contains(lower, "${"+name+"}") {
+	for i := strings.IndexByte(lower, '$'); i >= 0; {
+		if tempVar(lower[i:], temps, sh) {
 			return true
 		}
+		next := strings.IndexByte(lower[i+1:], '$')
+		if next < 0 {
+			break
+		}
+		i += 1 + next
 	}
 	return false
 }
@@ -167,7 +188,7 @@ type dirState struct {
 
 // learnTemps records the variables a command assigns from a temporary source: t=$(mktemp) in POSIX shells,
 // $f = Join-Path $env:TEMP x or $f = New-TemporaryFile in PowerShell.
-func (d *dirState) learnTemps(ws []word) {
+func (d *dirState) learnTemps(ws []word, sh Shell) {
 	if d.temps == nil {
 		d.temps = map[string]bool{}
 	}
@@ -176,7 +197,7 @@ func (d *dirState) learnTemps(ws []word) {
 			break
 		}
 		name, value, _ := strings.Cut(w.text, "=")
-		if tempValue(strings.ToLower(value), d.temps) {
+		if tempValue(strings.ToLower(value), d.temps, sh) {
 			d.temps[strings.ToLower(strings.TrimSuffix(name, "+"))] = true
 		}
 	}
@@ -196,16 +217,16 @@ func (d *dirState) learnTemps(ws []word) {
 	for _, w := range rest {
 		b.WriteString(" " + w.text)
 	}
-	if v, ok := leadingVar(name); ok && v == strings.ToLower(name[1:]) && tempValue(strings.ToLower(b.String()), d.temps) {
+	if v, ok := leadingVar(name); ok && v == strings.ToLower(name[1:]) && tempValue(strings.ToLower(b.String()), d.temps, sh) {
 		d.temps[v] = true
 	}
 }
 
 // cd moves to the folder w names.
-func (d *dirState) cd(w word) {
+func (d *dirState) cd(w word, sh Shell) {
 	t := w.text
 	switch {
-	case (w.dynamic || strings.HasPrefix(t, "(")) && tempTarget(strings.ToLower(t), d.temps):
+	case (w.dynamic || strings.HasPrefix(t, "(")) && tempTarget(strings.ToLower(t), d.temps, sh):
 		d.dir, d.unknown, d.temp = "", false, true
 	case w.dynamic || strings.HasPrefix(t, "(") || t == "-":
 		d.dir, d.unknown, d.temp = "", true, false
@@ -217,10 +238,10 @@ func (d *dirState) cd(w word) {
 }
 
 // resolve joins p (a target as written) to the folder the line is in.
-func (d *dirState) resolve(w word) Target {
+func (d *dirState) resolve(w word, sh Shell) Target {
 	t := w.text
 	if w.dynamic || strings.HasPrefix(t, "(") {
-		if tempTarget(strings.ToLower(t), d.temps) {
+		if tempTarget(strings.ToLower(t), d.temps, sh) {
 			return Target{}
 		}
 		dir := literalFolder(t)
@@ -293,10 +314,10 @@ func lineWrites(line string, sh Shell, depth int, d *dirState, add func(Target))
 		if moved >= 0 && seg.list != moved {
 			d.dir, d.unknown, d.temp, d.stack, moved = "", true, false, nil, -1
 		}
-		d.learnTemps(seg.words)
+		d.learnTemps(seg.words, sh)
 		for _, w := range seg.redirs {
 			if !nullTargets[strings.ToLower(w.text)] {
-				add(d.resolve(w))
+				add(d.resolve(w, sh))
 			}
 		}
 		if segmentWrites(seg.words, sh, depth, d, add) && seg.list != 0 {
@@ -336,7 +357,7 @@ func segmentWrites(ws []word, sh Shell, depth int, d *dirState, add func(Target)
 		}
 		switch {
 		case len(pos) > 0:
-			d.cd(pos[0])
+			d.cd(pos[0], sh)
 		case sh == POSIX && name == "cd":
 			d.dir, d.unknown, d.temp = "~", false, false // the home folder
 		}
@@ -369,23 +390,23 @@ func segmentWrites(ws []word, sh Shell, depth int, d *dirState, add func(Target)
 		}
 	case name == "sed" || name == "perl":
 		for _, a := range inPlaceFiles(name, args) {
-			add(d.resolve(a))
+			add(d.resolve(a, sh))
 		}
 	case writeVerbs[name]:
 		for _, a := range positionalWords(args, sh) {
-			add(d.resolve(a))
+			add(d.resolve(a, sh))
 		}
 	case copyVerbs[name]:
 		if w, ok := flagWord(args, "-destination"); ok {
-			add(d.resolve(w))
+			add(d.resolve(w, sh))
 			return false
 		}
 		pos := positionalWords(args, sh)
 		switch {
 		case name == "robocopy" && len(pos) >= 2:
-			add(d.resolve(pos[1]))
+			add(d.resolve(pos[1], sh))
 		case len(pos) >= 2:
-			add(d.resolve(pos[len(pos)-1]))
+			add(d.resolve(pos[len(pos)-1], sh))
 		}
 	}
 	return false
