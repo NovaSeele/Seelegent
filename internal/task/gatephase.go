@@ -218,6 +218,16 @@ func (s *Service) gatePhase(r *run, t *Task) (bool, error) {
 		}
 		res.Settled = true
 	}
+	// Findings an earlier fix turn could not clear stop the gate before its other steps: run those too, so what
+	// comes next depends on whether anything else fails.
+	stuck := stuckStyle(t, ph.Turn, res)
+	if p.AutoFixes < p.Budget && onlyFailures(res, stuck) && len(res.NotRun) > 0 {
+		rest, ok := s.runGate(r, t.ID, ph.Turn, runner, pastHygiene(steps))
+		if !ok {
+			return s.gateStopped(t.ID)
+		}
+		res = withHygieneOf(rest, res)
+	}
 	others := s.others(r.ctx, t)
 	for i := range res.Steps {
 		st := &res.Steps[i]
@@ -236,9 +246,99 @@ func (s *Service) gatePhase(r *run, t *Task) (bool, error) {
 	}
 	// Only the task's own failures are worth a fix turn.
 	if p.AutoFixes < p.Budget && gate.Failing(res) != nil {
-		return s.fixTurn(t.ID, ph.Turn, res, barChanged, gate.FixPrompt(res, p.AutoFixes+1, p.Budget, others), ByGate)
+		if !onlyFailures(res, stuck) {
+			// Other failures are worth another turn; the repeated findings are left out of its prompt and stay red.
+			msg := gate.FixPrompt(withoutFindings(res, stuck), p.AutoFixes+1, p.Budget, others)
+			return s.fixTurn(t.ID, ph.Turn, res, barChanged, msg, ByGate)
+		}
+		res.Warnings = append(res.Warnings, "the automatic fix turn left the same line ending and BOM findings: "+
+			"no more fix turns, the lead decides")
 	}
 	return false, s.endGate(t.ID, ph.Turn, &res, barChanged)
+}
+
+// stuckStyle returns the line ending and BOM findings of res when turn n is an automatic fix turn whose gate still
+// has exactly those (same files, same kinds) of the gate that started it, or nil: another fix turn would not clear
+// them either (M18: two fix turns could not, one worker even converted a file to CRLF trying).
+func stuckStyle(t *Task, n int, res api.GateResult) map[[2]string]bool {
+	now := styleFindings(res)
+	if len(now) == 0 {
+		return nil
+	}
+	for _, tu := range t.Turns {
+		if tu.Gate != nil && tu.Gate.AutoFix == n {
+			if maps.Equal(styleFindings(*tu.Gate), now) {
+				return now
+			}
+			return nil
+		}
+	}
+	return nil
+}
+
+// onlyFailures reports whether the findings of stuck (not empty) are all the task's own failures in res: every
+// other own step passed and the hygiene step has no other red finding.
+func onlyFailures(res api.GateResult, stuck map[[2]string]bool) bool {
+	if len(stuck) == 0 {
+		return false
+	}
+	for i := range res.Steps {
+		st := &res.Steps[i]
+		if !stepFailed(st.State) || st.Foreign {
+			continue
+		}
+		if st.Kind != api.StepHygiene {
+			return false
+		}
+		for _, f := range st.Findings {
+			if f.Severity == api.SeverityRed && !stuck[[2]string{f.Kind, f.Path}] {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// withoutFindings returns a copy of res for a fix prompt without the findings of stuck; a hygiene step left with no
+// red finding counts as passed there, so the prompt works on the next failure.
+func withoutFindings(res api.GateResult, stuck map[[2]string]bool) api.GateResult {
+	if len(stuck) == 0 {
+		return res
+	}
+	res.Steps = slices.Clone(res.Steps)
+	for i := range res.Steps {
+		st := &res.Steps[i]
+		if st.Kind != api.StepHygiene {
+			continue
+		}
+		st.Findings = slices.DeleteFunc(slices.Clone(st.Findings), func(f api.Finding) bool {
+			return stuck[[2]string{f.Kind, f.Path}]
+		})
+		if redFindings(st.Findings) == 0 && stepFailed(st.State) {
+			st.State = api.StepGreen
+		}
+	}
+	return res
+}
+
+// stepFailed reports a red or error step.
+func stepFailed(state string) bool { return state == api.StepRed || state == api.StepError }
+
+// styleFindings returns the line ending and BOM findings of a gate's hygiene steps, as kind and path.
+func styleFindings(res api.GateResult) map[[2]string]bool {
+	out := map[[2]string]bool{}
+	for i := range res.Steps {
+		if res.Steps[i].Kind != api.StepHygiene {
+			continue
+		}
+		for _, f := range res.Steps[i].Findings {
+			switch f.Kind {
+			case api.FindingEOLChanged, api.FindingBOMChanged, api.FindingBOMNewFile:
+				out[[2]string{f.Kind, f.Path}] = true
+			}
+		}
+	}
+	return out
 }
 
 func failedGate(res api.GateResult) bool {
@@ -575,4 +675,26 @@ func (s *Service) fixTurn(id string, turn int, res api.GateResult, barChanged []
 		return false, err
 	}
 	return more, nil
+}
+
+// pastHygiene returns the plan steps with the hygiene step passed, so a run reaches the steps it stopped.
+func pastHygiene(steps []api.GateStep) []api.GateStep {
+	out := slices.Clone(steps)
+	for i := range out {
+		if out[i].Kind == api.StepHygiene {
+			out[i].State, out[i].Findings, out[i].Tail = api.StepGreen, nil, ""
+		}
+	}
+	return out
+}
+
+// withHygieneOf returns rest, a run past the hygiene step (pastHygiene), with the hygiene step of first put back.
+func withHygieneOf(rest, first api.GateResult) api.GateResult {
+	for i := range rest.Steps {
+		if rest.Steps[i].Kind == api.StepHygiene && i < len(first.Steps) && first.Steps[i].Kind == api.StepHygiene {
+			rest.Steps[i] = first.Steps[i]
+		}
+	}
+	rest.State, rest.Settled = gate.Overall(rest.Steps), first.Settled
+	return rest
 }

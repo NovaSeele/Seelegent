@@ -242,8 +242,26 @@ all; a turn without snapshots is `404 not_found`.
 
 ### Hygiene
 
-For the files the turn changed that were clean before it (not other tasks' files); line endings and BOM are
-compared with `HEAD`, files over 2 MiB, binary and scratch files are skipped:
+For the files the turn changed (not other tasks' files); files over 2 MiB, binary and scratch files are skipped, and
+the new-file kinds only look at files that were clean before the turn. Line endings and BOM judge what the turn did:
+they are a finding only when the file's style matches none of its content at the start of the turn (when the start
+snapshot kept it, that is when it was dirty then), its `HEAD` blob as committed and its `HEAD` blob as a checkout
+writes it. Line endings are also no finding when git normalizes the file on commit (`core.autocrlf` true or input,
+the `text` and `eol` attributes; asked through `git hash-object --path`, which writes nothing) and the LF form keeps
+the style: those line endings never reach a commit. So an LF working copy under `core.autocrlf=true` is never
+flagged against the CRLF checkout form, while an LF file that gets CRLF lines where nothing normalizes is. A file
+that was dirty before the turn but whose start content the snapshot did not keep is not checked.
+
+- For a file that was dirty at the start of the turn, `HEAD`'s style still counts besides its start content: a
+  worker that returns the user's dirty CRLF file to `HEAD`'s LF is not flagged. This is intended: the committed
+  style is always a legitimate one, and a fix turn that undoes an earlier turn's line ending change must pass.
+- `hash-object` does not read the index, so it misses git's "safer autocrlf" rule: an automatic conversion
+  (`core.autocrlf`, `text=auto` with or without `eol`) is skipped when the index version of the file already has a
+  CR, and `git add` keeps the CRLF lines. The check applies that rule itself (`git check-attr text eol` and the
+  index blob read raw); an explicit `text` or an `eol` without `text=auto` still normalizes.
+- Known edge: with `core.safecrlf=true` and mixed line endings, `hash-object` reports the file as normalized while
+  `git add` refuses it (the conversion is not reversible). The check then finds nothing; the user's `git add` says
+  so instead.
 
 | Kind | Severity | When |
 |---|---|---|

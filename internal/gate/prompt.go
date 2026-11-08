@@ -84,7 +84,8 @@ func FixPrompt(res api.GateResult, attempt, budget int, others []Other) string {
 		if slices.Contains(kinds, api.FindingEOLChanged) || slices.Contains(kinds, api.FindingBOMChanged) ||
 			slices.Contains(kinds, api.FindingBOMNewFile) {
 			b.WriteString("\nRestore the original line endings and BOM of those files without changing anything else " +
-				"(re-save keeping the style of the committed version; never git checkout, restore, stash, reset or clean).\n")
+				"(re-save them in the style they had before you edited them; never git checkout, restore, stash, reset " +
+				"or clean).\n")
 		}
 		if slices.Contains(kinds, api.FindingJunkFile) {
 			b.WriteString("\nDelete the junk files you or your commands created.\n")

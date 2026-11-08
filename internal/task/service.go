@@ -32,6 +32,7 @@ type SafetyGit interface {
 	DiffContent(ctx context.Context, rel string, before, after []byte, beforeMissing, afterMissing bool) (
 		api.FileDiff, error)
 	Tracked(ctx context.Context, root, suffix string, n int) ([]string, error)
+	Normalizes(ctx context.Context, root, rel string, data []byte) (bool, error)
 	Lock(ctx context.Context, root string) (func(), error)
 }
 

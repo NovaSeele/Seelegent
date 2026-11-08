@@ -249,7 +249,7 @@ func computeAttention(t *Task, live liveState, acc accountHealth, now time.Time,
 			for i := range g.Steps {
 				s := &g.Steps[i]
 				if s.Kind == api.StepHygiene {
-					red = max(red, len(s.Files))
+					red = max(red, redFindings(s.Findings))
 				}
 			}
 		}
