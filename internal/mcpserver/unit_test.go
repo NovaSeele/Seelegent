@@ -187,6 +187,16 @@ func TestToolsList(t *testing.T) {
 		if strings.Contains(string(data), "{{") {
 			t.Errorf("%s has an unfilled placeholder", tool.Name)
 		}
+		// wake_on_blocked wakes on every state that needs the lead, not only blocked (M18 review G2).
+		if raw, ok := schema.Properties["wake_on_blocked"]; ok {
+			var p struct {
+				Description string `json:"description"`
+			}
+			_ = json.Unmarshal(raw, &p)
+			if !strings.Contains(p.Description, "question") || !strings.Contains(p.Description, "stalled") {
+				t.Errorf("%s wake_on_blocked = %q, want questions and stalls named", tool.Name, p.Description)
+			}
+		}
 	}
 	// Shapes the old schema had: enums and oneOfs (spot checks), and the tier models in the model description.
 	delegate := byName["delegate"]
