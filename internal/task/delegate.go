@@ -207,6 +207,9 @@ func (s *Service) DelegateWith(ctx context.Context, req api.DelegateRequest, sp 
 			Data: api.DepsData{State: api.DepsWaiting, After: t.After, Reason: t.DepsReason}})
 	}
 	// The lane check and the create are one step: two delegates cannot both claim the same files (old D25a).
+	// The new task's first flags are read against the accounts as they are now, not as the last attention tick saw
+	// them: an account added or signed in since must not show as no_accounts, which wakes the delegate's wait (N2).
+	s.refreshHealth(ctx)
 	s.claimMu.Lock()
 	laneEvs, err := s.checkLane(ctx, t, t.Proof, req.ForceLane)
 	if err != nil {
@@ -259,6 +262,7 @@ func (s *Service) Followup(ctx context.Context, id string, req api.FollowupReque
 	if by != ByLead && by != ByUser {
 		return api.TaskSummary{}, invalidf("by %q must be lead or user", req.By)
 	}
+	s.refreshHealth(ctx) // the new turn's flags against the accounts as they are now (see DelegateWith)
 	preq := proofRequest{gate: req.Gate, gateCommands: listOf(req.GateCommands), lane: req.Lane,
 		noLane: req.NoLane, forceLane: req.ForceLane, verify: req.Verify}
 	var mem *api.Member
@@ -478,20 +482,26 @@ func checkCwd(cwd string) (canonical, key, name string, err error) {
 	return canonical, key, name, nil
 }
 
-// checkSpec validates a Spec Kit feature directory: relative to cwd (inside it) or absolute (outside it).
+// checkSpec validates a Spec Kit feature directory: relative to cwd (inside it) or absolute (outside it). A relative
+// one that leaves cwd once cleaned and resolved (.., a link or junction out) is refused, as the old version, GET
+// /spec and proof refuse it (A-L9h): a folder outside cwd is named by its absolute path.
 func checkSpec(cwd string, req *api.SpecRequest) (spec *api.SpecRef, outside bool, err error) {
 	dir := strings.TrimSpace(req.Dir)
 	if dir == "" {
 		return nil, false, invalidf("spec.dir is required")
 	}
 	abs := dir
-	if !filepath.IsAbs(abs) {
+	relative := !filepath.IsAbs(abs)
+	if relative {
 		abs = filepath.Join(cwd, dir)
 	}
 	if st, err := os.Stat(abs); err != nil || !st.IsDir() {
 		return nil, false, invalidf("spec.dir %q is not an existing folder", req.Dir)
 	}
 	rel, inside := relInside(cwd, abs)
+	if relative && !inside {
+		return nil, false, invalidf("spec.dir %q leaves cwd; pass an absolute path", req.Dir)
+	}
 	if inside {
 		dir = filepath.ToSlash(rel)
 	} else {

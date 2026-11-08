@@ -1,7 +1,7 @@
 // Package doctor checks a Seelegent installation for `seelegent doctor`: the data directory, the settings, the
-// database, the daemon and the build it runs, processes of the old Node version, the embedded dashboard, git, the
-// enabled backend CLIs, the accounts (counts only), PATH and, when rustup is installed, whether the first cargo on
-// PATH is rustup's proxy.
+// database, the daemon and the build it runs, processes and the pid file of the old Node version, the embedded
+// dashboard, git, the enabled backend CLIs, the accounts (counts only), PATH and, when rustup is installed, whether
+// the first cargo on PATH is rustup's proxy.
 // It reads only: it never starts or stops the daemon or any other process, never migrates the database and never
 // prints an e-mail address or key.
 package doctor
@@ -90,6 +90,9 @@ func Run(ctx context.Context, o Options) []Check {
 	}
 	if n, ok := oldNode(ctx, o.Processes); ok {
 		out = append(out, n)
+	}
+	if p, ok := oldPIDFile(ctx, o.Paths.Home, o.Processes); ok {
+		out = append(out, p)
 	}
 	out = append(out, portFile(o), dashboard(o.Web), git(o.GitPath, o.GitWrapper))
 	out = append(out, backends(o)...)

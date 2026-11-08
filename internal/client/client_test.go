@@ -91,7 +91,7 @@ func TestUnreachableAndCancel(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
 	defer cancel()
 	start := time.Now()
-	_, err := slow.Wait(ctx, api.WaitRequest{IDs: []string{"t"}, TimeoutSeconds: 3000}, "")
+	_, err := slow.Wait(ctx, api.WaitRequest{IDs: []string{"t"}, TimeoutSeconds: 3000}, "", time.Time{})
 	if !errors.Is(err, context.DeadlineExceeded) || time.Since(start) > 5*time.Second {
 		t.Fatalf("cancelled wait = %v after %v", err, time.Since(start))
 	}

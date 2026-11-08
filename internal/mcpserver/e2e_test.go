@@ -562,3 +562,30 @@ func TestTeamTools(t *testing.T) {
 		t.Fatalf("notes = %s", msg)
 	}
 }
+
+// TestDelegateBlockedAtCreationReturnsAtOnce: with no account a task is blocked (no_accounts) as soon as it is
+// created; delegate returns its report at once instead of holding the lead for the default 600 s wait, and so does
+// a followup that blocks the same way (final verification N2). A plain wait still sits out the flag it found.
+func TestDelegateBlockedAtCreationReturnsAtOnce(t *testing.T) {
+	d := newDaemon(t)
+	start := time.Now()
+	var rep api.TaskReport
+	sum := ok(t, d.cs, "delegate", map[string]any{"prompt": "Build it.", "cwd": d.cwd}, &rep)
+	took := time.Since(start)
+	if took > 5*time.Second {
+		t.Fatalf("delegate took %v", took)
+	}
+	t.Logf("delegate returned in %v", took)
+	if (rep.Status != "queued" && rep.Status != "waiting_quota") || rep.Attention == nil ||
+		rep.Attention.State != api.AttentionBlocked ||
+		rep.Attention.Reason != "no_accounts" {
+		t.Fatalf("delegate = %+v (%s)", rep, sum)
+	}
+	start = time.Now()
+	var reports []api.TaskReport
+	sum = ok(t, d.cs, "wait", map[string]any{"task_ids": []string{rep.TaskID, rep.TaskID}, "wait_seconds": 1},
+		&reports)
+	if took := time.Since(start); took < 900*time.Millisecond || !strings.Contains(sum, "Woke: timeout") {
+		t.Fatalf("a plain wait woke on the old flag after %v: %s", took, sum)
+	}
+}

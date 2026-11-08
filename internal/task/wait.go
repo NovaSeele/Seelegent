@@ -14,7 +14,13 @@ const maxWaitSeconds = 3000
 // newly needs the lead (WakeOnBlocked, default true), until the timeout, or until ctx ends. Unknown ids fail
 // before waiting. Ending the wait never touches a task or its worker (an MCP cancel stops only the wait, old bug).
 // All waits share the engine's one notifier.
-func (s *Service) Wait(ctx context.Context, req api.WaitRequest, reportCwd string) (api.WaitResult, error) {
+//
+// since (zero: none) is a mark the caller took before it created or followed up the tasks: a flag raised at or after
+// it counts as new although it was there when the wait began, so a delegate whose task is blocked as soon as it is
+// created (no account can run it) wakes at once instead of holding the lead for the whole wait (final verification
+// N2). A plain wait passes zero: flags raised before it began never end it.
+func (s *Service) Wait(ctx context.Context, req api.WaitRequest, reportCwd string, since time.Time) (api.WaitResult,
+	error) {
 	if len(req.IDs) == 0 {
 		return api.WaitResult{}, invalidf("ids are required")
 	}
@@ -22,14 +28,16 @@ func (s *Service) Wait(ctx context.Context, req api.WaitRequest, reportCwd strin
 		return api.WaitResult{}, invalidf("timeoutSeconds must be 0..%d", maxWaitSeconds)
 	}
 	wake := req.WakeOnBlocked == nil || *req.WakeOnBlocked
-	// The flags that were raised before the wait began do not end it.
+	// The flags that were raised before the wait began (and before since) do not end it.
 	seen := map[string]string{}
 	tasks, err := s.load(ctx, req.IDs)
 	if err != nil {
 		return api.WaitResult{}, err
 	}
 	for _, t := range tasks {
-		seen[t.ID] = flagKey(t)
+		if !raisedSince(t, since) {
+			seen[t.ID] = flagKey(t)
+		}
 	}
 	timer := s.clk.NewTimer(time.Duration(req.TimeoutSeconds) * time.Second)
 	defer timer.Stop()
@@ -85,6 +93,15 @@ func flagKey(t *Task) string {
 		return a.State + "|" + a.Reason + "|" + a.Since
 	}
 	return ""
+}
+
+// raisedSince reports whether t's flag that needs the lead was raised at or after since (never for a zero since).
+func raisedSince(t *Task, since time.Time) bool {
+	if since.IsZero() || flagKey(t) == "" {
+		return false
+	}
+	at, err := api.ParseTime(t.Attention.Since)
+	return err == nil && !at.Before(since)
 }
 
 func (s *Service) load(ctx context.Context, ids []string) ([]*Task, error) {

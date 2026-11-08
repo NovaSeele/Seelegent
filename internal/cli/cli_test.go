@@ -102,7 +102,7 @@ func TestRunExitCodes(t *testing.T) {
 		{name: "missing argument", args: []string{"cancel"}, wantCode: ExitUsage, wantStderr: "Error: usage: seelegent cancel"},
 		{name: "json usage error", args: []string{"wait", "--json"}, wantCode: ExitUsage, wantStdout: "{\n  \"error\": \"usage: seelegent wait"},
 		{name: "run unknown flag", args: []string{"run", "--bogus", "x"}, wantCode: ExitUsage, wantStderr: "Error: unknown flag: --bogus"},
-		{name: "no command", args: nil, wantCode: ExitOK, wantStdout: "Seelegent runs a local daemon"},
+		{name: "no command", args: []string{}, wantCode: ExitOK, wantStdout: "Seelegent runs a local daemon"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

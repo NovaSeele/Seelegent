@@ -37,7 +37,10 @@ foreground `seelegent daemon` command.
 3. The caller is classified. A process inside a running worker's process tree is a worker and may only use the §1.3
    allow-list (`403 forbidden`, `details.caller: "worker"`).
 4. Routing. Bodies are read through a 1 MiB limit (`413 too_large`); unknown fields, wrong types and unknown enum
-   values are `400 invalid_argument` with `details.field`.
+   values are `400 invalid_argument` with `details.field`. An unknown path under `/api/v1/` is `404 not_found`; a
+   path that exists, asked with a method it does not take (`DELETE /api/v1/health`), is `405` with an `Allow`
+   header listing the methods it takes and the body code `invalid_argument` with `details.reason:
+   "method_not_allowed"` and `details.allow` (the error codes stay the contract's set).
 
 `seelegent daemon --dev-origin http://localhost:5173` adds one loopback `http` origin to checks 1 and 2, so the Vite
 dev server (whose proxy keeps the browser's Host and Origin) can reach a development daemon. Without the flag nothing
@@ -157,8 +160,12 @@ in the daemon.
   removed from or moved to another provider is followed by `providers.changed` (because `Provider.accounts` counts
   them), whichever of the handler and that watcher sees the change first. Accounts cannot change provider through
   the API today; the watcher covers it if they ever do.
-- `POST /tasks/wait` takes the cwd for its report from an optional `cwd` query parameter. A wait whose client went
-  away writes nothing. When the daemon shuts down (`Server.Close`, on `POST /daemon/stop` and on Ctrl+C) every open
+- `POST /wait` takes the cwd for its report from an optional `cwd` query parameter. A flag that needs the lead and
+  was already raised when the wait began does not end it, unless the optional `since` query parameter (RFC 3339) is
+  given and the flag was raised at or after it: `delegate` and `followup` (CLI and MCP, and the MCP tools that start
+  or follow up a task: `notes` send, `issues` triage and ticket tasks) pass a mark taken before they created or
+  followed up the task, so a task blocked as soon as it is created (`no_accounts`) returns its report at once
+  instead of after the whole wait. A wait whose client went away writes nothing. When the daemon shuts down (`Server.Close`, on `POST /daemon/stop` and on Ctrl+C) every open
   wait ends at once with `503 daemon_stopping` (a wait that ended on its own just before is answered normally), so
   `http.Server.Shutdown` does not sit out the waits; the clients take that code to mean "do not start the daemon
   again" (see [cli.md](cli.md) and [mcp.md](mcp.md)). The other long waits do the same: `GET /meetings/{id}/wait`,

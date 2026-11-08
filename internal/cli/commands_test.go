@@ -880,3 +880,35 @@ func TestDoctor(t *testing.T) {
 		t.Fatalf("broken settings: exit %d\n%s", r.code, r.stdout)
 	}
 }
+
+// TestDelegateBlockedAtCreationReturnsAtOnce: with no account the task is blocked (no_accounts) as soon as it is
+// created; delegate prints the report at once instead of waiting out its 600 s (final verification N2).
+func TestDelegateBlockedAtCreationReturnsAtOnce(t *testing.T) {
+	d := newTestDaemon(t)
+	accs, err := d.a.Accounts.List(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, a := range accs {
+		if err := d.a.Accounts.Remove(t.Context(), a.ID); err != nil {
+			t.Fatal(err)
+		}
+	}
+	d.a.Pool.Notify()
+	td := testDeps(nil)
+	start := time.Now()
+	var rep api.TaskReport
+	r := must(t, td, "delegate", "--cwd", d.cwd, "--json", "hello")
+	took := time.Since(start)
+	r.json(t, &rep)
+	if took > 5*time.Second || rep.Attention == nil || rep.Attention.State != api.AttentionBlocked ||
+		rep.Attention.Reason != "no_accounts" || rep.Status == string(api.StatusDone) {
+		t.Fatalf("delegate after %v = %+v\nstderr: %s", took, rep, r.stderr)
+	}
+	t.Logf("delegate returned in %v", took)
+	start = time.Now()
+	out := must(t, td, "delegate", "--cwd", d.cwd, "hello again").stdout
+	if took := time.Since(start); took > 5*time.Second || !strings.Contains(out, "no_accounts") {
+		t.Fatalf("text delegate after %v:\n%s", took, out)
+	}
+}

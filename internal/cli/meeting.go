@@ -49,13 +49,16 @@ func pollConsult(cmd *cobra.Command, c *client.Client, taskID string, rec api.Co
 	return rec, nil
 }
 
-// waitAndPrint waits for a task's report after a send and prints it.
-func waitAndPrint(cmd *cobra.Command, d deps, _ *client.Client, id string, wait int, head string) error {
+// waitAndPrint waits for a task's report after a send and prints it. since is a mark taken before the send: a flag
+// raised from then on wakes the wait (N2).
+func waitAndPrint(cmd *cobra.Command, d deps, _ *client.Client, id string, wait int, since time.Time,
+	head string) error {
 	c, cn, err := d.daemonClient(cmd)
 	if err != nil {
 		return err
 	}
-	res, err := waitReports(cmd.Context(), c, cn, ops.Wait{IDs: []string{id}, Seconds: wait, WakeOnBlocked: true})
+	res, err := waitReports(cmd.Context(), c, cn, ops.Wait{IDs: []string{id}, Seconds: wait, WakeOnBlocked: true,
+		Since: since})
 	if err != nil {
 		return fmt.Errorf("sent, but reading the report failed: %w", err)
 	}

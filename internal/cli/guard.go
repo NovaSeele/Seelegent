@@ -192,6 +192,7 @@ func guardGit(ctx context.Context, bin *gitx.Binary, env []string, dir string, g
 		}
 		c.Env = gitx.Env(env, "GIT_OPTIONAL_LOCKS=0", "GIT_TERMINAL_PROMPT=0", "LC_ALL=C", "LANGUAGE=C")
 		platform.HideWindow(c)
+		c.WaitDelay = 2 * time.Second // a child git leaves can hold the pipes after the timeout kills git
 		var err error
 		out, err = c.Output()
 		return err

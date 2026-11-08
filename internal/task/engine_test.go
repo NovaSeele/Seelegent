@@ -286,6 +286,32 @@ func TestTransientRetriesAfterDelay(t *testing.T) {
 	}
 }
 
+// TestTransientBackoffIgnoresPoolWakes: the 15 s backoff after a transient failure is not cut short when the pool
+// wakes its waiters (an account released, added or changed); only the delay ends it (old B9: every release woke
+// the backoff, so a busy pool burned both retries in seconds).
+func TestTransientBackoffIgnoresPoolWakes(t *testing.T) {
+	h := newHarness(t)
+	h.agy("only", 0)
+	h.queue.Push(t, transientScript())
+	h.queue.Push(t, okScript("conv-b9", "ok"))
+	sum := h.delegate(api.DelegateRequest{})
+	h.waitEvent(sum.ID, api.EventRetry)
+	for range 5 {
+		h.pool.Notify()
+		time.Sleep(20 * time.Millisecond)
+	}
+	h.clk.Advance(14 * time.Second)
+	time.Sleep(100 * time.Millisecond)
+	if h.queue.Left(t) != 1 {
+		t.Fatal("pool wakes cut the backoff short")
+	}
+	h.waitFor("the retry after the delay", func() bool {
+		h.clk.Advance(time.Second)
+		return h.queue.Left(t) == 0
+	})
+	h.waitStatus(sum.ID, StatusDone)
+}
+
 // TestBackgroundWaitContinuesOnce continues a turn whose CLI stopped on a background wait, once.
 func TestBackgroundWaitContinuesOnce(t *testing.T) {
 	h := newHarness(t)
@@ -409,7 +435,7 @@ func TestWaitCancelLeavesTask(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan api.WaitResult, 1)
 	go func() {
-		res, err := h.s.Wait(ctx, api.WaitRequest{IDs: []string{sum.ID}, TimeoutSeconds: 600}, "")
+		res, err := h.s.Wait(ctx, api.WaitRequest{IDs: []string{sum.ID}, TimeoutSeconds: 600}, "", time.Time{})
 		if err != nil {
 			t.Error(err)
 		}
@@ -425,10 +451,10 @@ func TestWaitCancelLeavesTask(t *testing.T) {
 	if tk := h.task(sum.ID); tk.Status != StatusRunning || tk.CancelRequested || !h.s.live(sum.ID).running {
 		t.Fatalf("the wait's cancel touched the task: %s", tk.Status)
 	}
-	if _, err := h.s.Wait(t.Context(), api.WaitRequest{IDs: []string{"nope"}}, ""); !errors.Is(err, ErrNotFound) {
+	if _, err := h.s.Wait(t.Context(), api.WaitRequest{IDs: []string{"nope"}}, "", time.Time{}); !errors.Is(err, ErrNotFound) {
 		t.Errorf("unknown id: %v", err)
 	}
-	if _, err := h.s.Wait(t.Context(), api.WaitRequest{IDs: []string{sum.ID}, TimeoutSeconds: 4000}, ""); !errors.Is(err,
+	if _, err := h.s.Wait(t.Context(), api.WaitRequest{IDs: []string{sum.ID}, TimeoutSeconds: 4000}, "", time.Time{}); !errors.Is(err,
 		ErrInvalid) {
 		t.Errorf("timeout 4000: %v", err)
 	}
@@ -449,7 +475,7 @@ func TestWaitWakesOnStallAndDone(t *testing.T) {
 	h.waitFor("the open tool call", func() bool { return h.s.live(sum.ID).tool != "" })
 	done := make(chan api.WaitResult, 1)
 	go func() {
-		res, err := h.s.Wait(t.Context(), api.WaitRequest{IDs: []string{sum.ID}, TimeoutSeconds: 3000, Reports: true}, "")
+		res, err := h.s.Wait(t.Context(), api.WaitRequest{IDs: []string{sum.ID}, TimeoutSeconds: 3000, Reports: true}, "", time.Time{})
 		if err != nil {
 			t.Error(err)
 		}
@@ -469,12 +495,12 @@ func TestWaitWakesOnStallAndDone(t *testing.T) {
 	if err := os.WriteFile(release, nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	res, err := h.s.Wait(t.Context(), api.WaitRequest{IDs: []string{sum.ID}, TimeoutSeconds: 3000}, "")
+	res, err := h.s.Wait(t.Context(), api.WaitRequest{IDs: []string{sum.ID}, TimeoutSeconds: 3000}, "", time.Time{})
 	if err != nil || !res.Done || res.Woke != api.WokeDone || res.Tasks[0].Status != StatusDone {
 		t.Fatalf("second wait = %+v, %v", res, err)
 	}
 	// A wait on finished tasks returns at once; the timeout of the fake clock ends a wait on a pending one.
-	res, err = h.s.Wait(t.Context(), api.WaitRequest{IDs: []string{sum.ID}, TimeoutSeconds: 0, Any: true}, "")
+	res, err = h.s.Wait(t.Context(), api.WaitRequest{IDs: []string{sum.ID}, TimeoutSeconds: 0, Any: true}, "", time.Time{})
 	if err != nil || !res.Done {
 		t.Fatalf("third wait = %+v, %v", res, err)
 	}
@@ -580,6 +606,66 @@ func TestNoAccountWaitsAndBlocks(t *testing.T) {
 		h.clk.Advance(noAccountRecheck)
 		return h.task(sum.ID).Status == StatusDone
 	})
+}
+
+// TestWaitSinceWakesOnFlagRaisedAtCreation: a task blocked as soon as it is created (no account) wakes a wait that
+// carries a mark taken before the creation at once, while a plain wait still ignores a flag that was there when it
+// began (final verification N2).
+func TestWaitSinceWakesOnFlagRaisedAtCreation(t *testing.T) {
+	h := newHarness(t)
+	mark := h.clk.Now()
+	sum := h.delegate(api.DelegateRequest{})
+	h.waitFor("the no_accounts flag", func() bool {
+		a := h.task(sum.ID).Attention
+		return a != nil && a.Reason == ReasonNoAccounts
+	})
+	res, err := h.s.Wait(t.Context(), api.WaitRequest{IDs: []string{sum.ID}, TimeoutSeconds: 600}, "", mark)
+	if err != nil || res.Woke != api.WokeBlocked || res.Done || res.Tasks[0].Attention == nil ||
+		res.Tasks[0].Attention.Reason != ReasonNoAccounts {
+		t.Fatalf("wait since the mark = %+v, %v", res, err)
+	}
+	// A plain wait (no mark), and one whose mark is after the flag, sit the flag out until the timeout.
+	for _, since := range []time.Time{{}, h.clk.Now().Add(time.Second)} {
+		done := make(chan api.WaitResult, 1)
+		go func() {
+			res, err := h.s.Wait(t.Context(), api.WaitRequest{IDs: []string{sum.ID}, TimeoutSeconds: 60}, "", since)
+			if err != nil {
+				t.Error(err)
+			}
+			done <- res
+		}()
+		select {
+		case res := <-done:
+			t.Fatalf("a wait since %v woke on the old flag: %+v", since, res)
+		case <-time.After(100 * time.Millisecond):
+		}
+		var res api.WaitResult
+		h.waitFor("the timeout", func() bool {
+			h.clk.Advance(61 * time.Second)
+			select {
+			case res = <-done:
+				return true
+			case <-time.After(20 * time.Millisecond):
+				return false
+			}
+		})
+		if res.Woke != api.WokeTimeout {
+			t.Fatalf("a wait since %v = %+v", since, res)
+		}
+	}
+}
+
+// TestNewTaskSeesAccountsAddedSinceTheTick: an account added after the last attention tick counts for a new task's
+// first flags, so the task is not flagged no_accounts (which would wake the delegate's wait) when it can run.
+func TestNewTaskSeesAccountsAddedSinceTheTick(t *testing.T) {
+	h := newHarness(t)
+	h.agy("late", 0)
+	h.queue.Push(t, okScript("conv-l", "ok"))
+	sum := h.delegate(api.DelegateRequest{})
+	if sum.Attention != nil {
+		t.Fatalf("a task that can run was flagged at creation: %+v", sum.Attention)
+	}
+	h.waitStatus(sum.ID, StatusDone)
 }
 
 // TestAnswerQuestion turns a "## Blocked" report into a question that the user answers with a new turn.

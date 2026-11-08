@@ -2,8 +2,11 @@ package task
 
 import (
 	"context"
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"time"
 )
 
@@ -31,9 +34,21 @@ func (s *Service) watchSweep() {
 	}
 }
 
+// ownFolder and ownFile match what this version writes directly in a task folder TasksDir/<id>: attempt folders
+// t<turn>-a<n> (attemptDir), console folders console-<ms> (takeover) and gate step logs gate-t<turn>-<step>.log
+// (gatephase).
+var (
+	ownFolder = regexp.MustCompile(`^(t\d+-a\d+|console-\d+)$`)
+	ownFile   = regexp.MustCompile(`^gate-t\d+-\d+\.log$`)
+)
+
 // sweep removes the attempt and launch folders (TasksDir/<id>) and the snapshots of tasks that no longer exist, and
 // of finished tasks unchanged for snapshotRetentionDays (bugs.md F5 and D7). A task that is pending, blocked on its
 // prerequisites, followed by a run or taken over keeps everything; a store that cannot be read removes nothing.
+//
+// TasksDir is shared with the old Node version, whose tasks the store never knew (migrate does not import them):
+// <id>.json and <id>.jsonl next to a folder <id>/ of stream and stderr files. A folder is removed only when it is
+// provably this version's (removableTaskFolder), never on the store's silence alone (final verification N1).
 func (s *Service) sweep(ctx context.Context) {
 	ages, err := s.repo.Ages(ctx)
 	if err != nil {
@@ -79,7 +94,7 @@ func (s *Service) sweep(ctx context.Context) {
 		if ctx.Err() != nil {
 			return
 		}
-		if !e.IsDir() || keep(e.Name()) {
+		if !e.IsDir() || keep(e.Name()) || !s.removableTaskFolder(e.Name(), ages) {
 			continue
 		}
 		if err := os.RemoveAll(filepath.Join(s.o.TasksDir, e.Name())); err != nil {
@@ -91,4 +106,31 @@ func (s *Service) sweep(ctx context.Context) {
 	if removed > 0 {
 		s.log.Info("task: swept task folders", "folders", removed)
 	}
+}
+
+// removableTaskFolder reports whether the task folder TasksDir/<id> that the retention rule gave up may be removed:
+//   - never while the old version's task file <id>.json or <id>.jsonl sits next to it, or when that cannot be told;
+//   - a task the store knows is this version's: its folder goes by the retention rule;
+//   - a folder the store does not know goes only when everything in it is what this version writes there
+//     (ownFolder, ownFile), so a folder of the old version, or anything else put there, stays.
+func (s *Service) removableTaskFolder(id string, ages map[string]Age) bool {
+	for _, ext := range []string{".json", ".jsonl"} {
+		if _, err := os.Lstat(filepath.Join(s.o.TasksDir, id+ext)); !errors.Is(err, fs.ErrNotExist) {
+			return false
+		}
+	}
+	if _, known := ages[id]; known {
+		return true
+	}
+	entries, err := os.ReadDir(filepath.Join(s.o.TasksDir, id))
+	if err != nil {
+		return false
+	}
+	for _, e := range entries {
+		own := e.IsDir() && ownFolder.MatchString(e.Name()) || e.Type().IsRegular() && ownFile.MatchString(e.Name())
+		if !own {
+			return false
+		}
+	}
+	return true
 }

@@ -82,6 +82,14 @@ func TestTaskLifecycle(t *testing.T) {
 	if res.Woke != api.WokeDone || res.Tasks[0].Status != api.StatusDone {
 		t.Fatalf("wait = %+v", res)
 	}
+	// since (a mark taken before the caller created the tasks, N2) is an RFC 3339 time.
+	e.wantError(e.post("/api/v1/wait?since=yesterday", map[string]any{"ids": []string{sum.ID}}),
+		http.StatusBadRequest, api.CodeInvalidArgument, "since")
+	e.must(e.post("/api/v1/wait?since=2026-11-08T00:00:00.000Z", map[string]any{"ids": []string{sum.ID}}),
+		http.StatusOK).json(t, &res)
+	if res.Woke != api.WokeDone {
+		t.Fatalf("wait since = %+v", res)
+	}
 	stream.until("task.updated", func(f frame) bool { return strings.Contains(f.data, `"status":"done"`) })
 
 	var detail api.TaskDetail

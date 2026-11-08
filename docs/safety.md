@@ -191,6 +191,13 @@ above the 2- and 3-minute limits of a snapshot and of the post-turn checks). A t
 a write and its rename (`.<name>.<n>.tmp`, in a task's folder or the blob store) is skipped, and removed once it is
 older than that hour.
 
+The `tasks/` folder is shared with the old Node version, whose tasks the database never knew (`seelegent migrate`
+does not import them). A task folder is therefore removed only when it is provably this version's: never while the
+old version's `tasks/<id>.json` or `tasks/<id>.jsonl` sits next to it; a task the database knows goes by the rule
+above; a folder the database does not know goes only when everything directly in it is what this version writes
+there (attempt folders `t<turn>-a<n>/`, console folders `console-<ms>/`, gate logs `gate-t<turn>-<step>.log`). The
+old version's `<id>/a1-1.stream.jsonl` and anything else put there stay.
+
 ## Post-turn checks
 
 They run when a turn ends, before the task's end is published, so a lead woken by the report already sees them.

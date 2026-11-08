@@ -115,6 +115,15 @@ var messages = map[string]map[string]string{
 		"ru":    "тело запроса больше 1 МиБ",
 		"zh-CN": "请求正文超过 1 MiB",
 	},
+	"method": {
+		"en":    "this endpoint does not take this method; the Allow header lists the ones it takes",
+		"vi":    "endpoint này không nhận method này; header Allow liệt kê các method nó nhận",
+		"es":    "este endpoint no acepta este método; la cabecera Allow indica los que acepta",
+		"ja":    "このエンドポイントはこのメソッドを受け付けません。受け付けるメソッドは Allow ヘッダーにあります",
+		"ko":    "이 엔드포인트는 이 메서드를 받지 않습니다. 받는 메서드는 Allow 헤더에 있습니다",
+		"ru":    "этот эндпоинт не принимает этот метод; допустимые перечислены в заголовке Allow",
+		"zh-CN": "此接口不接受该方法；可用的方法列在 Allow 响应头中",
+	},
 	"not_found": {
 		"en":    "no such endpoint",
 		"vi":    "không có endpoint này",
@@ -313,6 +322,18 @@ func (s *Server) writeError(w http.ResponseWriter, r *http.Request, err error) {
 	}
 	body := api.ErrorBody{Error: api.ErrorInfo{Code: ae.code, Message: msg, Details: ae.details}}
 	writeJSON(w, ae.code.HTTPStatus(), body)
+}
+
+// writeErrorStatus sends the middleware error ae with status instead of its code's (405 for a wrong method).
+func (s *Server) writeErrorStatus(w http.ResponseWriter, r *http.Request, status int, ae *apiError) {
+	if r.Context().Err() != nil {
+		return
+	}
+	msg := ae.message
+	if m, ok := messages[ae.msgID][language(r)]; ok {
+		msg = m
+	}
+	writeJSON(w, status, api.ErrorBody{Error: api.ErrorInfo{Code: ae.code, Message: msg, Details: ae.details}})
 }
 
 // writeJSON sends v as JSON with status. Every JSON answer has Cache-Control: no-store.
