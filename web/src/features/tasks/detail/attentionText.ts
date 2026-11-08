@@ -4,7 +4,7 @@
  * a sentence from (a failure, an unknown reason, a flag older than the params); a worker's question and a
  * verifier's reason are the worker's own words and stay as they are (`quote`).
  */
-import type { Attention } from '@/api/types'
+import type { Attention, TaskSummary } from '@/api/types'
 
 import { reasonKey } from './question'
 
@@ -32,6 +32,24 @@ const DEP_KEY: Readonly<Record<string, string>> = {
 export function attentionTitle(a: Pick<Attention, 'reason'>, t: Translate, te: HasKey): string {
   const key = `common.attention.${reasonKey(a.reason)}`
   return te(key) ? t(key) : t('common.attention.unknown')
+}
+
+/**
+ * A line on a task's dependencies in the reader's language, never the daemon's English `depsReason`: why it is
+ * blocked (from its deps_blocked flag), or which tasks it waits for ("" otherwise).
+ */
+export function depsText(
+  task: Pick<TaskSummary, 'status' | 'after' | 'attention'>,
+  t: Translate,
+  te: HasKey,
+): string {
+  if (task.status === 'blocked_deps' && task.attention?.reason === 'deps_blocked') {
+    return attentionText(task.attention, t, te).why
+  }
+  if (task.status === 'waiting_deps' && task.after.length) {
+    return t('task.attention.why.depsWaiting', { tasks: task.after.join(', ') })
+  }
+  return ''
 }
 
 export function attentionText(a: Attention, t: Translate, te: HasKey): AttentionText {

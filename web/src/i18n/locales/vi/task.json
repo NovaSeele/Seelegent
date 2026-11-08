@@ -42,6 +42,7 @@
       "depMissing": "Tác vụ trước {task} không còn tồn tại.",
       "depRejected": "Tác vụ trước {title} ({task}) đã bị từ chối.",
       "depFailed": "Tác vụ trước {title} ({task}) đã thất bại.",
+      "depsWaiting": "Đang chờ {tasks} hoàn tất.",
       "depCancelled": "Tác vụ trước {title} ({task}) đã bị huỷ.",
       "hygiene": "{count} phát hiện vệ sinh mã cần xem",
       "workAtRisk": "{count} tệp có thể đã mất thay đổi"

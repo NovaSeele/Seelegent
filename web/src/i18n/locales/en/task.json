@@ -42,6 +42,7 @@
       "depMissing": "The earlier task {task} no longer exists.",
       "depRejected": "The earlier task {title} ({task}) was rejected.",
       "depFailed": "The earlier task {title} ({task}) failed.",
+      "depsWaiting": "Waits for {tasks} to finish.",
       "depCancelled": "The earlier task {title} ({task}) was cancelled.",
       "hygiene": "{count} hygiene finding to look at | {count} hygiene findings to look at",
       "workAtRisk": "{count} file may have lost changes | {count} files may have lost changes"

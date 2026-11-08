@@ -42,6 +42,7 @@
       "depMissing": "前置任务 {task} 已不存在。",
       "depRejected": "前置任务 {title}（{task}）被拒绝了。",
       "depFailed": "前置任务 {title}（{task}）失败了。",
+      "depsWaiting": "等待 {tasks} 完成。",
       "depCancelled": "前置任务 {title}（{task}）已取消。",
       "hygiene": "有 {count} 条卫生检查发现需要查看",
       "workAtRisk": "{count} 个文件的修改可能已丢失"

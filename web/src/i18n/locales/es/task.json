@@ -42,6 +42,7 @@
       "depMissing": "La tarea previa {task} ya no existe.",
       "depRejected": "La tarea previa {title} ({task}) fue rechazada.",
       "depFailed": "La tarea previa {title} ({task}) falló.",
+      "depsWaiting": "Espera a que terminen {tasks}.",
       "depCancelled": "La tarea previa {title} ({task}) fue cancelada.",
       "hygiene": "{count} hallazgo de higiene por revisar | {count} hallazgos de higiene por revisar",
       "workAtRisk": "{count} archivo puede haber perdido cambios | {count} archivos pueden haber perdido cambios"

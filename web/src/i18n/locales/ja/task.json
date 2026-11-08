@@ -42,6 +42,7 @@
       "depMissing": "前のタスク {task} はもう存在しません。",
       "depRejected": "前のタスク {title}（{task}）は却下されました。",
       "depFailed": "前のタスク {title}（{task}）は失敗しました。",
+      "depsWaiting": "{tasks} の完了を待っています。",
       "depCancelled": "前のタスク {title}（{task}）はキャンセルされました。",
       "hygiene": "確認が必要な衛生チェックの指摘が {count} 件あります",
       "workAtRisk": "{count} 件のファイルで変更が失われた可能性があります"

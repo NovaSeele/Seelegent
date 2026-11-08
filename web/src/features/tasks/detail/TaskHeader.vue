@@ -122,7 +122,6 @@ const age = computed(() => {
       >
         {{ dep }}
       </RouterLink>
-      <span v-if="task.depsReason"> · {{ task.depsReason }}</span>
     </p>
   </header>
 </template>
