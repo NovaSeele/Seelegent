@@ -172,10 +172,14 @@ const focusable = (commit: GitCommit) =>
 
 .gcl__row:hover {
   background: var(--bg-hover);
+  --text-muted: var(--text-primary);
+  --text-secondary: var(--text-primary);
 }
 
 .gcl__row--selected {
   background: var(--accent-soft);
+  --text-muted: var(--text-primary);
+  --text-secondary: var(--text-primary);
 }
 
 .gcl__row:focus-visible {
