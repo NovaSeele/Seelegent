@@ -5,13 +5,14 @@
  * Moving a role to another scope (or renaming its id) is a write to the new place and then a delete of the old
  * one; the contract has no single route for it. When the delete fails, the new copy is deleted again, so the
  * role is never left in both places (old bug B26). A 404 on that delete means the old copy is already gone: the
- * move is done, nothing is rolled back.
+ * move is done, nothing is rolled back. When removing the new copy fails too, the role is in both places and the
+ * save throws a RoleMoveError that says so (E-B26).
  */
 import { defineStore } from 'pinia'
 import { shallowRef } from 'vue'
 
 import { rolesApi as defaultApi } from '@/api'
-import { ApiError } from '@/api/client'
+import { ApiError, errorMessage } from '@/api/client'
 import type { RoleFields, RolesApi, RoleWrite } from '@/api/roles'
 import { roleScope } from '@/api/types'
 import type { Role, RoleProject, Skill } from '@/api/types'
@@ -34,6 +35,26 @@ export const samePlace = (a: RolePlace, b: RolePlace): boolean =>
   a.id === b.id &&
   a.scope === b.scope &&
   (a.scope === 'global' || pathKey(a.cwd ?? '') === pathKey(b.cwd ?? ''))
+
+/**
+ * A move whose old copy could not be deleted (`reason`) and whose new copy could not be removed again either
+ * (`rollback`): the role is now at both `from` and `to`.
+ */
+export class RoleMoveError extends Error {
+  override readonly name = 'RoleMoveError'
+
+  constructor(
+    readonly reason: unknown,
+    readonly rollback: unknown,
+    readonly from: RolePlace,
+    readonly to: RolePlace,
+  ) {
+    super(
+      `${errorMessage(reason)}; removing the new copy failed too (${errorMessage(rollback)}): ` +
+        'the role is in both places',
+    )
+  }
+}
 
 /** A project a role can be placed in: its daemon key (fsutil.ProjectKey), folder and name. */
 export interface ProjectChoice {
@@ -129,7 +150,8 @@ export const useRolesStore = defineStore('roles', () => {
 
   /**
    * Saves `write`. With `from` (the role as it was) at another place, the old one is deleted after the new one is
-   * stored; when that delete fails the new copy is removed again and the error is thrown.
+   * stored; when that delete fails the new copy is removed again and the error is thrown, or a RoleMoveError when
+   * the new copy cannot be removed either.
    */
   async function save(write: RoleWrite, from?: RolePlace): Promise<Role> {
     const to: RolePlace = { id: write.role.id, scope: write.scope, cwd: write.cwd }
@@ -138,9 +160,14 @@ export const useRolesStore = defineStore('roles', () => {
       try {
         await removeIfThere(from)
       } catch (cause) {
-        await client.remove(to.id, roleScope(to.scope), to.cwd).catch(() => undefined)
+        let stuck: RoleMoveError | null = null
+        try {
+          await removeIfThere(to)
+        } catch (rollback) {
+          stuck = new RoleMoveError(cause, rollback, from, to)
+        }
         await load()
-        throw cause
+        throw stuck ?? cause
       }
     }
     await load()

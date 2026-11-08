@@ -82,6 +82,7 @@
     "name": "Hãy đặt tên cho vai trò.",
     "id": "Dùng a-z, 0-9 và -, bắt đầu bằng chữ hoặc số, tối đa 40 ký tự.",
     "project": "Hãy chọn một dự án.",
+    "bothPlaces": "Không xoá được bản cũ ({error}), và gỡ bản mới cũng lỗi ({rollback}): role giờ nằm ở cả hai nơi. Hãy xoá bản bạn không cần.",
     "taken": "Ở đó đã có vai trò với id này."
   },
   "templates": {

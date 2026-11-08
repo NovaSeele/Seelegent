@@ -82,6 +82,7 @@
     "name": "Give the role a name.",
     "id": "Use a-z, 0-9 and -, starting with a letter or digit, at most 40 characters.",
     "project": "Choose a project.",
+    "bothPlaces": "The old copy could not be deleted ({error}), and removing the new copy failed too ({rollback}): the role is now in both places. Delete the one you do not want.",
     "taken": "A role with this id already exists there."
   },
   "templates": {

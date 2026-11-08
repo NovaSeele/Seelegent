@@ -13,7 +13,13 @@ import TextArea from '@/components/ui/TextArea.vue'
 import TextField from '@/components/ui/TextField.vue'
 import { useAccountsStore } from '@/stores/accounts'
 import { useConnectionStore } from '@/stores/connection'
-import { projectChoices, samePlace, useRolesStore, type RolePlace } from '@/stores/roles'
+import {
+  projectChoices,
+  RoleMoveError,
+  samePlace,
+  useRolesStore,
+  type RolePlace,
+} from '@/stores/roles'
 import { useToastStore } from '@/stores/toast'
 
 import RoleSkills from './RoleSkills.vue'
@@ -135,7 +141,12 @@ async function save() {
     errors.value = Object.fromEntries(
       problems.map((p) => [p.field.replace(/^role\./, ''), p.message]),
     )
-    if (!problems.length) failure.value = errorMessage(error)
+    if (error instanceof RoleMoveError) {
+      failure.value = t('roles.errors.bothPlaces', {
+        error: errorMessage(error.reason),
+        rollback: errorMessage(error.rollback),
+      })
+    } else if (!problems.length) failure.value = errorMessage(error)
   } finally {
     busy.value = false
   }
