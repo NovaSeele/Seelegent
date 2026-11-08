@@ -172,3 +172,45 @@ func TestExitedKeepsRecord(t *testing.T) {
 		t.Fatalf("kept record: %+v %v %v", ex, ok, err)
 	}
 }
+
+// TestTailWakesWhenTheWatchedLauncherEnds: a tail of a quiet worker watches its launcher and returns right after
+// the launcher exits, well inside the polling bound (the worker ends about 1 s into the tail's longest wait, so
+// polling alone would see it about 800 ms late); the tails share one watch, and it ends with the last of them.
+func TestTailWakesWhenTheWatchedLauncherEnds(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "a1")
+	h, err := Start(context.Background(), testOptions(dir, "print:one", "sleep:1700", "exit:0"))
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	if _, ok := h.Tree(); !ok {
+		t.Fatal("a started launch has no tree")
+	}
+	done, release := h.watchLauncher()
+	if done == nil {
+		t.Skip("the launcher cannot be watched here")
+	}
+	_, again := h.watchLauncher()
+	h.watchMu.Lock()
+	refs := h.watch.refs
+	h.watchMu.Unlock()
+	if refs != 2 {
+		t.Fatalf("two watches hold %d shares, want one shared wait", refs)
+	}
+	release()
+	again()
+	h.watchMu.Lock()
+	left := h.watch
+	h.watchMu.Unlock()
+	if left != nil {
+		t.Fatal("the watch outlives its last share")
+	}
+	got := collect(t, h, 0)
+	returned := time.Now()
+	if fmt.Sprint(texts(got)) != "[one]" {
+		t.Fatalf("lines %v", texts(got))
+	}
+	ex := wait(t, h)
+	if late := returned.Sub(ex.EndedAt); late > exitCheckIdle {
+		t.Fatalf("Tail returned %v after the launcher wrote its exit record, want it woken by the watch", late)
+	}
+}

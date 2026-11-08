@@ -23,14 +23,21 @@ const (
 // looks for the end of the launch at most every exitCheckIdle after a poll that read nothing and every
 // exitCheckBusy while lines keep coming (see the constants for the bounds). Once it saw the exit record it reads
 // until nothing is left: every byte written before the record is read.
+//
+// It also watches the launcher process (watchLauncher): while it runs, the checks cost nothing (Exited answers
+// from the watch), and its end wakes the tail at once, so the end of a launch is seen right after the launcher
+// exits. Without a watch the bounds of the constants apply.
 func (h *Handle) tail(ctx context.Context, path string, offset int64, fn func([]byte, int64) error) error {
 	if offset < 0 {
 		return fmt.Errorf("tail %s: negative offset %d", path, offset)
 	}
 	t := tailer{path: path, next: offset, fn: fn, buf: make([]byte, tailChunk)}
 	defer t.close()
+	var launcherDone <-chan struct{}
+	release := func() {}
+	defer func() { release() }()
 	p := newTailPace()
-	ended := false
+	ended, fired := false, false
 	for {
 		read, err := t.readAvailable()
 		if err != nil {
@@ -42,7 +49,19 @@ func (h *Handle) tail(ctx context.Context, path string, offset int64, fn func([]
 			}
 			continue
 		}
-		if p.checkDue(time.Now(), read == 0) {
+		now := time.Now()
+		woke := false
+		if launcherDone != nil && !fired {
+			select {
+			case <-launcherDone:
+				fired, woke = true, true // look now
+			default:
+			}
+		}
+		if woke || p.checkDue(now, read == 0) {
+			if launcherDone == nil {
+				launcherDone, release = h.watchLauncher()
+			}
 			_, done, err := h.Exited()
 			if err != nil {
 				return err
@@ -54,10 +73,27 @@ func (h *Handle) tail(ctx context.Context, path string, offset int64, fn func([]
 		if read > 0 {
 			p.poll.reset()
 		}
-		if err := sleep(ctx, p.poll.next()); err != nil {
+		wake := launcherDone
+		if fired {
+			wake = nil
+		}
+		if err := sleepOr(ctx, p.poll.next(), wake); err != nil {
 			return fmt.Errorf("tail: %w", err)
 		}
 	}
+}
+
+// sleepOr is sleep that also ends when wake is closed.
+func sleepOr(ctx context.Context, d time.Duration, wake <-chan struct{}) error {
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-ctx.Done():
+		return context.Cause(ctx)
+	case <-t.C:
+	case <-wake:
+	}
+	return nil
 }
 
 // tailPace paces a tail: poll is its wait while nothing comes, and checkDue says when to look for the exit record.
