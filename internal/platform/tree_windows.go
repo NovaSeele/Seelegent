@@ -3,10 +3,11 @@
 package platform
 
 import (
-	"crypto/rand"
+	"encoding/binary"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"math/rand/v2"
 	"os"
 	"os/exec"
 	"time"
@@ -278,12 +279,15 @@ func createJob(name string) (windows.Handle, error) {
 	return job, nil
 }
 
-// newTreeName returns `Local\Seelegent-` and 128 random bits in hex.
+// newTreeName returns `Local\Seelegent-` and 128 random bits in hex. The bits come from math/rand/v2, whose
+// generator the runtime seeds from the system's random source in every process: the names only have to be unique,
+// and a name that is taken anyway is refused by StartWorkerTree (ErrTreeNameTaken). crypto/rand is not used
+// because the launcher (cmd/seelegent-launch), which names the trees of launches written before M19, must not
+// link any crypto package.
 func newTreeName() (string, error) {
 	var b [16]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		return "", fmt.Errorf("new tree name: %w", err)
-	}
+	binary.LittleEndian.PutUint64(b[:8], rand.Uint64()) //nolint:gosec // unique, not secret (see above)
+	binary.LittleEndian.PutUint64(b[8:], rand.Uint64()) //nolint:gosec // unique, not secret (see above)
 	return `Local\Seelegent-` + hex.EncodeToString(b[:]), nil
 }
 
