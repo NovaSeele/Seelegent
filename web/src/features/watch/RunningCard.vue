@@ -5,10 +5,14 @@ import { useI18n } from 'vue-i18n'
 import StatusPill from '@/components/ui/StatusPill.vue'
 import { useFormat } from '@/composables/useFormat'
 import { displayStatus, statusWordKey } from '@/lib/taskStatus'
-import { depsText } from '@/features/tasks/detail/attentionText'
+import { depsText, resourcesWaitLine } from '@/features/tasks/detail/attentionText'
+import { mbFormatter } from '@/lib/memory'
 import { useTasksStore } from '@/stores/tasks'
 
-/** A task in progress: what it is doing now, for how long, and on which account. */
+/**
+ * A task in progress: what it is doing now, for how long, and on which account. A task waiting for resources says
+ * how long and how much memory it needs, with a link to the Resources settings.
+ */
 const props = defineProps<{ id: string; now: number }>()
 
 const { t, te } = useI18n()
@@ -26,6 +30,9 @@ const stepFor = computed(() => {
 })
 /** Why it waits on other tasks, in the reader's language (never the daemon's English depsReason). */
 const deps = computed(() => (task.value ? depsText(task.value, t, te) : ''))
+const resources = computed(() =>
+  task.value ? resourcesWaitLine(task.value, t, te, mbFormatter(fmt.value)) : '',
+)
 const until = computed(() =>
   task.value?.waitingUntil ? fmt.value.relative(task.value.waitingUntil, props.now) : '',
 )
@@ -54,6 +61,12 @@ const until = computed(() =>
     <p v-if="task.status === 'running'" class="run__step" aria-live="off">
       <span class="run__step-label">{{ task.activeStep?.label ?? t('watch.running.noStep') }}</span>
       <span v-if="stepFor" class="run__step-time">{{ stepFor }}</span>
+    </p>
+    <p v-else-if="resources" class="run__step run__step--wrap" data-resources>
+      <span class="run__step-text">{{ resources }}</span>
+      <RouterLink :to="{ name: 'settings', params: { section: 'resources' } }" class="run__aside">
+        {{ t('nav.lowMemory.settings') }}
+      </RouterLink>
     </p>
     <p v-else-if="until" class="run__step">{{ t('watch.running.until', { time: until }) }}</p>
     <p v-else-if="deps" class="run__step">{{ deps }}</p>
@@ -146,6 +159,23 @@ const until = computed(() =>
   color: var(--text-secondary);
   font-family: var(--font-mono);
   font-size: var(--fs-xs);
+}
+
+.run__step--wrap {
+  flex-wrap: wrap;
+  font-family: inherit;
+}
+
+.run__step-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* Above the title link's card-wide overlay, so it opens the settings instead of the task. */
+.run__aside {
+  position: relative;
+  z-index: 1;
+  color: var(--link);
 }
 
 .run__step-label {

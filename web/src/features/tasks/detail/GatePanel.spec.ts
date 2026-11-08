@@ -1,9 +1,11 @@
-import { mount, RouterLinkStub } from '@vue/test-utils'
+import { flushPromises, mount, RouterLinkStub } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 
 import type { GateResult, GateStep, TaskProof, Turn, VerifierResult } from '@/api/types'
+import { useConnectionStore } from '@/stores/connection'
+import { useTasksStore } from '@/stores/tasks'
 import { setupApp } from '@/test/app'
-import { iso, makeDetail, makeTask } from '@/test/fixtures'
+import { iso, makeDetail, makeEvent, makeTask } from '@/test/fixtures'
 
 import {
   budgetUsedUp,
@@ -13,6 +15,7 @@ import {
   gateTone,
   gateUrgent,
   hasGate,
+  queuePlace,
   stepCommand,
   stepKindKey,
   stepNote,
@@ -116,6 +119,37 @@ describe('gate model', () => {
     )
     expect(g.state).toBe('green')
     expect(gateUrgent(g)).toBe(true)
+  })
+
+  it('tells what a queued gate waits for, and its place in line from the newest gate event', () => {
+    const slot = gateOf(
+      makeTask({ gate: { state: 'running', phase: 'queued', wait: 'slot', autoFixes: 0 } }),
+      null,
+    )
+    expect([slot.phase, slot.wait]).toEqual(['queued', 'slot'])
+    expect(gateTone(slot.state, slot.phase, slot.wait)).toBe('neutral')
+    expect(gateTone('running', 'queued', 'memory')).toBe('attention')
+    // A wait left over on another phase is not shown.
+    const running = gateOf(
+      makeTask({ gate: { state: 'running', phase: 'running', wait: 'slot', autoFixes: 0 } }),
+      null,
+    )
+    expect(running.wait).toBeNull()
+
+    const gate = (seq: number, data: Record<string, unknown>) => makeEvent('t1', seq, data, 'gate')
+    expect(
+      queuePlace([
+        gate(1, { phase: 'queued', wait: 'slot', position: 3, limit: 2 }),
+        gate(2, { phase: 'queued', wait: 'slot', position: 1, limit: 2 }),
+      ]),
+    ).toEqual({ position: 1, limit: 2 })
+    expect(
+      queuePlace([
+        gate(1, { phase: 'queued', wait: 'slot', position: 3, limit: 2 }),
+        gate(2, { phase: 'start', steps: [] }),
+      ]),
+    ).toBeNull()
+    expect(queuePlace(undefined)).toBeNull()
   })
 
   it('has nothing to show for a task without a gate', () => {
@@ -284,10 +318,74 @@ describe('GatePanel', () => {
   })
 })
 
+describe('GatePanel queued', () => {
+  async function mountQueued(wait: 'slot' | 'memory') {
+    const { plugins } = await setupApp()
+    useConnectionStore().settings = { gateConcurrency: 2 } as never
+    const task = makeTask({
+      id: 't1',
+      status: 'running',
+      gate: { state: 'running', phase: 'queued', wait, autoFixes: 0, turn: 1 },
+    })
+    return mount(GatePanel, {
+      props: { task, detail: makeDetail() },
+      global: { plugins, stubs: { RouterLink: RouterLinkStub } },
+    })
+  }
+
+  it('says a gate waits for a slot, with how many run at once, without a spinner', async () => {
+    const wrapper = await mountQueued('slot')
+    const summary = wrapper.get('summary')
+    expect(summary.text()).toContain('waiting for a gate slot')
+    expect(summary.text()).toContain('2 at a time')
+    expect(summary.find('[role="status"]').exists()).toBe(false)
+    expect(wrapper.get('details').classes()).toContain('tone-neutral')
+    expect(wrapper.text()).not.toContain('The gate runs when the worker reports.')
+  })
+
+  it('gives the place in line when the task’s log is on screen', async () => {
+    const { plugins } = await setupApp()
+    const tasks = useTasksStore()
+    tasks.setApi({
+      events: () =>
+        Promise.resolve({
+          items: [
+            makeEvent('t1', 1, { phase: 'queued', wait: 'slot', position: 2, limit: 3 }, 'gate'),
+          ],
+          lastSeq: 1,
+        }),
+    } as never)
+    const log = tasks.retainEvents('t1')
+    await flushPromises()
+    expect(log.items.value).toHaveLength(1)
+    const task = makeTask({
+      id: 't1',
+      status: 'running',
+      gate: { state: 'running', phase: 'queued', wait: 'slot', autoFixes: 0 },
+    })
+    const wrapper = mount(GatePanel, {
+      props: { task, detail: makeDetail() },
+      global: { plugins, stubs: { RouterLink: RouterLinkStub } },
+    })
+    expect(wrapper.get('summary').text()).toContain('number 2 in line, 3 at a time')
+    tasks.releaseEvents('t1')
+  })
+
+  it('says a gate waits for free memory', async () => {
+    const wrapper = await mountQueued('memory')
+    expect(wrapper.get('summary').text()).toContain('waiting for free memory')
+    expect(wrapper.get('summary').text()).not.toContain('at a time')
+    expect(wrapper.get('details').classes()).toContain('tone-attention')
+  })
+})
+
 describe('GateSteps', () => {
   async function mountSteps(r: GateResult) {
     const { plugins } = await setupApp()
-    return mount(GateSteps, { props: { result: r, turn: 2 }, global: { plugins } })
+    return mount(GateSteps, {
+      props: { result: r, turn: 2 },
+      global: { plugins, stubs: { RouterLink: RouterLinkStub } },
+    })
   }
 
   it('leaves the output closed when the failures are listed, and says not run only once', async () => {
@@ -310,5 +408,38 @@ describe('GateSteps', () => {
     expect(wrapper.text()).toContain('bad json')
     expect(wrapper.find('details').attributes('open')).toBeUndefined()
     expect(wrapper.text()).not.toContain('Not run: make')
+  })
+
+  it('says a step the memory watchdog stopped, with its stops, and a run that ended for it', async () => {
+    const wrapper = await mountSteps(
+      result({
+        state: 'error',
+        reason: 'low_memory',
+        steps: [
+          step({
+            cmd: 'go test ./...',
+            state: 'error',
+            stopped: 'low_memory',
+            stops: 3,
+            tail: 'signal: killed',
+          }),
+          step({ cmd: 'make', state: 'not_run' }),
+        ],
+      }),
+    )
+    // Piece A gives a stopped step the state error: it reads "Stopped", not "Error", and its output stays closed.
+    expect(wrapper.text()).toContain('Stopped')
+    expect(wrapper.text()).not.toContain('Error')
+    expect(wrapper.get('details').attributes('open')).toBeUndefined()
+    expect(wrapper.getComponent(RouterLinkStub).props('to')).toEqual({
+      name: 'settings',
+      params: { section: 'resources' },
+    })
+    expect(wrapper.get('[data-stopped]').text()).toBe(
+      'Stopped because the machine ran low on memory (3 of 3); the gate runs again once memory is back.',
+    )
+    expect(wrapper.get('[data-reason]').text()).toBe(
+      'The machine kept running out of memory: the gate was stopped 3 times. Free some memory or lower “Gates at once”, then run the gate again. Resource settings',
+    )
   })
 })

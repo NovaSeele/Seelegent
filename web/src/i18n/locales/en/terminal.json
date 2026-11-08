@@ -122,7 +122,12 @@
       "red": "Gate failed",
       "error": "The gate could not run",
       "skipped": "Gate stopped",
-      "autoFix": "automatic fix in turn {n}"
+      "autoFix": "automatic fix in turn {n}",
+      "queued": "Gate queued",
+      "queuedSlot": "Gate queued: number {position} in line, {limit} at a time",
+      "queuedMemory": "The gate waits for free memory",
+      "stoppedLowMemory": "Gate step stopped: the machine ran low on memory ({n} of {max})",
+      "lowMemory": "the machine kept running out of memory ({max} stops)"
     },
     "lane": {
       "forced": "Lane taken over {count} other task's claim | Lane taken over {count} other tasks' claims",
@@ -134,6 +139,8 @@
       "accept": "The reviewer accepted the change",
       "reject": "The reviewer rejected the change",
       "error": "The review could not finish"
-    }
+    },
+    "waitingMemory": "Waiting for resources: {available} free, needs {need}",
+    "waitingResources": "Waiting for resources"
   }
 }

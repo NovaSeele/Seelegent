@@ -4,6 +4,9 @@
  * shows a short "Saved" mark; a refused one keeps what was typed and shows the daemon's message for that field.
  * Settings shown come from the connection store, so a settings.updated frame from elsewhere updates every control
  * that is not being typed in (the fields keep their own text while focused).
+ *
+ * Settings checked against each other (LINKED_FIELDS) share their error: the daemon names one field, the message
+ * shows on every field that can fix it, and it goes from all of them once one is saved or typed back.
  */
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -13,7 +16,7 @@ import type { SettingsPatch } from '@/api/types'
 import { useConnectionStore } from '@/stores/connection'
 import { useSettingsStore } from '@/stores/settings'
 
-import { patchAt, valueAt } from './fields'
+import { LINKED_FIELDS, patchAt, valueAt } from './fields'
 
 export const SAVED_MARK_MS = 2000
 
@@ -35,15 +38,24 @@ export function useSettingsForm() {
     return next
   }
 
+  /** `errors` without the error of `path` and the same error on the fields linked with it. */
+  function without(path: string): Record<string, string> {
+    const rest = { ...errors.value }
+    const message = rest[path]
+    delete rest[path]
+    if (message !== undefined) {
+      for (const other of LINKED_FIELDS[path] ?? []) if (rest[other] === message) delete rest[other]
+    }
+    return rest
+  }
+
   /** Saves one value (null = back to the default). Returns whether it was accepted. */
   async function set(path: string, value: unknown): Promise<boolean> {
     if (!settings.value) return false
     saving.value = mark(saving.value, path, true)
     try {
       await store.save(patchAt(path, value) as SettingsPatch)
-      const rest = { ...errors.value }
-      delete rest[path]
-      errors.value = rest
+      errors.value = without(path)
       saved.value = mark(saved.value, path, true)
       clearTimeout(timers.get(path))
       timers.set(
@@ -54,7 +66,13 @@ export function useSettingsForm() {
     } catch (error) {
       const problems = fieldProblems(error)
       const next = { ...errors.value }
-      for (const problem of problems) next[problem.field] = problem.message
+      for (const problem of problems) {
+        next[problem.field] = problem.message
+        // A rule between two settings names the other one in its message ("must be below minFreeMemoryMB").
+        for (const other of LINKED_FIELDS[problem.field] ?? []) {
+          if (problem.message.includes(other)) next[other] = problem.message
+        }
+      }
       if (!problems.some((p) => p.field === path)) {
         next[path] =
           problems[0]?.message ?? t('settings.daemon.failed', { error: errorMessage(error) })
@@ -74,9 +92,7 @@ export function useSettingsForm() {
   /** The field shows the saved value again: its error, red border and aria-invalid go. */
   function clear(path: string): void {
     if (!(path in errors.value)) return
-    const rest = { ...errors.value }
-    delete rest[path]
-    errors.value = rest
+    errors.value = without(path)
   }
 
   return {

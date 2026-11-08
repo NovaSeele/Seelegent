@@ -46,7 +46,8 @@ export function displayStatus(task: TaskSummary): DisplayStatus {
     case 'running':
       return 'running'
     case 'waiting_quota':
-      return 'waiting'
+      // The same daemon status covers both waits; "memory" means free memory or commit, not quota.
+      return task.waiting === 'memory' ? 'waitingResources' : 'waiting'
     case 'waiting_deps':
       return 'waitingDeps'
     case 'blocked_deps':

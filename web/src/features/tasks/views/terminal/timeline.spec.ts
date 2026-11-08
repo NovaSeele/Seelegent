@@ -297,6 +297,84 @@ describe('terminal timeline', () => {
     ])
   })
 
+  it('keeps one line for a memory wait that is told again, with the latest reading', () => {
+    seq = 0
+    const items = buildTimeline([
+      ev('waiting_quota', { until: '2026-11-08T10:00:00Z' }),
+      ev('waiting_quota', { reason: 'memory', availableMB: 1800, needMB: 2048 }),
+      ev('waiting_quota', { reason: 'memory', availableMB: 1500, needMB: 2048 }),
+    ])
+    expect(items).toHaveLength(2)
+    expect(items[0]).toMatchObject({ message: { key: 'terminal.ev.waitingQuota' } })
+    expect(items[1]).toMatchObject({
+      key: 'e2',
+      rev: 3,
+      icon: 'gauge',
+      message: {
+        key: 'terminal.ev.waitingMemory',
+        params: { available: 1500, need: 2048 },
+        mb: ['available', 'need'],
+      },
+    })
+  })
+
+  it('follows a queued gate in one line, then says a step the watchdog stopped and why a gate ended', () => {
+    seq = 0
+    const stopped = {
+      kind: 'task',
+      label: 'test',
+      cmd: 'go test ./...',
+      state: 'error',
+      stopped: 'low_memory',
+      stops: 2,
+      tail: 'signal: killed',
+    }
+    const items = buildTimeline([
+      ev('gate', { phase: 'queued', wait: 'slot', position: 3, limit: 2 }),
+      ev('gate', { phase: 'queued', wait: 'slot', position: 1, limit: 2 }),
+      ev('gate', { phase: 'step', index: 0, step: { ...stopped, stopped: undefined } }),
+      ev('gate', { phase: 'step', index: 0, step: stopped }),
+      ev('gate', { phase: 'queued', wait: 'memory' }),
+      ev('gate', {
+        phase: 'result',
+        result: {
+          state: 'error',
+          reason: 'low_memory',
+          steps: [stopped],
+          notRun: [],
+          warnings: [],
+          startedAt: '',
+        },
+      }),
+    ])
+    const notices = items.flatMap((i) => (i.kind === 'notice' ? [i] : []))
+    expect(notices.map((i) => i.message.key)).toEqual([
+      'terminal.ev.gate.queuedSlot',
+      'terminal.ev.gate.stoppedLowMemory',
+      'terminal.ev.gate.queuedMemory',
+      'terminal.ev.gate.error',
+    ])
+    expect(notices[0]?.message.params).toEqual({ position: 1, limit: 2 })
+    expect(notices[1]?.message.params).toEqual({ n: 2, max: 3 })
+    expect(notices[1]?.lines).toEqual([
+      { label: { key: 'task.gate.kind.task' }, text: 'go test ./...' },
+    ])
+    expect(notices[3]?.note).toEqual({ key: 'terminal.ev.gate.lowMemory', params: { max: 3 } })
+    // The stopped step says it was stopped, never shows a killed command's output, and the next step follows.
+    expect(notices[3]?.lines).toEqual([
+      { label: { key: 'task.gate.kind.task' }, text: 'go test ./...' },
+      { label: { key: 'task.gate.stepState.stopped' } },
+      { text: '' },
+      {
+        label: {
+          key: 'task.gate.lowMemoryNext',
+          params: { setting: 'settings.items.gateConcurrency.label' },
+          keys: ['setting'],
+        },
+      },
+    ])
+  })
+
   it('keeps a gate_red flag of another turn', () => {
     seq = 0
     const items = buildTimeline([

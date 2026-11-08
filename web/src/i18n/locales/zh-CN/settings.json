@@ -69,6 +69,10 @@
     "language": {
       "label": "语言",
       "desc": "控制面板的语言。更改立即生效。"
+    },
+    "resources": {
+      "label": "资源",
+      "desc": "工人、关卡命令和服务可以占用这台机器多少资源。修改无需重启即生效：正在运行的保持原有限制，下次启动使用新值。"
     }
   },
   "daemon": {
@@ -82,7 +86,16 @@
     "rangeWhole": "请输入 {min} 到 {max} 之间的整数。",
     "rangePercent": "请输入 {min} 到 {max} 之间的百分比。",
     "lines": "每行一项；离开输入框时保存。",
-    "readonly": "在服务启动时设置（seelegent config），无法在此更改。"
+    "readonly": "在服务启动时设置（seelegent config），无法在此更改。",
+    "rangeZero": {
+      "off": "{min} 到 {max}（0 = 关闭）",
+      "unlimited": "{min} 到 {max}（0 = 不限）"
+    },
+    "nowFree": "当前空闲：{free}",
+    "osOnly": "仅限 {os}。",
+    "osOther": "仅限 {os}：在服务所在的系统上不起作用。",
+    "criticalBelowMin": "两者都开启时，紧急内存下限必须小于“启动所需空闲内存”。",
+    "mbIs": "= {size}"
   },
   "units": {
     "min": "分钟",
@@ -92,7 +105,8 @@
     "days": "天",
     "bytes": "字节",
     "times": "次",
-    "pct": "%"
+    "pct": "%",
+    "mb": "MB"
   },
   "options": {
     "tier": {
@@ -110,6 +124,10 @@
       "readOnly": "只读",
       "workspaceWrite": "可写工作区",
       "dangerFullAccess": "完全访问（危险）"
+    },
+    "priority": {
+      "low": "低",
+      "normal": "正常"
     }
   },
   "backends": {
@@ -430,6 +448,61 @@
       "label": "实验功能",
       "desc": "开启仍在测试中的功能。",
       "keywords": "测试版 预览"
+    },
+    "workerPriority": {
+      "label": "工人优先级",
+      "desc": "每个工人及其启动的所有进程的优先级。设为“低”可在工人构建和测试时保持机器流畅。从下次启动起生效。",
+      "keywords": "cpu 优先级 nice 低 慢"
+    },
+    "gatePriority": {
+      "label": "关卡优先级",
+      "desc": "关卡命令、回归运行、自动化检查和钩子的进程优先级。低优先级可能让关卡变慢，可能需要更长的关卡时间限制。",
+      "keywords": "cpu 优先级 nice 测试 构建"
+    },
+    "maxWorkers": {
+      "label": "同时运行的工人数",
+      "desc": "所有账号合计同时运行的工人回合数（每个账号自己的上限照常适用）。调低不会停止任何正在运行的，只会让新启动等待。",
+      "keywords": "并发 并行 上限 总数"
+    },
+    "gateConcurrency": {
+      "label": "同时运行的关卡数",
+      "desc": "同时运行的关卡命令和回归运行数。其余排队等待，时间限制从真正开始时才计算。",
+      "keywords": "并发 并行 队列 名额"
+    },
+    "minFreeMemory": {
+      "label": "启动所需空闲内存",
+      "desc": "机器空闲内存（RAM）低于此值时，新的工人回合或关卡命令会等待。任务显示“等待资源”。",
+      "keywords": "ram 内存 空闲 阈值 等待"
+    },
+    "minFreeCommit": {
+      "label": "启动所需空闲提交",
+      "desc": "对空闲提交量（RAM 加页面文件）起同样作用。",
+      "keywords": "提交 页面文件 交换 虚拟内存"
+    },
+    "criticalFreeMemory": {
+      "label": "紧急内存下限",
+      "desc": "空闲内存或空闲提交低于此值时，最新运行的关卡命令会被停止并重新排队，所有新启动等待，直到内存回到启动阈值以上。工人从不会被停止。必须小于“启动所需空闲内存”。",
+      "keywords": "紧急 看门狗 内存不足 卡死"
+    },
+    "workerMemoryLimit": {
+      "label": "工人内存上限",
+      "desc": "每个工人及其启动的所有进程最多可用的内存。达到上限的回合会失败并给出说明；已写入磁盘的修改会保留。",
+      "keywords": "ram 上限 作业对象"
+    },
+    "workerCpuRate": {
+      "label": "工人 CPU 上限",
+      "desc": "每个工人及其启动的所有进程最多可用的 CPU，按整台机器（所有核心合计）的百分比计。",
+      "keywords": "cpu 处理器 上限 限制"
+    },
+    "testParallelism": {
+      "label": "测试并行度",
+      "desc": "测试和构建同时运行的包或作业数：任务说明要求工人遵守，工人和关卡环境会设置 GOFLAGS=-p 和 CARGO_BUILD_JOBS。",
+      "keywords": "并行 作业 go test cargo pytest maxworkers"
+    },
+    "daemonMemoryLimit": {
+      "label": "服务内存上限",
+      "desc": "Seelegent 服务本身的软内存上限：接近时会更积极地释放内存，但不会因此被停止。为服务设置的 GOMEMLIMIT 优先。",
+      "keywords": "守护进程 gomemlimit 服务 ram"
     }
   },
   "appearance": {
@@ -461,5 +534,8 @@
       "builtin": "内置",
       "namesOnly": "仅名称"
     }
+  },
+  "os": {
+    "windows": "Windows"
   }
 }

@@ -69,6 +69,10 @@
     "language": {
       "label": "Language",
       "desc": "Language of the dashboard. Changes apply at once."
+    },
+    "resources": {
+      "label": "Resources",
+      "desc": "How much of this machine the workers, gate commands and the service may use. Changes apply without a restart: running work keeps its limits, the next start gets the new ones."
     }
   },
   "daemon": {
@@ -82,7 +86,16 @@
     "rangeWhole": "Enter a whole number from {min} to {max}.",
     "rangePercent": "Enter a percentage from {min} to {max}.",
     "lines": "One per line; saved when you leave the field.",
-    "readonly": "Set when the service starts (seelegent config); it cannot change here."
+    "readonly": "Set when the service starts (seelegent config); it cannot change here.",
+    "rangeZero": {
+      "off": "{min} to {max} (0 = off)",
+      "unlimited": "{min} to {max} (0 = no limit)"
+    },
+    "nowFree": "Now: {free} free",
+    "osOnly": "{os} only.",
+    "osOther": "{os} only: has no effect on the system the service runs on.",
+    "criticalBelowMin": "The emergency memory floor must be below Free memory to start while both are on.",
+    "mbIs": "= {size}"
   },
   "units": {
     "min": "min",
@@ -92,7 +105,8 @@
     "days": "days",
     "bytes": "bytes",
     "times": "times",
-    "pct": "%"
+    "pct": "%",
+    "mb": "MB"
   },
   "options": {
     "tier": {
@@ -110,6 +124,10 @@
       "readOnly": "Read only",
       "workspaceWrite": "Write in the workspace",
       "dangerFullAccess": "Full access (dangerous)"
+    },
+    "priority": {
+      "low": "Low",
+      "normal": "Normal"
     }
   },
   "backends": {
@@ -430,6 +448,61 @@
       "label": "Experimental features",
       "desc": "Turn on features that are still being tested.",
       "keywords": "beta preview labs"
+    },
+    "workerPriority": {
+      "label": "Worker priority",
+      "desc": "Process priority of each worker and everything it starts. Low keeps the machine responsive while workers build and test. Applies from the next launch.",
+      "keywords": "cpu priority nice below normal slow"
+    },
+    "gatePriority": {
+      "label": "Gate priority",
+      "desc": "Process priority of gate commands, regression runs, automation checks and hooks. Low priority can make gates slower, so they may need a longer gate time limit.",
+      "keywords": "cpu priority nice test build"
+    },
+    "maxWorkers": {
+      "label": "Workers at once",
+      "desc": "How many worker turns run at the same time over all accounts (each account keeps its own limit too). Lowering it stops nothing: it only holds new starts.",
+      "keywords": "concurrency parallel limit cap total"
+    },
+    "gateConcurrency": {
+      "label": "Gates at once",
+      "desc": "How many gate commands and regression runs run at the same time. The others wait in line, and their time limit starts only when they start.",
+      "keywords": "concurrency parallel queue slot"
+    },
+    "minFreeMemory": {
+      "label": "Free memory to start",
+      "desc": "A new worker turn or gate command waits while the machine has less free memory (RAM) than this. The task shows “Waiting for resources”.",
+      "keywords": "ram memory free threshold wait hold"
+    },
+    "minFreeCommit": {
+      "label": "Free commit to start",
+      "desc": "The same for free commit (RAM plus page file).",
+      "keywords": "commit page file swap virtual memory"
+    },
+    "criticalFreeMemory": {
+      "label": "Emergency memory floor",
+      "desc": "Below this much free memory or commit, the newest running gate command is stopped and queued again, and every new start waits until memory is back above the start threshold. Workers are never stopped. Must be below Free memory to start.",
+      "keywords": "critical watchdog low memory freeze"
+    },
+    "workerMemoryLimit": {
+      "label": "Worker memory cap",
+      "desc": "Most memory each worker and everything it starts may use. A turn that reaches it fails with a message saying so; edits already on disk stay.",
+      "keywords": "ram limit cap job object"
+    },
+    "workerCpuRate": {
+      "label": "Worker CPU cap",
+      "desc": "Most CPU each worker and everything it starts may use, as a percentage of the whole machine (all cores together).",
+      "keywords": "cpu processor rate limit throttle"
+    },
+    "testParallelism": {
+      "label": "Test parallelism",
+      "desc": "How many packages or jobs tests and builds run at once: briefs ask workers to keep to it, and worker and gate environments get GOFLAGS=-p and CARGO_BUILD_JOBS.",
+      "keywords": "parallel jobs go test cargo pytest maxworkers"
+    },
+    "daemonMemoryLimit": {
+      "label": "Service memory limit",
+      "desc": "Soft memory limit of the Seelegent service itself: it frees memory harder near it and is never stopped for it. A GOMEMLIMIT set for the service wins.",
+      "keywords": "daemon gomemlimit service ram"
     }
   },
   "appearance": {
@@ -461,5 +534,8 @@
       "builtin": "Built in",
       "namesOnly": "Names only"
     }
+  },
+  "os": {
+    "windows": "Windows"
   }
 }

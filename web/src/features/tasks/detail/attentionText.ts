@@ -5,6 +5,7 @@
  * verifier's reason are the worker's own words and stay as they are (`quote`).
  */
 import type { Attention, TaskSummary } from '@/api/types'
+import type { FormatMB } from '@/lib/memory'
 
 import { reasonKey } from './question'
 
@@ -63,7 +64,29 @@ export function depsText(
   return ''
 }
 
-export function attentionText(a: Attention, t: Translate, te: HasKey): AttentionText {
+/** Memory amounts when the caller has no formatter (the daemon's MB as they are). */
+const plainMB: FormatMB = (mb) => `${mb} MB`
+
+/**
+ * The line a task waiting for resources shows under its status (Watch card, task header): the resources_wait
+ * flag's sentence, or "" for any other task. Other info flags stay out of sight: they are notes, not news.
+ */
+export function resourcesWaitLine(
+  task: Pick<TaskSummary, 'attention'>,
+  t: Translate,
+  te: HasKey,
+  mb: FormatMB = plainMB,
+): string {
+  const a = task.attention
+  return a?.reason === 'resources_wait' ? attentionText(a, t, te, mb).why : ''
+}
+
+export function attentionText(
+  a: Attention,
+  t: Translate,
+  te: HasKey,
+  mb: FormatMB = plainMB,
+): AttentionText {
   const out: AttentionText = { title: attentionTitle(a, t, te), why: '', quote: '', said: '' }
   const p = a.params
   const why = (key: string, named?: Record<string, unknown>, plural?: number) =>
@@ -139,6 +162,17 @@ export function attentionText(a: Attention, t: Translate, te: HasKey): Attention
       break
     case 'work_at_risk':
       out.why = why('workAtRisk', { count: p.count ?? 0 }, p.count ?? 0)
+      break
+    case 'resources_wait':
+      // Free memory (or commit) below the threshold that holds the task; the lead cannot act on it.
+      out.why =
+        p.availableMB !== undefined && p.needMB
+          ? why('resourcesWait', {
+              minutes: p.minutes ?? 0,
+              available: mb(p.availableMB),
+              need: mb(p.needMB),
+            })
+          : why('resourcesWaitPlain', { minutes: p.minutes ?? 0 })
       break
     default:
       out.said = a.detail ?? a.reason

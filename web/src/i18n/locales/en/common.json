@@ -105,6 +105,10 @@
     "blockedDeps": {
       "label": "Earlier task failed",
       "short": "Dep failed"
+    },
+    "waitingResources": {
+      "label": "Waiting for resources",
+      "short": "Resources"
     }
   },
   "attention": {
@@ -128,7 +132,8 @@
     "verifierRejected": "Review rejected it",
     "peerObjection": "A peer objects",
     "backgroundWait": "Waiting on a background command",
-    "unknown": "Needs a look"
+    "unknown": "Needs a look",
+    "resourcesWait": "Waiting for resources"
   },
   "stage": {
     "explore": "Explore",

@@ -105,6 +105,10 @@
     "blockedDeps": {
       "label": "Tác vụ trước thất bại",
       "short": "Trước thất bại"
+    },
+    "waitingResources": {
+      "label": "Chờ tài nguyên",
+      "short": "Tài nguyên"
     }
   },
   "attention": {
@@ -128,7 +132,8 @@
     "verifierRejected": "Bị duyệt lần hai từ chối",
     "peerObjection": "Thành viên ngang hàng phản đối",
     "backgroundWait": "Đang chờ lệnh chạy nền",
-    "unknown": "Cần xem lại"
+    "unknown": "Cần xem lại",
+    "resourcesWait": "Chờ tài nguyên"
   },
   "stage": {
     "explore": "Khám phá",

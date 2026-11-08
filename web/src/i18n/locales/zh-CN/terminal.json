@@ -122,7 +122,12 @@
       "red": "关卡未通过",
       "error": "关卡无法运行",
       "skipped": "关卡已停止",
-      "autoFix": "第 {n} 轮自动修复"
+      "autoFix": "第 {n} 轮自动修复",
+      "queued": "关卡排队中",
+      "queuedSlot": "关卡排队中：第 {position} 位，同时 {limit} 个",
+      "queuedMemory": "关卡在等待空闲内存",
+      "stoppedLowMemory": "关卡步骤已停止：机器内存不足（{n}/{max}）",
+      "lowMemory": "机器内存一再不足（停止 {max} 次）"
     },
     "lane": {
       "forced": "已越过另外 {count} 个任务的占用取得通道",
@@ -134,6 +139,8 @@
       "accept": "二次审查接受了改动",
       "reject": "二次审查拒绝了改动",
       "error": "二次审查未能完成"
-    }
+    },
+    "waitingMemory": "等待资源：空闲 {available}，需要 {need}",
+    "waitingResources": "等待资源"
   }
 }

@@ -122,7 +122,12 @@
       "red": "Gate fallido",
       "error": "No se pudo ejecutar el gate",
       "skipped": "Gate detenido",
-      "autoFix": "corrección automática en el turno {n}"
+      "autoFix": "corrección automática en el turno {n}",
+      "queued": "Gate en cola",
+      "queuedSlot": "Gate en cola: puesto {position}, {limit} a la vez",
+      "queuedMemory": "El gate espera memoria libre",
+      "stoppedLowMemory": "Paso del gate detenido: la máquina se quedó sin memoria ({n} de {max})",
+      "lowMemory": "la máquina se quedó sin memoria una y otra vez ({max} paradas)"
     },
     "lane": {
       "forced": "Carril tomado sobre la reserva de {count} tarea | Carril tomado sobre las reservas de {count} tareas",
@@ -134,6 +139,8 @@
       "accept": "La segunda revisión aceptó el cambio",
       "reject": "La segunda revisión rechazó el cambio",
       "error": "La segunda revisión no pudo terminar"
-    }
+    },
+    "waitingMemory": "Esperando recursos: {available} libres, necesita {need}",
+    "waitingResources": "Esperando recursos"
   }
 }

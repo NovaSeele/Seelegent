@@ -8,6 +8,7 @@ import Button from '@/components/ui/Button.vue'
 import Icon from '@/components/ui/Icon.vue'
 import { useFormat } from '@/composables/useFormat'
 import { useNow } from '@/composables/useNow'
+import { mbFormatter } from '@/lib/memory'
 import { canCancel, canTakeOver } from '@/lib/taskStatus'
 import { useTeamStore } from '@/stores/team'
 
@@ -20,7 +21,8 @@ import type { TaskActions } from './useTaskActions'
 /**
  * Why the task waits and what you can do: the reason, who has to act (you or the lead), since when, the detail,
  * and the actions (dismiss, take over, cancel). A question gets its answer card; take-over shows "you are
- * driving". Shown only while there is something to say.
+ * driving". Shown only while there is something to say. Of the info flags only resources_wait shows (with a link to
+ * the Resources settings): the others are notes the transcript already tells.
  */
 const props = defineProps<{
   task: TaskSummary
@@ -36,15 +38,19 @@ const now = useNow(30_000)
 
 const attention = computed(() => {
   const value = props.task.attention
-  return value && value.state !== 'info' ? value : null
+  return value && (value.state !== 'info' || value.reason === 'resources_wait') ? value : null
 })
+const info = computed(() => attention.value?.state === 'info')
+const resources = computed(() => attention.value?.reason === 'resources_wait')
 /**
  * A worker's question gets its answer card while the task runs and after the turn ended on it (the usual case: the
  * worker finished with a question for the lead); answering a finished task starts the next turn.
  */
 const question = computed(() => attention.value?.state === 'question')
 /** The flag in the reader's language, from its reason code and params (F14). */
-const text = computed(() => (attention.value ? attentionText(attention.value, t, te) : null))
+const text = computed(() =>
+  attention.value ? attentionText(attention.value, t, te, mbFormatter(fmt.value)) : null,
+)
 const reason = computed(() => text.value?.title ?? '')
 /** For a red gate: its failing steps, named by kind in the reader's language (null for other reasons). */
 const gateSteps = computed(() =>
@@ -53,7 +59,7 @@ const gateSteps = computed(() =>
     : null,
 )
 const tone = computed(() =>
-  attention.value?.state === 'background_wait' ? 'neutral' : 'attention',
+  attention.value?.state === 'background_wait' || info.value ? 'neutral' : 'attention',
 )
 
 /** The peer objections that stand, named after their members ("Peri Okafor objects; answer before accepting"). */
@@ -82,12 +88,15 @@ onMounted(() => team.ensureMembers())
     </div>
   </section>
   <section v-else-if="attention" class="banner" :class="`tone-${tone}`" role="status">
-    <Icon :name="question ? 'question' : 'statusBlocked'" class="banner__icon" />
+    <Icon
+      :name="question ? 'question' : resources ? 'gauge' : 'statusBlocked'"
+      class="banner__icon"
+    />
     <div class="banner__body">
       <div class="banner__head">
         <p class="banner__title">
           <strong>{{ objections.length ? objectionTitle : reason }}</strong>
-          <span class="banner__who">
+          <span v-if="!info" class="banner__who">
             ·
             {{
               t(attention.who === 'user' ? 'task.attention.needsYou' : 'task.attention.needsLead')
@@ -98,6 +107,14 @@ onMounted(() => team.ensureMembers())
           </time>
         </p>
         <div class="banner__actions">
+          <Button
+            v-if="resources"
+            size="sm"
+            variant="ghost"
+            :to="{ name: 'settings', params: { section: 'resources' } }"
+          >
+            {{ t('nav.lowMemory.settings') }}
+          </Button>
           <Button v-if="objections.length" size="sm" variant="primary" @click="emit('answer')">
             {{ t('task.consults.answerAction') }}
           </Button>
