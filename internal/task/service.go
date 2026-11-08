@@ -163,6 +163,9 @@ type Options struct {
 	Settings func() config.Settings
 	// TasksDir holds one folder per task with its attempt folders (config.Paths.Tasks).
 	TasksDir string
+	// DataDir is the data folder (config.Paths.Home) for the worker brief's data-folder rule (brief.Input.DataDir);
+	// "" names it ~/.seelegent.
+	DataDir string
 	// Launcher is the command that runs the detached launcher ({os.Executable(), "__launch"}).
 	Launcher []string
 
