@@ -165,7 +165,12 @@ function fold(f: Fold, event: TaskEvent): Draft | null {
       return notice('error', 'accounts', 'terminal.ev.authFailed', {}, { detail: event.data.error })
     case 'waiting_quota': {
       const data = event.data
+      if (data.reason === 'busy' || data.reason === 'no_account') {
+        const key = data.reason === 'busy' ? 'terminal.ev.waitingSlot' : 'terminal.ev.noAccounts'
+        return notice('warn', 'statusWaiting', key, {}, { detail: data.detail })
+      }
       if (data.reason !== 'memory') {
+        // resting, or no reason (events of an older daemon): waiting for quota.
         return notice(
           'warn',
           'statusWaiting',

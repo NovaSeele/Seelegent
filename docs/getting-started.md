@@ -238,6 +238,7 @@ says why:
 | Needs sign-in | Every account of the backend is signed out: sign one in on **Accounts**. |
 | No accounts left | No enabled account can run the task (signed out, out of quota, the model not allowed). Add or turn on an account, or wait for a reset. |
 | Waiting for quota | Not a problem: the task starts by itself when an account's window resets. |
+| Waiting for a free slot | Not a problem: every account that could run it already runs its maximum of tasks (`maxConcurrentPerAccount`). It starts when one of them ends; raise the limit or add an account to run more at once. |
 | Gate failed | The automatic fix turns are used up. Read the failing steps in the gate panel, then follow up or reject. |
 | Hygiene problem | The turn changed line endings or a BOM, or left a stray file. Follow up to fix it. |
 | Work may be lost | The turn may have lost uncommitted lines. Check the files in the safety panel and **Restore** them from the snapshot taken before the turn. |

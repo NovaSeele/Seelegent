@@ -69,6 +69,8 @@
     "quotaExhausted": "계정의 할당량이 소진되었습니다",
     "authFailed": "계정에 다시 로그인해야 합니다",
     "waitingQuota": "할당량 대기 중",
+    "waitingSlot": "빈 슬롯 대기",
+    "noAccounts": "남은 계정 없음",
     "retry": "{seconds}초 후 다시 시도",
     "handoff": "{from}에서 {to}(으)로 이동",
     "reattach": "실행 중인 워커에 다시 연결했습니다",

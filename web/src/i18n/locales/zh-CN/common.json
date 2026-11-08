@@ -71,8 +71,8 @@
       "short": "配额"
     },
     "waitingWorker": {
-      "label": "等待空闲工人",
-      "short": "等工人"
+      "label": "等待空闲槽位",
+      "short": "槽位已满"
     },
     "blocked": {
       "label": "需要处理",

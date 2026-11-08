@@ -4,7 +4,7 @@ import { useI18n } from 'vue-i18n'
 
 import StatusPill from '@/components/ui/StatusPill.vue'
 import { useFormat } from '@/composables/useFormat'
-import { displayStatus, statusWordKey } from '@/lib/taskStatus'
+import { displayStatus, slotWaitDetail, statusWordKey } from '@/lib/taskStatus'
 import { depsText, resourcesWaitLine } from '@/features/tasks/detail/attentionText'
 import { mbFormatter } from '@/lib/memory'
 import { useTasksStore } from '@/stores/tasks'
@@ -33,6 +33,8 @@ const deps = computed(() => (task.value ? depsText(task.value, t, te) : ''))
 const resources = computed(() =>
   task.value ? resourcesWaitLine(task.value, t, te, mbFormatter(fmt.value)) : '',
 )
+/** Which accounts are full while it waits for a free slot. */
+const slot = computed(() => (task.value ? slotWaitDetail(task.value) : ''))
 const until = computed(() =>
   task.value?.waitingUntil ? fmt.value.relative(task.value.waitingUntil, props.now) : '',
 )
@@ -67,6 +69,9 @@ const until = computed(() =>
       <RouterLink :to="{ name: 'settings', params: { section: 'resources' } }" class="run__aside">
         {{ t('nav.lowMemory.settings') }}
       </RouterLink>
+    </p>
+    <p v-else-if="slot" class="run__step run__step--wrap" data-slot>
+      <span class="run__step-text">{{ slot }}</span>
     </p>
     <p v-else-if="until" class="run__step">{{ t('watch.running.until', { time: until }) }}</p>
     <p v-else-if="deps" class="run__step">{{ deps }}</p>

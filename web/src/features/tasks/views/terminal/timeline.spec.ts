@@ -414,3 +414,21 @@ describe('terminal timeline', () => {
     expect(sameTimeline(first, grown)).toBe(false)
   })
 })
+
+describe('waiting_quota reasons', () => {
+  it('names a slot wait and a no-account wait, and reads a missing reason as quota', () => {
+    const items = buildTimeline([
+      ev('waiting_quota', { reason: 'busy', detail: 'acc6: 2 of 2 running' }),
+      ev('waiting_quota', { reason: 'no_account', detail: 'no enabled, signed-in agy account' }),
+      ev('waiting_quota', { reason: 'resting', until: '2026-11-08T10:00:00Z' }),
+      ev('waiting_quota', { until: '2026-11-08T11:00:00Z' }),
+    ])
+    expect(items.map((i) => (i.kind === 'notice' ? i.message.key : i.kind))).toEqual([
+      'terminal.ev.waitingSlot',
+      'terminal.ev.noAccounts',
+      'terminal.ev.waitingQuota',
+      'terminal.ev.waitingQuota',
+    ])
+    expect(items[0]).toMatchObject({ detail: 'acc6: 2 of 2 running' })
+  })
+})

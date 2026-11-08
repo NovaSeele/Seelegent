@@ -54,4 +54,18 @@ describe('RunningCard', () => {
     expect(wrapper.find('[data-resources]').exists()).toBe(false)
     expect(wrapper.text()).toContain('24 minutes')
   })
+
+  it('names a wait for a free slot and the full accounts, not quota', async () => {
+    const wrapper = await mountCard(
+      makeTask({
+        id: 't3',
+        status: 'waiting_quota',
+        waiting: 'busy',
+        waitDetail: 'acc6: 2 of 2 running',
+      }),
+    )
+    expect(wrapper.text()).toContain('Waiting for a free slot')
+    expect(wrapper.text()).not.toContain('Waiting for quota')
+    expect(wrapper.get('[data-slot]').text()).toBe('acc6: 2 of 2 running')
+  })
 })

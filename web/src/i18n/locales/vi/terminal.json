@@ -69,6 +69,8 @@
     "quotaExhausted": "Tài khoản đã hết quota",
     "authFailed": "Tài khoản cần đăng nhập lại",
     "waitingQuota": "Đang chờ quota",
+    "waitingSlot": "Chờ chỗ trống",
+    "noAccounts": "Không còn tài khoản",
     "retry": "Thử lại sau {seconds} giây",
     "handoff": "Chuyển từ {from} sang {to}",
     "reattach": "Đã kết nối lại với worker đang chạy",

@@ -71,8 +71,8 @@
       "short": "クォータ"
     },
     "waitingWorker": {
-      "label": "ワーカー待ち",
-      "short": "ワーカー"
+      "label": "空きスロット待ち",
+      "short": "枠待ち"
     },
     "blocked": {
       "label": "対応が必要",

@@ -71,8 +71,8 @@
       "short": "Quota"
     },
     "waitingWorker": {
-      "label": "Chờ worker rảnh",
-      "short": "Chờ worker"
+      "label": "Chờ chỗ trống",
+      "short": "Hết chỗ"
     },
     "blocked": {
       "label": "Cần xử lý",

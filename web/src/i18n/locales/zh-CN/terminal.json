@@ -69,6 +69,8 @@
     "quotaExhausted": "账号额度已用完",
     "authFailed": "账号需要重新登录",
     "waitingQuota": "等待额度恢复",
+    "waitingSlot": "等待空闲槽位",
+    "noAccounts": "没有可用账号",
     "retry": "{seconds} 秒后重试",
     "handoff": "从 {from} 转到 {to}",
     "reattach": "已重新连接到运行中的 worker",

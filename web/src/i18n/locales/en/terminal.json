@@ -69,6 +69,8 @@
     "quotaExhausted": "The account ran out of quota",
     "authFailed": "The account needs to sign in again",
     "waitingQuota": "Waiting for quota",
+    "waitingSlot": "Waiting for a free slot",
+    "noAccounts": "No accounts left",
     "retry": "Trying again in {seconds} s",
     "handoff": "Moved from {from} to {to}",
     "reattach": "Reconnected to the running worker",
