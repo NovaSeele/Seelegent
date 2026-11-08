@@ -139,25 +139,97 @@ func TestCodexCommand(t *testing.T) {
 	if _, err := b.Command(Turn{Sandbox: "yolo"}); err == nil {
 		t.Error("unknown sandbox accepted")
 	}
+	if c := b.(*Codex); c.goos != runtime.GOOS {
+		t.Errorf("New gave codex goos %q, want %q", c.goos, runtime.GOOS)
+	}
+}
+
+// TestCodexWindowsSandbox: on Windows a sandboxed codex turn names the unelevated Windows sandbox (codex 0.167
+// refuses every shell command under read-only or workspace-write without it); danger-full-access and other systems
+// get no override.
+func TestCodexWindowsSandbox(t *testing.T) {
+	override := []string{"-c", "windows.sandbox=unelevated"}
+	for _, bin := range []string{`C:\npm\codex.cmd`, `C:\bin\codex.exe`} {
+		win := &Codex{bin: bin, goos: "windows"}
+		cmd, err := win.Command(Turn{Prompt: "go", Model: "gpt-6-luna"})
+		if err != nil {
+			t.Fatalf("%s: %v", bin, err)
+		}
+		want := []string{bin, "exec", "--json", "--sandbox", "workspace-write", "-c", "windows.sandbox=unelevated",
+			"--model", "gpt-6-luna", "--skip-git-repo-check", "-"}
+		if !slices.Equal(cmd.Argv, want) {
+			t.Errorf("windows argv = %q\nwant %q", cmd.Argv, want)
+		}
+		cmd, err = win.Command(Turn{Prompt: "go", ConversationID: "th1"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		want = []string{bin, "exec", "resume", "th1", "--json", "--sandbox", "workspace-write", "-c",
+			"windows.sandbox=unelevated", "--skip-git-repo-check", "-"}
+		if !slices.Equal(cmd.Argv, want) {
+			t.Errorf("windows resume argv = %q\nwant %q", cmd.Argv, want)
+		}
+		cmd, _ = win.Command(Turn{Prompt: "go", Plan: true, Sandbox: config.SandboxFullAccess})
+		if !slices.Contains(cmd.Argv, "read-only") || !hasRun(cmd.Argv, override) {
+			t.Errorf("windows plan argv = %q", cmd.Argv)
+		}
+		cmd, _ = win.Command(Turn{Prompt: "go", Sandbox: config.SandboxReadOnly})
+		if !hasRun(cmd.Argv, override) {
+			t.Errorf("windows read-only argv = %q", cmd.Argv)
+		}
+		cmd, _ = win.Command(Turn{Prompt: "go", Sandbox: config.SandboxFullAccess})
+		if slices.Contains(cmd.Argv, "-c") {
+			t.Errorf("windows danger-full-access argv = %q", cmd.Argv)
+		}
+	}
+	for _, goos := range []string{"linux", "darwin"} {
+		for _, sb := range []string{config.SandboxReadOnly, config.SandboxWorkspaceWrite, config.SandboxFullAccess} {
+			cmd, err := (&Codex{bin: "/usr/bin/codex", goos: goos}).Command(Turn{Prompt: "go", Sandbox: sb})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if slices.Contains(cmd.Argv, "-c") {
+				t.Errorf("%s %s argv = %q", goos, sb, cmd.Argv)
+			}
+		}
+	}
+	// The override passes the batch-shim rule (codex.cmd runs through cmd.exe); a quoted TOML value would not, which
+	// is why the value is left bare: codex reads a value that is not valid TOML as a literal string.
+	if err := checkShimArgs(append([]string{`C:\npm\codex.cmd`}, override...), "windows"); err != nil {
+		t.Errorf("override refused for a .cmd shim: %v", err)
+	}
+	if err := checkShimArgs([]string{`C:\npm\codex.cmd`, "-c", `windows.sandbox="unelevated"`}, "windows"); err == nil {
+		t.Error("quoted override accepted for a .cmd shim")
+	}
+}
+
+// hasRun reports whether run appears in argv as consecutive elements.
+func hasRun(argv, run []string) bool {
+	for i := 0; i+len(run) <= len(argv); i++ {
+		if slices.Equal(argv[i:i+len(run)], run) {
+			return true
+		}
+	}
+	return false
 }
 
 func TestShimArgs(t *testing.T) {
-	if runtime.GOOS != "windows" {
-		if err := checkShimArgs([]string{"claude.cmd", "a&b"}); err != nil {
-			t.Errorf("non-Windows: %v", err)
-		}
-		return
+	if err := checkShimArgs([]string{"claude.cmd", "a&b"}, "linux"); err != nil {
+		t.Errorf("non-Windows: %v", err)
 	}
-	if err := checkShimArgs([]string{`C:\npm\claude.cmd`, "-p", `C:\Users\A B\home\mcp-empty.json`}); err != nil {
+	if err := checkShimArgs([]string{`C:\npm\claude.cmd`, "-p", `C:\Users\A B\home\mcp-empty.json`}, "windows"); err != nil {
 		t.Errorf("safe args refused: %v", err)
 	}
 	for _, bad := range []string{"a&b", "50%", `say "hi"`, "a|b", "x^y", "line\nbreak", "!x!"} {
-		if err := checkShimArgs([]string{`C:\npm\codex.CMD`, bad}); err == nil {
+		if err := checkShimArgs([]string{`C:\npm\codex.CMD`, bad}, "windows"); err == nil {
 			t.Errorf("arg %q accepted for a .cmd shim", bad)
 		}
 	}
-	if err := checkShimArgs([]string{`C:\bin\codex.exe`, "a&b"}); err != nil {
+	if err := checkShimArgs([]string{`C:\bin\codex.exe`, "a&b"}, "windows"); err != nil {
 		t.Errorf(".exe refused: %v", err)
+	}
+	if runtime.GOOS != "windows" {
+		return
 	}
 	if _, err := New("claude", `C:\npm\claude.cmd`); err != nil {
 		t.Fatal(err)
@@ -768,7 +840,12 @@ func TestUnknownLinesAreLogs(t *testing.T) {
 		evs[5].Tool.Name != "mcp_tool_call" || evs[6].Text != "fatal-ish" {
 		t.Errorf("codex items = %+v", evs)
 	}
-	if evs := codex.Line([]byte(`{"type":"turn.completed"}`)); len(evs) != 1 || evs[0].Report.Usage != nil {
+	// The report waits for Finish (codexParser.held).
+	if evs := codex.Line([]byte(`{"type":"turn.completed"}`)); len(evs) != 0 {
 		t.Errorf("turn.completed without usage = %+v", evs)
+	}
+	if evs := codex.Finish(launch.Exit{Reason: launch.ReasonExited}, ""); len(evs) != 1 || evs[0].Report == nil ||
+		evs[0].Report.Usage != nil {
+		t.Errorf("finish after turn.completed without usage = %+v", evs)
 	}
 }

@@ -42,6 +42,16 @@ func startE2E(t *testing.T, name, script string, prof account.Profile, turn Turn
 	if err != nil {
 		t.Fatal(err)
 	}
+	return startE2EOn(t, b, script, prof, turn, env)
+}
+
+// startE2EOn is startE2E with backend b, whose binary runs the test binary (itself or through a shim).
+func startE2EOn(t *testing.T, b Backend, script string, prof account.Profile, turn Turn, env []string) *e2eRun {
+	t.Helper()
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := b.Prepare(prof, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -144,7 +154,7 @@ func TestEndToEndStreams(t *testing.T) {
 	cases := map[string][]string{
 		"agy":    {"success.jsonl", "quota.jsonl", "auth.jsonl", "background.jsonl", "fatal.jsonl"},
 		"claude": {"success.jsonl", "quota.jsonl", "auth.jsonl", "overloaded.jsonl"},
-		"codex":  {"success.jsonl", "quota.jsonl", "transient.jsonl"},
+		"codex":  {"success.jsonl", "quota.jsonl", "transient.jsonl", "policy.jsonl"},
 	}
 	for name, files := range cases {
 		for _, file := range files {

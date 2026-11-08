@@ -86,7 +86,7 @@ Durations use the unit in their name. "Tier" means one of `fast`, `standard`, `s
 | `backends.codex.enabled` | boolean | `false` | Allow tasks on the OpenAI Codex CLI. |
 | `backends.codex.allowedModels` | regular expression | `""` | Model ids allowed on codex. |
 | `backends.codex.tiers.<tier>` | model id | `""` | Model of each tier on codex; empty leaves the tier unavailable. |
-| `backends.codex.sandbox` | `read-only`, `workspace-write`, `danger-full-access` | `"workspace-write"` | Sandbox mode passed to codex. |
+| `backends.codex.sandbox` | `read-only`, `workspace-write`, `danger-full-access` | `"workspace-write"` | Sandbox mode passed to codex (`--sandbox`). On Windows a `read-only` or `workspace-write` turn also gets `-c windows.sandbox=unelevated` (see below). |
 | `backends.claude.enabled` | boolean | `false` | Allow tasks on the Claude Code CLI. |
 | `backends.claude.allowedModels` | regular expression | `""` | Model ids allowed on claude. |
 | `backends.claude.tiers.<tier>` | model id | `""` | Model of each tier on claude; empty leaves the tier unavailable. |
@@ -98,6 +98,17 @@ empty pattern for codex, claude and providers (agy allowed any, as now), althoug
 `seelegent migrate` turns such an old empty pattern into one that allows only the tier models (`^$` when no tier is
 set). RE2 has no look-ahead: write `"^gemini-3\\.8-"` (the JSON spelling of
 `^gemini-3\.8-`) rather than `"^(?!gemini-4)"`.
+
+A codex turn runs `codex exec [resume <id>] --json --sandbox <mode> [-c windows.sandbox=unelevated] [--model <m>]
+--skip-git-repo-check -` with the brief on standard input (plan mode is always `read-only`). The `-c` override is
+added on Windows for `read-only` and `workspace-write`: codex-cli 0.167.0 with no `[windows]` table in its
+`config.toml` refuses every shell command of such a turn ("rejected: blocked by policy"). `windows.sandbox` is the
+key that version reads (`elevated`, `unelevated` or `mxc`; the old `experimental_windows_sandbox` and
+`elevated_windows_sandbox` features are removed); `elevated` needs a one-time administrator setup, so Seelegent uses
+`unelevated`. The value is written bare: codex takes a value that is not valid TOML as a literal string, and a
+double quote could not pass through the `codex.cmd` shim npm installs. When codex's policy still refuses commands,
+they are listed in the turn's denied actions (`denied_actions` in the report), and a turn in which every shell command
+was refused fails instead of ending done.
 
 ### Accounts, quota and timeouts
 

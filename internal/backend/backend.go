@@ -11,6 +11,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"runtime"
 	"time"
 
 	"github.com/NovaSeele/Seelegent/internal/account"
@@ -227,7 +228,7 @@ func New(name, bin string, opts ...Option) (Backend, error) {
 	case config.BackendClaude:
 		return &Claude{bin: bin, quota: o.quota, guard: o.guard}, nil
 	case config.BackendCodex:
-		return &Codex{bin: bin, quota: o.quota}, nil
+		return &Codex{bin: bin, quota: o.quota, goos: runtime.GOOS}, nil
 	}
 	return nil, fmt.Errorf("%w %q", ErrUnknownBackend, name)
 }

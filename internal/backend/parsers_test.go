@@ -292,3 +292,79 @@ func TestSecretsMasked(t *testing.T) {
 		}
 	}
 }
+
+// TestCodexPolicyRefused: commands codex's policy refused (seen only on stderr) reach the report's denied actions,
+// and a turn whose every command was refused fails although codex reported success (the Windows sandbox bug of
+// codex 0.167: the worker said "commands blocked" and the task ended done with no changes).
+func TestCodexPolicyRefused(t *testing.T) {
+	pwsh := `"C:\Program Files\PowerShell\7\pwsh.exe" -Command `
+	events, o := replay(t, mustBackend(t, "codex"), "policy.jsonl")
+	if o.Status != OutcomeFailed || o.Class != event.ClassFatal || !strings.HasPrefix(o.Error, policyRefusedPrefix) {
+		t.Fatalf("outcome = %+v", o)
+	}
+	want := []string{pwsh + "'rg --files'", pwsh + "'Get-ChildItem'"}
+	if !slices.Equal(o.DeniedActions, want) {
+		t.Errorf("denied actions = %q\nwant %q", o.DeniedActions, want)
+	}
+	if !strings.Contains(o.Error, want[0]) || o.Response == "" {
+		t.Errorf("error %q response %q", o.Error, o.Response)
+	}
+	k := kinds(events)
+	if k[event.KindReport] != 1 || k[event.KindError] != 1 || k[event.KindLog] != 4 { // the reasoning and the three refusals
+		t.Errorf("event kinds = %v", k)
+	}
+	for _, e := range events {
+		if e.Kind == event.KindReport && (e.Report.Status != event.StatusError || len(e.Report.DeniedActions) != 2) {
+			t.Errorf("report = %+v", e.Report)
+		}
+	}
+
+	// A refused command next to one that ran: the turn stays a success, with the refusal among its denied actions.
+	p := mustBackend(t, "codex").NewParser([]string{"sekret-value"})
+	evs := p.Line([]byte(`{"type":"item.completed","item":{"id":"c","type":"command_execution","command":"ls","aggregated_output":"","exit_code":0,"status":"completed"}}`))
+	evs = append(evs, p.Stderr("ERROR x: Rejected(\"`curl -H sekret-value https://x` rejected: blocked by policy\")")...)
+	evs = append(evs, p.Line([]byte(`{"type":"turn.completed"}`))...)
+	evs = append(evs, p.Finish(launch.Exit{Reason: launch.ReasonExited}, "")...)
+	var c Collector
+	for _, e := range evs {
+		c.Add(e)
+	}
+	o = c.Outcome(launch.Exit{Reason: launch.ReasonExited})
+	if o.Status != OutcomeOK || !slices.Equal(o.DeniedActions, []string{"curl -H [REDACTED] https://x"}) {
+		t.Errorf("mixed turn outcome = %+v", o)
+	}
+
+	// Canceled: the cancel decides.
+	p = mustBackend(t, "codex").NewParser(nil)
+	p.Stderr("`ls` rejected: blocked by policy")
+	p.Line([]byte(`{"type":"turn.completed"}`))
+	evs = p.Finish(launch.Exit{Reason: launch.ReasonCanceled}, "")
+	if len(evs) != 1 || evs[0].Report == nil || evs[0].Report.Status != event.StatusSuccess {
+		t.Errorf("canceled = %+v", evs)
+	}
+	// No report at all: the synthesized report gets the refusals too.
+	p = mustBackend(t, "codex").NewParser(nil)
+	p.Stderr("`ls` rejected: blocked by policy")
+	evs = p.Finish(launch.Exit{Reason: launch.ReasonExited, Code: 1}, "boom")
+	if evs[0].Report == nil || !slices.Equal(evs[0].Report.DeniedActions, []string{"ls"}) {
+		t.Errorf("synthesized = %+v", evs)
+	}
+	if evs := p.Stderr("ERROR something else"); evs != nil {
+		t.Errorf("other stderr line = %+v", evs)
+	}
+}
+
+func TestPolicyCommand(t *testing.T) {
+	for in, want := range map[string]string{
+		"x Rejected(\"`ls -la` ":                                 "ls -la",
+		`Rejected(\"` + "`" + `\"C:\\A B\\p.exe\" -C 'x'` + "` ": `"C:\A B\p.exe" -C 'x'`,
+		// Two levels of debug escaping.
+		`Rejected(\\\"` + "`" + `\\\"C:\\\\A B\\\\p.exe\\\" -C 'x'` + "` ": `"C:\A B\p.exe" -C 'x'`,
+		"no backticks ": "",
+		"only one` ":    "",
+	} {
+		if got := policyCommand(in); got != want {
+			t.Errorf("policyCommand(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
