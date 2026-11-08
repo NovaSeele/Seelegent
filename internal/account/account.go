@@ -48,6 +48,9 @@ var (
 	ErrInvalid = errors.New("invalid")
 	// ErrConflict: the change clashes with existing data (an id already taken, a provider still in use).
 	ErrConflict = errors.New("conflict")
+	// ErrBadKey: a submitted API key is malformed (a URL, spaces, several lines). It also matches ErrInvalid; the
+	// message says what is wrong and never holds the key (FieldError.Reason names it).
+	ErrBadKey = errors.New("bad API key")
 	// ErrNoKey: an API-key account has no key stored. A turn cannot start; treat it as "sign-in required".
 	ErrNoKey = errors.New("no API key stored")
 	// ErrProviderUnavailable: the provider of an API-key account is disabled or misconfigured. A turn cannot start;
@@ -81,9 +84,35 @@ type Account struct {
 	KeyHint string `json:"keyHint,omitempty"`
 	// KeySetAt is when the API key was last stored or removed (zero when never); other edits do not change it.
 	KeySetAt time.Time `json:"keySetAt,omitzero"`
+	// TestResult is the reason code of the last key test (TestOK, or what went wrong) or TestOK after a turn on the
+	// account ended well; empty while the account was never tested and never ran well, and again after its key or
+	// its provider's endpoint changed (API-key accounts only). TestedAt is when.
+	TestResult string    `json:"testResult,omitempty"`
+	TestedAt   time.Time `json:"testedAt,omitzero"`
 	// CreatedAt and UpdatedAt are UTC times.
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
+}
+
+// Test states of an API-key account (Account.TestState).
+const (
+	// TestOK: the last test passed, or a turn ended well since the key and endpoint were set.
+	TestOK = "ok"
+	// TestNotTested: never tested and never ran well on the current key and endpoint.
+	TestNotTested = "not_tested"
+)
+
+// TestState returns the test state of an API-key account: TestNotTested, or the stored result (TestOK or the
+// reason code of a failed test). Other accounts have none (""). It is advice only: the pool selects accounts that
+// were never tested like any other (their first turn is the check).
+func (a *Account) TestState() string {
+	switch {
+	case a.Kind != KindAPIKey:
+		return ""
+	case a.TestResult == "":
+		return TestNotTested
+	}
+	return a.TestResult
 }
 
 // New describes an account to create.
@@ -109,36 +138,36 @@ func backends() []string {
 	return []string{config.BackendAgy, config.BackendClaude, config.BackendCodex}
 }
 
-// validate checks a new account (without the provider lookup).
+// validate checks a new account (without the provider lookup). Its errors name the field (FieldError).
 func (n New) validate() error {
 	switch n.Backend {
 	case config.BackendAgy, config.BackendClaude, config.BackendCodex:
 	default:
-		return invalidf("backend %q (want one of %s)", n.Backend, strings.Join(backends(), ", "))
+		return withField("backend", invalidf("backend %q (want one of %s)", n.Backend, strings.Join(backends(), ", ")))
 	}
 	switch n.Kind {
 	case KindIsolated:
 	case KindSystem:
 		if n.Backend != config.BackendAgy {
-			return invalidf("a system account is only possible for agy, not %s", n.Backend)
+			return withField("kind", invalidf("a system account is only possible for agy, not %s", n.Backend))
 		}
 	case KindAPIKey:
 		if n.Backend == config.BackendAgy {
-			return invalidf("agy has no API-key accounts")
+			return withField("kind", invalidf("agy has no API-key accounts"))
 		}
 		if n.Provider == "" {
-			return invalidf("an API-key account needs a provider")
+			return withField("provider", invalidf("an API-key account needs a provider"))
 		}
 	default:
-		return invalidf("kind %q (want isolated, system or api-key)", n.Kind)
+		return withField("kind", invalidf("kind %q (want isolated, system or api-key)", n.Kind))
 	}
 	if n.Kind != KindAPIKey && n.Provider != "" {
-		return invalidf("only API-key accounts have a provider")
+		return withField("provider", invalidf("only API-key accounts have a provider"))
 	}
 	if err := validateLabel(n.Label); err != nil {
-		return err
+		return withField("label", err)
 	}
-	return validatePriority(n.Priority)
+	return withField("priority", validatePriority(n.Priority))
 }
 
 func validateLabel(l string) error {

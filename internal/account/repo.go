@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"strconv"
 	"time"
 )
@@ -56,19 +57,33 @@ func (r *Repo) Create(ctx context.Context, n New, taken func(id string) bool) (A
 	if err := n.validate(); err != nil {
 		return Account{}, err
 	}
+	var a Account
+	err := r.db.Write(ctx, func(tx *sql.Tx) error {
+		var err error
+		a, err = r.createTx(ctx, tx, n, taken)
+		return err
+	})
+	if err != nil {
+		return Account{}, wrap("create account", err)
+	}
+	return a, nil
+}
+
+// createTx inserts a validated new account in tx (see Create).
+func (r *Repo) createTx(ctx context.Context, tx *sql.Tx, n New, taken func(id string) bool) (Account, error) {
 	now := r.stamp()
 	a := Account{
 		Backend: n.Backend, Kind: n.Kind, Label: n.Label, Enabled: n.Enabled, Priority: n.Priority,
 		Provider: n.Provider, CreatedAt: now, UpdatedAt: now,
 	}
-	err := r.db.Write(ctx, func(tx *sql.Tx) error {
+	err := func() error {
 		if a.Kind == KindAPIKey {
 			p, err := getProvider(ctx, tx, a.Provider)
 			if err != nil {
 				return err
 			}
 			if p.Backend != a.Backend {
-				return invalidf("provider %s serves %s, not %s", p.ID, p.Backend, a.Backend)
+				return withField("backend", invalidf("provider %s serves %s, not %s", p.ID, p.Backend, a.Backend))
 			}
 		}
 		if a.Kind == KindSystem {
@@ -87,14 +102,14 @@ func (r *Repo) Create(ctx context.Context, n New, taken func(id string) bool) (A
 			a.ID = id
 		}
 		_, err := tx.ExecContext(ctx, `INSERT INTO accounts
-			(id, backend, kind, label, enabled, priority, provider, key_hint, created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, '', ?, ?)`,
+			(id, backend, kind, label, enabled, priority, provider, key_hint, test_reset_at, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, '', ?, ?, ?)`,
 			a.ID, a.Backend, string(a.Kind), a.Label, a.Enabled, a.Priority, nullString(a.Provider),
-			formatTime(now), formatTime(now))
+			formatTime(now), formatTime(now), formatTime(now))
 		return err
-	})
+	}()
 	if err != nil {
-		return Account{}, wrap("create account", err)
+		return Account{}, err
 	}
 	return a, nil
 }
@@ -142,8 +157,8 @@ func accountExists(ctx context.Context, tx *sql.Tx, id string) (bool, error) {
 	return err == nil, err
 }
 
-const accountColumns = `id, backend, kind, label, enabled, priority, provider, key_hint, key_set_at, created_at,
-	updated_at`
+const accountColumns = `id, backend, kind, label, enabled, priority, provider, key_hint, key_set_at, test_result,
+	tested_at, created_at, updated_at`
 
 // Get returns the account with the id, or an error matching ErrNotFound.
 func (r *Repo) Get(ctx context.Context, id string) (Account, error) {
@@ -232,18 +247,61 @@ func (r *Repo) Update(ctx context.Context, id string, p Patch) (Account, error) 
 	return a, nil
 }
 
-// SetKeyHint records the hint of the stored key ("" when the key was removed) and when the key changed.
+// SetKeyHint records the hint of the stored key ("" when the key was removed) and when the key changed. The
+// account's test state is cleared: it is "not tested" until a test or a turn on the new key succeeds.
 func (r *Repo) SetKeyHint(ctx context.Context, id, hint string) error {
+	err := r.db.Write(ctx, func(tx *sql.Tx) error { return r.setKeyHintTx(ctx, tx, id, hint) })
+	return wrap("set key hint", err)
+}
+
+func (r *Repo) setKeyHintTx(ctx context.Context, tx *sql.Tx, id, hint string) error {
+	now := formatTime(r.stamp())
+	res, err := tx.ExecContext(ctx, `UPDATE accounts SET key_hint = ?, key_set_at = ?, test_result = '', tested_at = '',
+		test_reset_at = ?, updated_at = ? WHERE id = ?`, hint, now, now, now, id)
+	if err != nil {
+		return err
+	}
+	return mustAffect(res, "account", id)
+}
+
+// testResultRe matches a stored test result: a short reason code.
+var testResultRe = regexp.MustCompile(`^[a-z][a-z_]{0,31}$`)
+
+// RecordTest stores the result of a key test that started at started (TestOK or a reason code). A test that
+// started before the key or the provider's endpoint last changed tested the old ones and is not stored (changed
+// false); so is a test of an account that is not an API-key account or has no key. A missing account is not an
+// error.
+func (r *Repo) RecordTest(ctx context.Context, id, result string, started time.Time) (changed bool, err error) {
+	if !testResultRe.MatchString(result) {
+		return false, invalidf("test result %q is not a reason code", result)
+	}
+	return r.recordTest(ctx, id, result, started, false)
+}
+
+// MarkRunOK records that a turn that started at started ended well on the API-key account: its test state becomes
+// TestOK, unless it is already, or the turn started before the key or the endpoint last changed. changed reports
+// whether the state moved. A missing account is not an error (it may have been removed while the turn ran).
+func (r *Repo) MarkRunOK(ctx context.Context, id string, started time.Time) (changed bool, err error) {
+	return r.recordTest(ctx, id, TestOK, started, true)
+}
+
+func (r *Repo) recordTest(ctx context.Context, id, result string, started time.Time, onlyIfNotOK bool) (bool, error) {
+	changed := false
+	query := `UPDATE accounts SET test_result = ?, tested_at = ? WHERE id = ? AND kind = 'api-key' AND key_hint <> ''
+		AND test_reset_at <= ?`
+	if onlyIfNotOK {
+		query += " AND test_result <> 'ok'"
+	}
 	err := r.db.Write(ctx, func(tx *sql.Tx) error {
-		now := formatTime(r.stamp())
-		res, err := tx.ExecContext(ctx, "UPDATE accounts SET key_hint = ?, key_set_at = ?, updated_at = ? WHERE id = ?",
-			hint, now, now, id)
+		res, err := tx.ExecContext(ctx, query, result, formatTime(r.stamp()), id, formatTime(started))
 		if err != nil {
 			return err
 		}
-		return mustAffect(res, "account", id)
+		n, err := res.RowsAffected()
+		changed = n > 0
+		return err
 	})
-	return wrap("set key hint", err)
+	return changed, wrap("record key test", err)
 }
 
 // Delete removes the account record. The id is not given out again.
@@ -263,14 +321,14 @@ type scanner interface{ Scan(dest ...any) error }
 
 func scanAccount(s scanner) (Account, error) {
 	var (
-		a                        Account
-		kind                     string
-		provider                 sql.NullString
-		keySet, created, updated string
-		enabled, priority        int64
+		a                                Account
+		kind                             string
+		provider                         sql.NullString
+		keySet, tested, created, updated string
+		enabled, priority                int64
 	)
 	if err := s.Scan(&a.ID, &a.Backend, &kind, &a.Label, &enabled, &priority, &provider, &a.KeyHint,
-		&keySet, &created, &updated); err != nil {
+		&keySet, &a.TestResult, &tested, &created, &updated); err != nil {
 		return Account{}, err
 	}
 	a.Kind = Kind(kind)
@@ -280,6 +338,11 @@ func scanAccount(s scanner) (Account, error) {
 	var err error
 	if keySet != "" {
 		if a.KeySetAt, err = parseTime(keySet); err != nil {
+			return Account{}, fmt.Errorf("account %s: %w", a.ID, err)
+		}
+	}
+	if tested != "" {
+		if a.TestedAt, err = parseTime(tested); err != nil {
 			return Account{}, fmt.Errorf("account %s: %w", a.ID, err)
 		}
 	}
@@ -297,24 +360,34 @@ func (r *Repo) CreateProvider(ctx context.Context, p Provider) (Provider, error)
 	if err := p.Validate(); err != nil {
 		return Provider{}, err
 	}
-	now := r.stamp()
-	p.CreatedAt, p.UpdatedAt = now, now
 	err := r.db.Write(ctx, func(tx *sql.Tx) error {
-		if _, err := getProvider(ctx, tx, p.ID); err == nil {
-			return fmt.Errorf("%w: provider %s already exists", ErrConflict, p.ID)
-		} else if !errors.Is(err, ErrNotFound) {
-			return err
-		}
-		_, err := tx.ExecContext(ctx, `INSERT INTO providers
-			(id, name, backend, preset, base_url, wire_api, official, enabled, allowed_models, models,
-			 tier_fast, tier_standard, tier_strong, tier_max, created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			p.ID, p.Name, p.Backend, p.Preset, p.BaseURL, p.WireAPI, p.Official, p.Enabled, p.AllowedModels,
-			modelsJSON(p.Models), p.Tiers.Fast, p.Tiers.Standard, p.Tiers.Strong, p.Tiers.Max, formatTime(now), formatTime(now))
+		var err error
+		p, err = r.insertProviderTx(ctx, tx, p)
 		return err
 	})
 	if err != nil {
 		return Provider{}, wrap("create provider", err)
+	}
+	return p, nil
+}
+
+// insertProviderTx inserts a validated provider in tx; an existing id fails with ErrConflict.
+func (r *Repo) insertProviderTx(ctx context.Context, tx *sql.Tx, p Provider) (Provider, error) {
+	now := r.stamp()
+	p.CreatedAt, p.UpdatedAt = now, now
+	if _, err := getProvider(ctx, tx, p.ID); err == nil {
+		return Provider{}, withField("id", fmt.Errorf("%w: provider %s already exists", ErrConflict, p.ID))
+	} else if !errors.Is(err, ErrNotFound) {
+		return Provider{}, err
+	}
+	_, err := tx.ExecContext(ctx, `INSERT INTO providers
+		(id, name, backend, preset, base_url, wire_api, official, enabled, allowed_models, models,
+		 tier_fast, tier_standard, tier_strong, tier_max, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		p.ID, p.Name, p.Backend, p.Preset, p.BaseURL, p.WireAPI, p.Official, p.Enabled, p.AllowedModels,
+		modelsJSON(p.Models), p.Tiers.Fast, p.Tiers.Standard, p.Tiers.Strong, p.Tiers.Max, formatTime(now), formatTime(now))
+	if err != nil {
+		return Provider{}, err
 	}
 	return p, nil
 }
@@ -342,6 +415,13 @@ func (r *Repo) UpdateProvider(ctx context.Context, p Provider) (Provider, error)
 		}
 		p.CreatedAt = old.CreatedAt
 		p.UpdatedAt = r.stamp()
+		if old.endpoint() != p.endpoint() {
+			// Its accounts send their keys elsewhere, or another way, now: a test of the old endpoint says nothing.
+			if _, err := tx.ExecContext(ctx, `UPDATE accounts SET test_result = '', tested_at = '', test_reset_at = ?
+				WHERE provider = ?`, formatTime(p.UpdatedAt), p.ID); err != nil {
+				return err
+			}
+		}
 		_, err = tx.ExecContext(ctx, `UPDATE providers SET name = ?, backend = ?, preset = ?, base_url = ?,
 			wire_api = ?, official = ?, enabled = ?, allowed_models = ?, models = ?, tier_fast = ?,
 			tier_standard = ?, tier_strong = ?, tier_max = ?, updated_at = ? WHERE id = ?`,
@@ -384,19 +464,9 @@ func getProvider(ctx context.Context, tx *sql.Tx, id string) (Provider, error) {
 func (r *Repo) ListProviders(ctx context.Context) ([]Provider, error) {
 	var out []Provider
 	err := r.db.Read(ctx, func(tx *sql.Tx) error {
-		rows, err := tx.QueryContext(ctx, "SELECT "+providerColumns+" FROM providers ORDER BY id")
-		if err != nil {
-			return err
-		}
-		defer func() { _ = rows.Close() }()
-		for rows.Next() {
-			p, err := scanProvider(rows)
-			if err != nil {
-				return err
-			}
-			out = append(out, p)
-		}
-		return rows.Err()
+		var err error
+		out, err = listProvidersTx(ctx, tx)
+		return err
 	})
 	if err != nil {
 		return nil, wrap("list providers", err)

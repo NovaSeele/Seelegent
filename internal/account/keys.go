@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"unicode"
 
 	"github.com/NovaSeele/Seelegent/internal/fsutil"
 )
@@ -41,10 +40,10 @@ func (k Keys) path(id string) (string, error) {
 	return filepath.Join(dir, keyFileName), nil
 }
 
-// Save validates key, stores it for the account and returns its hint.
+// Save cleans and validates key (NormalizeKey), stores it for the account and returns its hint.
 func (k Keys) Save(id, key string) (hint string, err error) {
-	key = strings.TrimSpace(key)
-	if err := validateKey(key); err != nil {
+	key, _, err = NormalizeKey(key)
+	if err != nil {
 		return "", err
 	}
 	path, err := k.path(id)
@@ -131,18 +130,4 @@ func ProtectSecret(data []byte, purpose string) ([]byte, error) {
 // UnprotectSecret decrypts a blob made by ProtectSecret with the same purpose.
 func UnprotectSecret(blob []byte, purpose string) ([]byte, error) {
 	return unprotect(blob, "secret:"+purpose)
-}
-
-// validateKey checks an API key (already trimmed).
-func validateKey(key string) error {
-	if key == "" {
-		return invalidf("API key is empty")
-	}
-	if len(key) > maxKeyLen {
-		return invalidf("API key is longer than %d characters", maxKeyLen)
-	}
-	if strings.IndexFunc(key, func(r rune) bool { return unicode.IsSpace(r) || unicode.IsControl(r) }) >= 0 {
-		return invalidf("API key must not contain spaces or control characters")
-	}
-	return nil
 }
