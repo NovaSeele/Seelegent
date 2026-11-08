@@ -73,11 +73,11 @@ func (r *Repo) Create(ctx context.Context, t *Task, evs []NewEvent) ([]api.TaskE
 		if err != nil {
 			return err
 		}
+		args := append([]any{t.ID, t.Title, foldText(t.Title), string(t.Status), t.ProjectKey, t.Cwd, t.Backend,
+			string(data), formatTime(t.CreatedAt), formatTime(t.UpdatedAt), t.Kind}, digestOf(t).args()...)
 		if _, err := tx.ExecContext(ctx, `INSERT INTO tasks
-			(id, title, title_fold, status, project_key, cwd, backend, data, created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			t.ID, t.Title, foldText(t.Title), string(t.Status), t.ProjectKey, t.Cwd, t.Backend, string(data),
-			formatTime(t.CreatedAt), formatTime(t.UpdatedAt)); err != nil {
+			(id, title, title_fold, status, project_key, cwd, backend, data, created_at, updated_at, kind, `+
+			digestColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, args...); err != nil {
 			return fmt.Errorf("insert task %s: %w", t.ID, err)
 		}
 		if err := saveTurns(ctx, tx, t, t.Turns); err != nil {
@@ -106,10 +106,13 @@ func (r *Repo) Save(ctx context.Context, t *Task, turns []*Turn, evs []NewEvent)
 		if err != nil {
 			return err
 		}
+		// The digest comes from t.Turns, which holds every turn even when only some are written.
+		args := append([]any{t.Title, foldText(t.Title), string(t.Status), t.ProjectKey, t.Cwd, t.Backend,
+			string(data), formatTime(t.UpdatedAt), t.Kind}, digestOf(t).args()...)
 		res, err := tx.ExecContext(ctx, `UPDATE tasks SET title = ?, title_fold = ?, status = ?, project_key = ?,
-			cwd = ?, backend = ?, data = ?, updated_at = ? WHERE id = ?`,
-			t.Title, foldText(t.Title), string(t.Status), t.ProjectKey, t.Cwd, t.Backend, string(data),
-			formatTime(t.UpdatedAt), t.ID)
+			cwd = ?, backend = ?, data = ?, updated_at = ?, kind = ?, turn_count = ?, tokens_used = ?,
+			files_changed = ?, gate_turn = ?, gate_state = ?, last_account_id = ?, last_account_label = ?
+			WHERE id = ?`, append(args, t.ID)...)
 		if err != nil {
 			return fmt.Errorf("save task %s: %w", t.ID, err)
 		}
@@ -370,26 +373,64 @@ type Query struct {
 	Cursor string
 }
 
-// List returns one page of tasks, newest first by (created_at, id), and the cursor of the next page ("" on the
-// last page).
+// List returns one page of tasks (without their turns), newest first by (created_at, id), and the cursor of the
+// next page ("" on the last page).
 func (r *Repo) List(ctx context.Context, q Query) ([]*Task, string, error) {
-	limit := q.Limit
+	ls, next, err := r.listPage(ctx, q)
+	if err != nil {
+		return nil, "", err
+	}
+	tasks := make([]*Task, len(ls))
+	for i, l := range ls {
+		tasks[i] = l.t
+	}
+	return tasks, next, nil
+}
+
+// listPage is List with the digest of each task's turns, which are not loaded (only those of tasks stored before
+// the digest columns existed).
+func (r *Repo) listPage(ctx context.Context, q Query) ([]listed, string, error) {
+	sqlText, args, limit, err := listQuery(q)
+	if err != nil {
+		return nil, "", err
+	}
+	var tasks []listed
+	err = r.db.Read(ctx, func(tx *sql.Tx) error {
+		var err error
+		tasks, err = queryListed(ctx, tx, sqlText, args...)
+		return err
+	})
+	if err != nil {
+		return nil, "", err
+	}
+	next := ""
+	if len(tasks) > limit {
+		tasks = tasks[:limit]
+		last := tasks[len(tasks)-1].t
+		next = encodeCursor(formatTime(last.CreatedAt), last.ID)
+	}
+	return tasks, next, nil
+}
+
+// listQuery builds the query of a list page; it asks for one row more than the page, to know whether another
+// page follows.
+func listQuery(q Query) (sqlText string, args []any, limit int, err error) {
+	limit = q.Limit
 	if limit <= 0 {
 		limit = 50
 	}
 	if limit > 200 {
-		return nil, "", invalidf("limit %d is over 200", limit)
+		return "", nil, 0, invalidf("limit %d is over 200", limit)
 	}
 	// Hidden runs (verify, consult, meeting, judge) are read through what started them, never listed.
-	where := []string{`coalesce(json_extract(data, '$.kind'), '') NOT IN (` + placeholders(len(hiddenKinds())) + `)`}
-	var args []any
+	where := []string{`kind NOT IN (` + placeholders(len(hiddenKinds())) + `)`}
 	for _, k := range hiddenKinds() {
 		args = append(args, k)
 	}
 	if len(q.Statuses) > 0 {
 		for _, s := range q.Statuses {
 			if !ValidStatus(s) {
-				return nil, "", invalidf("unknown status %q", s)
+				return "", nil, 0, invalidf("unknown status %q", s)
 			}
 			args = append(args, string(s))
 		}
@@ -406,52 +447,16 @@ func (r *Repo) List(ctx context.Context, q Query) ([]*Task, string, error) {
 		args = append(args, like, like)
 	}
 	if q.Cursor != "" {
-		at, id, err := decodeCursor(q.Cursor)
-		if err != nil {
-			return nil, "", err
+		at, id, cerr := decodeCursor(q.Cursor)
+		if cerr != nil {
+			return "", nil, 0, cerr
 		}
 		where = append(where, `(created_at < ? OR (created_at = ? AND id < ?))`)
 		args = append(args, at, at, id)
 	}
-	sqlText := `SELECT ` + taskColumns + ` FROM tasks WHERE ` + //nolint:gosec // fixed filters with placeholders
+	sqlText = `SELECT ` + listedColumns + ` FROM tasks WHERE ` + //nolint:gosec // fixed filters with placeholders
 		strings.Join(where, " AND ") + ` ORDER BY created_at DESC, id DESC LIMIT ?`
-	args = append(args, limit+1)
-	var tasks []*Task
-	more := false
-	err := r.db.Read(ctx, func(tx *sql.Tx) error {
-		more = false
-		rows, err := tx.QueryContext(ctx, sqlText, args...)
-		if err != nil {
-			return err
-		}
-		for rows.Next() {
-			t, err := scanTask(rows)
-			if err != nil {
-				_ = rows.Close()
-				return err
-			}
-			tasks = append(tasks, t)
-		}
-		if err := rows.Close(); err != nil {
-			return err
-		}
-		if err := rows.Err(); err != nil {
-			return err
-		}
-		if len(tasks) > limit {
-			tasks, more = tasks[:limit], true
-		}
-		return loadTurns(ctx, tx, tasks)
-	})
-	if err != nil {
-		return nil, "", err
-	}
-	next := ""
-	if more {
-		last := tasks[len(tasks)-1]
-		next = encodeCursor(formatTime(last.CreatedAt), last.ID)
-	}
-	return tasks, next, nil
+	return sqlText, append(args, limit+1), limit, nil
 }
 
 // Prompt returns the brief of attempt n of turn (the latest attempt when n is 0).
@@ -537,6 +542,11 @@ func scanTask(s scanner) (*Task, error) {
 	if err := s.Scan(&id, &status, &data, &seq, &lastAt, &created, &updated); err != nil {
 		return nil, err
 	}
+	return decodeTask(id, status, data, seq, lastAt, created, updated)
+}
+
+// decodeTask builds a task from the values of taskColumns.
+func decodeTask(id, status, data string, seq int64, lastAt, created, updated string) (*Task, error) {
 	t := &Task{}
 	if err := json.Unmarshal([]byte(data), t); err != nil {
 		return nil, fmt.Errorf("task %s is unreadable: %w", id, err)

@@ -791,32 +791,6 @@ func (s *Service) briefGate(t *Task) (lane, cmds []string) {
 	return lane, cmds
 }
 
-// gateSummary is the gate state a task summary shows: the running phase, else the last gate since the lead's
-// latest instruction (null when none ran).
-func gateSummary(t *Task) *api.Gate {
-	fixes := 0
-	if t.Proof != nil {
-		fixes = t.Proof.AutoFixes
-	}
-	if ph := t.GatePhase; ph != nil {
-		g := &api.Gate{State: api.GateRunning, Phase: ph.State, AutoFixes: fixes, Turn: ph.Turn}
-		if ph.State == api.GatePhaseQueued {
-			g.Wait = ph.Wait
-		}
-		return g
-	}
-	if len(t.Turns) == 0 {
-		return nil
-	}
-	start := instructionStart(t, t.Turns[len(t.Turns)-1].N)
-	for i := len(t.Turns) - 1; i >= start; i-- {
-		if g := t.Turns[i].Gate; g != nil {
-			return &api.Gate{State: g.State, AutoFixes: fixes, Turn: t.Turns[i].N}
-		}
-	}
-	return nil
-}
-
 // proofAPI is the task's proof as the API shows it.
 func proofAPI(p *Proof) *api.TaskProof {
 	if p == nil {

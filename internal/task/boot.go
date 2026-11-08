@@ -23,43 +23,26 @@ func (s *Service) Boot(ctx context.Context) ([]api.TaskSummary, error) {
 	}
 	args = append(args, string(StatusWaitingDeps), string(StatusQueued), string(StatusRunning),
 		string(StatusWaitingQuota), string(StatusDone), bootNewest)
-	shown := `coalesce(json_extract(data, '$.kind'), '') NOT IN (` + placeholders(len(hiddenKinds())) + `)`
-	var tasks []*Task
+	shown := `kind NOT IN (` + placeholders(len(hiddenKinds())) + `)`
+	var tasks []listed
 	err := s.repo.db.Read(ctx, func(tx *sql.Tx) error {
-		tasks = nil
+		var err error
 		//nolint:gosec // only constant text and placeholders are joined; the kinds are bound arguments
-		rows, err := tx.QueryContext(ctx, `WITH shown AS (SELECT * FROM tasks WHERE `+shown+`)
-			SELECT `+taskColumns+` FROM shown
+		tasks, err = queryListed(ctx, tx, `WITH shown AS (SELECT * FROM tasks WHERE `+shown+`)
+			SELECT `+listedColumns+` FROM shown
 			WHERE status IN (?, ?, ?, ?)
 			   OR json_extract(data, '$.attention') IS NOT NULL
 			   OR (status = ? AND json_extract(data, '$.review') IS NULL)
 			   OR id IN (SELECT id FROM shown ORDER BY created_at DESC, id DESC LIMIT ?)
 			ORDER BY created_at DESC, id DESC`, args...)
-		if err != nil {
-			return err
-		}
-		for rows.Next() {
-			t, err := scanTask(rows)
-			if err != nil {
-				_ = rows.Close()
-				return err
-			}
-			tasks = append(tasks, t)
-		}
-		if err := rows.Close(); err != nil {
-			return err
-		}
-		if err := rows.Err(); err != nil {
-			return err
-		}
-		return loadTurns(ctx, tx, tasks)
+		return err
 	})
 	if err != nil {
 		return nil, err
 	}
 	out := make([]api.TaskSummary, 0, len(tasks))
-	for _, t := range tasks {
-		out = append(out, s.summary(t))
+	for _, l := range tasks {
+		out = append(out, s.summaryOf(l.t, l.d))
 	}
 	return out, nil
 }

@@ -332,6 +332,9 @@ func (s *Service) Start(ctx context.Context) error {
 	if err := s.repo.BackfillFold(ctx); err != nil {
 		return fmt.Errorf("task: search titles: %w", err)
 	}
+	if err := s.repo.BackfillDigests(ctx); err != nil {
+		return fmt.Errorf("task: list columns: %w", err)
+	}
 	if err := s.recoverTasks(ctx); err != nil {
 		return err
 	}
