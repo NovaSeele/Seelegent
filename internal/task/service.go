@@ -168,9 +168,10 @@ type Options struct {
 
 	// Usage, QuotaRefresh, Memory, Roles and Consoles are optional.
 	Usage Usage
-	// QuotaRefresh asks for a background quota read of an account after a turn on it (quota.Refresher.Request);
+	// QuotaRefresh asks for a background quota read of an account after an attempt on it ended, saying whether the
+	// attempt failed (quota.Refresher.AfterRun: a run that went well skips the read when the quota is fresh);
 	// it must not block.
-	QuotaRefresh func(accountID string)
+	QuotaRefresh func(accountID string, failed bool)
 	Memory       Memory
 	Roles        Roles
 	Consoles     Consoles
@@ -335,6 +336,9 @@ func (s *Service) Start(ctx context.Context) error {
 	s.mu.Unlock()
 	if err := s.repo.BackfillFold(ctx); err != nil {
 		return fmt.Errorf("task: search titles: %w", err)
+	}
+	if err := s.repo.BackfillDigests(ctx); err != nil {
+		return fmt.Errorf("task: list columns: %w", err)
 	}
 	if err := s.recoverTasks(ctx); err != nil {
 		return err
