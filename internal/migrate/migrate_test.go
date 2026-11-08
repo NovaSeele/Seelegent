@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"io/fs"
 	"os"
@@ -540,5 +541,39 @@ func TestMigrateSameFolderAndErrors(t *testing.T) {
 
 	if _, err := Run(context.Background(), Options{From: t.TempDir(), Paths: f.paths}); !errors.Is(err, ErrNotOldData) {
 		t.Errorf("empty folder: %v", err)
+	}
+}
+
+// TestMigrateErrorsFile: a run with errors leaves migrate-errors.json with the failed items (the installer reads it
+// to say migrate should run again), a dry run never touches it, and a later run without errors removes it.
+func TestMigrateErrorsFile(t *testing.T) {
+	f := newFixture(t)
+	path := filepath.Join(f.paths.Home, ErrorsFile)
+	f.write("roles.json", `not json`)
+	if rep := f.run(true); !rep.Failed() {
+		t.Fatal("the dry run found no error")
+	}
+	if _, err := os.Stat(path); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("a dry run wrote %s: %v", path, err)
+	}
+	f.run(false)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var rec errorsRecord
+	if err := json.Unmarshal(data, &rec); err != nil {
+		t.Fatal(err)
+	}
+	if rec.Errors != 1 || len(rec.Items) != 1 || rec.Items[0].Kind != KindRole || rec.From != f.old ||
+		rec.At != "2026-11-07T12:00:00Z" {
+		t.Errorf("errors file = %+v", rec)
+	}
+	f.write("roles.json", `{"roles": []}`)
+	if rep := f.run(false); rep.Failed() {
+		t.Fatalf("still failing: %+v", rep.Items)
+	}
+	if _, err := os.Stat(path); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("a run without errors kept %s: %v", path, err)
 	}
 }

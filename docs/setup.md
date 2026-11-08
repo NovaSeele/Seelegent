@@ -192,13 +192,15 @@ and quota caches.
 Rules:
 
 - The old folder is never changed or deleted. When it is the data folder, migrate only adds this version's files
-  (`config.json`, `seelegent.db`, `profiles/<id>/seelegent-key`).
+  (`config.json`, `seelegent.db`, `profiles/<id>/seelegent-key`, `migrate-errors.json`).
 - `--dry-run` writes nothing. It runs against a temporary copy of the database and reports what would be imported.
 - A second run reports `unchanged` for everything imported before. Data this version already has under the same name
   and with a different value is `kept`, never overwritten. Settings count as already there when `config.json` differs
   from the defaults.
 - Each file, account, project and role is its own item, so an unreadable piece is reported and the rest goes on. The
-  exit code is 1 when any item is `error`.
+  exit code is 1 when any item is `error`. A run (not `--dry-run`) with errors writes the failed items to
+  `migrate-errors.json` in the data folder, and a run without errors removes it; the installer, which runs migrate
+  only while `seelegent.db` does not exist, reads it to say that migrate should run again.
 
 ## Bugs of the old version covered here
 

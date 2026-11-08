@@ -477,6 +477,9 @@ main() {
 	if [ "$old_data" = 1 ] && [ ! -e "$data_dir/seelegent.db" ]; then
 		say "Importing the old version's data from $data_dir (seelegent migrate) ..."
 		"$exe" migrate || failed="$failed seelegent-migrate"
+	elif [ "$old_data" = 1 ] && [ -e "$data_dir/migrate-errors.json" ]; then
+		# migrate leaves this file when items failed and removes it on a run without errors.
+		warn "the last seelegent migrate did not import everything (see $data_dir/migrate-errors.json). Fix what it reported, stop the daemon (seelegent stop) and run seelegent migrate again."
 	fi
 	if [ "$no_setup" = 1 ]; then
 		say "Lead hosts left alone (--no-setup)."

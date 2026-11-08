@@ -10,9 +10,11 @@ package migrate
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -181,7 +183,54 @@ func Run(ctx context.Context, o Options) (Report, error) {
 	m.importMeetings(ctx)
 	m.importAutomations(ctx)
 	m.notImported()
-	return rep, ctx.Err()
+	if err := ctx.Err(); err != nil {
+		return rep, err
+	}
+	if !o.DryRun {
+		if err := writeErrorsFile(o.Paths.Home, rep, o.Now()); err != nil {
+			rep.Warnings = append(rep.Warnings, err.Error())
+		}
+	}
+	return rep, nil
+}
+
+// ErrorsFile is the file a run that ended with errors leaves in the data folder, and a later run without errors
+// removes: the installer runs migrate only while seelegent.db does not exist, so it reads this file to say that
+// the last migrate did not import everything.
+const ErrorsFile = "migrate-errors.json"
+
+// errorsRecord is the content of ErrorsFile.
+type errorsRecord struct {
+	At     string `json:"at"`
+	From   string `json:"from"`
+	Errors int    `json:"errors"`
+	Items  []Item `json:"items"`
+}
+
+// writeErrorsFile writes ErrorsFile into home when rep has errors, and removes it when it has none.
+func writeErrorsFile(home string, rep Report, now time.Time) error {
+	path := filepath.Join(home, ErrorsFile)
+	var failed []Item
+	for _, it := range rep.Items {
+		if it.Action == Error {
+			failed = append(failed, it)
+		}
+	}
+	if len(failed) == 0 {
+		if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return fmt.Errorf("remove %s: %w", path, err)
+		}
+		return nil
+	}
+	data, err := json.MarshalIndent(errorsRecord{At: now.UTC().Format(time.RFC3339), From: rep.From,
+		Errors: len(failed), Items: failed}, "", "  ")
+	if err != nil {
+		return err
+	}
+	if err := fsutil.WriteFileAtomic(path, append(data, '\n'), 0o600); err != nil {
+		return fmt.Errorf("write %s: %w", path, err)
+	}
+	return nil
 }
 
 // migrator carries one run.
