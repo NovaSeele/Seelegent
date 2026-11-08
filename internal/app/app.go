@@ -139,6 +139,8 @@ type App struct {
 	started0   time.Time
 	pid        int
 	patchMu    sync.Mutex
+	// rescheduler re-arms the quota refresher when quotaRefreshMinutes changes (the Refresher; a fake in tests).
+	rescheduler interface{ Reschedule() }
 	// stopCh is closed (once) when someone asked the daemon to stop through the API.
 	stopCh   chan struct{}
 	stopOnce sync.Once
@@ -279,6 +281,7 @@ func (a *App) build(o Options) error {
 	if err != nil {
 		return err
 	}
+	a.rescheduler = a.Refresher
 	p, err = pool.New(pool.Options{
 		Accounts: a.Accounts, Quotas: a.Quotas, DB: a.DB, Settings: a.Settings, Refresh: a.Refresher.Refresh,
 		Confirm: a.Refresher.Request, Clock: o.Clock, Logger: a.log,

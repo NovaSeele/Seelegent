@@ -50,7 +50,7 @@ func (a *App) PatchSettings(ctx context.Context, patch []byte) (config.Settings,
 func (a *App) settingsChanged(prev, next config.Settings) {
 	a.Pool.Notify()
 	if prev.QuotaRefreshMinutes != next.QuotaRefreshMinutes {
-		a.Refresher.Reschedule()
+		a.rescheduler.Reschedule()
 	}
 }
 
