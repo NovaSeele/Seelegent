@@ -237,7 +237,8 @@ latest instruction (field report 4):
   no turn's change in the first place, so they never reach the lane. Temporary targets are neither paths nor
   unknown: the temporary folder's variables (`$env:TEMP`, `%TEMP%`, `$TMPDIR`), `$(mktemp)`, `New-TemporaryFile`,
   `[IO.Path]::GetTempFileName()`, a `cd` into one, and a variable the same line assigned from one
-  (`t=$(mktemp); ... > "$t"`, `$f = Join-Path $env:TEMP x; ... > $f`); so are the null devices (`$null`, `nul`,
+  (`t=$(mktemp); ... > "$t"`, `$f = Join-Path $env:TEMP x; ... > $f`), each as a whole name (`$tmp/x` and
+  `${tmp}x` are temporary, `$tmpl/x` and `$template_dir/x` unknown); so are the null devices (`$null`, `nul`,
   `/dev/null`). A `cd` inside a subshell, a command substitution or a PowerShell block applies inside it; after
   the group the rest of the line is in an unknown folder (a POSIX subshell keeps its `cd`, cmd's `( )` and
   `Set-Location` in a block do not, so the reading does not guess).
