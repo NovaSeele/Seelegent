@@ -206,6 +206,12 @@ func TestFetchConfig(t *testing.T) {
 		{"remote.Old.fetch", "refs/nothing/x:refs/heads/x"},
 		{"remote.Old.prune", "true"},
 	}
+	slash := append([]ConfigEntry{
+		{"remote.a/b.fetch", "+refs/heads/*:refs/heads/*"},
+		{`remote.a\b.fetch`, "+refs/heads/*:refs/heads/*"},
+		{"remotes.grp/x", "origin a/b"},
+		{"remotes.safe/g", "origin"},
+	}, normal...)
 	var gotGlobals []string
 	with := func(cfg []ConfigEntry, err error) Checker {
 		return Checker{Config: func(globals []string) ([]ConfigEntry, error) {
@@ -240,6 +246,15 @@ func TestFetchConfig(t *testing.T) {
 		{"fetch old --no-prune", with(stale, nil), "fetch --no-prune old", false},
 		{"remote prune old", with(stale, nil), "remote prune old", true},
 		{"fetch origin, stale elsewhere", with(stale, nil), "fetch origin", false},
+		{"fetch a/b, a remote named with a slash", with(slash, nil), "fetch a/b", true},
+		{`fetch a\b, a remote named with a backslash`, with(slash, nil), `fetch a\b`, true},
+		{"fetch a/b main, a remote named with a slash", with(slash, nil), "fetch a/b main", true},
+		{"fetch ../a/b main, a path", with(slash, nil), "fetch ../a/b main", false},
+		{"fetch https URL", with(slash, nil), "fetch https://example.invalid/r main", false},
+		{"remote update a/b", with(slash, nil), "remote update a/b", true},
+		{"fetch grp/x, a group with the mirror", with(slash, nil), "fetch grp/x", true},
+		{"fetch safe/g, a group of origin", with(slash, nil), "fetch safe/g", false},
+		{"fetch --multiple origin a/b", with(slash, nil), "fetch --multiple origin a/b", true},
 		{"config cannot be read", with(nil, errors.New("exit status 128")), "fetch origin", true},
 		{"no reader", Checker{}, "fetch old", false},
 	}

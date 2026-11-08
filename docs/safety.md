@@ -36,7 +36,8 @@ script that edits a file mentioning `git stash`, is data. Long options count by 
   `apply` unless it only checks; `reflog expire|delete|drop` (the stash is a reflog); `worktree remove|prune|move`
   and `worktree add -B`; `replay` unless `--ref-action=print`; `fetch --update-head-ok` and `--stdin`, and a fetch
   with a refspec that can move a branch back or delete one. Every refspec that applies is checked: the command
-  line's, the `--refmap` values, or else the `remote.<name>.fetch` refspecs of the remotes it reads (read with
+  line's, the `--refmap` values, or else the `remote.<name>.fetch` refspecs of the remotes it reads (a name is a
+  remote group, then a configured remote, even `a/b`, and only then a URL or a path, as git reads it; read with
   `git config --get-regexp` in the command's folder, with its `-C`/`--git-dir`/`--work-tree`; a configuration that
   cannot be read refuses the fetch). A destination (compared in lower case, as on a disk that ignores case) that is
   empty, `FETCH_HEAD` or under `refs/remotes/` or `refs/tags/` passes; any other is refused when it has a

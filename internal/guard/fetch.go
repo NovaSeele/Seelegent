@@ -12,8 +12,8 @@ type ConfigEntry struct {
 }
 
 // FetchConfigPattern is the git config --get-regexp pattern of the settings Checker.Config returns: the fetch
-// refspecs and prune settings of every remote, and the prune defaults.
-const FetchConfigPattern = `^(remote\..*\.(fetch|prune|prunetags)|fetch\.(prune|prunetags))$`
+// refspecs and prune settings of every remote, the remote groups, and the prune defaults.
+const FetchConfigPattern = `^(remote\..*\.(fetch|prune|prunetags)|remotes\..+|fetch\.(prune|prunetags))$`
 
 // fetchPlan is what a fetch (or git remote prune/update) will write: the remotes it reads, the refspecs of the
 // command line, the --refmap values that replace the configured refspecs, and whether it forces and prunes.
@@ -151,8 +151,9 @@ func (c Checker) fetchUnsafe(globals []string, f fetchPlan) bool {
 	return c.caseClash(globals, branches)
 }
 
-// selected returns whether the fetch reads the configured remote sub: every remote when it names none, or names one
-// the configuration does not know (a remote group, or a remote with no fetch settings); none for a URL or a path.
+// selected returns whether the fetch reads the configured remote sub: the remotes it names, those of a group it
+// names, every remote when it names none, or a name the configuration does not know that is no URL or path (a
+// remote with no fetch settings); a URL or a path adds none.
 func (f fetchPlan) selected(cfg []ConfigEntry) func(sub string) bool {
 	all := func(string) bool { return true }
 	if f.every || len(f.remotes) == 0 {
@@ -160,20 +161,27 @@ func (f fetchPlan) selected(cfg []ConfigEntry) func(sub string) bool {
 	}
 	var names []string
 	for _, r := range f.remotes {
-		if r == "." || r == ".." || strings.ContainsAny(r, `/\:`) {
-			continue
-		}
-		known := false
+		// git reads a name as a remote group (remotes.<group>), then as a configured remote, and only then as a URL
+		// or a path: a remote may be called a/b (review of fix/m18-open-items, item 2).
+		group, known := false, false
 		for _, e := range cfg {
+			if g, ok := strings.CutPrefix(e.Key, "remotes."); ok && strings.EqualFold(g, r) {
+				group = true
+				names = append(names, strings.Fields(e.Value)...)
+			}
 			if section, sub, _ := splitKey(e.Key); section == "remote" && strings.EqualFold(sub, r) {
 				known = true
-				break
 			}
 		}
-		if !known {
+		switch {
+		case group:
+		case known:
+			names = append(names, r)
+		case r == "." || r == ".." || strings.ContainsAny(r, `/\:`):
+			// a URL or a path: no configured refspecs
+		default:
 			return all
 		}
-		names = append(names, r)
 	}
 	return func(sub string) bool {
 		for _, n := range names {

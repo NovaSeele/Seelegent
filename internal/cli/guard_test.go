@@ -277,6 +277,53 @@ func TestGuardFetchConfig(t *testing.T) {
 	}
 }
 
+// TestGuardSlashRemote runs real git through the shim (review of fix/m18-open-items, item 2): a remote named a/b
+// was read as a path, so its configured forcing refspec was not checked, and git fetch a/b moved main back.
+func TestGuardSlashRemote(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not installed")
+	}
+	root := t.TempDir()
+	t.Setenv("GIT_CONFIG_GLOBAL", filepath.Join(root, "no-global"))
+	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
+	git := func(dir string, args ...string) string {
+		t.Helper()
+		b, err := exec.CommandContext(t.Context(), "git", append([]string{"-C", dir}, args...)...).CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %q: %v\n%s", args, err, b)
+		}
+		return strings.TrimSpace(string(b))
+	}
+	repo, upstream := filepath.Join(root, "repo"), filepath.Join(root, "upstream")
+	git(root, "init", "-q", "-b", "main", repo)
+	for _, kv := range [][2]string{{"user.name", "T"}, {"user.email", "t@example.invalid"}, {"commit.gpgsign", "false"}} {
+		git(repo, "config", kv[0], kv[1])
+	}
+	git(repo, "commit", "-q", "--allow-empty", "-m", "one")
+	git(root, "clone", "-q", repo, upstream) // upstream's main stays at one
+	git(repo, "commit", "-q", "--allow-empty", "-m", "two")
+	git(repo, "checkout", "-q", "-b", "side") // main not checked out: fetch may write it
+	git(repo, "config", "remote.a/b.url", upstream)
+	git(repo, "config", "remote.a/b.fetch", "+refs/heads/*:refs/heads/*")
+	git(repo, "pack-refs", "--all")
+	head := git(repo, "rev-parse", "main")
+	for _, args := range [][]string{{"fetch", "a/b"}, {"fetch", "a/b", "main"}, {"remote", "update", "a/b"}} {
+		var out, errOut bytes.Buffer
+		code := runGitShim(t.Context(), "", append([]string{"-C", repo}, args...), strings.NewReader(""), &out, &errOut)
+		if code != 1 || !strings.HasPrefix(errOut.String(), guard.Marker) {
+			t.Errorf("git %q: code %d, stderr %q", args, code, errOut.String())
+		}
+		if got := git(repo, "rev-parse", "main"); got != head {
+			t.Fatalf("git %q moved main from %s to %s", args, head, got)
+		}
+	}
+	var out, errOut bytes.Buffer
+	if code := runGitShim(t.Context(), "", []string{"-C", repo, "fetch", upstream, "main"}, strings.NewReader(""),
+		&out, &errOut); code != 0 {
+		t.Errorf("fetch from the path: code %d, stderr %q", code, errOut.String())
+	}
+}
+
 // TestGuardBranchCase runs real git through the shim and the hook (review of fix/m18-open-items, item 1): on a disk
 // that ignores case, git branch Main old (or checkout -b, worktree add -b, fetch . old:Main) wrote the loose ref
 // refs/heads/Main over main, packed or not, and main moved back. Those are refused and main stays; a new name
