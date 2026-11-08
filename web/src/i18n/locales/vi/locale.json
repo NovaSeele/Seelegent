@@ -6,5 +6,6 @@
     "prefix": "Ngôn ngữ:",
     "apply": "Ngôn ngữ: {name}",
     "group": "Ngôn ngữ"
-  }
+  },
+  "browser": "Theo trình duyệt"
 }

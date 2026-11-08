@@ -34,7 +34,7 @@ export function isLocale(value: unknown): value is Locale {
 }
 
 /**
- * Maps a legacy language tag (the old dashboard's setting) to a supported locale: exact match first, then the base language
+ * Maps a browser or legacy language tag to a supported locale: exact match first, then the base language
  * (`zh-TW` and the old dashboard's `zh` map to zh-CN, `en-GB` to en).
  */
 export function matchLocale(tag: string): Locale | null {
@@ -44,4 +44,13 @@ export function matchLocale(tag: string): Locale | null {
   if (exact) return exact
   const base = lower.split(/[-_]/)[0]
   return SUPPORTED_LOCALES.find((locale) => locale.toLowerCase().split('-')[0] === base) ?? null
+}
+
+/** Picks the first supported locale from the browser's preference list, else the fallback. */
+export function detectLocale(preferred: readonly string[]): Locale {
+  for (const tag of preferred) {
+    const match = matchLocale(tag)
+    if (match) return match
+  }
+  return FALLBACK_LOCALE
 }

@@ -48,7 +48,7 @@ export const PREFS = {
   ),
   motion: pref<MotionPref>('ui.motion', 'system', isOneOf(MOTION_PREFS)),
   fileIcons: pref<FileIconSetId>('ui.fileIcons', DEFAULT_FILE_ICON_SET, isFileIconSet),
-  /** null = never chosen: English. */
+  /** null = never chosen: follow the browser's languages. */
   locale: pref<Locale | null>(
     'ui.locale',
     null,

@@ -49,7 +49,7 @@ describe('ui store', () => {
     expect(ui.theme).toBe('auto')
   })
 
-  it('switches language without reloading and can go back to the default, English', async () => {
+  it('switches language without reloading and can follow the browser again', async () => {
     const ui = useUiStore()
     await ui.setLocale('ko')
     expect(i18n.global.locale.value).toBe('ko')
@@ -57,7 +57,7 @@ describe('ui store', () => {
     expect(localStorage.getItem(storageKey(PREFS.locale.name))).toBe('"ko"')
     await ui.setLocale(null)
     expect(ui.localeChoice).toBeNull()
-    expect(ui.locale).toBe('en')
+    expect(ui.locale).toBe('en') // jsdom's navigator.languages is en-US
   })
 
   it('hands a task search request to exactly one taker', () => {

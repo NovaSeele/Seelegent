@@ -21,7 +21,7 @@ function setup(response: Response | Error | DOMException) {
 }
 
 describe('api client', () => {
-  it('GETs JSON under /api/v1 with X-Seelegent-Lang and without the CSRF header', async () => {
+  it('GETs JSON under /api/v1 with Accept-Language and without the CSRF header', async () => {
     const { client, call, headers } = setup(json({ status: 'ok' }))
     await expect(
       client.get('/health', { query: { a: 1, skip: undefined, b: 'x y' } }),
@@ -30,7 +30,7 @@ describe('api client', () => {
     })
     expect(call()[0]).toBe('/api/v1/health?a=1&b=x+y')
     expect(call()[1].method).toBe('GET')
-    expect(headers()['X-Seelegent-Lang']).toBe('vi')
+    expect(headers()['Accept-Language']).toBe('vi')
     expect(headers()['X-Seelegent']).toBeUndefined()
   })
 

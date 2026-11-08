@@ -259,7 +259,7 @@
     },
     "locale": {
       "label": "Ngôn ngữ",
-      "desc": "Ngôn ngữ của bảng điều khiển: tiếng Anh, trừ khi bạn chọn ngôn ngữ khác ở đây.",
+      "desc": "Theo trình duyệt sẽ dùng ngôn ngữ trình duyệt ưu tiên.",
       "keywords": "ngôn ngữ dịch tiếng"
     },
     "concurrency": {
