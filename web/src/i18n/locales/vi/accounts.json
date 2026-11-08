@@ -220,6 +220,7 @@
     "official_preset": "Đã chuyển sang mẫu Anthropic",
     "key_name_removed": "Đã bỏ tên biến khỏi khóa",
     "key_quotes_removed": "Đã bỏ dấu ngoặc khỏi khóa",
+    "key_assignment": "Trông giống NAME=giá trị: chỉ dán phần sau dấu =",
     "key_prefix": "Khóa trông như của dịch vụ khác",
     "provider_reused": "Dùng lại nhà cung cấp đã có"
   },

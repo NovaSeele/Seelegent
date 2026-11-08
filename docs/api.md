@@ -178,15 +178,17 @@ in the daemon.
   (Claude Code adds `/v1/messages` itself); a claude provider without a preset or with `custom-anthropic` whose host
   is `api.anthropic.com` becomes the official `anthropic` preset (no base URL, the key as `x-api-key`). Codex base
   URLs keep their `/v1`. What a save changed on its own comes back in `notices` (`{code, field?, message}`; codes
-  `base_url_trimmed`, `official_preset`, `key_name_removed`, `key_quotes_removed`, `key_prefix`, `provider_reused`)
-  on `POST`/`PATCH /providers`, `POST /accounts` and `PUT /accounts/{id}/key`; notices never block a save.
+  `base_url_trimmed`, `official_preset`, `key_name_removed`, `key_quotes_removed`, `key_assignment`, `key_prefix`,
+  `provider_reused`) on `POST`/`PATCH /providers`, `POST /accounts` and `PUT /accounts/{id}/key`; notices never block a save.
 - API keys (`POST /accounts` `apiKey`, `PUT /accounts/{id}/key`, `POST /providers/test`) go through
   `account.NormalizeKey`: surrounding whitespace and matching quotes are dropped, and so is a leading `NAME=` or
   `export NAME=` (a pasted `.env` line), each with a notice; a key with `://` (a URL), inner whitespace or control
   characters is `400 invalid_argument` with `details.field` (`apiKey`, or `key` for `PUT .../key`) and
   `details.reason` (`url`, `whitespace`, `control`, `empty`, `too_long`). The message never holds the key. A
   known prefix that does not fit the preset (`sk-ant-` outside Anthropic, an OpenRouter or Groq key on another
-  known preset, the official preset without `sk-ant-`) is a `key_prefix` notice only. Validation errors of
+  known preset, the official preset without `sk-ant-`) is a `key_prefix` notice only. Only an upper-case `NAME=`
+  followed by at least 8 characters is removed; a key kept whole that still reads as `name=value` (say
+  `llm_api_key=sk-…`) gets a `key_assignment` notice ("paste only the part after ="). Validation errors of
   accounts and providers carry `details.field` (`newProvider.baseUrl` for a field of `newProvider`).
 - `POST /accounts` also takes an API-key account in one call: `provider` (existing) or `newProvider` (a
   `ProviderInput`, `id` optional) and `apiKey`; `backend`, `kind` (`api-key`) and `label` (`"<provider name> <n>"`)

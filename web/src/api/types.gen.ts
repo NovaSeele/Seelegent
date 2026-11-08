@@ -119,6 +119,7 @@ export interface Notice {
     | 'official_preset'
     | 'key_name_removed'
     | 'key_quotes_removed'
+    | 'key_assignment'
     | 'key_prefix'
     | 'provider_reused'
   field?: string

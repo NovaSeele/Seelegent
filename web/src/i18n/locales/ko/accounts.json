@@ -252,6 +252,7 @@
     "official_preset": "Anthropic 프리셋으로 바꿨습니다",
     "key_name_removed": "키에서 변수 이름을 뺐습니다",
     "key_quotes_removed": "키에서 따옴표를 뺐습니다",
+    "key_assignment": "NAME=값 형태로 보입니다. = 뒤의 부분만 붙여 넣으세요",
     "key_prefix": "다른 서비스의 키처럼 보입니다",
     "provider_reused": "기존 공급자를 다시 사용했습니다"
   },

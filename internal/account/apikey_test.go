@@ -146,12 +146,24 @@ func TestNormalizeKey(t *testing.T) {
 	}
 	// Keys that hold "=" or look like name=value are kept whole: only an env-style NAME= followed by a whole key
 	// is a pasted .env line. A notice never quotes key characters.
-	for _, in := range []string{"QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVpkZWZnaGlqa2xtbm9wZGVm==", "abc_DEF=xyz12345",
-		"ABCDEFGH==ijklmnopqrst", "KEY=short"} {
+	for _, in := range []string{"QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVpkZWZnaGlqa2xtbm9wZGVm==",
+		"ABCDEFGH==ijklmnopqrst", "KEY=short", "llm_key=short12"} {
 		key, notices, err := NormalizeKey(in)
 		if err != nil || key != in || len(notices) != 0 {
 			t.Errorf("NormalizeKey(%q) = %q, %v, %v; want it unchanged", in, key, notices, err)
 		}
+	}
+	// A lower-case name=value is kept whole but gets advice that never quotes it.
+	for _, in := range []string{"llm_api_key=sk-0123456789abcdef", "abc_DEF=xyz12345", "Key1=" + secret} {
+		key, notices, err := NormalizeKey(in)
+		if err != nil || key != in || len(notices) != 1 || notices[0].Code != NoticeKeyAssignment ||
+			notices[0].Field != "apiKey" || notices[0].Message != "this looks like NAME=value; paste only the part after =" {
+			t.Errorf("NormalizeKey(%q) = %q, %+v, %v; want it whole with a key_assignment notice", in, key, notices, err)
+		}
+	}
+	if _, notices, _ := NormalizeKey(`"llm_api_key=sk-0123456789abcdef"`); len(notices) != 2 ||
+		notices[1].Code != NoticeKeyAssignment {
+		t.Errorf("quoted assignment: %+v", notices)
 	}
 	long := strings.Repeat("A", 41)
 	key, notices, err := NormalizeKey(long + "=" + secret)

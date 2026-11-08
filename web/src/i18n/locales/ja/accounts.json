@@ -252,6 +252,7 @@
     "official_preset": "Anthropic のプリセットに切り替えました",
     "key_name_removed": "キーから変数名を取り除きました",
     "key_quotes_removed": "キーから引用符を取り除きました",
+    "key_assignment": "NAME=値 の形に見えます。= の後ろの部分だけを貼り付けてください",
     "key_prefix": "別のサービスのキーのようです",
     "provider_reused": "既存のプロバイダーを再利用しました"
   },

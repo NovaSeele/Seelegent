@@ -252,6 +252,7 @@
     "official_preset": "Cambiado a la plantilla de Anthropic",
     "key_name_removed": "Se quitó el nombre de variable de la clave",
     "key_quotes_removed": "Se quitaron las comillas de la clave",
+    "key_assignment": "Parece NOMBRE=valor: pega solo la parte después de =",
     "key_prefix": "La clave parece de otro servicio",
     "provider_reused": "Se reutilizó un proveedor existente"
   },

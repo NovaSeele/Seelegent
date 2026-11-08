@@ -20,6 +20,9 @@ const (
 	NoticeKeyNameRemoved = "key_name_removed"
 	// NoticeKeyQuotesRemoved: quotes around the key were removed.
 	NoticeKeyQuotesRemoved = "key_quotes_removed"
+	// NoticeKeyAssignment: the key was kept whole but looks like "name=value" (a lower-case variable name, which
+	// is not removed on its own). Only advice: the service will likely refuse it.
+	NoticeKeyAssignment = "key_assignment"
 	// NoticeKeyPrefix: the key does not start the way the service's keys do. Only advice: proxies use their own
 	// formats.
 	NoticeKeyPrefix = "key_prefix"
@@ -122,6 +125,10 @@ var envAssignment = regexp.MustCompile(`^(?:export\s+)?([A-Z_][A-Z0-9_]*)\s*=\s*
 
 // Limits of the NAME= prefix removal: what follows must look like a whole key, and a notice names the variable only
 // when it is short (a long "name" may be part of the key, which a notice never quotes).
+// looksAssigned matches a key kept whole that still reads as "name=value": identifier characters, "=", then at
+// least minKeyAfterName characters that do not start with "=".
+var looksAssigned = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*=[^=]`)
+
 const (
 	minKeyAfterName = 8
 	maxNoticeName   = 40
@@ -129,8 +136,8 @@ const (
 
 // NormalizeKey cleans a pasted API key and checks it: surrounding whitespace, a leading "NAME=" and surrounding
 // quotes are removed (each removal is a notice), then a key that holds "://", whitespace or control characters is
-// refused (an error matching ErrBadKey and ErrInvalid, field apiKey). Neither the notices nor the errors quote the
-// key.
+// refused (an error matching ErrBadKey and ErrInvalid, field apiKey). A key kept whole that still looks like
+// "name=value" gets a key_assignment notice. Neither the notices nor the errors quote the key.
 func NormalizeKey(raw string) (string, []Notice, error) {
 	key := strings.TrimSpace(raw)
 	var notices []Notice
@@ -151,6 +158,10 @@ func NormalizeKey(raw string) (string, []Notice, error) {
 	}
 	if err := validateKey(key); err != nil {
 		return "", nil, err
+	}
+	if i := strings.IndexByte(key, '='); looksAssigned.MatchString(key) && len(key)-i-1 >= minKeyAfterName {
+		notices = append(notices, Notice{Code: NoticeKeyAssignment, Field: "apiKey",
+			Message: "this looks like NAME=value; paste only the part after ="})
 	}
 	return key, notices, nil
 }

@@ -125,6 +125,7 @@ const (
 	NoticeOfficialPreset   = "official_preset"
 	NoticeKeyNameRemoved   = "key_name_removed"
 	NoticeKeyQuotesRemoved = "key_quotes_removed"
+	NoticeKeyAssignment    = "key_assignment"
 	NoticeKeyPrefix        = "key_prefix"
 	NoticeProviderReused   = "provider_reused"
 )
@@ -132,13 +133,13 @@ const (
 // NoticeCodes lists every notice code.
 func NoticeCodes() []string {
 	return []string{NoticeBaseURLTrimmed, NoticeOfficialPreset, NoticeKeyNameRemoved, NoticeKeyQuotesRemoved,
-		NoticeKeyPrefix, NoticeProviderReused}
+		NoticeKeyAssignment, NoticeKeyPrefix, NoticeProviderReused}
 }
 
 // Notice is something a save changed on its own, or advice that did not block it. Code names it for translation,
 // Field the request field it is about (when any), Message is the English text.
 type Notice struct {
-	Code    string `json:"code" ts:"'base_url_trimmed' | 'official_preset' | 'key_name_removed' | 'key_quotes_removed' | 'key_prefix' | 'provider_reused'"`
+	Code    string `json:"code" ts:"'base_url_trimmed' | 'official_preset' | 'key_name_removed' | 'key_quotes_removed' | 'key_assignment' | 'key_prefix' | 'provider_reused'"`
 	Field   string `json:"field,omitempty"`
 	Message string `json:"message"`
 }

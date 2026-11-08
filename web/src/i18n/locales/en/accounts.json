@@ -220,6 +220,7 @@
     "official_preset": "Switched to the Anthropic preset",
     "key_name_removed": "Variable name removed from the key",
     "key_quotes_removed": "Quotes removed from the key",
+    "key_assignment": "This looks like NAME=value: paste only the part after =",
     "key_prefix": "Key looks like another service's",
     "provider_reused": "Existing provider reused"
   },

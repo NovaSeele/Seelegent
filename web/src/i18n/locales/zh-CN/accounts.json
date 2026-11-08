@@ -252,6 +252,7 @@
     "official_preset": "已切换到 Anthropic 预设",
     "key_name_removed": "已去掉密钥中的变量名",
     "key_quotes_removed": "已去掉密钥两侧的引号",
+    "key_assignment": "看起来像 NAME=值：只粘贴 = 之后的部分",
     "key_prefix": "密钥看起来属于其他服务",
     "provider_reused": "已复用现有提供方"
   },
