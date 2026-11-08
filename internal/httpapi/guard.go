@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/netip"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -124,7 +125,8 @@ func (s *Server) callerOf(r *http.Request) Caller {
 }
 
 // workerAllowed is the worker allow-list: GET /health, GET /tasks/{own} and /tasks/{own}/events, and GET /spec
-// and /memory for the own task's folder or its repository root. Everything else is refused.
+// and /memory for the own task's folder or its repository root (for /spec, a dir inside that folder or the own
+// task's spec folder). Everything else is refused.
 func (s *Server) workerAllowed(r *http.Request, c Caller) bool {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		return false
@@ -139,10 +141,36 @@ func (s *Server) workerAllowed(r *http.Request, c Caller) bool {
 	switch p {
 	case apiPrefix + "/tasks/" + c.TaskID, apiPrefix + "/tasks/" + c.TaskID + "/events":
 		return true
-	case apiPrefix + "/spec", apiPrefix + "/memory":
+	case apiPrefix + "/memory":
 		return s.ownFolder(r.Context(), c.TaskID, r.URL.Query().Get("cwd"))
+	case apiPrefix + "/spec":
+		q := r.URL.Query()
+		return s.ownFolder(r.Context(), c.TaskID, q.Get("cwd")) &&
+			s.ownSpecDir(r.Context(), c.TaskID, q.Get("cwd"), q.Get("dir"))
 	}
 	return false
+}
+
+// ownSpecDir reports whether a worker may read the spec folder dir (relative to cwd or absolute): a folder inside
+// cwd, or the spec folder of the worker's own task. Paths are compared as fsutil keys, with links and junctions
+// resolved, so neither an absolute dir nor a link inside cwd reaches another project's spec (M18 hunt H7). An
+// empty dir passes here; the handler answers it with 400.
+func (s *Server) ownSpecDir(ctx context.Context, taskID, cwd, dir string) bool {
+	if dir == "" {
+		return true
+	}
+	if !filepath.IsAbs(dir) {
+		dir = filepath.Join(cwd, dir)
+	}
+	if inside, err := fsutil.Within(cwd, dir); err == nil && inside {
+		return true
+	}
+	d, err := s.o.Tasks.Get(ctx, taskID)
+	if err != nil || d.Spec == nil || d.Spec.Dir == "" {
+		return false
+	}
+	same, err := fsutil.SamePath(d.Spec.Dir, dir)
+	return err == nil && same
 }
 
 // ownFolder reports whether cwd is the task's folder or its repository root.

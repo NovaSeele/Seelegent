@@ -144,8 +144,10 @@ in the daemon.
   `App.Close`, lock released last), and `http.Server.Shutdown` lets the answer finish first. A server built without
   `Stop` answers `503 unavailable`. The worker guard denies it like every route outside the allow-list. The daemon
   also writes its pid on the second line of `run/daemon.port`; `seelegent stop` and `doctor` only show it.
-- A worker may call `GET /spec` with an absolute `dir`. The guard checks the task's cwd only, as the contract says,
-  and `dir` must stay inside that cwd.
+- A worker may call `GET /spec` only with its own task's cwd (or repository root), and `dir`, relative or absolute,
+  must lie inside that cwd or be its own task's spec folder. Paths are compared as `fsutil` keys with links and
+  junctions resolved, so an absolute `dir` of another project or a link inside the cwd that leads out of it is
+  `403 forbidden` like a foreign cwd. `GET /memory` takes no other path.
 
 ## The dashboard
 
