@@ -50,6 +50,7 @@ import type {
   TurnEndData,
   VerifyEventData,
   WaitingQuotaData,
+  SnapshotTruncatedData,
   WorkAtRiskData,
   WorkerEvent,
   WorkerPromptData,
@@ -79,6 +80,7 @@ export type TaskEvent =
   | Ev<'cancel', CancelData>
   | Ev<'work_at_risk', WorkAtRiskData>
   | Ev<'restored', RestoredData>
+  | Ev<'snapshot_truncated', SnapshotTruncatedData>
   | Ev<'gate', GateEventData>
   | Ev<'lane', LaneEventData>
   | Ev<'verify', VerifyEventData>
@@ -160,6 +162,11 @@ export const EVENT_REQUIRED: Readonly<Record<TaskEventType, readonly (readonly [
     cancel: [],
     work_at_risk: [['files', 'array']],
     restored: [['files', 'array']],
+    snapshot_truncated: [
+      ['snapshots', 'array'],
+      ['maxFiles', 'number'],
+      ['maxBytes', 'number'],
+    ],
     gate: [['phase', 'string']],
     lane: [
       ['kind', 'string'],

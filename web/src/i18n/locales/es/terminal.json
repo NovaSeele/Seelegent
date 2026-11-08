@@ -97,6 +97,7 @@
     },
     "cancel": "Cancelada",
     "workAtRisk": "{count} archivo cambiado podría perderse | {count} archivos cambiados podrían perderse",
+    "snapshotTruncated": "Una instantánea de este turno alcanzó sus límites ({files} archivos o {mib} MiB); los archivos que los superan no se comprobaron",
     "error": "Error",
     "worker": {
       "quota_exhausted": "El worker se quedó sin cuota",

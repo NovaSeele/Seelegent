@@ -27,8 +27,11 @@ type TaskReport struct {
 	Question        *ReportQuestion  `json:"question,omitempty"`
 	BlockedCommands []string         `json:"blocked_commands,omitempty"`
 	// WorkAtRisk names the latest turn's files whose uncommitted work may be lost, and how to restore them.
-	WorkAtRisk   *ReportRisk     `json:"work_at_risk,omitempty"`
-	FileOverlaps []ReportOverlap `json:"file_overlaps,omitempty"`
+	WorkAtRisk *ReportRisk `json:"work_at_risk,omitempty"`
+	// SnapshotTruncated is true when a snapshot of the latest checked turn hit its limits: dirty files past them
+	// were not checked.
+	SnapshotTruncated bool            `json:"snapshot_truncated,omitempty"`
+	FileOverlaps      []ReportOverlap `json:"file_overlaps,omitempty"`
 	// Hygiene and ScopeWarnings are the findings of the last turn's checks.
 	Hygiene       []ReportFinding `json:"hygiene,omitempty"`
 	ScopeWarnings []ReportFinding `json:"scope_warnings,omitempty"`

@@ -179,6 +179,19 @@ describe('terminal timeline', () => {
     expect(notices[2]).not.toHaveProperty('detail')
   })
 
+  it('says when a snapshot of the turn hit its limits', () => {
+    seq = 0
+    const items = buildTimeline([
+      ev('snapshot_truncated', { snapshots: ['end'], maxFiles: 3000, maxBytes: 268435456 }),
+    ])
+    const notices = items.flatMap((i) => (i.kind === 'notice' ? [i] : []))
+    expect(notices).toHaveLength(1)
+    expect(notices[0]).toMatchObject({
+      tone: 'warn',
+      message: { key: 'terminal.ev.snapshotTruncated', params: { files: 3000, mib: 256 } },
+    })
+  })
+
   it('names gate steps by kind and says a failed gate once', () => {
     seq = 0
     const at = (e: TaskEvent, turn: number) => ({ ...e, turn })

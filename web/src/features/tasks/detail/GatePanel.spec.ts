@@ -38,6 +38,7 @@ const turn = (n: number, extra: Partial<Turn> = {}): Turn => ({
   hygiene: [],
   scope: [],
   outsideDiff: false,
+  snapshotTruncated: false,
   gate: null,
   verifier: null,
   ...extra,

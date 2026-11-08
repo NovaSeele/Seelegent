@@ -97,6 +97,7 @@
     },
     "cancel": "キャンセル済み",
     "workAtRisk": "変更した {count} ファイルが失われる可能性があります",
+    "snapshotTruncated": "このターンのスナップショットが上限（{files} ファイルまたは {mib} MiB）に達しました。それを超えたファイルは確認されていません",
     "error": "エラー",
     "worker": {
       "quota_exhausted": "ワーカーのクォータが切れました",

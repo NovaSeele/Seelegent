@@ -104,6 +104,7 @@ func (s *Service) report(ctx context.Context, t *Task, cwd string) api.TaskRepor
 		rep.Handback = tu.Handback
 		rep.DeniedActions = tu.DeniedActions
 		rep.Hygiene, rep.ScopeWarnings = findingsReport(tu.Hygiene), findingsReport(tu.Scope)
+		rep.SnapshotTruncated = tu.Snap != nil && tu.Snap.Checked && (tu.Snap.Truncated || tu.Snap.EndTruncated)
 	}
 	gateReport(t, &rep)
 	rep.WorkAtRisk = riskReport(t)

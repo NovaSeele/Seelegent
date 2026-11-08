@@ -122,6 +122,11 @@ known) and after it, the task engine records the repository's uncommitted files:
   (`start`, `end`, `restore-<time>`), names the files, their hashes and `HEAD`;
 - limits: 8 MiB per file, 3000 files and 256 MiB per snapshot (`truncated` is set past them); untracked files under
   `node_modules`, `.venv`, `venv`, `__pycache__`, `.next`, `.nuxt`, `.turbo`, `.cache` and `.gradle` are not copied.
+  The end snapshot reads the start snapshot's files and the files the edit tools changed first, outside those
+  limits, so a turn that creates thousands of files cannot hide the files it destroyed; only the other dirty files
+  can be cut. A turn whose start or end snapshot was cut gets a `snapshot_truncated` event, `snapshotTruncated` on
+  the turn, `snapshot_truncated` in the report and a notice in the dashboard's safety panel: files past the limits
+  were not checked (for a cut start snapshot, that includes work at risk).
 
 A failed snapshot is logged and the turn runs anyway; its checks are then skipped.
 

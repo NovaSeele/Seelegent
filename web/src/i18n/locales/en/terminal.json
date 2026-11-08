@@ -97,6 +97,7 @@
     },
     "cancel": "Cancelled",
     "workAtRisk": "{count} changed file may be lost | {count} changed files may be lost",
+    "snapshotTruncated": "A snapshot of this turn hit its limits ({files} files or {mib} MiB); files past them were not checked",
     "error": "Error",
     "worker": {
       "quota_exhausted": "The worker ran out of quota",

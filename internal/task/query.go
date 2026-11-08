@@ -39,7 +39,8 @@ func (s *Service) Get(ctx context.Context, id string) (api.TaskDetail, error) {
 			DeniedActions: api.NonNil(tu.DeniedActions), Usage: api.UsageOf(tu.Usage), Handback: tu.HandbackText,
 			Attempts: make([]api.Attempt, 0, len(tu.Attempts)), WorkAtRisk: api.NonNil(tu.WorkAtRisk),
 			Hygiene: api.NonNil(tu.Hygiene), Scope: api.NonNil(tu.Scope), OutsideDiff: tu.Snap != nil,
-			Gate: tu.Gate, Verifier: tu.Verifier}
+			SnapshotTruncated: tu.Snap != nil && (tu.Snap.Truncated || tu.Snap.EndTruncated),
+			Gate:              tu.Gate, Verifier: tu.Verifier}
 		if tu.Snap != nil && tu.Snap.Checked {
 			at.Git = &api.TurnGit{Changed: api.NonNil(tu.Changed), Preexisting: api.NonNil(tu.Preexisting)}
 		}

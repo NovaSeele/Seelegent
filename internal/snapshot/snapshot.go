@@ -131,57 +131,81 @@ func (s *Store) Git() Git { return s.git }
 
 // Take snapshots the repository at root: every dirty file, plus the files of extra (relative to root) whatever
 // their state, so a file that was cleaned or reverted still shows its end state.
+//
+// The files of extra are read first and do not count against MaxFiles and MaxTotalBytes (each is still kept only
+// up to MaxFileBytes): the end snapshot passes the start snapshot's files and the turn's edited files there, and a
+// turn that creates thousands of new files (a build into dist/) must not push the files it may have destroyed out
+// of the comparison (M18 hunt H5). Only the other dirty files can be cut, which sets Truncated.
 func (s *Store) Take(ctx context.Context, root string, extra []string) (Manifest, error) {
 	head, dirty, err := s.git.Dirty(ctx, root)
 	if err != nil {
 		return Manifest{}, err
 	}
 	m := Manifest{Version: 1, Root: root, Head: head, TakenAt: s.now().UTC(), Files: []File{}}
+	// status holds the git status of every dirty path (a rename's old path counts as deleted), so a file read
+	// early through extra keeps it.
+	status := map[string]string{}
+	for _, d := range dirty {
+		if d.OldPath != "" {
+			if k := Key(d.OldPath); status[k] == "" {
+				status[k] = api.GitDeleted
+			}
+		}
+		status[Key(d.Path)] = d.Status
+	}
 	seen := map[string]bool{}
+	var files int
 	var total int64
-	add := func(rel, status string) error {
+	add := func(rel, st string, capped bool) error {
 		k := Key(rel)
-		if seen[k] || skipped(rel) {
+		if seen[k] || st == api.GitUntracked && skipped(rel) {
 			return nil
 		}
 		seen[k] = true
-		if len(m.Files) >= MaxFiles || total > MaxTotalBytes {
+		if capped && (files >= MaxFiles || total > MaxTotalBytes) {
 			m.Truncated = true
 			return nil
 		}
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		f, n, err := s.record(root, rel, status)
+		f, n, err := s.record(root, rel, st)
 		if err != nil {
 			return err
 		}
-		total += n
+		if capped {
+			total += n
+		}
 		if f != nil {
+			if capped {
+				files++
+			}
 			m.Files = append(m.Files, *f)
 		}
 		return nil
 	}
+	for _, rel := range extra {
+		rel = filepath.ToSlash(rel)
+		if err := add(rel, status[Key(rel)], false); err != nil {
+			return Manifest{}, err
+		}
+	}
 	for _, d := range dirty {
-		if err := add(d.Path, d.Status); err != nil {
+		if err := add(d.Path, d.Status, true); err != nil {
 			return Manifest{}, err
 		}
 		if d.OldPath != "" {
-			if err := add(d.OldPath, api.GitDeleted); err != nil {
+			if err := add(d.OldPath, api.GitDeleted, true); err != nil {
 				return Manifest{}, err
 			}
-		}
-	}
-	for _, rel := range extra {
-		if err := add(filepath.ToSlash(rel), ""); err != nil {
-			return Manifest{}, err
 		}
 	}
 	sort.Slice(m.Files, func(i, j int) bool { return m.Files[i].Path < m.Files[j].Path })
 	return m, nil
 }
 
-// skipped reports a path under a heavy folder.
+// skipped reports a path under a heavy folder. Only untracked files there are left out: a tracked file under
+// venv/ or .cache/ is the user's like any other.
 func skipped(rel string) bool {
 	for _, part := range strings.Split(rel, "/") {
 		if heavyDirs[part] {

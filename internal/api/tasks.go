@@ -216,6 +216,9 @@ type Turn struct {
 	Scope      []Finding  `json:"scope"`
 	// OutsideDiff is true when the turn has snapshots, so GET /tasks/{id}/turns/{n}/outside-diff can answer.
 	OutsideDiff bool `json:"outsideDiff"`
+	// SnapshotTruncated is true when the turn's start or end snapshot hit its limits (3000 files or 256 MiB of new
+	// content), so its checks did not cover every dirty file (SnapshotTruncatedData says which).
+	SnapshotTruncated bool `json:"snapshotTruncated"`
 	// Gate is the gate run after the turn (null when none ran); Verifier the review of its green gate.
 	Gate     *GateResult     `json:"gate"`
 	Verifier *VerifierResult `json:"verifier"`
