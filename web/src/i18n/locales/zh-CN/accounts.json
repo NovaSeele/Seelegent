@@ -278,7 +278,9 @@
     "unknown": "此服务的花费未知"
   },
   "restReason": {
-    "budget_reached": "暂停中：已达预算"
+    "budget_reached": "已达预算（{spent} / {budget}）",
+    "credits": "余额不足",
+    "creditsHint": "请充值，然后测试密钥，或将账号关闭后再打开。"
   },
   "spendSource": {
     "cli": "Claude Code 的估算",

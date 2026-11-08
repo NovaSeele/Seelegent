@@ -278,7 +278,9 @@
     "unknown": "Không biết chi phí của dịch vụ này"
   },
   "restReason": {
-    "budget_reached": "Đang nghỉ: đã hết ngân sách"
+    "budget_reached": "Đã hết ngân sách ({spent} / {budget})",
+    "credits": "Hết tín dụng",
+    "creditsHint": "Hãy nạp thêm, rồi kiểm tra khóa hoặc tắt rồi bật lại tài khoản."
   },
   "spendSource": {
     "cli": "Ước tính của Claude Code",

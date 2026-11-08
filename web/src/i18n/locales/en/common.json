@@ -118,6 +118,7 @@
     "noResponse": "Worker not responding",
     "auth": "Needs sign-in",
     "noAccounts": "No accounts left",
+    "budgetReached": "Budget reached",
     "failed": "Failed",
     "review": "Awaiting review",
     "quotaWait": "Waiting for quota",

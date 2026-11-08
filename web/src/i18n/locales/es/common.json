@@ -118,6 +118,7 @@
     "noResponse": "El worker no responde",
     "auth": "Requiere iniciar sesión",
     "noAccounts": "Sin cuentas disponibles",
+    "budgetReached": "Presupuesto agotado",
     "failed": "Falló",
     "review": "Pendiente de revisión",
     "quotaWait": "Esperando cuota",

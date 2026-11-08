@@ -46,6 +46,7 @@
       "callsFailed": "The last {count} tool calls failed.",
       "repeated": "The worker repeated the same {tool} call {count} times in its last {steps} steps.",
       "noAccounts": "No {backend} account can run work. Sign one in or enable one.",
+      "budgetReached": "{account} reached its {budget} budget. Raise the budget or change the key.",
       "auth": "Every enabled {backend} account needs a sign-in.",
       "depMissing": "The earlier task {task} no longer exists.",
       "depRejected": "The earlier task {title} ({task}) was rejected.",

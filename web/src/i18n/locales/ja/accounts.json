@@ -278,7 +278,9 @@
     "unknown": "このサービスの支出は不明"
   },
   "restReason": {
-    "budget_reached": "休止中: 予算に達しました"
+    "budget_reached": "予算に達しました ({spent} / {budget})",
+    "credits": "クレジットなし",
+    "creditsHint": "チャージしてから、キーをテストするか、アカウントをオフにしてからオンにしてください。"
   },
   "spendSource": {
     "cli": "Claude Code の推定",

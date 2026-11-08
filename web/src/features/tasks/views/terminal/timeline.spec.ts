@@ -431,4 +431,11 @@ describe('waiting_quota reasons', () => {
     ])
     expect(items[0]).toMatchObject({ detail: 'acc6: 2 of 2 running' })
   })
+
+  it('names a budget wait with the daemon line, never a time', () => {
+    const detail = 'acc9 reached its $200 budget: raise the budget or change the key'
+    const [item] = buildTimeline([ev('waiting_quota', { reason: 'budget_reached', detail })])
+    expect(item).toMatchObject({ kind: 'notice', detail })
+    expect(item?.kind === 'notice' && item.message.key).toBe('terminal.ev.budgetReached')
+  })
 })

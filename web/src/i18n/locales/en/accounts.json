@@ -278,7 +278,9 @@
     "unknown": "Spend not known for this service"
   },
   "restReason": {
-    "budget_reached": "Resting: budget reached"
+    "budget_reached": "Budget reached ({spent} of {budget})",
+    "credits": "No credit left",
+    "creditsHint": "Top up, then test the key or turn the account off and on."
   },
   "spendSource": {
     "cli": "Claude Code's estimate",

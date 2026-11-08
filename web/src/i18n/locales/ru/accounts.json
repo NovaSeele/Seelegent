@@ -278,7 +278,9 @@
     "unknown": "Расходы этого сервиса неизвестны"
   },
   "restReason": {
-    "budget_reached": "Отдыхает: бюджет исчерпан"
+    "budget_reached": "Бюджет исчерпан ({spent} из {budget})",
+    "credits": "Нет кредита",
+    "creditsHint": "Пополните баланс, затем проверьте ключ или выключите и включите аккаунт."
   },
   "spendSource": {
     "cli": "Оценка Claude Code",

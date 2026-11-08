@@ -278,7 +278,9 @@
     "unknown": "Gasto desconocido para este servicio"
   },
   "restReason": {
-    "budget_reached": "En pausa: presupuesto agotado"
+    "budget_reached": "Presupuesto agotado ({spent} de {budget})",
+    "credits": "Sin crédito",
+    "creditsHint": "Recarga saldo y luego prueba la clave o apaga y enciende la cuenta."
   },
   "spendSource": {
     "cli": "Estimación de Claude Code",
