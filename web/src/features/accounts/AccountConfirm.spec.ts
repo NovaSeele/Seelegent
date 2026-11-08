@@ -12,8 +12,9 @@ import { useAccountsStore } from '@/stores/accounts'
 import { setupApp } from '@/test/app'
 import { makeAccount } from '@/test/fixtures'
 
-import AccountCard, { type AccountDialog } from './AccountCard.vue'
+import AccountCard from './AccountCard.vue'
 import AccountDialogs from './AccountDialogs.vue'
+import type { AccountDialog } from './useAccountControls'
 import { offConsequence } from './accountView'
 
 describe('offConsequence', () => {
@@ -184,5 +185,32 @@ describe('account confirmations', () => {
     button(dialog() as HTMLElement, 'Cancel').click()
     await flushPromises()
     expect(api.update).not.toHaveBeenCalled()
+  })
+
+  it('sets the priority from the dialog a narrow list row asks for', async () => {
+    const { plugins } = await setupApp()
+    const store = useAccountsStore()
+    const account = makeAccount({ label: 'Work', priority: 1 })
+    const api = {
+      update: vi.fn(async (id: string, body: { priority?: number }) => ({ ...account, ...body })),
+    }
+    store.setApi(api as unknown as AccountsApi)
+    store.replaceAll([account])
+    const wrapper = mount(AccountDialogs, {
+      props: { account, modelValue: 'priority' },
+      attachTo: document.body,
+      global: { plugins },
+    })
+    unmount = () => wrapper.unmount()
+    await flushPromises()
+    expect(dialog()?.textContent).toContain('Priority of Work')
+    const input = dialog()?.querySelector('input') as HTMLInputElement
+    input.value = '9'
+    input.dispatchEvent(new Event('input'))
+    input.dispatchEvent(new Event('blur'))
+    await flushPromises()
+    button(dialog() as HTMLElement, 'Save priority').click()
+    await flushPromises()
+    expect(api.update).toHaveBeenCalledWith(account.id, { priority: 9 })
   })
 })
