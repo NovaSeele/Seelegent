@@ -180,6 +180,7 @@ const summary = computed(() =>
 }
 
 .graph__scroll {
+  position: relative; /* contains its absolute descendants, like .pf */
   flex: 1;
   min-width: 0;
   overflow-x: auto;

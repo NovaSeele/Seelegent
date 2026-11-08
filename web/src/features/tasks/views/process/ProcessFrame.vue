@@ -62,6 +62,9 @@ const { t } = useI18n()
 
 <style scoped>
 .pf {
+  /* The scroll frame contains its absolute descendants (the rows' .sr-only labels): without a position they
+     belong to .split__main, stretch its scroll height to the whole tree and let the pane scroll away. */
+  position: relative;
   display: flex;
   flex: 1;
   flex-direction: column;

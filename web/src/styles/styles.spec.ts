@@ -147,3 +147,24 @@ describe('style gates', () => {
     expect(small.map(([path]) => path)).toEqual([])
   })
 })
+
+// Design review (Tree tab): a scroll frame without a position does not contain its absolute descendants (every
+// .sr-only label is absolute), so they stretch the scroll height of the pane around it and the whole task pane
+// scrolls away. The process views' scroll frames are positioned.
+describe('task view scroll frames', () => {
+  it('position every scroll frame of the process views', () => {
+    const missing: string[] = []
+    for (const [path, source] of Object.entries(sources)) {
+      if (!path.startsWith('src/features/tasks/views/process/') || !path.endsWith('.vue')) continue
+      const css = [...source.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/g)].map((m) => m[1]).join('\n')
+      for (const m of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+        const body = m[2] ?? ''
+        const scrolls = /overflow(-x|-y)?:\s*(auto|scroll)/.test(body)
+        if (scrolls && !/position:\s*(relative|absolute|sticky|fixed)/.test(body)) {
+          missing.push(`${path}: ${(m[1] ?? '').trim()}`)
+        }
+      }
+    }
+    expect(missing).toEqual([])
+  })
+})
