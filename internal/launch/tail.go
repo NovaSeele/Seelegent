@@ -18,36 +18,41 @@ const (
 	maxLine = 32 << 20
 )
 
-// tail implements Handle.Tail for one file. It reads whatever is there on every poll; it polls every
-// pollInterval while lines come and backs off up to maxPollInterval while none do, and it looks for the end of the
-// launch at most every exitCheckInterval (see the constants for the bounds).
+// tail implements Handle.Tail for one file. Every poll reads whatever is there (readAvailable reads to the end of
+// the file); it polls every tailPollInterval while lines come and backs off up to maxPollInterval while none do. It
+// looks for the end of the launch at most every exitCheckIdle after a poll that read nothing and every
+// exitCheckBusy while lines keep coming (see the constants for the bounds). Once it saw the exit record it reads
+// until nothing is left: every byte written before the record is read.
 func (h *Handle) tail(ctx context.Context, path string, offset int64, fn func([]byte, int64) error) error {
 	if offset < 0 {
 		return fmt.Errorf("tail %s: negative offset %d", path, offset)
 	}
 	t := tailer{path: path, next: offset, fn: fn, buf: make([]byte, tailChunk)}
 	defer t.close()
-	p := tailPace{poll: backoff{min: pollInterval, max: maxPollInterval}, every: exitCheckInterval}
+	p := newTailPace()
 	ended := false
 	for {
-		// Look at the end state before reading, so that bytes written before the exit record are always read.
-		if !ended && p.checkDue(time.Now()) {
-			_, done, err := h.Exited()
-			if err != nil {
-				return err
-			}
-			ended = done
-		}
 		read, err := t.readAvailable()
 		if err != nil {
 			return err
 		}
+		if ended {
+			if read == 0 {
+				return t.flush()
+			}
+			continue
+		}
+		if p.checkDue(time.Now(), read == 0) {
+			_, done, err := h.Exited()
+			if err != nil {
+				return err
+			}
+			if ended = done; ended {
+				continue // read what was written before the record
+			}
+		}
 		if read > 0 {
 			p.poll.reset()
-			continue // there may be more right away
-		}
-		if ended {
-			return t.flush()
 		}
 		if err := sleep(ctx, p.poll.next()); err != nil {
 			return fmt.Errorf("tail: %w", err)
@@ -57,15 +62,24 @@ func (h *Handle) tail(ctx context.Context, path string, offset int64, fn func([]
 
 // tailPace paces a tail: poll is its wait while nothing comes, and checkDue says when to look for the exit record.
 type tailPace struct {
-	poll      backoff
-	every     time.Duration
-	lastCheck time.Time // zero: never looked
+	poll       backoff
+	idle, busy time.Duration
+	lastCheck  time.Time // zero: never looked
 }
 
-// checkDue reports whether to look for the exit record at now (the first time always) and, if so, counts the look
-// as done.
-func (p *tailPace) checkDue(now time.Time) bool {
-	if !p.lastCheck.IsZero() && now.Sub(p.lastCheck) < p.every {
+func newTailPace() tailPace {
+	return tailPace{poll: backoff{min: tailPollInterval, max: maxPollInterval}, idle: exitCheckIdle,
+		busy: exitCheckBusy}
+}
+
+// checkDue reports whether to look for the exit record at now (the first time always) after a poll that read
+// nothing (idle) or read lines and, if so, counts the look as done.
+func (p *tailPace) checkDue(now time.Time, idle bool) bool {
+	every := p.busy
+	if idle {
+		every = p.idle
+	}
+	if !p.lastCheck.IsZero() && now.Sub(p.lastCheck) < every {
 		return false
 	}
 	p.lastCheck = now
