@@ -243,7 +243,7 @@ func TestResourceValidation(t *testing.T) {
 		},
 		func(s *Settings) { s.MinFreeMemoryMB, s.CriticalFreeMemoryMB = Int(0), Int(1<<20) }, // the floor alone
 		func(s *Settings) { s.MinFreeMemoryMB, s.CriticalFreeMemoryMB = Int(4096), Int(0) },  // no floor
-		func(s *Settings) { s.CriticalFreeMemoryMB = Int(1 << 20) },                          // the minimum on auto
+		func(s *Settings) { s.CriticalFreeMemoryMB = Int(1 << 19) },                          // the minimum on auto
 		func(s *Settings) { s.MinFreeMemoryMB = Int(256) },                                   // the floor on auto
 	} {
 		s := Defaults()
@@ -269,6 +269,11 @@ func TestResourceSettingsPatch(t *testing.T) {
 	if _, err := MergePatch(s, []byte(`{"criticalFreeMemoryMB": 1536}`)); !errors.Is(err, ErrInvalid) ||
 		!strings.Contains(err.Error(), "criticalFreeMemoryMB") {
 		t.Fatalf("floor above the minimum: %v", err)
+	}
+	// A lone floor whose double (the derived minimum) would be out of range is refused, naming the floor.
+	if _, err := MergePatch(Defaults(), []byte(`{"criticalFreeMemoryMB": 524289}`)); !errors.Is(err, ErrInvalid) ||
+		!strings.Contains(err.Error(), "criticalFreeMemoryMB") || strings.Contains(err.Error(), "minFreeMemoryMB:") {
+		t.Fatalf("lone floor above half the range: %v", err)
 	}
 	s, err = MergePatch(s, []byte(`{"workerPriority": null, "gateConcurrency": null, "minFreeMemoryMB": null,
 		"testParallelism": null, "daemonMemoryLimitMB": null}`))

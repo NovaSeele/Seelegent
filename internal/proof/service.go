@@ -64,8 +64,9 @@ type Git interface {
 type Options struct {
 	Ledger *Ledger
 	Git    Git
-	// Exec runs one command in dir with the gate timeout, writing its output to logFile.
-	Exec func(ctx context.Context, cmd, dir, logFile string) CmdResult
+	// Exec runs one command in dir with the gate timeout, writing its output to logFile. gateTask is the
+	// request's GateTask (the task whose gate asked for the run, or "").
+	Exec func(ctx context.Context, cmd, dir, logFile, gateTask string) CmdResult
 	// Active returns the ids of the active tasks in the repository at root.
 	Active func(ctx context.Context, root string) ([]string, error)
 	// TaskFeatures returns the feature folders (absolute) the tasks of the repository at root work on.
@@ -415,6 +416,8 @@ func (s *Service) StartRun(ctx context.Context, req api.ProofRunRequest) (api.Pr
 		if active, err = s.o.Active(ctx, p.Root); err != nil {
 			return api.ProofRun{}, err
 		}
+		// The task whose gate asks for the run is no other task.
+		active = slices.DeleteFunc(active, func(id string) bool { return id == req.GateTask })
 	}
 	if len(active) > 0 && !req.Force {
 		return api.ProofRun{}, &ConflictError{
@@ -451,7 +454,7 @@ func (s *Service) StartRun(ctx context.Context, req api.ProofRunRequest) (api.Pr
 	go func() {
 		defer s.wg.Done()
 		defer cancel()
-		s.execute(rctx, p, run, cmds)
+		s.execute(rctx, p, run, cmds, req.GateTask)
 	}()
 	s.publish(run)
 	return run, nil
@@ -464,7 +467,7 @@ func (s *Service) publish(r api.ProofRun) {
 }
 
 // execute runs the commands of a regression run and records the results.
-func (s *Service) execute(ctx context.Context, p Project, run api.ProofRun, cmds []runCmd) {
+func (s *Service) execute(ctx context.Context, p Project, run api.ProofRun, cmds []runCmd, gateTask string) {
 	defer func() {
 		s.mu.Lock()
 		if a := s.active[p.Key]; a != nil && a.id == run.ID {
@@ -497,7 +500,7 @@ func (s *Service) execute(ctx context.Context, p Project, run api.ProofRun, cmds
 			State: api.RunRunning})
 		save()
 		log := filepath.Join(s.o.LogDir, p.Key, run.ID, fmt.Sprintf("%d.log", i+1))
-		res := s.exec(ctx, c.cmd, p.Root, log)
+		res := s.exec(ctx, c.cmd, p.Root, log, gateTask)
 		if ctx.Err() != nil || res.Stopped {
 			run.Results = run.Results[:len(run.Results)-1]
 			if res.Stopped && ctx.Err() == nil {
@@ -551,9 +554,9 @@ func (s *Service) execute(ctx context.Context, p Project, run api.ProofRun, cmds
 // exec runs one command of a regression run. A command the memory watchdog stopped runs again (Exec waits for
 // memory first) until it ends by itself or was stopped api.GateLowMemoryStopsMax times; only the last attempt is
 // returned, so a stopped attempt never counts as a result.
-func (s *Service) exec(ctx context.Context, cmd, root, log string) CmdResult {
+func (s *Service) exec(ctx context.Context, cmd, root, log, gateTask string) CmdResult {
 	for stops := 1; ; stops++ {
-		res := s.o.Exec(ctx, cmd, root, log)
+		res := s.o.Exec(ctx, cmd, root, log, gateTask)
 		if !res.Stopped || ctx.Err() != nil || stops >= api.GateLowMemoryStopsMax {
 			return res
 		}

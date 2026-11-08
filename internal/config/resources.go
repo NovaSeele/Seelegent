@@ -43,7 +43,8 @@ const (
 //   - minFreeMemoryMB: 12.5% of the physical memory, from 512 to 2048 MB; criticalFreeMemoryMB: half of it.
 //   - minFreeCommitMB: Windows with a known commit limit only, 10% of it, from 1024 to 4096 MB; 0 elsewhere.
 //   - testParallelism: a quarter of the CPUs, from 1 to 8; gateConcurrency: an eighth of the CPUs or one gate per
-//     8 GB of memory (CPUs only when the memory is unknown), whichever is less, from 1 to 4 (8 GB: 1, 16 GB: 2, 31 GB with 24 CPUs: 3).
+//     8 GB of memory (CPUs only when the memory is unknown), whichever is less, from 1 to 4 (8 GB: 1, 16 GB: 2,
+//     31 GB with 24 CPUs: 3).
 func AutoResources(m Machine) Resources {
 	minFree := clamp(int(m.TotalPhysMB/8), autoMinFreeLo, autoMinFreeHi)
 	commit := 0
@@ -67,36 +68,58 @@ func autoGates(m Machine) int {
 	return min(m.CPUs/8, int(m.TotalPhysMB/1024/8))
 }
 
-// EffectiveResources are the values the daemon uses on m: each explicit setting wins, the others are auto. When
-// only one of minFreeMemoryMB and criticalFreeMemoryMB is set, the auto one is derived so the floor stays below:
-// an auto floor is half the minimum (half the auto minimum when the minimum is off), and an auto minimum is twice
-// a floor at or above the auto minimum.
+// Sources of an effective resource value (ResourceSources).
+const (
+	// SourceAuto: the setting is auto; the value comes from the machine.
+	SourceAuto = "auto"
+	// SourceExplicit: the user set the value.
+	SourceExplicit = "explicit"
+	// SourceDerived: the setting is auto, but its value comes from the user's other memory threshold (half of an
+	// explicit minFreeMemoryMB, or twice an explicit criticalFreeMemoryMB), so the floor stays below the minimum.
+	SourceDerived = "derived"
+)
+
+// ResourceSources say where each effective resource value comes from (SourceAuto, SourceExplicit, SourceDerived).
+type ResourceSources struct {
+	MinFreeMemoryMB      string
+	CriticalFreeMemoryMB string
+	MinFreeCommitMB      string
+	TestParallelism      string
+	GateConcurrency      string
+}
+
+// EffectiveResources are the values the daemon uses on m (EffectiveResourceSources without the sources).
 func EffectiveResources(s Settings, m Machine) Resources {
-	r := AutoResources(m)
-	autoMin := r.MinFreeMemoryMB
-	set := func(dst *int, v *int) {
-		if v != nil {
-			*dst = *v
-		}
-	}
-	set(&r.MinFreeCommitMB, s.MinFreeCommitMB)
-	set(&r.TestParallelism, s.TestParallelism)
-	set(&r.GateConcurrency, s.GateConcurrency)
-	switch minV, critV := s.MinFreeMemoryMB, s.CriticalFreeMemoryMB; {
-	case minV != nil && critV != nil:
-		r.MinFreeMemoryMB, r.CriticalFreeMemoryMB = *minV, *critV
-	case minV != nil:
-		r.MinFreeMemoryMB = *minV
-		if *minV > 0 {
-			r.CriticalFreeMemoryMB = *minV / 2
-		}
-	case critV != nil:
-		r.CriticalFreeMemoryMB = *critV
-		if *critV >= autoMin {
-			r.MinFreeMemoryMB = min(2**critV, MemoryMBMax)
-		}
-	}
+	r, _ := EffectiveResourceSources(s, m)
 	return r
+}
+
+// EffectiveResourceSources are the values the daemon uses on m and where each comes from: each explicit setting
+// wins, the others are auto. When only one of minFreeMemoryMB and criticalFreeMemoryMB is set, the other is
+// derived from it so the floor stays below: a derived floor is half an explicit minimum above 0 (with the minimum
+// off the floor stays auto), and a derived minimum is twice an explicit floor at or above the auto minimum (below
+// it the auto minimum is already above the floor). Validate keeps twice a lone floor within MemoryMBMax.
+func EffectiveResourceSources(s Settings, m Machine) (Resources, ResourceSources) {
+	r := AutoResources(m)
+	src := ResourceSources{SourceAuto, SourceAuto, SourceAuto, SourceAuto, SourceAuto}
+	autoMin := r.MinFreeMemoryMB
+	set := func(dst *int, from *string, v *int) {
+		if v != nil {
+			*dst, *from = *v, SourceExplicit
+		}
+	}
+	set(&r.MinFreeCommitMB, &src.MinFreeCommitMB, s.MinFreeCommitMB)
+	set(&r.TestParallelism, &src.TestParallelism, s.TestParallelism)
+	set(&r.GateConcurrency, &src.GateConcurrency, s.GateConcurrency)
+	set(&r.MinFreeMemoryMB, &src.MinFreeMemoryMB, s.MinFreeMemoryMB)
+	set(&r.CriticalFreeMemoryMB, &src.CriticalFreeMemoryMB, s.CriticalFreeMemoryMB)
+	switch minV, critV := s.MinFreeMemoryMB, s.CriticalFreeMemoryMB; {
+	case minV != nil && critV == nil && *minV > 0:
+		r.CriticalFreeMemoryMB, src.CriticalFreeMemoryMB = *minV/2, SourceDerived
+	case critV != nil && minV == nil && *critV >= autoMin:
+		r.MinFreeMemoryMB, src.MinFreeMemoryMB = min(2**critV, MemoryMBMax), SourceDerived
+	}
+	return r, src
 }
 
 // AutoSettingKeys are the JSON keys of the auto settings (nil = auto, never written to config.json).

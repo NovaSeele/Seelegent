@@ -169,7 +169,9 @@ by default: while the key is absent from `config.json` (or `null`), the daemon c
 so one default suits a 4 GB laptop and a 128 GB workstation. A value you set wins, and `0` still means off or
 unlimited; setting the key to `null` again (`PATCH /api/v1/settings` with `null`, or "Auto" in the dashboard)
 returns it to auto. A computed value is never written to `config.json`. `GET /api/v1/health` (`resources`, each with
-`source` `auto` or `explicit`, and `machine`) and `seelegent doctor` (check `resources`) show the values in use.
+a `source`, and `machine`) and `seelegent doctor` (check `resources`) show the values in use. The source is
+`explicit` for a value you set, `auto` for one computed from the machine, and `derived` for an auto memory threshold
+computed from the other one you set (see the last point below).
 
 | Auto setting | Formula | 8 GB, 4 CPUs (Windows, 12 GB commit) | 16 GB, 16 CPUs (Linux) | 31 GB, 24 CPUs (Windows, 36 GB commit) |
 | --- | --- | --- | --- | --- |
@@ -180,14 +182,17 @@ returns it to auto. A computed value is never written to `config.json`. `GET /ap
 | `gateConcurrency` | an eighth of the CPUs or one per 8 GB of memory, whichever is less, from 1 to 4 | 1 | 2 | 3 |
 
 - The machine is read once when the daemon starts and again when the settings change, never per memory reading, so
-  the auto thresholds hold still. Physical memory is the cgroup memory limit when that is lower (containers); the
+  the auto thresholds hold still. Physical memory is the cgroup memory limit when that is lower (containers; cgroup
+  v2, else the v1 `memory.limit_in_bytes`); the
   commit limit is rounded down to a whole GB, so a growing page file does not move them.
 - The CPUs are the ones the daemon may use: `GOMAXPROCS` (which follows the cgroup CPU limit on Linux), or, when
-  `GOMAXPROCS` is set in the daemon's environment, the logical CPUs lowered to the cgroup v2 `cpu.max`.
+  `GOMAXPROCS` is set in the daemon's environment, the logical CPUs lowered to the cgroup v2 `cpu.max` (v1:
+  `cpu.cfs_quota_us` / `cpu.cfs_period_us`).
 - When only one of `minFreeMemoryMB` and `criticalFreeMemoryMB` is set, the other is derived so the floor stays below
   the minimum: an auto floor is half the minimum you set (half the auto minimum when yours is `0`), and an auto
-  minimum is twice a floor you set at or above the auto minimum (at most 1048576). The rule "the floor must be below
-  the minimum" is checked only when you set both.
+  minimum is twice a floor you set at or above the auto minimum. Such a value has the source `derived`. A floor set
+  alone may be at most 524288 (so that twice it stays in range); the rule "the floor must be below the minimum" is
+  checked when you set both.
 
 | Setting | Type | Default | Applies | Meaning |
 | --- | --- | --- | --- | --- |

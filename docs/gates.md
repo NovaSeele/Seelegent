@@ -127,11 +127,14 @@ it then fails with "stopped: machine low on memory" in its tail. Such a stop is 
 runs the command again once memory is back, and after 3 stops of one command it ends `cancelled` with an `error`
 saying so, without recording anything for that command's spec tasks (no false error in the ledger).
 
-A gate command must not ask the daemon for a regression run (`seelegent proof run`): the regression's commands
-wait for a gate slot while the gate that asked holds one. With `gateConcurrency` N, N gates that each do so all
-wait, and nothing moves until `gateTimeoutSec` ends their gate commands (with `gateConcurrency: 1` a single such
-gate is enough). Seelegent does not refuse such a request: gate commands carry `SEELEGENT_GATE=1`, but so do
-Seelegent's own test runs inside a gate, which exercise `proof run` legitimately.
+A gate command may ask the daemon for a regression run (`seelegent proof run`). The CLI sends the gate's task id
+(`SEELEGENT_TASK` of the gate environment) as the request's `gateTask`, and while that task's gate holds a slot
+the regression's commands share it instead of waiting for a second one (they still wait for memory), so the gate
+cannot wait on its own slot; the gate's own task does not count as another active task either (no `--force`
+needed for it). An id the daemon does not know (Seelegent's own tests inside a gate start their own
+daemon, which never saw the outer task) and a gate that holds no slot change nothing: the commands wait for a slot
+as usual. Only a request sent without the id (an HTTP client of its own that drops it) can still wait on the slot
+its gate holds, until `gateTimeoutSec` ends the gate command.
 
 Each step is published as a `gate` task event (`phase: start | step | settling | result`) and stored on the turn
 (`Turn.gate`), so the dashboard shows it live. The `start` event carries the plan (each step's kind, command and

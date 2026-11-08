@@ -28,7 +28,7 @@ func TestAdmitHeavyWaitsForMemory(t *testing.T) {
 	})
 	admitted := make(chan func(), 1)
 	go func() {
-		release, err := h.s.AdmitHeavy(t.Context())
+		release, err := h.s.AdmitHeavy(t.Context(), "")
 		if err != nil {
 			t.Error(err)
 			return
@@ -61,7 +61,7 @@ func TestAdmitHeavyWaitsForMemory(t *testing.T) {
 	mem.set(1000, 0)
 	ctx, cancel = context.WithCancel(t.Context())
 	cancel()
-	if _, err := h.s.AdmitHeavy(ctx); !errors.Is(err, context.Canceled) {
+	if _, err := h.s.AdmitHeavy(ctx, ""); !errors.Is(err, context.Canceled) {
 		t.Fatalf("AdmitHeavy on a cancelled context = %v", err)
 	}
 }
@@ -324,4 +324,55 @@ func TestAutoThresholdHoldsStill(t *testing.T) {
 	}
 	mem.set(5000, 0)
 	h.waitStatus(sum.ID, StatusDone)
+}
+
+// TestRegressionInGateSharesSlot: with gateConcurrency 1, a regression run asked for from a gate command (its task
+// id as gateTask) while that gate holds the only slot shares it and starts at once: the gate does not deadlock on
+// its own slot. An id the daemon does not know (or "") waits for the slot as before.
+func TestRegressionInGateSharesSlot(t *testing.T) {
+	h := newHarnessWith(t, func(h *harness) {
+		h.set(func(s *config.Settings) { s.GateConcurrency = config.Int(1) })
+		h.slots = gate.NewSlots(func() int { return *h.config().GateConcurrency })
+	})
+	h.initRepo(map[string]string{"a.txt": "a\n"})
+	h.agy("w", 1)
+	h.queue.Push(t, editScript("conv-a", filepath.Join(h.cwd, "a.txt"), "a2\n", "A."))
+	sum := h.delegate(api.DelegateRequest{Title: "A", GateCommands: []string{gateCmd(t, "--wait", "a.release")}})
+	h.waitGateStarts(sum.ID, 1)
+	if !h.s.HoldsGateSlot(sum.ID) {
+		t.Fatal("the running gate holds no slot")
+	}
+
+	// The gate's own regression command: no second slot, no wait.
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	release, err := h.s.AdmitHeavy(ctx, sum.ID)
+	if err != nil {
+		t.Fatalf("a regression run from the gate that holds the slot waited: %v", err)
+	}
+	release()
+
+	// Anyone else waits for the slot while the gate holds it.
+	for _, other := range []string{"t-unknown", ""} {
+		short, stop := context.WithTimeout(t.Context(), 300*time.Millisecond)
+		if rel, err := h.s.AdmitHeavy(short, other); !errors.Is(err, context.DeadlineExceeded) {
+			if rel != nil {
+				rel()
+			}
+			t.Errorf("gateTask %q: AdmitHeavy = %v, want a wait for the slot", other, err)
+		}
+		stop()
+	}
+
+	h.write("a.release", "go")
+	h.waitStatus(sum.ID, StatusDone)
+	if h.s.HoldsGateSlot(sum.ID) {
+		t.Error("the slot is still counted after the gate ended")
+	}
+	// With the gate done, its id no longer shares anything: the run takes the free slot like any other.
+	release, err = h.s.AdmitHeavy(ctx, sum.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	release()
 }

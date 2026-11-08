@@ -30,7 +30,7 @@ func newService(t *testing.T, root string, exec func(cmd string) CmdResult, acti
 	var mu sync.Mutex
 	var published []api.ProofRun
 	s := New(Options{Ledger: NewLedger(st, nil), Git: fakeGit{root: root},
-		Exec: func(_ context.Context, cmd, dir, _ string) CmdResult {
+		Exec: func(_ context.Context, cmd, dir, _, _ string) CmdResult {
 			if same, _ := fsutil.SamePath(dir, root); !same {
 				t.Errorf("dir = %s", dir)
 			}
@@ -172,7 +172,7 @@ func TestCancelRun(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = st.Close() })
 	s := New(Options{Ledger: NewLedger(st, nil), Git: fakeGit{root: root}, LogDir: t.TempDir(),
-		Exec: func(ctx context.Context, _, _, _ string) CmdResult {
+		Exec: func(ctx context.Context, _, _, _, _ string) CmdResult {
 			started <- struct{}{}
 			<-ctx.Done()
 			return CmdResult{}
@@ -204,7 +204,7 @@ func TestRunNotStuckOnWriteError(t *testing.T) {
 	t.Cleanup(func() { _ = st.Close() })
 	db := &failingDB{DB: st, fail: true}
 	s := New(Options{Ledger: NewLedger(db, nil), Git: fakeGit{root: root}, LogDir: t.TempDir(),
-		Exec: func(context.Context, string, string, string) CmdResult { return CmdResult{Exit: code(0)} }})
+		Exec: func(context.Context, string, string, string, string) CmdResult { return CmdResult{Exit: code(0)} }})
 	t.Cleanup(s.Close)
 	ctx := context.Background()
 	if _, err := s.StartRun(ctx, api.ProofRunRequest{Cwd: root}); err == nil {
@@ -216,6 +216,43 @@ func TestRunNotStuckOnWriteError(t *testing.T) {
 		t.Fatalf("the project is stuck: %v", err)
 	}
 	waitRun(t, s, root, run.ID)
+}
+
+// TestRunPassesGateTask: the task id of the gate that asked for a run reaches every command's Exec, so the daemon
+// can let it share that gate's slot.
+func TestRunPassesGateTask(t *testing.T) {
+	root := t.TempDir()
+	write(t, filepath.Join(root, "specs", "001-p", "tasks.md"), tasksMD)
+	st, err := store.Open(context.Background(), filepath.Join(t.TempDir(), "seelegent.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	got := make(chan string, 10)
+	// The gate's own task is active; it does not refuse the run as another active task would.
+	s := New(Options{Ledger: NewLedger(st, nil), Git: fakeGit{root: root}, LogDir: t.TempDir(),
+		Active: func(context.Context, string) ([]string, error) { return []string{"t-gate"}, nil },
+		Exec: func(_ context.Context, _, _, _, gateTask string) CmdResult {
+			got <- gateTask
+			return CmdResult{Exit: code(0)}
+		}})
+	t.Cleanup(s.Close)
+	run, err := s.StartRun(context.Background(), api.ProofRunRequest{Cwd: root, GateTask: "t-gate"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if run.Noisy {
+		t.Error("the asking gate's own task made the run noisy")
+	}
+	waitRun(t, s, root, run.ID)
+	if n := len(got); n == 0 {
+		t.Fatal("no command ran")
+	}
+	for range len(got) {
+		if id := <-got; id != "t-gate" {
+			t.Errorf("Exec got gateTask %q", id)
+		}
+	}
 }
 
 type failingDB struct {

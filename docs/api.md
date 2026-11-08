@@ -179,7 +179,9 @@ in the daemon.
   [configuration.md](configuration.md)); the frame `resources.changed {lowMemory, memory}` says when `lowMemory`
   flips (milestone 19). `resources` holds the values in use for the five auto settings (`gateConcurrency`,
   `minFreeMemoryMB`, `minFreeCommitMB`, `criticalFreeMemoryMB`, `testParallelism`), each `{value, source}` with
-  `source` `auto` (computed from the machine) or `explicit` (set by the user), and `machine`
+  `source` `auto` (computed from the machine), `explicit` (set by the user) or `derived` (an auto memory threshold
+  computed from the other one the user set: a floor half an explicit minimum, a minimum twice an explicit floor),
+  and `machine`
   (`{totalPhysMB, totalCommitMB, cpus}`) is what the auto values come from. In `GET /settings` an auto setting is
   absent; `PATCH /settings` with `null` returns one to auto.
 - `capabilities.takeover` is true for backends that can resume a session; `apiKey` for every backend but agy;

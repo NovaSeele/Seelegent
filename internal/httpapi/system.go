@@ -90,19 +90,22 @@ func (s *Server) health() api.Health {
 
 // effectiveResources are the API form of config.EffectiveResources with the source of each value.
 func effectiveResources(set config.Settings, m config.Machine) api.EffectiveResources {
-	r := config.EffectiveResources(set, m)
-	value := func(v int, p *int) api.EffectiveValue {
-		if p != nil {
+	r, src := config.EffectiveResourceSources(set, m)
+	value := func(v int, source string) api.EffectiveValue {
+		switch source {
+		case config.SourceExplicit:
 			return api.EffectiveValue{Value: v, Source: api.ResourceExplicit}
+		case config.SourceDerived:
+			return api.EffectiveValue{Value: v, Source: api.ResourceDerived}
 		}
 		return api.EffectiveValue{Value: v, Source: api.ResourceAuto}
 	}
 	return api.EffectiveResources{
-		MinFreeMemoryMB:      value(r.MinFreeMemoryMB, set.MinFreeMemoryMB),
-		CriticalFreeMemoryMB: value(r.CriticalFreeMemoryMB, set.CriticalFreeMemoryMB),
-		MinFreeCommitMB:      value(r.MinFreeCommitMB, set.MinFreeCommitMB),
-		TestParallelism:      value(r.TestParallelism, set.TestParallelism),
-		GateConcurrency:      value(r.GateConcurrency, set.GateConcurrency),
+		MinFreeMemoryMB:      value(r.MinFreeMemoryMB, src.MinFreeMemoryMB),
+		CriticalFreeMemoryMB: value(r.CriticalFreeMemoryMB, src.CriticalFreeMemoryMB),
+		MinFreeCommitMB:      value(r.MinFreeCommitMB, src.MinFreeCommitMB),
+		TestParallelism:      value(r.TestParallelism, src.TestParallelism),
+		GateConcurrency:      value(r.GateConcurrency, src.GateConcurrency),
 	}
 }
 

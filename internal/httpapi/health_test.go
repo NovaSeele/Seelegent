@@ -50,4 +50,14 @@ func TestHealthResources(t *testing.T) {
 	if h.Resources != want || h.Machine != (api.Machine{TotalPhysMB: 16384, TotalCommitMB: 24576, CPUs: 8}) {
 		t.Fatalf("resources = %+v machine = %+v", h.Resources, h.Machine)
 	}
+	// A floor set alone above the auto minimum makes the minimum twice it: derived, not auto.
+	set.CriticalFreeMemoryMB = config.Int(3000)
+	s.o.Settings = fixedSettings{set}
+	h = s.health()
+	if got := h.Resources.MinFreeMemoryMB; got != (api.EffectiveValue{Value: 6000, Source: api.ResourceDerived}) {
+		t.Fatalf("minFreeMemoryMB = %+v", got)
+	}
+	if got := h.Resources.CriticalFreeMemoryMB; got.Source != api.ResourceExplicit {
+		t.Fatalf("criticalFreeMemoryMB = %+v", got)
+	}
 }

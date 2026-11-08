@@ -147,6 +147,11 @@ func (s *Settings) Validate() error {
 	if c, m := s.CriticalFreeMemoryMB, s.MinFreeMemoryMB; c != nil && m != nil && *c > 0 && *m > 0 && *c >= *m {
 		v.add("criticalFreeMemoryMB", "must be below minFreeMemoryMB (%d) while both are on (got %d)", *m, *c)
 	}
+	// A lone floor makes the minimum twice the floor (when above the auto one), which must stay within the range.
+	if c := s.CriticalFreeMemoryMB; c != nil && s.MinFreeMemoryMB == nil && *c > MemoryMBMax/2 {
+		v.add("criticalFreeMemoryMB", "must be at most %d while minFreeMemoryMB is auto (it becomes twice this "+
+			"value; got %d)", MemoryMBMax/2, *c)
+	}
 	v.intRange("workerMemoryLimitMB", s.WorkerMemoryLimitMB, 0, MemoryMBMax)
 	v.intRange("workerCPURatePercent", s.WorkerCPURatePercent, 0, CPURatePercentMax)
 	v.autoRange("testParallelism", s.TestParallelism, TestParallelismMax)
