@@ -207,6 +207,12 @@ SSE hub and the task bus): `go test -p 4 -run '^$' -bench . ./internal/backend .
   workspace.
 - `pnpm build` writes `web/dist`; the next `go build` embeds it (package `web`, `web.FS()`).
 
+## Database migrations
+
+Migrations live in `internal/store/migrations/NNNN_name.sql`, numbered without gaps. Never rewrite a migration
+that has run anywhere (an installed daemon, a release, a user's data folder): change the schema with a new one.
+Only a migration that never left an unmerged branch may still be renamed or changed.
+
 ## Toolchain decisions
 
 - **TypeScript 6.0**, not 7. TypeScript 7.0 (the native port) is the newest release, but its npm package no longer
