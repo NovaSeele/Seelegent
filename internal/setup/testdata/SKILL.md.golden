@@ -79,7 +79,7 @@ Workers never saw your conversation. Write the brief like a ticket for a capable
 - **Acceptance criteria**: a checklist of what must work.
 - **Verify**: the exact commands to run (tests, build, lint).
 
-Pick the tier by difficulty: `fast` for mechanical edits and lookups, `standard` by default, `strong` or `max` for tricky or multi-file work.
+Pick the tier by difficulty and pass it in `model` (there is no `tier` argument): `fast` for mechanical edits and lookups, `standard` by default, `strong` or `max` for tricky or multi-file work.
 
 ## Parallel work
 

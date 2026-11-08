@@ -232,7 +232,7 @@ func TestDelegateRequest(t *testing.T) {
 	var rep api.TaskReport
 	ok(t, cs, "delegate", map[string]any{"prompt": "p", "cwd": "sub", "mode": "full", "model": "fast",
 		"gate": false, "lane": false, "allow_git": "true", "spec": "specs/001", "task_ids": []string{"T1"},
-		"after": []string{"t0"}, "after_mode": "done", "force_lane": false, "verify": false, "unknown_field": 1}, &rep)
+		"after": []string{"t0"}, "after_mode": "done", "force_lane": false, "verify": false}, &rep)
 	var req map[string]any
 	st.body(t, "POST /tasks", &req)
 	want := map[string]any{"prompt": "p", "cwd": filepath.Join(wd, "sub"), "mode": "edit", "model": "fast",
@@ -787,7 +787,10 @@ func TestGateOptions(t *testing.T) {
 	}
 	for _, opt := range options {
 		for tool, key := range map[string]string{"delegate": "POST /tasks", "followup": "POST /tasks/t1/followup"} {
-			args := map[string]any{"prompt": "p", "cwd": `C:\p`, "task_id": "t1", "message": "m", "wait_seconds": 0}
+			args := map[string]any{"prompt": "p", "cwd": `C:\p`, "wait_seconds": 0}
+			if tool == "followup" {
+				args = map[string]any{"task_id": "t1", "message": "m", "wait_seconds": 0}
+			}
 			maps.Copy(args, opt.args)
 			var rep any
 			ok(t, cs, tool, args, &rep)
