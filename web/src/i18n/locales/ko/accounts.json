@@ -227,6 +227,12 @@
       "week": "주간",
       "month": "월간"
     },
+    "spanShort": {
+      "hours": "{n}시간",
+      "day": "1일",
+      "week": "7일",
+      "month": "30일"
+    },
     "quota": {
       "tip": "{group} · {window}",
       "lowestTip": "모든 창 중 가장 낮음: {group} · {window}",

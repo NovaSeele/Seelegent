@@ -227,6 +227,12 @@
       "week": "Weekly",
       "month": "Monthly"
     },
+    "spanShort": {
+      "hours": "{n}h",
+      "day": "1d",
+      "week": "7d",
+      "month": "30d"
+    },
     "quota": {
       "tip": "{group} · {window}",
       "lowestTip": "Lowest of all windows: {group} · {window}",

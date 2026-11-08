@@ -34,6 +34,8 @@ interface TileWindow {
   tip: string
 }
 
+// TODO(accounts redesign): an API-key account routes on its provider's tier models, not the backend's. Harmless
+// today (API-key accounts report no quota groups), but read the provider's tiers here once the redesign lands.
 function tileWindow(account: Account): TileWindow | undefined {
   const summary = quotaSummary(account, connection.settings?.backends?.[account.backend]?.tiers)
   let pick: SummaryWindow | undefined
