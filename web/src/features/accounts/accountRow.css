@@ -4,12 +4,16 @@
  * NARROW_LIST is the same number) a row takes two lines: name, status and the controls, then the quota bars.
  */
 .row {
-  border-bottom: var(--border-width) solid var(--border-subtle);
   background: var(--bg-surface);
 }
 
-.row:last-child {
-  border-bottom: 0;
+/* The separator sits above every row but the first, inside the row's 52px, so every row is equally tall. */
+.row + .row {
+  border-top: var(--border-width) solid var(--border-subtle);
+}
+
+.row + .row > .row__main {
+  min-height: calc(52px - var(--border-width));
 }
 
 .row__main {
@@ -68,6 +72,24 @@
   grid-area: status;
   justify-self: start;
   max-width: 100%;
+}
+
+/* The status reason is the row's most important word: it wraps to two lines before it is cut (its title has all
+   of it). */
+.row__main .row__status {
+  height: auto;
+  min-height: 18px;
+  padding-block: 1px;
+  white-space: normal;
+}
+
+.row__status :deep(.pill__label) {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  line-height: var(--lh-tight);
 }
 
 .row__slots {

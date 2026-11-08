@@ -48,8 +48,9 @@ extra passes. The flag refuses anything that is not `http://localhost|127.0.0.1|
 Warn line naming the extra origins at start-up.
 
 Every answer, refusals included, carries `X-Frame-Options: DENY`, `Content-Security-Policy: frame-ancestors 'none'`
-and `Referrer-Policy: no-referrer`. A request whose client went away gets nothing written (logged at Debug), never a
-500.
+and `Referrer-Policy: no-referrer`; every answer under `/api/`, refusals included, also carries
+`Cross-Origin-Resource-Policy: same-origin`, so no other origin's page can load one as an image or script. A
+request whose client went away gets nothing written (logged at Debug), never a 500.
 
 Files a worker can plant are read with `fsutil.ReadRegular`/`OpenRegular`, which never block on a FIFO and never
 follow a symbolic link: `GET /spec` answers 400 for a `tasks.md` that is not a regular file or is over 4 MiB, `GET
@@ -95,7 +96,10 @@ in the daemon.
   accounts, `acc6: 2 of 2 running`). The `waiting_quota` event carries the same as `reason` and `detail`. Both are
   absent for other statuses; events and daemons from before this addition carry only `memory` (an account wait
   had no reason), which the dashboard reads as waiting for quota. The lead's report (`TaskReport.waiting`) still
-  names only the memory wait.
+  names only the memory wait; `TaskReport.wait_detail` carries `waitDetail` while the task waits. A task without
+  `provider` whose sign-in accounts rest or are busy gets the free API-key accounts of its backend named there
+  (`; free API-key accounts: pass provider: anthropic and a model`, at most three providers, "and a model" when the
+  provider maps no tier); it never moves to them by itself, since keys cost money.
 
 - `GET /git/branches` answers `null` for a folder that does not exist, keyed by the cwd as given. A batch of 50 cwds
   should not fail because one project folder was deleted. A relative cwd is still `400`.
@@ -132,28 +136,41 @@ in the daemon.
   the `path` (ending in `/`), the file `count`, their total `bytes` and the first 200 `files`; those files are left
   out of `files`. Only this view groups: the snapshots, the safety checks and a commit still see every file, and a
   commit may name a grouped file one by one (never the folder). The extra `git ls-files --others --directory` call
-  runs only when a top-level folder holds more than 20 untracked files, and only over those folders.
+  runs only when a top-level folder holds more than 20 untracked files, and only over those folders; when it fails
+  (a timeout on a huge folder) the failure is logged and the view lists every file instead. A row's `others` counts
+  the folder's untracked files that are not the task's; the repository panel leaves them out, as the row stands for
+  the folder. The view's images (in `files` and in the rows' `files`) carry a `stamp`: the working-tree file's size
+  and modification time (one `Lstat`) and its blob id at HEAD from the status line, so a rewritten image gets a new
+  URL although its status and counts stay the same.
 - When the commits since the start cannot be read (git times out on a big repository, an object is missing), the
   error is logged and `TaskGit` still answers with `files`: `historyState` is `history_unavailable`, `commits` and
   `committedFiles` are empty, and a later read tries again.
 - `GET /tasks/{id}/git/diff` takes `base=start` (the default: the working tree against the task's start, or the
   empty tree when the repository had no commit then) or `base=head` (the uncommitted list); any other `base` is
   `400`. It accepts `turn` but does not use it; per-turn changes come from the turn snapshots (`outside-diff`).
-- `GET /tasks/{id}/git/image?path=&version=` (an addition to the contract) answers one image of the task's
-  repository for the Git view's previews: `version=worktree` (the default) reads the working tree, `version=head`
-  the blob at HEAD (`404` when HEAD is unborn or has no such file); any other version is `400`. `path` is
-  repository-relative (`\` reads as `/`); an empty or absolute path, a `..` segment, any `:` (a drive or a Windows
-  alternate data stream), a control character, a Windows device name as any segment (`CON`, `PRN`, `AUX`, `NUL`,
-  `COM1`–`9`, `LPT1`–`9`, with or without an extension), or a working-tree path that leaves the repository once
-  links and junctions are resolved (`filepath.EvalSymlinks` on the file and the root, compared through
-  `fsutil.Key`) is `400` with field `path`. Only `png`, `jpg`, `jpeg`, `gif`, `webp`, `avif`, `bmp`, `ico` and `svg`
-  are served; any other extension is `415 unsupported_media_type` (`details.reason: "not_image"`), and so is a Git
-  LFS pointer (`details.reason: "lfs_pointer"`). An image over 10 MiB is `413 too_large` with `details.size` (and
-  the size in the message), checked before reading: `os.Stat` (then a capped read) for the working tree,
-  `git cat-file --batch-check` for HEAD. The answer's `Content-Type` comes from the extension (never sniffed), with
-  `X-Content-Type-Options: nosniff`, `Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline';
-  sandbox` (an SVG opened as a page runs no script on the daemon's origin) and `Cache-Control: no-store`. It is a
-  GET for the dashboard and the lead: it is not on the worker allow-list, so a worker is refused it.
+- `GET /tasks/{id}/git/image?path=&version=` (an addition to the contract) answers one image of the task's repository
+  for the Git view's previews: `version=worktree` (the default) reads the working tree, `version=head` the blob at HEAD
+  (`404` when HEAD is unborn or has no such file); any other version is `400`. `path` is repository-relative (`\` reads
+  as `/`); an empty or absolute path, a `..` segment, any `:` (a drive or a Windows alternate data stream), a control
+  character, a Windows device name as any segment (`CON`, `PRN`, `AUX`, `NUL`, `COM1`–`9`, `LPT1`–`9`, with or without
+  an extension), or a working-tree path that leaves the repository through a link or junction is `400` with field
+  `path`. The working-tree file is opened through `os.Root` on the repository root (a relative symbolic link is followed
+  only while it stays inside it; a link with an absolute target, every Windows junction included, counts as leaving,
+  even one that points back inside; there is no gap between a check and the open; `O_NONBLOCK` on Unix, so a FIFO cannot
+  hang the request) and must be a regular file. Only `png`, `jpg`, `jpeg`, `gif`, `webp`, `avif`, `bmp`, `ico` and `svg`
+  are served; any other extension is `415 unsupported_media_type` (`details.reason: "not_image"`), and so is a Git LFS
+  pointer (`details.reason: "lfs_pointer"`). An image over 10 MiB is `413 too_large` with `details.size` (and the size
+  in the message), checked before reading: the open file's `Stat` for the working tree, `git cat-file --batch-check` for
+  HEAD (then a capped read: gitx has no streaming read). A working-tree image up to 1 MiB is read whole and its file
+  closed before the answer is written; a larger one is streamed, never held whole, under a write deadline of 30 seconds
+  for this route only (the server has no `WriteTimeout`, for the event stream), so a client that stops reading cannot
+  keep the file open. A browser request from another site (`Sec-Fetch-Site: cross-site` or `same-site`) is `403
+  forbidden` with `details.reason: "cross_site"`; a request without the header (the CLI, MCP) is served. The answer's
+  `Content-Type` comes from the extension (never sniffed), with `X-Content-Type-Options: nosniff`,
+  `Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; sandbox; frame-ancestors 'none'` (an SVG
+  opened as a page runs no script on the daemon's origin) and `Cache-Control: no-store`. The Git view adds `v=<stamp>`
+  (`GitFile.stamp`) to the URL; the endpoint ignores it. It is a GET for the dashboard and the lead: it is not on the
+  worker allow-list, so a worker is refused it.
 - `GET /tasks/{id}/git/commits/{sha}` (an addition to the contract) answers `GitCommitDetail`: the commit's files and
   parsed diffs against its first parent, 1 MiB in all (`truncated`), with `--no-textconv` and `--no-ext-diff` like
   the other diffs. The sha is checked as 4–64 hex digits before git sees it (`400`, field `sha`), resolved with

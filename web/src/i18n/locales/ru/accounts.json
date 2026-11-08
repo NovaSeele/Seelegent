@@ -227,6 +227,12 @@
       "week": "Неделя",
       "month": "Месяц"
     },
+    "spanShort": {
+      "hours": "{n} ч",
+      "day": "1 д",
+      "week": "7 д",
+      "month": "30 д"
+    },
     "quota": {
       "tip": "{group} · {window}",
       "lowestTip": "Самое низкое из всех окон: {group} · {window}",

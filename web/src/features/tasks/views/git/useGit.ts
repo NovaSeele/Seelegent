@@ -13,7 +13,7 @@ import { gitApi, isAbortError, type CommitResult, type GitApi } from '@/api'
 import type { FileDiff, TaskGit, TaskSummary } from '@/api/types'
 import { useToastStore } from '@/stores/toast'
 
-import { fileSignature, sortFiles } from './git'
+import { fileSignature, sortFiles, stepFile, totals } from './git'
 
 export type GitState =
   | { status: 'loading' }
@@ -30,7 +30,15 @@ export type GitBusy = 'suggest' | 'dismiss' | 'commit' | null
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error))
 
-export function useGit(task: () => TaskSummary, api: GitApi = gitApi) {
+/**
+ * `path` (optional) selects a file when the view opens on one (from the Files view), opening its untracked folder
+ * when the file is listed inside one.
+ */
+export function useGit(
+  task: () => TaskSummary,
+  api: GitApi = gitApi,
+  path: () => string | null | undefined = () => null,
+) {
   const { t } = useI18n()
   const toast = useToastStore()
   const id = () => task().id
@@ -47,10 +55,15 @@ export function useGit(task: () => TaskSummary, api: GitApi = gitApi) {
     ...files.value,
     ...dirs.value.filter((d) => expanded.value.has(d.path)).flatMap((d) => d.files),
   ])
+  /** Every uncommitted file of the task, those inside the untracked folders included. */
+  const count = computed(() => files.value.length + dirs.value.reduce((n, d) => n + d.count, 0))
   /** Files of the task left out of `shown`: in closed folders, or past an open folder's list. */
-  const hidden = computed(
-    () => dirs.value.reduce((n, d) => n + d.count, 0) - (shown.value.length - files.value.length),
-  )
+  const hidden = computed(() => count.value - shown.value.length)
+  /**
+   * Lines added and removed in the files shown (the files of a closed folder have no counts here); with
+   * `hidden` above 0 the view says the totals cover the shown files only.
+   */
+  const sums = computed(() => totals(shown.value))
   const suggestion = computed(() => git.value?.suggestion ?? null)
 
   let statusCall: AbortController | null = null
@@ -100,6 +113,35 @@ export function useGit(task: () => TaskSummary, api: GitApi = gitApi) {
       selected.value = list[0]?.path ?? null
     }
   })
+
+  // A file asked for by path is selected once it is known; a folder holding it opens. Each value is applied once:
+  // a later reload keeps the file the user picked since. A path that is cleared and asked for again applies again.
+  let applied: string | null = null
+  watch(
+    () => [path(), files.value, dirs.value] as const,
+    ([want, list, folders]) => {
+      if (!want) {
+        applied = null
+        return
+      }
+      if (want === applied) return
+      const dir = folders.find((d) => d.files.some((f) => f.path === want))
+      if (dir) expanded.value = new Set([...expanded.value, dir.path])
+      if (dir || list.some((f) => f.path === want)) {
+        selected.value = want
+        applied = want
+      }
+    },
+    { immediate: true },
+  )
+
+  /** Moves the selection `delta` files through `shown` (open folders' files included); false when it cannot. */
+  function step(delta: number): boolean {
+    const next = stepFile(shown.value, selected.value, delta)
+    if (!next) return false
+    selected.value = next
+    return true
+  }
 
   let diffCall: AbortController | null = null
   async function loadDiff() {
@@ -177,7 +219,9 @@ export function useGit(task: () => TaskSummary, api: GitApi = gitApi) {
     dirs,
     expanded,
     shown,
+    count,
     hidden,
+    sums,
     suggestion,
     selected,
     selectedFile,
@@ -185,6 +229,7 @@ export function useGit(task: () => TaskSummary, api: GitApi = gitApi) {
     busy,
     reload: load,
     reloadDiff: loadDiff,
+    step,
     suggest: () => write('suggest', () => api.suggestMessage(id())),
     dismiss: () => write('dismiss', () => api.dismissSuggestion(id())),
     commit,

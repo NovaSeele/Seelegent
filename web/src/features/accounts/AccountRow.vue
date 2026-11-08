@@ -77,7 +77,13 @@ const details = computed(() =>
           {{ kindLabel }}<span v-if="slots" class="row__slots-inline"> · {{ slots }}</span>
         </p>
       </div>
-      <StatusPill class="row__status" :tone="pill.tone" :label="pill.label" size="sm" />
+      <StatusPill
+        class="row__status"
+        :tone="pill.tone"
+        :label="pill.label"
+        :title="pill.label"
+        size="sm"
+      />
       <span class="row__slots" :class="{ 'row__slots--busy': account.busy > 0 }">{{ slots }}</span>
       <QuotaBars class="row__quota" :account="account" :now="now" />
       <div class="row__controls" @click.stop>

@@ -132,12 +132,66 @@ type spawnSummary struct {
 	MaxPeakWSMB  float64 `json:"maxPeakWSMB,omitempty"`
 }
 
+// budgetCheck is one row of the budget. An Info row is shown with its limit but not judged: OK still says
+// whether the value is under the limit, and Note says why the row is information only.
 type budgetCheck struct {
 	Name  string  `json:"name"`
 	Limit float64 `json:"limit"`
 	Value float64 `json:"value"`
 	OK    bool    `json:"ok"`
+	Info  bool    `json:"info,omitempty"`
+	Note  string  `json:"note,omitempty"`
 }
+
+// retainedHeap is the load scenario's retained-heap check: the daemon's live heap after forced GCs just before the
+// load tasks start (after the warmup) and again once every load task ended, the SSE clients and pollers stopped and
+// SettleSeconds passed. The delta is what the load left behind; unlike the slopes it does not count the state of
+// attempts that are still running. The SSE replay ring keeps the last frames for 10 minutes, so at the end it still
+// holds the load's frames: ExRingDeltaMB, the budgeted value, is the delta without the ring's heap at either
+// reading (the raw delta when the daemon does not report its ring: RingUnknown).
+type retainedHeap struct {
+	StartMB         float64 `json:"startMB"`
+	EndMB           float64 `json:"endMB"`
+	DeltaMB         float64 `json:"deltaMB"`
+	StartRingMB     float64 `json:"startSseRingMB"`
+	EndRingMB       float64 `json:"endSseRingMB"`
+	StartRingFrames int     `json:"startSseRingFrames"`
+	EndRingFrames   int     `json:"endSseRingFrames"`
+	ExRingDeltaMB   float64 `json:"deltaExcludingSseRingMB"`
+	RingUnknown     bool    `json:"sseRingUnknown,omitempty"`
+	SettleSeconds   float64 `json:"settleSeconds"`
+	Note            string  `json:"note,omitempty"`
+	// Error is why the end could not be read; the budget row is then left out.
+	Error string `json:"error,omitempty"`
+	// start is the first reading (the ring in bytes, for the end's arithmetic).
+	start heapReading
+}
+
+// goSysBreakdown is where Go's Sys goes at the end of the run (runtime.MemStats, MB): the heap, and what lies outside
+// it (goroutine stacks, span structures, per-P caches, GC metadata, profiling buckets, the rest). The *Sys fields
+// add up to Sys; HeapReleased is the part of HeapSys returned to the OS.
+type goSysBreakdown struct {
+	SysMB          float64 `json:"sysMB"`
+	HeapSysMB      float64 `json:"heapSysMB"`
+	HeapInuseMB    float64 `json:"heapInuseMB"`
+	HeapReleasedMB float64 `json:"heapReleasedMB"`
+	StackSysMB     float64 `json:"stackSysMB"`
+	MSpanSysMB     float64 `json:"mSpanSysMB"`
+	MCacheSysMB    float64 `json:"mCacheSysMB"`
+	GCSysMB        float64 `json:"gcSysMB"`
+	BuckHashSysMB  float64 `json:"buckHashSysMB"`
+	OtherSysMB     float64 `json:"otherSysMB"`
+}
+
+func breakdown(m memStatsSys) *goSysBreakdown {
+	f := func(b uint64) float64 { return round(mb(b), 2) }
+	return &goSysBreakdown{SysMB: f(m.Sys), HeapSysMB: f(m.HeapSys), HeapInuseMB: f(m.HeapInuse),
+		HeapReleasedMB: f(m.HeapReleased), StackSysMB: f(m.StackSys), MSpanSysMB: f(m.MSpanSys),
+		MCacheSysMB: f(m.MCacheSys), GCSysMB: f(m.GCSys), BuckHashSysMB: f(m.BuckHashSys), OtherSysMB: f(m.OtherSys)}
+}
+
+// measured reports whether both ends were read.
+func (x *retainedHeap) measured() bool { return x != nil && x.Error == "" }
 
 type loadSummary struct {
 	Tasks          int                     `json:"tasks"`
@@ -155,30 +209,34 @@ type loadSummary struct {
 
 // result is one bench run (result.json).
 type result struct {
-	Scenario    string            `json:"scenario"`
-	Commit      string            `json:"commit"`
-	GOOS        string            `json:"goos"`
-	GOARCH      string            `json:"goarch"`
-	NumCPU      int               `json:"numCPU"`
-	Options     map[string]string `json:"options"`
-	Started     time.Time         `json:"started"`
-	WindowStart time.Time         `json:"windowStart"`
-	WindowEnd   time.Time         `json:"windowEnd"`
-	Machine     machineSummary    `json:"machine"`
-	Setup       []setupPhase      `json:"setup"`
-	Daemon      daemonSummary     `json:"daemon"`
-	Tree        *treeSummary      `json:"tree,omitempty"`
-	TreeFinal   *jobStat          `json:"treeFinal,omitempty"`
-	Roles       []roleSummary     `json:"roles"`
-	Spawns      []spawnSummary    `json:"spawnLog"`
-	Runs        []spawnRun        `json:"runs"`
-	Idle        *idleSummary      `json:"idle,omitempty"`
-	DB          dbSummary         `json:"db"`
-	Load        *loadSummary      `json:"load,omitempty"`
-	Budget      []budgetCheck     `json:"budget"`
-	Errors      map[string]int    `json:"sampleErrors,omitempty"`
-	Processes   []*tracked        `json:"processes"`
-	Samples     []sample          `json:"samples"`
+	Scenario string            `json:"scenario"`
+	Commit   string            `json:"commit"`
+	GOOS     string            `json:"goos"`
+	GOARCH   string            `json:"goarch"`
+	NumCPU   int               `json:"numCPU"`
+	Options  map[string]string `json:"options"`
+	Started  time.Time         `json:"started"`
+	// DaemonStarted is when the bench started the daemon: the usage recorder's ticks are timed from it.
+	DaemonStarted time.Time       `json:"daemonStarted,omitzero"`
+	WindowStart   time.Time       `json:"windowStart"`
+	WindowEnd     time.Time       `json:"windowEnd"`
+	Machine       machineSummary  `json:"machine"`
+	Setup         []setupPhase    `json:"setup"`
+	Daemon        daemonSummary   `json:"daemon"`
+	Tree          *treeSummary    `json:"tree,omitempty"`
+	TreeFinal     *jobStat        `json:"treeFinal,omitempty"`
+	Roles         []roleSummary   `json:"roles"`
+	Spawns        []spawnSummary  `json:"spawnLog"`
+	Runs          []spawnRun      `json:"runs"`
+	Idle          *idleSummary    `json:"idle,omitempty"`
+	DB            dbSummary       `json:"db"`
+	Load          *loadSummary    `json:"load,omitempty"`
+	Retained      *retainedHeap   `json:"retainedHeap,omitempty"`
+	GoSysEnd      *goSysBreakdown `json:"goSysEnd,omitempty"`
+	Budget        []budgetCheck   `json:"budget"`
+	Errors        map[string]int  `json:"sampleErrors,omitempty"`
+	Processes     []*tracked      `json:"processes"`
+	Samples       []sample        `json:"samples"`
 }
 
 func optionsOf(o *options) map[string]string {
@@ -452,7 +510,7 @@ func (r *result) fill(s *sampler, g *loadGen, spawns []spawnRecord) {
 	sort.Slice(r.Spawns, func(i, j int) bool { return r.Spawns[i].Role < r.Spawns[j].Role })
 	r.Runs = spawnRuns(spawns)
 	if r.idleScenario() {
-		r.Idle = idleCost(base, win, r.Runs)
+		r.Idle = idleCost(base, win, r.Runs, recorderTicks(r.DaemonStarted, from, to, time.Local))
 	}
 
 	if r.Scenario == "load" || g.sseConns.Load() > 0 {
@@ -476,6 +534,17 @@ func (r *result) fill(s *sampler, g *loadGen, spawns []spawnRecord) {
 	r.Budget = r.budget()
 }
 
+// The load scenario's peak private budget grows with the tasks that run at once: loadPrivateBase MB plus
+// loadPrivatePerTask MB per task (8 tasks: 100 MB). Each running attempt holds its own state (parser, launcher
+// buffers, task bus). To be tuned from a 16-task run.
+const (
+	loadPrivateBase    = 80.0
+	loadPrivatePerTask = 2.5
+)
+
+// minSlopeWindow is the shortest measured window whose slopes are judged (a 5-minute load gave false OVER results).
+const minSlopeWindow = 15 * time.Minute
+
 // budget is the plan's budget (m19-resources.md §7); a violation is flagged, never a failure.
 func (r *result) budget() []budgetCheck {
 	var out []budgetCheck
@@ -484,14 +553,43 @@ func (r *result) budget() []budgetCheck {
 	}
 	// Memory is judged on private bytes (commit): the working set jumps with what the OS keeps resident, not with
 	// what the daemon allocates, so it is reported as information only. A leak shows as a slope once the start is
-	// over; the limits allow for the noise of a few minutes of samples.
+	// over; the limits allow for the noise of a few minutes of samples. Under load the slopes also count the state
+	// of the attempts that run all through the window, so there they are information only and the live heap
+	// retained after the load is the leak check.
+	// A window shorter than minSlopeWindow extrapolates start-up growth and GC noise to a whole hour, so its slopes
+	// are information only too.
 	add("daemon private bytes slope over the second half MB/h", 10, r.Daemon.PrivSlope)
 	add("daemon live heap slope over the second half MB/h", 5, r.Daemon.HeapSlope)
+	slopeNote := ""
+	switch {
+	case r.WindowEnd.Sub(r.WindowStart) < minSlopeWindow:
+		slopeNote = "information only: window too short"
+	case r.Scenario == "load":
+		slopeNote = "information only: per-attempt state grows while tasks run; see retained heap"
+	}
+	if slopeNote != "" {
+		for i := len(out) - 2; i < len(out); i++ {
+			out[i].Info, out[i].Note = true, slopeNote
+		}
+	}
+	if x := r.Retained; x.measured() {
+		c := budgetCheck{Name: "live heap retained after load, excluding the SSE replay ring (after GC) MB", Limit: 3,
+			Value: x.ExRingDeltaMB, OK: x.ExRingDeltaMB <= 3}
+		if x.RingUnknown {
+			c.Note = "the daemon does not report its SSE ring: raw delta"
+		}
+		out = append(out, c)
+	}
 	if r.idleScenario() {
 		add("idle daemon CPU % of one core (window average)", 0.1, r.Daemon.CPUPercent)
 		add("idle daemon peak private MB", 100, r.Daemon.PeakPrivMB)
 	} else {
-		add("load daemon peak private MB", 100, r.Daemon.PeakPrivMB)
+		tasks := 0
+		if r.Load != nil {
+			tasks = r.Load.Tasks
+		}
+		add(fmt.Sprintf("load daemon peak private MB (%g + %g × %d tasks)", loadPrivateBase, loadPrivatePerTask, tasks),
+			loadPrivateBase+loadPrivatePerTask*float64(tasks), r.Daemon.PeakPrivMB)
 		if r.Load != nil && r.Load.EventsStored > 0 {
 			// Not linear in the events: growth per 10k events must stay small.
 			add("load daemon private growth MB per 10k events", 5, r.Load.PrivPer10kEvts)
@@ -559,8 +657,43 @@ func writeMarkdown(w io.Writer, r *result) {
 		d.HeapGrowthMB)
 	p("| slope over the second half | private %+.2f MB/h, live heap %+.2f MB/h (WS %+.2f MB/h, information) |\n",
 		d.PrivSlope, d.HeapSlope, d.WSSlope)
+	if x := r.Retained; x != nil {
+		if x.measured() {
+			p("| live heap retained after load (after GC) start / end / delta | %.2f / %.2f / %+.2f MB |\n", x.StartMB,
+				x.EndMB, x.DeltaMB)
+			if x.RingUnknown {
+				p("| SSE replay ring start / end | not reported by this daemon |\n")
+			} else {
+				p("| SSE replay ring start / end | %.2f / %.2f MB (%d / %d frames) |\n", x.StartRingMB, x.EndRingMB,
+					x.StartRingFrames, x.EndRingFrames)
+			}
+			p("| live heap retained after load, excluding the SSE replay ring | %+.2f MB |\n", x.ExRingDeltaMB)
+		} else {
+			p("| live heap retained after load (after GC) | start %.2f MB, end not read: %s |\n", x.StartMB, x.Error)
+		}
+	}
 	p("| database start / end | %.2f / %.2f MB, WAL %.2f / %.2f MB (max %.2f) |\n\n", r.DB.DBStartMB, r.DB.DBEndMB,
 		r.DB.WALStartMB, r.DB.WALEndMB, r.DB.WALMaxMB)
+	if x := r.Retained; x != nil {
+		p("Retained heap: the live heap after forced GCs (`/debug/pprof/heap?gc=1` twice, then `/gc/heap/live` from "+
+			"`/debug/vars?light=1`) just before the load tasks start and %.0f s after every load task ended and the SSE "+
+			"clients and pollers stopped; profiles in heap-before-load.pprof and heap-after-load.pprof. The SSE replay "+
+			"ring (daemon.sseRing in the same answer) keeps the last frames for 10 minutes, so the budget is the delta "+
+			"without it.", x.SettleSeconds)
+		if x.Note != "" {
+			p(" Note: %s.", x.Note)
+		}
+		p("\n\n")
+	}
+	if g := r.GoSysEnd; g != nil {
+		p("## Go sys breakdown (end)\n\n| Sys | HeapSys | HeapInuse | HeapReleased | StackSys | MSpanSys | MCacheSys | " +
+			"GCSys | BuckHashSys | OtherSys |\n|---|---|---|---|---|---|---|---|---|---|\n")
+		p("| %.2f | %.2f | %.2f | %.2f | %.2f | %.2f | %.2f | %.2f | %.2f | %.2f |\n\n", g.SysMB, g.HeapSysMB,
+			g.HeapInuseMB, g.HeapReleasedMB, g.StackSysMB, g.MSpanSysMB, g.MCacheSysMB, g.GCSysMB, g.BuckHashSysMB,
+			g.OtherSysMB)
+		p("MB, from runtime.MemStats at the end of the run (memstats-end.json; in the load scenario after the retained-" +
+			"heap reading). The *Sys columns add up to Sys; HeapReleased is the part of HeapSys returned to the OS.\n\n")
+	}
 	p("## Process tree by role\n\n| role | peak n | WS mean / peak MB | private mean / peak MB | CPU s | %% core | " +
 		"handles | threads | spawns (window) | spawns/h | seen (run) | max proc peak WS MB |\n" +
 		"|---|---|---|---|---|---|---|---|---|---|---|---|\n")
@@ -602,10 +735,17 @@ func writeMarkdown(w io.Writer, r *result) {
 	p("\n## Budget\n\n| check | limit | value | |\n|---|---|---|---|\n")
 	for _, b := range r.Budget {
 		mark := "ok"
-		if !b.OK {
+		switch {
+		case b.Info:
+			mark = "info"
+		case !b.OK:
 			mark = "**over**"
 		}
-		p("| %s | %g | %g | %s |\n", b.Name, b.Limit, b.Value, mark)
+		name := b.Name
+		if b.Note != "" {
+			name += " (" + b.Note + ")"
+		}
+		p("| %s | %g | %g | %s |\n", name, b.Limit, b.Value, mark)
 	}
 	if len(r.Errors) > 0 {
 		p("\nSample errors: %v\n", r.Errors)
@@ -649,12 +789,24 @@ func (r *result) metrics() []metric {
 		m = append(m, metric{x.Name + " daemon CPU s per " + x.Unit, x.DaemonCPUPerUnit},
 			metric{x.Name + " tree CPU s per " + x.Unit, x.TreeCPUPerUnit})
 	}
+	if g := r.GoSysEnd; g != nil {
+		m = append(m, metric{"Go StackSys end MB", g.StackSysMB}, metric{"Go GCSys end MB", g.GCSysMB},
+			metric{"Go OtherSys end MB", g.OtherSysMB})
+	}
+	if x := r.Retained; x.measured() {
+		m = append(m, metric{"live heap before load MB", x.StartMB}, metric{"live heap after load MB", x.EndMB},
+			metric{"live heap retained after load MB", x.DeltaMB},
+			metric{"live heap retained after load excl. SSE ring MB", x.ExRingDeltaMB},
+			metric{"SSE ring after load MB", x.EndRingMB})
+	}
 	if t := r.Tree; t != nil {
 		m = append(m, metric{"tree CPU % core", t.CPUPercent}, metric{"tree processes/h", t.StartedPerHour})
 	}
 	if x := r.Idle; x != nil {
 		m = append(m, metric{"idle floor daemon CPU % core", x.FloorPercent},
-			metric{"idle daemon CPU s per quota cycle", x.CPUPerCycle}, metric{"idle quota cycles", float64(x.Cycles)})
+			metric{"idle daemon CPU s per quota cycle", x.CPUPerCycle}, metric{"idle quota cycles", float64(x.Cycles)},
+			metric{"idle daemon CPU s per quota-reader spawn", x.CPUPerRead},
+			metric{"idle daemon CPU s per recorder tick", x.CPUPerTick})
 	}
 	for _, x := range r.Roles {
 		if x.Role != "daemon" {

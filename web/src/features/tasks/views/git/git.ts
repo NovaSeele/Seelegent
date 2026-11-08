@@ -34,9 +34,12 @@ export function splitPath(path: string): { dir: string; name: string } {
     : { dir: path.slice(0, cut + 1), name: path.slice(cut + 1) }
 }
 
-/** Changes whenever the file's diff would: a new status, other counts or another rename source. */
+/**
+ * Changes whenever the file's diff or preview would: a new status, other counts, another rename source, or (for
+ * an image, whose counts stay 0/0) another stamp.
+ */
 export const fileSignature = (file: GitFile) =>
-  `${file.status}:${file.additions}:${file.deletions}:${file.oldPath ?? ''}`
+  `${file.status}:${file.additions}:${file.deletions}:${file.oldPath ?? ''}:${file.stamp ?? ''}`
 
 /** The path `delta` steps from `current`, clamped to the list; the first file when nothing is selected. */
 export function stepFile(

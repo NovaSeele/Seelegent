@@ -219,6 +219,9 @@ type Options struct {
 	Logger *slog.Logger
 	// Heartbeat is the SSE ping interval (25 s when 0); tests shorten it.
 	Heartbeat time.Duration
+	// ImageWriteTimeout bounds how long an image larger than smallImageBytes may take to send (30 s when 0): its
+	// file stays open while it streams, so a client that stops reading must not hold it for ever. Tests shorten it.
+	ImageWriteTimeout time.Duration
 	// AccountsPoll is how often the account watcher looks for changes besides pool and task notices (30 s).
 	AccountsPoll time.Duration
 	// DevOrigins are extra browser origins accepted for development only (the Vite dev server, whose proxy keeps
@@ -268,6 +271,9 @@ func New(o Options) (*Server, error) {
 	}
 	if o.Heartbeat <= 0 {
 		o.Heartbeat = 25 * time.Second
+	}
+	if o.ImageWriteTimeout <= 0 {
+		o.ImageWriteTimeout = 30 * time.Second
 	}
 	if o.AccountsPoll <= 0 {
 		o.AccountsPoll = 30 * time.Second
@@ -348,16 +354,20 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 	// Every answer, refusals included: no page may frame the dashboard (clickjacking), and no link leaks the
-	// daemon's URL to another site.
+	// daemon's URL to another site. An API answer is also never loaded by another origin's page as a resource (an
+	// <img> or <script> of another site, which no CORS check covers).
+	isAPI := r.URL.Path == apiPrefix || strings.HasPrefix(r.URL.Path, apiPrefix+"/")
 	h := w.Header()
 	h.Set("X-Frame-Options", "DENY")
 	h.Set("Content-Security-Policy", "frame-ancestors 'none'")
 	h.Set("Referrer-Policy", "no-referrer")
+	if isAPI {
+		h.Set("Cross-Origin-Resource-Policy", "same-origin")
+	}
 	if !s.hostAllowed(r.Host) {
 		s.writeError(w, r, translated(api.CodeMisdirected, "misdirected"))
 		return
 	}
-	isAPI := r.URL.Path == apiPrefix || strings.HasPrefix(r.URL.Path, apiPrefix+"/")
 	if isAPI && mutating(r.Method) {
 		if r.Header.Get("X-Seelegent") != "1" {
 			s.writeError(w, r, translated(api.CodeForbidden, "no_header"))

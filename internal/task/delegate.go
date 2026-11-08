@@ -276,12 +276,12 @@ func (s *Service) Followup(ctx context.Context, id string, req api.FollowupReque
 		}
 		mem = &m
 	}
-	start := false
+	start, superseded, child := false, false, ""
 	// A new lane is checked and saved as one step, as in Delegate (old D25a): claimMu is held through the mutate
 	// (lock order claimMu, then the task).
 	s.claimMu.Lock()
 	_, err := s.mutate(ctx, id, func(t *Task) ([]NewEvent, error) {
-		start = false
+		start, superseded, child = false, false, ""
 		if Hidden(t.Kind) && mem != nil {
 			return nil, invalidf("task %s is a hidden %s run; its member cannot change", id, t.Kind)
 		}
@@ -291,8 +291,16 @@ func (s *Service) Followup(ctx context.Context, id string, req api.FollowupReque
 		if s.consoleOpen(id) {
 			return nil, badStatef("the takeover console of task %s is still open; close it first", id)
 		}
+		var pre []NewEvent
 		if Active(t.Status) {
-			return nil, badStatef("task %s is %s; wait for it or cancel it first", id, t.Status)
+			if !supersedable(t) || msg == "" {
+				return nil, badStatef("task %s is %s (%s); wait for it or cancel it first", id, t.Status, busyWith(t))
+			}
+			// The worker has reported and only the gate runs (or waits to run again): the lead's instruction
+			// supersedes it. The gate stops (its commands are killed with the run, below) and the new turn starts.
+			child = t.GatePhase.ChildID
+			pre = stopGate(t, t.GatePhase, s.now(), supersededNote)
+			t.Status, superseded = StatusDone, true
 		}
 		if err := s.checkContest(ctx, t); err != nil {
 			return nil, err
@@ -347,9 +355,14 @@ func (s *Service) Followup(ctx context.Context, id string, req api.FollowupReque
 				return nil, err
 			}
 		}
+		note := rejectNote(t)
 		ev, err := s.addTurn(ctx, t, by, msg, turnReq)
 		if err != nil {
 			return nil, err
+		}
+		if note != "" {
+			// The worker reads the lead's reject with the instruction, never as a reason to delete its work (F4).
+			t.LastTurn().Message = note + "\n\n" + msg
 		}
 		laneEvs, changed, err := s.followupProof(ctx, t, preq, len(req.TaskIDs) > 0)
 		if err != nil {
@@ -357,17 +370,84 @@ func (s *Service) Followup(ctx context.Context, id string, req api.FollowupReque
 		}
 		t.LastTurn().ProofChanged = changed
 		start = true
-		return append([]NewEvent{ev}, laneEvs...), nil
+		return append(append(pre, ev), laneEvs...), nil
 	})
 	s.claimMu.Unlock()
 	if err != nil {
 		return api.TaskSummary{}, err
+	}
+	if superseded {
+		s.stopSupersededGate(id, child)
 	}
 	if start {
 		s.startRun(id)
 	}
 	s.checkDeps(s.background())
 	return s.Summary(ctx, id)
+}
+
+// rejectNote is the line a followup after the lead rejected a task with files outside its lane starts with, or "":
+// the reject must not push the worker to delete or move those files (field report 4, F4).
+func rejectNote(t *Task) string {
+	r, last := t.Review, t.LastTurn()
+	if r == nil || r.Verdict != api.VerdictRejected || last == nil {
+		return ""
+	}
+	if st := reportLaneStep(t, last.Gate, last); st == nil || len(st.Files)+len(st.Unseen) == 0 {
+		return ""
+	}
+	notes := r.Notes
+	if notes == "" {
+		notes = "(no notes)"
+	}
+	return "Do not delete or move files unless the message below names that exact file and says so; the lead " +
+		"rejected for: " + notes
+}
+
+// supersedable reports whether a followup may take over task t now: its worker has reported and the task is only in
+// its gate phase (the gate runs, is queued, settles or waits for the verifier), not cancelled or taken over.
+func supersedable(t *Task) bool {
+	if t.GatePhase == nil || t.CancelRequested || t.Manual || t.Status != StatusRunning {
+		return false
+	}
+	tu := t.LastTurn()
+	return tu == nil || tu.Status != TurnRunning
+}
+
+// busyWith says what an active task is doing, for a refused followup.
+func busyWith(t *Task) string {
+	switch {
+	case t.CancelRequested:
+		return "it is being cancelled"
+	case t.GatePhase != nil && t.GatePhase.State == api.GatePhaseSettling:
+		return "its gate waits for the other workers of the repository"
+	case t.GatePhase != nil && t.GatePhase.State == api.GatePhaseVerifying:
+		return "the verifier is reviewing it"
+	case t.GatePhase != nil:
+		return "the gate is running"
+	case t.Status == StatusQueued:
+		return "it is queued for a worker"
+	case t.Status == StatusWaitingQuota:
+		return "it waits for an account or for memory"
+	}
+	return "the worker's turn is still running"
+}
+
+// stopSupersededGate stops the gate a followup superseded: the run working on it is stopped (its gate commands are
+// killed through the run's context, as on a cancel) and the verify task, if any, is cancelled. The run then ends
+// and, as the task has an open turn, the next run starts it (endRun).
+func (s *Service) stopSupersededGate(id, child string) {
+	s.mu.Lock()
+	r := s.runs[id]
+	s.mu.Unlock()
+	if r != nil {
+		r.requestStop()
+	}
+	if child != "" {
+		if _, _, err := s.Cancel(s.background(), child, api.CancelRequest{}); err != nil {
+			s.log.Warn("task: cancel the verify task", "task", child, "err", err)
+		}
+	}
 }
 
 // Answer answers the question a task asked: a followup by the user.

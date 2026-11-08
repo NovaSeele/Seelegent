@@ -13,7 +13,8 @@ import { quotaSummary, windowMinutes, type SummaryWindow } from './quotaSummary'
 
 /**
  * A list row's quota at a glance: up to two thin bars of the group the pool routes this backend's work on (see
- * quotaSummary.ts), each with what is left, its reset time in a tooltip, and "+N" for the windows not shown. When
+ * quotaSummary.ts), each with what is left, its reset time in a tooltip, and "+N" for the windows not shown. A bar
+ * from another group than the row's own names that group in its label ("Claude Opus · Weekly"). When
  * no group matches the tier models, one bar shows the lowest window of all in a neutral colour (it may belong to
  * models the workers never use, so it never turns amber or red) and its tooltip says so.
  */
@@ -23,21 +24,28 @@ const { t } = useI18n()
 const fmt = useFormat()
 const connection = useConnectionStore()
 
+// TODO(accounts redesign): an API-key account routes on its provider's tier models, not the backend's. Harmless
+// today (API-key accounts report no quota groups), but read the provider's tiers here once the redesign lands.
 const summary = computed(() =>
   quotaSummary(props.account, connection.settings?.backends?.[props.account.backend]?.tiers),
 )
 
 const DAY = 24 * 60
 
-/** "5h", "Weekly", … for a window, else its own label or key. */
-function spanName(item: SummaryWindow): string {
+/**
+ * "5h", "Weekly", … for a window, else its own label or key. The bars write the short form ("5h", "7d"): next to
+ * "+N" at about 1000px a bar has no room for "Weekly" and cut it to "Wee…". The tooltip and the bar's accessible
+ * name keep the full one.
+ */
+function spanName(item: SummaryWindow, short = false): string {
   const w = item.window
   const m = windowMinutes(w)
-  if (m === 7 * DAY) return t('accounts.list.span.week')
-  if (m === DAY) return t('accounts.list.span.day')
-  if (m === 30 * DAY) return t('accounts.list.span.month')
-  if (m > 0 && m < DAY && m % 60 === 0) return t('accounts.list.span.hours', { n: m / 60 })
-  return w.label || w.window
+  const ns = short ? 'accounts.list.spanShort' : 'accounts.list.span'
+  if (m === 7 * DAY) return t(`${ns}.week`)
+  if (m === DAY) return t(`${ns}.day`)
+  if (m === 30 * DAY) return t(`${ns}.month`)
+  if (m > 0 && m < DAY && m % 60 === 0) return t(`${ns}.hours`, { n: m / 60 })
+  return short ? w.window : w.label || w.window
 }
 
 function tone(remaining: number, routing: boolean): Tone {
@@ -50,6 +58,7 @@ const bars = computed(() => {
   const { windows, routing } = summary.value
   return windows.map((item) => {
     const span = spanName(item)
+    const short = spanName(item, true)
     const where = t(routing ? 'accounts.list.quota.tip' : 'accounts.list.quota.lowestTip', {
       group: item.group,
       window: span,
@@ -60,7 +69,8 @@ const bars = computed(() => {
     const left = t('common.ui.quotaLeft', { value: fmt.value.percent(item.window.remaining) })
     return {
       key: `${item.group}/${item.window.window}`,
-      name: routing ? span : `${item.group} · ${span}`,
+      name: item.named ? `${item.group} · ${span}` : span,
+      short: item.named ? `${item.group} · ${short}` : short,
       left,
       tip: reset ? `${where} · ${reset}` : where,
       tone: tone(item.window.remaining, routing),
@@ -87,7 +97,7 @@ const moreText = computed(() =>
       <Tooltip v-for="bar in bars" :key="bar.key" :text="bar.tip" class="qb__item">
         <div class="qb__bar">
           <span class="qb__head">
-            <span class="qb__name">{{ bar.name }}</span>
+            <span class="qb__name">{{ bar.short }}</span>
             <span class="qb__value" :class="`tone-${bar.tone}`">{{ bar.left }}</span>
           </span>
           <ProgressBar

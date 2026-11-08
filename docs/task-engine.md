@@ -59,6 +59,9 @@ append the events in **one transaction**, then publish on the bus. The log and t
    after a minute. Every account resting or busy: `waiting: resting` (with `waitingUntil`) or `waiting: busy`, with
    the pool's line in `waitDetail` (for busy the full accounts, `acc6: 2 of 2 running`); the `waiting_quota` event
    carries both as `reason` and `detail`, and is written again only when one of them or the time changes.
+   A task without `provider` never takes an API-key account (keys cost money), but when one of its backend would be
+   free with `provider` set, `waitDetail` names that provider (at most three, each once; "and a model" when the
+   provider maps no tier), and the report carries it as `wait_detail`.
    A hand-back turn waits for the conversation's own account while it rests or is busy instead of moving. When that
    account cannot run at all any more (signed out, disabled, removed, its models no longer allowed), the hand-back
    runs on another account in a new conversation, whose brief says plainly that the console's context is not
@@ -79,8 +82,9 @@ append the events in **one transaction**, then publish on the bus. The log and t
    the task records `gitStart`, the HEAD commit and branch it starts from (an empty head in a repository without
    commits, an empty branch when detached, nothing outside a repository); followups keep the first start, and the Git
    view lists the commits made since it ([api.md](api.md)). The
-   baseline is taken before the run waits for an account (`Pool.Wait`), so files changed while the task waits are
-   not in it. A retry on the same
+   baseline is taken right before the first launch, once an account is leased (`Pool.Wait`), so files someone
+   changed while the task waited for an account are in it, and the worker is told to leave them too. A retry on the
+   same
    conversation resends the request itself when the failed attempt never reported a session, and otherwise the retry
    note together with the request, so a followup is never lost.
 3. **Launch.** `account.Manager.Env` builds the environment (an API key that is missing is an `auth` outcome, not an
@@ -107,13 +111,18 @@ append the events in **one transaction**, then publish on the bus. The log and t
 | ok | turn `ok`, task `done` (a hand-back turn also logs `handback`); a gated task stays `running` in its gate phase first (below) |
 | quota | the account rests for that quota group (`pool.MarkExhausted`), next attempt |
 | auth | the account is marked signed out (`pool.MarkAuthFailed`), next attempt on another account |
+| credits | the key's credit or billing ran out (class `credits`, never a quota rest): the account is left out with no end time (`pool.MarkNoCredit`) until the user stores a new key or edits the account (switches it off and on after a top-up); next attempt on another account, or, when no other account can run the task, the task fails at once naming the key ("the anthropic key has no credit left; top up or change the key") instead of waiting |
 | transient | `retry` event, wait 15 s then 45 s on the same account (only its own timer wakes it), then another account |
 | background_wait | continue once with the background-wait prompt; the second time the turn ends `ok` |
 | error / timeout | turn and task `failed` |
 | cancelled | turn and task `cancelled` |
 
-A turn makes at most one attempt per account of the backend plus three. After every attempt the usage is recorded
-and a background quota read of the account is requested.
+A turn makes at most one attempt per account of the backend plus three, not counting attempts that ended on a quota
+limit: those rest the account and resume or hand over, so the turn waits rather than fails. A runaway loop of limits
+ends the turn after 50 of them. After every attempt the usage is recorded and a background quota read of the account
+is requested. Codex reports the thread's running total at `turn.completed`, so a resumed codex attempt records what
+it added to the total the conversation's previous attempt reported (kept as the outcome's `threadUsage`); a total
+below that one is taken as is.
 
 6. **Gate.** An edit task whose turn ended `ok` keeps its run: the task stays `running` with `gatePhase` set while
    the gate runs, settles, or the verifier child works ([gates.md](gates.md)). A red gate or a verifier reject with

@@ -74,6 +74,9 @@ type repoState struct {
 	upstream      string
 	ahead, behind int
 	ab            bool
+	// heads holds the blob id at HEAD (porcelain v2's hH) of the changed tracked images, by path: the HEAD half of
+	// their GitFile.Stamp.
+	heads map[string]string
 }
 
 // state reads `git status` of the repository at root, with the line counts of the changed tracked files when
@@ -145,10 +148,12 @@ func parseStatus(out []byte) repoState {
 		case '1':
 			if f := strings.SplitN(rec, " ", 9); len(f) == 9 {
 				st.files = append(st.files, api.GitFile{Path: f[8], Status: statusOf(f[1])})
+				st.headOf(f[8], f[6])
 			}
 		case '2':
 			if f := strings.SplitN(rec, " ", 10); len(f) == 10 {
 				gf := api.GitFile{Path: f[9], Status: api.GitRenamed}
+				st.headOf(f[9], f[6]) // the blob of the old path: the preview's "before"
 				if i+1 < len(recs) {
 					i++
 					gf.OldPath = recs[i]
@@ -168,6 +173,17 @@ func parseStatus(out []byte) repoState {
 	}
 	sort.Slice(st.files, func(i, j int) bool { return st.files[i].Path < st.files[j].Path })
 	return st
+}
+
+// headOf keeps the blob id at HEAD of path when it is an image (see repoState.heads).
+func (st *repoState) headOf(path, oid string) {
+	if !isImage(path) {
+		return
+	}
+	if st.heads == nil {
+		st.heads = map[string]string{}
+	}
+	st.heads[path] = oid
 }
 
 // statusOf maps the XY code of a changed entry (index, worktree).

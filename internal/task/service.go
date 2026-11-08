@@ -53,6 +53,7 @@ type Pool interface {
 	MarkExhausted(ctx context.Context, accountID string, ex pool.Exhaustion) (pool.Cooldown, error)
 	MarkAuthFailed(ctx context.Context, accountID, message string) error
 	MarkSucceeded(ctx context.Context, accountID string, started time.Time) error
+	MarkNoCredit(ctx context.Context, accountID, message string) error
 	Changed() <-chan struct{}
 }
 
@@ -164,6 +165,9 @@ type Options struct {
 	Settings func() config.Settings
 	// TasksDir holds one folder per task with its attempt folders (config.Paths.Tasks).
 	TasksDir string
+	// DataDir is the data folder (config.Paths.Home) for the worker brief's data-folder rule (brief.Input.DataDir);
+	// "" names it ~/.seelegent.
+	DataDir string
 	// Launcher is the command that runs the detached launcher ({os.Executable(), "__launch"}).
 	Launcher []string
 
@@ -260,9 +264,11 @@ type Service struct {
 	// health is the accounts' state the attention rules read, refreshed by the attention watcher.
 	healthMu sync.Mutex
 	health   map[string]accountHealth
-	// overlaps caches the contention view of each repository for a few seconds.
-	overlapMu sync.Mutex
-	overlaps  map[string]overlapCache
+	// overlaps caches the contention view of each repository for a few seconds; overlapSweep is set while the
+	// goroutine that drops expired views runs (sweepOverlaps).
+	overlapMu    sync.Mutex
+	overlaps     map[string]overlapCache
+	overlapSweep bool
 
 	// resMu guards the resource state (resources.go): the watchdog's hold (low), whether it stopped a gate in
 	// this low-memory episode (stopped), the heavy commands in flight (newest last), the last spaced start, lowWake,

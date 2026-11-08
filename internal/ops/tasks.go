@@ -167,6 +167,9 @@ func ReportSummary(r api.TaskReport) string {
 	if r.Error != "" {
 		b.WriteString(", with an error")
 	}
+	if r.WaitDetail != "" {
+		fmt.Fprintf(&b, ", waiting: %s", r.WaitDetail)
+	}
 	b.WriteString(".")
 	return b.String()
 }

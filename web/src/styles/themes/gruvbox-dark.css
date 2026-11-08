@@ -56,4 +56,6 @@
   --term-border: rgba(235, 219, 178, 0.08);
   --shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.56), 0 4px 12px rgba(0, 0, 0, 0.36);
   --font-mono-theme: var(--font-mono-fira-code);
+  /* Provider hues (styles/providers.css), one step lighter to keep 3:1 on both surfaces. */
+  --provider-agy: #8c75ff;
 }

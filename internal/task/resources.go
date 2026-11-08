@@ -386,6 +386,14 @@ func waitingOf(t *Task) string {
 	return ""
 }
 
+// waitDetailOf is the report's WaitDetail: TaskSummary.WaitDetail while the task waits for an account or memory.
+func waitDetailOf(t *Task) string {
+	if t.Status == StatusWaitingQuota {
+		return t.WaitDetail
+	}
+	return ""
+}
+
 // LowMemory reports whether the watchdog holds every new start (Health.LowMemory).
 func (s *Service) LowMemory() bool {
 	s.resMu.Lock()

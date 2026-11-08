@@ -5,6 +5,7 @@
   "notRepoDesc": "{cwd} no está dentro de un repositorio git, así que no hay nada que confirmar.",
   "noBranch": "desacoplado",
   "uncommittedCount": "{n} archivo sin confirmar | {n} archivos sin confirmar",
+  "sumShown": "en los archivos listados",
   "refresh": "Volver a leer",
   "empty": "Esta tarea no tiene cambios",
   "emptyDesc": "Los archivos que cambie el worker aparecen aquí, listos para revisar y confirmar.",
@@ -125,7 +126,8 @@
     "label": "Carpetas sin seguimiento",
     "files": "{n} archivo | {n} archivos",
     "more": "y {n} archivo más | y {n} archivos más",
-    "listLabel": "Archivos en {path}"
+    "listLabel": "Archivos en {path}",
+    "others": "{n} archivo más aquí no es de esta tarea | {n} archivos más aquí no son de esta tarea"
   },
   "image": {
     "before": "Antes (HEAD)",

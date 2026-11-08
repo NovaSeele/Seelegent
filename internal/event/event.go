@@ -44,6 +44,10 @@ const (
 	ClassQuotaExhausted Class = "quota_exhausted"
 	// ClassAuthRequired: the account must sign in again (or its API key/provider is unusable).
 	ClassAuthRequired Class = "auth_required"
+	// ClassCredits: the account's credit balance or billing ran out (an API key without credit). It is not a quota
+	// rest: no time ends it. The account rests until the user acts (tops up and edits the account, or changes
+	// the key) and the task tries another account.
+	ClassCredits Class = "credits"
 	// ClassTransient: a network or server hiccup; retrying the same turn may work.
 	ClassTransient Class = "transient"
 	// ClassFatal: anything else; retrying will not help.

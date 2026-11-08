@@ -812,8 +812,17 @@ export interface GateStep {
    */
   stopped?: 'low_memory'
   stops?: number
-  /** Files are the files out of lane (lane) or checked (auto). */
+  /**
+   * Files are the files out of lane (lane) or checked (auto). For the lane they are the files a worker touched:
+   * with its edit tools or through a command Seelegent saw write them.
+   */
   files?: string[]
+  /**
+   * Unseen are the files out of lane that changed during the turns although no worker edit or command Seelegent
+   * saw touched them (the lead or the user editing the same tree, or a command's side effects): lane only, a
+   * warning, never red.
+   */
+  unseen?: string[]
   /** Failures are the files an auto check refused, with why. */
   failures?: GateFailure[]
   /** Findings are the red hygiene findings. */
@@ -1188,6 +1197,12 @@ export interface GitDir {
   bytes: number
   /** Files are its first GitDirFiles files by path; Count minus their number are left out. */
   files: GitFile[]
+  /**
+   * Others counts the folder's untracked files that are not the task's (already there when it started, or
+   * outside its folder and never touched by it). The row stands for the whole folder, so the repository view
+   * does not list them either.
+   */
+  others?: number
 }
 
 /** GitFile is one changed file. */
@@ -1200,6 +1215,12 @@ export interface GitFile {
   /** Turn is the turn that last changed the file, when known. */
   turn?: number
   binary: boolean
+  /**
+   * Stamp changes whenever an image's preview would (TaskGit.Files and UntrackedDirs of the Git tab view only,
+   * images only): the working tree file's size and modification time, and its blob id at HEAD. The view adds it
+   * to the image URLs, so a rewritten image is read again although its status and line counts stay the same.
+   */
+  stamp?: string
 }
 
 /**
@@ -2017,6 +2038,11 @@ export interface TaskReport {
   cancelling?: boolean
   error?: string
   waiting_until?: string
+  /**
+   * WaitDetail is TaskSummary.WaitDetail while the task waits for an account: why, and the free API-key
+   * accounts a provider would reach.
+   */
+  wait_detail?: string
   /** Waiting is TaskSummary.Waiting: "memory" while a waiting_quota task waits for free memory. */
   waiting?: 'memory'
   answered_by?: string
@@ -2157,9 +2183,13 @@ export interface Finding {
     | 'unreported_file'
     | 'outside_repo_write'
     | 'unfetched_url'
+    | 'outside_lane'
     | 'skipped'
   severity: 'red' | 'warn'
-  /** Path is relative to the repository root (hygiene) or absolute (outside_repo_write); empty for URLs. */
+  /**
+   * Path is relative to the repository root (hygiene, outside_lane) or absolute (outside_repo_write); empty for
+   * URLs.
+   */
   path?: string
   /** Detail is a short explanation (the command, the URLs). */
   detail?: string
@@ -2963,9 +2993,17 @@ export interface Attempt {
   model?: string
   startedAt: string
   endedAt?: string
-  /** Status is running, ok, quota, auth, transient, background_wait, error or cancelled. */
+  /** Status is running, ok, quota, auth, credits, transient, background_wait, error or cancelled. */
   status:
-    'running' | 'ok' | 'quota' | 'auth' | 'transient' | 'background_wait' | 'error' | 'cancelled'
+    | 'running'
+    | 'ok'
+    | 'quota'
+    | 'auth'
+    | 'credits'
+    | 'transient'
+    | 'background_wait'
+    | 'error'
+    | 'cancelled'
   /** Kind is "console" for a takeover. */
   kind?: 'console'
   error?: string
@@ -3006,8 +3044,8 @@ export interface DelegateRequest {
   afterMode?: 'accepted' | 'done'
   allowGit?: boolean
   /**
-   * Gate: true adds the test, lint and build commands found in the repository; false turns the gate's commands
-   * off (lane and hygiene still run). GateCommands are the lead's own gate commands; with spec task ids they
+   * Gate: true adds the test, lint and build commands found in the repository; false turns the gate phase off
+   * (no commands, no fix turns; the lane is still checked after each turn, as information). GateCommands are the lead's own gate commands; with spec task ids they
    * replace the tasks' Gate: lines and the feature gate, and prove those tasks.
    */
   gate?: boolean
@@ -4103,7 +4141,7 @@ export interface WorkerReport {
 
 /** Error is a classified failure. */
 export interface WorkerError {
-  class: 'quota_exhausted' | 'auth_required' | 'transient' | 'fatal'
+  class: 'quota_exhausted' | 'auth_required' | 'credits' | 'transient' | 'fatal'
   message: string
 }
 

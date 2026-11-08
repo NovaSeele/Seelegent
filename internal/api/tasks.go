@@ -320,8 +320,8 @@ type Attempt struct {
 	Model        string `json:"model,omitempty"`
 	StartedAt    string `json:"startedAt"`
 	EndedAt      string `json:"endedAt,omitempty"`
-	// Status is running, ok, quota, auth, transient, background_wait, error or cancelled.
-	Status string `json:"status" ts:"'running' | 'ok' | 'quota' | 'auth' | 'transient' | 'background_wait' | 'error' | 'cancelled'"`
+	// Status is running, ok, quota, auth, credits, transient, background_wait, error or cancelled.
+	Status string `json:"status" ts:"'running' | 'ok' | 'quota' | 'auth' | 'credits' | 'transient' | 'background_wait' | 'error' | 'cancelled'"`
 	// Kind is "console" for a takeover.
 	Kind  string `json:"kind,omitempty" ts:"'console'"`
 	Error string `json:"error,omitempty"`
@@ -374,8 +374,8 @@ type DelegateRequest struct {
 	After     []string     `json:"after,omitempty"`
 	AfterMode string       `json:"afterMode,omitempty" ts:"'accepted' | 'done'"`
 	AllowGit  bool         `json:"allowGit,omitempty"`
-	// Gate: true adds the test, lint and build commands found in the repository; false turns the gate's commands
-	// off (lane and hygiene still run). GateCommands are the lead's own gate commands; with spec task ids they
+	// Gate: true adds the test, lint and build commands found in the repository; false turns the gate phase off
+	// (no commands, no fix turns; the lane is still checked after each turn, as information). GateCommands are the lead's own gate commands; with spec task ids they
 	// replace the tasks' Gate: lines and the feature gate, and prove those tasks.
 	Gate         *bool    `json:"gate,omitempty"`
 	GateCommands []string `json:"gateCommands,omitempty"`

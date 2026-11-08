@@ -23,6 +23,7 @@ import (
 
 // e2eRun is one turn run through the real launcher with the fake CLI.
 type e2eRun struct {
+	backend string
 	handle  *launch.Handle
 	parser  Parser
 	record  string
@@ -70,7 +71,7 @@ func startE2EOn(t *testing.T, b Backend, script string, prof account.Profile, tu
 	if err != nil {
 		t.Fatal(err)
 	}
-	r := &e2eRun{record: filepath.Join(attempt, "record.json")}
+	r := &e2eRun{backend: b.Name(), record: filepath.Join(attempt, "record.json")}
 	if env == nil {
 		env = os.Environ()
 	}
@@ -128,7 +129,7 @@ func (r *e2eRun) finish(t *testing.T) {
 		t.Fatal(err)
 	}
 	r.events = append(r.events, r.parser.Finish(r.exit, tail)...)
-	var c Collector
+	c := Collector{Backend: r.backend}
 	for _, e := range r.events {
 		c.Add(e)
 	}
@@ -185,8 +186,8 @@ func TestEndToEndStreams(t *testing.T) {
 }
 
 // TestEndToEndClaudeLimit runs Claude Code's 5-hour limit message through the launcher (field report 3, B1): the
-// turn is quota_exhausted with the reset time of the message, the next 3:10am in Ho Chi Minh City after the exit,
-// and keeps the conversation and the tokens of the work done before the limit.
+// turn is quota_exhausted with the reset time of the message, 3:10am in Ho Chi Minh City no more than resetLate
+// before the exit and less than a day after it, and keeps the conversation and the tokens of the work done before the limit.
 func TestEndToEndClaudeLimit(t *testing.T) {
 	r := startE2E(t, "claude", filepath.Join("testdata", "streams", "claude", "limit.jsonl"), testProfile(t),
 		Turn{Prompt: "add the limiter", Model: "claude-opus-5", Timeout: time.Minute}, nil)
@@ -202,7 +203,7 @@ func TestEndToEndClaudeLimit(t *testing.T) {
 	}
 	reset := o.ResetAt.In(hcm)
 	if r.exit.EndedAt.IsZero() || reset.Hour() != 3 || reset.Minute() != 10 ||
-		reset.Before(r.exit.EndedAt.Add(-resetGrace)) || reset.After(r.exit.EndedAt.Add(24*time.Hour)) {
+		reset.Before(r.exit.EndedAt.Add(-resetLate)) || reset.After(r.exit.EndedAt.Add(24*time.Hour-resetLate)) {
 		t.Errorf("reset = %v for an exit at %v", o.ResetAt, r.exit.EndedAt)
 	}
 }

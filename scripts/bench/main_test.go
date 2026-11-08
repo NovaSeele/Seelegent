@@ -24,7 +24,8 @@ const envSpawnLog = "BENCH_SPAWN_LOG"
 //   - by the daemon as gh (a copy named gh on the daemon's PATH): it answers the access check offline;
 //   - by the daemon's quota readers as `agy -p /usage ...` (FAKECLI_QUEUE set): it answers a healthy quota;
 //   - by the daemon's launchers as the worker CLI (FAKECLI_QUEUE set): fakecli replays the next queued script;
-//   - by the developer: it parses the bench flags and runs a scenario.
+//   - by the developer: it parses the bench flags and runs a scenario;
+//   - by `go test -run`: it runs the unit tests of the report instead.
 func TestMain(m *testing.M) {
 	if exeBase(os.Args[0]) == "gh" {
 		os.Exit(fakeGh(os.Args[1:]))
@@ -41,6 +42,10 @@ func TestMain(m *testing.M) {
 	}
 	o := registerFlags(flag.CommandLine)
 	flag.Parse()
+	if f := flag.Lookup("test.run"); f != nil && f.Value.String() != "" {
+		// `go test -tags bench -run Test ./scripts/bench`: the bench's own unit tests (report_unit_test.go), no bench.
+		os.Exit(m.Run())
+	}
 	if err := run(o); err != nil {
 		fmt.Fprintln(os.Stderr, "bench:", err)
 		os.Exit(1)
@@ -205,7 +210,20 @@ func (o *options) normalize() error {
 	if o.interval <= 0 || o.tasks < 1 || o.rate <= 0 || o.accounts < 1 || o.poll <= 0 {
 		return fmt.Errorf("-interval, -tasks, -rate, -accounts and -poll must be positive")
 	}
+	if o.perAccount() > maxPerAccount {
+		return fmt.Errorf("-tasks %d on -accounts %d needs %d turns per account; at most %d: add accounts", o.tasks,
+			o.accounts, o.perAccount(), maxPerAccount)
+	}
 	return nil
+}
+
+// defaultPerAccount is the daemon's default maxConcurrentPerAccount; maxPerAccount the most it accepts.
+const defaultPerAccount, maxPerAccount = 2, 64
+
+// perAccount is the maxConcurrentPerAccount the bench daemon gets: the default, or more when the load tasks would
+// not all fit on the accounts at once (-tasks 16 on 6 accounts needs 3), so every load task runs in parallel.
+func (o *options) perAccount() int {
+	return max(defaultPerAccount, (o.tasks+o.accounts-1)/o.accounts)
 }
 
 // freePort asks the system for a free loopback port. Another program can take it before the daemon listens; the

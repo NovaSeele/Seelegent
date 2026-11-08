@@ -79,7 +79,7 @@ function onClick(event: MouseEvent, navigate: (e?: MouseEvent) => unknown) {
             <span v-if="showProject">{{ task.projectName }}</span>
             <span v-if="task.manual" class="row__manual">{{ t('tasks.row.manual') }}</span>
             <template v-else>
-              <ProviderMark :backend="task.backend" size="sm" />
+              <ProviderMark :backend="task.backend" size="sm" label="hidden" class="row__mark" />
               <span v-if="task.accountLabel">{{ task.accountLabel }}</span>
             </template>
           </span>
@@ -197,6 +197,12 @@ function onClick(event: MouseEvent, navigate: (e?: MouseEvent) => unknown) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* The backend is only its dot here (name in the tooltip and for screen readers), so it never shrinks. */
+.row__meta > .row__mark {
+  flex: none;
+  margin-inline-end: calc(var(--space-1) - var(--space-2));
 }
 
 /* The current step gets its own line, so a narrow sidebar never cuts project and step both. */

@@ -227,6 +227,12 @@
       "week": "每周",
       "month": "每月"
     },
+    "spanShort": {
+      "hours": "{n} 小时",
+      "day": "1天",
+      "week": "7天",
+      "month": "30天"
+    },
     "quota": {
       "tip": "{group} · {window}",
       "lowestTip": "所有窗口中最低：{group} · {window}",

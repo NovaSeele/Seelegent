@@ -81,7 +81,12 @@ func (s *Service) follow(r *run, h *launch.Handle, b backend.Backend, m attemptM
 	if m.patterns {
 		parser.MaskPatterns(logx.NewRedactor().String)
 	}
+	tp, _ := parser.(threadUsageParser)
+	if tp != nil {
+		tp.SetUsageBaseline(s.usageBaseline(id, turn, n))
+	}
 	f := s.newFollower(r, parser, id, turn, n, committed)
+	f.coll.Backend = b.Name()
 	ctx, cancel := context.WithCancel(s.root)
 	defer cancel()
 
@@ -128,7 +133,71 @@ func (s *Service) follow(r *run, h *launch.Handle, b backend.Backend, m attemptM
 	for _, ev := range finish {
 		f.coll.Add(ev)
 	}
-	return attemptResult{outcome: f.coll.Outcome(exit), exit: exit, finish: finish}, nil
+	out := f.coll.Outcome(exit)
+	if tp != nil {
+		out.ThreadTracked = true
+		if u, ok := tp.ThreadUsage(); ok {
+			out.ThreadUsage = &u
+		}
+	}
+	return attemptResult{outcome: out, exit: exit, finish: finish}, nil
+}
+
+// threadUsageParser is a parser whose CLI reports usage as the conversation's running total (codex: the
+// turn.completed of a resumed thread counts every earlier run of it again). It gets the total before the attempt,
+// reports the attempt's part, and returns the new total, which the attempt's outcome keeps for the next one.
+type threadUsageParser interface {
+	SetUsageBaseline(event.Usage)
+	ThreadUsage() (event.Usage, bool)
+}
+
+// usageBaseline is the conversation's usage total before attempt n of turn (usageBaselineOf). A task that cannot be
+// read gives zero, so the attempt counts the whole total: too much rather than nothing.
+func (s *Service) usageBaseline(id string, turn, n int) event.Usage {
+	t, err := s.repo.Get(s.background(), id)
+	if err != nil {
+		s.log.Warn("task: read the usage before the attempt", "task", id, "err", err)
+		return event.Usage{}
+	}
+	return usageBaselineOf(t, turn, n)
+}
+
+// usageBaselineOf is the usage total of the conversation attempt n of turn continues, as the latest earlier attempt
+// in that conversation reported it; zero for an attempt that starts a new conversation. An attempt whose outcome
+// tracked the total but holds none (codex reported zeros, or the run failed) keeps the base before it; one recorded
+// before outcomes tracked the total (no ThreadTracked) gives its usage, which was the CLI's total then. Zero usage is
+// never a base.
+func usageBaselineOf(t *Task, turn, n int) event.Usage {
+	tu := t.TurnN(turn)
+	if tu == nil || n < 1 || n > len(tu.Attempts) {
+		return event.Usage{}
+	}
+	cur := tu.Attempts[n-1]
+	if !cur.Continuing || cur.ConversationID == "" {
+		return event.Usage{}
+	}
+	var base event.Usage
+	for _, x := range t.Turns {
+		for _, a := range x.Attempts {
+			if x.N > turn || (x.N == turn && a.N >= n) || a.ConversationID != cur.ConversationID || a.Outcome == nil {
+				continue
+			}
+			switch {
+			case a.Outcome.ThreadUsage != nil && !a.Outcome.ThreadUsage.IsZero():
+				base = *a.Outcome.ThreadUsage
+			case !a.Outcome.ThreadTracked && a.Usage != nil && !a.Usage.IsZero():
+				base = *a.Usage
+			}
+		}
+	}
+	return base
+}
+
+// activity is what the worker does now, as the task's active step shows it: its step label and open tool.
+func (r *run) activity() [2]string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return [2]string{r.live.step, r.live.tool}
 }
 
 // line takes one line of the stream (or stderr).
@@ -151,9 +220,21 @@ func (f *follower) line(stderr bool, line []byte, next int64) error {
 		replay = next <= f.committed.Stream
 	}
 	now := f.s.clk.Now()
+	before := f.r.activity()
 	for _, ev := range evs {
 		f.coll.Add(ev)
 		f.r.note(ev, now, replay)
+		if !replay && ev.Tool != nil && ev.Tool.Blocked {
+			// The whole refused command goes to the (redacted) daemon log: the task's events cut it short, which kept
+			// a false refusal from being understood (field report 4, F11).
+			f.s.log.Info("task: the git guard refused a command", "task", f.id, "turn", f.turn,
+				"command", ev.Tool.Command, "reason", ev.Tool.Output)
+		}
+	}
+	if !replay && f.r.activity() != before {
+		// The task's active step changed: the summary views show it (field report 4, F9: it stayed "starting" for
+		// 45 minutes, as worker events never republished the summary).
+		f.s.bus.Publish(Notice{Kind: NoticeLive, TaskID: f.id})
 	}
 	if replay || len(evs) == 0 || f.mergeLocked(evs) {
 		if f.pending == nil {

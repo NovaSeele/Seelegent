@@ -113,7 +113,9 @@ does), with two additions: `gate` of `delegate` and `followup` also takes `true`
 
 Argument handling follows the old server, with one change: an argument the tool's input schema does not have is
 refused with a tool error (`invalid_argument`) that names it and lists the valid ones (the old server ignored it, so
-`tier: "strong"` ran on the default tier; tiers go in `model`). The schemas say `additionalProperties: false`. Numbers
+`tier: "strong"` ran on the default tier; tiers go in `model`). The schemas do not say `additionalProperties: false`:
+hosts that pass tool schemas through the Gemini API (agy, Antigravity, Gemini CLI) have rejected that keyword, and
+one refused schema hides every tool on that host. Numbers
 and booleans may arrive as strings, a single string is accepted where a list is expected, wait seconds are clamped
 (`delegate`/`followup`/`wait` 0..3000, default 600, and 0 for a `delegate` with `after`; `cancel` 0..60, default 15).
 `mode: full` maps to the API's `edit`. `lane: false`, `verify: false` and `force_lane: false` mean "off" and are

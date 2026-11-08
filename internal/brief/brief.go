@@ -7,10 +7,13 @@ package brief
 import (
 	"fmt"
 	"strings"
+
+	"github.com/NovaSeele/Seelegent/internal/fsutil"
 )
 
-// workerRules is the fixed part of every worker brief (old WORKER_BRIEF).
-const workerRules = `You are a worker engineer on a team led by a lead engineer (the lead). The lead designs, reviews and tests; you implement.
+// rulesHead and rulesTail are the fixed part of every worker brief (old WORKER_BRIEF), around the data-folder
+// rule (DataRule), which depends on the task's folders.
+const rulesHead = `You are a worker engineer on a team led by a lead engineer (the lead). The lead designs, reviews and tests; you implement.
 Rules:
 - Do exactly the task below. Stay inside its scope; do not refactor or "improve" unrelated code.
 - Add only what the task asks for: no extra options, configuration or abstractions nobody asked for, and no handling for situations that cannot happen. If 200 lines could be 50, rewrite it.
@@ -22,8 +25,10 @@ Rules:
 - Never modify files outside this repository: toolchains, package caches (~/.cargo, ~/.npm and the like), global config, other projects. If the environment looks broken (wrong compiler, corrupt cache, missing tool), stop and report it to the lead under Open issues instead of repairing it.
 - When your report states facts from outside the repo (library or API behavior, versions, documentation), say how you know: write "fetched <URL>" only for pages you fetched in this task; otherwise mark the claim "(unverified)".
 - Files you created only to check your work (throwaway test settings, scratch scripts, debug output) must be deleted before your report. Do not add a test folder or test settings to a repo that has none unless the brief asks for them; if it does, name them under Open issues so the lead can remove them when the work is finished.
-- Put temporary things (browser profiles, downloads, caches, scratch scripts and their output) in the OS temp folder (TEMP/TMPDIR), never inside the repository.
-- If the task names a way to verify (tests, build, lint, a command), run it and fix what fails. If it names none, run the cheapest relevant check you can find.
+- Put temporary things (browser profiles, downloads, caches, scratch scripts and their output) in the OS temp folder (TEMP/TMPDIR), the one place outside the repository you may write.
+`
+
+const rulesTail = `- If the task names a way to verify (tests, build, lint, a command), run it and fix what fails. If it names none, run the cheapest relevant check you can find.
 - If something is ambiguous or blocked, make the most reasonable choice, keep going, and report it.
 - If you cannot continue without a decision only the lead can make, stop, and add this section at the end of your report:
 ## Blocked
@@ -80,6 +85,9 @@ type Input struct {
 	Lead string
 	// Cwd is the task's working folder.
 	Cwd string
+	// DataDir is Seelegent's data folder (config.Paths.Home); "" names it as ~/.seelegent. A Cwd inside it leaves
+	// the data-folder rule out.
+	DataDir string
 	// Plan is true in plan mode (read-only).
 	Plan bool
 	// PlanShell is true when the attempt's backend reads files in plan mode with read-only shell commands (codex's
@@ -159,7 +167,11 @@ type Turn struct {
 // request. A turn after earlier ones (or after an interrupted attempt) carries the handoff section, so a worker on
 // another account never loses the task (old bug B7).
 func Worker(in Input) string {
-	head := workerRules
+	specDir := ""
+	if in.Spec != nil && in.Spec.Outside {
+		specDir = in.Spec.Dir
+	}
+	head := rulesHead + "- " + DataRule(in.DataDir, in.Cwd, specDir) + "\n" + rulesTail
 	if in.Lead != "" {
 		head += "\nThe lead for this task is " + in.Lead + "."
 	}
@@ -264,8 +276,9 @@ func GateSection(lane, gate []string) string {
 	var lines []string
 	if lane != nil {
 		lines = append(lines, "## Your lane", "Change only these files (paths relative to the repository root; a "+
-			"trailing / covers the folder): "+strings.Join(lane, ", ")+". Seelegent checks this after your report; if "+
-			"the task needs another file, stop and explain it under ## Blocked.")
+			"path without wildcards covers that file or folder and everything under it): "+strings.Join(lane, ", ")+
+			". Seelegent checks this after your report; if the task needs another file, stop and explain it under "+
+			"## Blocked.")
 	}
 	if len(gate) > 0 {
 		if len(lines) > 0 {
@@ -351,7 +364,49 @@ func LeadName(host string) string {
 // Preview returns the first PreviewChars characters of a brief after the fixed rules, which every full brief starts
 // with, so previews of different tasks differ.
 func Preview(prompt string) string {
-	return cut(strings.TrimLeft(strings.TrimPrefix(prompt, workerRules), "\n"), PreviewChars, "")
+	if strings.HasPrefix(prompt, rulesHead) {
+		if i := strings.Index(prompt, rulesTail); i >= 0 {
+			prompt = prompt[i+len(rulesTail):]
+		}
+	}
+	return cut(strings.TrimLeft(prompt, "\n"), PreviewChars, "")
+}
+
+// DataRule is the rule about Seelegent's data folder (dataDir; named ~/.seelegent when "", and then no exception
+// can be told) that every worker brief and the gate's fix prompts carry: explore neither it nor the daemon's
+// processes (field report 4, F10). A Spec Kit workspace lives inside it (<data>/specs/<repo>-spec/), so the rule
+// names the exception: the task's folder (cwd) when that lies inside (the speckit-* steps work there), else its
+// spec folder outside the repository (specDir, an absolute path; "" for none) when that lies inside.
+func DataRule(dataDir, cwd, specDir string) string {
+	shown := "~/.seelegent"
+	if dataDir != "" {
+		shown = dataDir
+	}
+	head := "Do not explore " + shown + " or Seelegent's processes; inside it, "
+	switch {
+	case dataDir != "" && within(cwd, dataDir):
+		return head + "work only in " + cwd + "."
+	case dataDir != "" && within(specDir, dataDir):
+		return head + "read only " + specDir + " (your spec folder) and the paths this brief names."
+	}
+	return head + "read only the paths this brief names, such as the spec folder."
+}
+
+// within reports whether p lies in dir or is dir, compared through fsutil.Key.
+func within(p, dir string) bool {
+	if p == "" {
+		return false
+	}
+	kp, err := fsutil.Key(p)
+	if err != nil {
+		return false
+	}
+	kd, err := fsutil.Key(dir)
+	if err != nil {
+		return false
+	}
+	kd = strings.TrimSuffix(kd, "/")
+	return kp == kd || strings.HasPrefix(kp, kd+"/")
 }
 
 // quoted prepares text written by a worker or the lead for a brief section: cut to n characters with a "…" mark,

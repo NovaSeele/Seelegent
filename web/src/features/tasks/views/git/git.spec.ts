@@ -112,13 +112,17 @@ describe('git model', () => {
 describe('useGit', () => {
   let model!: GitModel
 
-  async function setup(api: GitApi, initial: Partial<TaskSummary> = {}) {
+  async function setup(api: GitApi, initial: Partial<TaskSummary> = {}, path?: string) {
     const { plugins } = await setupApp()
     const task = shallowRef(makeTask({ id: 't1', status: 'done', ...initial }))
     mount(
       defineComponent({
         setup() {
-          model = useGit(() => task.value, api)
+          model = useGit(
+            () => task.value,
+            api,
+            () => path,
+          )
           return () => h('div')
         },
       }),
@@ -211,6 +215,60 @@ describe('useGit', () => {
     model.selected.value = 'gen/b.png'
     await flush(4)
     expect(model.selectedFile.value?.path).toBe('gen/b.png')
+  })
+
+  it('steps into an open folder, counts its files, and sums the lines of the files shown', async () => {
+    const listed = [
+      file('gen/a.png', { status: 'untracked', additions: 0, deletions: 0, binary: true }),
+      file('gen/b.txt', { status: 'untracked', additions: 4, deletions: 0 }),
+    ]
+    const status = vi.fn<GitApi['status']>().mockResolvedValue(
+      repo([file('src/a.ts', { additions: 2, deletions: 1 })], {
+        untrackedDirs: [{ path: 'gen/', count: 2, bytes: 10, files: listed }],
+      }),
+    )
+    await setup(fakeGitApi({ status }))
+    expect(model.count.value).toBe(3)
+    expect(model.sums.value).toEqual({ additions: 2, deletions: 1 })
+    expect(model.hidden.value).toBe(2)
+    expect(model.selected.value).toBe('src/a.ts')
+    expect(model.step(1)).toBe(true)
+    expect(model.selected.value).toBe('src/a.ts') // the closed folder's files are not stepped into
+    model.expanded.value = new Set(['gen/'])
+    expect(model.step(1)).toBe(true)
+    expect(model.selected.value).toBe('gen/a.png')
+    expect(model.step(1)).toBe(true)
+    expect(model.selected.value).toBe('gen/b.txt')
+    expect(model.sums.value).toEqual({ additions: 6, deletions: 1 })
+    expect(model.hidden.value).toBe(0)
+  })
+
+  it('opens the folder of a file asked for by path and selects it', async () => {
+    const listed = [file('gen/a.png', { status: 'untracked' })]
+    const status = vi.fn<GitApi['status']>().mockResolvedValue(
+      repo([file('src/a.ts')], {
+        untrackedDirs: [{ path: 'gen/', count: 25, bytes: 1, files: listed }],
+      }),
+    )
+    await setup(fakeGitApi({ status }), {}, 'gen/a.png')
+    expect([...model.expanded.value]).toEqual(['gen/'])
+    expect(model.selected.value).toBe('gen/a.png')
+  })
+
+  it('applies the path asked for once: a reload keeps the file picked since', async () => {
+    const status = vi
+      .fn<GitApi['status']>()
+      .mockImplementation(() => Promise.resolve(repo([file('a.ts'), file('b.ts')])))
+    const task = await setup(fakeGitApi({ status }), {}, 'a.ts')
+    expect(model.selected.value).toBe('a.ts')
+    model.selected.value = 'b.ts'
+    task.value = { ...task.value, filesChanged: 5 }
+    await flush(4)
+    expect(status).toHaveBeenCalledTimes(2)
+    expect(model.selected.value).toBe('b.ts')
+    await model.reload()
+    await flush(4)
+    expect(model.selected.value).toBe('b.ts')
   })
 
   it('re-reads while a suggestion is being written, on task updates only', async () => {

@@ -81,7 +81,11 @@ script that edits a file mentioning `git stash`, is data. Long options count by 
   inline code that starts programs), whether or not the same line runs git: they define aliases and settings that
   the alias lookup above does not see, for that command and every later git command of the same shell;
 - fail closed: a line that mentions git and cannot be read (an unclosed quote, a variable used as the git
-  subcommand or an option, nesting deeper than the limit).
+  subcommand or an option, nesting deeper than the limit). "Mentions git" is any `git` in the line, also once the
+  quotes and escape characters of every dialect are taken out, except inside the words `digit`, `legit`,
+  `.gitignore`, `.gitattributes`, `.gitkeep`, `github`, `gitlab` and `gitea`, which name no git program or folder
+  (field report 4, F11). The refusal quotes the place with some context (`mentions git: "…the digits and then git
+  stash…"`), and the daemon log keeps the whole refused command (the task's events cut it short).
 
 Every refusal starts with `Blocked by Seelegent` (`guard.Marker`). The backend parsers look for that text and mark
 the tool call `blocked`; the turn lists the command under `blockedCommands`, the report under `blocked_commands`,
@@ -160,7 +164,11 @@ subcommand (`git stsh`) is not run as the command git guesses. git takes the las
 ## Snapshots
 
 Package `internal/snapshot`. Before every turn of a task in a git repository (once the task's repository root is
-known) and after it, the task engine records the repository's uncommitted files:
+known) and after it, the task engine records the repository's uncommitted files. The start snapshot is taken right
+before the turn's first launch, once an account is leased, not when the turn is queued: what others change while
+the turn waits for an account or for memory is not the turn's work. Retries and handovers of the turn keep that
+snapshot. A turn in which no worker ever ran (it waited and was cancelled, or every launch failed before the worker
+started) gets no post-turn checks: no work at risk, no hygiene findings, no changed files. A snapshot:
 
 - `git status` (read-only, `GIT_OPTIONAL_LOCKS=0`) lists the changed, deleted and untracked files; nothing touches
   the user's index, stash, refs or objects (bugs.md D7, D25c);
@@ -285,15 +293,20 @@ that was dirty before the turn but whose start content the snapshot did not keep
 | `bom_changed` | red | a byte order mark was added or removed |
 | `bom_new_file` | red | a new file starts with a BOM while the repository's tracked files of that extension have none (first 20 checked) |
 | `junk_file` | red | a new file that looks like a leftover: `*.orig`, `*.rej`, `*.tmp`, `*.bak`, `*~`, or a Windows device name such as `nul` (from `> nul` in a POSIX shell) |
-| `unreported_file` | warn | a new file the report names neither by its path nor by its file name |
+| `unreported_file` | warn | a new file the worker made (one of its edit tools' files, or a path its shell commands write) that the report names neither by its path (from the repository root or from the task's folder) nor by its file name; a file only the snapshots show, such as one the lead edited during the turn, is not judged |
 
 A red finding makes a done task's attention `hygiene`.
 
 ### Scope warnings
 
 - `outside_repo_write` (warn): an edit tool, or a shell command's redirection, copy or move target or a file
-  `sed -i`/`perl -i` edits in place (`guard.Writes`), wrote outside the task's folder, the repository, the temp folder and the worker's profile
-  folders. Git Bash paths (`/c/...`) are mapped on Windows; dynamic words and `~` are skipped. At most 20.
+  `sed -i`/`perl -i` edits in place (`guard.Writes`, joined to the folder a `cd` of the same line moved to), wrote
+  outside the task's folder, the repository, the temp folder and the worker's profile folders. Git Bash paths
+  (`/c/...`) are mapped on Windows; dynamic words and `~` are skipped. At most 20.
+- `outside_lane` (warn): a task whose gate is off (`gate: false`) has no lane step; its lane is checked after each
+  turn with the gate's rules ([gates.md](gates.md#the-lane-check)) and each file outside it is a warning, with the
+  detail `outside the lane` (a worker touched it) or `outside the lane, changed during the turn but not by a worker
+  edit or command Seelegent saw`.
 - `unfetched_url` (warn): a URL in the report that appears nowhere in the prompt, the messages, the commands or the
   tool events of the turn (local hosts ignored). At most 10.
 

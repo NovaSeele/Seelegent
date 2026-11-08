@@ -29,17 +29,27 @@ describe('ProviderMark', () => {
     expect(wrapper.attributes('style')).toContain('--pm-hue: var(--provider-other)')
   })
 
-  it('shows an API-key provider as a neutral chip next to the backend', async () => {
-    const wrapper = await mark({ backend: 'claude', provider: 'DeepSeek' })
+  it('shows an API-key provider as a neutral chip with the display name it is given', async () => {
+    const wrapper = await mark({ backend: 'claude', providerName: 'DeepSeek' })
     expect(wrapper.find('.pm__name').text()).toBe('Claude Code')
     expect(wrapper.find('.pm__chip').text()).toBe('DeepSeek')
     // The provider has no hue of its own: the mark keeps the backend's.
     expect(wrapper.attributes('style')).toContain('--pm-hue: var(--provider-claude)')
+    expect((await mark({ backend: 'claude' })).find('.pm__chip').exists()).toBe(false)
+  })
+
+  it('keeps only the dot where there is no room, with the name as tooltip and for screen readers', async () => {
+    const wrapper = await mark({ backend: 'agy', label: 'hidden' })
+    expect(wrapper.find('.pm__name').exists()).toBe(false)
+    expect(wrapper.attributes('title')).toBe('Antigravity')
+    expect(wrapper.find('.sr-only').text()).toBe('Antigravity')
   })
 
   it('leaves the name out with label false, and sizes', async () => {
     const wrapper = await mark({ backend: 'agy', label: false, size: 'sm' })
     expect(wrapper.find('.pm__name').exists()).toBe(false)
+    expect(wrapper.text()).toBe('')
+    expect(wrapper.attributes('title')).toBeUndefined()
     expect(wrapper.classes()).toContain('pm--sm')
   })
 })

@@ -81,7 +81,10 @@ export type ImageVersion = 'worktree' | 'head'
 
 /**
  * The URL of an image of the task's repository (GET /tasks/{id}/git/image), for an `<img src>`: a GET needs no
- * header, and the answer carries nosniff and a sandbox CSP, so an SVG never runs as a page.
+ * header, and the answer carries nosniff and a sandbox CSP, so an SVG never runs as a page. `stamp` (the file's
+ * GitFile.stamp) changes when the image is rewritten, so the browser reads the new picture instead of keeping the
+ * old one; the endpoint ignores it.
  */
-export const gitImageUrl = (taskId: string, path: string, version: ImageVersion) =>
-  `/api/v1/tasks/${enc(taskId)}/git/image?path=${enc(path)}&version=${version}`
+export const gitImageUrl = (taskId: string, path: string, version: ImageVersion, stamp?: string) =>
+  `/api/v1/tasks/${enc(taskId)}/git/image?path=${enc(path)}&version=${version}` +
+  (stamp ? `&v=${enc(stamp)}` : '')

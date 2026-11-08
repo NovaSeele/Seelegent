@@ -86,7 +86,7 @@ onBeforeUnmount(() => observer?.disconnect())
   flex-direction: column;
   gap: var(--space-4);
   /* Column sizes shared by the header and every row (accountRow.css). */
-  --account-cols: var(--control-sm) minmax(0, 1.3fr) minmax(0, 1fr) 76px minmax(0, 1.8fr) 176px;
+  --account-cols: var(--control-sm) minmax(0, 1.2fr) minmax(0, 1.3fr) 76px minmax(0, 1.6fr) 176px;
 }
 
 .list__cols {
@@ -95,6 +95,8 @@ onBeforeUnmount(() => observer?.disconnect())
   gap: var(--space-3);
   margin-bottom: calc(-1 * var(--space-2));
   padding: 0 var(--space-3) 0 var(--space-2);
+  /* The rows sit inside the list's 1px border: the header takes the same inset, so its columns line up. */
+  border-inline: var(--border-width) solid transparent;
   color: var(--text-muted);
   font-size: var(--fs-2xs);
   font-weight: var(--fw-medium);

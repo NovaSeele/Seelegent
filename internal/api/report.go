@@ -52,6 +52,9 @@ type TaskReport struct {
 	Cancelling   bool            `json:"cancelling,omitempty"`
 	Error        string          `json:"error,omitempty"`
 	WaitingUntil string          `json:"waiting_until,omitempty"`
+	// WaitDetail is TaskSummary.WaitDetail while the task waits for an account: why, and the free API-key
+	// accounts a provider would reach.
+	WaitDetail string `json:"wait_detail,omitempty"`
 	// Waiting is TaskSummary.Waiting: "memory" while a waiting_quota task waits for free memory.
 	Waiting    string `json:"waiting,omitempty" ts:"'memory'"`
 	AnsweredBy string `json:"answered_by,omitempty"`

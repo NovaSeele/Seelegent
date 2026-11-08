@@ -30,7 +30,7 @@ type gateFlags struct {
 func (o *gateFlags) add(fs *pflag.FlagSet) {
 	fs.StringArrayVar(&o.gate, "gate", nil, "gate command to run after the report (repeatable; replaces the spec's)")
 	fs.BoolVar(&o.detect, "gate-detect", false, "add the repository's detected test, lint and build commands")
-	fs.BoolVar(&o.noGate, "no-gate", false, "run no gate commands (lane and hygiene checks still run)")
+	fs.BoolVar(&o.noGate, "no-gate", false, "no gate phase or fix turns (the lane is still checked, as information)")
 	fs.StringSliceVar(&o.lane, "lane", nil, "files and globs the worker may change, relative to the repository root")
 	fs.BoolVar(&o.noLane, "no-lane", false, "drop the lane a spec would give")
 	fs.BoolVar(&o.forceLane, "force-lane", false, "claim the lane even where another task holds it")

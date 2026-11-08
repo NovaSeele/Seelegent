@@ -180,6 +180,49 @@ func TestUnreadableFailsClosed(t *testing.T) {
 	}
 }
 
+// TestHereStringsAndGitWords: a PowerShell script in a here-string whose text only holds words like .gitignore,
+// github.com or digit is no git command (field report 4, F11), but a here-string that runs git is still read and
+// refused, and a line no dialect can read still fails closed on any other spelling of git.
+func TestHereStringsAndGitWords(t *testing.T) {
+	allow := []string{
+		"powershell -Command @\"\nSet-Content -Path .gitignore -Value @'\nnode_modules/\ndist/\n'@\nWrite-Output 'see https://github.com/x/y'\n\"@",
+		"powershell -NoProfile -Command @\"\n$n = 3 # one digit\nSet-Content -Path src/a.ts -Value @'\nexport const a = 1;\n'@\n\"@",
+		"Set-Content -Path .gitattributes -Value @'\n* text=auto\n'@",
+		// Unreadable lines that only hold innocent words. The first is the field run's form: a here-string on one
+		// line, which no dialect reads (PowerShell itself wants a line break after @").
+		"powershell -Command @\"Set-Content -Path .gitignore -Value @'node_modules/'@\"@",
+		"echo $(cat .gitignore", "echo 'one digit", "echo \"see github.com/x",
+	}
+	for _, line := range allow {
+		if r := Check(line); r.Deny {
+			t.Errorf("Check(%q) denied: %s", line, r.Reason)
+		}
+	}
+	deny := []string{
+		"powershell -Command @\"\ngit reset --hard\n\"@",
+		"powershell -Command @\"\nWrite-Output 'x'\ngit stash\n\"@",
+		"powershell -Command @\"git reset --hard\"@",
+		"Invoke-Expression @'\ngit checkout -- .\n'@",
+		"powershell -Command @\"\n$x = @'\ndigit\n'@\ngit reset --hard\n\"@",
+	}
+	for _, line := range deny {
+		if r := Check(line); !r.Deny {
+			t.Errorf("Check(%q) allowed", line)
+		}
+	}
+	for _, line := range []string{"echo $($gitExe reset --hard", "echo $(GIT stash", "echo $(g\"i\"t stash",
+		"echo $(cat .git/HEAD"} {
+		r := Check(line)
+		if !r.Deny || !strings.Contains(r.Reason, "mentions git: \"") {
+			t.Errorf("unreadable %q: %+v", line, r)
+		}
+	}
+	if r := Check("echo $(see the digits and then git stash and more text here"); !strings.Contains(r.Reason,
+		`mentions git: "…see the digits and then git stash and more text her…"`) {
+		t.Errorf("reason = %q", r.Reason)
+	}
+}
+
 func TestBacktickIsPowerShellEscape(t *testing.T) {
 	// bugs.md D16: in PowerShell the backtick escapes; in POSIX it substitutes.
 	if r := (Checker{}).Command("git `stash", PowerShell); !r.Deny {

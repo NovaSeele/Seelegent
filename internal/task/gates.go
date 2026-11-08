@@ -31,7 +31,7 @@ type Ledger interface {
 // Proof is what a task's gate checks, frozen when the task starts (old bug D10: the doctrine was read from the
 // worktree, which the worker can edit, at every gate).
 type Proof struct {
-	// GateOff: the lead turned the gate's checks off (lane and hygiene still run).
+	// GateOff: the lead turned the gate off: no gate phase; the lane is checked after each turn as scope findings.
 	GateOff bool `json:"gateOff,omitempty"`
 	// Detect: the lead asked for the repository's test, lint and build commands (gate: true).
 	Detect bool `json:"detect,omitempty"`

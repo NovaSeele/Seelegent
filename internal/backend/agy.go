@@ -201,7 +201,7 @@ func (a *Agy) QuotaReader() QuotaReader { return a.quota }
 
 // NewParser implements Backend.
 func (*Agy) NewParser(secrets []string) Parser {
-	p := &agyParser{base: newBase(config.BackendAgy, secrets, agyRules()), seen: map[string]bool{}}
+	p := &agyParser{base: newBase(config.BackendAgy, secrets, agyRules()), seen: map[agySeenKey]struct{}{}}
 	p.bgWait = regexp.MustCompile(agyBackgroundWait)
 	return p
 }
@@ -209,7 +209,14 @@ func (*Agy) NewParser(secrets []string) Parser {
 // agyParser parses `agy --output-format stream-json`.
 type agyParser struct {
 	base
-	seen map[string]bool // tool steps already reported, by "step:state"
+	seen map[agySeenKey]struct{} // tool steps already reported, by step and state
+}
+
+// agySeenKey is a tool step's step index and state: a comparable key, so the dedup of step updates builds no
+// string per line.
+type agySeenKey struct {
+	step  int
+	state string
 }
 
 type agyLine struct {
@@ -298,11 +305,11 @@ func (p *agyParser) step(s *agyStep) []event.Event {
 }
 
 func (p *agyParser) tool(s *agyStep) []event.Event {
-	key := fmt.Sprintf("%d:%s", s.StepIndex, s.State)
-	if p.seen[key] {
+	key := agySeenKey{step: s.StepIndex, state: s.State}
+	if _, ok := p.seen[key]; ok {
 		return nil
 	}
-	p.seen[key] = true
+	p.seen[key] = struct{}{}
 	t := &event.Tool{Name: s.ToolName}
 	var params, errRaw json.RawMessage
 	if s.ToolInfo != nil {

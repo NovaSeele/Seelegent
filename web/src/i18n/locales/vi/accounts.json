@@ -256,6 +256,12 @@
       "week": "Theo tuần",
       "month": "Theo tháng"
     },
+    "spanShort": {
+      "hours": "{n} giờ",
+      "day": "1 ngày",
+      "week": "7 ngày",
+      "month": "30 ngày"
+    },
     "quota": {
       "tip": "{group} · {window}",
       "lowestTip": "Thấp nhất trong mọi khung: {group} · {window}",

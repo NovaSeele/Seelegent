@@ -57,7 +57,12 @@ async function onError() {
   const call = (probe = new AbortController())
   try {
     const res = await fetch(src, { credentials: 'same-origin', signal: call.signal })
-    if (res.ok || call !== probe || src !== props.src) return
+    if (res.ok) {
+      // The image itself answered: only the headers were needed, so its body is not downloaded a second time.
+      call.abort()
+      return
+    }
+    if (call !== probe || src !== props.src) return
     const body = (await res.json().catch(() => ({}))) as { error?: ErrorInfo }
     if (call === probe) failure.value = reasonOf(res.status, body.error ?? {})
   } catch {

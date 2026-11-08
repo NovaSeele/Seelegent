@@ -39,6 +39,7 @@ func (s *Service) report(ctx context.Context, t *Task, cwd string) api.TaskRepor
 	}
 	rep := api.TaskReport{TaskID: t.ID, Status: string(t.Status), TokensUsed: t.TokensUsed(), Error: t.Error,
 		FilesChanged: []string{}, WaitingUntil: api.FormatTime(t.WaitingUntil), Waiting: waitingOf(t),
+		WaitDetail: waitDetailOf(t),
 		DepsReason: t.DepsReason,
 		Cancelling: t.CancelRequested && Active(t.Status)}
 	if s.o.Dashboard != nil {

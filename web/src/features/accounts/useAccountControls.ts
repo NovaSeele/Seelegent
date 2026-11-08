@@ -3,6 +3,7 @@ import { useI18n } from 'vue-i18n'
 
 import type { Account } from '@/api/types'
 import type { MenuItem } from '@/components/ui/Menu.vue'
+import { useProviderNames } from '@/composables/useProviderNames'
 import { useAccountsStore } from '@/stores/accounts'
 
 import { canSignIn, offConsequence, useActions } from './accountView'
@@ -22,12 +23,15 @@ export function useAccountControls(
 ) {
   const { t } = useI18n()
   const accounts = useAccountsStore()
+  const providerName = useProviderNames(() => [props.account.provider])
   const actions = useActions()
 
   const session = computed(() => accounts.logins[props.account.id])
   const kindLabel = computed(() =>
     props.account.kind === 'api-key'
-      ? t('accounts.kind.apiKeyOf', { provider: props.account.provider ?? '?' })
+      ? t('accounts.kind.apiKeyOf', {
+          provider: providerName(props.account.provider) ?? '?',
+        })
       : t(`accounts.kind.${props.account.kind}`),
   )
 
