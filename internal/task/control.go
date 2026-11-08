@@ -74,7 +74,8 @@ func (s *Service) ReviewWith(ctx context.Context, id string, req api.ReviewReque
 		return api.TaskSummary{}, err
 	}
 	if s.o.Memory != nil && !o.SkipHistory {
-		if err := s.o.Memory.AddVerdict(ctx, memory.Verdict{Cwd: t.projectDir(), TaskID: t.ID, Title: t.Title,
+		// The verdict is saved: its history entry is written even if the caller leaves now (M18 hunt H23).
+		if err := s.o.Memory.AddVerdict(context.WithoutCancel(ctx), memory.Verdict{Cwd: t.projectDir(), TaskID: t.ID, Title: t.Title,
 			Verdict: verdict, Notes: t.Review.Notes}); err != nil {
 			s.log.Warn("task: review history", "task", id, "err", err)
 		}
