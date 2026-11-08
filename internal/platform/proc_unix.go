@@ -22,7 +22,7 @@ func sysProcAttr(cmd *exec.Cmd) *syscall.SysProcAttr {
 	return cmd.SysProcAttr
 }
 
-func startDetached(newCmd func() *exec.Cmd) (*exec.Cmd, error) {
+func startDetached(newCmd func() *exec.Cmd, _ bool) (*exec.Cmd, error) {
 	cmd := newCmd()
 	sysProcAttr(cmd).Setsid = true
 	if err := cmd.Start(); err != nil {

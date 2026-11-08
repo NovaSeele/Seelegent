@@ -107,7 +107,9 @@ func Start(ctx context.Context, opts Options) (*Handle, error) {
 		return nil, fmt.Errorf("start launch: %w", err)
 	}
 	argv := append(append([]string(nil), opts.Launcher...), f.Dir)
-	cmd, err := platform.StartDetached(func() *exec.Cmd {
+	// No console: the launcher starts the worker through platform.StartWorkerTreeWith, which gives the worker a
+	// hidden console of its own, so a console host for the launcher itself would be idle memory.
+	cmd, err := platform.StartDetachedNoConsole(func() *exec.Cmd {
 		c := exec.Command(argv[0], argv[1:]...) //nolint:gosec,noctx // the launcher must outlive ctx and the daemon
 		c.Env = opts.Env
 		c.Dir = f.Dir

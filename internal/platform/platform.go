@@ -29,9 +29,11 @@ const DefaultKillGrace = 3 * time.Second
 // ErrNotStarted is returned by Tree methods when the tree was never started.
 var ErrNotStarted = errors.New("process tree not started")
 
-// HideWindow prepares cmd so that starting it never shows a console window on Windows (the process gets a hidden
-// console that its own children inherit, so they do not flash windows either). It does nothing elsewhere. Call it
-// before cmd.Start for every helper command the daemon runs (quota readers, model lists, git, ...).
+// HideWindow prepares cmd so that starting it never shows a console window on Windows: the process shares the
+// caller's console when the caller has one (hidden for the daemon, started with StartDetached), and otherwise gets
+// a hidden console of its own; its own children inherit that console, so they do not flash windows either. Sharing
+// starts no console host per command. It does nothing elsewhere. Call it before cmd.Start for every helper command
+// the daemon runs (quota readers, model lists, git, ...).
 func HideWindow(cmd *exec.Cmd) { hideWindow(cmd) }
 
 // SetCmdLine sets the raw command line of cmd on Windows, for programs such as cmd.exe that parse their own; it
@@ -46,7 +48,15 @@ func SetCmdLine(cmd *exec.Cmd, line string) { setCmdLine(cmd, line) }
 // newCmd must return a fresh, unstarted command each time it is called: if breaking away from the job is refused,
 // the start is retried without it on a second command. The started command is returned.
 func StartDetached(newCmd func() *exec.Cmd) (*exec.Cmd, error) {
-	return startDetached(newCmd)
+	return startDetached(newCmd, true)
+}
+
+// StartDetachedNoConsole is StartDetached for a process that starts console programs only through HideWindow,
+// StartTree or StartWorkerTree, such as the worker launcher: on Windows it gets no console at all
+// (DETACHED_PROCESS), which saves a console host (conhost.exe) for as long as it runs. A console program it started
+// without HideWindow would open a visible console window. Elsewhere it is StartDetached.
+func StartDetachedNoConsole(newCmd func() *exec.Cmd) (*exec.Cmd, error) {
+	return startDetached(newCmd, false)
 }
 
 // ProcessAlive reports whether a process with the given id exists. It cannot tell a reused id from the original

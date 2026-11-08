@@ -3,6 +3,7 @@ package platform
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"os"
 	"os/exec"
@@ -16,20 +17,53 @@ import (
 )
 
 // runOSRole runs the Windows-only helper roles:
-//   - console: writes 1 to the file named last when the process has a console window, else 0.
+//   - console: writes consoleState (whether the process has a console, and its window) to the file named last;
+//   - console-children: does what console does, then starts two console helpers, one with HideWindow and one as
+//     a StartTree root, which write their state to the files named last with ".hidden" and ".tree" appended, and
+//     waits for them (it is started without a console: the case where HideWindow must give them a hidden console
+//     of their own).
 func runOSRole(role string) bool {
-	if role != "console" {
-		return false
+	out := os.Args[len(os.Args)-1]
+	switch role {
+	case "console":
+		if err := os.WriteFile(out, []byte(consoleState()), 0o600); err != nil {
+			os.Exit(3)
+		}
+		return true
+	case "console-children":
+		if err := os.WriteFile(out, []byte(consoleState()), 0o600); err != nil {
+			os.Exit(3)
+		}
+		env := func(cmd *exec.Cmd) *exec.Cmd {
+			cmd.Env = append(os.Environ(), roleEnv+"=console")
+			return cmd
+		}
+		hidden := env(exec.Command(selfExe(), out+".hidden")) //nolint:noctx // a test helper's own child
+		HideWindow(hidden)
+		if err := hidden.Run(); err != nil {
+			os.Exit(4)
+		}
+		tree, err := StartTree(env(exec.Command(selfExe(), out+".tree"))) //nolint:noctx // a test helper's own child
+		if err != nil {
+			os.Exit(5)
+		}
+		werr := tree.Wait()
+		_ = tree.Close()
+		if werr != nil {
+			os.Exit(6)
+		}
+		return true
+	}
+	return false
+}
+
+// consoleState is "none" for a process without a console, else "console" and its window handle (0: hidden).
+func consoleState() string {
+	if !hasConsole() {
+		return "none"
 	}
 	win, _, _ := windows.NewLazySystemDLL("kernel32.dll").NewProc("GetConsoleWindow").Call()
-	mark := "0"
-	if win != 0 {
-		mark = "1"
-	}
-	if err := os.WriteFile(os.Args[len(os.Args)-1], []byte(mark), 0o600); err != nil {
-		os.Exit(3)
-	}
-	return true
+	return fmt.Sprintf("console %#x", win)
 }
 
 // TestStaleOwner: the owner of a client socket is trusted only while it runs and when it started before the
@@ -187,12 +221,21 @@ func TestSocketOwnerUnavailableJob(t *testing.T) {
 	}
 }
 
-// TestHiddenStartsHaveNoConsoleWindow: every way Seelegent starts a hidden process (HideWindow, the detached
-// launcher, a process tree) sets CREATE_NO_WINDOW, and the process really has no console window, so no window
-// flashes when a worker or a git call starts (old L14 and L19).
+// TestHiddenStartsHaveNoConsoleWindow: no way Seelegent starts a hidden process (HideWindow, the detached daemon
+// and launcher, a process tree) opens a console window, so no window flashes when a worker or a git call starts
+// (old L14 and L19). A child of a process with a console shares that console (no console host of its own); a
+// child of a process without one gets a hidden console; the launcher (StartDetachedNoConsole) gets none.
 func TestHiddenStartsHaveNoConsoleWindow(t *testing.T) {
 	dir := t.TempDir()
-	check := func(name string, cmd *exec.Cmd, wait func() error, want uint32) {
+	state := func(name string) string {
+		t.Helper()
+		mark, err := os.ReadFile(filepath.Join(dir, name))
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		return string(mark)
+	}
+	check := func(name string, cmd *exec.Cmd, wait func() error, want uint32, wantState string) {
 		t.Helper()
 		attr := cmd.SysProcAttr
 		if attr == nil || !attr.HideWindow || attr.CreationFlags&want != want {
@@ -201,10 +244,16 @@ func TestHiddenStartsHaveNoConsoleWindow(t *testing.T) {
 		if err := wait(); err != nil {
 			t.Fatalf("%s: %v", name, err)
 		}
-		mark, err := os.ReadFile(filepath.Join(dir, name))
-		if err != nil || string(mark) != "0" {
-			t.Errorf("%s: console window %q, %v", name, mark, err)
+		if got := state(name); got != wantState {
+			t.Errorf("%s: console %q, want %q", name, got, wantState)
 		}
+	}
+	// A hidden start shares this process's console (whose window, if any, is already there) or, without one,
+	// gets a hidden console.
+	inherited, ownFlag := consoleState(), uint32(0)
+	t.Logf("this process: %s", inherited)
+	if inherited == "none" {
+		inherited, ownFlag = "console 0x0", windows.CREATE_NO_WINDOW
 	}
 
 	hidden := helper("console", filepath.Join(dir, "hidden"))
@@ -212,13 +261,13 @@ func TestHiddenStartsHaveNoConsoleWindow(t *testing.T) {
 	if err := hidden.Start(); err != nil {
 		t.Fatal(err)
 	}
-	check("hidden", hidden, hidden.Wait, windows.CREATE_NO_WINDOW)
+	check("hidden", hidden, hidden.Wait, ownFlag, inherited)
 
 	detached, err := StartDetached(func() *exec.Cmd { return helper("console", filepath.Join(dir, "detached")) })
 	if err != nil {
 		t.Fatal(err)
 	}
-	check("detached", detached, detached.Wait, windows.CREATE_NO_WINDOW|windows.CREATE_NEW_PROCESS_GROUP)
+	check("detached", detached, detached.Wait, windows.CREATE_NO_WINDOW|windows.CREATE_NEW_PROCESS_GROUP, "console 0x0")
 
 	cmd := helper("console", filepath.Join(dir, "tree"))
 	tree, err := StartTree(cmd)
@@ -226,7 +275,24 @@ func TestHiddenStartsHaveNoConsoleWindow(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = tree.Close() })
-	check("tree", cmd, tree.Wait, windows.CREATE_NO_WINDOW)
+	check("tree", cmd, tree.Wait, ownFlag, inherited)
+
+	// The launcher has no console, and what it starts hidden gets a hidden console of its own.
+	launcher, err := StartDetachedNoConsole(func() *exec.Cmd {
+		return helper("console-children", filepath.Join(dir, "children"))
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if attr := launcher.SysProcAttr; attr.CreationFlags&windows.CREATE_NO_WINDOW != 0 {
+		t.Errorf("no console: flags %#x, want no CREATE_NO_WINDOW", attr.CreationFlags)
+	}
+	check("children", launcher, launcher.Wait, windows.DETACHED_PROCESS|windows.CREATE_NEW_PROCESS_GROUP, "none")
+	for _, name := range []string{"children.hidden", "children.tree"} {
+		if got := state(name); got != "console 0x0" {
+			t.Errorf("%s: console %q, want a hidden console of its own", name, got)
+		}
+	}
 }
 
 // TestTreeMemoryCap: a tree that needs more than its job memory cap fails, and MemoryLimitHit says why; one that

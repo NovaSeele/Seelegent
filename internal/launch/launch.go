@@ -4,7 +4,7 @@
 // # Protocol
 //
 // Every launch owns one directory. The daemon writes the spec (launch.json) and starts `seelegent __launch <dir>`
-// detached (platform.StartDetached). The launcher then:
+// detached and without a console (platform.StartDetachedNoConsole). The launcher then:
 //
 //  1. takes an exclusive lock on launcher.lock and holds it for its whole life. The operating system releases the
 //     lock when the launcher exits or crashes, so "lock held" is a liveness test that cannot be fooled by a reused
