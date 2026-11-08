@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"os"
 	"path/filepath"
 	"slices"
 	"sort"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/NovaSeele/Seelegent/internal/api"
 	"github.com/NovaSeele/Seelegent/internal/backend"
+	"github.com/NovaSeele/Seelegent/internal/launch"
 	"github.com/NovaSeele/Seelegent/internal/snapshot"
 )
 
@@ -75,6 +77,11 @@ type turnCheck struct {
 // or the checks cannot run.
 func (s *Service) checkTurn(ctx context.Context, t *Task, tu *Turn, last *backend.Outcome, ok bool) *turnCheck {
 	if s.o.Snapshots == nil || tu == nil || tu.Snap == nil || tu.Snap.Checked {
+		return nil
+	}
+	if !workerRan(tu, last) {
+		// No worker ever ran in this turn (it waited for an account and was cancelled, or its launch failed): what
+		// changed meanwhile is someone else's work, never at risk from it (field report 4).
 		return nil
 	}
 	ctx, cancel := context.WithTimeout(ctx, checkTimeout)
@@ -322,6 +329,28 @@ func (s *Service) preCheck(ctx context.Context, id string, turn int, status stri
 	return c
 }
 
+// workerRan reports whether a worker process ran in turn tu: one of its attempts got as far as starting the worker
+// (the launcher's ready record in its launch folder), or reported a conversation, an edit or a command. last is the
+// outcome of the attempt that just ended (not stored yet), or nil.
+func workerRan(tu *Turn, last *backend.Outcome) bool {
+	ran := func(o *backend.Outcome) bool {
+		return o != nil && (o.ConversationID != "" || len(o.FilesEdited) > 0 || len(o.Commands) > 0)
+	}
+	if ran(last) {
+		return true
+	}
+	for _, a := range tu.Attempts {
+		if ran(a.Outcome) {
+			return true
+		}
+		if a.LaunchDir != "" {
+			if _, err := os.Stat(launch.FilesIn(a.LaunchDir).Ready); err == nil {
+				return true
+			}
+		}
+	}
+	return false
+}
 
 // lateCheck runs the post-turn checks of a turn that ended without them (a cancel, a failure) and saves them.
 func (s *Service) lateCheck(ctx context.Context, id string, turn int) {

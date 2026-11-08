@@ -164,7 +164,11 @@ subcommand (`git stsh`) is not run as the command git guesses. git takes the las
 ## Snapshots
 
 Package `internal/snapshot`. Before every turn of a task in a git repository (once the task's repository root is
-known) and after it, the task engine records the repository's uncommitted files:
+known) and after it, the task engine records the repository's uncommitted files. The start snapshot is taken right
+before the turn's first launch, once an account is leased, not when the turn is queued: what others change while
+the turn waits for an account or for memory is not the turn's work. Retries and handovers of the turn keep that
+snapshot. A turn in which no worker ever ran (it waited and was cancelled, or every launch failed before the worker
+started) gets no post-turn checks: no work at risk, no hygiene findings, no changed files. A snapshot:
 
 - `git status` (read-only, `GIT_OPTIONAL_LOCKS=0`) lists the changed, deleted and untracked files; nothing touches
   the user's index, stash, refs or objects (bugs.md D7, D25c);
