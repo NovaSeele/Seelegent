@@ -36,7 +36,7 @@ func TestNormalizesMatchesGitAdd(t *testing.T) {
 			git(t, dir, "config", "core.autocrlf", autocrlf)
 			r := New(nil, nil)
 			for _, name := range []string{"crlf.txt", "lf.txt", "auto.txt", "text.txt", "eol.txt", "binary.txt",
-				"new.txt"} {
+				"lonecr.txt", "new.txt"} {
 				data := []byte("a\r\nb\r\nc\r\n")
 				write(t, filepath.Join(dir, name), string(data))
 				got, err := r.Normalizes(context.Background(), dir, name, data)

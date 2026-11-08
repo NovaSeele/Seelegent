@@ -23,7 +23,7 @@ const indexBlobMax = 32 << 20
 // reports false.
 //
 // hash-object does not read the index, so it misses git's "safer autocrlf" rule: an automatic conversion
-// (core.autocrlf, text=auto) is skipped when the index version of the file already has a CR, and `git add` keeps
+// (core.autocrlf, text=auto) is skipped when the index version of the file is text with a CRLF, and `git add` keeps
 // the CRLF lines. Normalizes applies that rule itself (autoEOL, the index blob read raw).
 func (r *Repos) Normalizes(ctx context.Context, root, rel string, data []byte) (bool, error) {
 	crlf := []byte("\r\n")
@@ -50,7 +50,8 @@ func (r *Repos) Normalizes(ctx context.Context, root, rel string, data []byte) (
 	if err != nil {
 		return false, err
 	}
-	return !bytes.Contains(idx, []byte("\r")), nil
+	// git's has_crlf_in_index: the index blob is text (no NUL) and has a CRLF; a lone CR does not count.
+	return !bytes.Contains(idx, crlf) || bytes.IndexByte(idx, 0) >= 0, nil
 }
 
 // autoEOL reports whether the line ending conversion of rel is git's automatic one (convert.c CRLF_AUTO*), the
