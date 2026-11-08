@@ -98,7 +98,9 @@ func TestRequestChecks(t *testing.T) {
 		http.StatusNotFound, api.CodeNotFound, "")
 	e.wantError(e.get("/api/v1/nothing-here"), http.StatusNotFound, api.CodeNotFound, "")
 	e.wantError(e.req(http.MethodDelete, "/api/v1/accounts/a-nope", nil, nil), http.StatusNotFound, api.CodeNotFound, "")
-	e.wantError(e.req(http.MethodDelete, "/api/v1/health", nil, nil), http.StatusNotFound, api.CodeNotFound, "")
+	// A route that exists with another method is 405 (N4, TestWrongMethod).
+	e.wantError(e.req(http.MethodDelete, "/api/v1/health", nil, nil), http.StatusMethodNotAllowed,
+		api.CodeInvalidArgument, "")
 
 	// Milestone 15 built the last reserved paths: an unknown automation is a plain 404.
 	e.wantError(e.get("/api/v1/automations/a1"), http.StatusNotFound, api.CodeNotFound, "")
@@ -163,6 +165,41 @@ func TestAntiFraming(t *testing.T) {
 		if h.Get("X-Frame-Options") != "DENY" || h.Get("Content-Security-Policy") != "frame-ancestors 'none'" ||
 			h.Get("Referrer-Policy") != "no-referrer" {
 			t.Errorf("%s: headers %v", name, h)
+		}
+	}
+}
+
+// TestWrongMethod: a path that exists, asked with a method it does not take, is 405 with an Allow header that lists
+// the ones it takes; an unknown path stays 404 and the dashboard routes still get the page (final verification N4).
+func TestWrongMethod(t *testing.T) {
+	e := newEnv(t)
+	for _, tc := range []struct {
+		method, path string
+		allow        []string
+	}{
+		{http.MethodDelete, "/api/v1/health", []string{"GET", "HEAD"}},
+		{http.MethodPost, "/api/v1/health", []string{"GET", "HEAD"}},
+		{http.MethodGet, "/api/v1/wait", []string{"POST"}},
+		{http.MethodPut, "/api/v1/tasks", []string{"GET", "HEAD", "POST"}},
+		{http.MethodDelete, "/api/v1/settings", []string{"GET", "HEAD", "PATCH"}},
+	} {
+		r := e.req(tc.method, tc.path, nil, nil)
+		got := e.wantError(r, http.StatusMethodNotAllowed, api.CodeInvalidArgument, "")
+		if allow := r.header.Get("Allow"); allow != strings.Join(tc.allow, ", ") {
+			t.Errorf("%s %s: Allow %q, want %v", tc.method, tc.path, allow, tc.allow)
+		}
+		if got.Details["reason"] != "method_not_allowed" || got.Message == "" {
+			t.Errorf("%s %s: error %+v", tc.method, tc.path, got)
+		}
+	}
+	e.wantError(e.req(http.MethodDelete, "/api/v1/nothing-here", nil, nil), http.StatusNotFound, api.CodeNotFound, "")
+	e.wantError(e.get("/api/v1/nope"), http.StatusNotFound, api.CodeNotFound, "")
+	// Without X-Seelegent a mutating method is refused before routing, as before.
+	e.wantError(e.req(http.MethodDelete, "/api/v1/health", nil, map[string]string{"X-Seelegent": ""}),
+		http.StatusForbidden, api.CodeForbidden, "")
+	for _, p := range []string{"/", "/tasks", "/tasks/t-1", "/settings"} {
+		if r := e.must(e.get(p), http.StatusOK); !strings.Contains(r.header.Get("Content-Type"), "text/html") {
+			t.Errorf("GET %s: %v", p, r.header)
 		}
 	}
 }

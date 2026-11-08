@@ -442,8 +442,32 @@ func (s *Server) routes() {
 	s.automationRoutes()
 	s.mux.HandleFunc("GET "+apiPrefix+"/events", s.serveEvents)
 	s.mux.HandleFunc(apiPrefix+"/", func(w http.ResponseWriter, r *http.Request) {
+		if allow := s.allowed(r); len(allow) > 0 {
+			// A route that exists, asked with another method: 405 with the methods it takes (final verification N4).
+			w.Header().Set("Allow", strings.Join(allow, ", "))
+			s.writeErrorStatus(w, r, http.StatusMethodNotAllowed, translated(api.CodeInvalidArgument, "method").
+				with("reason", "method_not_allowed").with("allow", allow))
+			return
+		}
 		s.writeError(w, r, translated(api.CodeNotFound, "not_found"))
 	})
+}
+
+// allowed returns the methods a registered route other than the catch-all takes on r's path (none: no such route).
+func (s *Server) allowed(r *http.Request) []string {
+	var out []string
+	for _, m := range [...]string{http.MethodGet, http.MethodHead, http.MethodPost, http.MethodPut, http.MethodPatch,
+		http.MethodDelete} {
+		if m == r.Method {
+			continue
+		}
+		probe := r.Clone(r.Context())
+		probe.Method = m
+		if _, pattern := s.mux.Handler(probe); pattern != "" && pattern != apiPrefix+"/" {
+			out = append(out, m)
+		}
+	}
+	return out
 }
 
 // background runs fn until Close.

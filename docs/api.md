@@ -37,7 +37,10 @@ foreground `seelegent daemon` command.
 3. The caller is classified. A process inside a running worker's process tree is a worker and may only use the §1.3
    allow-list (`403 forbidden`, `details.caller: "worker"`).
 4. Routing. Bodies are read through a 1 MiB limit (`413 too_large`); unknown fields, wrong types and unknown enum
-   values are `400 invalid_argument` with `details.field`.
+   values are `400 invalid_argument` with `details.field`. An unknown path under `/api/v1/` is `404 not_found`; a
+   path that exists, asked with a method it does not take (`DELETE /api/v1/health`), is `405` with an `Allow`
+   header listing the methods it takes and the body code `invalid_argument` with `details.reason:
+   "method_not_allowed"` and `details.allow` (the error codes stay the contract's set).
 
 `seelegent daemon --dev-origin http://localhost:5173` adds one loopback `http` origin to checks 1 and 2, so the Vite
 dev server (whose proxy keeps the browser's Host and Origin) can reach a development daemon. Without the flag nothing

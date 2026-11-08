@@ -30,7 +30,7 @@ func TestDaemonStop(t *testing.T) {
 		http.StatusForbidden, api.CodeForbidden, "")
 	e.wantError(e.req(http.MethodPost, "/api/v1/daemon/stop", nil, map[string]string{"Origin": "http://evil.example"}),
 		http.StatusForbidden, api.CodeForbidden, "")
-	e.wantError(e.get("/api/v1/daemon/stop"), http.StatusNotFound, api.CodeNotFound, "")
+	e.wantError(e.get("/api/v1/daemon/stop"), http.StatusMethodNotAllowed, api.CodeInvalidArgument, "")
 
 	e.who.set(&httpapi.Caller{Worker: true, TaskID: "t-1"})
 	if got := e.wantError(e.post("/api/v1/daemon/stop", nil), http.StatusForbidden, api.CodeForbidden, ""); got.Details["caller"] != "worker" {
