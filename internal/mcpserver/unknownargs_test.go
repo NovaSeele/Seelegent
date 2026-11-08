@@ -72,15 +72,17 @@ func TestUnknownArguments(t *testing.T) {
 		t.Fatalf("delegate body = %v", req)
 	}
 
-	// The schemas say so too.
+	// The refusal is the server's alone: no schema says additionalProperties. Hosts that pass tool schemas through
+	// the Gemini API's OpenAPI schema (agy, Antigravity, Gemini CLI, all registered by setup) have rejected that
+	// keyword, and one refused schema hides every Seelegent tool on that host.
 	tools, err := cs.ListTools(t.Context(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, tool := range tools.Tools {
 		data, _ := json.Marshal(tool.InputSchema)
-		if !strings.Contains(string(data), `"additionalProperties":false`) {
-			t.Errorf("%s schema allows other properties: %s", tool.Name, data)
+		if strings.Contains(string(data), "additionalProperties") {
+			t.Errorf("%s schema says additionalProperties: %s", tool.Name, data)
 		}
 	}
 }
