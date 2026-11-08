@@ -57,6 +57,5 @@
   --shadow-lg: 0 16px 40px rgba(17, 24, 39, 0.16), 0 4px 12px rgba(17, 24, 39, 0.08);
   --font-mono-theme: var(--font-mono-ibm-plex-mono);
   /* Provider hues (styles/providers.css), one step darker to keep 3:1 on both surfaces. */
-  --provider-agy: #3b80f4;
   --provider-claude: #d3633e;
 }

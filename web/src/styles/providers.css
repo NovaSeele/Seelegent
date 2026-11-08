@@ -11,7 +11,7 @@
 :root,
 [data-theme-preview] {
   --provider-claude: #d97757;
-  --provider-agy: #4285f4;
+  --provider-agy: #7b61ff;
 }
 
 /* A 3px left edge in a backend's hue on a row, group or card (components/ui/provider.ts providerEdge sets the hue).
