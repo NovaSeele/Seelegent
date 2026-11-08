@@ -190,6 +190,15 @@ func breakdown(m memStatsSys) *goSysBreakdown {
 		MCacheSysMB: f(m.MCacheSys), GCSysMB: f(m.GCSys), BuckHashSysMB: f(m.BuckHashSys), OtherSysMB: f(m.OtherSys)}
 }
 
+// eventDelay returns the event delay statistics of a load run that measured them.
+func (l *loadSummary) eventDelay() (latencyStats, bool) {
+	if l == nil {
+		return latencyStats{}, false
+	}
+	ev, ok := l.API["event"]
+	return ev, ok && ev.Count > 0
+}
+
 // measured reports whether both ends were read.
 func (x *retainedHeap) measured() bool { return x != nil && x.Error == "" }
 
@@ -540,6 +549,20 @@ const (
 	loadPrivatePerTask = 2.5
 )
 
+// The load scenario's daemon CPU budget also grows with the tasks: loadCPUBase % of one core plus loadCPUPerTask
+// per task. The stream lines (-rate) are shared by the tasks, so the base carries the events, the SSE clients and
+// the pollers, and the per-task part what one running attempt adds by itself (its tails, the wait on its
+// launcher, its follower). Measured on Windows (24 cores, -rate 100): 6.9 % at 8 tasks and 7.1 % at 16, so about
+// 6.8 % plus 0.03 % per task; runs of the same build vary by about a point (more on a hybrid CPU when the daemon
+// lands on efficiency cores), hence the margin.
+const (
+	loadCPUBase    = 8.0
+	loadCPUPerTask = 0.25
+)
+
+// loadEventDelayP95 bounds the 95th percentile of the event delay (a worker line written to its SSE frame), ms.
+const loadEventDelayP95 = 1000.0
+
 // budget is the plan's budget (m19-resources.md §7); a violation is flagged, never a failure.
 func (r *result) budget() []budgetCheck {
 	var out []budgetCheck
@@ -576,9 +599,14 @@ func (r *result) budget() []budgetCheck {
 		}
 		add(fmt.Sprintf("load daemon peak private MB (%g + %g × %d tasks)", loadPrivateBase, loadPrivatePerTask, tasks),
 			loadPrivateBase+loadPrivatePerTask*float64(tasks), r.Daemon.PeakPrivMB)
+		add(fmt.Sprintf("load daemon CPU %% of one core (%g + %g × %d tasks)", loadCPUBase, loadCPUPerTask, tasks),
+			loadCPUBase+loadCPUPerTask*float64(tasks), r.Daemon.CPUPercent)
 		if r.Load != nil && r.Load.EventsStored > 0 {
 			// Not linear in the events: growth per 10k events must stay small.
 			add("load daemon private growth MB per 10k events", 5, r.Load.PrivPer10kEvts)
+		}
+		if ev, ok := r.Load.eventDelay(); ok {
+			add("load event delay p95 ms (worker line to SSE frame)", loadEventDelayP95, ev.P95)
 		}
 	}
 	return out
