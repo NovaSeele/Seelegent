@@ -86,8 +86,8 @@ func TestWorkerFull(t *testing.T) {
 // paths and its data-folder rule lets the worker read them, so the two never contradict each other. A task whose
 // folder lies inside the data folder (speckit-specify in the workspace) gets no data-folder rule at all.
 // A Spec Kit workspace lives in the data folder (<data>/specs/<repo>-spec/): a task whose spec folder or working
-// folder is there gets no data-folder rule, which would contradict the paths the brief names; any other task gets
-// it, naming the data folder.
+// folder is there keeps the data-folder rule, which names that folder as the exception; any other task gets the
+// plain rule.
 func TestWorkerDataFolder(t *testing.T) {
 	data := "/home/u/.seelegent"
 	feature := data + "/specs/app-spec/specs/001-x"
@@ -101,9 +101,14 @@ func TestWorkerDataFolder(t *testing.T) {
 	}
 	inside := Worker(Input{Cwd: data + "/specs/app-spec", DataDir: data, Message: "Run speckit-specify."})
 	golden(t, "cwd-in-data-dir", inside)
-	for name, b := range map[string]string{"spec folder": outside, "working folder": inside} {
-		if strings.Contains(b, "Do not explore") || strings.Contains(b, "Never read") {
-			t.Errorf("%s in the data folder, yet the brief keeps the worker out of it:\n%s", name, b)
+	for b, want := range map[string]string{
+		outside: "- Do not explore " + data + " or Seelegent's processes; inside it, read only " + feature +
+			" (your spec folder) and the paths this brief names.\n",
+		inside: "- Do not explore " + data + " or Seelegent's processes; inside it, work only in " + data +
+			"/specs/app-spec.\n",
+	} {
+		if !strings.Contains(b, want) || strings.Contains(b, "Never read") {
+			t.Errorf("the brief lacks %q:\n%s", want, b)
 		}
 	}
 
@@ -119,6 +124,38 @@ func TestWorkerDataFolder(t *testing.T) {
 		if p := Preview(b); !strings.HasPrefix(p, "Working directory: ") {
 			t.Errorf("the preview does not skip the rules: %q", p)
 		}
+	}
+}
+
+// Every worker brief keeps the worker out of Seelegent's data folder (field report 4, F10), with or without an
+// exception: each worker-brief golden carries exactly one data-folder rule, naming ~/.seelegent when the data
+// folder is unknown. The readonly-* goldens are ReadOnlyRun prompts (consults, meetings), which carry none of the
+// worker rules.
+func TestEveryGoldenHasDataRule(t *testing.T) {
+	files, err := filepath.Glob(filepath.Join("testdata", "*.golden"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	briefs := 0
+	for _, f := range files {
+		data, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		text := strings.ReplaceAll(string(data), "\r\n", "\n")
+		if !strings.HasPrefix(text, rulesHead) {
+			continue
+		}
+		briefs++
+		if n := strings.Count(text, "\n- Do not explore "); n != 1 {
+			t.Errorf("%s: %d data-folder rules", f, n)
+		}
+		if !strings.Contains(text, " or Seelegent's processes; inside it, ") {
+			t.Errorf("%s: the data-folder rule lost its wording", f)
+		}
+	}
+	if briefs < 7 {
+		t.Errorf("only %d of %d goldens are worker briefs", briefs, len(files))
 	}
 }
 

@@ -186,8 +186,8 @@ func TestDetect(t *testing.T) {
 	}
 }
 
-// A fix turn of a Spec Kit task keeps the worker brief's data-folder rule: none when the spec folder or the task's
-// folder lies in the data folder (the worker reads its spec there), the rule naming the data folder otherwise.
+// A fix turn ends with the worker brief's data-folder rule, the same exception included: the spec folder or the
+// task's folder when it lies in the data folder (a Spec Kit workspace).
 func TestFixPromptDataFolder(t *testing.T) {
 	exit := 1
 	res := api.GateResult{State: api.GateRed, Steps: []api.GateStep{
@@ -195,19 +195,17 @@ func TestFixPromptDataFolder(t *testing.T) {
 	}}
 	data := "/home/u/.seelegent"
 	ws := data + "/specs/app-spec"
-	for name, where := range map[string]Folders{
-		"spec outside the repository": {Data: data, Cwd: "/work/app", Spec: ws + "/specs/001-x"},
-		"task in the spec workspace":  {Data: data, Cwd: ws},
+	for where, want := range map[Folders]string{
+		{Data: data, Cwd: "/work/app", Spec: ws + "/specs/001-x"}: "read only " + ws + "/specs/001-x (your spec folder)",
+		{Data: data, Cwd: ws}: "work only in " + ws + ".",
+		{Data: data, Cwd: "/work/app", Spec: "/work/specs/001-x"}: "read only the paths this brief names",
 	} {
-		if p := FixPrompt(res, nil, 1, 2, nil, where); strings.Contains(p, "Do not explore") ||
-			strings.Contains(p, "Do not read") {
-			t.Errorf("%s: the fix prompt keeps the worker out of the data folder:\n%s", name, p)
+		p := FixPrompt(res, nil, 1, 2, nil, where)
+		rule := brief.DataRule(where.Data, where.Cwd, where.Spec)
+		if !strings.HasSuffix(p, "\n"+rule) || !strings.HasPrefix(rule, "Do not explore "+data+" ") ||
+			!strings.Contains(rule, want) {
+			t.Errorf("%+v: the fix prompt does not end with the rule naming %q:\n%s", where, want, p)
 		}
-	}
-	p := FixPrompt(res, nil, 1, 2, nil, Folders{Data: data, Cwd: "/work/app", Spec: "/work/specs/001-x"})
-	if want := brief.DataRule(data, "/work/app", ""); !strings.HasSuffix(p, "\n"+want) ||
-		!strings.Contains(want, "Do not explore "+data) {
-		t.Errorf("a task outside the data folder: the fix prompt does not end with %q:\n%s", want, p)
 	}
 }
 
