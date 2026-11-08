@@ -5,6 +5,7 @@ import { useI18n } from 'vue-i18n'
 import type { ContestVariant } from '@/api/types'
 import ProviderMark from '@/components/ui/ProviderMark.vue'
 import StatusPill from '@/components/ui/StatusPill.vue'
+import { useProviderNames } from '@/composables/useProviderNames'
 
 import { runsOn, variantRunsOn, variantStatus } from './contestModel'
 
@@ -15,6 +16,7 @@ import { runsOn, variantRunsOn, variantStatus } from './contestModel'
 const props = defineProps<{ variants: readonly ContestVariant[] }>()
 
 const { t } = useI18n()
+const providerName = useProviderNames(() => props.variants.map((v) => v.spec.provider))
 const rows = computed(() =>
   props.variants.map((v) => {
     const backend = v.backend ?? v.spec.backend
@@ -32,7 +34,12 @@ const rows = computed(() =>
     <li v-for="{ v, s, backend, text } in rows" :key="v.label" class="variant">
       <strong class="variant__label">{{ v.label }}</strong>
       <span class="variant__runs">
-        <ProviderMark v-if="backend" :backend="backend" :provider="v.spec.provider" size="sm" />
+        <ProviderMark
+          v-if="backend"
+          :backend="backend"
+          :provider-name="providerName(v.spec.provider)"
+          size="sm"
+        />
         {{ text }}
       </span>
       <StatusPill v-if="'status' in s" size="sm" :status="s.status" />

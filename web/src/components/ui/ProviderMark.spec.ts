@@ -1,10 +1,7 @@
-import { flushPromises, mount } from '@vue/test-utils'
+import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 
-import type { ProvidersApi } from '@/api/providers'
-import { useProvidersStore } from '@/stores/providers'
 import { setupApp } from '@/test/app'
-import { makeProvider } from '@/test/fixtures'
 
 import { providerEdge, providerToken } from './provider'
 import ProviderMark from './ProviderMark.vue'
@@ -32,25 +29,13 @@ describe('ProviderMark', () => {
     expect(wrapper.attributes('style')).toContain('--pm-hue: var(--provider-other)')
   })
 
-  it('shows an API-key provider as a neutral chip with its display name', async () => {
-    const wrapper = await mark({ backend: 'claude', provider: 'deepseek' })
+  it('shows an API-key provider as a neutral chip with the display name it is given', async () => {
+    const wrapper = await mark({ backend: 'claude', providerName: 'DeepSeek' })
     expect(wrapper.find('.pm__name').text()).toBe('Claude Code')
-    // The providers are not read yet: the id stands in.
-    expect(wrapper.find('.pm__chip').text()).toBe('deepseek')
+    expect(wrapper.find('.pm__chip').text()).toBe('DeepSeek')
     // The provider has no hue of its own: the mark keeps the backend's.
     expect(wrapper.attributes('style')).toContain('--pm-hue: var(--provider-claude)')
-
-    const providers = useProvidersStore()
-    providers.setApi({
-      list: () =>
-        Promise.resolve({
-          items: [makeProvider({ id: 'deepseek', name: 'DeepSeek' })],
-          presets: [],
-        }),
-    } as unknown as ProvidersApi)
-    await providers.load()
-    await flushPromises()
-    expect(wrapper.find('.pm__chip').text()).toBe('DeepSeek')
+    expect((await mark({ backend: 'claude' })).find('.pm__chip').exists()).toBe(false)
   })
 
   it('keeps only the dot where there is no room, with the name as tooltip and for screen readers', async () => {

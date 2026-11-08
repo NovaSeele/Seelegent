@@ -8,6 +8,7 @@ import ProviderMark from '@/components/ui/ProviderMark.vue'
 import StatusPill from '@/components/ui/StatusPill.vue'
 import type { Tone } from '@/components/ui/tone'
 import { useFormat } from '@/composables/useFormat'
+import { useProviderNames } from '@/composables/useProviderNames'
 
 import { gateCell, outTone, runsOn, variantStatus, verifierCell } from './contestModel'
 
@@ -21,6 +22,7 @@ const emit = defineEmits<{ select: [label: string] }>()
 
 const { t } = useI18n()
 const fmt = useFormat()
+const providerName = useProviderNames(() => props.contest.scoreboard.map((r) => r.provider))
 
 const rows = computed(() => {
   const c = props.contest
@@ -99,7 +101,7 @@ const rows = computed(() => {
             <ProviderMark
               v-if="row.r.backend"
               :backend="row.r.backend"
-              :provider="row.r.provider"
+              :provider-name="providerName(row.r.provider)"
               size="sm"
             />
             {{ row.runsOn }}
