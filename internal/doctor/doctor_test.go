@@ -19,11 +19,11 @@ func TestSmallChecks(t *testing.T) {
 		t.Fatal(err)
 	}
 	sep := string(filepath.ListSeparator)
-	if c := pathEntries([]string{"PATH=" + abs + sep + "bin" + sep + "." + sep}); c.Status != Warn ||
+	if c := pathEntries([]string{"PATH=" + abs + sep + "bin" + sep + "." + sep}, runtime.GOOS); c.Status != Warn ||
 		!strings.Contains(c.Message, "bin, .") {
 		t.Errorf("relative PATH = %+v", c)
 	}
-	if c := pathEntries([]string{"Path=" + abs}); c.Status != OK {
+	if c := pathEntries([]string{"Path=" + abs}, runtime.GOOS); c.Status != OK {
 		t.Errorf("absolute PATH = %+v", c)
 	}
 	if c := dashboard(fstest.MapFS{"index.html": {Data: []byte("x")}}); c.Status != OK {

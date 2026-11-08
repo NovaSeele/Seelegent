@@ -214,23 +214,25 @@ tools) has no command for either, and the daemon refuses those routes to any cal
 
 ## doctor
 
-It changes nothing: it never starts the daemon, never migrates the database (it opens it query-only through
-`store.Inspect`), never touches a running daemon's data directory, and never prints an e-mail address or key. Only
-when no daemon of the data directory runs does it check writability by writing a probe file
-(`.doctor-write-test`, atomically) and removing it again. Checks, in order:
+It changes nothing: it never starts or stops the daemon or any other process, never migrates the database (it
+opens it query-only through `store.Inspect`), never touches a running daemon's data directory, and never prints an
+e-mail address or key. Only when no daemon of the data directory runs does it check writability by writing a probe
+file (`.doctor-write-test`, atomically) and removing it again. Checks, in order:
 
 | Name | ok | warn | fail |
 |---|---|---|---|
 | `data_dir` | exists, and writable (probe) or in use by its running daemon (nothing written) | does not exist yet | not a folder, or not writable |
 | `settings` | `config.json` loads (or is absent) | unknown keys | cannot be read |
 | `database` | schema current, or no database yet | older schema (the daemon migrates it) | newer schema, or cannot be opened |
-| `daemon` | answers (version, address, pid) | not running; or another version than this command | holds its lock without answering; another program, or another data directory's daemon, on the port |
+| `daemon` | answers (version, address, pid) | not running | holds its lock without answering; another program, or another data directory's daemon, on the port |
+| `daemon_version` (only when something answers on the port) | the daemon runs this build | the daemon runs another version, or the same version from another commit (compared when both builds know their commit): "the daemon on port N runs vX (commit a), this seelegent is vY (commit b)", fix `seelegent restart`; or what answers is no Seelegent v1 daemon (no `/api/v1/health`), such as the old Node version's daemon, or speaks another API version | – |
+| `old_node` (Windows only) | no process of the old Node version runs | processes run `node ...\seelegent\...\cli.js` (count, pids, how many are its MCP server `cli.js mcp`): lead hosts not restarted after the update keep the old MCP server, which can start the old daemon on the migrated data folder; fix: restart the lead hosts. Nothing is stopped; the command lines are read through a Toolhelp snapshot | – |
 | `port_file` | no stale port file | a port file left by a daemon that is gone (never a fail) | – |
 | `dashboard` | embedded | not part of this build | – |
 | `git` | found (the `gitx` resolver; the message names the git used) | Windows: the first git on PATH is a batch wrapper (`git.cmd`, `git.bat`, such as ServBay's). Seelegent never runs it (cmd.exe would drop the `^` of `X^{tree}` and expand `%VAR%`) and uses a real `git.exe` instead, but hooks, gate commands and terminals still go through the wrapper | not found, or only a wrapper that names no `git.exe` |
 | `backend_<id>` | enabled and its CLI found (`backend.Find`), or disabled | – | enabled but not found |
 | `accounts` | counts: total, enabled and (daemon running) usable | no enabled account, or counts unknown | – |
-| `path` | no relative PATH entries | relative entries (a worker would resolve them in the project folder) | – |
+| `path` | no relative PATH entries | relative entries (a worker would resolve them in the project folder); on Windows, entries with an unexpanded `%NAME%` (PATH stored as `REG_SZ` instead of `REG_EXPAND_SZ`, so every program sees the literal text; the fix names the expanded path) | – |
 | `cargo` (only when rustup is installed) | the first `cargo` on PATH is rustup's proxy | no `cargo` on PATH; or another `cargo` comes first (a dependency's own `rust-toolchain.toml` can then switch compilers mid-build, error E0514, in your own shells; workers and gates are pinned) | – |
 
 There is no host registration check (MCP entries, skills) yet; `seelegent setup --dry-run` shows what is

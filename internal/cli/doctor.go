@@ -26,8 +26,9 @@ func newDoctorCommand(info buildinfo.Info, d deps) *cobra.Command {
 				return err
 			}
 			o := doctor.Options{Paths: cn.paths, Settings: cn.settings, SettingsErr: cn.configErr, Daemon: cn.daemon,
-				Version: info.Version, Web: web.FS(), Env: os.Environ(), GitPath: gitx.NewBinary(nil, log).Path,
-				GitWrapper: gitx.FirstWrapper(os.Environ())}
+				Version: info.Version, Commit: info.Commit, Web: web.FS(), Env: os.Environ(),
+				GitPath: gitx.NewBinary(nil, log).Path, GitWrapper: gitx.FirstWrapper(os.Environ()),
+				Processes: d.processes}
 			if cn.configErr == nil {
 				if cfg, err := config.Load(cn.paths.Config); err == nil {
 					o.Unknown = cfg.Unknown()

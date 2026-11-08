@@ -27,6 +27,7 @@ import (
 	"github.com/NovaSeele/Seelegent/internal/doctor"
 	"github.com/NovaSeele/Seelegent/internal/fsutil"
 	"github.com/NovaSeele/Seelegent/internal/ops"
+	"github.com/NovaSeele/Seelegent/internal/platform"
 	"github.com/NovaSeele/Seelegent/internal/testutil/fakecli"
 )
 
@@ -806,6 +807,14 @@ func TestDaemonPortTaken(t *testing.T) {
 func TestDoctor(t *testing.T) {
 	newTestDaemon(t)
 	td := testDeps(nil)
+	// The process list is injected: an old Node MCP server and an unrelated node program.
+	td.processes = func(context.Context) ([]platform.Process, error) {
+		return []platform.Process{
+			{PID: 4120, Name: "node.exe", Args: []string{"node", `C:\Programs\seelegent\versions\0.3.0\src\cli.js`,
+				"mcp"}},
+			{PID: 4121, Name: "node.exe", Args: []string{"node", "server.js"}},
+		}, nil
+	}
 	var checks []doctor.Check
 	r := runCLI(t, td, "doctor", "--json")
 	r.json(t, &checks)
@@ -813,16 +822,21 @@ func TestDoctor(t *testing.T) {
 	for _, c := range checks {
 		byName[c.Name] = c
 	}
-	for _, name := range []string{"data_dir", "settings", "database", "daemon", "port_file", "dashboard", "git",
-		"backend_agy", "backend_claude", "backend_codex", "accounts", "path"} {
+	for _, name := range []string{"data_dir", "settings", "database", "daemon", "daemon_version", "old_node",
+		"port_file", "dashboard", "git", "backend_agy", "backend_claude", "backend_codex", "accounts", "path"} {
 		if _, ok := byName[name]; !ok {
 			t.Errorf("no %s check in %+v", name, checks)
 		}
 	}
-	for _, name := range []string{"data_dir", "settings", "database", "daemon", "port_file", "backend_agy", "accounts"} {
+	for _, name := range []string{"data_dir", "settings", "database", "daemon", "daemon_version", "port_file",
+		"backend_agy", "accounts"} {
 		if byName[name].Status != doctor.OK {
 			t.Errorf("%s = %+v", name, byName[name])
 		}
+	}
+	if c := byName["old_node"]; c.Status != doctor.Warn || !strings.Contains(c.Message, "1 process of the old Node "+
+		"version runs (pid 4120)") {
+		t.Errorf("old_node = %+v", c)
 	}
 	if !strings.Contains(byName["accounts"].Message, "1 account, 1 enabled") || strings.Contains(r.stdout, "@") {
 		t.Errorf("accounts = %+v", byName["accounts"])
