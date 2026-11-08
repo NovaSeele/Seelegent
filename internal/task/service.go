@@ -337,9 +337,6 @@ func (s *Service) Start(ctx context.Context) error {
 	if err := s.repo.BackfillFold(ctx); err != nil {
 		return fmt.Errorf("task: search titles: %w", err)
 	}
-	if err := s.repo.BackfillDigests(ctx); err != nil {
-		return fmt.Errorf("task: list columns: %w", err)
-	}
 	if err := s.recoverTasks(ctx); err != nil {
 		return err
 	}
@@ -356,6 +353,39 @@ func (s *Service) Start(ctx context.Context) error {
 		s.spawn("memory", "", s.watchMemory)
 	}
 	return nil
+}
+
+// backfillPause is the rest between two batches of the digest backfill, so that it yields to the daemon's work.
+const backfillPause = 50 * time.Millisecond
+
+// BackfillDigests stores, in the background, the list digest of the tasks written before the digest columns existed
+// (Repo.BackfillDigests): the daemon calls it once it listens, so a large database after an upgrade never delays the
+// start. It stops when the engine closes; a task that cannot be read is logged and keeps loading its turns when
+// listed. Lists are right before, during and after it.
+func (s *Service) BackfillDigests() {
+	s.spawn("digests", "", func() {
+		ctx := s.root
+		pause := func(ctx context.Context) error {
+			t := s.clk.NewTimer(backfillPause)
+			defer t.Stop()
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-t.C():
+				return nil
+			}
+		}
+		skip := func(id string, err error) {
+			s.log.Warn("task: list digest not stored; the task's turns cannot be read", "task", id, "err", err)
+		}
+		n, err := s.repo.BackfillDigests(ctx, pause, skip)
+		switch {
+		case err != nil && ctx.Err() == nil:
+			s.log.Warn("task: list digest backfill stopped", "stored", n, "err", err)
+		case n > 0:
+			s.log.Info("task: list digests stored", "tasks", n)
+		}
+	})
 }
 
 // Close stops the engine: it stops following workers and waits (until ctx ends) for its goroutines. Workers keep

@@ -3,6 +3,7 @@ package task
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 
 	"github.com/NovaSeele/Seelegent/internal/api"
@@ -145,35 +146,93 @@ func (r *Repo) getListed(ctx context.Context, id string) (listed, error) {
 	return l, err
 }
 
-// backfillBatch is how many tasks one transaction of BackfillDigests updates.
+// backfillBatch is how many tasks one transaction of BackfillDigests updates (Repo.backfillBatch; tests lower it).
 const backfillBatch = 100
 
 // BackfillDigests stores the digest of the tasks written before the digest columns existed (migration 0011), in
-// batches. Lists work before it ran: they load those tasks' turns.
-func (r *Repo) BackfillDigests(ctx context.Context) error {
+// batches of Repo.backfillBatch in id order, calling pause between batches (it ends the backfill when it returns an
+// error). Lists work before and during it: they load the turns of the tasks without a digest. A task that cannot be
+// read is passed to skip and keeps no digest (its list entries keep loading its turns, and report the error).
+// A task saved meanwhile keeps the digest its save stored. It returns how many digests it stored.
+func (r *Repo) BackfillDigests(ctx context.Context, pause func(context.Context) error,
+	skip func(id string, err error)) (int, error) {
+	stored := 0
+	after := ""
 	for {
-		n := 0
-		err := r.db.Write(ctx, func(tx *sql.Tx) error {
-			ls, err := queryListed(ctx, tx, `SELECT `+listedColumns+` FROM tasks WHERE turn_count < 0 LIMIT ?`,
-				backfillBatch)
-			if err != nil {
-				return err
+		ids, err := r.undigested(ctx, after)
+		if err != nil || len(ids) == 0 {
+			return stored, err
+		}
+		after = ids[len(ids)-1]
+		ls := make([]listed, 0, len(ids))
+		for _, id := range ids {
+			l, err := r.getListed(ctx, id)
+			switch {
+			case errors.Is(err, ErrNotFound):
+			case err != nil && ctx.Err() != nil:
+				return stored, ctx.Err()
+			case err != nil:
+				skip(id, err)
+			default:
+				ls = append(ls, l)
 			}
-			n = len(ls)
-			for _, l := range ls {
-				args := append(l.d.args(), l.t.ID)
-				if _, err := tx.ExecContext(ctx, `UPDATE tasks SET turn_count = ?, tokens_used = ?, files_changed = ?,
-					gate_turn = ?, gate_state = ?, last_account_id = ?, last_account_label = ? WHERE id = ?`,
-					args...); err != nil {
-					return fmt.Errorf("store the digest of task %s: %w", l.t.ID, err)
-				}
-			}
-			return nil
-		})
-		if err != nil || n < backfillBatch {
-			return err
+		}
+		n, err := r.storeDigests(ctx, ls)
+		stored += n
+		if err != nil || len(ids) < r.backfillBatch {
+			return stored, err
+		}
+		if err := pause(ctx); err != nil {
+			return stored, err
 		}
 	}
+}
+
+// undigested returns the ids after after (in id order) of up to backfillBatch tasks without a digest.
+func (r *Repo) undigested(ctx context.Context, after string) ([]string, error) {
+	var ids []string
+	err := r.db.Read(ctx, func(tx *sql.Tx) error {
+		rows, err := tx.QueryContext(ctx, `SELECT id FROM tasks WHERE turn_count < 0 AND id > ? ORDER BY id LIMIT ?`,
+			after, r.backfillBatch)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = rows.Close() }()
+		for rows.Next() {
+			var id string
+			if err := rows.Scan(&id); err != nil {
+				return err
+			}
+			ids = append(ids, id)
+		}
+		return rows.Err()
+	})
+	return ids, err
+}
+
+// storeDigests stores the digests in one transaction, except over a digest a save stored meanwhile.
+func (r *Repo) storeDigests(ctx context.Context, ls []listed) (int, error) {
+	if len(ls) == 0 {
+		return 0, nil
+	}
+	n := 0
+	err := r.db.Write(ctx, func(tx *sql.Tx) error {
+		n = 0
+		for _, l := range ls {
+			args := append(l.d.args(), l.t.ID)
+			res, err := tx.ExecContext(ctx, `UPDATE tasks SET turn_count = ?, tokens_used = ?, files_changed = ?,
+				gate_turn = ?, gate_state = ?, last_account_id = ?, last_account_label = ? WHERE id = ? AND turn_count < 0`,
+				args...)
+			if err != nil {
+				return fmt.Errorf("store the digest of task %s: %w", l.t.ID, err)
+			}
+			if k, err := res.RowsAffected(); err == nil {
+				n += int(k)
+			}
+		}
+		return nil
+	})
+	return n, err
 }
 
 // gateOf is the gate state a task summary shows: the running phase, else the newest gate since the lead's latest
