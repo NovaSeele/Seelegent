@@ -205,6 +205,7 @@ func (s *Service) startRunWith(id string, pre *launch.Handle) {
 		starting: pre}
 	s.runs[id] = r
 	s.mu.Unlock()
+	s.poke()
 	ok := s.spawn("run", id, func() {
 		defer func() {
 			if v := recover(); v != nil {
@@ -361,6 +362,10 @@ type attemptResult struct {
 // whether the turn goes on with another attempt.
 func (s *Service) newAttempt(r *run, t *Task, tu *Turn) (bool, error) {
 	ctx := r.ctx
+	if s.holdForMemory(r, t.ID) {
+		// Low memory: waited without touching the pool; look at the task again before asking for an account.
+		return true, nil
+	}
 	b, err := s.backend(t.Backend)
 	if err != nil {
 		return false, err
@@ -898,7 +903,8 @@ func (s *Service) setWaiting(id string, u *pool.Unavailable) {
 		if err := t.SetStatus(StatusWaitingQuota); err != nil {
 			return nil, err
 		}
-		t.Waiting, t.WaitDetail, t.WaitingUntil, t.MemoryWait = string(u.Reason), detail, u.Until.UTC(), nil
+		// MemoryWait stays: a pool wait that ends back in a memory wait keeps its start (resources_wait).
+		t.Waiting, t.WaitDetail, t.WaitingUntil = string(u.Reason), detail, u.Until.UTC()
 		turn := 0
 		if tu := t.LastTurn(); tu != nil {
 			turn = tu.N

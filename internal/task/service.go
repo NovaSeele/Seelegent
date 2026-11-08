@@ -260,14 +260,16 @@ type Service struct {
 	overlaps  map[string]overlapCache
 
 	// resMu guards the resource state (resources.go): the watchdog's hold (low), whether it stopped a gate in
-	// this low-memory episode (stopped), the gate runs in flight (newest last), the last spaced start, and lowWake,
-	// closed and replaced whenever low flips.
+	// this low-memory episode (stopped), the heavy commands in flight (newest last), the last spaced start, lowWake,
+	// closed and replaced whenever low flips, and activity, closed and replaced when a run or a heavy command starts
+	// (it wakes an idle watchdog).
 	resMu     sync.Mutex
 	low       bool
 	stopped   bool
 	gateRuns  []*gateRun
 	lastAdmit time.Time
 	lowWake   chan struct{}
+	activity  chan struct{}
 }
 
 // toolEnv is the toolchain pin for commands run in dir with the daemon's environment.
@@ -307,6 +309,7 @@ func New(o Options) (*Service, error) {
 		o: o, repo: NewRepo(o.DB, o.Clock.Now), bus: NewBus(), clk: o.Clock, log: o.Logger,
 		locks: map[string]*taskLock{}, runs: map[string]*run{}, watches: map[string]*consoleWatch{},
 		root: root, cancel: cancel, overlaps: map[string]overlapCache{}, lowWake: make(chan struct{}),
+		activity: make(chan struct{}),
 	}, nil
 }
 

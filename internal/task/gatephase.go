@@ -424,42 +424,79 @@ func (s *Service) runGate(r *run, id string, turn int, runner gate.Runner, steps
 // while it waits for memory: it gives the slot back and queues again. It returns the slot's release, or false
 // when the run was stopped meanwhile.
 func (s *Service) gateAdmit(r *run, id string, turn int) (func(), bool) {
+	release, err := s.admitHeavy(r.ctx, func(pos, limit int) {
+		s.gateQueued(id, turn, api.GateWaitSlot, pos, limit)
+	}, func() { s.gateQueued(id, turn, api.GateWaitMemory, 0, 0) })
+	return release, err == nil
+}
+
+// AdmitHeavy admits a heavy command outside a task gate (a regression run command): it waits for a gate slot
+// (gateConcurrency, in order with the task gates), then for memory like a gate, giving the slot back while it waits
+// for memory. It returns the slot's release, or ctx's error when ctx ended first. A gate command that runs a
+// regression through the daemon asks for a slot while its own gate holds one.
+func (s *Service) AdmitHeavy(ctx context.Context) (func(), error) {
+	return s.admitHeavy(ctx, nil, nil)
+}
+
+// admitHeavy is AdmitHeavy with the queue reports: onSlot with the place in line while it waits for a slot,
+// onMemory when it waits for memory (each may be nil).
+func (s *Service) admitHeavy(ctx context.Context, onSlot func(pos, limit int), onMemory func()) (func(), error) {
 	for {
 		release := func() {}
 		if sl := s.o.GateSlots; sl != nil {
-			rel, err := sl.Acquire(r.ctx, func(pos int) {
-				s.gateQueued(id, turn, api.GateWaitSlot, pos, sl.Limit())
-			})
+			var onWait func(int)
+			if onSlot != nil {
+				onWait = func(pos int) { onSlot(pos, sl.Limit()) }
+			}
+			rel, err := sl.Acquire(ctx, onWait)
 			if rel != nil {
 				release = rel
 			}
-			if err != nil || r.ctx.Err() != nil {
+			if err == nil {
+				err = ctx.Err()
+			}
+			if err != nil {
 				release()
-				return nil, false
+				return nil, err
 			}
 		}
 		wake := s.memoryWake()
 		if s.memoryHold(s.settings()) == nil {
-			return release, true
+			return release, nil
 		}
 		release()
-		s.gateQueued(id, turn, api.GateWaitMemory, 0, 0)
-		s.waitMemory(r.ctx, wake)
-		if r.ctx.Err() != nil {
-			return nil, false
+		if onMemory != nil {
+			onMemory()
+		}
+		s.waitMemory(ctx, wake)
+		if err := ctx.Err(); err != nil {
+			return nil, err
 		}
 	}
 }
 
-// gateQueued shows the gate phase of turn queued, waiting for wait, with a queued gate event (again when the slot
-// queue position changes).
+// queueNear is the slot queue position from which every move of a queued gate is logged.
+const queueNear = 3
+
+// queueMoveLogged reports whether a queued gate that moved in the slot queue from position was to pos logs a new
+// queued event: near the front (queueNear or less) every move, further back only when the position halved. With k
+// gates queued, each slot release would otherwise log k-1 events (k² over the queue); this keeps it to about
+// log2(k)+queueNear per gate. GatePhase.Position is the position last logged.
+func queueMoveLogged(was, pos int) bool {
+	return pos != was && (pos <= queueNear || pos <= was/2)
+}
+
+// gateQueued shows the gate phase of turn queued, waiting for wait, with a queued gate event: when the wait starts,
+// when what it waits for changes (slot, memory), and when its slot queue position moved enough (queueMoveLogged).
+// A smaller move changes nothing stored.
 func (s *Service) gateQueued(id string, turn int, wait string, pos, limit int) {
 	_, err := s.mutate(s.background(), id, func(t *Task) ([]NewEvent, error) {
 		ph := t.GatePhase
 		if ph == nil || ph.Turn != turn || t.CancelRequested {
 			return nil, errNoChange
 		}
-		if ph.State == api.GatePhaseQueued && ph.Wait == wait && (wait == api.GateWaitMemory || ph.Position == pos) {
+		if ph.State == api.GatePhaseQueued && ph.Wait == wait &&
+			(wait == api.GateWaitMemory || !queueMoveLogged(ph.Position, pos)) {
 			return nil, errNoChange
 		}
 		ph.State, ph.Wait, ph.Position = api.GatePhaseQueued, wait, pos
@@ -507,7 +544,7 @@ func (s *Service) runGateOnce(r *run, id string, turn int, runner gate.Runner, s
 	api.GateResult, bool) {
 	ctx, cancel := context.WithCancelCause(r.ctx)
 	defer cancel(nil)
-	untrack := s.trackGate(cancel)
+	untrack := s.TrackHeavy(cancel)
 	defer untrack()
 	started := api.FormatTime(s.now())
 	labels := make([]string, len(steps))
