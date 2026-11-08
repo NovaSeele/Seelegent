@@ -2,6 +2,7 @@ package task
 
 import (
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -9,6 +10,7 @@ import (
 	"github.com/NovaSeele/Seelegent/internal/api"
 	"github.com/NovaSeele/Seelegent/internal/backend"
 	"github.com/NovaSeele/Seelegent/internal/config"
+	"github.com/NovaSeele/Seelegent/internal/ops"
 	"github.com/NovaSeele/Seelegent/internal/pool"
 	"github.com/NovaSeele/Seelegent/internal/testutil/fakecli"
 )
@@ -189,6 +191,57 @@ func TestClaudeLimitRepeatedRests(t *testing.T) {
 	}
 	if n := len(eventsOf(h.events(sum.ID), api.EventQuotaExhausted)); n != hits {
 		t.Errorf("quota events = %d", n)
+	}
+}
+
+// TestWaitNamesFreeKeyProviders (field report F14): a task without provider waits while the only claude sign-in
+// account rests. A free API-key account of a provider without tiers is named in the wait detail, the report and its
+// summary, with "and a model"; the task never moves to it. Without the API-key account the detail is the plain one.
+func TestWaitNamesFreeKeyProviders(t *testing.T) {
+	for _, withKey := range []bool{false, true} {
+		t.Run(map[bool]string{false: "sign-in only", true: "free API-key account"}[withKey], func(t *testing.T) {
+			h := newHarness(t)
+			h.useClaude()
+			h.claude("solo", 0)
+			if withKey {
+				ctx := t.Context()
+				if _, err := h.accounts.CreateProvider(ctx, account.Provider{ID: "anthropic",
+					Backend: config.BackendClaude, Official: true, Enabled: true}); err != nil {
+					t.Fatal(err)
+				}
+				key, _, err := h.accounts.Add(ctx, account.New{Backend: config.BackendClaude, Kind: account.KindAPIKey,
+					Label: "key", Provider: "anthropic", Enabled: true}, nil)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if _, err := h.accounts.SetKey(ctx, key.ID, "qz7Kp2mWx9Rt4Lb8Nc3Vd6Fh1Jg5Ty0Ue"); err != nil {
+					t.Fatal(err)
+				}
+				h.pool.Notify()
+			}
+			h.queue.Push(t, claudeLimitScript("sess-f14"))
+			sum := h.delegate(api.DelegateRequest{Backend: config.BackendClaude, Model: "claude-opus-5"})
+			h.waitFor("the task to wait for the reset", func() bool {
+				tk := h.task(sum.ID)
+				return tk.Status == StatusWaitingQuota && tk.Waiting == string(pool.ReasonResting)
+			})
+			tk := h.task(sum.ID)
+			const hint = "; free API-key accounts: pass provider: anthropic and a model"
+			if !strings.HasPrefix(tk.WaitDetail, "all 1 claude accounts are resting") ||
+				strings.HasSuffix(tk.WaitDetail, hint) != withKey || strings.Count(tk.WaitDetail, "anthropic") > 1 {
+				t.Fatalf("wait detail = %q", tk.WaitDetail)
+			}
+			rep, err := h.s.Report(t.Context(), sum.ID, "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if rep.WaitDetail != tk.WaitDetail || !strings.Contains(ops.ReportSummary(rep), "waiting: "+tk.WaitDetail) {
+				t.Errorf("report wait detail = %q, summary %q", rep.WaitDetail, ops.ReportSummary(rep))
+			}
+			if at := tk.LastTurn().Attempts; len(at) != 1 || len(h.queue.Records(t)) != 1 {
+				t.Errorf("the task moved on: %d attempts", len(at))
+			}
+		})
 	}
 }
 

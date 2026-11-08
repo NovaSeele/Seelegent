@@ -59,6 +59,9 @@ append the events in **one transaction**, then publish on the bus. The log and t
    after a minute. Every account resting or busy: `waiting: resting` (with `waitingUntil`) or `waiting: busy`, with
    the pool's line in `waitDetail` (for busy the full accounts, `acc6: 2 of 2 running`); the `waiting_quota` event
    carries both as `reason` and `detail`, and is written again only when one of them or the time changes.
+   A task without `provider` never takes an API-key account (keys cost money), but when one of its backend would be
+   free with `provider` set, `waitDetail` names that provider (at most three, each once; "and a model" when the
+   provider maps no tier), and the report carries it as `wait_detail`.
    A hand-back turn waits for the conversation's own account while it rests or is busy instead of moving. When that
    account cannot run at all any more (signed out, disabled, removed, its models no longer allowed), the hand-back
    runs on another account in a new conversation, whose brief says plainly that the console's context is not

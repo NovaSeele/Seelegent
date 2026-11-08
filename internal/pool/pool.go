@@ -221,6 +221,18 @@ type Unavailable struct {
 	Running int `json:"running,omitempty"`
 	// Slots are the busy accounts with their running turns, in the order of the accounts (ReasonBusy).
 	Slots []BusySlot `json:"slots,omitempty"`
+	// KeyProviders are the providers whose API-key accounts of the backend are free now, for a request that names
+	// no provider and waits on its sign-in accounts (resting or busy). Such a request never takes them (keys cost
+	// money); Error names them so the lead can pass provider. In account order, each once.
+	KeyProviders []KeyProvider `json:"keyProviders,omitempty"`
+}
+
+// KeyProvider is a provider with a free API-key account (Unavailable.KeyProviders).
+type KeyProvider struct {
+	ID string `json:"id"`
+	// NeedsModel: the provider maps no tier to a model, so a task on it needs an explicit model. The pool does
+	// not read providers: the caller that does sets it before Error.
+	NeedsModel bool `json:"needsModel,omitempty"`
 }
 
 // BusySlot is a matching account that has no free slot: Running of Limit (maxConcurrentPerAccount) turns run on
@@ -232,8 +244,11 @@ type BusySlot struct {
 	Held      bool   `json:"held,omitempty"`
 }
 
-// maxSlotsShown is how many busy accounts Unavailable.Error names.
-const maxSlotsShown = 3
+// maxSlotsShown is how many busy accounts Unavailable.Error names, and maxKeyProvidersShown how many providers.
+const (
+	maxSlotsShown        = 3
+	maxKeyProvidersShown = 3
+)
 
 // Error implements error.
 func (u *Unavailable) Error() string {
@@ -276,7 +291,30 @@ func (u *Unavailable) Error() string {
 	if u.Group != "" {
 		fmt.Fprintf(&b, " (quota group %s)", u.Group)
 	}
+	u.writeKeyProviders(&b)
 	return b.String()
+}
+
+// writeKeyProviders adds the free API-key accounts: "; free API-key accounts: pass provider: anthropic and a
+// model, or provider: zai".
+func (u *Unavailable) writeKeyProviders(b *strings.Builder) {
+	if len(u.KeyProviders) == 0 {
+		return
+	}
+	b.WriteString("; free API-key accounts: pass ")
+	for i, kp := range u.KeyProviders {
+		if i == maxKeyProvidersShown {
+			fmt.Fprintf(b, ", or %d more", len(u.KeyProviders)-i)
+			break
+		}
+		if i > 0 {
+			b.WriteString(", or ")
+		}
+		fmt.Fprintf(b, "provider: %s", kp.ID)
+		if kp.NeedsModel {
+			b.WriteString(" and a model")
+		}
+	}
 }
 
 // Is matches the reason's sentinel error.

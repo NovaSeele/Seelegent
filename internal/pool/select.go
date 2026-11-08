@@ -277,10 +277,35 @@ func (p *Pool) choose(v *view, req *Request) (Choice, *Unavailable) {
 		default:
 			u.Reason = ReasonResting
 		}
+		if u.Reason != ReasonNoAccount && u.Capped == 0 {
+			u.KeyProviders = p.freeKeyProviders(v, req)
+		}
 		return Choice{}, u
 	}
 	best := pick(free, req.Prefer)
 	return Choice{Account: *best.a, Model: best.model, Remaining: best.remaining, RemainingKnown: best.known}, nil
+}
+
+// freeKeyProviders lists the providers whose API-key accounts of the request's backend would be free for it with
+// provider set, when the request names no provider and no account. The caller holds p.mu.
+func (p *Pool) freeKeyProviders(v *view, req *Request) []KeyProvider {
+	if req.Provider != "" || req.Account != "" {
+		return nil
+	}
+	var out []KeyProvider
+	for i := range v.accounts {
+		a := &v.accounts[i]
+		if a.Kind != account.KindAPIKey || a.Provider == "" || p.held[a.ID] > 0 ||
+			slices.ContainsFunc(out, func(k KeyProvider) bool { return k.ID == a.Provider }) {
+			continue
+		}
+		with := *req
+		with.Provider = a.Provider
+		if v.evaluate(a, &with, len(p.leases[a.ID])).state == stateFree {
+			out = append(out, KeyProvider{ID: a.Provider})
+		}
+	}
+	return out
 }
 
 // runningLocked counts the turns running on every account (leases, takeover consoles included). The caller holds

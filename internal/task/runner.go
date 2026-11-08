@@ -17,6 +17,7 @@ import (
 	"github.com/NovaSeele/Seelegent/internal/api"
 	"github.com/NovaSeele/Seelegent/internal/backend"
 	"github.com/NovaSeele/Seelegent/internal/brief"
+	"github.com/NovaSeele/Seelegent/internal/config"
 	"github.com/NovaSeele/Seelegent/internal/event"
 	"github.com/NovaSeele/Seelegent/internal/fsutil"
 	"github.com/NovaSeele/Seelegent/internal/launch"
@@ -937,6 +938,7 @@ func (s *Service) finishCancel(id string) {
 
 // setWaiting shows a task as waiting for an account.
 func (s *Service) setWaiting(id string, u *pool.Unavailable) {
+	u = s.keyProviders(u)
 	_, err := s.mutate(s.background(), id, func(t *Task) ([]NewEvent, error) {
 		if t.CancelRequested || t.Manual || !Active(t.Status) {
 			return nil, errNoChange
@@ -961,6 +963,26 @@ func (s *Service) setWaiting(id string, u *pool.Unavailable) {
 	if err != nil && s.root.Err() == nil {
 		s.log.Warn("task: set waiting", "task", id, "err", err)
 	}
+}
+
+// keyProviders returns u with its free API-key providers checked (field report F14): a disabled or unreadable
+// provider is dropped, since delegate refuses it, and one that maps no tier to a model needs an explicit model. The
+// task never moves to them by itself: keys cost money, the lead decides.
+func (s *Service) keyProviders(u *pool.Unavailable) *pool.Unavailable {
+	if len(u.KeyProviders) == 0 {
+		return u
+	}
+	c := *u
+	c.KeyProviders = nil
+	for _, kp := range u.KeyProviders {
+		p, err := s.o.Accounts.GetProvider(s.background(), kp.ID)
+		if err != nil || !p.Enabled {
+			continue
+		}
+		kp.NeedsModel = p.Tiers == (config.TierModels{})
+		c.KeyProviders = append(c.KeyProviders, kp)
+	}
+	return &c
 }
 
 // sleep waits d, until wake is closed (nil: never), or until ctx ends.

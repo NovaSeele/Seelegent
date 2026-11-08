@@ -1856,6 +1856,11 @@ export interface TaskReport {
   cancelling?: boolean
   error?: string
   waiting_until?: string
+  /**
+   * WaitDetail is TaskSummary.WaitDetail while the task waits for an account: why, and the free API-key
+   * accounts a provider would reach.
+   */
+  wait_detail?: string
   /** Waiting is TaskSummary.Waiting: "memory" while a waiting_quota task waits for free memory. */
   waiting?: 'memory'
   answered_by?: string
