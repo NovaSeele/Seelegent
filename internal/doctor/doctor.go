@@ -99,7 +99,11 @@ func Run(ctx context.Context, o Options) []Check {
 	out = append(out, portFile(o), dashboard(o.Web), git(o.GitPath, o.GitWrapper))
 	out = append(out, backends(o)...)
 	out = append(out, accounts(ctx, o, c), pathEntries(o.Env, runtime.GOOS))
-	if r, ok := resources(o, runtime.GOOS); ok {
+	var live *api.Health
+	if c != nil {
+		live = &h
+	}
+	if r, ok := resources(o, runtime.GOOS, live); ok {
 		out = append(out, r)
 	}
 	if c, ok := cargo(o.Env, o.RealHome, runtime.GOOS); ok {
@@ -467,33 +471,33 @@ func expandPercent(e string, env []string) (string, bool) {
 }
 
 // resources compares one reading of free memory with the effective minFreeMemoryMB and minFreeCommitMB of this
-// machine (auto from its size, or set by the user): below either, new worker turns and gate commands would wait
-// now. It is a single reading (free memory can swing by gigabytes within hours), so the suggestion is a range to
-// consider, never a prescription.
-func resources(o Options, goos string) (Check, bool) {
+// machine (auto from its size, derived from the other threshold, or set by the user): below either, new worker
+// turns and gate commands would wait now. The values, their sources and the machine come from the running
+// daemon's health (live) when it reports them, else they are computed here from the settings file; the message
+// says which. It is a single reading (free memory can swing by gigabytes within hours), so the suggestion is a
+// range to consider, never a prescription.
+func resources(o Options, goos string, live *api.Health) (Check, bool) {
 	if o.Memory == nil {
 		return Check{}, false
 	}
 	c := Check{Name: "resources"}
-	m, set := o.Memory(), o.Settings
+	m := o.Memory()
 	if !m.Known {
 		c.Status, c.Message = OK, "free memory cannot be read on this system: the memory thresholds hold nothing"
 		return c, true
 	}
-	r := config.EffectiveResources(set, config.NewMachine(m.TotalPhysMB, m.TotalCommitMB, platform.CPUs(), goos))
-	source := func(p *int) string {
-		if p != nil {
-			return "set by you"
-		}
-		return "auto for this machine"
-	}
+	r, src, from := effectiveResources(o.Settings, m, goos, live)
 	commitKnown := m.AvailCommitMB > 0
 	reading := fmt.Sprintf("free memory %d MB (minFreeMemoryMB %d, %s)", m.AvailPhysMB, r.MinFreeMemoryMB,
-		source(set.MinFreeMemoryMB))
+		sourceWords(src.MinFreeMemoryMB, "criticalFreeMemoryMB"))
 	if commitKnown {
 		reading += fmt.Sprintf(", free commit %d MB (minFreeCommitMB %d, %s)", m.AvailCommitMB, r.MinFreeCommitMB,
-			source(set.MinFreeCommitMB))
+			sourceWords(src.MinFreeCommitMB, ""))
 	}
+	if m.CgroupV1 {
+		reading += ", within the cgroup v1 memory limit"
+	}
+	reading += "; " + from
 	physLow := r.MinFreeMemoryMB > 0 && m.AvailPhysMB < int64(r.MinFreeMemoryMB)
 	commitLow := r.MinFreeCommitMB > 0 && commitKnown && m.AvailCommitMB < int64(r.MinFreeCommitMB)
 	if !physLow && !commitLow {
@@ -501,7 +505,7 @@ func resources(o Options, goos string) (Check, bool) {
 		return c, true
 	}
 	c.Status = Warn
-	c.Message = "right now " + reading + ": new worker turns and gate commands would wait for memory. This is a " +
+	c.Message = "right now " + reading + ". New worker turns and gate commands would wait for memory. This is a " +
 		"single reading; free memory can swing a lot within hours, so check again when the machine is in its usual state"
 	var hints []string
 	if physLow {
@@ -521,6 +525,41 @@ func resources(o Options, goos string) (Check, bool) {
 		strings.Join(hints, " and ") + " (about half to three quarters of what is free now) in the dashboard's " +
 		"Settings, Resources; a value you set replaces the auto one, and Auto goes back to it"
 	return c, true
+}
+
+// effectiveResources are the effective resource values with their sources and where they come from: the running
+// daemon's health (live; nil when it does not answer) when it reports them, else computed here.
+func effectiveResources(set config.Settings, m platform.MemoryStatus, goos string,
+	live *api.Health) (r config.Resources, src config.ResourceSources, from string) {
+	if live != nil && live.Resources.MinFreeMemoryMB.Source != "" {
+		e, mc := live.Resources, live.Machine
+		r = config.Resources{MinFreeMemoryMB: e.MinFreeMemoryMB.Value, CriticalFreeMemoryMB: e.CriticalFreeMemoryMB.Value,
+			MinFreeCommitMB: e.MinFreeCommitMB.Value, TestParallelism: e.TestParallelism.Value,
+			GateConcurrency: e.GateConcurrency.Value}
+		src = config.ResourceSources{MinFreeMemoryMB: e.MinFreeMemoryMB.Source,
+			CriticalFreeMemoryMB: e.CriticalFreeMemoryMB.Source, MinFreeCommitMB: e.MinFreeCommitMB.Source,
+			TestParallelism: e.TestParallelism.Source, GateConcurrency: e.GateConcurrency.Source}
+		return r, src, fmt.Sprintf("values from the running daemon (machine: %d MB, %d CPUs)", mc.TotalPhysMB, mc.CPUs)
+	}
+	mc := config.NewMachine(m.TotalPhysMB, m.TotalCommitMB, platform.CPUs(), goos)
+	r, src = config.EffectiveResourceSources(set, mc)
+	why := "the daemon is not running"
+	if live != nil {
+		why = "the daemon does not report them"
+	}
+	return r, src, fmt.Sprintf("values computed here from the settings file, as %s (machine: %d MB, %d CPUs)", why,
+		mc.TotalPhysMB, mc.CPUs)
+}
+
+// sourceWords say where an effective value comes from; other names the threshold a derived one comes from.
+func sourceWords(source, other string) string {
+	switch source {
+	case config.SourceExplicit:
+		return "set by you"
+	case config.SourceDerived:
+		return "derived from your " + other
+	}
+	return "auto for this machine"
 }
 
 // memoryRange is a threshold range to consider for a reading of free MB: half to three quarters of it, rounded down

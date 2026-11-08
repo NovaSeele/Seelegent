@@ -10,6 +10,7 @@ import (
 	"testing/fstest"
 	"time"
 
+	"github.com/NovaSeele/Seelegent/internal/api"
 	"github.com/NovaSeele/Seelegent/internal/config"
 	"github.com/NovaSeele/Seelegent/internal/platform"
 )
@@ -139,17 +140,17 @@ func TestResourcesCheck(t *testing.T) {
 				TotalCommitMB: 24576, Known: true}
 		}
 	}
-	if _, ok := resources(Options{Settings: set}, "windows"); ok {
+	if _, ok := resources(Options{Settings: set}, "windows", nil); ok {
 		t.Fatal("no reader: the check must be skipped")
 	}
-	c, _ := resources(Options{Settings: set, Memory: read(8000, 12000)}, "windows")
+	c, _ := resources(Options{Settings: set, Memory: read(8000, 12000)}, "windows", nil)
 	if c.Status != OK || !strings.Contains(c.Message, "one reading") ||
 		!strings.Contains(c.Message, "minFreeMemoryMB 2048, auto for this machine") ||
 		!strings.Contains(c.Message, "minFreeCommitMB 2457, auto") {
 		t.Errorf("enough memory: %+v", c)
 	}
 	// Physical below its threshold, commit fine: a range for minFreeMemoryMB and the commit hint.
-	c, _ = resources(Options{Settings: set, Memory: read(1500, 5000)}, "windows")
+	c, _ = resources(Options{Settings: set, Memory: read(1500, 5000)}, "windows", nil)
 	if c.Status != Warn || !strings.Contains(c.Message, "would wait") || !strings.Contains(c.Message, "single reading") ||
 		!strings.Contains(c.Fix, "minFreeMemoryMB somewhere around 512-1024 MB") ||
 		!strings.Contains(c.Fix, "stronger guard") || strings.Contains(c.Fix, "minFreeCommitMB somewhere") ||
@@ -158,26 +159,61 @@ func TestResourcesCheck(t *testing.T) {
 	}
 	// Both low, the commit threshold set by the user: a range for each.
 	set.MinFreeCommitMB = config.Int(4096)
-	c, _ = resources(Options{Settings: set, Memory: read(1500, 3000)}, "windows")
+	c, _ = resources(Options{Settings: set, Memory: read(1500, 3000)}, "windows", nil)
 	if c.Status != Warn || !strings.Contains(c.Fix, "minFreeCommitMB somewhere around 1280-2048 MB") ||
 		strings.Contains(c.Fix, "stronger guard") || !strings.Contains(c.Message, "minFreeCommitMB 4096, set by you") {
 		t.Errorf("both low: %+v", c)
 	}
 	// Commit unknown (not Windows) never warns for commit; thresholds off never warn.
-	c, _ = resources(Options{Settings: config.Defaults(), Memory: read(8000, 0)}, "linux")
+	c, _ = resources(Options{Settings: config.Defaults(), Memory: read(8000, 0)}, "linux", nil)
 	if c.Status != OK || strings.Contains(c.Message, "commit") {
 		t.Errorf("commit unknown: %+v", c)
 	}
 	set.MinFreeMemoryMB, set.MinFreeCommitMB, set.CriticalFreeMemoryMB = config.Int(0), config.Int(0), config.Int(0)
-	if c, _ = resources(Options{Settings: set, Memory: read(100, 100)}, "windows"); c.Status != OK {
+	if c, _ = resources(Options{Settings: set, Memory: read(100, 100)}, "windows", nil); c.Status != OK {
 		t.Errorf("thresholds off: %+v", c)
 	}
 	c, _ = resources(Options{Settings: set, Memory: func() platform.MemoryStatus { return platform.MemoryStatus{} }},
-		"windows")
+		"windows", nil)
 	if c.Status != OK || !strings.Contains(c.Message, "cannot be read") {
 		t.Errorf("unknown: %+v", c)
 	}
 	if lo, hi := memoryRange(300); lo != 256 || hi != 256 {
 		t.Errorf("memoryRange(300) = %d, %d", lo, hi)
+	}
+}
+
+// TestResourcesFromDaemon: with the daemon running, the values, sources and machine come from its health, not from
+// the settings file; a daemon that does not report them, or none, falls back to computing them here.
+func TestResourcesFromDaemon(t *testing.T) {
+	read := func() platform.MemoryStatus {
+		return platform.MemoryStatus{AvailPhysMB: 1500, TotalPhysMB: 16384, Known: true, CgroupV1: true}
+	}
+	v := func(n int, source string) api.EffectiveValue { return api.EffectiveValue{Value: n, Source: source} }
+	live := &api.Health{
+		Resources: api.EffectiveResources{MinFreeMemoryMB: v(6000, api.ResourceDerived),
+			CriticalFreeMemoryMB: v(3000, api.ResourceExplicit), MinFreeCommitMB: v(0, api.ResourceAuto),
+			TestParallelism: v(2, api.ResourceAuto), GateConcurrency: v(1, api.ResourceAuto)},
+		Machine: api.Machine{TotalPhysMB: 16384, CPUs: 8},
+	}
+	// The settings file says off; the daemon's values win.
+	set := config.Defaults()
+	set.MinFreeMemoryMB = config.Int(0)
+	c, _ := resources(Options{Settings: set, Memory: read}, "linux", live)
+	if c.Status != Warn || !strings.Contains(c.Message, "minFreeMemoryMB 6000, derived from your criticalFreeMemoryMB") ||
+		!strings.Contains(c.Message, "values from the running daemon (machine: 16384 MB, 8 CPUs)") ||
+		!strings.Contains(c.Message, "cgroup v1") {
+		t.Errorf("from the daemon: %+v", c)
+	}
+	// An older daemon without resources in its health: computed here, and said so.
+	c, _ = resources(Options{Settings: set, Memory: read}, "linux", &api.Health{})
+	if c.Status != OK || !strings.Contains(c.Message, "minFreeMemoryMB 0, set by you") ||
+		!strings.Contains(c.Message, "computed here") || !strings.Contains(c.Message, "does not report them") {
+		t.Errorf("old daemon: %+v", c)
+	}
+	c, _ = resources(Options{Settings: config.Defaults(), Memory: read}, "linux", nil)
+	if c.Status != Warn || !strings.Contains(c.Message, "minFreeMemoryMB 2048, auto for this machine") ||
+		!strings.Contains(c.Message, "the daemon is not running") {
+		t.Errorf("no daemon: %+v", c)
 	}
 }
