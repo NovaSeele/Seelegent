@@ -18,8 +18,18 @@ import (
 
 // Polling intervals of the daemon side.
 const (
-	// pollInterval is how often Tail and Wait look for new output and the exit record.
+	// pollInterval is how often Tail looks for new output while the worker writes, and how often Wait first looks
+	// for the exit record. A Tail that finds nothing waits twice as long each time, up to maxPollInterval, and goes
+	// back to pollInterval as soon as it reads something: a quiet worker costs one wake-up a second, not ten.
 	pollInterval = 100 * time.Millisecond
+	// maxPollInterval bounds the backoff of Tail: a line written after a long quiet stretch is read within it.
+	maxPollInterval = time.Second
+	// maxWaitInterval bounds the backoff of Wait.
+	maxWaitInterval = 500 * time.Millisecond
+	// exitCheckInterval is how often at most Tail looks for the exit record (Exited: a file open, a stat and a lock
+	// probe), also while lines keep coming. The end of a launch is therefore seen within exitCheckInterval plus one
+	// poll interval (at most 1.5 s) after its exit record is written, and every byte written before it is read.
+	exitCheckInterval = 500 * time.Millisecond
 	// livenessInterval is how often the launcher lock is probed while no exit record exists.
 	livenessInterval = 500 * time.Millisecond
 	// defaultReadyTimeout bounds how long Start waits for the launcher to report the worker running.
@@ -71,6 +81,9 @@ type Handle struct {
 	mu        sync.Mutex
 	lastProbe time.Time
 	alive     bool
+
+	exitMu sync.Mutex
+	exit   *Exit // the exit record once found: it never changes, so it is read only once
 
 	treeMu     sync.Mutex
 	tree       *platform.WorkerTree // set by Start, or by Tree once a record checks out
@@ -251,8 +264,25 @@ func (h *Handle) Cancel() error {
 }
 
 // Exited returns the exit record if the launch has ended. A launcher that died without writing one is reported as
-// ReasonLost (and the record is written so later readers agree).
+// ReasonLost (and the record is written so later readers agree). Once a record was found, the handle keeps it.
 func (h *Handle) Exited() (Exit, bool, error) {
+	h.exitMu.Lock()
+	known := h.exit
+	h.exitMu.Unlock()
+	if known != nil {
+		return *known, true, nil
+	}
+	ex, ok, err := h.exited()
+	if err == nil && ok {
+		h.exitMu.Lock()
+		h.exit = &ex
+		h.exitMu.Unlock()
+	}
+	return ex, ok, err
+}
+
+// exited is Exited without the kept record.
+func (h *Handle) exited() (Exit, bool, error) {
 	ex, ok, err := readExit(h.files.Exit)
 	if err != nil || ok {
 		return ex, ok, err
@@ -398,10 +428,10 @@ func (h *Handle) launcherAlive() (bool, error) {
 	return h.alive, nil
 }
 
-// Wait waits until the launch has ended and returns its exit record.
+// Wait waits until the launch has ended and returns its exit record. It looks every pollInterval at first, then
+// less often, up to every maxWaitInterval.
 func (h *Handle) Wait(ctx context.Context) (Exit, error) {
-	ticker := time.NewTicker(pollInterval)
-	defer ticker.Stop()
+	poll := backoff{min: pollInterval, max: maxWaitInterval}
 	for {
 		ex, ok, err := h.Exited()
 		if err != nil {
@@ -410,13 +440,40 @@ func (h *Handle) Wait(ctx context.Context) (Exit, error) {
 		if ok {
 			return ex, nil
 		}
-		select {
-		case <-ctx.Done():
-			return Exit{}, fmt.Errorf("wait for launch: %w", context.Cause(ctx))
-		case <-ticker.C:
+		if err := sleep(ctx, poll.next()); err != nil {
+			return Exit{}, fmt.Errorf("wait for launch: %w", err)
 		}
 	}
 }
+
+// sleep waits for d or until ctx ends (its cause is returned).
+func sleep(ctx context.Context, d time.Duration) error {
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-ctx.Done():
+		return context.Cause(ctx)
+	case <-t.C:
+		return nil
+	}
+}
+
+// backoff is a polling interval that starts at min, doubles after every next up to max, and starts over at min
+// after reset.
+type backoff struct {
+	min, max time.Duration
+	cur      time.Duration // the next interval; zero means min
+}
+
+// next returns the interval to wait now and doubles the following one.
+func (b *backoff) next() time.Duration {
+	d := max(b.cur, b.min)
+	b.cur = min(2*d, b.max)
+	return d
+}
+
+// reset makes the next interval min again.
+func (b *backoff) reset() { b.cur = 0 }
 
 // Tail follows the worker's stdout from byte offset (0 for the start, or the last committed offset after a daemon
 // restart) and calls fn for each line, without its line break, together with the offset just after that line: the
