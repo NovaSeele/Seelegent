@@ -66,23 +66,40 @@ func cgroupV2Path(data []byte) (string, bool) {
 	return "", false
 }
 
-// cgroupFreeMB is the memory a cgroup v2 still allows, in MiB: memory.max minus memory.current, at least 0. False
-// when there is no limit ("max") or a file does not parse. memory.current counts the group's page cache too, so
-// this is a low estimate; Memory takes the smaller of it and MemAvailable.
-func cgroupFreeMB(maxData, currentData []byte) (int64, bool) {
+// cgroupFreeMB is the memory a cgroup v2 still allows, in MiB: memory.max minus the group's working set, at least
+// 0. The working set is memory.current minus the inactive_file of memory.stat, as Kubernetes and `docker stats`
+// count it: memory.current includes page cache, which a group under no pressure keeps, so after a day of clones
+// and builds it sits near memory.max while most of it could be dropped at once. A missing or unreadable
+// memory.stat (statData nil or without inactive_file) counts the whole of memory.current. False when there is no
+// limit ("max") or memory.max or memory.current does not parse.
+func cgroupFreeMB(maxData, currentData, statData []byte) (int64, bool) {
 	limit := strings.TrimSpace(string(maxData))
 	if limit == "" || limit == "max" {
 		return 0, false
 	}
 	maxBytes, err1 := strconv.ParseUint(limit, 10, 64)
-	cur, err2 := strconv.ParseUint(strings.TrimSpace(string(currentData)), 10, 64)
+	used, err2 := strconv.ParseUint(strings.TrimSpace(string(currentData)), 10, 64)
 	if err1 != nil || err2 != nil {
 		return 0, false
 	}
-	if cur >= maxBytes {
+	used -= min(used, inactiveFile(statData))
+	if used >= maxBytes {
 		return 0, true
 	}
-	return mib(maxBytes - cur), true
+	return mib(maxBytes - used), true
+}
+
+// inactiveFile reads the inactive_file bytes of a cgroup v2 memory.stat; 0 when it is not there.
+func inactiveFile(stat []byte) uint64 {
+	for line := range strings.SplitSeq(string(stat), "\n") {
+		if v, ok := strings.CutPrefix(line, "inactive_file "); ok {
+			if n, err := strconv.ParseUint(strings.TrimSpace(v), 10, 64); err == nil {
+				return n
+			}
+			return 0
+		}
+	}
+	return 0
 }
 
 // fromMemorystatusLevel is macOS's best-effort reading: hw.memsize (bytes of RAM) times kern.memorystatus_level

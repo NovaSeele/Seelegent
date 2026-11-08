@@ -26,8 +26,8 @@ func memoryStatus() MemoryStatus {
 	return m
 }
 
-// cgroupFree is the smallest room left under the memory.max of this process's cgroup and its parents, in MiB;
-// false when none of them has a limit.
+// cgroupFree is the smallest room left under the memory.max of this process's cgroup and its parents, in MiB, each
+// level against its own working set (cgroupFreeMB); false when none of them has a limit.
 func cgroupFree() (int64, bool) {
 	self, err := os.ReadFile("/proc/self/cgroup")
 	if err != nil {
@@ -43,7 +43,8 @@ func cgroupFree() (int64, bool) {
 		limit, err1 := os.ReadFile(filepath.Join(dir, "memory.max"))
 		cur, err2 := os.ReadFile(filepath.Join(dir, "memory.current"))
 		if err1 == nil && err2 == nil {
-			if free, ok := cgroupFreeMB(limit, cur); ok && (!found || free < least) {
+			stat, _ := os.ReadFile(filepath.Join(dir, "memory.stat")) // unreadable: count all of memory.current
+			if free, ok := cgroupFreeMB(limit, cur, stat); ok && (!found || free < least) {
 				least, found = free, true
 			}
 		}
