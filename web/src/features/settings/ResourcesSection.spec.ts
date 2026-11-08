@@ -614,16 +614,10 @@ describe('Resources settings', () => {
     wrapper.unmount()
   })
 
-  it('reads /health again after a save, so the values in use follow the settings', async () => {
+  it('says Auto without a stale number while Health still has the value the user had set', async () => {
+    // /health is read again after settings.updated (connection store); until it answers, Health may still have
+    // the value set before the reset to auto.
     const wrapper = await mountSection(echo(), health(), AUTO_SETTINGS)
-    const refresh = vi.mocked(useConnectionStore().refreshHealth)
-    expect(refresh).toHaveBeenCalledTimes(1)
-    const input = wrapper.get('[data-setting="maxWorkers"] input')
-    await input.setValue('2')
-    await input.trigger('keydown', { key: 'Enter' })
-    await flushPromises()
-    expect(refresh).toHaveBeenCalledTimes(2)
-    // Until it answers, Health may still have the value the user had set: the row says Auto, no stale number.
     useConnectionStore().health = health({
       resources: {
         ...makeHealthResources().resources,

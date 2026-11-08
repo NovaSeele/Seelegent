@@ -107,6 +107,11 @@ export const useConnectionStore = defineStore('connection', () => {
   let stopped = false
   /** Bumped by every /health read; an answer applies only while it is the newest. */
   let healthSeq = 0
+  /**
+   * healthSeq when the last live resources.changed frame came: a /health read begun at or before it answers with a
+   * lowMemory and memory older than the frame's, so those two keep the frame's values.
+   */
+  let lowSeq = -1
 
   function setStatus(next: ConnectionStatus): void {
     status.value = next
@@ -268,6 +273,7 @@ export const useConnectionStore = defineStore('connection', () => {
         const change = data as ServerEvents['resources.changed']
         if (!careful && health.value) {
           health.value = { ...health.value, lowMemory: change.lowMemory, memory: change.memory }
+          lowSeq = healthSeq
         }
         break
       }
@@ -387,14 +393,18 @@ export const useConnectionStore = defineStore('connection', () => {
   /**
    * Reads GET /health again (the free memory shown next to the resource settings is read when the daemon answers;
    * the effective resource values change with the settings). Only the newest read applies, so a slow answer never
-   * puts back values older than one already shown. A failure keeps the last reading: the connection state says
-   * when the daemon is gone.
+   * puts back values older than one already shown; a resources.changed frame that came while it was on its way
+   * keeps its lowMemory and memory (the rest of the answer, the resources after a settings change, still applies).
+   * A failure keeps the last reading: the connection state says when the daemon is gone.
    */
   async function refreshHealth(signal?: AbortSignal): Promise<void> {
     const seq = ++healthSeq
     try {
       const next = await client.get<Health>('/health', { signal })
-      if (health.value && seq === healthSeq) health.value = next
+      const shown = health.value
+      if (!shown || seq !== healthSeq) return
+      health.value =
+        lowSeq >= seq ? { ...next, lowMemory: shown.lowMemory, memory: shown.memory } : next
     } catch {
       // Kept as it was.
     }

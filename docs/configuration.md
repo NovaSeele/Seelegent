@@ -167,9 +167,12 @@ the new values (the "Applies" column). A memory reading the system cannot give n
 `gateConcurrency`, `minFreeMemoryMB`, `minFreeCommitMB`, `criticalFreeMemoryMB` and `testParallelism` are **auto**
 by default: while the key is absent from `config.json` (or `null`), the daemon computes the value from the machine,
 so one default suits a 4 GB laptop and a 128 GB workstation. A value you set wins, and `0` still means off or
-unlimited; setting the key to `null` again (`PATCH /api/v1/settings` with `null`, or "Auto" in the dashboard)
-returns it to auto. A computed value is never written to `config.json`. `GET /api/v1/health` (`resources`, each with
-a `source`, and `machine`) and `seelegent doctor` (check `resources`) show the values in use. The source is
+unlimited; setting the key to `null` again (`PATCH /api/v1/settings` with `null`, or "Use auto" in the dashboard)
+returns it to auto. In the dashboard, "Set" opens the field at the value in use, and leaving it unchanged keeps
+the setting auto: to pin the current value, type a different number and then the one you want, or write it into
+`config.json` (or `PATCH` it). A computed value is never written to `config.json`. `GET /api/v1/health`
+(`resources`, each with a `source`, and `machine`) and `seelegent doctor` (check `resources`) show the values in use.
+The source is
 `explicit` for a value you set, `auto` for one computed from the machine, and `derived` for an auto memory threshold
 computed from the other one you set (see the last point below).
 

@@ -71,12 +71,14 @@ export const useSettingsStore = defineStore('settings', () => {
     })
   }
 
-  /** Sends a merge patch; the answer is the settings now, and /health is read again for the values in use. */
+  /**
+   * Sends a merge patch and applies the answer. The values in use (Health.resources) follow through the
+   * settings.updated frame the daemon sends for every change: the connection store reads /health then (or takes
+   * the /state snapshot after a stream reset), so a save does not read it a second time.
+   */
   async function save(patch: SettingsPatch): Promise<Settings> {
     const next = await client.patch(patch)
-    const connection = useConnectionStore()
-    connection.settings = next
-    void connection.refreshHealth()
+    useConnectionStore().settings = next
     return next
   }
 
