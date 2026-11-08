@@ -3,6 +3,7 @@
 package bench
 
 import (
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -139,8 +140,9 @@ type options struct {
 
 func registerFlags(fs *flag.FlagSet) *options {
 	o := &options{}
-	fs.StringVar(&o.scenario, "scenario", "idle", "idle or load")
-	fs.DurationVar(&o.duration, "duration", 0, "measured time (default: idle 10m, load 5m)")
+	fs.StringVar(&o.scenario, "scenario", "idle", "idle, idle-sse (a dashboard tab left open) or load")
+	fs.DurationVar(&o.duration, "duration", 0,
+		"measured time (default: idle 22m, at least two quota cycles of 10 minutes; load 5m)")
 	fs.DurationVar(&o.warmup, "warmup", 30*time.Second, "time after the setup that is not measured")
 	fs.DurationVar(&o.cpuProfile, "cpuprofile", 60*time.Second,
 		"CPU profile taken after the measured time (0 = none); kept out of the CPU numbers")
@@ -157,7 +159,7 @@ func registerFlags(fs *flag.FlagSet) *options {
 	fs.IntVar(&o.accounts, "accounts", 6, "fake agy accounts (quota readers on)")
 	fs.IntVar(&o.tasks, "tasks", 8, "load: tasks running at once")
 	fs.Float64Var(&o.rate, "rate", 100, "load: worker stream lines per second, all tasks together")
-	fs.IntVar(&o.sse, "sse", -1, "SSE clients (default: idle 0, load 3)")
+	fs.IntVar(&o.sse, "sse", -1, "SSE clients (default: idle 0, idle-sse 1, load 3)")
 	fs.DurationVar(&o.poll, "poll", 250*time.Millisecond, "load: interval of the list and the detail requests")
 	fs.IntVar(&o.seedTasks, "seed-tasks", 20, "finished tasks created before the warmup")
 	fs.BoolVar(&o.keepHome, "keep-home", false, "keep the temp data folder")
@@ -166,10 +168,14 @@ func registerFlags(fs *flag.FlagSet) *options {
 
 func (o *options) normalize() error {
 	switch o.scenario {
-	case "idle":
-		o.duration = cmpOr(o.duration, 10*time.Minute)
+	case "idle", "idle-sse":
+		// At least two quota cycles (quotaRefreshMinutes 10, ±10 % jitter) fall inside the window.
+		o.duration = cmpOr(o.duration, 22*time.Minute)
 		if o.sse < 0 {
 			o.sse = 0
+			if o.scenario == "idle-sse" {
+				o.sse = 1
+			}
 		}
 	case "load":
 		o.duration = cmpOr(o.duration, 5*time.Minute)
@@ -177,7 +183,7 @@ func (o *options) normalize() error {
 			o.sse = 3
 		}
 	default:
-		return fmt.Errorf("-scenario %q: want idle or load", o.scenario)
+		return fmt.Errorf("-scenario %q: want idle, idle-sse or load", o.scenario)
 	}
 	if o.port == 47821 || o.pprofPort == 47821 {
 		return fmt.Errorf("port 47821 belongs to the installed daemon; the bench uses its own (default: a free port)")
@@ -205,7 +211,7 @@ func (o *options) normalize() error {
 // freePort asks the system for a free loopback port. Another program can take it before the daemon listens; the
 // daemon then fails to start, and the identity check (env.ours) keeps the bench away from that program.
 func freePort() (int, error) {
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	ln, err := (&net.ListenConfig{}).Listen(context.Background(), "tcp", "127.0.0.1:0")
 	if err != nil {
 		return 0, fmt.Errorf("pick a free port: %w", err)
 	}

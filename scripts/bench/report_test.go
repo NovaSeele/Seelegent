@@ -57,11 +57,13 @@ type daemonSummary struct {
 	MallocsPerSec  float64 `json:"mallocsPerSecond"`
 	GCPerMin       float64 `json:"gcPerMinute"`
 	WSGrowthMB     float64 `json:"wsGrowthMB"`
+	PrivGrowthMB   float64 `json:"privateGrowthMB"`
 	HeapGrowthMB   float64 `json:"heapGrowthMB"`
 	// WSSlope and HeapSlope are least-squares slopes over the second half of the window, in MB per hour: a
 	// leak shows there once the start-up growth is over. HeapSlope is the live heap's (marked at the last GC), not
 	// the allocated heap's, whose GC sawtooth swamps a few minutes of samples.
 	WSSlope   float64 `json:"wsSlopeSecondHalfMBPerHour"`
+	PrivSlope float64 `json:"privateSlopeSecondHalfMBPerHour"`
 	HeapSlope float64 `json:"heapSlopeSecondHalfMBPerHour"`
 }
 
@@ -93,6 +95,8 @@ type machineSummary struct {
 	ThreadsMean    float64 `json:"systemThreadsMean"`
 	ThreadsMax     int     `json:"systemThreadsMax"`
 	ProcessesMean  float64 `json:"systemProcessesMean"`
+	// TopOther are the programs outside the bench that used the most CPU during the window.
+	TopOther []otherProcess `json:"topOtherByCpu"`
 }
 
 // treeSummary is the Windows job's accounting of the whole tree over the window (G4): exact CPU, short-lived
@@ -146,6 +150,7 @@ type loadSummary struct {
 	SSEMB          float64                 `json:"sseMB"`
 	API            map[string]latencyStats `json:"api"`
 	WSMBPer10kEvts float64                 `json:"daemonWSGrowthMBPer10kEvents"`
+	PrivPer10kEvts float64                 `json:"daemonPrivateGrowthMBPer10kEvents"`
 }
 
 // result is one bench run (result.json).
@@ -166,6 +171,8 @@ type result struct {
 	TreeFinal   *jobStat          `json:"treeFinal,omitempty"`
 	Roles       []roleSummary     `json:"roles"`
 	Spawns      []spawnSummary    `json:"spawnLog"`
+	Runs        []spawnRun        `json:"runs"`
+	Idle        *idleSummary      `json:"idle,omitempty"`
 	DB          dbSummary         `json:"db"`
 	Load        *loadSummary      `json:"load,omitempty"`
 	Budget      []budgetCheck     `json:"budget"`
@@ -398,8 +405,10 @@ func (r *result) fill(s *sampler, g *loadGen, spawns []spawnRecord) {
 			d.GCPerMin = round(float64(last.Go.NumGC-first.Go.NumGC)/(span/60), 2)
 		}
 		d.WSGrowthMB = round(mb(last.DaemonWS)-mb(first.DaemonWS), 1)
+		d.PrivGrowthMB = round(mb(last.Roles["daemon"].Private)-mb(first.Roles["daemon"].Private), 1)
 		half := win[len(win)/2:]
 		d.WSSlope = round(slopePerHour(half, func(x *sample) float64 { return mb(x.DaemonWS) }), 2)
+		d.PrivSlope = round(slopePerHour(half, func(x *sample) float64 { return mb(x.Roles["daemon"].Private) }), 2)
 		d.HeapSlope = round(slopePerHour(half, func(x *sample) float64 { return mb(liveHeap(x)) }), 2)
 		d.HeapGrowthMB = round(mb(last.Go.HeapAlloc)-mb(first.Go.HeapAlloc), 1)
 		r.DB = dbSummary{DBStartMB: round(float64(first.DBBytes)/mib, 2), DBEndMB: round(float64(last.DBBytes)/mib, 2),
@@ -441,6 +450,10 @@ func (r *result) fill(s *sampler, g *loadGen, spawns []spawnRecord) {
 		r.Spawns = append(r.Spawns, *x)
 	}
 	sort.Slice(r.Spawns, func(i, j int) bool { return r.Spawns[i].Role < r.Spawns[j].Role })
+	r.Runs = spawnRuns(spawns)
+	if r.idleScenario() {
+		r.Idle = idleCost(base, win, r.Runs)
+	}
 
 	if r.Scenario == "load" || g.sseConns.Load() > 0 {
 		l := &loadSummary{Tasks: len(g.ids), EventsStored: g.events, SSEClients: g.e.o.sse,
@@ -456,6 +469,7 @@ func (r *result) fill(s *sampler, g *loadGen, spawns []spawnRecord) {
 		}
 		if g.events > 0 {
 			l.WSMBPer10kEvts = round(d.WSGrowthMB/(float64(g.events)/10000), 2)
+			l.PrivPer10kEvts = round(d.PrivGrowthMB/(float64(g.events)/10000), 2)
 		}
 		r.Load = l
 	}
@@ -468,21 +482,26 @@ func (r *result) budget() []budgetCheck {
 	add := func(name string, limit, value float64) {
 		out = append(out, budgetCheck{Name: name, Limit: limit, Value: value, OK: value < limit})
 	}
-	// A leak shows as a slope once the start is over; the limits allow for the noise of a few minutes of samples.
-	add("daemon WS slope over the second half MB/h", 10, r.Daemon.WSSlope)
+	// Memory is judged on private bytes (commit): the working set jumps with what the OS keeps resident, not with
+	// what the daemon allocates, so it is reported as information only. A leak shows as a slope once the start is
+	// over; the limits allow for the noise of a few minutes of samples.
+	add("daemon private bytes slope over the second half MB/h", 10, r.Daemon.PrivSlope)
 	add("daemon live heap slope over the second half MB/h", 5, r.Daemon.HeapSlope)
-	if r.Scenario == "idle" {
-		add("idle daemon CPU % of one core", 0.1, r.Daemon.CPUPercent)
-		add("idle daemon peak working set MB", 100, r.Daemon.PeakWSMB)
+	if r.idleScenario() {
+		add("idle daemon CPU % of one core (window average)", 0.1, r.Daemon.CPUPercent)
+		add("idle daemon peak private MB", 100, r.Daemon.PeakPrivMB)
 	} else {
-		add("load daemon peak working set MB", 100, r.Daemon.PeakWSMB)
+		add("load daemon peak private MB", 100, r.Daemon.PeakPrivMB)
 		if r.Load != nil && r.Load.EventsStored > 0 {
 			// Not linear in the events: growth per 10k events must stay small.
-			add("load daemon WS growth MB per 10k events", 5, r.Load.WSMBPer10kEvts)
+			add("load daemon private growth MB per 10k events", 5, r.Load.PrivPer10kEvts)
 		}
 	}
 	return out
 }
+
+// idleScenario reports whether the run is one of the idle scenarios.
+func (r *result) idleScenario() bool { return strings.HasPrefix(r.Scenario, "idle") }
 
 func writeResult(dir string, r *result) error {
 	data, err := json.MarshalIndent(r, "", "  ")
@@ -509,6 +528,13 @@ func writeMarkdown(w io.Writer, r *result) {
 		"system (max %d threads).\n\n", mc.OSVersion, mc.OS, mc.LogicalCPUs, mc.TotalMemMB, mc.CommitLimitMB,
 		mc.FreeMemMinMB, mc.FreeMemMeanMB, mc.FreeCommMinMB, mc.FreeCommMeanMB, mc.ProcessesMean, mc.ThreadsMean,
 		mc.ThreadsMax)
+	if len(mc.TopOther) > 0 {
+		p("Other programs by CPU over the window:")
+		for _, x := range mc.TopOther {
+			p(" %s (pid %d) %.1f s = %.1f %% of one core;", x.Name, x.PID, x.CPUSeconds, x.CPUPercent)
+		}
+		p("\n\n")
+	}
 	if len(r.Setup) > 0 {
 		p("## Setup cost\n\n| phase | n | seconds | daemon CPU s | per unit | tree CPU s | per unit | processes |\n" +
 			"|---|---|---|---|---|---|---|---|\n")
@@ -529,8 +555,10 @@ func writeMarkdown(w io.Writer, r *result) {
 		d.HeapAllocMax, d.HeapLiveMean, d.HeapLiveMax)
 	p("| heap sys max, Go sys max | %.1f, %.1f MB |\n", d.HeapSysMax, d.SysMax)
 	p("| allocation rate | %.3f MB/s, %.1f mallocs/s, %.2f GC/min |\n", d.AllocMBps, d.MallocsPerSec, d.GCPerMin)
-	p("| growth over the window | WS %+.1f MB, heap %+.1f MB |\n", d.WSGrowthMB, d.HeapGrowthMB)
-	p("| slope over the second half | WS %+.2f MB/h, live heap %+.2f MB/h |\n", d.WSSlope, d.HeapSlope)
+	p("| growth over the window | private %+.1f MB, WS %+.1f MB, heap %+.1f MB |\n", d.PrivGrowthMB, d.WSGrowthMB,
+		d.HeapGrowthMB)
+	p("| slope over the second half | private %+.2f MB/h, live heap %+.2f MB/h (WS %+.2f MB/h, information) |\n",
+		d.PrivSlope, d.HeapSlope, d.WSSlope)
 	p("| database start / end | %.2f / %.2f MB, WAL %.2f / %.2f MB (max %.2f) |\n\n", r.DB.DBStartMB, r.DB.DBEndMB,
 		r.DB.WALStartMB, r.DB.WALEndMB, r.DB.WALMaxMB)
 	p("## Process tree by role\n\n| role | peak n | WS mean / peak MB | private mean / peak MB | CPU s | %% core | " +
@@ -555,10 +583,11 @@ func writeMarkdown(w io.Writer, r *result) {
 		p("| %s | %d | %d | %.1f | %.1f | %.1f | %.1f / %.1f |\n", x.Role, x.Count, x.InWindow, x.PerHour, x.MeanMs,
 			x.MeanCPUMs, x.MeanPeakWSMB, x.MaxPeakWSMB)
 	}
+	writeIdle(p, r)
 	if l := r.Load; l != nil {
 		p("\n## Load\n\n%d tasks, %d events stored (%.1f/s), %d SSE clients (%d connects): %d frames (%.1f/s), %.2f MB. "+
-			"Daemon WS growth %.2f MB per 10k events.\n\n", l.Tasks, l.EventsStored, l.EventsPerSec, l.SSEClients,
-			l.SSEConnects, l.SSEFrames, l.SSEFramesPerS, l.SSEMB, l.WSMBPer10kEvts)
+			"Daemon private growth %.2f MB per 10k events (WS %.2f).\n\n", l.Tasks, l.EventsStored, l.EventsPerSec,
+			l.SSEClients, l.SSEConnects, l.SSEFrames, l.SSEFramesPerS, l.SSEMB, l.PrivPer10kEvts, l.WSMBPer10kEvts)
 		p("| request | count | errors | p50 ms | p95 ms | p99 ms | max ms |\n|---|---|---|---|---|---|---|\n")
 		names := make([]string, 0, len(l.API))
 		for n := range l.API {
@@ -589,8 +618,11 @@ func writeMarkdown(w io.Writer, r *result) {
 		"point to temp folders): the bench never uses this machine's GitHub sign-in or reaches GitHub.\n" +
 		"- The daemon's /debug/vars is read with ?light=1 (runtime/metrics, no stop-the-world) every sample and " +
 		"with memstats once a minute.\n" +
-		"- Windows CPU profiles count threads blocked in a system call (pipe reads) as busy: use the CPU seconds " +
-		"above, which come from the process counters, for the cost.\n")
+		"- Windows CPU profiles count goroutines blocked in a system call (ReadFile on a pipe) as CPU: use the CPU " +
+		"seconds above, which come from the process counters, for the cost, and do not chase " +
+		"bytes.Buffer.ReadFrom or os.(*File).Read in a Windows profile.\n" +
+		"- Memory is judged on private bytes; the working set is shown as information (it jumps with what the OS " +
+		"keeps resident).\n")
 }
 
 // metric is one value compared with a baseline.
@@ -608,7 +640,8 @@ func (r *result) metrics() []metric {
 		{"daemon alloc MB/s", r.Daemon.AllocMBps}, {"daemon GC/min", r.Daemon.GCPerMin},
 		{"daemon handles", float64(r.Daemon.Handles)}, {"daemon threads", float64(r.Daemon.Threads)},
 		{"DB end MB", r.DB.DBEndMB}, {"WAL max MB", r.DB.WALMaxMB},
-		{"daemon WS slope MB/h", r.Daemon.WSSlope}, {"daemon live heap slope MB/h", r.Daemon.HeapSlope},
+		{"daemon WS slope MB/h", r.Daemon.WSSlope}, {"daemon private slope MB/h", r.Daemon.PrivSlope},
+		{"daemon private peak MB", r.Daemon.PeakPrivMB}, {"daemon live heap slope MB/h", r.Daemon.HeapSlope},
 		{"daemon live heap max MB", r.Daemon.HeapLiveMax},
 		{"machine free memory min MB", r.Machine.FreeMemMinMB}, {"machine threads mean", r.Machine.ThreadsMean},
 	}
@@ -618,6 +651,10 @@ func (r *result) metrics() []metric {
 	}
 	if t := r.Tree; t != nil {
 		m = append(m, metric{"tree CPU % core", t.CPUPercent}, metric{"tree processes/h", t.StartedPerHour})
+	}
+	if x := r.Idle; x != nil {
+		m = append(m, metric{"idle floor daemon CPU % core", x.FloorPercent},
+			metric{"idle daemon CPU s per quota cycle", x.CPUPerCycle}, metric{"idle quota cycles", float64(x.Cycles)})
 	}
 	for _, x := range r.Roles {
 		if x.Role != "daemon" {

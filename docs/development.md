@@ -122,7 +122,10 @@ daemon on a free port picked for the run (`-port`), with `--pprof-addr` on anoth
 `SEELEGENT_HOME` and user home, adds 6 fake agy accounts with their quota readers on, runs 20 short tasks so the
 lists are not empty, and then:
 
-- `-scenario idle` (default, `-duration 10m`): nothing happens; this is the daemon left running all day.
+- `-scenario idle` (default, `-duration 22m`, at least two quota cycles): nothing happens; this is the daemon
+  left running all day. The result splits the idle CPU into the floor (between quota cycles), the CPU per quota
+  cycle and the window's average, and lists the start of every quota read and gh run.
+- `-scenario idle-sse`: the same with one SSE client connected, a dashboard tab left open.
 - `-scenario load` (`-duration 5m`): 8 tasks whose fake workers stream `-rate 100` lines a second together, 3 SSE
   clients, and a list and a detail request every 250 ms (p50/p95/p99 recorded).
 
@@ -163,10 +166,19 @@ bin/seelegent-bench -scenario load -baseline <dir>/result.json   # prints the de
 Results go to `-out` (default `<temp>/seelegent-bench/<time>-<scenario>`, outside the repository): `result.json`,
 `result.md` (the tables), `setup-cpu.pprof`, `cpu.pprof`, `allocs-start.pprof`, `allocs-end.pprof`, `heap.pprof`, `goroutine.txt` and
 the daemon's log. Compare allocation profiles with `go tool pprof -top -sample_index=alloc_space -base
-allocs-start.pprof allocs-end.pprof`. The budget (under 0.1% of one core and under 100 MB working set when idle;
-growth under load not linear in the events; a working-set slope under 10 MB/h and a live-heap slope under 5 MB/h
-over the second half of the window, so a leak shows once the start-up growth is over) is printed and flagged, never a
-failure. Run it at low priority and
+allocs-start.pprof allocs-end.pprof`. The budget is judged on private bytes (commit), not the working set, which
+jumps with what the OS keeps resident: under 0.1% of one core and under 100 MB private when idle; growth under
+load not linear in the events; a private-bytes slope under 10 MB/h and a live-heap slope under 5 MB/h over the
+second half of the window, so a leak shows once the start-up growth is over. It is printed and flagged, never a
+failure. Every result carries the machine profile (OS, CPUs, RAM and commit, free memory and commit over the
+window, system threads, the three other programs that used the most CPU), so runs on different machines or on a
+busy one can be told apart.
+
+On Windows a CPU profile counts goroutines blocked in a system call as CPU: a launcher or the daemon waiting in
+`ReadFile` on a pipe shows up as `os.(*File).Read`, `bytes.Buffer.ReadFrom` or `io.Copy` with large sample counts
+while the process is idle. Do not chase those; take the cost from the CPU seconds of the process counters (the
+result's tables), and read Windows profiles for the code that does run (for example the thread walk in
+`platform.resumeThreads`). Run it at low priority and
 on an otherwise quiet machine; the latency numbers depend on what else runs.
 
 Hot paths have plain Go benchmarks (stream parsers, launcher line delivery, task repository writes and reads, the

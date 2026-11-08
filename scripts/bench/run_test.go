@@ -592,12 +592,14 @@ func (e *env) scenario(ctx context.Context) (*result, error) {
 		lwg.Go(func() { gen.sse(lctx) })
 	}
 	s.setPhase("measure")
+	cpuStart := cpuByProcess()
 	r.WindowStart = time.Now()
 	// The base of the window's rates: without it they would start at the sample before, up to an interval earlier
 	// (the load tasks' start included).
 	s.sampleNow(ctx, r.WindowStart)
 	err = sleep(ctx, e.o.duration)
 	r.WindowEnd = time.Now()
+	cpuEnd := cpuByProcess()
 	if err == nil && e.o.cpuProfile > 0 {
 		s.setPhase("profile")
 		if perr := s.saveProfile(ctx, "/debug/pprof/profile?seconds="+strconv.Itoa(int(e.o.cpuProfile.Seconds())),
@@ -616,6 +618,7 @@ func (e *env) scenario(ctx context.Context) (*result, error) {
 	gen.finish(context.WithoutCancel(ctx))
 	stopAll()
 	r.fill(s, gen, readSpawnLog(e.spawns))
+	r.Machine.TopOther = topOther(cpuStart, cpuEnd, s.treePIDs(), r.WindowEnd.Sub(r.WindowStart), 3)
 	r.Machine.OSVersion = osVersion()
 	return r, err
 }
