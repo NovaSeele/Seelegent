@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"net"
 	"os"
 	"slices"
 	"time"
@@ -151,8 +152,8 @@ func registerFlags(fs *flag.FlagSet) *options {
 	fs.StringVar(&o.baseline, "baseline", "", "an earlier result.json: print the deltas")
 	fs.StringVar(&o.bin, "bin", "", "seelegent binary to run (default: build ./cmd/seelegent)")
 	fs.StringVar(&o.commit, "commit", "", "commit recorded in the result (default: git rev-parse HEAD of the module)")
-	fs.IntVar(&o.port, "port", 47891, "daemon port")
-	fs.IntVar(&o.pprofPort, "pprof-port", 47892, "daemon --pprof-addr port on 127.0.0.1")
+	fs.IntVar(&o.port, "port", 0, "daemon port (default: a free port picked for this run)")
+	fs.IntVar(&o.pprofPort, "pprof-port", 0, "daemon --pprof-addr port on 127.0.0.1 (default: a free port)")
 	fs.IntVar(&o.accounts, "accounts", 6, "fake agy accounts (quota readers on)")
 	fs.IntVar(&o.tasks, "tasks", 8, "load: tasks running at once")
 	fs.Float64Var(&o.rate, "rate", 100, "load: worker stream lines per second, all tasks together")
@@ -179,15 +180,41 @@ func (o *options) normalize() error {
 		return fmt.Errorf("-scenario %q: want idle or load", o.scenario)
 	}
 	if o.port == 47821 || o.pprofPort == 47821 {
-		return fmt.Errorf("port 47821 belongs to the installed daemon; the bench uses its own (default 47891)")
+		return fmt.Errorf("port 47821 belongs to the installed daemon; the bench uses its own (default: a free port)")
 	}
-	if o.port <= 0 || o.pprofPort <= 0 || o.port == o.pprofPort {
+	// A free port per run, so benches that run at the same time never share one (one bench's cleanup once
+	// stopped another bench's daemon on the shared default port).
+	for _, p := range []*int{&o.port, &o.pprofPort} {
+		if *p == 0 {
+			free, err := freePort()
+			if err != nil {
+				return err
+			}
+			*p = free
+		}
+	}
+	if o.port < 0 || o.pprofPort < 0 || o.port == o.pprofPort {
 		return fmt.Errorf("-port and -pprof-port must be two different ports")
 	}
 	if o.interval <= 0 || o.tasks < 1 || o.rate <= 0 || o.accounts < 1 || o.poll <= 0 {
 		return fmt.Errorf("-interval, -tasks, -rate, -accounts and -poll must be positive")
 	}
 	return nil
+}
+
+// freePort asks the system for a free loopback port. Another program can take it before the daemon listens; the
+// daemon then fails to start, and the identity check (env.ours) keeps the bench away from that program.
+func freePort() (int, error) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return 0, fmt.Errorf("pick a free port: %w", err)
+	}
+	defer func() { _ = ln.Close() }()
+	addr, ok := ln.Addr().(*net.TCPAddr)
+	if !ok {
+		return 0, fmt.Errorf("pick a free port: unexpected address %v", ln.Addr())
+	}
+	return addr.Port, nil
 }
 
 func cmpOr(d, def time.Duration) time.Duration {

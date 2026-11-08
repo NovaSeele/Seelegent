@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/NovaSeele/Seelegent/internal/api"
+	"github.com/NovaSeele/Seelegent/internal/config"
 	"github.com/NovaSeele/Seelegent/internal/testutil/fakecli"
 )
 
@@ -42,6 +43,9 @@ type env struct {
 	http    *http.Client
 	scripts int
 	job     *treeJob
+	// pid and homeID identify the daemon this bench started: it never uses or stops another one.
+	pid    int
+	homeID string
 }
 
 func run(o *options) error {
@@ -75,6 +79,7 @@ func run(o *options) error {
 		defer removeAll(e.work)
 	}
 	e.home, e.project = filepath.Join(e.work, "data"), filepath.Join(e.work, "project")
+	e.homeID = config.HomeID(e.home)
 	e.queue, e.spawns = filepath.Join(e.work, "queue"), filepath.Join(e.work, "spawns.jsonl")
 	for _, d := range []string{e.home, e.project, e.queue, filepath.Join(e.work, "userhome"),
 		filepath.Join(e.work, "fakebin"), filepath.Join(e.work, "appdata"), filepath.Join(e.work, "localappdata"),
@@ -240,11 +245,9 @@ func (e *env) startDaemon(ctx context.Context) (*exec.Cmd, <-chan error, error) 
 	}
 	exited := make(chan error, 1)
 	go func() { exited <- cmd.Wait(); _ = logf.Close() }()
+	e.pid = cmd.Process.Pid
 	deadline := time.Now().Add(60 * time.Second)
 	for {
-		if _, err := e.call(ctx, http.MethodGet, "/health", nil, nil); err == nil {
-			return cmd, exited, nil
-		}
 		select {
 		case err := <-exited:
 			return nil, nil, fmt.Errorf("the daemon exited at start (%w); see %s", err,
@@ -254,11 +257,57 @@ func (e *env) startDaemon(ctx context.Context) (*exec.Cmd, <-chan error, error) 
 			return nil, nil, ctx.Err()
 		case <-time.After(200 * time.Millisecond):
 		}
+		err := e.ours(ctx)
+		if err == nil {
+			return cmd, exited, nil
+		}
+		if errors.Is(err, errNotOurs) {
+			_ = cmd.Process.Kill()
+			return nil, nil, err
+		}
 		if time.Now().After(deadline) {
 			_ = cmd.Process.Kill()
 			return nil, nil, errors.New("the daemon did not answer /health within 60 s")
 		}
 	}
+}
+
+// errNotOurs: the port answers for a daemon this bench did not start.
+var errNotOurs = errors.New("another daemon answers on the bench's port")
+
+// ours checks that the API and the pprof ports answer for the daemon this bench started: its pid and the HomeID of
+// the bench's own SEELEGENT_HOME. Anything else is errNotOurs, and the bench neither uses nor stops it.
+func (e *env) ours(ctx context.Context) error {
+	var h api.Health
+	if _, err := e.call(ctx, http.MethodGet, "/health", nil, &h); err != nil {
+		return err
+	}
+	if h.PID != e.pid || h.HomeID != e.homeID {
+		return fmt.Errorf("%w: port %d answers for pid %d (home %s), the bench started pid %d (home %s)", errNotOurs,
+			e.o.port, h.PID, h.HomeID, e.pid, e.homeID)
+	}
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, e.pprof+"/debug/vars?light=1", http.NoBody)
+	if err != nil {
+		return err
+	}
+	resp, err := e.http.Do(req)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	var vars struct {
+		PID int `json:"pid"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&vars); err != nil {
+		return fmt.Errorf("pprof port %d: %w", e.o.pprofPort, err)
+	}
+	if vars.PID != e.pid {
+		return fmt.Errorf("%w: pprof port %d answers for pid %d, the bench started pid %d", errNotOurs,
+			e.o.pprofPort, vars.PID, e.pid)
+	}
+	return nil
 }
 
 // call sends one API request; out receives the JSON answer.
@@ -403,12 +452,18 @@ func (e *env) seedTasks(ctx context.Context) error {
 	return e.waitTerminal(ctx, ids, 5*time.Minute)
 }
 
+// stopDaemon stops the daemon this bench started: through the API only after ours confirms the port still answers
+// for it, else by killing the process it launched. It never stops another daemon.
 func (e *env) stopDaemon(ctx context.Context, cmd *exec.Cmd, exited <-chan error) {
 	sctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
-	_, err := e.call(sctx, http.MethodPost, "/daemon/stop", struct{}{}, nil)
+	err := e.ours(sctx)
+	if err == nil {
+		_, err = e.call(sctx, http.MethodPost, "/daemon/stop", struct{}{}, nil)
+	}
 	cancel()
 	if err != nil {
-		_, _ = fmt.Fprintln(os.Stderr, "bench: stop the daemon:", err)
+		_, _ = fmt.Fprintln(os.Stderr, "bench: stop the daemon through the API:", err, "- killing pid", e.pid)
+		_ = cmd.Process.Kill()
 	}
 	var exit error
 	select {

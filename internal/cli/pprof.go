@@ -84,7 +84,7 @@ func runtimeSamples() []struct{ key, name string } {
 	}
 }
 
-// debugVars writes the expvar-style JSON of /debug/vars: "goroutines" and "runtime" (runtime/metrics) always,
+// debugVars writes the expvar-style JSON of /debug/vars: "pid", "goroutines" and "runtime" (runtime/metrics) always,
 // "cmdline" and "memstats" (runtime.ReadMemStats, which stops the world briefly) unless the query has light=1.
 // The values are built per request, never published in expvar's process-wide registry.
 func debugVars(w http.ResponseWriter, r *http.Request) {
@@ -100,7 +100,7 @@ func debugVars(w http.ResponseWriter, r *http.Request) {
 			rt[names[i].key] = s.Value.Uint64()
 		}
 	}
-	out := map[string]any{"goroutines": runtime.NumGoroutine(), "runtime": rt}
+	out := map[string]any{"pid": os.Getpid(), "goroutines": runtime.NumGoroutine(), "runtime": rt}
 	if r.URL.Query().Get("light") != "1" {
 		var m runtime.MemStats
 		runtime.ReadMemStats(&m)

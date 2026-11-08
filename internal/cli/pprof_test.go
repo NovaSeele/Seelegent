@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -84,11 +85,12 @@ func TestPprofServer(t *testing.T) {
 	// light=1: the goroutine count and runtime/metrics, without memstats (ReadMemStats stops the world).
 	code, body := pprofGet(t, base+"/debug/vars?light=1", "")
 	var light struct {
+		PID        int               `json:"pid"`
 		Goroutines int               `json:"goroutines"`
 		Runtime    map[string]uint64 `json:"runtime"`
 		Memstats   json.RawMessage   `json:"memstats"`
 	}
-	if code != http.StatusOK || json.Unmarshal([]byte(body), &light) != nil || light.Goroutines < 1 ||
+	if code != http.StatusOK || json.Unmarshal([]byte(body), &light) != nil || light.Goroutines < 1 || light.PID != os.Getpid() ||
 		light.Memstats != nil || light.Runtime["heapAllocBytesTotal"] == 0 ||
 		light.Runtime["heapLiveBytes"] == 0 && light.Runtime["gcCycles"] > 0 || light.Runtime["gcCycles"] == 0 &&
 		light.Runtime["heapObjectsBytes"] == 0 {

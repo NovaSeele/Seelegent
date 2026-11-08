@@ -100,7 +100,7 @@ server and a mux of their own (never the API's port, never `http.DefaultServeMux
 default and never a setting. It takes loopback addresses only (`127.0.0.1`, `[::1]`, `localhost`; a `localhost`
 that resolves to anything else is refused once it listens) and refuses requests whose `Host` header is not
 `127.0.0.1`, `localhost`, `[::1]` or the address it listens on, with its port (the API's DNS-rebinding check).
-`/debug/vars` is expvar-style JSON: `goroutines` and `runtime` (runtime/metrics: heap, live heap, allocations,
+`/debug/vars` is expvar-style JSON: `pid`, `goroutines` and `runtime` (runtime/metrics: heap, live heap, allocations,
 GC cycles) always, `memstats` and `cmdline` unless the query has `light=1` (`runtime.ReadMemStats` stops the world, so a
 sampler polls `?light=1`). It is a development tool: heap and
 goroutine profiles can hold secrets (API keys, prompts, tokens in memory), so never share them or start a daemon
@@ -118,8 +118,9 @@ curl -s 'http://127.0.0.1:6060/debug/vars?light=1'                        # goro
 ### Benchmark
 
 `scripts/bench` (build tag `bench`) measures what Seelegent costs the machine. It builds `seelegent`, starts a
-daemon on port 47891 with `--pprof-addr 127.0.0.1:47892` and a temp `SEELEGENT_HOME` and user home, adds 6 fake
-agy accounts with their quota readers on, runs 20 short tasks so the lists are not empty, and then:
+daemon on a free port picked for the run (`-port`), with `--pprof-addr` on another (`-pprof-port`) and a temp
+`SEELEGENT_HOME` and user home, adds 6 fake agy accounts with their quota readers on, runs 20 short tasks so the
+lists are not empty, and then:
 
 - `-scenario idle` (default, `-duration 10m`): nothing happens; this is the daemon left running all day.
 - `-scenario load` (`-duration 5m`): 8 tasks whose fake workers stream `-rate 100` lines a second together, 3 SSE
@@ -138,6 +139,11 @@ The setup is measured on its own: the daemon's and the tree's CPU per account, p
 start, with a CPU profile from the daemon's start (`-setup-profile 90s`, `setup-cpu.pprof`; the warmup waits for
 it). A CPU profile is taken after the measured window (`-cpuprofile 60s`, kept out of the CPU numbers), together
 with allocation profiles at the start and the end of the window.
+
+Benches can run at the same time: each talks only to the daemon it started. Before it uses the daemon and before
+it stops it, it checks that the API port answers with that process's pid and the HomeID of its own
+`SEELEGENT_HOME`, and that the pprof port's `/debug/vars` names the same pid; another daemon on the port is an
+error, never used or stopped (the bench kills only the process it launched).
 
 The bench is hermetic: the fake agy is the test binary itself (`internal/testutil/fakecli`), which logs each run so
 quota reads are counted exactly and answers a quota read instantly (a real agy costs far more); gh is a copy of the
