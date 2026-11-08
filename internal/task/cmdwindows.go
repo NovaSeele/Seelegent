@@ -116,19 +116,21 @@ func (s *Service) addRuns(ctx context.Context, w *workerWrites, t *Task, n int, 
 		if !guard.Runs(c) {
 			continue
 		}
-		w.runners = true
+		if w.runner == "" {
+			w.runner = c
+		}
 		if !timed[c] && !slices.Contains(w.unknown, c) {
 			w.unknown = append(w.unknown, c)
 		}
 	}
 }
 
-// ranDuring reports whether a file changed at the given time while one of runs ran.
-func ranDuring(runs []commandRun, at time.Time) bool {
+// runAt returns the run during which a file changed at the given time: the first whose window holds it.
+func runAt(runs []commandRun, at time.Time) (commandRun, bool) {
 	for _, r := range runs {
 		if !at.Before(r.start.Add(-runSlack)) && !at.After(r.end.Add(runSlack)) {
-			return true
+			return r, true
 		}
 	}
-	return false
+	return commandRun{}, false
 }

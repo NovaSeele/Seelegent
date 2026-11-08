@@ -252,7 +252,10 @@ latest instruction (field report 4):
   the worker thinks, stays a warning. A code runner whose start is not known (a result with neither a call event
   nor a duration, or no event at all) counts as a write Seelegent cannot read, and a file gone from the end
   snapshot (no time to compare) counts as the worker's when a code runner ran. Event times and file times come from
-  the same machine's clock.
+  the same machine's clock. A red lane gets no fix turn, so a file counted this way says why: the step's tail lists
+  it under "Of these, counted by time (no worker edit or command names them)" as ``docs/x.md: changed while `node
+  gen.js` ran`` (a deleted file: ``deleted, and the worker ran `node gen.js` ``), and with the gate off the
+  `outside_lane` finding's detail says the same ("outside the lane, changed while … ran").
 - The changed-file list of the turn (`files_changed`) is not narrowed: it still holds every file the snapshots saw
   change.
 

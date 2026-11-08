@@ -93,12 +93,16 @@ func (s *Service) netLane(t *Task, n int, union []string, end *snapshot.Manifest
 }
 
 // laneFindings words a lane step as the warn-only scope findings of a task whose gate is off (field report 4, F12):
-// the lane is still checked after each turn, but only as information.
-func laneFindings(st api.GateStep) []api.Finding {
+// the lane is still checked after each turn, but only as information. why explains a file counted by time.
+func laneFindings(st api.GateStep, why func(string) string) []api.Finding {
 	var out []api.Finding
 	for _, f := range st.Files {
+		detail := "outside the lane"
+		if r := why(f); r != "" {
+			detail += ", " + r
+		}
 		out = append(out, api.Finding{Kind: api.FindingOutsideLane, Severity: api.SeverityWarn, Path: f,
-			Detail: "outside the lane"})
+			Detail: detail})
 	}
 	for _, f := range st.Unseen {
 		out = append(out, api.Finding{Kind: api.FindingOutsideLane, Severity: api.SeverityWarn, Path: f,
@@ -148,5 +152,6 @@ func (s *Service) laneOffFindings(ctx context.Context, t *Task, tu *Turn, change
 	}
 	s.addRuns(ctx, touch, t, tu.N, append(all, commands...), end)
 	files := s.netLane(t, tu.N, union, end)
-	return laneFindings(gate.LaneStep(t.Proof.Lane.Paths, files, laneMode, touch.wrote, touch.unknown))
+	st := gate.LaneStep(t.Proof.Lane.Paths, files, laneMode, touch.wrote, touch.why, touch.unknown)
+	return laneFindings(st, touch.why)
 }

@@ -29,6 +29,9 @@ type Input struct {
 	// Touched reports whether a worker plausibly touched a file (its edit tools, or a command that writes it). Only
 	// such a file outside the lane makes the lane step red; the others are Unseen, a warning. nil: every file counts.
 	Touched func(file string) bool
+	// Why explains a file Touched counts though no worker edit or command names it ("changed while `make` ran"),
+	// for the lane step's tail; "" otherwise. nil: no reasons.
+	Why func(file string) string
 	// UnknownWrites are the workers' commands that wrote somewhere Seelegent could not read (a variable, a command's
 	// output, the whole repository): with one, a file outside the lane that nothing else explains counts as touched.
 	UnknownWrites []string
@@ -59,7 +62,7 @@ func Plan(in Input) []api.GateStep {
 		if files == nil {
 			files = in.Files
 		}
-		steps = append(steps, LaneStep(in.Lane, files, in.LaneMode, in.Touched, in.UnknownWrites))
+		steps = append(steps, LaneStep(in.Lane, files, in.LaneMode, in.Touched, in.Why, in.UnknownWrites))
 	}
 	if in.Hygienic && (len(in.Files) > 0 || len(in.Hygiene) > 0) {
 		s := api.GateStep{Kind: api.StepHygiene, Label: "hygiene", State: api.StepGreen}
@@ -114,6 +117,10 @@ func Plan(in Input) []api.GateStep {
 // UnseenNote heads the lane's files that changed without a worker edit or command Seelegent saw.
 const UnseenNote = "changed during the turn but not by a worker edit or command Seelegent saw"
 
+// TimedNote heads the out-of-lane files counted because they changed while a worker's command ran, though no edit
+// or command names them; each line says which command.
+const TimedNote = "counted by time (no worker edit or command names them)"
+
 // UnknownNote explains the out-of-lane files counted because a worker's command wrote somewhere Seelegent could not
 // read.
 const UnknownNote = "counted: no worker edit or readable command names them, but a worker's command wrote where " +
@@ -123,13 +130,19 @@ const UnknownNote = "counted: no worker edit or readable command names them, but
 // step red (warn under lanes: warn); one it does not report is listed in Unseen and makes the step warn at most,
 // unless unknown holds a worker command that wrote where Seelegent could not read: then it counts too (fail closed;
 // the files other tasks changed are no turn's change to begin with).
-func LaneStep(lane, files []string, mode string, touched func(string) bool, unknown []string) api.GateStep {
+func LaneStep(lane, files []string, mode string, touched func(string) bool, why func(string) string,
+	unknown []string) api.GateStep {
 	s := api.GateStep{Kind: api.StepLane, Label: "lane", State: api.StepGreen}
-	var guessed []string
+	var guessed, reasons []string
 	for _, f := range proof.Outside(lane, files) {
 		switch {
 		case touched == nil || touched(f):
 			s.Files = append(s.Files, f)
+			if why != nil {
+				if r := why(f); r != "" {
+					reasons = append(reasons, f+": "+r)
+				}
+			}
 		case len(unknown) > 0:
 			s.Files = append(s.Files, f)
 			guessed = append(guessed, f)
@@ -140,6 +153,9 @@ func LaneStep(lane, files []string, mode string, touched func(string) bool, unkn
 	var parts []string
 	if len(s.Files) > 0 {
 		parts = append(parts, "Out of lane:\n"+strings.Join(listed(s.Files), "\n"))
+		if len(reasons) > 0 {
+			parts = append(parts, "Of these, "+TimedNote+":\n"+strings.Join(listed(reasons), "\n"))
+		}
 		if len(guessed) > 0 {
 			parts = append(parts, fmt.Sprintf("Of these, %s %s: %s", strings.Join(listed(guessed), ", "), UnknownNote,
 				strings.Join(cut(unknown, 3, 160), " | ")))
