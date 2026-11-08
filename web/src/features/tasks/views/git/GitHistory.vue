@@ -23,10 +23,12 @@ const { t } = useI18n()
 const h = props.history
 const titleId = useId()
 
+// The commit count includes the older ones the list leaves out.
+const total = computed(() => h.commits.value.length + h.more.value)
 const options = computed(() => [
   {
     value: 'commits' as HistoryMode,
-    label: t('git.history.commits', { n: h.commits.value.length }, h.commits.value.length),
+    label: t('git.history.commits', { n: total.value }, total.value),
   },
   {
     value: 'files' as HistoryMode,

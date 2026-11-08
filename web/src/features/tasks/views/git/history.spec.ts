@@ -362,7 +362,7 @@ describe('commit list and history section', () => {
         make: () => {
           const history = useGitHistory(
             () => 't1',
-            () => view({ commits: [c], committedFiles: [file('parser.go')] }),
+            () => view({ commits: [c], commitsMore: 2, committedFiles: [file('parser.go')] }),
             api,
           )
           return () => h(GitHistory, { history, wrap: false })
@@ -375,6 +375,8 @@ describe('commit list and history section', () => {
     expect(w.find('.gcd__subject').text()).toBe('Add the parser')
     expect(w.find('.gcd__body').text()).toBe('Why it changed.')
     expect(w.text()).toContain('in parser.go')
+    // The count includes the older commits the list leaves out.
+    expect(w.findAll('[role="radio"]').map((r) => r.text())).toEqual(['3 commits', '1 file'])
 
     await w.findAll('[role="radio"]')[1]?.trigger('click')
     await flush(6)
