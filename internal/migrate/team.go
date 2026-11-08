@@ -224,8 +224,8 @@ func (m *migrator) importMeetings(ctx context.Context) {
 			m.add(KindMeeting, id, Error, "%v", err)
 			continue
 		}
-		var mt api.Meeting
-		if err := json.Unmarshal(data, &mt); err != nil {
+		mt, err := decodeOldMeeting(data)
+		if err != nil {
 			m.add(KindMeeting, id, Error, "unreadable: %v", err)
 			continue
 		}
