@@ -193,6 +193,10 @@ type Options struct {
 	// Redact masks secrets in log lines (logx.Redactor.String); identity when nil.
 	Redact func(string) string
 
+	// Activity is told of every API request that is not a worker's (the dashboard, the CLI, the lead's MCP
+	// calls), before it is served (quota.Refresher.Touch). It must not block. Nil tells nobody.
+	Activity func()
+
 	// Stop asks the daemon to shut down cleanly (POST /daemon/stop). It must only signal and return at once: the
 	// shutdown waits for the answer to be written. Nil answers 503.
 	Stop func()
@@ -355,13 +359,17 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if c := s.callerOf(r); c.Worker && !s.workerAllowed(r, c) {
+	c := s.callerOf(r)
+	if c.Worker && !s.workerAllowed(r, c) {
 		s.workerDenied(w, r)
 		return
 	}
 	if !isAPI {
 		s.serveWeb(w, r)
 		return
+	}
+	if s.o.Activity != nil && !c.Worker {
+		s.o.Activity()
 	}
 	s.mux.ServeHTTP(w, r)
 }

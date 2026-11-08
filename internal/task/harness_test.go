@@ -175,7 +175,7 @@ func (h *harness) start() {
 		DB: h.db, Accounts: h.accounts, Pool: p, Backends: backends,
 		Settings: h.config, TasksDir: filepath.Join(h.dir, "tasks"), Launcher: fakecli.Launcher(t),
 		Usage: h.usage, Memory: h.memory, Roles: h.roles, Members: h.members, Consoles: h.consoles, Clock: h.clk,
-		QuotaRefresh: func(id string) {
+		QuotaRefresh: func(id string, _ bool) {
 			h.mu.Lock()
 			h.refreshes = append(h.refreshes, id)
 			h.mu.Unlock()
