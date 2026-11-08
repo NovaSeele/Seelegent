@@ -13,6 +13,9 @@ import (
 	"github.com/NovaSeele/Seelegent/internal/ops"
 )
 
+// allowGitScope is how long --allow-git lasts (the flag help of delegate and followup).
+const allowGitScope = "for this command only: this turn and its automatic fix turns; a followup must pass it again"
+
 // gateFlags are the gate, lane and verifier options of delegate, run and followup (docs/gates.md).
 type gateFlags struct {
 	gate      []string
@@ -93,7 +96,7 @@ func (f *delegateFlags) add(fs *pflag.FlagSet, withWait bool) {
 	fs.StringVar(&f.task, "task", "", "Spec Kit task ids, comma separated (needs --spec)")
 	fs.StringSliceVar(&f.after, "after", nil, "start after these tasks (comma separated)")
 	fs.StringVar(&f.afterMode, "after-mode", "", "accepted (default) or done")
-	fs.BoolVar(&f.allowGit, "allow-git", false, "let the worker commit")
+	fs.BoolVar(&f.allowGit, "allow-git", false, "let the worker commit, "+allowGitScope)
 	fs.StringVar(&f.member, "member", "", "department member (its backend, model or tier and role)")
 	f.gates.add(fs)
 	if withWait {

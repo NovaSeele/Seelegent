@@ -863,8 +863,9 @@ func (s *Service) fixTurn(id string, turn int, res api.GateResult, barChanged []
 		if tu == nil {
 			return nil, errNoChange
 		}
+		// An automatic fix turn belongs to the command of the turn it fixes: it inherits its allow_git.
 		next := &Turn{N: len(t.Turns) + 1, By: by, Message: msg, Status: TurnRunning, Model: t.Model,
-			Tier: t.Tier, Effort: t.Effort, StartedAt: s.now()}
+			Tier: t.Tier, Effort: t.Effort, AllowGit: tu.AllowGit, StartedAt: s.now()}
 		var evs []NewEvent
 		if by == ByGate {
 			res.AutoFix = next.N

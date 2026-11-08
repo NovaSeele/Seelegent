@@ -531,8 +531,9 @@ func (s *Service) launchAndFollow(r *run, t *Task, turn, n int, acc account.Acco
 	base := s.o.BaseEnv()
 	extra := ParallelVars(base, s.limits().TestParallelism)
 	maps.Copy(extra, s.toolEnv(ctx, t.Cwd))
+	allowGit := tu != nil && tu.AllowGit // per command (Turn.AllowGit)
 	env, err := s.o.Accounts.Env(ctx, acc, b, account.EnvOptions{Base: base, Model: model,
-		AllowGit: t.AllowGit, Extra: extra})
+		AllowGit: allowGit, Extra: extra})
 	if err != nil {
 		if errors.Is(err, account.ErrNoKey) || errors.Is(err, account.ErrProviderUnavailable) {
 			return failed(event.ClassAuthRequired, err)
@@ -554,7 +555,7 @@ func (s *Service) launchAndFollow(r *run, t *Task, turn, n int, acc account.Acco
 	if err := b.Prepare(env.Profile, prov); err != nil {
 		return failed(event.ClassFatal, fmt.Errorf("prepare the profile: %w", err))
 	}
-	if s.o.GitShim != "" && set.GitGuard && !t.AllowGit && backend.NeedsShim(b, env.Profile) {
+	if s.o.GitShim != "" && set.GitGuard && !allowGit && backend.NeedsShim(b, env.Profile) {
 		env.Vars = prependPath(env.Vars, s.o.GitShim)
 	}
 	timeout := time.Duration(set.TaskTimeoutMinutes) * time.Minute
