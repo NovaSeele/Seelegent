@@ -148,10 +148,12 @@ type App struct {
 	mu      sync.Mutex
 	api     *httpapi.Server
 	httpSrv *http.Server
-	cancel  context.CancelFunc
-	wg      sync.WaitGroup
-	started bool
-	closed  bool
+	// httpConns are the open connections of httpSrv, so closeHTTP can drop the ones that never sent a request.
+	httpConns *connTracker
+	cancel    context.CancelFunc
+	wg        sync.WaitGroup
+	started   bool
+	closed    bool
 }
 
 // New builds the services. Nothing runs until Start.

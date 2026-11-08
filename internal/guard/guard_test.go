@@ -393,3 +393,41 @@ func FuzzCheck(f *testing.F) {
 		}
 	})
 }
+
+// TestUpdateIndexRefresh: update-index that only refreshes the stat information passes; every form that changes
+// what the index holds, a path (which stages that file), an abbreviation or a variable is still refused.
+func TestUpdateIndexRefresh(t *testing.T) {
+	allowLines := []string{
+		"git update-index --refresh", "git update-index --really-refresh", "git update-index -q --refresh",
+		"git update-index --refresh -q", "git update-index -q --really-refresh --unmerged --ignore-missing",
+		"git update-index --ignore-submodules --refresh", "git -C ../repo update-index -q --refresh",
+		"git status && git update-index -q --refresh", "bash -c 'git update-index --refresh'",
+		"git.exe update-index --really-refresh",
+	}
+	for _, line := range allowLines {
+		if r := Check(line); r.Deny {
+			t.Errorf("Check(%q) denied (%s), want allow", line, r.Reason)
+		}
+	}
+	deny := []string{
+		"git update-index", "git update-index -q", "git update-index --unmerged --ignore-missing",
+		"git update-index --add a.go", "git update-index --refresh --add a.go", "git update-index --remove a.go",
+		"git update-index --force-remove a.go", "git update-index --refresh --force-remove a.go",
+		"git update-index --assume-unchanged a.go", "git update-index --refresh --assume-unchanged a.go",
+		"git update-index --no-assume-unchanged a.go", "git update-index --skip-worktree a.go",
+		"git update-index --refresh --skip-worktree a.go",
+		"git update-index --cacheinfo 100644,e69de29bb2d1d6434b8b29ae775ad8c2e48c5391,a.go",
+		"git update-index --index-info", "git update-index --refresh --index-info", "git update-index --replace a.go",
+		"git update-index --chmod=+x a.go", "git update-index --refresh --chmod=+x a.go",
+		"git update-index --refresh a.go", "git update-index --refresh -- a.go", "git update-index a.go",
+		"git update-index --stdin", "git update-index --refresh --stdin", "git update-index --again",
+		"git update-index --split-index --refresh", "git update-index --untracked-cache --refresh",
+		"git update-index --ref", "git update-index --really", "git update-index --refresh $X",
+		"git update-index \"$FLAG\"", "bash -c 'git update-index --refresh --add a.go'",
+	}
+	for _, line := range deny {
+		if r := Check(line); !r.Deny {
+			t.Errorf("Check(%q) allowed, want deny", line)
+		}
+	}
+}

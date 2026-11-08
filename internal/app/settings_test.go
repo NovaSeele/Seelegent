@@ -17,6 +17,9 @@ func (c *countReschedule) Reschedule() { c.n.Add(1) }
 // and only then (bugs.md F75).
 func TestPatchSettingsReschedulesQuota(t *testing.T) {
 	d := newDaemon(t)
+	// Registered after newDaemon, so it runs before the daemon closes: no keep-alive connection of the default
+	// client is left for its shutdown.
+	t.Cleanup(http.DefaultClient.CloseIdleConnections)
 	fake := &countReschedule{}
 	d.a.rescheduler = fake
 	addr, err := d.a.ListenHTTP(t.Context(), 0)

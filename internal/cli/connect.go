@@ -11,6 +11,7 @@ import (
 	"github.com/NovaSeele/Seelegent/internal/account"
 	"github.com/NovaSeele/Seelegent/internal/client"
 	"github.com/NovaSeele/Seelegent/internal/config"
+	"github.com/NovaSeele/Seelegent/internal/doctor"
 	"github.com/NovaSeele/Seelegent/internal/logx"
 	"github.com/NovaSeele/Seelegent/internal/platform"
 )
@@ -29,6 +30,8 @@ type deps struct {
 	// stopGrace is how long a wait whose daemon said it was stopping looks for one that comes back
 	// (ops.DefaultStopGrace when 0).
 	stopGrace time.Duration
+	// processes lists the node processes for doctor's old_node check (nil skips the check).
+	processes func(ctx context.Context) ([]platform.Process, error)
 }
 
 // defaultDeps are the real ones.
@@ -42,6 +45,9 @@ func defaultDeps() deps {
 			return client.SpawnDaemon(exe, paths, port, os.Environ()), nil
 		},
 		openURL: platform.OpenURL,
+		processes: func(ctx context.Context) ([]platform.Process, error) {
+			return platform.ListProcesses(ctx, doctor.IsNode)
+		},
 	}
 }
 

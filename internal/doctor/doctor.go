@@ -1,7 +1,9 @@
 // Package doctor checks a Seelegent installation for `seelegent doctor`: the data directory, the settings, the
-// database, the daemon, the embedded dashboard, git, the enabled backend CLIs, the accounts (counts only), PATH and,
-// when rustup is installed, whether the first cargo on PATH is rustup's proxy.
-// It reads only: it never starts the daemon, never migrates the database and never prints an e-mail address or key.
+// database, the daemon and the build it runs, processes of the old Node version, the embedded dashboard, git, the
+// enabled backend CLIs, the accounts (counts only), PATH and, when rustup is installed, whether the first cargo on
+// PATH is rustup's proxy.
+// It reads only: it never starts or stops the daemon or any other process, never migrates the database and never
+// prints an e-mail address or key.
 package doctor
 
 import (
@@ -19,7 +21,9 @@ import (
 	"github.com/NovaSeele/Seelegent/internal/backend"
 	"github.com/NovaSeele/Seelegent/internal/client"
 	"github.com/NovaSeele/Seelegent/internal/config"
+	"github.com/NovaSeele/Seelegent/internal/envx"
 	"github.com/NovaSeele/Seelegent/internal/fsutil"
+	"github.com/NovaSeele/Seelegent/internal/platform"
 	"github.com/NovaSeele/Seelegent/internal/store"
 )
 
@@ -59,8 +63,12 @@ type Options struct {
 	// Unknown are config.json keys this version does not know.
 	Unknown []string
 	Daemon  Daemon
-	// Version is this binary's version; a daemon of another version gets a warning.
+	// Version and Commit are this binary's build (buildinfo); a daemon of another build gets a warning.
 	Version string
+	Commit  string
+	// Processes lists the running node processes with their command lines (platform.ListProcesses with a node
+	// filter); nil, or an error matching errors.ErrUnsupported, skips the old_node check.
+	Processes func(ctx context.Context) ([]platform.Process, error)
 	// Web is the embedded dashboard (nil or without index.html: not part of this build).
 	Web fs.FS
 	// Env is the environment (os.Environ) and RealHome the user's home folder, to find the CLIs.
@@ -75,10 +83,17 @@ type Options struct {
 // Run runs every check in a fixed order.
 func Run(ctx context.Context, o Options) []Check {
 	out := []Check{dataDir(o.Paths, o.Daemon.LockHeld()), settings(o), database(ctx, o.Paths)}
-	d, c := daemon(ctx, o)
-	out = append(out, d, portFile(o), dashboard(o.Web), git(o.GitPath, o.GitWrapper))
+	d, c, h, findErr := daemon(ctx, o)
+	out = append(out, d)
+	if v, ok := daemonVersion(o, c, h, findErr); ok {
+		out = append(out, v)
+	}
+	if n, ok := oldNode(ctx, o.Processes); ok {
+		out = append(out, n)
+	}
+	out = append(out, portFile(o), dashboard(o.Web), git(o.GitPath, o.GitWrapper))
 	out = append(out, backends(o)...)
-	out = append(out, accounts(ctx, o, c), pathEntries(o.Env))
+	out = append(out, accounts(ctx, o, c), pathEntries(o.Env, runtime.GOOS))
 	if c, ok := cargo(o.Env, o.RealHome, runtime.GOOS); ok {
 		out = append(out, c)
 	}
@@ -165,23 +180,19 @@ func database(ctx context.Context, p config.Paths) Check {
 	return c
 }
 
-// daemon checks the running daemon and returns its client when it answers.
-func daemon(ctx context.Context, o Options) (Check, *client.Client) {
+// daemon checks the running daemon. It returns the daemon's client and health answer when it answers, else the
+// lookup's error (daemonVersion reads both).
+func daemon(ctx context.Context, o Options) (Check, *client.Client, api.Health, error) {
 	c := Check{Name: "daemon"}
 	cl, err := o.Daemon.Find(ctx)
 	if err == nil {
 		h, herr := cl.Health(ctx)
 		if herr != nil {
 			c.Status, c.Message = Fail, fmt.Sprintf("the daemon answers but its health check fails: %v", herr)
-			return c, nil
+			return c, nil, api.Health{}, herr
 		}
 		c.Status, c.Message = OK, fmt.Sprintf("the daemon %s runs at %s/ (pid %d)", h.Version, cl.BaseURL(), h.PID)
-		if o.Version != "" && h.Version != "" && h.Version != o.Version {
-			c.Status = Warn
-			c.Message += fmt.Sprintf(", but this command is %s", o.Version)
-			c.Fix = "seelegent restart"
-		}
-		return c, cl
+		return c, cl, h, nil
 	}
 	switch {
 	case errors.Is(err, client.ErrNotRunning) && o.Daemon.LockHeld():
@@ -201,7 +212,7 @@ func daemon(ctx context.Context, o Options) (Check, *client.Client) {
 			c.Fix = "stop that program, or set another port with SEELEGENT_PORT or the settings' port"
 		}
 	}
-	return c, nil
+	return c, nil, api.Health{}, err
 }
 
 func portFile(o Options) Check {
@@ -355,22 +366,94 @@ func plural(n int) string {
 }
 
 // pathEntries warns about relative PATH entries: a worker started in a project folder would run programs from it.
-func pathEntries(env []string) Check {
+// On Windows an entry with a %NAME% left in it is told apart: the variable was never expanded (a REG_SZ PATH
+// value, or a per-user variable in the system PATH), so no program finds anything there.
+func pathEntries(env []string, goos string) Check {
 	path := ""
 	for _, kv := range env {
 		if k, v, ok := strings.Cut(kv, "="); ok && strings.EqualFold(k, "PATH") {
 			path = v
 		}
 	}
-	var rel []string
+	var rel, unexpanded, expanded []string
 	for _, e := range filepath.SplitList(path) {
-		if e != "" && !filepath.IsAbs(e) {
+		switch {
+		case e == "":
+		case goos == "windows" && hasPercentVar(e):
+			unexpanded = append(unexpanded, e)
+			if x, ok := expandPercent(e, env); ok {
+				expanded = append(expanded, x)
+			}
+		case !filepath.IsAbs(e):
 			rel = append(rel, e)
 		}
 	}
-	if len(rel) > 0 {
-		return Check{Name: "path", Status: Warn, Message: "PATH has relative entries: " + strings.Join(rel, ", "),
-			Fix: "make them absolute or remove them; a worker resolves them inside the project folder"}
+	if len(rel) == 0 && len(unexpanded) == 0 {
+		return Check{Name: "path", Status: OK, Message: "PATH has no relative entries"}
 	}
-	return Check{Name: "path", Status: OK, Message: "PATH has no relative entries"}
+	var msgs, fixes []string
+	if len(unexpanded) > 0 {
+		msgs = append(msgs, "PATH has entries whose variable was never expanded: "+strings.Join(unexpanded, ", ")+
+			", so every program sees the literal text and finds nothing there. This usually has one of two causes: "+
+			"the PATH value is REG_SZ instead of REG_EXPAND_SZ, or the entry is in the system PATH but uses a "+
+			"per-user variable such as %APPDATA% or %USERPROFILE%, which does not exist when Windows expands the "+
+			"system PATH")
+		fix := "look at the Path value in HKCU\\Environment and in HKLM\\SYSTEM\\CurrentControlSet\\Control\\" +
+			"Session Manager\\Environment: make it REG_EXPAND_SZ, move per-user entries to the user PATH, or write " +
+			"the expanded path"
+		if len(expanded) == len(unexpanded) {
+			fix += " (" + strings.Join(expanded, ", ") + ")"
+		}
+		fixes = append(fixes, fix+"; then restart the programs that read PATH")
+	}
+	if len(rel) > 0 {
+		msgs = append(msgs, "PATH has relative entries: "+strings.Join(rel, ", "))
+		fixes = append(fixes, "make the relative entries absolute or remove them; a worker resolves them inside the "+
+			"project folder")
+	}
+	return Check{Name: "path", Status: Warn, Message: strings.Join(msgs, ". "), Fix: strings.Join(fixes, "; ")}
+}
+
+// hasPercentVar reports whether a PATH entry holds a %NAME% (a name without path separators).
+func hasPercentVar(e string) bool {
+	_, ok := nextPercentVar(e)
+	return ok
+}
+
+// nextPercentVar finds the first %NAME% in s: the indexes of its two % signs.
+func nextPercentVar(s string) (span [2]int, ok bool) {
+	for i := 0; i < len(s); i++ {
+		if s[i] != '%' {
+			continue
+		}
+		j := strings.IndexByte(s[i+1:], '%')
+		if j < 0 {
+			return span, false
+		}
+		name := s[i+1 : i+1+j]
+		if name != "" && !strings.ContainsAny(name, `\/;`) {
+			return [2]int{i, i + 1 + j}, true
+		}
+		i += j // the second % may open the next variable
+	}
+	return span, false
+}
+
+// expandPercent expands every %NAME% in e from env, as REG_EXPAND_SZ would; ok is false when a name is not set.
+func expandPercent(e string, env []string) (string, bool) {
+	var b strings.Builder
+	for {
+		span, found := nextPercentVar(e)
+		if !found {
+			b.WriteString(e)
+			return b.String(), true
+		}
+		v, set := envx.Lookup(env, e[span[0]+1:span[1]])
+		if !set {
+			return "", false
+		}
+		b.WriteString(e[:span[0]])
+		b.WriteString(v)
+		e = e[span[1]+1:]
+	}
 }
