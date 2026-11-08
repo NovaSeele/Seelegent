@@ -112,7 +112,7 @@ func (s *Service) storeVariant(ctx context.Context, c *api.Contest, v *api.Conte
 		return fmt.Errorf("diff: %w", err)
 	}
 	stat, err := s.o.Git.Exec(ctx, c.Root, gitx.ExecOptions{Timeout: gitx.ReadTimeout}, "diff", "--numstat",
-		"--no-renames", c.BaseSha, tree)
+		"--no-renames", "--no-textconv", c.BaseSha, tree)
 	if err != nil {
 		return fmt.Errorf("numstat: %w", err)
 	}
