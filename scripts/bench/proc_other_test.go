@@ -19,6 +19,8 @@ func procStats(int) (procStat, error) { return procStat{}, errNoProcs }
 
 func selfStats() (procStat, error) { return procStat{}, errNoProcs }
 
+func machineMemory() (machineStat, error) { return machineStat{}, errNoProcs }
+
 type procHandle struct{}
 
 func openProc(int) (*procHandle, error) { return nil, errNoProcs }
@@ -26,3 +28,5 @@ func openProc(int) (*procHandle, error) { return nil, errNoProcs }
 func (*procHandle) stats() (procStat, error) { return procStat{}, errNoProcs }
 
 func (*procHandle) close() {}
+
+func osVersion() string { return "" }

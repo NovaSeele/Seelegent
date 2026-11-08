@@ -2,21 +2,24 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
-	"expvar"
 	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
 	"net/http/pprof"
 	"net/netip"
+	"os"
+	"runtime"
+	"runtime/metrics"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 )
 
-// pprofServer is the debug server of the hidden `daemon --pprof-addr` flag: net/http/pprof and expvar on their own
+// pprofServer is the debug server of the hidden `daemon --pprof-addr` flag: net/http/pprof and /debug/vars on their own
 // mux and their own http.Server, never on http.DefaultServeMux and never on the API's port. It is a development
 // tool: heap and goroutine profiles can hold secrets (tokens in memory, prompts), so it listens on loopback only and
 // is never a setting.
@@ -49,28 +52,75 @@ func checkPprofAddr(addr string) error {
 }
 
 // pprofHostAllowed is the DNS-rebinding defense of the debug server, the same rule as the API's Host check
-// (internal/httpapi Server.hostAllowed): 127.0.0.1, localhost or [::1] with the server's own port. It is a copy on
-// purpose, so the debug server does not reach into httpapi.
-func pprofHostAllowed(host string, port int) bool {
-	p := strconv.Itoa(port)
+// (internal/httpapi Server.hostAllowed): 127.0.0.1, localhost or [::1] with the server's own port, plus the
+// loopback address the server actually listens on (127.0.0.2:6060 is reached as Host 127.0.0.2:6060). It is a copy
+// on purpose, so the debug server does not reach into httpapi.
+func pprofHostAllowed(host string, listen *net.TCPAddr) bool {
+	p := strconv.Itoa(listen.Port)
 	switch strings.ToLower(host) {
 	case "127.0.0.1:" + p, "localhost:" + p, "[::1]:" + p:
 		return true
 	}
-	return false
+	h, port, err := net.SplitHostPort(host)
+	if err != nil || port != p {
+		return false
+	}
+	ip, err := netip.ParseAddr(h)
+	own, ok := netip.AddrFromSlice(listen.IP)
+	return err == nil && ok && ip.IsLoopback() && ip.Unmap() == own.Unmap()
 }
 
-// pprofHandler serves /debug/pprof/... and /debug/vars behind the Host check for port.
-func pprofHandler(port int) http.Handler {
+// runtimeSamples are the runtime/metrics values /debug/vars reports under "runtime": cheap to read (no
+// stop-the-world, unlike runtime.ReadMemStats), so a sampler can poll them often with ?light=1.
+func runtimeSamples() []struct{ key, name string } {
+	return []struct{ key, name string }{
+		{"heapObjectsBytes", "/memory/classes/heap/objects:bytes"},
+		{"heapLiveBytes", "/gc/heap/live:bytes"},
+		{"heapAllocBytesTotal", "/gc/heap/allocs:bytes"},
+		{"heapAllocObjectsTotal", "/gc/heap/allocs:objects"},
+		{"gcCycles", "/gc/cycles/total:gc-cycles"},
+		{"totalBytes", "/memory/classes/total:bytes"},
+		{"goroutines", "/sched/goroutines:goroutines"},
+	}
+}
+
+// debugVars writes the expvar-style JSON of /debug/vars: "pid", "goroutines" and "runtime" (runtime/metrics) always,
+// "cmdline" and "memstats" (runtime.ReadMemStats, which stops the world briefly) unless the query has light=1.
+// The values are built per request, never published in expvar's process-wide registry.
+func debugVars(w http.ResponseWriter, r *http.Request) {
+	names := runtimeSamples()
+	samples := make([]metrics.Sample, len(names))
+	for i, s := range names {
+		samples[i].Name = s.name
+	}
+	metrics.Read(samples)
+	rt := make(map[string]uint64, len(samples))
+	for i, s := range samples {
+		if s.Value.Kind() == metrics.KindUint64 {
+			rt[names[i].key] = s.Value.Uint64()
+		}
+	}
+	out := map[string]any{"pid": os.Getpid(), "goroutines": runtime.NumGoroutine(), "runtime": rt}
+	if r.URL.Query().Get("light") != "1" {
+		var m runtime.MemStats
+		runtime.ReadMemStats(&m)
+		out["memstats"], out["cmdline"] = &m, os.Args
+	}
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	_ = json.NewEncoder(w).Encode(out)
+}
+
+// pprofHandler serves /debug/pprof/... and /debug/vars behind the Host check for the listen address.
+func pprofHandler(listen *net.TCPAddr) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/debug/pprof/", pprof.Index)
 	mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
 	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
 	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
 	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
-	mux.Handle("/debug/vars", expvar.Handler())
+	mux.HandleFunc("/debug/vars", debugVars)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !pprofHostAllowed(r.Host, port) {
+		if !pprofHostAllowed(r.Host, listen) {
 			http.Error(w, "misdirected request: the Host header must name this loopback address",
 				http.StatusMisdirectedRequest)
 			return
@@ -90,13 +140,14 @@ func startPprof(ctx context.Context, addr string, log *slog.Logger) (*pprofServe
 		return nil, fmt.Errorf("--pprof-addr: %w", err)
 	}
 	tcp, ok := ln.Addr().(*net.TCPAddr)
-	if !ok {
+	if !ok || !tcp.IP.IsLoopback() {
+		// "localhost" resolved to something else (a hosts file can say anything).
 		_ = ln.Close()
-		return nil, fmt.Errorf("--pprof-addr: unexpected listener address %v", ln.Addr())
+		return nil, fmt.Errorf("--pprof-addr %q: listens on %v, which is not a loopback address", addr, ln.Addr())
 	}
 	p := &pprofServer{addr: ln.Addr().String(), done: make(chan error, 1)}
 	p.srv = &http.Server{
-		Handler:           pprofHandler(tcp.Port),
+		Handler:           pprofHandler(tcp),
 		ReadHeaderTimeout: 10 * time.Second,
 		// No write timeout: /debug/pprof/profile and /trace stream for as many seconds as asked.
 		BaseContext: func(net.Listener) context.Context { return context.WithoutCancel(ctx) },

@@ -15,12 +15,14 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/NovaSeele/Seelegent/internal/api"
+	"github.com/NovaSeele/Seelegent/internal/config"
 	"github.com/NovaSeele/Seelegent/internal/testutil/fakecli"
 )
 
@@ -40,6 +42,10 @@ type env struct {
 	pprof   string
 	http    *http.Client
 	scripts int
+	job     *treeJob
+	// pid and homeID identify the daemon this bench started: it never uses or stops another one.
+	pid    int
+	homeID string
 }
 
 func run(o *options) error {
@@ -55,7 +61,8 @@ func run(o *options) error {
 	e := &env{o: o, self: self, http: &http.Client{Timeout: 30 * time.Second},
 		api:   fmt.Sprintf("http://127.0.0.1:%d/api/v1", o.port),
 		pprof: fmt.Sprintf("http://127.0.0.1:%d", o.pprofPort)}
-	if e.root, err = moduleRoot(); err != nil {
+	// With -bin the module is not needed (a bench binary cross-compiled for WSL runs from a temp folder).
+	if e.root, err = moduleRoot(); err != nil && o.bin == "" {
 		return err
 	}
 	e.out = o.out
@@ -72,8 +79,11 @@ func run(o *options) error {
 		defer removeAll(e.work)
 	}
 	e.home, e.project = filepath.Join(e.work, "data"), filepath.Join(e.work, "project")
+	e.homeID = config.HomeID(e.home)
 	e.queue, e.spawns = filepath.Join(e.work, "queue"), filepath.Join(e.work, "spawns.jsonl")
-	for _, d := range []string{e.home, e.project, e.queue, filepath.Join(e.work, "userhome")} {
+	for _, d := range []string{e.home, e.project, e.queue, filepath.Join(e.work, "userhome"),
+		filepath.Join(e.work, "fakebin"), filepath.Join(e.work, "appdata"), filepath.Join(e.work, "localappdata"),
+		filepath.Join(e.work, "ghconfig")} {
 		if err := os.MkdirAll(d, 0o750); err != nil {
 			return err
 		}
@@ -85,6 +95,10 @@ func run(o *options) error {
 		return err
 	}
 	if err := e.build(ctx); err != nil {
+		return err
+	}
+	// The fake gh: a copy of this binary named gh, first on the daemon's PATH.
+	if err := copyExe(self, filepath.Join(e.work, "fakebin", exeName("gh"))); err != nil {
 		return err
 	}
 	initProject(ctx, e.project)
@@ -115,6 +129,18 @@ func moduleRoot() (string, error) {
 		}
 		dir = parent
 	}
+}
+
+// copyExe copies an executable (a hard link when the file system allows it).
+func copyExe(from, to string) error {
+	if os.Link(from, to) == nil {
+		return nil
+	}
+	data, err := os.ReadFile(from)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(to, data, 0o700)
 }
 
 func removeAll(dir string) {
@@ -163,22 +189,35 @@ func initProject(ctx context.Context, dir string) {
 	}
 }
 
-// daemonEnv is the daemon's environment: this machine's minus anything Seelegent or the fake CLI reads, plus the
-// temp data folder, a temp user home, the fake agy and the queue.
+// hostVars are variables the daemon's environment never takes from this machine: GitHub sign-ins and hosts, and
+// the per-user folders where gh (%APPDATA%\GitHub CLI), the real CLIs and their sign-ins live.
+func hostVars() []string {
+	return []string{"GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN", "GH_HOST",
+		"GH_CONFIG_DIR", "GH_PATH", "APPDATA", "LOCALAPPDATA", "XDG_CONFIG_HOME", "HOME", "USERPROFILE", "GOMEMLIMIT",
+		"GOGC", "GOCOVERDIR", envSpawnLog}
+}
+
+// daemonEnv is the daemon's environment: this machine's minus anything Seelegent, the fake CLI or gh reads, plus
+// the temp data folder, a temp user home and per-user folders, the fake agy, the fake gh first on PATH and the
+// queue. The bench never uses the user's gh sign-in or reaches GitHub.
 func (e *env) daemonEnv() []string {
 	var out []string
 	for _, kv := range os.Environ() {
-		k, _, _ := strings.Cut(kv, "=")
+		k, v, _ := strings.Cut(kv, "=")
 		ku := strings.ToUpper(k)
-		if strings.HasPrefix(ku, "SEELEGENT_") || strings.HasPrefix(ku, "FAKECLI_") || ku == "GOCOVERDIR" ||
-			ku == envSpawnLog || ku == "HOME" || ku == "USERPROFILE" || ku == "GOMEMLIMIT" || ku == "GOGC" {
+		if strings.HasPrefix(ku, "SEELEGENT_") || strings.HasPrefix(ku, "FAKECLI_") || slices.Contains(hostVars(), ku) {
 			continue
+		}
+		if ku == "PATH" {
+			kv = k + "=" + filepath.Join(e.work, "fakebin") + string(os.PathListSeparator) + v
 		}
 		out = append(out, kv)
 	}
 	userHome := filepath.Join(e.work, "userhome")
 	missing := filepath.Join(e.work, "not-installed")
 	return append(out, "SEELEGENT_HOME="+e.home, "HOME="+userHome, "USERPROFILE="+userHome,
+		"APPDATA="+filepath.Join(e.work, "appdata"), "LOCALAPPDATA="+filepath.Join(e.work, "localappdata"),
+		"GH_CONFIG_DIR="+filepath.Join(e.work, "ghconfig"),
 		"SEELEGENT_AGY="+e.self, "SEELEGENT_CLAUDE="+missing, "SEELEGENT_CODEX="+missing,
 		fakecli.EnvQueue+"="+e.queue, envSpawnLog+"="+e.spawns)
 }
@@ -189,7 +228,8 @@ func (e *env) startDaemon(ctx context.Context) (*exec.Cmd, <-chan error, error) 
 	if err != nil {
 		return nil, nil, err
 	}
-	args := []string{"daemon", "--port", strconv.Itoa(e.o.port), "--pprof-addr", "127.0.0.1:" + strconv.Itoa(e.o.pprofPort)}
+	args := []string{"daemon", "--port", strconv.Itoa(e.o.port),
+		"--pprof-addr", "127.0.0.1:" + strconv.Itoa(e.o.pprofPort)}
 	// No context: the daemon is stopped through POST /daemon/stop (stopDaemon), and killed only when that fails.
 	cmd := exec.Command(e.bin, args...) //nolint:noctx // stopped through the API, see above
 	cmd.Env, cmd.Stdout, cmd.Stderr, cmd.Dir = e.daemonEnv(), logf, logf, e.work
@@ -197,13 +237,17 @@ func (e *env) startDaemon(ctx context.Context) (*exec.Cmd, <-chan error, error) 
 		_ = logf.Close()
 		return nil, nil, err
 	}
+	// Windows: a Job Object accounts the whole tree, short-lived processes included.
+	if job, err := newTreeJob(cmd.Process.Pid); err == nil {
+		e.job = job
+	} else if runtime.GOOS == "windows" {
+		fmt.Fprintln(os.Stderr, "bench: no job accounting:", err)
+	}
 	exited := make(chan error, 1)
 	go func() { exited <- cmd.Wait(); _ = logf.Close() }()
+	e.pid = cmd.Process.Pid
 	deadline := time.Now().Add(60 * time.Second)
 	for {
-		if _, err := e.call(ctx, http.MethodGet, "/health", nil, nil); err == nil {
-			return cmd, exited, nil
-		}
 		select {
 		case err := <-exited:
 			return nil, nil, fmt.Errorf("the daemon exited at start (%w); see %s", err,
@@ -213,11 +257,57 @@ func (e *env) startDaemon(ctx context.Context) (*exec.Cmd, <-chan error, error) 
 			return nil, nil, ctx.Err()
 		case <-time.After(200 * time.Millisecond):
 		}
+		err := e.ours(ctx)
+		if err == nil {
+			return cmd, exited, nil
+		}
+		if errors.Is(err, errNotOurs) {
+			_ = cmd.Process.Kill()
+			return nil, nil, err
+		}
 		if time.Now().After(deadline) {
 			_ = cmd.Process.Kill()
 			return nil, nil, errors.New("the daemon did not answer /health within 60 s")
 		}
 	}
+}
+
+// errNotOurs: the port answers for a daemon this bench did not start.
+var errNotOurs = errors.New("another daemon answers on the bench's port")
+
+// ours checks that the API and the pprof ports answer for the daemon this bench started: its pid and the HomeID of
+// the bench's own SEELEGENT_HOME. Anything else is errNotOurs, and the bench neither uses nor stops it.
+func (e *env) ours(ctx context.Context) error {
+	var h api.Health
+	if _, err := e.call(ctx, http.MethodGet, "/health", nil, &h); err != nil {
+		return err
+	}
+	if h.PID != e.pid || h.HomeID != e.homeID {
+		return fmt.Errorf("%w: port %d answers for pid %d (home %s), the bench started pid %d (home %s)", errNotOurs,
+			e.o.port, h.PID, h.HomeID, e.pid, e.homeID)
+	}
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, e.pprof+"/debug/vars?light=1", http.NoBody)
+	if err != nil {
+		return err
+	}
+	resp, err := e.http.Do(req)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	var vars struct {
+		PID int `json:"pid"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&vars); err != nil {
+		return fmt.Errorf("pprof port %d: %w", e.o.pprofPort, err)
+	}
+	if vars.PID != e.pid {
+		return fmt.Errorf("%w: pprof port %d answers for pid %d, the bench started pid %d", errNotOurs,
+			e.o.pprofPort, vars.PID, e.pid)
+	}
+	return nil
 }
 
 // call sends one API request; out receives the JSON answer.
@@ -362,12 +452,18 @@ func (e *env) seedTasks(ctx context.Context) error {
 	return e.waitTerminal(ctx, ids, 5*time.Minute)
 }
 
+// stopDaemon stops the daemon this bench started: through the API only after ours confirms the port still answers
+// for it, else by killing the process it launched. It never stops another daemon.
 func (e *env) stopDaemon(ctx context.Context, cmd *exec.Cmd, exited <-chan error) {
 	sctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
-	_, err := e.call(sctx, http.MethodPost, "/daemon/stop", struct{}{}, nil)
+	err := e.ours(sctx)
+	if err == nil {
+		_, err = e.call(sctx, http.MethodPost, "/daemon/stop", struct{}{}, nil)
+	}
 	cancel()
 	if err != nil {
-		_, _ = fmt.Fprintln(os.Stderr, "bench: stop the daemon:", err)
+		_, _ = fmt.Fprintln(os.Stderr, "bench: stop the daemon through the API:", err, "- killing pid", e.pid)
+		_ = cmd.Process.Kill()
 	}
 	var exit error
 	select {
@@ -382,22 +478,75 @@ func (e *env) stopDaemon(ctx context.Context, cmd *exec.Cmd, exited <-chan error
 	}
 }
 
+// costMark is the CPU the daemon and its whole tree (the job) used up to a moment.
+type costMark struct {
+	at        time.Time
+	daemonCPU time.Duration
+	job       *jobStat
+}
+
+func (e *env) mark(pid int) costMark {
+	m := costMark{at: time.Now()}
+	if st, err := procStats(pid); err == nil {
+		m.daemonCPU = st.CPU
+	}
+	if e.job != nil {
+		if js, err := e.job.stats(); err == nil {
+			m.job = &js
+		}
+	}
+	return m
+}
+
+// phaseCost is what one setup phase cost: the daemon's CPU and the tree's (job) per unit.
+func phaseCost(name, unit string, n int, from, to costMark) setupPhase {
+	p := setupPhase{Name: name, Unit: unit, Count: n, Seconds: round(to.at.Sub(from.at).Seconds(), 1),
+		DaemonCPUSeconds: round((to.daemonCPU - from.daemonCPU).Seconds(), 3)}
+	if from.job != nil && to.job != nil {
+		p.TreeCPUSeconds = round((to.job.CPU - from.job.CPU).Seconds(), 3)
+		p.ProcessesStarted = to.job.Started - from.job.Started
+	}
+	if n > 0 {
+		p.DaemonCPUPerUnit = round(p.DaemonCPUSeconds/float64(n), 3)
+		p.TreeCPUPerUnit = round(p.TreeCPUSeconds/float64(n), 3)
+	}
+	return p
+}
+
 // scenario runs the setup, the warmup, the measured time and the profile window, then stops the daemon.
 func (e *env) scenario(ctx context.Context) (*result, error) {
 	cmd, exited, err := e.startDaemon(ctx)
 	if err != nil {
 		return nil, err
 	}
-	s := newSampler(cmd.Process.Pid, e.self, filepath.Join(e.home, "seelegent.db"), e.pprof)
+	pid := cmd.Process.Pid
+	s := newSampler(pid, e.self, filepath.Join(e.home, "seelegent.db"), e.pprof, e.job)
 	sctx, stopSampler := context.WithCancel(ctx)
 	var wg sync.WaitGroup
 	wg.Go(func() { s.run(sctx, e.o.interval, 250*time.Millisecond) })
 	r := &result{Scenario: e.o.scenario, Started: time.Now(), Options: optionsOf(e.o), GOOS: runtime.GOOS,
-		GOARCH: runtime.GOARCH, NumCPU: runtime.NumCPU(), Commit: gitCommit(ctx, e.root)}
+		GOARCH: runtime.GOARCH, NumCPU: runtime.NumCPU(), Commit: cmpOrString(e.o.commit, gitCommit(ctx, e.root))}
+	// The setup profile runs from the daemon's start; the warmup waits for it.
+	var profWG sync.WaitGroup
+	if e.o.setupProf > 0 {
+		profWG.Go(func() {
+			path := "/debug/pprof/profile?seconds=" + strconv.Itoa(int(e.o.setupProf.Seconds()))
+			if err := s.saveProfile(ctx, path, filepath.Join(e.out, "setup-cpu.pprof"), e.o.setupProf+time.Minute); err != nil {
+				fmt.Fprintln(os.Stderr, "bench: setup cpu profile:", err)
+			}
+		})
+	}
 	stopAll := func() {
 		e.stopDaemon(ctx, cmd, exited)
+		profWG.Wait()
 		stopSampler()
 		wg.Wait()
+		if e.job != nil {
+			if js, err := e.job.stats(); err == nil {
+				r.TreeFinal = &js
+			}
+			e.job.close()
+		}
 		copyFile(filepath.Join(e.home, "logs", "daemon.log"), filepath.Join(e.out, "daemon.log"))
 	}
 	fail := func(err error) (*result, error) {
@@ -405,13 +554,19 @@ func (e *env) scenario(ctx context.Context) (*result, error) {
 		return nil, err
 	}
 
+	m0 := e.mark(pid)
 	if err := e.seedAccounts(ctx); err != nil {
 		return fail(err)
 	}
+	m1 := e.mark(pid)
 	if err := e.seedTasks(ctx); err != nil {
 		return fail(err)
 	}
+	m2 := e.mark(pid)
+	r.Setup = append(r.Setup, phaseCost("accounts", "account", e.o.accounts, m0, m1),
+		phaseCost("seed tasks", "task", e.o.seedTasks, m1, m2))
 	s.setPhase("warmup")
+	profWG.Wait()
 	if err := sleep(ctx, e.o.warmup); err != nil {
 		return fail(err)
 	}
@@ -420,20 +575,31 @@ func (e *env) scenario(ctx context.Context) (*result, error) {
 	gen := &loadGen{e: e, lat: map[string]*latencies{"list": {}, "detail": {}}}
 	lctx, stopLoad := context.WithCancel(ctx)
 	var lwg sync.WaitGroup
+	if e.o.scenario == "load" {
+		// The load tasks' start is measured alone: the pollers and the SSE clients start once every task streams.
+		m3 := e.mark(pid)
+		if err := gen.delegateAll(lctx); err != nil {
+			stopLoad()
+			return fail(err)
+		}
+		if err := gen.waitStreaming(lctx, time.Minute); err != nil {
+			fmt.Fprintln(os.Stderr, "bench:", err)
+		}
+		r.Setup = append(r.Setup, phaseCost("load task start", "task", e.o.tasks, m3, e.mark(pid)))
+		gen.startPollers(lctx, &lwg)
+	}
 	for range e.o.sse {
 		lwg.Go(func() { gen.sse(lctx) })
 	}
-	if e.o.scenario == "load" {
-		if err := gen.start(lctx, &lwg); err != nil {
-			stopLoad()
-			lwg.Wait()
-			return fail(err)
-		}
-	}
 	s.setPhase("measure")
+	cpuStart := cpuByProcess()
 	r.WindowStart = time.Now()
+	// The base of the window's rates: without it they would start at the sample before, up to an interval earlier
+	// (the load tasks' start included).
+	s.sampleNow(ctx, r.WindowStart)
 	err = sleep(ctx, e.o.duration)
 	r.WindowEnd = time.Now()
+	cpuEnd := cpuByProcess()
 	if err == nil && e.o.cpuProfile > 0 {
 		s.setPhase("profile")
 		if perr := s.saveProfile(ctx, "/debug/pprof/profile?seconds="+strconv.Itoa(int(e.o.cpuProfile.Seconds())),
@@ -452,6 +618,8 @@ func (e *env) scenario(ctx context.Context) (*result, error) {
 	gen.finish(context.WithoutCancel(ctx))
 	stopAll()
 	r.fill(s, gen, readSpawnLog(e.spawns))
+	r.Machine.TopOther = topOther(cpuStart, cpuEnd, s.treePIDs(), r.WindowEnd.Sub(r.WindowStart), 3)
+	r.Machine.OSVersion = osVersion()
 	return r, err
 }
 
@@ -462,7 +630,17 @@ func copyFile(from, to string) {
 	}
 }
 
+func cmpOrString(a, b string) string {
+	if a != "" {
+		return a
+	}
+	return b
+}
+
 func gitCommit(ctx context.Context, root string) string {
+	if root == "" {
+		return ""
+	}
 	cmd := exec.CommandContext(ctx, "git", "rev-parse", "--short=12", "HEAD")
 	cmd.Dir = root
 	out, err := cmd.Output()

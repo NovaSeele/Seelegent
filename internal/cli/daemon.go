@@ -32,7 +32,7 @@ const daemonCloseTimeout = 30 * time.Second
 type daemonFlags struct {
 	port       int
 	devOrigins []string
-	// pprofAddr is the hidden --pprof-addr: a loopback address for net/http/pprof and expvar ("" = off).
+	// pprofAddr is the hidden --pprof-addr: a loopback address for net/http/pprof and /debug/vars ("" = off).
 	pprofAddr string
 }
 
@@ -65,7 +65,7 @@ func newDaemonCommand(info buildinfo.Info) *cobra.Command {
 	cmd.Flags().StringSliceVar(&f.devOrigins, "dev-origin", nil,
 		"development only: also accept this loopback browser origin, e.g. http://localhost:5173 for the Vite dev server")
 	cmd.Flags().StringVar(&f.pprofAddr, "pprof-addr", "",
-		"development only: serve net/http/pprof and expvar on this loopback address, e.g. 127.0.0.1:6060 "+
+		"development only: serve net/http/pprof and /debug/vars on this loopback address, e.g. 127.0.0.1:6060 "+
 			"(profiles can hold secrets)")
 	_ = cmd.Flags().MarkHidden("pprof-addr")
 	return cmd

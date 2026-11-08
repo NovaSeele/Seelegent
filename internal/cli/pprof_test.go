@@ -2,9 +2,11 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"log/slog"
 	"net/http"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -76,8 +78,23 @@ func TestPprofServer(t *testing.T) {
 		!strings.HasPrefix(body, "goroutine profile: total ") {
 		t.Fatalf("goroutine = %d %.80q", code, body)
 	}
-	if code, body := pprofGet(t, base+"/debug/vars", ""); code != http.StatusOK || !strings.Contains(body, `"memstats"`) {
+	if code, body := pprofGet(t, base+"/debug/vars", ""); code != http.StatusOK || !strings.Contains(body, `"memstats"`) ||
+		!strings.Contains(body, `"goroutines"`) {
 		t.Fatalf("/debug/vars = %d %.80q", code, body)
+	}
+	// light=1: the goroutine count and runtime/metrics, without memstats (ReadMemStats stops the world).
+	code, body := pprofGet(t, base+"/debug/vars?light=1", "")
+	var light struct {
+		PID        int               `json:"pid"`
+		Goroutines int               `json:"goroutines"`
+		Runtime    map[string]uint64 `json:"runtime"`
+		Memstats   json.RawMessage   `json:"memstats"`
+	}
+	if code != http.StatusOK || json.Unmarshal([]byte(body), &light) != nil || light.Goroutines < 1 || light.PID != os.Getpid() ||
+		light.Memstats != nil || light.Runtime["heapAllocBytesTotal"] == 0 ||
+		light.Runtime["heapLiveBytes"] == 0 && light.Runtime["gcCycles"] > 0 || light.Runtime["gcCycles"] == 0 &&
+		light.Runtime["heapObjectsBytes"] == 0 {
+		t.Fatalf("/debug/vars?light=1 = %d %.200q", code, body)
 	}
 	_, port, _ := strings.Cut(p.Addr(), ":")
 	if code, _ := pprofGet(t, base+"/debug/pprof/", "localhost:"+port); code != http.StatusOK {
@@ -97,6 +114,24 @@ func TestPprofServer(t *testing.T) {
 	}
 	if err := p.Close(); err != nil {
 		t.Fatalf("second Close = %v", err)
+	}
+}
+
+// The Host check accepts the loopback address the server listens on, not only 127.0.0.1 (M19 review: a server on
+// 127.0.0.2 answered 421 to every request).
+func TestPprofServerOtherLoopback(t *testing.T) {
+	p, err := startPprof(t.Context(), "127.0.0.2:0", slog.New(slog.DiscardHandler))
+	if err != nil {
+		t.Skipf("127.0.0.2 is not usable here: %v", err)
+	}
+	t.Cleanup(func() { _ = p.Close() })
+	if code, _ := pprofGet(t, "http://"+p.Addr()+"/debug/pprof/", ""); code != http.StatusOK {
+		t.Fatalf("own address = %d", code)
+	}
+	_, port, _ := strings.Cut(p.Addr(), ":")
+	code, _ := pprofGet(t, "http://"+p.Addr()+"/debug/pprof/", "127.0.0.3:"+port)
+	if code != http.StatusMisdirectedRequest {
+		t.Fatalf("another loopback address = %d, want 421", code)
 	}
 }
 

@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -68,10 +67,35 @@ type roleSample struct {
 	Threads int    `json:"threads"`
 }
 
-// goStats is what the daemon's expvar and goroutine profile say.
+// machineStat is the machine's memory (bytes).
+type machineStat struct {
+	TotalPhys   uint64 `json:"totalPhys"`
+	AvailPhys   uint64 `json:"availPhys"`
+	CommitLimit uint64 `json:"commitLimit"`
+	CommitAvail uint64 `json:"commitAvail"`
+}
+
+// machineSample is the machine's state at one sample: memory, and the processes and threads of every program.
+type machineSample struct {
+	machineStat
+	Processes int `json:"processes"`
+	Threads   int `json:"threads"`
+}
+
+// jobStat is the Windows job's accounting of the whole tree since the daemon started.
+type jobStat struct {
+	CPU        time.Duration `json:"cpuNs"`
+	Started    int           `json:"started"`
+	Active     int           `json:"active"`
+	PeakCommit uint64        `json:"peakCommit"`
+}
+
+// goStats is what the daemon's /debug/vars says: runtime/metrics on every sample, memstats once a minute.
 type goStats struct {
 	Goroutines int    `json:"goroutines"`
 	HeapAlloc  uint64 `json:"heapAlloc"`
+	// HeapLive is the heap marked live by the last GC: no sawtooth, so its slope shows a leak.
+	HeapLive   uint64 `json:"heapLive"`
 	HeapInuse  uint64 `json:"heapInuse"`
 	HeapSys    uint64 `json:"heapSys"`
 	Sys        uint64 `json:"sys"`
@@ -94,6 +118,8 @@ type sample struct {
 	DBBytes     int64         `json:"dbBytes"`
 	WALBytes    int64         `json:"walBytes"`
 	TreeSize    int           `json:"treeSize"`
+	Machine     machineSample `json:"machine"`
+	Job         *jobStat      `json:"job,omitempty"`
 	SampleError string        `json:"sampleError,omitempty"`
 }
 
@@ -104,6 +130,13 @@ type sampler struct {
 	db        string
 	pprofURL  string
 	client    *http.Client
+	job       *treeJob
+	// memstatsAt is when the last full /debug/vars (memstats) was read; memstatsEvery is how often. varsMu guards
+	// them (the end of a run samples once more while the sampler still runs).
+	varsMu        sync.Mutex
+	memstatsAt    time.Time
+	memstatsEvery time.Duration
+	lastMem       goStats
 
 	mu      sync.Mutex
 	phase   string
@@ -113,10 +146,10 @@ type sampler struct {
 	errs    map[string]int
 }
 
-func newSampler(daemonPID int, selfExe, db, pprofURL string) *sampler {
+func newSampler(daemonPID int, selfExe, db, pprofURL string, job *treeJob) *sampler {
 	return &sampler{daemonPID: daemonPID, selfName: exeBase(selfExe), db: db, pprofURL: pprofURL,
-		client: &http.Client{Timeout: 10 * time.Second}, phase: "setup", procs: map[int]*tracked{},
-		errs: map[string]int{}}
+		client: &http.Client{Timeout: 10 * time.Second}, job: job, memstatsEvery: time.Minute, phase: "setup",
+		procs: map[int]*tracked{}, errs: map[string]int{}}
 }
 
 func exeBase(name string) string {
@@ -222,6 +255,18 @@ func (s *sampler) sampleNow(ctx context.Context, now time.Time) {
 	phase := s.phase
 	smp := sample{At: now, Phase: phase, Roles: map[string]roleSample{}, TreeSize: len(s.procs)}
 	list, _ := listProcs()
+	smp.Machine.Processes = len(list)
+	for _, e := range list {
+		smp.Machine.Threads += e.Threads
+	}
+	if m, err := machineMemory(); err == nil {
+		smp.Machine.machineStat = m
+	}
+	if s.job != nil {
+		if js, err := s.job.stats(); err == nil {
+			smp.Job = &js
+		}
+	}
 	// Under the lock: the handles are closed by scan, which the end of a run may call at the same time.
 	for _, t := range s.procs {
 		var st procStat
@@ -274,33 +319,42 @@ func fileSize(p string) int64 {
 	return st.Size()
 }
 
-// goStats reads /debug/vars (memstats) and the goroutine count from the daemon's pprof server.
+// goStats reads the daemon's /debug/vars: ?light=1 (goroutines and runtime/metrics, no stop-the-world) on every
+// sample, the full answer with memstats (heap sys and in use, GC pauses) once every memstatsEvery. Reading the
+// goroutine profile each time was most of what the idle daemon spent outside its quota rounds (M19 review).
 func (s *sampler) goStats(ctx context.Context) (goStats, error) {
-	var g goStats
-	body, err := s.get(ctx, "/debug/vars")
+	s.varsMu.Lock()
+	defer s.varsMu.Unlock()
+	full := time.Since(s.memstatsAt) >= s.memstatsEvery
+	path := "/debug/vars?light=1"
+	if full {
+		path = "/debug/vars"
+	}
+	body, err := s.get(ctx, path)
 	if err != nil {
-		return g, err
+		return goStats{}, err
 	}
 	var vars struct {
-		Memstats struct {
-			HeapAlloc, HeapInuse, HeapSys, Sys, TotalAlloc, Mallocs, PauseTotalNs uint64
-			NumGC                                                                 uint32
+		Goroutines int `json:"goroutines"`
+		Runtime    struct {
+			HeapObjectsBytes, HeapLiveBytes, HeapAllocBytesTotal, HeapAllocObjectsTotal, GCCycles, TotalBytes uint64
+		} `json:"runtime"`
+		Memstats *struct {
+			HeapInuse, HeapSys, PauseTotalNs uint64
 		} `json:"memstats"`
 	}
 	if err := json.Unmarshal(body, &vars); err != nil {
-		return g, err
+		return goStats{}, err
 	}
-	m := vars.Memstats
-	g = goStats{HeapAlloc: m.HeapAlloc, HeapInuse: m.HeapInuse, HeapSys: m.HeapSys, Sys: m.Sys,
-		TotalAlloc: m.TotalAlloc, Mallocs: m.Mallocs, NumGC: m.NumGC, PauseTotal: m.PauseTotalNs}
-	body, err = s.get(ctx, "/debug/pprof/goroutine?debug=1")
-	if err != nil {
-		return g, err
+	rt := vars.Runtime
+	g := goStats{Goroutines: vars.Goroutines, HeapAlloc: rt.HeapObjectsBytes, HeapLive: rt.HeapLiveBytes,
+		Sys: rt.TotalBytes, TotalAlloc: rt.HeapAllocBytesTotal, Mallocs: rt.HeapAllocObjectsTotal,
+		NumGC: uint32(rt.GCCycles)}
+	if m := vars.Memstats; m != nil {
+		s.memstatsAt = time.Now()
+		s.lastMem = goStats{HeapInuse: m.HeapInuse, HeapSys: m.HeapSys, PauseTotal: m.PauseTotalNs}
 	}
-	line, _, _ := strings.Cut(string(body), "\n")
-	if n, ok := strings.CutPrefix(line, "goroutine profile: total "); ok {
-		g.Goroutines, _ = strconv.Atoi(strings.TrimSpace(n))
-	}
+	g.HeapInuse, g.HeapSys, g.PauseTotal = s.lastMem.HeapInuse, s.lastMem.HeapSys, s.lastMem.PauseTotal
 	return g, nil
 }
 

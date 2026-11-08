@@ -136,3 +136,33 @@ func openProc(pid int) (*procHandle, error) { return &procHandle{pid: pid}, nil 
 func (p *procHandle) stats() (procStat, error) { return procStats(p.pid) }
 
 func (*procHandle) close() {}
+
+// machineMemory reads MemTotal, MemAvailable, CommitLimit and Committed_AS from /proc/meminfo.
+func machineMemory() (machineStat, error) {
+	data, err := os.ReadFile(filepath.Join(procRoot, "meminfo"))
+	if err != nil {
+		return machineStat{}, err
+	}
+	kb := map[string]uint64{}
+	for _, line := range strings.Split(string(data), "\n") {
+		k, v, ok := strings.Cut(line, ":")
+		if fs := strings.Fields(v); ok && len(fs) >= 1 {
+			n, _ := strconv.ParseUint(fs[0], 10, 64)
+			kb[k] = n << 10
+		}
+	}
+	m := machineStat{TotalPhys: kb["MemTotal"], AvailPhys: kb["MemAvailable"], CommitLimit: kb["CommitLimit"]}
+	if c := kb["Committed_AS"]; c < m.CommitLimit {
+		m.CommitAvail = m.CommitLimit - c
+	}
+	return m, nil
+}
+
+// osVersion is the kernel release (a WSL kernel names itself microsoft-standard-WSL2).
+func osVersion() string {
+	data, err := os.ReadFile(filepath.Join(procRoot, "sys", "kernel", "osrelease"))
+	if err != nil {
+		return "Linux"
+	}
+	return "Linux " + strings.TrimSpace(string(data))
+}

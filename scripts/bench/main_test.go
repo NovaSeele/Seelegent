@@ -3,9 +3,11 @@
 package bench
 
 import (
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
+	"net"
 	"os"
 	"slices"
 	"time"
@@ -18,11 +20,15 @@ import (
 // envSpawnLog names the file the fake CLI appends one JSON line to per run (role, pid, own CPU and peak memory).
 const envSpawnLog = "BENCH_SPAWN_LOG"
 
-// TestMain is the whole bench. The binary is started three ways:
+// TestMain is the whole bench. The binary is started four ways:
+//   - by the daemon as gh (a copy named gh on the daemon's PATH): it answers the access check offline;
 //   - by the daemon's quota readers as `agy -p /usage ...` (FAKECLI_QUEUE set): it answers a healthy quota;
 //   - by the daemon's launchers as the worker CLI (FAKECLI_QUEUE set): fakecli replays the next queued script;
 //   - by the developer: it parses the bench flags and runs a scenario.
 func TestMain(m *testing.M) {
+	if exeBase(os.Args[0]) == "gh" {
+		os.Exit(fakeGh(os.Args[1:]))
+	}
 	if os.Getenv(fakecli.EnvQueue) != "" {
 		if slices.Contains(os.Args[1:], "/usage") {
 			os.Exit(fakeUsage())
@@ -54,6 +60,23 @@ func fakeUsage() int {
 	_, _ = fmt.Fprintln(os.Stdout, usageAnswer)
 	logSpawn("quota-reader", start, true)
 	return 0
+}
+
+// fakeGh is the gh CLI of the bench daemon: the daemon never reaches GitHub or the user's gh sign-in. It answers
+// what the access check asks (`gh --version`, `gh api user --jq .login`) and refuses everything else.
+func fakeGh(args []string) int {
+	start := time.Now()
+	defer logSpawn("gh", start, true)
+	switch {
+	case slices.Equal(args, []string{"--version"}):
+		_, _ = fmt.Fprintln(os.Stdout, "gh version 2.99.0 (2026-01-01)\nhttps://github.com/cli/cli/releases/tag/v2.99.0")
+		return 0
+	case len(args) >= 2 && args[0] == "api" && args[1] == "user":
+		_, _ = fmt.Fprintln(os.Stdout, "bench-user")
+		return 0
+	}
+	_, _ = fmt.Fprintf(os.Stderr, "bench gh: %q is not supported offline\n", args)
+	return 1
 }
 
 // spawnRecord is one line of the spawn log.
@@ -98,10 +121,12 @@ type options struct {
 	duration   time.Duration
 	warmup     time.Duration
 	cpuProfile time.Duration
+	setupProf  time.Duration
 	interval   time.Duration
 	out        string
 	baseline   string
 	bin        string
+	commit     string
 	port       int
 	pprofPort  int
 	accounts   int
@@ -115,21 +140,26 @@ type options struct {
 
 func registerFlags(fs *flag.FlagSet) *options {
 	o := &options{}
-	fs.StringVar(&o.scenario, "scenario", "idle", "idle or load")
-	fs.DurationVar(&o.duration, "duration", 0, "measured time (default: idle 10m, load 5m)")
+	fs.StringVar(&o.scenario, "scenario", "idle", "idle, idle-sse (a dashboard tab left open) or load")
+	fs.DurationVar(&o.duration, "duration", 0,
+		"measured time (default: idle 22m, at least two quota cycles of 10 minutes; load 5m)")
 	fs.DurationVar(&o.warmup, "warmup", 30*time.Second, "time after the setup that is not measured")
 	fs.DurationVar(&o.cpuProfile, "cpuprofile", 60*time.Second,
 		"CPU profile taken after the measured time (0 = none); kept out of the CPU numbers")
+	fs.DurationVar(&o.setupProf, "setup-profile", 90*time.Second,
+		"CPU profile from the daemon's start, covering the accounts and the seed tasks (0 = none); the warmup "+
+			"waits for it")
 	fs.DurationVar(&o.interval, "interval", 5*time.Second, "sampling interval")
 	fs.StringVar(&o.out, "out", "", "output folder (default: <temp>/seelegent-bench/<time>)")
 	fs.StringVar(&o.baseline, "baseline", "", "an earlier result.json: print the deltas")
 	fs.StringVar(&o.bin, "bin", "", "seelegent binary to run (default: build ./cmd/seelegent)")
-	fs.IntVar(&o.port, "port", 47891, "daemon port")
-	fs.IntVar(&o.pprofPort, "pprof-port", 47892, "daemon --pprof-addr port on 127.0.0.1")
+	fs.StringVar(&o.commit, "commit", "", "commit recorded in the result (default: git rev-parse HEAD of the module)")
+	fs.IntVar(&o.port, "port", 0, "daemon port (default: a free port picked for this run)")
+	fs.IntVar(&o.pprofPort, "pprof-port", 0, "daemon --pprof-addr port on 127.0.0.1 (default: a free port)")
 	fs.IntVar(&o.accounts, "accounts", 6, "fake agy accounts (quota readers on)")
 	fs.IntVar(&o.tasks, "tasks", 8, "load: tasks running at once")
 	fs.Float64Var(&o.rate, "rate", 100, "load: worker stream lines per second, all tasks together")
-	fs.IntVar(&o.sse, "sse", -1, "SSE clients (default: idle 0, load 3)")
+	fs.IntVar(&o.sse, "sse", -1, "SSE clients (default: idle 0, idle-sse 1, load 3)")
 	fs.DurationVar(&o.poll, "poll", 250*time.Millisecond, "load: interval of the list and the detail requests")
 	fs.IntVar(&o.seedTasks, "seed-tasks", 20, "finished tasks created before the warmup")
 	fs.BoolVar(&o.keepHome, "keep-home", false, "keep the temp data folder")
@@ -138,10 +168,14 @@ func registerFlags(fs *flag.FlagSet) *options {
 
 func (o *options) normalize() error {
 	switch o.scenario {
-	case "idle":
-		o.duration = cmpOr(o.duration, 10*time.Minute)
+	case "idle", "idle-sse":
+		// At least two quota cycles (quotaRefreshMinutes 10, ±10 % jitter) fall inside the window.
+		o.duration = cmpOr(o.duration, 22*time.Minute)
 		if o.sse < 0 {
 			o.sse = 0
+			if o.scenario == "idle-sse" {
+				o.sse = 1
+			}
 		}
 	case "load":
 		o.duration = cmpOr(o.duration, 5*time.Minute)
@@ -149,18 +183,44 @@ func (o *options) normalize() error {
 			o.sse = 3
 		}
 	default:
-		return fmt.Errorf("-scenario %q: want idle or load", o.scenario)
+		return fmt.Errorf("-scenario %q: want idle, idle-sse or load", o.scenario)
 	}
 	if o.port == 47821 || o.pprofPort == 47821 {
-		return fmt.Errorf("port 47821 belongs to the installed daemon; the bench uses its own (default 47891)")
+		return fmt.Errorf("port 47821 belongs to the installed daemon; the bench uses its own (default: a free port)")
 	}
-	if o.port <= 0 || o.pprofPort <= 0 || o.port == o.pprofPort {
+	// A free port per run, so benches that run at the same time never share one (one bench's cleanup once
+	// stopped another bench's daemon on the shared default port).
+	for _, p := range []*int{&o.port, &o.pprofPort} {
+		if *p == 0 {
+			free, err := freePort()
+			if err != nil {
+				return err
+			}
+			*p = free
+		}
+	}
+	if o.port < 0 || o.pprofPort < 0 || o.port == o.pprofPort {
 		return fmt.Errorf("-port and -pprof-port must be two different ports")
 	}
 	if o.interval <= 0 || o.tasks < 1 || o.rate <= 0 || o.accounts < 1 || o.poll <= 0 {
 		return fmt.Errorf("-interval, -tasks, -rate, -accounts and -poll must be positive")
 	}
 	return nil
+}
+
+// freePort asks the system for a free loopback port. Another program can take it before the daemon listens; the
+// daemon then fails to start, and the identity check (env.ours) keeps the bench away from that program.
+func freePort() (int, error) {
+	ln, err := (&net.ListenConfig{}).Listen(context.Background(), "tcp", "127.0.0.1:0")
+	if err != nil {
+		return 0, fmt.Errorf("pick a free port: %w", err)
+	}
+	defer func() { _ = ln.Close() }()
+	addr, ok := ln.Addr().(*net.TCPAddr)
+	if !ok {
+		return 0, fmt.Errorf("pick a free port: unexpected address %v", ln.Addr())
+	}
+	return addr.Port, nil
 }
 
 func cmpOr(d, def time.Duration) time.Duration {
