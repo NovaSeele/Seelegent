@@ -207,7 +207,7 @@ func TestTaskImageStalledClient(t *testing.T) {
 	// stall sends a GET for path, reads the status line and headers, then reads nothing more.
 	stall := func(path string) {
 		t.Helper()
-		c, err := net.Dial("tcp", "127.0.0.1:"+strconv.Itoa(e.port))
+		c, err := (&net.Dialer{}).DialContext(t.Context(), "tcp", "127.0.0.1:"+strconv.Itoa(e.port))
 		if err != nil {
 			t.Fatal(err)
 		}

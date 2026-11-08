@@ -13,12 +13,13 @@ func fileHeld(t *testing.T, path string) (held, known bool) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	fds, err := os.ReadDir("/proc/self/fd")
+	const fdDir = "/proc/self/fd"
+	fds, err := os.ReadDir(fdDir)
 	if err != nil {
 		return false, false
 	}
 	for _, fd := range fds {
-		if target, err := os.Readlink(filepath.Join("/proc/self/fd", fd.Name())); err == nil && target == want {
+		if target, err := os.Readlink(fdDir + "/" + fd.Name()); err == nil && target == want {
 			return true, true
 		}
 	}
