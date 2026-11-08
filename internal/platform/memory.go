@@ -13,25 +13,27 @@ import (
 // 0 then, and a caller must never hold work back on an unknown reading.
 type MemoryStatus struct {
 	// AvailPhysMB is the physical memory available to new processes, in MiB (Windows: ullAvailPhys of
-	// GlobalMemoryStatusEx; Linux: MemAvailable of /proc/meminfo, or less when the cgroup v2 memory limit of the
+	// GlobalMemoryStatusEx; Linux: MemAvailable of /proc/meminfo, or less when the cgroup memory limit of the
 	// daemon leaves less; macOS: best effort).
 	AvailPhysMB int64
 	// AvailCommitMB is the commit still available (RAM plus page file), in MiB: Windows only (ullAvailPageFile of
 	// GlobalMemoryStatusEx); 0 elsewhere, where commit is unknown. A known reading with AvailCommitMB 0 therefore
 	// means "commit unknown", never "no commit left": callers check commit only when it is above 0.
 	AvailCommitMB int64
-	// TotalPhysMB is the machine's physical memory in MiB (Windows: ullTotalPhys; Linux: MemTotal, or the cgroup v2
-	// memory.max of the daemon when lower; macOS: hw.memsize).
+	// TotalPhysMB is the machine's physical memory in MiB (Windows: ullTotalPhys; Linux: MemTotal, or the cgroup
+	// memory limit of the daemon when lower; macOS: hw.memsize).
 	TotalPhysMB int64
 	// TotalCommitMB is the commit limit (RAM plus page file) in MiB: Windows only (ullTotalPageFile); 0 elsewhere.
 	TotalCommitMB int64
 	// Known is true when the reading succeeded.
 	Known bool
+	// CgroupV1 is true when a cgroup v1 memory limit (Linux without cgroup v2 limits) lowered the reading.
+	CgroupV1 bool
 }
 
 // CPUs are the logical CPUs this process may use: runtime.GOMAXPROCS(0), which since Go 1.25 follows the cgroup
 // CPU quota (and the CPU affinity), unless GOMAXPROCS is set in the environment; then runtime.NumCPU lowered to the
-// cgroup v2 cpu.max quota (Linux). At least 1.
+// cgroup CPU quota (Linux: v2 cpu.max, else v1 cpu.cfs_quota_us / cpu.cfs_period_us). At least 1.
 func CPUs() int {
 	if os.Getenv("GOMAXPROCS") == "" {
 		return max(runtime.GOMAXPROCS(0), 1)
@@ -150,24 +152,24 @@ func cgroupFreeMB(maxData, currentData, statData []byte) (int64, bool) {
 	if err1 != nil || err2 != nil {
 		return 0, false
 	}
-	used -= min(used, inactiveFile(statData))
+	inactive, _ := statValue(statData, "inactive_file")
+	used -= min(used, inactive)
 	if used >= maxBytes {
 		return 0, true
 	}
 	return mib(maxBytes - used), true
 }
 
-// inactiveFile reads the inactive_file bytes of a cgroup v2 memory.stat; 0 when it is not there.
-func inactiveFile(stat []byte) uint64 {
+// statValue reads one value of a cgroup memory.stat ("inactive_file 12345"); false when it is not there or does
+// not parse.
+func statValue(stat []byte, key string) (uint64, bool) {
 	for line := range strings.SplitSeq(string(stat), "\n") {
-		if v, ok := strings.CutPrefix(line, "inactive_file "); ok {
-			if n, err := strconv.ParseUint(strings.TrimSpace(v), 10, 64); err == nil {
-				return n
-			}
-			return 0
+		if v, ok := strings.CutPrefix(line, key+" "); ok {
+			n, err := strconv.ParseUint(strings.TrimSpace(v), 10, 64)
+			return n, err == nil
 		}
 	}
-	return 0
+	return 0, false
 }
 
 // fromMemorystatusLevel is macOS's best-effort reading: hw.memsize (bytes of RAM) times kern.memorystatus_level

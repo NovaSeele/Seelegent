@@ -182,10 +182,12 @@ computed from the other one you set (see the last point below).
 | `gateConcurrency` | an eighth of the CPUs or one per 8 GB of memory, whichever is less, from 1 to 4 | 1 | 2 | 3 |
 
 - The machine is read once when the daemon starts and again when the settings change, never per memory reading, so
-  the auto thresholds hold still. Physical memory is the cgroup memory limit when that is lower (containers); the
+  the auto thresholds hold still. Physical memory is the cgroup memory limit when that is lower (containers; cgroup
+  v2, else the v1 `memory.limit_in_bytes`); the
   commit limit is rounded down to a whole GB, so a growing page file does not move them.
 - The CPUs are the ones the daemon may use: `GOMAXPROCS` (which follows the cgroup CPU limit on Linux), or, when
-  `GOMAXPROCS` is set in the daemon's environment, the logical CPUs lowered to the cgroup v2 `cpu.max`.
+  `GOMAXPROCS` is set in the daemon's environment, the logical CPUs lowered to the cgroup v2 `cpu.max` (v1:
+  `cpu.cfs_quota_us` / `cpu.cfs_period_us`).
 - When only one of `minFreeMemoryMB` and `criticalFreeMemoryMB` is set, the other is derived so the floor stays below
   the minimum: an auto floor is half the minimum you set (half the auto minimum when yours is `0`), and an auto
   minimum is twice a floor you set at or above the auto minimum. Such a value has the source `derived`. A floor set
