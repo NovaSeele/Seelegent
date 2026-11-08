@@ -165,7 +165,7 @@ the new values (the "Applies" column). A memory reading the system cannot give n
 
 | Setting | Type | Default | Applies | Meaning |
 | --- | --- | --- | --- | --- |
-| `workerPriority` | `low`, `normal` | `"low"` | next launch | Process priority of worker trees. `low` is `BELOW_NORMAL_PRIORITY_CLASS` for the whole Job Object on Windows (every descendant included) and nice 10 for the process group on Unix; the launcher itself stays at normal priority. |
+| `workerPriority` | `low`, `normal` | `"low"` | next launch | Process priority of worker trees. `low` is `BELOW_NORMAL_PRIORITY_CLASS` for the whole Job Object on Windows (every descendant included; the launcher itself stays at normal priority) and nice 10 on Unix (the launcher lowers its own nice before it starts the worker, so every descendant inherits it). Low priority only shares the CPU: it does not lower memory or disk pressure. |
 | `gatePriority` | `low`, `normal` | `"low"` | next command | Process priority of gate commands, proof regression runs, automation prechecks and event hooks. git, quota reads and `gh` always run at normal priority. Low priority makes gates slower on a busy machine, so they may need a larger `gateTimeoutSec`. |
 | `maxConcurrentWorkers` | integer 0–256 | `0` | now | Worker turns that may run at the same time over all accounts (`maxConcurrentPerAccount` still caps each account); `0` = no cap. |
 | `gateConcurrency` | integer 0–64 | `2` | now | Gate commands and regression runs that may run at the same time; the others wait in order with the gate phase `queued`, and their timeout starts only when their command starts. `0` = unlimited. |
