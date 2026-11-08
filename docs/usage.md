@@ -5,6 +5,7 @@ run. Each section ends with a link to the page that has every detail. New to See
 [Getting started](getting-started.md), then come back here.
 
 - [Install and set up](#install-and-set-up)
+- [What a task goes through](#what-a-task-goes-through)
 - [Add accounts](#add-accounts)
 - [Delegate from the lead](#delegate-from-the-lead)
 - [Watch tasks in the dashboard](#watch-tasks-in-the-dashboard)
@@ -17,7 +18,9 @@ run. Each section ends with a link to the page that has every detail. New to See
 - [Automations](#automations)
 - [Resources](#resources)
 - [Doctor and troubleshooting](#doctor-and-troubleshooting)
+- [Data and privacy](#data-and-privacy)
 - [Update and uninstall](#update-and-uninstall)
+- [Coming from the old version](#coming-from-the-old-version)
 
 ## Install and set up
 
@@ -54,6 +57,49 @@ run. Each section ends with a link to the page that has every detail. New to See
 </p>
 
 More: [installer options](release.md#installing), [what setup writes for each host](setup.md#seelegent-setup).
+
+## What a task goes through
+
+```mermaid
+flowchart LR
+    U([You]) --> L[Lead agent]
+    L -->|MCP: delegate, wait, followup, review| M[seelegent mcp]
+    M -->|HTTP on 127.0.0.1| D[Seelegent daemon]
+    D -->|one run per turn| A[agy]
+    D --> C[claude]
+    D --> X[codex]
+    U -->|browser| B[Dashboard]
+    B --- D
+```
+
+**Accounts.** Three backends (`agy`, `claude`, `codex`) and three kinds of account: an isolated profile with its own
+sign-in, the sign-in already on this computer (`agy` only), or an API key of a provider (`claude` and `codex` only:
+Anthropic, DeepSeek, Moonshot Kimi, Z.ai GLM, OpenRouter, OpenAI, Groq, a local Ollama, or a custom endpoint). The
+pool reads each account's quota windows and prefers higher priority, fewer running tasks and more quota left. Model
+tiers `fast`, `standard`, `strong` and `max` map to real models per backend.
+
+**Tasks.** A task is a conversation: `delegate`, then `followup` as often as needed, then `review` with `accepted`
+or `rejected`. Tasks run in parallel, can wait for each other (`after`), get the project's memory and review history
+in every brief, can run as a worker role (rules, output style, skills, default tier), and can take a Spec Kit feature
+folder and task ids instead of the whole spec. Tasks that stall, loop or ask a question wake the lead early, and tasks
+that need you (a sign-in, no account left) go to the top of the dashboard. You can take a task over in a console
+and hand it back.
+
+**Gates, lanes and proof.** After every worker report the daemon runs the task's gate: the lead's commands, the
+spec's `Gate:` lines or the repository's detected test, lint and build commands, the project doctrine, syntax checks
+and the hygiene check. A red gate goes back to the worker as an automatic fix turn (2 by default) before the lead is
+woken. Lanes list the files a task may change, so parallel workers stay off each other's files. An optional verifier
+reviews a green gate read-only.
+
+**Team, GitHub and automations.** Members are named workers with a backend, a model or tier, a role and a rank
+(`worker`, `senior`, `peer`); a peer's objection in a consult blocks acceptance until the lead answers it. Event
+hooks run your own shell commands on task, account and daemon events. A connected repository's issues become
+tickets; once the work is accepted, Seelegent commits, pushes the ticket branch, opens a draft pull request and
+follows its CI checks. It uses `gh` when it is signed in, else a token you store in the dashboard, else a manual
+mode with a compare link. Automations run on a schedule (hourly, daily, weekdays, weekly or cron, in a time zone)
+with a precheck command and quota rules.
+
+More: [task engine](task-engine.md), [gates](gates.md), [team](team.md).
 
 ## Add accounts
 
@@ -94,6 +140,32 @@ The lead skill tells the lead what to do. The loop uses four MCP tools:
 | `followup` | Send concrete fixes or the next step; the same worker continues its conversation. |
 | `review` | Close the task as `accepted` or `rejected`, with notes that later briefs show to workers. |
 
+All 17 tools the `seelegent` MCP server offers the lead:
+
+| Tool | What it does |
+|---|---|
+| `delegate` | Start a task (or a contest) and wait for the worker's report. |
+| `wait` | Wait for one or more tasks; `any: true` returns at the first. |
+| `followup` | Send the next instruction or fixes on a task. |
+| `review` | Close a task as `accepted` or `rejected`, with notes. |
+| `cancel` | Stop a running or queued task. |
+| `task` | A task's report and its recent worker steps. |
+| `status` | Accounts and quota, active tasks, backends. |
+| `memory` | Per-project notes included in every brief. |
+| `profiles` | Worker roles: rules, output style, skills, default tier. |
+| `proof` | Requirement matrix, regression runs, lane claims, statistics. |
+| `members` | The department members. |
+| `consult` | A second opinion on a finished task from a senior or peer. |
+| `notes` | Review notes on a task's diff, sent as one followup. |
+| `meeting` | A structured meeting of members before a decision. |
+| `contest` | Follow a contest, pick the winner. |
+| `issues` | GitHub issues to tickets, worktrees and draft pull requests. |
+| `automations` | Scheduled delegations. |
+
+`seelegent setup` also installs the lead skill, which teaches the lead this loop; `seelegent skill` prints it. Every
+tool except `profiles` has a `seelegent` command (worker roles are edited on the **Roles** page and through the
+`profiles` tool), and every command takes `--json`.
+
 Pick a tier for the work: `fast` for lookups and mechanical edits, `standard` for most work, `strong` or `max` for
 hard, multi-file changes. Several tasks can run in parallel; give each its own files (a lane) so they do not edit
 the same ones.
@@ -130,7 +202,9 @@ More: [every MCP tool and its arguments](mcp.md), [every command](cli.md), [the 
 - **Take over** opens the worker's conversation in a console on the same account; when you close it, the worker
   writes a hand-back report.
 
-`Ctrl+K` (`Cmd+K` on macOS) opens the command palette and `Ctrl+,` the settings.
+`Ctrl+K` (`Cmd+K` on macOS) opens the command palette and `Ctrl+,` the settings. The dashboard comes in seven
+languages (English, Tiếng Việt, 简体中文, Español, 한국어, 日本語, Русский) and follows your browser's language unless
+you pick one in **Settings › Language**.
 
 <table>
   <tr>
@@ -210,8 +284,15 @@ More: [gates, lanes and proof](gates.md).
   `seelegent restore <id> --turn N [--file path]`. The current content is kept in a backup snapshot first.
 - Post-turn checks also report line-ending and BOM changes, stray files, writes outside the project and files other
   tasks changed too.
+- None of these layers fails a task on its own: they tell the lead and the dashboard what happened.
+- A worker cannot call Seelegent itself (it cannot start, change or review tasks), cannot turn on an automation and
+  cannot store a GitHub token. Only you, in the dashboard, can do the last two.
+- Before a push, Seelegent scans every file it adds, and it pushes one commit of its own, never the worker's commits:
+  `.env` files, keys and certificates, credential files, tokens in file content, Windows device names such as `nul`
+  and files over 5 MB refuse the push, with no override. It never force-pushes, merges or closes issues.
 
-These are guards, not a sandbox: worker CLIs run as your user, so review what they changed.
+These are guards, not a sandbox: worker CLIs run as your user, so review what they changed. To report a security
+problem, see [SECURITY.md](../SECURITY.md).
 
 <p align="center">
   <a href="media/git-guard.mp4"><img src="media/git-guard.webp" width="720"
@@ -300,7 +381,8 @@ More: [resource settings and their formulas](configuration.md#resources),
 ## Doctor and troubleshooting
 
 - `seelegent doctor` checks the data folder, settings, database, daemon, git, each enabled worker CLI, accounts, PATH
-  and free memory, and says how to fix what fails. It changes nothing apart from a write test in the data folder.
+  and free memory against the resource thresholds, and says how to fix what fails. It changes nothing apart from a
+  write test in the data folder (`.doctor-write-test`, removed again).
 - `seelegent status` shows the daemon, the backends, each account's quota and the tasks that need you.
 - `seelegent task <id> --steps 30` prints a task's last worker steps; `--full` the whole task.
 - `seelegent restart` restarts the daemon; running workers keep running and are picked up again. Its log is
@@ -309,17 +391,57 @@ More: [resource settings and their formulas](configuration.md#resources),
 - `seelegent setup --dry-run` shows what is registered with each lead host. Restart a host after setup or update.
 - "Seelegent is not available inside a Seelegent worker." means a worker tried to call Seelegent; that is refused on
   purpose.
+- A task stuck in **Needs you** says why on its banner: answer its question, sign an account in, restore files at
+  risk, or follow up on a red gate.
 
 More: [when something is stuck](getting-started.md#7-when-something-is-stuck), [doctor's checks](cli.md#doctor).
 
+## Data and privacy
+
+- Everything runs on your machine. The daemon listens on `127.0.0.1` only. Seelegent itself sends no telemetry; the
+  worker CLIs follow their own settings.
+- Data lives in `~/.seelegent` (set `SEELEGENT_HOME` to move it): `config.json` (settings), `seelegent.db` (tasks,
+  accounts, usage, team, tickets, automations), `profiles/` (one isolated profile per account, with its API key),
+  `github/` (the token), `snapshots/`, `contests/` (stored contest diffs), `worktrees/` (only for contests and
+  tickets), `run/` and `logs/`.
+- Seelegent never asks for passwords. Each worker CLI signs in with its own flow and keeps its tokens in the account's
+  profile. API keys and the GitHub token are each stored in their own file, encrypted with DPAPI on Windows and as
+  owner-only (0600) plain text elsewhere; the dashboard shows only their last four characters, and logs mask secrets.
+- What leaves the machine: the worker CLIs talk to their own providers (that is the work), quota is read through the
+  CLIs (and, for Claude sign-ins, from Anthropic's usage endpoint with that account's own sign-in), API-key accounts
+  call the provider you configured, and GitHub is called only for repositories you connect (syncing, a poll of
+  their issues and pull requests every 10 minutes, which `githubPollMinutes: 0` turns off, and the pushes, pull
+  requests and comments you or the lead ask for), to check your GitHub sign-in when you open **Issues**, and by the
+  installers and `seelegent update`.
+
+More: [the data folder and every setting](configuration.md).
+
 ## Update and uninstall
 
-- `seelegent update` tells you whether a newer release exists; `seelegent update --apply` installs it in place
-  (checked against the release's `checksums.txt`, daemon restarted, lead hosts refreshed);
-  `seelegent update --rollback` goes back to the version the last update replaced.
-- To uninstall: `seelegent stop`, then `seelegent setup --remove`; delete the binary and the `.previous` copy next to
-  it (`%LOCALAPPDATA%\Programs\seelegent\bin\` on Windows, `~/.local/bin/seelegent*` elsewhere) and remove that
-  folder from your PATH. Optionally delete `~/.seelegent`, which holds your account profiles, keys, tasks and
-  history.
+`seelegent update` tells you whether a newer release exists; `seelegent update --apply` installs it in place (checked
+against the release's `checksums.txt`, daemon restarted, lead hosts refreshed) and `seelegent update --rollback` goes
+back to the version the last update replaced. The database is never migrated backwards, so a release older than your
+data is refused.
 
-More: [updating](release.md#updating), [the README's uninstall steps](../README.md#update-and-uninstall).
+To uninstall:
+
+1. `seelegent stop`, then `seelegent setup --remove` (removes the MCP entries, the lead skill and the hook).
+2. Delete the binary and the kept `seelegent.exe.previous` (`seelegent.previous`) next to it:
+   `%LOCALAPPDATA%\Programs\seelegent\bin\` on Windows, `~/.local/bin/seelegent*` elsewhere. Remove that folder from
+   your PATH (the user `Path` on Windows, the `export PATH=...` line the installer added to your shell profile
+   elsewhere).
+3. Optionally delete `~/.seelegent`. It holds your account profiles (and their sign-ins), keys, tasks and history.
+
+More: [updating](release.md#updating).
+
+## Coming from the old version
+
+The old Node version kept its data in the same folder. On the first install the installer runs `seelegent migrate`,
+which imports settings, providers, accounts with their profiles and API keys, project memory and review history,
+roles, members, hooks, meeting records and automations (every automation off, to confirm again). Tasks, review
+notes, contests, proof records, usage history and the GitHub folder are not imported: connect your repositories and
+store the token again. The old folder is never changed. On Windows, if the old launcher is in the install folder, it
+is kept as `seelegent-node`. Stop the old daemon before you install, and run `seelegent migrate --dry-run` to see
+what would be imported.
+
+More: [seelegent migrate](setup.md#seelegent-migrate).
