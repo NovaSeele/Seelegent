@@ -217,8 +217,9 @@ func Worker(in Input) string {
 func PlanRule(shell bool) string {
 	if shell {
 		return "This turn runs in a read-only sandbox: shell commands that only read (`rg -n`, `Get-Content` or " +
-			"`cat`, `Select-String`, `git log`, `git diff`, `git status`, tests that write nothing) work, and every " +
-			"write to a file is refused. Read files with shell commands, and always end with a text answer."
+			"`cat`, `Select-String`, `git log`, `git diff`, `git status`) work, and every write to a file is " +
+			"refused. Most test runners write caches (GOCACHE, .pytest_cache, node_modules/.cache) and fail here: " +
+			"that says nothing about the code. Read files with shell commands, and always end with a text answer."
 	}
 	return "Shell commands are refused in this mode, so read files with the file tools, and always end with a text " +
 		"answer."

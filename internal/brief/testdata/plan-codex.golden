@@ -27,7 +27,7 @@ Rules:
 
 Working directory: D:\proj
 
-This turn runs in a read-only sandbox: shell commands that only read (`rg -n`, `Get-Content` or `cat`, `Select-String`, `git log`, `git diff`, `git status`, tests that write nothing) work, and every write to a file is refused. Read files with shell commands, and always end with a text answer.
+This turn runs in a read-only sandbox: shell commands that only read (`rg -n`, `Get-Content` or `cat`, `Select-String`, `git log`, `git diff`, `git status`) work, and every write to a file is refused. Most test runners write caches (GOCACHE, .pytest_cache, node_modules/.cache) and fail here: that says nothing about the code. Read files with shell commands, and always end with a text answer.
 
 ## Task
 Explain the pool.
