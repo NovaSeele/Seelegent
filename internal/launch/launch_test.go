@@ -73,7 +73,7 @@ func selfExe() string {
 // runWorker runs the fake worker steps: print:<text>, partial:<text>, stderr:<text>, sleep:<ms>, env:<NAME>,
 // stdin, pid:<file>, spawn:<file> (a grandchild that writes its pid to file and sleeps), escape:<file> (the same,
 // daemonised: setsid + double fork on Unix, detached on Windows), escapeshort:<file> (a daemonised grandchild
-// that exits after 300 ms), exit:<code>.
+// that exits after 300 ms), alloc:<mb> (allocate and touch mb MiB), exit:<code>.
 func runWorker(steps []string) int {
 	for _, s := range steps {
 		op, arg, _ := strings.Cut(s, ":")
@@ -122,6 +122,13 @@ func runWorker(steps []string) int {
 				return 3
 			}
 			return 0 // without waiting: the grandchild is orphaned
+		case "alloc":
+			mb, _ := strconv.Atoi(arg)
+			b := make([]byte, mb<<20)
+			for i := 0; i < len(b); i += 4096 {
+				b[i] = 1
+			}
+			runtime.KeepAlive(b)
 		case "exit":
 			code, _ := strconv.Atoi(arg)
 			return code
@@ -769,5 +776,78 @@ func TestSpecTreeTravelsInLaunchJSON(t *testing.T) {
 	}
 	if strings.Contains(string(data), `"tree"`) {
 		t.Fatalf("a zero tree must be left out of launch.json:\n%s", data)
+	}
+}
+
+// TestWorkerTreePriority: Spec.Tree.Priority low runs the worker and its grandchild at low priority (Windows: the
+// job's BELOW_NORMAL class; Unix: nice 10 from the launcher); the zero value leaves them at the caller's.
+func TestWorkerTreePriority(t *testing.T) {
+	atNormalPriority(t)
+	self := priorityOf(t, os.Getpid())
+	if isLow(self) {
+		t.Skip("the test already runs at low priority")
+	}
+	for _, tc := range []struct {
+		name string
+		tree platform.TreeOptions
+		low  bool
+	}{
+		{"low", platform.TreeOptions{Priority: platform.PriorityLow}, true},
+		{"zero", platform.TreeOptions{}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := filepath.Join(t.TempDir(), "a1")
+			workerPid, childPid := filepath.Join(dir, "worker.pid"), filepath.Join(dir, "child.pid")
+			opts := testOptions(dir, "spawn:"+childPid, "pid:"+workerPid, "sleep:60000")
+			opts.Spec.Tree = tc.tree
+			h, err := Start(context.Background(), opts)
+			if err != nil {
+				t.Fatalf("Start: %v", err)
+			}
+			r, _ := h.Ready()
+			pids := []int{readPid(t, workerPid), readPid(t, childPid)}
+			for _, p := range pids {
+				got := priorityOf(t, p)
+				if tc.low && !isLow(got) || !tc.low && got != self {
+					t.Errorf("process %d: priority %#x (this test %#x), low wanted: %v", p, got, self, tc.low)
+				}
+			}
+			if runtime.GOOS == "windows" {
+				if got := priorityOf(t, r.LauncherPID); got != self {
+					t.Errorf("launcher: priority %#x, want %#x", got, self)
+				}
+			}
+			if err := h.Cancel(); err != nil {
+				t.Fatal(err)
+			}
+			if ex := wait(t, h); ex.Reason != ReasonCanceled || ex.MemoryLimitHit {
+				t.Fatalf("exit %+v", ex)
+			}
+			waitDead(t, append(pids, r.LauncherPID)...)
+		})
+	}
+}
+
+// TestWorkerMemoryLimit: a worker that needs more than Spec.Tree.MemoryLimitMB fails and the exit record says the
+// limit was hit (Windows only: Unix has no tree memory cap); one under the cap does not.
+func TestWorkerMemoryLimit(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("no tree memory cap on " + runtime.GOOS)
+	}
+	run := func(mb string, limit int) Exit {
+		t.Helper()
+		opts := testOptions(filepath.Join(t.TempDir(), "a1"), "alloc:"+mb, "print:done")
+		opts.Spec.Tree = platform.TreeOptions{MemoryLimitMB: limit}
+		h, err := Start(context.Background(), opts)
+		if err != nil {
+			t.Fatalf("Start: %v", err)
+		}
+		return wait(t, h)
+	}
+	if ex := run("200", 64); ex.Reason != ReasonExited || ex.Code == 0 || !ex.MemoryLimitHit {
+		t.Fatalf("200 MB under a 64 MB cap: %+v", ex)
+	}
+	if ex := run("8", 256); ex.Reason != ReasonExited || ex.Code != 0 || ex.MemoryLimitHit {
+		t.Fatalf("8 MB under a 256 MB cap: %+v", ex)
 	}
 }
