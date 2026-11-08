@@ -149,6 +149,9 @@ func newTestDaemon(t *testing.T) *testDaemon {
 	}
 	d := &testDaemon{queue: fakecli.NewQueue(t), paths: paths, cwd: cwd}
 	set := config.Defaults()
+	// The memory holds are tested in package task; here they would only make the tests depend on the machine's
+	// free memory (below 2 GB every task waits).
+	set.MinFreeMemoryMB, set.MinFreeCommitMB, set.CriticalFreeMemoryMB = 0, 0, 0
 	a, err := app.New(t.Context(), app.Options{Paths: paths, Settings: &set, Env: d.queue.Env(os.Environ()),
 		RealHome: filepath.Join(home, "realhome"), Launcher: fakecli.Launcher(t), NoQuotaReaders: true, NoGh: true,
 		Bins: map[string]string{config.BackendAgy: fakecli.Exe(t), config.BackendClaude: "", config.BackendCodex: ""}})
