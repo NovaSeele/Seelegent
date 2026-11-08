@@ -121,21 +121,80 @@ func (r *Repos) history(ctx context.Context, root, cwdRel string, tf TaskFiles, 
 	if total == 0 {
 		return nil
 	}
-	// Every commit of the range, for the files the task's commits changed; the list shows the newest ones. A log
-	// past maxLogBytes keeps what it read: files of older commits then count as not the task's.
-	args := append([]string{"log", "-z", "--no-renames", "--name-only", "--no-color",
-		"--format=%x1e%H%x1f%an%x1f%at%x1f%ct%x1f%s"}, rng...)
-	logOut, _, err := r.run(ctx, root, ReadTimeout, maxLogBytes, append(args, "--")...)
+	// The list: the newest commits only, each with its file count (git diffs at most MaxTaskCommits trees).
+	args := append([]string{"log", "-z", "--no-renames", "--name-only", "--no-color", logFormat,
+		"-n", strconv.Itoa(api.MaxTaskCommits)}, rng...)
+	logOut, _, err := r.run(ctx, root, ReadTimeout, 4<<20, append(args, "--")...)
 	if err != nil {
 		return err
 	}
-	commits, names := parseLog(logOut, tf.Turns)
-	if len(commits) > api.MaxTaskCommits {
-		commits = commits[:api.MaxTaskCommits]
-	}
+	commits, _ := parseLog(logOut, tf.Turns)
 	out.Commits = commits
 	out.CommitsMore = max(0, total-len(commits))
+	names, err := r.turnNames(ctx, root, rng, tf.Turns)
+	if err != nil {
+		return err
+	}
 	return r.committedFiles(ctx, root, cwdRel, tf.Start.Head, st.oid, touched, names, out)
+}
+
+// logFormat is the commit header parseLog reads.
+const logFormat = "--format=%x1e%H%x1f%an%x1f%at%x1f%ct%x1f%s"
+
+// turnCommits returns the commits of the range made during one of the task's turns (by committer time), newest
+// first. Listing them diffs no tree; the walk stops before the first turn's start (--max-age) and skips commits
+// after the last turn's end (--min-age), so its cost follows the task's span, not the range's length.
+func (r *Repos) turnCommits(ctx context.Context, root string, rng []string, turns []TurnSpan) ([]string, error) {
+	if len(turns) == 0 {
+		return nil, nil
+	}
+	first, last, open := turns[0].Start, turns[0].End, false
+	for _, s := range turns {
+		if s.Start.Before(first) {
+			first = s.Start
+		}
+		if s.End.IsZero() {
+			open = true
+		} else if s.End.After(last) {
+			last = s.End
+		}
+	}
+	args := []string{"rev-list", "--timestamp", "--max-age=" + strconv.FormatInt(first.Unix(), 10)}
+	if !open {
+		args = append(args, "--min-age="+strconv.FormatInt(last.Unix()+1, 10))
+	}
+	out, _, err := r.run(ctx, root, ReadTimeout, maxLogBytes, append(append(args, rng...), "--")...)
+	if err != nil {
+		return nil, err
+	}
+	var shas []string
+	for _, line := range strings.Split(string(out), "\n") {
+		ts, sha, ok := strings.Cut(strings.TrimSpace(line), " ")
+		if !ok || !fullSHARe.MatchString(sha) {
+			continue
+		}
+		ct, _ := strconv.ParseInt(ts, 10, 64)
+		if turnAt(turns, time.Unix(ct, 0)) > 0 {
+			shas = append(shas, sha)
+		}
+	}
+	return shas, nil
+}
+
+// turnNames reads the files the commits made during the task's turns changed, with the newest turn of each: git
+// diffs the trees of those commits only (`log --no-walk --stdin`). A log past maxLogBytes keeps what it read.
+func (r *Repos) turnNames(ctx context.Context, root string, rng []string, turns []TurnSpan) (map[string]int, error) {
+	shas, err := r.turnCommits(ctx, root, rng, turns)
+	if err != nil || len(shas) == 0 {
+		return map[string]int{}, err
+	}
+	out, _, err := r.runIn(ctx, root, nil, []byte(strings.Join(shas, "\n")+"\n"), ReadTimeout, maxLogBytes,
+		"log", "--no-walk=unsorted", "--stdin", "-z", "--no-renames", "--name-only", "--no-color", logFormat, "--")
+	if err != nil {
+		return nil, err
+	}
+	_, names := parseLog(out, turns)
+	return names, nil
 }
 
 // startReachable reports whether start ("" for a repository that had no commit) is an ancestor of HEAD. hasHead

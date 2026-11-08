@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -291,6 +292,83 @@ func TestTaskGitOtherCommits(t *testing.T) {
 	c, err := r.TaskCommit(ctx, tf, g.Commits[1].SHA)
 	if err != nil || !c.OutsideTurns || c.Turn != 0 || len(c.Files) != 1 || c.Files[0].Path != "other.go" {
 		t.Fatalf("someone else's commit: %+v, %v", c, err)
+	}
+}
+
+// TestTaskGitLongRange (review performance note): an old task on a busy repository, HEAD hundreds of commits past
+// the start, most of them someone else's after the task's turn. The list still shows the 50 newest and counts the
+// rest, the task's own commits (the oldest of the range) still give their files, and git diffs the trees of the
+// task's commits only: the turn walk names exactly those, not the whole range.
+func TestTaskGitLongRange(t *testing.T) {
+	dir := newRepo(t)
+	start := head(t, dir)
+	now := time.Now()
+	turn := TurnSpan{N: 1, Start: now.Add(-2 * time.Hour), End: now.Add(-time.Hour)}
+	const own, others = 5, 300
+	var stream strings.Builder
+	data := func(s string) { fmt.Fprintf(&stream, "data %d\n%s\n", len(s), s) }
+	for i := range own + others {
+		at := turn.Start.Add(10*time.Minute + time.Duration(i)*time.Second)
+		path, who := fmt.Sprintf("web/t%d.ts", i), "Task"
+		if i >= own {
+			at, path, who = now.Add(-50*time.Minute+time.Duration(i)*time.Second), "noise.txt", "Other"
+		}
+		fmt.Fprintf(&stream, "commit refs/heads/main\ncommitter %s <x@example.invalid> %d +0000\n", who, at.Unix())
+		data(fmt.Sprintf("commit %d", i))
+		if i == 0 {
+			fmt.Fprintf(&stream, "from %s\n", start)
+		}
+		fmt.Fprintf(&stream, "M 100644 inline %s\n", path)
+		data(fmt.Sprintf("v%d\n", i))
+	}
+	cmd := exec.CommandContext(t.Context(), gitExe(t), "fast-import", "--quiet")
+	cmd.Dir, cmd.Stdin = dir, strings.NewReader(stream.String())
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("fast-import: %v\n%s", err, out)
+	}
+	git(t, dir, "reset", "-q", "--hard")
+
+	r := New(nil, nil)
+	tf := TaskFiles{Cwd: dir, Start: &TaskStart{Head: start, Branch: "main"}, Turns: []TurnSpan{turn}}
+	g, err := r.TaskGit(t.Context(), tf)
+	if err != nil || g.HistoryState != "" {
+		t.Fatal(g.HistoryState, err)
+	}
+	if len(g.Commits) != api.MaxTaskCommits || g.CommitsMore != own+others-api.MaxTaskCommits {
+		t.Fatalf("listed %d, more %d", len(g.Commits), g.CommitsMore)
+	}
+	for _, c := range g.Commits {
+		if !c.OutsideTurns || c.Turn != 0 || c.FileCount != 1 {
+			t.Fatalf("listed %+v", c)
+		}
+	}
+	var files []string
+	for _, f := range g.CommittedFiles {
+		files = append(files, fmt.Sprintf("%s:%d", f.Path, f.Turn))
+	}
+	if got := strings.Join(files, ","); got != "web/t0.ts:1,web/t1.ts:1,web/t2.ts:1,web/t3.ts:1,web/t4.ts:1" {
+		t.Fatalf("committed files: %s", got)
+	}
+	// The commits whose trees are diffed for the files: the task's five, none of the 300 others.
+	shas, err := r.turnCommits(t.Context(), dir, []string{start + "..HEAD"}, tf.Turns)
+	if err != nil || len(shas) != own {
+		t.Fatalf("turn commits: %d, %v", len(shas), err)
+	}
+	for _, sha := range shas {
+		var n int
+		subject := strings.TrimSpace(git(t, dir, "log", "-1", "--format=%s", sha))
+		if _, err := fmt.Sscanf(subject, "commit %d", &n); err != nil || n >= own {
+			t.Fatalf("turn commit %s is %q", sha, subject)
+		}
+	}
+	// A turn still running takes every commit since its start.
+	running := []TurnSpan{{N: 1, Start: turn.Start}}
+	if shas, err := r.turnCommits(t.Context(), dir, []string{start + "..HEAD"}, running); err != nil ||
+		len(shas) != own+others {
+		t.Fatalf("running turn: %d, %v", len(shas), err)
+	}
+	if shas, err := r.turnCommits(t.Context(), dir, []string{start + "..HEAD"}, nil); err != nil || shas != nil {
+		t.Fatalf("no turns: %v, %v", shas, err)
 	}
 }
 
