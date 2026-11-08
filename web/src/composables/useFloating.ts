@@ -6,6 +6,9 @@ export type Placement = Side | `${Side}-${Exclude<Align, 'center'>}`
 
 const VIEWPORT_MARGIN = 8
 
+/** Why a floating element has no place: its anchor left the document, or has no box. */
+export type LostReason = 'detached' | 'unsized'
+
 interface Rect {
   top: number
   left: number
@@ -79,13 +82,19 @@ const UNPLACED = { position: 'fixed', top: '0px', left: '0px', visibility: 'hidd
  * and resize. Until it has coordinates for this opening the style keeps it `visibility: hidden`, so it never
  * flashes at the viewport's top-left corner or at a stale place. An anchor out of the document or not laid out
  * (a 0×0 box: its row re-rendered, its list switched layout) gives no coordinates: the element stays hidden and
- * `onLost` lets the owner close it (a tooltip does; a menu keeps its state and shows again once placed).
+ * `onLost` tells the owner why: 'detached' (the anchor left the document for good: a popover or menu closes) or
+ * 'unsized' (0×0, it may come back: a tooltip closes, a popover stays hidden until it can be placed). A new anchor
+ * element (its owner re-rendered) is placed at once.
  */
 export function useFloating(
   anchor: Ref<HTMLElement | null>,
   floating: Ref<HTMLElement | null>,
   open: Ref<boolean>,
-  options: { placement?: Ref<Placement> | Placement; offset?: number; onLost?: () => void } = {},
+  options: {
+    placement?: Ref<Placement> | Placement
+    offset?: number
+    onLost?: (reason: LostReason) => void
+  } = {},
 ) {
   const style = ref<Record<string, string>>({ ...UNPLACED })
   const side = ref<Side>('bottom')
@@ -98,7 +107,7 @@ export function useFloating(
     const rect = a.getBoundingClientRect()
     if (!a.isConnected || (rect.width === 0 && rect.height === 0)) {
       style.value = { ...style.value, visibility: 'hidden' }
-      options.onLost?.()
+      options.onLost?.(a.isConnected ? 'unsized' : 'detached')
       return
     }
     const placement =
@@ -146,6 +155,11 @@ export function useFloating(
     },
     { immediate: true },
   )
+
+  // The owner re-rendered its anchor (a new element): place next to the new one.
+  watch(anchor, () => {
+    if (open.value) update()
+  })
 
   onBeforeUnmount(stop)
 
