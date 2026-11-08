@@ -404,6 +404,34 @@ func (s *sampler) liveAfterGC(ctx context.Context, file string) (uint64, error) 
 	return vars.Runtime.HeapLiveBytes, nil
 }
 
+// memStatsSys are the runtime.MemStats fields of the Sys breakdown.
+type memStatsSys struct {
+	Sys, HeapSys, HeapInuse, HeapReleased, StackSys, MSpanSys, MCacheSys, GCSys, BuckHashSys, OtherSys uint64
+}
+
+// memStats reads the full /debug/vars (runtime.ReadMemStats, a short stop-the-world) and returns the Sys fields and
+// the memstats object as the daemon wrote it.
+func (s *sampler) memStats(ctx context.Context) (memStatsSys, json.RawMessage, error) {
+	body, err := s.get(ctx, "/debug/vars")
+	if err != nil {
+		return memStatsSys{}, nil, err
+	}
+	var vars struct {
+		Memstats json.RawMessage `json:"memstats"`
+	}
+	if err := json.Unmarshal(body, &vars); err != nil {
+		return memStatsSys{}, nil, err
+	}
+	if len(vars.Memstats) == 0 || string(vars.Memstats) == "null" {
+		return memStatsSys{}, nil, errors.New("/debug/vars has no memstats")
+	}
+	var m memStatsSys
+	if err := json.Unmarshal(vars.Memstats, &m); err != nil {
+		return memStatsSys{}, nil, err
+	}
+	return m, vars.Memstats, nil
+}
+
 // saveProfile writes a pprof endpoint's answer to a file of dir.
 func (s *sampler) saveProfile(ctx context.Context, path, file string, timeout time.Duration) error {
 	c := &http.Client{Timeout: timeout}

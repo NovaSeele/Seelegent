@@ -126,8 +126,10 @@ lists are not empty, and then:
   left running all day. The result splits the idle CPU into the floor (between quota cycles), the CPU per quota
   cycle and the window's average, and lists the start of every quota read and gh run.
 - `-scenario idle-sse`: the same with one SSE client connected, a dashboard tab left open.
-- `-scenario load` (`-duration 5m`): 8 tasks whose fake workers stream `-rate 100` lines a second together, 3 SSE
-  clients, and a list and a detail request every 250 ms (p50/p95/p99 recorded).
+- `-scenario load` (`-duration 5m`): 8 tasks (`-tasks`) whose fake workers stream `-rate 100` lines a second
+  together, 3 SSE clients, and a list and a detail request every 250 ms (p50/p95/p99 recorded). The bench daemon's
+  config has no cap over all accounts and enough turns per account for every task to run at once: the default 2,
+  or more when `-tasks` does not fit (`-tasks 16` on the 6 accounts gets 3 per account).
 
 Every 5 s it samples the daemon's whole process tree (daemon, launchers, workers, quota readers, git and their
 consoles): working set, private bytes, CPU seconds and handles per role (Windows: toolhelp snapshot and process
@@ -165,12 +167,18 @@ bin/seelegent-bench -scenario load -baseline <dir>/result.json   # prints the de
 
 Results go to `-out` (default `<temp>/seelegent-bench/<time>-<scenario>`, outside the repository): `result.json`,
 `result.md` (the tables), `setup-cpu.pprof`, `cpu.pprof`, `allocs-start.pprof`, `allocs-end.pprof`, `heap.pprof`, `goroutine.txt` and
-the daemon's log (the load scenario adds `heap-before-load.pprof` and `heap-after-load.pprof`). Compare allocation profiles with `go tool pprof -top -sample_index=alloc_space -base
+the daemon's log (the load scenario adds `heap-before-load.pprof` and `heap-after-load.pprof`), and
+`memstats-end.json`: the daemon's full `runtime.MemStats` (`/debug/vars` without `light=1`) read at the end of every
+scenario, in the load scenario after the retained-heap reading. The result's "Go sys breakdown (end)" shows where
+Go's `Sys` goes: `HeapSys` (with `HeapInuse` and `HeapReleased`, the part returned to the OS) and what lies outside
+the heap, `StackSys` (goroutine stacks), `MSpanSys`, `MCacheSys`, `GCSys` (GC metadata), `BuckHashSys` (profiling)
+and `OtherSys`. Compare allocation profiles with `go tool pprof -top -sample_index=alloc_space -base
 allocs-start.pprof allocs-end.pprof`. The budget is judged on private bytes (commit), not the working set, which
-jumps with what the OS keeps resident: under 0.1% of one core and under 100 MB private when idle; growth under
-load not linear in the events; a private-bytes slope under 10 MB/h and a live-heap slope under 5 MB/h over the
-second half of the window, so a leak shows once the start-up growth is over. It is printed and flagged, never a
-failure.
+jumps with what the OS keeps resident: under 0.1% of one core and under 100 MB private when idle; under load a
+peak under 80 MB plus 2.5 MB per task running at once (100 MB for the default 8 tasks), since each running attempt
+holds its own state; growth under load not linear in the events; a private-bytes slope under 10 MB/h and a
+live-heap slope under 5 MB/h over the second half of the window, so a leak shows once the start-up growth is over.
+It is printed and flagged, never a failure.
 
 Under load the two slopes are shown as information only: the 8 tasks run through the whole window, and what each
 running attempt holds (the parser's state, the launcher's output buffers) grows with the events it has seen, so a

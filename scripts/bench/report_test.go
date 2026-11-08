@@ -157,6 +157,29 @@ type retainedHeap struct {
 	Error string `json:"error,omitempty"`
 }
 
+// goSysBreakdown is where Go's Sys goes at the end of the run (runtime.MemStats, MB): the heap, and what lies outside
+// it (goroutine stacks, span structures, per-P caches, GC metadata, profiling buckets, the rest). The *Sys fields
+// add up to Sys; HeapReleased is the part of HeapSys returned to the OS.
+type goSysBreakdown struct {
+	SysMB          float64 `json:"sysMB"`
+	HeapSysMB      float64 `json:"heapSysMB"`
+	HeapInuseMB    float64 `json:"heapInuseMB"`
+	HeapReleasedMB float64 `json:"heapReleasedMB"`
+	StackSysMB     float64 `json:"stackSysMB"`
+	MSpanSysMB     float64 `json:"mSpanSysMB"`
+	MCacheSysMB    float64 `json:"mCacheSysMB"`
+	GCSysMB        float64 `json:"gcSysMB"`
+	BuckHashSysMB  float64 `json:"buckHashSysMB"`
+	OtherSysMB     float64 `json:"otherSysMB"`
+}
+
+func breakdown(m memStatsSys) *goSysBreakdown {
+	f := func(b uint64) float64 { return round(mb(b), 2) }
+	return &goSysBreakdown{SysMB: f(m.Sys), HeapSysMB: f(m.HeapSys), HeapInuseMB: f(m.HeapInuse),
+		HeapReleasedMB: f(m.HeapReleased), StackSysMB: f(m.StackSys), MSpanSysMB: f(m.MSpanSys),
+		MCacheSysMB: f(m.MCacheSys), GCSysMB: f(m.GCSys), BuckHashSysMB: f(m.BuckHashSys), OtherSysMB: f(m.OtherSys)}
+}
+
 // measured reports whether both ends were read.
 func (x *retainedHeap) measured() bool { return x != nil && x.Error == "" }
 
@@ -197,6 +220,7 @@ type result struct {
 	DB          dbSummary         `json:"db"`
 	Load        *loadSummary      `json:"load,omitempty"`
 	Retained    *retainedHeap     `json:"retainedHeap,omitempty"`
+	GoSysEnd    *goSysBreakdown   `json:"goSysEnd,omitempty"`
 	Budget      []budgetCheck     `json:"budget"`
 	Errors      map[string]int    `json:"sampleErrors,omitempty"`
 	Processes   []*tracked        `json:"processes"`
@@ -498,6 +522,14 @@ func (r *result) fill(s *sampler, g *loadGen, spawns []spawnRecord) {
 	r.Budget = r.budget()
 }
 
+// The load scenario's peak private budget grows with the tasks that run at once: loadPrivateBase MB plus
+// loadPrivatePerTask MB per task (8 tasks: 100 MB). Each running attempt holds its own state (parser, launcher
+// buffers, task bus). To be tuned from a 16-task run.
+const (
+	loadPrivateBase    = 80.0
+	loadPrivatePerTask = 2.5
+)
+
 // budget is the plan's budget (m19-resources.md §7); a violation is flagged, never a failure.
 func (r *result) budget() []budgetCheck {
 	var out []budgetCheck
@@ -524,7 +556,12 @@ func (r *result) budget() []budgetCheck {
 		add("idle daemon CPU % of one core (window average)", 0.1, r.Daemon.CPUPercent)
 		add("idle daemon peak private MB", 100, r.Daemon.PeakPrivMB)
 	} else {
-		add("load daemon peak private MB", 100, r.Daemon.PeakPrivMB)
+		tasks := 0
+		if r.Load != nil {
+			tasks = r.Load.Tasks
+		}
+		add(fmt.Sprintf("load daemon peak private MB (%g + %g × %d tasks)", loadPrivateBase, loadPrivatePerTask, tasks),
+			loadPrivateBase+loadPrivatePerTask*float64(tasks), r.Daemon.PeakPrivMB)
 		if r.Load != nil && r.Load.EventsStored > 0 {
 			// Not linear in the events: growth per 10k events must stay small.
 			add("load daemon private growth MB per 10k events", 5, r.Load.PrivPer10kEvts)
@@ -610,6 +647,15 @@ func writeMarkdown(w io.Writer, r *result) {
 			p(" Note: %s.", x.Note)
 		}
 		p("\n\n")
+	}
+	if g := r.GoSysEnd; g != nil {
+		p("## Go sys breakdown (end)\n\n| Sys | HeapSys | HeapInuse | HeapReleased | StackSys | MSpanSys | MCacheSys | " +
+			"GCSys | BuckHashSys | OtherSys |\n|---|---|---|---|---|---|---|---|---|---|\n")
+		p("| %.2f | %.2f | %.2f | %.2f | %.2f | %.2f | %.2f | %.2f | %.2f | %.2f |\n\n", g.SysMB, g.HeapSysMB,
+			g.HeapInuseMB, g.HeapReleasedMB, g.StackSysMB, g.MSpanSysMB, g.MCacheSysMB, g.GCSysMB, g.BuckHashSysMB,
+			g.OtherSysMB)
+		p("MB, from runtime.MemStats at the end of the run (memstats-end.json; in the load scenario after the retained-" +
+			"heap reading). The *Sys columns add up to Sys; HeapReleased is the part of HeapSys returned to the OS.\n\n")
 	}
 	p("## Process tree by role\n\n| role | peak n | WS mean / peak MB | private mean / peak MB | CPU s | %% core | " +
 		"handles | threads | spawns (window) | spawns/h | seen (run) | max proc peak WS MB |\n" +
@@ -705,6 +751,10 @@ func (r *result) metrics() []metric {
 	for _, x := range r.Setup {
 		m = append(m, metric{x.Name + " daemon CPU s per " + x.Unit, x.DaemonCPUPerUnit},
 			metric{x.Name + " tree CPU s per " + x.Unit, x.TreeCPUPerUnit})
+	}
+	if g := r.GoSysEnd; g != nil {
+		m = append(m, metric{"Go StackSys end MB", g.StackSysMB}, metric{"Go GCSys end MB", g.GCSysMB},
+			metric{"Go OtherSys end MB", g.OtherSysMB})
 	}
 	if x := r.Retained; x.measured() {
 		m = append(m, metric{"live heap before load MB", x.StartMB}, metric{"live heap after load MB", x.EndMB},

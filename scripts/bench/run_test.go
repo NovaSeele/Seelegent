@@ -89,9 +89,11 @@ func run(o *options) error {
 		}
 	}
 	// The bench measures the daemon's own cost: the memory thresholds are off, so a busy machine cannot hold the
-	// bench's tasks (missing keys keep their defaults).
-	off := []byte(`{"minFreeMemoryMB": 0, "minFreeCommitMB": 0, "criticalFreeMemoryMB": 0}` + "\n")
-	if err := os.WriteFile(filepath.Join(e.home, "config.json"), off, 0o600); err != nil {
+	// bench's tasks, and the slots fit every load task at once: no cap over all accounts, and enough turns per
+	// account for -tasks (missing keys keep their defaults).
+	cfg := fmt.Sprintf(`{"minFreeMemoryMB": 0, "minFreeCommitMB": 0, "criticalFreeMemoryMB": 0, `+
+		`"maxConcurrentWorkers": 0, "maxConcurrentPerAccount": %d}`+"\n", o.perAccount())
+	if err := os.WriteFile(filepath.Join(e.home, "config.json"), []byte(cfg), 0o600); err != nil {
 		return err
 	}
 	if err := e.build(ctx); err != nil {
@@ -627,6 +629,7 @@ func (e *env) scenario(ctx context.Context) (*result, error) {
 	case r.Retained != nil:
 		r.Retained.Error = "the run was cut short: " + err.Error()
 	}
+	r.GoSysEnd = e.goSysEnd(context.WithoutCancel(ctx), s)
 	stopAll()
 	r.fill(s, gen, readSpawnLog(e.spawns))
 	r.Machine.TopOther = topOther(cpuStart, cpuEnd, s.treePIDs(), r.WindowEnd.Sub(r.WindowStart), 3)
@@ -669,6 +672,26 @@ func (e *env) retainedEnd(ctx context.Context, s *sampler, rh *retainedHeap, not
 	}
 	rh.EndMB = round(mb(live), 2)
 	rh.DeltaMB = round(rh.EndMB-rh.StartMB, 2)
+}
+
+// goSysEnd reads the daemon's full runtime.MemStats (/debug/vars without light=1) at the end of the run, after the
+// load's retained-heap reading, saves it as memstats-end.json and returns the breakdown of Go's Sys; nil when it
+// cannot be read.
+func (e *env) goSysEnd(ctx context.Context, s *sampler) *goSysBreakdown {
+	m, raw, err := s.memStats(ctx)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "bench: memstats at the end:", err)
+		s.noteErr("memstats end: " + err.Error())
+		return nil
+	}
+	var b bytes.Buffer
+	if json.Indent(&b, raw, "", "  ") == nil {
+		raw = b.Bytes()
+	}
+	if err := os.WriteFile(filepath.Join(e.out, "memstats-end.json"), raw, 0o600); err != nil {
+		fmt.Fprintln(os.Stderr, "bench: memstats-end.json:", err)
+	}
+	return breakdown(m)
 }
 
 func copyFile(from, to string) {
