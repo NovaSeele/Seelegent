@@ -1,9 +1,9 @@
 /**
  * What an account means at a glance: one display state (from the pool's status plus its runtime: signing in,
- * out of quota, resting, busy) with its tone, and its tightest quota window. Views read these instead of
- * re-deriving them from Account fields.
+ * out of quota, resting, busy) with its tone. Views read these instead of re-deriving them from Account fields.
+ * Which quota window to show is quotaSummary's job (features/accounts/quotaSummary.ts).
  */
-import type { Account, QuotaWindow } from '@/api/types'
+import type { Account } from '@/api/types'
 import type { Tone } from '@/components/ui/tone'
 
 export type AccountState =
@@ -55,24 +55,4 @@ export function accountState(account: Account, now = Date.now()): AccountState {
   if (account.resting) return 'resting'
   // ok and error (last read failed, old numbers) are both usable.
   return account.busy > 0 ? 'busy' : 'ready'
-}
-
-export interface TightWindow extends QuotaWindow {
-  group: string
-}
-
-/** The window with the least left across every group; undefined when the quota was never read. */
-export function tightestWindow(account: Account): TightWindow | undefined {
-  let best: TightWindow | undefined
-  for (const group of account.quota.groups) {
-    for (const window of group.windows) {
-      if (!best || window.remaining < best.remaining) best = { ...window, group: group.name }
-    }
-  }
-  return best
-}
-
-/** "gemini-pro · 5h" style name of a window. */
-export function windowName(window: TightWindow): string {
-  return `${window.group} · ${window.label || window.window}`
 }

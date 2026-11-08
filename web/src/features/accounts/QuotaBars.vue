@@ -13,7 +13,8 @@ import { quotaSummary, windowMinutes, type SummaryWindow } from './quotaSummary'
 
 /**
  * A list row's quota at a glance: up to two thin bars of the group the pool routes this backend's work on (see
- * quotaSummary.ts), each with what is left, its reset time in a tooltip, and "+N" for the windows not shown. When
+ * quotaSummary.ts), each with what is left, its reset time in a tooltip, and "+N" for the windows not shown. A bar
+ * from another group than the row's own names that group in its label ("Claude Opus · Weekly"). When
  * no group matches the tier models, one bar shows the lowest window of all in a neutral colour (it may belong to
  * models the workers never use, so it never turns amber or red) and its tooltip says so.
  */
@@ -60,7 +61,7 @@ const bars = computed(() => {
     const left = t('common.ui.quotaLeft', { value: fmt.value.percent(item.window.remaining) })
     return {
       key: `${item.group}/${item.window.window}`,
-      name: routing ? span : `${item.group} · ${span}`,
+      name: item.named ? `${item.group} · ${span}` : span,
       left,
       tip: reset ? `${where} · ${reset}` : where,
       tone: tone(item.window.remaining, routing),
