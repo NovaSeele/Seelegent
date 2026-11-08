@@ -104,12 +104,13 @@ func (s *Service) resumeAttempt(r *run, t *Task, tu *Turn, a *Attempt) (bool, er
 	// exists but cannot be read fails closed: the attempt's output is also masked by key patterns, and the recovery
 	// event says so.
 	var m attemptMask
+	var code api.RecoveryNoticeCode
 	var notice string
 	secrets, err := loadMask(s.attemptDir(t.ID, tu.N, a.N))
 	if err != nil {
 		s.log.Warn("task: read the mask list", "task", t.ID, "err", err)
 		m.patterns = true
-		notice = maskNotice
+		code, notice = api.RecoveryNoticeMaskUnreadable, maskNotice
 	}
 	if acc, err := s.o.Accounts.Get(ctx, a.AccountID); err == nil {
 		if env, err := s.o.Accounts.Env(ctx, acc, b, account.EnvOptions{Base: []string{}, Model: a.Model}); err == nil {
@@ -124,7 +125,8 @@ func (s *Service) resumeAttempt(r *run, t *Task, tu *Turn, a *Attempt) (bool, er
 		typ = api.EventReattach
 	}
 	if err := s.appendEvents(ctx, t.ID, []NewEvent{{Type: typ, Turn: tu.N, Attempt: a.N,
-		Data: api.RecoveryData{AccountID: a.AccountID, Offset: a.StreamOffset, Notice: notice}}}, nil); err != nil {
+		Data: api.RecoveryData{AccountID: a.AccountID, Offset: a.StreamOffset, NoticeCode: code,
+			Notice: notice}}}, nil); err != nil {
 		return false, err
 	}
 	r.setHandle(h, a.AccountID, a.StartedAt)

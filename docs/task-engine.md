@@ -194,7 +194,8 @@ exits with an error within 3 s is reported at once as no terminal.
   unmasks it. A worker whose mask list cannot be written is not started. A mask list that exists but cannot be
   read fails closed: that attempt's output is also masked by the key patterns of the log redaction (`sk-…`,
   `AIza…`, GitHub and Slack tokens, bearer credentials, `token=…` and the like, and email addresses), and the
-  `reattach` or `resumed` event carries a `notice` saying so.
+  `reattach` or `resumed` event carries `noticeCode: "mask_unreadable"` saying so (the dashboard words the code;
+  `notice` holds the same in English for logs and API clients).
 - An attempt whose worker never started is closed as interrupted; the turn goes on with a new attempt and the full
   brief.
 - A cancel the earlier daemon recorded is carried out; takeover consoles are watched again; dependents are

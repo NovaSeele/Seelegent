@@ -189,14 +189,24 @@ function fold(f: Fold, event: TaskEvent): Draft | null {
       )
     case 'reattach':
     case 'resumed':
-      // A notice (the mask list could not be read, so the output is masked by key patterns) makes it a warning.
-      return notice(
-        event.data.notice ? 'warn' : 'dim',
-        'refresh',
-        `terminal.ev.${event.type}`,
-        {},
-        { detail: event.data.notice },
-      )
+      // A notice code (mask_unreadable: the output is also masked by key patterns) makes it a warning, worded from
+      // the catalog; the daemon's English `notice` is never shown (bugs.md F14).
+      return event.data.noticeCode
+        ? notice(
+            'warn',
+            'refresh',
+            `terminal.ev.${event.type}`,
+            {},
+            {
+              note: REASON.test(event.data.noticeCode)
+                ? {
+                    key: `terminal.ev.recoveryNotice.${event.data.noticeCode}`,
+                    fallback: 'terminal.ev.recoveryNotice.unknown',
+                  }
+                : { key: 'terminal.ev.recoveryNotice.unknown' },
+            },
+          )
+        : notice('dim', 'refresh', `terminal.ev.${event.type}`)
     case 'attention':
       return foldAttention(f, event, base)
     case 'deps':

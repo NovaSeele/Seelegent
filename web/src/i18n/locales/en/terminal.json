@@ -73,6 +73,10 @@
     "handoff": "Moved from {from} to {to}",
     "reattach": "Reconnected to the running worker",
     "resumed": "Resumed after the daemon restarted",
+    "recoveryNotice": {
+      "mask_unreadable": "This attempt's saved mask list could not be read, so its output is also masked by key patterns.",
+      "unknown": "The daemon reported something about this recovery that this dashboard does not know."
+    },
     "attentionCleared": "No longer waiting",
     "attention": {
       "blocked": "The worker is blocked",

@@ -33,24 +33,40 @@ describe('terminal timeline', () => {
     })
   })
 
-  it('shows a recovery notice as a warning with its detail', () => {
+  it('words a recovery notice from its code, never from the daemon English', () => {
     seq = 0
+    const english = 'the mask list could not be read'
     const items = buildTimeline([
       ev('reattach', { accountId: 'a1' }),
-      ev('resumed', { accountId: 'a1', notice: 'masked by key patterns' }),
+      ev('resumed', { accountId: 'a1', noticeCode: 'mask_unreadable', notice: english }),
+      ev('reattach', { accountId: 'a1', noticeCode: 'from_a_newer_daemon', notice: english }),
+      ev('reattach', { accountId: 'a1', noticeCode: 'Not a code', notice: english }),
     ])
-    expect(items).toHaveLength(2)
+    expect(items).toHaveLength(4)
     expect(items[0]).toMatchObject({
       kind: 'notice',
       tone: 'dim',
       message: { key: 'terminal.ev.reattach' },
     })
+    expect(items[0]).not.toHaveProperty('note')
     expect(items[1]).toMatchObject({
       kind: 'notice',
       tone: 'warn',
       message: { key: 'terminal.ev.resumed' },
-      detail: 'masked by key patterns',
+      note: {
+        key: 'terminal.ev.recoveryNotice.mask_unreadable',
+        fallback: 'terminal.ev.recoveryNotice.unknown',
+      },
     })
+    expect(items[2]).toMatchObject({
+      tone: 'warn',
+      note: { key: 'terminal.ev.recoveryNotice.from_a_newer_daemon' },
+    })
+    expect(items[3]).toMatchObject({
+      tone: 'warn',
+      note: { key: 'terminal.ev.recoveryNotice.unknown' },
+    })
+    expect(JSON.stringify(items)).not.toContain(english)
   })
 
   it('pairs a tool call with its result and the file it touched', () => {

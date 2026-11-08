@@ -154,10 +154,21 @@ const HandoffBackend = "backend"
 type RecoveryData struct {
 	AccountID string `json:"accountId"`
 	Offset    int64  `json:"offset,omitempty"`
-	// Notice says what the lead should know about the recovery, such as an attempt whose mask list could not be
-	// read, so its output is masked by key patterns.
-	Notice string `json:"notice,omitempty"`
+	// NoticeCode says what the lead should know about the recovery (RecoveryNotice*); the dashboard words it.
+	// Notice is the same in English, the raw text behind the code (logs, API clients).
+	NoticeCode RecoveryNoticeCode `json:"noticeCode,omitempty"`
+	Notice     string             `json:"notice,omitempty"`
 }
+
+// RecoveryNoticeCode says what the lead should know about a recovery.
+type RecoveryNoticeCode string
+
+// RecoveryNoticeCode values.
+const (
+	// RecoveryNoticeMaskUnreadable: the attempt's mask list could not be read, so its output is also masked by key
+	// patterns.
+	RecoveryNoticeMaskUnreadable RecoveryNoticeCode = "mask_unreadable"
+)
 
 // AttentionData is the data of an attention event that clears the flag ({state: "cleared"}); a raised flag is an
 // Attention.

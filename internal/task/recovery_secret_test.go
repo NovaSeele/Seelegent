@@ -101,8 +101,9 @@ func restartMasksKey(t *testing.T, damaged bool) {
 	for _, e := range eventsOf(h.events(sum.ID), api.EventReattach) {
 		decode(t, e, &rec)
 	}
-	if (rec.Notice != "") != damaged {
-		t.Errorf("reattach notice = %q", rec.Notice)
+	if wantCode := map[bool]api.RecoveryNoticeCode{true: api.RecoveryNoticeMaskUnreadable}[damaged]; rec.NoticeCode != wantCode ||
+		(rec.Notice != "") != damaged {
+		t.Errorf("reattach notice = %q (%q)", rec.NoticeCode, rec.Notice)
 	}
 	if err := os.WriteFile(release, nil, 0o600); err != nil {
 		t.Fatal(err)

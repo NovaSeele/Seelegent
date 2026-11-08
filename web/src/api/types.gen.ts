@@ -536,11 +536,15 @@ export interface ReattachData {
   accountId: string
   offset?: number
   /**
-   * Notice says what the lead should know about the recovery, such as an attempt whose mask list could not be
-   * read, so its output is masked by key patterns.
+   * NoticeCode says what the lead should know about the recovery (RecoveryNotice*); the dashboard words it.
+   * Notice is the same in English, the raw text behind the code (logs, API clients).
    */
+  noticeCode?: RecoveryNoticeCode
   notice?: string
 }
+
+/** RecoveryNoticeCode says what the lead should know about a recovery. */
+export type RecoveryNoticeCode = 'mask_unreadable'
 
 /**
  * AttentionData is the data of an attention event that clears the flag ({state: "cleared"}); a raised flag is an

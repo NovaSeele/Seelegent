@@ -73,6 +73,10 @@
     "handoff": "Pasó de {from} a {to}",
     "reattach": "Reconectado al worker en curso",
     "resumed": "Reanudado tras reiniciar el daemon",
+    "recoveryNotice": {
+      "mask_unreadable": "No se pudo leer la lista de máscaras guardada de este intento, así que su salida también se enmascara por patrones de claves.",
+      "unknown": "El daemon informó algo sobre esta recuperación que este panel no conoce."
+    },
     "attentionCleared": "Ya no espera",
     "attention": {
       "blocked": "El worker está bloqueado",

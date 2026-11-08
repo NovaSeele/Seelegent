@@ -46,6 +46,26 @@ describe('TimelineEntry notices', () => {
     expect(note.find('.te__notice--dim').exists()).toBe(true)
   })
 
+  it('words a recovery notice from its code, never with the daemon English', async () => {
+    const english = 'the mask list could not be read'
+    const items = buildTimeline([
+      makeEvent(
+        't1',
+        1,
+        { accountId: 'a1', noticeCode: 'mask_unreadable', notice: english },
+        'reattach',
+      ),
+      makeEvent('t1', 2, { accountId: 'a1', noticeCode: 'brand_new', notice: english }, 'resumed'),
+    ])
+    const known = await render(items[0] as TimelineItem)
+    expect(known.text()).toContain('Reconnected to the running worker')
+    expect(known.text()).toContain('also masked by key patterns')
+    expect(known.find('.te__notice--warn').exists()).toBe(true)
+    const unknown = await render(items[1] as TimelineItem)
+    expect(unknown.text()).toContain('this dashboard does not know')
+    for (const w of [known, unknown]) expect(w.text()).not.toContain(english)
+  })
+
   it('names the steps of a gate in the reader language, with their commands', async () => {
     const items = buildTimeline([
       makeEvent(
