@@ -2469,7 +2469,7 @@ export interface Attention {
 /**
  * AttentionParams are the values an attention flag's text is made of. Only the fields of the reason are set:
  * stalled (Kind, Minutes, Tool, Command), looping (Kind, Count, Tool, Steps), no_accounts and auth (Backend),
- * deps_blocked (Kind, Task, Title), no_response (Denied), hygiene and work_at_risk (Count).
+ * deps_blocked (Kind, Task, Title), no_response (Denied), hygiene and work_at_risk (Count), question (Options).
  */
 export interface AttentionParams {
   kind?:
@@ -2502,6 +2502,11 @@ export interface AttentionParams {
   title?: string
   /** Denied are the actions the worker was refused before it ended without a report. */
   denied?: string[]
+  /**
+   * Options are the choices a worker's question lists (its "## Blocked" options), which the question card offers;
+   * the question itself is the flag's detail.
+   */
+  options?: string[]
 }
 
 /** Review is the lead's verdict on a task. */

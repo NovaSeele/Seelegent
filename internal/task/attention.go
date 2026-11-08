@@ -222,12 +222,13 @@ func computeAttention(t *Task, live liveState, acc accountHealth, now time.Time,
 			return att(api.AttentionBlocked, ReasonNoResponse, WhoLead, detail, params)
 		}
 		if q := parseBlocked(tu.Response); q != nil {
-			// The options follow as a numbered list, which the dashboard's question card offers as choices.
-			detail := q.Text
-			for i, o := range q.Options {
-				detail += fmt.Sprintf("\n%d. %s", i+1, o)
+			// The detail is the question alone (the CLI prints it on one line); the options go in the params, which
+			// the dashboard's question card offers as choices.
+			var params *api.AttentionParams
+			if len(q.Options) > 0 {
+				params = &api.AttentionParams{Options: slices.Clone(q.Options)}
 			}
-			return att(api.AttentionQuestion, ReasonQuestion, WhoLead, detail)
+			return att(api.AttentionQuestion, ReasonQuestion, WhoLead, q.Text, params)
 		}
 		if g := tu.Gate; g != nil && (g.State == api.GateRed || g.State == api.GateError) && !hygieneOnly(g) {
 			return att(api.AttentionBlocked, ReasonGateRed, WhoLead, gateDetail(g))
@@ -471,7 +472,7 @@ func sameParams(a, b *api.AttentionParams) bool {
 	}
 	return a.Kind == b.Kind && a.Minutes == b.Minutes && a.Count == b.Count && a.Steps == b.Steps &&
 		a.Tool == b.Tool && a.Command == b.Command && a.Backend == b.Backend && a.Task == b.Task &&
-		a.Title == b.Title && slices.Equal(a.Denied, b.Denied) &&
+		a.Title == b.Title && slices.Equal(a.Denied, b.Denied) && slices.Equal(a.Options, b.Options) &&
 		(a.ExitCode == nil) == (b.ExitCode == nil) && (a.ExitCode == nil || *a.ExitCode == *b.ExitCode)
 }
 

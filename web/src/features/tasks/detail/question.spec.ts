@@ -20,6 +20,15 @@ describe('worker question', () => {
     expect(parsed.text).toBe('2. not a choice\n3. skipped')
   })
 
+  it('takes the choices from the params when the daemon gives them', () => {
+    const parsed = parseQuestion('Which database?', ['SQLite', 'Postgres'])
+    expect(parsed.text).toBe('Which database?')
+    expect(parsed.options).toEqual([
+      { n: 1, label: 'SQLite' },
+      { n: 2, label: 'Postgres' },
+    ])
+  })
+
   it('handles a missing detail', () => {
     expect(parseQuestion(undefined)).toEqual({ text: '', options: [] })
   })
