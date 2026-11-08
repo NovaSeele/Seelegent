@@ -152,7 +152,8 @@
       "restored": "Đã khôi phục",
       "restoredTitle": "Đã khôi phục công việc",
       "restoredDesc": "Các tệp đã được lấy lại từ bản chụp trước lượt {n}.",
-      "restoredDescMany": "Các tệp đã được lấy lại từ bản chụp trước mỗi lượt."
+      "restoredDescMany": "Các tệp đã được lấy lại từ bản chụp trước mỗi lượt.",
+      "truncated": "Lượt {n}: bản chụp đã chạm giới hạn ({files} tệp hoặc {mib} MiB nội dung mới), nên các tệp vượt quá giới hạn chưa được kiểm tra."
     },
     "overlaps": {
       "title": "Cũng bị tác vụ khác thay đổi",

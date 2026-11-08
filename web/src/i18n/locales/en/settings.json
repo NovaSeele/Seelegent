@@ -246,7 +246,7 @@
     },
     "loopRepeat": {
       "label": "Loop detection",
-      "desc": "The same step repeated this many times counts as a loop.",
+      "desc": "The same step repeated this many times counts as a loop. Effective up to 12: the check looks at the last 12 tool calls.",
       "keywords": "loop repeat stuck"
     },
     "attentionDecay": {

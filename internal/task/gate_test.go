@@ -491,11 +491,12 @@ func TestGateEnvTurnFiles(t *testing.T) {
 		}
 		return n, value
 	}
-	if n, v := count(h.s.gateEnv(&Task{ID: "t1"}, []string{"a.go", "b.go"})); n != 1 || v != "a.go\nb.go" {
+	if n, v := count(h.s.gateEnv(t.Context(), &Task{ID: "t1"}, h.cwd, []string{"a.go", "b.go"})); n != 1 ||
+		v != "a.go\nb.go" {
 		t.Errorf("turn files = %d %q", n, v)
 	}
 	long := []string{strings.Repeat("x", turnFilesEnvMax+1)}
-	if n, _ := count(h.s.gateEnv(&Task{ID: "t1"}, long)); n != 0 {
+	if n, _ := count(h.s.gateEnv(t.Context(), &Task{ID: "t1"}, h.cwd, long)); n != 0 {
 		t.Errorf("a list too long kept %d values: the inherited one must go too", n)
 	}
 }

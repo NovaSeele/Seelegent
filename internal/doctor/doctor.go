@@ -1,5 +1,6 @@
 // Package doctor checks a Seelegent installation for `seelegent doctor`: the data directory, the settings, the
-// database, the daemon, the embedded dashboard, git, the enabled backend CLIs, the accounts (counts only) and PATH.
+// database, the daemon, the embedded dashboard, git, the enabled backend CLIs, the accounts (counts only), PATH and,
+// when rustup is installed, whether the first cargo on PATH is rustup's proxy.
 // It reads only: it never starts the daemon, never migrates the database and never prints an e-mail address or key.
 package doctor
 
@@ -10,8 +11,10 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
+	"github.com/NovaSeele/Seelegent/internal/account"
 	"github.com/NovaSeele/Seelegent/internal/api"
 	"github.com/NovaSeele/Seelegent/internal/backend"
 	"github.com/NovaSeele/Seelegent/internal/client"
@@ -63,17 +66,23 @@ type Options struct {
 	// Env is the environment (os.Environ) and RealHome the user's home folder, to find the CLIs.
 	Env      []string
 	RealHome string
-	// GitPath finds git (gitx.Binary.Path).
-	GitPath func() (string, error)
+	// GitPath finds git (gitx.Binary.Path). GitWrapper is the batch file (git.cmd, git.bat) that comes first on
+	// PATH, which Seelegent never runs ("" when the first git on PATH is no batch file; gitx.FirstWrapper).
+	GitPath    func() (string, error)
+	GitWrapper string
 }
 
 // Run runs every check in a fixed order.
 func Run(ctx context.Context, o Options) []Check {
 	out := []Check{dataDir(o.Paths, o.Daemon.LockHeld()), settings(o), database(ctx, o.Paths)}
 	d, c := daemon(ctx, o)
-	out = append(out, d, portFile(o), dashboard(o.Web), git(o.GitPath))
+	out = append(out, d, portFile(o), dashboard(o.Web), git(o.GitPath, o.GitWrapper))
 	out = append(out, backends(o)...)
-	return append(out, accounts(ctx, o, c), pathEntries(o.Env))
+	out = append(out, accounts(ctx, o, c), pathEntries(o.Env))
+	if c, ok := cargo(o.Env, o.RealHome, runtime.GOOS); ok {
+		out = append(out, c)
+	}
+	return out
 }
 
 // Failed reports whether any check failed.
@@ -214,11 +223,20 @@ func dashboard(web fs.FS) Check {
 		Fix: "build with web/dist (make build, or scripts/build.ps1)"}
 }
 
-func git(path func() (string, error)) Check {
+// git names the git Seelegent runs. A batch wrapper first on PATH (ServBay's or a package manager's git.cmd) is a
+// warning: Seelegent skips it, but cmd.exe rewrites the arguments of everything else that runs it (^ is dropped,
+// %VAR% expanded), such as the user's hooks and gate commands.
+func git(path func() (string, error), wrapper string) Check {
 	p, err := path()
 	if err != nil {
 		return Check{Name: "git", Status: Fail, Message: fmt.Sprintf("git not found: %v", err),
-			Fix: "install git and make sure it is on PATH"}
+			Fix: "install Git for Windows (git.exe) or put the folder of a real git executable on PATH"}
+	}
+	if wrapper != "" && !strings.EqualFold(filepath.Clean(wrapper), filepath.Clean(p)) {
+		return Check{Name: "git", Status: Warn, Message: fmt.Sprintf("git %s; the first git on PATH is the batch "+
+			"wrapper %s, which Seelegent never runs, but your own hooks, gate commands and terminals do, and cmd.exe "+
+			"rewrites their arguments (HEAD^ loses its ^)", p, wrapper),
+			Fix: fmt.Sprintf("put %s before %s on PATH", filepath.Dir(p), filepath.Dir(wrapper))}
 	}
 	return Check{Name: "git", Status: OK, Message: "git " + p}
 }
@@ -246,6 +264,32 @@ func backends(o Options) []Check {
 		out = append(out, c)
 	}
 	return out
+}
+
+// cargo checks that the first cargo on PATH is rustup's proxy. ok is false when rustup is not installed (no check).
+func cargo(env []string, realHome, goos string) (c Check, ok bool) {
+	state, rustup, cargo := account.CargoOnPath(env, realHome)
+	userBin := "~/.cargo/bin"
+	if goos == "windows" {
+		userBin = `%USERPROFILE%\.cargo\bin`
+	}
+	c = Check{Name: "cargo"}
+	switch state {
+	case account.CargoNoRustup:
+		return c, false
+	case account.CargoMissing:
+		c.Status, c.Message = Warn, fmt.Sprintf("rustup is installed (%s) but no cargo is on PATH", rustup)
+		c.Fix = "add " + userBin + " to PATH"
+	case account.CargoProxy:
+		c.Status, c.Message = OK, fmt.Sprintf("cargo on PATH is the rustup proxy (%s)", cargo)
+	case account.CargoPlain:
+		c.Status = Warn
+		c.Message = fmt.Sprintf("the first cargo on PATH is %s, not the rustup proxy in %s. A plain cargo lets a "+
+			"dependency's own rust-toolchain.toml switch compilers mid-build (error E0514). Seelegent pins "+
+			"RUSTUP_TOOLCHAIN for workers and gates; your own shells are not covered", cargo, filepath.Dir(rustup))
+		c.Fix = fmt.Sprintf("put %s before %s in PATH", userBin, filepath.Dir(cargo))
+	}
+	return c, true
 }
 
 func envFor(name string) string {

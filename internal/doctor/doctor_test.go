@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -31,11 +32,58 @@ func TestSmallChecks(t *testing.T) {
 	if c := dashboard(nil); c.Status != Warn {
 		t.Errorf("no dashboard = %+v", c)
 	}
-	if c := git(func() (string, error) { return "", errors.New("not found") }); c.Status != Fail {
+	if c := git(func() (string, error) { return "", errors.New("not found") }, ""); c.Status != Fail {
 		t.Errorf("no git = %+v", c)
+	}
+	// A batch wrapper first on PATH: Seelegent uses the real git, and doctor names both and warns.
+	exe := filepath.Join(abs, "Git", "cmd", "git.exe")
+	wrapper := filepath.Join(abs, "ServBay", "bin", "git.cmd")
+	found := func() (string, error) { return exe, nil }
+	if c := git(found, ""); c.Status != OK || c.Message != "git "+exe {
+		t.Errorf("plain git = %+v", c)
+	}
+	if c := git(found, wrapper); c.Status != Warn || !strings.Contains(c.Message, "git "+exe+";") ||
+		!strings.Contains(c.Message, wrapper) || !strings.Contains(c.Fix, filepath.Dir(exe)) {
+		t.Errorf("git behind a wrapper = %+v", c)
 	}
 	if !Failed([]Check{{Status: OK}, {Status: Fail}}) || Failed([]Check{{Status: Warn}}) {
 		t.Error("Failed")
+	}
+}
+
+func TestCargoCheck(t *testing.T) {
+	exe := func(dir, name string) {
+		if runtime.GOOS == "windows" {
+			name += ".exe"
+		}
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("#!/bin/sh\n"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	sep := string(filepath.ListSeparator)
+	proxy, plain := t.TempDir(), t.TempDir()
+	exe(proxy, "rustup")
+	exe(proxy, "cargo")
+	exe(plain, "cargo")
+	noHome := "CARGO_HOME=" + t.TempDir()
+
+	if c, ok := cargo([]string{"PATH=" + plain, noHome}, "", runtime.GOOS); ok {
+		t.Errorf("no rustup gave a check: %+v", c)
+	}
+	if c, ok := cargo([]string{"PATH=" + proxy + sep + plain}, "", "linux"); !ok || c.Status != OK ||
+		!strings.Contains(c.Message, "rustup proxy") {
+		t.Errorf("proxy first = %+v", c)
+	}
+	c, ok := cargo([]string{"PATH=" + plain + sep + proxy}, "", "windows")
+	if !ok || c.Status != Warn || !strings.Contains(c.Message, "E0514") ||
+		!strings.Contains(c.Fix, `%USERPROFILE%\.cargo\bin`) || !strings.Contains(c.Fix, plain) {
+		t.Errorf("plain first = %+v", c)
+	}
+	onlyRustup := t.TempDir()
+	exe(onlyRustup, "rustup")
+	if c, ok := cargo([]string{"PATH=" + onlyRustup}, "", "linux"); !ok || c.Status != Warn ||
+		!strings.Contains(c.Fix, "~/.cargo/bin") {
+		t.Errorf("no cargo = %+v", c)
 	}
 }
 

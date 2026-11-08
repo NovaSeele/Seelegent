@@ -19,6 +19,11 @@ export interface Formatters {
   dateTime(value: DateInput): string
   /** "3 minutes ago", "in 2 hours", "now"; picks the largest unit that fits. */
   relative(value: DateInput, now?: number): string
+  /**
+   * A moment that is always past (a task's creation, a flag's start): relative, but `justNow` for one at or after
+   * `now`. A page's clock ticks in steps, so a fresh moment can be ahead of it and must not read "in 11 seconds".
+   */
+  ago(value: DateInput, now: number | undefined, justNow: string): string
   /** 3_725_000 ms -> "1h 2m" (narrow units, at most two). */
   duration(ms: number): string
 }
@@ -80,6 +85,9 @@ export function createFormatters(locale: string): Formatters {
         }
       }
       return rtf.format(0, 'second')
+    },
+    ago(value, now = Date.now(), justNow) {
+      return toTime(value) >= now ? justNow : formatters.relative(value, now)
     },
     duration(ms) {
       const total = Math.max(0, Math.round(ms / 1000))

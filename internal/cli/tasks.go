@@ -96,8 +96,8 @@ func newFollowupCommand(d deps) *cobra.Command {
 				return usagef("--wait must be 0 or more")
 			}
 			req := api.FollowupRequest{Message: msg, By: by, Model: model, Effort: effort, TaskIDs: splitList([]string{task}),
-				Profile: profile, Gate: g.gate, GateCommands: g.commands, Lane: g.lane, NoLane: g.noLane,
-				ForceLane: g.forceLane, Verify: g.verify, Force: force, Member: member}
+				Profile: profile, Gate: g.gate, GateCommands: optList(g.commands), Lane: g.lane,
+				NoLane: g.noLane, ForceLane: g.forceLane, Verify: g.verify, Force: force, Member: member}
 			if cmd.Flags().Changed("allow-git") {
 				req.AllowGit = &allowGit
 			}
@@ -182,7 +182,7 @@ func printWait(w io.Writer, res api.WaitResult) {
 		r := &res.Reports[i]
 		tag := ""
 		if r.Attention != nil {
-			tag = " [BLOCKED: " + r.Attention.Reason + "]"
+			tag = " [" + attentionLabel(r.Attention.State) + ": " + r.Attention.Reason + "]"
 		}
 		_, _ = fmt.Fprintf(w, "  %-19s %-14s %s%s\n", r.TaskID, r.Status, titles[r.TaskID], tag)
 	}
@@ -231,6 +231,13 @@ func newReviewCommand(d deps) *cobra.Command {
 	return cmd
 }
 
+// cancelRecordedOut is what cancel prints when the daemon stopped during the wait after recording the cancel.
+type cancelRecordedOut struct {
+	TaskID         string `json:"taskId"`
+	Status         string `json:"status"`
+	CancelRecorded bool   `json:"cancelRecorded"`
+}
+
 func newCancelCommand(d deps) *cobra.Command {
 	var wait int
 	cmd := &cobra.Command{
@@ -248,6 +255,13 @@ func newCancelCommand(d deps) *cobra.Command {
 				return err
 			}
 			_, stopped, err := c.Cancel(cmd.Context(), id, api.CancelRequest{WaitSeconds: wait})
+			if ops.CancelRecorded(err) {
+				out := cancelRecordedOut{TaskID: id, Status: "cancelling", CancelRecorded: true}
+				return emit(cmd, out, func(w io.Writer) {
+					_, _ = fmt.Fprintf(w, "Task %s: the cancel was recorded; the daemon is stopping and carries it out "+
+						"when it starts again.\n", id)
+				})
+			}
 			if err != nil {
 				return err
 			}
@@ -314,19 +328,21 @@ func newTaskCommand(d deps) *cobra.Command {
 			return emit(cmd, struct {
 				api.TaskReport
 				RecentSteps []ops.Step `json:"recent_steps,omitempty"`
-			}{r, recent}, func(w io.Writer) {
-				_, _ = fmt.Fprintf(w, "Task %s [%s]\n", r.TaskID, r.Status)
-				_, _ = fmt.Fprintf(w, "Model: %s, Effort: %s, Turns: %d\n", dash(r.Model), dash(r.Effort), r.Turn)
-				if r.Response != "" {
-					_, _ = fmt.Fprintf(w, "\n%s\n", strings.TrimRight(r.Response, "\n"))
-				}
-				printSteps(w, recent)
-			})
+			}{r, recent}, func(w io.Writer) { printTaskReport(w, r, recent) })
 		},
 	}
 	cmd.Flags().IntVar(&steps, "steps", 0, "also show the last n worker tool steps")
 	cmd.Flags().BoolVar(&full, "full", false, "the whole task with its turns")
 	return cmd
+}
+
+// printTaskReport is the text of task <id>: the report as wait prints it (failure, attention, question, files,
+// gate, link; M18 hunt H15), with the model line and the recent steps.
+func printTaskReport(w io.Writer, r api.TaskReport, steps []ops.Step) {
+	_, _ = fmt.Fprintf(w, "Task %s [%s]\n", r.TaskID, r.Status)
+	_, _ = fmt.Fprintf(w, "Model: %s, Effort: %s, Turns: %d\n", dash(r.Model), dash(r.Effort), r.Turn)
+	printReportBody(w, r, "")
+	printSteps(w, steps)
 }
 
 func printSteps(w io.Writer, steps []ops.Step) {
@@ -413,7 +429,7 @@ func printTasks(w io.Writer, tasks []api.TaskSummary) {
 		t := &tasks[i]
 		att := ""
 		if ops.Blocked(*t) {
-			att = "blocked(" + t.Attention.Reason + ")"
+			att = t.Attention.State + "(" + t.Attention.Reason + ")"
 		}
 		_, _ = fmt.Fprintf(w, "%-19s %-14s %-14s %-12s %s\n", t.ID, t.Status, t.ProjectName, att, t.Title)
 	}

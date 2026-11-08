@@ -124,6 +124,12 @@ type Consoles interface {
 	Find(exitFile string) (p ConsoleProcess, ok bool)
 }
 
+// Toolchains returns the extra variables (RUSTUP_TOOLCHAIN) for commands run in cwd with environment env; an
+// empty map when nothing is pinned. It never fails.
+type Toolchains interface {
+	Env(ctx context.Context, cwd string, env []string) map[string]string
+}
+
 // Options configure a Service. DB, Accounts, Pool, Backends, Settings, TasksDir and Launcher are required.
 type Options struct {
 	DB       DB
@@ -157,6 +163,9 @@ type Options struct {
 
 	// BaseEnv returns the environment workers inherit (os.Environ when nil).
 	BaseEnv func() []string
+	// Toolchains pins RUSTUP_TOOLCHAIN for worker turns and gate commands in Rust repositories
+	// (account.Toolchains, one per daemon so both share its cache); nil pins nothing.
+	Toolchains Toolchains
 	// Dashboard returns the dashboard link of a task (for reports); nil leaves it empty.
 	Dashboard func(taskID string) string
 	// Git is the daemon's git executable, for the baseline (gitx.NewBinary over BaseEnv when nil).
@@ -219,6 +228,14 @@ type Service struct {
 	// overlaps caches the contention view of each repository for a few seconds.
 	overlapMu sync.Mutex
 	overlaps  map[string]overlapCache
+}
+
+// toolEnv is the toolchain pin for commands run in dir with the daemon's environment.
+func (s *Service) toolEnv(ctx context.Context, dir string) map[string]string {
+	if s.o.Toolchains == nil {
+		return nil
+	}
+	return s.o.Toolchains.Env(ctx, dir, s.o.BaseEnv())
 }
 
 // New returns a service. Call Start to recover the tasks of an earlier daemon and start the background work.

@@ -194,7 +194,7 @@ func (s *Server) followup(ctx context.Context, k *call) (result, error) {
 	req := api.FollowupRequest{Message: a.Message, Model: a.Model, Effort: a.Effort, TaskIDs: a.TaskIDs,
 		Profile: a.Profile, AllowGit: a.AllowGit.ptr(), Force: a.Force.or(false), Verify: a.Verify.ptr(),
 		ForceLane: a.ForceLane.or(false), Member: a.Member}
-	req.Gate, req.GateCommands = a.Gate.request()
+	req.Gate, req.GateCommands = a.Gate.followup()
 	req.Lane, req.NoLane = a.Lane.paths, a.Lane.off
 	if _, err := c.Followup(ctx, a.TaskID, req); err != nil {
 		return result{}, err
@@ -239,7 +239,13 @@ func (s *Server) wait(ctx context.Context, k *call) (result, error) {
 // only, never started, after it said it was stopping).
 func (s *Server) waitReports(ctx context.Context, k *call, ids []string, seconds int, anyDone, wake bool,
 	cwd string) (api.WaitResult, error) {
-	connect := func(ctx context.Context, how ops.Lookup) (*client.Client, error) {
+	return ops.WaitReports(ctx, s.connector(k), s.waitOpts(ids, seconds, anyDone, wake, cwd))
+}
+
+// connector is the daemon lookup of the call's waits (ops.Connect): it reuses the call's client, finds the daemon
+// again without starting it (after it said it was stopping), or finds or starts it.
+func (s *Server) connector(k *call) ops.Connect {
+	return func(ctx context.Context, how ops.Lookup) (*client.Client, error) {
 		switch how {
 		case ops.Reuse:
 		case ops.FindOnly:
@@ -253,8 +259,12 @@ func (s *Server) waitReports(ctx context.Context, k *call, ids []string, seconds
 		}
 		return k.client(ctx)
 	}
-	return ops.WaitReports(ctx, connect, ops.Wait{IDs: ids, Seconds: seconds, Any: anyDone, WakeOnBlocked: wake,
-		Cwd: cwd, RetryPause: s.o.RetryPause, StopGrace: s.o.StopGrace, Logger: s.o.Logger.With("from", "mcp")})
+}
+
+// waitOpts are the options of a wait of seconds (the ids and flags only matter to task waits).
+func (s *Server) waitOpts(ids []string, seconds int, anyDone, wake bool, cwd string) ops.Wait {
+	return ops.Wait{IDs: ids, Seconds: seconds, Any: anyDone, WakeOnBlocked: wake, Cwd: cwd,
+		RetryPause: s.o.RetryPause, StopGrace: s.o.StopGrace, Logger: s.o.Logger.With("from", "mcp")}
 }
 
 // reportResult is the result of a call that returns one task's report.
@@ -334,6 +344,12 @@ func (s *Server) cancel(ctx context.Context, k *call) (result, error) {
 		return result{}, err
 	}
 	sum, stopped, err := c.Cancel(ctx, a.TaskID, api.CancelRequest{WaitSeconds: secs})
+	if ops.CancelRecorded(err) {
+		return result{value: taskStatus{TaskID: a.TaskID, Status: "cancelling",
+			Note: "the daemon is stopping; the cancel was recorded and is carried out when it starts again. " +
+				"Do not cancel again; check with task later."},
+			summary: fmt.Sprintf("Task %s: cancel recorded; the daemon is stopping.", a.TaskID)}, nil
+	}
 	if err != nil {
 		return result{}, err
 	}

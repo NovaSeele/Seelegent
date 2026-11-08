@@ -99,6 +99,8 @@ type liveState struct {
 	steps []loopStep
 	// pending is the key of the tool call still open.
 	pending string
+	// edits numbers the path-only edits whose file could not be read (each is its own loop step).
+	edits int
 	// edited are the files the worker's edit tools changed so far in this attempt (as reported).
 	edited []string
 }
@@ -163,7 +165,7 @@ func computeAttention(t *Task, live liveState, acc accountHealth, now time.Time,
 				fmt.Sprintf("the worker has not started %d min after launch", mins),
 				&api.AttentionParams{Kind: api.AttentionNotStarted, Minutes: mins})
 		}
-		if loop, detail, params := detectLoop(live.steps); loop {
+		if loop, detail, params := detectLoop(live.steps, set.LoopRepeat); loop {
 			return att(api.AttentionBlocked, ReasonLooping, WhoLead, detail, params)
 		}
 		if acc.known && acc.total > 0 && acc.usable == 0 {

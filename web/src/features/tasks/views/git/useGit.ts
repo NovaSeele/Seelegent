@@ -93,7 +93,8 @@ export function useGit(task: () => TaskSummary, api: GitApi = gitApi) {
     const path = file.path
     diff.value = { status: 'loading', path }
     try {
-      const result = await api.diff(id(), path, undefined, call.signal)
+      // The uncommitted list diffs against HEAD: what a commit of this file would take.
+      const result = await api.diff(id(), path, undefined, call.signal, 'head')
       if (call === diffCall) diff.value = { status: 'ready', path, diff: result }
     } catch (error) {
       if (isAbortError(error) || call !== diffCall) return

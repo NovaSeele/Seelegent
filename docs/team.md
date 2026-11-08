@@ -202,7 +202,9 @@ stop partway (a locked file on Windows, a read-only folder), and a retry would o
 tree. No git command runs in a folder that is no longer a worktree of its own (its `.git` went first, as NTFS
 deletes it): with a stored copy, such a folder is deleted without git, entry by entry, removing every link or
 junction as itself and never walking into one, only strictly inside the contest's folder under the worktree base,
-and then `git worktree prune` drops git's record. `POST /contests/{id}/cancel` stops the variants and the judge; the user's working tree is not touched.
+and then git's record of that one worktree is dropped: only the `.git/worktrees/<id>` folder whose `gitdir` names
+it, never `git worktree prune`, which would also drop the user's own worktrees whose folders are missing for a while
+(an unplugged drive), with their index. The same goes for a removal whose worktree folder is already gone. `POST /contests/{id}/cancel` stops the variants and the judge; the user's working tree is not touched.
 
 Every change publishes `contest.updated` with the summary. `GET /contests/{id}/variants/{label}/diff` answers the
 variant's diff against the base (cut at 400 000 bytes, `truncated` then) as text and parsed per file (`files`, for
@@ -231,7 +233,7 @@ folder. At most 50 hooks; four run at once and 50 events wait, the oldest droppe
 run's output start (4 KiB, secrets masked) goes to `logs/hooks.log` (2 MiB, two old copies) and to `hook.ran`.
 
 Hooks have stable ids: `PUT /hooks` keeps the ids it gets and gives new hooks one, and `POST /hooks/{id}/test`
-runs a hook by id, never by list index, so an edited list cannot run the wrong hook (old bug C-B20).
+runs a hook by id, never by list index, so an edited list cannot run the wrong hook (old bug C-B20). `PUT /hooks` needs the `hooks` list: a body without it (`{}`, `null`, `{"hooks": null}`) answers `400 invalid_argument` and keeps every hook, and `{"hooks": []}` removes them all.
 
 ## Locks
 

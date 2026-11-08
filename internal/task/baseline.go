@@ -21,7 +21,10 @@ const baselineMax = 1000
 // captureBaseline lists the files under cwd that already have uncommitted changes, as absolute paths, and the
 // repository root. A folder outside git, or a git that is missing, fails or times out, gives no baseline and no
 // error: the baseline only warns the worker, it never blocks a task.
-func captureBaseline(ctx context.Context, bin *gitx.Binary, cwd string) (root string, files []string) {
+//
+// start is where the repository stands (HEAD and branch), nil outside git or when git could not tell.
+func captureBaseline(ctx context.Context, bin *gitx.Binary, cwd string, now time.Time) (root string,
+	files []string, start *GitStart) {
 	// The first call goes through bin.Run, so a git removed or moved since it was found is looked up again.
 	var git string
 	var out []byte
@@ -31,15 +34,37 @@ func captureBaseline(ctx context.Context, bin *gitx.Binary, cwd string) (root st
 		out, err = runGit(ctx, p, cwd, "rev-parse", "--show-toplevel")
 		return err
 	}); err != nil {
-		return "", nil
+		return "", nil, nil
 	}
 	root = filepath.Clean(strings.TrimSpace(string(out)))
+	start = captureStart(ctx, git, cwd, now)
 	out, err := runGit(ctx, git, cwd, "--literal-pathspecs", "-c", "core.quotepath=off",
 		"status", "--porcelain", "-z", "--untracked-files=all", "--", ".")
 	if err != nil {
-		return root, nil
+		return root, nil, start
 	}
-	return root, parsePorcelainZ(root, out)
+	return root, parsePorcelainZ(root, out), start
+}
+
+// captureStart reads HEAD and the branch of the repository at cwd. A repository without a commit has Head "",
+// a detached HEAD Branch ""; any other failure (a timeout, a git that cannot run) records no start.
+func captureStart(ctx context.Context, git, cwd string, now time.Time) *GitStart {
+	start := &GitStart{At: now}
+	out, err := runGit(ctx, git, cwd, "rev-parse", "--verify", "--quiet", "HEAD")
+	switch {
+	case err == nil:
+		start.Head = strings.TrimSpace(string(out))
+	case gitx.ExitCode(err) != 1: // 1: no commit yet
+		return nil
+	}
+	out, err = runGit(ctx, git, cwd, "symbolic-ref", "--quiet", "--short", "HEAD")
+	switch {
+	case err == nil:
+		start.Branch = strings.TrimSpace(string(out))
+	case gitx.ExitCode(err) != 1: // 1: detached
+		return nil
+	}
+	return start
 }
 
 // parsePorcelainZ reads `git status --porcelain -z`: "XY path" entries, where a rename or copy, in the index (X)

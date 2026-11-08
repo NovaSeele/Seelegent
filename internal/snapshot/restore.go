@@ -58,7 +58,7 @@ func (s *Store) Restore(taskID string, turn int, files []string) ([]Restored, er
 			out = append(out, Restored{Path: f.Path, Error: "the path leaves the repository"})
 			continue
 		}
-		cur, _, err := s.record(start.Root, f.Path, "")
+		cur, _, err := s.record(start.Root, f.Path, "", nil, &budget{}) // a large file is refused below: no hash
 		if err != nil {
 			return out, err
 		}

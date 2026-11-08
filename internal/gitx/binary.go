@@ -154,6 +154,40 @@ func findGit(env []string) (path, via string, err error) {
 	return "", "", fmt.Errorf("%w: git was not found on PATH", ErrNoGit)
 }
 
+// FirstWrapper returns the batch file (git.cmd, git.bat) that a shell or exec.LookPath would run for "git" in the
+// PATH of env, when the first git on PATH is one; "" otherwise, and always "" outside Windows. Seelegent itself
+// never runs it (see Binary), but the user's own hooks, gate commands and terminals do, through cmd.exe, which
+// rewrites their arguments: doctor warns about it.
+func FirstWrapper(env []string) string {
+	if runtime.GOOS != "windows" {
+		return ""
+	}
+	pathVar, _ := envx.Lookup(env, "PATH")
+	exts := []string{".com", ".exe", ".bat", ".cmd"}
+	if v, ok := envx.Lookup(env, "PATHEXT"); ok && strings.TrimSpace(v) != "" {
+		exts = nil
+		for _, e := range strings.Split(v, ";") {
+			if e = strings.ToLower(strings.TrimSpace(e)); strings.HasPrefix(e, ".") {
+				exts = append(exts, e)
+			}
+		}
+	}
+	for _, dir := range filepath.SplitList(pathVar) {
+		if dir = strings.Trim(strings.TrimSpace(dir), `"`); dir == "" || !filepath.IsAbs(dir) {
+			continue
+		}
+		for _, ext := range exts {
+			if p := filepath.Join(dir, "git"+ext); isFile(p) {
+				if ext == ".cmd" || ext == ".bat" {
+					return p
+				}
+				return ""
+			}
+		}
+	}
+	return ""
+}
+
 // shimExe matches a git.exe a batch file starts: quoted, or a run of characters without spaces.
 var shimExe = regexp.MustCompile(`(?i)"([^"\r\n]*git\.exe)"|([^\s"]*git\.exe)`)
 

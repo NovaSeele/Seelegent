@@ -29,7 +29,9 @@ const (
 type base struct {
 	name    string
 	secrets []string
-	rules   []rule
+	// redact, when set, masks by pattern after the literal secrets (MaskPatterns).
+	redact func(string) string
+	rules  []rule
 	// bgWait matches the CLI's "waiting for background tasks" line on stderr (agy only).
 	bgWait *regexp.Regexp
 
@@ -58,7 +60,15 @@ func (b *base) mask(s string) string {
 			s = strings.ReplaceAll(s, sec, redacted)
 		}
 	}
+	if b.redact != nil {
+		s = b.redact(s)
+	}
 	return s
+}
+
+// MaskPatterns sets a pattern redactor run after the literal secrets (Parser.MaskPatterns).
+func (b *base) MaskPatterns(redact func(string) string) {
+	b.redact = redact
 }
 
 // maskJSON masks secrets inside raw JSON, keeping it valid.

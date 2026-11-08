@@ -102,8 +102,10 @@ func TestMergePatchTypeAndPort(t *testing.T) {
 	if _, err := MergePatch(s, []byte(`{"port": 47821}`)); err != nil {
 		t.Errorf("an unchanged port is fine: %v", err)
 	}
-	if _, err := MergePatch(s, []byte(`[1]`)); !errors.Is(err, ErrParse) {
-		t.Errorf("array patch: %v", err)
+	for _, bad := range []string{`[1]`, `null`, `{"port":`} {
+		if _, err := MergePatch(s, []byte(bad)); !errors.Is(err, ErrBadPatch) || errors.Is(err, ErrParse) {
+			t.Errorf("patch %s: %v", bad, err)
+		}
 	}
 	if _, err := MergePatch(s, []byte(`{"Port": 1}`)); err == nil {
 		t.Error("a key in the wrong case was accepted")

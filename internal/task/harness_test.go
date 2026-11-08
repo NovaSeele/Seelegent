@@ -60,6 +60,8 @@ type harness struct {
 	consoles *fakeConsoles
 	pool     *pool.Pool
 	s        *Service
+	// backends are more backends (besides agy) whose binary is the fake CLI, from the next start on.
+	backends []string
 
 	mu        sync.Mutex
 	refreshes []string
@@ -147,8 +149,16 @@ func (h *harness) start() {
 		t.Fatal(err)
 	}
 	repos := gitx.New(h.clk.Now, nil)
+	backends := map[string]backend.Backend{config.BackendAgy: agy}
+	for _, name := range h.backends {
+		b, err := backend.New(name, fakecli.Exe(t))
+		if err != nil {
+			t.Fatal(err)
+		}
+		backends[name] = b
+	}
 	s, err := New(Options{
-		DB: h.db, Accounts: h.accounts, Pool: p, Backends: map[string]backend.Backend{config.BackendAgy: agy},
+		DB: h.db, Accounts: h.accounts, Pool: p, Backends: backends,
 		Settings: h.config, TasksDir: filepath.Join(h.dir, "tasks"), Launcher: fakecli.Launcher(t),
 		Usage: h.usage, Memory: h.memory, Roles: h.roles, Members: h.members, Consoles: h.consoles, Clock: h.clk,
 		QuotaRefresh: func(id string) {

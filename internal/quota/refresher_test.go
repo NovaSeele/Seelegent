@@ -305,6 +305,83 @@ func TestRunCyclesWithIntervalAndKick(t *testing.T) {
 	<-done
 }
 
+// TestRescheduleAppliesNewInterval: a changed quotaRefreshMinutes re-arms the wait at once, counted from the last
+// cycle (old bug B15: the new interval waited for the old timer), and never reads everything in a burst.
+func TestRescheduleAppliesNewInterval(t *testing.T) {
+	f := newRefFixture(t, func(context.Context, string) (backend.Quota, error) { return okQuota(0.5), nil })
+	var interval, asked atomic.Int64
+	interval.Store(int64(60 * time.Minute))
+	f.r.o.Interval = func() time.Duration { asked.Add(1); return time.Duration(interval.Load()) }
+	f.r.o.Jitter = func(n int64) int64 { return n / 2 } // no jitter
+	a := f.add(t, account.New{Backend: "agy", Kind: account.KindIsolated, Enabled: true})
+	ctx, cancel := context.WithCancel(t.Context())
+	done := make(chan struct{})
+	go func() {
+		f.r.Run(ctx)
+		close(done)
+	}()
+	defer func() { cancel(); <-done }()
+	waitReads := func(n int) {
+		t.Helper()
+		deadline := time.Now().Add(5 * time.Second)
+		for f.reader.count(a.ID) < n {
+			if time.Now().After(deadline) {
+				t.Fatalf("reads = %d, want %d", f.reader.count(a.ID), n)
+			}
+			time.Sleep(time.Millisecond)
+		}
+	}
+	// reschedule changes the interval and waits until Run has re-armed its timer.
+	reschedule := func(d time.Duration) {
+		t.Helper()
+		before := asked.Load()
+		interval.Store(int64(d))
+		f.r.Reschedule()
+		deadline := time.Now().Add(5 * time.Second)
+		for asked.Load() == before {
+			if time.Now().After(deadline) {
+				t.Fatal("the interval was not asked again")
+			}
+			time.Sleep(time.Millisecond)
+		}
+	}
+	waitReads(1)
+	if !f.clk.WaitTimers(1, 5*time.Second) {
+		t.Fatal("no timer")
+	}
+
+	// Lowered from 60 to 10 min three minutes after the last cycle: the next one is 7 min later, not 57.
+	f.clk.Advance(3 * time.Minute)
+	reschedule(10 * time.Minute)
+	if !f.clk.WaitTimers(1, 5*time.Second) {
+		t.Fatal("no timer after reschedule")
+	}
+	f.clk.Advance(6 * time.Minute)
+	time.Sleep(20 * time.Millisecond)
+	if n := f.reader.count(a.ID); n != 1 {
+		t.Fatalf("reads = %d before last cycle + new interval", n)
+	}
+	f.clk.Advance(time.Minute)
+	waitReads(2)
+	if !f.clk.WaitTimers(1, 5*time.Second) {
+		t.Fatal("no timer")
+	}
+
+	// Lowered below the time already waited: one cycle now, then the new interval.
+	f.clk.Advance(5 * time.Minute)
+	reschedule(2 * time.Minute)
+	waitReads(3)
+	if !f.clk.WaitTimers(1, 5*time.Second) {
+		t.Fatal("no timer")
+	}
+	time.Sleep(20 * time.Millisecond)
+	if n := f.reader.count(a.ID); n != 3 {
+		t.Fatalf("reads = %d: a burst after lowering the interval", n)
+	}
+	f.clk.Advance(2 * time.Minute)
+	waitReads(4)
+}
+
 func TestMergeAndNewRefresher(t *testing.T) {
 	a := account.Account{ID: "acc1", Backend: "agy", Kind: account.KindIsolated}
 	s := Merge(Snapshot{}, false, a, backend.Quota{}, ErrPassive, t0)

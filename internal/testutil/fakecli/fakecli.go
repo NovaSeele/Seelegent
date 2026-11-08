@@ -7,10 +7,12 @@
 //
 // Then the test binary is, depending on how it was started:
 //
-//   - "<exe> __launch <dir>": the launcher (internal/launch.Run), as the daemon runs it;
+//   - "<exe> __launch <dir>": the launcher (internal/launch.Run), as the daemon runs it (an interrupt or SIGTERM
+//     stops it the way it stops `seelegent __launch`);
 //   - with FAKECLI_QUEUE set: the fake CLI. Whatever its arguments, it takes the next script of the queue directory
-//     (scripts are taken in the order they were pushed, each once), records its arguments, standard input and
-//     working directory next to the script, and replays it;
+//     (scripts are taken in the order they were pushed, each once), records its arguments, standard input,
+//     working directory and the variables FAKECLI_RECORD_ENV names (comma-separated) next to the script, and
+//     replays it;
 //   - otherwise: the tests.
 //
 // A script is a recorded stream: every line goes to standard output, except directive lines:
@@ -34,11 +36,13 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -56,7 +60,10 @@ const launchArg = "__launch"
 func Main(m *testing.M) {
 	switch {
 	case len(os.Args) > 2 && os.Args[1] == launchArg:
-		if err := launch.Run(context.Background(), os.Args[2]); err != nil {
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		err := launch.Run(ctx, os.Args[2])
+		stop()
+		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
@@ -86,7 +93,12 @@ type Record struct {
 	Args   []string `json:"args"`
 	Stdin  string   `json:"stdin"`
 	Dir    string   `json:"dir"`
+	// Env holds the variables named by FAKECLI_RECORD_ENV that were set.
+	Env map[string]string `json:"env,omitempty"`
 }
+
+// EnvRecord names the variables (comma-separated) the fake CLI records in Record.Env.
+const EnvRecord = "FAKECLI_RECORD_ENV"
 
 // Queue is the list of scripts the fake CLI replays, one per run.
 type Queue struct {
@@ -247,6 +259,14 @@ func runCLI(dir string) int {
 	stdin := readStdin()
 	rec := Record{Script: name, Args: os.Args[1:], Stdin: stdin}
 	rec.Dir, _ = os.Getwd()
+	for _, n := range strings.Split(os.Getenv(EnvRecord), ",") {
+		if v, ok := os.LookupEnv(n); ok && n != "" {
+			if rec.Env == nil {
+				rec.Env = map[string]string{}
+			}
+			rec.Env[n] = v
+		}
+	}
 	if data, err := json.Marshal(rec); err == nil {
 		// Written aside and renamed, so Records never reads half a record of a run that is still writing it or
 		// was stopped while writing it.

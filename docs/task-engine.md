@@ -60,7 +60,10 @@ append the events in **one transaction**, then publish on the bus. The log and t
    review history, constitution, the git baseline, earlier turns, prerequisite context, and the "you continue an
    interrupted task" section when an attempt came before. Before the first attempt of a task the baseline is taken:
    `git status --porcelain` (literal pathspecs, `core.fsmonitor` off, no shell, 20 s timeout) lists the files under
-   the task folder that already have uncommitted changes, and the brief tells the worker not to revert them. The
+   the task folder that already have uncommitted changes, and the brief tells the worker not to revert them. With it
+   the task records `gitStart`, the HEAD commit and branch it starts from (an empty head in a repository without
+   commits, an empty branch when detached, nothing outside a repository); followups keep the first start, and the Git
+   view lists the commits made since it ([api.md](api.md)). The
    baseline is taken before the run waits for an account (`Pool.Wait`), so files changed while the task waits are
    not in it. A retry on the same
    conversation resends the request itself when the failed attempt never reported a session, and otherwise the retry
@@ -73,6 +76,10 @@ append the events in **one transaction**, then publish on the bus. The log and t
 4. **Follow.** The stream and stderr are tailed from the start. Message deltas of one step are **coalesced for 250 ms**
    and written as one `worker` event; any other event flushes them first. Each write carries the stream and stderr
    offsets it covers, committed in the same transaction (`attempts.data.streamOffset`, `stderrOffset`).
+   A launch directory removed while the worker runs (Unix allows it; the launcher keeps its lock on the unlinked
+   file) is not taken for an ended worker: the daemon asks the launcher it knows (from `launch.Start`, or from a
+   record that checked out) to stop with SIGTERM, kills what is left of the tree after a grace period, and fails the
+   attempt (`launch.ErrGone`) only once the tree has ended, so the task keeps its lane until nothing writes.
 5. **Outcome.** The parser's closing events, `attempt_end` and the decision are one transaction:
 
 | Outcome | What happens |
@@ -100,7 +107,9 @@ and a background quota read of the account is requested.
 `computeAttention` maps the task and what the run knows about its worker onto the contract's states:
 
 - `blocked`: prerequisites failed (`deps_blocked`), no account can run it (`no_accounts`, for the user), every
-  account needs a sign-in (`auth`, for the user), the worker repeats itself (`looping`), a done turn with no answer
+  account needs a sign-in (`auth`, for the user), the worker repeats itself (`looping`: the same call `loopRepeat`
+  times in its last 12 without progress, or five failed calls in a row; an edit that reports only its file is told
+  apart by the file's content hash, or counts as new when the file cannot be read), a done turn with no answer
   (`no_response`), red hygiene findings (`hygiene`), files at risk not restored (`work_at_risk`), a failed task
   (`failed`), a red gate with no fix budget left (`gate_red`; `hygiene` when hygiene is its only red step), a
   verifier reject with no budget left (`verifier_rejected`), a peer member's objection the lead has not answered
@@ -191,7 +200,14 @@ exits with an error within 3 s is reported at once as no terminal.
   (`pool.Reattach` is idempotent; the lease is released when the worker exits).
 - An attempt that finished meanwhile is **replayed** from its files (`resumed` event).
 - In both cases the stream and stderr are read from the start so the parser sees the whole turn, and lines at or
-  before the committed offsets are not logged again.
+  before the committed offsets are not logged again. The output is masked for the secrets the worker was started
+  with (an API-key account's key, kept in the attempt folder's `mask` file until the attempt ends: a DPAPI blob on
+  Windows like the stored keys, a plain 0600 file elsewhere, see [configuration.md](configuration.md)) and for the account's current ones, so removing or changing the key while no daemon runs never
+  unmasks it. A worker whose mask list cannot be written is not started. A mask list that exists but cannot be
+  read fails closed: that attempt's output is also masked by the key patterns of the log redaction (`sk-…`,
+  `AIza…`, GitHub and Slack tokens, bearer credentials, `token=…` and the like, and email addresses), and the
+  `reattach` or `resumed` event carries `noticeCode: "mask_unreadable"` saying so (the dashboard words the code;
+  `notice` holds the same in English for logs and API clients).
 - An attempt whose worker never started is closed as interrupted; the turn goes on with a new attempt and the full
   brief.
 - A cancel the earlier daemon recorded is carried out; takeover consoles are watched again; dependents are

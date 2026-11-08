@@ -76,7 +76,8 @@ func (s *Service) ReviewWith(ctx context.Context, id string, req api.ReviewReque
 		return api.TaskSummary{}, err
 	}
 	if s.o.Memory != nil && !o.SkipHistory {
-		if err := s.o.Memory.AddVerdict(ctx, memory.Verdict{Cwd: t.projectDir(), TaskID: t.ID, Title: t.Title,
+		// The verdict is saved: its history entry is written even if the caller leaves now (M18 hunt H23).
+		if err := s.o.Memory.AddVerdict(context.WithoutCancel(ctx), memory.Verdict{Cwd: t.projectDir(), TaskID: t.ID, Title: t.Title,
 			Verdict: verdict, Notes: t.Review.Notes}); err != nil {
 			s.log.Warn("task: review history", "task", id, "err", err)
 		}
@@ -212,7 +213,9 @@ func (s *Service) Cancel(ctx context.Context, id string, req api.CancelRequest) 
 			}
 		}
 	}
-	sum, err = s.Summary(ctx, id)
+	// The cancel is recorded: its summary is read even when ctx ended the wait (a daemon that is stopping), so a
+	// nil error always means the cancel stands.
+	sum, err = s.Summary(context.WithoutCancel(ctx), id)
 	if err != nil {
 		return api.TaskSummary{}, false, err
 	}

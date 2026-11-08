@@ -400,6 +400,26 @@ func TestApplyChecksumMismatch(t *testing.T) {
 	assertNoLeftovers(t, e.exe)
 }
 
+// An update sweeps the download folders an interrupted one left behind (M18 hunt, update note).
+func TestApplySweepsLeftoverDownloads(t *testing.T) {
+	e := newEnv(t, "linux", "v0.0.2", "v0.0.2")
+	u := e.updater(t, "v0.0.2")
+	left := filepath.Join(u.o.WorkDir, "download-1234")
+	if err := os.MkdirAll(left, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(left, "seelegent.tar.gz"), []byte("half"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	res, err := u.Apply(context.Background(), "")
+	if err != nil || res.Applied {
+		t.Fatalf("Apply = %+v, %v", res, err)
+	}
+	if _, err := os.Stat(left); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("the leftover download is still there: %v", err)
+	}
+}
+
 func TestApplyChecksumMissing(t *testing.T) {
 	e := newEnv(t, "windows", "v0.0.1", "v0.0.2")
 	e.server.releases["v0.0.2"].sums = strings.Repeat("a", 64) + "  other.zip\n"

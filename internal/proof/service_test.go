@@ -45,6 +45,18 @@ func newService(t *testing.T, root string, exec func(cmd string) CmdResult, acti
 
 func code(n int) *int { return &n }
 
+// A run asked for once the service closes is refused with ErrStopping, which the API answers as 503 (M18 hunt).
+func TestStartRunWhileStopping(t *testing.T) {
+	root := t.TempDir()
+	write(t, filepath.Join(root, "specs", "001-p", "spec.md"), specMD)
+	write(t, filepath.Join(root, "specs", "001-p", "tasks.md"), tasksMD)
+	s, _ := newService(t, root, func(string) CmdResult { return CmdResult{Exit: code(0)} }, nil)
+	s.Close()
+	if _, err := s.StartRun(context.Background(), api.ProofRunRequest{Cwd: root}); !errors.Is(err, ErrStopping) {
+		t.Fatalf("StartRun = %v, want ErrStopping", err)
+	}
+}
+
 func waitRun(t *testing.T, s *Service, cwd, id string) api.ProofRun {
 	t.Helper()
 	deadline := time.Now().Add(10 * time.Second)

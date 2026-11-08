@@ -16,17 +16,23 @@ import CommitDialog from './CommitDialog.vue'
 import { isDrafts, putDraft, stepFile, totals, type Drafts } from './git'
 import GitDiffPane from './GitDiffPane.vue'
 import GitFileList from './GitFileList.vue'
+import GitHistory from './GitHistory.vue'
+import GitRepoPanel from './GitRepoPanel.vue'
+import GitStartNotice from './GitStartNotice.vue'
+import GitUpstream from './GitUpstream.vue'
 import { useGit } from './useGit'
 import { useGitCommands } from './useGitCommands'
+import { useGitHistory } from './useGitHistory'
+import { useRepoStatus } from './useRepoStatus'
 import NotesPanel from './NotesPanel.vue'
 import OutsideDiffButton from './OutsideDiffButton.vue'
 import { useNotes } from './useNotes'
 
 /**
- * The Git view: the files this task changed (paths from the repository root), the selected file's diff, and a
- * commit of the ticked ones. Files the repo had changed before the task are listed apart and never offered.
- * `path` selects a file (opened from the Files view). j/k step through the files. `detail` says which turns have
- * changes outside the edit tools to show.
+ * The Git view: what this task committed since it started (GitHistory), the files it changed and has not
+ * committed (paths from the repository root) with the selected file's diff and a commit of the ticked ones, and
+ * the rest of the repository (GitRepoPanel), never offered. `path` selects a file (opened from the Files view).
+ * j/k step through the uncommitted files. `detail` says which turns have changes outside the edit tools to show.
  */
 const props = defineProps<{
   task: TaskSummary
@@ -38,6 +44,11 @@ const { t } = useI18n()
 const format = useFormat()
 const model = useGit(() => props.task)
 const { git, files, selected, selectedFile, diff } = model
+const history = useGitHistory(
+  () => props.task.id,
+  () => git.value,
+)
+const repo = useRepoStatus(() => git.value)
 
 const list = ref<InstanceType<typeof GitFileList> | null>(null)
 const sums = computed(() => totals(files.value))
@@ -105,8 +116,9 @@ useGitCommands(
           <Icon name="git" />
           <span>{{ git.branch ?? t('git.noBranch') }}</span>
         </span>
+        <GitUpstream :upstream="repo.upstream.value" />
         <span class="git__sum">
-          {{ t('git.files', { n: files.length }, files.length) }}
+          {{ t('git.uncommittedCount', { n: files.length }, files.length) }}
           <span class="git__add">+{{ format.number(sums.additions) }}</span>
           <span class="git__del">−{{ format.number(sums.deletions) }}</span>
         </span>
@@ -126,12 +138,19 @@ useGitCommands(
         </span>
       </header>
 
+      <GitStartNotice :notices="history.notices.value" />
+      <GitHistory v-if="history.hasHistory.value" :history="history" :wrap="wrap" />
+      <h3 v-if="history.hasHistory.value" class="git__heading">
+        {{ t('git.history.uncommitted') }}
+      </h3>
       <EmptyState
         v-if="!files.length"
         icon="git"
         :level="3"
-        :title="t('git.empty')"
-        :description="t('git.emptyDesc')"
+        :title="history.hasHistory.value ? t('git.history.noUncommitted') : t('git.empty')"
+        :description="
+          history.hasHistory.value ? t('git.history.noUncommittedDesc') : t('git.emptyDesc')
+        "
       />
       <div v-else class="git__body">
         <nav class="git__list">
@@ -152,17 +171,11 @@ useGitCommands(
       </div>
       <NotesPanel v-if="files.length" :notes="notes" :busy="active" @open="selected = $event" />
 
-      <details v-if="git.preexisting.length" class="git__pre">
-        <summary>
-          {{ t('git.preexisting', { n: git.preexisting.length }, git.preexisting.length) }}
-        </summary>
-        <p>{{ t('git.preexistingDesc') }}</p>
-        <ul>
-          <li v-for="pre in git.preexisting" :key="pre">
-            <code>{{ pre }}</code>
-          </li>
-        </ul>
-      </details>
+      <GitRepoPanel
+        :state="repo.state.value"
+        :others="repo.others.value"
+        :preexisting="git.preexisting"
+      />
 
       <CommitDialog
         v-model:open="committing"
@@ -256,23 +269,9 @@ useGitCommands(
   background: var(--bg-surface);
 }
 
-.git__pre {
-  color: var(--text-secondary);
-  font-size: var(--fs-sm);
-}
-
-.git__pre summary {
-  cursor: pointer;
-}
-
-.git__pre p,
-.git__pre ul {
-  margin-top: var(--space-2);
-  padding-left: var(--space-5);
-}
-
-.git__pre code {
-  font-family: var(--font-mono);
+.git__heading {
+  font-size: var(--fs-md);
+  font-weight: var(--fw-semibold);
 }
 
 @media (width >= 900px) {

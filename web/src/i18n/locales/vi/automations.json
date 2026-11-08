@@ -8,6 +8,8 @@
   "masterLink": "Mở cài đặt",
   "deleteTitle": "Xóa {name}?",
   "deleteDesc": "Việc tự động và lịch sử chạy của nó bị xóa. Các tác vụ nó đã bắt đầu vẫn giữ lại.",
+  "runTitle": "Chạy {name} ngay?",
+  "runDesc": "Seelegent giao việc cho worker ngay bây giờ. Bước kiểm tra trước và quota vẫn được xét, và nếu lần chạy trước còn đang chạy thì lần này bị bỏ qua.",
   "state": {
     "on": "Đang bật",
     "requested": "Chờ bạn",

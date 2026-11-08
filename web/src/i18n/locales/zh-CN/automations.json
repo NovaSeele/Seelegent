@@ -8,6 +8,8 @@
   "masterLink": "打开设置",
   "deleteTitle": "删除 {name}？",
   "deleteDesc": "自动化及其运行记录将被删除。它启动的任务会保留。",
+  "runTitle": "立即运行 {name}？",
+  "runDesc": "它会马上把工作交给 worker。预检和配额仍会检查；如果上一次运行还没结束，这次会被跳过。",
   "state": {
     "on": "已开启",
     "requested": "等待你确认",

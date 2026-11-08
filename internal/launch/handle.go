@@ -27,10 +27,23 @@ const (
 	// startGrace is how long a launch without a ready record and without a live launcher counts as still starting
 	// (a daemon that crashed while starting it) before it is reported lost.
 	startGrace = 30 * time.Second
+	// orphanGrace is how long a launcher whose launch directory was removed gets to stop its worker tree after
+	// being asked to (it waits up to platform.DefaultKillGrace for the tree itself) before the daemon kills the
+	// launcher and its tree.
+	orphanGrace = platform.DefaultKillGrace + 5*time.Second
 )
 
 // ErrNotLaunch is returned by Attach for a directory that holds no launch spec.
 var ErrNotLaunch = errors.New("not a launch directory")
+
+// ErrGone is returned by Exited, Wait and Tail once the launch directory was removed and its launcher has ended:
+// there is nothing left to follow, and waiting for it would never end. Unix lets the directory be removed while
+// the launcher runs (it keeps its lock on the unlinked file); the handle then stops the launcher, and with it the
+// worker tree, before it reports ErrGone, so no worker goes on writing unseen (see Handle.Exited).
+var ErrGone = errors.New("the launch directory is gone")
+
+// errDirGone is launcherAlive's answer when the lock cannot be probed because the launch directory is gone.
+var errDirGone = errors.New("the launch directory is gone")
 
 // Options configures Start.
 type Options struct {
@@ -59,8 +72,14 @@ type Handle struct {
 	lastProbe time.Time
 	alive     bool
 
-	treeMu sync.Mutex
-	tree   *platform.WorkerTree // set by Start, or by Tree once a record checks out
+	treeMu     sync.Mutex
+	tree       *platform.WorkerTree // set by Start, or by Tree once a record checks out
+	seen       *Ready               // the last ready record read, not checked: only ever used to keep waiting
+	lastVerify time.Time
+
+	stopMu    sync.Mutex
+	stopAsked time.Time      // when a launcher whose directory was removed was asked to stop
+	orphans   map[int]uint64 // what is known of that launcher's tree: process id -> start time
 }
 
 // Start writes the spec into opts.Dir, starts the launcher detached and waits until the worker runs (or has
@@ -189,8 +208,12 @@ func (h *Handle) loadTree() (t *platform.WorkerTree, ok, verified bool) {
 		return unknown, true, false
 	}
 	r, ready := h.Ready()
+	alive, err := h.launcherAlive()
+	if err != nil {
+		return unknown, true, false // the folder is gone: nothing to check the launcher against
+	}
 	if !ready {
-		if exists(h.files.Exit) || !h.launcherAlive() {
+		if exists(h.files.Exit) || !alive {
 			return nil, false, false
 		}
 		if sf.Job != "" {
@@ -198,7 +221,7 @@ func (h *Handle) loadTree() (t *platform.WorkerTree, ok, verified bool) {
 		}
 		return unknown, true, false
 	}
-	if !h.launcherAlive() {
+	if !alive {
 		return nil, false, false
 	}
 	if r.Job != sf.Job || r.LauncherPID <= 0 {
@@ -238,7 +261,15 @@ func (h *Handle) Exited() (Exit, bool, error) {
 			return Exit{}, false, nil
 		}
 	}
-	if h.launcherAlive() {
+	alive, err := h.launcherAlive()
+	if errors.Is(err, errDirGone) {
+		return h.gone()
+	}
+	if err != nil {
+		return Exit{}, false, err
+	}
+	if alive {
+		h.keepTree()
 		return Exit{}, false, nil
 	}
 	// The launcher may have written its record just before releasing the lock.
@@ -255,12 +286,97 @@ func (h *Handle) Exited() (Exit, bool, error) {
 	return lost, true, nil
 }
 
-// launcherAlive probes the launcher lock, at most every livenessInterval.
-func (h *Handle) launcherAlive() bool {
+// keepTree makes an attached handle learn its launcher while the launch directory still exists, so that a
+// directory removed later still leaves the daemon a launcher it can stop (see gone). Like Tree, it keeps only a
+// record that checks out; the last record read is kept apart, unchecked, in seen.
+func (h *Handle) keepTree() {
+	h.treeMu.Lock()
+	defer h.treeMu.Unlock()
+	if h.tree != nil || (!h.lastVerify.IsZero() && time.Since(h.lastVerify) < livenessInterval) {
+		return
+	}
+	h.lastVerify = time.Now()
+	if r, ok := h.Ready(); ok {
+		h.seen = &r
+	}
+	if t, _, verified := h.loadTree(); verified {
+		h.tree = t
+	}
+}
+
+// gone is Exited for a launch whose directory was removed. Windows refuses to remove it while the launcher runs,
+// but Unix allows it: the launcher keeps its lock on the unlinked file and the worker keeps running. Reporting
+// the launch ended then would let the task fail and free its lane while the worker goes on writing (M18 review
+// N2). So the tree of a launcher the daemon knows (from Start, or from a record that checked out) is stopped
+// first: the launcher is asked to stop it, and whatever of it still runs after orphanGrace, or after the launcher
+// ended, is killed. A launcher known only from a record that did not check out is never signaled (the record
+// may name another process): while that process runs, the launch counts as running. ErrGone comes only once
+// nothing known of the launch runs.
+func (h *Handle) gone() (Exit, bool, error) {
+	h.treeMu.Lock()
+	tree, seen := h.tree, h.seen
+	h.treeMu.Unlock()
+	switch {
+	case tree != nil && tree.RootPID > 0:
+		if h.stopOrphan(tree) {
+			return Exit{}, false, nil
+		}
+	case tree == nil && seen != nil && seen.LauncherPID > 0 &&
+		platform.ProcessRunning(seen.LauncherPID, seen.LauncherStart):
+		return Exit{}, false, nil
+	}
+	return Exit{}, false, fmt.Errorf("launch %s: %w", h.files.Dir, ErrGone)
+}
+
+// stopOrphan stops the tree of a launcher whose launch directory was removed and reports whether any of it still
+// runs. While the launcher runs, its tree is listed (with start times, so a reused id is never taken for it) and
+// the launcher is asked once to stop it; a launcher that has not ended after orphanGrace is killed with what was
+// listed of its tree. Processes listed earlier that outlive the launcher are killed as well.
+func (h *Handle) stopOrphan(tree *platform.WorkerTree) bool {
+	h.stopMu.Lock()
+	defer h.stopMu.Unlock()
+	launcher := platform.ProcessRunning(tree.RootPID, tree.RootStart)
+	if h.orphans == nil {
+		h.orphans = map[int]uint64{}
+	}
+	if launcher {
+		h.orphans[tree.RootPID] = tree.RootStart
+		pids, _ := tree.PIDs()
+		for _, pid := range pids {
+			if _, ok := h.orphans[pid]; !ok {
+				if start, err := platform.ProcessStartTime(pid); err == nil {
+					h.orphans[pid] = start
+				}
+			}
+		}
+	}
+	for pid, start := range h.orphans {
+		if !platform.ProcessRunning(pid, start) {
+			delete(h.orphans, pid)
+		}
+	}
+	if len(h.orphans) == 0 {
+		return false
+	}
+	switch {
+	case h.stopAsked.IsZero() && launcher:
+		h.stopAsked = time.Now()
+		_ = askStop(tree.RootPID) // a launcher that does not stop is killed after orphanGrace
+	case !launcher || time.Since(h.stopAsked) >= orphanGrace:
+		for pid := range h.orphans {
+			_ = forceStop(pid) // one that has just ended is dropped on the next call
+		}
+	}
+	return true
+}
+
+// launcherAlive probes the launcher lock, at most every livenessInterval. It fails with errDirGone when the launch
+// directory no longer exists: the lock cannot be probed then, and "cannot tell" would mean waiting forever.
+func (h *Handle) launcherAlive() (bool, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if !h.lastProbe.IsZero() && time.Since(h.lastProbe) < livenessInterval {
-		return h.alive
+		return h.alive, nil
 	}
 	h.lastProbe = time.Now()
 	lock, err := fsutil.TryLock(h.files.Lock)
@@ -271,9 +387,13 @@ func (h *Handle) launcherAlive() bool {
 	case errors.Is(err, fsutil.ErrLocked):
 		h.alive = true
 	default:
+		if _, serr := os.Stat(h.files.Dir); errors.Is(serr, os.ErrNotExist) {
+			h.lastProbe = time.Time{}
+			return false, errDirGone
+		}
 		h.alive = true // cannot tell: never declare a running worker lost
 	}
-	return h.alive
+	return h.alive, nil
 }
 
 // Wait waits until the launch has ended and returns its exit record.

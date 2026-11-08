@@ -29,7 +29,12 @@ export interface Safety {
   findings: Finding[]
   findingsTurn: number | null
   blocked: BlockedCommand[]
+  /** Turns whose start or end snapshot hit its limits (files past them were not checked), newest first. */
+  truncated: number[]
 }
+
+/** The limits of one snapshot (internal/snapshot: MaxFiles, MaxTotalBytes in MiB), for the truncation notice. */
+export const SNAPSHOT_LIMITS = { files: 3000, mib: 256 } as const
 
 /** How many things of each kind the panel lists; `risk` counts files not restored yet, `restored` the others. */
 export interface SafetyParts {
@@ -63,6 +68,7 @@ export function safetyOf(detail: TaskDetail | null): Safety {
     findings,
     findingsTurn: findings.length && latest ? latest.n : null,
     blocked,
+    truncated: turns.filter((turn) => turn.snapshotTruncated).map((turn) => turn.n),
   }
 }
 

@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -21,6 +22,7 @@ func (s *Server) gitRoutes() {
 		return http.StatusOK, g, err
 	})
 	s.handle("GET /tasks/{id}/git/diff", s.taskDiff)
+	s.handle("GET /tasks/{id}/git/commits/{sha}", s.taskCommit)
 	s.handle("POST /tasks/{id}/git/suggest-message", s.suggestMessage)
 	s.handle("POST /tasks/{id}/git/suggest-message/dismiss", func(w http.ResponseWriter, r *http.Request) (int, any,
 		error) {
@@ -101,14 +103,20 @@ func (s *Server) taskGit(ctx context.Context, id string) (api.TaskGit, task.GitS
 }
 
 func taskFiles(g task.GitScope) gitx.TaskFiles {
-	return gitx.TaskFiles{Cwd: g.Cwd, Baseline: g.Baseline, Files: g.Files}
+	return gitx.TaskFiles{Cwd: g.Cwd, Baseline: g.Baseline, Files: g.Files, Start: g.Start, Turns: g.Turns}
 }
 
-// taskDiff is GET /tasks/{id}/git/diff?path=: one file of the task against HEAD (turn is accepted; per-turn diffs
-// need the snapshots of milestone 12 and show the current change).
+// taskDiff is GET /tasks/{id}/git/diff?path=&base=: one file of the task in the working tree against the task's
+// start (base=start, the default: committed and uncommitted work together) or against HEAD (base=head: what a
+// commit would take). Without a usable start (TaskGit.startState not recorded) both compare against HEAD. turn is
+// accepted; per-turn diffs need the snapshots and show the current change.
 func (s *Server) taskDiff(_ http.ResponseWriter, r *http.Request) (code int, body any, err error) {
 	if _, err := queryInt(r, "turn", 0, 1<<30); err != nil {
 		return 0, nil, err
+	}
+	against := r.URL.Query().Get("base")
+	if against != "" && against != "start" && against != "head" {
+		return 0, nil, invalid("base must be start or head (got %q)", against).withField("base")
 	}
 	g, _, err := s.taskGit(r.Context(), r.PathValue("id"))
 	if err != nil {
@@ -127,8 +135,40 @@ func (s *Server) taskDiff(_ http.ResponseWriter, r *http.Request) (code int, bod
 			untracked = f.Status == api.GitUntracked
 		}
 	}
-	d, err := s.o.Git.Diff(r.Context(), g.Root, rel, "", untracked)
+	base := ""
+	if against != "head" && g.StartState == api.GitStartRecorded && g.Head != "" {
+		base = g.StartHead
+		if base == "" { // the repository had no commit when the task started
+			base = gitx.EmptyTree(g.Head)
+		}
+	}
+	d, err := s.o.Git.Diff(r.Context(), g.Root, rel, base, untracked)
 	return http.StatusOK, d, err
+}
+
+// taskCommit is GET /tasks/{id}/git/commits/{sha}: one of the task's commits (start..HEAD) with its diff. A
+// commit outside that range is 404 with details.reason "not_in_task"; a task whose start is unknown or unreachable
+// is 409 bad_state with details.reason "start_unknown" or "start_unreachable".
+func (s *Server) taskCommit(_ http.ResponseWriter, r *http.Request) (code int, body any, err error) {
+	sha := r.PathValue("sha")
+	if !gitx.ValidSHA(sha) {
+		return 0, nil, invalid("the commit must be 4 to 64 hex digits (got %q)", sha).withField("sha")
+	}
+	scope, err := s.o.Tasks.GitScope(r.Context(), r.PathValue("id"))
+	if err != nil {
+		return 0, nil, err
+	}
+	d, err := s.o.Git.TaskCommit(r.Context(), taskFiles(scope), sha)
+	var se *gitx.StartError
+	switch {
+	case err == nil:
+		return http.StatusOK, d, nil
+	case errors.As(err, &se):
+		return 0, nil, newError(api.CodeBadState, "%s", se.Error()).with("reason", "start_"+se.State)
+	case errors.Is(err, gitx.ErrNotInTask):
+		return 0, nil, newError(api.CodeNotFound, "%s", err.Error()).with("reason", "not_in_task")
+	}
+	return 0, nil, err
 }
 
 // withPathField names the path query in an invalid path error.

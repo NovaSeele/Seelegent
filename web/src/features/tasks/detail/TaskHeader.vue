@@ -89,7 +89,11 @@ const age = computed(() => {
       </span>
       <span>
         <time :datetime="task.createdAt" :title="fmt.dateTime(task.createdAt)">
-          {{ t('task.header.started', { time: fmt.relative(task.createdAt, now) }) }}
+          {{
+            t('task.header.started', {
+              time: fmt.ago(task.createdAt, now, t('common.time.justNow')),
+            })
+          }}
         </time>
         · {{ age }}
       </span>

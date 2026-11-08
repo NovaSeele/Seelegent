@@ -14,8 +14,8 @@ import (
 	"github.com/NovaSeele/Seelegent/internal/fsutil"
 )
 
-// baseRe is a commit a diff may be based on: HEAD or 7 to 40 hex digits.
-var baseRe = regexp.MustCompile(`^(HEAD|[0-9a-fA-F]{7,40})$`)
+// baseRe is a commit a diff may be based on: HEAD or 7 to 64 hex digits (SHA-1 or SHA-256 repositories).
+var baseRe = regexp.MustCompile(`^(HEAD|[0-9a-fA-F]{7,64})$`)
 
 // hunkRe reads a hunk header: @@ -oldStart[,oldLines] +newStart[,newLines] @@.
 var hunkRe = regexp.MustCompile(`^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@`)

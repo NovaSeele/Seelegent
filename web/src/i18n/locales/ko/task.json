@@ -152,7 +152,8 @@
       "restored": "복원됨",
       "restoredTitle": "작업 복원됨",
       "restoredDesc": "턴 {n} 전에 찍은 스냅샷에서 파일을 되돌렸습니다.",
-      "restoredDescMany": "각 턴 전에 찍은 스냅샷에서 파일을 되돌렸습니다."
+      "restoredDescMany": "각 턴 전에 찍은 스냅샷에서 파일을 되돌렸습니다.",
+      "truncated": "턴 {n}: 스냅샷이 한도(파일 {files}개 또는 새 내용 {mib} MiB)에 도달해 그 이후의 파일은 확인하지 않았습니다."
     },
     "overlaps": {
       "title": "다른 작업도 변경한 파일",

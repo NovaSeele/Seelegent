@@ -297,10 +297,15 @@ func (s *Service) prepare(ctx context.Context, a account.Account, b backend.Back
 	return prof, nil
 }
 
-// stop closes the window of a sign-in that is given up.
+// stop closes the window of a sign-in that is given up. It kills the process only while it is the one the window
+// started (same start time): a window closed by the user may have left its pid to an unrelated process.
 func (s *Service) stop(term Terminal) {
-	pid, _, ok := term.Identity()
+	pid, start, ok := term.Identity()
 	if !ok {
+		return
+	}
+	if !platform.ProcessRunning(pid, start) {
+		s.o.Logger.Debug("stop sign-in window: its process is gone", "pid", pid)
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

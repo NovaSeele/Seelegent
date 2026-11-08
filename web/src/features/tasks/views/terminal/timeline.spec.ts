@@ -33,6 +33,42 @@ describe('terminal timeline', () => {
     })
   })
 
+  it('words a recovery notice from its code, never from the daemon English', () => {
+    seq = 0
+    const english = 'the mask list could not be read'
+    const items = buildTimeline([
+      ev('reattach', { accountId: 'a1' }),
+      ev('resumed', { accountId: 'a1', noticeCode: 'mask_unreadable', notice: english }),
+      ev('reattach', { accountId: 'a1', noticeCode: 'from_a_newer_daemon', notice: english }),
+      ev('reattach', { accountId: 'a1', noticeCode: 'Not a code', notice: english }),
+    ])
+    expect(items).toHaveLength(4)
+    expect(items[0]).toMatchObject({
+      kind: 'notice',
+      tone: 'dim',
+      message: { key: 'terminal.ev.reattach' },
+    })
+    expect(items[0]).not.toHaveProperty('note')
+    expect(items[1]).toMatchObject({
+      kind: 'notice',
+      tone: 'warn',
+      message: { key: 'terminal.ev.resumed' },
+      note: {
+        key: 'terminal.ev.recoveryNotice.mask_unreadable',
+        fallback: 'terminal.ev.recoveryNotice.unknown',
+      },
+    })
+    expect(items[2]).toMatchObject({
+      tone: 'warn',
+      note: { key: 'terminal.ev.recoveryNotice.from_a_newer_daemon' },
+    })
+    expect(items[3]).toMatchObject({
+      tone: 'warn',
+      note: { key: 'terminal.ev.recoveryNotice.unknown' },
+    })
+    expect(JSON.stringify(items)).not.toContain(english)
+  })
+
   it('pairs a tool call with its result and the file it touched', () => {
     seq = 0
     const items = buildTimeline([
@@ -177,6 +213,19 @@ describe('terminal timeline', () => {
     // The flag after the first restore is not a repeat: it says how many files are still at risk.
     expect(notices[2]).toMatchObject({ note: { key: 'terminal.ev.atRisk', params: { count: 1 } } })
     expect(notices[2]).not.toHaveProperty('detail')
+  })
+
+  it('says when a snapshot of the turn hit its limits', () => {
+    seq = 0
+    const items = buildTimeline([
+      ev('snapshot_truncated', { snapshots: ['end'], maxFiles: 3000, maxBytes: 268435456 }),
+    ])
+    const notices = items.flatMap((i) => (i.kind === 'notice' ? [i] : []))
+    expect(notices).toHaveLength(1)
+    expect(notices[0]).toMatchObject({
+      tone: 'warn',
+      message: { key: 'terminal.ev.snapshotTruncated', params: { files: 3000, mib: 256 } },
+    })
   })
 
   it('names gate steps by kind and says a failed gate once', () => {

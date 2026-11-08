@@ -152,7 +152,8 @@
       "restored": "Restaurado",
       "restoredTitle": "Trabajo restaurado",
       "restoredDesc": "Los archivos se recuperaron de la instantánea tomada antes del turno {n}.",
-      "restoredDescMany": "Los archivos se recuperaron de las instantáneas tomadas antes de sus turnos."
+      "restoredDescMany": "Los archivos se recuperaron de las instantáneas tomadas antes de sus turnos.",
+      "truncated": "Turno {n}: una instantánea alcanzó sus límites ({files} archivos o {mib} MiB de contenido nuevo), así que los archivos que los superan no se comprobaron."
     },
     "overlaps": {
       "title": "También cambiados por otras tareas",

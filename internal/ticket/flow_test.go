@@ -147,7 +147,11 @@ func newFakeGitHub(t *testing.T, origin string) *fakeGitHub {
 func (f *fakeGitHub) host() string { return strings.TrimPrefix(f.srv.URL, "http://") }
 
 func (f *fakeGitHub) originSha(branch string) string {
-	out, err := exec.CommandContext(context.Background(), "git", "--git-dir", f.origin, "rev-parse",
+	exe, err := gitx.NewBinary(nil, nil).Path()
+	if err != nil {
+		return ""
+	}
+	out, err := exec.CommandContext(context.Background(), exe, "--git-dir", f.origin, "rev-parse",
 		"refs/heads/"+branch).Output()
 	if err != nil {
 		return ""
@@ -275,9 +279,14 @@ func (noGh) Run(context.Context, []string, []byte, []string) (stdout, stderr []b
 	return nil, nil, github.ErrNoGh
 }
 
+// run runs the git the daemon finds (gitx.Binary: never a Windows batch wrapper, which drops the ^ of X^{tree}).
 func run(t *testing.T, dir string, args ...string) string {
 	t.Helper()
-	cmd := exec.CommandContext(t.Context(), "git", args...)
+	exe, err := gitx.NewBinary(nil, nil).Path()
+	if err != nil {
+		t.Skipf("no usable git: %v", err)
+	}
+	cmd := exec.CommandContext(t.Context(), exe, args...)
 	cmd.Dir = dir
 	out, err := cmd.CombinedOutput()
 	if err != nil {

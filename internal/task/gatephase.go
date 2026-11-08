@@ -143,8 +143,9 @@ func (s *Service) othersWorking(ctx context.Context, t *Task) bool {
 
 // gateEnv is the environment of gate commands: the daemon's, plus CI=1 and what the gate is about. The gate's own
 // variables are never inherited: a SEELEGENT_TURN_FILES from the daemon's environment would name other files when
-// this list is too long to pass (as the old version did).
-func (s *Service) gateEnv(t *Task, files []string) []string {
+// this list is too long to pass (as the old version did). Commands run in root get the same Rust toolchain pin as
+// the worker (Toolchains): only set when the daemon's environment does not pin one itself.
+func (s *Service) gateEnv(ctx context.Context, t *Task, root string, files []string) []string {
 	own := []string{"CI", "SEELEGENT_GATE", "SEELEGENT_TASK", "SEELEGENT_TURN_FILES"}
 	var env []string
 	for _, kv := range s.o.BaseEnv() {
@@ -152,6 +153,10 @@ func (s *Service) gateEnv(t *Task, files []string) []string {
 		if !slices.ContainsFunc(own, func(n string) bool { return strings.EqualFold(n, name) }) {
 			env = append(env, kv)
 		}
+	}
+	pin := s.toolEnv(ctx, root)
+	for _, k := range slices.Sorted(maps.Keys(pin)) {
+		env = append(env, k+"="+pin[k])
 	}
 	env = append(env, "CI=1", "SEELEGENT_GATE=1", "SEELEGENT_TASK="+t.ID)
 	if v := strings.Join(files, "\n"); len(v) <= turnFilesEnvMax {
@@ -194,7 +199,7 @@ func (s *Service) gatePhase(r *run, t *Task) (bool, error) {
 		return s.afterGreen(t, ph.Turn, nil, files)
 	}
 	root := claimRoot(t)
-	runner := gate.Runner{Root: root, Env: s.gateEnv(t, files),
+	runner := gate.Runner{Root: root, Env: s.gateEnv(r.ctx, t, root, files),
 		Timeout:   time.Duration(max(set.GateTimeoutSec, 1)) * time.Second,
 		TailBytes: max(set.GateOutputTailBytes, 1),
 		LogPrefix: filepath.Join(s.o.TasksDir, t.ID, fmt.Sprintf("gate-t%d-", ph.Turn)),

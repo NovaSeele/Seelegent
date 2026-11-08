@@ -101,8 +101,37 @@ in the daemon.
   the turn's checks ran, and `TaskDetail.fileOverlaps` is always a list.
 - `POST /tasks/{id}/git/suggest-message` builds the suggestion locally and at once. It still answers `202 TaskGit`
   and publishes `task.updated`, so clients written for a slow suggestion keep working.
-- `GET /tasks/{id}/git/diff` accepts `turn` but shows the working-tree diff; per-turn diffs need the snapshot store of
-  a later milestone.
+- `TaskGit` follows the task from its start (bugs.md F70): the task records `gitStart` (head and branch) with its
+  baseline at the first turn, and `commits`, `commitsMore`, `committedFiles`, `startState`, `startHead`,
+  `startBranch`, `branchChanged` and `head` describe what it committed since. `files` stays the uncommitted changes
+  counted against HEAD, and only those can be committed; `committedFiles` are view only. A task from before
+  `gitStart` uses its turn-1 snapshot head, but only in the repository that snapshot was taken in and only when it
+  names a head; else `startState` is `unknown`. `unreachable` means the start is gone or no longer an ancestor of
+  HEAD (a rebase or a reset); then no commits are listed and diffs compare with HEAD.
+- `commits` lists every commit in start..HEAD, the task's or not. Each gets the `turn` that was running when it was
+  committed (by committer time); one made while none of the task's turns ran (someone else's, or between turns) has
+  no turn and `outsideTurns: true`; `ownCommits` counts the range's commits made during the turns (listed or older),
+  so the others number `commits` plus `commitsMore` minus `ownCommits`. Attribution is by time only: another task's commit made while this task's turn
+  `n` ran is also given turn `n`. `committedFiles` keeps only the task's files among those the range changed: a file
+  its turns touched, or a file under the task's folder that a commit made during one of its turns changed. A file
+  only commits outside the turns changed is never listed. A committed file's diff compares the working tree with
+  the start, so it also holds others' commits to that same file.
+- When the commits since the start cannot be read (git times out on a big repository, an object is missing), the
+  error is logged and `TaskGit` still answers with `files`: `historyState` is `history_unavailable`, `commits` and
+  `committedFiles` are empty, and a later read tries again.
+- `GET /tasks/{id}/git/diff` takes `base=start` (the default: the working tree against the task's start, or the
+  empty tree when the repository had no commit then) or `base=head` (the uncommitted list); any other `base` is
+  `400`. It accepts `turn` but does not use it; per-turn changes come from the turn snapshots (`outside-diff`).
+- `GET /tasks/{id}/git/commits/{sha}` (an addition to the contract) answers `GitCommitDetail`: the commit's files and
+  parsed diffs against its first parent, 1 MiB in all (`truncated`), with `--no-textconv` and `--no-ext-diff` like
+  the other diffs. The sha is checked as 4–64 hex digits before git sees it (`400`, field `sha`), resolved with
+  `rev-parse --verify`, and answered only when it is in start..HEAD: any other commit, a known one or not, is
+  `404 not_found` with `details.reason: "not_in_task"`, and a task whose start is unknown or unreachable is
+  `409 bad_state` with `details.reason` `start_unknown` or `start_unreachable`. Diffs are not redacted, the same as
+  the other diff endpoints.
+- `RepoStatus` adds `upstream`, `ahead`, `behind` and `upstreamGone` (the upstream is set but its ref is gone), read
+  from `git status --porcelain=v2 --branch`. The Git view shows them and the repository's other uncommitted files.
+- `GET /git/diff` takes `base` as `HEAD` or 7–64 hex digits (SHA-256 repositories).
 - `Account.email` is never set: no backend reports it reliably yet.
 - `Provider.models` is the allow-list exactly as last set through `models`, never the tier models, and
   `Provider.allowedModels` is the pattern enforced. A list becomes `^(?:a|b)$`; a hand-written pattern (old data, or
@@ -118,7 +147,7 @@ in the daemon.
   the dashboard's own requests: `403 forbidden` with `details.reason: "dashboard_only"` otherwise.
 - A `POST /tasks` body with `ticketId` is a `400` (C-B21): ticket tasks start only through the ticket routes.
 - `PATCH /settings` applies the JSON merge patch to the daemon's in-memory settings and writes `config.json`
-  atomically. Unknown keys, type errors and validation errors are reported together in one `400`.
+  atomically. Unknown keys, type errors and validation errors are reported together in one `400`. A body that is not a JSON object (`null`, an array, broken JSON) is a `400 invalid_argument` "the settings patch must be a JSON object", never "config file cannot be parsed".
 - `/state` reads `lastEventId` before the snapshot. A frame newer than the id can repeat a change the snapshot holds
   (harmless), but no change can be missing from both.
 - SSE: the `hello` frame carries an id like every frame (contract §7: "every frame"). On a fresh connect it is the
@@ -132,7 +161,10 @@ in the daemon.
   away writes nothing. When the daemon shuts down (`Server.Close`, on `POST /daemon/stop` and on Ctrl+C) every open
   wait ends at once with `503 daemon_stopping` (a wait that ended on its own just before is answered normally), so
   `http.Server.Shutdown` does not sit out the waits; the clients take that code to mean "do not start the daemon
-  again" (see [cli.md](cli.md) and [mcp.md](mcp.md)).
+  again" (see [cli.md](cli.md) and [mcp.md](mcp.md)). The other long waits do the same: `GET /meetings/{id}/wait`,
+  `GET /contests/{id}/wait` and `POST /tasks/{id}/cancel` with `waitSeconds` (the cancel itself is recorded before
+  its wait, and the next daemon finishes it; that answer then carries `details.cancelRecorded: true` and says so in
+  its message, and the CLI and the MCP `cancel` tool report the cancel as recorded instead of failing).
 - `GET /health` carries `homeId` (`config.HomeID`: 16 hex digits of the SHA-256 of `fsutil.Key(home)`), so a client
   of another data directory refuses this daemon instead of using or stopping it.
 - `capabilities.takeover` is true for backends that can resume a session; `apiKey` for every backend but agy;
@@ -146,8 +178,10 @@ in the daemon.
   `App.Close`, lock released last), and `http.Server.Shutdown` lets the answer finish first. A server built without
   `Stop` answers `503 unavailable`. The worker guard denies it like every route outside the allow-list. The daemon
   also writes its pid on the second line of `run/daemon.port`; `seelegent stop` and `doctor` only show it.
-- A worker may call `GET /spec` with an absolute `dir`. The guard checks the task's cwd only, as the contract says,
-  and `dir` must stay inside that cwd.
+- A worker may call `GET /spec` only with its own task's cwd (or repository root), and `dir`, relative or absolute,
+  must lie inside that cwd or be its own task's spec folder. Paths are compared as `fsutil` keys with links and
+  junctions resolved, so an absolute `dir` of another project or a link inside the cwd that leads out of it is
+  `403 forbidden` like a foreign cwd. `GET /memory` takes no other path.
 
 ## The dashboard
 

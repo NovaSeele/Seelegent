@@ -23,6 +23,7 @@ with owner-only permissions when a command starts, never earlier.
 | `run/start.lock`   | held by an MCP server while it starts the daemon, so several start only one            |
 | `backups/`         | copies taken before migrations and imports                                             |
 | `tasks/<id>/t<turn>-a<attempt>/` | files of one worker attempt: `launch/` (launch spec, stream, stderr, exit record), the prompt of CLIs that read it on standard input, a long agy brief |
+| `tasks/<id>/t<turn>-a<attempt>/mask` | the secrets the attempt's output is masked for (an API-key account's key), kept while the worker runs so a restarted daemon still masks them: a DPAPI blob on Windows, a 0600 file elsewhere |
 | `snapshots/`       | turn snapshots of the work at risk: content-addressed file copies (`blobs/`) and one manifest per task turn (`tasks/<id>/`), never anything inside your repository ([safety.md](safety.md)) |
 | `guard/bin/`       | the git shim workers without a pre-tool hook get first on `PATH` ([safety.md](safety.md)) |
 | `contests/<id>/<label>.json` | the stored copy of a contest variant's changes, written once its task stops ([team.md](team.md)) |
@@ -33,8 +34,8 @@ with owner-only permissions when a command starts, never earlier.
 | `update/`          | downloads and the lock of `seelegent update` ([release.md](release.md))                |
 | `setup-created.json` | the host files and folders `seelegent setup` created, so `setup --remove` deletes them only when they are empty again ([setup.md](setup.md)) |
 
-Outside Windows, `profiles/<id>/seelegent-key` and `github/token` are plain text protected only by their 0600 mode:
-there is no OS key store Seelegent uses there. Anyone who can read your files (a program running as you, root, a
+Outside Windows, `profiles/<id>/seelegent-key`, `github/token` and a running attempt's `mask` are plain text
+protected only by their 0600 mode: there is no OS key store Seelegent uses there. Anyone who can read your files (a program running as you, root, a
 backup that does not keep modes) can read them. Prefer a fine-grained GitHub token limited to the repositories
 Seelegent works on, or the `gh` CLI, whose own credential store Seelegent then uses instead of a token.
 
@@ -50,6 +51,8 @@ Seelegent works on, or the `gh` CLI, whose own credential store Seelegent then u
 
 - A missing `config.json` means "all defaults"; it is written the first time a setting is saved.
 - Every key is optional. A missing key, or a key set to `null`, takes its default.
+- A UTF-8 byte order mark at the start (Notepad, Windows PowerShell 5.1's `Set-Content -Encoding UTF8`) is
+  skipped; saves never write one.
 - A file that is not valid JSON, has a value of the wrong type, or holds a value out of range is an **error**: the
   daemon refuses to start and names the file, line and column or the setting. The file is never replaced by
   defaults, so a typo cannot wipe your settings.
@@ -101,7 +104,7 @@ set). RE2 has no look-ahead: write `"^gemini-3\\.8-"` (the JSON spelling of
 | Setting | Type | Default | Meaning |
 | --- | --- | --- | --- |
 | `maxConcurrentPerAccount` | integer 1–64 | `2` | Turns that may run at the same time on one account. |
-| `quotaRefreshMinutes` | integer ≥ 1 | `10` | How often quota is read from every account (each cycle ±10 % so accounts are not all read at the same instant). A change applies from the next cycle. Accounts marked signed out are read every 6 hours instead, or at once after a sign-in or a refused run. |
+| `quotaRefreshMinutes` | integer ≥ 1 | `10` | How often quota is read from every account (each cycle ±10 % so accounts are not all read at the same instant). A change applies at once: the next cycle comes one new interval after the last one ended, or right away when that time has passed. Accounts marked signed out are read every 6 hours instead, or at once after a sign-in or a refused run. |
 | `minRemaining` | number 0 ≤ x < 1 | `0.03` | An account is skipped for a quota group once its remaining fraction is at or below this; it rests until the used-up windows reset. |
 | `passiveCooldownMinutes` | integer ≥ 1 | `60` | Rest after a quota error for API-key accounts whose provider cannot report the reset time. |
 | `usageHistory` | boolean | `true` | Record hourly usage snapshots (kept 30 days). The usage summary per task and account is recorded either way. |
@@ -114,7 +117,7 @@ set). RE2 has no look-ahead: write `"^gemini-3\\.8-"` (the JSON spelling of
 | --- | --- | --- | --- |
 | `stallMinutes` | integer ≥ 1 | `10` | Flag a running turn that produced no event for this long. |
 | `stallToolMinutes` | integer ≥ 1 | `25` | Flag a single tool call running this long. |
-| `loopRepeat` | integer 2–100 | `4` | Flag a worker that repeats the same tool call this many times in a row. |
+| `loopRepeat` | integer 2–100 | `4` | Flag a worker as looping when the same tool call (same tool and parameters) comes back this many times within its last 12 tool calls with no progress in between (a successful edit seen once), or alternates this many times with the same other call. Takes effect at once. Effective up to 12: the check looks at the last 12 tool calls, so a value above 12 turns it off (such values are still accepted, so existing files keep loading); five failed calls in a row are flagged whatever the value. |
 | `attentionDecayHours` | integer ≥ 1 | `24` | Drop an unanswered attention flag after this long. |
 
 ### Gates, lanes and safety

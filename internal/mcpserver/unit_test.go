@@ -187,6 +187,16 @@ func TestToolsList(t *testing.T) {
 		if strings.Contains(string(data), "{{") {
 			t.Errorf("%s has an unfilled placeholder", tool.Name)
 		}
+		// wake_on_blocked wakes on every state that needs the lead, not only blocked (M18 review G2).
+		if raw, ok := schema.Properties["wake_on_blocked"]; ok {
+			var p struct {
+				Description string `json:"description"`
+			}
+			_ = json.Unmarshal(raw, &p)
+			if !strings.Contains(p.Description, "question") || !strings.Contains(p.Description, "stalled") {
+				t.Errorf("%s wake_on_blocked = %q, want questions and stalls named", tool.Name, p.Description)
+			}
+		}
 	}
 	// Shapes the old schema had: enums and oneOfs (spot checks), and the tier models in the model description.
 	delegate := byName["delegate"]
@@ -791,6 +801,26 @@ func TestGateOptions(t *testing.T) {
 	}
 	if calls.Load() == 0 {
 		t.Fatal("no call reached the daemon")
+	}
+	// A followup's empty gate list clears the lead's commands: it reaches the daemon as an empty list, and a gate
+	// left out sends nothing.
+	for _, c := range []struct {
+		gate any
+		want string
+		in   bool
+	}{{[]string{}, `"gateCommands":[]`, true}, {nil, `"gateCommands"`, false}} {
+		args := map[string]any{"task_id": "t1", "message": "m", "wait_seconds": 0}
+		if c.gate != nil {
+			args["gate"] = c.gate
+		}
+		var rep any
+		ok(t, cs, "followup", args, &rep)
+		st.mu.Lock()
+		body := string(st.bodies["POST /tasks/t1/followup"])
+		st.mu.Unlock()
+		if strings.Contains(body, c.want) != c.in {
+			t.Errorf("followup with gate %v: body %s", c.gate, body)
+		}
 	}
 }
 

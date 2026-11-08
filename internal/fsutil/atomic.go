@@ -53,7 +53,14 @@ func WriteFileAtomic(path string, data []byte, perm fs.FileMode) (err error) {
 	if err = os.Chmod(tmp, perm); err != nil {
 		return fmt.Errorf("write %s: chmod: %w", path, err)
 	}
+	// Windows refuses to replace a read-only file (Access is denied): clear the bit first and, when the replace
+	// fails, put it back. The new file gets its read-only bit from perm.
+	undo, err := unprotect(path)
+	if err != nil {
+		return fmt.Errorf("write %s: %w", path, err)
+	}
 	if err = Rename(tmp, path); err != nil {
+		undo()
 		return fmt.Errorf("write %s: replace: %w", path, err)
 	}
 	if err = syncDir(dir); err != nil {

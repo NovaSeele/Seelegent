@@ -1,0 +1,15 @@
+{
+  "seq": 7,
+  "ts": "2026-11-07T09:00:00.000Z",
+  "taskId": "t261107090000-ab12",
+  "turn": 1,
+  "attempt": 1,
+  "type": "snapshot_truncated",
+  "data": {
+    "snapshots": [
+      "end"
+    ],
+    "maxFiles": 3000,
+    "maxBytes": 268435456
+  }
+}

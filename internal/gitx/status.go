@@ -31,7 +31,8 @@ func (r *Repos) Status(ctx context.Context, cwd string) (api.RepoStatus, error) 
 		return api.RepoStatus{}, err
 	}
 	return api.RepoStatus{Repo: true, Root: root, Branch: st.branch, Detached: st.detached,
-		Dirty: len(st.files) > 0, Files: api.NonNil(st.files)}, nil
+		Dirty: len(st.files) > 0, Files: api.NonNil(st.files), Upstream: st.upstream, Ahead: st.ahead,
+		Behind: st.behind, UpstreamGone: st.upstream != "" && !st.ab}, nil
 }
 
 // Branch returns the branch of the repository that contains cwd, or nil outside git. Answers are cached for 10 s
@@ -64,8 +65,14 @@ func (r *Repos) Branch(ctx context.Context, cwd string) (*api.BranchInfo, error)
 type repoState struct {
 	branch   string
 	detached bool
-	head     bool // the repository has a commit
+	head     bool   // the repository has a commit
+	oid      string // the HEAD commit ("" without one)
 	files    []api.GitFile
+	// upstream is the branch's upstream ("" without one); ahead and behind are set when ab is (the upstream's
+	// branch exists).
+	upstream      string
+	ahead, behind int
+	ab            bool
 }
 
 // state reads `git status` of the repository at root, with line counts when numstat is set.
@@ -122,7 +129,20 @@ func parseStatus(out []byte) repoState {
 					st.branch = b
 				}
 			case strings.HasPrefix(rec, "# branch.oid "):
-				st.head = strings.TrimPrefix(rec, "# branch.oid ") != "(initial)"
+				st.oid = strings.TrimPrefix(rec, "# branch.oid ")
+				st.head = st.oid != "(initial)"
+				if !st.head {
+					st.oid = ""
+				}
+			case strings.HasPrefix(rec, "# branch.upstream "):
+				st.upstream = strings.TrimPrefix(rec, "# branch.upstream ")
+			case strings.HasPrefix(rec, "# branch.ab "):
+				// "+<ahead> -<behind>"; absent when the upstream's branch is gone.
+				if f := strings.Fields(strings.TrimPrefix(rec, "# branch.ab ")); len(f) == 2 {
+					st.ahead, _ = strconv.Atoi(strings.TrimPrefix(f[0], "+"))
+					st.behind, _ = strconv.Atoi(strings.TrimPrefix(f[1], "-"))
+					st.ab = true
+				}
 			}
 		case '1':
 			if f := strings.SplitN(rec, " ", 9); len(f) == 9 {

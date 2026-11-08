@@ -94,6 +94,18 @@ func TestLoadOldSettings(t *testing.T) {
 	}
 }
 
+// TestLoadHighLoopRepeat: loopRepeat keeps its range 2–100 although the loop check is effective only up to 12 (it
+// looks at the last 12 tool calls), so a file written with a higher value still loads as it is.
+func TestLoadHighLoopRepeat(t *testing.T) {
+	c, err := Load(writeFile(t, `{"loopRepeat": 50}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Settings.LoopRepeat != 50 {
+		t.Errorf("loopRepeat = %d, want 50", c.Settings.LoopRepeat)
+	}
+}
+
 func TestSaveKeepsUnknownKeys(t *testing.T) {
 	path := writeFile(t, oldSettings)
 	c, err := Load(path)

@@ -15,6 +15,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path"
@@ -34,12 +35,17 @@ import (
 
 // Limits of one snapshot.
 const (
-	// MaxFileBytes is the largest file whose content is kept; a larger one is recorded by size only.
+	// MaxFileBytes is the largest file whose content is kept; a larger one is recorded by size, hash and
+	// modification time.
 	MaxFileBytes = 8 << 20
 	// MaxFiles caps the files of one snapshot.
 	MaxFiles = 3000
 	// MaxTotalBytes caps the new content one snapshot copies.
 	MaxTotalBytes = 256 << 20
+	// MaxReadBytes caps what one snapshot reads outside those caps: the large files it hashes in a stream and the
+	// files of extra (Take). Past it a file is recorded by size and modification time only, and the manifest says
+	// so (HashBudgetSpent).
+	MaxReadBytes = 2 << 30
 )
 
 // Manifest kinds.
@@ -77,6 +83,9 @@ type Manifest struct {
 	Files   []File    `json:"files"`
 	// Truncated is set when the dirty files went over MaxFiles or MaxTotalBytes; later files are missing.
 	Truncated bool `json:"truncated,omitempty"`
+	// HashBudgetSpent is set when the snapshot read MaxReadBytes: the files after that point have neither hash
+	// nor content and are compared by size and modification time only, a weaker check (M18 review G3, G4).
+	HashBudgetSpent bool `json:"hashBudgetSpent,omitempty"`
 }
 
 // File is one file of a snapshot.
@@ -95,6 +104,25 @@ type File struct {
 	Binary bool `json:"binary,omitempty"`
 	// Link: a symbolic link, whose content is its target.
 	Link bool `json:"link,omitempty"`
+	// ModTime is the modification time in Unix nanoseconds (0 for a missing file, or in an older manifest). It is
+	// what tells a change apart when a file has no hash (see Changed).
+	ModTime int64 `json:"modTime,omitempty"`
+}
+
+// Changed reports whether a file differs between two snapshots. Two hashes decide when both sides have one;
+// otherwise (a file too large to hash, or read past MaxReadBytes) the size and, where both are known, the
+// modification time do, and weak is true.
+func Changed(before, after File) (changed, weak bool) {
+	if before.Missing || after.Missing {
+		return before.Missing != after.Missing, false
+	}
+	if before.Hash != "" && after.Hash != "" {
+		return before.Hash != after.Hash, false
+	}
+	if before.Size != after.Size {
+		return true, true
+	}
+	return before.ModTime != 0 && after.ModTime != 0 && before.ModTime != after.ModTime, true
 }
 
 // Find returns the entry of path (compared as Key) and whether there is one.
@@ -116,6 +144,8 @@ type Store struct {
 	// blobs orders put (shared) against the sweep's check-and-remove of one blob (exclusive): a blob reused while
 	// the sweep looks at it is either touched first, and kept, or removed first, and written again.
 	blobs sync.RWMutex
+	// readBudget is MaxReadBytes (smaller in tests).
+	readBudget int64
 }
 
 // New returns a store in dir.
@@ -123,7 +153,23 @@ func New(dir string, git Git, now func() time.Time) *Store {
 	if now == nil {
 		now = time.Now
 	}
-	return &Store{dir: dir, git: git, now: now}
+	return &Store{dir: dir, git: git, now: now, readBudget: MaxReadBytes}
+}
+
+// budget is what a snapshot may still read outside its caps (MaxReadBytes).
+type budget struct {
+	left  int64
+	spent bool
+}
+
+// take reserves n bytes, or reports that they do not fit any more.
+func (b *budget) take(n int64) bool {
+	if n > b.left {
+		b.spent = true
+		return false
+	}
+	b.left -= n
+	return true
 }
 
 // Git returns the git access of the store.
@@ -131,57 +177,89 @@ func (s *Store) Git() Git { return s.git }
 
 // Take snapshots the repository at root: every dirty file, plus the files of extra (relative to root) whatever
 // their state, so a file that was cleaned or reverted still shows its end state.
+//
+// The files of extra are read first and do not count against MaxFiles and MaxTotalBytes (each is still kept only
+// up to MaxFileBytes): the end snapshot passes the start snapshot's files and the turn's edited files there, and a
+// turn that creates thousands of new files (a build into dist/) must not push the files it may have destroyed out
+// of the comparison (M18 hunt H5). Only the other dirty files can be cut, which sets Truncated. The files of extra
+// and the hashes of large files share one read budget instead, MaxReadBytes; past it a file is recorded by size
+// and modification time only, which sets HashBudgetSpent.
 func (s *Store) Take(ctx context.Context, root string, extra []string) (Manifest, error) {
 	head, dirty, err := s.git.Dirty(ctx, root)
 	if err != nil {
 		return Manifest{}, err
 	}
 	m := Manifest{Version: 1, Root: root, Head: head, TakenAt: s.now().UTC(), Files: []File{}}
+	// status holds the git status of every dirty path (a rename's old path counts as deleted), so a file read
+	// early through extra keeps it.
+	status := map[string]string{}
+	for _, d := range dirty {
+		if d.OldPath != "" {
+			if k := Key(d.OldPath); status[k] == "" {
+				status[k] = api.GitDeleted
+			}
+		}
+		status[Key(d.Path)] = d.Status
+	}
 	seen := map[string]bool{}
+	var files int
 	var total int64
-	add := func(rel, status string) error {
+	read := &budget{left: s.readBudget}
+	add := func(rel, st string, capped bool) error {
 		k := Key(rel)
-		if seen[k] || skipped(rel) {
+		if seen[k] || st == api.GitUntracked && skipped(rel) {
 			return nil
 		}
 		seen[k] = true
-		if len(m.Files) >= MaxFiles || total > MaxTotalBytes {
+		if capped && (files >= MaxFiles || total > MaxTotalBytes) {
 			m.Truncated = true
 			return nil
 		}
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		f, n, err := s.record(root, rel, status)
+		var b *budget
+		if !capped {
+			b = read // the files of extra are read on the budget, the others under the caps
+		}
+		f, n, err := s.record(root, rel, st, b, read)
 		if err != nil {
 			return err
 		}
-		total += n
+		if capped {
+			total += n
+		}
 		if f != nil {
+			if capped {
+				files++
+			}
 			m.Files = append(m.Files, *f)
 		}
 		return nil
 	}
+	for _, rel := range extra {
+		rel = filepath.ToSlash(rel)
+		if err := add(rel, status[Key(rel)], false); err != nil {
+			return Manifest{}, err
+		}
+	}
 	for _, d := range dirty {
-		if err := add(d.Path, d.Status); err != nil {
+		if err := add(d.Path, d.Status, true); err != nil {
 			return Manifest{}, err
 		}
 		if d.OldPath != "" {
-			if err := add(d.OldPath, api.GitDeleted); err != nil {
+			if err := add(d.OldPath, api.GitDeleted, true); err != nil {
 				return Manifest{}, err
 			}
 		}
 	}
-	for _, rel := range extra {
-		if err := add(filepath.ToSlash(rel), ""); err != nil {
-			return Manifest{}, err
-		}
-	}
 	sort.Slice(m.Files, func(i, j int) bool { return m.Files[i].Path < m.Files[j].Path })
+	m.HashBudgetSpent = read.spent
 	return m, nil
 }
 
-// skipped reports a path under a heavy folder.
+// skipped reports a path under a heavy folder. Only untracked files there are left out: a tracked file under
+// venv/ or .cache/ is the user's like any other.
 func skipped(rel string) bool {
 	for _, part := range strings.Split(rel, "/") {
 		if heavyDirs[part] {
@@ -192,8 +270,9 @@ func skipped(rel string) bool {
 }
 
 // record reads one file and stores its content. It returns nil for something that is not a file (a folder, a
-// submodule, a FIFO) and the number of new bytes written.
-func (s *Store) record(root, rel, status string) (*File, int64, error) {
+// submodule, a FIFO) and the number of new bytes written. A file of up to MaxFileBytes is read on contents when
+// that is not nil (the files of extra); a larger one is hashed on hashes.
+func (s *Store) record(root, rel, status string, contents, hashes *budget) (*File, int64, error) {
 	full := filepath.Join(root, filepath.FromSlash(rel))
 	f := &File{Path: rel, Status: status}
 	st, err := os.Lstat(full)
@@ -208,11 +287,18 @@ func (s *Store) record(root, rel, status string) (*File, int64, error) {
 	}
 	f.Link = st.Mode()&os.ModeSymlink != 0
 	f.Size = st.Size()
+	f.ModTime = st.ModTime().UnixNano()
 	if !f.Link && !st.Mode().IsRegular() {
 		return nil, 0, nil
 	}
 	if f.Size > MaxFileBytes {
+		if !f.Link && f.Size <= MaxHashBytes && hashes.take(f.Size) {
+			f.Hash = hashLarge(full)
+		}
 		return f, 0, nil
+	}
+	if contents != nil && !contents.take(f.Size) {
+		return f, 0, nil // by size and modification time only
 	}
 	data, err := gitx.ReadWorktree(full, MaxFileBytes+1)
 	if err != nil {
@@ -234,6 +320,26 @@ func (s *Store) record(root, rel, status string) (*File, int64, error) {
 	}
 	f.Stored = true
 	return f, n, nil
+}
+
+// MaxHashBytes is the largest file over MaxFileBytes whose hash is still taken (its content is never kept); a
+// larger one is compared by size and modification time.
+const MaxHashBytes = 1 << 30
+
+// hashLarge returns the hash of a file too large to keep, read in a stream, or "" when it is over MaxHashBytes or
+// cannot be read. A change to such a file can then still be noticed (M18 hunt H18).
+func hashLarge(full string) string {
+	file, err := os.Open(full)
+	if err != nil {
+		return ""
+	}
+	defer func() { _ = file.Close() }()
+	h := sha256.New()
+	n, err := io.Copy(h, io.LimitReader(file, MaxHashBytes+1))
+	if err != nil || n > MaxHashBytes {
+		return ""
+	}
+	return hex.EncodeToString(h.Sum(nil))
 }
 
 // Hash is the content hash the store uses.
@@ -381,6 +487,13 @@ func (s *Store) Sweep(ctx context.Context, keep func(taskID string) bool) (int, 
 			return removed, err
 		}
 		for _, f := range files {
+			if tempName(f.Name()) {
+				// A manifest write cut short (a crash between the temp file and the rename): not a manifest.
+				if err := s.removeStale(filepath.Join(dir, f.Name()), cutoff); err != nil {
+					return removed, err
+				}
+				continue
+			}
 			data, err := fsutil.ReadFile(filepath.Join(dir, f.Name()))
 			if err != nil {
 				return removed, err
@@ -411,7 +524,7 @@ func (s *Store) Sweep(ctx context.Context, keep func(taskID string) bool) (int, 
 			}
 			return err
 		}
-		if d.IsDir() || !hashRe.MatchString(d.Name()) || used[d.Name()] {
+		if d.IsDir() || used[d.Name()] || !hashRe.MatchString(d.Name()) && !tempName(d.Name()) {
 			return nil
 		}
 		return s.removeStale(p, cutoff)
@@ -419,7 +532,13 @@ func (s *Store) Sweep(ctx context.Context, keep func(taskID string) bool) (int, 
 	return removed, err
 }
 
-// removeStale removes the blob at p unless it was written or reused after cutoff.
+// tempName reports the name of a temp file fsutil.WriteFileAtomic writes before its rename. One left behind by a
+// crash is skipped by the sweep, and removed once it is older than blobGrace (M18 hunt H19).
+func tempName(name string) bool {
+	return strings.HasPrefix(name, ".") && strings.HasSuffix(name, ".tmp")
+}
+
+// removeStale removes the blob (or leftover temp file) at p unless it was written or reused after cutoff.
 func (s *Store) removeStale(p string, cutoff time.Time) error {
 	s.blobs.Lock()
 	defer s.blobs.Unlock()

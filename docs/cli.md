@@ -61,20 +61,20 @@ allowed, and so do the read commands of `members`, `meeting`, `contest`, `notes`
 
 | Command | What it does | `--json` prints |
 |---|---|---|
-| `daemon [--port N] [--dev-origin URL]` (alias `serve`) | Runs the daemon in the foreground until Ctrl+C or `seelegent stop`. | – |
+| `daemon [--port N] [--dev-origin URL]` (alias `serve`) | Runs the daemon in the foreground until Ctrl+C (or SIGTERM on Unix) or `seelegent stop`. Every command, the hidden `__launch` launcher included, ends its work on SIGINT and, on Unix, SIGTERM: a launcher then stops its worker tree and writes the exit record. | – |
 | `mcp` | The MCP server for a lead host ([mcp.md](mcp.md)). | – |
 | `ui [--no-open]` | Starts the daemon if needed, opens the dashboard in the browser (Windows, macOS, Linux) and prints `Dashboard: <url>`. | `{dashboard}` |
-| `status` | Daemon, backends, accounts (labels and quota, never e-mails) and the tasks that need you. Prints `not running` (exit 0) when no daemon runs; a daemon that holds its lock without answering, or another program on the port, is exit 1. | `{running, dashboard?, health?, backends: Backend[], accounts: Account[], activeTasks: TaskSummary[]}` |
+| `status` | Daemon, backends, accounts (labels and quota, never e-mails) and the active tasks; a task that needs you is tagged `[BLOCKED: reason]`, `[QUESTION: reason]` or `[STALLED: reason]`. Prints `not running` (exit 0) when no daemon runs; a daemon that holds its lock without answering, or another program on the port, is exit 1. | `{running, dashboard?, health?, backends: Backend[], accounts: Account[], activeTasks: TaskSummary[]}` |
 | `stop` | Asks the daemon to shut down (`POST /api/v1/daemon/stop`) and waits up to 15 s until its lock is free and its port silent; prints `stopped` or `not running`. Open waits are answered at once (`daemon_stopping`), so this takes about a second, and a lead that was waiting does not start the daemon again (see waits below). Removes a port file left by a daemon that is gone. A daemon that holds its lock but does not answer is reported with its pid (when recorded) and the log path, exit 1. Nothing is ever killed by a pid read from a file (old B3, B14). | `{ok, stopped}` |
 | `restart` | `stop`, then start the daemon and wait until it answers. Prints `Daemon restarted.` | `{ok: true, restarted: true}` |
 | `delegate [flags] <prompt\|@file>` | Creates a task and waits for its report. Flags: `--cwd`, `--title`, `--backend`, `--provider`, `--model`, `--effort`, `--mode full\|plan`, `--profile`, `--spec`, `--task T001,T002` (needs `--spec`), `--after t1,t2`, `--after-mode accepted\|done`, `--allow-git`, `--member M` (the member's backend, model or tier and role; [team.md](team.md)), the gate flags below, the contest flags below, `--wait N` (default 600; 0 returns at once; a task with `--after` does not wait unless `--wait` is given). The text report ends with the gate, lane, bar and verifier lines. | `TaskReport`; a contest prints the contest |
 | `run [flags] <prompt\|@file>` | Legacy: `delegate` with a 3600 s wait; always prints the report JSON. Same flags as `delegate` except `--wait`. | `TaskReport` |
 | `followup <id> [flags] <message\|@file>` | Sends the next instruction and waits for the report. Flags: `--by lead\|user`, `--model`, `--effort`, `--task`, `--profile`, `--allow-git`, `--force` (start a task waiting for its prerequisites; the message may then be empty), `--member M` (the task runs as that member from this turn on), the gate flags below, `--wait N` (default 600). Gate flags on a followup change the gate from this turn on. | `TaskReport` |
-| `wait <id...> [--any] [--seconds N] [--no-wake]` | Waits (default 600 s) and prints the reports. `--no-wake` keeps waiting when a task needs the lead. | `WaitResult` with `reports` |
+| `wait <id...> [--any] [--seconds N] [--no-wake]` | Waits (default 600 s) and prints the reports; each summary line names the attention state (`[QUESTION: reason]`, `[STALLED: reason]`, ...). `--no-wake` keeps waiting when a task needs the lead. | `WaitResult` with `reports` |
 | `review <id> accepted\|rejected [--notes T] [--answer-objection T\|@file]` | Records the verdict. Accepting a task a peer member objected to (consult verdict `object`) needs `--answer-objection`; the answer is recorded with the review. Accepting over a senior's objection prints a `Warning:` line naming it (`--json`: `warnings`). | `TaskSummary` |
-| `cancel <id> [--wait N]` | Cancels and waits up to N s (default 15, max 60) for the worker to stop. | `TaskReport` read after the cancel (`cancelling: true` while it stops) |
-| `task <id> [--steps N] [--full]` | The report, with the last N worker tool steps; `--full` the whole task with its turns. | `TaskReport` + `recent_steps`, or `TaskDetail` + `recent_steps` |
-| `ls [--active] [--blocked] [--project P] [--limit N]` | Tasks, newest first (limit 1..200, default 50). | `TaskPage` |
+| `cancel <id> [--wait N]` | Cancels and waits up to N s (default 15, max 60) for the worker to stop. A daemon that stops during the wait after recording the cancel prints that the cancel was recorded (exit 0); the next daemon carries it out. | `TaskReport` read after the cancel (`cancelling: true` while it stops); `{taskId, status: "cancelling", cancelRecorded: true}` when the daemon stopped during the wait |
+| `task <id> [--steps N] [--full]` | The report (as `wait` prints it: response, files, attention by state, question, gate, error, link), with the last N worker tool steps; `--full` the whole task with its turns. | `TaskReport` + `recent_steps`, or `TaskDetail` + `recent_steps` |
+| `ls [--active] [--blocked] [--project P] [--limit N]` | Tasks, newest first (limit 1..200, default 50). `--blocked` and the ATTENTION column cover every flag that wakes a wait: `blocked`, `question` and `stalled`. | `TaskPage` |
 | `restore <id> --turn N [--file=<path>]... [--force]` | Puts back the content files had when turn N started, from its snapshot ([safety.md](safety.md)); without `--file`, every work-at-risk file of the turn not restored yet. Paths are relative to the repository root. A file changed after the turn ended is skipped (`changed since the turn ended`) unless `--force`. Prints `restored`/`skipped` lines and the `backup` snapshot that keeps what the files held before. Refused while the task is active. | `RestoreResult` |
 | `memory read\|append\|replace --cwd D [text\|@file]` | A project's notes for workers. | `Memory` |
 | `proof index [--cwd D]` | Every Spec Kit feature of the repository (default: the current folder) with its requirement counts, and the latest regression runs ([gates.md](gates.md)). | `ProofIndex` |
@@ -89,7 +89,7 @@ allowed, and so do the read commands of `members`, `meeting`, `contest`, `notes`
 | `members add --name N --backend B --rank R [flags]`, `members set <id> [flags]`, `members remove <id>` | Change the department. Flags: `--id`, `--name`, `--backend`, `--provider`, `--rank worker\|senior\|peer`, `--tier`, `--model`, `--role`, `--prefer a,b`, `--fallback a,b`, `--enabled`. `set` sends only the flags given. | `Member`; `remove` `{ok, removed}` |
 | `consult <task-id> --member M [--focus T] [--wait N]` | A senior or peer member reads the finished task read-only and answers a verdict (`approve`, `concerns`, `object`) with findings; waits up to N s (default 600). | `Consult` |
 | `notes list\|add\|resolve\|reopen\|delete\|send <task-id> ...` | Review notes on a task's diff. `add --file F --line N [--end-line N] [--side new\|old] <body\|@file>`; `send [--extra T\|@file] [--wait N]` sends the drafts and the notes the last turn left unaddressed as one followup and waits for the report. | `Note[]`, `Note`, `NotesSendResult` or `TaskReport` |
-| `meeting open --attendee id[:rank] ... [--option T]... [--context a,b] [--rounds N] [--sealed T] [--title T] [--cwd D] [--estimate] [--wait N] <question\|@file>` | Opens a meeting of 1 to 6 members (`--estimate` only prints the most runs it takes). | `Meeting` (`RunEstimate` with `--estimate`) |
+| `meeting open --attendee id[:rank] ... [--option T]... [--context a,b] [--rounds N] [--sealed T\|@file] [--title T] [--cwd D] [--estimate] [--wait N] <question\|@file>` | Opens a meeting of 1 to 6 members (`--estimate` only prints the most runs it takes). | `Meeting` (`RunEstimate` with `--estimate`) |
 | `meeting list\|status <id>\|wait <id> [--seconds N]` | Meetings, one meeting's state and minutes, or a wait (default 600, at most 1500) until it needs you or ends. | `MeetingSummary[]`, `Meeting` |
 | `meeting post <id> --answer q1=text ... [--note T]`, `decide <id> [--option K] [--rationale T] <decision>`, `act <id> [--member M] [--backend B] [--model M] [--cwd D] <brief>`, `cancel <id>`, `dissent-outcome <id> <dissent-id> vindicated\|dismissed` | The lead's side of a meeting: answer questions, decide, turn the decision into a task, cancel, settle a dissent later. | `Meeting`; `act` `MeetingActResult` |
 | `contest list\|status <id>\|wait <id> [--seconds N]\|diff <id> <variant>` | Contests, one contest's scoreboard, judge and proposal, a wait until it is ready or ended, a variant's diff against the base. | `ContestSummary[]`, `Contest`, `ContestDiff` |
@@ -185,6 +185,27 @@ A plan task (`--mode plan`) refuses `--gate`, `--gate-detect`, `--lane`, `--forc
 the brief in its own worktree. `--judge M` names the judge (default: the first enabled peer), `--no-judge` scores by
 machine only, `--deadline N` sets the minutes (default 60). A contest refuses `--after` and `--mode plan`.
 
+### Old syntax
+
+The Node version's spellings still work, so scripts and lead skills written for it keep running. They are hidden
+from the help (aliases and hidden flags); the forms in the table above are the ones to write.
+
+| Old form | Same as |
+|---|---|
+| `meeting dissent <id> <dissent-id> vindicated\|dismissed` | `meeting dissent-outcome ...` |
+| `meeting open --question T\|@file ...` | the question as the argument (not both) |
+| `meeting open --seal T\|@file` | `--sealed T\|@file` |
+| `meeting act <id> --item T\|@file [--item ...] [--member M]` | the brief as the argument; each `--item` is one task with the same options |
+| `issues list <repo> --all`, `--closed` | `--state all`, `--state closed` (one of the three) |
+| `issues add <repo> --title T --body B\|@file` | the body as the argument (not both) |
+| `issues triage <repo> <key> assign <brief\|@file>` | `--prompt brief\|@file` (not both) |
+| `issues repo-settings <repo> [--shared-dir D]... [--no-shared-dirs]` | `issues shared-dirs <repo> [D...] [--clear]` (`--shared-dir` takes comma lists too) |
+| `contest status <id> --full` | `--json`: the whole record |
+
+Not carried over: the old `--full` of the other commands (the record they print with `--json` is the whole one
+already), `contest status` without an id (now `contest list`), and `@file` for `meeting decide --rationale`, `issues
+triage --reason`/`--question` (these take text only).
+
 ### No token and no confirmation here
 
 The GitHub token is stored, and an automation is confirmed, only in the dashboard: the command line (like the MCP
@@ -206,10 +227,11 @@ when no daemon of the data directory runs does it check writability by writing a
 | `daemon` | answers (version, address, pid) | not running; or another version than this command | holds its lock without answering; another program, or another data directory's daemon, on the port |
 | `port_file` | no stale port file | a port file left by a daemon that is gone (never a fail) | – |
 | `dashboard` | embedded | not part of this build | – |
-| `git` | found (the `gitx` resolver) | – | not found |
+| `git` | found (the `gitx` resolver; the message names the git used) | Windows: the first git on PATH is a batch wrapper (`git.cmd`, `git.bat`, such as ServBay's). Seelegent never runs it (cmd.exe would drop the `^` of `X^{tree}` and expand `%VAR%`) and uses a real `git.exe` instead, but hooks, gate commands and terminals still go through the wrapper | not found, or only a wrapper that names no `git.exe` |
 | `backend_<id>` | enabled and its CLI found (`backend.Find`), or disabled | – | enabled but not found |
 | `accounts` | counts: total, enabled and (daemon running) usable | no enabled account, or counts unknown | – |
 | `path` | no relative PATH entries | relative entries (a worker would resolve them in the project folder) | – |
+| `cargo` (only when rustup is installed) | the first `cargo` on PATH is rustup's proxy | no `cargo` on PATH; or another `cargo` comes first (a dependency's own `rust-toolchain.toml` can then switch compilers mid-build, error E0514, in your own shells; workers and gates are pinned) | – |
 
 There is no host registration check (MCP entries, skills) yet; `seelegent setup --dry-run` shows what is
 registered.

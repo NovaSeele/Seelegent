@@ -148,9 +148,14 @@ func SnapshotBar(root, featureDir string, taskLines map[string]string, gate []st
 		return nil
 	})
 	for id, line := range taskLines {
-		b["tasks.md#"+id] = hash([]byte(untick(line)))
+		b["tasks.md#"+id] = TaskLineHash(line)
 	}
 	return b
+}
+
+// TaskLineHash is the bar hash of one tasks.md line (the value of its "tasks.md#ID" key): the line without its tick.
+func TaskLineHash(line string) string {
+	return hash([]byte(untick(line)))
 }
 
 // untick turns "- [x] T001" into "- [ ] T001", so ticking a task does not change the bar.

@@ -73,6 +73,10 @@
     "handoff": "从 {from} 转到 {to}",
     "reattach": "已重新连接到运行中的 worker",
     "resumed": "守护进程重启后继续运行",
+    "recoveryNotice": {
+      "mask_unreadable": "无法读取此次尝试保存的遮盖列表，因此其输出也按密钥模式遮盖。",
+      "unknown": "守护进程报告了此次恢复的一项情况，此仪表板无法识别。"
+    },
     "attentionCleared": "不再等待",
     "attention": {
       "blocked": "worker 被阻塞",
@@ -97,6 +101,7 @@
     },
     "cancel": "已取消",
     "workAtRisk": "{count} 个改动的文件可能丢失",
+    "snapshotTruncated": "本轮的快照达到上限（{files} 个文件或 {mib} MiB），超出部分的文件未被检查",
     "error": "错误",
     "worker": {
       "quota_exhausted": "worker 额度已用完",

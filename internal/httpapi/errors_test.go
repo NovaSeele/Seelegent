@@ -12,6 +12,7 @@ import (
 
 	"github.com/NovaSeele/Seelegent/internal/api"
 	"github.com/NovaSeele/Seelegent/internal/contest"
+	"github.com/NovaSeele/Seelegent/internal/proof"
 )
 
 // TestCanceledIsNotInternal: a request whose client went away gets nothing written and no Error log; a canceled
@@ -37,6 +38,17 @@ func TestCanceledIsNotInternal(t *testing.T) {
 	s.writeError(rec, live, fmt.Errorf("stopping: %w", context.Canceled))
 	if rec.Code != http.StatusServiceUnavailable || strings.Contains(logs.String(), "level=ERROR") {
 		t.Fatalf("canceled operation = %d %q, logs %s", rec.Code, rec.Body, logs.String())
+	}
+}
+
+// A regression run asked for while the daemon stops answers 503 daemon_stopping, never 500 (M18 hunt, proof note).
+func TestProofStoppingIsNotInternal(t *testing.T) {
+	ae := toAPIError(fmt.Errorf("start run: %w", proof.ErrStopping))
+	if ae.code != api.CodeDaemonStopping {
+		t.Fatalf("code = %s (%s)", ae.code, ae.message)
+	}
+	if got := ae.code.HTTPStatus(); got != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d", got)
 	}
 }
 

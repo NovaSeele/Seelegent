@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/NovaSeele/Seelegent/internal/api"
+	"github.com/NovaSeele/Seelegent/internal/gitx"
 	"github.com/NovaSeele/Seelegent/internal/httpapi"
 )
 
@@ -26,7 +27,11 @@ func (e *env) dashboard() map[string]string {
 
 func gitRun(t *testing.T, dir string, args ...string) {
 	t.Helper()
-	cmd := exec.CommandContext(t.Context(), "git", args...)
+	exe, err := gitx.NewBinary(nil, nil).Path() // as the daemon finds it: never a Windows batch wrapper
+	if err != nil {
+		t.Skipf("no usable git: %v", err)
+	}
+	cmd := exec.CommandContext(t.Context(), exe, args...)
 	cmd.Dir = dir
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("git %v: %v\n%s", args, err, out)
@@ -235,6 +240,10 @@ func TestAutomationRoutes(t *testing.T) {
 	if len(runs) != 1 {
 		t.Fatalf("runs = %+v", runs)
 	}
+	// The limit is the contract's 1..200 (M18 hunt H24: the daemon took up to 500).
+	e.must(e.get("/api/v1/automations/"+a.ID+"/runs?limit=200"), http.StatusOK)
+	e.wantError(e.get("/api/v1/automations/"+a.ID+"/runs?limit=201"), http.StatusBadRequest,
+		api.CodeInvalidArgument, "limit")
 	var list []api.Automation
 	e.must(e.get("/api/v1/automations"), http.StatusOK).json(t, &list)
 	if len(list) != 1 || list[0].LastRun == nil {

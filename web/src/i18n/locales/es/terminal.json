@@ -73,6 +73,10 @@
     "handoff": "Pasó de {from} a {to}",
     "reattach": "Reconectado al worker en curso",
     "resumed": "Reanudado tras reiniciar el daemon",
+    "recoveryNotice": {
+      "mask_unreadable": "No se pudo leer la lista de máscaras guardada de este intento, así que su salida también se enmascara por patrones de claves.",
+      "unknown": "El daemon informó algo sobre esta recuperación que este panel no conoce."
+    },
     "attentionCleared": "Ya no espera",
     "attention": {
       "blocked": "El worker está bloqueado",
@@ -97,6 +101,7 @@
     },
     "cancel": "Cancelada",
     "workAtRisk": "{count} archivo cambiado podría perderse | {count} archivos cambiados podrían perderse",
+    "snapshotTruncated": "Una instantánea de este turno alcanzó sus límites ({files} archivos o {mib} MiB); los archivos que los superan no se comprobaron",
     "error": "Error",
     "worker": {
       "quota_exhausted": "El worker se quedó sin cuota",

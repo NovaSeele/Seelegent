@@ -303,7 +303,7 @@ func newAutomationsCommand(d deps) *cobra.Command {
 				}
 			})
 		})
-	runs.Flags().IntVar(&limit, "limit", 20, "how many (1-500)")
+	runs.Flags().IntVar(&limit, "limit", 20, "how many (1-200)")
 	return group("automations", "Saved delegations on a schedule", automationsUsage, list, show, create, update,
 		enable, disable, del, run, runs, newPreviewCommand(d))
 }

@@ -447,6 +447,7 @@ export type EventType =
   | 'cancel'
   | 'work_at_risk'
   | 'restored'
+  | 'snapshot_truncated'
   | 'gate'
   | 'lane'
   | 'verify'
@@ -535,7 +536,16 @@ export interface HandoffData {
 export interface ReattachData {
   accountId: string
   offset?: number
+  /**
+   * NoticeCode says what the lead should know about the recovery (RecoveryNotice*); the dashboard words it.
+   * Notice is the same in English, the raw text behind the code (logs, API clients).
+   */
+  noticeCode?: RecoveryNoticeCode
+  notice?: string
 }
+
+/** RecoveryNoticeCode says what the lead should know about a recovery. */
+export type RecoveryNoticeCode = 'mask_unreadable'
 
 /**
  * AttentionData is the data of an attention event that clears the flag ({state: "cleared"}); a raised flag is an
@@ -580,6 +590,19 @@ export type CancelData = Record<string, never>
 export interface WorkAtRiskData {
   files: string[]
   snapshot?: string
+}
+
+/**
+ * SnapshotTruncatedData is the data of a snapshot_truncated event: which snapshots of the turn hit the limits of
+ * one snapshot (MaxFiles files, MaxBytes bytes of new content). The start snapshot's files and the files the edit
+ * tools changed are always read, so a truncated end snapshot still covers the work at risk; dirty files past the
+ * limits are missing from the turn's change lists and hygiene check, and a truncated start snapshot leaves its
+ * missing files out of the work at risk check.
+ */
+export interface SnapshotTruncatedData {
+  snapshots: ('start' | 'end')[]
+  maxFiles: number
+  maxBytes: number
 }
 
 /**
@@ -886,11 +909,80 @@ export interface TaskGit {
   root?: string
   branch?: string
   dirty: boolean
-  /** Files are the task's uncommitted changes; a commit may only name these. */
+  /** Files are the task's uncommitted changes, counted against HEAD; a commit may only name these. */
   files: GitFile[]
   /** Preexisting lists files that were already dirty when the task started. */
   preexisting: string[]
   suggestion: Suggestion | null
+  /** Head is the current HEAD commit ("" without commits). */
+  head?: string
+  /** StartState says whether the task's start can be used (GitStart*). */
+  startState: 'recorded' | 'unknown' | 'unreachable'
+  /**
+   * StartHead is the commit the task started from ("" when the repository had no commit yet, or unknown);
+   * StartBranch is the branch it was on ("" when detached or unknown).
+   */
+  startHead?: string
+  startBranch?: string
+  /** BranchChanged: the task started on StartBranch and the repository is now on another branch or detached. */
+  branchChanged: boolean
+  /**
+   * Commits are the commits since the start (start..HEAD), newest first, at most MaxTaskCommits; CommitsMore
+   * counts the older ones left out. Empty unless StartState is recorded. A commit made outside the task's turns
+   * (someone else's, or between turns) is listed with OutsideTurns set.
+   */
+  commits: GitCommit[]
+  commitsMore: number
+  /**
+   * OwnCommits counts the commits of the range made during the task's turns (listed or among the older ones),
+   * the task's own by time; the others are Commits plus CommitsMore minus OwnCommits.
+   */
+  ownCommits?: number
+  /**
+   * CommittedFiles are the task's files among those the commits since the start changed: files the task's turns
+   * touched, and files under the task's folder that a commit made during one of its turns changed. A file only
+   * a commit outside the turns changed is left out. Each is counted from the start to the working tree (a file
+   * committed and then edited again shows its whole change, other commits to the same file included). View
+   * only: a commit takes Files.
+   */
+  committedFiles: GitFile[]
+  /** HistoryState is GitHistoryUnavailable when the commits could not be read; empty otherwise. */
+  historyState?: 'history_unavailable'
+}
+
+/** GitCommit is one commit made since a task started. */
+export interface GitCommit {
+  sha: string
+  subject: string
+  author: string
+  /** AuthorTime is when the commit was written. */
+  authorTime: string
+  /**
+   * Turn is the task's turn that was running when the commit was made, when one was. Attribution is by time:
+   * another task's commit made while this task's turn n ran also has Turn n.
+   */
+  turn?: number
+  /** OutsideTurns: the commit was made while none of the task's turns ran (by someone else, or between turns). */
+  outsideTurns?: boolean
+  /** FileCount counts the files the commit changed (0 for a merge in the list). */
+  fileCount: number
+}
+
+/**
+ * GitCommitDetail is GET /tasks/{id}/git/commits/{sha}: one of the task's commits with its files and diffs
+ * against its first parent (the empty tree for a root commit).
+ */
+export interface GitCommitDetail extends GitCommit {
+  body: string
+  /** Parent is the first parent ("" for a root commit). */
+  parent?: string
+  files: GitFile[]
+  /**
+   * Diffs are the parsed diffs of the files, in order. When the whole diff is over 1 MiB, Truncated is set: the
+   * last diff is cut and the files after it have none.
+   */
+  diffs: FileDiff[]
+  truncated: boolean
 }
 
 /** Suggestion is a suggested commit message. */
@@ -924,6 +1016,10 @@ export type RepoStatus =
       detached: boolean
       dirty: boolean
       files: GitFile[]
+      upstream?: string
+      ahead?: number
+      behind?: number
+      upstreamGone?: boolean
     }
 
 /**
@@ -1686,6 +1782,11 @@ export interface TaskReport {
   blocked_commands?: string[]
   /** WorkAtRisk names the latest turn's files whose uncommitted work may be lost, and how to restore them. */
   work_at_risk?: ReportRisk
+  /**
+   * SnapshotTruncated is true when a snapshot of the latest checked turn hit its limits: dirty files past them
+   * were not checked.
+   */
+  snapshot_truncated?: boolean
   file_overlaps?: ReportOverlap[]
   /** Hygiene and ScopeWarnings are the findings of the last turn's checks. */
   hygiene?: ReportFinding[]
@@ -1761,6 +1862,8 @@ export interface ReportQuestion {
 
 /** ReportAttention says why a task needs the lead. */
 export interface ReportAttention {
+  /** State is the attention state, so a reader can tell a question or a stall from a block. */
+  state: 'blocked' | 'question' | 'stalled' | 'background_wait'
   reason: string
   detail?: string
 }
@@ -1958,7 +2061,10 @@ export interface Settings {
   stallMinutes: number
   /** StallToolMinutes flags a single tool call that has been running for this long. */
   stallToolMinutes: number
-  /** LoopRepeat flags a worker that repeats the same tool call this many times in a row. */
+  /**
+   * LoopRepeat flags a worker that repeats the same tool call this many times within its last 12 tool calls
+   * without progress in between.
+   */
   loopRepeat: number
   /** AttentionDecayHours drops an unanswered attention flag after this long. */
   attentionDecayHours: number
@@ -2474,6 +2580,11 @@ export interface Turn {
   scope: Finding[]
   /** OutsideDiff is true when the turn has snapshots, so GET /tasks/{id}/turns/{n}/outside-diff can answer. */
   outsideDiff: boolean
+  /**
+   * SnapshotTruncated is true when the turn's start or end snapshot hit its limits (3000 files or 256 MiB of new
+   * content), so its checks did not cover every dirty file (SnapshotTruncatedData says which).
+   */
+  snapshotTruncated: boolean
   /** Gate is the gate run after the turn (null when none ran); Verifier the review of its green gate. */
   gate: GateResult | null
   verifier: VerifierResult | null
@@ -2566,7 +2677,8 @@ export interface FollowupRequest {
   allowGit?: boolean
   /**
    * Gate, GateCommands, Lane, NoLane, ForceLane and Verify change the task's gate from this turn on (see
-   * DelegateRequest); left out, the task keeps what it had.
+   * DelegateRequest); left out, the task keeps what it had. An empty GateCommands list (not left out) clears the
+   * lead's commands, so the spec's Gate: lines (as frozen) or the detected commands run again.
    */
   gate?: boolean
   gateCommands?: string[]

@@ -47,6 +47,7 @@ const FIXTURES: Record<TaskEventType, Record<string, unknown>> = {
   cancel: {},
   work_at_risk: { files: ['a.go'] },
   restored: { files: ['a.go'], backup: 't1-restore-1' },
+  snapshot_truncated: { snapshots: ['end'], maxFiles: 3000, maxBytes: 268435456 },
   gate: { phase: 'start', steps: ['lane', 'go test ./...'] },
   lane: { kind: 'violation', paths: ['src/'], files: ['README.md'] },
   verify: { phase: 'start', childId: 't2' },

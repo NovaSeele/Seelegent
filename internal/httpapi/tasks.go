@@ -66,11 +66,24 @@ func (s *Server) taskRoutes() {
 		if req.WaitSeconds < 0 || req.WaitSeconds > 60 {
 			return 0, nil, invalid("waitSeconds must be 0..60").withField("waitSeconds")
 		}
-		sum, stopped, err := s.o.Tasks.Cancel(r.Context(), r.PathValue("id"), req)
-		if stopped {
-			return http.StatusOK, sum, err
+		recorded := false
+		run := func(ctx context.Context) (int, any, error) {
+			sum, stopped, err := s.o.Tasks.Cancel(ctx, r.PathValue("id"), req)
+			recorded = err == nil
+			if stopped {
+				return http.StatusOK, sum, err
+			}
+			return http.StatusAccepted, sum, err
 		}
-		return http.StatusAccepted, sum, err
+		if req.WaitSeconds == 0 {
+			return run(r.Context())
+		}
+		code, body, err := s.untilStop(r, run)
+		if e := (*apiError)(nil); recorded && errors.As(err, &e) && e.code == api.CodeDaemonStopping {
+			// The wait was cut, not the cancel: say so, so the lead does not cancel again or think it failed.
+			return 0, nil, translated(api.CodeDaemonStopping, "stopping_cancel_recorded").with("cancelRecorded", true)
+		}
+		return code, body, err
 	})
 	s.handle("POST /tasks/{id}/answer", func(w http.ResponseWriter, r *http.Request) (int, any, error) {
 		var req api.AnswerRequest
@@ -233,3 +246,23 @@ func (s *Server) wait(w http.ResponseWriter, r *http.Request) (code int, body an
 
 // errStopping is the cause that ends a wait when the server closes.
 var errStopping = errors.New("the daemon is stopping")
+
+// untilStop runs a handler that may wait long (a meeting or contest wait, a cancel that waits for the worker) with
+// a context that also ends when the daemon stops, as POST /wait does: the shutdown does not sit out the open
+// waits (App.Close would stall for the HTTP grace and the client get a broken connection), and the answer is
+// daemon_stopping, so the caller knows not to start the daemon again (M18 hunt H8). A client that left gets no
+// answer.
+func (s *Server) untilStop(r *http.Request, run func(ctx context.Context) (int, any, error)) (code int, body any,
+	err error) {
+	wctx, cancel := context.WithCancelCause(r.Context())
+	defer cancel(nil)
+	defer context.AfterFunc(s.ctx, func() { cancel(errStopping) })()
+	code, body, err = run(wctx)
+	switch {
+	case r.Context().Err() != nil:
+		return 0, nil, nil
+	case errors.Is(context.Cause(wctx), errStopping):
+		return 0, nil, translated(api.CodeDaemonStopping, "stopping")
+	}
+	return code, body, err
+}

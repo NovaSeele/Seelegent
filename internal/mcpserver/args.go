@@ -185,6 +185,19 @@ func (g gateArg) request() (gate *bool, commands []string) {
 	return nil, g.cmds
 }
 
+// followup maps the argument onto FollowupRequest.Gate and GateCommands: an explicit empty list stays an empty list
+// (clear the lead's commands), never "left out".
+func (g gateArg) followup() (gate *bool, commands *[]string) {
+	gate, cmds := g.request()
+	if g.set && gate == nil {
+		if cmds == nil {
+			cmds = []string{}
+		}
+		commands = &cmds
+	}
+	return gate, commands
+}
+
 // laneArg is the lane argument: a list of paths or globs, or false.
 type laneArg struct {
 	set   bool

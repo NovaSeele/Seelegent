@@ -226,14 +226,13 @@ func (t *Trees) AddBranch(ctx context.Context, root, dir, branch, commit string)
 // RemoveClean removes the worktree wt only when nothing in it is uncommitted (else ErrDirty, and the worktree is
 // left as it is): the shared-folder links and any link a worker made go first, never followed, then plain
 // `git worktree remove`. Unlike Remove it commits nothing (a ticket's branch holds only what the lead sent). A
-// worktree whose folder is gone is pruned.
+// worktree whose folder is gone is forgotten (see forget).
 func (t *Trees) RemoveClean(ctx context.Context, root, wt string, env *api.WorktreeEnv) error {
 	if _, err := t.owned(wt); err != nil {
 		return err
 	}
 	if _, err := os.Lstat(wt); errors.Is(err, os.ErrNotExist) {
-		_, perr := t.Git.Exec(ctx, root, gitx.ExecOptions{}, "worktree", "prune")
-		return perr
+		return t.forget(ctx, root, wt)
 	}
 	st, err := t.Git.Exec(ctx, wt, gitx.ExecOptions{Timeout: gitx.ReadTimeout}, "status", "--porcelain")
 	if err != nil {
@@ -480,14 +479,13 @@ func (t *Trees) Seal(ctx context.Context, wt string, env *api.WorktreeEnv, messa
 }
 
 // Remove seals the worktree wt and removes it with plain `git worktree remove` (never --force). A worktree whose
-// folder is gone is pruned. It returns the final commit ("" when the folder was gone).
+// folder is gone is forgotten (see forget). It returns the final commit ("" when the folder was gone).
 func (t *Trees) Remove(ctx context.Context, root, wt string, env *api.WorktreeEnv, message string) (string, error) {
 	if _, err := t.owned(wt); err != nil {
 		return "", err
 	}
 	if _, err := os.Lstat(wt); errors.Is(err, os.ErrNotExist) {
-		_, perr := t.Git.Exec(ctx, root, gitx.ExecOptions{}, "worktree", "prune")
-		return "", perr
+		return "", t.forget(ctx, root, wt)
 	}
 	if _, _, err := RemoveLinks(wt, env); err != nil {
 		return "", fmt.Errorf("remove shared-folder links: %w", err)
@@ -525,7 +523,7 @@ func (t *Trees) Working(ctx context.Context, wt string) bool {
 }
 
 // Discard deletes the folder of a worktree git no longer knows as one (a `git worktree remove` that stopped
-// partway), once its changes are kept elsewhere, then prunes git's record of it. wt must be owned and lie strictly
+// partway), once its changes are kept elsewhere, then forgets git's record of it. wt must be owned and lie strictly
 // inside scope (the contest's folder under Base). The shared-folder links and every other link go first, as
 // themselves; the folder is then deleted entry by entry without ever following a link or junction (a linked
 // node_modules points into the user's real folder).
@@ -563,8 +561,56 @@ func (t *Trees) Discard(ctx context.Context, root, wt, scope string, env *api.Wo
 			return err
 		}
 	}
-	_, err = t.Git.Exec(ctx, root, gitx.ExecOptions{}, "worktree", "prune")
-	return err
+	return t.forget(ctx, root, wt)
+}
+
+// forget removes git's record of the owned worktree wt, whose folder is gone: only the admin folder
+// (<common dir>/worktrees/<id>) whose gitdir file names wt/.git. It never runs `git worktree prune`, which would also
+// drop the user's own worktrees whose folders are missing for a while (an unplugged drive), with their index and
+// staged work (M18 hunt H6). A locked entry is left alone, as git would.
+func (t *Trees) forget(ctx context.Context, root, wt string) error {
+	out, err := t.Git.Exec(ctx, root, gitx.ExecOptions{Timeout: gitx.ReadTimeout}, "rev-parse",
+		"--path-format=absolute", "--git-common-dir")
+	if err != nil {
+		return err
+	}
+	admins := filepath.Join(filepath.FromSlash(strings.TrimSpace(string(out))), "worktrees")
+	entries, err := os.ReadDir(admins)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	for _, e := range entries {
+		admin := filepath.Join(admins, e.Name())
+		if !e.IsDir() {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(admin, "gitdir"))
+		if err != nil {
+			continue
+		}
+		gitdir := filepath.FromSlash(strings.TrimSpace(string(data)))
+		if !filepath.IsAbs(gitdir) { // worktree.useRelativePaths
+			gitdir = filepath.Join(admin, gitdir)
+		}
+		if !strings.EqualFold(filepath.Base(gitdir), ".git") {
+			continue
+		}
+		if same, err := fsutil.SamePath(filepath.Dir(gitdir), wt); err != nil || !same {
+			continue
+		}
+		// gitdir is wt's .git (checked above); look at it through wt, our own path.
+		if _, err := os.Lstat(filepath.Join(wt, filepath.Base(gitdir))); err == nil {
+			return fmt.Errorf("worktree %s is there again; not forgetting it", wt)
+		}
+		if _, err := os.Lstat(filepath.Join(admin, "locked")); err == nil {
+			return nil
+		}
+		return os.RemoveAll(admin)
+	}
+	return nil
 }
 
 // removeTree deletes p and everything below it. A link or junction (any reparse point) is removed as itself and

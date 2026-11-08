@@ -217,7 +217,7 @@ func (c *Client) Hooks(ctx context.Context) ([]api.Hook, error) {
 	return v, err
 }
 
-// ReplaceHooks is PUT /hooks.
+// ReplaceHooks is PUT /hooks. A nil list is refused by the daemon; an empty one removes every hook.
 func (c *Client) ReplaceHooks(ctx context.Context, hooks []api.Hook) ([]api.Hook, error) {
 	var v []api.Hook
 	_, err := c.Do(ctx, http.MethodPut, "/hooks", api.HooksRequest{Hooks: hooks}, &v)

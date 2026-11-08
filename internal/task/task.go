@@ -147,6 +147,9 @@ type Task struct {
 	// started; BaselineTaken records that the capture ran, even when it found nothing.
 	Baseline      []string `json:"baseline,omitempty"`
 	BaselineTaken bool     `json:"baselineTaken,omitempty"`
+	// GitStart is where the repository stood when the baseline was taken (the task's first turn); nil for a folder
+	// outside git, when git could not be read, and for tasks from before it was recorded. Followups keep it.
+	GitStart *GitStart `json:"gitStart,omitempty"`
 
 	// AccountID owns the conversation ConversationID: a later turn on the same account resumes it.
 	AccountID      string `json:"accountId,omitempty"`
@@ -265,6 +268,15 @@ type Turn struct {
 	Attempts []*Attempt `json:"-"`
 }
 
+// GitStart is where a task's repository stood when the task started.
+type GitStart struct {
+	// Head is the HEAD commit, "" when the repository had no commit yet.
+	Head string `json:"head,omitempty"`
+	// Branch is the current branch, "" when HEAD was detached.
+	Branch string    `json:"branch,omitempty"`
+	At     time.Time `json:"at"`
+}
+
 // TurnSnap says which snapshots a turn has: the start one (taken before its first attempt) and the end one (taken
 // when it ended, once the checks ran).
 type TurnSnap struct {
@@ -272,6 +284,9 @@ type TurnSnap struct {
 	Head string `json:"head,omitempty"`
 	// Truncated: the start snapshot hit its limits; files past them are not covered.
 	Truncated bool `json:"truncated,omitempty"`
+	// EndTruncated: the end snapshot hit its limits. The start snapshot's files and the edited ones are always in
+	// it; other dirty files past the limits are not covered by the change lists and the hygiene check.
+	EndTruncated bool `json:"endTruncated,omitempty"`
 	// Checked is set once the end snapshot was taken and the post-turn checks ran.
 	Checked bool `json:"checked,omitempty"`
 }

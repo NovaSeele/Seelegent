@@ -73,6 +73,10 @@
     "handoff": "{from}에서 {to}(으)로 이동",
     "reattach": "실행 중인 워커에 다시 연결했습니다",
     "resumed": "데몬 재시작 후 이어서 실행합니다",
+    "recoveryNotice": {
+      "mask_unreadable": "이 시도의 저장된 마스크 목록을 읽을 수 없어 출력도 키 패턴으로 가립니다.",
+      "unknown": "데몬이 이 복구에 대해 이 대시보드가 모르는 내용을 알렸습니다."
+    },
     "attentionCleared": "더 이상 기다리지 않음",
     "attention": {
       "blocked": "워커가 막혔습니다",
@@ -97,6 +101,7 @@
     },
     "cancel": "취소됨",
     "workAtRisk": "변경된 파일 {count}개가 사라질 수 있습니다",
+    "snapshotTruncated": "이 턴의 스냅샷이 한도(파일 {files}개 또는 {mib} MiB)에 도달했습니다. 그 이후의 파일은 확인하지 않았습니다",
     "error": "오류",
     "worker": {
       "quota_exhausted": "워커의 할당량이 소진되었습니다",

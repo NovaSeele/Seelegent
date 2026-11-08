@@ -246,7 +246,7 @@
     },
     "loopRepeat": {
       "label": "Phát hiện vòng lặp",
-      "desc": "Một bước lặp lại ngần này lần thì bị coi là vòng lặp.",
+      "desc": "Một bước lặp lại ngần này lần thì bị coi là vòng lặp. Có tác dụng tới 12: phép kiểm tra xem 12 lần gọi công cụ gần nhất.",
       "keywords": "vòng lặp lặp lại kẹt"
     },
     "attentionDecay": {

@@ -73,6 +73,10 @@
     "handoff": "Moved from {from} to {to}",
     "reattach": "Reconnected to the running worker",
     "resumed": "Resumed after the daemon restarted",
+    "recoveryNotice": {
+      "mask_unreadable": "This attempt's saved mask list could not be read, so its output is also masked by key patterns.",
+      "unknown": "The daemon reported something about this recovery that this dashboard does not know."
+    },
     "attentionCleared": "No longer waiting",
     "attention": {
       "blocked": "The worker is blocked",
@@ -97,6 +101,7 @@
     },
     "cancel": "Cancelled",
     "workAtRisk": "{count} changed file may be lost | {count} changed files may be lost",
+    "snapshotTruncated": "A snapshot of this turn hit its limits ({files} files or {mib} MiB); files past them were not checked",
     "error": "Error",
     "worker": {
       "quota_exhausted": "The worker ran out of quota",

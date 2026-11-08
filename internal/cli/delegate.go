@@ -155,6 +155,14 @@ func splitList(vals []string) []string {
 	return out
 }
 
+// optList points at vals when the flag was given (`--gate ""` clears the lead's commands), nil when it was not.
+func optList(vals []string) *[]string {
+	if vals == nil {
+		return nil
+	}
+	return &vals
+}
+
 const delegateUsage = "seelegent delegate [flags] <prompt|@file>"
 
 func newDelegateCommand(d deps) *cobra.Command {
@@ -274,6 +282,12 @@ func printReport(w io.Writer, r api.TaskReport, woke string) {
 		head += fmt.Sprintf(", turn %d", r.Turn)
 	}
 	_, _ = fmt.Fprintln(w, head)
+	printReportBody(w, r, woke)
+}
+
+// printReportBody is a report after its head line: the response, the files, the attention, the question, the gate,
+// the error and the dashboard link.
+func printReportBody(w io.Writer, r api.TaskReport, woke string) {
 	if r.Response != "" {
 		_, _ = fmt.Fprintf(w, "\n%s\n", strings.TrimRight(r.Response, "\n"))
 	}
@@ -281,7 +295,7 @@ func printReport(w io.Writer, r api.TaskReport, woke string) {
 		_, _ = fmt.Fprintf(w, "\nFiles changed: %s\n", strings.Join(r.FilesChanged, ", "))
 	}
 	if r.Attention != nil {
-		_, _ = fmt.Fprintf(w, "\nAttention: BLOCKED (%s)", r.Attention.Reason)
+		_, _ = fmt.Fprintf(w, "\nAttention: %s (%s)", attentionLabel(r.Attention.State), r.Attention.Reason)
 		if r.Attention.Detail != "" {
 			_, _ = fmt.Fprintf(w, " - %s", r.Attention.Detail)
 		}
@@ -303,4 +317,19 @@ func printReport(w io.Writer, r api.TaskReport, woke string) {
 	if r.Dashboard != "" {
 		_, _ = fmt.Fprintf(w, "Dashboard: %s\n", r.Dashboard)
 	}
+}
+
+// attentionLabel is the label of a report's attention state (M18 hunt H15: every state read BLOCKED).
+func attentionLabel(state string) string {
+	switch state {
+	case api.AttentionQuestion:
+		return "QUESTION"
+	case api.AttentionStalled:
+		return "STALLED"
+	case api.AttentionBackgroundWait:
+		return "WAITING ON BACKGROUND COMMANDS"
+	case api.AttentionBlocked, "":
+		return "BLOCKED"
+	}
+	return strings.ToUpper(state)
 }

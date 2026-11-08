@@ -162,6 +162,12 @@ func TestSettingsMemoryRoles(t *testing.T) {
 	}
 	e.wantError(e.req(http.MethodPatch, "/api/v1/settings", "[1]", nil), http.StatusBadRequest,
 		api.CodeInvalidArgument, "")
+	// A null body is a bad request, not a broken config file (M18 hunt, settings note).
+	if got := e.wantError(e.req(http.MethodPatch, "/api/v1/settings", "null", nil), http.StatusBadRequest,
+		api.CodeInvalidArgument, ""); strings.Contains(got.Message, "config file") ||
+		!strings.Contains(got.Message, "patch") {
+		t.Errorf("PATCH null: %q", got.Message)
+	}
 
 	// Memory.
 	var m api.Memory

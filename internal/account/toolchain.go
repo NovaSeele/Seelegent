@@ -133,16 +133,19 @@ func (t *Toolchains) compute(ctx context.Context, cwd string, env []string) map[
 }
 
 // findRustup returns rustup on PATH, or in $CARGO_HOME/bin (default ~/.cargo/bin), or "".
-func (t *Toolchains) findRustup(env []string) string {
+func (t *Toolchains) findRustup(env []string) string { return FindRustup(env, t.realHome) }
+
+// FindRustup returns rustup on the PATH of env, or in $CARGO_HOME/bin (default <realHome>/.cargo/bin), or "".
+func FindRustup(env []string, realHome string) string {
 	if p := envx.ResolveCommand("rustup", env); p != "" {
 		return p
 	}
 	cargoHome, _ := envx.Lookup(env, "CARGO_HOME")
 	if cargoHome == "" {
-		if t.realHome == "" {
+		if realHome == "" {
 			return ""
 		}
-		cargoHome = filepath.Join(t.realHome, ".cargo")
+		cargoHome = filepath.Join(realHome, ".cargo")
 	}
 	name := "rustup"
 	if runtime.GOOS == "windows" {
@@ -153,6 +156,39 @@ func (t *Toolchains) findRustup(env []string) string {
 		return candidate
 	}
 	return ""
+}
+
+// CargoState is what CargoOnPath found.
+type CargoState int
+
+// Cargo states.
+const (
+	// CargoNoRustup means rustup is not installed, so there is nothing to compare.
+	CargoNoRustup CargoState = iota
+	// CargoMissing means rustup is installed but no cargo is on PATH.
+	CargoMissing
+	// CargoProxy means the first cargo on PATH is rustup's proxy (in rustup's folder).
+	CargoProxy
+	// CargoPlain means the first cargo on PATH is another one: in the user's own shells a dependency's
+	// rust-toolchain.toml can switch compilers mid-build (workers and gates are pinned by Toolchains).
+	CargoPlain
+)
+
+// CargoOnPath reports whether the first cargo on the PATH of env is rustup's proxy, for `seelegent doctor` (the old
+// version's cargoPathCheck). rustup and cargo are the paths found ("" when not found).
+func CargoOnPath(env []string, realHome string) (state CargoState, rustup, cargo string) {
+	rustup = FindRustup(env, realHome)
+	if rustup == "" {
+		return CargoNoRustup, "", ""
+	}
+	cargo = envx.ResolveCommand("cargo", env)
+	switch {
+	case cargo == "":
+		return CargoMissing, rustup, ""
+	case strings.EqualFold(filepath.Clean(filepath.Dir(cargo)), filepath.Clean(filepath.Dir(rustup))):
+		return CargoProxy, rustup, cargo
+	}
+	return CargoPlain, rustup, cargo
 }
 
 // cargoDirs returns the folders holding a Cargo.toml within maxDepth levels of root, shallowest first. It skips

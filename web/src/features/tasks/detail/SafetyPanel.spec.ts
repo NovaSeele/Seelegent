@@ -30,6 +30,7 @@ const turn = (n: number, extra: Partial<Turn> = {}): Turn => ({
   hygiene: [],
   scope: [],
   outsideDiff: true,
+  snapshotTruncated: false,
   gate: null,
   verifier: null,
   ...extra,
@@ -66,6 +67,8 @@ function fakeApi(overrides: Partial<GitApi> = {}): GitApi {
     commit: vi.fn(missing),
     outsideDiff: vi.fn(missing),
     restore: vi.fn(missing),
+    commitDetail: vi.fn(missing),
+    repoStatus: vi.fn(missing),
     ...overrides,
   }
 }
@@ -136,6 +139,20 @@ describe('SafetyPanel', () => {
       attachTo: document.body,
     })
   }
+
+  it('says which turns had a snapshot cut at its limits, even with nothing else to show', async () => {
+    const detail = makeDetail({
+      status: 'done',
+      turns: [turn(1, { snapshotTruncated: true }), turn(2)],
+    })
+    expect(safetyOf(detail).truncated).toEqual([1])
+    const w = await mountPanel(fakeApi(), 'done', detail)
+    const note = w.find('.safety__note')
+    expect(note.exists()).toBe(true)
+    expect(note.text()).toContain('Turn 1')
+    expect(note.text()).toContain('3000 files')
+    expect(note.text()).toContain('256 MiB')
+  })
 
   it('shows nothing when the checks found nothing', async () => {
     const wrapper = await mountPanel(fakeApi(), 'done', makeDetail({ turns: [turn(1)] }))
@@ -269,7 +286,7 @@ describe('SafetyPanel', () => {
       ),
     })
     const wrapper = await mountPanel(api)
-    const buttons = wrapper.findAll('button').filter((b) => b.text() === 'Outside changes')
+    const buttons = wrapper.findAll('button').filter((b) => b.text() === 'Shell edits')
     expect(buttons).toHaveLength(2)
     await buttons[0]?.trigger('click')
     await flush()
@@ -312,7 +329,7 @@ describe('SafetyPanel when every file is back', () => {
     expect(wrapper.text()).toContain('Files were put back from the snapshot taken before turn 3.')
     expect(wrapper.find('.risk .chip.tone-success').text()).toBe('Restored')
     expect(wrapper.text()).toContain('changed recently')
-    expect(wrapper.findAll('button').map((b) => b.text())).toEqual(['Outside changes'])
+    expect(wrapper.findAll('button').map((b) => b.text())).toEqual(['Shell edits'])
   })
 
   it('still shows a task whose only finding was restored', async () => {

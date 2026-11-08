@@ -38,6 +38,11 @@ const repo = (files: GitFile[], extra: Partial<TaskGit> = {}): TaskGit => ({
   files,
   preexisting: [],
   suggestion: null,
+  startState: 'unknown',
+  branchChanged: false,
+  commits: [],
+  commitsMore: 0,
+  committedFiles: [],
   ...extra,
 })
 
@@ -53,6 +58,8 @@ function fakeGitApi(overrides: Partial<GitApi> = {}): GitApi {
     commit: vi.fn(missing),
     outsideDiff: vi.fn(missing),
     restore: vi.fn(missing),
+    commitDetail: vi.fn(missing),
+    repoStatus: vi.fn(missing),
     ...overrides,
   }
 }
@@ -134,6 +141,11 @@ describe('useGit', () => {
         files: [],
         preexisting: [],
         suggestion: null,
+        startState: 'unknown',
+        branchChanged: false,
+        commits: [],
+        commitsMore: 0,
+        committedFiles: [],
       })
     await setup(fakeGitApi({ status }))
     expect(model.state.value).toEqual({ status: 'error', error: 'git status timed out' })
@@ -169,7 +181,13 @@ describe('useGit', () => {
     expect(api.diff).toHaveBeenCalledTimes(1)
     model.selected.value = 'b.ts'
     await flush(4)
-    expect(api.diff).toHaveBeenLastCalledWith('t1', 'b.ts', undefined, expect.any(AbortSignal))
+    expect(api.diff).toHaveBeenLastCalledWith(
+      't1',
+      'b.ts',
+      undefined,
+      expect.any(AbortSignal),
+      'head',
+    )
   })
 
   it('re-reads while a suggestion is being written, on task updates only', async () => {
