@@ -53,6 +53,9 @@ type Outcome struct {
 	// of a resumed conversation (codex); Usage is then this run's part. The next run of the conversation starts from
 	// it.
 	ThreadUsage *event.Usage `json:"threadUsage,omitempty"`
+	// ThreadTracked is set on every outcome of such a CLI, with or without ThreadUsage: Usage is this run's part.
+	// An outcome without it was recorded before Seelegent kept the total, and its Usage was the CLI's total.
+	ThreadTracked bool `json:"threadTracked,omitempty"`
 	// DurationMs is the duration the CLI reported.
 	DurationMs int64 `json:"durationMs,omitempty"`
 	// BackgroundWait is the CLI's line when Status is background_wait.

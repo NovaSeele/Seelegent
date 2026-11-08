@@ -134,6 +134,7 @@ func (s *Service) follow(r *run, h *launch.Handle, b backend.Backend, m attemptM
 	}
 	out := f.coll.Outcome(exit)
 	if tp != nil {
+		out.ThreadTracked = true
 		if u, ok := tp.ThreadUsage(); ok {
 			out.ThreadUsage = &u
 		}
@@ -161,8 +162,10 @@ func (s *Service) usageBaseline(id string, turn, n int) event.Usage {
 }
 
 // usageBaselineOf is the usage total of the conversation attempt n of turn continues, as the latest earlier attempt
-// in that conversation reported it; zero for an attempt that starts a new conversation. An attempt with usage but
-// no total ended before the outcome kept the total: its usage was the CLI's total then.
+// in that conversation reported it; zero for an attempt that starts a new conversation. An attempt whose outcome
+// tracked the total but holds none (codex reported zeros, or the run failed) keeps the base before it; one recorded
+// before outcomes tracked the total (no ThreadTracked) gives its usage, which was the CLI's total then. Zero usage is
+// never a base.
 func usageBaselineOf(t *Task, turn, n int) event.Usage {
 	tu := t.TurnN(turn)
 	if tu == nil || n < 1 || n > len(tu.Attempts) {
@@ -179,9 +182,9 @@ func usageBaselineOf(t *Task, turn, n int) event.Usage {
 				continue
 			}
 			switch {
-			case a.Outcome.ThreadUsage != nil:
+			case a.Outcome.ThreadUsage != nil && !a.Outcome.ThreadUsage.IsZero():
 				base = *a.Outcome.ThreadUsage
-			case a.Usage != nil:
+			case !a.Outcome.ThreadTracked && a.Usage != nil && !a.Usage.IsZero():
 				base = *a.Usage
 			}
 		}
