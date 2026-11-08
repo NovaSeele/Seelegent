@@ -8,6 +8,7 @@
   "stale": "마지막 숫자를 보여 줍니다. 새로 고침 실패: {error}",
   "historyFailed": "할당량 기록을 불러오지 못했습니다: {error}",
   "dataSince": "사용량은 {date}부터 저장되어 있습니다.",
+  "tokensNote": "토큰 수에는 CLI가 따로 보고하는 캐시 읽기(Claude Code 등)가 포함되지 않습니다.",
   "noCost": "보고되지 않음",
   "showTable": "표로 보기",
   "showChart": "차트로 보기",

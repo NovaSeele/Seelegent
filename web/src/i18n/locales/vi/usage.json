@@ -8,6 +8,7 @@
   "stale": "Đang hiện số liệu cũ; lần làm mới bị lỗi: {error}",
   "historyFailed": "Không tải được lịch sử hạn mức: {error}",
   "dataSince": "Số liệu sử dụng được lưu từ {date}.",
+  "tokensNote": "Số token không gồm lượt đọc bộ nhớ đệm mà CLI báo riêng (như Claude Code).",
   "noCost": "Không có số liệu",
   "showTable": "Xem dạng bảng",
   "showChart": "Xem dạng biểu đồ",
