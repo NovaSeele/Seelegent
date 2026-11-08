@@ -69,6 +69,10 @@
     "language": {
       "label": "Ngôn ngữ",
       "desc": "Ngôn ngữ của bảng điều khiển. Đổi là áp dụng ngay."
+    },
+    "resources": {
+      "label": "Tài nguyên",
+      "desc": "Worker, lệnh kiểm tra và dịch vụ được dùng bao nhiêu tài nguyên của máy này. Thay đổi có hiệu lực ngay, không cần khởi động lại: việc đang chạy giữ giới hạn cũ, lần chạy sau dùng giới hạn mới."
     }
   },
   "daemon": {
@@ -82,7 +86,15 @@
     "rangeWhole": "Nhập một số nguyên từ {min} đến {max}.",
     "rangePercent": "Nhập một tỉ lệ phần trăm từ {min} đến {max}.",
     "lines": "Mỗi dòng một mục; lưu khi bạn rời ô.",
-    "readonly": "Đặt khi dịch vụ khởi động (seelegent config); không đổi được ở đây."
+    "readonly": "Đặt khi dịch vụ khởi động (seelegent config); không đổi được ở đây.",
+    "rangeZero": {
+      "off": "Từ {min} đến {max} (0 = tắt)",
+      "unlimited": "Từ {min} đến {max} (0 = không giới hạn)"
+    },
+    "nowFree": "Hiện trống: {free}",
+    "osOnly": "Chỉ trên {os}.",
+    "osOther": "Chỉ trên {os}: không có tác dụng trên hệ điều hành dịch vụ đang chạy.",
+    "criticalBelowMin": "Ngưỡng RAM khẩn cấp phải nhỏ hơn RAM trống để bắt đầu khi cả hai đều bật."
   },
   "units": {
     "min": "phút",
@@ -92,7 +104,8 @@
     "days": "ngày",
     "bytes": "byte",
     "times": "lần",
-    "pct": "%"
+    "pct": "%",
+    "mb": "MB"
   },
   "options": {
     "tier": {
@@ -110,6 +123,10 @@
       "readOnly": "Chỉ đọc",
       "workspaceWrite": "Được ghi trong thư mục làm việc",
       "dangerFullAccess": "Toàn quyền (nguy hiểm)"
+    },
+    "priority": {
+      "low": "Thấp",
+      "normal": "Bình thường"
     }
   },
   "backends": {
@@ -430,6 +447,61 @@
       "label": "Tính năng thử nghiệm",
       "desc": "Bật các tính năng còn đang được thử.",
       "keywords": "beta xem trước"
+    },
+    "workerPriority": {
+      "label": "Độ ưu tiên của worker",
+      "desc": "Độ ưu tiên tiến trình của mỗi worker và mọi thứ nó chạy. Mức thấp giữ máy mượt khi worker build và chạy test. Áp dụng từ lần chạy sau.",
+      "keywords": "cpu ưu tiên priority nice thấp chậm"
+    },
+    "gatePriority": {
+      "label": "Độ ưu tiên của cổng kiểm tra",
+      "desc": "Độ ưu tiên tiến trình của lệnh kiểm tra, lần chạy hồi quy, kiểm tra tự động hóa và hook. Mức thấp có thể làm cổng chạy chậm hơn, nên có thể cần tăng giới hạn thời gian của cổng.",
+      "keywords": "cpu ưu tiên priority nice test build"
+    },
+    "maxWorkers": {
+      "label": "Số worker cùng lúc",
+      "desc": "Tối đa bao nhiêu lượt worker chạy cùng lúc trên mọi tài khoản (mỗi tài khoản vẫn có giới hạn riêng). Giảm số này không dừng việc gì: chỉ giữ các lượt mới lại.",
+      "keywords": "song song đồng thời giới hạn tổng"
+    },
+    "gateConcurrency": {
+      "label": "Số cổng kiểm tra cùng lúc",
+      "desc": "Tối đa bao nhiêu lệnh kiểm tra và lần chạy hồi quy chạy cùng lúc. Số còn lại xếp hàng chờ, và giới hạn thời gian chỉ tính từ khi lệnh bắt đầu.",
+      "keywords": "song song đồng thời hàng đợi lượt"
+    },
+    "minFreeMemory": {
+      "label": "RAM trống để bắt đầu",
+      "desc": "Lượt worker hoặc lệnh kiểm tra mới sẽ chờ khi RAM trống của máy ít hơn mức này. Tác vụ hiện “Chờ tài nguyên”.",
+      "keywords": "ram bộ nhớ trống ngưỡng chờ"
+    },
+    "minFreeCommit": {
+      "label": "Commit trống để bắt đầu",
+      "desc": "Như trên, cho commit trống (RAM cộng tệp hoán đổi).",
+      "keywords": "commit page file swap bộ nhớ ảo"
+    },
+    "criticalFreeMemory": {
+      "label": "Ngưỡng RAM khẩn cấp",
+      "desc": "Khi RAM hoặc commit trống xuống dưới mức này, lệnh kiểm tra mới nhất đang chạy bị dừng và xếp hàng lại, mọi lượt mới chờ đến khi bộ nhớ trở lại trên ngưỡng bắt đầu. Worker không bao giờ bị dừng. Phải nhỏ hơn RAM trống để bắt đầu.",
+      "keywords": "khẩn cấp watchdog thiếu bộ nhớ treo máy"
+    },
+    "workerMemoryLimit": {
+      "label": "Giới hạn RAM của worker",
+      "desc": "Bộ nhớ tối đa mỗi worker và mọi thứ nó chạy được dùng. Lượt chạm giới hạn sẽ thất bại kèm thông báo; các thay đổi đã ghi xuống đĩa vẫn giữ.",
+      "keywords": "ram giới hạn job object"
+    },
+    "workerCpuRate": {
+      "label": "Giới hạn CPU của worker",
+      "desc": "CPU tối đa mỗi worker và mọi thứ nó chạy được dùng, tính theo phần trăm của cả máy (mọi nhân cộng lại).",
+      "keywords": "cpu bộ xử lý giới hạn hạn chế"
+    },
+    "testParallelism": {
+      "label": "Mức song song khi test",
+      "desc": "Test và build chạy bao nhiêu gói hoặc job cùng lúc: bản giao việc yêu cầu worker giữ mức này, môi trường của worker và cổng có GOFLAGS=-p và CARGO_BUILD_JOBS.",
+      "keywords": "song song job go test cargo pytest maxworkers"
+    },
+    "daemonMemoryLimit": {
+      "label": "Giới hạn RAM của dịch vụ",
+      "desc": "Giới hạn bộ nhớ mềm của chính dịch vụ Seelegent: gần mức này nó thu hồi bộ nhớ mạnh hơn và không bao giờ bị dừng vì nó. GOMEMLIMIT đặt cho dịch vụ được ưu tiên.",
+      "keywords": "daemon gomemlimit dịch vụ ram"
     }
   },
   "appearance": {
@@ -461,5 +533,8 @@
       "builtin": "Có sẵn",
       "namesOnly": "Chỉ hiện tên"
     }
+  },
+  "os": {
+    "windows": "Windows"
   }
 }

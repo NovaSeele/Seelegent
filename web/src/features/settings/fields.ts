@@ -6,17 +6,22 @@
  */
 import type { Settings } from '@/api/types'
 
-export type Unit = 'min' | 'h' | 's' | 'ms' | 'days' | 'bytes' | 'times' | 'pct'
+export type Unit = 'min' | 'h' | 's' | 'ms' | 'days' | 'bytes' | 'times' | 'pct' | 'mb'
 
 interface Base {
   /** settings.items.<item> */
   item: string
   /** Dotted path into Settings, e.g. "stallMinutes". */
   path: keyof Settings & string
+  /** The only system the setting works on (Health.os, Go's GOOS); elsewhere the row says it has no effect. */
+  os?: 'windows'
+  /** The free memory reading (Health.memory) the row shows next to its threshold: physical or commit. */
+  now?: 'phys' | 'commit'
 }
 
 export type FieldDef =
-  | (Base & { kind: 'number'; unit?: Unit; min: number; max: number })
+  /** `zero`: what 0 means (the hint says so). */
+  | (Base & { kind: 'number'; unit?: Unit; min: number; max: number; zero?: 'off' | 'unlimited' })
   /** A 0..1 fraction shown as a percentage. */
   | (Base & { kind: 'percent'; min: number; max: number })
   | (Base & { kind: 'bool' })
@@ -27,6 +32,9 @@ export type FieldDef =
   | (Base & { kind: 'readonly' })
 
 const TIERS = ['fast', 'standard', 'strong', 'max'] as const
+const PRIORITIES = ['low', 'normal'] as const
+/** config.MemoryMBMax: the largest memory threshold or cap, in MB. */
+const MEMORY_MB_MAX = 1048576
 
 export const FIELDS = {
   workers: [
@@ -124,6 +132,106 @@ export const FIELDS = {
       optionsKey: 'tier',
     },
   ],
+  resources: [
+    {
+      item: 'workerPriority',
+      path: 'workerPriority',
+      kind: 'select',
+      options: PRIORITIES,
+      optionsKey: 'priority',
+    },
+    {
+      item: 'gatePriority',
+      path: 'gatePriority',
+      kind: 'select',
+      options: PRIORITIES,
+      optionsKey: 'priority',
+    },
+    {
+      item: 'maxWorkers',
+      path: 'maxConcurrentWorkers',
+      kind: 'number',
+      min: 0,
+      max: 256,
+      zero: 'unlimited',
+    },
+    {
+      item: 'gateConcurrency',
+      path: 'gateConcurrency',
+      kind: 'number',
+      min: 0,
+      max: 64,
+      zero: 'unlimited',
+    },
+    {
+      item: 'minFreeMemory',
+      path: 'minFreeMemoryMB',
+      kind: 'number',
+      unit: 'mb',
+      min: 0,
+      max: MEMORY_MB_MAX,
+      zero: 'off',
+      now: 'phys',
+    },
+    {
+      item: 'minFreeCommit',
+      path: 'minFreeCommitMB',
+      kind: 'number',
+      unit: 'mb',
+      min: 0,
+      max: MEMORY_MB_MAX,
+      zero: 'off',
+      os: 'windows',
+      now: 'commit',
+    },
+    {
+      item: 'criticalFreeMemory',
+      path: 'criticalFreeMemoryMB',
+      kind: 'number',
+      unit: 'mb',
+      min: 0,
+      max: MEMORY_MB_MAX,
+      zero: 'off',
+      now: 'phys',
+    },
+    {
+      item: 'workerMemoryLimit',
+      path: 'workerMemoryLimitMB',
+      kind: 'number',
+      unit: 'mb',
+      min: 0,
+      max: MEMORY_MB_MAX,
+      zero: 'off',
+      os: 'windows',
+    },
+    {
+      item: 'workerCpuRate',
+      path: 'workerCPURatePercent',
+      kind: 'number',
+      unit: 'pct',
+      min: 0,
+      max: 100,
+      zero: 'off',
+      os: 'windows',
+    },
+    {
+      item: 'testParallelism',
+      path: 'testParallelism',
+      kind: 'number',
+      min: 0,
+      max: 64,
+      zero: 'off',
+    },
+    {
+      item: 'daemonMemoryLimit',
+      path: 'daemonMemoryLimitMB',
+      kind: 'number',
+      unit: 'mb',
+      min: 0,
+      max: 65536,
+      zero: 'off',
+    },
+  ],
   workspace: [
     { item: 'hygiene', path: 'hygiene', kind: 'bool' },
     { item: 'gitGuard', path: 'gitGuard', kind: 'bool' },
@@ -171,6 +279,28 @@ export const FIELDS = {
 export type FieldSection = keyof typeof FIELDS
 
 export const isFieldSection = (id: string): id is FieldSection => Object.hasOwn(FIELDS, id)
+
+/**
+ * Settings checked against each other (internal/config/validate.go): an error about one is shown on all of them,
+ * since changing either one fixes it.
+ */
+export const LINKED_FIELDS: Readonly<Record<string, readonly string[]>> = {
+  criticalFreeMemoryMB: ['minFreeMemoryMB'],
+  minFreeMemoryMB: ['criticalFreeMemoryMB'],
+}
+
+/**
+ * The cross-field rule the dashboard can check before sending: criticalFreeMemoryMB must be below minFreeMemoryMB
+ * while both are on. Returns the paths that clash with `path` set to `value`, or [] when it is fine.
+ */
+export function crossFieldClash(settings: Settings | null, path: string, value: number): string[] {
+  if (!settings || (path !== 'criticalFreeMemoryMB' && path !== 'minFreeMemoryMB')) return []
+  const critical = path === 'criticalFreeMemoryMB' ? value : settings.criticalFreeMemoryMB
+  const min = path === 'minFreeMemoryMB' ? value : settings.minFreeMemoryMB
+  return critical > 0 && min > 0 && critical >= min
+    ? ['criticalFreeMemoryMB', 'minFreeMemoryMB']
+    : []
+}
 
 /** The value at a dotted path of the settings. */
 export function valueAt(settings: Settings | null, path: string): unknown {

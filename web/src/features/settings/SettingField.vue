@@ -8,19 +8,25 @@ import NumberField from '@/components/ui/NumberField.vue'
 import Select from '@/components/ui/Select.vue'
 import Spinner from '@/components/ui/Spinner.vue'
 import Switch from '@/components/ui/Switch.vue'
+import { useFormat } from '@/composables/useFormat'
+import { formatMB, freeMB } from '@/lib/memory'
+import { useConnectionStore } from '@/stores/connection'
 
 import CommitField from './CommitField.vue'
-import type { FieldDef } from './fields'
+import { crossFieldClash, type FieldDef } from './fields'
 import SettingRow from './SettingRow.vue'
 import type { SettingsForm } from './useSettingsForm'
 
 /**
  * One daemon setting as a row: its control (by kind), "Saving…" / "Saved" next to it, the daemon's error under
- * it, and a button that resets it to the default (a null in the merge patch).
+ * it, and a button that resets it to the default (a null in the merge patch). A setting that works on one system
+ * only says so, and is dimmed on any other (Health.os); a memory threshold shows the machine's free memory now.
  */
 const props = defineProps<{ def: FieldDef; form: SettingsForm; highlighted?: boolean }>()
 
 const { t } = useI18n()
+const fmt = useFormat()
+const connection = useConnectionStore()
 
 const label = computed(() => t(`settings.items.${props.def.item}.label`))
 const value = computed(() => props.form.get(props.def.path))
@@ -38,6 +44,26 @@ const options = computed(() =>
       }))
     : [],
 )
+
+const hint = computed(() => {
+  const def = props.def
+  if (def.kind !== 'number' && def.kind !== 'percent') return undefined
+  const range = { min: def.min, max: def.max }
+  return def.kind === 'number' && def.zero
+    ? t(`settings.daemon.rangeZero.${def.zero}`, range)
+    : t('settings.daemon.range', range)
+})
+
+/** The setting works only on `def.os`, and the daemon runs on another system. */
+const otherOs = computed(() => {
+  const os = connection.health?.os
+  return !!props.def.os && !!os && os !== props.def.os
+})
+
+const nowText = computed(() => {
+  const mb = props.def.now ? freeMB(connection.health?.memory, props.def.now) : null
+  return mb === null ? '' : t('settings.daemon.nowFree', { free: formatMB(fmt.value, mb) })
+})
 
 const percent = computed(() => Math.round(Number(value.value ?? 0) * 1000) / 10)
 const lines = computed(() => (Array.isArray(value.value) ? value.value.join('\n') : ''))
@@ -58,6 +84,11 @@ function saveInRange(shown: number, value: number) {
     props.form.fail(def.path, t(key, { min: def.min, max: def.max }))
     return
   }
+  const clash = crossFieldClash(props.form.settings.value, def.path, value)
+  if (clash.length) {
+    for (const path of clash) props.form.fail(path, t('settings.daemon.criticalBelowMin'))
+    return
+  }
   save(value)
 }
 
@@ -72,7 +103,12 @@ function saveLines(text: string) {
 </script>
 
 <template>
-  <SettingRow :item="def.item" :highlighted="highlighted" :stacked="def.kind === 'lines'">
+  <SettingRow
+    :item="def.item"
+    :highlighted="highlighted"
+    :stacked="def.kind === 'lines'"
+    :class="{ 'sf-row--inert': otherOs }"
+  >
     <div class="sf-wrap">
       <div class="sf">
         <div class="sf__control" :class="{ 'sf__control--switch': def.kind === 'bool' }">
@@ -83,7 +119,7 @@ function saveLines(text: string) {
             hide-label
             size="sm"
             :unit="def.unit ? t(`settings.units.${def.unit}`) : undefined"
-            :hint="t('settings.daemon.range', { min: def.min, max: def.max })"
+            :hint="hint"
             :error="error"
             :debounce="500"
             integer
@@ -97,7 +133,7 @@ function saveLines(text: string) {
             hide-label
             size="sm"
             :unit="t('settings.units.pct')"
-            :hint="t('settings.daemon.range', { min: def.min, max: def.max })"
+            :hint="hint"
             :error="error"
             :debounce="500"
             @commit="saveInRange($event, $event / 100)"
@@ -159,6 +195,14 @@ function saveLines(text: string) {
         {{ error }}
       </p>
       <p v-if="def.kind === 'readonly'" class="sf__note">{{ t('settings.daemon.readonly') }}</p>
+      <p v-if="def.os" class="sf__note" :data-os-note="otherOs ? 'other' : 'this'">
+        {{
+          t(otherOs ? 'settings.daemon.osOther' : 'settings.daemon.osOnly', {
+            os: t(`settings.os.${def.os}`),
+          })
+        }}
+      </p>
+      <p v-if="nowText && !otherOs" class="sf__note" data-now>{{ nowText }}</p>
     </div>
   </SettingRow>
 </template>
@@ -218,5 +262,10 @@ function saveLines(text: string) {
 .sf__note {
   color: var(--text-muted);
   font-size: var(--fs-xs);
+}
+
+/* A setting that has no effect on the daemon's system stays editable (the config may move) but reads as inert. */
+.sf-row--inert :deep(.setting__text) {
+  opacity: 0.6;
 }
 </style>

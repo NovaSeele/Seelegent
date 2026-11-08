@@ -18,6 +18,7 @@ import LanguageSection from './LanguageSection.vue'
 import MemorySection from './MemorySection.vue'
 import PlaceholderSection from './PlaceholderSection.vue'
 import ProvidersSection from './ProvidersSection.vue'
+import ResourcesSection from './ResourcesSection.vue'
 import { searchSettings, type SettingHit } from './search'
 import { DEFAULT_SECTION, isSectionId, SECTIONS, type SectionId } from './sections'
 
@@ -48,6 +49,7 @@ const VIEWS: Partial<Record<SectionId, Component>> = {
   appearance: AppearanceSection,
   backends: BackendsSection,
   providers: ProvidersSection,
+  resources: ResourcesSection,
   hooks: HooksSection,
   memory: MemorySection,
   language: LanguageSection,
