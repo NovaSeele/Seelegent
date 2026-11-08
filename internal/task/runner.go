@@ -448,7 +448,7 @@ func (s *Service) newAttempt(r *run, t *Task, tu *Turn) (bool, error) {
 		attemptModel = model
 	}
 	continuing := t.ConversationID != "" && acc.ID == t.AccountID
-	prompt := s.prompt(ctx, t, tu, continuing)
+	prompt := s.prompt(ctx, t, tu, continuing, b.Capabilities().PlanShell)
 	n := len(tu.Attempts) + 1
 	dir := s.attemptDir(t.ID, tu.N, n)
 	launchDir := filepath.Join(dir, "launch")
@@ -992,15 +992,25 @@ func lastError(tu *Turn) string {
 
 // prompt builds what the worker gets: the short continuation of its own conversation, or the full brief for a
 // fresh conversation (with the handoff section, so a worker on another account never loses the task, old B7).
-func (s *Service) prompt(ctx context.Context, t *Task, tu *Turn, continuing bool) string {
+// planShell is Capabilities.PlanShell of the backend this attempt runs on: a fresh plan conversation is told how
+// that backend reads files (brief.PlanRule), whatever backend the task started on.
+func (s *Service) prompt(ctx context.Context, t *Task, tu *Turn, continuing, planShell bool) string {
 	if Hidden(t.Kind) {
 		// A hidden run's first turn carries its whole brief (role, rules, format); later turns (meeting rounds) lean
 		// on the conversation. A fresh conversation on a later turn (another account) gets the first brief again.
-		if continuing || tu.N <= 1 || len(t.Turns) == 0 || t.Turns[0].Message == "" {
+		// Either fresh conversation starts with the plan rule of the attempt's backend.
+		if continuing {
 			return tu.Message
 		}
-		return "## Your brief\n(Sent when this work began; you continue it in a new conversation.)\n\n" +
-			t.Turns[0].Message + "\n\n## This turn\n\n" + tu.Message
+		msg := tu.Message
+		if tu.N > 1 && len(t.Turns) > 0 && t.Turns[0].Message != "" {
+			msg = "## Your brief\n(Sent when this work began; you continue it in a new conversation.)\n\n" +
+				t.Turns[0].Message + "\n\n## This turn\n\n" + tu.Message
+		}
+		if t.Mode != ModePlan {
+			return msg
+		}
+		return brief.ReadOnlyRun(msg, planShell)
 	}
 	spec := s.briefSpec(t)
 	if continuing {
@@ -1025,7 +1035,7 @@ func (s *Service) prompt(ctx context.Context, t *Task, tu *Turn, continuing bool
 		}
 		return request
 	}
-	in := brief.Input{Cwd: t.Cwd, Plan: t.Mode == ModePlan, Spec: spec, Deps: t.DepsContext,
+	in := brief.Input{Cwd: t.Cwd, Plan: t.Mode == ModePlan, PlanShell: planShell, Spec: spec, Deps: t.DepsContext,
 		Interrupted: len(tu.Attempts) > 0, Message: tu.Message, Baseline: displayPaths(t.Cwd, t.Baseline)}
 	in.Lane, in.Gate = s.briefGate(t)
 	if tu.Handback {

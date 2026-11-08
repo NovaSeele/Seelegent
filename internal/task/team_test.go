@@ -9,8 +9,12 @@ import (
 	"time"
 
 	"github.com/NovaSeele/Seelegent/internal/api"
+	"github.com/NovaSeele/Seelegent/internal/backend"
+	"github.com/NovaSeele/Seelegent/internal/brief"
+	"github.com/NovaSeele/Seelegent/internal/config"
 	"github.com/NovaSeele/Seelegent/internal/member"
 	"github.com/NovaSeele/Seelegent/internal/proof"
+	"github.com/NovaSeele/Seelegent/internal/testutil/fakecli"
 )
 
 func (h *harness) member(in api.MemberInput) api.Member {
@@ -372,19 +376,44 @@ func TestSeniorObjectionLatestConsult(t *testing.T) {
 }
 
 // A hidden run that continues on another account (a fresh conversation) gets its first brief again; the same
-// conversation gets only the turn's message.
+// conversation gets only the turn's message. Each fresh conversation starts with the plan rule of the attempt's
+// backend.
 func TestHiddenRunFreshConversation(t *testing.T) {
-	tk := &Task{Kind: KindMeeting, Turns: []*Turn{{N: 1, Message: "You are P1, a peer."}, {N: 2, Message: "Round 2 of 3."}}}
+	tk := &Task{Kind: KindMeeting, Mode: ModePlan,
+		Turns: []*Turn{{N: 1, Message: "You are P1, a peer."}, {N: 2, Message: "Round 2 of 3."}}}
 	s := &Service{}
-	if got := s.prompt(t.Context(), tk, tk.Turns[1], true); got != "Round 2 of 3." {
+	if got := s.prompt(t.Context(), tk, tk.Turns[1], true, true); got != "Round 2 of 3." {
 		t.Errorf("continuing = %q", got)
 	}
-	got := s.prompt(t.Context(), tk, tk.Turns[1], false)
-	if !strings.Contains(got, "You are P1, a peer.") || !strings.HasSuffix(got, "Round 2 of 3.") {
+	got := s.prompt(t.Context(), tk, tk.Turns[1], false, false)
+	if !strings.HasPrefix(got, brief.PlanRule(false)+"\n\n## Your brief\n") ||
+		!strings.Contains(got, "You are P1, a peer.") || !strings.HasSuffix(got, "Round 2 of 3.") {
 		t.Errorf("fresh conversation = %q", got)
 	}
-	if got := s.prompt(t.Context(), tk, tk.Turns[0], false); got != "You are P1, a peer." {
+	if got := s.prompt(t.Context(), tk, tk.Turns[0], false, false); got != brief.ReadOnlyRun("You are P1, a peer.",
+		false) {
 		t.Errorf("first turn = %q", got)
+	}
+}
+
+// Every kind of hidden run gets the plan rule of the backend its attempt runs on (R4): codex reads with shell
+// commands in its read-only sandbox and takes its citation lines from rg -n; agy and claude use their file tools.
+func TestHiddenRunPlanRulePerBackend(t *testing.T) {
+	s := &Service{}
+	for _, kind := range []string{KindVerify, KindConsult, KindMeeting, KindJudge} {
+		for _, name := range []string{config.BackendAgy, config.BackendClaude, config.BackendCodex} {
+			b, err := backend.New(name, fakecli.Exe(t))
+			if err != nil {
+				t.Fatal(err)
+			}
+			tk := &Task{Kind: kind, Mode: ModePlan, Backend: config.BackendAgy, Turns: []*Turn{{N: 1, Message: "Brief."}}}
+			got := s.prompt(t.Context(), tk, tk.Turns[0], false, b.Capabilities().PlanShell)
+			codex := name == config.BackendCodex
+			if strings.Contains(got, "read-only sandbox") != codex || strings.Contains(got, "`rg -n`") != codex ||
+				strings.Contains(got, "read files with the file tools") == codex || !strings.HasSuffix(got, "\n\nBrief.") {
+				t.Errorf("%s run on %s:\n%s", kind, name, got)
+			}
+		}
 	}
 }
 

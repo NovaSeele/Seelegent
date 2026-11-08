@@ -55,7 +55,9 @@ dissents, advice not taken, consults and objections.
 
 Consults, meeting attendees and contest judges run as tasks of kind `consult`, `meeting` and `judge` (the
 verifier's `verify` too). They are read-only (plan mode), have no gate, lane or snapshots, are never listed and are
-read through what started them. When one ends the engine closes it, so it never waits for the lead. A run whose
+read through what started them. Each fresh conversation of one starts with how its backend reads files in plan
+mode: with the file tools on agy and claude, with read-only shell commands on codex, which is also told to take its
+`[path:line]` line numbers from `rg -n` or `Select-String` ([task-engine.md](task-engine.md)). When one ends the engine closes it, so it never waits for the lead. A run whose
 record was never stored (a consult whose task started a new turn meanwhile, a meeting whose insert failed, a
 cancelled meeting's running turns) is cancelled and closed once its worker has stopped. A daemon that stops first
 leaves such runs open, so at startup the meeting service stops and closes the open `meeting` runs whose meeting

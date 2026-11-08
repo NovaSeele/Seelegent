@@ -100,7 +100,8 @@ set). RE2 has no look-ahead: write `"^gemini-3\\.8-"` (the JSON spelling of
 `^gemini-3\.8-`) rather than `"^(?!gemini-4)"`.
 
 A codex turn runs `codex exec --json --sandbox <mode> [-c windows.sandbox=unelevated] [--model <m>]
---skip-git-repo-check [resume <id>] -` with the brief on standard input (plan mode is always `read-only`). The exec
+--skip-git-repo-check [resume <id>] -` with the brief on standard input (plan mode is always `read-only`, which runs
+the shell commands that only read; the brief tells a codex plan turn to read files with them). The exec
 options come before `resume`, which a continued turn adds: `codex exec resume` of codex-cli 0.167.0 has no
 `--sandbox` and refuses it. The `-c` override is
 added on Windows for `read-only` and `workspace-write`: codex-cli 0.167.0 with no `[windows]` table in its

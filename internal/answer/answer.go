@@ -18,9 +18,10 @@ import (
 	"github.com/NovaSeele/Seelegent/internal/proof"
 )
 
-// ReadOnlyRule is the rule of every read-only member run.
-const ReadOnlyRule = "Do not edit, create or delete files. Read the code to support your claims. Shell commands may " +
-	"be refused in this mode, so read files with the file tools, and always end with a text answer in the format below."
+// ReadOnlyRule is the rule of every read-only member run. How the run can read files depends on the backend it runs
+// on, so the task engine puts that first in a fresh conversation (brief.ReadOnlyRun), not this rule.
+const ReadOnlyRule = "Do not edit, create or delete files. Read the code to support your claims, and always end with " +
+	"a text answer in the format below."
 
 // CitationRule is how claims about the code must cite it.
 const CitationRule = "Every claim about the code must cite [path:line] or [path:line-line], path relative to the " +

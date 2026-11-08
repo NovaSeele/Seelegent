@@ -43,9 +43,12 @@ func (*Codex) Name() string { return config.BackendCodex }
 // Bin implements Backend.
 func (c *Codex) Bin() string { return c.bin }
 
-// Capabilities implements Backend. codex has no pre-tool hook, so the git guard relies on the sandbox mode.
+// Capabilities implements Backend. codex has no pre-tool hook, so the git guard relies on the sandbox mode. Its
+// only way to read files is the shell, which the read-only sandbox of a plan turn runs for commands that write
+// nothing.
 func (*Codex) Capabilities() Capabilities {
-	return Capabilities{ActiveQuota: true, NativePreToolGuard: false, StdinPrompt: true, ResumeFlag: "resume"}
+	return Capabilities{ActiveQuota: true, NativePreToolGuard: false, StdinPrompt: true, ResumeFlag: "resume",
+		PlanShell: true}
 }
 
 // codexHome is CODEX_HOME of a profile.
