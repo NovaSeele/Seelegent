@@ -27,10 +27,21 @@ func TestContestAccountsFollowThePool(t *testing.T) {
 		t.Fatal(err)
 	}
 	d.wait(sum.ID)
-	states, err := d.a.Pool.States(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
+	// The quota read after the turn runs on its own: wait until account "one" lands in the error state, so that
+	// States and contestAccounts below read the same pool.
+	var states []pool.AccountState
+	waitFor(t, func() bool {
+		var err error
+		if states, err = d.a.Pool.States(ctx); err != nil {
+			t.Fatal(err)
+		}
+		for _, st := range states {
+			if st.Account.Label == "one" {
+				return st.Status == pool.StatusError
+			}
+		}
+		return false
+	})
 	got, err := d.a.contestAccounts(ctx)
 	if err != nil || len(got) != len(states) {
 		t.Fatalf("accounts = %+v, %v", got, err)
