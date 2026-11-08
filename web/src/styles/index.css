@@ -1,6 +1,8 @@
-/* Global stylesheet: tokens first (the derived colour layer must precede the palettes), then every theme palette
-   (all 26 are bundled so the pre-paint script can pick any of them before first paint), then element defaults. */
+/* Global stylesheet: tokens and the provider hues first (the derived colour layer must precede the palettes), then
+   every theme palette (all 26 are bundled so the pre-paint script can pick any of them before first paint), then
+   element defaults. */
 @import './tokens.css';
+@import './providers.css';
 @import './themes/catppuccin-latte.css';
 @import './themes/catppuccin-mocha.css';
 @import './themes/claude-dark.css';

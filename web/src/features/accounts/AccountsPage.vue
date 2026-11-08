@@ -7,6 +7,7 @@ import PageContainer from '@/components/layout/PageContainer.vue'
 import PageHeader from '@/components/layout/PageHeader.vue'
 import Button from '@/components/ui/Button.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
+import ProviderMark from '@/components/ui/ProviderMark.vue'
 import { useNow } from '@/composables/useNow'
 import { useAccountsStore } from '@/stores/accounts'
 
@@ -115,6 +116,7 @@ watch(() => accounts.accounts.filter((a) => a.signingIn).length, resumeLogins)
           :aria-labelledby="`accounts-${group.backend}`"
         >
           <h2 :id="`accounts-${group.backend}`" class="accounts__heading">
+            <ProviderMark :backend="group.backend" :label="false" />
             {{ t(`accounts.backend.${group.backend}`) }}
             <span class="accounts__count">{{ group.items.length }}</span>
           </h2>

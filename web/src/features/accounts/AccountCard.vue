@@ -7,6 +7,7 @@ import Button from '@/components/ui/Button.vue'
 import IconButton from '@/components/ui/IconButton.vue'
 import Menu, { type MenuItem } from '@/components/ui/Menu.vue'
 import NumberField from '@/components/ui/NumberField.vue'
+import { providerEdge } from '@/components/ui/provider'
 import StatusPill from '@/components/ui/StatusPill.vue'
 import Switch from '@/components/ui/Switch.vue'
 import { useAccountsStore } from '@/stores/accounts'
@@ -96,7 +97,12 @@ function setPriority(priority: number) {
 </script>
 
 <template>
-  <article class="card" :class="{ 'card--off': !account.enabled }" :aria-labelledby="`${id}-name`">
+  <article
+    class="card provider-edge"
+    :class="{ 'card--off': !account.enabled }"
+    :style="providerEdge(account.backend)"
+    :aria-labelledby="`${id}-name`"
+  >
     <header class="card__head">
       <div class="card__title">
         <h3 :id="`${id}-name`" class="card__name">{{ account.label }}</h3>

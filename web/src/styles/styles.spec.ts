@@ -108,8 +108,9 @@ describe('style gates', () => {
     .filter(([path]) => !path.startsWith(THEMES_DIR))
     .map(([path, source]) => [path, styleText(path, source)] as const)
 
-  // File-type glyph colours are fixed per type (like VS Code), not themed, so they live in one table of their own.
-  const COLOUR_TABLES = ['src/styles/fileicons.css']
+  // File-type glyph colours are fixed per type (like VS Code) and provider hues per backend, not themed, so each
+  // lives in a table of its own.
+  const COLOUR_TABLES = ['src/styles/fileicons.css', 'src/styles/providers.css']
 
   it('keeps colour literals inside theme files', () => {
     const literal =

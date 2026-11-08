@@ -254,4 +254,18 @@
   /* Outline of a control with no fill of its own (checkbox): its only sign, so it keeps 3:1 (contrast.spec.ts). */
   --border-control: var(--text-muted);
   --scrollbar-thumb: var(--border-strong);
+
+  /* Provider identity (components/ui/ProviderMark.vue; the Claude and Antigravity hues live in providers.css).
+     OpenAI is monochrome, and a green would clash with the accent and with "accepted". An unknown backend takes
+     --provider-other. -soft is a chip background, -border an outline; neither carries text of its own colour. */
+  --provider-codex: var(--text-primary);
+  --provider-other: var(--text-muted);
+  --provider-claude-soft: color-mix(in oklab, var(--provider-claude) 14%, var(--bg-surface));
+  --provider-claude-border: color-mix(in oklab, var(--provider-claude) 45%, var(--bg-surface));
+  --provider-agy-soft: color-mix(in oklab, var(--provider-agy) 14%, var(--bg-surface));
+  --provider-agy-border: color-mix(in oklab, var(--provider-agy) 45%, var(--bg-surface));
+  --provider-codex-soft: color-mix(in oklab, var(--provider-codex) 14%, var(--bg-surface));
+  --provider-codex-border: color-mix(in oklab, var(--provider-codex) 45%, var(--bg-surface));
+  --provider-other-soft: color-mix(in oklab, var(--provider-other) 14%, var(--bg-surface));
+  --provider-other-border: color-mix(in oklab, var(--provider-other) 45%, var(--bg-surface));
 }

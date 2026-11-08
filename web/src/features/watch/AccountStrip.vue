@@ -2,6 +2,8 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 
+import { providerEdge } from '@/components/ui/provider'
+import ProviderMark from '@/components/ui/ProviderMark.vue'
 import QuotaBar from '@/components/ui/QuotaBar.vue'
 import { useFormat } from '@/composables/useFormat'
 import { ACCOUNT_TONE, accountState, tightestWindow, windowName } from '@/lib/accountState'
@@ -34,7 +36,12 @@ const tiles = computed(() =>
     </div>
     <p v-if="!tiles.length" class="strip__empty">{{ t('watch.accounts.empty') }}</p>
     <ul v-else class="strip__list">
-      <li v-for="{ account, state, twin, window } in tiles" :key="account.id" class="tile">
+      <li
+        v-for="{ account, state, twin, window } in tiles"
+        :key="account.id"
+        class="tile provider-edge"
+        :style="providerEdge(account.backend)"
+      >
         <div class="tile__head">
           <span class="tile__label">{{ account.label }}</span>
           <span class="tile__state" :class="`tone-${ACCOUNT_TONE[state]}`">
@@ -56,6 +63,7 @@ const tiles = computed(() =>
           {{ t('watch.accounts.readFailed') }}
         </p>
         <p class="tile__foot">
+          <ProviderMark :backend="account.backend" size="sm" />
           <span>{{
             t('watch.accounts.busy', { busy: account.busy, max: account.maxConcurrent })
           }}</span>
