@@ -19,6 +19,7 @@ func TestRunsUserCode(t *testing.T) {
 		{"-c core.hooksPath=NUL --no-pager -C dir --git-dir .git --work-tree=. push origin b", "push", true, true},
 		{"--git-dir .git worktree add --detach d HEAD", "worktree", true, true},
 		{"--namespace ns --config-env a=B fetch origin", "fetch", true, false},
+		{"ls-remote --heads https://example.com/r.git refs/heads/b", "ls-remote", true, false},
 		{"checkout main", "checkout", true, false},
 		{"reset --hard", "reset", true, false},
 		{"stash push", "stash", true, false},

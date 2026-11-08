@@ -424,7 +424,7 @@ func (s *Service) lineCounts(ctx context.Context, c *api.Contest, v *api.Contest
 		return nil, 0, 0, false
 	}
 	out, err := s.o.Git.Exec(ctx, c.Root, gitx.ExecOptions{Timeout: gitx.ReadTimeout}, "diff", "--numstat",
-		"--no-renames", c.BaseSha, tree)
+		"--no-renames", "--no-textconv", c.BaseSha, tree)
 	if err != nil {
 		return nil, 0, 0, false
 	}
@@ -463,7 +463,7 @@ func (s *Service) diffText(ctx context.Context, c *api.Contest, v *api.ContestVa
 func (s *Service) gitDiff(ctx context.Context, c *api.Contest, tree string, limit int) (text string, truncated bool,
 	err error) {
 	out, err := s.o.Git.Exec(ctx, c.Root, gitx.ExecOptions{Timeout: gitx.ReadTimeout, Limit: limit}, "diff",
-		"--no-color", "--no-ext-diff", c.BaseSha, tree)
+		"--no-color", "--no-ext-diff", "--no-textconv", c.BaseSha, tree)
 	var ge *gitx.Error
 	if errors.As(err, &ge) && ge.Stderr == "" && len(out) >= limit {
 		return cutDiff(string(out), limit-1), true, nil
@@ -704,8 +704,10 @@ func (s *Service) Pick(ctx context.Context, id string, req api.ContestPickReques
 	if len(files) == 0 {
 		return api.Contest{}, invalidf("variant %s has no changes to apply", lbl)
 	}
+	// --no-textconv: a textconv driver (docx, pdf, a decrypting diff=...) would put its converted text in the
+	// patch, which then fails to apply or, for an added file, writes the converted content.
 	patch, err := s.o.Git.Exec(ctx, c.Root, gitx.ExecOptions{Limit: maxPatch}, "diff", "--binary", "--full-index",
-		"--no-color", "--no-ext-diff", c.BaseSha, commit)
+		"--no-color", "--no-ext-diff", "--no-textconv", c.BaseSha, commit)
 	if err != nil {
 		return api.Contest{}, fmt.Errorf("the %s patch: %w", lbl, err)
 	}
