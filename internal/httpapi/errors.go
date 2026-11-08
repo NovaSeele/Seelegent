@@ -60,7 +60,7 @@ func (e *apiError) with(k string, v any) *apiError {
 	return e
 }
 
-// translated is a middleware error whose message has translations (Accept-Language).
+// translated is a middleware error whose message has translations (the dashboard's X-Seelegent-Lang).
 func translated(code api.ErrorCode, msgID string) *apiError {
 	return &apiError{code: code, msgID: msgID, message: messages[msgID]["en"]}
 }
@@ -180,9 +180,12 @@ var messages = map[string]map[string]string{
 	},
 }
 
-// language picks the first of locales that Accept-Language names (a "zh" tag means zh-CN), en otherwise.
+// language picks the first of locales that the dashboard's X-Seelegent-Lang header names (a "zh" tag means
+// zh-CN), English otherwise. The browser's own Accept-Language is ignored on purpose: English is the default
+// everywhere, and only the language the user picked in the dashboard changes it (requests that skip the
+// dashboard's client, such as the event stream or a URL opened by hand, get English).
 func language(r *http.Request) string {
-	for _, part := range strings.Split(r.Header.Get("Accept-Language"), ",") {
+	for _, part := range strings.Split(r.Header.Get("X-Seelegent-Lang"), ",") {
 		tag := strings.ToLower(strings.TrimSpace(strings.SplitN(part, ";", 2)[0]))
 		base, _, _ := strings.Cut(tag, "-")
 		if base == "zh" {
