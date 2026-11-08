@@ -146,8 +146,11 @@ palette, `Ctrl+,` the settings; each rail item's tooltip shows its own shortcut.
   - **Graph**: the steps over time, one lane per stage, with a mark where a turn or a hand-over to another account
     starts;
   - **Files**: every file the worker read or edited, grouped by folder;
-  - **Git**: the task's diff file by file, review notes on lines, the changes made outside the edit tools, and a
-    **Commit…** dialog that commits only this task's files.
+  - **Git**: what the task committed since it started (its commits, each with its own diff, or the files they
+    changed against the start), its uncommitted changes file by file with review notes on lines, the changes made
+    outside the edit tools, a **Commit…** dialog that commits only this task's uncommitted files, and the rest of
+    the repository: other uncommitted files and how far the branch is ahead of or behind its upstream. A notice says
+    when the branch changed since the start or the start can no longer be found.
 
   From a task you can **Follow up**, **Accept** or **Reject**, **Cancel task**, or **Take over**: the worker's
   conversation opens in a console on the same account; when you close it the worker writes a hand-back report.
