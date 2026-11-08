@@ -175,6 +175,7 @@ func (s *Service) summary(t *Task) api.TaskSummary {
 		After: api.NonNil(t.After), AfterMode: t.AfterMode, DepsReason: t.DepsReason, Manual: t.Manual,
 		ParentID: t.ParentID, ContestID: t.ContestID, TicketID: t.TicketID, MeetingID: t.MeetingID,
 		AutomationID: t.AutomationID, Variant: t.Variant, LastEventSeq: t.LastEventSeq, Gate: gateSummary(t),
+		ConsultState: consultState(t),
 	}
 	if sum.AfterMode == "" { // tasks stored before afterMode was always set
 		sum.AfterMode = AfterAccepted

@@ -26,9 +26,11 @@
     "invalid": "使用できません: {reason}",
     "runsOn": "実行先",
     "role": "ロール",
+    "trackFailed": "実績を読み込めませんでした: {error}",
     "track": {
       "title": "実績",
       "none": "会議や相談はまだありません。",
+      "failed": "読み込めませんでした。",
       "meetings": "会議",
       "dissents": "異議",
       "vindicated": "正しかった",

@@ -118,7 +118,12 @@ export const SECTIONS: readonly SectionInfo[] = [
   { id: 'memory', icon: 'memory', ready: true, items: ['projectMemory'] },
   { id: 'notifications', icon: 'bell', ready: false, items: ['desktopNotify', 'sound'] },
   { id: 'shortcuts', icon: 'keyboard', ready: false, items: ['keymap'] },
-  { id: 'system', icon: 'monitor', ready: true, items: ['port', 'githubPoll', 'automations'] },
+  {
+    id: 'system',
+    icon: 'monitor',
+    ready: true,
+    items: ['port', 'githubPoll', 'githubHosts', 'automations'],
+  },
   { id: 'experiments', icon: 'flask', ready: false, items: ['experimental'] },
   { id: 'language', icon: 'language', ready: true, items: ['locale'] },
 ]

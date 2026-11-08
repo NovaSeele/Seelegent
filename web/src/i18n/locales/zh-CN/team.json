@@ -26,9 +26,11 @@
     "invalid": "无法使用：{reason}",
     "runsOn": "运行于",
     "role": "角色",
+    "trackFailed": "无法读取履历：{error}",
     "track": {
       "title": "记录",
       "none": "还没有会议或咨询。",
+      "failed": "无法读取。",
       "meetings": "会议",
       "dissents": "异议",
       "vindicated": "被证明正确",

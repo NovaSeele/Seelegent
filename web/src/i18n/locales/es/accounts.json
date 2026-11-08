@@ -120,6 +120,7 @@
     "noProvider": "Este backend aún no tiene proveedor. Añade uno antes en Proveedores de API.",
     "keyHint": "Opcional; puedes añadirla después. Luego solo se muestran sus últimos caracteres.",
     "keyless": "Se añadió {name}, pero no tiene clave: la clave fue rechazada y la cuenta no se pudo quitar de nuevo. Introduce aquí una clave para ella.",
+    "loginFailed": "Se añadió {name}, pero no se pudo iniciar su inicio de sesión: {error}. Usa Iniciar sesión en su tarjeta para volver a intentarlo.",
     "systemTaken": "Ya añadida: {name}",
     "next": "Siguiente",
     "submit": "Añadir cuenta"

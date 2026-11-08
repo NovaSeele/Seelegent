@@ -2405,6 +2405,11 @@ export interface TaskSummary {
   gate: Gate | null
   spec: SpecRef | null
   activeStep: ActiveStep | null
+  /**
+   * ConsultState counts the task's consults (absent while it has none); it changes whenever a consult starts,
+   * ends or has its objection answered, so a reader of the full record (TaskDetail.Consults) knows to read again.
+   */
+  consultState?: ConsultState
   after: string[]
   afterMode: 'accepted' | 'done'
   depsReason?: string
@@ -2847,6 +2852,16 @@ export interface Consult {
   error?: string
   /** AnsweredObjection is the lead's answer to a peer objection, given with review accepted. */
   answeredObjection: ObjectionAnswer | null
+}
+
+/** ConsultState counts the consults of a task, for its summary. */
+export interface ConsultState {
+  /** Total is the number of consults asked. */
+  total: number
+  /** Running is the number of consults whose run has not ended. */
+  running: number
+  /** Objections is the number of peer objections without an answer (they block review accepted). */
+  objections: number
 }
 
 /** ObjectionAnswer is the lead's written answer to a peer objection. */

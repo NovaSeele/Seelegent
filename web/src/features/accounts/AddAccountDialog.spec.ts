@@ -6,6 +6,7 @@ import { ApiError } from '@/api/client'
 import type { ProvidersApi } from '@/api/providers'
 import { useAccountsStore } from '@/stores/accounts'
 import { useProvidersStore } from '@/stores/providers'
+import { useToastStore } from '@/stores/toast'
 import { setupApp } from '@/test/app'
 import { makeAccount, makeProvider } from '@/test/fixtures'
 
@@ -118,6 +119,32 @@ describe('AddAccountDialog', () => {
     expect(api.create).toHaveBeenCalledTimes(1)
     expect(api.setKey).toHaveBeenLastCalledWith('k1', 'sk-long-enough')
     expect(wrapper.emitted('update:open')?.at(-1)).toEqual([false])
+    wrapper.unmount()
+  })
+
+  it('says when the sign-in of the new account could not start (E-B11)', async () => {
+    const isolated = makeAccount({ id: 'g1', label: 'Gemini 1', kind: 'isolated', backend: 'agy' })
+    const api = {
+      create: vi.fn(() => Promise.resolve(isolated)),
+      login: vi.fn(() => Promise.reject(new ApiError(500, 'internal', 'no terminal'))),
+    }
+    const wrapper = await mountDialog(api)
+    radio('agy').click()
+    await flushPromises()
+    radio('isolated').click()
+    await flushPromises()
+    button('Next').click()
+    await flushPromises()
+    button('Add account').click()
+    await flushPromises()
+
+    expect(api.login).toHaveBeenCalledWith('g1')
+    const toasts = useToastStore().toasts
+    expect(toasts.map((t) => t.message)).toContain('Added Gemini 1')
+    const failed = toasts.find((t) => t.tone === 'error')
+    expect(failed?.message).toBe(
+      'Gemini 1 was added, but its sign-in could not start: no terminal. Use Sign in on its card to try again.',
+    )
     wrapper.unmount()
   })
 })

@@ -13,7 +13,13 @@ import TextArea from '@/components/ui/TextArea.vue'
 import TextField from '@/components/ui/TextField.vue'
 import { useAccountsStore } from '@/stores/accounts'
 import { useConnectionStore } from '@/stores/connection'
-import { projectChoices, samePlace, useRolesStore, type RolePlace } from '@/stores/roles'
+import {
+  projectChoices,
+  RoleMoveError,
+  samePlace,
+  useRolesStore,
+  type RolePlace,
+} from '@/stores/roles'
 import { useToastStore } from '@/stores/toast'
 
 import RoleSkills from './RoleSkills.vue'
@@ -98,6 +104,11 @@ watch(
   },
 )
 
+// A role's place for a message: its id and where it lives (global, or the project's folder).
+function placeLabel(p: RolePlace): string {
+  return `${p.id} (${p.scope === 'global' ? t('roles.scope.global') : (p.cwd ?? t('roles.scope.project'))})`
+}
+
 function toggleAccount(id: string, on: boolean) {
   const list = draft.value.preferredAccounts
   draft.value.preferredAccounts = on ? [...list, id] : list.filter((a) => a !== id)
@@ -135,7 +146,14 @@ async function save() {
     errors.value = Object.fromEntries(
       problems.map((p) => [p.field.replace(/^role\./, ''), p.message]),
     )
-    if (!problems.length) failure.value = errorMessage(error)
+    if (error instanceof RoleMoveError) {
+      failure.value = t('roles.errors.bothPlaces', {
+        error: errorMessage(error.reason),
+        rollback: errorMessage(error.rollback),
+        from: placeLabel(error.from),
+        to: placeLabel(error.to),
+      })
+    } else if (!problems.length) failure.value = errorMessage(error)
   } finally {
     busy.value = false
   }

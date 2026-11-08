@@ -29,18 +29,23 @@ const views = computed(() =>
   runs.value.map((r) => ({ run: r, ...runView(r, (k, p) => (p ? t(k, p) : t(k)), fmt.value) })),
 )
 
-watch(open, async (now) => {
-  const a = props.automation
-  if (!now || !a) return
+// Each read gets a number; an answer for an earlier read (another automation, or a dialog closed since) is dropped,
+// so a slow answer for A never fills the dialog that now shows B (E-B17).
+let request = 0
+
+watch([open, () => props.automation?.id], async ([now, id]) => {
+  const mine = ++request
+  if (!now || !id) return
   loading.value = true
   error.value = ''
   runs.value = []
   try {
-    runs.value = await store.api().runs(a.id, 50)
+    const list = await store.api().runs(id, 50)
+    if (mine === request) runs.value = list
   } catch (cause) {
-    error.value = errorMessage(cause)
+    if (mine === request) error.value = errorMessage(cause)
   } finally {
-    loading.value = false
+    if (mine === request) loading.value = false
   }
 })
 </script>

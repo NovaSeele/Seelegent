@@ -118,6 +118,16 @@ type Consult struct {
 	AnsweredObjection *ObjectionAnswer `json:"answeredObjection"`
 }
 
+// ConsultState counts the consults of a task, for its summary.
+type ConsultState struct {
+	// Total is the number of consults asked.
+	Total int `json:"total"`
+	// Running is the number of consults whose run has not ended.
+	Running int `json:"running"`
+	// Objections is the number of peer objections without an answer (they block review accepted).
+	Objections int `json:"objections"`
+}
+
 // ObjectionAnswer is the lead's written answer to a peer objection.
 type ObjectionAnswer struct {
 	Text string `json:"text"`

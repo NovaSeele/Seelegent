@@ -26,9 +26,11 @@
     "invalid": "사용할 수 없음: {reason}",
     "runsOn": "실행 위치",
     "role": "역할",
+    "trackFailed": "실적을 읽지 못했습니다: {error}",
     "track": {
       "title": "실적",
       "none": "아직 회의나 자문이 없습니다.",
+      "failed": "읽지 못했습니다.",
       "meetings": "회의",
       "dissents": "반대",
       "vindicated": "옳았음",

@@ -67,6 +67,9 @@ type TaskSummary struct {
 	Gate       *Gate       `json:"gate"`
 	Spec       *SpecRef    `json:"spec"`
 	ActiveStep *ActiveStep `json:"activeStep"`
+	// ConsultState counts the task's consults (absent while it has none); it changes whenever a consult starts,
+	// ends or has its objection answered, so a reader of the full record (TaskDetail.Consults) knows to read again.
+	ConsultState *ConsultState `json:"consultState,omitempty"`
 
 	After      []string `json:"after"`
 	AfterMode  string   `json:"afterMode" ts:"'accepted' | 'done'"`

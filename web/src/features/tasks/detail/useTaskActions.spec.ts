@@ -1,5 +1,5 @@
 import { mount } from '@vue/test-utils'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { defineComponent } from 'vue'
 
 import type { TasksApi } from '@/api'
@@ -66,5 +66,38 @@ describe('useTaskActions review', () => {
     const [toast] = useToastStore().toasts
     expect(toast?.message).toBe('Accepted')
     expect(toast?.tone).toBe('success')
+  })
+})
+
+// Old B21 (E-B21): the copy was not awaited, so a refused clipboard still showed "copied".
+describe('useTaskActions copyId', () => {
+  afterEach(() => {
+    Reflect.deleteProperty(navigator, 'clipboard')
+  })
+
+  function stubClipboard(writeText: (text: string) => Promise<void>) {
+    const clipboard = { writeText: vi.fn(writeText) }
+    Object.defineProperty(navigator, 'clipboard', { value: clipboard, configurable: true })
+    return clipboard.writeText
+  }
+
+  it('says copied only once the clipboard took the id', async () => {
+    const writeText = stubClipboard(() => Promise.resolve())
+    const actions = await withActions(makeTask())
+    expect(await actions.copyId()).toBe(true)
+    expect(writeText).toHaveBeenCalledWith('t1')
+    const [toast] = useToastStore().toasts
+    expect(toast).toMatchObject({ message: 'Task ID copied', tone: 'success' })
+  })
+
+  it('says it could not copy when the browser refuses, and never "copied"', async () => {
+    stubClipboard(() => Promise.reject(new DOMException('denied', 'NotAllowedError')))
+    const actions = await withActions(makeTask())
+    expect(await actions.copyId()).toBe(false)
+    const toasts = useToastStore().toasts
+    expect(toasts.map((t) => t.message)).toEqual([
+      'Could not copy: the browser refused clipboard access',
+    ])
+    expect(toasts[0]?.tone).toBe('error')
   })
 })
