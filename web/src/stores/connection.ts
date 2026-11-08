@@ -16,6 +16,11 @@
  *   settings. Other frames
  *   (providers.changed, roles.changed, memory.changed, hook.ran) go to the stores that `subscribe` to them,
  *   through the same hold-and-replay path, so none is lost during a resync.
+ * - A tab hidden for HIDDEN_PAUSE_MS closes the stream (and stops any retry of /state), so a background tab neither
+ *   keeps reading the API nor counts as a client: the daemon's idle policy needs none. It is a deliberate pause,
+ *   not an outage: the status stays as it was and no banner shows. When the tab shows again the stream reopens from
+ *   the last event id, the way a reconnect does: missed frames are replayed, or the daemon's `reset` brings a fresh
+ *   /state snapshot.
  * - After every snapshot but the first, `onResync` listeners run: data that is not in /state (providers, roles,
  *   usage) is read again, since frames about it may have fallen between the old stream and the new one (old
  *   bug B9: pages stayed stale after a reconnect).
@@ -47,6 +52,9 @@ export interface ConnectionDeps {
   reload?: () => void
   random?: () => number
 }
+
+/** How long a hidden tab keeps the event stream open before it pauses it (see the header). */
+export const HIDDEN_PAUSE_MS = 5 * 60_000
 
 /** Frames held while a resync reads /state; beyond this the oldest are dropped (the snapshot covers them). */
 export const MAX_HELD_FRAMES = 5000
@@ -112,6 +120,11 @@ export const useConnectionStore = defineStore('connection', () => {
    * lowMemory and memory older than the frame's, so those two keep the frame's values.
    */
   let lowSeq = -1
+  /** The stream is closed because the tab has been hidden for HIDDEN_PAUSE_MS. */
+  const paused = ref(false)
+  let pauseTimer: ReturnType<typeof setTimeout> | undefined
+  /** The stream was running when it paused: it reopens on resume (else the boot read runs again). */
+  let resumeStream = false
 
   function setStatus(next: ConnectionStatus): void {
     status.value = next
@@ -161,7 +174,7 @@ export const useConnectionStore = defineStore('connection', () => {
     } catch {
       syncing = false
       again = false
-      if (stopped) return
+      if (stopped || paused.value) return
       const events = stream.value
       // Before the stream runs, a failed boot read is the connection state; once it runs the stream says.
       const delay = backoffDelay(attempt++, random)
@@ -193,7 +206,8 @@ export const useConnectionStore = defineStore('connection', () => {
     const events = stream.value
     if (events && !events.running) {
       events.setLastEventId(state.lastEventId)
-      events.start()
+      if (paused.value) resumeStream = true
+      else events.start()
     }
   }
 
@@ -333,7 +347,7 @@ export const useConnectionStore = defineStore('connection', () => {
           retryAt.value = null
           hasConnected.value = true
         } else if (state === 'closed') {
-          if (stopped) return
+          if (stopped || paused.value) return
           status.value = 'offline'
           retryAt.value = retryIn === null ? null : Date.now() + retryIn
         } else if (status.value !== 'offline') {
@@ -349,23 +363,53 @@ export const useConnectionStore = defineStore('connection', () => {
 
     if (typeof window !== 'undefined') {
       const retry = () => retryNow()
-      const onVisible = () => {
-        if (document.visibilityState === 'visible') retry()
+      const onVisibility = () => {
+        if (document.visibilityState !== 'hidden') {
+          clearTimeout(pauseTimer)
+          pauseTimer = undefined
+          if (paused.value) resume()
+          else retry()
+        } else if (pauseTimer === undefined && !paused.value) {
+          pauseTimer = setTimeout(pause, HIDDEN_PAUSE_MS)
+        }
       }
       window.addEventListener('online', retry)
-      document.addEventListener('visibilitychange', onVisible)
+      document.addEventListener('visibilitychange', onVisibility)
+      if (document.visibilityState === 'hidden') onVisibility()
       cleanup = () => {
         window.removeEventListener('online', retry)
-        document.removeEventListener('visibilitychange', onVisible)
+        document.removeEventListener('visibilitychange', onVisibility)
       }
     }
     return events
   }
 
+  /** Closes the stream of a tab hidden for HIDDEN_PAUSE_MS, and any retry of /state, without changing the status. */
+  function pause(): void {
+    pauseTimer = undefined
+    const events = stream.value
+    if (!events || stopped) return
+    paused.value = true
+    resumeStream = events.running
+    clearTimeout(retryTimer)
+    retryTimer = undefined
+    events.stop()
+  }
+
+  /** The tab shows again: the stream reopens from its last event id (or the boot read runs again). */
+  function resume(): void {
+    paused.value = false
+    const events = stream.value
+    if (!events || stopped) return
+    if (resumeStream) events.start()
+    else if (!syncing) void sync()
+    resumeStream = false
+  }
+
   /** Retries at once: the boot read when it is still failing, else the stream. */
   function retryNow(): void {
     const events = stream.value
-    if (!events) return
+    if (!events || paused.value) return
     if (!events.running) {
       if (!syncing) void sync()
       return
@@ -377,6 +421,10 @@ export const useConnectionStore = defineStore('connection', () => {
     stopped = true
     clearTimeout(retryTimer)
     retryTimer = undefined
+    clearTimeout(pauseTimer)
+    pauseTimer = undefined
+    paused.value = false
+    resumeStream = false
     stream.value?.stop()
     stream.value = null
     cleanup?.()
@@ -424,6 +472,7 @@ export const useConnectionStore = defineStore('connection', () => {
     projects,
     hasConnected,
     clockOffsetMs,
+    paused,
     stream,
     setStatus,
     start,
