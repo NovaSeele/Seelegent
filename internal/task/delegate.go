@@ -119,6 +119,9 @@ func (s *Service) DelegateWith(ctx context.Context, req api.DelegateRequest, sp 
 		if p.Backend != backendName {
 			return api.TaskSummary{}, invalidf("provider %s serves %s, not %s", p.ID, p.Backend, backendName)
 		}
+		if err := s.providerBudget(ctx, p.ID); err != nil {
+			return api.TaskSummary{}, err
+		}
 		prov = &p
 	}
 	t := &Task{
@@ -382,6 +385,11 @@ func (s *Service) Answer(ctx context.Context, id string, req api.AnswerRequest) 
 // addTurn opens the next turn of a finished task.
 func (s *Service) addTurn(ctx context.Context, t *Task, by, msg string, req api.FollowupRequest) (NewEvent, error) {
 	model, tier, effort := t.Model, t.Tier, t.Effort
+	if t.Provider != "" {
+		if err := s.providerBudget(ctx, t.Provider); err != nil {
+			return NewEvent{}, err
+		}
+	}
 	if req.Effort != "" {
 		effort = req.Effort
 	}
@@ -421,6 +429,26 @@ func (s *Service) addTurn(ctx context.Context, t *Task, by, msg string, req api.
 		Data: api.LeadMessageData{Message: msg, By: by, Model: model, Effort: effort, Tier: tier}}, nil
 }
 
+// providerBudget refuses work on a provider whose every usable key rests on its budget (account.BudgetReachedError,
+// details.reason budget_reached), instead of letting the task wait until the user raises a budget.
+func (s *Service) providerBudget(ctx context.Context, providerID string) error {
+	accounts, err := s.o.Accounts.List(ctx)
+	if err != nil {
+		return err
+	}
+	if err := account.ProviderBudgetReached(accounts, providerID); err != nil {
+		return plainInvalid{err}
+	}
+	return nil
+}
+
+// plainInvalid is a refusal that matches ErrInvalid but reads as its cause alone, for messages written for the
+// lead ("anthropic keys reached their budget ($200); raise it in Accounts"); the cause's APIDetails stay reachable.
+type plainInvalid struct{ error }
+
+// Unwrap matches ErrInvalid and the cause.
+func (e plainInvalid) Unwrap() []error { return []error{ErrInvalid, e.error} }
+
 // resolveModel picks the model of a turn: an explicit model, else the tier, else the role's default tier, else the
 // settings' default tier (backend.ModelPolicy.Resolve). The effort defaults to the role's.
 func (s *Service) resolveModel(backendName string, prov *account.Provider, model, tier, effort string,
@@ -443,6 +471,9 @@ func (s *Service) resolveModel(backendName string, prov *account.Provider, model
 		return "", "", "", invalidf("tier %q must be one of %s", tier, strings.Join(config.Tiers(), ", "))
 	}
 	resolved, err = policy.Resolve(model, tier, defaultTier)
+	if nd := (*backend.NoDefaultModelError)(nil); errors.As(err, &nd) {
+		return "", "", "", plainInvalid{err}
+	}
 	if err != nil {
 		return "", "", "", fmt.Errorf("%w: %w", ErrInvalid, err)
 	}

@@ -40,6 +40,14 @@ type slimAccount struct {
 	ModelPerTask bool `json:"modelPerTask,omitempty"`
 	// TestResult is an API-key account's key test state (not_tested, ok, refused, ...).
 	TestResult string `json:"testResult,omitempty"`
+	// Spend of an API-key account on its current key: spentUsd (only from a trusted spendSource, "cli"), tokens,
+	// the budget and its state (ok, warn, reached, unknown), and restReason budget_reached while it rests on it.
+	SpentUSD    *float64 `json:"spentUsd,omitempty"`
+	SpentTokens int64    `json:"spentTokens,omitempty"`
+	SpendSource string   `json:"spendSource,omitempty"`
+	BudgetUSD   *float64 `json:"budgetUsd,omitempty"`
+	BudgetState string   `json:"budgetState,omitempty"`
+	RestReason  string   `json:"restReason,omitempty"`
 }
 
 // slimTask is an active task in the slim status.
@@ -126,6 +134,12 @@ func slimAccountOf(a api.Account) slimAccount {
 		TestResult: a.TestResult}
 	if a.Kind == "api-key" {
 		out.Auth = "api-key"
+		if a.SpendSource == api.SpendCLI {
+			spent := a.SpentUSD
+			out.SpentUSD = &spent
+		}
+		out.SpentTokens, out.SpendSource, out.BudgetUSD = a.SpentTokens, a.SpendSource, a.BudgetUSD
+		out.BudgetState, out.RestReason = a.BudgetState, a.RestReason
 	}
 	if a.Provider != "" {
 		out.Provider = &a.Provider
