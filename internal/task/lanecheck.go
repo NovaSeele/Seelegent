@@ -1,6 +1,8 @@
 package task
 
 import (
+	"context"
+
 	"github.com/NovaSeele/Seelegent/internal/api"
 	"github.com/NovaSeele/Seelegent/internal/gate"
 	"github.com/NovaSeele/Seelegent/internal/snapshot"
@@ -11,9 +13,18 @@ import (
 // counts against it (F6). A file that changed without either (the lead or the user editing the same tree, a
 // command's side effects) is a warning.
 
-// laneTouched collects what the workers of t's turns since the instruction, up to turn n, touched.
-func laneTouched(t *Task, n int) *workerWrites {
+// laneTouched collects what the workers of t's turns since the instruction, up to turn n, touched: their edits and
+// command writes, and the files that changed while their commands ran (end: turn n's end snapshot, or nil).
+func (s *Service) laneTouched(ctx context.Context, t *Task, n int, end *snapshot.Manifest) *workerWrites {
 	w := newWorkerWrites(t.Cwd, claimRoot(t), nil, nil)
+	s.addRuns(ctx, w, t, n, addTurns(w, t, n), end)
+	return w
+}
+
+// addTurns adds to w the edits and command writes of t's turns since the instruction up to turn n, and returns
+// their commands.
+func addTurns(w *workerWrites, t *Task, n int) []string {
+	var commands []string
 	for _, tu := range t.Turns[instructionStart(t, n):] {
 		if tu.N > n {
 			break
@@ -22,8 +33,9 @@ func laneTouched(t *Task, n int) *workerWrites {
 		for _, c := range tu.Commands {
 			w.addCommand(c)
 		}
+		commands = append(commands, tu.Commands...)
 	}
-	return w
+	return commands
 }
 
 // netChanged reports whether rel differs between the snapshot taken when the instruction's turn started and the
@@ -104,7 +116,7 @@ func laneOffGate(t *Task, laneMode string) bool {
 
 // laneOffFindings checks the lane of a gate-off task at the end of turn tu, whose own results (not stored yet) are
 // changed, edited and commands, with end its end snapshot.
-func (s *Service) laneOffFindings(t *Task, tu *Turn, changed, edited, commands []string,
+func (s *Service) laneOffFindings(ctx context.Context, t *Task, tu *Turn, changed, edited, commands []string,
 	end *snapshot.Manifest) []api.Finding {
 	laneMode := s.settings().Lanes
 	if !laneOffGate(t, laneMode) {
@@ -121,11 +133,12 @@ func (s *Service) laneOffFindings(t *Task, tu *Turn, changed, edited, commands [
 		}
 	}
 	touch := newWorkerWrites(t.Cwd, claimRoot(t), nil, nil)
+	var all []string
 	if tu.N > 1 {
 		prev, _, _ := gateInput(t, tu.N-1)
 		if instructionStart(t, tu.N-1) == instructionStart(t, tu.N) {
 			add(prev)
-			touch = laneTouched(t, tu.N-1)
+			all = addTurns(touch, t, tu.N-1)
 		}
 	}
 	add(changed)
@@ -133,6 +146,7 @@ func (s *Service) laneOffFindings(t *Task, tu *Turn, changed, edited, commands [
 	for _, c := range commands {
 		touch.addCommand(c)
 	}
+	s.addRuns(ctx, touch, t, tu.N, append(all, commands...), end)
 	files := s.netLane(t, tu.N, union, end)
 	return laneFindings(gate.LaneStep(t.Proof.Lane.Paths, files, laneMode, touch.wrote, touch.unknown))
 }

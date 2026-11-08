@@ -8,8 +8,10 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/NovaSeele/Seelegent/internal/api"
 	"github.com/NovaSeele/Seelegent/internal/backend"
@@ -314,10 +316,9 @@ func TestLaneTouchCommands(t *testing.T) {
 		t.Errorf("unknown = %q", w.unknown)
 	}
 	// Writes whose place the line does not spell out claim nothing and are listed; the temporary folder is neither.
-	unknown := []string{"Remove-Item -Path $env:OUT -Recurse", "cd $(mktemp -d) && touch x", "cp -r ../tpl/* .",
-		"rm -rf ."}
+	unknown := []string{"Remove-Item -Path $env:OUT -Recurse", "cp -r ../tpl/* .", "rm -rf ."}
 	w = newWorkerWrites(root, root, nil, append(slices.Clone(unknown), `echo x > $env:TEMP\log.txt`,
-		"rm -f $TMPDIR/x"))
+		"rm -f $TMPDIR/x", "cd $(mktemp -d) && touch x"))
 	if !slices.Equal(w.unknown, unknown) || w.wrote("src/store.ts") {
 		t.Errorf("unknown = %q, keys %q", w.unknown, w.keys)
 	}
@@ -526,5 +527,69 @@ func TestRejectedLaneFollowupKeepsFiles(t *testing.T) {
 	tk.Turns[1].Gate = &api.GateResult{State: api.GateGreen, Steps: []api.GateStep{{Kind: api.StepLane, State: api.StepGreen}}}
 	if n := rejectNote(tk); n != "" {
 		t.Errorf("note without lane files = %q", n)
+	}
+}
+
+// fakeMtime is a script line that sets a file's modification time: a write at that time, on the harness clock.
+func fakeMtime(path string, at time.Time) string {
+	return "#!mtime " + path + "\t" + strconv.FormatInt(at.UnixNano(), 10)
+}
+
+// A worker's script writes a file outside the lane that no word of its command names (python -c, as Gemini does
+// for bulk edits). The file changed while the command ran, by its call and result events: red (review).
+func TestLaneScriptWriteIsRed(t *testing.T) {
+	h := newHarness(t)
+	laneRepo(h)
+	h.agy("w", 1)
+	cmd := `python -c "open('docs/x.md','w').write('x')"`
+	out := filepath.Join(h.cwd, "docs", "x.md")
+	h.queue.Push(t, script(agyInit("conv-p"), agyTool(1, "CALLING", cmd), fakeWrite(out, "x"),
+		fakeMtime(out, h.clk.Now().Add(time.Second)), agyTool(1, "DONE", cmd), agyResult("conv-p", "Wrote the docs.")))
+	sum := h.delegate(api.DelegateRequest{Title: "script write", Lane: []string{"src/"}})
+	tk := h.waitStatus(sum.ID, StatusDone)
+	if st := h.laneOf(tk, 1); st.State != api.StepRed || !slices.Equal(st.Files, []string{"docs/x.md"}) ||
+		len(st.Unseen) != 0 || strings.Contains(st.Tail, gate.UnknownNote) {
+		t.Fatalf("lane = %+v", st)
+	}
+}
+
+// The lead edits a file outside the lane while no worker command runs: the worker's command ran (and is timed)
+// before, so the change stays a warning.
+func TestLaneEditOutsideRunsWarns(t *testing.T) {
+	h := newHarness(t)
+	laneRepo(h)
+	h.agy("w", 1)
+	cmd := `python fix.py`
+	in := filepath.Join(h.cwd, "src", "x", "a.vue")
+	lead := filepath.Join(h.cwd, "docs", "y.md")
+	h.queue.Push(t, script(agyInit("conv-q"), agyTool(1, "CALLING", cmd), fakeWrite(in, "b\n"),
+		fakeMtime(in, h.clk.Now()), agyTool(1, "DONE", cmd),
+		fakeWrite(lead, "the lead's notes\n"), fakeMtime(lead, h.clk.Now().Add(time.Minute)),
+		agyResult("conv-q", "Fixed a.vue.")))
+	sum := h.delegate(api.DelegateRequest{Title: "lead edit", Lane: []string{"src/"}})
+	tk := h.waitStatus(sum.ID, StatusDone)
+	st := h.laneOf(tk, 1)
+	if st.State != api.StepWarn || len(st.Files) != 0 || !slices.Equal(st.Unseen, []string{"docs/y.md"}) {
+		t.Fatalf("lane = %+v", st)
+	}
+	if g := tk.LastTurn().Gate; g.State != api.GateGreen {
+		t.Fatalf("gate = %+v", g)
+	}
+}
+
+// A code runner whose start is not known (a result event without a call or a duration) writes where Seelegent
+// cannot tell: an unexplained file outside the lane counts, and the step names the command.
+func TestLaneUntimedRunnerFailsClosed(t *testing.T) {
+	h := newHarness(t)
+	laneRepo(h)
+	h.agy("w", 1)
+	out := filepath.Join(h.cwd, "docs", "z.md")
+	h.queue.Push(t, script(agyInit("conv-r"), agyTool(1, "DONE", "npm run format"), fakeWrite(out, "z\n"),
+		agyResult("conv-r", "Formatted.")))
+	sum := h.delegate(api.DelegateRequest{Title: "untimed", Lane: []string{"src/"}})
+	tk := h.waitStatus(sum.ID, StatusDone)
+	if st := h.laneOf(tk, 1); st.State != api.StepRed || !slices.Equal(st.Files, []string{"docs/z.md"}) ||
+		!strings.Contains(st.Tail, gate.UnknownNote+": npm run format") {
+		t.Fatalf("lane = %+v", st)
 	}
 }

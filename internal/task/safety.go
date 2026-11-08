@@ -169,7 +169,7 @@ func (s *Service) checkTurn(ctx context.Context, t *Task, tu *Turn, last *backen
 		c.hygiene = s.hygiene(ctx, root, t.Cwd, start, end, c.changed, response, reported, writes.wrote)
 	}
 	c.scope = s.scope(ctx, t, root, editedAbs, commands, response)
-	c.scope = append(c.scope, s.laneOffFindings(t, tu, c.changed, c.edited, commands, &end)...)
+	c.scope = append(c.scope, s.laneOffFindings(ctx, t, tu, c.changed, c.edited, commands, &end)...)
 	return c
 }
 
