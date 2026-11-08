@@ -124,7 +124,7 @@ func (s *Service) DelegateWith(ctx context.Context, req api.DelegateRequest, sp 
 	t := &Task{
 		Title: title(req.Title, prompt), Status: StatusQueued, Kind: kind, Mode: mode, Cwd: cwd,
 		ProjectKey: key, ProjectName: name, Prompt: prompt, Backend: backendName, Provider: providerID,
-		AllowGit: req.AllowGit, Session: session, Role: req.Role, ParentID: sp.ParentID, MeetingID: sp.MeetingID,
+		Session: session, Role: req.Role, ParentID: sp.ParentID, MeetingID: sp.MeetingID,
 		ContestID: sp.ContestID, TicketID: sp.TicketID, AutomationID: sp.AutomationID, Variant: sp.Variant,
 		ProjectCwd: projectCwd, BaselineTaken: Hidden(kind),
 	}
@@ -199,7 +199,7 @@ func (s *Service) DelegateWith(ctx context.Context, req api.DelegateRequest, sp 
 	now := s.now()
 	t.CreatedAt, t.UpdatedAt = now, now
 	t.Turns = []*Turn{{N: 1, By: ByLead, Message: prompt, Status: TurnRunning, Model: model,
-		RequestedModel: reqModel, Tier: tier, Effort: effort, TaskIDs: taskIDs, StartedAt: now}}
+		RequestedModel: reqModel, Tier: tier, Effort: effort, TaskIDs: taskIDs, AllowGit: req.AllowGit, StartedAt: now}}
 	evs := []NewEvent{{Type: api.EventLeadMessage, Turn: 1,
 		Data: api.LeadMessageData{Message: prompt, By: ByLead, Model: model, Effort: effort, Tier: tier}}}
 	if t.Status == StatusWaitingDeps {
@@ -294,7 +294,7 @@ func (s *Service) Followup(ctx context.Context, id string, req api.FollowupReque
 		if err := s.checkContest(ctx, t); err != nil {
 			return nil, err
 		}
-		if t.AllowGit = derefOr(req.AllowGit, t.AllowGit); req.Profile != "" {
+		if req.Profile != "" {
 			if err := s.setProfile(ctx, t, req.Profile); err != nil {
 				return nil, err
 			}
@@ -317,6 +317,11 @@ func (s *Service) Followup(ctx context.Context, id string, req api.FollowupReque
 				tu := t.TurnN(1)
 				tu.Message += "\n\n## Additional instructions from the " + who + "\n\n" + msg
 				evs = append(evs, NewEvent{Type: api.EventLeadMessage, Turn: 1, Data: api.LeadMessageData{Message: msg, By: by}})
+			}
+			// The force starts the delegated command (turn 1): it keeps the delegate's allow_git unless this request
+			// passes one.
+			if tu := t.TurnN(1); tu != nil {
+				tu.AllowGit = derefOr(req.AllowGit, tu.AllowGit)
 			}
 			laneEvs, _, err := s.followupProof(ctx, t, preq, false)
 			if err != nil {
@@ -394,8 +399,10 @@ func (s *Service) addTurn(ctx context.Context, t *Task, by, msg string, req api.
 			return NewEvent{}, err
 		}
 	}
+	// allow_git is per command: a followup that does not pass it runs guarded (Turn.AllowGit).
 	tu := &Turn{N: len(t.Turns) + 1, By: by, Message: msg, Status: TurnRunning, Model: model,
-		RequestedModel: req.Model, Tier: tier, Effort: effort, StartedAt: s.now()}
+		RequestedModel: req.Model, Tier: tier, Effort: effort, AllowGit: derefOr(req.AllowGit, false),
+		StartedAt: s.now()}
 	if len(req.TaskIDs) > 0 {
 		if t.Spec == nil {
 			return NewEvent{}, invalidf("taskIds need a task with a spec")

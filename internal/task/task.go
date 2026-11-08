@@ -132,7 +132,6 @@ type Task struct {
 	Spec    *api.SpecRef    `json:"spec,omitempty"`
 	// SpecOutside is true when the spec directory lies outside the task's folder.
 	SpecOutside bool `json:"specOutside,omitempty"`
-	AllowGit    bool `json:"allowGit,omitempty"`
 	// Prefer lists the accounts the lead asked for, tried first.
 	Prefer []string `json:"prefer,omitempty"`
 
@@ -235,9 +234,14 @@ type Turn struct {
 	TaskIDsPassed bool `json:"taskIdsPassed,omitempty"`
 	// ProofChanged is true when the followup that opened the turn changed the task's lane or gate commands: the
 	// continuation repeats them.
-	ProofChanged bool      `json:"proofChanged,omitempty"`
-	StartedAt    time.Time `json:"startedAt"`
-	EndedAt      time.Time `json:"endedAt,omitzero"`
+	ProofChanged bool `json:"proofChanged,omitempty"`
+	// AllowGit turns the git guard off for this turn. It belongs to one lead command: the delegate or followup that
+	// opened the turn sets it (a followup without allow_git turns it off), and the automatic fix turns of that
+	// command (gate auto-fix, verifier reject) inherit it from the turn they fix; retries and handovers run the
+	// same turn. A takeover's handback turn has it off.
+	AllowGit  bool      `json:"allowGit,omitempty"`
+	StartedAt time.Time `json:"startedAt"`
+	EndedAt   time.Time `json:"endedAt,omitzero"`
 
 	Response        string       `json:"response,omitempty"`
 	Files           []string     `json:"files,omitempty"`

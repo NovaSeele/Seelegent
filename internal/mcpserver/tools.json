@@ -116,7 +116,7 @@
         },
         "allow_git": {
           "type": "boolean",
-          "description": "Allow worker to run potentially destructive git commands (bypasses git guard)."
+          "description": "Allow the worker to run potentially destructive git commands (bypasses the git guard), for this command only: this turn and its automatic fix turns; a followup must pass it again."
         },
         "verify": {
           "type": "boolean",
@@ -279,7 +279,7 @@
         },
         "allow_git": {
           "type": "boolean",
-          "description": "Allow worker to run potentially destructive git commands (bypasses git guard)."
+          "description": "Allow the worker to run potentially destructive git commands (bypasses the git guard), for this command only: this turn and its automatic fix turns; a followup must pass it again."
         },
         "verify": {
           "type": "boolean",

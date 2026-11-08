@@ -98,8 +98,12 @@ and the dashboard's terminal and safety panel show it.
 Hooks are written only into the worker's own profile (`Prepare` of the backend), never into the user's real
 `~/.claude`, `~/.gemini` or `~/.codex`: a system account's profile is the user's real home, so it gets the shim
 instead. Turning `gitGuard` off in the settings removes the hook at the next `Prepare`. `--allow-git` on
-`delegate`/`followup` sets `SEELEGENT_GIT_GUARD=off` in the worker CLI's environment for that turn, and the daemon
-leaves the shim off `PATH` for such a turn (and whenever `gitGuard` is off).
+`delegate`/`followup` (MCP `allow_git`) applies for this command only: this turn and its automatic fix turns; a
+followup must pass it again. It is stored on the turn it opens (`Turn.allowGit`): the gate's and the verifier's fix
+turns inherit it from the turn they fix, retries and handovers run the same turn, and a daemon restart keeps it. For
+such a turn the daemon sets `SEELEGENT_GIT_GUARD=off` in the worker CLI's environment and leaves the shim off `PATH`
+(as whenever `gitGuard` is off). Any other new turn (a followup or answer without it, a takeover's handback) runs
+guarded.
 
 Only the hooks read `SEELEGENT_GIT_GUARD`. They inherit the environment of the worker CLI, which the daemon builds
 (the variable is never passed through from the daemon's own environment); the commands the worker runs are child

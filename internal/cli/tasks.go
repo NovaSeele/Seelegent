@@ -131,7 +131,7 @@ func newFollowupCommand(d deps) *cobra.Command {
 	fs.StringVar(&task, "task", "", "Spec Kit task ids of this turn, comma separated")
 	fs.StringVar(&profile, "profile", "", "worker profile (role)")
 	fs.StringVar(&member, "member", "", "move the task to this department member from this turn on")
-	fs.BoolVar(&allowGit, "allow-git", false, "let the worker commit")
+	fs.BoolVar(&allowGit, "allow-git", false, "let the worker commit, "+allowGitScope)
 	fs.BoolVar(&force, "force", false, "start a task that waits for its prerequisites anyway")
 	fs.IntVar(&wait, "wait", defaultWait, "seconds to wait for the report (0: return at once)")
 	gates.add(fs)
