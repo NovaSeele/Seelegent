@@ -204,6 +204,45 @@ describe('connection store', () => {
       expect(store.status).toBe('online')
     })
 
+    it('reads the /state a reset asked for once visible, when it was still failing at the pause', async () => {
+      const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValueOnce(json(boot()))
+      const store = await online(fetch)
+      fetch.mockRejectedValue(new TypeError('timeout'))
+      FakeEventSource.last.emit('reset', '{"reason":"too_old"}')
+      setVisibility('hidden')
+      await vi.advanceTimersByTimeAsync(HIDDEN_PAUSE_MS)
+      expect(store.paused).toBe(true)
+      fetch.mockResolvedValue(json(boot({ tasks: [makeTask({ id: 't1', title: 'fresh' })] })))
+      setVisibility('visible')
+      FakeEventSource.last.open()
+      await vi.advanceTimersByTimeAsync(60_000)
+      expect(useTasksStore().get('t1')?.title).toBe('fresh')
+      expect(store.status).toBe('online')
+    })
+
+    it('reads the /state a reset asked for once visible, when that read failed during the pause', async () => {
+      let fail: (reason: unknown) => void = () => {}
+      const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValueOnce(json(boot()))
+      const store = await online(fetch)
+      fetch.mockReturnValueOnce(new Promise<Response>((_, reject) => (fail = reject)))
+      FakeEventSource.last.emit('reset', '{"reason":"too_old"}')
+      setVisibility('hidden')
+      await vi.advanceTimersByTimeAsync(HIDDEN_PAUSE_MS)
+      expect(store.paused).toBe(true)
+      fail(new TypeError('timeout'))
+      await flushPromises()
+      // Paused: the failed read is not retried while hidden...
+      await vi.advanceTimersByTimeAsync(60 * 60_000)
+      expect(fetch).toHaveBeenCalledTimes(2)
+      // ...but it is owed: the tab reads it as soon as it shows.
+      fetch.mockResolvedValue(json(boot({ tasks: [makeTask({ id: 't1', title: 'fresh' })] })))
+      setVisibility('visible')
+      FakeEventSource.last.open()
+      await vi.advanceTimersByTimeAsync(60_000)
+      expect(fetch).toHaveBeenCalledTimes(3)
+      expect(useTasksStore().get('t1')?.title).toBe('fresh')
+    })
+
     it('stops retrying an unreachable daemon while hidden, and tries again once visible', async () => {
       const fetch = vi.fn<typeof globalThis.fetch>().mockRejectedValue(new TypeError('refused'))
       const store = start(fetch)

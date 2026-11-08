@@ -125,6 +125,11 @@ export const useConnectionStore = defineStore('connection', () => {
   let pauseTimer: ReturnType<typeof setTimeout> | undefined
   /** The stream was running when it paused: it reopens on resume (else the boot read runs again). */
   let resumeStream = false
+  /**
+   * A /state read was owed when the stream paused (a retry was waiting, or a read was on its way, maybe to fail):
+   * resume reads it, since the stream's replay does not bring the snapshot a reset asked for.
+   */
+  let syncOwed = false
 
   function setStatus(next: ConnectionStatus): void {
     status.value = next
@@ -174,7 +179,11 @@ export const useConnectionStore = defineStore('connection', () => {
     } catch {
       syncing = false
       again = false
-      if (stopped || paused.value) return
+      if (stopped) return
+      if (paused.value) {
+        syncOwed = true
+        return
+      }
       const events = stream.value
       // Before the stream runs, a failed boot read is the connection state; once it runs the stream says.
       const delay = backoffDelay(attempt++, random)
@@ -187,6 +196,7 @@ export const useConnectionStore = defineStore('connection', () => {
     }
     if (stopped) return
     attempt = 0
+    syncOwed = false
     applySnapshot(state)
     if (again) {
       // Keep the held frames: the next snapshot's id is looked up among them.
@@ -391,19 +401,24 @@ export const useConnectionStore = defineStore('connection', () => {
     if (!events || stopped) return
     paused.value = true
     resumeStream = events.running
+    if (retryTimer !== undefined || syncing) syncOwed = true
     clearTimeout(retryTimer)
     retryTimer = undefined
     events.stop()
   }
 
-  /** The tab shows again: the stream reopens from its last event id (or the boot read runs again). */
+  /**
+   * The tab shows again: the stream reopens from its last event id, and a /state read owed since the pause (or the
+   * boot read, when the stream never ran) runs; frames that come meanwhile are held as in any resync.
+   */
   function resume(): void {
     paused.value = false
     const events = stream.value
     if (!events || stopped) return
+    const owed = syncOwed || !resumeStream
     if (resumeStream) events.start()
-    else if (!syncing) void sync()
     resumeStream = false
+    if (owed && !syncing) void sync()
   }
 
   /** Retries at once: the boot read when it is still failing, else the stream. */
@@ -425,6 +440,7 @@ export const useConnectionStore = defineStore('connection', () => {
     pauseTimer = undefined
     paused.value = false
     resumeStream = false
+    syncOwed = false
     stream.value?.stop()
     stream.value = null
     cleanup?.()
