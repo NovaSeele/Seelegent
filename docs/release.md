@@ -1,22 +1,48 @@
 # Releases, installation and updates
 
-Seelegent ships as one binary per platform, built by [GoReleaser](https://goreleaser.com) from a `v*` tag. The
-installers (`scripts/install.ps1`, `scripts/install.sh`) and `seelegent update` download those release archives,
-check them against the release's `checksums.txt`, and put the binary at a stable path that the lead hosts' MCP
-entries keep pointing at.
+Seelegent ships as one binary per platform, with a small companion launcher next to it, built by
+[GoReleaser](https://goreleaser.com) from a `v*` tag. The installers (`scripts/install.ps1`, `scripts/install.sh`)
+and `seelegent update` download those release archives, check them against the release's `checksums.txt`, and put
+the binary at a stable path that the lead hosts' MCP entries keep pointing at.
 
 ## Release files
 
 | File | Content |
 |---|---|
-| `seelegent_<version>_windows_<arch>.zip` | `seelegent.exe`, `LICENSE`, `README.md`, `THIRD_PARTY_NOTICES.md` |
-| `seelegent_<version>_<linux\|darwin>_<arch>.tar.gz` | `seelegent` and the same files |
+| `seelegent_<version>_windows_<arch>.zip` | `seelegent.exe`, `seelegent-launch.exe`, `LICENSE`, `README.md`, `THIRD_PARTY_NOTICES.md` |
+| `seelegent_<version>_<linux\|darwin>_<arch>.tar.gz` | `seelegent`, `seelegent-launch` and the same files |
 | `checksums.txt` | `<sha256>  <file name>` for every archive |
 
 `<version>` has no `v` (`seelegent_1.2.0_linux_arm64.tar.gz`), `<arch>` is `amd64` or `arm64`. The binaries are
 built with `CGO_ENABLED=0` and `-trimpath`, with the dashboard embedded, and report `v<version>`, the short commit
 and the commit date (`seelegent version`). The installers and the updater rely on these names: change
 `.goreleaser.yaml`, both scripts and `internal/update` together.
+
+### The companion launcher
+
+`seelegent-launch` (`cmd/seelegent-launch`) runs exactly what `seelegent __launch` runs (`launch.Main`): the
+detached process that starts one task's worker, waits for it and writes its exit record, one per running task for
+the whole turn. It is a separate executable because it links no crypto package: every Go binary that imports one
+(even `crypto/sha1`) carries a 32 MiB zero-filled entropy buffer (`crypto/internal/fips140/drbg`) that Windows charges
+as commit to each process, so a launcher started as `seelegent __launch` costs about 51 MB private and the companion
+about 12 MB. `TestLinksNoCrypto` in `cmd/seelegent-launch` fails when a change pulls a `crypto/` package into it
+(for Windows, Linux and macOS); see [development.md](development.md#the-companion-launcher).
+
+The daemon uses it only when that is safe, and falls back to `seelegent __launch` otherwise (which always works):
+
+- it must be the file `seelegent-launch[.exe]` in the folder of the daemon's own executable (`os.Executable`, links
+  resolved);
+- its build information, read from the file without running it (`debug/buildinfo`), must say it is
+  `cmd/seelegent-launch` of the daemon's own build: the same module version, Go version and build settings (VCS
+  revision, time and modified flag, `-ldflags` with the version stamp, `GOOS`, `GOARCH`, ...). So both must be built
+  by the same command with the same flags: `.goreleaser.yaml` shares them through YAML anchors, `make build`, `make
+  cross` and `scripts/build.ps1` build both.
+
+The daemon looks at the file for every launch (one `stat`) and reads its build information again only when its
+path, modification time or size changed, so a companion that appears, goes or is replaced is noticed at the next
+launch. Each change of decision is logged once in `logs/daemon.log`: info when it is used or absent, a warning with
+the reason when a file is there but not of this build. `seelegent doctor` reports it as the `launcher` line (always
+`ok`: launches work either way).
 
 ## Cutting a release
 
@@ -73,7 +99,11 @@ What the installers do, in order:
    folder only, so even a running `seelegent.exe` is replaced safely: the replaced binary is kept as
    `seelegent.exe.previous` (`seelegent.previous`) for `seelegent update --rollback`. An older kept binary is deleted
    only once the new one is in place. When this step fails, the old binary stays and the stopped daemon is started
-   again.
+   again. The companion launcher `seelegent-launch[.exe]` from the archive is then put next to it the same way (the
+   replaced one kept as `seelegent-launch[.exe].previous`; a running one, a launcher of a task that goes on, is
+   renamed aside); a release without one moves the installed one to `.previous`. A failure here is only a warning:
+   the daemon runs launches as `seelegent __launch` without it. The installers do not read its build information;
+   the daemon checks it before every use.
    - Windows: `%LOCALAPPDATA%\Programs\seelegent\bin\seelegent.exe`, the old version's install root.
    - Linux and macOS: `~/.local/bin/seelegent`.
    - `-InstallDir` / `--install-dir` / `SEELEGENT_INSTALL_DIR` choose another folder. Its path goes into PATH as
@@ -121,13 +151,18 @@ See [cli.md](cli.md) for the output. The steps of `--apply`:
    executable; a `download-*` folder an interrupted update left there is removed first): download the archive, verify its
    SHA-256 against `checksums.txt` (no line, or another hash: refused, code `checksum_mismatch`), extract the binary
    and run its `version --json`. Its `schemaVersion` is compared with the database (read-only): see
-   [Database schema](#database-schema-and-going-back) (`schema_too_new`, `schema_unknown`, `--force`).
-3. Copy it next to the installed binary as `<exe>.new`. Stop the daemon if it runs (`POST /api/v1/daemon/stop`, the
-   same graceful stop as `seelegent stop`: open waits are answered with `daemon_stopping` and a lead's wait goes on
-   against the new daemon).
-4. Rename the installed binary to `<exe>.previous` (an older kept binary is removed first) and `<exe>.new` to
-   `<exe>`. Windows allows renaming a running executable, so this works from the running `seelegent update` itself
-   and while lead hosts run `seelegent mcp`. A failed rename puts everything back.
+   [Database schema](#database-schema-and-going-back) (`schema_too_new`, `schema_unknown`, `--force`). When the
+   archive holds the companion launcher, it is extracted too and its build information must match the new binary's
+   (as the daemon checks it, without running either); otherwise nothing is installed.
+3. Copy them next to the installed files as `<exe>.new` and `<companion>.new`. Stop the daemon if it runs (`POST
+   /api/v1/daemon/stop`, the same graceful stop as `seelegent stop`: open waits are answered with `daemon_stopping`
+   and a lead's wait goes on against the new daemon).
+4. Rename the installed companion to `<companion>.previous` and `<companion>.new` to `<companion>`, then the same for
+   the binary: `<exe>` to `<exe>.previous` (an older kept file is moved to the trash first) and `<exe>.new` to
+   `<exe>`. A release without a companion moves the installed one to `<companion>.previous`; a kept companion with
+   no installed one belongs to an older version and goes to the trash. Windows allows renaming a running
+   executable, so this works from the running `seelegent update` itself, while lead hosts run `seelegent mcp` and
+   while launchers of running tasks run the companion (their tasks go on). A failed rename puts everything back.
 5. Start the daemon again from the new binary when it ran before, and wait up to two minutes for it to answer as the
    new version (its first start may run database migrations). If it fails, answers late or answers as another
    build, that daemon is stopped (gracefully when it answers, else the exact process the update started is killed)
@@ -137,16 +172,18 @@ See [cli.md](cli.md) for the output. The steps of `--apply`:
    `migrated_then_failed`: fix what `logs/daemon.log` says, then `seelegent restart` (or install a release that
    knows that schema). Otherwise the old binary is put back, its daemon started and its version checked; the update
    fails, the error says what runs now, and the executables are as before. Ctrl+C while the daemon starts still
-   finishes this step.
+   finishes this step. The companion goes back with the binary (a companion that cannot be put back is named in the
+   error; launches then run as `seelegent __launch` until the next update).
 6. Refresh the lead hosts (old C-B1): run the new binary's `setup --dry-run --json`, then `setup --host <ids>` for
    the hosts whose MCP entry already exists (action `unchanged` or `updated`). The entry's path did not change, so
    this mostly brings the lead skill to the new version. Hosts without an entry are not added, the reminder hook is
    not touched. Problems here are warnings; the update itself is done.
-7. Delete leftovers: `<exe>.old-*` files that could not be deleted while they ran (an MCP server of the old version
-   keeps its file in use until its host restarts it) are removed by a later update or rollback.
+7. Delete leftovers: `<exe>.old-*` and `<companion>.old-*` files that could not be deleted while they ran (an MCP
+   server of the old version keeps its file in use until its host restarts it, a launcher until its task's turn
+   ends) are removed by a later update or rollback.
 
-`--rollback` puts `<exe>.previous` back the same way (schema check, stop, rename, start, refresh) and discards the
-version it rolls back from, so a second rollback reports `no_previous` instead of rolling forward again (old
+`--rollback` puts `<exe>.previous` back the same way (schema check, stop, rename, start, refresh), with
+`<companion>.previous` (or, when none is kept, without a companion), and discards the version it rolls back from, so a second rollback reports `no_previous` instead of rolling forward again (old
 C-B15). To go forward again, run `seelegent update --apply`. When the kept version's daemon does not start, the
 rollback is undone and the kept executable stays for another try, unless that daemon migrated the database past the
 running version (a kept version newer than the running one): then the rollback stays, as in step 5.
