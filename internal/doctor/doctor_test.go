@@ -32,8 +32,19 @@ func TestSmallChecks(t *testing.T) {
 	if c := dashboard(nil); c.Status != Warn {
 		t.Errorf("no dashboard = %+v", c)
 	}
-	if c := git(func() (string, error) { return "", errors.New("not found") }); c.Status != Fail {
+	if c := git(func() (string, error) { return "", errors.New("not found") }, ""); c.Status != Fail {
 		t.Errorf("no git = %+v", c)
+	}
+	// A batch wrapper first on PATH: Seelegent uses the real git, and doctor names both and warns.
+	exe := filepath.Join(abs, "Git", "cmd", "git.exe")
+	wrapper := filepath.Join(abs, "ServBay", "bin", "git.cmd")
+	found := func() (string, error) { return exe, nil }
+	if c := git(found, ""); c.Status != OK || c.Message != "git "+exe {
+		t.Errorf("plain git = %+v", c)
+	}
+	if c := git(found, wrapper); c.Status != Warn || !strings.Contains(c.Message, "git "+exe+";") ||
+		!strings.Contains(c.Message, wrapper) || !strings.Contains(c.Fix, filepath.Dir(exe)) {
+		t.Errorf("git behind a wrapper = %+v", c)
 	}
 	if !Failed([]Check{{Status: OK}, {Status: Fail}}) || Failed([]Check{{Status: Warn}}) {
 		t.Error("Failed")

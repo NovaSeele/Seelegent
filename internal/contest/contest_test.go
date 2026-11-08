@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -116,9 +117,19 @@ func (f fakeMembers) List(context.Context) ([]api.Member, error) {
 	return out, nil
 }
 
+// gitExe is the git the daemon finds (gitx.Binary: never a Windows batch wrapper, which drops the ^ of X^{tree}).
+func gitExe(t *testing.T) string {
+	t.Helper()
+	exe, err := gitx.NewBinary(nil, nil).Path()
+	if err != nil {
+		t.Skipf("no usable git: %v", err)
+	}
+	return exe
+}
+
 func git(t *testing.T, dir string, args ...string) string {
 	t.Helper()
-	cmd := exec.CommandContext(t.Context(), "git", append([]string{"-c", "user.name=t", "-c", "user.email=t@t", "-c",
+	cmd := exec.CommandContext(t.Context(), gitExe(t), append([]string{"-c", "user.name=t", "-c", "user.email=t@t", "-c",
 		"commit.gpgsign=false"}, args...)...)
 	cmd.Dir = dir
 	cmd.Env = gitx.Env(os.Environ())
@@ -428,7 +439,8 @@ func TestDiffsOutliveGC(t *testing.T) {
 		}
 	}
 	for _, sha := range gone {
-		cmd := exec.CommandContext(ctx, "git", "cat-file", "-e", sha+"^{commit}")
+		// Through a batch wrapper the ^ was dropped, so cat-file always failed and this passed for any sha.
+		cmd := exec.CommandContext(ctx, gitExe(t), "cat-file", "-e", sha+"^{commit}")
 		cmd.Dir = e.root
 		if cmd.Run() == nil {
 			t.Fatalf("commit %s survived gc; the test does not show what it should", sha)
@@ -634,6 +646,62 @@ func makeDirLink(t *testing.T, target, link string) {
 	}
 	if got := read(t, filepath.Join(link, "keep", "data.txt")); got != "precious\n" {
 		t.Fatalf("the junction does not reach its target: %q", got)
+	}
+}
+
+// D21: a winning worker that stops ignoring the shared folder (empties .gitignore) must not bring the folder's
+// link into its diff or the pick; the exclude holds whatever .gitignore says.
+func TestSharedFolderStaysOutWhenNoLongerIgnored(t *testing.T) {
+	e := setup(t)
+	ctx := t.Context()
+	c, err := e.s.Create(ctx, api.ContestRequest{DelegateRequest: api.DelegateRequest{Prompt: "Change a.", Cwd: e.root},
+		Variants: 2, NoJudge: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	v1, v2 := c.Variants[0], c.Variants[1]
+	if v1.Env == nil || len(v1.Env.Linked) != 1 {
+		t.Fatalf("V1 env = %+v", v1.Env)
+	}
+	write(t, filepath.Join(v1.Worktree, "a.txt"), "alpha\nfrom V1\n")
+	write(t, filepath.Join(v1.Worktree, ".gitignore"), "# emptied by the worker\n")
+	write(t, filepath.Join(v2.Worktree, "a.txt"), "alpha\nfrom V2\n")
+	e.tasks.finish(v1.TaskID, "done")
+	e.tasks.finish(v2.TaskID, "done")
+	c = waitFor(t, e.s, c.ID, status(api.ContestStatusReady))
+	inShared := func(p string) bool { return p == "deps" || strings.HasPrefix(p, "deps/") }
+	d, err := e.s.Diff(ctx, c.ID, "V1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var paths []string
+	for _, f := range d.Files {
+		paths = append(paths, f.Path)
+		if inShared(f.Path) {
+			t.Errorf("the shared folder is in V1's diff: %s", f.Path)
+		}
+	}
+	if !slices.Contains(paths, "a.txt") || !slices.Contains(paths, ".gitignore") {
+		t.Errorf("V1's diff = %v, want a.txt and .gitignore", paths)
+	}
+	c, err = e.s.Pick(ctx, c.ID, api.ContestPickRequest{Winner: "V1"})
+	if err != nil {
+		t.Fatalf("pick: %v", err)
+	}
+	for _, f := range c.Applied.Files {
+		if inShared(f) {
+			t.Errorf("the shared folder reached the pick: %s", f)
+		}
+	}
+	fi, err := os.Lstat(filepath.Join(e.root, "deps"))
+	if err != nil || fi.Mode()&os.ModeSymlink != 0 || !fi.IsDir() {
+		t.Fatalf("deps in the user's tree is no plain folder any more: %v %v", fi, err)
+	}
+	if got := read(t, filepath.Join(e.root, "deps", "lib.txt")); got != "lib\n" {
+		t.Errorf("deps/lib.txt = %q", got)
+	}
+	if got := read(t, filepath.Join(e.root, "a.txt")); got != "alpha\nfrom V1\n" {
+		t.Errorf("a.txt after the pick = %q", got)
 	}
 }
 

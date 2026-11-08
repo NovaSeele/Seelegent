@@ -4,7 +4,7 @@
   "notRepo": "不是 git 仓库",
   "notRepoDesc": "{cwd} 不在任何 git 仓库中，没有可提交的内容。",
   "noBranch": "分离头指针",
-  "files": "{n} 个文件",
+  "uncommittedCount": "{n} 个未提交的文件",
   "refresh": "重新读取",
   "empty": "此任务没有改动",
   "emptyDesc": "worker 修改的文件会显示在这里，可供审阅和提交。",
@@ -61,11 +61,63 @@
     "commit": "Git：提交此任务的文件…"
   },
   "outside": {
-    "open": "工具外的修改",
+    "open": "Shell 修改",
     "title": "编辑工具之外的修改",
     "desc": "本轮通过 shell 命令和其他程序所做的修改，与本轮开始前的快照对比。",
     "turn": "轮次",
     "error": "无法读取修改: {error}",
-    "empty": "编辑工具之外没有任何修改。"
+    "empty": "编辑工具之外没有任何修改。",
+    "hint": "worker 的轮次通过 shell 命令和其他程序（编辑工具之外）所做的修改。"
+  },
+  "notice": {
+    "unknown": "此任务没有记录开始时的提交（任务早于此功能，或当时文件夹不在 git 中）。只显示未提交的更改（与 HEAD 比较），不列出提交。",
+    "unreachable": "此任务开始时的提交（{sha}）已不在 HEAD 的历史中（已变基、重置或切换到别处）。只显示未提交的更改（与 HEAD 比较）。",
+    "branchChanged": "此任务开始于 {from}；仓库现在位于 {to}。列出的提交是当前分支上自开始以来的全部提交。",
+    "detached": "分离的 HEAD",
+    "historyUnavailable": "这次无法读取自任务开始以来的提交（git 耗时过长或缺少对象）。未提交的更改照常显示；点击“重新读取”可重试。"
+  },
+  "history": {
+    "title": "此任务中的提交",
+    "desc": "在此任务轮次中提交的内容，其后是自任务开始以来的其他提交。仅供查看：这些工作已经提交。",
+    "mode": "显示",
+    "commits": "{n} 个提交",
+    "files": "{n} 个文件",
+    "commitsLabel": "自任务开始以来的提交",
+    "filesLabel": "任务的提交所更改的文件",
+    "commitLabel": "所选提交",
+    "commitFiles": "此提交中的文件",
+    "more": "另有 {n} 个更早的提交未显示",
+    "turn": "第 {n} 轮",
+    "fileCount": "{n} 个文件",
+    "loading": "正在加载提交…",
+    "error": "无法加载提交：{error}",
+    "noFiles": "与第一个父提交相比，此提交没有更改任何文件。",
+    "diffSkipped": "此文件的差异超出大小限制，未显示。",
+    "sinceStart": "自任务开始以来的全部更改",
+    "uncommitted": "未提交的更改",
+    "noUncommitted": "没有可提交的内容",
+    "noUncommittedDesc": "此任务的所有更改都在上面的提交中。",
+    "ownGroup": "在此任务的轮次中提交",
+    "othersGroup": "自任务开始以来的其他 {n} 个提交",
+    "othersHint": "在此任务没有轮次运行时提交：来自他人，或在两轮之间。它们的文件不算作此任务的文件。",
+    "outside": "在任务轮次之外",
+    "sinceStartNote": "与任务开始时比较，因此也包含此后其他提交对此文件的更改。"
+  },
+  "repo": {
+    "title": "仓库中的其他更改",
+    "summary": "另有 {n} 个已更改的文件",
+    "desc": "此仓库中不属于此任务的未提交更改。这里永远不会提交它们。",
+    "preexisting": "任务开始前已更改",
+    "untouched": "不是此任务的更改",
+    "error": "无法读取仓库：{error}",
+    "listLabel": "其他已更改的文件"
+  },
+  "upstream": {
+    "label": "与 {name} 比较",
+    "ahead": "领先 {n} 个提交",
+    "behind": "落后 {n} 个提交",
+    "synced": "与 {name} 保持同步",
+    "gone": "{name} 已不存在",
+    "goneShort": "（已删除）"
   }
 }

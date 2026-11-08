@@ -348,21 +348,29 @@ func (r *Repos) SnapshotTree(ctx context.Context, dir, tmpDir string, exclude ..
 			return "", err
 		}
 	}
-	args := []string{"add", "-A", "--", "."}
+	// Every git call runs with GIT_LITERAL_PATHSPECS=1, which also turns pathspec magic off, so ":(exclude)" would
+	// be read as a file name and nothing would be excluded (old D21). This one `add` turns literal pathspecs off
+	// and spells `literal` on every pathspec it passes instead: still no globbing, but the exclusion works. The
+	// exclusion has to happen in the add itself, before git walks into the link; staging the shared folder and
+	// dropping it afterwards would make git read all of it (through a junction, outside the worktree).
+	args := []string{"add", "-A", "--", ":(literal)."}
 	for _, x := range exclude {
 		if x = strings.Trim(filepath.ToSlash(x), "/"); x == "" {
 			continue
 		}
 		// Only what add would stage is excluded: git add fails on an excluded path it ignores anyway (a junction
 		// under "node_modules/") or does not see. A symlink is no folder to "node_modules/", so add would stage it.
+		// The path is passed plain: literal pathspecs are on for this call.
 		out, err := r.Exec(ctx, dir, ExecOptions{Timeout: ReadTimeout}, "ls-files", "--others", "--exclude-standard",
-			"-z", "--", ":(literal)"+x)
+			"-z", "--", x)
 		if err != nil || len(bytes.Trim(out, "\x00")) == 0 {
 			continue
 		}
 		args = append(args, ":(exclude,literal)"+x)
 	}
-	if _, err := r.Exec(ctx, dir, opt, args...); err != nil {
+	add := opt
+	add.Env = append(slices.Clone(opt.Env), "GIT_LITERAL_PATHSPECS=0")
+	if _, err := r.Exec(ctx, dir, add, args...); err != nil {
 		return "", err
 	}
 	out, err := r.Exec(ctx, dir, opt, "write-tree")

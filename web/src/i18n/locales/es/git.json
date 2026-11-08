@@ -4,7 +4,7 @@
   "notRepo": "No es un repositorio git",
   "notRepoDesc": "{cwd} no está dentro de un repositorio git, así que no hay nada que confirmar.",
   "noBranch": "desacoplado",
-  "files": "{n} archivo | {n} archivos",
+  "uncommittedCount": "{n} archivo sin confirmar | {n} archivos sin confirmar",
   "refresh": "Volver a leer",
   "empty": "Esta tarea no tiene cambios",
   "emptyDesc": "Los archivos que cambie el worker aparecen aquí, listos para revisar y confirmar.",
@@ -61,11 +61,63 @@
     "commit": "Git: confirmar los archivos de esta tarea…"
   },
   "outside": {
-    "open": "Cambios externos",
+    "open": "Ediciones por shell",
     "title": "Cambios fuera de las herramientas de edición",
     "desc": "Lo que el turno cambió con comandos de shell y otros programas, comparado con la instantánea tomada antes.",
     "turn": "Turno",
     "error": "No se pudieron leer los cambios: {error}",
-    "empty": "Nada cambió fuera de las herramientas de edición."
+    "empty": "Nada cambió fuera de las herramientas de edición.",
+    "hint": "Lo que los turnos del worker cambiaron con comandos de shell y otros programas, fuera de las herramientas de edición."
+  },
+  "notice": {
+    "unknown": "Esta tarea no registró el commit desde el que empezó (es anterior a esta función o su carpeta no estaba en git entonces). Solo se muestran los cambios sin confirmar, comparados con HEAD; no se listan commits.",
+    "unreachable": "El commit desde el que empezó esta tarea ({sha}) ya no está en la historia de HEAD (rebase, reset o cambio a otra rama). Solo se muestran los cambios sin confirmar, comparados con HEAD.",
+    "branchChanged": "Esta tarea empezó en {from}; el repositorio está ahora en {to}. Los commits listados son todo lo que hay desde el inicio en la rama actual.",
+    "detached": "un HEAD separado",
+    "historyUnavailable": "Esta vez no se pudieron leer los commits desde que empezó la tarea (git tardó demasiado o falta un objeto). Los cambios sin confirmar se muestran como siempre; «Volver a leer» lo intenta de nuevo."
+  },
+  "history": {
+    "title": "Confirmado en esta tarea",
+    "desc": "Commits hechos durante los turnos de esta tarea y, después, otros commits desde que empezó. Solo lectura: este trabajo ya está confirmado.",
+    "mode": "Mostrar",
+    "commits": "{n} commit | {n} commits",
+    "files": "{n} archivo | {n} archivos",
+    "commitsLabel": "Commits desde que empezó la tarea",
+    "filesLabel": "Archivos que cambiaron los commits de la tarea",
+    "commitLabel": "El commit seleccionado",
+    "commitFiles": "Archivos de este commit",
+    "more": "{n} commit anterior no se muestra | {n} commits anteriores no se muestran",
+    "turn": "Turno {n}",
+    "fileCount": "{n} archivo | {n} archivos",
+    "loading": "Cargando el commit…",
+    "error": "No se pudo cargar el commit: {error}",
+    "noFiles": "Este commit no cambia ningún archivo respecto a su primer padre.",
+    "diffSkipped": "El diff de este archivo supera el límite de tamaño y no se muestra.",
+    "sinceStart": "Todo el cambio desde que empezó la tarea",
+    "uncommitted": "Cambios sin confirmar",
+    "noUncommitted": "No queda nada por confirmar",
+    "noUncommittedDesc": "Todo lo que cambió esta tarea está en sus commits de arriba.",
+    "ownGroup": "Hechos durante los turnos de esta tarea",
+    "othersGroup": "{n} otro commit desde que empezó la tarea | {n} otros commits desde que empezó la tarea",
+    "othersHint": "Hechos mientras no corría ningún turno de esta tarea: de otra persona o entre turnos. Sus archivos no cuentan como de esta tarea.",
+    "outside": "Fuera de los turnos de la tarea",
+    "sinceStartNote": "Comparado con el inicio de la tarea, así que incluye otros commits a este archivo desde entonces."
+  },
+  "repo": {
+    "title": "En el resto del repositorio",
+    "summary": "{n} archivo cambiado más | {n} archivos cambiados más",
+    "desc": "Cambios sin confirmar de este repositorio que no son trabajo de esta tarea. Nunca se ofrecen para confirmar aquí.",
+    "preexisting": "Cambiado antes de esta tarea",
+    "untouched": "No es de esta tarea",
+    "error": "No se pudo leer el repositorio: {error}",
+    "listLabel": "Otros archivos cambiados"
+  },
+  "upstream": {
+    "label": "Comparado con {name}",
+    "ahead": "{n} commit por delante | {n} commits por delante",
+    "behind": "{n} commit por detrás | {n} commits por detrás",
+    "synced": "Al día con {name}",
+    "gone": "{name} ya no existe",
+    "goneShort": "(eliminada)"
   }
 }

@@ -895,11 +895,80 @@ export interface TaskGit {
   root?: string
   branch?: string
   dirty: boolean
-  /** Files are the task's uncommitted changes; a commit may only name these. */
+  /** Files are the task's uncommitted changes, counted against HEAD; a commit may only name these. */
   files: GitFile[]
   /** Preexisting lists files that were already dirty when the task started. */
   preexisting: string[]
   suggestion: Suggestion | null
+  /** Head is the current HEAD commit ("" without commits). */
+  head?: string
+  /** StartState says whether the task's start can be used (GitStart*). */
+  startState: 'recorded' | 'unknown' | 'unreachable'
+  /**
+   * StartHead is the commit the task started from ("" when the repository had no commit yet, or unknown);
+   * StartBranch is the branch it was on ("" when detached or unknown).
+   */
+  startHead?: string
+  startBranch?: string
+  /** BranchChanged: the task started on StartBranch and the repository is now on another branch or detached. */
+  branchChanged: boolean
+  /**
+   * Commits are the commits since the start (start..HEAD), newest first, at most MaxTaskCommits; CommitsMore
+   * counts the older ones left out. Empty unless StartState is recorded. A commit made outside the task's turns
+   * (someone else's, or between turns) is listed with OutsideTurns set.
+   */
+  commits: GitCommit[]
+  commitsMore: number
+  /**
+   * OwnCommits counts the commits of the range made during the task's turns (listed or among the older ones),
+   * the task's own by time; the others are Commits plus CommitsMore minus OwnCommits.
+   */
+  ownCommits?: number
+  /**
+   * CommittedFiles are the task's files among those the commits since the start changed: files the task's turns
+   * touched, and files under the task's folder that a commit made during one of its turns changed. A file only
+   * a commit outside the turns changed is left out. Each is counted from the start to the working tree (a file
+   * committed and then edited again shows its whole change, other commits to the same file included). View
+   * only: a commit takes Files.
+   */
+  committedFiles: GitFile[]
+  /** HistoryState is GitHistoryUnavailable when the commits could not be read; empty otherwise. */
+  historyState?: 'history_unavailable'
+}
+
+/** GitCommit is one commit made since a task started. */
+export interface GitCommit {
+  sha: string
+  subject: string
+  author: string
+  /** AuthorTime is when the commit was written. */
+  authorTime: string
+  /**
+   * Turn is the task's turn that was running when the commit was made, when one was. Attribution is by time:
+   * another task's commit made while this task's turn n ran also has Turn n.
+   */
+  turn?: number
+  /** OutsideTurns: the commit was made while none of the task's turns ran (by someone else, or between turns). */
+  outsideTurns?: boolean
+  /** FileCount counts the files the commit changed (0 for a merge in the list). */
+  fileCount: number
+}
+
+/**
+ * GitCommitDetail is GET /tasks/{id}/git/commits/{sha}: one of the task's commits with its files and diffs
+ * against its first parent (the empty tree for a root commit).
+ */
+export interface GitCommitDetail extends GitCommit {
+  body: string
+  /** Parent is the first parent ("" for a root commit). */
+  parent?: string
+  files: GitFile[]
+  /**
+   * Diffs are the parsed diffs of the files, in order. When the whole diff is over 1 MiB, Truncated is set: the
+   * last diff is cut and the files after it have none.
+   */
+  diffs: FileDiff[]
+  truncated: boolean
 }
 
 /** Suggestion is a suggested commit message. */
@@ -933,6 +1002,10 @@ export type RepoStatus =
       detached: boolean
       dirty: boolean
       files: GitFile[]
+      upstream?: string
+      ahead?: number
+      behind?: number
+      upstreamGone?: boolean
     }
 
 /**

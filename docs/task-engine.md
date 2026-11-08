@@ -60,7 +60,10 @@ append the events in **one transaction**, then publish on the bus. The log and t
    review history, constitution, the git baseline, earlier turns, prerequisite context, and the "you continue an
    interrupted task" section when an attempt came before. Before the first attempt of a task the baseline is taken:
    `git status --porcelain` (literal pathspecs, `core.fsmonitor` off, no shell, 20 s timeout) lists the files under
-   the task folder that already have uncommitted changes, and the brief tells the worker not to revert them. The
+   the task folder that already have uncommitted changes, and the brief tells the worker not to revert them. With it
+   the task records `gitStart`, the HEAD commit and branch it starts from (an empty head in a repository without
+   commits, an empty branch when detached, nothing outside a repository); followups keep the first start, and the Git
+   view lists the commits made since it ([api.md](api.md)). The
    baseline is taken before the run waits for an account (`Pool.Wait`), so files changed while the task waits are
    not in it. A retry on the same
    conversation resends the request itself when the failed attempt never reported a session, and otherwise the retry

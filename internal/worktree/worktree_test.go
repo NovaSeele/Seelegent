@@ -12,9 +12,14 @@ import (
 	"github.com/NovaSeele/Seelegent/internal/gitx"
 )
 
+// git runs the git the daemon finds (gitx.Binary: never a Windows batch wrapper, which drops the ^ of X^{tree}).
 func git(t *testing.T, dir string, args ...string) string {
 	t.Helper()
-	cmd := exec.CommandContext(t.Context(), "git", append([]string{"-c", "user.name=t", "-c", "user.email=t@t", "-c",
+	exe, err := gitx.NewBinary(nil, nil).Path()
+	if err != nil {
+		t.Skipf("no usable git: %v", err)
+	}
+	cmd := exec.CommandContext(t.Context(), exe, append([]string{"-c", "user.name=t", "-c", "user.email=t@t", "-c",
 		"commit.gpgsign=false"}, args...)...)
 	cmd.Dir = dir
 	cmd.Env = gitx.Env(os.Environ())

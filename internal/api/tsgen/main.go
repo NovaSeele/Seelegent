@@ -110,7 +110,8 @@ func skipped(k key) bool {
 // overrides are hand-written bodies for shapes Go cannot express (a discriminated union).
 var overrides = map[key]string{
 	{"api", "RepoStatus"}: "export type RepoStatus =\n  | { repo: false }\n  | {\n      repo: true\n      root: string\n" +
-		"      branch: string\n      detached: boolean\n      dirty: boolean\n      files: GitFile[]\n    }\n",
+		"      branch: string\n      detached: boolean\n      dirty: boolean\n      files: GitFile[]\n" +
+		"      upstream?: string\n      ahead?: number\n      behind?: number\n      upstreamGone?: boolean\n    }\n",
 }
 
 // extras are appended at the end: unions built from generated types.

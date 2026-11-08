@@ -50,6 +50,7 @@ const desc = computed(() => {
             v-if="group.outsideDiff"
             size="sm"
             variant="ghost"
+            :title="t('git.outside.hint')"
             @click="emit('outside', group.turn)"
           >
             {{ t('git.outside.open') }}

@@ -99,8 +99,37 @@ in the daemon.
   the turn's checks ran, and `TaskDetail.fileOverlaps` is always a list.
 - `POST /tasks/{id}/git/suggest-message` builds the suggestion locally and at once. It still answers `202 TaskGit`
   and publishes `task.updated`, so clients written for a slow suggestion keep working.
-- `GET /tasks/{id}/git/diff` accepts `turn` but shows the working-tree diff; per-turn diffs need the snapshot store of
-  a later milestone.
+- `TaskGit` follows the task from its start (bugs.md F70): the task records `gitStart` (head and branch) with its
+  baseline at the first turn, and `commits`, `commitsMore`, `committedFiles`, `startState`, `startHead`,
+  `startBranch`, `branchChanged` and `head` describe what it committed since. `files` stays the uncommitted changes
+  counted against HEAD, and only those can be committed; `committedFiles` are view only. A task from before
+  `gitStart` uses its turn-1 snapshot head, but only in the repository that snapshot was taken in and only when it
+  names a head; else `startState` is `unknown`. `unreachable` means the start is gone or no longer an ancestor of
+  HEAD (a rebase or a reset); then no commits are listed and diffs compare with HEAD.
+- `commits` lists every commit in start..HEAD, the task's or not. Each gets the `turn` that was running when it was
+  committed (by committer time); one made while none of the task's turns ran (someone else's, or between turns) has
+  no turn and `outsideTurns: true`; `ownCommits` counts the range's commits made during the turns (listed or older),
+  so the others number `commits` plus `commitsMore` minus `ownCommits`. Attribution is by time only: another task's commit made while this task's turn
+  `n` ran is also given turn `n`. `committedFiles` keeps only the task's files among those the range changed: a file
+  its turns touched, or a file under the task's folder that a commit made during one of its turns changed. A file
+  only commits outside the turns changed is never listed. A committed file's diff compares the working tree with
+  the start, so it also holds others' commits to that same file.
+- When the commits since the start cannot be read (git times out on a big repository, an object is missing), the
+  error is logged and `TaskGit` still answers with `files`: `historyState` is `history_unavailable`, `commits` and
+  `committedFiles` are empty, and a later read tries again.
+- `GET /tasks/{id}/git/diff` takes `base=start` (the default: the working tree against the task's start, or the
+  empty tree when the repository had no commit then) or `base=head` (the uncommitted list); any other `base` is
+  `400`. It accepts `turn` but does not use it; per-turn changes come from the turn snapshots (`outside-diff`).
+- `GET /tasks/{id}/git/commits/{sha}` (an addition to the contract) answers `GitCommitDetail`: the commit's files and
+  parsed diffs against its first parent, 1 MiB in all (`truncated`), with `--no-textconv` and `--no-ext-diff` like
+  the other diffs. The sha is checked as 4–64 hex digits before git sees it (`400`, field `sha`), resolved with
+  `rev-parse --verify`, and answered only when it is in start..HEAD: any other commit, a known one or not, is
+  `404 not_found` with `details.reason: "not_in_task"`, and a task whose start is unknown or unreachable is
+  `409 bad_state` with `details.reason` `start_unknown` or `start_unreachable`. Diffs are not redacted, the same as
+  the other diff endpoints.
+- `RepoStatus` adds `upstream`, `ahead`, `behind` and `upstreamGone` (the upstream is set but its ref is gone), read
+  from `git status --porcelain=v2 --branch`. The Git view shows them and the repository's other uncommitted files.
+- `GET /git/diff` takes `base` as `HEAD` or 7–64 hex digits (SHA-256 repositories).
 - `Account.email` is never set: no backend reports it reliably yet.
 - `Provider.models` is the allow-list exactly as last set through `models`, never the tier models, and
   `Provider.allowedModels` is the pattern enforced. A list becomes `^(?:a|b)$`; a hand-written pattern (old data, or

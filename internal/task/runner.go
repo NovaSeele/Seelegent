@@ -324,9 +324,10 @@ func (s *Service) runTask(r *run) {
 }
 
 // takeBaseline records which files under the task's folder already had uncommitted changes before its first
-// worker ran, so the brief tells the worker not to revert them (old A10).
+// worker ran, so the brief tells the worker not to revert them (old A10), and where the repository stood (HEAD and
+// branch), so the Git view can show what the task committed. Both are taken once: followups keep them.
 func (s *Service) takeBaseline(ctx context.Context, t *Task) {
-	root, files := captureBaseline(ctx, s.o.Git, t.Cwd)
+	root, files, start := captureBaseline(ctx, s.o.Git, t.Cwd, s.now())
 	if ctx.Err() != nil {
 		return
 	}
@@ -334,7 +335,7 @@ func (s *Service) takeBaseline(ctx context.Context, t *Task) {
 		if cur.BaselineTaken {
 			return nil, errNoChange
 		}
-		cur.BaselineTaken, cur.Baseline = true, files
+		cur.BaselineTaken, cur.Baseline, cur.GitStart = true, files, start
 		if cur.RepoRoot == "" {
 			cur.RepoRoot = root
 		}
