@@ -34,7 +34,7 @@ const annOp = "seelegent.op"
 
 // Execute runs the command line with the process arguments and exits with its status code.
 func Execute() {
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	ctx, stop := signal.NotifyContext(context.Background(), stopSignals()...)
 	if code, ok := shimMain(ctx); ok {
 		stop()
 		os.Exit(code)

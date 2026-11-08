@@ -61,7 +61,7 @@ allowed, and so do the read commands of `members`, `meeting`, `contest`, `notes`
 
 | Command | What it does | `--json` prints |
 |---|---|---|
-| `daemon [--port N] [--dev-origin URL]` (alias `serve`) | Runs the daemon in the foreground until Ctrl+C or `seelegent stop`. | – |
+| `daemon [--port N] [--dev-origin URL]` (alias `serve`) | Runs the daemon in the foreground until Ctrl+C (or SIGTERM on Unix) or `seelegent stop`. Every command, the hidden `__launch` launcher included, ends its work on SIGINT and, on Unix, SIGTERM: a launcher then stops its worker tree and writes the exit record. | – |
 | `mcp` | The MCP server for a lead host ([mcp.md](mcp.md)). | – |
 | `ui [--no-open]` | Starts the daemon if needed, opens the dashboard in the browser (Windows, macOS, Linux) and prints `Dashboard: <url>`. | `{dashboard}` |
 | `status` | Daemon, backends, accounts (labels and quota, never e-mails) and the tasks that need you. Prints `not running` (exit 0) when no daemon runs; a daemon that holds its lock without answering, or another program on the port, is exit 1. | `{running, dashboard?, health?, backends: Backend[], accounts: Account[], activeTasks: TaskSummary[]}` |
