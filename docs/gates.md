@@ -130,8 +130,11 @@ saying so, without recording anything for that command's spec tasks (no false er
 A gate command may ask the daemon for a regression run (`seelegent proof run`). The CLI sends the gate's task id
 (`SEELEGENT_TASK` of the gate environment) as the request's `gateTask`, and while that task's gate holds a slot
 the regression's commands share it instead of waiting for a second one (they still wait for memory), so the gate
-cannot wait on its own slot; the gate's own task does not count as another active task either (no `--force`
-needed for it). An id the daemon does not know (Seelegent's own tests inside a gate start their own
+cannot wait on its own slot; while that gate holds its slot, its own task does not count as another active task
+either (no `--force` needed for it). The run is not tied to the gate: started without `--wait`, or still going when
+the gate times out, it goes on after the gate ends, so for the command running then it may exceed
+`gateConcurrency` by one (at most one run per project), while its next commands wait for a slot and the memory
+watchdog watches it like any heavy command. An id the daemon does not know (Seelegent's own tests inside a gate start their own
 daemon, which never saw the outer task) and a gate that holds no slot change nothing: the commands wait for a slot
 as usual. Only a request sent without the id (an HTTP client of its own that drops it) can still wait on the slot
 its gate holds, until `gateTimeoutSec` ends the gate command.

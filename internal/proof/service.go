@@ -67,6 +67,9 @@ type Options struct {
 	// Exec runs one command in dir with the gate timeout, writing its output to logFile. gateTask is the
 	// request's GateTask (the task whose gate asked for the run, or "").
 	Exec func(ctx context.Context, cmd, dir, logFile, gateTask string) CmdResult
+	// HoldsGateSlot reports whether the gate of task id holds a gate slot now (task.Service.HoldsGateSlot); nil:
+	// none does. A run asked for from such a gate (GateTask) does not count that task as active.
+	HoldsGateSlot func(id string) bool
 	// Active returns the ids of the active tasks in the repository at root.
 	Active func(ctx context.Context, root string) ([]string, error)
 	// TaskFeatures returns the feature folders (absolute) the tasks of the repository at root work on.
@@ -416,7 +419,11 @@ func (s *Service) StartRun(ctx context.Context, req api.ProofRunRequest) (api.Pr
 		if active, err = s.o.Active(ctx, p.Root); err != nil {
 			return api.ProofRun{}, err
 		}
-		// The task whose gate asks for the run is no other task.
+	}
+	// The task whose gate asks for the run, while that gate holds a gate slot, is no other task. Any other id
+	// (unknown, or a task whose gate holds no slot) changes nothing. The run is not tied to the gate: it goes on
+	// after the gate ends (a gate may start it without waiting for it), and its next commands wait for a slot.
+	if req.GateTask != "" && s.o.HoldsGateSlot != nil && s.o.HoldsGateSlot(req.GateTask) {
 		active = slices.DeleteFunc(active, func(id string) bool { return id == req.GateTask })
 	}
 	if len(active) > 0 && !req.Force {
