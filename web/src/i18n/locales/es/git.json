@@ -44,6 +44,7 @@
     "files": "Archivos",
     "all": "Todos los archivos ({n}) | Todos los archivos ({n})",
     "renameNote": "Un archivo renombrado se confirma junto con la eliminación de su ruta anterior.",
+    "hiddenNote": "{n} archivo de carpetas sin seguimiento no aparece aquí. Abre su carpeta en la lista para confirmarlo. | {n} archivos de carpetas sin seguimiento no aparecen aquí. Abre una carpeta en la lista para confirmar sus archivos.",
     "active": "El worker sigue en marcha. Confirma cuando la tarea haya terminado.",
     "confirm": "Confirmar {n} archivo | Confirmar {n} archivos",
     "done": "Commit {sha}: {summary}",
@@ -119,5 +120,11 @@
     "synced": "Al día con {name}",
     "gone": "{name} ya no existe",
     "goneShort": "(eliminada)"
+  },
+  "dir": {
+    "label": "Carpetas sin seguimiento",
+    "files": "{n} archivo | {n} archivos",
+    "more": "y {n} archivo más | y {n} archivos más",
+    "listLabel": "Archivos en {path}"
   }
 }

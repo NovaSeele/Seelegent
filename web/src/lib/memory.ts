@@ -20,6 +20,15 @@ export function formatMB(fmt: Pick<Formatters, 'number'>, mb: number, exact = fa
   return unit(mb, 'megabyte', 0)
 }
 
+/** A file size in bytes: bytes and KB below 1 MB, then as formatMB reads it ("512 bytes", "12 KB", "1.5 GB"). */
+export function formatBytes(fmt: Pick<Formatters, 'number'>, bytes: number): string {
+  const unit = (value: number, name: string) =>
+    fmt.number(value, { style: 'unit', unit: name, unitDisplay: 'short', maximumFractionDigits: 0 })
+  if (bytes < 1024) return unit(bytes, 'byte')
+  if (bytes < 1024 * 1024) return unit(bytes / 1024, 'kilobyte')
+  return formatMB(fmt, bytes / (1024 * 1024))
+}
+
 /** formatMB bound to a formatter, for code that only takes a function (attention text, the transcript). */
 export type FormatMB = (mb: number, exact?: boolean) => string
 

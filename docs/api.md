@@ -119,6 +119,12 @@ in the daemon.
   its turns touched, or a file under the task's folder that a commit made during one of its turns changed. A file
   only commits outside the turns changed is never listed. A committed file's diff compares the working tree with
   the start, so it also holds others' commits to that same file.
+- `TaskGit.untrackedDirs` groups the task's untracked files of a folder git itself shows as one entry (no tracked
+  file inside, `dir/` under `--untracked-files=normal`) when it holds more than 20 of them: one `GitDir` row with
+  the `path` (ending in `/`), the file `count`, their total `bytes` and the first 200 `files`; those files are left
+  out of `files`. Only this view groups: the snapshots, the safety checks and a commit still see every file, and a
+  commit may name a grouped file one by one (never the folder). The extra `git ls-files --others --directory` call
+  runs only when a top-level folder holds more than 20 untracked files, and only over those folders.
 - When the commits since the start cannot be read (git times out on a big repository, an object is missing), the
   error is logged and `TaskGit` still answers with `files`: `historyState` is `history_unavailable`, `commits` and
   `committedFiles` are empty, and a later read tries again.

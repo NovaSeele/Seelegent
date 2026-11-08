@@ -47,10 +47,21 @@ type TurnSpan struct {
 // TaskGit returns the repository of a task, the task's uncommitted changes in it, and what the task committed
 // since it started. The uncommitted changes are the dirty files the task's turns touched, plus dirty files under
 // the task's folder that were not dirty when the task started (a worker's shell commands change files the stream
-// never names). Suggestion is left nil for the caller.
+// never names). Every changed file is in Files (UntrackedDirs is empty): what a commit may name. Suggestion is
+// left nil for the caller.
 func (r *Repos) TaskGit(ctx context.Context, tf TaskFiles) (api.TaskGit, error) {
-	out := api.TaskGit{Files: []api.GitFile{}, Preexisting: []string{}, StartState: api.GitStartUnknown,
-		Commits: []api.GitCommit{}, CommittedFiles: []api.GitFile{}}
+	return r.taskGit(ctx, tf, false)
+}
+
+// TaskGitView is TaskGit as the Git tab shows it: the files of large untracked folders are grouped into
+// UntrackedDirs (collapseUntracked), and only the files shown have their lines counted.
+func (r *Repos) TaskGitView(ctx context.Context, tf TaskFiles) (api.TaskGit, error) {
+	return r.taskGit(ctx, tf, true)
+}
+
+func (r *Repos) taskGit(ctx context.Context, tf TaskFiles, view bool) (api.TaskGit, error) {
+	out := api.TaskGit{Files: []api.GitFile{}, UntrackedDirs: []api.GitDir{}, Preexisting: []string{},
+		StartState: api.GitStartUnknown, Commits: []api.GitCommit{}, CommittedFiles: []api.GitFile{}}
 	root, err := r.Root(ctx, tf.Cwd)
 	if errors.Is(err, ErrNotRepo) {
 		return out, nil
@@ -84,6 +95,15 @@ func (r *Repos) TaskGit(ctx context.Context, tf TaskFiles) (api.TaskGit, error) 
 		f.Turn = turn
 		out.Files = append(out.Files, f)
 	}
+	if view {
+		if out.Files, out.UntrackedDirs, err = r.collapseUntracked(ctx, root, out.Files); err != nil {
+			return out, err
+		}
+		for i := range out.UntrackedDirs {
+			countUntracked(root, out.UntrackedDirs[i].Files)
+		}
+	}
+	countUntracked(root, out.Files)
 	out.Head = st.oid
 	// What the task committed is extra: when it cannot be read (git too slow on a big repository, a missing
 	// object), the uncommitted files and the commit dialog still work.

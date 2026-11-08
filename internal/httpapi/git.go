@@ -6,7 +6,9 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
+	"strings"
 
 	"github.com/NovaSeele/Seelegent/internal/api"
 	"github.com/NovaSeele/Seelegent/internal/gitx"
@@ -84,13 +86,13 @@ func turnNumber(r *http.Request) (int, error) {
 	return n, nil
 }
 
-// taskGit returns the git view of a task with its commit message suggestion.
+// taskGit returns the git view of a task (large untracked folders as rows) with its commit message suggestion.
 func (s *Server) taskGit(ctx context.Context, id string) (api.TaskGit, task.GitScope, error) {
 	scope, err := s.o.Tasks.GitScope(ctx, id)
 	if err != nil {
 		return api.TaskGit{}, scope, err
 	}
-	g, err := s.o.Git.TaskGit(ctx, taskFiles(scope))
+	g, err := s.o.Git.TaskGitView(ctx, taskFiles(scope))
 	if err != nil {
 		return api.TaskGit{}, scope, err
 	}
@@ -134,6 +136,9 @@ func (s *Server) taskDiff(_ http.ResponseWriter, r *http.Request) (code int, bod
 		if f.Path == rel {
 			untracked = f.Status == api.GitUntracked
 		}
+	}
+	for _, d := range g.UntrackedDirs {
+		untracked = untracked || strings.HasPrefix(rel, d.Path)
 	}
 	base := ""
 	if against != "head" && g.StartState == api.GitStartRecorded && g.Head != "" {
@@ -192,9 +197,13 @@ func (s *Server) suggestMessage(w http.ResponseWriter, r *http.Request) (code in
 	if err != nil {
 		return 0, nil, err
 	}
+	files := slices.Clone(g.Files)
+	for _, d := range g.UntrackedDirs {
+		files = append(files, d.Files...)
+	}
 	sg := api.Suggestion{State: api.SuggestionReady, Message: gitx.SuggestMessage(scope.Title, scope.LastResponse,
-		g.Files)}
-	if len(g.Files) == 0 {
+		files)}
+	if len(files) == 0 {
 		sg = api.Suggestion{State: api.SuggestionFailed, Message: ""}
 	}
 	s.mu.Lock()

@@ -44,6 +44,7 @@
     "files": "文件",
     "all": "全部文件（{n}）",
     "renameNote": "重命名的文件会连同旧路径的删除一起提交。",
+    "hiddenNote": "未跟踪文件夹中的 {n} 个文件未在此列出。在文件列表中展开文件夹即可提交其中的文件。",
     "active": "worker 仍在运行。请在任务完成后提交。",
     "confirm": "提交 {n} 个文件",
     "done": "已提交 {sha}：{summary}",
@@ -119,5 +120,11 @@
     "synced": "与 {name} 保持同步",
     "gone": "{name} 已不存在",
     "goneShort": "（已删除）"
+  },
+  "dir": {
+    "label": "未跟踪的文件夹",
+    "files": "{n} 个文件",
+    "more": "还有 {n} 个",
+    "listLabel": "{path} 中的文件"
   }
 }

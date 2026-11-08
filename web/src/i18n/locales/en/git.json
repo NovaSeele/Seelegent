@@ -44,6 +44,7 @@
     "files": "Files",
     "all": "All files ({n}) | All files ({n})",
     "renameNote": "A renamed file is committed together with the removal of its old path.",
+    "hiddenNote": "{n} file in untracked folders is not listed here. Open its folder in the file list to commit it. | {n} files in untracked folders are not listed here. Open a folder in the file list to commit its files.",
     "active": "The worker is still running. Commit when the task has finished.",
     "confirm": "Commit {n} file | Commit {n} files",
     "done": "Committed {sha}: {summary}",
@@ -119,5 +120,11 @@
     "synced": "Up to date with {name}",
     "gone": "{name} no longer exists",
     "goneShort": "(gone)"
+  },
+  "dir": {
+    "label": "Untracked folders",
+    "files": "{n} file | {n} files",
+    "more": "and {n} more file | and {n} more files",
+    "listLabel": "Files in {path}"
   }
 }

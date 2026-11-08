@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { createFormatters } from '@/composables/useFormat'
 
-import { distinctMB, formatMB, freeMB, mbFormatter } from './memory'
+import { distinctMB, formatBytes, formatMB, freeMB, mbFormatter } from './memory'
 
 const en = createFormatters('en')
 
@@ -20,6 +20,12 @@ describe('memory amounts', () => {
     expect(distinctMB(mb, [2040, 2048])).toEqual(['2,040 MB', '2,048 MB'])
     expect(distinctMB(mb, [2048, 2048])).toEqual(['2 GB', '2 GB'])
     expect(distinctMB(mb, [])).toEqual([])
+  })
+
+  it('reads file sizes in bytes, KB, then as memory amounts', () => {
+    expect(formatBytes(en, 512)).toBe('512 byte')
+    expect(formatBytes(en, 12 * 1024)).toBe('12 kB')
+    expect(formatBytes(en, 3 * 1024 * 1024)).toBe('3 MB')
   })
 
   it('gives no free amount for an unknown reading', () => {
