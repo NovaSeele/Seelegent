@@ -708,6 +708,8 @@ func writeMarkdown(w io.Writer, r *result) {
 			"Daemon private growth %.2f MB per 10k events (WS %.2f).\n\n", l.Tasks, l.EventsStored, l.EventsPerSec,
 			l.SSEClients, l.SSEConnects, l.SSEFrames, l.SSEFramesPerS, l.SSEMB, l.PrivPer10kEvts, l.WSMBPer10kEvts)
 		p("| request | count | errors | p50 ms | p95 ms | p99 ms | max ms |\n|---|---|---|---|---|---|---|\n")
+		// "event" is not a request: the delay from a worker line written to its task.event frame received by an
+		// SSE client (each client counts each frame).
 		names := make([]string, 0, len(l.API))
 		for n := range l.API {
 			names = append(names, n)
@@ -799,7 +801,7 @@ func (r *result) metrics() []metric {
 		}
 	}
 	if r.Load != nil {
-		for _, n := range []string{"list", "detail"} {
+		for _, n := range []string{"list", "detail", "event"} {
 			if s, ok := r.Load.API[n]; ok {
 				m = append(m, metric{n + " p50 ms", s.P50}, metric{n + " p95 ms", s.P95}, metric{n + " p99 ms", s.P99})
 			}

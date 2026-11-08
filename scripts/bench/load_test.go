@@ -4,6 +4,7 @@ package bench
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -11,12 +12,14 @@ import (
 	"net/http"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/NovaSeele/Seelegent/internal/api"
+	"github.com/NovaSeele/Seelegent/internal/testutil/fakecli"
 )
 
 func jsonLine(v any) string {
@@ -38,8 +41,12 @@ func resultLine(conv string) string {
 		"usage": map[string]any{"input_tokens": 1000, "output_tokens": 100, "total_tokens": 1100}}})
 }
 
+// latencyMark prefixes the write time the fake CLI puts in each tool line (fakecli.NowToken): the SSE clients find
+// it in the task.event frames and record the delay from the line written to its event received.
+const latencyMark = "benchWrittenAt"
+
 // streamLine is line i of a worker's stream: a text delta, then a tool call and its result, with arguments that
-// never repeat (so loop detection stays quiet).
+// never repeat (so loop detection stays quiet). The tool lines carry the time they are written (latencyMark).
 func streamLine(task, i int) string {
 	step := i/3 + 1
 	path := fmt.Sprintf("/work/demo/pkg%d/file%d.go", task, step)
@@ -52,12 +59,13 @@ func streamLine(task, i int) string {
 		return jsonLine(map[string]any{"event": "step_update", "step_update": map[string]any{"step_index": step,
 			"step_type": "tool", "state": "CALLING", "tool_name": "view_file",
 			"tool_info": map[string]any{"parameters": map[string]any{"AbsolutePath": path, "StartLine": 1,
-				"EndLine": 80}}}})
+				"EndLine": 80, "Mark": latencyMark + fakecli.NowToken}}}})
 	default:
 		return jsonLine(map[string]any{"event": "step_update", "step_update": map[string]any{"step_index": step,
 			"step_type": "tool", "state": "DONE", "tool_name": "view_file", "duration_seconds": 0.02,
 			"tool_info": map[string]any{"parameters": map[string]any{"AbsolutePath": path, "StartLine": 1,
-				"EndLine": 80}, "output": strings.Repeat(fmt.Sprintf("// line of %s\n", path), 6)}}})
+				"EndLine": 80, "Mark": latencyMark + fakecli.NowToken},
+				"output": strings.Repeat(fmt.Sprintf("// line of %s\n", path), 6)}}})
 	}
 }
 
@@ -236,6 +244,9 @@ func (g *loadGen) sse(ctx context.Context) {
 				if len(line) > 6 && string(line[:6]) == "event:" {
 					g.sseFrames.Add(1)
 				}
+				if at, ok := writtenAt(line); ok {
+					g.lat["event"].add(time.Since(time.Unix(0, at)), nil)
+				}
 				if err != nil && !errors.Is(err, bufio.ErrBufferFull) {
 					break
 				}
@@ -244,6 +255,24 @@ func (g *loadGen) sse(ctx context.Context) {
 		}
 		_ = sleep(ctx, time.Second)
 	}
+}
+
+// writtenAt finds the write time a frame's data line carries (latencyMark followed by Unix nanoseconds).
+func writtenAt(line []byte) (int64, bool) {
+	if !bytes.HasPrefix(line, []byte("data:")) {
+		return 0, false
+	}
+	i := bytes.Index(line, []byte(latencyMark))
+	if i < 0 {
+		return 0, false
+	}
+	digits := line[i+len(latencyMark):]
+	n := 0
+	for n < len(digits) && digits[n] >= '0' && digits[n] <= '9' {
+		n++
+	}
+	at, err := strconv.ParseInt(string(digits[:n]), 10, 64)
+	return at, err == nil && at > 0
 }
 
 // finish counts the events the load tasks stored, cancels the tasks that are still running and waits until every

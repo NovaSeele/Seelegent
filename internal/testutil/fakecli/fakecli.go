@@ -29,6 +29,9 @@
 //	#!alloc <mb>         allocate and touch mb MiB, kept until the CLI exits (a worker that needs that much memory;
 //	                     under a job memory cap the Go runtime fails with "out of memory", exit code 2)
 //
+// In a line written to standard output, NowToken is replaced by the time it is written, in nanoseconds since the
+// Unix epoch (the bench measures the delay from a line written to its event seen).
+//
 // An empty queue makes the fake CLI fail with exit code 97 and "fakecli: no script" on standard error.
 package fakecli
 
@@ -55,6 +58,9 @@ import (
 
 // EnvQueue names the queue directory of the fake CLI.
 const EnvQueue = "FAKECLI_QUEUE"
+
+// NowToken in a script's output line is replaced by the time the line is written (Unix nanoseconds).
+const NowToken = "{{fakecli.now}}"
 
 // launchArg is the launcher's command name, as the daemon passes it.
 const launchArg = "__launch"
@@ -287,6 +293,9 @@ func runCLI(dir string) int {
 	for sc.Scan() {
 		line := sc.Text()
 		if !strings.HasPrefix(line, "#!") {
+			if strings.Contains(line, NowToken) {
+				line = strings.ReplaceAll(line, NowToken, strconv.FormatInt(time.Now().UnixNano(), 10))
+			}
 			_, _ = out.WriteString(line + "\n")
 			_ = out.Flush()
 			continue
