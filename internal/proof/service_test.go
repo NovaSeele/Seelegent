@@ -270,3 +270,78 @@ func TestLedgerRecord(t *testing.T) {
 		t.Errorf("abandoned run = %+v, %v", r, err)
 	}
 }
+
+// TestStoppedCommandRunsAgain: a command the memory watchdog stopped is no result: it runs again, and only the
+// run that ended by itself counts and reaches the ledger.
+func TestStoppedCommandRunsAgain(t *testing.T) {
+	root := t.TempDir()
+	write(t, filepath.Join(root, "specs", "001-p", "spec.md"), specMD)
+	write(t, filepath.Join(root, "specs", "001-p", "tasks.md"), tasksMD)
+	var mu sync.Mutex
+	ran := map[string]int{}
+	s, _ := newService(t, root, func(cmd string) CmdResult {
+		mu.Lock()
+		defer mu.Unlock()
+		ran[cmd]++
+		if cmd == "go test ./internal/p" && ran[cmd] == 1 {
+			return CmdResult{Stopped: true, Tail: "stopped: machine low on memory"}
+		}
+		return CmdResult{Exit: code(0)}
+	}, nil)
+	ctx := context.Background()
+	run, err := s.StartRun(ctx, api.ProofRunRequest{Cwd: root, Feature: "specs/001-p"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	run = waitRun(t, s, root, run.ID)
+	if run.State != api.RunGreen || run.Counts.Green != run.Total || run.Counts.Error != 0 ||
+		len(run.Results) != run.Total || ran["go test ./internal/p"] != 2 {
+		t.Fatalf("run = %+v, ran %v", run, ran)
+	}
+	m, err := s.Matrix(ctx, root, "specs/001-p")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r := m.Rows[0]; r.ID != "FR-001" || r.Status != api.ProofProven || r.Tasks[0].Source != SourceRegression {
+		t.Fatalf("row = %+v", r)
+	}
+}
+
+// TestStoppedCommandGivesUp: a command stopped api.GateLowMemoryStopsMax times ends the run as cancelled with the
+// reason, records nothing for its spec task and runs nothing after it.
+func TestStoppedCommandGivesUp(t *testing.T) {
+	root := t.TempDir()
+	write(t, filepath.Join(root, "specs", "001-p", "spec.md"), specMD)
+	write(t, filepath.Join(root, "specs", "001-p", "tasks.md"), tasksMD)
+	var mu sync.Mutex
+	ran := map[string]int{}
+	s, _ := newService(t, root, func(cmd string) CmdResult {
+		mu.Lock()
+		defer mu.Unlock()
+		ran[cmd]++
+		if cmd == "go build ./..." {
+			return CmdResult{Stopped: true, Tail: "stopped: machine low on memory"}
+		}
+		return CmdResult{Exit: code(0)}
+	}, nil)
+	ctx := context.Background()
+	run, err := s.StartRun(ctx, api.ProofRunRequest{Cwd: root, Feature: "specs/001-p"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	run = waitRun(t, s, root, run.ID)
+	if run.State != api.RunCancelled || run.Counts.Error != 0 || run.Counts.Green != 1 || len(run.Results) != 1 ||
+		!strings.Contains(run.Error, "out of memory") {
+		t.Fatalf("run = %+v", run)
+	}
+	if ran["go build ./..."] != api.GateLowMemoryStopsMax || ran["echo ok"] != 0 || ran["go vet ./..."] != 0 {
+		t.Fatalf("ran %v", ran)
+	}
+	m, err := s.Matrix(ctx, root, "specs/001-p")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r := m.Rows[0]; r.ID != "FR-001" || r.Status == api.ProofFailing || r.Tasks[0].Source == SourceRegression {
+		t.Fatalf("T001 was recorded: %+v", r)
+	}
+}

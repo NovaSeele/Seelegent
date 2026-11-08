@@ -115,15 +115,22 @@ they were asked for; while a gate waits for one its phase is `queued` with `wait
 (`position`, 1 = next), published as a `gate` event with `phase: "queued"`. That event is logged when the wait
 starts, when what it waits for changes, and when the position moves: every move at position 3 or less, further
 back only when the position halved, so a long queue logs about log2(k)+3 events per gate instead of k. With a
-slot in hand, a gate checks memory next: below `minFreeMemoryMB` / `minFreeCommitMB` (or, while the machine is low on memory, below the resume level)
-it gives the slot back and waits with `wait: "memory"`, so a gate that cannot start never blocks one that could.
+slot in hand, a gate checks memory next: below `minFreeMemoryMB` / `minFreeCommitMB` (or, while the machine is low
+on memory, below the resume level) it gives the slot back and waits with `wait: "memory"`, so a gate that cannot
+start never blocks one that could.
 `gateTimeoutSec` counts from the moment a command starts, never while it is queued. A lowered `gateConcurrency`
 stops nothing: the runs that hold a slot finish and the next ones wait. A queued phase is no attention flag; the
 dashboard shows the wait. Each regression run command is admitted the same way (`AdmitHeavy`: a slot, then
 free memory, giving the slot back while it waits for memory), and the memory watchdog may stop it like a gate run;
-it then fails with "stopped: machine low on memory" in its tail. A gate command that itself asks the daemon for a
-regression run waits for a slot while its own gate holds one: with `gateConcurrency: 1` it waits until
-`gateTimeoutSec` ends the gate command.
+it then fails with "stopped: machine low on memory" in its tail. Such a stop is no result: the regression run
+runs the command again once memory is back, and after 3 stops of one command it ends `cancelled` with an `error`
+saying so, without recording anything for that command's spec tasks (no false error in the ledger).
+
+A gate command must not ask the daemon for a regression run (`seelegent proof run`): the regression's commands
+wait for a gate slot while the gate that asked holds one. With `gateConcurrency` N, N gates that each do so all
+wait, and nothing moves until `gateTimeoutSec` ends their gate commands (with `gateConcurrency: 1` a single such
+gate is enough). Seelegent does not refuse such a request: gate commands carry `SEELEGENT_GATE=1`, but so do
+Seelegent's own test runs inside a gate, which exercise `proof run` legitimately.
 
 Each step is published as a `gate` task event (`phase: start | step | settling | result`) and stored on the turn
 (`Turn.gate`), so the dashboard shows it live. The `start` event carries the plan (each step's kind, command and

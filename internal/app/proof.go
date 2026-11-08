@@ -71,7 +71,7 @@ func (a *App) proofExec(ctx context.Context, cmd, dir, logFile string) proof.Cmd
 	if res.Stopped == api.StepStoppedLowMemory {
 		tail = strings.TrimSpace(tail + "\nstopped: machine low on memory")
 	}
-	return proof.CmdResult{Exit: res.Exit, Ms: res.Ms, Tail: tail}
+	return proof.CmdResult{Exit: res.Exit, Ms: res.Ms, Tail: tail, Stopped: res.Stopped == api.StepStoppedLowMemory}
 }
 
 // publishProofRun forwards a regression run's progress to the SSE stream once the HTTP API runs.

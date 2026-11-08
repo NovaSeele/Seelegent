@@ -47,6 +47,9 @@ type CmdResult struct {
 	Exit *int
 	Ms   int64
 	Tail string
+	// Stopped: the memory watchdog stopped the command (the machine ran low on memory). It is no result: the run
+	// runs the command again (Exec waits for memory first), and gives up after api.GateLowMemoryStopsMax stops.
+	Stopped bool
 }
 
 // Git is what the service needs from git.
@@ -485,6 +488,7 @@ func (s *Service) execute(ctx context.Context, p Project, run api.ProofRun, cmds
 		}
 	}
 	got := map[string][]EntryCmd{}
+	outOfMemory := false
 	for i, c := range cmds {
 		if ctx.Err() != nil {
 			break
@@ -493,9 +497,14 @@ func (s *Service) execute(ctx context.Context, p Project, run api.ProofRun, cmds
 			State: api.RunRunning})
 		save()
 		log := filepath.Join(s.o.LogDir, p.Key, run.ID, fmt.Sprintf("%d.log", i+1))
-		res := s.o.Exec(ctx, c.cmd, p.Root, log)
-		if ctx.Err() != nil {
+		res := s.exec(ctx, c.cmd, p.Root, log)
+		if ctx.Err() != nil || res.Stopped {
 			run.Results = run.Results[:len(run.Results)-1]
+			if res.Stopped && ctx.Err() == nil {
+				outOfMemory = true
+				run.Error = fmt.Sprintf("the machine kept running out of memory: %q was stopped %d times; nothing "+
+					"of this command was recorded", c.cmd, api.GateLowMemoryStopsMax)
+			}
 			break
 		}
 		state := api.GateGreen
@@ -527,7 +536,7 @@ func (s *Service) execute(ctx context.Context, p Project, run api.ProofRun, cmds
 	}
 	run.EndedAt = api.FormatTime(s.o.Now())
 	switch {
-	case ctx.Err() != nil:
+	case ctx.Err() != nil, outOfMemory:
 		run.State = api.RunCancelled
 	case run.Counts.Red > 0:
 		run.State = api.RunRed
@@ -537,6 +546,20 @@ func (s *Service) execute(ctx context.Context, p Project, run api.ProofRun, cmds
 		run.State = api.RunGreen
 	}
 	save()
+}
+
+// exec runs one command of a regression run. A command the memory watchdog stopped runs again (Exec waits for
+// memory first) until it ends by itself or was stopped api.GateLowMemoryStopsMax times; only the last attempt is
+// returned, so a stopped attempt never counts as a result.
+func (s *Service) exec(ctx context.Context, cmd, root, log string) CmdResult {
+	for stops := 1; ; stops++ {
+		res := s.o.Exec(ctx, cmd, root, log)
+		if !res.Stopped || ctx.Err() != nil || stops >= api.GateLowMemoryStopsMax {
+			return res
+		}
+		s.log.Warn("proof: a regression command was stopped for low memory; it runs again", "cmd", cmd,
+			"stops", stops)
+	}
 }
 
 // recordKey writes the aggregated result of one spec task of a regression run.

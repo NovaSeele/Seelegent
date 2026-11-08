@@ -158,8 +158,8 @@ for 2 s, and `Changed` fires when one crosses a threshold or the settings change
   and `Running` say so); a release wakes the waiters, and a lowered cap stops nothing.
 - **Watchdog.** A goroutine checks memory on every sampler signal and every 2 s while a task runs, a heavy command
   (gate run or regression run command, `TrackHeavy`) is in flight or the machine is low. Otherwise it arms no timer
-  and sleeps until a run or a heavy command starts. With `criticalFreeMemoryMB` above 0, the machine turns **low** when free physical
-  memory, or free commit when it is known, drops below it, and turns back only at the resume level: physical at
+  and sleeps until a run or a heavy command starts. With `criticalFreeMemoryMB` above 0, the machine turns **low**
+  when free physical memory, or free commit when it is known, drops below it, and turns back only at the resume level: physical at
   `minFreeMemoryMB` (twice the critical line when that is off), commit at `minFreeCommitMB` (likewise). Between the
   two lines nothing flips, so a reading that swings around the critical line does not flicker. While low, every
   new start waits at the resume level instead of the `minFree` thresholds, `LowMemory()` is true (GET /health and
