@@ -12,6 +12,8 @@ import StatusPill from '@/components/ui/StatusPill.vue'
 import Switch from '@/components/ui/Switch.vue'
 
 import AccountFacts from './AccountFacts.vue'
+import KeyActions from './KeyActions.vue'
+import KeyFacts from './KeyFacts.vue'
 import LoginPanel from './LoginPanel.vue'
 import QuotaGroups from './QuotaGroups.vue'
 import { useAccountState } from './useAccountState'
@@ -30,7 +32,7 @@ const { t } = useI18n()
 const id = useId()
 
 const { pill } = useAccountState(props)
-const { actions, session, kindLabel, next, menu, onMenu, setEnabled, setPriority } =
+const { actions, session, kindLabel, routing, next, menu, onMenu, setEnabled, setPriority } =
   useAccountControls(props, (kind) => emit('dialog', kind))
 </script>
 
@@ -43,7 +45,9 @@ const { actions, session, kindLabel, next, menu, onMenu, setEnabled, setPriority
   >
     <header class="card__head">
       <div class="card__title">
-        <h3 :id="`${id}-name`" class="card__name">{{ account.label }}</h3>
+        <h3 :id="`${id}-name`" class="card__name" :title="routing || undefined">
+          {{ account.label }}
+        </h3>
         <p class="card__meta">
           <span>{{ kindLabel }}</span>
           <span v-if="account.keyHint">{{ t('accounts.keyHint', { hint: account.keyHint }) }}</span>
@@ -51,12 +55,21 @@ const { actions, session, kindLabel, next, menu, onMenu, setEnabled, setPriority
           <span v-if="account.quota.plan">{{ account.quota.plan }}</span>
         </p>
       </div>
-      <StatusPill :tone="pill.tone" :label="pill.label" size="sm" />
+      <StatusPill :tone="pill.tone" :label="pill.label" :title="pill.title" size="sm" />
     </header>
 
     <AccountFacts :account="account" :now="now" :has-session="!!session" />
 
-    <QuotaGroups :account="account" :now="now" />
+    <template v-if="account.kind === 'api-key'">
+      <KeyFacts
+        :account="account"
+        :now="now"
+        @budget="emit('dialog', 'budget')"
+        @prices="emit('dialog', 'prices')"
+      />
+      <KeyActions :account="account" @dialog="emit('dialog', $event)" />
+    </template>
+    <QuotaGroups v-else :account="account" :now="now" />
     <LoginPanel v-if="session" :account="account" :session="session" />
 
     <div v-if="next" class="card__next">
@@ -71,7 +84,7 @@ const { actions, session, kindLabel, next, menu, onMenu, setEnabled, setPriority
         {{ t('accounts.action.login') }}
       </Button>
       <Button v-else size="sm" variant="primary" @click="emit('dialog', 'key')">
-        {{ t('accounts.action.key') }}
+        {{ t('accounts.action.addKey') }}
       </Button>
     </div>
 

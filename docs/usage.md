@@ -107,13 +107,54 @@ More: [task engine](task-engine.md), [gates](gates.md), [team](team.md).
 1. **Turn on the backends you want.** `agy` (Antigravity CLI, Gemini models) is on by default. For `claude` or
    `codex`, open **Settings › Backends**, turn the backend on and give each tier (`fast`, `standard`, `strong`,
    `max`) a model id.
-2. **For an API key**, set the provider up first under **Settings › API providers** (presets for Anthropic,
-   DeepSeek, Moonshot Kimi, Z.ai GLM, OpenRouter, OpenAI, Groq, a local Ollama, or a custom endpoint).
-3. On **Accounts**, choose **Add account**, pick the backend and the kind (its own sign-in, this computer's sign-in
-   for `agy`, or an API key), then give it a name and a priority (higher numbers are used first).
-4. For an account with its own sign-in, the worker CLI's own sign-in starts right after **Add account**, in your
-   browser or a terminal window, or asks you to paste a code; the account card's **Sign in** button tries again.
-   Seelegent never sees your password.
+2. On **Accounts**, choose **Add account** and say how the account connects:
+   - **Sign in with a subscription**: pick Gemini (Antigravity), Claude Pro or Max (Claude Code) or ChatGPT
+     (Codex), give it a name, and choose **Sign in**. The worker CLI's own sign-in starts at once, in your browser or
+     a terminal window, or asks you to paste a code; the dialog shows it until it is done, and the account's
+     **Sign in** button tries again later. Seelegent never sees your password. **Use the sign-in already on this
+     computer** (Antigravity only) adds the account on the sign-in you already have.
+   - **Use an API key**: choose the service (your own services first, with how many keys each has, then Anthropic,
+     DeepSeek, Moonshot Kimi, Z.ai GLM, OpenRouter, OpenAI, Groq, a local Ollama, or "Other" for any Anthropic- or
+     OpenAI-compatible address) and paste the key. A key that starts with `sk-ant-`, `sk-or-` or `gsk_` picks its
+     service by itself. The field checks the key as the daemon does: a web address or a key with spaces inside is
+     refused before anything is sent, and a pasted `.env` line (`ANTHROPIC_API_KEY=sk-…`) or quotes are cleaned.
+     The model defaults to **Let the lead choose**: each task names its model. **Different model per tier** sets a
+     model for `fast`, `standard`, `strong` and `max` instead. **More options** has the name, the priority (higher
+     numbers are used first) and a budget; **Advanced** has the base URL, wire API and extra models.
+     **Test and add** checks the key with the service and adds the account only when it works; if the test fails,
+     the reason is shown and **Add without testing** adds it anyway.
+3. An account that waits for you (no key, signed out, a key the service refused, no credit left, budget reached) is
+   listed under **Needs you** at the top of the page, with the button that fixes it.
+
+An API-key account only takes tasks that ask for its service: it is "used when a task asks for Anthropic
+(`provider: anthropic`)", as its row says. Its row shows the key test ("Works", "Not tested", "Refused") and, in
+place of quota, what the key has spent. Where the amount comes from depends on the service:
+
+- **OpenRouter** counts each key's spend itself: the row shows that count, with today, this week and this month in
+  its tooltip. A key with its own limit at OpenRouter offers **Use the key's OpenRouter limit** as its budget in one
+  click.
+- A service with **prices** (see below) shows its tokens at your prices.
+- **Anthropic** without prices shows Claude Code's own estimate, marked "≈": it is not the service's bill.
+- A local service (Ollama, localhost) says "Local · free".
+- Any other service shows the tokens used, with **Set prices to see cost**.
+
+DeepSeek and Moonshot report the balance of the whole service account, shared by every key on it, so it shows beside
+the spend as, for example, "Balance ¥187.60 (account-wide, read 2 min ago)", in the currency the service uses. A
+balance that may be out of date or cannot pay for requests says so, and a failed reading says why.
+
+**Set budget** gives the key a budget in US dollars; with **Stop using this key when the budget is used up** ticked,
+the key rests once its spend reaches the budget, until you raise the budget or replace the key. A budget on a service
+that has no cost to judge it by waits for that service's prices. Open a row (or use its ⋯ menu) for **Test again**,
+**Replace key**, **Change model** (it applies to every key of that service), **Set budget**, **Set prices**,
+**Rename**, **Turn off** and **Remove**.
+
+**Services** (at the bottom of the page, under Advanced, and in **Settings › API providers**) lists where API keys
+send their requests: each service's address, tier models, allowed models and key count, with **Add key** to add
+another key to it. A service that keys still use cannot be deleted; the confirmation names those accounts.
+**Prices** sets what a service charges, in US dollars per 1M tokens: one row per model for input, cached input
+(empty means the input price) and output, with `*` for any model without its own row. Seelegent ships no prices;
+the form links the service's own price page when it has one. New prices count from then on, and an empty table
+removes them.
 
 Add several accounts of the same backend to use several subscriptions. Turn **Use for work** off to keep an account
 without using it for now.

@@ -13,11 +13,12 @@ import {
 import type { SettingsApi } from '@/api/settings'
 import type { Memory, Role } from '@/api/types'
 import { setupApp } from '@/test/app'
-import { makeAccount, T0 } from '@/test/fixtures'
+import { makeAccount, makeProvider, T0 } from '@/test/fixtures'
 
-import { KeylessAccountError, useAccountsStore } from './accounts'
+import { useAccountsStore } from './accounts'
 import { useConnectionStore } from './connection'
 import { createLoader } from './loader'
+import { useProvidersStore } from './providers'
 import { projectChoices, samePlace, useRolesStore } from './roles'
 import { useSettingsStore } from './settings'
 import { useUsageStore } from './usage'
@@ -66,44 +67,72 @@ beforeEach(async () => {
 })
 
 describe('accounts store writes', () => {
-  it('deletes a new API-key account again when its key cannot be stored', async () => {
-    const created = makeAccount({ id: 'k1', kind: 'api-key', backend: 'claude', status: 'no_key' })
-    const { client, calls } = fakeClient((method) => {
-      if (method === 'POST') return { body: created }
-      if (method === 'PUT') return error(400, 'invalid_argument', 'key too short')
-      return { status: 204 }
+  it('adds an API-key account in one call, with its key and the provider it made', async () => {
+    const created = {
+      ...makeAccount({ id: 'k1', kind: 'api-key', backend: 'claude', provider: 'anthropic' }),
+      notices: [{ code: 'key_name_removed', field: 'apiKey', message: 'removed' }],
+      newProvider: makeProvider({ id: 'anthropic', name: 'Anthropic', official: true }),
+      providerCreated: true,
+    }
+    let sent: unknown
+    const { client, calls } = fakeClient((method, _url, body) => {
+      sent = body
+      return { status: 201, body: created }
     })
     const store = useAccountsStore()
     store.setApi(createAccountsApi(client))
-    const result = store.create(
-      { backend: 'claude', kind: 'api-key', label: 'Key', provider: 'anthropic' },
-      'sk',
-    )
-    await expect(result).rejects.toBeInstanceOf(ApiError)
-    expect(calls).toEqual([
-      'POST /api/v1/accounts',
-      'PUT /api/v1/accounts/k1/key',
-      'DELETE /api/v1/accounts/k1',
-    ])
-    expect(store.get('k1')).toBeUndefined()
+    const answer = await store.create({
+      kind: 'api-key',
+      newProvider: { preset: 'anthropic', backend: 'claude' },
+      apiKey: 'sk-ant-xyz',
+    })
+    expect(calls).toEqual(['POST /api/v1/accounts'])
+    expect(sent).toMatchObject({ apiKey: 'sk-ant-xyz', newProvider: { preset: 'anthropic' } })
+    expect(answer.notices).toHaveLength(1)
+    // The list keeps the account alone; the provider goes to the providers store at once.
+    expect(store.get('k1')).toBeDefined()
+    expect(store.get('k1')).not.toHaveProperty('newProvider')
+    expect(store.get('k1')).not.toHaveProperty('notices')
+    expect(useProvidersStore().items.map((p) => p.id)).toEqual(['anthropic'])
   })
 
-  it('says the account stays without a key when deleting it again fails too', async () => {
-    const created = makeAccount({ id: 'k1', kind: 'api-key', backend: 'claude', status: 'no_key' })
-    const { client } = fakeClient((method) => {
-      if (method === 'POST') return { body: created }
-      if (method === 'PUT') return error(400, 'invalid_argument', 'key too short')
-      return error(500, 'internal', 'disk full')
-    })
+  it('leaves nothing behind when the daemon refuses the key', async () => {
+    const { client, calls } = fakeClient(() => ({
+      status: 400,
+      body: {
+        error: {
+          code: 'invalid_argument',
+          message: 'this looks like a URL',
+          details: { field: 'apiKey', reason: 'url' },
+        },
+      },
+    }))
     const store = useAccountsStore()
     store.setApi(createAccountsApi(client))
     const failure = await store
-      .create({ backend: 'claude', kind: 'api-key', label: 'Key', provider: 'anthropic' }, 'sk')
+      .create({ kind: 'api-key', provider: 'anthropic', apiKey: 'https://x' })
       .catch((e: unknown) => e)
-    expect(failure).toBeInstanceOf(KeylessAccountError)
-    expect((failure as KeylessAccountError).account.id).toBe('k1')
-    expect((failure as KeylessAccountError).reason).toMatchObject({ message: 'key too short' })
-    expect(store.get('k1')).toBeDefined()
+    expect(failure).toBeInstanceOf(ApiError)
+    expect(calls).toEqual(['POST /api/v1/accounts'])
+    expect(store.accounts).toEqual([])
+  })
+
+  it('notes a saved key test on the account before its frame arrives', () => {
+    const store = useAccountsStore()
+    store.replaceAll([makeAccount({ id: 'k1', kind: 'api-key', testResult: 'not_tested' })])
+    const result = {
+      ok: true,
+      status: 200,
+      reason: 'ok' as const,
+      message: '',
+      models: [],
+      latencyMs: 1,
+    }
+    store.noteTest('k1', result)
+    expect(store.get('k1')?.testResult).toBe('not_tested')
+    store.noteTest('k1', { ...result, saved: true })
+    expect(store.get('k1')?.testResult).toBe('ok')
+    expect(store.get('k1')?.testedAt).toBeDefined()
   })
 
   it('keeps the latest sign-in per account until it is cleared', () => {

@@ -25,9 +25,22 @@ export const STATUS_TONE: Readonly<Record<AccountStatus, Tone>> = {
   disabled: 'muted',
 }
 
-/** The i18n key of a kind (catalog keys have no hyphen). */
-export const kindKey = (kind: Account['kind']): 'isolated' | 'system' | 'apiKey' =>
-  kind === 'api-key' ? 'apiKey' : kind
+export type TestResult = NonNullable<Account['testResult']>
+
+/**
+ * The tone of an API-key account's test state in its Status pill: a passing key is green, an untested or
+ * unverifiable one neutral, a refused key or a wrong address red, a service that was down or answered oddly amber.
+ */
+export const TEST_TONE: Readonly<Record<TestResult, Tone>> = {
+  ok: 'success',
+  not_tested: 'neutral',
+  no_models_endpoint: 'neutral',
+  refused: 'danger',
+  not_found: 'danger',
+  redirected: 'danger',
+  unreachable: 'attention',
+  error: 'attention',
+}
 
 /** Can this account sign in (isolated and system accounts; API-key accounts use a key)? */
 export const canSignIn = (account: Account): boolean => account.kind !== 'api-key'

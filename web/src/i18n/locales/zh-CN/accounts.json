@@ -16,10 +16,11 @@
     "disabled": "已关闭"
   },
   "kind": {
-    "isolated": "独立登录",
-    "system": "本机的登录",
-    "apiKey": "API 密钥",
-    "apiKeyOf": "API 密钥 · {provider}"
+    "apiKeyOf": "API 密钥 · {provider}",
+    "line": {
+      "isolated": "订阅 · 独立登录",
+      "system": "订阅 · 本机"
+    }
   },
   "keyHint": "密钥 {hint}",
   "busy": "{max} 个槽位中 {busy} 个忙碌",
@@ -48,10 +49,17 @@
     "rename": "重命名",
     "login": "登录",
     "logout": "退出登录",
-    "key": "设置 API 密钥",
     "delete": "删除账号",
     "more": "{name} 的更多操作",
-    "priority": "优先级：{n}…"
+    "priority": "优先级：{n}…",
+    "test": "重新测试",
+    "addKey": "添加密钥",
+    "replaceKey": "更换密钥",
+    "model": "更改模型",
+    "budget": "设置预算",
+    "turnOff": "关闭",
+    "turnOn": "开启",
+    "prices": "设置价格"
   },
   "done": {
     "added": "已添加 {name}",
@@ -62,7 +70,12 @@
     "logout": "已退出登录",
     "refreshedAll": "配额已刷新",
     "off": "已停止给 {name} 分配工作",
-    "priority": "已将 {name} 的优先级设为 {n}"
+    "priority": "已将 {name} 的优先级设为 {n}",
+    "budgetSet": "{name} 的预算已设为 {budget}",
+    "budgetRemoved": "已移除 {name} 的预算",
+    "modelSet": "已保存 {service} 的模型",
+    "pricesSet": "已保存 {service} 的价格",
+    "pricesCleared": "已移除 {service} 的价格"
   },
   "quota": {
     "window": "{window} 窗口",
@@ -101,39 +114,36 @@
   },
   "add": {
     "title": "添加账号",
-    "step1": "第 1 步，共 2 步：账号类型。",
-    "step2": "第 2 步，共 2 步：详细信息。",
-    "backend": "后端",
-    "kind": "类型",
-    "backendDesc": {
-      "agy": "通过 Antigravity CLI 使用 Gemini 模型。",
-      "claude": "通过 Claude Code 使用 Claude 模型。",
-      "codex": "通过 Codex 使用 OpenAI 模型。"
+    "connect": {
+      "legend": "这个账号如何连接?",
+      "subscription": "用订阅登录",
+      "subscriptionDesc": "使用你的 Gemini、Claude 或 ChatGPT 套餐。在浏览器中登录一次即可。",
+      "apiKey": "使用 API 密钥",
+      "apiKeyDesc": "用 Anthropic、DeepSeek、OpenRouter、OpenAI 等服务的密钥按 token 付费。"
     },
-    "kindDesc": {
-      "isolated": "独立配置；在浏览器中登录一次。",
-      "system": "使用本机上已有的登录。",
-      "apiKey": "通过 API 提供方按 token 付费。"
+    "product": {
+      "legend": "哪个订阅?",
+      "agy": "Gemini,通过 Antigravity",
+      "claude": "Claude Pro 或 Max,通过 Claude Code",
+      "codex": "ChatGPT,通过 Codex"
     },
+    "useSystem": "使用本机已有的登录",
+    "signIn": "登录",
+    "made": "已添加 {name}。请在下方完成登录;也可以先关闭,稍后在它那一行继续。",
+    "done": "完成",
     "defaultLabel": "{backend} {n}",
     "label": "名称",
     "priorityHint": "数字越大越先使用（−1000 到 1000）。",
-    "provider": "提供方",
-    "noProvider": "此后端还没有提供方。请先在“API 提供方”中添加一个。",
-    "keyHint": "可选，可以稍后添加。之后只显示最后几个字符。",
-    "keyless": "已添加 {name}，但它没有密钥：密钥被拒绝，且无法再删除该账号。请在这里为它输入密钥。",
     "loginFailed": "已添加 {name}，但无法开始登录：{error}。请在其卡片上点击“登录”重试。",
-    "systemTaken": "已添加：{name}",
-    "next": "下一步",
-    "submit": "添加账号"
+    "next": "下一步"
   },
   "key": {
-    "title": "{name} 的 API 密钥",
+    "titleAdd": "为 {name} 添加密钥",
+    "titleReplace": "更换 {name} 的密钥",
     "current": "已保存的密钥以 {hint} 结尾。新密钥会替换它。",
     "none": "尚未保存密钥。",
-    "label": "API 密钥",
-    "hint": "由服务保存；控制面板不会再显示它。",
-    "save": "保存密钥",
+    "save": "测试并保存",
+    "saveUntested": "不测试直接保存",
     "clear": "移除密钥"
   },
   "rename": {
@@ -166,28 +176,27 @@
     "withProvider": "{backend}（{provider}）"
   },
   "providers": {
-    "title": "API 提供方",
-    "desc": "API 密钥账号发送请求的地方：Claude Code 使用 Anthropic 兼容服务，Codex 使用 OpenAI 兼容服务。",
-    "add": "添加提供方",
-    "search": "搜索提供方",
-    "loading": "正在加载提供方…",
-    "loadFailed": "无法加载提供方：{error}",
-    "empty": "还没有提供方。",
-    "noMatch": "没有匹配的提供方。",
-    "usedBy": "{n} 个账号在用",
+    "title": "服务",
+    "desc": "API 密钥发送请求的地方。大多数人从不需要修改这里。",
+    "add": "添加服务",
+    "search": "搜索服务",
+    "loading": "正在加载服务…",
+    "loadFailed": "无法加载服务:{error}",
+    "empty": "还没有服务。添加一个 API 密钥就会创建一个。",
+    "noMatch": "没有匹配的服务。",
     "anyModel": "任意模型",
     "patternModels": "模式 {pattern}",
     "enabledOf": "使用 {name}",
     "editOf": "编辑 {name}",
     "deleteOf": "删除 {name}",
     "deleteTitle": "删除 {name}？",
-    "deleteDesc": "账号将无法再使用它。仍有账号在用的提供方不能删除。",
-    "deleteConfirm": "删除提供方",
-    "inUse": "仍有账号在使用它；请先迁移或删除这些账号。{error}",
+    "deleteDesc": "API 密钥将无法再使用它。",
+    "deleteConfirm": "删除服务",
+    "inUse": "仍有账号在使用它;请先删除这些账号。{error}",
     "deleted": "已删除 {name}",
     "saved": "已保存 {name}",
-    "addTitle": "添加 API 提供方",
-    "editTitle": "编辑 API 提供方",
+    "addTitle": "添加服务",
+    "editTitle": "编辑服务",
     "preset": "基于",
     "blank": "空白",
     "id": "ID",
@@ -200,10 +209,40 @@
     "modelsPattern": "由模式 {pattern} 允许；填写列表会替换此模式。",
     "allowAny": "允许任意模型",
     "anyOnSave": "保存后将移除该模式，允许任意模型。",
-    "tierModels": "始终允许（各档模型）：{models}",
     "enabled": "允许账号使用",
-    "save": "保存提供方"
+    "save": "保存提供方",
+    "tiers": "各层级的模型"
   },
+  "testResult": {
+    "not_tested": "未测试",
+    "ok": "密钥可用",
+    "refused": "密钥被拒绝",
+    "not_found": "地址错误",
+    "no_models_endpoint": "未验证：第一次运行时会检验",
+    "unreachable": "无法连接服务",
+    "redirected": "被重定向到别处",
+    "error": "测试失败",
+    "creditUnseen": "此测试无法查看余额",
+    "testedAt": "测试于 {time}"
+  },
+  "notice": {
+    "base_url_trimmed": "已缩短基础 URL",
+    "official_preset": "已切换到 Anthropic 预设",
+    "key_name_removed": "已去掉密钥中的变量名",
+    "key_quotes_removed": "已去掉密钥两侧的引号",
+    "key_assignment": "看起来像 NAME=值：只粘贴 = 之后的部分",
+    "key_prefix": "密钥看起来属于其他服务",
+    "provider_reused": "已复用现有提供方"
+  },
+  "keyError": {
+    "empty": "请粘贴 API 密钥",
+    "too_long": "密钥过长",
+    "url": "这看起来是网址,不是密钥。",
+    "whitespace": "只粘贴密钥:里面有空格或换行。",
+    "control": "密钥包含不可见字符"
+  },
+  "modelPerTask": "每个任务自选模型",
+  "modelPerTaskHint": "此提供方没有默认模型：每个任务自行指定所用模型。",
   "view": {
     "label": "账号视图",
     "list": "列表",
@@ -214,7 +253,7 @@
       "account": "账号",
       "status": "状态",
       "slots": "槽位",
-      "quota": "配额",
+      "quota": "配额或花费",
       "controls": "用于工作 · 优先级"
     },
     "slots": "{busy}/{max} 忙碌",
@@ -242,41 +281,12 @@
       "checking": "正在读取配额…"
     }
   },
-  "testResult": {
-    "not_tested": "未测试",
-    "ok": "密钥可用",
-    "refused": "密钥被拒绝",
-    "not_found": "地址错误",
-    "no_models_endpoint": "未验证：第一次运行时会检验",
-    "unreachable": "无法连接服务",
-    "redirected": "被重定向到别处",
-    "error": "测试失败",
-    "creditUnseen": "此测试无法查看余额",
-    "testedAt": "测试于 {time}"
-  },
-  "notice": {
-    "base_url_trimmed": "已缩短基础 URL",
-    "official_preset": "已切换到 Anthropic 预设",
-    "key_name_removed": "已去掉密钥中的变量名",
-    "key_quotes_removed": "已去掉密钥两侧的引号",
-    "key_assignment": "看起来像 NAME=值：只粘贴 = 之后的部分",
-    "key_prefix": "密钥看起来属于其他服务",
-    "provider_reused": "已复用现有提供方"
-  },
-  "keyError": {
-    "empty": "请粘贴 API 密钥",
-    "too_long": "密钥过长",
-    "url": "这看起来是 URL，而不是 API 密钥",
-    "whitespace": "密钥不能包含空格或换行",
-    "control": "密钥包含不可见字符"
-  },
-  "modelPerTask": "每个任务自选模型",
-  "modelPerTaskHint": "此提供方没有默认模型：每个任务自行指定所用模型。",
   "budgetState": {
     "ok": "在预算内",
     "warn": "已用预算的 80%",
     "reached": "已达预算",
-    "unknown": "此服务的花费未知"
+    "unknown": "此服务的花费未知",
+    "unknownNeedsPrices": "预算 {budget} 在等待价格:为此服务设置价格后才能核对"
   },
   "restReason": {
     "budget_reached": "已达预算（{spent} / {budget}）",
@@ -286,6 +296,209 @@
   "spendSource": {
     "cli": "Claude Code 的估算",
     "free": "本地 · 免费",
-    "none": "此服务不报告费用"
+    "none": "此服务不报告费用",
+    "service": "服务自己为这个密钥统计的金额",
+    "prices": "按你为此服务设置的价格计算"
+  },
+  "service": {
+    "label": "服务",
+    "search": "搜索服务",
+    "yours": "你的服务",
+    "presets": "服务",
+    "keys": "{n} 个密钥",
+    "noKey": "还没有密钥",
+    "change": "更改",
+    "changeOf": "更改服务({name})",
+    "runsOn": "通过 {cli} 运行",
+    "otherAnthropic": "其他(兼容 Anthropic)",
+    "otherOpenai": "其他(兼容 OpenAI)",
+    "noMatch": "没有匹配的服务。",
+    "detected": "已识别为 {service} 密钥",
+    "required": "请选择密钥所属的服务"
+  },
+  "keyField": {
+    "label": "API 密钥",
+    "hint": "保存后只显示最后 4 个字符。",
+    "show": "显示",
+    "hide": "隐藏",
+    "showLabel": "显示密钥",
+    "nameRemoved": "已去掉开头的 {name}="
+  },
+  "modelPicker": {
+    "label": "worker 使用的模型",
+    "lead": "由 lead 选择(任意模型)",
+    "perTier": "每个层级用不同模型",
+    "perTierOption": "每层一个模型(见下方)",
+    "leadHint": "每个任务自行指定模型;未指定的任务会被拒绝。",
+    "fromService": "在 {service} 上为它的所有密钥统一设置:请在账号上用“更改模型”来修改。",
+    "tier": {
+      "fast": "快速",
+      "standard": "标准",
+      "strong": "强",
+      "max": "最强"
+    },
+    "tierEmpty": "由任务指定",
+    "tierHint": "留空的层级:该层级的任务必须指定模型。"
+  },
+  "form": {
+    "testAndAdd": "测试并添加",
+    "addUntested": "不测试直接添加",
+    "listModels": "检查密钥并列出模型",
+    "testing": "正在测试密钥…",
+    "more": "更多选项",
+    "advanced": "高级",
+    "budget": "预算(USD)",
+    "budgetHint": "0 表示不设预算。只有 Anthropic 密钥会报告费用(Claude Code 的估算);其他服务只统计 token。",
+    "budgetStop": "预算用完后停止使用此密钥",
+    "baseUrl": "基础 URL",
+    "baseUrlHint": "服务的地址。Claude Code 会自己加上 /v1/messages,请不要写上。",
+    "baseUrlRequired": "请输入服务的地址",
+    "wireApi": "Wire API",
+    "wireChat": "Chat Completions",
+    "wireResponses": "Responses",
+    "extraModels": "额外允许的模型",
+    "extraModelsHint": "用逗号分隔;留空表示允许任意模型。"
+  },
+  "budget": {
+    "title": "{name} 的预算",
+    "save": "保存预算",
+    "remove": "移除预算",
+    "positive": "请输入大于 0 的金额",
+    "noCost": "此服务不报告费用,无法核对预算:密钥不会因预算而停用。",
+    "suggested": "使用该密钥在 OpenRouter 的上限 {amount}"
+  },
+  "model": {
+    "title": "{service} 的模型",
+    "desc": "适用于 {service} 的所有密钥。",
+    "save": "保存模型"
+  },
+  "needs": {
+    "title": "需要你处理",
+    "row": "{name}:{problem}。",
+    "problem": {
+      "no_key": "没有密钥",
+      "needs_login": "已退出登录",
+      "no_plan": "其套餐不能使用此后端",
+      "refused": "服务拒绝了密钥",
+      "not_found": "服务地址似乎不对",
+      "redirected": "服务把测试转到了别处",
+      "credits": "余额不足",
+      "budget_reached": "已达到预算({spent} / {budget})"
+    },
+    "action": {
+      "key": "添加密钥",
+      "login": "登录",
+      "replaceKey": "更换密钥",
+      "test": "测试密钥",
+      "budget": "提高预算"
+    }
+  },
+  "testState": {
+    "ok": "可用",
+    "not_tested": "未测试",
+    "refused": "被拒绝",
+    "not_found": "地址错误",
+    "no_models_endpoint": "未验证",
+    "unreachable": "无法连接",
+    "redirected": "被重定向",
+    "error": "测试失败"
+  },
+  "testHelp": {
+    "ok": "密钥可用。有 {n} 个模型可用。",
+    "refused": "服务拒绝了这个密钥。",
+    "not_found": "地址错误:那里没有任何响应。请去掉基础 URL 末尾的 /v1。",
+    "no_models_endpoint": "无法验证此服务:它没有可用于核对密钥的模型列表。第一个任务会测试它。",
+    "unreachable": "无法连接到服务。请检查地址和网络连接。",
+    "redirected": "服务把测试转到了另一个地址;密钥没有发往那里。",
+    "error": "服务返回了错误(HTTP {status})。"
+  },
+  "spend": {
+    "short": {
+      "budget": "{spent} / {budget}",
+      "over": "{spent} / {budget}",
+      "since": "{spent},自 {date}",
+      "cost": "{spent}",
+      "tokens": "{tokens} token"
+    },
+    "long": {
+      "budget": "已花费 {spent} / {budget} · 剩余 {left}",
+      "over": "已花费 {spent} / {budget} · 超出 {left}",
+      "since": "自设置密钥起已花费 {spent}({date})",
+      "cost": "已花费 {spent}",
+      "tokens": "{tokens} token,费用未知"
+    },
+    "free": "本地 · 免费",
+    "estimateTip": "Claude Code 自己的估算,不是服务的账单",
+    "setBudget": "设置预算",
+    "barLabel": "已用预算",
+    "budgetUnknown": "预算 {budget} 不生效:此服务不报告费用",
+    "unpricedTokens": "{tokens} token 没有价格",
+    "setPrices": "设置价格以查看费用"
+  },
+  "facts": {
+    "model": "模型:{model}",
+    "models": "模型:{models}"
+  },
+  "routing": "当任务指定 {service} 时使用(provider: {id})。",
+  "services": {
+    "advanced": "高级",
+    "addKey": "添加密钥",
+    "official": "api.anthropic.com(官方)",
+    "allows": "允许 {models}",
+    "usedByNames": "{names} 仍在使用它:请先删除这些账号。",
+    "prices": "价格",
+    "pricesOf": "{name} 的价格"
+  },
+  "balance": {
+    "title": "余额 {amount}",
+    "shared": "整个账号",
+    "accountWide": "整个 {provider} 账号的余额,由它的所有密钥共用",
+    "readAt": "{time}读取",
+    "stale": "可能已过时",
+    "granted": "赠送 {amount}",
+    "paid": "充值 {amount}",
+    "unavailable": "不足以支付请求"
+  },
+  "serviceUsage": {
+    "total": "服务为此密钥统计:{amount}",
+    "daily": "今天 {amount}",
+    "weekly": "本周 {amount}",
+    "monthly": "本月 {amount}",
+    "limit": "上限 {amount},{reset}",
+    "reset": {
+      "daily": "每天重置",
+      "weekly": "每周重置",
+      "monthly": "每月重置",
+      "never": "不重置"
+    }
+  },
+  "serviceError": {
+    "refused": "读取花费:服务拒绝了密钥",
+    "no_credit": "读取花费:服务表示余额不足",
+    "unreachable": "读取花费:无法连接到服务",
+    "redirected": "读取花费:服务转到了别处(密钥没有发往那里)",
+    "error": "读取花费:服务返回了错误"
+  },
+  "prices": {
+    "title": "{service} 的价格",
+    "model": "模型",
+    "anyModel": "* 表示没有单独一行的任意模型。",
+    "input": "输入",
+    "cachedInput": "缓存输入",
+    "output": "输出",
+    "perMillion": "每 100 万 token 的美元价格",
+    "pricingLink": "{service} 的价格页面",
+    "add": "添加一行",
+    "remove": "删除 {model} 这一行",
+    "save": "保存价格",
+    "empty": "没有价格:此服务的花费只按 token 统计。添加一行即可按美元统计。",
+    "appliesFromNow": "新价格适用于从现在起的工作;已统计的花费保持原价。",
+    "error": {
+      "modelRequired": "请输入模型,或用 * 表示任意模型",
+      "modelTooLong": "最多 200 个字符",
+      "duplicate": "这个模型已经有一行",
+      "invalid": "请输入 0 到 10,000 之间的价格",
+      "tooMany": "最多 200 行"
+    }
   }
 }

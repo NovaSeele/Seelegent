@@ -16,10 +16,11 @@
     "disabled": "Tắt"
   },
   "kind": {
-    "isolated": "Đăng nhập riêng",
-    "system": "Đăng nhập của máy này",
-    "apiKey": "Khóa API",
-    "apiKeyOf": "Khóa API · {provider}"
+    "apiKeyOf": "Khóa API · {provider}",
+    "line": {
+      "isolated": "Gói đăng ký · Đăng nhập riêng",
+      "system": "Gói đăng ký · Máy này"
+    }
   },
   "keyHint": "khóa {hint}",
   "busy": "Đang dùng {busy}/{max} chỗ",
@@ -48,10 +49,17 @@
     "rename": "Đổi tên",
     "login": "Đăng nhập",
     "logout": "Đăng xuất",
-    "key": "Đặt khóa API",
     "delete": "Xóa tài khoản",
     "more": "Thêm thao tác cho {name}",
-    "priority": "Ưu tiên: {n}…"
+    "priority": "Ưu tiên: {n}…",
+    "test": "Kiểm tra lại",
+    "addKey": "Thêm khóa",
+    "replaceKey": "Thay khóa",
+    "model": "Đổi mô hình",
+    "budget": "Đặt ngân sách",
+    "turnOff": "Tắt",
+    "turnOn": "Bật",
+    "prices": "Đặt giá"
   },
   "done": {
     "added": "Đã thêm {name}",
@@ -62,7 +70,12 @@
     "logout": "Đã đăng xuất",
     "refreshedAll": "Đã làm mới hạn mức",
     "off": "Đã tắt nhận việc cho {name}",
-    "priority": "Đã đặt ưu tiên của {name} là {n}"
+    "priority": "Đã đặt ưu tiên của {name} là {n}",
+    "budgetSet": "Đã đặt ngân sách của {name} là {budget}",
+    "budgetRemoved": "Đã bỏ ngân sách của {name}",
+    "modelSet": "Đã lưu mô hình của {service}",
+    "pricesSet": "Đã lưu giá của {service}",
+    "pricesCleared": "Đã bỏ giá của {service}"
   },
   "quota": {
     "window": "Khung {window}",
@@ -101,39 +114,36 @@
   },
   "add": {
     "title": "Thêm tài khoản",
-    "step1": "Bước 1/2: loại tài khoản.",
-    "step2": "Bước 2/2: thông tin chi tiết.",
-    "backend": "Backend",
-    "kind": "Loại",
-    "backendDesc": {
-      "agy": "Mô hình Gemini qua Antigravity CLI.",
-      "claude": "Mô hình Claude qua Claude Code.",
-      "codex": "Mô hình OpenAI qua Codex."
+    "connect": {
+      "legend": "Tài khoản này kết nối thế nào?",
+      "subscription": "Đăng nhập bằng gói đăng ký",
+      "subscriptionDesc": "Dùng gói Gemini, Claude hoặc ChatGPT của bạn. Bạn đăng nhập một lần trong trình duyệt.",
+      "apiKey": "Dùng khóa API",
+      "apiKeyDesc": "Trả tiền theo token bằng khóa của Anthropic, DeepSeek, OpenRouter, OpenAI và các dịch vụ khác."
     },
-    "kindDesc": {
-      "isolated": "Hồ sơ riêng; bạn đăng nhập một lần trong trình duyệt.",
-      "system": "Dùng lượt đăng nhập đã có sẵn trên máy này.",
-      "apiKey": "Trả theo token qua một nhà cung cấp API."
+    "product": {
+      "legend": "Gói đăng ký nào?",
+      "agy": "Gemini, qua Antigravity",
+      "claude": "Claude Pro hoặc Max, qua Claude Code",
+      "codex": "ChatGPT, qua Codex"
     },
+    "useSystem": "Dùng phiên đăng nhập sẵn có trên máy này",
+    "signIn": "Đăng nhập",
+    "made": "Đã thêm {name}. Hoàn tất đăng nhập bên dưới; bạn cũng có thể đóng hộp thoại này và làm sau từ hàng của nó.",
+    "done": "Xong",
     "defaultLabel": "{backend} {n}",
     "label": "Tên",
     "priorityHint": "Số lớn hơn được dùng trước (−1000 đến 1000).",
-    "provider": "Nhà cung cấp",
-    "noProvider": "Backend này chưa có nhà cung cấp nào. Hãy thêm một nhà cung cấp ở mục Nhà cung cấp API trước.",
-    "keyHint": "Không bắt buộc; bạn có thể thêm sau. Về sau chỉ hiện vài ký tự cuối.",
-    "keyless": "Đã thêm {name} nhưng tài khoản chưa có khóa: khóa bị từ chối và không xóa lại được tài khoản. Hãy nhập khóa cho nó ở đây.",
     "loginFailed": "Đã thêm {name}, nhưng không bắt đầu đăng nhập được: {error}. Dùng Đăng nhập trên thẻ của nó để thử lại.",
-    "systemTaken": "Đã thêm: {name}",
-    "next": "Tiếp",
-    "submit": "Thêm tài khoản"
+    "next": "Tiếp"
   },
   "key": {
-    "title": "Khóa API của {name}",
+    "titleAdd": "Thêm khóa cho {name}",
+    "titleReplace": "Thay khóa của {name}",
     "current": "Khóa đã lưu kết thúc bằng {hint}. Khóa mới sẽ thay thế nó.",
     "none": "Chưa lưu khóa nào.",
-    "label": "Khóa API",
-    "hint": "Dịch vụ giữ khóa; bảng điều khiển sẽ không hiện lại nó.",
-    "save": "Lưu khóa",
+    "save": "Kiểm tra và lưu",
+    "saveUntested": "Lưu mà không kiểm tra",
     "clear": "Gỡ khóa"
   },
   "rename": {
@@ -166,28 +176,27 @@
     "withProvider": "{backend} ({provider})"
   },
   "providers": {
-    "title": "Nhà cung cấp API",
-    "desc": "Nơi các tài khoản dùng khóa API gửi yêu cầu: tương thích Anthropic cho Claude Code, tương thích OpenAI cho Codex.",
-    "add": "Thêm nhà cung cấp",
-    "search": "Tìm nhà cung cấp",
-    "loading": "Đang tải nhà cung cấp…",
-    "loadFailed": "Không tải được nhà cung cấp: {error}",
-    "empty": "Chưa có nhà cung cấp nào.",
-    "noMatch": "Không có nhà cung cấp nào khớp.",
-    "usedBy": "{n} tài khoản đang dùng",
+    "title": "Dịch vụ",
+    "desc": "Nơi các khóa API gửi yêu cầu. Hầu hết mọi người không bao giờ cần đổi phần này.",
+    "add": "Thêm dịch vụ",
+    "search": "Tìm dịch vụ",
+    "loading": "Đang tải dịch vụ…",
+    "loadFailed": "Không tải được dịch vụ: {error}",
+    "empty": "Chưa có dịch vụ. Thêm một khóa API sẽ tạo dịch vụ.",
+    "noMatch": "Không có dịch vụ nào khớp.",
     "anyModel": "mọi mô hình",
     "patternModels": "mẫu {pattern}",
     "enabledOf": "Dùng {name}",
     "editOf": "Sửa {name}",
     "deleteOf": "Xóa {name}",
     "deleteTitle": "Xóa {name}?",
-    "deleteDesc": "Các tài khoản sẽ không dùng được nó nữa. Không xóa được nhà cung cấp còn tài khoản đang dùng.",
-    "deleteConfirm": "Xóa nhà cung cấp",
-    "inUse": "Vẫn còn tài khoản dùng nó; hãy chuyển hoặc xóa các tài khoản đó trước. {error}",
+    "deleteDesc": "Các khóa API sẽ không dùng được nó nữa.",
+    "deleteConfirm": "Xóa dịch vụ",
+    "inUse": "Vẫn có tài khoản đang dùng nó; hãy xóa chúng trước. {error}",
     "deleted": "Đã xóa {name}",
     "saved": "Đã lưu {name}",
-    "addTitle": "Thêm nhà cung cấp API",
-    "editTitle": "Sửa nhà cung cấp API",
+    "addTitle": "Thêm dịch vụ",
+    "editTitle": "Sửa dịch vụ",
     "preset": "Bắt đầu từ",
     "blank": "Trống",
     "id": "ID",
@@ -200,9 +209,9 @@
     "modelsPattern": "Đang cho phép theo mẫu {pattern}; nhập một danh sách sẽ thay mẫu này.",
     "allowAny": "Cho phép mọi mô hình",
     "anyOnSave": "Khi lưu, mẫu sẽ bị xoá và mọi mô hình đều được phép.",
-    "tierModels": "Luôn được dùng (mô hình theo cấp): {models}",
     "enabled": "Tài khoản được dùng",
-    "save": "Lưu nhà cung cấp"
+    "save": "Lưu nhà cung cấp",
+    "tiers": "Mô hình của từng cấp"
   },
   "testResult": {
     "not_tested": "Chưa kiểm tra",
@@ -228,8 +237,8 @@
   "keyError": {
     "empty": "Hãy dán khóa API",
     "too_long": "Khóa này quá dài",
-    "url": "Đây giống một URL, không phải khóa API",
-    "whitespace": "Khóa không được chứa dấu cách hay xuống dòng",
+    "url": "Đây có vẻ là địa chỉ web, không phải khóa.",
+    "whitespace": "Chỉ dán khóa: bên trong có dấu cách hoặc xuống dòng.",
     "control": "Khóa chứa ký tự ẩn"
   },
   "modelPerTask": "Chọn mô hình theo từng tác vụ",
@@ -244,7 +253,7 @@
       "account": "Tài khoản",
       "status": "Trạng thái",
       "slots": "Chỗ",
-      "quota": "Hạn mức",
+      "quota": "Hạn mức hoặc chi tiêu",
       "controls": "Dùng để làm việc · Ưu tiên"
     },
     "slots": "Đang dùng {busy}/{max}",
@@ -276,7 +285,8 @@
     "ok": "Trong ngân sách",
     "warn": "Đã dùng 80% ngân sách",
     "reached": "Đã hết ngân sách",
-    "unknown": "Không biết chi phí của dịch vụ này"
+    "unknown": "Không biết chi phí của dịch vụ này",
+    "unknownNeedsPrices": "Ngân sách {budget} đang chờ giá: hãy đặt giá cho dịch vụ này để đối chiếu"
   },
   "restReason": {
     "budget_reached": "Đã hết ngân sách ({spent} / {budget})",
@@ -286,6 +296,209 @@
   "spendSource": {
     "cli": "Ước tính của Claude Code",
     "free": "Cục bộ · miễn phí",
-    "none": "Dịch vụ này không báo chi phí"
+    "none": "Dịch vụ này không báo chi phí",
+    "service": "Số liệu chính dịch vụ đếm cho khóa này",
+    "prices": "Theo giá bạn đặt cho dịch vụ này"
+  },
+  "service": {
+    "label": "Dịch vụ",
+    "search": "Tìm dịch vụ",
+    "yours": "Dịch vụ của bạn",
+    "presets": "Dịch vụ",
+    "keys": "{n} khóa",
+    "noKey": "Chưa có khóa",
+    "change": "Đổi",
+    "changeOf": "Đổi dịch vụ ({name})",
+    "runsOn": "Chạy qua {cli}",
+    "otherAnthropic": "Khác (tương thích Anthropic)",
+    "otherOpenai": "Khác (tương thích OpenAI)",
+    "noMatch": "Không có dịch vụ nào khớp.",
+    "detected": "Đã nhận ra khóa {service}",
+    "required": "Chọn dịch vụ cấp khóa này"
+  },
+  "keyField": {
+    "label": "Khóa API",
+    "hint": "Sau khi lưu chỉ còn hiện 4 ký tự cuối.",
+    "show": "Hiện",
+    "hide": "Ẩn",
+    "showLabel": "Hiện khóa",
+    "nameRemoved": "Đã bỏ {name}= ở đầu"
+  },
+  "modelPicker": {
+    "label": "Mô hình worker dùng",
+    "lead": "Để lead chọn (mô hình bất kỳ)",
+    "perTier": "Mô hình riêng cho từng cấp",
+    "perTierOption": "Mỗi cấp một mô hình (bên dưới)",
+    "leadHint": "Mỗi tác vụ tự nêu mô hình; tác vụ không nêu sẽ bị từ chối.",
+    "fromService": "Đặt trên {service} cho mọi khóa của nó: dùng Đổi mô hình trên một tài khoản để thay đổi.",
+    "tier": {
+      "fast": "Nhanh",
+      "standard": "Chuẩn",
+      "strong": "Mạnh",
+      "max": "Tối đa"
+    },
+    "tierEmpty": "chọn theo tác vụ",
+    "tierHint": "Cấp để trống: tác vụ ở cấp đó phải nêu mô hình."
+  },
+  "form": {
+    "testAndAdd": "Kiểm tra và thêm",
+    "addUntested": "Thêm mà không kiểm tra",
+    "listModels": "Kiểm tra khóa và liệt kê mô hình",
+    "testing": "Đang kiểm tra khóa…",
+    "more": "Tùy chọn khác",
+    "advanced": "Nâng cao",
+    "budget": "Ngân sách (USD)",
+    "budgetHint": "0 là không có ngân sách. Chỉ khóa Anthropic báo chi phí (ước tính của Claude Code); dịch vụ khác chỉ đếm token.",
+    "budgetStop": "Ngừng dùng khóa này khi hết ngân sách",
+    "baseUrl": "URL gốc",
+    "baseUrlHint": "Địa chỉ của dịch vụ. Claude Code tự thêm /v1/messages, nên đừng ghi phần đó.",
+    "baseUrlRequired": "Nhập địa chỉ của dịch vụ",
+    "wireApi": "Wire API",
+    "wireChat": "Chat Completions",
+    "wireResponses": "Responses",
+    "extraModels": "Mô hình được phép thêm",
+    "extraModelsHint": "Cách nhau bằng dấu phẩy; để trống là cho phép mọi mô hình."
+  },
+  "budget": {
+    "title": "Ngân sách của {name}",
+    "save": "Lưu ngân sách",
+    "remove": "Bỏ ngân sách",
+    "positive": "Nhập số tiền lớn hơn 0",
+    "noCost": "Dịch vụ này không báo chi phí nên không đối chiếu được ngân sách: khóa sẽ không bao giờ bị dừng vì nó.",
+    "suggested": "Dùng giới hạn OpenRouter của khóa, {amount}"
+  },
+  "model": {
+    "title": "Mô hình của {service}",
+    "desc": "Áp dụng cho mọi khóa của {service}.",
+    "save": "Lưu mô hình"
+  },
+  "needs": {
+    "title": "Cần bạn",
+    "row": "{name}: {problem}.",
+    "problem": {
+      "no_key": "chưa có khóa",
+      "needs_login": "đã đăng xuất",
+      "no_plan": "gói của nó không dùng được backend này",
+      "refused": "dịch vụ từ chối khóa",
+      "not_found": "địa chỉ dịch vụ có vẻ sai",
+      "redirected": "dịch vụ chuyển yêu cầu kiểm tra đi nơi khác",
+      "credits": "hết tín dụng",
+      "budget_reached": "đã chạm ngân sách ({spent} trên {budget})"
+    },
+    "action": {
+      "key": "Thêm khóa",
+      "login": "Đăng nhập",
+      "replaceKey": "Thay khóa",
+      "test": "Kiểm tra khóa",
+      "budget": "Nâng ngân sách"
+    }
+  },
+  "testState": {
+    "ok": "Hoạt động",
+    "not_tested": "Chưa kiểm tra",
+    "refused": "Bị từ chối",
+    "not_found": "Sai địa chỉ",
+    "no_models_endpoint": "Chưa xác minh",
+    "unreachable": "Không kết nối được",
+    "redirected": "Bị chuyển hướng",
+    "error": "Kiểm tra lỗi"
+  },
+  "testHelp": {
+    "ok": "Khóa hoạt động. Có {n} mô hình.",
+    "refused": "Dịch vụ từ chối khóa này.",
+    "not_found": "Sai địa chỉ: không có gì trả lời ở đó. Bỏ /v1 ở cuối URL gốc.",
+    "no_models_endpoint": "Không xác minh được dịch vụ này: nó không có danh sách mô hình để đối chiếu khóa. Tác vụ đầu tiên sẽ kiểm tra nó.",
+    "unreachable": "Không kết nối được dịch vụ. Hãy kiểm tra địa chỉ và mạng của bạn.",
+    "redirected": "Dịch vụ chuyển yêu cầu kiểm tra sang địa chỉ khác; khóa không được gửi tới đó.",
+    "error": "Dịch vụ trả về lỗi (HTTP {status})."
+  },
+  "spend": {
+    "short": {
+      "budget": "{spent} / {budget}",
+      "over": "{spent} / {budget}",
+      "since": "{spent} từ {date}",
+      "cost": "{spent}",
+      "tokens": "{tokens} token"
+    },
+    "long": {
+      "budget": "đã tiêu {spent} trên {budget} · còn {left}",
+      "over": "đã tiêu {spent} trên {budget} · vượt {left}",
+      "since": "đã tiêu {spent} từ khi đặt khóa ({date})",
+      "cost": "đã tiêu {spent}",
+      "tokens": "{tokens} token, chưa biết chi phí"
+    },
+    "free": "Cục bộ · miễn phí",
+    "estimateTip": "Ước tính của chính Claude Code, không phải hóa đơn của dịch vụ",
+    "setBudget": "Đặt ngân sách",
+    "barLabel": "Ngân sách đã dùng",
+    "budgetUnknown": "Ngân sách {budget} không được áp dụng: dịch vụ này không báo chi phí",
+    "unpricedTokens": "{tokens} token chưa có giá",
+    "setPrices": "Đặt giá để xem chi phí"
+  },
+  "facts": {
+    "model": "Mô hình: {model}",
+    "models": "Các mô hình: {models}"
+  },
+  "routing": "Được dùng khi một tác vụ yêu cầu {service} (provider: {id}).",
+  "services": {
+    "advanced": "Nâng cao",
+    "addKey": "Thêm khóa",
+    "official": "api.anthropic.com (chính thức)",
+    "allows": "cho phép {models}",
+    "usedByNames": "{names} vẫn đang dùng nó: hãy xóa (các) tài khoản đó trước.",
+    "prices": "Giá",
+    "pricesOf": "Giá của {name}"
+  },
+  "balance": {
+    "title": "Số dư {amount}",
+    "shared": "chung cả tài khoản",
+    "accountWide": "Số dư của cả tài khoản {provider}, dùng chung cho mọi khóa của nó",
+    "readAt": "đọc {time}",
+    "stale": "có thể đã cũ",
+    "granted": "Được tặng {amount}",
+    "paid": "Đã nạp {amount}",
+    "unavailable": "không đủ để trả cho yêu cầu"
+  },
+  "serviceUsage": {
+    "total": "Dịch vụ đếm cho khóa này: {amount}",
+    "daily": "hôm nay {amount}",
+    "weekly": "tuần này {amount}",
+    "monthly": "tháng này {amount}",
+    "limit": "giới hạn {amount}, {reset}",
+    "reset": {
+      "daily": "đặt lại mỗi ngày",
+      "weekly": "đặt lại mỗi tuần",
+      "monthly": "đặt lại mỗi tháng",
+      "never": "không đặt lại"
+    }
+  },
+  "serviceError": {
+    "refused": "Đọc chi tiêu: dịch vụ từ chối khóa",
+    "no_credit": "Đọc chi tiêu: dịch vụ báo đã hết tín dụng",
+    "unreachable": "Đọc chi tiêu: không kết nối được dịch vụ",
+    "redirected": "Đọc chi tiêu: dịch vụ chuyển đi nơi khác (khóa không được gửi tới đó)",
+    "error": "Đọc chi tiêu: dịch vụ trả về lỗi"
+  },
+  "prices": {
+    "title": "Giá của {service}",
+    "model": "Mô hình",
+    "anyModel": "* là mọi mô hình không có hàng riêng.",
+    "input": "Đầu vào",
+    "cachedInput": "Đầu vào đã cache",
+    "output": "Đầu ra",
+    "perMillion": "Đô la Mỹ cho mỗi 1 triệu token",
+    "pricingLink": "Trang giá của {service}",
+    "add": "Thêm hàng",
+    "remove": "Xóa hàng của {model}",
+    "save": "Lưu giá",
+    "empty": "Chưa có giá: chi tiêu của dịch vụ này chỉ được đếm bằng token. Thêm một hàng để tính bằng đô la.",
+    "appliesFromNow": "Giá mới áp dụng cho công việc từ giờ; chi tiêu đã tính giữ nguyên giá cũ.",
+    "error": {
+      "modelRequired": "Nhập mô hình, hoặc * cho mọi mô hình",
+      "modelTooLong": "Tối đa 200 ký tự",
+      "duplicate": "Mô hình này đã có hàng",
+      "invalid": "Nhập giá từ 0 đến 10.000",
+      "tooMany": "Tối đa 200 hàng"
+    }
   }
 }

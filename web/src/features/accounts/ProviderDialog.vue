@@ -3,7 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { errorMessage, fieldProblems } from '@/api/client'
-import type { Provider, ProviderPreset } from '@/api/types'
+import type { Notice, Provider, ProviderPreset, TierModels } from '@/api/types'
 import Button from '@/components/ui/Button.vue'
 import Dialog from '@/components/ui/Dialog.vue'
 import Select from '@/components/ui/Select.vue'
@@ -18,15 +18,17 @@ import {
   parseModels,
   providerChanges,
   providerInput,
-  tierModels,
 } from './providerForm'
+import TierEditor from './TierEditor.vue'
 
 /**
  * Adds a provider (from a preset, or blank) or edits one. The id and backend are fixed once the provider exists.
  * The models field edits the allow-list, a comma-separated list (empty: any model). A provider allowed by a
  * hand-written pattern shows that pattern in the hint, and a list typed over it replaces it. An empty field leaves
- * the pattern alone, so a toggle under the hint turns it into "any model" on save (models: []). The tier
- * models are shown read-only, since they are always allowed. Field errors from the daemon show next to their field.
+ * the pattern alone, so a toggle under the hint turns it into "any model" on save (models: []). The tier models
+ * (always allowed) are edited apart, in the tier editor; all empty means each task names its model. Field errors
+ * from the daemon show next to their field, and what the daemon changed on its own (a base URL shortened, the
+ * official preset) is said in the toast.
  */
 const props = defineProps<{ provider: Provider | null }>()
 const open = defineModel<boolean>('open', { required: true })
@@ -38,6 +40,7 @@ const toast = useToastStore()
 const preset = ref('')
 const form = ref<ProviderPreset>(blank())
 const models = ref('')
+const tiers = ref<TierModels>({ fast: '', standard: '', strong: '', max: '' })
 /** Set by "Allow any model": save clears the hand-written pattern while the field stays empty. */
 const allowAny = ref(false)
 const busy = ref(false)
@@ -66,7 +69,10 @@ const modelsHint = computed(() => {
   if (canClear.value && allowAny.value) return t('accounts.providers.anyOnSave')
   return t('accounts.providers.modelsPattern', { pattern: pattern.value })
 })
-const tiers = computed(() => (props.provider ? tierModels(props.provider) : []))
+/** Models to suggest for the tiers: the allow-list and the current tier models. */
+const suggestions = computed(() => [
+  ...new Set([...parseModels(models.value), ...Object.values(tiers.value)].filter(Boolean)),
+])
 
 const presetOptions = computed(() => [
   { value: '', label: t('accounts.providers.blank') },
@@ -88,6 +94,7 @@ const backendOptions = computed(() =>
 function fill(from: ProviderPreset) {
   form.value = { ...from, models: [...from.models] }
   models.value = from.models.join(', ')
+  tiers.value = { ...(from.tiers ?? { fast: '', standard: '', strong: '', max: '' }) }
 }
 
 watch(open, (value) => {
@@ -113,14 +120,20 @@ async function submit() {
   const list = parseModels(models.value)
   try {
     const { name } = form.value
+    let notices: Notice[] = []
     if (props.provider) {
-      const changes = providerChanges(props.provider, form.value, list, allowAny.value)
-      await providers.update(props.provider.id, changes)
+      const changes = providerChanges(props.provider, form.value, list, allowAny.value, tiers.value)
+      notices = (await providers.update(props.provider.id, changes)).notices ?? []
     } else {
-      await providers.create(providerInput(form.value, list, preset.value))
+      const input = providerInput(form.value, list, preset.value, tiers.value)
+      notices = (await providers.create(input)).notices ?? []
     }
     open.value = false
-    toast.show({ message: t('accounts.providers.saved', { name }), tone: 'success' })
+    const notes = [...new Set(notices.map((n) => t(`accounts.notice.${n.code}`)))]
+    toast.show({
+      message: [t('accounts.providers.saved', { name }), ...notes].join('. '),
+      tone: 'success',
+    })
   } catch (error) {
     const problems = fieldProblems(error)
     errors.value = Object.fromEntries(problems.map((p) => [p.field, p.message]))
@@ -190,9 +203,12 @@ async function submit() {
           </button>
         </template>
       </TextField>
-      <p v-if="tiers.length" class="pform__tiers">
-        {{ t('accounts.providers.tierModels', { models: tiers.join(', ') }) }}
-      </p>
+      <TierEditor
+        v-model="tiers"
+        :suggestions="suggestions"
+        :legend="t('accounts.providers.tiers')"
+      />
+      <p v-if="errors.tiers" class="pform__error">{{ errors.tiers }}</p>
       <Switch v-model="form.enabled" :label="t('accounts.providers.enabled')" />
       <p v-if="failure" class="pform__error" role="alert">{{ failure }}</p>
     </form>
@@ -218,11 +234,6 @@ async function submit() {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: var(--space-3);
-}
-
-.pform__tiers {
-  color: var(--text-secondary);
-  font-size: var(--fs-xs);
 }
 
 .pform__link {

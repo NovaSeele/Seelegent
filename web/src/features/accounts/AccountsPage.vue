@@ -18,14 +18,17 @@ import AccountList from './AccountList.vue'
 import { type AccountsView, useAccountsView } from './accountsView'
 import { BACKENDS, isExhausted, readyForWork, useActions } from './accountView'
 import AddAccountDialog from './AddAccountDialog.vue'
-import ProvidersPanel from './ProvidersPanel.vue'
+import { needsYou } from './needsYou'
+import NeedsYou from './NeedsYou.vue'
+import ServicesSection from './ServicesSection.vue'
 import type { AccountDialog } from './useAccountControls'
 
 /**
- * Accounts: a summary of what can take work now, then the accounts grouped by backend (status, quota, sign-in,
- * controls) as a compact list (default) or as cards, then the API providers the API-key accounts use. The view
- * choice is remembered per viewer (accountsView.ts). Everything stays live over SSE (account.updated,
- * account.login, providers.changed).
+ * Accounts: a summary of what can take work now (chips), "Needs you" (the accounts waiting for the user, each
+ * with the step that fixes it; left out when empty), then the accounts grouped by backend (status, quota or spend,
+ * sign-in, controls) as a compact list (default) or as cards, then the Services API keys send their requests to
+ * (collapsed: advanced). The view choice is remembered per viewer (accountsView.ts). Everything stays live over
+ * SSE (account.updated, account.login, providers.changed).
  */
 const { t } = useI18n()
 const accounts = useAccountsStore()
@@ -50,8 +53,7 @@ const groups = computed(() =>
   })).filter((group) => group.items.length > 0),
 )
 
-const needsYou = (a: Account) =>
-  a.enabled && ['needs_login', 'no_key', 'no_plan'].includes(a.status)
+const needs = computed(() => needsYou(accounts.accounts))
 
 const summary = computed(() => {
   const list = accounts.accounts
@@ -62,7 +64,7 @@ const summary = computed(() => {
       id: 'resting',
       value: list.filter((a) => a.enabled && (a.resting || isExhausted(a, now.value))).length,
     },
-    { id: 'needsYou', value: list.filter(needsYou).length },
+    { id: 'needsYou', value: needs.value.length },
   ]
 })
 
@@ -120,11 +122,18 @@ watch(() => accounts.accounts.filter((a) => a.signingIn).length, resumeLogins)
       />
       <template v-else>
         <dl class="accounts__summary">
-          <div v-for="item in summary" :key="item.id" class="tile">
-            <dt class="tile__label">{{ t(`accounts.summary.${item.id}`) }}</dt>
-            <dd class="tile__value">{{ item.value }}</dd>
+          <div
+            v-for="item in summary"
+            :key="item.id"
+            class="chip"
+            :class="{ 'chip--attention': item.id === 'needsYou' && item.value > 0 }"
+          >
+            <dt class="chip__label">{{ t(`accounts.summary.${item.id}`) }}</dt>
+            <dd class="chip__value">{{ item.value }}</dd>
           </div>
         </dl>
+
+        <NeedsYou v-if="needs.length" :needs="needs" @dialog="openDialog" />
 
         <AccountList v-if="view === 'list'" :groups="groups" :now="now" @dialog="openDialog" />
         <template v-else>
@@ -152,7 +161,7 @@ watch(() => accounts.accounts.filter((a) => a.signingIn).length, resumeLogins)
         </template>
       </template>
 
-      <ProvidersPanel />
+      <ServicesSection />
     </div>
 
     <AddAccountDialog v-model:open="adding" />
@@ -169,30 +178,36 @@ watch(() => accounts.accounts.filter((a) => a.signingIn).length, resumeLogins)
 }
 
 .accounts__summary {
-  display: grid;
-  margin: 0;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  display: flex;
+  flex-wrap: wrap;
   gap: var(--space-2);
+  margin: 0;
 }
 
-.tile {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  padding: var(--space-3) var(--space-4);
+.chip {
+  display: inline-flex;
+  flex-direction: row-reverse;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
   border: var(--border-width) solid var(--border-subtle);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-pill);
   background: var(--bg-surface);
 }
 
-.tile__label {
+.chip--attention {
+  border-color: var(--attention-border);
+  background: var(--attention-bg);
+}
+
+.chip__label {
   color: var(--text-secondary);
   font-size: var(--fs-xs);
 }
 
-.tile__value {
+.chip__value {
   margin: 0;
-  font-size: var(--fs-xl);
+  font-size: var(--fs-md);
   font-weight: var(--fw-semibold);
   font-variant-numeric: tabular-nums;
 }
@@ -224,17 +239,13 @@ watch(() => accounts.accounts.filter((a) => a.signingIn).length, resumeLogins)
 
 .accounts__grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
   gap: var(--space-3);
 }
 
 @media (width < 600px) {
   .accounts {
     padding: 0 var(--space-4) var(--space-6);
-  }
-
-  .accounts__summary {
-    grid-template-columns: repeat(2, 1fr);
   }
 }
 </style>

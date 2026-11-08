@@ -89,7 +89,7 @@ describe('ProviderDialog', () => {
 
   // Review S1: the dialog filled the models field with the tier model the daemon answered in `models`, so adding
   // a model and saving replaced the real allow-list (deepseek-v4 and deepseek-r2 lost access).
-  it('edits the allow-list only, and shows the tier models apart', async () => {
+  it('edits the allow-list only, and the tier models apart', async () => {
     const update = vi.fn((_id: string, changes: object) =>
       Promise.resolve(makeProvider({ id: 'deepseek', ...changes })),
     )
@@ -103,7 +103,7 @@ describe('ProviderDialog', () => {
     const wrapper = await mountDialog(deepseek, update)
     const models = field('Models') as HTMLInputElement
     expect(models.value).toBe('deepseek-v4, deepseek-r2')
-    expect(document.body.textContent).toContain('Always allowed (tier models): deepseek-chat')
+    expect((field('Fast') as HTMLInputElement).value).toBe('deepseek-chat')
 
     models.value = 'deepseek-v4, deepseek-r2, deepseek-v5'
     models.dispatchEvent(new Event('input'))
@@ -111,6 +111,25 @@ describe('ProviderDialog', () => {
     await flushPromises()
     expect(update).toHaveBeenCalledWith('deepseek', {
       models: ['deepseek-v4', 'deepseek-r2', 'deepseek-v5'],
+    })
+    wrapper.unmount()
+  })
+
+  // Design trap 4: no UI could set a provider's tier models, so tasks without a model failed.
+  it('saves the tier models the user sets, and only them', async () => {
+    const update = vi.fn((_id: string, changes: object) =>
+      Promise.resolve(makeProvider({ id: 'zai', ...changes })),
+    )
+    const wrapper = await mountDialog(makeProvider({ id: 'zai', name: 'Z.ai' }), update)
+    for (const tier of ['Fast', 'Standard', 'Strong', 'Max']) {
+      const input = field(tier) as HTMLInputElement
+      input.value = 'glm-5'
+      input.dispatchEvent(new Event('input'))
+    }
+    document.body.querySelector<HTMLFormElement>('#provider-form')?.requestSubmit()
+    await flushPromises()
+    expect(update).toHaveBeenCalledWith('zai', {
+      tiers: { fast: 'glm-5', standard: 'glm-5', strong: 'glm-5', max: 'glm-5' },
     })
     wrapper.unmount()
   })
