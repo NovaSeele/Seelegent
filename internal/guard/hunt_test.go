@@ -1,6 +1,7 @@
 package guard
 
 import (
+	"errors"
 	"strings"
 	"testing"
 )
@@ -100,33 +101,158 @@ func TestBranchRewrites(t *testing.T) {
 		"fetch --prune origin":      false,
 		"fetch origin main":         false,
 		"fetch origin main:feature": false,
-		"fetch origin +refs/heads/*:refs/remotes/origin/*":            false,
-		"fetch -f origin +refs/tags/*:refs/tags/*":                    false,
-		"fetch --multiple -f a b":                                     false,
-		"fetch -j 4 origin":                                           false,
-		"checkout -B main HEAD~3":                                     true,
-		"checkout -b new HEAD~3":                                      false,
-		"worktree add -f -B main ../x HEAD~3":                         true,
-		"worktree add -B main ../x":                                   true,
-		"worktree add -b new ../x HEAD~3":                             false,
-		"worktree add ../x":                                           false,
-		"worktree list":                                               false,
-		"-c gc.reflogExpire=now -c gc.reflogExpireUnreachable=now gc": true,
-		"-c gc.refs/stash.reflogExpire=now gc":                        true,
-		"config gc.reflogExpire now":                                  true,
-		"config gc.reflogExpire":                                      false,
-		"repack -a -d":                                                true,
-		"repack -ad":                                                  true,
-		"repack -A -d":                                                false,
-		"repack -a -d --cruft":                                        false,
-		"repack -d":                                                   false,
-		"repack":                                                      false,
+		"fetch origin +refs/heads/*:refs/remotes/origin/*": false,
+		"fetch -f origin +refs/tags/*:refs/tags/*":         false,
+		"fetch --multiple -f a b":                          false,
+		"fetch -j 4 origin":                                false,
+		// Review N1: every refspec that applies, in lower case, with wildcards and pruning.
+		"fetch ../old +refs/*:refs/*":                              true,
+		"fetch ../old --refmap=+refs/heads/*:refs/heads/* main":    true,
+		"fetch ../old --refmap +refs/heads/*:refs/heads/* main":    true,
+		"fetch ../old --refm=+refs/heads/*:refs/heads/* main":      true,
+		"remote add --mirror=fetch old ../old":                     true,
+		"remote add --mirror old ../old":                           true,
+		"remote add --mirr=fetch old ../old":                       true,
+		"config remote.old.fetch +refs/heads/*:refs/heads/*":       true,
+		"config --add remote.old.fetch +refs/heads/*:refs/heads/*": true,
+		"config set remote.old.fetch refs/x/*:refs/*":              true,
+		"config remote.old.mirror true":                            true,
+		"config fetch.prune true":                                  true,
+		"config remote.origin.prune true":                          true,
+		"-c remote.old.fetch=+refs/heads/*:refs/heads/* fetch old": true,
+		"-c remote.old.fetch=refs/heads/*:refs/heads/* fetch old":  true,
+		"-c fetch.prune=true fetch . refs/x:refs/heads/x":          true,
+		"--config-env=remote.old.fetch=X fetch old":                true,
+		"--config-env remote.old.fetch=X fetch old":                true,
+		"fetch . +c1c1c1c:refs/HEADS/main":                         true,
+		"fetch . c1c1c1c:refs/HEADS/main":                          true,
+		"fetch . +c1c1c1c:refs/x/heads/main":                       true,
+		"fetch . c1c1c1c:refs/x/heads/main":                        true,
+		"fetch . +refs/x/*:refs/*":                                 true,
+		"fetch . refs/x/*:refs/*":                                  true,
+		"fetch --prune . refs/nothing/*:refs/heads/*":              true,
+		"fetch --prune . refs/nothing/x:refs/heads/x":              true,
+		"fetch -p . refs/nothing/x:x":                              true,
+		"fetch --prune-tags . refs/nothing/x:refs/heads/x":         true,
+		"fetch --stdin origin":                                     true,
+		"fetch --tags":                                             false,
+		"fetch --tags origin":                                      false,
+		"fetch origin main:main":                                   false,
+		"fetch origin refs/heads/main:refs/heads/main":             false,
+		"fetch origin tag v1":                                      false,
+		"fetch origin ^refs/heads/x":                               false,
+		"fetch --prune origin +refs/heads/*:refs/remotes/origin/*": false,
+		"fetch origin +refs/heads/main:FETCH_HEAD":                 false,
+		"fetch --refmap= origin main":                              false,
+		"remote add origin https://example.com/r.git":              false,
+		"remote -v":             false,
+		"remote prune origin":   false,
+		"remote update --prune": false,
+		"config remote.origin.fetch +refs/heads/*:refs/remotes/origin/*":   false,
+		"config remote.origin.fetch ^refs/heads/wip":                       false,
+		"config --unset remote.old.fetch":                                  false,
+		"config remote.old.mirror false":                                   false,
+		"config fetch.prune false":                                         false,
+		"-c remote.origin.fetch=+refs/heads/*:refs/remotes/origin/* fetch": false,
+		"-c fetch.prune=false fetch":                                       false,
+		"checkout -B main HEAD~3":                                          true,
+		"checkout -b new HEAD~3":                                           false,
+		"worktree add -f -B main ../x HEAD~3":                              true,
+		"worktree add -B main ../x":                                        true,
+		"worktree add -b new ../x HEAD~3":                                  false,
+		"worktree add ../x":                                                false,
+		"worktree list":                                                    false,
+		"-c gc.reflogExpire=now -c gc.reflogExpireUnreachable=now gc":      true,
+		"-c gc.refs/stash.reflogExpire=now gc":                             true,
+		"config gc.reflogExpire now":                                       true,
+		"config gc.reflogExpire":                                           false,
+		"repack -a -d":                                                     true,
+		"repack -ad":                                                       true,
+		"repack -A -d":                                                     false,
+		"repack -a -d --cruft":                                             false,
+		"repack -d":                                                        false,
+		"repack":                                                           false,
 	} {
 		if got := c.Git(strings.Fields(args)); got.Deny != want {
 			t.Errorf("git %s deny = %v, want %v", args, got.Deny, want)
 		}
 	}
-	expect(t, c, map[string]bool{"git send-pack . :refs/heads/x": true, "git fetch origin": false}, POSIX)
+	expect(t, c, map[string]bool{
+		"git send-pack . :refs/heads/x":                                              true,
+		"git fetch origin":                                                           false,
+		`git fetch ../old "+refs/*:refs/*"`:                                          true,
+		`git fetch ../old --refmap="+refs/heads/*:refs/heads/*" main`:                true,
+		`git remote add --mirror=fetch old ../old && git fetch old`:                  true,
+		`git config remote.old.fetch "+refs/heads/*:refs/heads/*"`:                   true,
+		`git -c remote.old.fetch="+refs/heads/*:refs/heads/*" fetch old`:             true,
+		`git fetch . "+c1c1c1c:refs/HEADS/main"`:                                     true,
+		`git fetch . "+c1c1c1c:refs/x/heads/main" && git fetch . "+refs/x/*:refs/*"`: true,
+		`git fetch --prune . "refs/nothing/*:refs/heads/*"`:                          true,
+		`git fetch --prune origin "+refs/heads/*:refs/remotes/origin/*"`:             false,
+	}, POSIX)
+}
+
+// TestFetchConfig (review N1): a fetch is checked with the refspecs and prune settings of the configuration of the
+// remotes it reads, unless --refmap replaces them; a configuration that cannot be read refuses it.
+func TestFetchConfig(t *testing.T) {
+	normal := []ConfigEntry{
+		{"remote.origin.fetch", "+refs/heads/*:refs/remotes/origin/*"},
+		{"remote.origin.prune", "true"},
+		{"fetch.prune", "true"},
+	}
+	mirror := append([]ConfigEntry{{"remote.old.fetch", "+refs/heads/*:refs/heads/*"}}, normal...)
+	stale := []ConfigEntry{
+		{"remote.origin.fetch", "+refs/heads/*:refs/remotes/origin/*"},
+		{"remote.Old.fetch", "refs/nothing/x:refs/heads/x"},
+		{"remote.Old.prune", "true"},
+	}
+	var gotGlobals []string
+	with := func(cfg []ConfigEntry, err error) Checker {
+		return Checker{Config: func(globals []string) ([]ConfigEntry, error) {
+			gotGlobals = globals
+			return cfg, err
+		}}
+	}
+	cases := []struct {
+		name string
+		c    Checker
+		args string
+		deny bool
+	}{
+		{"plain fetch, normal config", with(normal, nil), "fetch", false},
+		{"fetch origin, normal config", with(normal, nil), "fetch origin", false},
+		{"fetch --tags, normal config", with(normal, nil), "fetch --tags", false},
+		{"fetch --prune origin, normal config", with(normal, nil), "fetch --prune origin", false},
+		{"fetch --all, normal config", with(normal, nil), "fetch --all", false},
+		{"fetch origin main, normal config", with(normal, nil), "fetch origin main", false},
+		{"remote update, normal config", with(normal, nil), "remote update", false},
+		{"remote prune origin, normal config", with(normal, nil), "remote prune origin", false},
+		{"fetch old, mirror refspec", with(mirror, nil), "fetch old", true},
+		{"fetch old main, mirror refspec as refmap", with(mirror, nil), "fetch old main", true},
+		{"fetch old, --refmap replaces it", with(mirror, nil), "fetch --refmap= old main", false},
+		{"fetch origin, other remote mirrors", with(mirror, nil), "fetch origin", false},
+		{"plain fetch, some remote mirrors", with(mirror, nil), "fetch", true},
+		{"fetch --all, some remote mirrors", with(mirror, nil), "fetch --all", true},
+		{"fetch group, unknown name", with(mirror, nil), "fetch grp", true},
+		{"fetch URL, mirror elsewhere", with(mirror, nil), "fetch ../old main", false},
+		{"remote update, mirror", with(mirror, nil), "remote update", true},
+		{"fetch old, configured prune of a branch", with(stale, nil), "fetch old", true},
+		{"fetch old --no-prune", with(stale, nil), "fetch --no-prune old", false},
+		{"remote prune old", with(stale, nil), "remote prune old", true},
+		{"fetch origin, stale elsewhere", with(stale, nil), "fetch origin", false},
+		{"config cannot be read", with(nil, errors.New("exit status 128")), "fetch origin", true},
+		{"no reader", Checker{}, "fetch old", false},
+	}
+	for _, tc := range cases {
+		if got := tc.c.Git(strings.Fields(tc.args)); got.Deny != tc.deny {
+			t.Errorf("%s: git %s deny = %v, want %v", tc.name, tc.args, got.Deny, tc.deny)
+		}
+	}
+	with(normal, nil).Git([]string{"-C", "../x", "--git-dir=../x/.git", "fetch"})
+	if strings.Join(gotGlobals, " ") != "-C ../x --git-dir=../x/.git" {
+		t.Errorf("config read with globals %q, want -C ../x --git-dir=../x/.git", gotGlobals)
+	}
+	expect(t, with(mirror, nil), map[string]bool{"git fetch": true, "cd x && git fetch origin": false}, POSIX)
 }
 
 // TestProgramOptions (H4): git options, settings, URLs and variables that make git run a command of the caller's

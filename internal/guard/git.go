@@ -40,6 +40,7 @@ func (c Checker) git(args []word, depth int) Result {
 		return denyUnreadable()
 	}
 	i := 0
+	var globals []string // -C, --git-dir and --work-tree, for reading the configuration of the same repository
 	for i < len(args) {
 		a := args[i]
 		t := a.text
@@ -56,13 +57,14 @@ func (c Checker) git(args []word, depth int) Result {
 			if i+1 >= len(args) {
 				return allow
 			}
-			if args[i+1].dynamic || riskyConfig(args[i+1].text) {
+			v := args[i+1].text
+			if args[i+1].dynamic || t == "-c" && riskyConfig(v) || t == "--config-env" && riskyEnvConfig(v) {
 				return denyGit(args)
 			}
 			i += 2
 			continue
 		case strings.HasPrefix(t, "--config-env="):
-			if riskyConfigKey(configKey(strings.TrimPrefix(t, "--config-env="))) {
+			if riskyEnvConfig(strings.TrimPrefix(t, "--config-env=")) {
 				return denyGit(args)
 			}
 		case strings.HasPrefix(t, "-c") && len(t) > 2:
@@ -72,6 +74,14 @@ func (c Checker) git(args []word, depth int) Result {
 		case strings.HasPrefix(t, "--exec-path="):
 			// git runs its external commands and dashed helpers from this folder (H4).
 			return denyGit(args)
+		case setHas(t, "-C", "--git-dir", "--work-tree"):
+			if i+1 < len(args) {
+				globals = append(globals, t, args[i+1].text)
+			}
+			i += 2
+			continue
+		case strings.HasPrefix(t, "--git-dir=") || strings.HasPrefix(t, "--work-tree="):
+			globals = append(globals, t)
 		case globalValued[t]:
 			i += 2
 			continue
@@ -175,18 +185,37 @@ func (c Checker) git(args []word, depth int) Result {
 			return deny()
 		}
 	case "fetch":
-		// --update-head-ok lets fetch move the checked-out branch under the working tree; a forced refspec (+src:dst,
-		// or any refspec with --force) that writes a branch moves it anywhere, back in history included (H3).
-		p := scan(rest, opts{short: "jo", long: set("--depth", "--deepen", "--shallow-since", "--shallow-exclude",
-			"--jobs", "--upload-pack", "--server-option", "--refmap", "--negotiation-tip", "--filter",
-			"--recurse-submodules-default", "--submodule-prefix"), danger: []string{"--update-head-ok", "--force"}})
-		if p.unknown || p.has("-u", "--update-head-ok") {
+		// A fetch writes and deletes refs as its refspecs say: a forced or pruning one into a branch moves it back
+		// or deletes it (H3, review N1).
+		f, ok := fetchCommand(rest)
+		if !ok || c.fetchUnsafe(globals, f) {
 			return deny()
 		}
-		force := p.has("-f", "--force")
-		for i, r := range p.pos {
-			if i > 0 && forcedBranchWrite(r.text, force) {
-				return deny()
+	case "remote":
+		// remote add --mirror=fetch configures +refs/*:refs/*, which the next plain git fetch forces into every
+		// branch; remote prune and remote update fetch and prune with the configured refspecs (review N1).
+		p := scan(rest, opts{short: "tm", danger: []string{"--mirror", "--prune"}})
+		if p.unknown {
+			return deny()
+		}
+		if len(p.pos) > 0 {
+			var names []string
+			for _, w := range p.pos[1:] {
+				names = append(names, w.text)
+			}
+			switch p.pos[0].text {
+			case "add":
+				if p.has("--mirror") {
+					return deny()
+				}
+			case "prune":
+				if c.fetchUnsafe(globals, fetchPlan{remotes: names, prune: true}) {
+					return deny()
+				}
+			case "update":
+				if c.fetchUnsafe(globals, fetchPlan{remotes: names, prune: p.has("-p", "--prune")}) {
+					return deny()
+				}
 			}
 		}
 	case "grep":
@@ -382,22 +411,6 @@ func replayPrintsOnly(args []word) bool {
 	return prints
 }
 
-// forcedBranchWrite reports whether a fetch refspec forcibly writes a branch: +src:dst (or src:dst under --force)
-// whose dst is under refs/heads/ or a short name, which git resolves to a branch (+old:main moves main).
-func forcedBranchWrite(spec string, force bool) bool {
-	if strings.HasPrefix(spec, "+") {
-		force, spec = true, spec[1:]
-	}
-	if !force || strings.HasPrefix(spec, "^") {
-		return false
-	}
-	_, dst, ok := strings.Cut(spec, ":")
-	if !ok || dst == "" {
-		return false
-	}
-	return !strings.HasPrefix(dst, "refs/") || strings.HasPrefix(dst, "refs/heads/")
-}
-
 // alias resolves a git alias and checks what it runs.
 func (c Checker) alias(name string, rest []word, depth int) Result {
 	value, ok := c.Alias(name)
@@ -450,6 +463,11 @@ func (c Checker) config(args, rest []word) Result {
 	if riskyConfigKey(strings.ToLower(pos[0].text)) {
 		return denyGit(args)
 	}
+	// remote.<name>.fetch "+refs/heads/*:refs/heads/*", remote.<name>.mirror or fetch.prune true: a later plain git
+	// fetch forces or prunes into the branches (review N1). The key alone (--unset, remove-section) is safe.
+	if refConfigKey(pos[0].text) && len(pos) > 1 && (pos[1].dynamic || refConfigRisky(pos[0].text, pos[1].text)) {
+		return denyGit(args)
+	}
 	for _, w := range pos {
 		if strings.Contains(strings.ToLower(w.text), "ext::") {
 			return denyGit(args) // url.ext::sh -c ....insteadOf origin
@@ -464,8 +482,27 @@ var configWrites = []string{"--add", "--unset", "--unset-all", "--replace-all", 
 
 // riskyConfig reports a "key=value" setting that runs a program: a risky key, or a value that is an ext:: URL (a
 // url.<base>.insteadOf that rewrites a remote into one).
+// A remote's fetch refspec, mirror or prune setting is risky with a value that lets a later git fetch move or delete
+// a branch (refConfigRisky; a key given without a value is true).
 func riskyConfig(kv string) bool {
-	return riskyConfigKey(configKey(kv)) || strings.Contains(strings.ToLower(kv), "ext::")
+	k := configKey(kv)
+	if refConfigKey(k) {
+		v := "true"
+		if _, value, ok := strings.Cut(kv, "="); ok {
+			v = value
+		}
+		if refConfigRisky(k, v) {
+			return true
+		}
+	}
+	return riskyConfigKey(k) || strings.Contains(strings.ToLower(kv), "ext::")
+}
+
+// riskyEnvConfig reports a --config-env "key=VARIABLE" whose value the guard cannot see: a risky key, or one of the
+// fetch settings riskyConfig checks by value.
+func riskyEnvConfig(kv string) bool {
+	k := configKey(kv)
+	return riskyConfigKey(k) || refConfigKey(k)
 }
 
 // configKey returns the lower-case key of a "key=value" pair.

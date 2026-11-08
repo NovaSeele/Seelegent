@@ -79,6 +79,10 @@ type Checker struct {
 	// Alias returns the value of git alias name (alias.<name>), and whether it exists. nil: aliases are not
 	// resolved, and an unknown git subcommand is allowed.
 	Alias func(name string) (value string, ok bool)
+	// Config returns the configuration settings matching FetchConfigPattern (the remotes' fetch refspecs and prune
+	// settings) of the repository a git command with the global options globals (-C, --git-dir, --work-tree) works
+	// in; an error refuses the fetch. nil: no configuration is read, and only the command's own refspecs are checked.
+	Config func(globals []string) ([]ConfigEntry, error)
 	// HeredocAsCommands keeps the lines of a POSIX here-document in the PowerShell and cmd readings of a line read in
 	// every dialect, where they are commands. Set for agy on Windows: its run_command runs PowerShell, where
 	// cat <<'EOF' starts no here-document and the next lines run. Unset, those lines are read as POSIX only.

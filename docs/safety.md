@@ -34,8 +34,17 @@ script that edits a file mentioning `git stash`, is data. Long options count by 
 - `stash` except `list` and `show`; `clean` without `-n`; `checkout` except `checkout -b <new> [<start>]` (`-B`
   resets an existing branch); `commit -a|--all|--amend`; `branch` and `tag` deletes, moves and forced writes;
   `apply` unless it only checks; `reflog expire|delete|drop` (the stash is a reflog); `worktree remove|prune|move`
-  and `worktree add -B`; `replay` unless `--ref-action=print`; `fetch --update-head-ok` and a forced refspec
-  (`+src:dst`, or any with `--force`) whose destination is a branch (`refs/heads/...` or a short name);
+  and `worktree add -B`; `replay` unless `--ref-action=print`; `fetch --update-head-ok` and `--stdin`, and a fetch
+  with a refspec that can move a branch back or delete one. Every refspec that applies is checked: the command
+  line's, the `--refmap` values, or else the `remote.<name>.fetch` refspecs of the remotes it reads (read with
+  `git config --get-regexp` in the command's folder, with its `-C`/`--git-dir`/`--work-tree`; a configuration that
+  cannot be read refuses the fetch). A destination (compared in lower case, as on a disk that ignores case) that is
+  empty, `FETCH_HEAD` or under `refs/remotes/` or `refs/tags/` passes; any other is refused when it has a
+  wildcard, when the refspec is forced (`+` or `--force`), when the fetch prunes (`--prune`, `-p`, `--prune-tags`,
+  or `fetch.prune`/`remote.<name>.prune` set), or when it is under `refs/` outside `refs/heads/` (git updates such
+  refs whatever their history). `remote add --mirror`, and `remote prune` and `remote update` by the same rule;
+  writes (also `-c` and `--config-env`) of `remote.<name>.fetch` outside `refs/remotes/`, and of
+  `remote.<name>.mirror`, `remote.<name>.prune[Tags]` and `fetch.prune[Tags]` other than false;
   `repack -a -d` without `-A` or `--cruft` (it drops unreachable objects); `submodule deinit|update|absorbgitdirs`;
   `config` writes of keys that run programs or redirect git (aliases, includes, `core.hooksPath`, `core.editor`,
   filters and drivers, ...) and of `gc.pruneExpire`, `gc[.<pattern>].reflogExpire[Unreachable]` and
