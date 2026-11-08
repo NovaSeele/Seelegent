@@ -196,8 +196,11 @@ function onKeydown(event: KeyboardEvent) {
 
 .split__sidebar-foot {
   display: flex;
+  flex: none;
+  align-items: center;
   justify-content: flex-end;
-  padding: var(--space-1) var(--space-2);
+  min-height: var(--pane-foot-h);
+  padding: 0 var(--space-2);
   border-top: var(--border-width) solid var(--border-subtle);
 }
 

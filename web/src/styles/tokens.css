@@ -97,6 +97,10 @@
   --icon-md: 16px;
   --icon-lg: 20px;
   --border-width: 1px;
+  /* Pane footers (the list's foot, the task's composer bar): one control, 8px above and below, a top border. The
+     left and right feet share this height so their top borders line up. */
+  --pane-foot-control: max(var(--control-sm), var(--target-min));
+  --pane-foot-h: calc(var(--pane-foot-control) + 2 * var(--space-2) + var(--border-width));
   --focus-ring-width: 2px;
   --focus-ring: 0 0 0 var(--focus-ring-width) var(--border-focus);
 
