@@ -13,6 +13,7 @@ import (
 
 	"github.com/NovaSeele/Seelegent/internal/api"
 	"github.com/NovaSeele/Seelegent/internal/backend"
+	"github.com/NovaSeele/Seelegent/internal/brief"
 	"github.com/NovaSeele/Seelegent/internal/config"
 	"github.com/NovaSeele/Seelegent/internal/fsutil"
 	"github.com/NovaSeele/Seelegent/internal/gate"
@@ -160,7 +161,7 @@ func TestLaneNetChange(t *testing.T) {
 				t.Fatalf("first lane = %+v", first)
 			}
 			msg := tk.Turns[1].Message
-			for _, want := range []string{gate.NoDeleteLine, gate.NoLookingLine, "your lane is src/x/",
+			for _, want := range []string{gate.NoDeleteLine, brief.DataRule("", tk.Cwd, ""), "your lane is src/x/",
 				"outside it: " + first.Files[0], "does not contain"} {
 				if !strings.Contains(msg, want) {
 					t.Errorf("fix prompt misses %q:\n%s", want, msg)

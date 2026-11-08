@@ -285,7 +285,11 @@ func (s *Service) gatePhase(r *run, t *Task) (bool, error) {
 	// ending and BOM findings are left out of the prompt and stay red.
 	fix := withoutFindings(res, stuck)
 	if p.AutoFixes < p.Budget && gate.Fixable(fix) != nil {
-		msg := gate.FixPrompt(fix, lane, p.AutoFixes+1, p.Budget, others)
+		where := gate.Folders{Data: s.o.DataDir, Cwd: t.Cwd}
+		if t.Spec != nil && t.SpecOutside {
+			where.Spec = t.Spec.Dir
+		}
+		msg := gate.FixPrompt(fix, lane, p.AutoFixes+1, p.Budget, others, where)
 		return s.fixTurn(t.ID, ph.Turn, res, barChanged, msg, ByGate)
 	}
 	if p.AutoFixes < p.Budget && len(stuck) > 0 && gate.Fixable(res) != nil {

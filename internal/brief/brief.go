@@ -12,7 +12,7 @@ import (
 )
 
 // rulesHead and rulesTail are the fixed part of every worker brief (old WORKER_BRIEF), around the data-folder
-// rule (dataRule), which depends on the task's folder.
+// rule (DataRule), which depends on the task's folders.
 const rulesHead = `You are a worker engineer on a team led by a lead engineer (the lead). The lead designs, reviews and tests; you implement.
 Rules:
 - Do exactly the task below. Stay inside its scope; do not refactor or "improve" unrelated code.
@@ -167,7 +167,14 @@ type Turn struct {
 // request. A turn after earlier ones (or after an interrupted attempt) carries the handoff section, so a worker on
 // another account never loses the task (old bug B7).
 func Worker(in Input) string {
-	head := rulesHead + dataRule(in.Cwd, in.DataDir) + rulesTail
+	head := rulesHead + rulesTail
+	specDir := ""
+	if in.Spec != nil && in.Spec.Outside {
+		specDir = in.Spec.Dir
+	}
+	if rule := DataRule(in.DataDir, in.Cwd, specDir); rule != "" {
+		head = rulesHead + "- " + rule + "\n" + rulesTail
+	}
 	if in.Lead != "" {
 		head += "\nThe lead for this task is " + in.Lead + "."
 	}
@@ -368,20 +375,21 @@ func Preview(prompt string) string {
 	return cut(strings.TrimLeft(prompt, "\n"), PreviewChars, "")
 }
 
-// dataRule is the rule line about Seelegent's data folder (dataDir; "~/.seelegent" when not known): explore
-// neither it nor the daemon's processes, but read the paths the brief names inside it (a Spec Kit workspace lives
-// at <data>/specs/<repo>-spec/). A task whose folder lies inside the data folder (a speckit-specify run in a spec
-// workspace) gets no such line: it works there.
-func dataRule(cwd, dataDir string) string {
+// DataRule is the rule about Seelegent's data folder (dataDir; named ~/.seelegent when "") that the worker brief
+// and the gate's fix prompts carry: explore neither it nor the daemon's processes, read only the paths the brief
+// names inside it. It is "" when the task's folder (cwd) or its spec folder outside the repository (specDir, an
+// absolute path; "" for none) lies inside the data folder: a Spec Kit workspace is <data>/specs/<repo>-spec/, and
+// the task works there.
+func DataRule(dataDir, cwd, specDir string) string {
 	shown := "~/.seelegent"
 	if dataDir != "" {
-		if within(cwd, dataDir) {
+		if within(cwd, dataDir) || within(specDir, dataDir) {
 			return ""
 		}
 		shown = dataDir
 	}
-	return "- Do not explore Seelegent's data folder (" + shown + ") or its processes; inside it, read only the " +
-		"paths this brief names (such as the spec folder and its skills).\n"
+	return "Do not explore " + shown + " or Seelegent's processes; inside it, read only the paths this brief names, " +
+		"such as the spec folder."
 }
 
 // within reports whether p lies in dir or is dir, compared through fsutil.Key.

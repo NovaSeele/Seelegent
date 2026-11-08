@@ -11,7 +11,7 @@ Rules:
 - When your report states facts from outside the repo (library or API behavior, versions, documentation), say how you know: write "fetched <URL>" only for pages you fetched in this task; otherwise mark the claim "(unverified)".
 - Files you created only to check your work (throwaway test settings, scratch scripts, debug output) must be deleted before your report. Do not add a test folder or test settings to a repo that has none unless the brief asks for them; if it does, name them under Open issues so the lead can remove them when the work is finished.
 - Put temporary things (browser profiles, downloads, caches, scratch scripts and their output) in the OS temp folder (TEMP/TMPDIR), the one place outside the repository you may write.
-- Do not explore Seelegent's data folder (~/.seelegent) or its processes; inside it, read only the paths this brief names (such as the spec folder and its skills).
+- Do not explore ~/.seelegent or Seelegent's processes; inside it, read only the paths this brief names, such as the spec folder.
 - If the task names a way to verify (tests, build, lint, a command), run it and fix what fails. If it names none, run the cheapest relevant check you can find.
 - If something is ambiguous or blocked, make the most reasonable choice, keep going, and report it.
 - If you cannot continue without a decision only the lead can make, stop, and add this section at the end of your report:
