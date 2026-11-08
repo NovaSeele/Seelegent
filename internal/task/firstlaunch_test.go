@@ -70,6 +70,26 @@ func TestWorkerRan(t *testing.T) {
 	if !workerRan(tu, nil) {
 		t.Fatal("the ready record does not count")
 	}
+	// The ready record comes after the worker started: a worker that crashed at once shows in its exit record's
+	// start time or on its stream (review G4). A start that failed shows in neither.
+	for name, write := range map[string]func(f launch.Files) error{
+		"exit with a start": func(f launch.Files) error {
+			return os.WriteFile(f.Exit, []byte(`{"reason":"exited","code":1,"startedAt":"2026-11-09T00:00:00Z"}`), 0o600)
+		},
+		"stream output": func(f launch.Files) error { return os.WriteFile(f.Stream, []byte("{}\n"), 0o600) },
+	} {
+		f := launch.FilesIn(t.TempDir())
+		failed := os.WriteFile(f.Exit, []byte(`{"reason":"start_failed","code":-1}`), 0o600)
+		if failed != nil || workerRan(&Turn{N: 1, Attempts: []*Attempt{{N: 1, LaunchDir: f.Dir}}}, nil) {
+			t.Fatalf("%s: a failed start counts (%v)", name, failed)
+		}
+		if err := write(f); err != nil {
+			t.Fatal(err)
+		}
+		if !workerRan(&Turn{N: 1, Attempts: []*Attempt{{N: 1, LaunchDir: f.Dir}}}, nil) {
+			t.Errorf("%s does not count", name)
+		}
+	}
 }
 
 // A task with a lane waits for an account while someone else changes a committed file and adds one, both outside

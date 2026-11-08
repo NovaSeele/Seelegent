@@ -2,6 +2,7 @@ package task
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"maps"
@@ -317,9 +318,11 @@ func (s *Service) preCheck(ctx context.Context, id string, turn int, status stri
 	return c
 }
 
-// workerRan reports whether a worker process ran in turn tu: one of its attempts got as far as starting the worker
-// (the launcher's ready record in its launch folder), or reported a conversation, an edit or a command. last is the
-// outcome of the attempt that just ended (not stored yet), or nil.
+// workerRan reports whether a worker process ran in turn tu: one of its attempts got as far as starting the worker,
+// or reported a conversation, an edit or a command. last is the outcome of the attempt that just ended (not stored
+// yet), or nil. The launcher writes its ready record only after the worker was started (on Windows, resumed), so a
+// worker that crashed at once can leave none: its exit record's start time or any line on its stream counts too
+// (field report 4, review G4).
 func workerRan(tu *Turn, last *backend.Outcome) bool {
 	ran := func(o *backend.Outcome) bool {
 		return o != nil && (o.ConversationID != "" || len(o.FilesEdited) > 0 || len(o.Commands) > 0)
@@ -331,13 +334,27 @@ func workerRan(tu *Turn, last *backend.Outcome) bool {
 		if ran(a.Outcome) {
 			return true
 		}
-		if a.LaunchDir != "" {
-			if _, err := os.Stat(launch.FilesIn(a.LaunchDir).Ready); err == nil {
-				return true
-			}
+		if a.LaunchDir != "" && launchRan(launch.FilesIn(a.LaunchDir)) {
+			return true
 		}
 	}
 	return false
+}
+
+// launchRan reports whether the launch in f started its worker: a ready record, an exit record with a start time,
+// or output on the worker's stream.
+func launchRan(f launch.Files) bool {
+	if _, err := os.Stat(f.Ready); err == nil {
+		return true
+	}
+	if b, err := os.ReadFile(f.Exit); err == nil {
+		var ex launch.Exit
+		if json.Unmarshal(b, &ex) == nil && !ex.StartedAt.IsZero() {
+			return true
+		}
+	}
+	st, err := os.Stat(f.Stream)
+	return err == nil && st.Size() > 0
 }
 
 // lateCheck runs the post-turn checks of a turn that ended without them (a cancel, a failure) and saves them.
