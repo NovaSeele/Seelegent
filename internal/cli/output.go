@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	"github.com/NovaSeele/Seelegent/internal/api"
 	"github.com/NovaSeele/Seelegent/internal/client"
@@ -141,6 +142,33 @@ func fileArg(s, base string) (string, error) {
 		return "", fmt.Errorf("read %s: %w", s, err)
 	}
 	return string(data), nil
+}
+
+// argOrFlag is a text given either as the command's arguments or with the old flag --name (the Node version's
+// form, kept hidden), never both; @path reads the file as fileArg does.
+func argOrFlag(args []string, flag, name, base string) (string, error) {
+	if err := onlyOne(args, flag, name); err != nil {
+		return "", err
+	}
+	if flag != "" {
+		return fileArg(flag, base)
+	}
+	return fileArg(strings.Join(args, " "), base)
+}
+
+// onlyOne is the usage error of a text given both as arguments and with the old flag --name.
+func onlyOne(args []string, flag, name string) error {
+	if flag != "" && len(args) > 0 {
+		return usagef("give the %s once: as the argument or with --%s", name, name)
+	}
+	return nil
+}
+
+// hiddenFlag hides an old flag the command still takes (the Node version's syntax) from the help.
+func hiddenFlag(fs *pflag.FlagSet, names ...string) {
+	for _, n := range names {
+		_ = fs.MarkHidden(n)
+	}
 }
 
 // absDir resolves a --cwd value against the process's folder ("" stays "").

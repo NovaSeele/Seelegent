@@ -72,14 +72,20 @@ const meetingUsage = "seelegent meeting open|list|status|wait|post|decide|act|ca
 
 func newMeetingCommand(d deps) *cobra.Command {
 	var (
-		cwdFlag, title, sealed string
-		options, readFirst     []string
-		attendees              []string
-		rounds, openWait       int
-		estimate               bool
+		cwdFlag, title, sealed, question string
+		options, readFirst               []string
+		attendees                        []string
+		rounds, openWait                 int
+		estimate                         bool
 	)
+	openUsage := "seelegent meeting open --attendee <id>[:rank] ... [--option text] ... <question|@file>"
 	open := leaf(d, "open --attendee M ... <question|@file>", "Open a meeting of department members", "meeting",
-		"open", minArgs("seelegent meeting open --attendee <id>[:rank] ... [--option text] ... <question|@file>"),
+		"open", func(_ *cobra.Command, args []string) error {
+			if len(args) == 0 && question == "" {
+				return usagef("usage: %s", openUsage)
+			}
+			return onlyOne(args, question, "question")
+		},
 		func(cmd *cobra.Command, c *client.Client, args []string) error {
 			cwd, err := absDir(cwdFlag)
 			if err != nil {
@@ -90,12 +96,16 @@ func newMeetingCommand(d deps) *cobra.Command {
 					return err
 				}
 			}
-			q, err := fileArg(strings.Join(args, " "), cwd)
+			q, err := argOrFlag(args, question, "question", cwd)
+			if err != nil {
+				return err
+			}
+			seal, err := fileArg(sealed, cwd)
 			if err != nil {
 				return err
 			}
 			req := api.MeetingRequest{Question: q, Title: title, Options: options, Context: splitList(readFirst),
-				Cwd: cwd, Sealed: sealed, MaxRounds: rounds}
+				Cwd: cwd, Sealed: seal, MaxRounds: rounds}
 			for _, a := range splitList(attendees) {
 				id, rank, _ := strings.Cut(a, ":")
 				req.Attendees = append(req.Attendees, api.AttendeeRef{Member: id, Rank: rank})
@@ -126,10 +136,14 @@ func newMeetingCommand(d deps) *cobra.Command {
 	fs.StringArrayVar(&options, "option", nil, "a candidate answer (repeat, 2-6; labeled A, B, ...)")
 	fs.StringSliceVar(&readFirst, "context", nil, "repository files attendees read first")
 	fs.StringSliceVar(&attendees, "attendee", nil, "member id, or id:rank (repeat or comma separated)")
-	fs.StringVar(&sealed, "sealed", "", "your own position, sealed and shown anonymously in round 2")
+	fs.StringVar(&sealed, "sealed", "", "your own position (or @file), sealed and shown anonymously in round 2")
 	fs.IntVar(&rounds, "rounds", 0, "1-5 rounds (default 3)")
 	fs.IntVar(&openWait, "wait", 0, "seconds to wait until the meeting needs you")
 	fs.BoolVar(&estimate, "estimate", false, "only print how many runs it takes")
+	// The Node version's spelling: --question instead of the argument, --seal for --sealed.
+	fs.StringVar(&question, "question", "", "the question (or @file), instead of the argument")
+	fs.StringVar(&sealed, "seal", "", "same as --sealed")
+	hiddenFlag(fs, "question", "seal")
 
 	list := leaf(d, "list", "The meetings, newest first", "meeting", "list", noArgs,
 		func(cmd *cobra.Command, c *client.Client, _ []string) error {
@@ -214,19 +228,38 @@ func newMeetingCommand(d deps) *cobra.Command {
 	decide.Flags().StringVar(&rationale, "rationale", "", "why")
 	decide.Flags().StringVar(&option, "option", "", "the option key you chose (A-F)")
 	var actMember, actBackend, actModel, actCwd string
+	var actItems []string
+	actUsage := "seelegent meeting act <id> [--member id] [--backend b] [--model m] [--cwd dir] <brief|@file>"
 	act := leaf(d, "act <id> [--member M] <task brief|@file>", "Delegate a task from the decision", "meeting", "act",
-		minArgs("seelegent meeting act <id> [--member id] [--backend b] [--model m] [--cwd dir] <brief|@file>"),
+		func(_ *cobra.Command, args []string) error {
+			switch {
+			case len(args) == 0, len(args) == 1 && len(actItems) == 0:
+				return usagef("usage: %s", actUsage)
+			case len(args) > 1 && len(actItems) > 0:
+				return usagef("give the brief once: as the argument or with --item")
+			}
+			return nil
+		},
 		func(cmd *cobra.Command, c *client.Client, args []string) error {
-			text, err := fileArg(strings.Join(args[1:], " "), "")
-			if err != nil {
-				return err
+			// The old form gives one or more briefs with --item, each a task with the same options.
+			briefs := actItems
+			if len(briefs) == 0 {
+				briefs = []string{strings.Join(args[1:], " ")}
 			}
 			cwd, err := absDir(actCwd)
 			if err != nil {
 				return err
 			}
-			res, err := c.ActMeeting(cmd.Context(), args[0], api.MeetingActRequest{Items: []api.ActItem{{Text: text,
-				Member: actMember, Backend: actBackend, Model: actModel, Cwd: cwd}}})
+			var req api.MeetingActRequest
+			for _, b := range briefs {
+				text, err := fileArg(b, "")
+				if err != nil {
+					return err
+				}
+				req.Items = append(req.Items, api.ActItem{Text: text, Member: actMember, Backend: actBackend,
+					Model: actModel, Cwd: cwd})
+			}
+			res, err := c.ActMeeting(cmd.Context(), args[0], req)
 			if err != nil {
 				return err
 			}
@@ -238,6 +271,8 @@ func newMeetingCommand(d deps) *cobra.Command {
 	act.Flags().StringVar(&actBackend, "backend", "", "backend for the task")
 	act.Flags().StringVar(&actModel, "model", "", "model for the task")
 	act.Flags().StringVar(&actCwd, "cwd", "", "folder of the task (default: the meeting's)")
+	act.Flags().StringArrayVar(&actItems, "item", nil, "a task brief (or @file), instead of the argument (repeat)")
+	hiddenFlag(act.Flags(), "item")
 	cancel := leaf(d, "cancel <id>", "Cancel a meeting", "meeting", "cancel", exactArgs(1, "seelegent meeting cancel <id>"),
 		func(cmd *cobra.Command, c *client.Client, args []string) error {
 			m, err := c.CancelMeeting(cmd.Context(), args[0])
@@ -255,7 +290,8 @@ func newMeetingCommand(d deps) *cobra.Command {
 			}
 			return emitMeeting(cmd, &m)
 		})
-	outcome.Aliases = []string{"dissent_outcome"}
+	// dissent is the Node version's name.
+	outcome.Aliases = []string{"dissent_outcome", "dissent"}
 	return group("meeting <command>", "Structured meetings of department members before a decision", meetingUsage,
 		open, list, status, waitCmd, post, decide, act, cancel, outcome)
 }
@@ -299,6 +335,7 @@ func newContestCommand(d deps) *cobra.Command {
 				}
 			})
 		})
+	var full bool
 	status := leaf(d, "status <id>", "A contest's scoreboard, judge and proposal", "contest", "status",
 		exactArgs(1, "seelegent contest status <id>"),
 		func(cmd *cobra.Command, c *client.Client, args []string) error {
@@ -306,8 +343,14 @@ func newContestCommand(d deps) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			if full {
+				return printJSON(cmd.OutOrStdout(), v)
+			}
 			return emitContest(cmd, &v)
 		})
+	// The Node version's --full printed the raw record: the whole contest as JSON, as --json does now.
+	status.Flags().BoolVar(&full, "full", false, "the whole record as JSON (same as --json)")
+	hiddenFlag(status.Flags(), "full")
 	var wait int
 	waitCmd := leaf(d, "wait <id> [--seconds N]", "Wait until the contest is ready or ended", "contest", "wait",
 		exactArgs(1, "seelegent contest wait <id> [--seconds N]"),

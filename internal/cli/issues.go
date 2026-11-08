@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"io"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -62,6 +63,25 @@ func waitTicketTask(cmd *cobra.Command, d deps, taskID string, wait int, v any, 
 		return emit(cmd, v, func(w io.Writer) { _, _ = fmt.Fprintln(w, head) })
 	}
 	return waitAndPrint(cmd, d, nil, taskID, min(wait, 3000), head)
+}
+
+// listState is the state issues list asks for: --state, or the Node version's --all and --closed (one of them).
+func listState(state string, all, closed bool) (string, error) {
+	given := 0
+	for _, on := range []bool{state != "", all, closed} {
+		if on {
+			given++
+		}
+	}
+	switch {
+	case given > 1:
+		return "", usagef("give one of --state, --all and --closed")
+	case all:
+		return "all", nil
+	case closed:
+		return "closed", nil
+	}
+	return state, nil
 }
 
 func printIssue(w io.Writer, i *api.Issue) {
@@ -201,14 +221,23 @@ func issueRepoCommands(d deps) []*cobra.Command {
 			})
 		})
 	var state string
+	var all, closed bool
 	list := leaf(d, "list <repo> [--state open|closed|all]", "The inbox", "issues", "list",
-		exactArgs(1, "seelegent issues list <repo> [--state open|closed|all]"),
+		checked(exactArgs(1, "seelegent issues list <repo> [--state open|closed|all]"),
+			func(*cobra.Command, []string) error {
+				_, err := listState(state, all, closed)
+				return err
+			}),
 		func(cmd *cobra.Command, c *client.Client, args []string) error {
 			id, err := repoArg(cmd, c, args[0])
 			if err != nil {
 				return err
 			}
-			items, err := c.Issues(cmd.Context(), id, state)
+			st, err := listState(state, all, closed)
+			if err != nil {
+				return err
+			}
+			items, err := c.Issues(cmd.Context(), id, st)
 			if err != nil {
 				return err
 			}
@@ -219,7 +248,10 @@ func issueRepoCommands(d deps) []*cobra.Command {
 			})
 		})
 	list.Flags().StringVar(&state, "state", "", "open (default), closed or all")
-	var title string
+	list.Flags().BoolVar(&all, "all", false, "same as --state all")
+	list.Flags().BoolVar(&closed, "closed", false, "same as --state closed")
+	hiddenFlag(list.Flags(), "all", "closed")
+	var title, bodyFlag string
 	add := leaf(d, "add <repo> --title T [body|@file]", "Add a local issue", "issues", "add",
 		checked(minArgs("seelegent issues add <repo> --title T [body|@file]"),
 			func(_ *cobra.Command, args []string) error {
@@ -229,18 +261,16 @@ func issueRepoCommands(d deps) []*cobra.Command {
 				case strings.TrimSpace(title) == "":
 					return usagef("--title is required")
 				}
-				return nil
+				return onlyOne(args[1:], bodyFlag, "body")
 			}),
 		func(cmd *cobra.Command, c *client.Client, args []string) error {
 			id, err := repoArg(cmd, c, args[0])
 			if err != nil {
 				return err
 			}
-			body := ""
-			if len(args) == 2 {
-				if body, err = fileArg(args[1], ""); err != nil {
-					return err
-				}
+			body, err := argOrFlag(args[1:], bodyFlag, "body", "")
+			if err != nil {
+				return err
 			}
 			i, err := c.AddIssue(cmd.Context(), id, api.IssueInput{Title: title, Body: body})
 			if err != nil {
@@ -249,6 +279,8 @@ func issueRepoCommands(d deps) []*cobra.Command {
 			return emit(cmd, i, func(w io.Writer) { printIssue(w, &i) })
 		})
 	add.Flags().StringVar(&title, "title", "", "issue title")
+	add.Flags().StringVar(&bodyFlag, "body", "", "the body (or @file), instead of the argument")
+	hiddenFlag(add.Flags(), "body")
 	var sugMember, sugReason string
 	suggest := leaf(d, "suggest <repo> <key> assign|meeting|skip [--member M] [--reason T]",
 		"Record a suggestion (no side effects)", "issues", "suggest",
@@ -267,17 +299,27 @@ func issueRepoCommands(d deps) []*cobra.Command {
 		})
 	suggest.Flags().StringVar(&sugMember, "member", "", "member for assign")
 	suggest.Flags().StringVar(&sugReason, "reason", "", "one-line reason")
-	sharedClear := false
+	sharedClear, noShared := false, false
+	var sharedFlag []string
+	// sharedDirs are the folders given: the arguments and the old --shared-dir.
+	sharedDirs := func(args []string) []string { return splitList(append(slices.Clone(args[1:]), sharedFlag...)) }
 	shared := leaf(d, "shared-dirs <repo> [dir...] [--clear]",
 		"Gitignored folders linked into new ticket worktrees (none given: print them)", "issues", "repo_settings",
-		minArgs("seelegent issues shared-dirs <repo> [dir...] [--clear]"),
+		checked(minArgs("seelegent issues shared-dirs <repo> [dir...] [--clear]"),
+			func(_ *cobra.Command, args []string) error {
+				if (sharedClear || noShared) && len(sharedDirs(args)) > 0 {
+					return usagef("--clear links no folders; give folders or --clear, not both")
+				}
+				return nil
+			}),
 		func(cmd *cobra.Command, c *client.Client, args []string) error {
 			id, err := repoArg(cmd, c, args[0])
 			if err != nil {
 				return err
 			}
+			dirs := sharedDirs(args)
 			var r api.Repo
-			if len(args) == 1 && !sharedClear {
+			if len(dirs) == 0 && !sharedClear && !noShared {
 				list, err := c.Repos(cmd.Context())
 				if err != nil {
 					return err
@@ -290,18 +332,22 @@ func issueRepoCommands(d deps) []*cobra.Command {
 				if r.ID == "" {
 					return fmt.Errorf("%w: %s", ops.ErrRepoNotConnected, args[0])
 				}
-			} else if r, err = c.UpdateRepo(cmd.Context(), id, api.RepoPatch{SharedDirs: api.NonNil(
-				splitList(args[1:]))}); err != nil {
+			} else if r, err = c.UpdateRepo(cmd.Context(), id, api.RepoPatch{SharedDirs: api.NonNil(dirs)}); err != nil {
 				return err
 			}
-			dirs := api.NonNil(r.SharedDirs)
-			return emit(cmd, map[string]any{"id": r.ID, "path": r.Path, "sharedDirs": dirs}, func(w io.Writer) {
-				for _, s := range dirs {
+			now := api.NonNil(r.SharedDirs)
+			return emit(cmd, map[string]any{"id": r.ID, "path": r.Path, "sharedDirs": now}, func(w io.Writer) {
+				for _, s := range now {
 					_, _ = fmt.Fprintln(w, s)
 				}
 			})
 		})
 	shared.Flags().BoolVar(&sharedClear, "clear", false, "link no folders")
+	// The Node version's form: issues repo-settings <repo> [--shared-dir D]... [--no-shared-dirs].
+	shared.Aliases = []string{"repo-settings"}
+	shared.Flags().StringArrayVar(&sharedFlag, "shared-dir", nil, "a folder to link (repeat or comma separated)")
+	shared.Flags().BoolVar(&noShared, "no-shared-dirs", false, "same as --clear")
+	hiddenFlag(shared.Flags(), "shared-dir", "no-shared-dirs")
 	return []*cobra.Command{repos, connect, initCmd, remote, sync, list, add, suggest, newTriageCommand(d), shared}
 }
 
@@ -315,7 +361,13 @@ func newTriageCommand(d deps) *cobra.Command {
 	usage := "seelegent issues triage <repo> <key> assign|meeting|skip [--reason T] [--prompt T|@file] [flags]"
 	cmd := leaf(d, "triage <repo> <key> assign|meeting|skip [flags]",
 		"Decide an issue: assign makes a ticket with a task, meeting opens a meeting, skip records it", "issues",
-		"triage", exactArgs(3, usage),
+		// The Node version took the brief as a fourth argument (`... assign @brief.md`); it still does.
+		"triage", checked(func(_ *cobra.Command, args []string) error {
+			if len(args) < 3 {
+				return usagef("usage: %s", usage)
+			}
+			return nil
+		}, func(_ *cobra.Command, args []string) error { return onlyOne(args[3:], prompt, "prompt") }),
 		func(cmd *cobra.Command, c *client.Client, args []string) error {
 			opt, err := f.options(cmd.Flags())
 			if err != nil {
@@ -325,7 +377,7 @@ func newTriageCommand(d deps) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			brief, err := fileArg(prompt, "")
+			brief, err := argOrFlag(args[3:], prompt, "prompt", "")
 			if err != nil {
 				return err
 			}
