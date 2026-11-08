@@ -328,7 +328,7 @@ func resumeProcess(h windows.Handle, pid uint32) error {
 		return fmt.Errorf("resume process %d: %w", pid, err)
 	}
 	r, _, _ := procNtResumeProcess.Call(uintptr(h))
-	if status := windows.NTStatus(r); status != windows.STATUS_SUCCESS {
+	if status := windows.NTStatus(r); status != windows.STATUS_SUCCESS { //nolint:gosec // an NTSTATUS is 32 bits
 		return fmt.Errorf("resume process %d: %w", pid, status)
 	}
 	return nil
