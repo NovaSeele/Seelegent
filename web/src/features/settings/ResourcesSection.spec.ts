@@ -7,6 +7,7 @@ import type { Health, Settings } from '@/api/types'
 import { useConnectionStore } from '@/stores/connection'
 import { useSettingsStore } from '@/stores/settings'
 import { setupApp } from '@/test/app'
+import { makeHealthResources } from '@/test/fixtures'
 
 import { FIELDS } from './fields'
 import ResourcesSection from './ResourcesSection.vue'
@@ -42,6 +43,7 @@ function health(extra: Partial<Health> = {}): Health {
     os: 'windows',
     memory: { availPhysMB: 12595, availCommitMB: 20480, known: true },
     lowMemory: false,
+    ...makeHealthResources(),
     ...extra,
   }
 }

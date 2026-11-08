@@ -291,13 +291,14 @@ export const LINKED_FIELDS: Readonly<Record<string, readonly string[]>> = {
 
 /**
  * The cross-field rule the dashboard can check before sending: criticalFreeMemoryMB must be below minFreeMemoryMB
- * while both are on. Returns the paths that clash with `path` set to `value`, or [] when it is fine.
+ * while both are set (an auto one, null or absent, is derived by the daemon to stay in order) and on. Returns the
+ * paths that clash with `path` set to `value`, or [] when it is fine.
  */
 export function crossFieldClash(settings: Settings | null, path: string, value: number): string[] {
   if (!settings || (path !== 'criticalFreeMemoryMB' && path !== 'minFreeMemoryMB')) return []
   const critical = path === 'criticalFreeMemoryMB' ? value : settings.criticalFreeMemoryMB
   const min = path === 'minFreeMemoryMB' ? value : settings.minFreeMemoryMB
-  return critical > 0 && min > 0 && critical >= min
+  return critical != null && min != null && critical > 0 && min > 0 && critical >= min
     ? ['criticalFreeMemoryMB', 'minFreeMemoryMB']
     : []
 }

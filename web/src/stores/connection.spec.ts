@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createApiClient } from '@/api/client'
 import type { BootState } from '@/api/types'
 import { FakeEventSource, setupApp } from '@/test/app'
-import { iso, makeAccount, makeTask } from '@/test/fixtures'
+import { iso, makeAccount, makeHealthResources, makeTask } from '@/test/fixtures'
 
 import { useAccountsStore } from './accounts'
 import { useConnectionStore } from './connection'
@@ -25,6 +25,7 @@ function boot(overrides: Partial<BootState> = {}): BootState {
       os: 'windows',
       memory: { availPhysMB: 0, availCommitMB: 0, known: false },
       lowMemory: false,
+      ...makeHealthResources(),
     },
     settings: {} as BootState['settings'],
     accounts: [makeAccount()],

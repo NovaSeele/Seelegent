@@ -31,7 +31,7 @@
  */
 import { randomBytes } from 'node:crypto'
 import { createServer } from 'node:http'
-import { freemem } from 'node:os'
+import { availableParallelism, freemem, totalmem } from 'node:os'
 
 import { createAdminRoutes } from './mock-admin.mjs'
 
@@ -264,13 +264,10 @@ const settings = {
   workerPriority: 'low',
   gatePriority: 'low',
   maxConcurrentWorkers: 0,
-  gateConcurrency: 2,
-  minFreeMemoryMB: 2048,
-  minFreeCommitMB: 4096,
-  criticalFreeMemoryMB: 1024,
+  // gateConcurrency, minFreeMemoryMB, minFreeCommitMB, criticalFreeMemoryMB and testParallelism are auto: absent
+  // until set (Health.resources has the values in use).
   workerMemoryLimitMB: 0,
   workerCPURatePercent: 0,
-  testParallelism: 4,
   daemonMemoryLimitMB: 0,
 }
 
@@ -1458,6 +1455,36 @@ function memory() {
   return { availPhysMB: phys, availCommitMB: OS === 'windows' ? phys * 2 : 0, known: true }
 }
 
+const clamp = (n, lo, hi) => Math.max(lo, Math.min(n, hi))
+
+/** This machine's profile and the values in use for the auto settings (config.EffectiveResources, simplified). */
+function machineResources() {
+  const totalPhysMB = Math.round(totalmem() / 1048576)
+  const totalCommitMB = OS === 'windows' ? Math.floor((totalPhysMB * 1.5) / 1024) * 1024 : 0
+  const cpus = availableParallelism()
+  const minFree = clamp(Math.floor(totalPhysMB / 8), 512, 2048)
+  const auto = {
+    minFreeMemoryMB: minFree,
+    criticalFreeMemoryMB: Math.floor(minFree / 2),
+    minFreeCommitMB: totalCommitMB > 0 ? clamp(Math.floor(totalCommitMB / 10), 1024, 4096) : 0,
+    testParallelism: clamp(Math.floor(cpus / 4), 1, 8),
+    gateConcurrency: clamp(
+      Math.min(Math.floor(cpus / 8), Math.floor(totalPhysMB / 1024 / 8)),
+      1,
+      4,
+    ),
+  }
+  const resources = {}
+  for (const [key, value] of Object.entries(auto)) {
+    const set = settings[key]
+    resources[key] =
+      set === undefined || set === null
+        ? { value, source: 'auto' }
+        : { value: set, source: 'explicit' }
+  }
+  return { resources, machine: { totalPhysMB, totalCommitMB, cpus } }
+}
+
 function health() {
   return {
     ok: true,
@@ -1472,6 +1499,7 @@ function health() {
     os: OS,
     memory: memory(),
     lowMemory,
+    ...machineResources(),
   }
 }
 

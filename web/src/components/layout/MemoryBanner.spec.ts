@@ -6,7 +6,7 @@ import type { BootState, Health } from '@/api/types'
 import { useConnectionStore } from '@/stores/connection'
 import { useTasksStore } from '@/stores/tasks'
 import { FakeEventSource, setupApp } from '@/test/app'
-import { iso, makeTask } from '@/test/fixtures'
+import { iso, makeHealthResources, makeTask } from '@/test/fixtures'
 
 import MemoryBanner from './MemoryBanner.vue'
 
@@ -24,6 +24,7 @@ function health(extra: Partial<Health> = {}): Health {
     os: 'windows',
     memory: { availPhysMB: 700, availCommitMB: 2150, known: true },
     lowMemory: false,
+    ...makeHealthResources(),
     ...extra,
   }
 }
