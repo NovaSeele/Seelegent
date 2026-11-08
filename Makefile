@@ -34,7 +34,16 @@ CROSS_TARGETS := windows/amd64 windows/arm64 linux/amd64 linux/arm64 darwin/amd6
 # Extra flags for go test, for example GOTESTFLAGS=-race.
 GOTESTFLAGS ?=
 
-.PHONY: web build cross snapshot release-check test test-web lint lint-web fmt generate clean dev-daemon
+# Light mode (docs/development.md): test packages and lint jobs run at once. The machine froze with go test ./...
+# and lint at full width beside running workers; raise them on an idle machine, e.g. make test TEST_P=12.
+TEST_P ?= 4
+LINT_J ?= 4
+
+# Flags of the resource benchmark (scripts/bench), e.g. BENCH_ARGS="-scenario load -duration 5m".
+BENCH_ARGS ?=
+BENCH_BIN  := $(BIN_DIR)/seelegent-bench$(if $(filter Windows_NT,$(OS)),.exe,)
+
+.PHONY: web build cross snapshot release-check test test-web lint lint-web fmt generate clean dev-daemon bench
 
 web: ## Build the dashboard into web/dist
 	cd web && $(PNPM) install --frozen-lockfile && $(PNPM) build
@@ -56,15 +65,15 @@ snapshot: ## Build the release archives and checksums.txt into dist/ with GoRele
 release-check: ## Validate .goreleaser.yaml
 	$(GORELEASER) check
 
-test: ## Run the Go tests
-	$(GO) test $(GOTESTFLAGS) ./...
+test: ## Run the Go tests (TEST_P packages at once)
+	$(GO) test -p $(TEST_P) $(GOTESTFLAGS) ./...
 
 test-web: ## Run the dashboard tests
 	cd web && $(PNPM) test
 
-lint: ## Lint the Go code
+lint: ## Lint the Go code (LINT_J jobs, GOMEMLIMIT=2GiB)
 	$(GO) vet ./...
-	$(GOLANGCI_LINT) run ./...
+	GOMEMLIMIT=2GiB $(GOLANGCI_LINT) run --concurrency $(LINT_J) ./...
 
 lint-web: ## Lint and type-check the dashboard
 	cd web && $(PNPM) lint && $(PNPM) typecheck
@@ -79,6 +88,10 @@ generate: ## Generate web/src/api/types.gen.ts from internal/api (internal/api/t
 clean: ## Remove build output
 	rm -rf $(BIN_DIR) dist
 	find web/dist -mindepth 1 ! -name .gitkeep -exec rm -rf {} +
+
+bench: ## Run the resource benchmark (scripts/bench; BENCH_ARGS, default: idle for 10 minutes)
+	$(GO) test -tags bench -c -o $(BENCH_BIN) ./scripts/bench
+	./$(BENCH_BIN) $(BENCH_ARGS)
 
 dev-daemon: ## Run a development daemon on port 47831 with a fresh temp SEELEGENT_HOME (accepts the Vite dev server)
 	SEELEGENT_HOME="$$(mktemp -d)" $(GO) run ./cmd/seelegent daemon --port 47831 --dev-origin http://localhost:5173
