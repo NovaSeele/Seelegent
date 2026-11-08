@@ -45,20 +45,27 @@ async function nextRuns(a: Automation): Promise<void> {
   }
 }
 
+// Each read gets a number; an answer for an earlier read (another automation, or a dialog closed since) is dropped,
+// so the dialog opened for B never shows, or turns on, A (E-B17).
+let request = 0
+
 async function read(): Promise<void> {
   const id = props.automationId
+  const mine = ++request
   if (!id) return
   loading.value = true
   runs.value = null
   try {
     const a = await store.api().get(id)
+    if (mine !== request) return
     shown.value = a
     void nextRuns(a)
   } catch (cause) {
+    if (mine !== request) return
     shown.value = null
     error.value = errorMessage(cause)
   } finally {
-    loading.value = false
+    if (mine === request) loading.value = false
   }
 }
 
@@ -66,7 +73,10 @@ async function read(): Promise<void> {
 watch(
   [open, () => props.automationId],
   ([now]) => {
-    if (!now) return
+    if (!now) {
+      request++
+      return
+    }
     shown.value = null
     error.value = ''
     void read()
@@ -90,7 +100,7 @@ const gate = computed(() => {
 
 async function turnOn() {
   const a = shown.value
-  if (!a || busy.value) return
+  if (!a || busy.value || a.id !== props.automationId) return
   busy.value = true
   error.value = ''
   try {
