@@ -63,15 +63,17 @@ type Options struct {
 	// Env is the environment (os.Environ) and RealHome the user's home folder, to find the CLIs.
 	Env      []string
 	RealHome string
-	// GitPath finds git (gitx.Binary.Path).
-	GitPath func() (string, error)
+	// GitPath finds git (gitx.Binary.Path). GitWrapper is the batch file (git.cmd, git.bat) that comes first on
+	// PATH, which Seelegent never runs ("" when the first git on PATH is no batch file; gitx.FirstWrapper).
+	GitPath    func() (string, error)
+	GitWrapper string
 }
 
 // Run runs every check in a fixed order.
 func Run(ctx context.Context, o Options) []Check {
 	out := []Check{dataDir(o.Paths, o.Daemon.LockHeld()), settings(o), database(ctx, o.Paths)}
 	d, c := daemon(ctx, o)
-	out = append(out, d, portFile(o), dashboard(o.Web), git(o.GitPath))
+	out = append(out, d, portFile(o), dashboard(o.Web), git(o.GitPath, o.GitWrapper))
 	out = append(out, backends(o)...)
 	return append(out, accounts(ctx, o, c), pathEntries(o.Env))
 }
@@ -214,11 +216,20 @@ func dashboard(web fs.FS) Check {
 		Fix: "build with web/dist (make build, or scripts/build.ps1)"}
 }
 
-func git(path func() (string, error)) Check {
+// git names the git Seelegent runs. A batch wrapper first on PATH (ServBay's or a package manager's git.cmd) is a
+// warning: Seelegent skips it, but cmd.exe rewrites the arguments of everything else that runs it (^ is dropped,
+// %VAR% expanded), such as the user's hooks and gate commands.
+func git(path func() (string, error), wrapper string) Check {
 	p, err := path()
 	if err != nil {
 		return Check{Name: "git", Status: Fail, Message: fmt.Sprintf("git not found: %v", err),
-			Fix: "install git and make sure it is on PATH"}
+			Fix: "install Git for Windows (git.exe) or put the folder of a real git executable on PATH"}
+	}
+	if wrapper != "" && !strings.EqualFold(filepath.Clean(wrapper), filepath.Clean(p)) {
+		return Check{Name: "git", Status: Warn, Message: fmt.Sprintf("git %s; the first git on PATH is the batch "+
+			"wrapper %s, which Seelegent never runs, but your own hooks, gate commands and terminals do, and cmd.exe "+
+			"rewrites their arguments (HEAD^ loses its ^)", p, wrapper),
+			Fix: fmt.Sprintf("put %s before %s on PATH", filepath.Dir(p), filepath.Dir(wrapper))}
 	}
 	return Check{Name: "git", Status: OK, Message: "git " + p}
 }

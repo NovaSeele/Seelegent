@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"log/slog"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -230,5 +231,59 @@ func TestBinarySpecialName(t *testing.T) {
 	}
 	if _, err := os.Stat(marker); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("the batch shim ran (%v)", err)
+	}
+}
+
+// TestBinaryForwardingWrapper: a git.cmd that forwards to the real git (ServBay's shape) and comes first on PATH.
+// Run directly, cmd.exe drops the ^ of HEAD^{tree}; Seelegent runs the real git.exe instead, whether it is later
+// on PATH or only named by the wrapper, and gets the right tree. FirstWrapper names the wrapper for doctor.
+func TestBinaryForwardingWrapper(t *testing.T) {
+	realGit := gitExe(t)
+	dir := newRepo(t)
+	want := strings.TrimSpace(git(t, dir, "rev-parse", "HEAD:"))
+	wrapperDir := t.TempDir()
+	wrapper := filepath.Join(wrapperDir, "git.cmd")
+	write(t, wrapper, "@echo off\r\n\""+realGit+"\" %*\r\n")
+
+	out, err := exec.CommandContext(t.Context(), wrapper, "rev-parse", "HEAD^{tree}").CombinedOutput()
+	if err == nil && strings.TrimSpace(string(out)) == want {
+		t.Logf("this cmd.exe kept the ^ (%q); the wrapper is skipped anyway", out)
+	}
+
+	for name, env := range map[string]func() []string{
+		"real git later on PATH":    shimEnv(wrapperDir, dirOf(realGit)),
+		"only the wrapper on PATH":  shimEnv(wrapperDir),
+		"real git first, then shim": shimEnv(dirOf(realGit), wrapperDir),
+	} {
+		bin := NewBinary(env, nil)
+		got, err := bin.Path()
+		if err != nil || !strings.EqualFold(got, realGit) {
+			t.Fatalf("%s: Path = %q, %v; want %q", name, got, err, realGit)
+		}
+		tree, _, err := New(nil, bin).run(context.Background(), dir, ReadTimeout, 0, "rev-parse", "HEAD^{tree}")
+		if err != nil || strings.TrimSpace(string(tree)) != want {
+			t.Fatalf("%s: rev-parse HEAD^{tree} = %q, %v; want %q", name, tree, err, want)
+		}
+	}
+
+	if got := FirstWrapper(shimEnv(wrapperDir, dirOf(realGit))()); got != wrapper {
+		t.Errorf("FirstWrapper(wrapper first) = %q, want %q", got, wrapper)
+	}
+	if got := FirstWrapper(shimEnv(dirOf(realGit), wrapperDir)()); got != "" {
+		t.Errorf("FirstWrapper(git.exe first) = %q", got)
+	}
+	// In one folder, PATHEXT decides: .EXE before .CMD is the exe.
+	both := t.TempDir()
+	write(t, filepath.Join(both, "git.cmd"), "@echo off\r\n")
+	write(t, filepath.Join(both, "git.exe"), "not run")
+	if got := FirstWrapper(shimEnv(both)()); got != "" {
+		t.Errorf("FirstWrapper(exe and cmd in one folder) = %q", got)
+	}
+	env := []string{"PATH=" + both, "PATHEXT=.CMD;.EXE"}
+	if got := FirstWrapper(env); got != filepath.Join(both, "git.cmd") {
+		t.Errorf("FirstWrapper(PATHEXT .CMD first) = %q", got)
+	}
+	if got := FirstWrapper([]string{"PATH=relative;" + wrapperDir}); got != wrapper {
+		t.Errorf("FirstWrapper(relative entry skipped) = %q", got)
 	}
 }

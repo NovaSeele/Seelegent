@@ -206,7 +206,7 @@ when no daemon of the data directory runs does it check writability by writing a
 | `daemon` | answers (version, address, pid) | not running; or another version than this command | holds its lock without answering; another program, or another data directory's daemon, on the port |
 | `port_file` | no stale port file | a port file left by a daemon that is gone (never a fail) | – |
 | `dashboard` | embedded | not part of this build | – |
-| `git` | found (the `gitx` resolver) | – | not found |
+| `git` | found (the `gitx` resolver; the message names the git used) | Windows: the first git on PATH is a batch wrapper (`git.cmd`, `git.bat`, such as ServBay's). Seelegent never runs it (cmd.exe would drop the `^` of `X^{tree}` and expand `%VAR%`) and uses a real `git.exe` instead, but hooks, gate commands and terminals still go through the wrapper | not found, or only a wrapper that names no `git.exe` |
 | `backend_<id>` | enabled and its CLI found (`backend.Find`), or disabled | – | enabled but not found |
 | `accounts` | counts: total, enabled and (daemon running) usable | no enabled account, or counts unknown | – |
 | `path` | no relative PATH entries | relative entries (a worker would resolve them in the project folder) | – |
