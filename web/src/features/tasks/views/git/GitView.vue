@@ -170,6 +170,7 @@ useGitCommands(
         </nav>
         <GitDiffPane
           v-model:wrap="wrap"
+          :task-id="task.id"
           :file="selectedFile"
           :diff="diff"
           :notes="notes"

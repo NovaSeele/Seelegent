@@ -24,6 +24,7 @@ func (s *Server) gitRoutes() {
 		return http.StatusOK, g, err
 	})
 	s.handle("GET /tasks/{id}/git/diff", s.taskDiff)
+	s.handle("GET /tasks/{id}/git/image", s.taskImage)
 	s.handle("GET /tasks/{id}/git/commits/{sha}", s.taskCommit)
 	s.handle("POST /tasks/{id}/git/suggest-message", s.suggestMessage)
 	s.handle("POST /tasks/{id}/git/suggest-message/dismiss", func(w http.ResponseWriter, r *http.Request) (int, any,

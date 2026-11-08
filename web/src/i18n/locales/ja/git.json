@@ -126,5 +126,17 @@
     "files": "{n} 件のファイル",
     "more": "ほか {n} 件",
     "listLabel": "{path} のファイル"
+  },
+  "image": {
+    "before": "変更前 (HEAD)",
+    "after": "変更後 (作業ツリー)",
+    "alt": "{path}、{side}",
+    "pixels": "{width} × {height} px",
+    "tooLarge": "大きすぎてプレビューできません（{size}）。",
+    "lfs": "Git LFS で管理されています。リポジトリにあるのは画像ではなくポインターです。",
+    "unsupported": "このファイルはプレビューできません。",
+    "missing": "このバージョンのファイルはありません。",
+    "failed": "画像を読み込めませんでした: {error}",
+    "broken": "画像を表示できませんでした。"
   }
 }

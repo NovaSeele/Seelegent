@@ -140,6 +140,7 @@ type Git interface {
 	Branch(ctx context.Context, cwd string) (*api.BranchInfo, error)
 	Diff(ctx context.Context, root, rel, base string, untracked bool) (api.FileDiff, error)
 	TaskGitView(ctx context.Context, tf gitx.TaskFiles) (api.TaskGit, error)
+	HeadFile(ctx context.Context, root, rel string, limit int) (data []byte, size int64, ok bool, err error)
 	TaskCommit(ctx context.Context, tf gitx.TaskFiles, sha string) (api.GitCommitDetail, error)
 	Commit(ctx context.Context, tf gitx.TaskFiles, message string, files []string) (api.CommitResult, error)
 }

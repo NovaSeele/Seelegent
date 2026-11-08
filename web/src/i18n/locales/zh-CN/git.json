@@ -126,5 +126,17 @@
     "files": "{n} 个文件",
     "more": "还有 {n} 个",
     "listLabel": "{path} 中的文件"
+  },
+  "image": {
+    "before": "修改前 (HEAD)",
+    "after": "修改后（工作区）",
+    "alt": "{path}，{side}",
+    "pixels": "{width} × {height} px",
+    "tooLarge": "文件太大，无法预览（{size}）。",
+    "lfs": "此文件由 Git LFS 存储：仓库中只有指针，而不是图片。",
+    "unsupported": "无法预览此文件。",
+    "missing": "此版本的文件不存在。",
+    "failed": "无法加载图片：{error}",
+    "broken": "无法显示图片。"
   }
 }

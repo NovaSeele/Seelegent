@@ -126,5 +126,17 @@
     "files": "{n} file | {n} files",
     "more": "and {n} more file | and {n} more files",
     "listLabel": "Files in {path}"
+  },
+  "image": {
+    "before": "Before (HEAD)",
+    "after": "After (working tree)",
+    "alt": "{path}, {side}",
+    "pixels": "{width} × {height} px",
+    "tooLarge": "Too large to preview ({size}).",
+    "lfs": "Stored with Git LFS: the repository holds a pointer, not the image.",
+    "unsupported": "This file cannot be previewed.",
+    "missing": "This version of the file does not exist.",
+    "failed": "Could not load the image: {error}",
+    "broken": "The image could not be shown."
   }
 }

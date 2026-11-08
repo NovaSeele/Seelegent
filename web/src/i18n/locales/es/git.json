@@ -126,5 +126,17 @@
     "files": "{n} archivo | {n} archivos",
     "more": "y {n} archivo más | y {n} archivos más",
     "listLabel": "Archivos en {path}"
+  },
+  "image": {
+    "before": "Antes (HEAD)",
+    "after": "Después (árbol de trabajo)",
+    "alt": "{path}, {side}",
+    "pixels": "{width} × {height} px",
+    "tooLarge": "Demasiado grande para la vista previa ({size}).",
+    "lfs": "Guardado con Git LFS: el repositorio contiene un puntero, no la imagen.",
+    "unsupported": "Este archivo no se puede previsualizar.",
+    "missing": "Esta versión del archivo no existe.",
+    "failed": "No se pudo cargar la imagen: {error}",
+    "broken": "No se pudo mostrar la imagen."
   }
 }

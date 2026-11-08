@@ -126,5 +126,17 @@
     "files": "파일 {n}개",
     "more": "외 {n}개",
     "listLabel": "{path}의 파일"
+  },
+  "image": {
+    "before": "변경 전 (HEAD)",
+    "after": "변경 후 (작업 트리)",
+    "alt": "{path}, {side}",
+    "pixels": "{width} × {height} px",
+    "tooLarge": "미리 보기에는 너무 큽니다({size}).",
+    "lfs": "Git LFS로 저장된 파일입니다. 저장소에는 이미지가 아니라 포인터가 있습니다.",
+    "unsupported": "이 파일은 미리 볼 수 없습니다.",
+    "missing": "이 버전의 파일이 없습니다.",
+    "failed": "이미지를 불러오지 못했습니다: {error}",
+    "broken": "이미지를 표시하지 못했습니다."
   }
 }

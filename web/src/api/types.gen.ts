@@ -2250,6 +2250,7 @@ export type ErrorCode =
   | 'conflict'
   | 'bad_state'
   | 'too_large'
+  | 'unsupported_media_type'
   | 'misdirected_request'
   | 'upstream'
   | 'unavailable'

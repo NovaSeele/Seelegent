@@ -126,5 +126,17 @@
     "files": "{n} tệp",
     "more": "và {n} tệp nữa",
     "listLabel": "Các tệp trong {path}"
+  },
+  "image": {
+    "before": "Trước (HEAD)",
+    "after": "Sau (thư mục làm việc)",
+    "alt": "{path}, {side}",
+    "pixels": "{width} × {height} px",
+    "tooLarge": "Quá lớn để xem trước ({size}).",
+    "lfs": "Tệp lưu bằng Git LFS: kho chỉ giữ con trỏ, không phải ảnh.",
+    "unsupported": "Không xem trước được tệp này.",
+    "missing": "Phiên bản này của tệp không tồn tại.",
+    "failed": "Không tải được ảnh: {error}",
+    "broken": "Không hiển thị được ảnh."
   }
 }
