@@ -137,6 +137,10 @@ type GitDir struct {
 	Bytes int64 `json:"bytes"`
 	// Files are its first GitDirFiles files by path; Count minus their number are left out.
 	Files []GitFile `json:"files"`
+	// Others counts the folder's untracked files that are not the task's (already there when it started, or
+	// outside its folder and never touched by it). The row stands for the whole folder, so the repository view
+	// does not list them either.
+	Others int `json:"others,omitempty"`
 }
 
 // GitFile is one changed file.

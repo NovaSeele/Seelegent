@@ -32,7 +32,10 @@ export interface Upstream {
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error))
 
-/** The repository's uncommitted files that are not the task's, with their marks. */
+/**
+ * The repository's uncommitted files that are not the task's, with their marks. The files inside one of the
+ * task's untracked folder rows are left out: that row stands for the whole folder and counts them (`others`).
+ */
 export function otherFiles(repo: RepoStatus | null, git: TaskGit | null): OtherFile[] {
   if (!repo?.repo || !git?.repo) return []
   const own = new Set([...git.files, ...git.committedFiles].map((f) => f.path))

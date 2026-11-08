@@ -133,10 +133,12 @@ in the daemon.
   the `path` (ending in `/`), the file `count`, their total `bytes` and the first 200 `files`; those files are left
   out of `files`. Only this view groups: the snapshots, the safety checks and a commit still see every file, and a
   commit may name a grouped file one by one (never the folder). The extra `git ls-files --others --directory` call
-  runs only when a top-level folder holds more than 20 untracked files, and only over those folders. The view's
-  images (in `files` and in the rows' `files`) carry a `stamp`: the working-tree file's size and modification time
-  (one `Lstat`) and its blob id at HEAD from the status line, so a rewritten image gets a new URL although its
-  status and counts stay the same.
+  runs only when a top-level folder holds more than 20 untracked files, and only over those folders; when it fails
+  (a timeout on a huge folder) the failure is logged and the view lists every file instead. A row's `others` counts
+  the folder's untracked files that are not the task's; the repository panel leaves them out, as the row stands for
+  the folder. The view's images (in `files` and in the rows' `files`) carry a `stamp`: the working-tree file's size
+  and modification time (one `Lstat`) and its blob id at HEAD from the status line, so a rewritten image gets a new
+  URL although its status and counts stay the same.
 - When the commits since the start cannot be read (git times out on a big repository, an object is missing), the
   error is logged and `TaskGit` still answers with `files`: `historyState` is `history_unavailable`, `commits` and
   `committedFiles` are empty, and a later read tries again.

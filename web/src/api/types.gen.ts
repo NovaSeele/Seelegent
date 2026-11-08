@@ -1032,6 +1032,12 @@ export interface GitDir {
   bytes: number
   /** Files are its first GitDirFiles files by path; Count minus their number are left out. */
   files: GitFile[]
+  /**
+   * Others counts the folder's untracked files that are not the task's (already there when it started, or
+   * outside its folder and never touched by it). The row stands for the whole folder, so the repository view
+   * does not list them either.
+   */
+  others?: number
 }
 
 /** GitFile is one changed file. */

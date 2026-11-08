@@ -1,8 +1,11 @@
 package gitx
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"slices"
@@ -165,6 +168,56 @@ func TestUnbornHead(t *testing.T) {
 	}
 	if _, err := r.Commit(ctx, tf, "first", []string{"index.html", "staged.txt"}); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// A folder row counts the untracked files in it that are not the task's (here: already there when it started),
+// so the view can say so instead of losing them.
+func TestUntrackedFolderCountsOthers(t *testing.T) {
+	dir := newRepo(t)
+	ctx := context.Background()
+	var baseline []string
+	for i := range 5 {
+		p := filepath.Join(dir, "cache", fmt.Sprintf("old%d.bin", i))
+		write(t, p, "o\n")
+		baseline = append(baseline, p)
+	}
+	for i := range 25 {
+		write(t, filepath.Join(dir, "cache", fmt.Sprintf("new%02d.bin", i)), "n\n")
+	}
+	view, err := New(nil, nil).TaskGitView(ctx, TaskFiles{Cwd: dir, Baseline: baseline})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(view.UntrackedDirs) != 1 {
+		t.Fatalf("folders: %+v", view.UntrackedDirs)
+	}
+	if d := view.UntrackedDirs[0]; d.Path != "cache/" || d.Count != 25 || d.Others != 5 {
+		t.Fatalf("cache row: path %q count %d others %d", d.Path, d.Count, d.Others)
+	}
+}
+
+// Grouping the folders is only a convenience of the view: when it fails, the failure is logged and the view lists
+// every file instead of failing.
+func TestCollapseFailureListsEveryFile(t *testing.T) {
+	dir := newRepo(t)
+	var logs bytes.Buffer
+	r := New(nil, NewBinary(nil, slog.New(slog.NewTextHandler(&logs, nil))))
+	r.collapse = func(context.Context, string, []api.GitFile) ([]api.GitFile, []api.GitDir, error) {
+		return nil, nil, errors.New("ls-files: timed out")
+	}
+	for i := range 30 {
+		write(t, filepath.Join(dir, "gen", fmt.Sprintf("g%02d.txt", i)), "x\n")
+	}
+	view, err := r.TaskGitView(context.Background(), TaskFiles{Cwd: dir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(view.Files) != 30 || len(view.UntrackedDirs) != 0 || view.Files[0].Additions != 1 {
+		t.Fatalf("view: %d files, folders %+v", len(view.Files), view.UntrackedDirs)
+	}
+	if !strings.Contains(logs.String(), "could not be grouped") || !strings.Contains(logs.String(), "timed out") {
+		t.Fatalf("log: %s", logs.String())
 	}
 }
 
