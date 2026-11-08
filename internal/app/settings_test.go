@@ -1,7 +1,9 @@
 package app
 
 import (
+	"math"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -62,5 +64,48 @@ func TestPatchSettingsReschedulesQuota(t *testing.T) {
 	}
 	if got := d.a.Settings().QuotaRefreshMinutes; got != cur {
 		t.Errorf("quotaRefreshMinutes = %d, want %d", got, cur)
+	}
+}
+
+// memoryLimits records the calls of debug.SetMemoryLimit.
+type memoryLimits struct{ calls []int64 }
+
+func (m *memoryLimits) set(n int64) int64 { m.calls = append(m.calls, n); return 0 }
+
+// TestDaemonMemoryLimit: daemonMemoryLimitMB sets the daemon's soft memory limit when it changes, 0 lifts the one it
+// set, and a GOMEMLIMIT in the daemon's environment wins.
+func TestDaemonMemoryLimit(t *testing.T) {
+	d := newDaemon(t)
+	fake := &memoryLimits{}
+	d.a.setMemoryLimit = fake.set
+	patch := func(body string) {
+		t.Helper()
+		if _, err := d.a.PatchSettings(t.Context(), []byte(body)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	patch(`{"maxConcurrentPerAccount": 3}`)
+	patch(`{"daemonMemoryLimitMB": 512}`)
+	patch(`{"daemonMemoryLimitMB": 512}`) // unchanged
+	patch(`{"daemonMemoryLimitMB": 0}`)
+	patch(`{"daemonMemoryLimitMB": 0}`)
+	if want := []int64{512 << 20, math.MaxInt64}; !slices.Equal(fake.calls, want) {
+		t.Fatalf("SetMemoryLimit calls = %v, want %v", fake.calls, want)
+	}
+
+	// At start, and with GOMEMLIMIT set.
+	start := &memoryLimits{}
+	a := &App{setMemoryLimit: start.set}
+	a.applyMemoryLimit(0)
+	a.applyMemoryLimit(256)
+	if want := []int64{256 << 20}; !slices.Equal(start.calls, want) {
+		t.Fatalf("calls = %v, want %v", start.calls, want)
+	}
+	env := &memoryLimits{}
+	a = &App{setMemoryLimit: env.set, env: []string{"PATH=/bin", "GOMEMLIMIT=1GiB"}}
+	a.applyMemoryLimit(256)
+	a.applyMemoryLimit(0)
+	if len(env.calls) != 0 {
+		t.Fatalf("GOMEMLIMIT is set, yet SetMemoryLimit was called: %v", env.calls)
 	}
 }

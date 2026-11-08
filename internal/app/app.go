@@ -15,9 +15,11 @@ import (
 	"io"
 	"io/fs"
 	"log/slog"
+	"math"
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -30,6 +32,7 @@ import (
 	"github.com/NovaSeele/Seelegent/internal/config"
 	"github.com/NovaSeele/Seelegent/internal/contest"
 	"github.com/NovaSeele/Seelegent/internal/envx"
+	"github.com/NovaSeele/Seelegent/internal/gate"
 	"github.com/NovaSeele/Seelegent/internal/github"
 	"github.com/NovaSeele/Seelegent/internal/gitx"
 	"github.com/NovaSeele/Seelegent/internal/guard"
@@ -141,6 +144,14 @@ type App struct {
 	patchMu    sync.Mutex
 	// rescheduler re-arms the quota refresher when quotaRefreshMinutes changes (the Refresher; a fake in tests).
 	rescheduler interface{ Reschedule() }
+	// sampler is the cached memory reading the task engine and GET /health share; slots are the gate slots
+	// (gateConcurrency) of task gates and regression runs.
+	sampler *task.Sampler
+	slots   *gate.Slots
+	// setMemoryLimit is debug.SetMemoryLimit (a fake in tests); memoryLimitSet says daemonMemoryLimitMB set it.
+	setMemoryLimit func(int64) int64
+	memoryLimitMu  sync.Mutex
+	memoryLimitSet bool
 	// stopCh is closed (once) when someone asked the daemon to stop through the API.
 	stopCh   chan struct{}
 	stopOnce sync.Once
@@ -196,7 +207,8 @@ func New(ctx context.Context, o Options) (*App, error) {
 	}
 	a := &App{Paths: o.Paths, log: o.Logger, env: o.Env, info: o.Info, web: o.Web, classifier: o.Classifier,
 		devOrigins: o.DevOrigins,
-		redact:     logx.NewRedactor().String, started0: o.Clock.Now(), pid: os.Getpid(), stopCh: make(chan struct{})}
+		redact:     logx.NewRedactor().String, started0: o.Clock.Now(), pid: os.Getpid(), stopCh: make(chan struct{}),
+		setMemoryLimit: debug.SetMemoryLimit}
 	if o.Settings != nil {
 		s := *o.Settings
 		a.settings.Store(&s)
@@ -309,6 +321,8 @@ func (a *App) build(o Options) error {
 	// One toolchain probe for the daemon: worker turns, task gates and regression runs get the same pin (cached
 	// per folder).
 	a.toolchains = account.NewToolchains(o.RealHome, nil, now)
+	a.sampler = task.NewSampler(platform.Memory, o.Clock, a.Settings)
+	a.slots = gate.NewSlots(func() int { return a.Settings().GateConcurrency })
 	a.Tasks, err = task.New(task.Options{
 		DB: a.DB, Accounts: a.Accounts, Pool: p, Backends: a.Backends, Settings: a.Settings,
 		TasksDir: o.Paths.Tasks, Launcher: o.Launcher, Usage: a.Usage, QuotaRefresh: a.Refresher.Request,
@@ -325,6 +339,11 @@ func (a *App) build(o Options) error {
 		Ledger:        ledger,
 		Members:       a.Members,
 		ContestEnded:  a.contestEnded,
+		Resources:     a.sampler,
+		GateSlots:     a.slots,
+		OnLowMemory: func(low bool, m platform.MemoryStatus) {
+			a.withAPI(func(s *httpapi.Server) { s.PublishResourcesChanged(low, m) })
+		},
 	})
 	if err != nil {
 		return err
@@ -431,6 +450,7 @@ func (a *App) Start(ctx context.Context) error {
 	runCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	a.cancel = cancel
 	a.mu.Unlock()
+	a.applyMemoryLimit(a.Settings().DaemonMemoryLimitMB)
 	a.wg.Add(1)
 	go func() {
 		defer a.wg.Done()
@@ -447,6 +467,24 @@ func (a *App) Start(ctx context.Context) error {
 	a.startTeam(ctx, runCtx)
 	a.startGitHub(ctx)
 	return nil
+}
+
+// applyMemoryLimit sets the daemon's soft memory limit to mb MiB (daemonMemoryLimitMB), or lifts the one it set
+// when mb is 0. A GOMEMLIMIT in the daemon's environment wins: the setting is not applied then.
+func (a *App) applyMemoryLimit(mb int) {
+	if v, ok := envx.Lookup(a.env, "GOMEMLIMIT"); ok && v != "" {
+		return
+	}
+	a.memoryLimitMu.Lock()
+	defer a.memoryLimitMu.Unlock()
+	switch {
+	case mb > 0:
+		a.setMemoryLimit(int64(mb) << 20)
+		a.memoryLimitSet = true
+	case a.memoryLimitSet:
+		a.setMemoryLimit(math.MaxInt64) // the runtime's default: no limit
+		a.memoryLimitSet = false
+	}
 }
 
 // RequestStop asks the process that runs the App to shut it down (POST /daemon/stop). It only signals: the owner
