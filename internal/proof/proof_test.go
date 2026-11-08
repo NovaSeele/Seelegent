@@ -332,3 +332,17 @@ func TestCheckCite(t *testing.T) {
 		t.Errorf("Summarize = %+v", s)
 	}
 }
+
+// A glob segment path.Match cannot read (an unclosed [) is reported as an overlap: the claim warning fails closed
+// (field report 4, review G3).
+func TestOverlapMalformedGlob(t *testing.T) {
+	if got := Overlap([]string{"src/[x/*.ts"}, []string{"src/a"}); len(got) != 1 {
+		t.Fatalf("overlap = %+v", got)
+	}
+	if !globReaches("src/[x", "src/x") || !globReaches("src/[x/*.ts", "src/x/a.ts") {
+		t.Fatal("a malformed glob does not reach")
+	}
+	if globReaches("lib/[x", "src/x") {
+		t.Fatal("a malformed glob under another folder reaches")
+	}
+}
