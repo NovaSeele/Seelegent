@@ -39,8 +39,8 @@ func TestCodexSandboxOverrideThroughShim(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"exec", "resume", "th-9", "--json", "--sandbox", "workspace-write", "-c",
-		"windows.sandbox=unelevated", "--model", "gpt-6-luna", "--skip-git-repo-check", "-"}
+	want := []string{"exec", "--json", "--sandbox", "workspace-write", "-c",
+		"windows.sandbox=unelevated", "--model", "gpt-6-luna", "--skip-git-repo-check", "resume", "th-9", "-"}
 	if !slices.Equal(cmd.Argv[1:], want) {
 		t.Fatalf("argv = %q\nwant %q", cmd.Argv[1:], want)
 	}

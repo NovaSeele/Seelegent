@@ -53,19 +53,18 @@ func codexHome(p account.Profile) string { return filepath.Join(p.Home, ".codex"
 
 // Command implements Backend; the prompt goes on standard input ("-"):
 //
-//	codex exec [resume ID] --json --sandbox (read-only | <sandbox>) [-c windows.sandbox=unelevated] [--model M]
-//	    --skip-git-repo-check -
+//	codex exec --json --sandbox (read-only | <sandbox>) [-c windows.sandbox=unelevated] [--model M]
+//	    --skip-git-repo-check [resume ID] -
 //
-// The -c override is added on Windows when the sandbox is read-only or workspace-write.
+// The exec options come before the resume subcommand: `codex exec resume` of codex-cli 0.167.0 has no --sandbox
+// ("unexpected argument '--sandbox' found", exit 2), so a continued turn written as `exec resume ID --sandbox ...`
+// never started. The -c override is added on Windows when the sandbox is read-only or workspace-write.
 func (c *Codex) Command(t Turn) (Command, error) {
 	bin, err := needBin(c.Name(), c.bin)
 	if err != nil {
 		return Command{}, err
 	}
 	argv := []string{bin, "exec"}
-	if t.ConversationID != "" {
-		argv = append(argv, "resume", t.ConversationID)
-	}
 	sandbox := t.Sandbox
 	switch {
 	case t.Plan:
@@ -86,7 +85,11 @@ func (c *Codex) Command(t Turn) (Command, error) {
 		argv = append(argv, "--model", t.Model)
 	}
 	// exec refuses to run outside a git repository without this flag; tasks may run in plain folders.
-	argv = append(argv, "--skip-git-repo-check", "-")
+	argv = append(argv, "--skip-git-repo-check")
+	if t.ConversationID != "" {
+		argv = append(argv, "resume", t.ConversationID)
+	}
+	argv = append(argv, "-")
 	if err := checkShimArgs(argv, c.goos); err != nil {
 		return Command{}, err
 	}
