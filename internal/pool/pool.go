@@ -381,24 +381,46 @@ func (u *Unavailable) writeBudget(b *strings.Builder) {
 	b.WriteString(" reached their budgets: raise the budgets or change the keys")
 }
 
-// writeNoCredit names the accounts without credit, each provider once: "the anthropic key has no credit left; top
-// up or change the key".
+// writeNoCredit names the accounts without credit, each provider once, and what to do: a key is topped up or
+// changed ("the anthropic key has no credit left; top up or change the key"); a sign-in account has no key, it is
+// switched off and on after a top-up ("the claude account work has no credit left; top up, then switch the account
+// off and on").
 func (u *Unavailable) writeNoCredit(b *strings.Builder) {
 	var names []string
+	keys, signIns := false, false
 	for _, nc := range u.NoCredit {
 		name := "the " + nc.Provider + " key"
 		if nc.Provider == "" {
 			name = "the " + u.Backend + " account " + cmp.Or(nc.Label, nc.AccountID)
 		}
-		if !slices.Contains(names, name) {
-			names = append(names, name)
+		if slices.Contains(names, name) {
+			continue
+		}
+		names = append(names, name)
+		if nc.Provider == "" {
+			signIns = true
+		} else {
+			keys = true
 		}
 	}
-	if len(names) == 1 {
-		fmt.Fprintf(b, "%s has no credit left; top up or change the key", names[0])
-		return
+	one := len(names) == 1
+	verb, todo := "have", ""
+	if one {
+		verb = "has"
 	}
-	fmt.Fprintf(b, "%s have no credit left; top up or change the keys", strings.Join(names, ", "))
+	switch {
+	case keys && signIns:
+		todo = "top up, then change the keys or switch the accounts off and on"
+	case signIns && one:
+		todo = "top up, then switch the account off and on"
+	case signIns:
+		todo = "top up, then switch the accounts off and on"
+	case one:
+		todo = "top up or change the key"
+	default:
+		todo = "top up or change the keys"
+	}
+	fmt.Fprintf(b, "%s %s no credit left; %s", strings.Join(names, ", "), verb, todo)
 }
 
 // writeKeyProviders adds the free API-key accounts: "; free API-key accounts: pass provider: anthropic and a

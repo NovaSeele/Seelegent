@@ -8,6 +8,7 @@ import (
 	"github.com/NovaSeele/Seelegent/internal/account"
 	"github.com/NovaSeele/Seelegent/internal/api"
 	"github.com/NovaSeele/Seelegent/internal/backend"
+	"github.com/NovaSeele/Seelegent/internal/pool"
 )
 
 // testProviderID names a newProvider without an id while it is tested (it is never stored).
@@ -74,6 +75,10 @@ func (s *Server) testKey(w http.ResponseWriter, r *http.Request) (code int, body
 	s.log.Info("provider key test", "provider", p.ID, "reason", res.Reason, "status", res.Status)
 	// With accountId the account's own provider was tested (checked above), so the result is the account's.
 	if acc != nil && ctx.Err() == nil {
+		if res.OK && s.restReason(ctx, acc.ID) == pool.RestCredits {
+			out.CreditUnseen = true
+			out.Message += "; this test cannot see the credit balance"
+		}
 		saved, err := s.o.Accounts.RecordTest(ctx, acc.ID, res.Reason, started)
 		if err != nil {
 			return 0, nil, err
@@ -85,6 +90,21 @@ func (s *Server) testKey(w http.ResponseWriter, r *http.Request) (code int, body
 		}
 	}
 	return http.StatusOK, out, nil
+}
+
+// restReason returns why the account rests until the user acts (pool.AccountState.RestReason), "" when it does not
+// or when the pool cannot be read (the test result does not depend on it).
+func (s *Server) restReason(ctx context.Context, id string) string {
+	states, err := s.o.Pool.States(ctx)
+	if err != nil {
+		return ""
+	}
+	for i := range states {
+		if states[i].Account.ID == id {
+			return states[i].RestReason
+		}
+	}
+	return ""
 }
 
 // providerToTest returns the provider of a key test, validated and with its base URL cleaned (the notices say

@@ -84,8 +84,35 @@ func TestNoCreditNamedWhileWaiting(t *testing.T) {
 		NoCredit: []NoCredit{{AccountID: "a", Provider: "anthropic"}, {AccountID: "b", Provider: "anthropic"},
 			{AccountID: "c", Label: "work"}}}
 	want := "all 1 claude accounts are resting; the anthropic key, the claude account work have no credit left; " +
-		"top up or change the keys"
+		"top up, then change the keys or switch the accounts off and on"
 	if got := u.Error(); got != want {
 		t.Errorf("detail = %q\nwant      %q", got, want)
+	}
+}
+
+// TestNoCreditWording (G4): a sign-in account has no key, so it is switched off and on after a top-up; keys are
+// topped up or changed.
+func TestNoCreditWording(t *testing.T) {
+	for _, c := range []struct {
+		nc   []NoCredit
+		want string
+	}{
+		{[]NoCredit{{AccountID: "a", Provider: "anthropic"}},
+			"the anthropic key has no credit left; top up or change the key"},
+		{[]NoCredit{{AccountID: "a", Provider: "anthropic"}, {AccountID: "b", Provider: "zai"}},
+			"the anthropic key, the zai key have no credit left; top up or change the keys"},
+		{[]NoCredit{{AccountID: "c", Label: "work"}},
+			"the claude account work has no credit left; top up, then switch the account off and on"},
+		{[]NoCredit{{AccountID: "c", Label: "work"}, {AccountID: "d"}},
+			"the claude account work, the claude account d have no credit left; top up, then switch the accounts " +
+				"off and on"},
+		{[]NoCredit{{AccountID: "c"}, {AccountID: "a", Provider: "anthropic"}},
+			"the claude account c, the anthropic key have no credit left; top up, then change the keys or switch " +
+				"the accounts off and on"},
+	} {
+		u := &Unavailable{Reason: ReasonNoAccount, Backend: "claude", NoCredit: c.nc}
+		if got := u.Error(); got != c.want {
+			t.Errorf("detail = %q\nwant      %q", got, c.want)
+		}
 	}
 }

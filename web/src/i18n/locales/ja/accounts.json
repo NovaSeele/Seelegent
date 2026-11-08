@@ -251,6 +251,7 @@
     "unreachable": "サービスに接続できません",
     "redirected": "別の場所にリダイレクトされました",
     "error": "テストに失敗しました",
+    "creditUnseen": "このテストではクレジット残高を確認できません",
     "testedAt": "{time} にテスト"
   },
   "notice": {

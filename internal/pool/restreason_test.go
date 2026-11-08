@@ -56,9 +56,9 @@ func (f *fixture) state(id string) AccountState {
 	if err != nil {
 		f.t.Fatal(err)
 	}
-	for _, st := range states {
-		if st.Account.ID == id {
-			return st
+	for i := range states {
+		if states[i].Account.ID == id {
+			return states[i]
 		}
 	}
 	f.t.Fatalf("no state for %s", id)

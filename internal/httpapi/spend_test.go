@@ -26,7 +26,7 @@ func TestSpendAndBudget(t *testing.T) {
 		created.NewProvider == nil || created.NewProvider.SpendSource != api.SpendCLI {
 		t.Fatalf("created = %+v", created)
 	}
-	account := func() api.Account {
+	accountNow := func() api.Account {
 		t.Helper()
 		var list []api.Account
 		e.must(e.get("/api/v1/accounts"), http.StatusOK).json(t, &list)
@@ -44,7 +44,7 @@ func TestSpendAndBudget(t *testing.T) {
 		Usage: event.Usage{InputTokens: 1000, OutputTokens: 200, CostUSD: 0.155}}); err != nil {
 		t.Fatal(err)
 	}
-	a := account()
+	a := accountNow()
 	if a.SpentUSD != 0.155 || a.SpentTokens != 1200 || a.SpentInputTokens != 1000 || a.BudgetState != api.BudgetReached ||
 		!a.Resting || a.RestReason != api.RestBudgetReached || a.SpentSince == "" {
 		t.Fatalf("after a run past the budget: %+v", a)
@@ -57,7 +57,7 @@ func TestSpendAndBudget(t *testing.T) {
 	}
 	e.must(e.req(http.MethodPatch, "/api/v1/accounts/"+created.ID, map[string]any{"budgetUsd": 200}, nil),
 		http.StatusOK)
-	if a = account(); a.BudgetState != api.BudgetOK || a.Resting || a.RestReason != "" || *a.BudgetUSD != 200 {
+	if a = accountNow(); a.BudgetState != api.BudgetOK || a.Resting || a.RestReason != "" || *a.BudgetUSD != 200 {
 		t.Fatalf("budget raised: %+v", a)
 	}
 	e.wantError(e.req(http.MethodPatch, "/api/v1/accounts/"+created.ID, map[string]any{"budgetUsd": -1}, nil),
@@ -68,7 +68,7 @@ func TestSpendAndBudget(t *testing.T) {
 	if err := e.a.Pool.MarkNoCredit(ctx, created.ID, "Credit balance is too low"); err != nil {
 		t.Fatal(err)
 	}
-	if a = account(); !a.Resting || a.RestReason != api.RestCredits || a.RestingUntil != "" {
+	if a = accountNow(); !a.Resting || a.RestReason != api.RestCredits || a.RestingUntil != "" {
 		t.Fatalf("no credit: %+v", a)
 	}
 	got = e.wantError(e.post("/api/v1/tasks", map[string]any{"prompt": "hi", "cwd": e.cwd, "backend": "claude",
@@ -79,7 +79,7 @@ func TestSpendAndBudget(t *testing.T) {
 	time.Sleep(2 * time.Millisecond) // the edit must come after the mark
 	e.must(e.req(http.MethodPatch, "/api/v1/accounts/"+created.ID, map[string]any{"enabled": true}, nil),
 		http.StatusOK)
-	if a = account(); a.Resting || a.RestReason != "" {
+	if a = accountNow(); a.Resting || a.RestReason != "" {
 		t.Fatalf("after an edit: %+v", a)
 	}
 

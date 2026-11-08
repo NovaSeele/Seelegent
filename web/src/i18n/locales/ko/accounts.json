@@ -251,6 +251,7 @@
     "unreachable": "서비스에 연결할 수 없음",
     "redirected": "다른 곳으로 리디렉션됨",
     "error": "테스트 실패",
+    "creditUnseen": "이 테스트로는 크레딧 잔액을 확인할 수 없습니다",
     "testedAt": "{time}에 테스트함"
   },
   "notice": {

@@ -259,7 +259,9 @@ in the daemon.
   or reached is logged once and wakes the pool. An account whose credit or billing ran out (a run ended with class
   `credits`) is held the same way, by reason and never as a date: `resting: true`, `restReason: "credits"`, no
   `restingUntil`, until a new key is stored, a key test passes (`testResult: ok` after the mark) or the account is
-  edited (switched off and on after a top-up); spend updates never count as an edit. One pool predicate decides both
+  edited (switched off and on after a top-up); spend updates never count as an edit. The key test lists models,
+  which works at zero credit too: a pass while the account rests on credits sets `creditUnseen: true` on the
+  `KeyTestResult` and ends its message with "; this test cannot see the credit balance" (it still lifts the rest). One pool predicate decides both
   holds. `POST /tasks` and followups on a provider whose every usable key is held are `400 invalid_argument`:
   `details.reason: "budget_reached"`, "anthropic keys reached their budget ($200); raise it in Accounts", or
   `details.reason: "credits"`, "the anthropic key has no credit left; top up or change the key". Migration 0013 back-fills the totals from the attempts still stored since
