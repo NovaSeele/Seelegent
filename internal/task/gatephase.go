@@ -150,7 +150,7 @@ func (s *Service) othersWorking(ctx context.Context, t *Task) bool {
 // PYTEST_XDIST_AUTO_NUM_WORKERS=N (unless the daemon's environment sets them): ParallelVars.
 func (s *Service) gateEnv(ctx context.Context, t *Task, root string, files []string) []string {
 	base := s.o.BaseEnv()
-	extra := ParallelVars(base, s.settings().TestParallelism)
+	extra := ParallelVars(base, s.limits().TestParallelism)
 	maps.Copy(extra, s.toolEnv(ctx, root))
 	own := []string{"CI", "SEELEGENT_GATE", "SEELEGENT_TASK", "SEELEGENT_TURN_FILES"}
 	for k := range extra {
@@ -461,7 +461,7 @@ func (s *Service) admitHeavy(ctx context.Context, onSlot func(pos, limit int), o
 			}
 		}
 		wake := s.memoryWake()
-		if s.memoryHold(s.settings()) == nil {
+		if s.memoryHold(s.limits()) == nil {
 			return release, nil
 		}
 		release()

@@ -110,7 +110,8 @@ counts as finished, not cut short. The task then runs the whole gate again once 
 that only shows a stopped step therefore never reads as green.
 
 **Slots and memory.** Each gate run (all its commands, one after the other) and each regression run command takes
-one of `gateConcurrency` slots (`gate.Slots`, shared by every task; `0` = no limit). Slots are given in the order
+one of `gateConcurrency` slots (`gate.Slots`, shared by every task; the effective value, auto from the machine
+unless set; `0` = no limit). Slots are given in the order
 they were asked for; while a gate waits for one its phase is `queued` with `wait: "slot"` and its place in line
 (`position`, 1 = next), published as a `gate` event with `phase: "queued"`. That event is logged when the wait
 starts, when what it waits for changes, and when the position moves: every move at position 3 or less, further

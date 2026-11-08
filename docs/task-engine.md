@@ -136,7 +136,10 @@ gate commands, never on a running worker.
 
 The engine reads memory through `Options.Resources` (`task.Sampler` over `platform.Memory`: a reading is cached
 for 2 s, and `Changed` fires when one crosses a threshold or the settings change). A reading the system cannot give
-(`Known` false; commit is unknown when `AvailCommitMB` is 0) never holds anything.
+(`Known` false; commit is unknown when `AvailCommitMB` is 0) never holds anything. Every threshold below is the
+effective value (`config.EffectiveResources`: the user's value, or the auto value computed from the machine profile
+the daemon reads at start and on each settings change; see [configuration.md](configuration.md#resources)), so it
+does not move between readings.
 
 - **Start check.** Before a run asks the pool for an account, it compares free physical memory with
   `minFreeMemoryMB` and free commit with `minFreeCommitMB` (each `0` = off). Below either the task is

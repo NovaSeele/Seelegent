@@ -57,7 +57,7 @@ func (f *fakeMemory) set(phys, commit int64) {
 // memorySettings are the thresholds of the engine tests: 2048 MB physical, commit off, watchdog at crit (0 = off).
 func memorySettings(crit int) func(*config.Settings) {
 	return func(s *config.Settings) {
-		s.MinFreeMemoryMB, s.MinFreeCommitMB, s.CriticalFreeMemoryMB = 2048, 0, crit
+		s.MinFreeMemoryMB, s.MinFreeCommitMB, s.CriticalFreeMemoryMB = config.Int(2048), config.Int(0), config.Int(crit)
 	}
 }
 
@@ -201,8 +201,8 @@ func TestResourcesWaitAttention(t *testing.T) {
 func TestGateSlotsFIFO(t *testing.T) {
 	var slots *gate.Slots
 	h := newHarnessWith(t, func(h *harness) {
-		h.set(func(s *config.Settings) { s.GateConcurrency = 1 })
-		slots = gate.NewSlots(func() int { return h.config().GateConcurrency })
+		h.set(func(s *config.Settings) { s.GateConcurrency = config.Int(1) })
+		slots = gate.NewSlots(func() int { return *h.config().GateConcurrency })
 		h.slots = slots
 	})
 	h.initRepo(map[string]string{"a.txt": "a\n", "b.txt": "b\n"})
@@ -273,8 +273,8 @@ func TestGateQueuedMemoryReleasesSlot(t *testing.T) {
 	h := newHarnessWith(t, func(h *harness) {
 		h.res = mem
 		h.set(memorySettings(0))
-		h.set(func(s *config.Settings) { s.GateConcurrency = 1 })
-		slots = gate.NewSlots(func() int { return h.config().GateConcurrency })
+		h.set(func(s *config.Settings) { s.GateConcurrency = config.Int(1) })
+		slots = gate.NewSlots(func() int { return *h.config().GateConcurrency })
 		h.slots = slots
 	})
 	h.initRepo(map[string]string{"a.txt": "a\n"})
@@ -446,7 +446,8 @@ func TestWatchdogOneStopPerEpisode(t *testing.T) {
 func TestLowMemoryHysteresis(t *testing.T) {
 	mem := newFakeMemory(5000)
 	set := config.Defaults()
-	set.MinFreeMemoryMB, set.MinFreeCommitMB, set.CriticalFreeMemoryMB = 2048, 4096, 1024
+	set.MinFreeMemoryMB, set.MinFreeCommitMB = config.Int(2048), config.Int(4096)
+	set.CriticalFreeMemoryMB = config.Int(1024)
 	var flips []bool
 	s := &Service{o: Options{Resources: mem, Settings: func() config.Settings { return set },
 		OnLowMemory: func(low bool, _ platform.MemoryStatus) { flips = append(flips, low) }},
@@ -498,11 +499,11 @@ func TestLowMemoryHysteresis(t *testing.T) {
 		t.Fatal("an unknown reading must not hold")
 	}
 	step(500, 0, true)
-	set.CriticalFreeMemoryMB = 0
+	set.CriticalFreeMemoryMB = config.Int(0)
 	step(500, 0, false) // the watchdog is off
 
 	// Without minFree thresholds the resume level is twice the critical line.
-	set.MinFreeMemoryMB, set.MinFreeCommitMB, set.CriticalFreeMemoryMB = 0, 0, 1024
+	set.MinFreeMemoryMB, set.MinFreeCommitMB, set.CriticalFreeMemoryMB = config.Int(0), config.Int(0), config.Int(1024)
 	step(1000, 0, true)
 	step(2047, 0, true)
 	step(2048, 0, false)
@@ -515,11 +516,11 @@ func TestLowMemoryHysteresis(t *testing.T) {
 func TestSamplerCachesAndSignals(t *testing.T) {
 	clk := clock.NewFake(harnessEpoch)
 	set := config.Defaults()
-	set.MinFreeMemoryMB, set.CriticalFreeMemoryMB = 2048, 1024
+	set.MinFreeMemoryMB, set.CriticalFreeMemoryMB = config.Int(2048), config.Int(1024)
 	reads := 0
 	reading := platform.MemoryStatus{AvailPhysMB: 5000, Known: true}
 	s := NewSampler(func() platform.MemoryStatus { reads++; return reading }, clk,
-		func() config.Settings { return set })
+		func() config.Resources { return config.EffectiveResources(set, config.Machine{}) })
 	closed := func(ch <-chan struct{}) bool {
 		select {
 		case <-ch:
@@ -589,7 +590,7 @@ func mapsEqual(a, b map[string]string) bool {
 // CARGO_BUILD_JOBS the daemon's environment sets.
 func TestGateEnvParallelism(t *testing.T) {
 	set := config.Defaults()
-	set.TestParallelism = 4
+	set.TestParallelism = config.Int(4)
 	s := &Service{o: Options{Settings: func() config.Settings { return set },
 		BaseEnv: func() []string { return []string{"PATH=/bin", "GOFLAGS=-mod=mod", "CARGO_BUILD_JOBS=8"} }}}
 	env := s.gateEnv(t.Context(), &Task{ID: "t1"}, t.TempDir(), nil)
@@ -607,7 +608,7 @@ func TestGateEnvParallelism(t *testing.T) {
 			t.Errorf("%s: %d entries, last %q, want one %q (env %v)", name, n, v, want, env)
 		}
 	}
-	set.TestParallelism = 0
+	set.TestParallelism = config.Int(0)
 	env = s.gateEnv(t.Context(), &Task{ID: "t1"}, t.TempDir(), nil)
 	if n, v := count("GOFLAGS"); n != 1 || v != "-mod=mod" {
 		t.Errorf("testParallelism 0 changed GOFLAGS: %v", env)

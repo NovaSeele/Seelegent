@@ -16,3 +16,6 @@ func memoryStatus() MemoryStatus {
 	}
 	return fromMemorystatusLevel(memsize, level)
 }
+
+// cgroupCPUs: macOS has no cgroups.
+func cgroupCPUs() (int, bool) { return 0, false }

@@ -75,7 +75,35 @@ func (s *Server) health() api.Health {
 	if s.o.LowMemory != nil {
 		h.LowMemory = s.o.LowMemory()
 	}
+	var m config.Machine
+	if s.o.Machine != nil {
+		m = s.o.Machine()
+	}
+	set := config.Defaults()
+	if s.o.Settings != nil {
+		set = s.o.Settings.Settings()
+	}
+	h.Resources = effectiveResources(set, m)
+	h.Machine = api.Machine{TotalPhysMB: m.TotalPhysMB, TotalCommitMB: m.TotalCommitMB, CPUs: m.CPUs}
 	return h
+}
+
+// effectiveResources are the API form of config.EffectiveResources with the source of each value.
+func effectiveResources(set config.Settings, m config.Machine) api.EffectiveResources {
+	r := config.EffectiveResources(set, m)
+	value := func(v int, p *int) api.EffectiveValue {
+		if p != nil {
+			return api.EffectiveValue{Value: v, Source: api.ResourceExplicit}
+		}
+		return api.EffectiveValue{Value: v, Source: api.ResourceAuto}
+	}
+	return api.EffectiveResources{
+		MinFreeMemoryMB:      value(r.MinFreeMemoryMB, set.MinFreeMemoryMB),
+		CriticalFreeMemoryMB: value(r.CriticalFreeMemoryMB, set.CriticalFreeMemoryMB),
+		MinFreeCommitMB:      value(r.MinFreeCommitMB, set.MinFreeCommitMB),
+		TestParallelism:      value(r.TestParallelism, set.TestParallelism),
+		GateConcurrency:      value(r.GateConcurrency, set.GateConcurrency),
+	}
 }
 
 // memoryStatus is the API form of a known reading.

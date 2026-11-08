@@ -50,7 +50,8 @@ Seelegent works on, or the `gh` CLI, whose own credential store Seelegent then u
 ## How the file is read and written
 
 - A missing `config.json` means "all defaults"; it is written the first time a setting is saved.
-- Every key is optional. A missing key, or a key set to `null`, takes its default.
+- Every key is optional. A missing key, or a key set to `null`, takes its default. For the five auto settings
+  under [Resources](#resources) the default is computed from the machine, and it is never written to the file.
 - A UTF-8 byte order mark at the start (Notepad, Windows PowerShell 5.1's `Set-Content -Encoding UTF8`) is
   skipped; saves never write one.
 - A file that is not valid JSON, has a value of the wrong type, or holds a value out of range is an **error**: the
@@ -163,18 +164,43 @@ How much of the machine Seelegent's worker trees, gate commands and the daemon i
 without restarting the daemon: a running worker or gate command keeps the limits it started with, the next one gets
 the new values (the "Applies" column). A memory reading the system cannot give never holds anything back.
 
+`gateConcurrency`, `minFreeMemoryMB`, `minFreeCommitMB`, `criticalFreeMemoryMB` and `testParallelism` are **auto**
+by default: while the key is absent from `config.json` (or `null`), the daemon computes the value from the machine,
+so one default suits a 4 GB laptop and a 128 GB workstation. A value you set wins, and `0` still means off or
+unlimited; setting the key to `null` again (`PATCH /api/v1/settings` with `null`, or "Auto" in the dashboard)
+returns it to auto. A computed value is never written to `config.json`. `GET /api/v1/health` (`resources`, each with
+`source` `auto` or `explicit`, and `machine`) and `seelegent doctor` (check `resources`) show the values in use.
+
+| Auto setting | Formula | 8 GB, 4 CPUs (Windows, 12 GB commit) | 16 GB, 16 CPUs (Linux) | 31 GB, 24 CPUs (Windows, 36 GB commit) |
+| --- | --- | --- | --- | --- |
+| `minFreeMemoryMB` | 12.5% of the physical memory, from 512 to 2048 | 1024 | 2048 | 2048 |
+| `criticalFreeMemoryMB` | half of `minFreeMemoryMB` | 512 | 1024 | 1024 |
+| `minFreeCommitMB` | Windows with a known commit limit: 10% of it, from 1024 to 4096; else `0` | 1228 | 0 | 3686 |
+| `testParallelism` | a quarter of the CPUs, from 1 to 8 | 1 | 4 | 6 |
+| `gateConcurrency` | an eighth of the CPUs or one per 8 GB of memory, whichever is less, from 1 to 4 | 1 | 2 | 3 |
+
+- The machine is read once when the daemon starts and again when the settings change, never per memory reading, so
+  the auto thresholds hold still. Physical memory is the cgroup memory limit when that is lower (containers); the
+  commit limit is rounded down to a whole GB, so a growing page file does not move them.
+- The CPUs are the ones the daemon may use: `GOMAXPROCS` (which follows the cgroup CPU limit on Linux), or, when
+  `GOMAXPROCS` is set in the daemon's environment, the logical CPUs lowered to the cgroup v2 `cpu.max`.
+- When only one of `minFreeMemoryMB` and `criticalFreeMemoryMB` is set, the other is derived so the floor stays below
+  the minimum: an auto floor is half the minimum you set (half the auto minimum when yours is `0`), and an auto
+  minimum is twice a floor you set at or above the auto minimum (at most 1048576). The rule "the floor must be below
+  the minimum" is checked only when you set both.
+
 | Setting | Type | Default | Applies | Meaning |
 | --- | --- | --- | --- | --- |
 | `workerPriority` | `low`, `normal` | `"low"` | next launch | Process priority of worker trees. `low` is `BELOW_NORMAL_PRIORITY_CLASS` for the whole Job Object on Windows (every descendant included; the launcher itself stays at normal priority) and nice 10 on Unix (the launcher lowers its own nice before it starts the worker, so every descendant inherits it). Low priority only shares the CPU: it does not lower memory or disk pressure. |
 | `gatePriority` | `low`, `normal` | `"low"` | next command | Process priority of gate commands, proof regression runs, automation prechecks and event hooks. git, quota reads and `gh` always run at normal priority. Low priority makes gates slower on a busy machine, so they may need a larger `gateTimeoutSec`. |
 | `maxConcurrentWorkers` | integer 0–256 | `0` | now | Worker turns that may run at the same time over all accounts (`maxConcurrentPerAccount` still caps each account); `0` = no cap. |
-| `gateConcurrency` | integer 0–64 | `2` | now | Gate commands and regression runs that may run at the same time; the others wait in order with the gate phase `queued`, and their timeout starts only when their command starts. `0` = unlimited. |
-| `minFreeMemoryMB` | integer 0–1048576 | `2048` | next check | A new worker turn or gate command waits while the available physical memory is below this many MB (the task shows status `waiting_quota` with `waiting: "memory"`, a gate phase `queued` with wait `memory`); `0` = off. |
-| `minFreeCommitMB` | integer 0–1048576 | `4096` | next check | The same for the available commit (RAM plus page file). Windows only: elsewhere commit is unknown and never holds anything. `0` = off. |
-| `criticalFreeMemoryMB` | integer 0–1048576 | `1024` | next check | Emergency floor. While free physical memory or free commit is below it, the newest running gate command is stopped (its gate is queued again and the turn does not fail; after 3 such stops in one gate phase the gate ends in error), every new start waits, and the dashboard shows that the machine is low on memory. Workers are never stopped for it. While both are on it must be below `minFreeMemoryMB`. `0` = off. |
+| `gateConcurrency` | integer 0–64 or `null` | auto | now | Gate commands and regression runs that may run at the same time; the others wait in order with the gate phase `queued`, and their timeout starts only when their command starts. `0` = unlimited. |
+| `minFreeMemoryMB` | integer 0–1048576 or `null` | auto | next check | A new worker turn or gate command waits while the available physical memory is below this many MB (the task shows status `waiting_quota` with `waiting: "memory"`, a gate phase `queued` with wait `memory`); `0` = off. |
+| `minFreeCommitMB` | integer 0–1048576 or `null` | auto | next check | The same for the available commit (RAM plus page file). Windows only: elsewhere commit is unknown and never holds anything. `0` = off. |
+| `criticalFreeMemoryMB` | integer 0–1048576 or `null` | auto | next check | Emergency floor. While free physical memory or free commit is below it, the newest running gate command is stopped (its gate is queued again and the turn does not fail; after 3 such stops in one gate phase the gate ends in error), every new start waits, and the dashboard shows that the machine is low on memory. Workers are never stopped for it. While both are set and on it must be below `minFreeMemoryMB`. `0` = off. |
 | `workerMemoryLimitMB` | integer 0–1048576 | `0` | next launch | Windows only: memory cap of each worker tree (Job Object). A turn that reaches it fails with a message saying so; edits already on disk stay. `0` = off. |
 | `workerCPURatePercent` | integer 0–100 | `0` | next launch | Windows only: hard cap of each worker tree's CPU, as a percentage of the whole machine (Job Object CPU rate control). `0` = off. |
-| `testParallelism` | integer 0–64 | `4` | next full brief, next gate | Parallelism hint for tests and builds: full briefs get a "Shared machine" section (test only the packages you changed; cap `-p`, `-j`, `--maxWorkers`, `cargo -j`, `pytest -n`), and the environments of worker turns, gate commands and regression runs get `-p=N` appended to `GOFLAGS` (unless the daemon's `GOFLAGS` sets `-p` already), `CARGO_BUILD_JOBS=N` and `PYTEST_XDIST_AUTO_NUM_WORKERS=N` (unless the daemon's environment sets them). These are defaults only: a `-p`, `-j` or `-n` on a command line wins. `0` = no hint and no variables. |
+| `testParallelism` | integer 0–64 or `null` | auto | next full brief, next gate | Parallelism hint for tests and builds: full briefs get a "Shared machine" section (test only the packages you changed; cap `-p`, `-j`, `--maxWorkers`, `cargo -j`, `pytest -n`), and the environments of worker turns, gate commands and regression runs get `-p=N` appended to `GOFLAGS` (unless the daemon's `GOFLAGS` sets `-p` already), `CARGO_BUILD_JOBS=N` and `PYTEST_XDIST_AUTO_NUM_WORKERS=N` (unless the daemon's environment sets them). These are defaults only: a `-p`, `-j` or `-n` on a command line wins. `0` = no hint and no variables. |
 | `daemonMemoryLimitMB` | integer 0–65536 | `0` | now | Soft memory limit of the daemon process (Go's `debug.SetMemoryLimit`): the garbage collector works harder near it, the daemon is never stopped for it. A `GOMEMLIMIT` in the daemon's environment wins. `0` = off. |
 
 ### GitHub and automations

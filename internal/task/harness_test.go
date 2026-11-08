@@ -67,6 +67,8 @@ type harness struct {
 	res   Resources
 	slots GateSlots
 	onLow func(bool, platform.MemoryStatus)
+	// machine is the machine profile of the next start (nil: unknown).
+	machine func() config.Machine
 
 	mu        sync.Mutex
 	refreshes []string
@@ -189,6 +191,7 @@ func (h *harness) start() {
 		Resources:     h.res,
 		GateSlots:     h.slots,
 		OnLowMemory:   h.onLow,
+		Machine:       h.machine,
 		ContestEnded: func(_ context.Context, id string) (string, bool, error) {
 			h.mu.Lock()
 			defer h.mu.Unlock()

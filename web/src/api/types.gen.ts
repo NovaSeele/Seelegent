@@ -2153,22 +2153,28 @@ export interface Settings {
   gatePriority: 'low' | 'normal'
   /** MaxConcurrentWorkers caps the worker turns that run at the same time over all accounts; 0 = no cap. */
   maxConcurrentWorkers: number
-  /** GateConcurrency caps the gate commands (and regression runs) that run at the same time; 0 = unlimited. */
-  gateConcurrency: number
+  /**
+   * GateConcurrency caps the gate commands (and regression runs) that run at the same time; 0 = unlimited;
+   * absent = auto (Health.resources has the value in use).
+   */
+  gateConcurrency?: number | null
   /**
    * MinFreeMemoryMB holds new worker turns and gate commands while the available physical memory is below it;
-   * 0 = off. An unknown reading never holds anything.
+   * 0 = off; absent = auto. An unknown reading never holds anything.
    */
-  minFreeMemoryMB: number
-  /** MinFreeCommitMB is the same for the available commit (Windows only; elsewhere commit is unknown); 0 = off. */
-  minFreeCommitMB: number
+  minFreeMemoryMB?: number | null
+  /**
+   * MinFreeCommitMB is the same for the available commit (Windows only; elsewhere commit is unknown); 0 = off;
+   * absent = auto.
+   */
+  minFreeCommitMB?: number | null
   /**
    * CriticalFreeMemoryMB is the emergency floor: while free physical memory or free commit is below it, the
    * watchdog stops the newest running gate command (its gate is queued again; the turn does not fail) and every
-   * new start waits. Workers are never stopped for it. 0 = off; when both are on it must be below
-   * MinFreeMemoryMB.
+   * new start waits. Workers are never stopped for it. 0 = off; absent = auto; when both are set and on it must be
+   * below MinFreeMemoryMB.
    */
-  criticalFreeMemoryMB: number
+  criticalFreeMemoryMB?: number | null
   /**
    * WorkerMemoryLimitMB caps the memory of each worker tree (Windows Job Object; a turn over it fails);
    * 0 = off.
@@ -2181,9 +2187,10 @@ export interface Settings {
   workerCPURatePercent: number
   /**
    * TestParallelism is the parallelism hint for tests and builds: the "Shared machine" section of full briefs
-   * and GOFLAGS=-p=N / CARGO_BUILD_JOBS=N in worker and gate environments; 0 = no hint and no variables.
+   * and GOFLAGS=-p=N / CARGO_BUILD_JOBS=N in worker and gate environments; 0 = no hint and no variables;
+   * absent = auto.
    */
-  testParallelism: number
+  testParallelism?: number | null
   /**
    * DaemonMemoryLimitMB is the daemon's soft memory limit (debug.SetMemoryLimit); 0 = off. A GOMEMLIMIT in the
    * daemon's environment wins.
@@ -2330,6 +2337,38 @@ export interface Health {
    * below criticalFreeMemoryMB. resources.changed tells when it flips.
    */
   lowMemory: boolean
+  /**
+   * Resources are the values the daemon uses for the machine-sized settings, each with where it comes from
+   * (the setting is auto, or the user set it), so a view can show "Auto (2 GB on this machine)".
+   */
+  resources: EffectiveResources
+  /** Machine is what the auto values are computed from, read when the daemon started or the settings changed. */
+  machine: Machine
+}
+
+/** EffectiveValue is the value the daemon uses for one machine-sized setting and where it comes from. */
+export interface EffectiveValue {
+  value: number
+  source: 'auto' | 'explicit'
+}
+
+/** EffectiveResources are the effective values of the machine-sized settings (config.EffectiveResources). */
+export interface EffectiveResources {
+  minFreeMemoryMB: EffectiveValue
+  criticalFreeMemoryMB: EffectiveValue
+  minFreeCommitMB: EffectiveValue
+  testParallelism: EffectiveValue
+  gateConcurrency: EffectiveValue
+}
+
+/** Machine is what the auto resource values are computed from (config.Machine). */
+export interface Machine {
+  /** TotalPhysMB is the physical memory in MiB (the cgroup memory limit when lower); 0 = unknown. */
+  totalPhysMB: number
+  /** TotalCommitMB is the commit limit in MiB, rounded down to a whole GiB: Windows only, 0 = unknown. */
+  totalCommitMB: number
+  /** CPUs are the logical CPUs the daemon may use. */
+  cpus: number
 }
 
 /**

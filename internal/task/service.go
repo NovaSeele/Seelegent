@@ -215,6 +215,9 @@ type Options struct {
 	// OnLowMemory is told when the watchdog starts (low) or stops holding every new start, with the reading that
 	// flipped it (the resources.changed frame); nil tells nobody. It must not block.
 	OnLowMemory func(low bool, m platform.MemoryStatus)
+	// Machine is the machine profile the auto resource settings are computed from (config.EffectiveResources);
+	// nil is an unknown machine (the auto values at their low ends).
+	Machine func() config.Machine
 	// Clock is the time source (the system clock when nil).
 	Clock clock.Clock
 	// Logger receives engine logs (discarded when nil). Use a logx logger so secrets are masked.

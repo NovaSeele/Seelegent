@@ -43,7 +43,7 @@ func (a *App) proofExec(ctx context.Context, cmd, dir, logFile string) proof.Cmd
 	defer cancel(nil)
 	defer a.Tasks.TrackHeavy(cancel)()
 	set := a.Settings()
-	extra := task.ParallelVars(a.env, set.TestParallelism)
+	extra := task.ParallelVars(a.env, a.Limits().TestParallelism)
 	if a.toolchains != nil {
 		maps.Copy(extra, a.toolchains.Env(ctx, dir, a.env))
 	}

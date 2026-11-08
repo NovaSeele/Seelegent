@@ -177,7 +177,11 @@ in the daemon.
   (`runtime.GOOS`), `memory` (`{availPhysMB, availCommitMB, known}`, all zero unless the reading is known) and
   `lowMemory` (the memory watchdog holds new starts, see `criticalFreeMemoryMB` in
   [configuration.md](configuration.md)); the frame `resources.changed {lowMemory, memory}` says when `lowMemory`
-  flips (milestone 19).
+  flips (milestone 19). `resources` holds the values in use for the five auto settings (`gateConcurrency`,
+  `minFreeMemoryMB`, `minFreeCommitMB`, `criticalFreeMemoryMB`, `testParallelism`), each `{value, source}` with
+  `source` `auto` (computed from the machine) or `explicit` (set by the user), and `machine`
+  (`{totalPhysMB, totalCommitMB, cpus}`) is what the auto values come from. In `GET /settings` an auto setting is
+  absent; `PATCH /settings` with `null` returns one to auto.
 - `capabilities.takeover` is true for backends that can resume a session; `apiKey` for every backend but agy;
   `listModels` for codex.
 - Sign-in runs in a terminal window. Once the window is open the session is `in_terminal` ("finish signing in in the
