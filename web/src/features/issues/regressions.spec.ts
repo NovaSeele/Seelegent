@@ -7,7 +7,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { createApiClient, createGitHubApi } from '@/api'
 import type { GitHubAccess, Repo, Ticket } from '@/api/types'
-import { i18n } from '@/i18n'
 import { useGitHubStore } from '@/stores/github'
 import { flush, setupApp } from '@/test/app'
 
@@ -74,7 +73,7 @@ describe('issues regressions', () => {
     const w = mount(IssueInbox, { global: { plugins, stubs: { RouterLink: RouterLinkStub } } })
     await flush()
     expect(w.text()).toContain('The last sync did not finish')
-    expect(w.text()).toContain(i18n.global.t('issues.cause.githubNotFound'))
+    expect(w.text()).toContain('The sync error above says what went wrong')
     expect(w.text()).not.toContain('Sync to fetch')
 
     current = repo({ lastSyncAt: '2026-11-08T00:00:00Z' })

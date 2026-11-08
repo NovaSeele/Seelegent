@@ -15,14 +15,13 @@ import { useFormat } from '@/composables/useFormat'
 import { useGitHubStore } from '@/stores/github'
 
 import AddIssueDialog from './AddIssueDialog.vue'
-import { causeKey } from './causeText'
 import { inboxOrder, phaseLabel, safeUrl, TICKET_PHASE, ticketPhase } from './issueModel'
 import TriageDialog from './TriageDialog.vue'
 
 /**
  * The chosen repo's inbox: GitHub issues from the last sync and local ones, undecided first. Issue text is shown
  * as plain text (it is untrusted); a decision is made in the triage dialog. Empty after a failed sync, it says so
- * with the cause's next step (the repo bar above keeps the daemon's message), not "sync to fetch".
+ * and points at the repo bar's error above (the cause, its next step and the daemon's message), not "sync to fetch".
  */
 const { t } = useI18n()
 const fmt = useFormat()
@@ -72,7 +71,7 @@ function decide(issue: Issue) {
       v-else-if="!shown.length && gh.repo?.syncError"
       icon="warning"
       :title="t('issues.inbox.syncFailed')"
-      :description="t('issues.inbox.syncFailedDesc', { next: t(causeKey(gh.repo.syncErrorCause)) })"
+      :description="t('issues.inbox.syncFailedDesc')"
     />
     <EmptyState
       v-else-if="!shown.length"

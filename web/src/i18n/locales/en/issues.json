@@ -72,7 +72,7 @@
     "empty": "No issues here",
     "emptyDesc": "Sync to fetch the repository's issues from GitHub, or add a local issue.",
     "syncFailed": "The last sync did not finish",
-    "syncFailedDesc": "Its issues are not here yet. {next}",
+    "syncFailedDesc": "Its issues are not here yet. The sync error above says what went wrong and what to do next.",
     "closed": "Closed",
     "by": "by {author}",
     "suggested": "Suggested: {action}",

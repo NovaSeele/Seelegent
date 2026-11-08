@@ -72,7 +72,7 @@
     "empty": "issue가 없습니다",
     "emptyDesc": "동기화해서 GitHub에서 저장소의 issue를 가져오거나 로컬 issue를 추가하세요.",
     "syncFailed": "마지막 동기화가 끝나지 않았습니다",
-    "syncFailedDesc": "issue를 아직 가져오지 못했습니다. {next}",
+    "syncFailedDesc": "issue를 아직 가져오지 못했습니다. 위의 동기화 오류에 원인과 다음에 할 일이 나와 있습니다.",
     "closed": "닫힘",
     "by": "작성자 {author}",
     "suggested": "제안: {action}",
