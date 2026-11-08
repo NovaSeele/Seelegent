@@ -215,7 +215,8 @@ func runEOLCase(t *testing.T, tc eolCase) map[string][]string {
 }
 
 // An automatic fix turn that leaves the same line ending findings ends the fix loop at once: the lead decides,
-// the rest of the budget is not spent (M18: two fix turns could not clear a finding).
+// the rest of the budget is not spent (M18: two fix turns could not clear a finding). The steps the findings stopped
+// still run, and pass.
 func TestGateStopsFixLoopOnSameStyleFindings(t *testing.T) {
 	h := newHarness(t)
 	h.set(func(s *config.Settings) { s.GateMaxAutoFixes = 2 })
@@ -224,7 +225,7 @@ func TestGateStopsFixLoopOnSameStyleFindings(t *testing.T) {
 	a, b := filepath.Join(h.cwd, "a.txt"), filepath.Join(h.cwd, "b.txt")
 	h.queue.Push(t, editScript("conv-s", a, "x\r\ny\r\nz\r\nw\r\n", "Changed a.txt."))
 	h.queue.Push(t, editScript("conv-s", b, "b\nc\n", "Changed b.txt."))
-	sum := h.delegate(api.DelegateRequest{Title: "eol"})
+	sum := h.delegate(api.DelegateRequest{Title: "eol", GateCommands: []string{gateCmd(t, "b.txt", "b")}})
 	tk := h.waitStatus(sum.ID, StatusDone)
 	if len(tk.Turns) != 2 || tk.Proof.AutoFixes != 1 {
 		t.Fatalf("turns = %d, auto fixes = %d", len(tk.Turns), tk.Proof.AutoFixes)
@@ -234,7 +235,8 @@ func TestGateStopsFixLoopOnSameStyleFindings(t *testing.T) {
 		t.Fatalf("first gate = %+v, fix by %s", first.Gate, fix.By)
 	}
 	g := fix.Gate
-	if g == nil || g.State != api.GateRed || g.AutoFix != 0 || len(g.Warnings) != 1 ||
+	if g == nil || g.State != api.GateRed || g.AutoFix != 0 || len(g.Warnings) != 1 || len(g.NotRun) != 0 ||
+		g.Steps[len(g.Steps)-1].State != api.StepGreen ||
 		!strings.Contains(g.Warnings[0], "same line ending") {
 		t.Fatalf("fix gate = %+v", g)
 	}
@@ -243,31 +245,93 @@ func TestGateStopsFixLoopOnSameStyleFindings(t *testing.T) {
 	}
 }
 
-func TestStuckStyleFix(t *testing.T) {
-	gateOf := func(autoFix int, findings ...api.Finding) *api.GateResult {
-		return &api.GateResult{AutoFix: autoFix, Steps: []api.GateStep{{Kind: api.StepHygiene, Findings: findings}}}
+// A fix turn that repeats the line ending findings but also fails something else gets more fix turns; their
+// prompts leave the repeated files out, which stay red for the lead.
+func TestGateKeepsFixingOtherFailuresWithoutStuckStyle(t *testing.T) {
+	h := newHarness(t)
+	h.set(func(s *config.Settings) { s.GateMaxAutoFixes = 2 })
+	h.initRepo(map[string]string{"a.txt": "x\ny\nz\n", "b.txt": "b\n"})
+	h.agy("w", 1)
+	a, b := filepath.Join(h.cwd, "a.txt"), filepath.Join(h.cwd, "b.txt")
+	h.queue.Push(t, editScript("conv-o", a, "x\r\ny\r\nz\r\nw\r\n", "Changed a.txt."))
+	h.queue.Push(t, editScript("conv-o", b, "still broken\n", "Changed b.txt."))
+	h.queue.Push(t, editScript("conv-o", b, "fixed\n", "Fixed b.txt."))
+	sum := h.delegate(api.DelegateRequest{Title: "eol and test", GateCommands: []string{gateCmd(t, "b.txt", "fixed")}})
+	tk := h.waitStatus(sum.ID, StatusDone)
+	if len(tk.Turns) != 3 || tk.Proof.AutoFixes != 2 {
+		t.Fatalf("turns = %d, auto fixes = %d", len(tk.Turns), tk.Proof.AutoFixes)
 	}
-	eol := api.Finding{Kind: api.FindingEOLChanged, Path: "a.txt"}
-	bom := api.Finding{Kind: api.FindingBOMChanged, Path: "a.txt"}
-	junk := api.Finding{Kind: api.FindingJunkFile, Path: "x.orig"}
-	tk := &Task{Turns: []*Turn{{N: 1, Gate: gateOf(2, eol, junk)}, {N: 2, By: ByGate}}}
+	const restore = "Restore the original line endings"
+	if m := tk.Turns[1].Message; !strings.Contains(m, restore) || !strings.Contains(m, "a.txt (eol_changed)") {
+		t.Fatalf("first fix prompt:\n%s", m)
+	}
+	if m := tk.Turns[2].Message; strings.Contains(m, restore) || strings.Contains(m, "a.txt") ||
+		!strings.Contains(m, "gate-check b.txt fixed") {
+		t.Fatalf("second fix prompt:\n%s", m)
+	}
+	g := tk.LastTurn().Gate
+	if g == nil || g.State != api.GateRed || !hygieneOnly(g) {
+		t.Fatalf("last gate = %+v", g)
+	}
+	if a := tk.Attention; a == nil || a.Reason != ReasonHygiene {
+		t.Fatalf("attention = %+v", tk.Attention)
+	}
+}
+
+func TestStuckStyleFindings(t *testing.T) {
+	red := func(kind, path string) api.Finding {
+		return api.Finding{Kind: kind, Severity: api.SeverityRed, Path: path}
+	}
+	hygiene := func(findings ...api.Finding) api.GateStep {
+		return api.GateStep{Kind: api.StepHygiene, State: api.StepRed, Findings: findings}
+	}
+	gateOf := func(autoFix int, steps ...api.GateStep) api.GateResult {
+		return api.GateResult{AutoFix: autoFix, Steps: steps}
+	}
+	eol := red(api.FindingEOLChanged, "a.txt")
+	bom := red(api.FindingBOMChanged, "a.txt")
+	junk := red(api.FindingJunkFile, "x.orig")
+	test := api.GateStep{Kind: api.StepTask, State: api.StepRed, Cmd: "go test ./..."}
+	foreign := api.GateStep{Kind: api.StepTask, State: api.StepRed, Cmd: "make lint", Foreign: true}
+	started := gateOf(2, hygiene(eol, junk))
+	tk := &Task{Turns: []*Turn{{N: 1, Gate: &started}, {N: 2, By: ByGate}}}
 	for _, tc := range []struct {
-		name string
-		res  *api.GateResult
-		want bool
+		name         string
+		res          api.GateResult
+		stuck, alone bool
 	}{
-		{"same findings", gateOf(0, eol), true},
-		{"same findings, junk cleared", gateOf(0, eol), true},
-		{"another kind", gateOf(0, bom), false},
-		{"one more", gateOf(0, eol, bom), false},
-		{"cleared", gateOf(0, junk), false},
+		{"same findings, junk cleared", gateOf(0, hygiene(eol)), true, true},
+		{"same findings and a foreign failure", gateOf(0, hygiene(eol), foreign), true, true},
+		{"same findings and a failing test", gateOf(0, hygiene(eol), test), true, false},
+		{"same findings and a junk file", gateOf(0, hygiene(eol, junk)), true, false},
+		{"another kind", gateOf(0, hygiene(bom)), false, false},
+		{"one more", gateOf(0, hygiene(eol, bom)), false, false},
+		{"cleared", gateOf(0, hygiene(junk)), false, false},
 	} {
-		if got := stuckStyleFix(tk, 2, *tc.res); got != tc.want {
-			t.Errorf("%s: %v, want %v", tc.name, got, tc.want)
+		stuck := stuckStyle(tk, 2, tc.res)
+		if len(stuck) > 0 != tc.stuck || onlyFailures(tc.res, stuck) != tc.alone {
+			t.Errorf("%s: stuck %v, alone %v", tc.name, stuck, onlyFailures(tc.res, stuck))
 		}
 	}
 	// A turn no gate started (the lead's) is never stuck.
-	if stuckStyleFix(tk, 1, *gateOf(0, eol)) {
+	if len(stuckStyle(tk, 1, gateOf(0, hygiene(eol)))) > 0 {
 		t.Error("turn 1 is stuck")
+	}
+
+	// The prompt copy drops the stuck findings; a hygiene step left without red findings passes there, and the
+	// stored result keeps them.
+	res := gateOf(0, hygiene(eol), test)
+	cp := withoutFindings(res, stuckStyle(tk, 2, res))
+	if cp.Steps[0].State != api.StepGreen || len(cp.Steps[0].Findings) != 0 || cp.Steps[1].State != api.StepRed {
+		t.Fatalf("prompt copy = %+v", cp.Steps)
+	}
+	if res.Steps[0].State != api.StepRed || len(res.Steps[0].Findings) != 1 {
+		t.Fatalf("stored result changed: %+v", res.Steps)
+	}
+	res = gateOf(0, hygiene(eol, junk), test)
+	stuck := map[[2]string]bool{{api.FindingEOLChanged, "a.txt"}: true}
+	if cp := withoutFindings(res, stuck); cp.Steps[0].State != api.StepRed || len(cp.Steps[0].Findings) != 1 ||
+		cp.Steps[0].Findings[0].Path != "x.orig" {
+		t.Fatalf("prompt copy with junk = %+v", cp.Steps)
 	}
 }
