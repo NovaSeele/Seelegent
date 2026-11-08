@@ -810,12 +810,14 @@ func (s *Service) finishAttempt(r *run, id string, turn, n int, accountID, model
 	return true, nil
 }
 
-// endTurn closes a turn with the outcome of its last attempt and returns its turn_end event.
-func (s *Service) endTurn(t *Task, tu *Turn, status string, o backend.Outcome) NewEvent {
-	return s.endTurnChecked(t, tu, status, o, nil)
+// endTurn closes a turn that has no outcome to record (cancelled, given up) and returns its turn_end event; its
+// post-turn checks run later (lateCheck).
+func (s *Service) endTurn(t *Task, tu *Turn, status string) NewEvent {
+	return s.endTurnChecked(t, tu, status, backend.Outcome{}, nil)
 }
 
-// endTurnChecked is endTurn with the turn's post-turn checks (nil when they did not run): the turn's Files then
+// endTurnChecked closes a turn with the outcome of its last attempt and returns its turn_end event. c holds the
+// turn's post-turn checks (nil when they did not run): the turn's Files then
 // come from its snapshots (checkedFiles), so the turn_end event, the report and the task view list the same files.
 // A turn checked later (lateCheck) keeps the edit-tool list in its turn_end event; applyCheck updates its Files.
 func (s *Service) endTurnChecked(t *Task, tu *Turn, status string, o backend.Outcome, c *turnCheck) NewEvent {
@@ -852,7 +854,7 @@ func (s *Service) giveUp(id string, turn int, message string) (bool, error) {
 		if tu == nil || tu.Status != TurnRunning {
 			return nil, errNoChange
 		}
-		ev := s.endTurn(t, tu, TurnFailed, backend.Outcome{})
+		ev := s.endTurn(t, tu, TurnFailed)
 		t.Status, t.Error = StatusFailed, message
 		t.Waiting, t.WaitDetail, t.WaitingUntil, t.MemoryWait = "", "", time.Time{}, nil
 		return []NewEvent{ev}, nil
@@ -874,7 +876,7 @@ func (s *Service) finishCancel(id string) {
 		}
 		var evs []NewEvent
 		if tu := t.LastTurn(); tu != nil && tu.Status == TurnRunning {
-			evs = append(evs, s.endTurn(t, tu, TurnCancelled, backend.Outcome{}))
+			evs = append(evs, s.endTurn(t, tu, TurnCancelled))
 		}
 		if ph := t.GatePhase; ph != nil {
 			child = ph.ChildID

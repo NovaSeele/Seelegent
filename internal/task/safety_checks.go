@@ -34,10 +34,11 @@ var utf8BOM = []byte{0xEF, 0xBB, 0xBF}
 
 // hygiene checks the files the turn changed. For those that were clean when the turn started: junk files, a BOM in
 // a new file of a repository that uses none, and new files the report never mentions (old hygiene.js;
-// test_scaffold is left out). For every changed file whose start is known: line endings and BOM against the styles
+// test_scaffold is left out; only when reported, the turn ended with a report: a worker cut off before writing one
+// names nothing). For every changed file whose start is known: line endings and BOM against the styles
 // the file may keep (styleRefs), so only what the turn did is judged.
 func (s *Service) hygiene(ctx context.Context, root string, start, end snapshot.Manifest, changed []string,
-	response string) []api.Finding {
+	response string, reported bool) []api.Finding {
 	var out []api.Finding
 	report := newMentions(response)
 	for _, rel := range changed {
@@ -64,7 +65,7 @@ func (s *Service) hygiene(ctx context.Context, root string, start, end snapshot.
 				out = append(out, api.Finding{Kind: api.FindingBOMNewFile, Severity: api.SeverityRed, Path: rel})
 				continue
 			}
-			if !report.names(rel) {
+			if reported && !report.names(rel) {
 				out = append(out, api.Finding{Kind: api.FindingUnreported, Severity: api.SeverityWarn, Path: rel})
 			}
 			continue
@@ -138,10 +139,10 @@ func (m *mentions) word(s string, asPath bool) bool {
 			return false
 		}
 		i += from
-		before := i == 0 || !wordByte(t[i-1]) && !(asPath && (t[i-1] == '/' || t[i-1] == '.'))
+		before := i == 0 || !wordByte(t[i-1]) && (!asPath || t[i-1] != '/' && t[i-1] != '.')
 		end := i + len(s)
 		after := end == len(t) || !wordByte(t[end]) && t[end] != '/' &&
-			!(t[end] == '.' && end+1 < len(t) && wordByte(t[end+1]))
+			(t[end] != '.' || end+1 == len(t) || !wordByte(t[end+1]))
 		if before && after {
 			return true
 		}

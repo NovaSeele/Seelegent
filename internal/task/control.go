@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/NovaSeele/Seelegent/internal/api"
-	"github.com/NovaSeele/Seelegent/internal/backend"
 	"github.com/NovaSeele/Seelegent/internal/memory"
 )
 
@@ -167,7 +166,7 @@ func (s *Service) Cancel(ctx context.Context, id string, req api.CancelRequest) 
 			// The console belongs to the user; the task just stops waiting for it.
 			t.Manual, t.Console = false, nil
 			if tu := t.LastTurn(); tu != nil && tu.Status == TurnRunning {
-				evs = append(evs, s.endTurn(t, tu, TurnCancelled, backend.Outcome{}))
+				evs = append(evs, s.endTurn(t, tu, TurnCancelled))
 			}
 			t.Status = StatusCancelled
 			direct = true
@@ -175,7 +174,7 @@ func (s *Service) Cancel(ctx context.Context, id string, req api.CancelRequest) 
 		}
 		if t.Status == StatusWaitingDeps || t.Status == StatusBlockedDeps {
 			if tu := t.LastTurn(); tu != nil && tu.Status == TurnRunning {
-				evs = append(evs, s.endTurn(t, tu, TurnCancelled, backend.Outcome{}))
+				evs = append(evs, s.endTurn(t, tu, TurnCancelled))
 			}
 			t.Status, t.DepsReason, t.DepsBlock = StatusCancelled, "", nil
 			direct = true

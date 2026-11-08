@@ -1,6 +1,12 @@
 package task
 
-import "testing"
+import (
+	"path/filepath"
+	"slices"
+	"testing"
+
+	"github.com/NovaSeele/Seelegent/internal/api"
+)
 
 // The unreported_file check counts a new file as mentioned when the report names its path, its base name, its stem
 // as a whole word, or one of its folders written as a path (field report: 34 warnings for grouped lists).
@@ -37,5 +43,30 @@ func TestReportMentions(t *testing.T) {
 	}
 	if !newMentions("Added the `assets/` folder.").names("assets/logo.svg") {
 		t.Error("a single folder written with its slash should count")
+	}
+}
+
+// A worker cut off before its report (a crash, a quota stop) names nothing: its new files are not unreported_file
+// warnings, while the other hygiene checks still run.
+func TestNoUnreportedFilesWithoutAReport(t *testing.T) {
+	h := newHarness(t)
+	h.initRepo(map[string]string{"a.txt": "a\n"})
+	h.agy("only", 0)
+	cwd := h.cwd
+	h.queue.Push(t, script(agyInit("conv-x"),
+		fakeWrite(filepath.Join(cwd, "src", "new.ts"), "x\n"),
+		fakeWrite(filepath.Join(cwd, "left.orig"), "x\n"),
+		"#!stderr fatal: the worker process crashed", "#!exit 1"))
+	sum := h.delegate(api.DelegateRequest{})
+	tk := h.waitStatus(sum.ID, StatusFailed)
+	tu := tk.LastTurn()
+	if tu.Snap == nil || !tu.Snap.Checked {
+		t.Fatalf("snapshots: %+v", tu.Snap)
+	}
+	if len(tu.Hygiene) != 1 || tu.Hygiene[0].Kind != api.FindingJunkFile || tu.Hygiene[0].Path != "left.orig" {
+		t.Fatalf("hygiene: %+v", tu.Hygiene)
+	}
+	if !slices.Contains(tu.Files, "src/new.ts") {
+		t.Fatalf("files: %v", tu.Files)
 	}
 }

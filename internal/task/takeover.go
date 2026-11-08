@@ -105,7 +105,7 @@ func (s *Service) Takeover(ctx context.Context, id string) (api.TaskSummary, err
 			t.Console.OpenedAt = s.now()
 			var evs []NewEvent
 			if tu := t.LastTurn(); tu != nil && tu.Status == TurnRunning {
-				evs = append(evs, s.endTurn(t, tu, TurnCancelled, backend.Outcome{}))
+				evs = append(evs, s.endTurn(t, tu, TurnCancelled))
 			}
 			return evs, nil
 		})
@@ -208,7 +208,7 @@ func (s *Service) revertTakeover(id string, prev Status, since time.Time, why st
 		}
 		var evs []NewEvent
 		if tu := t.LastTurn(); tu != nil && tu.Status == TurnRunning {
-			evs = append(evs, s.endTurn(t, tu, TurnCancelled, backend.Outcome{}))
+			evs = append(evs, s.endTurn(t, tu, TurnCancelled))
 		}
 		t.Status = back
 		turn := 0
