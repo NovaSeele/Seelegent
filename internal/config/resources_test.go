@@ -14,6 +14,7 @@ func TestAutoResources(t *testing.T) {
 		m    Machine
 		want Resources
 	}{
+		{"memory unknown, 24 CPUs", Machine{CPUs: 24, OS: "darwin"}, Resources{512, 256, 0, 6, 3}},
 		{"4 GB container, 2 CPUs", Machine{TotalPhysMB: 4 * gb, CPUs: 2, OS: "linux"}, Resources{512, 256, 0, 1, 1}},
 		{"8 GB laptop, 4 CPUs", Machine{TotalPhysMB: 8 * gb, TotalCommitMB: 12 * gb, CPUs: 4, OS: "windows"},
 			Resources{1024, 512, 1228, 1, 1}},

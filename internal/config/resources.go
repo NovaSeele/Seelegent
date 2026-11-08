@@ -43,7 +43,7 @@ const (
 //   - minFreeMemoryMB: 12.5% of the physical memory, from 512 to 2048 MB; criticalFreeMemoryMB: half of it.
 //   - minFreeCommitMB: Windows with a known commit limit only, 10% of it, from 1024 to 4096 MB; 0 elsewhere.
 //   - testParallelism: a quarter of the CPUs, from 1 to 8; gateConcurrency: an eighth of the CPUs or one gate per
-//     8 GB of memory, whichever is less, from 1 to 4 (8 GB: 1, 16 GB: 2, 31 GB with 24 CPUs: 3).
+//     8 GB of memory (CPUs only when the memory is unknown), whichever is less, from 1 to 4 (8 GB: 1, 16 GB: 2, 31 GB with 24 CPUs: 3).
 func AutoResources(m Machine) Resources {
 	minFree := clamp(int(m.TotalPhysMB/8), autoMinFreeLo, autoMinFreeHi)
 	commit := 0
@@ -55,8 +55,16 @@ func AutoResources(m Machine) Resources {
 		CriticalFreeMemoryMB: minFree / 2,
 		MinFreeCommitMB:      commit,
 		TestParallelism:      clamp(m.CPUs/4, 1, autoTestParallelismHi),
-		GateConcurrency:      clamp(min(m.CPUs/8, int(m.TotalPhysMB/1024/8)), 1, autoGateConcurrencyHi),
+		GateConcurrency:      clamp(autoGates(m), 1, autoGateConcurrencyHi),
 	}
+}
+
+// autoGates is an eighth of the CPUs, or one gate per 8 GB when the memory is known, whichever is less.
+func autoGates(m Machine) int {
+	if m.TotalPhysMB <= 0 {
+		return m.CPUs / 8
+	}
+	return min(m.CPUs/8, int(m.TotalPhysMB/1024/8))
 }
 
 // EffectiveResources are the values the daemon uses on m: each explicit setting wins, the others are auto. When
