@@ -221,6 +221,8 @@ const triggerAttrs = computed(() => ({
 .menu__item:focus {
   outline: none;
   background: var(--bg-hover);
+  --text-muted: var(--text-primary);
+  --text-secondary: var(--text-primary);
 }
 
 .menu__item:focus-visible {

@@ -57,6 +57,8 @@ defineEmits<{ toggle: []; focus: [] }>()
 
 .group__btn:hover {
   background: var(--bg-hover);
+  --text-muted: var(--text-primary);
+  --text-secondary: var(--text-primary);
 }
 
 .group__btn:focus-visible {

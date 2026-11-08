@@ -168,6 +168,8 @@ const classes = computed(() => [
 
 .btn--secondary:hover:not(:disabled) {
   background: var(--bg-hover);
+  --text-muted: var(--text-primary);
+  --text-secondary: var(--text-primary);
 }
 
 .btn--ghost {
@@ -177,6 +179,8 @@ const classes = computed(() => [
 
 .btn--ghost:hover:not(:disabled) {
   background: var(--bg-hover);
+  --text-muted: var(--text-primary);
+  --text-secondary: var(--text-primary);
   color: var(--text-primary);
 }
 

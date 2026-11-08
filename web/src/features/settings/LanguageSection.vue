@@ -96,6 +96,8 @@ const options = computed(() =>
 .lang--checked:hover {
   border-color: var(--accent);
   background: var(--accent-soft);
+  --text-muted: var(--text-primary);
+  --text-secondary: var(--text-primary);
 }
 
 .lang:has(:focus-visible) {

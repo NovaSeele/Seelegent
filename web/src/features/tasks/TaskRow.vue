@@ -112,14 +112,23 @@ function onClick(event: MouseEvent, navigate: (e?: MouseEvent) => unknown) {
 
 .row:hover {
   background: var(--bg-hover);
+  --text-muted: var(--text-primary);
+  --text-secondary: var(--text-primary);
 }
 
+/* The open task: the hover tint and an accent edge. --bg-active would take even the primary text under 4.5:1 in
+   the themes whose hover tint sits at the limit (Darcula, One Dark, Solarized, Everforest Light). */
 .row--current {
-  background: var(--bg-active);
+  background: var(--bg-hover);
+  box-shadow: inset 3px 0 0 var(--accent);
+  --text-muted: var(--text-primary);
+  --text-secondary: var(--text-primary);
 }
 
 .row--selected {
   background: var(--accent-soft);
+  --text-muted: var(--text-primary);
+  --text-secondary: var(--text-primary);
 }
 
 .row:focus-visible {
@@ -194,16 +203,6 @@ function onClick(event: MouseEvent, navigate: (e?: MouseEvent) => unknown) {
   font-size: var(--fs-2xs);
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-/* On the current and selected rows' tinted backgrounds, muted text drops under 4.5:1; use secondary. */
-.row--current .row__meta,
-.row--current .row__step,
-.row--current .row__time,
-.row--selected .row__meta,
-.row--selected .row__step,
-.row--selected .row__time {
-  color: var(--text-secondary);
 }
 
 .row__manual {

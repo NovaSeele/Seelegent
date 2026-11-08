@@ -130,6 +130,8 @@ watch(locale, () => void nextTick(updateFade))
 
 .rail__brand:hover {
   background: var(--bg-hover);
+  --text-muted: var(--text-primary);
+  --text-secondary: var(--text-primary);
 }
 
 .rail__groups {
@@ -204,6 +206,8 @@ watch(locale, () => void nextTick(updateFade))
 
 .rail__item:hover {
   background: var(--bg-hover);
+  --text-muted: var(--text-primary);
+  --text-secondary: var(--text-primary);
   color: var(--text-primary);
 }
 
@@ -224,6 +228,8 @@ watch(locale, () => void nextTick(updateFade))
 
 .rail__item--active .rail__icon {
   background: var(--accent-soft);
+  --text-muted: var(--text-primary);
+  --text-secondary: var(--text-primary);
   color: var(--accent);
 }
 

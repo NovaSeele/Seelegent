@@ -143,6 +143,8 @@ const look = (status: keyof typeof MEETING_STATUS) => MEETING_STATUS[status]
 
 .row:hover {
   background: var(--bg-hover);
+  --text-muted: var(--text-primary);
+  --text-secondary: var(--text-primary);
 }
 
 .row:focus-visible {

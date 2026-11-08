@@ -64,6 +64,8 @@ const info = sectionInfo(props.section)
 
 .planned__item--highlighted {
   background: var(--accent-soft);
+  --text-muted: var(--text-primary);
+  --text-secondary: var(--text-primary);
 }
 
 .planned__label {

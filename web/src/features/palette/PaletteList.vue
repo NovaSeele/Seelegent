@@ -118,6 +118,8 @@ function groupLabel(match: CommandMatch) {
 
 .palette__option--active {
   background: var(--accent-soft);
+  --text-muted: var(--text-primary);
+  --text-secondary: var(--text-primary);
 }
 
 .palette__icon {

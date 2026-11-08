@@ -149,6 +149,8 @@ function onKeydown(event: KeyboardEvent) {
 
 .tree__head:hover {
   background: var(--bg-hover);
+  --text-muted: var(--text-primary);
+  --text-secondary: var(--text-primary);
 }
 
 .tree__head:focus-visible {

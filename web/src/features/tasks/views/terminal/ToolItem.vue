@@ -164,6 +164,8 @@ const outputId = computed(() => `tool-out-${props.item.key}`)
 
 .tool__toggle:hover {
   background: var(--bg-hover);
+  --text-muted: var(--text-primary);
+  --text-secondary: var(--text-primary);
   color: var(--term-fg);
 }
 
