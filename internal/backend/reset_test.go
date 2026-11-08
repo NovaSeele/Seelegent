@@ -73,12 +73,16 @@ func TestResetHint(t *testing.T) {
 		{"today just passed", "resets Sun 12:30am (Asia/Ho_Chi_Minh)", end, at(hcm, 2026, 11, 8, 0, 30)},
 		{"today long passed is next week", "resets Sunday 9am (Asia/Ho_Chi_Minh)", afternoon,
 			at(hcm, 2026, 11, 15, 9, 0)},
+		// Today's weekday without a time has passed, however late in the day: never next week.
+		{"today without time has passed", "resets Sunday (Asia/Ho_Chi_Minh)", afternoon, at(hcm, 2026, 11, 8, 0, 0)},
+		{"today without time, early", "resets Sun (Asia/Ho_Chi_Minh)", end, at(hcm, 2026, 11, 8, 0, 0)},
 
 		// Other wordings.
 		{"bare UTC", "You've hit your limit · resets at 00:00 UTC", end, at(time.UTC, 2026, 11, 8, 0, 0)},
 		{"bare GMT", "resets 3pm GMT", end, at(time.UTC, 2026, 11, 8, 15, 0)},
 		{"bare Z", "resets 21:00Z", end, at(time.UTC, 2026, 11, 7, 21, 0)},
 		{"weekday UTC", "resets Mon 9am UTC", end, at(time.UTC, 2026, 11, 9, 9, 0)},
+		{"UTC before a full stop", "resets 3pm UTC.", end, at(time.UTC, 2026, 11, 8, 15, 0)},
 		{"will reset", "Claude usage limit reached. Your limit will reset at 3pm (Asia/Ho_Chi_Minh).", end,
 			at(hcm, 2026, 11, 8, 15, 0)},
 		{"will reset date", "Your limit will reset on Nov 10 at 9am (Europe/Paris)", end, at(paris, 2026, 11, 10, 9, 0)},
@@ -99,6 +103,12 @@ func TestResetHint(t *testing.T) {
 		{"gemini wording", "Your quota will reset after 7h44m8s.", end, time.Time{}},
 		{"bare number", "resets 3 (Asia/Ho_Chi_Minh)", end, time.Time{}},
 		{"weekday bare number", "resets Monday 3", end, time.Time{}},
+		// An offset after a zone is not read: reading the time as UTC or local would be hours off.
+		{"GMT offset", "resets 3pm GMT+7", end, time.Time{}},
+		{"UTC offset", "resets 15:00 UTC-05:00", end, time.Time{}},
+		{"Z digit", "resets 21:00Z7", end, time.Time{}},
+		{"weekday GMT offset", "resets Mon 9am GMT+7", end, time.Time{}},
+		{"offset in parentheses", "resets 3pm (UTC+7)", end, time.Time{}},
 		{"bad hour", "resets 13pm", end, time.Time{}},
 		{"bad 24-hour", "resets 25:00", end, time.Time{}},
 		{"bad minute", "resets 3:75am", end, time.Time{}},

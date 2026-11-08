@@ -26,11 +26,11 @@ const (
 
 // Pattern pieces. The lead-in is Claude Code's "resets" or its older "will reset". A clock time is "3pm", "3:10am",
 // "15:00" (groups: hour, minute, am/pm); a zone is an IANA name in parentheses or a bare UTC, GMT or Z (groups:
-// name, bare).
+// name, bare, then the sign or digit right after a bare zone: "GMT+7", "UTC-05:00", an offset that is not read).
 const (
 	reResetLead  = `(?i)\b(?:resets|will\s+reset)\s+`
 	reResetClock = `(\d{1,2})(?::(\d{2}))?\s*([ap]\.?m\b\.?)?`
-	reResetZone  = `(?:\s*\(\s*([A-Za-z][A-Za-z0-9_+\-]*(?:/[A-Za-z0-9_+\-]+)*)\s*\)|\s*(UTC|GMT|Z)\b)?`
+	reResetZone  = `(?:\s*\(\s*([A-Za-z][A-Za-z0-9_+\-]*(?:/[A-Za-z0-9_+\-]+)*)\s*\)|\s*(UTC|GMT|Z)(?:([+\-\d])|\b))?`
 	reWeekday    = `(mon|tue|wed|thu|fri|sat|sun)([a-z]*)`
 )
 
@@ -56,8 +56,8 @@ var reResetUnix = regexp.MustCompile(`(?i)limit reached\|(\d{9,10})\b`)
 //
 // Relative times are read in the zone the message names, else in local time, relative to end:
 //   - a time alone is today's when it is ahead or passed by up to resetLate, else tomorrow's;
-//   - a weekday is its next occurrence, today's when its time (00:00 when none) is ahead or passed by up to
-//     resetLate, else next week's;
+//   - a weekday is its next occurrence, today's when its time is ahead or passed by up to resetLate, else next
+//     week's; today's weekday without a time has passed (00:00 today);
 //   - a date without a year is this year's, or next year's when this year's passed more than resetWrap ago.
 //
 // end zero leaves relative times unread and the Unix time unbounded.
@@ -94,7 +94,10 @@ func readDateTime(m []string, end time.Time) time.Time {
 	if !ok {
 		return time.Time{}
 	}
-	loc := readZone(m[6], m[7])
+	loc, ok := readZone(m[6], m[7], m[8])
+	if !ok {
+		return time.Time{}
+	}
 	now := end.In(loc)
 	if monthText == "" {
 		at := time.Date(now.Year(), now.Month(), now.Day(), hour, minute, 0, 0, loc)
@@ -137,10 +140,18 @@ func readWeekday(m []string, end time.Time) time.Time {
 			return time.Time{}
 		}
 	}
-	loc := readZone(m[6], m[7])
+	loc, ok := readZone(m[6], m[7], m[8])
+	if !ok {
+		return time.Time{}
+	}
 	now := end.In(loc)
 	days := (int(wd) - int(now.Weekday()) + 7) % 7
 	at := time.Date(now.Year(), now.Month(), now.Day()+days, hour, minute, 0, 0, loc)
+	if m[3] == "" && days == 0 {
+		// "resets Monday" seen on a Monday: that reset has passed (the CLI repeats it when a run resumes late), and
+		// reading it as next week would rest the account for days.
+		return at.UTC()
+	}
 	if days == 0 && end.Sub(at) > resetLate {
 		at = time.Date(now.Year(), now.Month(), now.Day()+7, hour, minute, 0, 0, loc)
 	}
@@ -175,17 +186,21 @@ func readClock(hourText, minText, ampm string) (hour, minute int, ok bool) {
 }
 
 // readZone returns the zone a message names: an IANA name, or a bare UTC, GMT or Z; local time when it names none
-// or one that is unknown.
-func readZone(name, bare string) *time.Location {
+// or an unknown name without digits. ok is false for an offset ("GMT+7", "UTC-05:00", "(UTC+7)"): offsets are not
+// read, and reading the time as UTC or local would be hours off, so the hint is dropped (the default rest is safe).
+func readZone(name, bare, offset string) (loc *time.Location, ok bool) {
 	if bare != "" {
-		return time.UTC
+		return time.UTC, offset == ""
 	}
 	if name != "" {
 		if l, err := time.LoadLocation(name); err == nil {
-			return l
+			return l, true
+		}
+		if strings.ContainsAny(name, "0123456789") {
+			return nil, false
 		}
 	}
-	return time.Local
+	return time.Local, true
 }
 
 // parseMonth reads an English month name or its three-letter abbreviation.
