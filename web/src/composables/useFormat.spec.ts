@@ -19,6 +19,14 @@ describe('formatters', () => {
     expect(createFormatters('ru').relative(now - 86_400_000, now)).toBe('вчера')
   })
 
+  it('never puts a past moment in the future', () => {
+    const now = Date.parse('2026-11-06T10:00:00.000Z')
+    const en = createFormatters('en')
+    expect(en.ago(now + 11_000, now, 'just now')).toBe('just now')
+    expect(en.ago(now, now, 'just now')).toBe('just now')
+    expect(en.ago(now - 5 * 60_000, now, 'just now')).toBe('5 minutes ago')
+  })
+
   it('formats durations with at most two units', () => {
     const en = createFormatters('en')
     expect(en.duration(0)).toBe('0s')

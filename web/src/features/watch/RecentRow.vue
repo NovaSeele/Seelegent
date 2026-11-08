@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 
 import StatusPill from '@/components/ui/StatusPill.vue'
 import { useFormat } from '@/composables/useFormat'
@@ -9,6 +10,7 @@ import { useTasksStore } from '@/stores/tasks'
 /** A finished task in the "recently finished" list. */
 const props = defineProps<{ id: string; now: number }>()
 
+const { t } = useI18n()
 const fmt = useFormat()
 const tasks = useTasksStore()
 const task = computed(() => tasks.get(props.id))
@@ -22,7 +24,7 @@ const task = computed(() => tasks.get(props.id))
     </RouterLink>
     <span class="recent__project">{{ task.projectName }}</span>
     <time class="recent__time" :datetime="task.updatedAt" :title="fmt.dateTime(task.updatedAt)">
-      {{ fmt.relative(task.updatedAt, now) }}
+      {{ fmt.ago(task.updatedAt, now, t('common.time.justNow')) }}
     </time>
   </li>
 </template>
