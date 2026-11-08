@@ -103,8 +103,8 @@
       "unlimited": "{auto}: 이 컴퓨터에서는 제한 없음"
     },
     "derived": {
-      "half": "{auto}: 직접 설정한 {other}의 절반, {value}",
-      "twice": "{auto}: 직접 설정한 {other}의 두 배, {value}"
+      "half": "{auto}: 직접 설정한 ‘{other}’의 절반, {value}",
+      "twice": "{auto}: 직접 설정한 ‘{other}’의 두 배, {value}"
     },
     "set": "설정",
     "setOf": "{name} 직접 설정",

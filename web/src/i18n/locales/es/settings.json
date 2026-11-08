@@ -103,8 +103,8 @@
       "unlimited": "{auto}: sin límite en esta máquina"
     },
     "derived": {
-      "half": "{auto}: la mitad de tu {other}, {value}",
-      "twice": "{auto}: el doble de tu {other}, {value}"
+      "half": "{auto}: la mitad de tu «{other}», {value}",
+      "twice": "{auto}: el doble de tu «{other}», {value}"
     },
     "set": "Fijar",
     "setOf": "Fijar un valor propio para {name}",

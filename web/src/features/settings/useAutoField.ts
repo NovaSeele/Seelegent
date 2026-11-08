@@ -67,7 +67,7 @@ export function useAutoField(
 
   /**
    * The Auto line: its message ({auto} is the "Auto" tag, {other} the setting it is derived from) and the amount:
-   * "Auto: 2 GB on this machine", "Auto: off on this machine" for 0, "Auto: half of your Free memory to start,
+   * "Auto: 2 GB on this machine", "Auto: off on this machine" for 0, "Auto: half of your “Free memory to start”,
    * 1 GB"; null while the value in use is not known.
    */
   const autoLine = computed(() => {

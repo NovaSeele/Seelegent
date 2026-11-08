@@ -103,8 +103,8 @@
       "unlimited": "{auto}: no limit on this machine"
     },
     "derived": {
-      "half": "{auto}: half of your {other}, {value}",
-      "twice": "{auto}: twice your {other}, {value}"
+      "half": "{auto}: half of your “{other}”, {value}",
+      "twice": "{auto}: twice your “{other}”, {value}"
     },
     "set": "Set",
     "setOf": "Set {name} yourself",

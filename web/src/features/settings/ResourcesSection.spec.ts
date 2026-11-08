@@ -651,7 +651,7 @@ describe('Resources settings', () => {
       settings,
     )
     expect(wrapper.get('[data-setting="criticalFreeMemory"] [data-auto]').text()).toBe(
-      'Auto: half of your Free memory to start, 1.5 GB',
+      'Auto: half of your “Free memory to start”, 1.5 GB',
     )
     // "Set" starts from the derived value.
     await wrapper.get('[data-setting="criticalFreeMemory"] [data-auto-set]').trigger('click')
@@ -673,7 +673,7 @@ describe('Resources settings', () => {
       { ...AUTO_SETTINGS, criticalFreeMemoryMB: 3072 } as Settings,
     )
     expect(twice.get('[data-setting="minFreeMemory"] [data-auto]').text()).toBe(
-      'Auto: twice your Emergency memory floor, 6 GB',
+      'Auto: twice your “Emergency memory floor”, 6 GB',
     )
     twice.unmount()
   })

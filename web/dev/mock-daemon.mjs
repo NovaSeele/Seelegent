@@ -1482,11 +1482,12 @@ function machineResources() {
         ? { value, source: 'auto' }
         : { value: set, source: 'explicit' }
   }
-  // Only one of the two memory thresholds set: the other is derived from it (docs/configuration.md "Resources").
+  // Only one of the two memory thresholds set: the other is derived from it, like the daemon does. A minimum set to
+  // 0 (off) leaves the floor auto with the machine's value; a minimum is derived only from a floor at or above the
+  // auto minimum.
   const { minFreeMemoryMB: min, criticalFreeMemoryMB: floor } = resources
-  if (min.source === 'explicit' && floor.source === 'auto') {
-    const base = min.value > 0 ? min.value : auto.minFreeMemoryMB
-    resources.criticalFreeMemoryMB = { value: Math.floor(base / 2), source: 'derived' }
+  if (min.source === 'explicit' && floor.source === 'auto' && min.value > 0) {
+    resources.criticalFreeMemoryMB = { value: Math.floor(min.value / 2), source: 'derived' }
   } else if (floor.source === 'explicit' && min.source === 'auto' && floor.value >= min.value) {
     resources.minFreeMemoryMB = { value: Math.min(floor.value * 2, 1048576), source: 'derived' }
   }

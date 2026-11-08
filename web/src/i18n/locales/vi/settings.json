@@ -103,8 +103,8 @@
       "unlimited": "{auto}: không giới hạn trên máy này"
     },
     "derived": {
-      "half": "{auto}: một nửa {other} bạn đặt, {value}",
-      "twice": "{auto}: gấp đôi {other} bạn đặt, {value}"
+      "half": "{auto}: một nửa “{other}” bạn đã đặt, {value}",
+      "twice": "{auto}: gấp đôi “{other}” bạn đã đặt, {value}"
     },
     "set": "Đặt",
     "setOf": "Tự đặt {name}",

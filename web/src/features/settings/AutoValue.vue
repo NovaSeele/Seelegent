@@ -3,7 +3,7 @@ import { I18nT, useI18n } from 'vue-i18n'
 
 /**
  * The Auto state of a machine-sized setting, where its number field would be: "Auto: 2 GB on this machine",
- * "Auto: half of your Free memory to start, 1 GB" for a value derived from the other threshold, or
+ * "Auto: half of your “Free memory to start”, 1 GB" for a value derived from the other threshold, or
  * "Auto" alone while the value in use is not known (`line` null, from useAutoField). Its id, data attributes and
  * click handler come from the row.
  */
