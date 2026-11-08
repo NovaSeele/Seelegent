@@ -132,12 +132,33 @@ type spawnSummary struct {
 	MaxPeakWSMB  float64 `json:"maxPeakWSMB,omitempty"`
 }
 
+// budgetCheck is one row of the budget. An Info row is shown with its limit but not judged: OK still says
+// whether the value is under the limit, and Note says why the row is information only.
 type budgetCheck struct {
 	Name  string  `json:"name"`
 	Limit float64 `json:"limit"`
 	Value float64 `json:"value"`
 	OK    bool    `json:"ok"`
+	Info  bool    `json:"info,omitempty"`
+	Note  string  `json:"note,omitempty"`
 }
+
+// retainedHeap is the load scenario's retained-heap check: the daemon's live heap after forced GCs just before the
+// load tasks start (after the warmup) and again once every load task ended, the SSE clients and pollers stopped and
+// SettleSeconds passed. The delta is what the load left behind; unlike the slopes it does not count the state of
+// attempts that are still running.
+type retainedHeap struct {
+	StartMB       float64 `json:"startMB"`
+	EndMB         float64 `json:"endMB"`
+	DeltaMB       float64 `json:"deltaMB"`
+	SettleSeconds float64 `json:"settleSeconds"`
+	Note          string  `json:"note,omitempty"`
+	// Error is why the end could not be read; the budget row is then left out.
+	Error string `json:"error,omitempty"`
+}
+
+// measured reports whether both ends were read.
+func (x *retainedHeap) measured() bool { return x != nil && x.Error == "" }
 
 type loadSummary struct {
 	Tasks          int                     `json:"tasks"`
@@ -175,6 +196,7 @@ type result struct {
 	Idle        *idleSummary      `json:"idle,omitempty"`
 	DB          dbSummary         `json:"db"`
 	Load        *loadSummary      `json:"load,omitempty"`
+	Retained    *retainedHeap     `json:"retainedHeap,omitempty"`
 	Budget      []budgetCheck     `json:"budget"`
 	Errors      map[string]int    `json:"sampleErrors,omitempty"`
 	Processes   []*tracked        `json:"processes"`
@@ -484,9 +506,20 @@ func (r *result) budget() []budgetCheck {
 	}
 	// Memory is judged on private bytes (commit): the working set jumps with what the OS keeps resident, not with
 	// what the daemon allocates, so it is reported as information only. A leak shows as a slope once the start is
-	// over; the limits allow for the noise of a few minutes of samples.
+	// over; the limits allow for the noise of a few minutes of samples. Under load the slopes also count the state
+	// of the attempts that run all through the window, so there they are information only and the live heap
+	// retained after the load is the leak check.
 	add("daemon private bytes slope over the second half MB/h", 10, r.Daemon.PrivSlope)
 	add("daemon live heap slope over the second half MB/h", 5, r.Daemon.HeapSlope)
+	if r.Scenario == "load" {
+		for i := len(out) - 2; i < len(out); i++ {
+			out[i].Info, out[i].Note = true, "information only: per-attempt state grows while tasks run; see retained heap"
+		}
+	}
+	if x := r.Retained; x.measured() {
+		out = append(out, budgetCheck{Name: "live heap retained after load (after GC) MB", Limit: 3, Value: x.DeltaMB,
+			OK: x.DeltaMB <= 3})
+	}
 	if r.idleScenario() {
 		add("idle daemon CPU % of one core (window average)", 0.1, r.Daemon.CPUPercent)
 		add("idle daemon peak private MB", 100, r.Daemon.PeakPrivMB)
@@ -559,8 +592,25 @@ func writeMarkdown(w io.Writer, r *result) {
 		d.HeapGrowthMB)
 	p("| slope over the second half | private %+.2f MB/h, live heap %+.2f MB/h (WS %+.2f MB/h, information) |\n",
 		d.PrivSlope, d.HeapSlope, d.WSSlope)
+	if x := r.Retained; x != nil {
+		if x.measured() {
+			p("| live heap retained after load (after GC) start / end / delta | %.2f / %.2f / %+.2f MB |\n", x.StartMB,
+				x.EndMB, x.DeltaMB)
+		} else {
+			p("| live heap retained after load (after GC) | start %.2f MB, end not read: %s |\n", x.StartMB, x.Error)
+		}
+	}
 	p("| database start / end | %.2f / %.2f MB, WAL %.2f / %.2f MB (max %.2f) |\n\n", r.DB.DBStartMB, r.DB.DBEndMB,
 		r.DB.WALStartMB, r.DB.WALEndMB, r.DB.WALMaxMB)
+	if x := r.Retained; x != nil {
+		p("Retained heap: the live heap after forced GCs (`/debug/pprof/heap?gc=1` twice, then `/gc/heap/live` from "+
+			"`/debug/vars?light=1`) just before the load tasks start and %.0f s after every load task ended and the SSE "+
+			"clients and pollers stopped; profiles in heap-before-load.pprof and heap-after-load.pprof.", x.SettleSeconds)
+		if x.Note != "" {
+			p(" Note: %s.", x.Note)
+		}
+		p("\n\n")
+	}
 	p("## Process tree by role\n\n| role | peak n | WS mean / peak MB | private mean / peak MB | CPU s | %% core | " +
 		"handles | threads | spawns (window) | spawns/h | seen (run) | max proc peak WS MB |\n" +
 		"|---|---|---|---|---|---|---|---|---|---|---|---|\n")
@@ -602,10 +652,17 @@ func writeMarkdown(w io.Writer, r *result) {
 	p("\n## Budget\n\n| check | limit | value | |\n|---|---|---|---|\n")
 	for _, b := range r.Budget {
 		mark := "ok"
-		if !b.OK {
+		switch {
+		case b.Info:
+			mark = "info"
+		case !b.OK:
 			mark = "**over**"
 		}
-		p("| %s | %g | %g | %s |\n", b.Name, b.Limit, b.Value, mark)
+		name := b.Name
+		if b.Note != "" {
+			name += " (" + b.Note + ")"
+		}
+		p("| %s | %g | %g | %s |\n", name, b.Limit, b.Value, mark)
 	}
 	if len(r.Errors) > 0 {
 		p("\nSample errors: %v\n", r.Errors)
@@ -648,6 +705,10 @@ func (r *result) metrics() []metric {
 	for _, x := range r.Setup {
 		m = append(m, metric{x.Name + " daemon CPU s per " + x.Unit, x.DaemonCPUPerUnit},
 			metric{x.Name + " tree CPU s per " + x.Unit, x.TreeCPUPerUnit})
+	}
+	if x := r.Retained; x.measured() {
+		m = append(m, metric{"live heap before load MB", x.StartMB}, metric{"live heap after load MB", x.EndMB},
+			metric{"live heap retained after load MB", x.DeltaMB})
 	}
 	if t := r.Tree; t != nil {
 		m = append(m, metric{"tree CPU % core", t.CPUPercent}, metric{"tree processes/h", t.StartedPerHour})

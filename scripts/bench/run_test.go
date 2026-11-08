@@ -571,6 +571,10 @@ func (e *env) scenario(ctx context.Context) (*result, error) {
 		return fail(err)
 	}
 	_ = s.saveProfile(ctx, "/debug/pprof/allocs", filepath.Join(e.out, "allocs-start.pprof"), time.Minute)
+	// The retained-heap check's start: the live heap after forced GCs, before any load task exists.
+	if e.o.scenario == "load" {
+		r.Retained = e.retainedStart(ctx, s)
+	}
 
 	gen := &loadGen{e: e, lat: map[string]*latencies{"list": {}, "detail": {}}}
 	lctx, stopLoad := context.WithCancel(ctx)
@@ -615,12 +619,56 @@ func (e *env) scenario(ctx context.Context) (*result, error) {
 	s.sampleNow(context.WithoutCancel(ctx), time.Now())
 	stopLoad()
 	lwg.Wait()
-	gen.finish(context.WithoutCancel(ctx))
+	ferr := gen.finish(context.WithoutCancel(ctx))
+	switch {
+	case r.Retained != nil && err == nil:
+		s.setPhase("retained")
+		e.retainedEnd(ctx, s, r.Retained, ferr)
+	case r.Retained != nil:
+		r.Retained.Error = "the run was cut short: " + err.Error()
+	}
 	stopAll()
 	r.fill(s, gen, readSpawnLog(e.spawns))
 	r.Machine.TopOther = topOther(cpuStart, cpuEnd, s.treePIDs(), r.WindowEnd.Sub(r.WindowStart), 3)
 	r.Machine.OSVersion = osVersion()
 	return r, err
+}
+
+// retainSettle is how long the retained-heap check waits after the load tasks ended before it forces a GC, so the
+// attempts' goroutines, pipes and buffers wind down.
+const retainSettle = 5 * time.Second
+
+// retainedStart reads the live heap after forced GCs before the load starts (heap-before-load.pprof); nil when it
+// cannot be read, and then the check is skipped.
+func (e *env) retainedStart(ctx context.Context, s *sampler) *retainedHeap {
+	live, err := s.liveAfterGC(ctx, filepath.Join(e.out, "heap-before-load.pprof"))
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "bench: live heap before the load:", err)
+		s.noteErr("retained heap start: " + err.Error())
+		return nil
+	}
+	return &retainedHeap{StartMB: round(mb(live), 2), SettleSeconds: retainSettle.Seconds()}
+}
+
+// retainedEnd reads the live heap after forced GCs once every load task ended and the SSE clients and pollers
+// stopped (heap-after-load.pprof), and fills the delta. notEnded is finish's error: load tasks still running.
+func (e *env) retainedEnd(ctx context.Context, s *sampler, rh *retainedHeap, notEnded error) {
+	if notEnded != nil {
+		rh.Note = "not every load task ended: " + notEnded.Error()
+	}
+	if err := sleep(ctx, retainSettle); err != nil {
+		rh.Error = err.Error()
+		return
+	}
+	live, err := s.liveAfterGC(ctx, filepath.Join(e.out, "heap-after-load.pprof"))
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "bench: live heap after the load:", err)
+		s.noteErr("retained heap end: " + err.Error())
+		rh.Error = err.Error()
+		return
+	}
+	rh.EndMB = round(mb(live), 2)
+	rh.DeltaMB = round(rh.EndMB-rh.StartMB, 2)
 }
 
 func copyFile(from, to string) {

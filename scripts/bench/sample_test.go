@@ -6,6 +6,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -372,6 +373,35 @@ func (s *sampler) get(ctx context.Context, path string) ([]byte, error) {
 		return nil, fmt.Errorf("%s: %s", path, resp.Status)
 	}
 	return io.ReadAll(resp.Body)
+}
+
+// liveAfterGC is the daemon's live heap right after forced garbage collections. Each GET of
+// /debug/pprof/heap?gc=1 runs runtime.GC first; it is fetched twice, so what sync.Pool keeps for one more cycle is
+// gone too, and the second profile is saved to file. The live heap is then /gc/heap/live:bytes from
+// /debug/vars?light=1: the bytes the last (forced) GC marked live.
+func (s *sampler) liveAfterGC(ctx context.Context, file string) (uint64, error) {
+	if _, err := s.get(ctx, "/debug/pprof/heap?gc=1"); err != nil {
+		return 0, err
+	}
+	if err := s.saveProfile(ctx, "/debug/pprof/heap?gc=1", file, time.Minute); err != nil {
+		return 0, err
+	}
+	body, err := s.get(ctx, "/debug/vars?light=1")
+	if err != nil {
+		return 0, err
+	}
+	var vars struct {
+		Runtime struct {
+			HeapLiveBytes uint64
+		} `json:"runtime"`
+	}
+	if err := json.Unmarshal(body, &vars); err != nil {
+		return 0, err
+	}
+	if vars.Runtime.HeapLiveBytes == 0 {
+		return 0, errors.New("/debug/vars has no heapLiveBytes")
+	}
+	return vars.Runtime.HeapLiveBytes, nil
 }
 
 // saveProfile writes a pprof endpoint's answer to a file of dir.

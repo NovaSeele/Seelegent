@@ -165,12 +165,25 @@ bin/seelegent-bench -scenario load -baseline <dir>/result.json   # prints the de
 
 Results go to `-out` (default `<temp>/seelegent-bench/<time>-<scenario>`, outside the repository): `result.json`,
 `result.md` (the tables), `setup-cpu.pprof`, `cpu.pprof`, `allocs-start.pprof`, `allocs-end.pprof`, `heap.pprof`, `goroutine.txt` and
-the daemon's log. Compare allocation profiles with `go tool pprof -top -sample_index=alloc_space -base
+the daemon's log (the load scenario adds `heap-before-load.pprof` and `heap-after-load.pprof`). Compare allocation profiles with `go tool pprof -top -sample_index=alloc_space -base
 allocs-start.pprof allocs-end.pprof`. The budget is judged on private bytes (commit), not the working set, which
 jumps with what the OS keeps resident: under 0.1% of one core and under 100 MB private when idle; growth under
 load not linear in the events; a private-bytes slope under 10 MB/h and a live-heap slope under 5 MB/h over the
 second half of the window, so a leak shows once the start-up growth is over. It is printed and flagged, never a
-failure. Every result carries the machine profile (OS, CPUs, RAM and commit, free memory and commit over the
+failure.
+
+Under load the two slopes are shown as information only: the 8 tasks run through the whole window, and what each
+running attempt holds (the parser's state, the launcher's output buffers) grows with the events it has seen, so a
+rising slope there does not tell a leak from work in progress. The load scenario checks for leaks with the **live
+heap retained after load** instead. Just before the load tasks start (after the warmup) the bench forces a garbage
+collection in the daemon and reads its live heap; after the window it cancels the load tasks that still run, waits
+until every one ended and the SSE clients and pollers stopped, waits 5 s more, and reads the live heap the same way.
+Each reading fetches `/debug/pprof/heap?gc=1` twice on the pprof port (every fetch runs a full GC first; the second
+also clears what `sync.Pool` keeps for one more cycle), saves the second profile (`heap-before-load.pprof`,
+`heap-after-load.pprof`), and then reads `/gc/heap/live` (the bytes the last GC marked live) from
+`/debug/vars?light=1`. The result shows the start, the end and the delta in MB; the budget allows a delta of at most
+3 MB. `go tool pprof -top -sample_index=inuse_space -base heap-before-load.pprof heap-after-load.pprof` shows what
+stayed. The idle scenarios keep the slopes as budgets. Every result carries the machine profile (OS, CPUs, RAM and commit, free memory and commit over the
 window, system threads, the three other programs that used the most CPU), so runs on different machines or on a
 busy one can be told apart.
 
