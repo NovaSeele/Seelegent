@@ -84,5 +84,11 @@
     "runningTitle": "正在运行的任务数",
     "waiting": "排队",
     "waitingTitle": "排队等待的任务数"
+  },
+  "lowMemory": {
+    "low": "机器内存不足：新启动已暂缓",
+    "freePhys": "空闲内存 {free}",
+    "freeCommit": "空闲提交 {free}",
+    "settings": "资源设置"
   }
 }

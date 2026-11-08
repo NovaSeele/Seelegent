@@ -84,5 +84,11 @@
     "runningTitle": "Tasks running",
     "waiting": "Queued",
     "waitingTitle": "Tasks waiting in the queue"
+  },
+  "lowMemory": {
+    "low": "Machine low on memory: new starts held",
+    "freePhys": "{free} memory free",
+    "freeCommit": "{free} commit free",
+    "settings": "Resource settings"
   }
 }

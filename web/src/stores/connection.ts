@@ -11,8 +11,9 @@
  * - `hello` with another `build` than the page was loaded with: the dashboard reloads to the new bundle.
  *   Another `instance` (daemon restart) also resyncs, in case the daemon's own reset was missed.
  * - task.* frames go to the tasks store, account.* (sign-in progress included) to the accounts store,
- *   settings.updated here. Other frames (providers.changed, roles.changed, memory.changed, hook.ran) go to the
- *   stores that `subscribe` to them, through the same hold-and-replay path, so none is lost during a resync.
+ *   settings.updated and resources.changed (the memory watchdog's lowMemory, into health) here. Other frames
+ *   (providers.changed, roles.changed, memory.changed, hook.ran) go to the stores that `subscribe` to them,
+ *   through the same hold-and-replay path, so none is lost during a resync.
  * - After every snapshot but the first, `onResync` listeners run: data that is not in /state (providers, roles,
  *   usage) is read again, since frames about it may have fallen between the old stream and the new one (old
  *   bug B9: pages stayed stale after a reconnect).
@@ -61,6 +62,7 @@ export type NoticeName = Exclude<
   | 'account.deleted'
   | 'account.login'
   | 'settings.updated'
+  | 'resources.changed'
 >
 
 interface HeldFrame {
@@ -83,6 +85,7 @@ export const useConnectionStore = defineStore('connection', () => {
   const clockOffsetMs = ref(0)
   const stream = shallowRef<EventStream<ServerEvents> | null>(null)
 
+  let client: ApiClient = defaultApi
   let tasksApi: TasksApi = createTasksApi(defaultApi)
   let reload: () => void = () => window.location.reload()
   let random: () => number = Math.random
@@ -252,6 +255,14 @@ export const useConnectionStore = defineStore('connection', () => {
         // change that raced it shows with the next settings.updated or resync. Live frames always apply.
         if (!careful) settings.value = data as Settings
         break
+      case 'resources.changed': {
+        // Like settings, it carries no time: a careful replay leaves lowMemory to the snapshot just applied.
+        const change = data as ServerEvents['resources.changed']
+        if (!careful && health.value) {
+          health.value = { ...health.value, lowMemory: change.lowMemory, memory: change.memory }
+        }
+        break
+      }
       default:
         for (const listener of [...(listeners.get(name) ?? [])]) listener(data)
         break
@@ -294,7 +305,8 @@ export const useConnectionStore = defineStore('connection', () => {
   function start(deps: ConnectionDeps = {}): EventStream<ServerEvents> {
     if (stream.value) return stream.value
     stopped = false
-    tasksApi = createTasksApi(deps.api ?? defaultApi)
+    client = deps.api ?? defaultApi
+    tasksApi = createTasksApi(client)
     if (deps.reload) reload = deps.reload
     if (deps.random) random = deps.random
     const events = createEventStream<ServerEvents>({
@@ -364,6 +376,19 @@ export const useConnectionStore = defineStore('connection', () => {
     snapshots = 0
   }
 
+  /**
+   * Reads GET /health again (the free memory shown next to the resource settings is read when the daemon answers).
+   * A failure keeps the last reading: the connection state says when the daemon is gone.
+   */
+  async function refreshHealth(signal?: AbortSignal): Promise<void> {
+    try {
+      const next = await client.get<Health>('/health', { signal })
+      if (health.value) health.value = next
+    } catch {
+      // Kept as it was.
+    }
+  }
+
   /** The server's idea of now (epoch ms). */
   function serverNow(): number {
     return Date.now() + clockOffsetMs.value
@@ -384,6 +409,7 @@ export const useConnectionStore = defineStore('connection', () => {
     retryNow,
     stop,
     sync,
+    refreshHealth,
     serverNow,
     subscribe,
     onResync,

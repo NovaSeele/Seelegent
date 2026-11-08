@@ -84,5 +84,11 @@
     "runningTitle": "실행 중인 작업 수",
     "waiting": "대기",
     "waitingTitle": "대기열에서 기다리는 작업 수"
+  },
+  "lowMemory": {
+    "low": "컴퓨터 메모리 부족: 새 시작 보류 중",
+    "freePhys": "여유 메모리 {free}",
+    "freeCommit": "여유 커밋 {free}",
+    "settings": "리소스 설정"
   }
 }

@@ -84,5 +84,11 @@
     "runningTitle": "Số tác vụ đang chạy",
     "waiting": "Chờ",
     "waitingTitle": "Số tác vụ đang xếp hàng chờ"
+  },
+  "lowMemory": {
+    "low": "Máy sắp hết bộ nhớ: tạm giữ các lượt chạy mới",
+    "freePhys": "RAM trống {free}",
+    "freeCommit": "commit trống {free}",
+    "settings": "Cài đặt tài nguyên"
   }
 }
