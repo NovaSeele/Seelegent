@@ -100,6 +100,8 @@ type ReportQuestion struct {
 
 // ReportAttention says why a task needs the lead.
 type ReportAttention struct {
+	// State is the attention state, so a reader can tell a question or a stall from a block.
+	State  string `json:"state" ts:"'blocked' | 'question' | 'stalled' | 'background_wait'"`
 	Reason string `json:"reason"`
 	Detail string `json:"detail,omitempty"`
 }

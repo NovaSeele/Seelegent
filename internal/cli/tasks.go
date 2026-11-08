@@ -314,19 +314,21 @@ func newTaskCommand(d deps) *cobra.Command {
 			return emit(cmd, struct {
 				api.TaskReport
 				RecentSteps []ops.Step `json:"recent_steps,omitempty"`
-			}{r, recent}, func(w io.Writer) {
-				_, _ = fmt.Fprintf(w, "Task %s [%s]\n", r.TaskID, r.Status)
-				_, _ = fmt.Fprintf(w, "Model: %s, Effort: %s, Turns: %d\n", dash(r.Model), dash(r.Effort), r.Turn)
-				if r.Response != "" {
-					_, _ = fmt.Fprintf(w, "\n%s\n", strings.TrimRight(r.Response, "\n"))
-				}
-				printSteps(w, recent)
-			})
+			}{r, recent}, func(w io.Writer) { printTaskReport(w, r, recent) })
 		},
 	}
 	cmd.Flags().IntVar(&steps, "steps", 0, "also show the last n worker tool steps")
 	cmd.Flags().BoolVar(&full, "full", false, "the whole task with its turns")
 	return cmd
+}
+
+// printTaskReport is the text of task <id>: the report as wait prints it (failure, attention, question, files,
+// gate, link; M18 hunt H15), with the model line and the recent steps.
+func printTaskReport(w io.Writer, r api.TaskReport, steps []ops.Step) {
+	_, _ = fmt.Fprintf(w, "Task %s [%s]\n", r.TaskID, r.Status)
+	_, _ = fmt.Fprintf(w, "Model: %s, Effort: %s, Turns: %d\n", dash(r.Model), dash(r.Effort), r.Turn)
+	printReportBody(w, r, "")
+	printSteps(w, steps)
 }
 
 func printSteps(w io.Writer, steps []ops.Step) {
@@ -413,7 +415,7 @@ func printTasks(w io.Writer, tasks []api.TaskSummary) {
 		t := &tasks[i]
 		att := ""
 		if ops.Blocked(*t) {
-			att = "blocked(" + t.Attention.Reason + ")"
+			att = t.Attention.State + "(" + t.Attention.Reason + ")"
 		}
 		_, _ = fmt.Fprintf(w, "%-19s %-14s %-14s %-12s %s\n", t.ID, t.Status, t.ProjectName, att, t.Title)
 	}

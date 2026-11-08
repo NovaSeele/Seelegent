@@ -1725,6 +1725,8 @@ export interface ReportQuestion {
 
 /** ReportAttention says why a task needs the lead. */
 export interface ReportAttention {
+  /** State is the attention state, so a reader can tell a question or a stall from a block. */
+  state: 'blocked' | 'question' | 'stalled' | 'background_wait'
   reason: string
   detail?: string
 }

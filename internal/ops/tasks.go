@@ -51,9 +51,17 @@ func ActiveTasks(ctx context.Context, c *client.Client) ([]api.TaskSummary, erro
 	return api.NonNil(out), nil
 }
 
-// Blocked reports whether a task waits for the lead.
+// Blocked reports whether a task waits for the lead: it is blocked, asks a question or stalled, the flags that wake
+// a lead's wait (M18 hunt H16: questions and stalls were left out).
 func Blocked(t api.TaskSummary) bool {
-	return t.Attention != nil && t.Attention.State == api.AttentionBlocked
+	if t.Attention == nil {
+		return false
+	}
+	switch t.Attention.State {
+	case api.AttentionBlocked, api.AttentionQuestion, api.AttentionStalled:
+		return true
+	}
+	return false
 }
 
 // TaskReason says why a task needs attention, or nil.
