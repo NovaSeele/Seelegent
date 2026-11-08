@@ -598,3 +598,15 @@ func (terminals) Find(exitFile string) (task.ConsoleProcess, bool) {
 	pid, start, ok := platform.AttachTerminal(exitFile).Identity()
 	return task.ConsoleProcess{Pid: pid, Start: start}, ok
 }
+
+// DebugVars are the daemon's own values for /debug/vars (the --pprof-addr debug server): the SSE replay ring's
+// frames, encoded bytes and estimated heap bytes, so a heap reading can tell the ring from a leak. Cheap: no
+// stop-the-world.
+func (a *App) DebugVars() map[string]any {
+	out := map[string]any{}
+	a.withAPI(func(s *httpapi.Server) {
+		frames, wire, heap := s.Hub().RingStats()
+		out["sseRing"] = map[string]int{"frames": frames, "bytes": wire, "heapBytes": heap}
+	})
+	return out
+}

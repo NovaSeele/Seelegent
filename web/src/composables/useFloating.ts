@@ -6,6 +6,9 @@ export type Placement = Side | `${Side}-${Exclude<Align, 'center'>}`
 
 const VIEWPORT_MARGIN = 8
 
+/** Why a floating element has no place: its anchor left the document, or has no box. */
+export type LostReason = 'detached' | 'unsized'
+
 interface Rect {
   top: number
   left: number
@@ -71,17 +74,29 @@ export function computePosition(
   return { top: Math.round(top), left: Math.round(left), side }
 }
 
+/** The style of a floating element that has no coordinates yet: laid out (so it can be measured) but unseen. */
+const UNPLACED = { position: 'fixed', top: '0px', left: '0px', visibility: 'hidden' }
+
 /**
  * Positions a teleported, fixed-position element next to its anchor while `open`, and keeps it there on scroll
- * and resize.
+ * and resize. Until it has coordinates for this opening the style keeps it `visibility: hidden`, so it never
+ * flashes at the viewport's top-left corner or at a stale place. An anchor out of the document or not laid out
+ * (a 0×0 box: its row re-rendered, its list switched layout) gives no coordinates: the element stays hidden and
+ * `onLost` tells the owner why: 'detached' (the anchor left the document for good: a popover or menu closes) or
+ * 'unsized' (0×0, it may come back: a tooltip closes, a popover stays hidden until it can be placed). A new anchor
+ * element (its owner re-rendered) is placed at once.
  */
 export function useFloating(
   anchor: Ref<HTMLElement | null>,
   floating: Ref<HTMLElement | null>,
   open: Ref<boolean>,
-  options: { placement?: Ref<Placement> | Placement; offset?: number } = {},
+  options: {
+    placement?: Ref<Placement> | Placement
+    offset?: number
+    onLost?: (reason: LostReason) => void
+  } = {},
 ) {
-  const style = ref<Record<string, string>>({ position: 'fixed', top: '0px', left: '0px' })
+  const style = ref<Record<string, string>>({ ...UNPLACED })
   const side = ref<Side>('bottom')
   let observer: ResizeObserver | null = null
 
@@ -90,6 +105,11 @@ export function useFloating(
     const f = floating.value
     if (!a || !f) return
     const rect = a.getBoundingClientRect()
+    if (!a.isConnected || (rect.width === 0 && rect.height === 0)) {
+      style.value = { ...style.value, visibility: 'hidden' }
+      options.onLost?.(a.isConnected ? 'unsized' : 'detached')
+      return
+    }
     const placement =
       typeof options.placement === 'string'
         ? options.placement
@@ -126,12 +146,20 @@ export function useFloating(
     open,
     async (isOpen) => {
       if (isOpen) {
+        // Unseen until placed for this opening: the anchor may have moved since the last one. (Closing keeps the
+        // place, so a leave transition plays where the element was.)
+        style.value = { ...style.value, visibility: 'hidden' }
         await nextTick()
         start()
       } else stop()
     },
     { immediate: true },
   )
+
+  // The owner re-rendered its anchor (a new element): place next to the new one.
+  watch(anchor, () => {
+    if (open.value) update()
+  })
 
   onBeforeUnmount(stop)
 

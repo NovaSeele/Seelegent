@@ -44,7 +44,7 @@ func (f *workFlags) add(fs *pflag.FlagSet) {
 	fs.StringVar(&f.model, "model", "", "model id or tier")
 	fs.StringArrayVar(&f.gates.gate, "gate", nil, "gate command to run after the report (repeatable)")
 	fs.BoolVar(&f.gates.detect, "gate-detect", false, "add the repository's detected test, lint and build commands")
-	fs.BoolVar(&f.gates.noGate, "no-gate", false, "run no gate commands (lane and hygiene checks still run)")
+	fs.BoolVar(&f.gates.noGate, "no-gate", false, "no gate phase or fix turns (the lane is still checked, as information)")
 	fs.StringSliceVar(&f.gates.lane, "lane", nil, "files and globs the worker may change (default: the whole worktree)")
 	fs.BoolVar(&f.gates.noLane, "no-lane", false, "no lane")
 }

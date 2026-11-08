@@ -9,7 +9,6 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
-	"runtime"
 	"strings"
 
 	"github.com/NovaSeele/Seelegent/internal/api"
@@ -336,85 +335,6 @@ func (s *Service) allowedKeys(t *Task, root string) []string {
 		}
 	}
 	return out
-}
-
-// gitBashDrive matches a Git Bash drive path (/c/Users/...).
-var gitBashDrive = regexp.MustCompile(`^/([A-Za-z])(/.*)?$`)
-
-// commandPath turns a path a command line names (guard.Writes, or an edit tool's) into an absolute path: relative
-// to cwd, a Git Bash drive path (/c/...) mapped on Windows. ok is false for the worker's home (~), a variable and
-// a device.
-func commandPath(cwd, p string) (string, bool) {
-	if p == "" || strings.HasPrefix(p, "~") || strings.HasPrefix(p, "$") || strings.HasPrefix(p, "%") {
-		return "", false // the worker's own home, or a variable
-	}
-	slash := filepath.ToSlash(p)
-	if strings.HasPrefix(slash, "/dev/") || strings.HasPrefix(slash, "/proc/") || slash == "/dev/null" {
-		return "", false
-	}
-	if runtime.GOOS == "windows" {
-		if m := gitBashDrive.FindStringSubmatch(slash); m != nil {
-			p = strings.ToUpper(m[1]) + ":" + filepath.FromSlash(m[2]+"/")
-		}
-	}
-	if !filepath.IsAbs(p) {
-		p = filepath.Join(cwd, p)
-	}
-	return p, true
-}
-
-// workerWrites answers whether the worker plausibly made a file of the repository during a turn: one of its edit
-// tools' files, or a path one of its shell commands writes (guard.Writes, relative to the task's folder), the file
-// itself or a folder holding it (mkdir, cp -r, mv into a folder). A write naming the repository root or the task's
-// folder itself counts for no file: it would claim every one.
-type workerWrites struct {
-	files map[string]bool // snapshot.Key of root-relative paths
-	dirs  []string
-}
-
-// newWorkerWrites reads a turn's edit-tool files (edited: relative to root, '/' separators) and its shell
-// commands.
-func newWorkerWrites(cwd, root string, edited, commands []string) *workerWrites {
-	w := &workerWrites{files: map[string]bool{}}
-	for _, rel := range edited {
-		w.files[snapshot.Key(rel)] = true
-	}
-	cwdKey := ""
-	if under, ok := relInside(root, cwd); ok && under != "." {
-		cwdKey = snapshot.Key(filepath.ToSlash(under))
-	}
-	for _, c := range commands {
-		for _, p := range guard.Writes(c) {
-			abs, ok := commandPath(cwd, p)
-			if !ok {
-				continue
-			}
-			rel, ok := relInside(root, abs)
-			if !ok || rel == "." {
-				continue
-			}
-			k := snapshot.Key(filepath.ToSlash(rel))
-			w.files[k] = true
-			if k != cwdKey {
-				w.dirs = append(w.dirs, k)
-			}
-		}
-	}
-	return w
-}
-
-// wrote reports whether the worker plausibly made rel (relative to the repository root).
-func (w *workerWrites) wrote(rel string) bool {
-	k := snapshot.Key(rel)
-	if w.files[k] {
-		return true
-	}
-	for _, d := range w.dirs {
-		if strings.HasPrefix(k, d+"/") {
-			return true
-		}
-	}
-	return false
 }
 
 // outside reports whether p (absolute, or relative to cwd) lies outside every allowed folder, with its key.

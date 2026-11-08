@@ -168,10 +168,10 @@ Waits (`wait`, `delegate`, `followup`, `run`; the same code as the MCP tools, `o
 - `--gate <cmd>` (repeatable): the lead's gate commands. With `--spec --task` they replace those tasks' `Gate:` lines
   and the feature gate, and prove those tasks in the ledger.
 - `--gate-detect`: add the test, lint and build commands found in the repository (`gate: true` of the MCP tool).
-- `--no-gate`: no gate commands; the lane and hygiene checks still run. It cannot go with `--gate` or
-  `--gate-detect` (usage error).
-- `--lane a,b` (or repeated): the files and globs the worker may change, relative to the repository root; a folder
-  covers everything under it. `--no-lane` drops the lane a spec would give (usage error with `--lane`).
+- `--no-gate`: no gate phase (no gate commands, no automatic fix turns); the lane is still checked after each turn,
+  as information only. It cannot go with `--gate` or `--gate-detect` (usage error).
+- `--lane a,b` (or repeated): the files and globs the worker may change, relative to the repository root; a path
+  covers that file or folder and everything under it (`src/x` covers `src/x/a.vue`, not `src/xy.ts`). `--no-lane` drops the lane a spec would give (usage error with `--lane`).
 - `--force-lane`: claim the lane even where another active task holds it (recorded as forced).
 - `--verify` / `--verify=false`: run, or skip, the second-opinion verifier once the gate is green; left out, the
   `verifier` setting decides.

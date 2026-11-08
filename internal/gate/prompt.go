@@ -28,11 +28,36 @@ func Failing(res api.GateResult) *api.GateStep {
 	return nil
 }
 
-// FixPrompt is the message of an automatic fix turn after a failed gate (attempt of budget).
-func FixPrompt(res api.GateResult, attempt, budget int, others []Other) string {
+// Fixable returns the first red or error step of a result that is the task's own and that an automatic fix turn may
+// work on: not foreign and not the lane, which only the lead decides (field report 4, F4: a fix turn told to get
+// back inside its lane deleted seven files of its own work). nil when there is none.
+func Fixable(res api.GateResult) *api.GateStep {
+	for i := range res.Steps {
+		s := &res.Steps[i]
+		if failed(s.State) && !s.Foreign && s.Kind != api.StepLane {
+			return s
+		}
+	}
+	return nil
+}
+
+// Fix prompt lines that keep a worker from destroying its own work (field report 4, F4 and F10).
+const (
+	// NoDeleteLine tells the worker to leave the files outside its lane alone.
+	NoDeleteLine = "Do NOT delete, revert or move any file to get back inside the lane: the lead decides about " +
+		"those files. Leave them as they are and name them under ## Open issues."
+	// NoLookingLine keeps the worker out of Seelegent's own data and processes.
+	NoLookingLine = "Do not read or search Seelegent's data folder or its processes: everything you need is in " +
+		"this message."
+)
+
+// FixPrompt is the message of an automatic fix turn after a failed gate (attempt of budget). lane is the task's lane:
+// when the lane step lists files outside it, the prompt names the lane and those files as information only, and
+// tells the worker not to delete, revert or move them.
+func FixPrompt(res api.GateResult, lane []string, attempt, budget int, others []Other) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "Seelegent ran the gate for your work and it failed (automatic fix %d/%d).\n", attempt, budget)
-	s := Failing(res)
+	s := Fixable(res)
 	if s != nil {
 		b.WriteString("\n")
 		fmt.Fprintf(&b, "Step: %s (%s)\n", s.Label, s.Kind)
@@ -48,9 +73,6 @@ func FixPrompt(res api.GateResult, attempt, budget int, others []Other) string {
 		case s.Exit != nil:
 			fmt.Fprintf(&b, "Exit: %d\n", *s.Exit)
 		}
-		if s.Kind == api.StepLane && len(s.Files) > 0 {
-			fmt.Fprintf(&b, "Out of lane: %s\n", strings.Join(listed(s.Files), ", "))
-		}
 		if len(s.Failures) > 0 {
 			b.WriteString("Failures:\n")
 			for _, f := range s.Failures {
@@ -63,18 +85,22 @@ func FixPrompt(res api.GateResult, attempt, budget int, others []Other) string {
 				fmt.Fprintf(&b, "- %s (%s)\n", f.Path, f.Kind)
 			}
 		}
-		if s.Tail != "" && s.Kind != api.StepHygiene && s.Kind != api.StepAuto && s.Kind != api.StepLane {
+		if s.Tail != "" && s.Kind != api.StepHygiene && s.Kind != api.StepAuto {
 			b.WriteString("```\n" + strings.TrimRight(s.Tail, "\n") + "\n```\n")
 		}
 	}
-	b.WriteString("\nFix only what makes this check fail. Stay inside your lane. Do not weaken, skip or delete tests " +
-		"or gate commands. Then reply with the normal report format.\n")
+	b.WriteString("\nFix only what makes this check fail. Do not weaken, skip or delete tests or gate commands. Then " +
+		"reply with the normal report format.\n")
 	b.WriteString("If the failure is in a file you did not change, do not edit that file: report it under " +
 		"## Open issues.\n")
-	if s != nil && s.Kind == api.StepLane {
-		b.WriteString("\nUndo only your own edits to those files. Never use git checkout, git restore, git stash, git " +
-			"reset or git clean: other people have uncommitted work in this folder. If the change is required, stop " +
-			"and explain it under ## Blocked.\n")
+	if ls := laneOf(res); ls != nil && len(ls.Files) > 0 {
+		b.WriteString("\nFor your information, not to fix: ")
+		if len(lane) > 0 {
+			fmt.Fprintf(&b, "your lane is %s (a path covers that file or folder and everything under it). ",
+				strings.Join(lane, ", "))
+		}
+		fmt.Fprintf(&b, "These files you changed are outside it: %s.\n", strings.Join(listed(ls.Files), ", "))
+		b.WriteString(NoDeleteLine + "\n")
 	}
 	if s != nil && s.Kind == api.StepHygiene {
 		var kinds []string
@@ -88,7 +114,9 @@ func FixPrompt(res api.GateResult, attempt, budget int, others []Other) string {
 				"or clean).\n")
 		}
 		if slices.Contains(kinds, api.FindingJunkFile) {
-			b.WriteString("\nDelete the junk files you or your commands created.\n")
+			b.WriteString("\nThe junk files look like leftovers (logs, temporary or backup files). Remove one only when " +
+				"you are sure your own commands left it and it holds no work; otherwise leave it and name it under " +
+				"## Open issues.\n")
 		}
 	}
 	if len(others) > 0 {
@@ -103,7 +131,18 @@ func FixPrompt(res api.GateResult, attempt, budget int, others []Other) string {
 		fmt.Fprintf(&b, "\nOther workers are active in this repository: %s; failures in their files are not yours "+
 			"to fix.\n", strings.Join(parts, "; "))
 	}
+	b.WriteString("\n" + NoLookingLine + "\n")
 	return strings.TrimRight(b.String(), "\n")
+}
+
+// laneOf returns the lane step of a result, or nil.
+func laneOf(res api.GateResult) *api.GateStep {
+	for i := range res.Steps {
+		if res.Steps[i].Kind == api.StepLane {
+			return &res.Steps[i]
+		}
+	}
+	return nil
 }
 
 var (

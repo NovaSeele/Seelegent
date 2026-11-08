@@ -254,7 +254,8 @@ func TestVerifierRejectThenAccept(t *testing.T) {
 		v1.Cites[0].State != proof.CiteLocated {
 		t.Fatalf("first verdict = %+v", v1)
 	}
-	if tk.Turns[1].By != ByVerifier || !strings.Contains(tk.Turns[1].Message, "must be three") {
+	if tk.Turns[1].By != ByVerifier || !strings.Contains(tk.Turns[1].Message, "must be three") ||
+		!strings.Contains(tk.Turns[1].Message, verifierNoDelete) {
 		t.Errorf("fix turn = %s %q", tk.Turns[1].By, tk.Turns[1].Message)
 	}
 	if v2 == nil || v2.Verdict != api.VerdictAccept {

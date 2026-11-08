@@ -45,7 +45,10 @@ const members = computed<SelectOption<string>[]>(() => [
 ])
 const backends = computed<SelectOption<string>[]>(() => [
   { value: '', label: t('issues.actions.retrySame') },
-  ...(['agy', 'claude', 'codex'] as const).map((b) => ({ value: b, label: b })),
+  ...(['agy', 'claude', 'codex'] as const).map((b) => ({
+    value: b,
+    label: t(`accounts.backend.${b}`),
+  })),
 ])
 
 const member = computed({

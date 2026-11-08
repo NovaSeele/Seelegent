@@ -205,7 +205,20 @@ func (o *options) normalize() error {
 	if o.interval <= 0 || o.tasks < 1 || o.rate <= 0 || o.accounts < 1 || o.poll <= 0 {
 		return fmt.Errorf("-interval, -tasks, -rate, -accounts and -poll must be positive")
 	}
+	if o.perAccount() > maxPerAccount {
+		return fmt.Errorf("-tasks %d on -accounts %d needs %d turns per account; at most %d: add accounts", o.tasks,
+			o.accounts, o.perAccount(), maxPerAccount)
+	}
 	return nil
+}
+
+// defaultPerAccount is the daemon's default maxConcurrentPerAccount; maxPerAccount the most it accepts.
+const defaultPerAccount, maxPerAccount = 2, 64
+
+// perAccount is the maxConcurrentPerAccount the bench daemon gets: the default, or more when the load tasks would
+// not all fit on the accounts at once (-tasks 16 on 6 accounts needs 3), so every load task runs in parallel.
+func (o *options) perAccount() int {
+	return max(defaultPerAccount, (o.tasks+o.accounts-1)/o.accounts)
 }
 
 // freePort asks the system for a free loopback port. Another program can take it before the daemon listens; the

@@ -10,6 +10,9 @@
  *   3:1    only UI parts whose colour carries meaning: the focus ring and the outline of a control that has no
  *          fill of its own (checkbox, --border-control)
  *
+ *   3:1    provider hues (--provider-<id>, components/ui/ProviderMark.vue) on --bg-surface and --bg-surface-2:
+ *          an identity mark beside the provider's name, never text
+ *
  * --border-subtle / --border-strong are separators between areas that already differ in background or spacing;
  * they carry no meaning on their own and are not checked.
  */
@@ -94,12 +97,15 @@ function declarations(css: string): Map<string, string> {
   return out
 }
 
-/** The derived colour layer of tokens.css (the block shared by :root and [data-theme-preview]). */
+/**
+ * The derived colour layer of tokens.css (the block shared by :root and [data-theme-preview]), plus the provider
+ * hues of providers.css, which no theme has to define.
+ */
 function derivedLayer(): Map<string, string> {
   const tokens = readFile('src/styles/tokens.css')
   const block = /:root,\s*\[data-theme-preview\]\s*\{([\s\S]*?)\n\}/.exec(tokens)
   if (!block?.[1]) throw new Error('tokens.css: derived colour layer not found')
-  return declarations(block[1])
+  return new Map([...declarations(readFile('src/styles/providers.css')), ...declarations(block[1])])
 }
 
 function parseColor(value: string): Rgba | null {
@@ -158,6 +164,9 @@ function contrast(a: Rgba, b: Rgba): number {
 
 const derived = derivedLayer()
 
+/** Every provider base hue (--provider-<id>, not its -soft and -border steps), wherever it is declared. */
+const PROVIDER_HUES = [...derived.keys()].filter((name) => /^--provider-[a-z]+$/.test(name)).sort()
+
 function violations(id: string): string[] {
   const resolve = resolver(declarations(readFile(`src/styles/themes/${id}.css`)), derived)
   const out: string[] = []
@@ -180,6 +189,30 @@ describe('theme contrast (WCAG)', () => {
 
   it.each(THEMES.map((theme) => theme.id))('%s meets the contrast table', (id) => {
     expect(violations(id)).toEqual([])
+  })
+
+  // Provider colours: the hue is all that sets the dot or edge apart from its surface, so it keeps 3:1 on both
+  // card surfaces in every theme (a theme whose surface misses it overrides the hue in its own file).
+  it('finds the provider hues', () => {
+    expect(PROVIDER_HUES).toEqual([
+      '--provider-agy',
+      '--provider-claude',
+      '--provider-codex',
+      '--provider-other',
+    ])
+  })
+
+  it.each(THEMES.map((theme) => theme.id))('%s keeps every provider hue at 3:1', (id) => {
+    const resolve = resolver(declarations(readFile(`src/styles/themes/${id}.css`)), derived)
+    const out: string[] = []
+    for (const hue of PROVIDER_HUES) {
+      for (const bgName of ['--bg-surface', '--bg-surface-2']) {
+        const bg = resolve(bgName)
+        const ratio = contrast(over(resolve(hue), bg), bg)
+        out.push(`${hue} on ${bgName}: ${ratio.toFixed(2)}`)
+      }
+    }
+    expect(out.filter((line) => Number(line.split(': ')[1]) < 3)).toEqual([])
   })
 
   // Design review: muted text on a hovered list row fell to about 4.0:1. Every block that lays a row tint

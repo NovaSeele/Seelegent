@@ -110,4 +110,43 @@ describe('Menu', () => {
     expect(selected).toEqual([])
     wrapper.unmount()
   })
+
+  it('closes when its trigger leaves the document, and keeps a 0×0 trigger open but hidden', async () => {
+    const { wrapper, trigger } = await setup()
+    press('ArrowDown', {}, trigger)
+    await flush()
+    // jsdom gives every element a 0×0 box: the menu stays open, unseen until it can be placed.
+    window.dispatchEvent(new Event('scroll'))
+    await flush()
+    const menu = document.querySelector<HTMLElement>('[role=menu]')
+    expect(menu).not.toBeNull()
+    expect(menu?.style.visibility).toBe('hidden')
+
+    // The row re-rendered: the trigger is gone for good. The menu closes; with no trigger left, focus stays put.
+    document.querySelector('.menu-anchor')?.remove()
+    window.dispatchEvent(new Event('scroll'))
+    await flush()
+    expect(document.querySelector('[role=menu]')).toBeNull()
+    expect(trigger.getAttribute('aria-expanded')).toBe('false')
+    expect(trigger.isConnected).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('hands focus to its trigger when the trigger is back in the document after closing', async () => {
+    const { wrapper, trigger } = await setup()
+    press('ArrowDown', {}, trigger)
+    await flush()
+    expect(focused()).toBe('Copy')
+
+    const anchor = document.querySelector('.menu-anchor') as HTMLElement
+    const parent = anchor.parentNode as Node
+    anchor.remove()
+    window.dispatchEvent(new Event('scroll'))
+    // Put back before the render settles (a kept-alive view coming back, a moved row).
+    parent.appendChild(anchor)
+    await flush()
+    expect(document.querySelector('[role=menu]')).toBeNull()
+    expect(document.activeElement).toBe(trigger)
+    wrapper.unmount()
+  })
 })

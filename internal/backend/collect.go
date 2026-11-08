@@ -23,12 +23,17 @@ const (
 	OutcomeCanceled OutcomeStatus = "canceled"
 )
 
+// BackgroundWaitTimeout is the error of a background-wait outcome that the turn's time limit ended: the worker's
+// commands, a dev server among them, are gone.
+const BackgroundWaitTimeout = "the turn reached its time limit while waiting for a background command; its process " +
+	"tree was stopped"
+
 // Outcome summarizes a finished turn.
 type Outcome struct {
 	Status OutcomeStatus `json:"status"`
 	// Class is set when Status is failed.
 	Class event.Class `json:"class,omitempty"`
-	// Error is the failure message (secrets masked).
+	// Error is the failure message (secrets masked), or why a background wait ended (BackgroundWaitTimeout).
 	Error string `json:"error,omitempty"`
 	// ResetAt is when the limit resets, when Class is quota_exhausted and Error says so ("resets 3:10am
 	// (Asia/Ho_Chi_Minh)"); zero otherwise. The task engine passes it to the pool as the rest's hint.
@@ -49,6 +54,13 @@ type Outcome struct {
 	DeniedActions []string `json:"deniedActions,omitempty"`
 	// Usage is the turn's token usage (camelCase JSON, see B12).
 	Usage event.Usage `json:"usage"`
+	// ThreadUsage is the conversation's usage total the CLI reported, for a CLI whose usage counts every earlier run
+	// of a resumed conversation (codex); Usage is then this run's part. The next run of the conversation starts from
+	// it.
+	ThreadUsage *event.Usage `json:"threadUsage,omitempty"`
+	// ThreadTracked is set on every outcome of such a CLI, with or without ThreadUsage: Usage is this run's part.
+	// An outcome without it was recorded before Seelegent kept the total, and its Usage was the CLI's total.
+	ThreadTracked bool `json:"threadTracked,omitempty"`
 	// DurationMs is the duration the CLI reported.
 	DurationMs int64 `json:"durationMs,omitempty"`
 	// BackgroundWait is the CLI's line when Status is background_wait.
@@ -136,6 +148,9 @@ func (c *Collector) Outcome(exit launch.Exit) Outcome {
 	case c.waiting != "":
 		o.Status = OutcomeBackgroundWait
 		o.BackgroundWait = c.waiting
+		if exit.Reason == launch.ReasonTimeout {
+			o.Error = BackgroundWaitTimeout
+		}
 	default:
 		o.Status = OutcomeFailed
 		o.Class = event.ClassFatal

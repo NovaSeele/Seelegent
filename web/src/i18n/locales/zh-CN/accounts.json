@@ -50,7 +50,8 @@
     "logout": "退出登录",
     "key": "设置 API 密钥",
     "delete": "删除账号",
-    "more": "{name} 的更多操作"
+    "more": "{name} 的更多操作",
+    "priority": "优先级：{n}…"
   },
   "done": {
     "added": "已添加 {name}",
@@ -60,7 +61,8 @@
     "deleted": "已删除 {name}",
     "logout": "已退出登录",
     "refreshedAll": "配额已刷新",
-    "off": "已停止给 {name} 分配工作"
+    "off": "已停止给 {name} 分配工作",
+    "priority": "已将 {name} 的优先级设为 {n}"
   },
   "quota": {
     "window": "{window} 窗口",
@@ -138,6 +140,10 @@
     "title": "重命名账号",
     "submit": "重命名"
   },
+  "priorityDialog": {
+    "title": "{name} 的优先级",
+    "submit": "保存优先级"
+  },
   "delete": {
     "title": "删除 {name}？",
     "desc": "它的配置和登录将从 Seelegent 中移除。它运行过的任务会保留历史。",
@@ -197,5 +203,43 @@
     "tierModels": "始终允许（各档模型）：{models}",
     "enabled": "允许账号使用",
     "save": "保存提供方"
+  },
+  "view": {
+    "label": "账号视图",
+    "list": "列表",
+    "cards": "卡片"
+  },
+  "list": {
+    "col": {
+      "account": "账号",
+      "status": "状态",
+      "slots": "槽位",
+      "quota": "配额",
+      "controls": "用于工作 · 优先级"
+    },
+    "slots": "{busy}/{max} 忙碌",
+    "expand": "显示 {name} 的详情",
+    "collapse": "隐藏 {name} 的详情",
+    "enabledFor": "将 {name} 用于工作",
+    "span": {
+      "hours": "{n} 小时",
+      "day": "每日",
+      "week": "每周",
+      "month": "每月"
+    },
+    "spanShort": {
+      "hours": "{n} 小时",
+      "day": "1天",
+      "week": "7天",
+      "month": "30天"
+    },
+    "quota": {
+      "tip": "{group} · {window}",
+      "lowestTip": "所有窗口中最低：{group} · {window}",
+      "more": "还有 {n} 个窗口，展开该行可见",
+      "moreShort": "+{n}",
+      "passive": "没有可读取的配额",
+      "checking": "正在读取配额…"
+    }
   }
 }

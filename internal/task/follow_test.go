@@ -373,3 +373,47 @@ func TestFollowerBatchCap(t *testing.T) {
 		t.Errorf("logged %d events", n)
 	}
 }
+
+// TestFollowerActiveStep: the active step follows the worker's agy events (a tool, then responding, then a tool agy
+// reports only when it is done) and each change is published for the summary views (field report 4, F9: the task
+// showed "starting" for 45 minutes).
+func TestFollowerActiveStep(t *testing.T) {
+	h := newHarness(t)
+	followTask(h, "tf9")
+	b, err := h.s.backend(config.BackendAgy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sub := h.s.Bus().Subscribe(1024)
+	defer sub.Close()
+	r := &run{id: "tf9"}
+	f := h.s.newFollower(r, b.NewParser(nil), "tf9", 1, 1, Offsets{})
+	lines := followLines(agyInit("c9"), agyTool(1, "CALLING", "go test ./..."), agyTool(1, "DONE", "go test ./..."),
+		agyDelta(2, "Done "), agyDelta(2, "now."), agyEdit(3, "a.go"))
+	var steps []string
+	for _, l := range lines {
+		if err := f.line(l.stderr, []byte(l.text), l.next); err != nil {
+			t.Fatal(err)
+		}
+		steps = append(steps, r.activity()[0])
+	}
+	want := []string{"", "run_command", "run_command", "responding", "responding", "replace_file_content"}
+	if strings.Join(steps, ",") != strings.Join(want, ",") {
+		t.Errorf("steps = %q, want %q", steps, want)
+	}
+	live := 0
+	for done := false; !done; {
+		select {
+		case n := <-sub.C():
+			if n.Kind == NoticeLive && n.TaskID == "tf9" {
+				live++
+			}
+		default:
+			done = true
+		}
+	}
+	// run_command opens, closes, responding, the edit: four changes; the second delta and the init change nothing.
+	if live != 4 {
+		t.Errorf("live notices = %d, want 4", live)
+	}
+}

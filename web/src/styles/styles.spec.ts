@@ -108,8 +108,9 @@ describe('style gates', () => {
     .filter(([path]) => !path.startsWith(THEMES_DIR))
     .map(([path, source]) => [path, styleText(path, source)] as const)
 
-  // File-type glyph colours are fixed per type (like VS Code), not themed, so they live in one table of their own.
-  const COLOUR_TABLES = ['src/styles/fileicons.css']
+  // File-type glyph colours are fixed per type (like VS Code) and provider hues per backend, not themed, so each
+  // lives in a table of its own.
+  const COLOUR_TABLES = ['src/styles/fileicons.css', 'src/styles/providers.css']
 
   it('keeps colour literals inside theme files', () => {
     const literal =
@@ -145,5 +146,26 @@ describe('style gates', () => {
   it('never sets a font size below 11px', () => {
     const small = styled.filter(([, css]) => /font-size:\s*(?:[0-9]|10)(?:\.\d+)?px/.test(css))
     expect(small.map(([path]) => path)).toEqual([])
+  })
+})
+
+// Design review (Tree tab): a scroll frame without a position does not contain its absolute descendants (every
+// .sr-only label is absolute), so they stretch the scroll height of the pane around it and the whole task pane
+// scrolls away. The process views' scroll frames are positioned.
+describe('task view scroll frames', () => {
+  it('position every scroll frame of the process views', () => {
+    const missing: string[] = []
+    for (const [path, source] of Object.entries(sources)) {
+      if (!path.startsWith('src/features/tasks/views/process/') || !path.endsWith('.vue')) continue
+      const css = styleText(path, source)
+      for (const m of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+        const body = m[2] ?? ''
+        const scrolls = /overflow(-x|-y)?:\s*(auto|scroll)/.test(body)
+        if (scrolls && !/position:\s*(relative|absolute|sticky|fixed)/.test(body)) {
+          missing.push(`${path}: ${(m[1] ?? '').trim()}`)
+        }
+      }
+    }
+    expect(missing).toEqual([])
   })
 })

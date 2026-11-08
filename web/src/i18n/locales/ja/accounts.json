@@ -50,7 +50,8 @@
     "logout": "サインアウト",
     "key": "API キーを設定",
     "delete": "アカウントを削除",
-    "more": "{name} のその他の操作"
+    "more": "{name} のその他の操作",
+    "priority": "優先度: {n}…"
   },
   "done": {
     "added": "{name} を追加しました",
@@ -60,7 +61,8 @@
     "deleted": "{name} を削除しました",
     "logout": "サインアウトしました",
     "refreshedAll": "クォータを更新しました",
-    "off": "{name} の作業受付をオフにしました"
+    "off": "{name} の作業受付をオフにしました",
+    "priority": "{name} の優先度を {n} にしました"
   },
   "quota": {
     "window": "{window} ウィンドウ",
@@ -138,6 +140,10 @@
     "title": "アカウント名を変更",
     "submit": "名前を変更"
   },
+  "priorityDialog": {
+    "title": "{name} の優先度",
+    "submit": "優先度を保存"
+  },
   "delete": {
     "title": "{name} を削除しますか？",
     "desc": "プロファイルとサインインが Seelegent から削除されます。実行したタスクの履歴は残ります。",
@@ -197,5 +203,43 @@
     "tierModels": "常に許可（ティアのモデル）: {models}",
     "enabled": "アカウントが使える",
     "save": "プロバイダーを保存"
+  },
+  "view": {
+    "label": "アカウントの表示",
+    "list": "リスト",
+    "cards": "カード"
+  },
+  "list": {
+    "col": {
+      "account": "アカウント",
+      "status": "状態",
+      "slots": "枠",
+      "quota": "クォータ",
+      "controls": "作業に使う · 優先度"
+    },
+    "slots": "{busy}/{max} 使用中",
+    "expand": "{name} の詳細を表示",
+    "collapse": "{name} の詳細を隠す",
+    "enabledFor": "{name} を作業に使う",
+    "span": {
+      "hours": "{n}時間",
+      "day": "日次",
+      "week": "週次",
+      "month": "月次"
+    },
+    "spanShort": {
+      "hours": "{n}時間",
+      "day": "1日",
+      "week": "7日",
+      "month": "30日"
+    },
+    "quota": {
+      "tip": "{group} · {window}",
+      "lowestTip": "全ウィンドウで最も少ないもの: {group} · {window}",
+      "more": "ほかに {n} 個のウィンドウ（行を開くと表示）",
+      "moreShort": "+{n}",
+      "passive": "読み取れるクォータなし",
+      "checking": "クォータを取得中…"
+    }
   }
 }

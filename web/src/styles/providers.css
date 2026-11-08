@@ -1,0 +1,21 @@
+/*
+ * Provider identity colours: one hue per worker backend, shown only through components/ui/ProviderMark.vue (an
+ * 8px dot, a 3px edge, or a chip at the -soft level; never a fill, never text, never a status).
+ *
+ * The brand hues are fixed per backend, like the file-type glyphs, and are not part of a theme: this is the second
+ * colour table outside styles/themes/, and styles.spec.ts exempts it by name. Codex (OpenAI is monochrome), the
+ * fallback for an unknown backend and the -soft / -border steps are derived in tokens.css. A theme may override
+ * any of them (its selector is more specific); contrast.spec.ts keeps every base hue at 3:1 on --bg-surface and
+ * --bg-surface-2 in every theme.
+ */
+:root,
+[data-theme-preview] {
+  --provider-claude: #d97757;
+  --provider-agy: #7b61ff;
+}
+
+/* A 3px left edge in a backend's hue on a row, group or card (components/ui/provider.ts providerEdge sets the hue).
+   Drawn as an inset shadow so it never shifts the content. */
+.provider-edge {
+  box-shadow: inset var(--status-stripe) 0 0 0 var(--provider-edge, var(--provider-other));
+}

@@ -7,19 +7,20 @@ import type { Account } from '@/api/types'
 import Button from '@/components/ui/Button.vue'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import Dialog from '@/components/ui/Dialog.vue'
+import NumberField from '@/components/ui/NumberField.vue'
 import TextField from '@/components/ui/TextField.vue'
 import { useNow } from '@/composables/useNow'
 import { useAccountsStore } from '@/stores/accounts'
 import { useToastStore } from '@/stores/toast'
 
-import type { AccountDialog } from './AccountCard.vue'
+import type { AccountDialog } from './useAccountControls'
 import { offConsequence } from './accountView'
 
 /**
- * The account dialogs the cards ask for: rename, the API key (set or clear; only its hint is ever shown, and the
- * typed key is cleared when the dialog closes), delete and sign out (409 while the account runs a task, said in the
- * dialog), and turning work off, which says what changes now (running turns finish; the last account of its kind
- * leaves new work waiting).
+ * The account dialogs the cards and list rows ask for: rename, the priority (a narrow list row has no room for its
+ * field), the API key (set or clear; only its hint is ever shown, and the typed key is cleared when the dialog
+ * closes), delete and sign out (409 while the account runs a task, said in the dialog), and turning work off, which
+ * says what changes now (running turns finish; the last account of its kind leaves new work waiting).
  */
 const props = defineProps<{ account: Account | undefined }>()
 const dialog = defineModel<AccountDialog | null>({ required: true })
@@ -29,6 +30,7 @@ const accounts = useAccountsStore()
 const toast = useToastStore()
 
 const label = ref('')
+const priority = ref(0)
 const key = ref('')
 const busy = ref(false)
 const error = ref('')
@@ -37,6 +39,7 @@ watch(dialog, (value) => {
   key.value = ''
   error.value = ''
   label.value = value === 'rename' ? (props.account?.label ?? '') : ''
+  priority.value = props.account?.priority ?? 0
 })
 
 // The account went away (deleted elsewhere): nothing left to edit.
@@ -88,6 +91,11 @@ const rename = () =>
     (a) => accounts.update(a.id, { label: label.value.trim() }),
     t('accounts.done.renamed', { name: label.value.trim() }),
   )
+const savePriority = () =>
+  run(
+    (a) => accounts.update(a.id, { priority: priority.value }),
+    t('accounts.done.priority', { name: name.value, n: priority.value }),
+  )
 const saveKey = () =>
   run(
     (a) => accounts.setKey(a.id, key.value.trim()),
@@ -129,6 +137,34 @@ const turnOff = () =>
         :disabled="!label.trim()"
       >
         {{ t('accounts.rename.submit') }}
+      </Button>
+    </template>
+  </Dialog>
+
+  <Dialog
+    :open="dialog === 'priority'"
+    size="sm"
+    :title="t('accounts.priorityDialog.title', { name })"
+    :dismissible="!busy"
+    initial-focus="input"
+    @update:open="dialog = null"
+  >
+    <form id="account-priority" @submit.prevent="savePriority">
+      <NumberField
+        :model-value="priority"
+        :label="t('accounts.priority')"
+        :hint="t('accounts.add.priorityHint')"
+        :error="error || undefined"
+        integer
+        @commit="priority = $event"
+      />
+    </form>
+    <template #footer>
+      <Button variant="ghost" :disabled="busy" @click="dialog = null">
+        {{ t('common.action.cancel') }}
+      </Button>
+      <Button type="submit" form="account-priority" variant="primary" :loading="busy">
+        {{ t('accounts.priorityDialog.submit') }}
       </Button>
     </template>
   </Dialog>

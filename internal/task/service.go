@@ -262,9 +262,11 @@ type Service struct {
 	// health is the accounts' state the attention rules read, refreshed by the attention watcher.
 	healthMu sync.Mutex
 	health   map[string]accountHealth
-	// overlaps caches the contention view of each repository for a few seconds.
-	overlapMu sync.Mutex
-	overlaps  map[string]overlapCache
+	// overlaps caches the contention view of each repository for a few seconds; overlapSweep is set while the
+	// goroutine that drops expired views runs (sweepOverlaps).
+	overlapMu    sync.Mutex
+	overlaps     map[string]overlapCache
+	overlapSweep bool
 
 	// resMu guards the resource state (resources.go): the watchdog's hold (low), whether it stopped a gate in
 	// this low-memory episode (stopped), the heavy commands in flight (newest last), the last spaced start, lowWake,

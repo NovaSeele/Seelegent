@@ -197,7 +197,7 @@ func (l *strList) UnmarshalJSON(b []byte) error {
 }
 
 // gateArg is the gate argument: a command, a list of commands, true (the repository's detected test, lint and
-// build commands) or false (no gate commands; the lane and hygiene checks still run).
+// build commands) or false (the gate is off: no commands, no fix turns; the lane is still checked as information).
 type gateArg struct {
 	set  bool
 	off  bool

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"os"
 	"path/filepath"
 	"slices"
 	"sort"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/NovaSeele/Seelegent/internal/api"
 	"github.com/NovaSeele/Seelegent/internal/backend"
+	"github.com/NovaSeele/Seelegent/internal/launch"
 	"github.com/NovaSeele/Seelegent/internal/snapshot"
 )
 
@@ -76,6 +78,11 @@ func (s *Service) checkTurn(ctx context.Context, t *Task, tu *Turn, last *backen
 	if s.o.Snapshots == nil || tu == nil || tu.Snap == nil || tu.Snap.Checked {
 		return nil
 	}
+	if !workerRan(tu, last) {
+		// No worker ever ran in this turn (it waited for an account and was cancelled, or its launch failed): what
+		// changed meanwhile is someone else's work, never at risk from it (field report 4).
+		return nil
+	}
 	ctx, cancel := context.WithTimeout(ctx, checkTimeout)
 	defer cancel()
 	root := tu.Snap.Root
@@ -101,15 +108,12 @@ func (s *Service) checkTurn(ctx context.Context, t *Task, tu *Turn, last *backen
 	editedKeys := map[string]bool{}
 	var editedAbs []string
 	for _, p := range abs {
-		if !filepath.IsAbs(p) {
-			p = filepath.Join(t.Cwd, p)
-		}
-		if slices.Contains(editedAbs, p) {
+		p, ok := commandPath(t.Cwd, p)
+		if !ok || slices.Contains(editedAbs, p) {
 			continue
 		}
 		editedAbs = append(editedAbs, p)
-		if rel, ok := relInside(root, p); ok {
-			rel = filepath.ToSlash(rel)
+		if rel, ok := repoRel(root, t.Cwd, p); ok {
 			if k := snapshot.Key(rel); !editedKeys[k] {
 				editedKeys[k] = true
 				c.edited = append(c.edited, rel)
@@ -164,6 +168,7 @@ func (s *Service) checkTurn(ctx context.Context, t *Task, tu *Turn, last *backen
 		c.hygiene = s.hygiene(ctx, root, t.Cwd, start, end, c.changed, response, reported, writes.wrote)
 	}
 	c.scope = s.scope(ctx, t, root, editedAbs, commands, response)
+	c.scope = append(c.scope, s.laneOffFindings(t, tu, c.changed, c.edited, commands, &end)...)
 	return c
 }
 
@@ -310,6 +315,29 @@ func (s *Service) preCheck(ctx context.Context, id string, turn int, status stri
 		s.log.Debug("task: post-turn checks", "task", id, "turn", turn, "took", took)
 	}
 	return c
+}
+
+// workerRan reports whether a worker process ran in turn tu: one of its attempts got as far as starting the worker
+// (the launcher's ready record in its launch folder), or reported a conversation, an edit or a command. last is the
+// outcome of the attempt that just ended (not stored yet), or nil.
+func workerRan(tu *Turn, last *backend.Outcome) bool {
+	ran := func(o *backend.Outcome) bool {
+		return o != nil && (o.ConversationID != "" || len(o.FilesEdited) > 0 || len(o.Commands) > 0)
+	}
+	if ran(last) {
+		return true
+	}
+	for _, a := range tu.Attempts {
+		if ran(a.Outcome) {
+			return true
+		}
+		if a.LaunchDir != "" {
+			if _, err := os.Stat(launch.FilesIn(a.LaunchDir).Ready); err == nil {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // lateCheck runs the post-turn checks of a turn that ended without them (a cancel, a failure) and saves them.

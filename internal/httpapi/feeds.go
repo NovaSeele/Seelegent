@@ -107,7 +107,7 @@ func (s *Server) taskFeed(ctx context.Context) {
 				if sum, err := s.o.Tasks.Summary(ctx, n.TaskID); err == nil && !task.Hidden(sum.Kind) {
 					s.publish(api.StreamTaskCreated, sum)
 				}
-			case n.Kind == task.NoticeTask:
+			case n.Kind == task.NoticeTask || n.Kind == task.NoticeLive:
 				pending[n.TaskID] = true
 				if fire == nil {
 					if timer == nil {

@@ -193,6 +193,51 @@ func TestAgyBackgroundWait(t *testing.T) {
 	}
 }
 
+// TestAgyBackgroundWaitTimeout: the turn's time limit hits while agy only waits for a background command (a dev
+// server). The outcome is a background wait, not a failure: no error event, the agent's last message kept, and the
+// error says the time limit stopped the process tree (field report 4, F8).
+func TestAgyBackgroundWaitTimeout(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("testdata", "streams", "agy", "background.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := mustBackend(t, "agy").NewParser(nil)
+	var col Collector
+	for _, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {
+		line = strings.TrimRight(line, "\r")
+		var evs []event.Event
+		switch {
+		case strings.HasPrefix(line, "#!stderr "):
+			evs = p.Stderr(strings.TrimPrefix(line, "#!stderr "))
+		case strings.HasPrefix(line, "#!"):
+		default:
+			evs = p.Line([]byte(line))
+		}
+		for _, e := range evs {
+			col.Add(e)
+		}
+	}
+	exit := launch.Exit{Reason: launch.ReasonTimeout, Code: -1}
+	fin := p.Finish(exit, "")
+	if k := kinds(fin); k[event.KindError] != 0 || k[event.KindBackgroundWait] != 1 {
+		t.Fatalf("finish = %+v", fin)
+	}
+	for _, e := range fin {
+		col.Add(e)
+	}
+	o := col.Outcome(exit)
+	if o.Status != OutcomeBackgroundWait || o.Error != BackgroundWaitTimeout || o.Response != "The dev server is running." ||
+		!strings.Contains(o.BackgroundWait, "waiting up to 45m0s") || o.Class != "" {
+		t.Errorf("outcome = %+v", o)
+	}
+	// A timeout without a wait line is still a failure.
+	p = mustBackend(t, "agy").NewParser(nil)
+	p.Line([]byte(`{"event":"step_update","step_update":{"step_index":2,"step_type":"agent_response","state":"RUNNING","text_delta":"working"}}`))
+	if k := kinds(p.Finish(exit, "")); k[event.KindError] != 1 || k[event.KindBackgroundWait] != 0 {
+		t.Errorf("plain timeout = %v", k)
+	}
+}
+
 func TestClaudeStreamSuccess(t *testing.T) {
 	events, o := replay(t, mustBackend(t, "claude"), "success.jsonl")
 	if o.Status != OutcomeOK || o.ConversationID != "4f1c2b9e-5d3a-4e7f-9a10-b2c3d4e5f607" || o.Model != "claude-sonnet-5" {
