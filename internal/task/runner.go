@@ -32,8 +32,18 @@ func retryDelays() []time.Duration { return []time.Duration{15 * time.Second, 45
 // noAccountRecheck is how often a task that no account can run looks again (account changes wake it sooner).
 const noAccountRecheck = time.Minute
 
-// extraAttempts is how many attempts a turn may make beyond one per account.
+// extraAttempts is how many attempts a turn may make beyond one per account. Quota attempts do not count (see
+// maxQuotaRests).
 const extraAttempts = 3
+
+// maxQuotaRests is how many attempts of one turn may end on a quota limit. Such an attempt is followed by a rest and a
+// resume, or a handover: the turn waits for quota, it does not fail, so these attempts stay out of maxAttempts (a
+// one-account task that rested four times in a turn used to end failed). This cap only stops a runaway loop, such as
+// a CLI that reports a limit on every start: each limit rests the account (an hour by default when the CLI gives no
+// reset time ahead), so 50 is about two days of such a loop on one account, while a real turn needs a handful (a
+// 5-hour window resets at most about five times a day). A count rather than a time limit, because a turn has no
+// deadline of its own and a weekly limit legitimately rests for days.
+const maxQuotaRests = 50
 
 // errStop tells the runner that the task was cancelled or taken over while it prepared an attempt.
 var errStop = errors.New("stopped")
@@ -682,7 +692,18 @@ func (s *Service) finishAttempt(r *run, id string, turn, n int, accountID, model
 		}
 	}
 	maxAttempts := s.maxAttempts(ctx, b.Name())
-	check := s.preCheck(ctx, id, turn, status, &o, n, maxAttempts)
+	// preCheck runs the post-turn checks only when this attempt may end the turn: when its budget is used up.
+	used, limit := n, maxAttempts
+	if cur, err := s.repo.Get(ctx, id); err == nil {
+		if tu := cur.TurnN(turn); tu != nil {
+			counted, rests := attemptBudget(tu, n, status)
+			used = counted
+			if status == AttemptQuota {
+				used, limit = rests, maxQuotaRests
+			}
+		}
+	}
+	check := s.preCheck(ctx, id, turn, status, &o, used, limit)
 	now := s.now()
 	var retry time.Duration
 	more, gating := false, false
@@ -770,11 +791,19 @@ func (s *Service) finishAttempt(r *run, id string, turn, n int, accountID, model
 			evs = append(evs, s.endTurnChecked(t, tu, TurnFailed, o, check))
 			t.Status, t.Error = StatusFailed, errText
 		}
-		if more && len(tu.Attempts) >= maxAttempts {
-			more, retry = false, 0
-			msg := fmt.Sprintf("gave up after %d attempts: %s", len(tu.Attempts), errText)
-			evs = append(evs, s.endTurnChecked(t, tu, TurnFailed, o, check))
-			t.Status, t.Error = StatusFailed, msg
+		if more {
+			msg := ""
+			switch counted, rests := attemptBudget(tu, n, status); {
+			case status == AttemptQuota && rests >= maxQuotaRests:
+				msg = fmt.Sprintf("gave up after %d quota limits in one turn: %s", rests, errText)
+			case status != AttemptQuota && counted >= maxAttempts:
+				msg = fmt.Sprintf("gave up after %d attempts: %s", counted, errText)
+			}
+			if msg != "" {
+				more, retry = false, 0
+				evs = append(evs, s.endTurnChecked(t, tu, TurnFailed, o, check))
+				t.Status, t.Error = StatusFailed, msg
+			}
 		}
 		if tu.Status != TurnRunning {
 			evs = append(evs, applyCheck(t, tu, check)...)
@@ -945,7 +974,25 @@ func (s *Service) sleep(ctx context.Context, d time.Duration, wake <-chan struct
 	}
 }
 
-// maxAttempts is how many attempts one turn may make: one per account of the backend plus extraAttempts.
+// attemptBudget returns how much of its budgets turn tu has used once attempt n ends as status: counted is the
+// number of its attempts that count toward maxAttempts (all but quota attempts), rests the number of quota attempts.
+func attemptBudget(tu *Turn, n int, status string) (counted, rests int) {
+	for i, a := range tu.Attempts {
+		st := a.Status
+		if i == n-1 {
+			st = status
+		}
+		if st == AttemptQuota {
+			rests++
+		} else {
+			counted++
+		}
+	}
+	return counted, rests
+}
+
+// maxAttempts is how many attempts one turn may make, quota attempts aside: one per account of the backend plus
+// extraAttempts.
 func (s *Service) maxAttempts(ctx context.Context, backendName string) int {
 	n := 0
 	if accs, err := s.o.Accounts.List(ctx); err == nil {

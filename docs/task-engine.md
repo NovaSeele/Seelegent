@@ -112,8 +112,10 @@ append the events in **one transaction**, then publish on the bus. The log and t
 | error / timeout | turn and task `failed` |
 | cancelled | turn and task `cancelled` |
 
-A turn makes at most one attempt per account of the backend plus three. After every attempt the usage is recorded
-and a background quota read of the account is requested.
+A turn makes at most one attempt per account of the backend plus three, not counting attempts that ended on a quota
+limit: those rest the account and resume or hand over, so the turn waits rather than fails. A runaway loop of limits
+ends the turn after 50 of them. After every attempt the usage is recorded and a background quota read of the account
+is requested.
 
 6. **Gate.** An edit task whose turn ended `ok` keeps its run: the task stays `running` with `gatePhase` set while
    the gate runs, settles, or the verifier child works ([gates.md](gates.md)). A red gate or a verifier reject with

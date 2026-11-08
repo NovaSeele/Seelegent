@@ -148,6 +148,62 @@ func TestClaudeLimitWaitsAndResumes(t *testing.T) {
 	}
 }
 
+// TestClaudeLimitRepeatedRests: the only claude account hits its limit five times in a row in one turn (Claude resets
+// late, the resumed run hits the limit again). Quota attempts do not use up the attempt budget (one account plus
+// extraAttempts = 4), so the task rests each time and ends done.
+func TestClaudeLimitRepeatedRests(t *testing.T) {
+	h := newHarness(t)
+	h.useClaude()
+	acc := h.claude("solo", 0)
+	const sess, hits = "sess-again", 5
+	for range hits {
+		h.queue.Push(t, claudeLimitScript(sess))
+	}
+	h.queue.Push(t, claudeOKScript(sess, "Finished the limiter after five rests."))
+	sum := h.delegate(api.DelegateRequest{Backend: config.BackendClaude, Model: "claude-opus-5"})
+
+	h.waitFor("the task to finish after the rests", func() bool {
+		tk := h.task(sum.ID)
+		if tk.Status == StatusWaitingQuota {
+			if until := tk.WaitingUntil; until.After(h.clk.Now()) {
+				h.clk.Advance(until.Sub(h.clk.Now()))
+			} else {
+				h.clk.Advance(time.Minute)
+			}
+		}
+		return (tk.Status == StatusDone || tk.Status == StatusFailed) && !h.s.hasRun(sum.ID)
+	})
+	tk := h.task(sum.ID)
+	at := tk.LastTurn().Attempts
+	if tk.Status != StatusDone || tk.Error != "" || len(at) != hits+1 {
+		t.Fatalf("task %s (%q), %d attempts", tk.Status, tk.Error, len(at))
+	}
+	for i, a := range at {
+		want := AttemptQuota
+		if i == hits {
+			want = AttemptOK
+		}
+		if a.Status != want || a.AccountID != acc.ID {
+			t.Errorf("attempt %d = %s on %s", i+1, a.Status, a.AccountID)
+		}
+	}
+	if n := len(eventsOf(h.events(sum.ID), api.EventQuotaExhausted)); n != hits {
+		t.Errorf("quota events = %d", n)
+	}
+}
+
+// TestAttemptBudget: quota attempts count only toward the quota cap, every other attempt toward maxAttempts.
+func TestAttemptBudget(t *testing.T) {
+	tu := &Turn{Attempts: []*Attempt{{Status: AttemptQuota}, {Status: AttemptTransient}, {Status: AttemptQuota},
+		{Status: AttemptRunning}}}
+	if counted, rests := attemptBudget(tu, 4, AttemptQuota); counted != 1 || rests != 3 {
+		t.Errorf("quota end = %d counted, %d rests", counted, rests)
+	}
+	if counted, rests := attemptBudget(tu, 4, AttemptError); counted != 2 || rests != 2 {
+		t.Errorf("error end = %d counted, %d rests", counted, rests)
+	}
+}
+
 // TestClaudeLimitHandsOver: with a second claude account free, the turn moves on to it at once.
 func TestClaudeLimitHandsOver(t *testing.T) {
 	h := newHarness(t)
