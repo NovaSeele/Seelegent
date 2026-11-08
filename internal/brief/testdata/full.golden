@@ -96,6 +96,9 @@ Do not edit C:/specs/app-spec/specs/001-x/tasks.md or any spec file: the lead ti
 - filed.go
 ... and 2 more
 
+## Shared machine
+Other workers and the user share this machine, and heavy test runs have frozen it. Test only the packages you changed, not the whole repository, unless the task asks for a full run. Cap parallelism at 4: `go test -p 4`, `golangci-lint run -j 4`, vitest `--maxWorkers=4`, `cargo test -j 4`, `pytest -n 4`. Never run two heavy commands (tests, lint, builds) at the same time.
+
 ## Context from prerequisite tasks
 
 These tasks ran before yours; their reports are summarized below.

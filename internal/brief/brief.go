@@ -102,6 +102,9 @@ type Input struct {
 	Lane []string
 	// Gate lists the commands Seelegent runs after the worker reports.
 	Gate []string
+	// TestParallelism is the parallelism tests and builds should keep to on this shared machine (the setting
+	// testParallelism); 0 leaves the "Shared machine" section out.
+	TestParallelism int
 	// Earlier are the turns before this one (the handoff section).
 	Earlier []Turn
 	// Interrupted is true when an earlier attempt of this turn ran on another account (or conversation) and did not
@@ -184,6 +187,9 @@ func Worker(in Input) string {
 	if s := GateSection(in.Lane, in.Gate); s != "" {
 		parts = append(parts, s)
 	}
+	if s := SharedMachine(in.TestParallelism); s != "" {
+		parts = append(parts, s)
+	}
 	if d := strings.TrimSpace(in.Deps); d != "" {
 		parts = append(parts, d)
 	}
@@ -235,6 +241,20 @@ func ReadOnlyRun(prompt string, shell bool) string {
 			"which numbers the lines of the file as they are, so the citations check out."
 	}
 	return rule + "\n\n" + prompt
+}
+
+// SharedMachine asks the worker to keep its test and build runs light (the setting testParallelism): "" when n is
+// 0. GOFLAGS=-p=N and CARGO_BUILD_JOBS=N in its environment only set defaults; scripts that pass their own -p or -j
+// need the explicit caps.
+func SharedMachine(n int) string {
+	if n <= 0 {
+		return ""
+	}
+	return fmt.Sprintf("## Shared machine\nOther workers and the user share this machine, and heavy test runs have "+
+		"frozen it. Test only the packages you changed, not the whole repository, unless the task asks for a full "+
+		"run. Cap parallelism at %[1]d: `go test -p %[1]d`, `golangci-lint run -j %[1]d`, vitest "+
+		"`--maxWorkers=%[1]d`, `cargo test -j %[1]d`, `pytest -n %[1]d`. Never run two heavy commands (tests, lint, "+
+		"builds) at the same time.", n)
 }
 
 // GateSection tells the worker its file lane and the gate commands that run after its report ("" when it has
