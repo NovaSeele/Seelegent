@@ -84,19 +84,32 @@ func TestCgroupV2(t *testing.T) {
 	if _, ok := cgroupV2Path([]byte("4:memory:/docker/abc\n")); ok {
 		t.Fatal("cgroup v1 only has no v2 path")
 	}
+	// docker -m 8g after a day of clones and builds: memory.current is 7.9 GB, 6 GiB of it inactive page cache.
+	const stat = "anon 1073741824\nfile 6979321856\nactive_file 536870912\ninactive_file 6442450944\n"
 	for _, tc := range []struct {
-		name, max, cur string
-		free           int64
-		ok             bool
+		name, max, cur, stat string
+		free                 int64
+		ok                   bool
 	}{
-		{"limited", "4294967296\n", "1073741824\n", 3072, true},
-		{"no limit", "max\n", "1073741824\n", 0, false},
-		{"over", "1073741824\n", "2147483648\n", 0, true},
-		{"bad max", "lots\n", "1\n", 0, false},
-		{"bad current", "4294967296\n", "\n", 0, false},
-		{"empty", "", "", 0, false},
+		{"limited, no stat", "4294967296\n", "1073741824\n", "", 3072, true},
+		// used = 8482560000 - 6442450944 = 2040109056 bytes; free = 8589934592 - used = 6549825536 bytes = 6246 MiB.
+		{"cache is free", "8589934592\n", "8482560000\n", stat, 6246, true},
+		{"cache counted without stat", "8589934592\n", "8482560000\n", "", 102, true},
+		{"stat without inactive_file", "4294967296\n", "1073741824\n", "anon 1\nfile 2\n", 3072, true},
+		{"unparsable inactive_file", "4294967296\n", "1073741824\n", "inactive_file lots\n", 3072, true},
+		{"cache above current", "4294967296\n", "1073741824\n", "inactive_file 2147483648\n", 4096, true},
+		{"no limit", "max\n", "1073741824\n", stat, 0, false},
+		{"over", "1073741824\n", "2147483648\n", "", 0, true},
+		{"over even without cache", "1073741824\n", "8482560000\n", stat, 0, true},
+		{"bad max", "lots\n", "1\n", "", 0, false},
+		{"bad current", "4294967296\n", "\n", "", 0, false},
+		{"empty", "", "", "", 0, false},
 	} {
-		if free, ok := cgroupFreeMB([]byte(tc.max), []byte(tc.cur)); free != tc.free || ok != tc.ok {
+		var statData []byte
+		if tc.stat != "" {
+			statData = []byte(tc.stat)
+		}
+		if free, ok := cgroupFreeMB([]byte(tc.max), []byte(tc.cur), statData); free != tc.free || ok != tc.ok {
 			t.Errorf("%s: %d, %v; want %d, %v", tc.name, free, ok, tc.free, tc.ok)
 		}
 	}
