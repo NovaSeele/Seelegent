@@ -94,6 +94,18 @@ Gate commands run outside the git guard and without `SEELEGENT_WORKER=1`: test s
 of the worker. The trade-off is that a gate runs code the worker can edit (package scripts, Makefiles, tests) in
 the shared folder, unguarded; the lead reviews what the worker changed in them.
 
+**Priority.** With `gatePriority: low` each command's process tree runs at low priority: the Job Object's
+`BELOW_NORMAL_PRIORITY_CLASS` on Windows, `nice -n 10` on Unix (when there is no `nice` program, the process group
+gets nice 10 right after the start; a process the command started before that and moved out of its group keeps the
+daemon's priority). The auto step's syntax checks run in the daemon and keep its priority.
+
+**Stopped for low memory.** When the memory watchdog stops a gate (`criticalFreeMemoryMB`), the command that runs
+is killed with its tree, as for a cancel, but the step gets `stopped: "low_memory"` (state `error`, the reason as
+its tail when the command printed nothing) instead of a cancel, the steps after it are `not_run`, and the run
+counts as finished, not cut short. The task then runs the whole gate again once memory is back; after
+`GateLowMemoryStopsMax` (3) stops in one gate phase the gate ends in `error` with `reason: "low_memory"`. A run
+that only shows a stopped step therefore never reads as green.
+
 Each step is published as a `gate` task event (`phase: start | step | settling | result`) and stored on the turn
 (`Turn.gate`), so the dashboard shows it live. The `start` event carries the plan (each step's kind, command and
 folder), so a view names the steps in its own language.

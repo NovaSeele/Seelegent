@@ -15,6 +15,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/NovaSeele/Seelegent/internal/api"
 	"github.com/NovaSeele/Seelegent/internal/platform"
 )
 
@@ -52,7 +53,7 @@ type ExecResult struct {
 	TimedOut  bool
 	Cancelled bool
 	Tail      string
-	// Err says why the command could not run, or "timeout"/"cancelled".
+	// Err says why the command could not run, or "timeout"/"cancelled", or ErrLowMemory's text when Stopped.
 	Err string
 	// Stopped is api.StepStoppedLowMemory when ctx ended with cause ErrLowMemory (the memory watchdog); Cancelled is
 	// false then.
@@ -66,8 +67,10 @@ var ErrLowMemory = errors.New("stopped: machine low on memory")
 // OK reports whether the command exited with code 0.
 func (r ExecResult) OK() bool { return r.Exit != nil && *r.Exit == 0 }
 
-// Exec runs cmdline through the system shell (cmd.exe on Windows, /bin/sh elsewhere) in its own process tree, which
-// is killed when the timeout passes or ctx ends. It never returns an error: failures are in the result.
+// Exec runs cmdline through the system shell (cmd.exe on Windows, /bin/sh elsewhere) in its own process tree (with
+// the limits of o.Tree), which is killed when the timeout passes or ctx ends. A ctx that ends with cause
+// ErrLowMemory gives Stopped (api.StepStoppedLowMemory) instead of Cancelled. It never returns an error: failures
+// are in the result.
 func Exec(ctx context.Context, cmdline string, o ExecOptions) ExecResult {
 	if o.TailBytes <= 0 {
 		o.TailBytes = DefaultTailBytes
@@ -87,8 +90,8 @@ func Exec(ctx context.Context, cmdline string, o ExecOptions) ExecResult {
 	cmd.WaitDelay = pipeGrace
 	began := time.Now()
 	res := ExecResult{}
-	if err := ctx.Err(); err != nil {
-		res.Cancelled, res.Err = true, "cancelled"
+	if ctx.Err() != nil {
+		ended(ctx, &res)
 		return res
 	}
 	tree, err := platform.StartTreeWith(cmd, o.Tree)
@@ -114,7 +117,7 @@ func Exec(ctx context.Context, cmdline string, o ExecOptions) ExecResult {
 		_ = tree.Kill(killGrace)
 		waitErr = <-done
 	case <-ctx.Done():
-		res.Cancelled = true
+		ended(ctx, &res)
 		_ = tree.Kill(killGrace)
 		waitErr = <-done
 	}
@@ -124,8 +127,8 @@ func Exec(ctx context.Context, cmdline string, o ExecOptions) ExecResult {
 	switch {
 	case res.TimedOut:
 		res.Err = fmt.Sprintf("timeout after %s", o.Timeout)
-	case res.Cancelled:
-		res.Err = "cancelled"
+	case res.Cancelled, res.Stopped != "":
+		// ended set Err
 	default:
 		var ee *exec.ExitError
 		if waitErr == nil || errors.As(waitErr, &ee) || errors.Is(waitErr, exec.ErrWaitDelay) {
@@ -139,6 +142,15 @@ func Exec(ctx context.Context, cmdline string, o ExecOptions) ExecResult {
 		res.Tail = res.Err
 	}
 	return res
+}
+
+// ended records why ctx ended in res: stopped by the memory watchdog (cause ErrLowMemory), else cancelled.
+func ended(ctx context.Context, res *ExecResult) {
+	if errors.Is(context.Cause(ctx), ErrLowMemory) {
+		res.Stopped, res.Err = api.StepStoppedLowMemory, ErrLowMemory.Error()
+		return
+	}
+	res.Cancelled, res.Err = true, "cancelled"
 }
 
 // output collects a command's output: the log file (capped) and the tail.

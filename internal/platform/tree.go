@@ -36,7 +36,7 @@ type Tree struct {
 // StartTree starts cmd hidden (no console window on Windows) as the root of a new process tree. cmd must not have
 // been started. The caller must call Wait to reap the root process and Close when done with the tree.
 func StartTree(cmd *exec.Cmd) (*Tree, error) {
-	return startTree(cmd, false, "")
+	return startTree(cmd, false, "", TreeOptions{})
 }
 
 // StartWorkerTree is StartTree for a process whose only job is to own this one tree, such as the worker launcher.
@@ -52,7 +52,7 @@ func StartTree(cmd *exec.Cmd) (*Tree, error) {
 //     exec.Cmd.Wait is never called for it.
 //   - macOS and the BSDs: no subreaper; Kill walks the descendants of the calling process (best effort).
 func StartWorkerTree(cmd *exec.Cmd, name string) (*Tree, error) {
-	return startTree(cmd, true, name)
+	return startTree(cmd, true, name, TreeOptions{})
 }
 
 // Priority is the process priority of a tree (TreeOptions.Priority).
@@ -61,7 +61,7 @@ type Priority string
 // Priorities. The zero value "" is PriorityNormal.
 const (
 	// PriorityLow: BELOW_NORMAL_PRIORITY_CLASS for every process of the Job Object on Windows (the job's priority
-	// class limit, so descendants cannot raise it); nice 10 for the tree's process group on Unix.
+	// class limit, so descendants cannot raise it); nice 10 for the whole tree on Unix (StartTreeWith).
 	PriorityLow Priority = "low"
 	// PriorityNormal: the priority the tree would get anyway (the caller's).
 	PriorityNormal Priority = "normal"
@@ -80,23 +80,35 @@ type TreeOptions struct {
 	CPURatePercent int `json:"cpuRatePercent,omitempty"`
 }
 
-// StartTreeWith is StartTree with resource limits.
+// StartTreeWith is StartTree with resource limits, for commands the daemon starts itself (gate commands):
 //
-// M19 contract stub: the options are not applied yet.
-func StartTreeWith(cmd *exec.Cmd, _ TreeOptions) (*Tree, error) {
-	return StartTree(cmd)
+//   - Windows: the Job Object gets the limits (priority class, job memory, CPU rate), and the root is created
+//     with BELOW_NORMAL_PRIORITY_CLASS when Priority is low.
+//   - Unix, Priority low: the command runs through `nice -n 10` when nice is on PATH, so the root and every
+//     descendant start at nice 10 (or lower priority, as nice adds to the daemon's own). Without nice the process
+//     group gets nice 10 right after the start; anything the root starts before that call and that has left the
+//     group by then keeps the daemon's priority (a race of a few microseconds). The memory and CPU caps are
+//     ignored on Unix.
+func StartTreeWith(cmd *exec.Cmd, opt TreeOptions) (*Tree, error) {
+	return startTree(cmd, false, "", opt)
 }
 
-// StartWorkerTreeWith is StartWorkerTree with resource limits.
+// StartWorkerTreeWith is StartWorkerTree with resource limits:
 //
-// M19 contract stub: the options are not applied yet.
-func StartWorkerTreeWith(cmd *exec.Cmd, name string, _ TreeOptions) (*Tree, error) {
-	return StartWorkerTree(cmd, name)
+//   - Windows: as StartTreeWith. The caller (the launcher) stays at its own priority; only the job is lowered.
+//   - Unix, Priority low: the caller lowers its own nice to at least 10 before it starts cmd, so the worker and
+//     everything it starts inherit it with no race. The caller's job is to own this one tree, and a lower nice
+//     does not keep it from stopping the tree (same user). On Linux nice is per thread: the call is made on a
+//     thread locked for the start (runtime.LockOSThread), so the forking thread is the lowered one; that thread
+//     goes back to the runtime with nice 10, the caller's other threads keep theirs. On macOS and the BSDs the
+//     whole caller is lowered. The memory and CPU caps are ignored on Unix.
+func StartWorkerTreeWith(cmd *exec.Cmd, name string, opt TreeOptions) (*Tree, error) {
+	return startTree(cmd, true, name, opt)
 }
 
-func startTree(cmd *exec.Cmd, worker bool, name string) (*Tree, error) {
+func startTree(cmd *exec.Cmd, worker bool, name string, opt TreeOptions) (*Tree, error) {
 	t := &Tree{cmd: cmd}
-	if err := t.os.start(cmd, worker, name); err != nil {
+	if err := t.os.start(cmd, worker, name, opt); err != nil {
 		return nil, err
 	}
 	t.pid = cmd.Process.Pid
@@ -137,6 +149,22 @@ func (t *Tree) ExitCode() int {
 		return -1
 	}
 	return t.os.exitCode(t.cmd)
+}
+
+// MemoryLimitHit reports whether the tree ran into its TreeOptions.MemoryLimitMB. Call it after Wait and before
+// Close. Windows: the job posted JOB_OBJECT_MSG_JOB_MEMORY_LIMIT to its completion port (an allocation was refused
+// because of the cap), or, if that message was missed, the root exited with a non-zero code after the job's peak
+// memory reached 90% of the cap. Always false without a cap, after Close, and on Unix (no caps).
+func (t *Tree) MemoryLimitHit() bool {
+	if t == nil {
+		return false
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.closed {
+		return false
+	}
+	return t.os.memoryLimitHit(t.os.exitCode(t.cmd))
 }
 
 // Kill stops every process of the tree. On Unix the tree first gets SIGTERM and, if anything is left after grace,

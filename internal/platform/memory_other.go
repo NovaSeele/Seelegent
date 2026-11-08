@@ -1,6 +1,6 @@
-//go:build !windows && !linux
+//go:build !windows && !linux && !darwin
 
 package platform
 
-// memoryStatus is a stub of the M19 contract: the reading is not implemented yet, so it is never known.
+// memoryStatus has no reading on the BSDs and other systems: unknown, which never holds anything back.
 func memoryStatus() MemoryStatus { return MemoryStatus{} }

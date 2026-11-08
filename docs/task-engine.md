@@ -109,6 +109,24 @@ and a background quota read of the account is requested.
    by a stopped daemon is picked up by the next one. Takeover is refused during the phase; a cancel ends it
    (`not_run` steps, verdict `error`) and cancels the verifier child.
 
+### Worker process trees and their limits
+
+The launcher starts the worker as the root of a process tree (`platform.StartWorkerTreeWith`), with the limits that
+travel in `launch.json` as `tree` (settings `workerPriority`, `workerMemoryLimitMB`, `workerCPURatePercent`, read at
+each launch):
+
+| Limit | Windows (Job Object) | Unix |
+|---|---|---|
+| priority `low` | `JOB_OBJECT_LIMIT_PRIORITY_CLASS` with `BELOW_NORMAL_PRIORITY_CLASS`, plus the same creation flag: every process of the job runs below normal and cannot raise itself; the launcher stays at normal | the launcher lowers its own nice to 10 before it starts the worker, so every descendant inherits it with no race. Linux keeps nice per thread: the launcher locks the starting goroutine to its thread, lowers that thread and forks from it |
+| memory cap | `JOB_OBJECT_LIMIT_JOB_MEMORY` (memory committed by the whole tree) | none |
+| CPU cap | CPU rate control, hard cap, as a percentage of the whole machine | none |
+
+When the memory cap refuses an allocation the job posts `JOB_OBJECT_MSG_JOB_MEMORY_LIMIT` to its completion port;
+the launcher reads it after the worker exits and writes `memoryLimitHit: true` into `exit.json`, and the turn fails
+saying so. If that message is missed, a worker that exits non-zero after the job's peak memory reached 90% of the
+cap counts as well. A worker's own test and lint runs are bounded only by this cap; the start check and the memory
+watchdog act on new starts and gate commands, never on a running worker.
+
 ## Attention
 
 `computeAttention` maps the task and what the run knows about its worker onto the contract's states:

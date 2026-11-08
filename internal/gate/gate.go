@@ -2,6 +2,7 @@ package gate
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"slices"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"github.com/NovaSeele/Seelegent/internal/api"
+	"github.com/NovaSeele/Seelegent/internal/platform"
 	"github.com/NovaSeele/Seelegent/internal/proof"
 )
 
@@ -125,6 +127,8 @@ type Runner struct {
 	LogPrefix string
 	// Checker runs the auto step's syntax checks.
 	Checker Checker
+	// Tree are the limits of each command's process tree (ExecOptions.Tree: gatePriority).
+	Tree platform.TreeOptions
 }
 
 // failed reports whether a step state stops the gate.
@@ -132,6 +136,11 @@ func failed(state string) bool { return state == api.StepRed || state == api.Ste
 
 // Run runs the steps in order; after the first red or error step the rest are not_run. progress, when set, gets
 // each step as it starts and ends. A run cut short by ctx returns the steps run so far and ok = false.
+//
+// A run whose ctx ends with cause ErrLowMemory (the memory watchdog) is not cut short but stopped: the step it
+// was at gets Stopped = api.StepStoppedLowMemory and state error (with the reason as its tail when it had no
+// output), the rest are not_run, and Run returns ok = true. The caller runs the whole gate again later (StoppedAt
+// finds the step); a caller that did not would see an error gate, never a green one.
 func (r Runner) Run(ctx context.Context, steps []api.GateStep, progress func(i int, s api.GateStep)) (
 	res api.GateResult, ok bool) {
 	res = api.GateResult{Steps: slices.Clone(steps), NotRun: []string{}, Warnings: []string{}}
@@ -145,14 +154,27 @@ func (r Runner) Run(ctx context.Context, steps []api.GateStep, progress func(i i
 		}
 		if s.State == api.StepPending {
 			if ctx.Err() != nil {
-				return res, false
+				if !lowMemory(ctx) {
+					return res, false
+				}
+				markStopped(s)
+				stop = true
+				continue
 			}
 			s.State = api.StepRunning
 			if progress != nil {
 				progress(i, *s)
 			}
 			r.runStep(ctx, i, s)
-			if ctx.Err() != nil {
+			switch {
+			case s.Stopped != "" || (ctx.Err() != nil && lowMemory(ctx)):
+				markStopped(s)
+				if progress != nil {
+					progress(i, *s)
+				}
+				stop = true
+				continue
+			case ctx.Err() != nil:
 				return res, false
 			}
 			if progress != nil {
@@ -166,6 +188,27 @@ func (r Runner) Run(ctx context.Context, steps []api.GateStep, progress func(i i
 	}
 	res.State = Overall(res.Steps)
 	return res, true
+}
+
+// lowMemory reports whether ctx ended because the memory watchdog stopped the run.
+func lowMemory(ctx context.Context) bool { return errors.Is(context.Cause(ctx), ErrLowMemory) }
+
+// markStopped marks s as stopped by the memory watchdog.
+func markStopped(s *api.GateStep) {
+	s.Stopped, s.State = api.StepStoppedLowMemory, api.StepError
+	if s.Tail == "" {
+		s.Tail = ErrLowMemory.Error()
+	}
+}
+
+// StoppedAt returns the index of the step the memory watchdog stopped in res, or -1 when it stopped none.
+func StoppedAt(res api.GateResult) int {
+	for i := range res.Steps {
+		if res.Steps[i].Stopped != "" {
+			return i
+		}
+	}
+	return -1
 }
 
 // Overall is the state of a gate from its steps: red when a step is red, else error when one is, else green. A
@@ -212,8 +255,8 @@ func (r Runner) runStep(ctx context.Context, i int, s *api.GateStep) {
 			log = fmt.Sprintf("%s%d.log", r.LogPrefix, i+1)
 		}
 		res := Exec(ctx, s.Cmd, ExecOptions{Dir: dir, Env: r.Env, Timeout: r.Timeout, TailBytes: r.TailBytes,
-			LogFile: log})
-		s.Exit, s.Ms, s.TimedOut, s.Tail = res.Exit, res.Ms, res.TimedOut, res.Tail
+			LogFile: log, Tree: r.Tree})
+		s.Exit, s.Ms, s.TimedOut, s.Tail, s.Stopped = res.Exit, res.Ms, res.TimedOut, res.Tail, res.Stopped
 		switch {
 		case res.OK():
 			s.State, s.Tail = api.StepGreen, ""

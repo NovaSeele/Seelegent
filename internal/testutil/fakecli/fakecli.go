@@ -25,6 +25,9 @@
 //	#!touch <path>       create path (tells the test the script got here)
 //	#!write <path>\t<q> write the Go-quoted string q to path (a change no edit tool reports)
 //	#!remove <path>      remove path
+//	#!pid <path>         write the fake CLI's process id to path (for checks from outside, such as its priority)
+//	#!alloc <mb>         allocate and touch mb MiB, kept until the CLI exits (a worker that needs that much memory;
+//	                     under a job memory cap the Go runtime fails with "out of memory", exit code 2)
 //
 // An empty queue makes the fake CLI fail with exit code 97 and "fakecli: no script" on standard error.
 package fakecli
@@ -38,6 +41,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -279,6 +283,7 @@ func runCLI(dir string) int {
 	defer func() { _ = out.Flush() }()
 	sc := bufio.NewScanner(strings.NewReader(string(script)))
 	sc.Buffer(make([]byte, 1<<20), 1<<20)
+	var held [][]byte // the memory of #!alloc
 	for sc.Scan() {
 		line := sc.Text()
 		if !strings.HasPrefix(line, "#!") {
@@ -321,9 +326,26 @@ func runCLI(dir string) int {
 		case "remove":
 			_ = out.Flush()
 			_ = os.Remove(arg) //nolint:gosec // a path the test's own script names
+		case "pid":
+			_ = out.Flush()
+			_ = os.WriteFile(arg, []byte(strconv.Itoa(os.Getpid())), 0o600) //nolint:gosec // a path the test's own script names
+		case "alloc":
+			_ = out.Flush()
+			mb, _ := strconv.Atoi(arg)
+			held = append(held, touched(mb))
 		}
 	}
+	runtime.KeepAlive(held)
 	return 0
+}
+
+// touched allocates mb MiB and writes to every page, so the memory is committed and resident.
+func touched(mb int) []byte {
+	b := make([]byte, max(mb, 0)<<20)
+	for i := 0; i < len(b); i += 4096 {
+		b[i] = 1
+	}
+	return b
 }
 
 // readStdin reads standard input; the launcher gives the CLI a file or the null device, so it never blocks.

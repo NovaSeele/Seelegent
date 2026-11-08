@@ -140,11 +140,18 @@ loop:
 			ctx = context.Background() // stop once; keep waiting for the worker
 		}
 	}
+	// Read before Close: the job (and its notifications) go with it.
+	memHit := tree.MemoryLimitHit()
+	if memHit {
+		appendLine(sf.Stderr, fmt.Sprintf("launcher: the worker process tree reached its memory limit (%d MB)",
+			sf.Tree.MemoryLimitMB))
+	}
 	// Anything the worker left behind (background commands) ends with the turn.
 	if err := tree.Close(); err != nil {
 		appendLine(sf.Stderr, "launcher: stop leftover processes: "+err.Error())
 	}
-	return Exit{Reason: reason, Code: tree.ExitCode(), StartedAt: started, EndedAt: time.Now().UTC()}
+	return Exit{Reason: reason, Code: tree.ExitCode(), StartedAt: started, MemoryLimitHit: memHit,
+		EndedAt: time.Now().UTC()}
 }
 
 // workerCommand builds the worker command with its files. closeFiles releases the launcher's copies of the files
