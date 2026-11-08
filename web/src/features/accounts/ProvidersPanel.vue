@@ -7,6 +7,7 @@ import type { Provider } from '@/api/types'
 import Button from '@/components/ui/Button.vue'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import IconButton from '@/components/ui/IconButton.vue'
+import ProviderMark from '@/components/ui/ProviderMark.vue'
 import Spinner from '@/components/ui/Spinner.vue'
 import Switch from '@/components/ui/Switch.vue'
 import TextField from '@/components/ui/TextField.vue'
@@ -148,7 +149,7 @@ function setEnabled(provider: Provider, enabled: boolean) {
         <div class="prov__main">
           <p class="prov__name">
             {{ provider.name }}
-            <span class="prov__backend">{{ t(`accounts.backend.${provider.backend}`) }}</span>
+            <ProviderMark :backend="provider.backend" size="sm" class="prov__backend" />
           </p>
           <p class="prov__url">{{ provider.baseUrl }}</p>
           <p class="prov__meta">
@@ -260,13 +261,9 @@ function setEnabled(provider: Provider, enabled: boolean) {
 }
 
 .prov__backend {
-  padding: 0 var(--space-2);
-  border-radius: var(--radius-pill);
-  background: var(--neutral-bg);
-  color: var(--neutral-fg);
-  font-size: var(--fs-2xs);
+  color: var(--text-secondary);
+  font-size: var(--fs-xs);
   font-weight: var(--fw-regular);
-  line-height: 18px;
 }
 
 .prov__url {

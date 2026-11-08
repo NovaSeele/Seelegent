@@ -6,6 +6,7 @@ import { errorMessage } from '@/api/client'
 import type { Automation } from '@/api/types'
 import Button from '@/components/ui/Button.vue'
 import Dialog from '@/components/ui/Dialog.vue'
+import ProviderMark from '@/components/ui/ProviderMark.vue'
 import Spinner from '@/components/ui/Spinner.vue'
 import { useFormat } from '@/composables/useFormat'
 import { useAutomationsStore } from '@/stores/automations'
@@ -89,11 +90,15 @@ watch(
 )
 
 const schedule = computed(() => (shown.value ? words.schedule(shown.value.schedule) : ''))
+/** A backend picked without a member is drawn as its ProviderMark, before the model. */
+const workerBackend = computed(() =>
+  shown.value && !shown.value.member ? shown.value.backend : '',
+)
 const worker = computed(() => {
   const a = shown.value
   if (!a) return ''
-  const who = a.member || a.backend || t('automations.confirm.defaultWorker')
-  return a.model ? `${who} · ${a.model}` : who
+  const who = a.member || (a.backend ? '' : t('automations.confirm.defaultWorker'))
+  return [who, a.model].filter(Boolean).join(' · ')
 })
 const gate = computed(() => {
   const a = shown.value
@@ -159,7 +164,10 @@ async function turnOn() {
           </span>
         </dd>
         <dt>{{ t('automations.confirm.worker') }}</dt>
-        <dd>{{ worker }}</dd>
+        <dd>
+          <ProviderMark v-if="workerBackend" :backend="workerBackend" size="sm" />
+          <template v-if="workerBackend && worker"> · </template>{{ worker }}
+        </dd>
         <dt>{{ t('automations.editor.gateLabel') }}</dt>
         <dd>{{ gate }}</dd>
         <dt>{{ t('automations.editor.lane') }}</dt>

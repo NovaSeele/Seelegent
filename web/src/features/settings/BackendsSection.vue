@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
 
+import ProviderMark from '@/components/ui/ProviderMark.vue'
 import Select from '@/components/ui/Select.vue'
 import Switch from '@/components/ui/Switch.vue'
 
@@ -42,6 +43,9 @@ const sandboxOptions = () =>
       stacked
       :highlighted="highlight === backend.item"
     >
+      <template #mark>
+        <ProviderMark :backend="backend.id" :label="false" class="be__mark" />
+      </template>
       <div class="be">
         <Switch
           :model-value="form.get(`backends.${backend.id}.enabled`) === true"
@@ -100,6 +104,10 @@ const sandboxOptions = () =>
 </template>
 
 <style scoped>
+.be__mark {
+  margin-right: var(--space-2);
+}
+
 .be {
   display: flex;
   flex-direction: column;

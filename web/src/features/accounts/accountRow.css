@@ -1,0 +1,171 @@
+/*
+ * AccountRow. One grid per row with the same column sizes in every row (AccountList's header uses them too), so
+ * the columns line up. Below 720px of list width (container "account-list", set by AccountList; AccountList's
+ * NARROW_LIST is the same number) a row takes two lines: name, status and the controls, then the quota bars.
+ */
+.row {
+  border-bottom: var(--border-width) solid var(--border-subtle);
+  background: var(--bg-surface);
+}
+
+.row:last-child {
+  border-bottom: 0;
+}
+
+.row__main {
+  display: grid;
+  grid-template-areas: 'chev name status slots quota controls';
+  grid-template-columns: var(--account-cols);
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 52px;
+  padding: var(--space-1) var(--space-3) var(--space-1) var(--space-2);
+  cursor: pointer;
+}
+
+.row__main:hover {
+  --text-muted: var(--text-primary);
+  --text-secondary: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.row__chev {
+  grid-area: chev;
+}
+
+.row__name {
+  grid-area: name;
+  min-width: 0;
+}
+
+.row__label {
+  overflow: hidden;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  line-height: var(--lh-tight);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.row--off .row__label,
+.row--off .row__quota {
+  opacity: 0.7;
+}
+
+.row__kind {
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: var(--fs-2xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.row__slots-inline {
+  display: none;
+}
+
+.row__status {
+  grid-area: status;
+  justify-self: start;
+  max-width: 100%;
+}
+
+.row__slots {
+  grid-area: slots;
+  color: var(--text-secondary);
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.row__slots--busy {
+  color: var(--text-primary);
+  font-weight: var(--fw-medium);
+}
+
+.row__quota {
+  grid-area: quota;
+}
+
+.row__controls {
+  display: flex;
+  grid-area: controls;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  --num-inline-width: 64px;
+  cursor: default;
+}
+
+.row__priority {
+  width: 64px;
+}
+
+.row__login {
+  margin: 0 var(--space-4) var(--space-3) calc(var(--space-2) + var(--control-sm) + var(--space-3));
+}
+
+.row__details {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-4) var(--space-4)
+    calc(var(--space-2) + var(--control-sm) + var(--space-3));
+}
+
+.row__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--space-2);
+  color: var(--text-secondary);
+  font-size: var(--fs-xs);
+  overflow-wrap: anywhere;
+}
+
+.row__meta > span + span::before {
+  margin-right: var(--space-2);
+  content: '·';
+  color: var(--text-muted);
+}
+
+.row__details :deep(.quota) {
+  max-width: 560px;
+}
+
+.row__next {
+  display: flex;
+}
+
+@container account-list (width < 720px) {
+  .row__main {
+    grid-template-areas:
+      'chev name status controls'
+      'chev quota quota quota';
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
+    row-gap: var(--space-1);
+    padding-block: var(--space-2);
+  }
+
+  .row__chev {
+    align-self: start;
+  }
+
+  .row__slots {
+    display: none;
+  }
+
+  .row__slots-inline {
+    display: inline;
+  }
+
+  .row__status {
+    justify-self: end;
+    max-width: 32cqi;
+  }
+
+  .row__login,
+  .row__details {
+    margin-inline: 0;
+    padding-inline: var(--space-3);
+  }
+}

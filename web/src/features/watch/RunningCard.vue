@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 
+import ProviderMark from '@/components/ui/ProviderMark.vue'
 import StatusPill from '@/components/ui/StatusPill.vue'
 import { useFormat } from '@/composables/useFormat'
 import { displayStatus, slotWaitDetail, statusWordKey } from '@/lib/taskStatus'
@@ -56,7 +57,8 @@ const until = computed(() =>
       </RouterLink>
     </h3>
     <p class="run__meta">
-      {{ task.projectName }}
+      {{ task.projectName }} ·
+      <ProviderMark :backend="task.backend" size="sm" />
       <template v-if="task.accountLabel"> · {{ task.accountLabel }}</template>
       <template v-if="task.model"> · {{ task.model }}</template>
     </p>
