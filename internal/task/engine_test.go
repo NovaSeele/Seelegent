@@ -2,6 +2,7 @@ package task
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -209,6 +210,37 @@ func TestAuthMovesOn(t *testing.T) {
 	}
 	if len(eventsOf(h.events(sum.ID), api.EventAuthFailed)) != 1 {
 		t.Fatal("no auth_failed event")
+	}
+}
+
+// TestCrashSaidOnce (design review): a worker that crashes without a report left its message three times in the
+// history (the report Seelegent made up, the error event, the attempt's end); the log says it once, in the report.
+func TestCrashSaidOnce(t *testing.T) {
+	h := newHarness(t)
+	h.agy("only", 0)
+	const crash = "fatal: the worker process crashed"
+	h.queue.Push(t, script("#!stderr "+crash, "#!exit 1"))
+	sum := h.delegate(api.DelegateRequest{})
+	tk := h.waitStatus(sum.ID, StatusFailed)
+	if tk.Error != crash {
+		t.Fatalf("error = %q", tk.Error)
+	}
+	if a := tk.LastTurn().Attempts[0]; a.Error != crash {
+		t.Fatalf("attempt error = %q", a.Error)
+	}
+	said := 0
+	for _, e := range h.events(sum.ID) {
+		if e.Type != api.EventWorker && e.Type != api.EventAttemptEnd {
+			continue
+		}
+		data, err := json.Marshal(e.Data)
+		if err != nil {
+			t.Fatal(err)
+		}
+		said += strings.Count(string(data), crash)
+	}
+	if said != 1 {
+		t.Fatalf("the crash is said %d times in the worker and attempt events, want 1", said)
 	}
 }
 

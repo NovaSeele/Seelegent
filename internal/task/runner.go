@@ -545,6 +545,32 @@ func (s *Service) launchAndFollow(r *run, t *Task, turn, n int, acc account.Acco
 	return s.follow(r, h, b, env.Secrets, t.ID, turn, n, Offsets{Turn: turn, Attempt: n})
 }
 
+// closingEvents are the parser's closing events as the task's log keeps them, and the error texts they hold. A CLI
+// that ended without a report gets a report Seelegent made up from its error, followed by the error event with the
+// same text: the log keeps the report and drops the error event that repeats it (design review: one crash message
+// stood three times in the history, with the attempt's end, which leaves out a text said here).
+func closingEvents(finish []event.Event) (kept []event.Event, said map[string]bool) {
+	said = map[string]bool{}
+	synthesized := ""
+	for _, ev := range finish {
+		if ev.Kind == event.KindReport && ev.Report != nil && ev.Report.Synthesized && ev.Report.Error != "" {
+			synthesized = ev.Report.Error
+		}
+	}
+	for _, ev := range finish {
+		switch {
+		case ev.Kind == event.KindError && ev.Error != nil && synthesized != "" && ev.Error.Message == synthesized:
+			continue
+		case ev.Kind == event.KindError && ev.Error != nil:
+			said[ev.Error.Message] = true
+		case ev.Kind == event.KindReport && ev.Report != nil && ev.Report.Error != "":
+			said[ev.Report.Error] = true
+		}
+		kept = append(kept, ev)
+	}
+	return kept, said
+}
+
 // classify maps an outcome to an attempt status and its error text.
 func classify(o backend.Outcome, exit launch.Exit, timeoutMinutes int) (status, text string) {
 	switch o.Status {
@@ -624,12 +650,17 @@ func (s *Service) finishAttempt(r *run, id string, turn, n int, accountID, model
 			a.ConversationID = o.ConversationID
 			t.AccountID, t.ConversationID = accountID, o.ConversationID
 		}
-		evs := make([]NewEvent, 0, len(res.finish)+4)
-		for _, ev := range res.finish {
+		finish, said := closingEvents(res.finish)
+		evs := make([]NewEvent, 0, len(finish)+4)
+		for _, ev := range finish {
 			evs = append(evs, NewEvent{Type: api.EventWorker, Turn: turn, Attempt: n, Data: ev})
 		}
+		endErr := errText
+		if said[errText] {
+			endErr = "" // the closing events say it already
+		}
 		evs = append(evs, NewEvent{Type: api.EventAttemptEnd, Turn: turn, Attempt: n,
-			Data: api.AttemptEndData{Status: status, Error: errText}})
+			Data: api.AttemptEndData{Status: status, Error: endErr}})
 		switch status {
 		case AttemptQuota:
 			evs = append(evs, NewEvent{Type: api.EventQuotaExhausted, Turn: turn, Attempt: n,
