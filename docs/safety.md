@@ -122,8 +122,10 @@ subcommand (`git stsh`) is not run as the command git guesses. git takes the las
   on the read end of a pipe reads it too (`echo git stash | (cd x && bash)`); `xargs` reading its input from a file
   (`-a`, `--arg-file`) into a shell is not read.
 - codex has no pre-tool hook. Its own sandbox (`backends.codex.sandbox`, default `workspace-write`; plan mode is
-  `read-only`) limits where it can write; the shim covers the git commands it runs through `PATH`. With
-  `danger-full-access` only the shim remains. On Windows the sandbox is codex's unelevated one
+  `read-only`) limits where it can write; the shim covers the git commands it runs through `PATH`. The
+  `workspace-write` sandbox also keeps `.git` read-only, so on codex every git command that writes `.git` (even
+  `git update-index --refresh` or `git add`) fails there with a permission error; the git shim is the second layer.
+  With `danger-full-access` only the shim remains. On Windows the sandbox is codex's unelevated one
   (`-c windows.sandbox=unelevated`, see [configuration.md](configuration.md)); commands it refuses are listed in the
   turn's denied actions, and a turn whose every command was refused fails. That includes a turn that edited files
   with apply_patch and whose only shell command (the tests, say) was refused: the worker could not verify its

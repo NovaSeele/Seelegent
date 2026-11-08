@@ -79,8 +79,11 @@ type Input struct {
 	Lead string
 	// Cwd is the task's working folder.
 	Cwd string
-	// Plan is true in plan mode (shell commands are refused).
+	// Plan is true in plan mode (read-only).
 	Plan bool
+	// PlanShell is true when the attempt's backend reads files in plan mode with read-only shell commands (codex's
+	// read-only sandbox) rather than with file tools (backend.Capabilities.PlanShell).
+	PlanShell bool
 	// Role is the task's role profile.
 	Role *Role
 	// Memory is the project memory the lead keeps for workers.
@@ -158,8 +161,7 @@ func Worker(in Input) string {
 	}
 	parts := []string{head, "Working directory: " + in.Cwd}
 	if in.Plan {
-		parts = append(parts, "Shell commands are refused in this mode, so read files with the file tools, and always "+
-			"end with a text answer.")
+		parts = append(parts, PlanRule(in.PlanShell))
 	}
 	if s := roleSection(in.Role); s != "" {
 		parts = append(parts, s)
@@ -207,6 +209,32 @@ func Worker(in Input) string {
 		parts = append(parts, "## Task\n"+in.Message)
 	}
 	return strings.Join(parts, "\n\n")
+}
+
+// PlanRule tells a plan (read-only) turn how it can read the code. shell is the attempt's backend's
+// Capabilities.PlanShell: codex runs plan turns in its read-only sandbox, where shell commands that only read work
+// and are its only way to read files; agy's and claude's plan modes refuse shell commands but keep their file tools.
+func PlanRule(shell bool) string {
+	if shell {
+		return "This turn runs in a read-only sandbox: shell commands that only read (`rg -n`, `Get-Content` or " +
+			"`cat`, `Select-String`, `git log`, `git diff`, `git status`) work, and every write to a file is " +
+			"refused. Most test runners write caches (GOCACHE, .pytest_cache, node_modules/.cache) and fail here: " +
+			"that says nothing about the code. Read files with shell commands, and always end with a text answer."
+	}
+	return "Shell commands are refused in this mode, so read files with the file tools, and always end with a text " +
+		"answer."
+}
+
+// ReadOnlyRun returns the first prompt of a fresh conversation of a hidden read-only run (a consult, a meeting
+// attendee, a contest judge, a verifier): the plan rule for the attempt's backend (PlanRule), then the run's brief.
+// A shell backend is also told where to take the line numbers of its [path:line] citations from, so they verify.
+func ReadOnlyRun(prompt string, shell bool) string {
+	rule := PlanRule(shell)
+	if shell {
+		rule += " Take the line numbers of your path:line citations from `rg -n` (or `Select-String`) output, " +
+			"which numbers the lines of the file as they are, so the citations check out."
+	}
+	return rule + "\n\n" + prompt
 }
 
 // GateSection tells the worker its file lane and the gate commands that run after its report ("" when it has

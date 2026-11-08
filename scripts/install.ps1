@@ -418,10 +418,19 @@ function Install-Seelegent {
         # --- data and hosts -------------------------------------------------------------------------------------
         $oldData = @('settings.json', 'accounts.json', 'roles.json', 'memory') |
             Where-Object { Test-Path -LiteralPath (Join-Path $dataDir $_) }
+        $migrateErrors = Join-Path $dataDir 'migrate-errors.json'
         if ($oldData -and -not (Test-Path -LiteralPath (Join-Path $dataDir 'seelegent.db'))) {
             Write-Step "Importing the old version's data from $dataDir (seelegent migrate) ..."
             & $exe migrate
             if ($LASTEXITCODE -ne 0) { $failed += 'seelegent migrate' }
+        } elseif ($oldData -and (Test-Path -LiteralPath $migrateErrors)) {
+            # migrate leaves this file when items failed and removes it on a run without errors.
+            $count = ''
+            try {
+                $record = Get-Content -LiteralPath $migrateErrors -Raw | ConvertFrom-Json
+                if ($record.errors) { $count = " ($($record.errors) item(s) failed)" }
+            } catch { $count = '' }
+            Write-Note "the last seelegent migrate did not import everything$count (see $migrateErrors). Fix what it reported, stop the daemon (seelegent stop) and run seelegent migrate again."
         }
         if ($NoSetup) {
             Write-Step 'Lead hosts left alone (-NoSetup).'

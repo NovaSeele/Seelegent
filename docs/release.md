@@ -90,7 +90,9 @@ What the installers do, in order:
    names another `seelegent` that comes first on PATH.
 6. Run `seelegent migrate` when the data folder (`SEELEGENT_HOME`, else `~/.seelegent`) holds the old version's data
    (`settings.json`, `accounts.json`, `roles.json` or `memory/`) and no `seelegent.db` yet: the first install
-   imports it, a later one never imports it again (run `seelegent migrate` yourself for that).
+   imports it, a later one never imports it again (run `seelegent migrate` yourself for that). When it does not run
+   migrate but the last migrate left `migrate-errors.json` in the data folder (some items failed; a run without
+   errors removes it), a warning says to fix what it reported and run `seelegent migrate` again.
 7. Run `seelegent setup` (every detected lead host), unless `-NoSetup` / `--no-setup` / `SEELEGENT_NO_SETUP=1`.
 8. Start the daemon again when step 3 stopped one, and print the next steps. When the daemon cannot start (for
    example the old version's daemon still holds the port), a warning says so.

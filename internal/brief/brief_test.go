@@ -162,3 +162,47 @@ func TestQuotedAndPreview(t *testing.T) {
 		t.Errorf("the earlier report's heading was not demoted:\n%s", w)
 	}
 }
+
+// A plan brief tells the worker how the attempt's backend reads files: codex's read-only sandbox runs shell
+// commands that only read and has no file tools; agy's and claude's plan modes refuse the shell and keep their
+// file tools (R4: a codex plan task answered from guesses after being told shell commands were refused).
+func TestWorkerPlanRulePerBackend(t *testing.T) {
+	codex := Worker(Input{Cwd: `D:\proj`, Plan: true, PlanShell: true, Message: "Explain the pool."})
+	golden(t, "plan-codex", codex)
+	for _, want := range []string{"This turn runs in a read-only sandbox", "`rg -n`", "`Get-Content`",
+		"every write to a file is refused", "Read files with shell commands, and always end with a text answer."} {
+		if !strings.Contains(codex, want) {
+			t.Errorf("codex plan brief lacks %q", want)
+		}
+	}
+	if strings.Contains(codex, "Shell commands are refused") || strings.Contains(codex, "file tools") {
+		t.Errorf("codex plan brief steers to file tools:\n%s", codex)
+	}
+	tools := Worker(Input{Cwd: `D:\proj`, Plan: true, Message: "Explain the pool."})
+	golden(t, "plan-file-tools", tools)
+	if !strings.Contains(tools, "Shell commands are refused in this mode, so read files with the file tools, and "+
+		"always end with a text answer.") || strings.Contains(tools, "read-only sandbox") {
+		t.Errorf("agy/claude plan brief:\n%s", tools)
+	}
+	if full := Worker(Input{Cwd: `D:\proj`, PlanShell: true, Message: "Fix it."}); strings.Contains(full,
+		"read-only sandbox") || strings.Contains(full, "Shell commands are refused") {
+		t.Errorf("a full-mode brief carries a plan rule:\n%s", full)
+	}
+}
+
+// A hidden read-only run starts with the plan rule of its backend; a codex run is also told to take its citation
+// line numbers from rg -n, so its [path:line] citations verify.
+func TestReadOnlyRun(t *testing.T) {
+	const body = "You are P1, a peer.\n\n## Question\nShould the pool retry?"
+	codex := ReadOnlyRun(body, true)
+	golden(t, "readonly-codex", codex)
+	if !strings.HasPrefix(codex, PlanRule(true)+" ") || !strings.Contains(codex, "citations from `rg -n`") ||
+		!strings.HasSuffix(codex, "\n\n"+body) {
+		t.Errorf("codex run:\n%s", codex)
+	}
+	tools := ReadOnlyRun(body, false)
+	golden(t, "readonly-file-tools", tools)
+	if tools != PlanRule(false)+"\n\n"+body {
+		t.Errorf("agy/claude run:\n%s", tools)
+	}
+}

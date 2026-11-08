@@ -58,7 +58,14 @@ append the events in **one transaction**, then publish on the bus. The log and t
 2. **Brief.** The same conversation gets a short continuation; a fresh conversation (first attempt, another account,
    or a retry that never got a conversation) gets the full brief from `internal/brief`, with role, project memory,
    review history, constitution, the git baseline, earlier turns, prerequisite context, and the "you continue an
-   interrupted task" section when an attempt came before. Before the first attempt of a task the baseline is taken:
+   interrupted task" section when an attempt came before. A plan-mode brief says how the backend of this attempt
+   (not the one the task started on) reads files (`Capabilities.PlanShell`, `brief.PlanRule`): agy's and claude's
+   plan modes refuse shell commands, so they read with their file tools; codex has no file tools and runs a plan
+   turn in its `read-only` sandbox, where shell commands that only read (`rg -n`, `Get-Content`, `git diff`, tests
+   that write nothing) work and every write is refused, so it reads with the shell. A hidden run (consult, meeting,
+   judge, verifier) gets the same rule at the top of each fresh conversation (`brief.ReadOnlyRun`), and on codex
+   also the advice to take its citation line numbers from `rg -n` or `Select-String`. Before the first attempt of a
+   task the baseline is taken:
    `git status --porcelain` (literal pathspecs, `core.fsmonitor` off, no shell, 20 s timeout) lists the files under
    the task folder that already have uncommitted changes, and the brief tells the worker not to revert them. With it
    the task records `gitStart`, the HEAD commit and branch it starts from (an empty head in a repository without

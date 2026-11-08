@@ -40,6 +40,10 @@ type Capabilities struct {
 	StdinPrompt bool `json:"stdinPrompt"`
 	// ResumeFlag is how a conversation is resumed (informative).
 	ResumeFlag string `json:"resumeFlag"`
+	// PlanShell: a plan turn reads files with shell commands, which its read-only sandbox runs as long as they write
+	// nothing (codex, which has no other tool to read files). Otherwise plan mode refuses shell commands and the
+	// worker reads with its file tools (agy, claude). The worker brief says which (brief.PlanRule).
+	PlanShell bool `json:"planShell"`
 }
 
 // Turn is the input of one worker turn.

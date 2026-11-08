@@ -216,8 +216,7 @@ func judgeBrief(prompt string, entries []judgeEntry) string {
 			"copies of the repository. Compare their changes and pick the best one: correct, complete, minimal, " +
 			"consistent with the existing code, tested where the project has tests. You only see anonymous letters; " +
 			"judge the code, not the style of the report.",
-		answer.ReadOnlyRule + " Read files with the file tools to support your claims; always end with a text " +
-			"answer in the format below.",
+		answer.ReadOnlyRule,
 		"## The brief\n" + prompt,
 	}
 	for _, e := range entries {
