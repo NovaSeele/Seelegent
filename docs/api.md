@@ -190,9 +190,10 @@ in the daemon.
   accounts and providers carry `details.field` (`newProvider.baseUrl` for a field of `newProvider`).
 - `POST /accounts` also takes an API-key account in one call: `provider` (existing) or `newProvider` (a
   `ProviderInput`, `id` optional) and `apiKey`; `backend`, `kind` (`api-key`) and `label` (`"<provider name> <n>"`)
-  may be left out. An enabled provider with the same preset, backend, base URL, official flag and models (and id,
-  when given) is reused (`provider_reused` notice), else one is created under a free id (the preset's, then `-2`,
-  ...). Provider, account, profile folder and key are written in one transaction; a failure at any step leaves none
+  may be left out, and `budgetUsd`/`budgetStop` given. An enabled provider with the same preset, backend, base URL,
+  official flag, wire API, models, allow-list and tiers (and id, when given) is reused unchanged (`provider_reused`
+  notice); a reused provider is never modified, so tiers that differ (on a model-per-task provider, say) create a
+  new provider under a free id (the preset's, then `-2`, ...). Provider, account, profile folder and key are written in one transaction; a failure at any step leaves none
   of them behind. The `201` answer is `AccountCreated`: the account plus `newProvider` and `providerCreated`. Old
   bodies (`backend`, `kind`, `label`, `provider`, no key) work as before.
 - `Account.testResult` (API-key accounts only) is `not_tested` until a key test succeeds or a turn on the current key
@@ -216,6 +217,27 @@ in the daemon.
   `400 invalid_argument` at once with `details.reason: "no_default_model"`, `details.provider`,
   `details.tier` and `details.models` (the provider's models, as examples). `ProviderPreset.tiers` suggests tier models: for
   `anthropic` the claude backend's tiers from the settings, when set; none for the others.
+- `no_models_endpoint` from `POST /providers/test` is not a pass: the key is not verified (DeepSeek, Kimi and Z.ai
+  usually have no `/v1/models`), the account stays untested, and its first good turn marks it `ok`. Only `ok` is a
+  verified key.
+- Spend and budget of API-key accounts (`internal/account/spend.go`). `Account.spentUsd`, `spentTokens`,
+  `spentInputTokens`, `spentOutputTokens` are what the current key spent since `spentSince` (when the key was set):
+  a running total that `account.ApplySpendTx` keeps in the transaction of every `usage.RecordAttempt`, adding only
+  the difference when an attempt is recorded again. It is never summed from `usage_turns` (pruned after
+  `TurnRetentionDays`) and it counts whatever `usageHistory` says (that setting only stops the hourly snapshots).
+  The dollar amount comes from the provider's `spendSource` (`Provider.spendSource`, `account.Provider.SpendSource`,
+  the one place that decides): `cli` (the CLI's own estimate, Claude Code `total_cost_usd`) only for the official
+  Anthropic API, `free` for Ollama and localhost base URLs, `none` otherwise (tokens only: the CLI's price table does
+  not know other services' models). The set is open (`service` and `prices` come later). Replacing or removing the
+  key resets the total and keeps the old one as `previousKey` (also logged). `budgetUsd` (`PATCH /accounts/{id}`,
+  or with `POST /accounts`; `0` removes it) and `budgetStop` (default true) set the budget; `budgetState` is `ok`,
+  `warn` (80%), `reached` or `unknown` (a budget on a source without cost: never enforced). A reached budget with
+  `budgetStop` rests the account in the pool (`resting: true`, `restReason: "budget_reached"`, no `restingUntil`)
+  until the budget is raised, `budgetStop` is turned off or the key replaced; it is not an error. Each rise to warn
+  or reached is logged once and wakes the pool. `POST /tasks` and followups on a provider whose every usable key
+  rests on its budget are `400 invalid_argument`, `details.reason: "budget_reached"`: "anthropic keys reached their
+  budget ($200); raise it in Accounts". Migration 0013 back-fills the totals from the attempts still stored since
+  the key was set. The task report adds `turn_cost_usd` for a task on a `cli` provider.
 - `POST /automations/{id}/confirm-token` takes `{revision}`, the `Automation.revision` the dashboard shows, and
   answers `409 bad_state` when the automation changed since (`400` without it), so a token enables exactly what
   the user read (F34). It and `POST /automations/{id}/confirm`, `PUT` and `DELETE /github/token` answer only
