@@ -16,8 +16,7 @@ func trivialCommand() *exec.Cmd {
 
 // BenchmarkStartTree starts and reaps a trivial command as a process tree, the way every git, gh, quota, hook and
 // gate command starts (gitx, github, quota, hook, gate), against a plain exec.Cmd start. The difference is the
-// tree's own cost (Windows: a Job Object and, to resume the suspended process, a snapshot of every thread of the
-// machine).
+// tree's own cost (Windows: a Job Object, and the suspended start, assignment and resume of the root).
 func BenchmarkStartTree(b *testing.B) {
 	b.Run("exec", func(b *testing.B) {
 		for b.Loop() {

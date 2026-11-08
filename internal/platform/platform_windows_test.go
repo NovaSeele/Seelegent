@@ -15,22 +15,8 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-// runOSRole runs the Windows-only helper roles:
-//   - console: writes 1 to the file named last when the process has a console window, else 0.
-func runOSRole(role string) bool {
-	if role != "console" {
-		return false
-	}
-	win, _, _ := windows.NewLazySystemDLL("kernel32.dll").NewProc("GetConsoleWindow").Call()
-	mark := "0"
-	if win != 0 {
-		mark = "1"
-	}
-	if err := os.WriteFile(os.Args[len(os.Args)-1], []byte(mark), 0o600); err != nil {
-		os.Exit(3)
-	}
-	return true
-}
+// runOSRole runs the Windows-only helper roles (see console_windows_test.go).
+func runOSRole(role string) bool { return runConsoleRole(role) }
 
 // TestStaleOwner: the owner of a client socket is trusted only while it runs and when it started before the
 // connection was accepted (a reused process id is a different process).
@@ -185,48 +171,6 @@ func TestSocketOwnerUnavailableJob(t *testing.T) {
 	if id != "" || !isWorker || !errors.As(err, &jobErr) || jobErr.Job != name {
 		t.Fatalf("lookup: id %q, worker %v, err %v", id, isWorker, err)
 	}
-}
-
-// TestHiddenStartsHaveNoConsoleWindow: every way Seelegent starts a hidden process (HideWindow, the detached
-// launcher, a process tree) sets CREATE_NO_WINDOW, and the process really has no console window, so no window
-// flashes when a worker or a git call starts (old L14 and L19).
-func TestHiddenStartsHaveNoConsoleWindow(t *testing.T) {
-	dir := t.TempDir()
-	check := func(name string, cmd *exec.Cmd, wait func() error, want uint32) {
-		t.Helper()
-		attr := cmd.SysProcAttr
-		if attr == nil || !attr.HideWindow || attr.CreationFlags&want != want {
-			t.Errorf("%s: SysProcAttr %+v, want HideWindow and flags %#x", name, attr, want)
-		}
-		if err := wait(); err != nil {
-			t.Fatalf("%s: %v", name, err)
-		}
-		mark, err := os.ReadFile(filepath.Join(dir, name))
-		if err != nil || string(mark) != "0" {
-			t.Errorf("%s: console window %q, %v", name, mark, err)
-		}
-	}
-
-	hidden := helper("console", filepath.Join(dir, "hidden"))
-	HideWindow(hidden)
-	if err := hidden.Start(); err != nil {
-		t.Fatal(err)
-	}
-	check("hidden", hidden, hidden.Wait, windows.CREATE_NO_WINDOW)
-
-	detached, err := StartDetached(func() *exec.Cmd { return helper("console", filepath.Join(dir, "detached")) })
-	if err != nil {
-		t.Fatal(err)
-	}
-	check("detached", detached, detached.Wait, windows.CREATE_NO_WINDOW|windows.CREATE_NEW_PROCESS_GROUP)
-
-	cmd := helper("console", filepath.Join(dir, "tree"))
-	tree, err := StartTree(cmd)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = tree.Close() })
-	check("tree", cmd, tree.Wait, windows.CREATE_NO_WINDOW)
 }
 
 // TestTreeMemoryCap: a tree that needs more than its job memory cap fails, and MemoryLimitHit says why; one that

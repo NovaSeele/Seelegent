@@ -131,7 +131,7 @@ func nodeCheck(ctx context.Context, node, root, abs string, env []string) string
 	defer cancel()
 	cmd := exec.CommandContext(ctx, node, "--check", abs)
 	cmd.Dir, cmd.Env = root, env
-	platform.HideWindow(cmd)
+	platform.HideWindowShared(cmd) // a fixed helper program
 	var buf bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &buf, &buf
 	err := cmd.Run()

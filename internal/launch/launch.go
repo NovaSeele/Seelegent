@@ -4,7 +4,7 @@
 // # Protocol
 //
 // Every launch owns one directory. The daemon writes the spec (launch.json) and starts `seelegent __launch <dir>`
-// detached (platform.StartDetached). The launcher then:
+// detached and without a console (platform.StartDetachedNoConsole). The launcher then:
 //
 //  1. takes an exclusive lock on launcher.lock and holds it for its whole life. The operating system releases the
 //     lock when the launcher exits or crashes, so "lock held" is a liveness test that cannot be fooled by a reused
@@ -18,10 +18,10 @@
 //     priority class on Windows; on Unix the launcher lowers its own nice before the start), and on Windows the
 //     job memory and CPU rate caps. Stdout is appended to stream.jsonl and stderr to stderr.txt; then it writes
 //     ready.json (with its own start time and the job name, which describe the tree: Handle.Tree);
-//  3. waits for the worker to exit, for the cancel file to appear (polled every 200 ms), for the timeout, or for
-//     its own context to end (SIGINT/SIGTERM on Unix). On cancel and timeout it stops the whole tree: on Unix
-//     SIGTERM to the group and every descendant, SIGKILL after the grace period, repeated until nothing is left;
-//     the job is terminated on Windows;
+//  3. waits for the worker to exit, for the cancel file to appear (polled every 200 ms at first, backing off to
+//     every second), for the timeout, or for its own context to end (SIGINT/SIGTERM on Unix). On cancel and
+//     timeout it stops the whole tree: on Unix SIGTERM to the group and every descendant, SIGKILL after the grace
+//     period, repeated until nothing is left; the job is terminated on Windows;
 //  4. when the worker has exited, stops whatever the worker left running in its tree, writes exit.json atomically
 //     and releases the lock.
 //

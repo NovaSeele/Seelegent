@@ -13,8 +13,13 @@ import (
 	"github.com/NovaSeele/Seelegent/internal/platform"
 )
 
-// cancelPoll is how often the launcher looks for the cancel file.
-const cancelPoll = 200 * time.Millisecond
+// The launcher looks for the cancel file (and lets its tree drain its notifications, Tree.Poll) every cancelPoll at
+// first, then twice as long each time up to maxCancelPoll: a cancel is seen within a second, and a long turn costs
+// the launcher one wake-up a second.
+const (
+	cancelPoll    = 200 * time.Millisecond
+	maxCancelPoll = time.Second
+)
 
 // lockWait is how long the launcher waits for the launch lock.
 const lockWait = 2 * time.Second
@@ -112,8 +117,9 @@ func supervise(ctx context.Context, f Files, sf specFile) Exit {
 		defer t.Stop()
 		timeout = t.C
 	}
-	ticker := time.NewTicker(cancelPoll)
-	defer ticker.Stop()
+	poll := backoff{min: cancelPoll, max: maxCancelPoll}
+	pollTimer := time.NewTimer(poll.next())
+	defer pollTimer.Stop()
 	grace := sf.KillGrace
 	if grace <= 0 {
 		grace = platform.DefaultKillGrace
@@ -131,7 +137,8 @@ loop:
 		select {
 		case <-waited:
 			break loop
-		case <-ticker.C:
+		case <-pollTimer.C:
+			pollTimer.Reset(poll.next())
 			if !memHit && tree.Poll() {
 				memHit = true
 				noteMemoryLimit(sf)

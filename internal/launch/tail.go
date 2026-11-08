@@ -18,37 +18,58 @@ const (
 	maxLine = 32 << 20
 )
 
-// tail implements Handle.Tail for one file.
+// tail implements Handle.Tail for one file. It reads whatever is there on every poll; it polls every
+// pollInterval while lines come and backs off up to maxPollInterval while none do, and it looks for the end of the
+// launch at most every exitCheckInterval (see the constants for the bounds).
 func (h *Handle) tail(ctx context.Context, path string, offset int64, fn func([]byte, int64) error) error {
 	if offset < 0 {
 		return fmt.Errorf("tail %s: negative offset %d", path, offset)
 	}
 	t := tailer{path: path, next: offset, fn: fn, buf: make([]byte, tailChunk)}
 	defer t.close()
-	ticker := time.NewTicker(pollInterval)
-	defer ticker.Stop()
+	p := tailPace{poll: backoff{min: pollInterval, max: maxPollInterval}, every: exitCheckInterval}
+	ended := false
 	for {
 		// Look at the end state before reading, so that bytes written before the exit record are always read.
-		_, ended, err := h.Exited()
-		if err != nil {
-			return err
+		if !ended && p.checkDue(time.Now()) {
+			_, done, err := h.Exited()
+			if err != nil {
+				return err
+			}
+			ended = done
 		}
 		read, err := t.readAvailable()
 		if err != nil {
 			return err
 		}
 		if read > 0 {
+			p.poll.reset()
 			continue // there may be more right away
 		}
 		if ended {
 			return t.flush()
 		}
-		select {
-		case <-ctx.Done():
-			return fmt.Errorf("tail: %w", context.Cause(ctx))
-		case <-ticker.C:
+		if err := sleep(ctx, p.poll.next()); err != nil {
+			return fmt.Errorf("tail: %w", err)
 		}
 	}
+}
+
+// tailPace paces a tail: poll is its wait while nothing comes, and checkDue says when to look for the exit record.
+type tailPace struct {
+	poll      backoff
+	every     time.Duration
+	lastCheck time.Time // zero: never looked
+}
+
+// checkDue reports whether to look for the exit record at now (the first time always) and, if so, counts the look
+// as done.
+func (p *tailPace) checkDue(now time.Time) bool {
+	if !p.lastCheck.IsZero() && now.Sub(p.lastCheck) < p.every {
+		return false
+	}
+	p.lastCheck = now
+	return true
 }
 
 // tailer reads one growing file and delivers its lines.
