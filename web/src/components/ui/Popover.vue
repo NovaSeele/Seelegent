@@ -10,7 +10,9 @@ defineOptions({ inheritAttrs: false })
 /**
  * A non-modal floating panel, teleported to <body> (so container queries and overflow never clip it) and
  * positioned next to `anchor`. Closes on Esc (while on top of the layer stack) and on a pointer press outside
- * the panel and the anchor. Focus handling is up to the content (Menu moves focus in; a plain popover may not).
+ * the panel and the anchor, and when the anchor leaves the document (its row re-rendered: there is nothing left to
+ * point at). An anchor with no box (display: none) only hides the panel until it can be placed again. Focus
+ * handling is up to the content (Menu moves focus in; a plain popover may not).
  */
 const props = withDefaults(
   defineProps<{
@@ -27,7 +29,7 @@ const props = withDefaults(
 
 const emit = defineEmits<{
   'update:open': [value: boolean]
-  close: [reason: 'escape' | 'outside']
+  close: [reason: 'escape' | 'outside' | 'detached']
 }>()
 
 const panel = ref<HTMLElement | null>(null)
@@ -35,9 +37,14 @@ const open = toRef(props, 'open')
 const anchorRef = toRef(props, 'anchor')
 const placement = toRef(props, 'placement')
 
-const { style } = useFloating(anchorRef, panel, open, { placement })
+const { style } = useFloating(anchorRef, panel, open, {
+  placement,
+  onLost: (reason) => {
+    if (reason === 'detached') close('detached')
+  },
+})
 
-function close(reason: 'escape' | 'outside') {
+function close(reason: 'escape' | 'outside' | 'detached') {
   emit('update:open', false)
   emit('close', reason)
 }
