@@ -14,6 +14,9 @@ func isTransient(err error) bool {
 	return errors.Is(err, syscall.EINTR)
 }
 
+// unprotect is a no-op outside Windows: a rename replaces a file whatever its mode.
+func unprotect(string) (undo func(), err error) { return func() {}, nil }
+
 // syncDir flushes the directory entry so that a rename into dir survives a crash.
 func syncDir(dir string) error {
 	d, err := os.Open(dir)
