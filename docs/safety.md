@@ -248,6 +248,9 @@ the style: those line endings never reach a commit. So an LF working copy under 
 flagged against the CRLF checkout form, while an LF file that gets CRLF lines where nothing normalizes is. A file
 that was dirty before the turn but whose start content the snapshot did not keep is not checked.
 
+- For a file that was dirty at the start of the turn, `HEAD`'s style still counts besides its start content: a
+  worker that returns the user's dirty CRLF file to `HEAD`'s LF is not flagged. This is intended: the committed
+  style is always a legitimate one, and a fix turn that undoes an earlier turn's line ending change must pass.
 - `hash-object` does not read the index, so it misses git's "safer autocrlf" rule: an automatic conversion
   (`core.autocrlf`, `text=auto` with or without `eol`) is skipped when the index version of the file already has a
   CR, and `git add` keeps the CRLF lines. The check applies that rule itself (`git check-attr text eol` and the
