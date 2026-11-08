@@ -89,6 +89,8 @@
     "low": "Máy sắp hết bộ nhớ: tạm giữ các lượt chạy mới",
     "freePhys": "RAM trống {free}",
     "freeCommit": "commit trống {free}",
-    "settings": "Cài đặt tài nguyên"
+    "settings": "Cài đặt tài nguyên",
+    "floor": "dưới {setting} ({floor})",
+    "waiting": "{count} tác vụ đang chờ"
   }
 }

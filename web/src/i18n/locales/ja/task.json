@@ -54,7 +54,7 @@
       "depCancelled": "前のタスク {title}（{task}）はキャンセルされました。",
       "hygiene": "確認が必要な衛生チェックの指摘が {count} 件あります",
       "workAtRisk": "{count} 件のファイルで変更が失われた可能性があります",
-      "resourcesWait": "{minutes} 分以上リソースを待っています：空き {available} MB、必要 {need} MB。",
+      "resourcesWait": "{minutes} 分以上リソースを待っています：空き {available}、必要 {need}。",
       "resourcesWaitPlain": "{minutes} 分以上リソースを待っています：マシンの空きメモリが足りません。"
     }
   },
@@ -231,7 +231,8 @@
       "red": "失敗",
       "error": "エラー",
       "warn": "警告",
-      "not_run": "未実行"
+      "not_run": "未実行",
+      "stopped": "停止"
     },
     "kind": {
       "lane": "レーン",
@@ -294,7 +295,8 @@
       "limit": "同時に {limit} 件まで"
     },
     "stoppedLowMemory": "マシンのメモリ不足で停止しました（{n}/{max}）。メモリが戻るとゲートを再実行します。",
-    "lowMemory": "マシンのメモリ不足が続きました：ゲートは {max} 回停止されました。"
+    "lowMemory": "マシンのメモリ不足が続きました：ゲートは {max} 回停止されました。",
+    "lowMemoryNext": "メモリを空けるか「{setting}」を下げてから、ゲートを再実行してください。"
   },
   "consults": {
     "title": "メンバーの意見",

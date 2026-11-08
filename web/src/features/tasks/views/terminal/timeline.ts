@@ -34,6 +34,10 @@ export interface Message {
   params?: Record<string, string | number>
   /** Shown instead when the catalog has no `key` (an attention reason this dashboard does not know). */
   fallback?: string
+  /** Params that are memory amounts in MB, shown with the shared formatter ("1.5 GB"). */
+  mb?: readonly string[]
+  /** Params whose values are catalog keys, translated when shown (a setting's name). */
+  keys?: readonly string[]
 }
 
 /** A line of a notice's detail: an optional translated label (a gate step's kind), then data shown as it is. */
@@ -178,6 +182,7 @@ function fold(f: Fold, event: TaskEvent): Draft | null {
               need: data.needMB,
             })
           : notice('warn', 'gauge', 'terminal.ev.waitingResources')
+      if (item.kind === 'notice' && item.message.params) item.message.mb = ['available', 'need']
       return merged(f, item, `memory:${event.turn ?? 0}.${event.attempt ?? 0}`)
     }
     case 'retry':

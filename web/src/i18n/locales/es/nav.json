@@ -89,6 +89,8 @@
     "low": "La máquina tiene poca memoria: nuevos inicios en espera",
     "freePhys": "{free} de memoria libres",
     "freeCommit": "{free} de commit libres",
-    "settings": "Ajustes de recursos"
+    "settings": "Ajustes de recursos",
+    "floor": "por debajo del {setting} ({floor})",
+    "waiting": "{count} tarea en espera | {count} tareas en espera"
   }
 }

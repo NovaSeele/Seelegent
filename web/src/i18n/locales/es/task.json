@@ -54,7 +54,7 @@
       "depCancelled": "La tarea previa {title} ({task}) fue cancelada.",
       "hygiene": "{count} hallazgo de higiene por revisar | {count} hallazgos de higiene por revisar",
       "workAtRisk": "{count} archivo puede haber perdido cambios | {count} archivos pueden haber perdido cambios",
-      "resourcesWait": "Lleva más de {minutes} minutos esperando recursos: {available} MB libres, necesita {need} MB.",
+      "resourcesWait": "Lleva más de {minutes} minutos esperando recursos: {available} libres, necesita {need}.",
       "resourcesWaitPlain": "Lleva más de {minutes} minutos esperando recursos: a la máquina le falta memoria libre."
     }
   },
@@ -231,7 +231,8 @@
       "red": "Fallido",
       "error": "Error",
       "warn": "Aviso",
-      "not_run": "Sin ejecutar"
+      "not_run": "Sin ejecutar",
+      "stopped": "Detenido"
     },
     "kind": {
       "lane": "Carril",
@@ -294,7 +295,8 @@
       "limit": "{limit} a la vez"
     },
     "stoppedLowMemory": "Detenido porque la máquina se quedó sin memoria ({n} de {max}); el gate vuelve a correr cuando haya memoria.",
-    "lowMemory": "La máquina se quedó sin memoria una y otra vez: el gate se detuvo {max} veces."
+    "lowMemory": "La máquina se quedó sin memoria una y otra vez: el gate se detuvo {max} veces.",
+    "lowMemoryNext": "Libera memoria o baja «{setting}» y vuelve a ejecutar el gate."
   },
   "consults": {
     "title": "Opiniones de miembros",

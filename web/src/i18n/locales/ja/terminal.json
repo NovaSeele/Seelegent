@@ -140,7 +140,7 @@
       "reject": "レビューで変更が却下されました",
       "error": "レビューを完了できませんでした"
     },
-    "waitingMemory": "リソース待ち：空き {available} MB、必要 {need} MB",
+    "waitingMemory": "リソース待ち：空き {available}、必要 {need}",
     "waitingResources": "リソース待ち"
   }
 }

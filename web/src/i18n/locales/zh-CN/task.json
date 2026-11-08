@@ -54,7 +54,7 @@
       "depCancelled": "前置任务 {title}（{task}）已取消。",
       "hygiene": "有 {count} 条卫生检查发现需要查看",
       "workAtRisk": "{count} 个文件的修改可能已丢失",
-      "resourcesWait": "等待资源已超过 {minutes} 分钟：空闲 {available} MB，需要 {need} MB。",
+      "resourcesWait": "等待资源已超过 {minutes} 分钟：空闲 {available}，需要 {need}。",
       "resourcesWaitPlain": "等待资源已超过 {minutes} 分钟：机器空闲内存不足。"
     }
   },
@@ -231,7 +231,8 @@
       "red": "未通过",
       "error": "出错",
       "warn": "警告",
-      "not_run": "未运行"
+      "not_run": "未运行",
+      "stopped": "已停止"
     },
     "kind": {
       "lane": "通道",
@@ -294,7 +295,8 @@
       "limit": "同时 {limit} 个"
     },
     "stoppedLowMemory": "因机器内存不足而停止（{n}/{max}）；内存恢复后关卡会重新运行。",
-    "lowMemory": "机器内存一再不足：关卡已被停止 {max} 次。"
+    "lowMemory": "机器内存一再不足：关卡已被停止 {max} 次。",
+    "lowMemoryNext": "请释放一些内存或调低“{setting}”，然后重新运行关卡。"
   },
   "consults": {
     "title": "成员意见",

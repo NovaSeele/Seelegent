@@ -89,6 +89,8 @@
     "low": "マシンのメモリが不足しています：新しい開始を保留中",
     "freePhys": "空きメモリ {free}",
     "freeCommit": "空きコミット {free}",
-    "settings": "リソース設定"
+    "settings": "リソース設定",
+    "floor": "{setting}（{floor}）を下回っています",
+    "waiting": "{count} 件のタスクが待機中"
   }
 }

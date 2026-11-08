@@ -140,7 +140,7 @@
       "reject": "The reviewer rejected the change",
       "error": "The review could not finish"
     },
-    "waitingMemory": "Waiting for resources: {available} MB free, needs {need} MB",
+    "waitingMemory": "Waiting for resources: {available} free, needs {need}",
     "waitingResources": "Waiting for resources"
   }
 }

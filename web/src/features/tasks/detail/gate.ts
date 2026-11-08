@@ -146,6 +146,16 @@ export function stepTone(state: StepState): Tone {
   }
 }
 
+/**
+ * A step's state word (task.gate.stepState.*) and tone. A step the memory watchdog stopped says "Stopped" in the
+ * attention tone whatever state the daemon gave it (error): it did not fail, the machine ran low on memory.
+ */
+export function stepBadge(step: Pick<GateStep, 'state' | 'stopped'>): { key: string; tone: Tone } {
+  if (step.stopped === 'low_memory')
+    return { key: 'task.gate.stepState.stopped', tone: 'attention' }
+  return { key: `task.gate.stepState.${step.state}`, tone: stepTone(step.state) }
+}
+
 /** Steps that did not pass (shown open), in gate order. */
 export function failingSteps(result: GateResult | null): GateStep[] {
   return (result?.steps ?? []).filter((s) => s.state === 'red' || s.state === 'error')

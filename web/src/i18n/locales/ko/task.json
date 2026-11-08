@@ -54,7 +54,7 @@
       "depCancelled": "앞선 작업 {title}({task})이(가) 취소되었습니다.",
       "hygiene": "확인할 위생 검사 지적 {count}개",
       "workAtRisk": "파일 {count}개의 변경 사항이 사라졌을 수 있습니다",
-      "resourcesWait": "{minutes}분 넘게 리소스를 기다리는 중: 여유 {available} MB, 필요 {need} MB.",
+      "resourcesWait": "{minutes}분 넘게 리소스를 기다리는 중: 여유 {available}, 필요 {need}.",
       "resourcesWaitPlain": "{minutes}분 넘게 리소스를 기다리는 중: 컴퓨터의 여유 메모리가 부족합니다."
     }
   },
@@ -231,7 +231,8 @@
       "red": "실패",
       "error": "오류",
       "warn": "경고",
-      "not_run": "실행 안 함"
+      "not_run": "실행 안 함",
+      "stopped": "중지됨"
     },
     "kind": {
       "lane": "레인",
@@ -294,7 +295,8 @@
       "limit": "동시에 {limit}개"
     },
     "stoppedLowMemory": "컴퓨터 메모리가 부족해 멈췄습니다({n}/{max}). 메모리가 돌아오면 게이트를 다시 실행합니다.",
-    "lowMemory": "컴퓨터 메모리가 계속 부족했습니다: 게이트가 {max}번 멈췄습니다."
+    "lowMemory": "컴퓨터 메모리가 계속 부족했습니다: 게이트가 {max}번 멈췄습니다.",
+    "lowMemoryNext": "메모리를 확보하거나 ‘{setting}’를 낮춘 다음 게이트를 다시 실행하세요."
   },
   "consults": {
     "title": "구성원 의견",

@@ -340,6 +340,7 @@ describe('GatePanel queued', () => {
     expect(summary.text()).toContain('2 at a time')
     expect(summary.find('[role="status"]').exists()).toBe(false)
     expect(wrapper.get('details').classes()).toContain('tone-neutral')
+    expect(wrapper.text()).not.toContain('The gate runs when the worker reports.')
   })
 
   it('gives the place in line when the task’s log is on screen', async () => {
@@ -381,7 +382,10 @@ describe('GatePanel queued', () => {
 describe('GateSteps', () => {
   async function mountSteps(r: GateResult) {
     const { plugins } = await setupApp()
-    return mount(GateSteps, { props: { result: r, turn: 2 }, global: { plugins } })
+    return mount(GateSteps, {
+      props: { result: r, turn: 2 },
+      global: { plugins, stubs: { RouterLink: RouterLinkStub } },
+    })
   }
 
   it('leaves the output closed when the failures are listed, and says not run only once', async () => {
@@ -411,14 +415,31 @@ describe('GateSteps', () => {
       result({
         state: 'error',
         reason: 'low_memory',
-        steps: [step({ cmd: 'go test ./...', state: 'not_run', stopped: 'low_memory', stops: 3 })],
+        steps: [
+          step({
+            cmd: 'go test ./...',
+            state: 'error',
+            stopped: 'low_memory',
+            stops: 3,
+            tail: 'signal: killed',
+          }),
+          step({ cmd: 'make', state: 'not_run' }),
+        ],
       }),
     )
+    // Piece A gives a stopped step the state error: it reads "Stopped", not "Error", and its output stays closed.
+    expect(wrapper.text()).toContain('Stopped')
+    expect(wrapper.text()).not.toContain('Error')
+    expect(wrapper.get('details').attributes('open')).toBeUndefined()
+    expect(wrapper.getComponent(RouterLinkStub).props('to')).toEqual({
+      name: 'settings',
+      params: { section: 'resources' },
+    })
     expect(wrapper.get('[data-stopped]').text()).toBe(
       'Stopped because the machine ran low on memory (3 of 3); the gate runs again once memory is back.',
     )
     expect(wrapper.get('[data-reason]').text()).toBe(
-      'The machine kept running out of memory: the gate was stopped 3 times.',
+      'The machine kept running out of memory: the gate was stopped 3 times. Free some memory or lower “Gates at once”, then run the gate again. Resource settings',
     )
   })
 })

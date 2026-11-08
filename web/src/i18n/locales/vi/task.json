@@ -54,7 +54,7 @@
       "depCancelled": "Tác vụ trước {title} ({task}) đã bị huỷ.",
       "hygiene": "{count} phát hiện vệ sinh mã cần xem",
       "workAtRisk": "{count} tệp có thể đã mất thay đổi",
-      "resourcesWait": "Đã chờ tài nguyên hơn {minutes} phút: trống {available} MB, cần {need} MB.",
+      "resourcesWait": "Đã chờ tài nguyên hơn {minutes} phút: trống {available}, cần {need}.",
       "resourcesWaitPlain": "Đã chờ tài nguyên hơn {minutes} phút: máy không đủ bộ nhớ trống."
     }
   },
@@ -231,7 +231,8 @@
       "red": "Không đạt",
       "error": "Không chạy được",
       "warn": "Cảnh báo",
-      "not_run": "Không chạy"
+      "not_run": "Không chạy",
+      "stopped": "Đã dừng"
     },
     "kind": {
       "lane": "Làn",
@@ -294,7 +295,8 @@
       "limit": "{limit} cùng lúc"
     },
     "stoppedLowMemory": "Bị dừng vì máy thiếu bộ nhớ ({n}/{max}); cổng chạy lại khi bộ nhớ trống trở lại.",
-    "lowMemory": "Máy liên tục thiếu bộ nhớ: cổng đã bị dừng {max} lần."
+    "lowMemory": "Máy liên tục thiếu bộ nhớ: cổng đã bị dừng {max} lần.",
+    "lowMemoryNext": "Giải phóng bớt bộ nhớ hoặc giảm “{setting}”, rồi chạy lại cổng."
   },
   "consults": {
     "title": "Ý kiến thành viên",

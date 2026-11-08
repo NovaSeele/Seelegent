@@ -54,7 +54,7 @@
       "depCancelled": "The earlier task {title} ({task}) was cancelled.",
       "hygiene": "{count} hygiene finding to look at | {count} hygiene findings to look at",
       "workAtRisk": "{count} file may have lost changes | {count} files may have lost changes",
-      "resourcesWait": "Waiting for resources for over {minutes} minutes: {available} MB free, needs {need} MB.",
+      "resourcesWait": "Waiting for resources for over {minutes} minutes: {available} free, needs {need}.",
       "resourcesWaitPlain": "Waiting for resources for over {minutes} minutes: the machine is short of free memory."
     }
   },
@@ -231,7 +231,8 @@
       "red": "Failed",
       "error": "Error",
       "warn": "Warning",
-      "not_run": "Not run"
+      "not_run": "Not run",
+      "stopped": "Stopped"
     },
     "kind": {
       "lane": "Lane",
@@ -294,7 +295,8 @@
       "limit": "{limit} at a time"
     },
     "stoppedLowMemory": "Stopped because the machine ran low on memory ({n} of {max}); the gate runs again once memory is back.",
-    "lowMemory": "The machine kept running out of memory: the gate was stopped {max} times."
+    "lowMemory": "The machine kept running out of memory: the gate was stopped {max} times.",
+    "lowMemoryNext": "Free some memory or lower “{setting}”, then run the gate again."
   },
   "consults": {
     "title": "Member opinions",

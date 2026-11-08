@@ -89,6 +89,8 @@
     "low": "Machine low on memory: new starts held",
     "freePhys": "{free} memory free",
     "freeCommit": "{free} commit free",
-    "settings": "Resource settings"
+    "settings": "Resource settings",
+    "floor": "below the {setting} of {floor}",
+    "waiting": "{count} task waiting | {count} tasks waiting"
   }
 }

@@ -140,7 +140,7 @@
       "reject": "La segunda revisión rechazó el cambio",
       "error": "La segunda revisión no pudo terminar"
     },
-    "waitingMemory": "Esperando recursos: {available} MB libres, necesita {need} MB",
+    "waitingMemory": "Esperando recursos: {available} libres, necesita {need}",
     "waitingResources": "Esperando recursos"
   }
 }

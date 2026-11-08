@@ -140,7 +140,7 @@
       "reject": "2차 검토에서 변경을 거절했습니다",
       "error": "2차 검토를 마치지 못했습니다"
     },
-    "waitingMemory": "리소스 대기: 여유 {available} MB, 필요 {need} MB",
+    "waitingMemory": "리소스 대기: 여유 {available}, 필요 {need}",
     "waitingResources": "리소스 대기"
   }
 }

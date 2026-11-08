@@ -6,6 +6,7 @@ import FileIcon from '@/components/ui/FileIcon.vue'
 import Icon from '@/components/ui/Icon.vue'
 import RichText from '@/components/RichText.vue'
 import { useFormat } from '@/composables/useFormat'
+import { formatMB } from '@/lib/memory'
 import { relativeTo } from '@/lib/paths'
 
 import PromptItem from './PromptItem.vue'
@@ -25,11 +26,23 @@ defineEmits<{ toggle: [] }>()
 const { t, te } = useI18n()
 const format = useFormat()
 
-/** A message in the reader's language, plural by its `count`; `fallback` when the catalog lacks `key`. */
+/**
+ * A message in the reader's language, plural by its `count`; `fallback` when the catalog lacks `key`. Its memory
+ * params (`mb`) read as amounts ("1.5 GB").
+ */
 function say(m: Message): string {
   const key = m.fallback && !te(m.key) ? m.fallback : m.key
-  const count = m.params?.count
-  return t(key, m.params ?? {}, typeof count === 'number' ? count : 1)
+  const params: Record<string, string | number> = { ...m.params }
+  for (const name of m.mb ?? []) {
+    const value = params[name]
+    if (typeof value === 'number') params[name] = formatMB(format.value, value)
+  }
+  for (const name of m.keys ?? []) {
+    const value = params[name]
+    if (typeof value === 'string') params[name] = t(value)
+  }
+  const count = params.count
+  return t(key, params, typeof count === 'number' ? count : 1)
 }
 
 const noticeText = computed(() => {

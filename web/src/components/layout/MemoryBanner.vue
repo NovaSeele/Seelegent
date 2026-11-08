@@ -7,19 +7,23 @@ import Icon from '@/components/ui/Icon.vue'
 import { useFormat } from '@/composables/useFormat'
 import { formatMB, freeMB } from '@/lib/memory'
 import { useConnectionStore } from '@/stores/connection'
+import { useTasksStore } from '@/stores/tasks'
 
 /**
  * Shown while the daemon's memory watchdog holds every new start (Health.lowMemory, kept current by the
- * resources.changed frame): says so with the free memory of that reading and links to the Resources settings.
+ * resources.changed frame). That happens only below the emergency floor (criticalFreeMemoryMB), where gate
+ * commands are stopped too, hence the danger tone. It says why: the free memory of that reading, the floor it is
+ * below (by the setting's name) and how many tasks wait for memory, and links to the Resources settings.
  * Hidden while the dashboard is offline (the connection banner says that; the reading would be old).
  */
 const { t } = useI18n()
 const fmt = useFormat()
 const connection = useConnectionStore()
+const tasks = useTasksStore()
 
 const shown = computed(() => connection.status !== 'offline' && !!connection.health?.lowMemory)
 
-const free = computed(() => {
+const facts = computed(() => {
   const memory = connection.health?.memory
   const phys = freeMB(memory, 'phys')
   const commit = freeMB(memory, 'commit')
@@ -27,8 +31,25 @@ const free = computed(() => {
   if (phys !== null) parts.push(t('nav.lowMemory.freePhys', { free: formatMB(fmt.value, phys) }))
   if (commit !== null)
     parts.push(t('nav.lowMemory.freeCommit', { free: formatMB(fmt.value, commit) }))
+  const floor = connection.settings?.criticalFreeMemoryMB ?? 0
+  if (floor > 0) {
+    parts.push(
+      t('nav.lowMemory.floor', {
+        floor: formatMB(fmt.value, floor),
+        setting: t('settings.items.criticalFreeMemory.label'),
+      }),
+    )
+  }
   return parts.join(' · ')
 })
+
+/** Tasks held for memory (only computed while the banner shows). */
+const waiting = computed(() =>
+  shown.value
+    ? tasks.all().filter((task) => task.status === 'waiting_quota' && task.waiting === 'memory')
+        .length
+    : 0,
+)
 </script>
 
 <template>
@@ -36,7 +57,10 @@ const free = computed(() => {
     <Icon name="gauge" class="banner__icon" />
     <p class="banner__text">
       <strong class="banner__title">{{ t('nav.lowMemory.low') }}</strong>
-      <span v-if="free" class="banner__free">{{ free }}</span>
+      <span v-if="facts" class="banner__free">{{ facts }}</span>
+      <span v-if="waiting" class="banner__free" data-waiting>
+        {{ t('nav.lowMemory.waiting', { count: waiting }, waiting) }}
+      </span>
     </p>
     <Button size="sm" variant="ghost" :to="{ name: 'settings', params: { section: 'resources' } }">
       {{ t('nav.lowMemory.settings') }}

@@ -1,4 +1,4 @@
-import { mount } from '@vue/test-utils'
+import { mount, RouterLinkStub } from '@vue/test-utils'
 import { describe, expect, it, vi } from 'vitest'
 import { shallowRef } from 'vue'
 
@@ -43,4 +43,41 @@ describe('AttentionBanner', () => {
       expect(a.answer).toHaveBeenCalledWith('301')
     },
   )
+
+  it('shows a resources_wait flag with its amounts and the Resources settings, but no other info flag', async () => {
+    const { plugins } = await setupApp()
+    const wait = {
+      state: 'info',
+      reason: 'resources_wait',
+      who: 'user',
+      since: iso(),
+      params: { minutes: 12, availableMB: 1536, needMB: 2048 },
+    } as const
+    const wrapper = mount(AttentionBanner, {
+      props: {
+        task: makeTask({ status: 'waiting_quota', waiting: 'memory', attention: wait }),
+        actions: actions(),
+      },
+      global: { plugins, stubs: { RouterLink: RouterLinkStub } },
+    })
+    await flush()
+    expect(wrapper.text()).toContain('Waiting for resources')
+    expect(wrapper.text()).toContain('over 12 minutes: 1.5 GB free, needs 2 GB.')
+    expect(wrapper.text()).not.toContain('Needs you')
+    expect(wrapper.get('section').classes()).toContain('tone-neutral')
+    expect(wrapper.getComponent(RouterLinkStub).props('to')).toEqual({
+      name: 'settings',
+      params: { section: 'resources' },
+    })
+
+    const note = {
+      state: 'info',
+      reason: 'hygiene',
+      who: 'lead',
+      since: iso(),
+      params: { count: 2 },
+    } as const
+    await wrapper.setProps({ task: makeTask({ status: 'running', attention: note }) })
+    expect(wrapper.find('section').exists()).toBe(false)
+  })
 })

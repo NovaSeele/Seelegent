@@ -100,7 +100,7 @@ watch(urgent, (value) => {
     <div class="gate__body">
       <p v-if="usedUp" class="gate__muted">{{ t('task.gate.nextStep') }}</p>
       <GateSteps v-if="view.result" :result="view.result" :turn="view.turn" />
-      <p v-else class="gate__muted">{{ t('task.gate.notYet') }}</p>
+      <p v-else-if="!queued" class="gate__muted">{{ t('task.gate.notYet') }}</p>
       <GateFacts :proof="view.proof" :verifier="view.verifier" />
     </div>
   </details>

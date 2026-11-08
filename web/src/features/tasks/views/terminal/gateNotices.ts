@@ -46,8 +46,16 @@ function stepLine(step: StepLike): DetailLine {
   return key ? { label: { key }, text: what || undefined } : { text: what || step.label }
 }
 
-/** What a failing step found, as plain lines under its own line: files, failures or the output tail. */
-function stepFindings(s: GateStep): string[] {
+/**
+ * What a failing step found, as plain lines under its own line: files, failures or the output tail. A step the
+ * memory watchdog stopped found nothing: it says so instead of showing the output of a killed command.
+ */
+function stepFindings(s: GateStep): DetailLine[] {
+  if (s.stopped === 'low_memory') return [{ label: { key: 'task.gate.stepState.stopped' } }]
+  return foundText(s).map((text) => ({ text }))
+}
+
+function foundText(s: GateStep): string[] {
   if (s.kind === 'lane') return s.files ?? []
   if (s.failures?.length) return s.failures.map((f) => `${f.file}: ${f.message}`)
   return s.tail ? s.tail.trimEnd().split('\n') : []
@@ -65,7 +73,7 @@ export function failingLines(result: GateResult): DetailLine[] {
     ...(s.foreign
       ? [{ label: { key: 'task.gate.foreign', params: { tasks: causeNames(s.causedBy) } } }]
       : []),
-    ...stepFindings(s).map((text) => ({ text })),
+    ...stepFindings(s),
   ])
 }
 
@@ -105,6 +113,16 @@ export function gateNotice(event: Of<'gate'>): GateNotice | null {
       const result = data.result
       if (!result) return null
       const lines = failingLines(result)
+      // A gate the machine kept stopping: what to do next, after its steps.
+      if (result.reason === 'low_memory') {
+        lines.push(...(lines.length ? [{ text: '' }] : []), {
+          label: {
+            key: 'task.gate.lowMemoryNext',
+            params: { setting: 'settings.items.gateConcurrency.label' },
+            keys: ['setting'],
+          },
+        })
+      }
       return {
         tone: GATE_TONE[result.state],
         icon: GATE_ICON[result.state],

@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 
 import type { Attention } from '@/api/types'
+import { createFormatters } from '@/composables/useFormat'
 import { activateLocale, i18n, type Locale } from '@/i18n'
+import { mbFormatter } from '@/lib/memory'
 
 import { attentionText, depsText, inSentence } from './attentionText'
 
@@ -30,6 +32,15 @@ describe('attention text (F14)', () => {
     )
     expect(view.title).toBe('Waiting for resources')
     expect(view.why).toBe('Waiting for resources for over 12 minutes: 1500 MB free, needs 2048 MB.')
+    const formatted = attentionText(
+      at({ reason: 'resources_wait', params: { minutes: 12, availableMB: 1536, needMB: 2048 } }),
+      i18n.global.t as never,
+      i18n.global.te as never,
+      mbFormatter(createFormatters('en')),
+    )
+    expect(formatted.why).toBe(
+      'Waiting for resources for over 12 minutes: 1.5 GB free, needs 2 GB.',
+    )
     expect(view.said).toBe('')
     const plain = await text(at({ reason: 'resources_wait', params: { minutes: 10 } }))
     expect(plain.why).toContain('short of free memory')

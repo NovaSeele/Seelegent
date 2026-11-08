@@ -89,6 +89,8 @@
     "low": "컴퓨터 메모리 부족: 새 시작 보류 중",
     "freePhys": "여유 메모리 {free}",
     "freeCommit": "여유 커밋 {free}",
-    "settings": "리소스 설정"
+    "settings": "리소스 설정",
+    "floor": "{setting}({floor}) 미만",
+    "waiting": "작업 {count}개 대기 중"
   }
 }

@@ -4,8 +4,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createApiClient } from '@/api/client'
 import type { BootState, Health } from '@/api/types'
 import { useConnectionStore } from '@/stores/connection'
+import { useTasksStore } from '@/stores/tasks'
 import { FakeEventSource, setupApp } from '@/test/app'
-import { iso } from '@/test/fixtures'
+import { iso, makeTask } from '@/test/fixtures'
 
 import MemoryBanner from './MemoryBanner.vue'
 
@@ -65,6 +66,29 @@ describe('MemoryBanner', () => {
     connection.health = health({ lowMemory: false })
     await flushPromises()
     expect(wrapper.find('[role="status"]').exists()).toBe(false)
+  })
+
+  it('says which floor the machine is under and how many tasks wait for memory', async () => {
+    const { wrapper, connection } = await mounted()
+    connection.status = 'online'
+    connection.settings = { criticalFreeMemoryMB: 1024 } as never
+    connection.health = health({ lowMemory: true })
+    await flushPromises()
+    const banner = wrapper.get('[role="status"]')
+    expect(banner.text()).toContain('below the Emergency memory floor of 1 GB')
+    expect(banner.find('[data-waiting]').exists()).toBe(false)
+
+    const tasks = useTasksStore()
+    tasks.upsert(makeTask({ id: 'a', status: 'waiting_quota', waiting: 'memory' }))
+    tasks.upsert(makeTask({ id: 'b', status: 'waiting_quota', waiting: 'memory' }))
+    tasks.upsert(makeTask({ id: 'c', status: 'waiting_quota' }))
+    tasks.upsert(makeTask({ id: 'd', status: 'running' }))
+    await flushPromises()
+    expect(wrapper.get('[data-waiting]').text()).toBe('2 tasks waiting')
+
+    connection.settings = { criticalFreeMemoryMB: 0 } as never
+    await flushPromises()
+    expect(wrapper.get('[role="status"]').text()).not.toContain('floor')
   })
 
   it('leaves out an unknown reading and hides while offline', async () => {

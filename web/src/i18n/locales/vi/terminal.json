@@ -140,7 +140,7 @@
       "reject": "Duyệt lần hai từ chối thay đổi",
       "error": "Duyệt lần hai không hoàn tất được"
     },
-    "waitingMemory": "Chờ tài nguyên: trống {available} MB, cần {need} MB",
+    "waitingMemory": "Chờ tài nguyên: trống {available}, cần {need}",
     "waitingResources": "Chờ tài nguyên"
   }
 }

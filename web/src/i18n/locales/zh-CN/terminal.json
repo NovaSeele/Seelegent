@@ -140,7 +140,7 @@
       "reject": "二次审查拒绝了改动",
       "error": "二次审查未能完成"
     },
-    "waitingMemory": "等待资源：空闲 {available} MB，需要 {need} MB",
+    "waitingMemory": "等待资源：空闲 {available}，需要 {need}",
     "waitingResources": "等待资源"
   }
 }
