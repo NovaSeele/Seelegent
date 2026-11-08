@@ -8,7 +8,9 @@ import { useI18n } from 'vue-i18n'
 
 import { ApiError, tasksApi, type TasksApi } from '@/api'
 import type { FollowupRequest, LaneConflict, TaskSummary, Verdict } from '@/api/types'
+import { memberLabel } from '@/features/members/memberModel'
 import { useTasksStore } from '@/stores/tasks'
+import { useTeamStore } from '@/stores/team'
 import { DURATION_LONG, useToastStore, type ToastOptions } from '@/stores/toast'
 
 export type TaskActionName =
@@ -18,6 +20,7 @@ export function useTaskActions(taskId: () => string, api: TasksApi = tasksApi) {
   const { t } = useI18n()
   const tasks = useTasksStore()
   const toast = useToastStore()
+  const team = useTeamStore()
   const busy = shallowRef<TaskActionName | null>(null)
 
   /** The toast text of a failed write; a lane conflict names the files, the tasks that hold them and what to do. */
@@ -33,15 +36,22 @@ export function useTaskActions(taskId: () => string, api: TasksApi = tasksApi) {
   }
 
   /**
-   * The toast of a review: accepting over a senior member's objection keeps the daemon's warnings in view (an info
-   * toast that stays long enough to read), not a plain "Accepted".
+   * The toast of a review: accepting over a senior member's objection names each objection in the reader's
+   * language (the member and its first finding, which is the member's own words) in an info toast that stays long
+   * enough to read, not a plain "Accepted". The daemon's English warnings are for the lead (F14).
    */
   function reviewToast(verdict: Verdict, sum: TaskSummary): ToastOptions {
     if (verdict !== 'accepted') return { message: t('task.review.rejectedToast'), tone: 'success' }
-    const warnings = sum.warnings ?? []
-    if (!warnings.length) return { message: t('task.review.acceptedToast'), tone: 'success' }
+    const objections = sum.objections ?? []
+    if (!objections.length) return { message: t('task.review.acceptedToast'), tone: 'success' }
+    const lines = objections.map((o) => {
+      const who = memberLabel(team.members, o.member)
+      return o.text
+        ? t('task.review.objected', { who, text: o.text })
+        : t('task.review.objectedBare', { who })
+    })
     return {
-      message: t('task.review.acceptedWarned', { warnings: warnings.join('; ') }),
+      message: t('task.review.acceptedWarned', { warnings: lines.join('; ') }),
       tone: 'info',
       duration: DURATION_LONG,
     }

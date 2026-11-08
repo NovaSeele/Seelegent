@@ -126,7 +126,9 @@
     "waitingDeps": "Ждёт предыдущую задачу",
     "hygiene": "Проблема гигиены",
     "verifierRejected": "Отклонено вторым мнением",
-    "peerObjection": "Коллега возражает"
+    "peerObjection": "Коллега возражает",
+    "backgroundWait": "Ждёт фоновую команду",
+    "unknown": "Требует внимания"
   },
   "stage": {
     "explore": "Поиск",
@@ -162,5 +164,6 @@
     "collapseSidebar": "Скрыть боковую панель",
     "expandSidebar": "Показать боковую панель",
     "noResults": "Ничего не найдено"
-  }
+  },
+  "daemonSaid": "Сообщение Seelegent:"
 }

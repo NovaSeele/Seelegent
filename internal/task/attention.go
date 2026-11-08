@@ -106,12 +106,16 @@ type liveState struct {
 // the states blocked, question, stalled, background_wait and info). It is pure; prev keeps Since of an unchanged
 // flag. acc is what is known about the accounts of the task's backend.
 func computeAttention(t *Task, live liveState, acc accountHealth, now time.Time, set config.Settings) *api.Attention {
-	att := func(state, reason, who, detail string) *api.Attention {
+	att := func(state, reason, who, detail string, params ...*api.AttentionParams) *api.Attention {
 		since := api.FormatTime(now)
 		if p := t.Attention; p != nil && p.State == state && p.Reason == reason && p.Since != "" {
 			since = p.Since
 		}
-		return &api.Attention{State: state, Reason: reason, Who: who, Detail: detail, Since: since}
+		a := &api.Attention{State: state, Reason: reason, Who: who, Detail: detail, Since: since}
+		if len(params) > 0 {
+			a.Params = params[0]
+		}
+		return a
 	}
 	if t.Kind != KindNormal && t.Kind != "" {
 		return nil
@@ -138,10 +142,13 @@ func computeAttention(t *Task, live liveState, acc accountHealth, now time.Time,
 			return nil
 		}
 	}
+	noAccounts := func(detail string) *api.Attention {
+		return att(api.AttentionBlocked, ReasonNoAccounts, WhoUser, detail, &api.AttentionParams{Backend: t.Backend})
+	}
 	tu := t.LastTurn()
 	switch t.Status {
 	case StatusBlockedDeps:
-		return att(api.AttentionBlocked, ReasonDepsBlocked, WhoLead, t.DepsReason)
+		return att(api.AttentionBlocked, ReasonDepsBlocked, WhoLead, t.DepsReason, t.DepsBlock)
 	case StatusRunning:
 		if !live.running {
 			return nil
@@ -150,14 +157,16 @@ func computeAttention(t *Task, live liveState, acc accountHealth, now time.Time,
 			return att(api.AttentionBackgroundWait, ReasonBackgroundWait, WhoLead, backgroundWaitDetail)
 		}
 		if !live.sawInit && t.ConversationID == "" && now.Sub(live.started) >= noInitAfter {
+			mins := int(now.Sub(live.started).Minutes())
 			return att(api.AttentionStalled, ReasonStalled, WhoLead,
-				fmt.Sprintf("the worker has not started %d min after launch", int(now.Sub(live.started).Minutes())))
+				fmt.Sprintf("the worker has not started %d min after launch", mins),
+				&api.AttentionParams{Kind: api.AttentionNotStarted, Minutes: mins})
 		}
-		if loop, detail := detectLoop(live.steps); loop {
-			return att(api.AttentionBlocked, ReasonLooping, WhoLead, detail)
+		if loop, detail, params := detectLoop(live.steps); loop {
+			return att(api.AttentionBlocked, ReasonLooping, WhoLead, detail, params)
 		}
 		if acc.known && acc.total > 0 && acc.usable == 0 {
-			return att(api.AttentionBlocked, ReasonNoAccounts, WhoUser, noAccountDetail(t.Backend))
+			return noAccounts(noAccountDetail(t.Backend))
 		}
 		last := live.lastEvent
 		if last.IsZero() {
@@ -172,36 +181,42 @@ func computeAttention(t *Task, live liveState, acc accountHealth, now time.Time,
 					step += fmt.Sprintf(" %q", live.command)
 				}
 				return att(api.AttentionStalled, ReasonStalled, WhoLead,
-					fmt.Sprintf("no output for %d min; last step %s", mins, step))
+					fmt.Sprintf("no output for %d min; last step %s", mins, step),
+					&api.AttentionParams{Kind: api.AttentionToolQuiet, Minutes: mins, Tool: live.tool,
+						Command: live.command})
 			}
 		} else if set.StallMinutes > 0 && idle >= time.Duration(set.StallMinutes)*time.Minute {
-			return att(api.AttentionStalled, ReasonStalled, WhoLead, fmt.Sprintf("no output for %d min", mins))
+			return att(api.AttentionStalled, ReasonStalled, WhoLead, fmt.Sprintf("no output for %d min", mins),
+				&api.AttentionParams{Kind: api.AttentionNoOutput, Minutes: mins})
 		}
 		return nil
 	case StatusQueued:
 		if acc.known && acc.usable == 0 {
-			return att(api.AttentionBlocked, ReasonNoAccounts, WhoUser, noAccountDetail(t.Backend))
+			return noAccounts(noAccountDetail(t.Backend))
 		}
 		return nil
 	case StatusWaitingQuota:
 		if acc.known && acc.enabled > 0 && acc.needsLogin == acc.enabled {
 			return att(api.AttentionBlocked, ReasonAuth, WhoUser,
-				fmt.Sprintf("every enabled %s account needs a sign-in", t.Backend))
+				fmt.Sprintf("every enabled %s account needs a sign-in", t.Backend),
+				&api.AttentionParams{Backend: t.Backend})
 		}
 		if acc.known && acc.usable == 0 {
-			return att(api.AttentionBlocked, ReasonNoAccounts, WhoUser, noAccountDetail(t.Backend))
+			return noAccounts(noAccountDetail(t.Backend))
 		}
 		if t.Waiting == string(pool.ReasonNoAccount) {
-			return att(api.AttentionBlocked, ReasonNoAccounts, WhoUser, t.WaitDetail)
+			return noAccounts(t.WaitDetail)
 		}
 		return nil
 	case StatusDone:
 		if tu == nil || strings.TrimSpace(tu.Response) == "" {
 			detail := ""
-			if tu != nil {
+			var params *api.AttentionParams
+			if tu != nil && len(tu.DeniedActions) > 0 {
 				detail = strings.Join(tu.DeniedActions, ", ")
+				params = &api.AttentionParams{Denied: slices.Clone(tu.DeniedActions)}
 			}
-			return att(api.AttentionBlocked, ReasonNoResponse, WhoLead, detail)
+			return att(api.AttentionBlocked, ReasonNoResponse, WhoLead, detail, params)
 		}
 		if q := parseBlocked(tu.Response); q != nil {
 			return att(api.AttentionQuestion, ReasonQuestion, WhoLead, q.Text)
@@ -230,10 +245,12 @@ func computeAttention(t *Task, live liveState, acc accountHealth, now time.Time,
 			}
 		}
 		if red > 0 {
-			return att(api.AttentionBlocked, ReasonHygiene, WhoLead, fmt.Sprintf("%d hygiene finding(s)", red))
+			return att(api.AttentionBlocked, ReasonHygiene, WhoLead, fmt.Sprintf("%d hygiene finding(s)", red),
+				&api.AttentionParams{Count: red})
 		}
 		if n := atRisk(t); n > 0 {
-			return att(api.AttentionBlocked, ReasonWorkAtRisk, WhoLead, fmt.Sprintf("%d file(s) at risk", n))
+			return att(api.AttentionBlocked, ReasonWorkAtRisk, WhoLead, fmt.Sprintf("%d file(s) at risk", n),
+				&api.AttentionParams{Count: n})
 		}
 		return att(api.AttentionInfo, ReasonReview, WhoLead, "")
 	case StatusFailed:
@@ -420,7 +437,17 @@ func sameAttention(a, b *api.Attention) bool {
 	if a == nil || b == nil {
 		return a == b
 	}
-	return *a == *b
+	return a.State == b.State && a.Reason == b.Reason && a.Who == b.Who && a.Detail == b.Detail &&
+		a.Since == b.Since && sameParams(a.Params, b.Params)
+}
+
+func sameParams(a, b *api.AttentionParams) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return a.Kind == b.Kind && a.Minutes == b.Minutes && a.Count == b.Count && a.Steps == b.Steps &&
+		a.Tool == b.Tool && a.Command == b.Command && a.Backend == b.Backend && a.Task == b.Task &&
+		a.Title == b.Title && slices.Equal(a.Denied, b.Denied)
 }
 
 // watchAttention re-checks running tasks for stalls every 30 s and finished ones for decayed flags every 10 min. It

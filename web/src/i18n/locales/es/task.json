@@ -26,7 +26,26 @@
     "drivingDesc": "La conversación del worker está abierta en una consola. Al cerrarla, el worker escribe un informe de traspaso.",
     "needsYou": "te necesita",
     "needsLead": "necesita al lead",
-    "dismiss": "Descartar"
+    "dismiss": "Descartar",
+    "why": {
+      "backgroundWait": "La CLI del worker espera un comando que el worker inició en segundo plano. Está en silencio, no atascada.",
+      "failed": "La tarea falló. Revisa el último turno y luego haz un seguimiento o iníciala de nuevo.",
+      "noResponse": "El worker terminó su turno sin informe.",
+      "denied": "El worker terminó su turno sin informe. Acciones rechazadas: {actions}",
+      "notStarted": "El worker no ha empezado {minutes} min después del lanzamiento.",
+      "noOutput": "Sin salida durante {minutes} min.",
+      "toolQuiet": "Sin salida durante {minutes} min; último paso {step}.",
+      "callsFailed": "Las últimas {count} llamadas a herramientas fallaron.",
+      "repeated": "El worker repitió la misma llamada {tool} {count} veces en sus últimos {steps} pasos.",
+      "noAccounts": "Ninguna cuenta de {backend} puede trabajar. Inicia sesión en una o activa una.",
+      "auth": "Todas las cuentas de {backend} activas necesitan iniciar sesión.",
+      "depMissing": "La tarea previa {task} ya no existe.",
+      "depRejected": "La tarea previa {title} ({task}) fue rechazada.",
+      "depFailed": "La tarea previa {title} ({task}) falló.",
+      "depCancelled": "La tarea previa {title} ({task}) fue cancelada.",
+      "hygiene": "{count} hallazgo de higiene por revisar | {count} hallazgos de higiene por revisar",
+      "workAtRisk": "{count} archivo puede haber perdido cambios | {count} archivos pueden haber perdido cambios"
+    }
   },
   "question": {
     "title": "El worker pregunta",
@@ -71,7 +90,9 @@
     "rejectedConfirm": "Rechazar",
     "acceptedToast": "Aceptada",
     "acceptedWarned": "Aceptada. Aviso: {warnings}",
-    "rejectedToast": "Rechazada"
+    "rejectedToast": "Rechazada",
+    "objected": "{who} se opuso: {text}",
+    "objectedBare": "{who} se opuso"
   },
   "confirm": {
     "cancelTitle": "¿Cancelar esta tarea?",

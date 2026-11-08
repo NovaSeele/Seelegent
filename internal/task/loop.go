@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"regexp"
 
+	"github.com/NovaSeele/Seelegent/internal/api"
 	"github.com/NovaSeele/Seelegent/internal/event"
 	"github.com/NovaSeele/Seelegent/internal/pool"
 )
@@ -80,13 +81,14 @@ func addStep(steps []loopStep, t *event.Tool, pending string) []loopStep {
 // or the same call loopRepeat times. Calls that alternate with something different each time (reading a file
 // between edits, bugs.md A9) are not a loop, and neither are repeats with progress between them: a successful
 // edit seen only once in the window.
-func detectLoop(steps []loopStep) (loop bool, detail string) {
+func detectLoop(steps []loopStep) (loop bool, detail string, params *api.AttentionParams) {
 	failed := 0
 	for i := len(steps) - 1; i >= 0 && steps[i].failed; i-- {
 		failed++
 	}
 	if failed >= loopErrors {
-		return true, fmt.Sprintf("the last %d tool calls failed", failed)
+		return true, fmt.Sprintf("the last %d tool calls failed", failed),
+			&api.AttentionParams{Kind: api.AttentionCallsFailed, Count: failed}
 	}
 	pos := map[string][]int{}
 	for i, st := range steps {
@@ -125,10 +127,11 @@ func detectLoop(steps []loopStep) (loop bool, detail string) {
 				continue
 			}
 		}
+		params = &api.AttentionParams{Kind: api.AttentionRepeated, Tool: st.name, Count: len(ps), Steps: len(steps)}
 		return true, fmt.Sprintf("the worker repeated the same %s call %d times in its last %d steps", st.name,
-			len(ps), len(steps))
+			len(ps), len(steps)), params
 	}
-	return false, ""
+	return false, "", nil
 }
 
 // accountHealth is what the attention rules know about the accounts of one backend.

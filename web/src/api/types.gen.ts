@@ -2311,6 +2311,17 @@ export interface TaskSummary {
   lastEventSeq: number
   /** Warnings are set only by a review: accepting over a senior member's objection names it and its first finding. */
   warnings?: string[]
+  /** Objections are the same warnings as values, for a text in the reader's language (F14). */
+  objections?: SeniorObjection[]
+}
+
+/**
+ * SeniorObjection is a senior member's standing objection to a task that was accepted anyway: the member and its
+ * first finding or required change (at most 300 characters).
+ */
+export interface SeniorObjection {
+  member: string
+  text?: string
 }
 
 /** ProfileRef names the role profile of a task. */
@@ -2335,8 +2346,44 @@ export interface Attention {
   reason: string
   /** Who is lead or user. */
   who: 'lead' | 'user'
+  /**
+   * Detail says why in English, for the lead (MCP, CLI); for a question it is the worker's question. The
+   * dashboard builds its own text from Reason and Params (F14).
+   */
   detail?: string
+  /** Params are the values behind Detail, for a text in the reader's language. */
+  params?: AttentionParams
   since: string
+}
+
+/**
+ * AttentionParams are the values an attention flag's text is made of. Only the fields of the reason are set:
+ * stalled (Kind, Minutes, Tool, Command), looping (Kind, Count, Tool, Steps), no_accounts and auth (Backend),
+ * deps_blocked (Kind, Task, Title), no_response (Denied), hygiene and work_at_risk (Count).
+ */
+export interface AttentionParams {
+  kind?:
+    | 'not_started'
+    | 'no_output'
+    | 'tool'
+    | 'failed_calls'
+    | 'repeated'
+    | 'missing'
+    | 'rejected'
+    | 'failed'
+    | 'cancelled'
+  minutes?: number
+  count?: number
+  /** Steps is how many recent tool calls a repeat was counted in. */
+  steps?: number
+  tool?: string
+  command?: string
+  backend?: string
+  /** Task and Title name the prerequisite of deps_blocked. */
+  task?: string
+  title?: string
+  /** Denied are the actions the worker was refused before it ended without a report. */
+  denied?: string[]
 }
 
 /** Review is the lead's verdict on a task. */

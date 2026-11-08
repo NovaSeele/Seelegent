@@ -459,8 +459,9 @@ func TestDependencies(t *testing.T) {
 		t.Fatal(err)
 	}
 	te := h.waitStatus(e.ID, StatusBlockedDeps)
-	if a := te.Attention; a == nil || a.Reason != ReasonDepsBlocked {
-		t.Fatalf("attention = %+v", te.Attention)
+	if a := te.Attention; a == nil || a.Reason != ReasonDepsBlocked || a.Params == nil ||
+		a.Params.Kind != api.AttentionDepRejected || a.Params.Task != d.ID || a.Params.Title != d.Title {
+		t.Fatalf("attention = %+v %+v", te.Attention, te.Attention.Params)
 	}
 	if _, err := h.s.Followup(t.Context(), e.ID, api.FollowupRequest{Message: "go"}); !errors.Is(err, ErrBadState) {
 		t.Errorf("followup without force: %v", err)

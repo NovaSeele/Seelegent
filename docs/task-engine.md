@@ -112,6 +112,11 @@ and a background quota read of the account is requested.
 - `background_wait`: the CLI waits for a command it started in the background.
 - `info` / `review`: a finished turn waits for the lead's verdict.
 
+`detail` is an English sentence for the lead's tools. Next to it, a flag carries `params` with the values it was
+built from (minutes, tool, count, backend, the blocking task, the refused actions), so the dashboard words it in the
+reader's language and keeps `detail` behind a "Seelegent said:" disclosure only when there is nothing to build from
+(F14). Two flags with the same reason, detail and params are the same flag; a change in params alone is a new one.
+
 A watcher re-checks running tasks every 30 s and finished ones that still carry a flag every 10 min (flags decay after
 `attentionDecayHours`). It only raises and clears flags; it never stops a worker. A dismissed flag comes back only
 when the worker produces something new or a new turn starts.

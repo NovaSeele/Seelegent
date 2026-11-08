@@ -39,8 +39,9 @@ func (s *Service) ReviewWith(ctx context.Context, id string, req api.ReviewReque
 	notes := strings.TrimSpace(req.Notes)
 	answerText := strings.TrimSpace(req.AnswerObjection)
 	var warnings []string
+	var objections []api.SeniorObjection
 	t, err := s.mutate(ctx, id, func(t *Task) ([]NewEvent, error) {
-		warnings = nil
+		warnings, objections = nil, nil
 		if Hidden(t.Kind) {
 			return nil, ErrNotFound
 		}
@@ -61,7 +62,8 @@ func (s *Service) ReviewWith(ctx context.Context, id string, req api.ReviewReque
 			notes = strings.TrimSpace(notes + "\n\nAnswer to peer objection: " + answerText)
 		}
 		if verdict == api.VerdictAccepted {
-			warnings = seniorObjections(t.Consults)
+			objections = seniorObjections(t.Consults)
+			warnings = objectionWarnings(objections)
 		}
 		t.Review = &api.Review{Verdict: verdict, Notes: notes, At: api.FormatTime(s.now())}
 		turn := 0
@@ -81,14 +83,27 @@ func (s *Service) ReviewWith(ctx context.Context, id string, req api.ReviewReque
 	}
 	s.checkDeps(s.background())
 	sum, err := s.Summary(ctx, id)
-	sum.Warnings = warnings
+	sum.Warnings, sum.Objections = warnings, objections
 	return sum, err
+}
+
+// objectionWarnings says the objections in English, for the lead: "senior sam objected: <first finding>".
+func objectionWarnings(os []api.SeniorObjection) []string {
+	var out []string
+	for _, o := range os {
+		w := "senior " + o.Member + " objected"
+		if o.Text != "" {
+			w += ": " + o.Text
+		}
+		out = append(out, w)
+	}
+	return out
 }
 
 // seniorObjections are the warnings of accepting a task: a senior's objection does not block, but is named with
 // its first finding (or required change). Only each senior's latest finished consult counts: an objection the senior
 // approved in a later consult is no longer theirs.
-func seniorObjections(cs []api.Consult) []string {
+func seniorObjections(cs []api.Consult) []api.SeniorObjection {
 	latest := map[string]int{}
 	var order []string
 	for i := range cs {
@@ -101,13 +116,12 @@ func seniorObjections(cs []api.Consult) []string {
 		}
 		latest[c.Member] = i
 	}
-	var out []string
+	var out []api.SeniorObjection
 	for _, m := range order {
 		c := &cs[latest[m]]
 		if c.Verdict != api.ConsultObject {
 			continue
 		}
-		w := "senior " + c.Member + " objected"
 		first := ""
 		if len(c.Findings) > 0 {
 			first = c.Findings[0].Text
@@ -118,9 +132,8 @@ func seniorObjections(cs []api.Consult) []string {
 			if r := []rune(first); len(r) > 300 {
 				first = string(r[:300])
 			}
-			w += ": " + first
 		}
-		out = append(out, w)
+		out = append(out, api.SeniorObjection{Member: c.Member, Text: first})
 	}
 	return out
 }
@@ -161,7 +174,7 @@ func (s *Service) Cancel(ctx context.Context, id string, req api.CancelRequest) 
 			if tu := t.LastTurn(); tu != nil && tu.Status == TurnRunning {
 				evs = append(evs, s.endTurn(t, tu, TurnCancelled, backend.Outcome{}))
 			}
-			t.Status, t.DepsReason = StatusCancelled, ""
+			t.Status, t.DepsReason, t.DepsBlock = StatusCancelled, "", nil
 			direct = true
 			return evs, nil
 		}

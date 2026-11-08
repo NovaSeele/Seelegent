@@ -397,5 +397,17 @@
       "device": "删除它：Windows 无法检出这个名字的文件。",
       "link": "删除该链接，或把它指向的内容复制到 worktree 中。"
     }
+  },
+  "cause": {
+    "gitAuth": "Git 无法登录远程仓库。请为它配置 git 凭据（GitHub 可用 gh auth setup-git），或检查令牌后重试。",
+    "gitRejected": "远程仓库拒绝了推送（受保护的分支或服务器端规则）。",
+    "git": "一个 git 命令失败了。",
+    "network": "未能及时连接到 GitHub 或远程仓库。请检查网络后重试。",
+    "githubAuth": "GitHub 拒绝了登录。请重新登录 gh 或更换令牌。",
+    "githubRateLimited": "已达到 GitHub 的请求上限。请稍后重试。",
+    "githubForbidden": "该 GitHub 账号或令牌无权在此仓库执行此操作。",
+    "githubManual": "这一步需要已登录的 gh CLI 或 GitHub 令牌。",
+    "github": "GitHub 返回了错误。",
+    "other": "这一步失败了。"
   }
 }

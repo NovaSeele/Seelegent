@@ -427,7 +427,7 @@ func TestDetectLoop(t *testing.T) {
 		{"repeats with no progress", st("read", "ls", "read", "grep", "ls", "read", "x", "read"), true},
 		{"three repeats", st("read", "read", "read"), false},
 	} {
-		if got, _ := detectLoop(tc.steps); got != tc.want {
+		if got, _, _ := detectLoop(tc.steps); got != tc.want {
 			t.Errorf("%s: loop = %v", tc.name, got)
 		}
 	}
@@ -435,8 +435,15 @@ func TestDetectLoop(t *testing.T) {
 	for i := range failed {
 		failed[i].failed = true
 	}
-	if ok, detail := detectLoop(failed); !ok || !strings.Contains(detail, "5") {
-		t.Errorf("failed calls: %v %q", ok, detail)
+	ok, detail, params := detectLoop(failed)
+	if !ok || !strings.Contains(detail, "5") || params == nil ||
+		params.Kind != api.AttentionCallsFailed || params.Count != 5 {
+		t.Errorf("failed calls: %v %q %+v", ok, detail, params)
+	}
+	ok, _, params = detectLoop(st("read", "ls", "read", "grep", "ls", "read", "x", "read"))
+	if !ok || params == nil || params.Kind != api.AttentionRepeated || params.Tool != "read" || params.Count != 4 ||
+		params.Steps != 8 {
+		t.Errorf("repeated call: %v %+v", ok, params)
 	}
 }
 

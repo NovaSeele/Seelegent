@@ -3,6 +3,7 @@ import { computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import type { TaskDetail, TaskSummary } from '@/api/types'
+import DaemonSaid from '@/components/DaemonSaid.vue'
 import Button from '@/components/ui/Button.vue'
 import Icon from '@/components/ui/Icon.vue'
 import { useFormat } from '@/composables/useFormat'
@@ -10,9 +11,9 @@ import { useNow } from '@/composables/useNow'
 import { canCancel, canTakeOver, isFinished } from '@/lib/taskStatus'
 import { useTeamStore } from '@/stores/team'
 
+import { attentionText } from './attentionText'
 import { memberLabel, openObjections } from './consults'
 import { failedSteps, gateOf } from './gate'
-import { reasonKey } from './question'
 import QuestionCard from './QuestionCard.vue'
 import type { TaskActions } from './useTaskActions'
 
@@ -38,12 +39,9 @@ const attention = computed(() => {
   return value && value.state !== 'info' ? value : null
 })
 const question = computed(() => attention.value?.state === 'question' && !isFinished(props.task))
-const reason = computed(() => {
-  const value = attention.value
-  if (!value) return ''
-  const key = `common.attention.${reasonKey(value.reason)}`
-  return te(key) ? t(key) : value.reason
-})
+/** The flag in the reader's language, from its reason code and params (F14). */
+const text = computed(() => (attention.value ? attentionText(attention.value, t, te) : null))
+const reason = computed(() => text.value?.title ?? '')
 /** For a red gate: its failing steps, named by kind in the reader's language (null for other reasons). */
 const gateSteps = computed(() =>
   attention.value?.reason === 'gate_red'
@@ -146,7 +144,11 @@ onMounted(() => team.ensureMembers())
           }}
         </li>
       </ul>
-      <p v-else-if="attention.detail" class="banner__detail">{{ attention.detail }}</p>
+      <template v-else-if="text">
+        <p v-if="text.why" class="banner__detail">{{ text.why }}</p>
+        <p v-if="text.quote" class="banner__detail banner__quote">{{ text.quote }}</p>
+        <DaemonSaid v-if="text.said" :text="text.said" />
+      </template>
     </div>
   </section>
 </template>
@@ -205,6 +207,11 @@ onMounted(() => team.ensureMembers())
   font-size: var(--fs-sm);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+.banner__quote {
+  padding-left: var(--space-2);
+  border-left: var(--border-width) solid var(--border-strong);
 }
 
 .banner__steps {

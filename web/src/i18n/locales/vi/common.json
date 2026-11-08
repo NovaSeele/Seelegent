@@ -126,7 +126,9 @@
     "waitingDeps": "Chờ tác vụ trước",
     "hygiene": "Lỗi vệ sinh mã",
     "verifierRejected": "Bị duyệt lần hai từ chối",
-    "peerObjection": "Thành viên ngang hàng phản đối"
+    "peerObjection": "Thành viên ngang hàng phản đối",
+    "backgroundWait": "Đang chờ lệnh chạy nền",
+    "unknown": "Cần xem lại"
   },
   "stage": {
     "explore": "Khám phá",
@@ -162,5 +164,6 @@
     "collapseSidebar": "Ẩn thanh bên",
     "expandSidebar": "Hiện thanh bên",
     "noResults": "Không có kết quả"
-  }
+  },
+  "daemonSaid": "Seelegent báo:"
 }

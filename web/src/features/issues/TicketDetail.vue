@@ -19,6 +19,7 @@ import {
   ticketFinished,
   ticketPhase,
 } from './issueModel'
+import CauseError from './CauseError.vue'
 import TicketActions from './TicketActions.vue'
 import TicketNextStep from './TicketNextStep.vue'
 import TicketSections from './TicketSections.vue'
@@ -110,9 +111,11 @@ const draft = computed(
           </RouterLink>
           <span>{{ fmt.relative(record.updatedAt) }}</span>
         </div>
-        <p v-if="record.error && phase !== 'failed'" class="ticket__error" role="alert">
-          {{ record.error }}
-        </p>
+        <CauseError
+          v-if="record.error && phase !== 'failed'"
+          :cause="record.errorCause"
+          :text="record.error"
+        />
         <p v-if="record.dropReason" class="ticket__note">
           {{ t('issues.ticket.dropReason', { reason: record.dropReason }) }}
         </p>
@@ -178,13 +181,6 @@ const draft = computed(
   gap: var(--space-2);
   color: var(--text-secondary);
   font-size: var(--fs-sm);
-  overflow-wrap: anywhere;
-}
-
-.ticket__error {
-  color: var(--status-danger-fg);
-  font-size: var(--fs-sm);
-  white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 

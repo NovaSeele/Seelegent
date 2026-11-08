@@ -85,6 +85,75 @@ func TestComputeAttention(t *testing.T) {
 	}
 }
 
+// TestAttentionParams (F14): every flag whose text has values carries them as params, so the dashboard says it in
+// the reader's language; Detail stays the English sentence for the lead.
+func TestAttentionParams(t *testing.T) {
+	now := harnessEpoch.Add(time.Hour)
+	set := config.Defaults()
+	set.StallMinutes, set.StallToolMinutes = 10, 20
+	running := &Task{Status: StatusRunning, Kind: KindNormal, ConversationID: "c", Backend: "agy"}
+	done := func(tu *Turn) *Task {
+		tu.N, tu.EndedAt = 1, now
+		return &Task{Status: StatusDone, Kind: KindNormal, UpdatedAt: now, Turns: []*Turn{tu}}
+	}
+	failedCalls := make([]loopStep, loopErrors)
+	for i := range failedCalls {
+		failedCalls[i] = loopStep{key: fmt.Sprint(i), name: "run", failed: true}
+	}
+	cases := []struct {
+		name string
+		t    *Task
+		live liveState
+		acc  accountHealth
+		want api.AttentionParams
+	}{
+		{"not started", &Task{Status: StatusRunning, Kind: KindNormal}, liveState{running: true,
+			started: now.Add(-4 * time.Minute), lastEvent: now}, accountHealth{},
+			api.AttentionParams{Kind: api.AttentionNotStarted, Minutes: 4}},
+		{"no output", running, liveState{running: true, sawInit: true, lastEvent: now.Add(-11 * time.Minute)},
+			accountHealth{}, api.AttentionParams{Kind: api.AttentionNoOutput, Minutes: 11}},
+		{"quiet tool", running, liveState{running: true, sawInit: true, tool: "run_command", command: "npm test",
+			lastEvent: now.Add(-21 * time.Minute)}, accountHealth{},
+			api.AttentionParams{Kind: api.AttentionToolQuiet, Minutes: 21, Tool: "run_command", Command: "npm test"}},
+		{"looping", running, liveState{running: true, sawInit: true, lastEvent: now, steps: failedCalls},
+			accountHealth{}, api.AttentionParams{Kind: api.AttentionCallsFailed, Count: loopErrors}},
+		{"no accounts", running, liveState{running: true, sawInit: true, lastEvent: now},
+			accountHealth{known: true, total: 2}, api.AttentionParams{Backend: "agy"}},
+		{"auth", &Task{Status: StatusWaitingQuota, Kind: KindNormal, Backend: "agy"}, liveState{},
+			accountHealth{known: true, total: 1, enabled: 1, needsLogin: 1}, api.AttentionParams{Backend: "agy"}},
+		{"pool no account", &Task{Status: StatusWaitingQuota, Kind: KindNormal, Backend: "agy",
+			Waiting: "no_account", WaitDetail: "no enabled, signed-in agy account can run this"}, liveState{},
+			accountHealth{}, api.AttentionParams{Backend: "agy"}},
+		{"deps", &Task{Status: StatusBlockedDeps, Kind: KindNormal, DepsReason: "prerequisite t1 (A) was failed",
+			DepsBlock: &api.AttentionParams{Kind: api.AttentionDepFailed, Task: "t1", Title: "A"}}, liveState{},
+			accountHealth{}, api.AttentionParams{Kind: api.AttentionDepFailed, Task: "t1", Title: "A"}},
+		{"no response", done(&Turn{DeniedActions: []string{"git push", "rm -rf"}}), liveState{}, accountHealth{},
+			api.AttentionParams{Denied: []string{"git push", "rm -rf"}}},
+		{"hygiene", done(&Turn{Response: "ok", Hygiene: []api.Finding{{Severity: api.SeverityRed}, {Severity: api.SeverityRed}}}),
+			liveState{}, accountHealth{}, api.AttentionParams{Count: 2}},
+		{"at risk", done(&Turn{Response: "ok", WorkAtRisk: []api.RiskFile{{Path: "a"}, {Path: "b"}, {Path: "c"}}}),
+			liveState{}, accountHealth{}, api.AttentionParams{Count: 3}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := computeAttention(c.t, c.live, c.acc, now, set)
+			if got == nil || got.Detail == "" || !sameParams(got.Params, &c.want) {
+				t.Fatalf("got %+v (params %+v), want params %+v", got, got.Params, c.want)
+			}
+		})
+	}
+	// The params are part of the flag: a change of them is a new flag, the same ones are not.
+	a := computeAttention(running, liveState{running: true, sawInit: true, lastEvent: now.Add(-11 * time.Minute)},
+		accountHealth{}, now, set)
+	b := computeAttention(running, liveState{running: true, sawInit: true, lastEvent: now.Add(-12 * time.Minute)},
+		accountHealth{}, now, set)
+	b.Detail = a.Detail
+	if sameAttention(a, b) || !sameAttention(a, computeAttention(running, liveState{running: true, sawInit: true,
+		lastEvent: now.Add(-11 * time.Minute)}, accountHealth{}, now, set)) {
+		t.Fatal("sameAttention ignores the params")
+	}
+}
+
 func TestParseBlocked(t *testing.T) {
 	cases := map[string]*api.ReportQuestion{
 		"no heading":                                 nil,

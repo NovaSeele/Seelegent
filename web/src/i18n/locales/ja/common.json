@@ -126,7 +126,9 @@
     "waitingDeps": "前のタスク待ち",
     "hygiene": "衛生上の問題",
     "verifierRejected": "レビューで却下",
-    "peerObjection": "ピアが異議を出しています"
+    "peerObjection": "ピアが異議を出しています",
+    "backgroundWait": "バックグラウンドのコマンドを待機中",
+    "unknown": "確認が必要"
   },
   "stage": {
     "explore": "調査",
@@ -162,5 +164,6 @@
     "collapseSidebar": "サイドバーを隠す",
     "expandSidebar": "サイドバーを表示",
     "noResults": "結果がありません"
-  }
+  },
+  "daemonSaid": "Seelegent のメッセージ："
 }

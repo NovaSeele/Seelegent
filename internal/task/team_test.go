@@ -339,9 +339,13 @@ func TestSeniorObjectionWarns(t *testing.T) {
 			Required: []string{"add a test"}},
 	}
 	got := seniorObjections(cs)
-	if len(got) != 2 || got[0] != "senior sam objected: the total can go negative" ||
-		got[1] != "senior una objected: add a test" {
-		t.Errorf("warnings = %q", got)
+	if want := []api.SeniorObjection{{Member: "sam", Text: "the total can go negative"},
+		{Member: "una", Text: "add a test"}}; !slices.Equal(got, want) {
+		t.Errorf("objections = %+v", got)
+	}
+	if w := objectionWarnings(got); !slices.Equal(w, []string{"senior sam objected: the total can go negative",
+		"senior una objected: add a test"}) {
+		t.Errorf("warnings = %q", w)
 	}
 }
 
@@ -360,7 +364,7 @@ func TestSeniorObjectionLatestConsult(t *testing.T) {
 		{Member: "ted", Rank: api.RankSenior, Status: consultFailed},
 		{Member: "una", Rank: api.RankSenior, Status: consultRunning},
 	}
-	got := seniorObjections(cs)
+	got := objectionWarnings(seniorObjections(cs))
 	want := []string{"senior una objected: new finding", "senior ted objected: keep the check"}
 	if !slices.Equal(got, want) {
 		t.Errorf("warnings = %q, want %q", got, want)

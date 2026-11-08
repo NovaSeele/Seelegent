@@ -26,7 +26,26 @@
     "drivingDesc": "The worker's conversation is open in a console. When you close it, the worker writes a hand-back report.",
     "needsYou": "needs you",
     "needsLead": "needs the lead",
-    "dismiss": "Dismiss"
+    "dismiss": "Dismiss",
+    "why": {
+      "backgroundWait": "The worker CLI waits for a command the worker started in the background. It is quiet, not stuck.",
+      "failed": "The task failed. Look at the last turn, then follow up or start it again.",
+      "noResponse": "The worker ended its turn without a report.",
+      "denied": "The worker ended its turn without a report. Refused actions: {actions}",
+      "notStarted": "The worker has not started {minutes} min after launch.",
+      "noOutput": "No output for {minutes} min.",
+      "toolQuiet": "No output for {minutes} min; last step {step}.",
+      "callsFailed": "The last {count} tool calls failed.",
+      "repeated": "The worker repeated the same {tool} call {count} times in its last {steps} steps.",
+      "noAccounts": "No {backend} account can run work. Sign one in or enable one.",
+      "auth": "Every enabled {backend} account needs a sign-in.",
+      "depMissing": "The earlier task {task} no longer exists.",
+      "depRejected": "The earlier task {title} ({task}) was rejected.",
+      "depFailed": "The earlier task {title} ({task}) failed.",
+      "depCancelled": "The earlier task {title} ({task}) was cancelled.",
+      "hygiene": "{count} hygiene finding to look at | {count} hygiene findings to look at",
+      "workAtRisk": "{count} file may have lost changes | {count} files may have lost changes"
+    }
   },
   "question": {
     "title": "The worker asks",
@@ -71,7 +90,9 @@
     "rejectedConfirm": "Reject",
     "acceptedToast": "Accepted",
     "acceptedWarned": "Accepted. Warning: {warnings}",
-    "rejectedToast": "Rejected"
+    "rejectedToast": "Rejected",
+    "objected": "{who} objected: {text}",
+    "objectedBare": "{who} objected"
   },
   "confirm": {
     "cancelTitle": "Cancel this task?",

@@ -87,6 +87,15 @@ type TaskSummary struct {
 
 	// Warnings are set only by a review: accepting over a senior member's objection names it and its first finding.
 	Warnings []string `json:"warnings,omitempty"`
+	// Objections are the same warnings as values, for a text in the reader's language (F14).
+	Objections []SeniorObjection `json:"objections,omitempty"`
+}
+
+// SeniorObjection is a senior member's standing objection to a task that was accepted anyway: the member and its
+// first finding or required change (at most 300 characters).
+type SeniorObjection struct {
+	Member string `json:"member"`
+	Text   string `json:"text,omitempty"`
 }
 
 // ProfileRef names the role profile of a task.
@@ -136,9 +145,48 @@ type Attention struct {
 	State  string `json:"state" ts:"'blocked' | 'question' | 'stalled' | 'background_wait' | 'info'"`
 	Reason string `json:"reason"`
 	// Who is lead or user.
-	Who    string `json:"who" ts:"'lead' | 'user'"`
+	Who string `json:"who" ts:"'lead' | 'user'"`
+	// Detail says why in English, for the lead (MCP, CLI); for a question it is the worker's question. The
+	// dashboard builds its own text from Reason and Params (F14).
 	Detail string `json:"detail,omitempty"`
-	Since  string `json:"since"`
+	// Params are the values behind Detail, for a text in the reader's language.
+	Params *AttentionParams `json:"params,omitempty"`
+	Since  string           `json:"since"`
+}
+
+// Kinds of AttentionParams: which case of the reason applies.
+const (
+	// stalled
+	AttentionNotStarted = "not_started"
+	AttentionNoOutput   = "no_output"
+	AttentionToolQuiet  = "tool"
+	// looping
+	AttentionCallsFailed = "failed_calls"
+	AttentionRepeated    = "repeated"
+	// deps_blocked: the prerequisite is missing, rejected, failed or cancelled.
+	AttentionDepMissing   = "missing"
+	AttentionDepRejected  = "rejected"
+	AttentionDepFailed    = "failed"
+	AttentionDepCancelled = "cancelled"
+)
+
+// AttentionParams are the values an attention flag's text is made of. Only the fields of the reason are set:
+// stalled (Kind, Minutes, Tool, Command), looping (Kind, Count, Tool, Steps), no_accounts and auth (Backend),
+// deps_blocked (Kind, Task, Title), no_response (Denied), hygiene and work_at_risk (Count).
+type AttentionParams struct {
+	Kind    string `json:"kind,omitempty" ts:"'not_started' | 'no_output' | 'tool' | 'failed_calls' | 'repeated' | 'missing' | 'rejected' | 'failed' | 'cancelled'"`
+	Minutes int    `json:"minutes,omitempty"`
+	Count   int    `json:"count,omitempty"`
+	// Steps is how many recent tool calls a repeat was counted in.
+	Steps   int    `json:"steps,omitempty"`
+	Tool    string `json:"tool,omitempty"`
+	Command string `json:"command,omitempty"`
+	Backend string `json:"backend,omitempty"`
+	// Task and Title name the prerequisite of deps_blocked.
+	Task  string `json:"task,omitempty"`
+	Title string `json:"title,omitempty"`
+	// Denied are the actions the worker was refused before it ended without a report.
+	Denied []string `json:"denied,omitempty"`
 }
 
 // Review is the lead's verdict on a task.
