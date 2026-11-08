@@ -786,6 +786,15 @@ export function createAdminRoutes(ctx) {
     snapshotRetentionDays: [1, 3650],
     contentionWindowHours: [1, 8760],
     githubPollMinutes: [0, 10080],
+    maxConcurrentWorkers: [0, 256],
+    gateConcurrency: [0, 64],
+    minFreeMemoryMB: [0, 1048576],
+    minFreeCommitMB: [0, 1048576],
+    criticalFreeMemoryMB: [0, 1048576],
+    workerMemoryLimitMB: [0, 1048576],
+    workerCPURatePercent: [0, 100],
+    testParallelism: [0, 64],
+    daemonMemoryLimitMB: [0, 65536],
   }
   const BOOLS = [
     'usageHistory',
@@ -833,6 +842,16 @@ export function createAdminRoutes(ctx) {
       bad('verifierTier', `must be one of ${TIERS.join(', ')}`)
     if (!['off', 'warn', 'enforce'].includes(next.lanes))
       bad('lanes', 'must be off, warn or enforce')
+    for (const key of ['workerPriority', 'gatePriority']) {
+      if (!['low', 'normal'].includes(next[key])) bad(key, 'must be low or normal')
+    }
+    const { criticalFreeMemoryMB: critical, minFreeMemoryMB: min } = next
+    if (critical > 0 && min > 0 && critical >= min) {
+      bad(
+        'criticalFreeMemoryMB',
+        `must be below minFreeMemoryMB (${min}) while both are on (got ${critical})`,
+      )
+    }
     if (!Array.isArray(next.linkIntoProfiles)) bad('linkIntoProfiles', 'must be a list')
     else {
       const seen = new Set()
