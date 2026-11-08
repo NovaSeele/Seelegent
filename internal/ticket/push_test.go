@@ -65,7 +65,7 @@ func TestPushNeverSendsWorkerHistory(t *testing.T) {
 	if err := os.Chmod(filepath.Join(e.repo, ".git", "hooks", "pre-push"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	tk, task := readyTicket(t, e, "Config")
+	tk, tid := readyTicket(t, e, "Config")
 	wt := tk.Worktree
 	aws := "AKIA" + "Z7Q4TESTCHECK2X9"
 	write(t, filepath.Join(wt, ".env"), "AWS="+aws+"\n")
@@ -78,7 +78,7 @@ func TestPushNeverSendsWorkerHistory(t *testing.T) {
 	write(t, filepath.Join(wt, "cfg.txt"), "token = none\n")
 	run(t, wt, "add", "-A")
 	run(t, wt, "commit", "-q", "-m", "fix")
-	e.tasks.accept(task, "ok")
+	e.tasks.accept(tid, "ok")
 	waitTicket(t, e.s, tk.ID, api.TicketReady)
 
 	tk, err := e.s.PR(ctx, tk.ID, api.PRRequest{})
@@ -127,12 +127,12 @@ func TestPushNeverSendsWorkerHistory(t *testing.T) {
 // the worker and still in the tree is refused like an uncommitted one, and nothing is pushed.
 func TestPushScanRefusesCommittedSecret(t *testing.T) {
 	e := setupFlow(t)
-	tk, task := readyTicket(t, e, "Keys")
+	tk, tid := readyTicket(t, e, "Keys")
 	write(t, filepath.Join(tk.Worktree, "deploy.key"), "x\n")
 	write(t, filepath.Join(tk.Worktree, "src", "cfg.go"), "package src\n\nconst k = \""+testToken+"\"\n")
 	run(t, tk.Worktree, "add", "-A")
 	run(t, tk.Worktree, "commit", "-q", "-m", "keys")
-	e.tasks.accept(task, "ok")
+	e.tasks.accept(tid, "ok")
 	waitTicket(t, e.s, tk.ID, api.TicketReady)
 	_, err := e.s.PR(t.Context(), tk.ID, api.PRRequest{})
 	var se *ScanError
@@ -174,9 +174,9 @@ func TestPushScanRefusesCommittedSecret(t *testing.T) {
 func TestRefusalGoesWithNewWorkOrDrop(t *testing.T) {
 	e := setupFlow(t)
 	ctx := t.Context()
-	tk, task := readyTicket(t, e, "Keys again")
+	tk, tid := readyTicket(t, e, "Keys again")
 	write(t, filepath.Join(tk.Worktree, "deploy.key"), "x\n")
-	e.tasks.accept(task, "ok")
+	e.tasks.accept(tid, "ok")
 	waitTicket(t, e.s, tk.ID, api.TicketReady)
 	refuse := func() {
 		t.Helper()
@@ -196,17 +196,17 @@ func TestRefusalGoesWithNewWorkOrDrop(t *testing.T) {
 
 	// A followup on the same task: the ticket works again and the refusal goes.
 	e.tasks.mu.Lock()
-	d := e.tasks.tasks[task]
+	d := e.tasks.tasks[tid]
 	d.Status, d.Review = api.StatusRunning, nil
 	d.Turns = append(d.Turns, api.Turn{N: 2, Message: "remove the key", Status: "running"})
 	e.tasks.mu.Unlock()
-	e.tasks.bus.Publish(taskNotice(task))
+	e.tasks.bus.Publish(taskNotice(tid))
 	got := waitTicket(t, e.s, tk.ID, api.TicketWorking)
 	rec, err := e.s.getTicket(ctx, tk.ID)
 	if err != nil || rec.Refusal != nil || got.Error != "" {
 		t.Fatalf("after a followup: refusal %+v, error %q, %v", rec.Refusal, got.Error, err)
 	}
-	e.tasks.accept(task, "still there")
+	e.tasks.accept(tid, "still there")
 	waitTicket(t, e.s, tk.ID, api.TicketReady)
 	refuse()
 
@@ -226,9 +226,9 @@ func TestRefusalGoesWithNewWorkOrDrop(t *testing.T) {
 func TestMergedPRChecksReadOnce(t *testing.T) {
 	e := setupFlow(t)
 	ctx := t.Context()
-	tk, task := readyTicket(t, e, "Merge me")
+	tk, tid := readyTicket(t, e, "Merge me")
 	write(t, filepath.Join(tk.Worktree, "src", "cache.go"), "package src\n\nvar ttl = 7\n")
-	e.tasks.accept(task, "ok")
+	e.tasks.accept(tid, "ok")
 	waitTicket(t, e.s, tk.ID, api.TicketReady)
 	setChecks := func(status, conclusion string) {
 		e.gh.mu.Lock()
@@ -295,9 +295,9 @@ func (b brokenCatFile) Exec(ctx context.Context, dir string, opt gitx.ExecOption
 // committed or pushed unscanned.
 func TestPushRefusedWhenScanFails(t *testing.T) {
 	e := setupFlow(t)
-	tk, task := readyTicket(t, e, "Broken")
+	tk, tid := readyTicket(t, e, "Broken")
 	write(t, filepath.Join(tk.Worktree, "src", "cache.go"), "package src\n\nvar ttl = 3\n")
-	e.tasks.accept(task, "ok")
+	e.tasks.accept(tid, "ok")
 	waitTicket(t, e.s, tk.ID, api.TicketReady)
 	e.s.o.Git = brokenCatFile{e.s.o.Git}
 	_, err := e.s.PR(t.Context(), tk.ID, api.PRRequest{})
@@ -320,9 +320,9 @@ func TestPushRefusedWhenScanFails(t *testing.T) {
 func TestPushRemoteRules(t *testing.T) {
 	e := setupFlow(t)
 	ctx := t.Context()
-	tk, task := readyTicket(t, e, "Remote")
+	tk, tid := readyTicket(t, e, "Remote")
 	write(t, filepath.Join(tk.Worktree, "src", "cache.go"), "package src\n\nvar ttl = 7\n")
-	e.tasks.accept(task, "ok")
+	e.tasks.accept(tid, "ok")
 	waitTicket(t, e.s, tk.ID, api.TicketReady)
 	if _, err := e.s.PR(ctx, tk.ID, api.PRRequest{}); err != nil {
 		t.Fatal(err)
@@ -394,9 +394,9 @@ func TestPushRemoteRules(t *testing.T) {
 func TestPushAfterBaseMoved(t *testing.T) {
 	e := setupFlow(t)
 	ctx := t.Context()
-	tk, task := readyTicket(t, e, "Moved")
+	tk, tid := readyTicket(t, e, "Moved")
 	write(t, filepath.Join(tk.Worktree, "src", "cache.go"), "package src\n\nvar ttl = 11\n")
-	e.tasks.accept(task, "ok")
+	e.tasks.accept(tid, "ok")
 	waitTicket(t, e.s, tk.ID, api.TicketReady)
 	if _, err := e.s.PR(ctx, tk.ID, api.PRRequest{}); err != nil {
 		t.Fatal(err)

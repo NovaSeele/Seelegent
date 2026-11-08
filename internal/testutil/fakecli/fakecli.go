@@ -252,7 +252,7 @@ func runCLI(dir string) int {
 		// was stopped while writing it.
 		path := filepath.Join(dir, strings.TrimSuffix(name, ".script")+".record.json")
 		if os.WriteFile(path+".tmp", data, 0o600) == nil { //nolint:gosec // the test's own queue folder
-			_ = retry(func() error { return os.Rename(path+".tmp", path) })
+			_ = retry(func() error { return os.Rename(path+".tmp", path) }) //nolint:gosec // the test's own queue folder
 		}
 	}
 	out := bufio.NewWriter(os.Stdout)

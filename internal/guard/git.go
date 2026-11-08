@@ -363,7 +363,7 @@ func replayPrintsOnly(args []word) bool {
 			prints = false
 			continue
 		}
-		if len(name) < len("--ref") || !strings.HasPrefix("--ref-action", name) {
+		if len(name) < len("--ref") || !isAbbrev(name, "--ref-action") {
 			continue
 		}
 		if !eq {
@@ -493,7 +493,7 @@ func riskyConfigKey(k string) bool {
 		}
 	}
 	if strings.HasPrefix(k, "protocol.") && strings.HasSuffix(k, ".allow") {
-		return true // protocol.ext.allow=always
+		return true // allowing the ext protocol lets ext:: URLs run commands
 	}
 	for _, suffix := range []string{".clean", ".smudge", ".process", ".textconv", ".command", ".driver",
 		".program", ".cmd", ".helper", ".uploadpack", ".receivepack", ".proxy",

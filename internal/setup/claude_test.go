@@ -386,7 +386,7 @@ func TestAgentHookOutput(t *testing.T) {
 			t.Errorf("%s on %s: %s %v, want %s", c.exe, c.goos, got, err, c.want)
 		}
 		if !isOurHook(got) {
-			t.Errorf("%s is not recognised as the hook", got)
+			t.Errorf("%s is not recognized as the hook", got)
 		}
 	}
 	for _, exe := range []string{`C:\a$b\seelegent.exe`, "C:\\`id`\\seelegent.exe", `C:\%TEMP%\seelegent.exe`} {

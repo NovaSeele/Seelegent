@@ -173,7 +173,7 @@ func (c Checker) line(line string, sh Shell, depth int) Result {
 	return res
 }
 
-// isAbbrev reports whether t abbreviates the PowerShell option full (a prefix of it, as pwsh accepts).
+// isAbbrev reports whether t abbreviates the option full (a prefix of it, as pwsh and git's long options accept).
 func isAbbrev(t, full string) bool { return strings.HasPrefix(full, t) }
 
 // cmdName is a command word reduced to its name: the last path element, lower case, without .exe/.cmd/.bat/.com.

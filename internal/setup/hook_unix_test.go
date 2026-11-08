@@ -27,7 +27,7 @@ func TestHookCommandRunsUnderSh(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cmd := exec.Command("sh", "-c", line)
+	cmd := exec.CommandContext(t.Context(), "sh", "-c", line)
 	cmd.Dir = t.TempDir()
 	out, err := cmd.CombinedOutput()
 	if err != nil || strings.TrimSpace(string(out)) != "ran hook "+HookCommand {
