@@ -22,8 +22,8 @@ type eolCase struct {
 	autocrlf string
 	// autocrlfAfter, when set, is core.autocrlf from after the commit on.
 	autocrlfAfter string
-	commit   map[string]string
-	checkout []string
+	commit        map[string]string
+	checkout      []string
 	// checkoutCRLF: the checkout must have written CRLF (the case is about that form).
 	checkoutCRLF bool
 	before       map[string]string
