@@ -43,10 +43,17 @@ func (s *Server) testKey(w http.ResponseWriter, r *http.Request) (code int, body
 		case err != nil:
 			return 0, nil, err
 		}
-		key, acc = k, &a
-		if req.Provider == "" && req.NewProvider == nil {
-			req.Provider = a.Provider
+		// A stored key goes only to the account's own provider: never to an address the caller chose.
+		switch {
+		case req.NewProvider != nil:
+			return 0, nil, invalid("a stored key is tested only against its account's own provider: give apiKey " +
+				"to test another provider").withField("newProvider")
+		case req.Provider != "" && req.Provider != a.Provider:
+			return 0, nil, invalid("account %s uses provider %s: a stored key is tested only against it",
+				a.ID, a.Provider).withField("provider")
 		}
+		key, acc = k, &a
+		req.Provider = a.Provider
 	} else {
 		k, ns, err := account.NormalizeKey(req.APIKey)
 		if err != nil {
@@ -65,8 +72,8 @@ func (s *Server) testKey(w http.ResponseWriter, r *http.Request) (code int, body
 	out := api.KeyTestResult{OK: res.OK, Status: res.Status, Reason: res.Reason, Message: res.Message,
 		Models: api.NonNil(res.Models), LatencyMs: res.Latency.Milliseconds(), Notices: noticeDTOs(notices)}
 	s.log.Info("provider key test", "provider", p.ID, "reason", res.Reason, "status", res.Status)
-	// The result belongs to the account only when its own provider was tested.
-	if acc != nil && req.NewProvider == nil && p.ID == acc.Provider && ctx.Err() == nil {
+	// With accountId the account's own provider was tested (checked above), so the result is the account's.
+	if acc != nil && ctx.Err() == nil {
 		saved, err := s.o.Accounts.RecordTest(ctx, acc.ID, res.Reason, started)
 		if err != nil {
 			return 0, nil, err

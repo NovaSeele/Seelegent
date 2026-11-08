@@ -208,8 +208,9 @@ in the daemon.
   `redirected` and the key is not sent there). It answers `200 KeyTestResult` whenever the call could be made, a
   refused key included: `reason` is `ok`, `refused` (401/403), `not_found` (404 on a hand-made base URL),
   `no_models_endpoint` (404 on a preset's address, or 405), `unreachable`, `redirected` or `error`, with `models`
-  on `ok`. With `accountId` the stored key is used and, when the account's own provider was tested, the result is
-  saved on it (`saved: true`). Only the provider, reason and status are logged. Workers may not call it.
+  on `ok`. With `accountId` the stored key is used, only against the account's own provider (`newProvider`, or a
+  `provider` other than the account's, is `400` with `details.field`, so a stored key never goes to an address the
+  caller chose), and the result is saved on it (`saved: true`). Only the provider, reason and status are logged. Workers may not call it.
 - A provider whose tiers have no model is "model per task" (`Provider.modelPerTask`, `Account.modelPerTask`): valid,
   but a task on it must name its model. `POST /tasks` without `model`, or with only a tier it has no model for, is
   `400 invalid_argument` at once with `details.reason: "no_default_model"`, `details.provider`,

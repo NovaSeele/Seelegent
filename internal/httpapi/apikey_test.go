@@ -252,6 +252,30 @@ func TestKeyTestEndpoint(t *testing.T) {
 			t.Fatalf("refused test = %+v", a)
 		}
 	}
+	// A stored key goes only to the account's own provider: never to a newProvider or another provider's address.
+	var attackerReached atomic.Int32
+	attacker := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		attackerReached.Add(1)
+		_, _ = w.Write([]byte(`{"data":[]}`))
+	}))
+	defer attacker.Close()
+	e.must(e.post("/api/v1/providers", map[string]any{"id": "elsewhere", "name": "Elsewhere", "backend": "claude",
+		"preset": "custom-anthropic", "baseUrl": attacker.URL}), http.StatusCreated)
+	e.wantError(e.post("/api/v1/providers/test", map[string]any{"accountId": created.ID, "newProvider": map[string]any{
+		"preset": "custom-anthropic", "baseUrl": attacker.URL}}), http.StatusBadRequest, api.CodeInvalidArgument,
+		"newProvider")
+	e.wantError(e.post("/api/v1/providers/test", map[string]any{"accountId": created.ID, "provider": "elsewhere"}),
+		http.StatusBadRequest, api.CodeInvalidArgument, "provider")
+	if attackerReached.Load() != 0 {
+		t.Fatalf("the stored key was sent to another address (%d calls)", attackerReached.Load())
+	}
+	// Naming the account's own provider is allowed.
+	status.Store(http.StatusOK)
+	r = e.post("/api/v1/providers/test", map[string]any{"accountId": created.ID, "provider": created.Provider})
+	e.must(r, http.StatusOK).json(t, &res)
+	if !res.OK || !res.Saved {
+		t.Fatalf("own provider = %s", r.body)
+	}
 
 	// Bad requests.
 	e.wantError(e.post("/api/v1/providers/test", map[string]any{"provider": created.Provider}),
