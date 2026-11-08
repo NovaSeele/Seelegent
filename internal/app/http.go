@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/http"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/NovaSeele/Seelegent/internal/api"
@@ -92,8 +94,10 @@ func (a *App) ListenHTTP(ctx context.Context, port int) (string, error) {
 		return "", err
 	}
 	hs := srv.HTTPServer(ln.Addr().String())
+	conns := newConnTracker()
+	conns.wrap(hs)
 	a.mu.Lock()
-	a.api, a.httpSrv = srv, hs
+	a.api, a.httpSrv, a.httpConns = srv, hs, conns
 	a.mu.Unlock()
 	a.wg.Add(1)
 	go func() {
@@ -119,17 +123,75 @@ func (a *App) publishLogin(l api.LoginSession) {
 // closeHTTP ends the SSE streams, then lets open requests finish (bounded) and stops the listener.
 func (a *App) closeHTTP(ctx context.Context) error {
 	a.mu.Lock()
-	srv, hs := a.api, a.httpSrv
+	srv, hs, conns := a.api, a.httpSrv, a.httpConns
 	a.mu.Unlock()
 	if hs == nil {
 		return nil
 	}
 	srv.Close()
-	sctx, cancel := context.WithTimeout(ctx, httpShutdown)
+	return shutdownHTTP(ctx, hs, conns, httpShutdown, a.log)
+}
+
+// shutdownHTTP stops hs: connections that never sent a request are closed at once (a browser opens spare ones
+// ahead of time, and http.Server.Shutdown waits up to five seconds for each before it counts it idle), idle
+// keep-alive connections are closed by Shutdown, and open requests get timeout to finish. When they do not, the
+// remaining connections are closed: that is a warning, not an error, since the server did stop.
+func shutdownHTTP(ctx context.Context, hs *http.Server, conns *connTracker, timeout time.Duration,
+	log *slog.Logger) error {
+	conns.closeNew()
+	sctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	if err := hs.Shutdown(sctx); err != nil {
-		_ = hs.Close()
-		return fmt.Errorf("http: shutdown: %w", err)
+	err := hs.Shutdown(sctx)
+	if err == nil {
+		return nil
 	}
+	if cerr := hs.Close(); cerr != nil {
+		return fmt.Errorf("http: shutdown: %w", errors.Join(err, cerr))
+	}
+	log.Warn("http: open requests did not finish in time; their connections were closed", "timeout", timeout,
+		"err", err)
 	return nil
+}
+
+// connTracker follows the connections of an http.Server through its ConnState hook.
+type connTracker struct {
+	mu    sync.Mutex
+	conns map[net.Conn]http.ConnState
+}
+
+func newConnTracker() *connTracker { return &connTracker{conns: map[net.Conn]http.ConnState{}} }
+
+// wrap installs the tracker as hs.ConnState, keeping a hook already set.
+func (t *connTracker) wrap(hs *http.Server) {
+	prev := hs.ConnState
+	hs.ConnState = func(c net.Conn, st http.ConnState) {
+		t.mu.Lock()
+		if st == http.StateClosed || st == http.StateHijacked {
+			delete(t.conns, c)
+		} else {
+			t.conns[c] = st
+		}
+		t.mu.Unlock()
+		if prev != nil {
+			prev(c, st)
+		}
+	}
+}
+
+// closeNew closes the connections that have not started a request yet.
+func (t *connTracker) closeNew() {
+	if t == nil {
+		return
+	}
+	t.mu.Lock()
+	var fresh []net.Conn
+	for c, st := range t.conns {
+		if st == http.StateNew {
+			fresh = append(fresh, c)
+		}
+	}
+	t.mu.Unlock()
+	for _, c := range fresh {
+		_ = c.Close()
+	}
 }
