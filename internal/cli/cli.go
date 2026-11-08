@@ -34,6 +34,9 @@ const annOp = "seelegent.op"
 
 // Execute runs the command line with the process arguments and exits with its status code.
 func Execute() {
+	if isLaunch(os.Args[1:]) {
+		limitLauncherRuntime(os.Getenv)
+	}
 	ctx, stop := signal.NotifyContext(context.Background(), stopSignals()...)
 	if code, ok := shimMain(ctx); ok {
 		stop()
