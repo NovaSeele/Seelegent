@@ -624,8 +624,8 @@ func TestRunRefusesWhileLocked(t *testing.T) {
 		t.Fatalf("Run: %v", err)
 	}
 	h := &Handle{files: FilesIn(dir)}
-	if !h.launcherAlive() {
-		t.Fatal("a held lock means the launcher is alive")
+	if alive, err := h.launcherAlive(); !alive || err != nil {
+		t.Fatalf("a held lock means the launcher is alive: %v, %v", alive, err)
 	}
 }
 

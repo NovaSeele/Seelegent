@@ -32,6 +32,10 @@ const (
 // ErrNotLaunch is returned by Attach for a directory that holds no launch spec.
 var ErrNotLaunch = errors.New("not a launch directory")
 
+// ErrGone is returned by Exited, Wait and Tail once the launch directory was removed: there is nothing left to
+// follow, and waiting for it would never end.
+var ErrGone = errors.New("the launch directory is gone")
+
 // Options configures Start.
 type Options struct {
 	// Launcher is the command that runs the launcher; the launch directory is appended as its last argument. For
@@ -189,8 +193,12 @@ func (h *Handle) loadTree() (t *platform.WorkerTree, ok, verified bool) {
 		return unknown, true, false
 	}
 	r, ready := h.Ready()
+	alive, err := h.launcherAlive()
+	if err != nil {
+		return unknown, true, false // the folder is gone: nothing to check the launcher against
+	}
 	if !ready {
-		if exists(h.files.Exit) || !h.launcherAlive() {
+		if exists(h.files.Exit) || !alive {
 			return nil, false, false
 		}
 		if sf.Job != "" {
@@ -198,7 +206,7 @@ func (h *Handle) loadTree() (t *platform.WorkerTree, ok, verified bool) {
 		}
 		return unknown, true, false
 	}
-	if !h.launcherAlive() {
+	if !alive {
 		return nil, false, false
 	}
 	if r.Job != sf.Job || r.LauncherPID <= 0 {
@@ -238,7 +246,11 @@ func (h *Handle) Exited() (Exit, bool, error) {
 			return Exit{}, false, nil
 		}
 	}
-	if h.launcherAlive() {
+	alive, err := h.launcherAlive()
+	if err != nil {
+		return Exit{}, false, err
+	}
+	if alive {
 		return Exit{}, false, nil
 	}
 	// The launcher may have written its record just before releasing the lock.
@@ -255,12 +267,13 @@ func (h *Handle) Exited() (Exit, bool, error) {
 	return lost, true, nil
 }
 
-// launcherAlive probes the launcher lock, at most every livenessInterval.
-func (h *Handle) launcherAlive() bool {
+// launcherAlive probes the launcher lock, at most every livenessInterval. It fails with ErrGone when the launch
+// directory no longer exists: the lock cannot be probed then, and "cannot tell" would mean waiting forever.
+func (h *Handle) launcherAlive() (bool, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if !h.lastProbe.IsZero() && time.Since(h.lastProbe) < livenessInterval {
-		return h.alive
+		return h.alive, nil
 	}
 	h.lastProbe = time.Now()
 	lock, err := fsutil.TryLock(h.files.Lock)
@@ -271,9 +284,13 @@ func (h *Handle) launcherAlive() bool {
 	case errors.Is(err, fsutil.ErrLocked):
 		h.alive = true
 	default:
+		if _, serr := os.Stat(h.files.Dir); errors.Is(serr, os.ErrNotExist) {
+			h.lastProbe = time.Time{}
+			return false, fmt.Errorf("launch %s: %w", h.files.Dir, ErrGone)
+		}
 		h.alive = true // cannot tell: never declare a running worker lost
 	}
-	return h.alive
+	return h.alive, nil
 }
 
 // Wait waits until the launch has ended and returns its exit record.
