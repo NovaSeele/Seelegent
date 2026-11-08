@@ -1,6 +1,8 @@
 package config
 
 import (
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -43,38 +45,92 @@ func TestAutoResources(t *testing.T) {
 
 func TestEffectiveResources(t *testing.T) {
 	m := Machine{TotalPhysMB: 16 * 1024, TotalCommitMB: 24 * 1024, CPUs: 8, OS: "windows"} // auto 2048/1024/2457/2/1
+	const a, e, d = SourceAuto, SourceExplicit, SourceDerived
+	auto := ResourceSources{a, a, a, a, a}
 	for _, c := range []struct {
 		name string
 		set  func(*Settings)
 		want Resources
+		src  ResourceSources
 	}{
-		{"all auto", func(*Settings) {}, Resources{2048, 1024, 2457, 2, 1}},
+		{"all auto", func(*Settings) {}, Resources{2048, 1024, 2457, 2, 1}, auto},
 		{"explicit values win", func(s *Settings) {
 			s.MinFreeMemoryMB, s.CriticalFreeMemoryMB, s.MinFreeCommitMB = Int(3000), Int(500), Int(0)
 			s.TestParallelism, s.GateConcurrency = Int(0), Int(0)
-		}, Resources{3000, 500, 0, 0, 0}},
+		}, Resources{3000, 500, 0, 0, 0}, ResourceSources{e, e, e, e, e}},
 		{"only the minimum: the floor is half of it", func(s *Settings) { s.MinFreeMemoryMB = Int(600) },
-			Resources{600, 300, 2457, 2, 1}},
+			Resources{600, 300, 2457, 2, 1}, ResourceSources{e, d, a, a, a}},
 		{"minimum off: the floor stays auto", func(s *Settings) { s.MinFreeMemoryMB = Int(0) },
-			Resources{0, 1024, 2457, 2, 1}},
+			Resources{0, 1024, 2457, 2, 1}, ResourceSources{e, a, a, a, a}},
 		{"only a low floor: the minimum stays auto", func(s *Settings) { s.CriticalFreeMemoryMB = Int(700) },
-			Resources{2048, 700, 2457, 2, 1}},
+			Resources{2048, 700, 2457, 2, 1}, ResourceSources{a, e, a, a, a}},
 		{"only a high floor: the minimum is twice it", func(s *Settings) { s.CriticalFreeMemoryMB = Int(3000) },
-			Resources{6000, 3000, 2457, 2, 1}},
-		{"floor off", func(s *Settings) { s.CriticalFreeMemoryMB = Int(0) }, Resources{2048, 0, 2457, 2, 1}},
+			Resources{6000, 3000, 2457, 2, 1}, ResourceSources{d, e, a, a, a}},
+		{"the highest lone floor: the minimum is the top of the range", func(s *Settings) {
+			s.CriticalFreeMemoryMB = Int(MemoryMBMax / 2)
+		}, Resources{MemoryMBMax, MemoryMBMax / 2, 2457, 2, 1}, ResourceSources{d, e, a, a, a}},
+		{"floor off", func(s *Settings) { s.CriticalFreeMemoryMB = Int(0) }, Resources{2048, 0, 2457, 2, 1},
+			ResourceSources{a, e, a, a, a}},
 		{"a tiny minimum: the derived floor is off, never at or above it", func(s *Settings) {
 			s.MinFreeMemoryMB = Int(1)
-		}, Resources{1, 0, 2457, 2, 1}},
+		}, Resources{1, 0, 2457, 2, 1}, ResourceSources{e, d, a, a, a}},
 	} {
 		s := Defaults()
 		c.set(&s)
-		got := EffectiveResources(s, m)
-		if got != c.want {
-			t.Errorf("%s: %+v, want %+v", c.name, got, c.want)
+		if err := s.Validate(); err != nil {
+			t.Fatalf("%s: %v", c.name, err)
 		}
-		if got.CriticalFreeMemoryMB > 0 && got.MinFreeMemoryMB > 0 && got.CriticalFreeMemoryMB >= got.MinFreeMemoryMB {
-			t.Errorf("%s: the floor %d is not below the minimum %d", c.name, got.CriticalFreeMemoryMB,
-				got.MinFreeMemoryMB)
+		got, src := EffectiveResourceSources(s, m)
+		if got != c.want || src != c.src {
+			t.Errorf("%s: %+v %+v, want %+v %+v", c.name, got, src, c.want, c.src)
+		}
+	}
+}
+
+// TestFloorBelowMinimum: on every machine, every pair of memory thresholds that validates has its effective floor
+// below its effective minimum whenever both are on; a lone floor whose double is out of range is refused, naming
+// only criticalFreeMemoryMB.
+func TestFloorBelowMinimum(t *testing.T) {
+	machines := []Machine{
+		{}, {TotalPhysMB: 2048, CPUs: 1, OS: "linux"}, NewMachine(8*1024, 12*1024, 4, "windows"),
+		NewMachine(32*1024, 64*1024, 24, "windows"), {TotalPhysMB: 1 << 20, CPUs: 256, OS: "linux"},
+	}
+	values := []*int{nil, Int(0), Int(1), Int(2), Int(255), Int(256), Int(511), Int(512), Int(1023), Int(1024),
+		Int(2047), Int(2048), Int(4096), Int(MemoryMBMax/2 - 1), Int(MemoryMBMax / 2), Int(MemoryMBMax/2 + 1),
+		Int(MemoryMBMax - 1), Int(MemoryMBMax)}
+	show := func(p *int) string {
+		if p == nil {
+			return "auto"
+		}
+		return fmt.Sprint(*p)
+	}
+	for _, m := range machines {
+		for _, minV := range values {
+			for _, critV := range values {
+				s := Defaults()
+				s.MinFreeMemoryMB, s.CriticalFreeMemoryMB = minV, critV
+				err := s.Validate()
+				lone := minV == nil && critV != nil && *critV > MemoryMBMax/2
+				if lone {
+					var inv *ValidationError
+					if !errors.As(err, &inv) || len(inv.Fields) != 1 || inv.Fields[0].Field != "criticalFreeMemoryMB" {
+						t.Errorf("min %s, floor %s: %v, want only criticalFreeMemoryMB refused", show(minV),
+							show(critV), err)
+					}
+					continue
+				}
+				if err != nil {
+					continue
+				}
+				r := EffectiveResources(s, m)
+				if r.CriticalFreeMemoryMB > 0 && r.MinFreeMemoryMB > 0 && r.CriticalFreeMemoryMB >= r.MinFreeMemoryMB {
+					t.Errorf("%+v, min %s, floor %s: floor %d not below the minimum %d", m, show(minV), show(critV),
+						r.CriticalFreeMemoryMB, r.MinFreeMemoryMB)
+				}
+				if r.MinFreeMemoryMB > MemoryMBMax {
+					t.Errorf("min %s, floor %s: minimum %d out of range", show(minV), show(critV), r.MinFreeMemoryMB)
+				}
+			}
 		}
 	}
 }

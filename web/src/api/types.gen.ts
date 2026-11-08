@@ -2349,7 +2349,7 @@ export interface Health {
 /** EffectiveValue is the value the daemon uses for one machine-sized setting and where it comes from. */
 export interface EffectiveValue {
   value: number
-  source: 'auto' | 'explicit'
+  source: 'auto' | 'explicit' | 'derived'
 }
 
 /** EffectiveResources are the effective values of the machine-sized settings (config.EffectiveResources). */

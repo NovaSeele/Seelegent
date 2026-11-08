@@ -49,12 +49,15 @@ const (
 	ResourceAuto = "auto"
 	// ResourceExplicit: the user set the value.
 	ResourceExplicit = "explicit"
+	// ResourceDerived: the setting is auto, but its value comes from the user's other memory threshold: a floor
+	// (criticalFreeMemoryMB) half of an explicit minFreeMemoryMB, or a minFreeMemoryMB twice an explicit floor.
+	ResourceDerived = "derived"
 )
 
 // EffectiveValue is the value the daemon uses for one machine-sized setting and where it comes from.
 type EffectiveValue struct {
 	Value  int    `json:"value"`
-	Source string `json:"source" ts:"'auto' | 'explicit'"`
+	Source string `json:"source" ts:"'auto' | 'explicit' | 'derived'"`
 }
 
 // EffectiveResources are the effective values of the machine-sized settings (config.EffectiveResources).
