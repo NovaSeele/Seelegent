@@ -30,17 +30,18 @@ func (g proofGit) Head(ctx context.Context, root string) (string, bool) {
 }
 
 // proofExec runs one command of a regression run like a gate command: through the shell, from dir, with the gate
-// time limit, output tail, Rust toolchain pin, testParallelism variables and gatePriority. Each command takes one of
-// the gate slots the task gates use (gateConcurrency); a regression run never runs inside a gate step, so it never
-// asks for a slot while it holds one.
+// time limit, output tail, Rust toolchain pin, testParallelism variables and gatePriority. Each command is admitted
+// like a task gate (task.Service.AdmitHeavy: one of the gateConcurrency slots, then free memory) and the memory
+// watchdog may stop it (TrackHeavy); a stopped command says so in its tail.
 func (a *App) proofExec(ctx context.Context, cmd, dir, logFile string) proof.CmdResult {
-	release, err := a.slots.Acquire(ctx, nil)
-	if release != nil {
-		defer release()
+	release, err := a.Tasks.AdmitHeavy(ctx)
+	if err != nil {
+		return proof.CmdResult{Tail: "cancelled while waiting for a gate slot or for free memory"}
 	}
-	if err != nil || ctx.Err() != nil {
-		return proof.CmdResult{Tail: "cancelled while waiting for a gate slot"}
-	}
+	defer release()
+	ctx, cancel := context.WithCancelCause(ctx)
+	defer cancel(nil)
+	defer a.Tasks.TrackHeavy(cancel)()
 	set := a.Settings()
 	extra := task.ParallelVars(a.env, set.TestParallelism)
 	if a.toolchains != nil {
@@ -66,6 +67,9 @@ func (a *App) proofExec(ctx context.Context, cmd, dir, logFile string) proof.Cmd
 	}
 	if res.TimedOut {
 		tail += "\n(timed out)"
+	}
+	if res.Stopped == api.StepStoppedLowMemory {
+		tail = strings.TrimSpace(tail + "\nstopped: machine low on memory")
 	}
 	return proof.CmdResult{Exit: res.Exit, Ms: res.Ms, Tail: tail}
 }
