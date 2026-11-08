@@ -448,6 +448,10 @@ func (s *Service) newAttempt(r *run, t *Task, tu *Turn) (bool, error) {
 			} else if moved {
 				return true, nil
 			}
+			if u := (*pool.Unavailable)(nil); errors.As(err, &u) && len(u.NoCredit) > 0 {
+				// Only accounts without credit are left: no time brings them back, so fail now (never wait).
+				return s.giveUp(t.ID, tu.N, u.Error())
+			}
 			if excludedBefore {
 				return s.giveUp(t.ID, tu.N, "no other account can run this task: "+lastError(tu))
 			}
@@ -656,6 +660,8 @@ func classify(o backend.Outcome, exit launch.Exit, timeoutMinutes int) (status, 
 		return AttemptQuota, o.Error
 	case event.ClassAuthRequired:
 		return AttemptAuth, o.Error
+	case event.ClassCredits:
+		return AttemptCredits, o.Error
 	case event.ClassTransient:
 		return AttemptTransient, o.Error
 	case event.ClassFatal:
@@ -690,6 +696,12 @@ func (s *Service) finishAttempt(r *run, id string, turn, n int, accountID, model
 	case AttemptAuth:
 		if err := s.o.Pool.MarkAuthFailed(ctx, accountID, errText); err != nil {
 			s.log.Warn("task: mark the account signed out", "account", accountID, "err", err)
+		}
+	case AttemptCredits:
+		// Not a quota rest: the account is left out until the user acts; the next pick moves on, or fails at once
+		// when no other account can run the task (pool.Unavailable.NoCredit).
+		if err := s.o.Pool.MarkNoCredit(ctx, accountID, errText); err != nil {
+			s.log.Warn("task: rest the account without credit", "account", accountID, "err", err)
 		}
 	}
 	maxAttempts := s.maxAttempts(ctx, b.Name())
@@ -773,7 +785,7 @@ func (s *Service) finishAttempt(r *run, id string, turn, n int, accountID, model
 		case status == AttemptBackgroundWait:
 			evs = append(evs, s.endTurnChecked(t, tu, TurnOK, o, check))
 			t.Status, t.Error = StatusDone, ""
-		case status == AttemptQuota || status == AttemptAuth:
+		case status == AttemptQuota || status == AttemptAuth || status == AttemptCredits:
 			more = true
 		case status == AttemptTransient:
 			k := 0
@@ -1081,6 +1093,8 @@ func classOf(a *Attempt) event.Class {
 		return event.ClassQuotaExhausted
 	case AttemptAuth:
 		return event.ClassAuthRequired
+	case AttemptCredits:
+		return event.ClassCredits
 	case AttemptTransient:
 		return event.ClassTransient
 	}

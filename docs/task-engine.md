@@ -110,6 +110,7 @@ append the events in **one transaction**, then publish on the bus. The log and t
 | ok | turn `ok`, task `done` (a hand-back turn also logs `handback`); a gated task stays `running` in its gate phase first (below) |
 | quota | the account rests for that quota group (`pool.MarkExhausted`), next attempt |
 | auth | the account is marked signed out (`pool.MarkAuthFailed`), next attempt on another account |
+| credits | the key's credit or billing ran out (class `credits`, never a quota rest): the account is left out with no end time (`pool.MarkNoCredit`) until the user stores a new key or edits the account (switches it off and on after a top-up); next attempt on another account, or, when no other account can run the task, the task fails at once naming the key ("the anthropic key has no credit left; top up or change the key") instead of waiting |
 | transient | `retry` event, wait 15 s then 45 s on the same account (only its own timer wakes it), then another account |
 | background_wait | continue once with the background-wait prompt; the second time the turn ends `ok` |
 | error / timeout | turn and task `failed` |

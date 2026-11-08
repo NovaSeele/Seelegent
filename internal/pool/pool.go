@@ -32,11 +32,13 @@
 package pool
 
 import (
+	"cmp"
 	"context"
 	"database/sql"
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -225,6 +227,17 @@ type Unavailable struct {
 	// no provider and waits on its sign-in accounts (resting or busy). Such a request never takes them (keys cost
 	// money); Error names them so the lead can pass provider. In account order, each once.
 	KeyProviders []KeyProvider `json:"keyProviders,omitempty"`
+	// NoCredit are the matching accounts left out because their credit ran out (MarkNoCredit). They do not count
+	// as candidates: with nothing else the reason is no_account, and the caller fails rather than waits.
+	NoCredit []NoCredit `json:"noCredit,omitempty"`
+}
+
+// NoCredit is an account whose credit ran out (Unavailable.NoCredit).
+type NoCredit struct {
+	AccountID string `json:"accountId"`
+	Label     string `json:"label,omitempty"`
+	// Provider is the API-key account's provider ("" for a sign-in account).
+	Provider string `json:"provider,omitempty"`
 }
 
 // KeyProvider is a provider with a free API-key account (Unavailable.KeyProviders).
@@ -255,6 +268,11 @@ func (u *Unavailable) Error() string {
 	var b strings.Builder
 	switch u.Reason {
 	case ReasonNoAccount:
+		if len(u.NoCredit) > 0 {
+			// The only thing to say: the lead can do nothing else, and the generic text would hide it.
+			u.writeNoCredit(&b)
+			return b.String()
+		}
 		fmt.Fprintf(&b, "no enabled, signed-in %s account can run this", u.Backend)
 	case ReasonResting:
 		fmt.Fprintf(&b, "all %d %s accounts are resting", u.Resting, u.Backend)
@@ -292,7 +310,31 @@ func (u *Unavailable) Error() string {
 		fmt.Fprintf(&b, " (quota group %s)", u.Group)
 	}
 	u.writeKeyProviders(&b)
+	if len(u.NoCredit) > 0 {
+		b.WriteString("; ")
+		u.writeNoCredit(&b)
+	}
 	return b.String()
+}
+
+// writeNoCredit names the accounts without credit, each provider once: "the anthropic key has no credit left; top
+// up or change the key".
+func (u *Unavailable) writeNoCredit(b *strings.Builder) {
+	var names []string
+	for _, nc := range u.NoCredit {
+		name := "the " + nc.Provider + " key"
+		if nc.Provider == "" {
+			name = "the " + u.Backend + " account " + cmp.Or(nc.Label, nc.AccountID)
+		}
+		if !slices.Contains(names, name) {
+			names = append(names, name)
+		}
+	}
+	if len(names) == 1 {
+		fmt.Fprintf(b, "%s has no credit left; top up or change the key", names[0])
+		return
+	}
+	fmt.Fprintf(b, "%s have no credit left; top up or change the keys", strings.Join(names, ", "))
 }
 
 // writeKeyProviders adds the free API-key accounts: "; free API-key accounts: pass provider: anthropic and a

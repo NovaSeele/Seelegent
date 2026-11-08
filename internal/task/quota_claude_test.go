@@ -277,3 +277,92 @@ func TestClaudeLimitHandsOver(t *testing.T) {
 		t.Errorf("events = %v", types(h.events(sum.ID)))
 	}
 }
+
+// claudeCreditsMessage is the Anthropic API's answer when an API key has no credit left.
+const claudeCreditsMessage = "Credit balance is too low"
+
+// claudeCreditsScript stops at once on the credit balance, as Claude Code does on an API key without credit.
+func claudeCreditsScript(sess string) string {
+	return script(claudeInit(sess),
+		claudeLine(map[string]any{"type": "result", "subtype": "success", "is_error": true,
+			"result": claudeCreditsMessage, "session_id": sess}),
+		"#!exit 1")
+}
+
+// anthropicKey adds an enabled claude API-key account of the provider anthropic (created on first use); accounts
+// with a higher priority are chosen first.
+func (h *harness) anthropicKey(label, key string, priority int) account.Account {
+	h.t.Helper()
+	ctx := h.t.Context()
+	if _, err := h.accounts.GetProvider(ctx, "anthropic"); err != nil {
+		if _, err := h.accounts.CreateProvider(ctx, account.Provider{ID: "anthropic", Backend: config.BackendClaude,
+			Official: true, Enabled: true}); err != nil {
+			h.t.Fatal(err)
+		}
+	}
+	a, _, err := h.accounts.Add(ctx, account.New{Backend: config.BackendClaude, Kind: account.KindAPIKey,
+		Label: label, Provider: "anthropic", Priority: priority, Enabled: true}, nil)
+	if err != nil {
+		h.t.Fatal(err)
+	}
+	if a, err = h.accounts.SetKey(ctx, a.ID, key); err != nil {
+		h.t.Fatal(err)
+	}
+	h.clk.Advance(time.Second)
+	h.pool.Notify()
+	return a
+}
+
+// TestClaudeCreditsFailsAtOnce (review N1): an API key without credit is not a quota limit. With no other account
+// the task fails at once, naming the key, and never waits; with a second key it moves on to it. Either way the
+// account without credit is left out until the user acts, with no rest time.
+func TestClaudeCreditsFailsAtOnce(t *testing.T) {
+	for _, second := range []bool{false, true} {
+		t.Run(map[bool]string{false: "alone", true: "second key"}[second], func(t *testing.T) {
+			h := newHarness(t)
+			h.useClaude()
+			broke := h.anthropicKey("broke", "qz7Kp2mWx9Rt4Lb8Nc3Vd6Fh1Jg5Ty0Ue", 10)
+			var other account.Account
+			if second {
+				other = h.anthropicKey("funded", "mB4nV8cX2zL6kJ0hG5fD9sA3pO7iU1yTr", 0)
+			}
+			h.queue.Push(t, claudeCreditsScript("sess-credits"))
+			if second {
+				h.queue.Push(t, claudeOKScript("sess-funded", "Finished on the funded key."))
+			}
+			sum := h.delegate(api.DelegateRequest{Backend: config.BackendClaude, Provider: "anthropic",
+				Model: "claude-opus-5"})
+			want := StatusFailed
+			if second {
+				want = StatusDone
+			}
+			tk := h.waitStatus(sum.ID, want)
+			at := tk.LastTurn().Attempts
+			if at[0].AccountID != broke.ID || at[0].Status != AttemptCredits || at[0].Error != claudeCreditsMessage {
+				t.Fatalf("first attempt = %+v", at[0])
+			}
+			if second {
+				if len(at) != 2 || at[1].AccountID != other.ID || at[1].Status != AttemptOK {
+					t.Fatalf("attempts = %+v", at)
+				}
+			} else if len(at) != 1 ||
+				tk.Error != "the anthropic key has no credit left; top up or change the key" {
+				t.Fatalf("task error %q, %d attempts", tk.Error, len(at))
+			}
+			evs := h.events(sum.ID)
+			if n := len(eventsOf(evs, api.EventWaitingQuota)) + len(eventsOf(evs, api.EventQuotaExhausted)); n != 0 {
+				t.Errorf("the task waited or rested on quota: %v", types(evs))
+			}
+			states, err := h.pool.States(t.Context())
+			if err != nil {
+				t.Fatal(err)
+			}
+			for i := range states {
+				if st := &states[i]; st.Account.ID == broke.ID && (len(st.Cooldowns) != 1 ||
+					st.Cooldowns[0].Reason != claudeCreditsMessage || st.Cooldowns[0].Until.Year() != 9999) {
+					t.Errorf("the account without credit rests %+v", st.Cooldowns)
+				}
+			}
+		})
+	}
+}

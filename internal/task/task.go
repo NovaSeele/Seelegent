@@ -80,6 +80,7 @@ const (
 	AttemptOK             = "ok"
 	AttemptQuota          = "quota"
 	AttemptAuth           = "auth"
+	AttemptCredits        = "credits"
 	AttemptTransient      = "transient"
 	AttemptBackgroundWait = "background_wait"
 	AttemptError          = "error"

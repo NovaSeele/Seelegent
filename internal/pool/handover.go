@@ -76,6 +76,8 @@ func (p *Pool) Handover(ctx context.Context, in HandoverInput) (Handover, error)
 		why = "the account was removed"
 	case in.Class == event.ClassAuthRequired:
 		why = "the account must sign in again"
+	case own.noCredit:
+		why = "the account has no credit left"
 	case own.state == stateIneligible:
 		why = "the account can no longer run this task (" + string(v.status[cur.ID]) + ")"
 	case own.state == stateResting:
