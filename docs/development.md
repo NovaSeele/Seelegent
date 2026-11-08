@@ -46,7 +46,7 @@ and the VCS data that Go embeds.
 
 | What             | make                                                    | Without make                                                                                                                                       |
 | ---------------- | ------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Go tests         | `make test` (`GOTESTFLAGS=-race` for the race detector) | `go test ./...`                                                                                                                                    |
+| Go tests         | `make test` (`GOTESTFLAGS=-race` for the race detector) | `go test -p 4 ./...`                                                                                                                               |
 | Go lint          | `make lint`                                             | `go vet ./...` and `go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0 run ./...` (set `GOTOOLCHAIN=go1.27.3` for that command) |
 | Web tests        | `make test-web`                                         | `cd web; pnpm test`                                                                                                                                |
 | Web lint + types | `make lint-web`                                         | `cd web; pnpm lint; pnpm typecheck`                                                                                                                |
@@ -66,6 +66,78 @@ Worker trees (cancel, timeout and the worker guard) are a bar, not a sandbox: a 
 started outside its tree by a service of the same user (Windows: WMI `Win32_Process.Create`, the Task Scheduler or
 out-of-process COM; Linux: `systemd-run --user`, at, cron; macOS: launchd). Such processes escape cancel and are
 seen as the lead. See the `platform` package documentation.
+
+### Light mode
+
+A development machine usually runs Seelegent's workers too, and one froze when several `go test ./...` and lint runs
+went at full width together. The commands here therefore run narrow by default:
+
+- `make test` runs `go test -p $(TEST_P)` with `TEST_P ?= 4` (packages tested at once); `make lint` runs
+  golangci-lint with `--concurrency $(LINT_J)` (`LINT_J ?= 4`) and `GOMEMLIMIT=2GiB`, and `.golangci.yml` sets
+  `run.concurrency: 4` for a plain `golangci-lint run`. On an idle machine raise them: `make test TEST_P=12`.
+- Without make: `go test -p 4 ./...`, and `GOMEMLIMIT=2GiB golangci-lint run -j 4 ./...`.
+- Never run the tests and the linter at the same time; test only the packages you changed while iterating
+  (`go test -p 4 ./internal/task`).
+- Run long checks at low priority, so the desktop and the workers stay responsive:
+  - Windows (PowerShell): `$p = Start-Process go -ArgumentList 'test','-p','4','./...' -NoNewWindow -PassThru;
+    $p.PriorityClass = 'BelowNormal'; $p.WaitForExit()`, or start a shell at low priority with
+    `cmd /c start "" /belownormal pwsh` (everything it starts inherits the class). Setting
+    `(Get-Process -Id $PID).PriorityClass = 'BelowNormal'` in a script lowers what the script starts afterwards.
+  - Linux and macOS: `nice -n 10 go test -p 4 ./...` (and `ionice -c 3` on Linux for disk-heavy runs).
+- Low CPU priority does not lower memory use: check free memory before a heavy run (Windows:
+  `(Get-CimInstance Win32_OperatingSystem).FreePhysicalMemory/1MB` GB; Linux: `free -g`).
+
+### Profiling the daemon (pprof)
+
+`seelegent daemon --pprof-addr 127.0.0.1:6060` serves `net/http/pprof` and `expvar` on that address, on a server
+and a mux of their own (never the API's port, never `http.DefaultServeMux`). The flag is hidden, off by default
+and never a setting. It takes loopback addresses only (`127.0.0.1`, `[::1]`, `localhost`) and refuses requests
+whose `Host` header is not that address (the API's DNS-rebinding check). It is a development tool: heap and
+goroutine profiles can hold secrets (API keys, prompts, tokens in memory), so never share them or start a daemon
+with it on a machine others use.
+
+```sh
+SEELEGENT_HOME=$(mktemp -d) go run ./cmd/seelegent daemon --port 47831 --pprof-addr 127.0.0.1:6060
+go tool pprof -top http://127.0.0.1:6060/debug/pprof/profile?seconds=30   # CPU
+go tool pprof -top -sample_index=alloc_space http://127.0.0.1:6060/debug/pprof/allocs
+curl -s 'http://127.0.0.1:6060/debug/pprof/goroutine?debug=1' | head      # goroutines
+curl -s http://127.0.0.1:6060/debug/vars                                  # memstats (expvar)
+```
+
+### Benchmark
+
+`scripts/bench` (build tag `bench`) measures what Seelegent costs the machine. It builds `seelegent`, starts a
+daemon on port 47891 with `--pprof-addr 127.0.0.1:47892` and a temp `SEELEGENT_HOME` and user home, adds 6 fake
+agy accounts with their quota readers on, runs 20 short tasks so the lists are not empty, and then:
+
+- `-scenario idle` (default, `-duration 10m`): nothing happens; this is the daemon left running all day.
+- `-scenario load` (`-duration 5m`): 8 tasks whose fake workers stream `-rate 100` lines a second together, 3 SSE
+  clients, and a list and a detail request every 250 ms (p50/p95/p99 recorded).
+
+Every 5 s it samples the daemon's whole process tree (daemon, launchers, workers, quota readers, git and their
+consoles): working set, private bytes, CPU seconds and handles per role (Windows: toolhelp snapshot and process
+counters; Linux: `/proc`), spawns per hour by name, the daemon's goroutines and heap (expvar) and the database and
+WAL sizes. A CPU profile is taken after the measured window (`-cpuprofile 60s`, kept out of the CPU numbers),
+together with allocation profiles at the start and the end of the window. The fake CLI is the test binary itself
+(`internal/testutil/fakecli`); it logs each run, so quota reads are counted exactly.
+
+```sh
+make bench                                            # idle, 10 minutes
+make bench BENCH_ARGS="-scenario load -duration 5m"
+go test -tags bench -c -o bin/seelegent-bench ./scripts/bench
+bin/seelegent-bench -scenario load -baseline <dir>/result.json   # prints the deltas against an earlier run
+```
+
+Results go to `-out` (default `<temp>/seelegent-bench/<time>-<scenario>`, outside the repository): `result.json`,
+`result.md` (the tables), `cpu.pprof`, `allocs-start.pprof`, `allocs-end.pprof`, `heap.pprof`, `goroutine.txt` and
+the daemon's log. Compare allocation profiles with `go tool pprof -top -sample_index=alloc_space -base
+allocs-start.pprof allocs-end.pprof`. The budget (under 0.1% of one core and under 100 MB working set when idle;
+growth under load not linear in the events) is printed and flagged, never a failure. Run it at low priority and
+on an otherwise quiet machine; the latency numbers depend on what else runs.
+
+Hot paths have plain Go benchmarks (stream parsers, launcher line delivery, task repository writes and reads, the
+SSE hub and the task bus): `go test -p 4 -run '^$' -bench . ./internal/backend ./internal/launch ./internal/task
+./internal/httpapi`.
 
 ## Dev ports and the dashboard
 

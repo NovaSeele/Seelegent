@@ -63,7 +63,7 @@ Seelegent is a Go daemon + CLI + MCP server in one binary, with a Vue 3 + TypeSc
 ## Commands
 
 ```sh
-go build ./... && go vet ./... && go test ./...
+go build ./... && go vet ./... && go test -p 4 ./...      # light mode (docs/development.md)
 make lint                                   # golangci-lint v2 (pinned)
 cd web && pnpm install && pnpm lint && pnpm typecheck && pnpm test && pnpm build
 make build                                  # or: pwsh -File scripts/build.ps1 (Windows)

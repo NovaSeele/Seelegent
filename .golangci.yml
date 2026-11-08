@@ -1,6 +1,10 @@
 # golangci-lint v2 configuration. Run with `make lint` (pinned version) or `golangci-lint run ./...`.
 version: "2"
 
+run:
+  # Light mode (docs/development.md): at most 4 packages are checked at once; `make lint LINT_J=n` overrides it.
+  concurrency: 4
+
 linters:
   # standard = errcheck, govet, ineffassign, staticcheck, unused
   default: standard
