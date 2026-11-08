@@ -17,11 +17,8 @@ import { useConnectionStore } from '@/stores/connection'
 import { isAutoPath, type AutoPath, type FieldDef } from './fields'
 import type { SettingsForm } from './useSettingsForm'
 
-/**
- * Where an effective value comes from. 'derived' is coming from the daemon (a memory threshold worked out from the
- * other one the user set); typed here until types.gen.ts has it.
- */
-type ResourceSource = EffectiveValue['source'] | 'derived'
+/** Where an effective value comes from ('derived': a memory threshold worked out from the other one the user set). */
+type ResourceSource = EffectiveValue['source']
 
 /** The setting a derived value is worked out from, and how (settings.daemon.derived.<how>). */
 const DERIVED_FROM: Partial<Record<AutoPath, { item: string; how: 'half' | 'twice' }>> = {
