@@ -258,6 +258,11 @@ function fold(f: Fold, event: TaskEvent): Draft | null {
           )
         : null
     }
+    case 'snapshot_truncated':
+      return notice('warn', 'warning', 'terminal.ev.snapshotTruncated', {
+        files: event.data.maxFiles,
+        mib: Math.round(event.data.maxBytes / 1048576),
+      })
     case 'gate':
     case 'lane':
     case 'verify': {

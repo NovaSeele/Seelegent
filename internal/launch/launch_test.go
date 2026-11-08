@@ -7,12 +7,14 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"runtime"
 	"slices"
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -29,7 +31,15 @@ func TestMain(m *testing.M) {
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
 		case "__launch":
-			if err := Run(context.Background(), os.Args[2]); err != nil {
+			// Like `seelegent __launch`, an interrupt or SIGTERM stops the launcher, which stops the worker tree;
+			// with envPlainLauncher set it keeps Go's default (SIGTERM ends it at once, leaving the tree).
+			ctx, stop := context.Background(), func() {}
+			if os.Getenv(envPlainLauncher) == "" {
+				ctx, stop = signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
+			}
+			err := Run(ctx, os.Args[2])
+			stop()
+			if err != nil {
 				fmt.Fprintln(os.Stderr, err)
 				os.Exit(1)
 			}
@@ -47,6 +57,9 @@ func TestMain(m *testing.M) {
 	}
 	os.Exit(m.Run())
 }
+
+// envPlainLauncher makes the test launcher keep Go's default handling of SIGTERM.
+const envPlainLauncher = "LAUNCH_TEST_PLAIN_LAUNCHER"
 
 // selfExe is the absolute path of this test binary. os.Args[0] can be relative ("./x.test"), and the children run
 // in other directories.
@@ -624,8 +637,8 @@ func TestRunRefusesWhileLocked(t *testing.T) {
 		t.Fatalf("Run: %v", err)
 	}
 	h := &Handle{files: FilesIn(dir)}
-	if !h.launcherAlive() {
-		t.Fatal("a held lock means the launcher is alive")
+	if alive, err := h.launcherAlive(); !alive || err != nil {
+		t.Fatalf("a held lock means the launcher is alive: %v, %v", alive, err)
 	}
 }
 

@@ -81,6 +81,8 @@ that comes back (never starts one) for up to 40 s within its own time. After a r
 daemon; after a plain stop the call ends with code `daemon_stopped` ("the Seelegent daemon was stopped during the
 wait; the tasks keep running: wait again later"). Nothing in that wait starts the daemon until a daemon is found
 again; from then on the usual rules apply again (a later crash is ridden out, a later stop starts a new grace).
+The waits of `meeting` (`wait`, and `open` with `wait_seconds`) and `contest` (`wait`, and `delegate` with variants
+and `wait_seconds`) follow the same rules.
 
 ## Tools
 

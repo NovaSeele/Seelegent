@@ -65,59 +65,124 @@ func translated(code api.ErrorCode, msgID string) *apiError {
 	return &apiError{code: code, msgID: msgID, message: messages[msgID]["en"]}
 }
 
+// locales are the languages of the dashboard (web/src/i18n/locales); every middleware message has each of them.
+var locales = []string{"en", "es", "ja", "ko", "ru", "vi", "zh-CN"}
+
 // messages are the translated middleware messages. Domain errors stay in English (they come from the packages).
 var messages = map[string]map[string]string{
 	"misdirected": {
-		"en": "this daemon answers only on 127.0.0.1, localhost or [::1] with its own port",
-		"vi": "daemon chỉ trả lời trên 127.0.0.1, localhost hoặc [::1] với đúng cổng của nó",
+		"en":    "this daemon answers only on 127.0.0.1, localhost or [::1] with its own port",
+		"vi":    "daemon chỉ trả lời trên 127.0.0.1, localhost hoặc [::1] với đúng cổng của nó",
+		"es":    "este daemon solo responde en 127.0.0.1, localhost o [::1] con su propio puerto",
+		"ja":    "このデーモンは 127.0.0.1、localhost、[::1] の自身のポートでのみ応答します",
+		"ko":    "이 데몬은 127.0.0.1, localhost 또는 [::1]의 자체 포트에서만 응답합니다",
+		"ru":    "этот демон отвечает только на 127.0.0.1, localhost или [::1] на своём порту",
+		"zh-CN": "此守护进程只在 127.0.0.1、localhost 或 [::1] 的自身端口上应答",
 	},
 	"no_header": {
-		"en": "a request that changes something needs the header X-Seelegent: 1",
-		"vi": "yêu cầu thay đổi dữ liệu cần header X-Seelegent: 1",
+		"en":    "a request that changes something needs the header X-Seelegent: 1",
+		"vi":    "yêu cầu thay đổi dữ liệu cần header X-Seelegent: 1",
+		"es":    "una solicitud que cambia algo necesita la cabecera X-Seelegent: 1",
+		"ja":    "変更を伴うリクエストにはヘッダー X-Seelegent: 1 が必要です",
+		"ko":    "무언가를 변경하는 요청에는 X-Seelegent: 1 헤더가 필요합니다",
+		"ru":    "запросу, который что-то изменяет, нужен заголовок X-Seelegent: 1",
+		"zh-CN": "会修改数据的请求需要请求头 X-Seelegent: 1",
 	},
 	"origin": {
-		"en": "requests from another origin are refused",
-		"vi": "yêu cầu từ nguồn (origin) khác bị từ chối",
+		"en":    "requests from another origin are refused",
+		"vi":    "yêu cầu từ nguồn (origin) khác bị từ chối",
+		"es":    "se rechazan las solicitudes de otro origen",
+		"ja":    "別のオリジンからのリクエストは拒否されます",
+		"ko":    "다른 출처(origin)에서 온 요청은 거부됩니다",
+		"ru":    "запросы с другого источника (origin) отклоняются",
+		"zh-CN": "来自其他来源 (origin) 的请求会被拒绝",
 	},
 	"worker": {
-		"en": "workers may not call this endpoint",
-		"vi": "worker không được gọi endpoint này",
+		"en":    "workers may not call this endpoint",
+		"vi":    "worker không được gọi endpoint này",
+		"es":    "los workers no pueden llamar a este endpoint",
+		"ja":    "ワーカーはこのエンドポイントを呼び出せません",
+		"ko":    "워커는 이 엔드포인트를 호출할 수 없습니다",
+		"ru":    "воркеры не могут вызывать этот эндпоинт",
+		"zh-CN": "worker 不能调用此接口",
 	},
 	"too_large": {
-		"en": "the request body is larger than 1 MiB",
-		"vi": "nội dung yêu cầu lớn hơn 1 MiB",
+		"en":    "the request body is larger than 1 MiB",
+		"vi":    "nội dung yêu cầu lớn hơn 1 MiB",
+		"es":    "el cuerpo de la solicitud supera 1 MiB",
+		"ja":    "リクエスト本文が 1 MiB を超えています",
+		"ko":    "요청 본문이 1 MiB보다 큽니다",
+		"ru":    "тело запроса больше 1 МиБ",
+		"zh-CN": "请求正文超过 1 MiB",
 	},
 	"not_found": {
-		"en": "no such endpoint",
-		"vi": "không có endpoint này",
+		"en":    "no such endpoint",
+		"vi":    "không có endpoint này",
+		"es":    "no existe ese endpoint",
+		"ja":    "そのエンドポイントはありません",
+		"ko":    "그런 엔드포인트가 없습니다",
+		"ru":    "такого эндпоинта нет",
+		"zh-CN": "没有这个接口",
 	},
 	"internal": {
-		"en": "internal error; the details are in the daemon log",
-		"vi": "lỗi nội bộ; chi tiết nằm trong log của daemon",
+		"en":    "internal error; the details are in the daemon log",
+		"vi":    "lỗi nội bộ; chi tiết nằm trong log của daemon",
+		"es":    "error interno; los detalles están en el registro del daemon",
+		"ja":    "内部エラーです。詳細はデーモンのログにあります",
+		"ko":    "내부 오류입니다. 자세한 내용은 데몬 로그에 있습니다",
+		"ru":    "внутренняя ошибка; подробности в журнале демона",
+		"zh-CN": "内部错误；详情见守护进程日志",
 	},
 	"not_implemented": {
-		"en": "this endpoint arrives with a later version",
-		"vi": "endpoint này sẽ có ở phiên bản sau",
+		"en":    "this endpoint arrives with a later version",
+		"vi":    "endpoint này sẽ có ở phiên bản sau",
+		"es":    "este endpoint llega con una versión posterior",
+		"ja":    "このエンドポイントは今後のバージョンで提供されます",
+		"ko":    "이 엔드포인트는 이후 버전에서 제공됩니다",
+		"ru":    "этот эндпоинт появится в следующей версии",
+		"zh-CN": "此接口将在后续版本中提供",
 	},
 	"stopping": {
-		"en": "the daemon is stopping; the tasks keep running",
-		"vi": "daemon đang dừng; các task vẫn tiếp tục chạy",
+		"en":    "the daemon is stopping; the tasks keep running",
+		"vi":    "daemon đang dừng; các task vẫn tiếp tục chạy",
+		"es":    "el daemon se está deteniendo; las tareas siguen ejecutándose",
+		"ja":    "デーモンを停止しています。タスクは実行を続けます",
+		"ko":    "데몬이 중지되는 중입니다. 작업은 계속 실행됩니다",
+		"ru":    "демон останавливается; задачи продолжают выполняться",
+		"zh-CN": "守护进程正在停止；任务会继续运行",
 	},
 	"shutting_down": {
-		"en": "the daemon is shutting down",
-		"vi": "daemon đang tắt",
+		"en":    "the daemon is shutting down",
+		"vi":    "daemon đang tắt",
+		"es":    "el daemon se está apagando",
+		"ja":    "デーモンをシャットダウンしています",
+		"ko":    "데몬이 종료되는 중입니다",
+		"ru":    "демон завершает работу",
+		"zh-CN": "守护进程正在关闭",
+	},
+	"stopping_cancel_recorded": {
+		"en":    "the daemon is stopping; the cancel was recorded and is carried out when the daemon starts again",
+		"vi":    "daemon đang dừng; lệnh huỷ đã được ghi nhận và sẽ được thực hiện khi daemon khởi động lại",
+		"es":    "el daemon se está deteniendo; la cancelación quedó registrada y se aplica cuando el daemon vuelva a iniciarse",
+		"ja":    "デーモンを停止しています。キャンセルは記録済みで、デーモンの再起動時に実行されます",
+		"ko":    "데몬이 중지되는 중입니다. 취소는 기록되었으며 데몬이 다시 시작되면 실행됩니다",
+		"ru":    "демон останавливается; отмена записана и будет выполнена при следующем запуске демона",
+		"zh-CN": "守护进程正在停止；取消已记录，将在守护进程再次启动时执行",
 	},
 }
 
-// language picks "vi" or "en" from Accept-Language.
+// language picks the first of locales that Accept-Language names (a "zh" tag means zh-CN), en otherwise.
 func language(r *http.Request) string {
 	for _, part := range strings.Split(r.Header.Get("Accept-Language"), ",") {
 		tag := strings.ToLower(strings.TrimSpace(strings.SplitN(part, ";", 2)[0]))
-		switch {
-		case strings.HasPrefix(tag, "vi"):
-			return "vi"
-		case strings.HasPrefix(tag, "en"):
-			return "en"
+		base, _, _ := strings.Cut(tag, "-")
+		if base == "zh" {
+			return "zh-CN"
+		}
+		for _, l := range locales {
+			if base == l {
+				return l
+			}
 		}
 	}
 	return "en"
@@ -191,6 +256,8 @@ func toAPIError(err error) *apiError {
 		errors.Is(err, notes.ErrNotFound), errors.Is(err, meeting.ErrNotFound), errors.Is(err, contest.ErrNotFound),
 		errors.Is(err, hook.ErrNotFound), errors.Is(err, ticket.ErrNotFound), errors.Is(err, automation.ErrNotFound):
 		return newError(api.CodeNotFound, "%s", msg)
+	case errors.Is(err, proof.ErrStopping):
+		return translated(api.CodeDaemonStopping, "shutting_down")
 	case errors.Is(err, automation.ErrForbidden):
 		return newError(api.CodeForbidden, "%s", msg)
 	case errors.Is(err, task.ErrBadState), errors.Is(err, signin.ErrBadState), errors.Is(err, notes.ErrBadState),
@@ -208,7 +275,8 @@ func toAPIError(err error) *apiError {
 	case errors.Is(err, task.ErrInvalid), errors.Is(err, account.ErrInvalid), errors.Is(err, account.ErrNoKey),
 		errors.Is(err, account.ErrProviderUnavailable), errors.Is(err, role.ErrInvalid),
 		errors.Is(err, memory.ErrInvalid), errors.Is(err, usage.ErrInvalid), errors.Is(err, gitx.ErrInvalid),
-		errors.Is(err, signin.ErrInvalid), errors.Is(err, config.ErrParse), errors.Is(err, gitx.ErrNotRepo),
+		errors.Is(err, signin.ErrInvalid), errors.Is(err, config.ErrParse), errors.Is(err, config.ErrBadPatch),
+		errors.Is(err, gitx.ErrNotRepo),
 		errors.Is(err, proof.ErrInvalid), errors.Is(err, member.ErrInvalid), errors.Is(err, notes.ErrInvalid),
 		errors.Is(err, meeting.ErrInvalid), errors.Is(err, contest.ErrInvalid), errors.Is(err, hook.ErrInvalid),
 		errors.Is(err, ticket.ErrInvalid), errors.Is(err, automation.ErrInvalid), errors.Is(err, github.ErrInvalid):

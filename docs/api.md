@@ -145,7 +145,7 @@ in the daemon.
   the dashboard's own requests: `403 forbidden` with `details.reason: "dashboard_only"` otherwise.
 - A `POST /tasks` body with `ticketId` is a `400` (C-B21): ticket tasks start only through the ticket routes.
 - `PATCH /settings` applies the JSON merge patch to the daemon's in-memory settings and writes `config.json`
-  atomically. Unknown keys, type errors and validation errors are reported together in one `400`.
+  atomically. Unknown keys, type errors and validation errors are reported together in one `400`. A body that is not a JSON object (`null`, an array, broken JSON) is a `400 invalid_argument` "the settings patch must be a JSON object", never "config file cannot be parsed".
 - `/state` reads `lastEventId` before the snapshot. A frame newer than the id can repeat a change the snapshot holds
   (harmless), but no change can be missing from both.
 - SSE: the `hello` frame carries an id like every frame (contract §7: "every frame"). On a fresh connect it is the
@@ -159,7 +159,10 @@ in the daemon.
   away writes nothing. When the daemon shuts down (`Server.Close`, on `POST /daemon/stop` and on Ctrl+C) every open
   wait ends at once with `503 daemon_stopping` (a wait that ended on its own just before is answered normally), so
   `http.Server.Shutdown` does not sit out the waits; the clients take that code to mean "do not start the daemon
-  again" (see [cli.md](cli.md) and [mcp.md](mcp.md)).
+  again" (see [cli.md](cli.md) and [mcp.md](mcp.md)). The other long waits do the same: `GET /meetings/{id}/wait`,
+  `GET /contests/{id}/wait` and `POST /tasks/{id}/cancel` with `waitSeconds` (the cancel itself is recorded before
+  its wait, and the next daemon finishes it; that answer then carries `details.cancelRecorded: true` and says so in
+  its message, and the CLI and the MCP `cancel` tool report the cancel as recorded instead of failing).
 - `GET /health` carries `homeId` (`config.HomeID`: 16 hex digits of the SHA-256 of `fsutil.Key(home)`), so a client
   of another data directory refuses this daemon instead of using or stopping it.
 - `capabilities.takeover` is true for backends that can resume a session; `apiKey` for every backend but agy;
@@ -173,8 +176,10 @@ in the daemon.
   `App.Close`, lock released last), and `http.Server.Shutdown` lets the answer finish first. A server built without
   `Stop` answers `503 unavailable`. The worker guard denies it like every route outside the allow-list. The daemon
   also writes its pid on the second line of `run/daemon.port`; `seelegent stop` and `doctor` only show it.
-- A worker may call `GET /spec` with an absolute `dir`. The guard checks the task's cwd only, as the contract says,
-  and `dir` must stay inside that cwd.
+- A worker may call `GET /spec` only with its own task's cwd (or repository root), and `dir`, relative or absolute,
+  must lie inside that cwd or be its own task's spec folder. Paths are compared as `fsutil` keys with links and
+  junctions resolved, so an absolute `dir` of another project or a link inside the cwd that leads out of it is
+  `403 forbidden` like a foreign cwd. `GET /memory` takes no other path.
 
 ## The dashboard
 

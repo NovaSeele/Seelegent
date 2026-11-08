@@ -282,6 +282,9 @@ type TurnSnap struct {
 	Head string `json:"head,omitempty"`
 	// Truncated: the start snapshot hit its limits; files past them are not covered.
 	Truncated bool `json:"truncated,omitempty"`
+	// EndTruncated: the end snapshot hit its limits. The start snapshot's files and the edited ones are always in
+	// it; other dirty files past the limits are not covered by the change lists and the hygiene check.
+	EndTruncated bool `json:"endTruncated,omitempty"`
 	// Checked is set once the end snapshot was taken and the post-turn checks ran.
 	Checked bool `json:"checked,omitempty"`
 }

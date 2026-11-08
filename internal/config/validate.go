@@ -17,6 +17,10 @@ import (
 // errors.As with *ValidationError gives the list of fields.
 var ErrInvalid = errors.New("invalid settings")
 
+// ErrBadPatch is returned by MergePatch for a patch that is not a JSON object. It is about the request, not the
+// config file: ErrParse ("config file cannot be parsed") named the wrong culprit.
+var ErrBadPatch = errors.New("the settings patch must be a JSON object")
+
 // Port range accepted for the daemon.
 const (
 	minPort = 1

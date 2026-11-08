@@ -88,7 +88,7 @@ last check and the delegate hold a lock that every change to an automation takes
 lands between them.
 
 Every run, scheduled or *run now*, goes through the same checks, and every outcome is recorded (the newest 500 per
-automation are kept):
+automation are kept; `GET /automations/{id}/runs` returns the newest `limit` 1..200, default 20, as the contract says; the dashboard asks for 50):
 
 | Outcome | When |
 |---|---|

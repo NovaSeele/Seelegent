@@ -73,19 +73,19 @@ func (c *Claude) Command(t Turn) (Command, error) {
 }
 
 // claudeStripped lists inherited variables that would make the worker use the lead's own credentials, endpoint,
-// model or session.
+// model or session: CLAUDECODE (set inside a Claude Code session, M18 hunt H25) and every CLAUDE_CODE_* among them.
 func claudeStripped(name string) bool {
 	switch strings.ToUpper(name) {
 	case "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL", "ANTHROPIC_MODEL",
 		"ANTHROPIC_SMALL_FAST_MODEL", "ANTHROPIC_DEFAULT_HAIKU_MODEL", "ANTHROPIC_DEFAULT_SONNET_MODEL",
-		"ANTHROPIC_DEFAULT_OPUS_MODEL", "CLAUDE_CONFIG_DIR", account.EnvProviderKey:
+		"ANTHROPIC_DEFAULT_OPUS_MODEL", "CLAUDE_CONFIG_DIR", "CLAUDECODE", account.EnvProviderKey:
 		return true
 	}
 	return strings.HasPrefix(strings.ToUpper(name), "CLAUDE_CODE_")
 }
 
-// Filter implements account.EnvRules: the lead's Anthropic variables and every CLAUDE_CODE_* go; a variable that
-// points into the real ~/.claude goes too, except PATH, which only loses those entries.
+// Filter implements account.EnvRules: the lead's Anthropic variables, CLAUDECODE and every CLAUDE_CODE_* go; a
+// variable that points into the real ~/.claude goes too, except PATH, which only loses those entries.
 func (*Claude) Filter(name, value string, p account.Profile) (newValue string, keep bool) {
 	if claudeStripped(name) {
 		return "", false

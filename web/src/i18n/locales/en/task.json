@@ -122,7 +122,8 @@
       "restored": "Restored",
       "restoredTitle": "Work restored",
       "restoredDesc": "Files were put back from the snapshot taken before turn {n}.",
-      "restoredDescMany": "Files were put back from the snapshots taken before their turns."
+      "restoredDescMany": "Files were put back from the snapshots taken before their turns.",
+      "truncated": "Turn {n}: a snapshot hit its limits ({files} files or {mib} MiB of new content), so files past them were not checked."
     },
     "overlaps": {
       "title": "Also changed by other tasks",

@@ -382,7 +382,7 @@ func (s *Server) automationRoutes() {
 		return http.StatusOK, run, err
 	})
 	s.handle("GET /automations/{id}/runs", func(_ http.ResponseWriter, r *http.Request) (int, any, error) {
-		limit, err := queryInt(r, "limit", 50, 500)
+		limit, err := queryInt(r, "limit", 20, 200)
 		if err != nil {
 			return 0, nil, err
 		}

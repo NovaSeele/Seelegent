@@ -165,7 +165,11 @@ func statusSummary(accounts []api.Account, tasks []api.TaskSummary) string {
 	s := fmt.Sprintf("%d account%s (%d ready), %d active task%s", len(accounts), plural(len(accounts)), ready,
 		len(tasks), plural(len(tasks)))
 	if need > 0 {
-		s += fmt.Sprintf(", %d blocked", need)
+		verb := "need"
+		if need == 1 {
+			verb = "needs"
+		}
+		s += fmt.Sprintf(", %d %s the lead", need, verb)
 	}
 	return s + "."
 }

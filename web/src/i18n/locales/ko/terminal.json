@@ -101,6 +101,7 @@
     },
     "cancel": "취소됨",
     "workAtRisk": "변경된 파일 {count}개가 사라질 수 있습니다",
+    "snapshotTruncated": "이 턴의 스냅샷이 한도(파일 {files}개 또는 {mib} MiB)에 도달했습니다. 그 이후의 파일은 확인하지 않았습니다",
     "error": "오류",
     "worker": {
       "quota_exhausted": "워커의 할당량이 소진되었습니다",

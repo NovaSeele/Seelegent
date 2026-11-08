@@ -51,6 +51,8 @@ Seelegent works on, or the `gh` CLI, whose own credential store Seelegent then u
 
 - A missing `config.json` means "all defaults"; it is written the first time a setting is saved.
 - Every key is optional. A missing key, or a key set to `null`, takes its default.
+- A UTF-8 byte order mark at the start (Notepad, Windows PowerShell 5.1's `Set-Content -Encoding UTF8`) is
+  skipped; saves never write one.
 - A file that is not valid JSON, has a value of the wrong type, or holds a value out of range is an **error**: the
   daemon refuses to start and names the file, line and column or the setting. The file is never replaced by
   defaults, so a typo cannot wipe your settings.

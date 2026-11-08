@@ -47,6 +47,8 @@ const (
 	EventWorkAtRisk EventType = "work_at_risk"
 	// EventRestored: RestoredData, files of a turn put back from its start snapshot (milestone 12).
 	EventRestored EventType = "restored"
+	// EventSnapshotTruncated: SnapshotTruncatedData, a snapshot of the turn hit its limits (M18 hunt H5).
+	EventSnapshotTruncated EventType = "snapshot_truncated"
 	// EventGate: GateEventData, the gate after a turn (milestone 13).
 	EventGate EventType = "gate"
 	// EventLane: LaneEventData, a lane claim forced or warned about at delegate or followup (milestone 13).
@@ -62,7 +64,7 @@ func EventTypes() []EventType {
 	return []EventType{EventWorker, EventLeadMessage, EventRoute, EventWorkerPrompt, EventAttemptEnd, EventTurnEnd,
 		EventQuotaExhausted, EventAuthFailed, EventWaitingQuota, EventRetry, EventHandoff, EventReattach,
 		EventResumed, EventAttention, EventDeps, EventTakeover, EventHandback, EventReview, EventCancel,
-		EventWorkAtRisk, EventRestored, EventGate, EventLane, EventVerify, EventError}
+		EventWorkAtRisk, EventRestored, EventSnapshotTruncated, EventGate, EventLane, EventVerify, EventError}
 }
 
 // TaskEvent is one entry of a task's append-only event log. Seq starts at 1 and grows by one per task.
@@ -218,6 +220,17 @@ type EmptyData struct{}
 type WorkAtRiskData struct {
 	Files    []string `json:"files"`
 	Snapshot string   `json:"snapshot,omitempty"`
+}
+
+// SnapshotTruncatedData is the data of a snapshot_truncated event: which snapshots of the turn hit the limits of
+// one snapshot (MaxFiles files, MaxBytes bytes of new content). The start snapshot's files and the files the edit
+// tools changed are always read, so a truncated end snapshot still covers the work at risk; dirty files past the
+// limits are missing from the turn's change lists and hygiene check, and a truncated start snapshot leaves its
+// missing files out of the work at risk check.
+type SnapshotTruncatedData struct {
+	Snapshots []string `json:"snapshots" ts:"('start' | 'end')[]"`
+	MaxFiles  int      `json:"maxFiles"`
+	MaxBytes  int64    `json:"maxBytes"`
 }
 
 // RestoredData is the data of a restored event; the event's turn is the turn whose start snapshot the files came

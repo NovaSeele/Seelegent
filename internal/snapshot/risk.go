@@ -27,6 +27,9 @@ type Risk struct {
 	Lost    int
 	Deleted bool
 	Binary  bool
+	// Weak is set when the change was seen by size and modification time only (a file without a hash on one side:
+	// too large to hash, or past the snapshot's read budget); its lost lines cannot be counted.
+	Weak bool
 }
 
 // Input is what Analyze compares.
@@ -73,11 +76,12 @@ func Analyze(in Input) []Risk {
 		}
 		k := Key(before.Path)
 		after, ok := in.End.Find(before.Path)
-		if !ok || after.Hash == before.Hash && after.Missing == before.Missing {
-			continue // unchanged, or not seen at the end (truncated): nothing to say
+		if !ok {
+			continue // not seen at the end: nothing to say
 		}
-		if before.Size > MaxFileBytes && after.Size == before.Size && !after.Missing {
-			continue // too large to compare by content; the same size is taken as unchanged
+		changed, weak := Changed(before, after)
+		if !changed {
+			continue // unchanged; a file without a hash is compared by size and modification time
 		}
 		if in.Others[k] || Scratch(before.Path) || JunkName(before.Path) {
 			continue
@@ -86,9 +90,9 @@ func Analyze(in Input) []Risk {
 			continue
 		}
 		edited := in.Edited[k]
-		r := Risk{Path: before.Path, Deleted: after.Missing, Binary: before.Binary || after.Binary}
+		r := Risk{Path: before.Path, Deleted: after.Missing, Binary: before.Binary || after.Binary, Weak: weak}
 		switch {
-		case r.Binary || !before.Stored:
+		case r.Binary || !before.Stored || weak && !after.Missing && !after.Stored:
 			if edited {
 				continue // an edit tool rewrote a binary or huge file on purpose
 			}

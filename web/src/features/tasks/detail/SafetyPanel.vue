@@ -12,6 +12,7 @@ import RestoreDialog from './RestoreDialog.vue'
 import {
   outsideTurns,
   restoredByTurn,
+  SNAPSHOT_LIMITS,
   safetyCount,
   safetyOf,
   safetyParts,
@@ -81,7 +82,7 @@ function showOutside(turn: number) {
 
 <template>
   <details
-    v-if="count || parts.restored"
+    v-if="count || parts.restored || safety.truncated.length"
     class="safety"
     :class="urgent ? 'tone-attention' : 'tone-neutral'"
     :open="expanded"
@@ -103,6 +104,9 @@ function showOutside(turn: number) {
       </span>
     </summary>
     <div class="safety__body">
+      <p v-for="n in safety.truncated" :key="`truncated-${n}`" class="safety__note">
+        {{ t('task.safety.risk.truncated', { n, ...SNAPSHOT_LIMITS }) }}
+      </p>
       <SafetyRisk
         v-if="safety.risk.length"
         :groups="safety.risk"
@@ -183,6 +187,11 @@ function showOutside(turn: number) {
 
 .safety__phrase--muted {
   color: var(--text-muted);
+}
+
+.safety__note {
+  color: var(--text-secondary);
+  font-size: var(--fs-xs);
 }
 
 .safety__body {

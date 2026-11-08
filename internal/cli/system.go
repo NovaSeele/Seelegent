@@ -196,7 +196,7 @@ func printStatus(w io.Writer, s statusOut) {
 		_, _ = fmt.Fprintln(w, "\nActive tasks:")
 		for i := range s.ActiveTasks {
 			t := &s.ActiveTasks[i]
-			_, _ = fmt.Fprintf(w, "  %-19s %-14s %s%s\n", t.ID, t.Status, titleOf(t.Title), blockedTag(t.Attention))
+			_, _ = fmt.Fprintf(w, "  %-19s %-14s %s%s\n", t.ID, t.Status, titleOf(t.Title), attentionTag(t))
 		}
 	}
 }
@@ -221,10 +221,11 @@ func titleOf(title string) string {
 	return title
 }
 
-// blockedTag is " [BLOCKED: reason]" for a task that waits for the lead.
-func blockedTag(a *api.Attention) string {
-	if a == nil || a.State != api.AttentionBlocked {
+// attentionTag is " [BLOCKED: reason]", " [QUESTION: reason]" or " [STALLED: reason]" for a task that waits for the
+// lead, the same set the MCP status counts (M18 review N1: only blocked tasks were tagged).
+func attentionTag(t *api.TaskSummary) string {
+	if !ops.Blocked(*t) {
 		return ""
 	}
-	return " [BLOCKED: " + a.Reason + "]"
+	return " [" + attentionLabel(t.Attention.State) + ": " + t.Attention.Reason + "]"
 }

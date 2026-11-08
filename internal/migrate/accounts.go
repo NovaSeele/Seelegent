@@ -189,6 +189,11 @@ func (m *migrator) importAccount(ctx context.Context, oa oldAccount, settings co
 		m.add(KindAccount, oa.ID, Kept, "an account with this id already exists as %s %s; it was left as it is "+
 			"(its profile and key were not imported)", a.Backend, a.Kind)
 		return
+	case err == nil && !sameAccount(a, n, created):
+		m.add(KindAccount, oa.ID, Kept, "an account with this id already exists (%q, created %s) and is not the "+
+			"old account %q; both were left as they are: add the old account again and sign it in", a.Label,
+			a.CreatedAt.UTC().Format(time.DateOnly), n.Label)
+		return
 	case err == nil:
 		already = true
 		m.add(KindAccount, oa.ID, Unchanged, "already imported")
@@ -211,6 +216,20 @@ func (m *migrator) importAccount(ctx context.Context, oa oldAccount, settings co
 	if a.Kind == account.KindAPIKey {
 		m.importKey(ctx, a)
 	}
+}
+
+// sameAccount reports whether the existing account a is the old account n created at created, imported by an
+// earlier run: the same backend, kind and provider (checked before), and the same creation time; without a
+// creation time in the old record, the same label. The label is not compared when the time is known, because the
+// user may have renamed the account since. An account this version created itself under a clashing id fails
+// here, and is never taken for the old one (M18 hunt H12). The key is never compared.
+func sameAccount(a account.Account, n account.New, created time.Time) bool {
+	if created.IsZero() || created.After(a.CreatedAt.Add(time.Second)) {
+		// No time, or one later than the stored one (Import keeps no future time): only the label is left.
+		return a.Label == n.Label
+	}
+	d := a.CreatedAt.Sub(created)
+	return d > -time.Second && d < time.Second
 }
 
 // cleanLabel makes an old label valid: no control characters, at most 80 characters.
@@ -253,7 +272,7 @@ func (m *migrator) importProfile(a account.Account, links []string, already bool
 		m.add(KindProfile, a.ID, Kept, "%s already exists; it was left as it is", prof.Home)
 		return
 	}
-	files, skipped, err := copyTree(src, prof.Home, m.o.DryRun)
+	files, skipped, err := copyProfile(src, prof.Home, m.o.DryRun)
 	if err != nil {
 		m.add(KindProfile, a.ID, Error, "copy %s: %v", src, err)
 		return
@@ -270,6 +289,31 @@ func (m *migrator) importProfile(a account.Account, links []string, already bool
 		}
 	}
 	m.add(KindProfile, a.ID, Imported, "%s", detail)
+}
+
+// copyProfile copies the profile folder src to dst (which must not exist) through a temp folder next to dst that
+// is renamed into place once every file is there, so a copy that fails halfway leaves no dst behind that a later
+// run would take for a complete profile (M18 hunt H11). A temp folder a crash left is removed first.
+func copyProfile(src, dst string, dryRun bool) (files, skipped int, err error) {
+	if dryRun {
+		return copyTree(src, dst, true)
+	}
+	tmp := dst + ".migrating"
+	if err := os.RemoveAll(tmp); err != nil {
+		return 0, 0, err
+	}
+	if err := os.MkdirAll(filepath.Dir(dst), 0o700); err != nil {
+		return 0, 0, err
+	}
+	files, skipped, err = copyTree(src, tmp, false)
+	if err == nil {
+		err = fsutil.Rename(tmp, dst)
+	}
+	if err != nil {
+		_ = os.RemoveAll(tmp)
+		return 0, 0, err
+	}
+	return files, skipped, nil
 }
 
 // copyTree copies the regular files and folders of src into dst (which must not exist), leaving out links (the

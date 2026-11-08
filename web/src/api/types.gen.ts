@@ -447,6 +447,7 @@ export type EventType =
   | 'cancel'
   | 'work_at_risk'
   | 'restored'
+  | 'snapshot_truncated'
   | 'gate'
   | 'lane'
   | 'verify'
@@ -589,6 +590,19 @@ export type CancelData = Record<string, never>
 export interface WorkAtRiskData {
   files: string[]
   snapshot?: string
+}
+
+/**
+ * SnapshotTruncatedData is the data of a snapshot_truncated event: which snapshots of the turn hit the limits of
+ * one snapshot (MaxFiles files, MaxBytes bytes of new content). The start snapshot's files and the files the edit
+ * tools changed are always read, so a truncated end snapshot still covers the work at risk; dirty files past the
+ * limits are missing from the turn's change lists and hygiene check, and a truncated start snapshot leaves its
+ * missing files out of the work at risk check.
+ */
+export interface SnapshotTruncatedData {
+  snapshots: ('start' | 'end')[]
+  maxFiles: number
+  maxBytes: number
 }
 
 /**
@@ -1713,6 +1727,11 @@ export interface TaskReport {
   blocked_commands?: string[]
   /** WorkAtRisk names the latest turn's files whose uncommitted work may be lost, and how to restore them. */
   work_at_risk?: ReportRisk
+  /**
+   * SnapshotTruncated is true when a snapshot of the latest checked turn hit its limits: dirty files past them
+   * were not checked.
+   */
+  snapshot_truncated?: boolean
   file_overlaps?: ReportOverlap[]
   /** Hygiene and ScopeWarnings are the findings of the last turn's checks. */
   hygiene?: ReportFinding[]
@@ -1788,6 +1807,8 @@ export interface ReportQuestion {
 
 /** ReportAttention says why a task needs the lead. */
 export interface ReportAttention {
+  /** State is the attention state, so a reader can tell a question or a stall from a block. */
+  state: 'blocked' | 'question' | 'stalled' | 'background_wait'
   reason: string
   detail?: string
 }
@@ -2449,6 +2470,11 @@ export interface Turn {
   scope: Finding[]
   /** OutsideDiff is true when the turn has snapshots, so GET /tasks/{id}/turns/{n}/outside-diff can answer. */
   outsideDiff: boolean
+  /**
+   * SnapshotTruncated is true when the turn's start or end snapshot hit its limits (3000 files or 256 MiB of new
+   * content), so its checks did not cover every dirty file (SnapshotTruncatedData says which).
+   */
+  snapshotTruncated: boolean
   /** Gate is the gate run after the turn (null when none ran); Verifier the review of its green gate. */
   gate: GateResult | null
   verifier: VerifierResult | null

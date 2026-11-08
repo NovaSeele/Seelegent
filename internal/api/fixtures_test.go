@@ -45,6 +45,8 @@ func eventSamples() map[EventType]any {
 		EventWorkAtRisk: WorkAtRiskData{Files: []string{"main.go"},
 			Snapshot: "refs/seelegent/snap/t1"},
 		EventRestored: RestoredData{Files: []string{"main.go"}, Backup: "t1-restore-1762506000000000000"},
+		EventSnapshotTruncated: SnapshotTruncatedData{Snapshots: []string{"end"}, MaxFiles: 3000,
+			MaxBytes: 256 << 20},
 		EventGate: GateEventData{Phase: GateEventResult, Result: &GateResult{State: GateRed,
 			Steps: []GateStep{{Kind: StepTask, Label: "T001", Cmd: "go test ./...", State: StepRed, Exit: &one,
 				Ms: 1200, Tail: "FAIL x"}, {Kind: StepDetect, Label: "go vet ./...", Cmd: "go vet ./...", State: StepNotRun}},

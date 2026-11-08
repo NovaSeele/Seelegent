@@ -101,6 +101,7 @@
     },
     "cancel": "Đã huỷ",
     "workAtRisk": "{count} tệp đã đổi có thể bị mất",
+    "snapshotTruncated": "Bản chụp của lượt này đã chạm giới hạn ({files} tệp hoặc {mib} MiB); các tệp vượt quá chưa được kiểm tra",
     "error": "Lỗi",
     "worker": {
       "quota_exhausted": "Worker đã hết quota",

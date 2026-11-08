@@ -70,6 +70,22 @@ type Wait struct {
 // StopGrace: a restart carries the wait on (and from then on the normal rules apply again), and after a plain stop
 // the wait ends with StoppedError instead of starting the daemon that was just stopped.
 func WaitReports(ctx context.Context, connect Connect, w Wait) (api.WaitResult, error) {
+	return WaitDaemon(ctx, connect, w, func(ctx context.Context, c *client.Client, deadline time.Time) (
+		api.WaitResult, error) {
+		return waitOn(ctx, c, w, deadline)
+	})
+}
+
+// WaitOn is one wait on a daemon until deadline (in as many calls as it needs); a deadline already past asks for
+// the current state at once.
+type WaitOn[T any] func(ctx context.Context, c *client.Client, deadline time.Time) (T, error)
+
+// WaitDaemon runs the wait on for w.Seconds with WaitReports' handling of a daemon that goes away (only Seconds,
+// RetryPause, StopGrace and Logger of w are used): a crash is ridden out by finding or starting the daemon again,
+// a daemon that said it was stopping is only looked for (a restart), never started, and the wait then ends with
+// StoppedError. Meeting and contest waits use it as task waits do (M18 hunt H8).
+func WaitDaemon[T any](ctx context.Context, connect Connect, w Wait, on WaitOn[T]) (T, error) {
+	var zero T
 	if w.RetryPause <= 0 {
 		w.RetryPause = time.Second
 	}
@@ -100,23 +116,23 @@ func WaitReports(ctx context.Context, connect Connect, w Wait) (api.WaitResult, 
 			stopped = time.Time{}
 		case err == nil:
 		case ctx.Err() != nil:
-			return api.WaitResult{}, ctx.Err()
+			return zero, ctx.Err()
 		case how == Reuse:
-			return api.WaitResult{}, err
+			return zero, err
 		case !time.Now().Before(end()):
 			if !stopped.IsZero() {
-				return api.WaitResult{}, StoppedError{}
+				return zero, StoppedError{}
 			}
 			// The daemon did not come back before the wait ended. An error that is only the lookup's own deadline
 			// says nothing: report why the daemon was lost instead.
 			if errors.Is(err, context.DeadlineExceeded) {
 				err = lost
 			}
-			return api.WaitResult{}, fmt.Errorf("the daemon did not come back before the wait ended: %w", err)
+			return zero, fmt.Errorf("the daemon did not come back before the wait ended: %w", err)
 		}
 		if err == nil {
-			var res api.WaitResult
-			if res, err = waitOn(ctx, c, w, deadline); err == nil {
+			var res T
+			if res, err = on(ctx, c, deadline); err == nil {
 				return res, nil
 			}
 		}
@@ -130,9 +146,9 @@ func WaitReports(ctx context.Context, connect Connect, w Wait) (api.WaitResult, 
 				client.TimedOut(err)
 			if !retry || !time.Now().Before(end()) {
 				if retry && !stopped.IsZero() {
-					return api.WaitResult{}, StoppedError{}
+					return zero, StoppedError{}
 				}
-				return api.WaitResult{}, err
+				return zero, err
 			}
 			w.Logger.Info("the daemon is gone or not answering during a wait; reconnecting", "err", err)
 		}
@@ -146,7 +162,7 @@ func WaitReports(ctx context.Context, connect Connect, w Wait) (api.WaitResult, 
 		select {
 		case <-ctx.Done():
 			pause.Stop()
-			return api.WaitResult{}, ctx.Err()
+			return zero, ctx.Err()
 		case <-pause.C:
 		}
 	}

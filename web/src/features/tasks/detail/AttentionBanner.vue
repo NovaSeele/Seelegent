@@ -92,7 +92,7 @@ onMounted(() => team.ensureMembers())
             }}
           </span>
           <time class="banner__since" :datetime="attention.since">
-            · {{ fmt.relative(attention.since, now) }}
+            · {{ fmt.ago(attention.since, now, t('common.time.justNow')) }}
           </time>
         </p>
         <div class="banner__actions">

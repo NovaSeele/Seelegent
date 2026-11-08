@@ -76,6 +76,10 @@ append the events in **one transaction**, then publish on the bus. The log and t
 4. **Follow.** The stream and stderr are tailed from the start. Message deltas of one step are **coalesced for 250 ms**
    and written as one `worker` event; any other event flushes them first. Each write carries the stream and stderr
    offsets it covers, committed in the same transaction (`attempts.data.streamOffset`, `stderrOffset`).
+   A launch directory removed while the worker runs (Unix allows it; the launcher keeps its lock on the unlinked
+   file) is not taken for an ended worker: the daemon asks the launcher it knows (from `launch.Start`, or from a
+   record that checked out) to stop with SIGTERM, kills what is left of the tree after a grace period, and fails the
+   attempt (`launch.ErrGone`) only once the tree has ended, so the task keeps its lane until nothing writes.
 5. **Outcome.** The parser's closing events, `attempt_end` and the decision are one transaction:
 
 | Outcome | What happens |

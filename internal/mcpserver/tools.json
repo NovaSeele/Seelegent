@@ -193,7 +193,7 @@
         },
         "wake_on_blocked": {
           "type": "boolean",
-          "description": "Whether to wake early when a watched task enters the blocked attention state (default true)."
+          "description": "Whether to wake early when a watched task needs the lead: it is blocked, asks a question or has stalled (default true)."
         }
       }
     }
@@ -291,7 +291,7 @@
         },
         "wake_on_blocked": {
           "type": "boolean",
-          "description": "Whether to wake early when a watched task enters the blocked attention state (default true)."
+          "description": "Whether to wake early when a watched task needs the lead: it is blocked, asks a question or has stalled (default true)."
         },
         "provider": {
           "type": "string",
@@ -333,7 +333,7 @@
         },
         "wake_on_blocked": {
           "type": "boolean",
-          "description": "Whether to wake early when a watched task enters the blocked attention state (default true)."
+          "description": "Whether to wake early when a watched task needs the lead: it is blocked, asks a question or has stalled (default true)."
         }
       }
     }
@@ -1009,7 +1009,7 @@
         },
         "wake_on_blocked": {
           "type": "boolean",
-          "description": "Whether to wake early when a watched task enters the blocked attention state (default true)."
+          "description": "Whether to wake early when a watched task needs the lead: it is blocked, asks a question or has stalled (default true)."
         },
         "full": {
           "type": "boolean",
@@ -1080,7 +1080,7 @@
         },
         "wake_on_blocked": {
           "type": "boolean",
-          "description": "Whether to wake early when a watched task enters the blocked attention state (default true)."
+          "description": "Whether to wake early when a watched task needs the lead: it is blocked, asks a question or has stalled (default true)."
         }
       }
     }

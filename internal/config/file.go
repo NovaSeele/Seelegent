@@ -54,6 +54,9 @@ func Load(path string) (*Config, error) {
 // Parse reads settings from the content of a config file. Missing keys take their defaults. The result is
 // validated.
 func Parse(data []byte) (*Config, error) {
+	// PowerShell 5.1 (Set-Content -Encoding UTF8) and Notepad write a UTF-8 byte order mark: skip it. Save never
+	// writes one (M18 hunt H9).
+	data = bytes.TrimPrefix(data, []byte("\xef\xbb\xbf"))
 	if len(bytes.TrimSpace(data)) == 0 {
 		return nil, fmt.Errorf("%w: the file is empty", ErrParse)
 	}

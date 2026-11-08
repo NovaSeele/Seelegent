@@ -87,7 +87,7 @@ function onClick(event: MouseEvent, navigate: (e?: MouseEvent) => unknown) {
           </span>
         </span>
         <time class="row__time" :datetime="task.createdAt" :title="fmt.dateTime(task.createdAt)">
-          {{ fmt.relative(task.createdAt, now) }}
+          {{ fmt.ago(task.createdAt, now, t('common.time.justNow')) }}
         </time>
       </a>
     </RouterLink>

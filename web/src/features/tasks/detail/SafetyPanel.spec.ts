@@ -30,6 +30,7 @@ const turn = (n: number, extra: Partial<Turn> = {}): Turn => ({
   hygiene: [],
   scope: [],
   outsideDiff: true,
+  snapshotTruncated: false,
   gate: null,
   verifier: null,
   ...extra,
@@ -138,6 +139,20 @@ describe('SafetyPanel', () => {
       attachTo: document.body,
     })
   }
+
+  it('says which turns had a snapshot cut at its limits, even with nothing else to show', async () => {
+    const detail = makeDetail({
+      status: 'done',
+      turns: [turn(1, { snapshotTruncated: true }), turn(2)],
+    })
+    expect(safetyOf(detail).truncated).toEqual([1])
+    const w = await mountPanel(fakeApi(), 'done', detail)
+    const note = w.find('.safety__note')
+    expect(note.exists()).toBe(true)
+    expect(note.text()).toContain('Turn 1')
+    expect(note.text()).toContain('3000 files')
+    expect(note.text()).toContain('256 MiB')
+  })
 
   it('shows nothing when the checks found nothing', async () => {
     const wrapper = await mountPanel(fakeApi(), 'done', makeDetail({ turns: [turn(1)] }))

@@ -30,7 +30,16 @@ import (
 	"github.com/NovaSeele/Seelegent/internal/testutil/fakecli"
 )
 
-func TestMain(m *testing.M) { fakecli.Main(m) }
+// envExecute makes the test binary run the real command line (Execute, with its signal handling) instead of the
+// tests or the fake CLI.
+const envExecute = "SEELEGENT_TEST_EXECUTE"
+
+func TestMain(m *testing.M) {
+	if os.Getenv(envExecute) != "" {
+		Execute()
+	}
+	fakecli.Main(m)
+}
 
 const limit = 60 * time.Second
 

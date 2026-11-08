@@ -11,6 +11,7 @@ import (
 
 	"github.com/NovaSeele/Seelegent/internal/api"
 	"github.com/NovaSeele/Seelegent/internal/client"
+	"github.com/NovaSeele/Seelegent/internal/ops"
 )
 
 // The team tools (milestone 14): members, meeting, consult, notes, contest, and delegate with variants. Their
@@ -383,14 +384,14 @@ func (s *Server) meeting(ctx context.Context, k *call) (result, error) {
 		}
 		k.announce(ctx, "Seelegent opened meeting "+m.ID+".", map[string]any{"meeting_id": m.ID})
 		if secs := clampWait(a.WaitSeconds, 0, teamWaitMax); secs > 0 {
-			if m, err = c.WaitMeeting(ctx, m.ID, secs); err != nil {
+			if m, err = s.waitMeeting(ctx, k, m.ID, secs); err != nil {
 				return result{}, err
 			}
 		}
 	case "status":
 		m, err = c.Meeting(ctx, a.MeetingID)
 	case "wait":
-		m, err = c.WaitMeeting(ctx, a.MeetingID, clampWait(a.WaitSeconds, defaultWait, teamWaitMax))
+		m, err = s.waitMeeting(ctx, k, a.MeetingID, clampWait(a.WaitSeconds, defaultWait, teamWaitMax))
 	case "post":
 		m, err = c.PostMeeting(ctx, a.MeetingID, api.MeetingPostRequest{Answers: a.Answers, Note: a.Note})
 	case "decide":
@@ -472,7 +473,7 @@ func (s *Server) contest(ctx context.Context, k *call) (result, error) {
 		}
 		v, err = c.Contest(ctx, a.ContestID)
 	case "wait":
-		v, err = waitContest(ctx, c, a.ContestID, clampWait(a.WaitSeconds, defaultWait, maxWait))
+		v, err = s.waitContest(ctx, k, a.ContestID, clampWait(a.WaitSeconds, defaultWait, maxWait))
 	case "pick":
 		v, err = c.PickContest(ctx, a.ContestID, api.ContestPickRequest{Winner: a.Winner, By: "lead"})
 	case "cancel":
@@ -484,16 +485,29 @@ func (s *Server) contest(ctx context.Context, k *call) (result, error) {
 	return contestResult(&v, a.Full.or(false)), nil
 }
 
-// waitContest waits up to seconds for a contest, in waits the daemon serves.
-func waitContest(ctx context.Context, c *client.Client, id string, seconds int) (api.Contest, error) {
-	deadline := time.Now().Add(time.Duration(seconds) * time.Second)
-	for {
-		left := int(time.Until(deadline).Seconds())
-		v, err := c.WaitContest(ctx, id, max(0, min(left, teamWaitMax)))
-		if err != nil || left <= teamWaitMax || contestSettled(v.Status) {
-			return v, err
-		}
-	}
+// waitMeeting waits up to seconds (at most teamWaitMax) for a meeting. A daemon that stops during the wait is
+// handled as in task waits (ops.WaitDaemon): looked for, never started again, and the wait ends with
+// daemon_stopped; a crash is ridden out.
+func (s *Server) waitMeeting(ctx context.Context, k *call, id string, seconds int) (api.Meeting, error) {
+	return ops.WaitDaemon(ctx, s.connector(k), s.waitOpts(nil, seconds, false, false, ""),
+		func(ctx context.Context, c *client.Client, deadline time.Time) (api.Meeting, error) {
+			return c.WaitMeeting(ctx, id, max(0, min(int(time.Until(deadline).Seconds()), teamWaitMax)))
+		})
+}
+
+// waitContest waits up to seconds for a contest, in waits the daemon serves, with the stop handling of
+// waitMeeting.
+func (s *Server) waitContest(ctx context.Context, k *call, id string, seconds int) (api.Contest, error) {
+	return ops.WaitDaemon(ctx, s.connector(k), s.waitOpts(nil, seconds, false, false, ""),
+		func(ctx context.Context, c *client.Client, deadline time.Time) (api.Contest, error) {
+			for {
+				left := int(time.Until(deadline).Seconds())
+				v, err := c.WaitContest(ctx, id, max(0, min(left, teamWaitMax)))
+				if err != nil || left <= teamWaitMax || contestSettled(v.Status) {
+					return v, err
+				}
+			}
+		})
 }
 
 func contestSettled(status string) bool {
@@ -662,7 +676,7 @@ func (s *Server) startContest(ctx context.Context, k *call, a *delegateArgs, req
 	k.announce(ctx, "Seelegent started contest "+id+" with "+fmt.Sprint(len(v.Variants))+" variants.",
 		map[string]any{"contest_id": id})
 	if secs := clampWait(a.WaitSeconds, defaultWait, maxWait); secs > 0 {
-		if v, err = waitContest(ctx, c, id, secs); err != nil {
+		if v, err = s.waitContest(ctx, k, id, secs); err != nil {
 			return result{}, fmt.Errorf("contest %s was created, but waiting for it failed: %w", id, err)
 		}
 	}

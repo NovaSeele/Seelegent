@@ -60,6 +60,8 @@ type turnCheck struct {
 	edited, changed, preexisting []string
 	risks                        []api.RiskFile
 	hygiene, scope               []api.Finding
+	// truncated: the end snapshot hit its limits (snapshot.Store.Take).
+	truncated bool
 }
 
 // checkTurn runs the post-turn checks of turn tu of t, whose last attempt ended with outcome last (it may not be
@@ -120,6 +122,7 @@ func (s *Service) checkTurn(ctx context.Context, t *Task, tu *Turn, last *backen
 		s.log.Warn("task: end snapshot", "task", t.ID, "turn", tu.N, "err", err)
 		return nil
 	}
+	c.truncated = end.Truncated
 	s.forgetOverlaps()
 	// Files other tasks changed meanwhile are theirs: not lost work, not this turn's change. The task's own
 	// earlier lines are not someone else's work either: they count as committed, so only the lines someone else
@@ -180,24 +183,39 @@ func changedFiles(start, end snapshot.Manifest, edited, others map[string]bool) 
 	return changed, preexisting
 }
 
-// applyCheck stores a check's results on the turn and returns its work_at_risk event, if any.
+// applyCheck stores a check's results on the turn and returns its snapshot_truncated and work_at_risk events, if
+// any.
 func applyCheck(t *Task, tu *Turn, c *turnCheck) []NewEvent {
 	if c == nil || tu.Snap == nil || tu.Snap.Checked {
 		return nil
 	}
 	tu.Snap.Checked = true
+	tu.Snap.EndTruncated = c.truncated
 	tu.Edited = api.NonNil(c.edited)
 	tu.Changed, tu.Preexisting = c.changed, c.preexisting
 	tu.WorkAtRisk, tu.Hygiene, tu.Scope = c.risks, c.hygiene, c.scope
+	var out []NewEvent
+	if tu.Snap.Truncated || tu.Snap.EndTruncated {
+		var which []string
+		if tu.Snap.Truncated {
+			which = append(which, snapshot.KindStart)
+		}
+		if tu.Snap.EndTruncated {
+			which = append(which, snapshot.KindEnd)
+		}
+		out = append(out, NewEvent{Type: api.EventSnapshotTruncated, Turn: tu.N,
+			Data: api.SnapshotTruncatedData{Snapshots: which, MaxFiles: snapshot.MaxFiles,
+				MaxBytes: snapshot.MaxTotalBytes}})
+	}
 	if len(c.risks) == 0 {
-		return nil
+		return out
 	}
 	files := make([]string, 0, len(c.risks))
 	for _, r := range c.risks {
 		files = append(files, r.Path)
 	}
-	return []NewEvent{{Type: api.EventWorkAtRisk, Turn: tu.N,
-		Data: api.WorkAtRiskData{Files: files, Snapshot: snapshotRef(t.ID, tu.N)}}}
+	return append(out, NewEvent{Type: api.EventWorkAtRisk, Turn: tu.N,
+		Data: api.WorkAtRiskData{Files: files, Snapshot: snapshotRef(t.ID, tu.N)}})
 }
 
 // snapshotRef names the start snapshot of a turn in events and reports.

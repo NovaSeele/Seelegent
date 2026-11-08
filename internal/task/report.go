@@ -104,6 +104,7 @@ func (s *Service) report(ctx context.Context, t *Task, cwd string) api.TaskRepor
 		rep.Handback = tu.Handback
 		rep.DeniedActions = tu.DeniedActions
 		rep.Hygiene, rep.ScopeWarnings = findingsReport(tu.Hygiene), findingsReport(tu.Scope)
+		rep.SnapshotTruncated = tu.Snap != nil && tu.Snap.Checked && (tu.Snap.Truncated || tu.Snap.EndTruncated)
 	}
 	gateReport(t, &rep)
 	rep.WorkAtRisk = riskReport(t)
@@ -121,9 +122,8 @@ func (s *Service) report(ctx context.Context, t *Task, cwd string) api.TaskRepor
 	}
 	rep.BlockedCommands = blocked
 	rep.Consults = consultsReport(t)
-	if a := t.Attention; a != nil && (a.State == api.AttentionBlocked || a.State == api.AttentionQuestion ||
-		a.Reason == ReasonBackgroundWait) {
-		rep.Attention = &api.ReportAttention{Reason: a.Reason, Detail: a.Detail}
+	if a := t.Attention; a != nil && (api.NeedsLead(a.State) || a.Reason == ReasonBackgroundWait) {
+		rep.Attention = &api.ReportAttention{State: a.State, Reason: a.Reason, Detail: a.Detail}
 	}
 	return rep
 }

@@ -7,7 +7,8 @@
 //
 // Then the test binary is, depending on how it was started:
 //
-//   - "<exe> __launch <dir>": the launcher (internal/launch.Run), as the daemon runs it;
+//   - "<exe> __launch <dir>": the launcher (internal/launch.Run), as the daemon runs it (an interrupt or SIGTERM
+//     stops it the way it stops `seelegent __launch`);
 //   - with FAKECLI_QUEUE set: the fake CLI. Whatever its arguments, it takes the next script of the queue directory
 //     (scripts are taken in the order they were pushed, each once), records its arguments, standard input,
 //     working directory and the variables FAKECLI_RECORD_ENV names (comma-separated) next to the script, and
@@ -35,11 +36,13 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -57,7 +60,10 @@ const launchArg = "__launch"
 func Main(m *testing.M) {
 	switch {
 	case len(os.Args) > 2 && os.Args[1] == launchArg:
-		if err := launch.Run(context.Background(), os.Args[2]); err != nil {
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		err := launch.Run(ctx, os.Args[2])
+		stop()
+		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}

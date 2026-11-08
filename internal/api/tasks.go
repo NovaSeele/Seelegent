@@ -131,6 +131,17 @@ const (
 	AttentionCleared = "cleared"
 )
 
+// NeedsLead reports whether an attention state waits for the lead: blocked, question or stalled. These are the flags
+// that wake a lead's wait and that status, ls --blocked and the report count; every place asks this one function so
+// the set cannot drift again (M18 hunt H16).
+func NeedsLead(state string) bool {
+	switch state {
+	case AttentionBlocked, AttentionQuestion, AttentionStalled:
+		return true
+	}
+	return false
+}
+
 // Attention says that a task needs someone to look at it.
 type Attention struct {
 	State  string `json:"state" ts:"'blocked' | 'question' | 'stalled' | 'background_wait' | 'info'"`
@@ -216,6 +227,9 @@ type Turn struct {
 	Scope      []Finding  `json:"scope"`
 	// OutsideDiff is true when the turn has snapshots, so GET /tasks/{id}/turns/{n}/outside-diff can answer.
 	OutsideDiff bool `json:"outsideDiff"`
+	// SnapshotTruncated is true when the turn's start or end snapshot hit its limits (3000 files or 256 MiB of new
+	// content), so its checks did not cover every dirty file (SnapshotTruncatedData says which).
+	SnapshotTruncated bool `json:"snapshotTruncated"`
 	// Gate is the gate run after the turn (null when none ran); Verifier the review of its green gate.
 	Gate     *GateResult     `json:"gate"`
 	Verifier *VerifierResult `json:"verifier"`
