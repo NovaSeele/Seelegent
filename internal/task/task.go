@@ -167,7 +167,9 @@ type Task struct {
 	// while it waits for free memory (resources.go, with MemoryWait); WaitDetail says more.
 	Waiting    string `json:"waiting,omitempty"`
 	WaitDetail string `json:"waitDetail,omitempty"`
-	// MemoryWait is set while Waiting is api.WaitingMemory: since when, and the last reading against its threshold.
+	// MemoryWait is set by a memory wait: since when, and the last reading against its threshold. A pool wait in
+	// between keeps it (so the wait's start survives); a launch or the end of the run clears it. Attention reads it
+	// only while Waiting is api.WaitingMemory.
 	MemoryWait           *MemoryWait    `json:"memoryWait,omitempty"`
 	NeedsSince           time.Time      `json:"needsSince,omitzero"`
 	Attention            *api.Attention `json:"attention,omitempty"`

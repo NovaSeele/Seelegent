@@ -15,12 +15,13 @@ func TestMemoryReading(t *testing.T) {
 	}
 	switch runtime.GOOS {
 	case "windows":
-		if !m.Known || m.AvailPhysMB == 0 || m.AvailCommitMB == 0 {
-			t.Fatalf("Windows reads physical memory and commit: %+v", m)
+		if !m.Known || m.AvailPhysMB == 0 || m.AvailCommitMB == 0 || m.TotalPhysMB < m.AvailPhysMB ||
+			m.TotalCommitMB < m.AvailCommitMB {
+			t.Fatalf("Windows reads physical memory and commit with their totals: %+v", m)
 		}
 	case "linux":
-		if !m.Known || m.AvailPhysMB == 0 || m.AvailCommitMB != 0 {
-			t.Fatalf("Linux reads MemAvailable, commit unknown: %+v", m)
+		if !m.Known || m.AvailPhysMB == 0 || m.AvailCommitMB != 0 || m.TotalPhysMB == 0 || m.TotalCommitMB != 0 {
+			t.Fatalf("Linux reads MemAvailable and MemTotal, commit unknown: %+v", m)
 		}
 	}
 	t.Logf("memory: %+v", m)
@@ -43,7 +44,9 @@ func TestParseMeminfo(t *testing.T) {
 		text string
 		want MemoryStatus
 	}{
-		{"fixture", meminfoFixture, MemoryStatus{AvailPhysMB: 15317136 / 1024, Known: true}},
+		{"fixture", meminfoFixture, MemoryStatus{AvailPhysMB: 15317136 / 1024, TotalPhysMB: 16080628 / 1024,
+			Known: true}},
+		{"bad MemTotal", "MemTotal: lots kB\nMemAvailable: 2097152 kB\n", MemoryStatus{}},
 		{"no MemAvailable (before Linux 3.14)", "MemTotal: 1000 kB\nMemFree: 500 kB\n", MemoryStatus{}},
 		{"empty", "", MemoryStatus{}},
 		{"no number", "MemAvailable:\n", MemoryStatus{}},
@@ -60,7 +63,8 @@ func TestParseMeminfo(t *testing.T) {
 
 func TestMemorystatusLevel(t *testing.T) {
 	const gb = 1 << 30
-	if got := fromMemorystatusLevel(32*gb, 25); got != (MemoryStatus{AvailPhysMB: 8192, Known: true}) {
+	if got := fromMemorystatusLevel(32*gb, 25); got != (MemoryStatus{AvailPhysMB: 8192, TotalPhysMB: 32768,
+		Known: true}) {
 		t.Fatalf("32 GB at 25%%: %+v", got)
 	}
 	for _, bad := range []struct {
@@ -111,6 +115,38 @@ func TestCgroupV2(t *testing.T) {
 		}
 		if free, ok := cgroupFreeMB([]byte(tc.max), []byte(tc.cur), statData); free != tc.free || ok != tc.ok {
 			t.Errorf("%s: %d, %v; want %d, %v", tc.name, free, ok, tc.free, tc.ok)
+		}
+	}
+}
+
+func TestCPUs(t *testing.T) {
+	if n := CPUs(); n < 1 || n > runtime.NumCPU() {
+		t.Fatalf("CPUs = %d (NumCPU %d)", n, runtime.NumCPU())
+	}
+	for _, tc := range []struct {
+		data string
+		n    int
+		ok   bool
+	}{
+		{"200000 100000\n", 2, true},
+		{"150000 100000", 2, true}, // 1.5 CPUs round up
+		{"50000 100000", 1, true},
+		{"max 100000\n", 0, false},
+		{"", 0, false},
+		{"lots 100000", 0, false},
+		{"100000 0", 0, false},
+	} {
+		if n, ok := parseCPUMax([]byte(tc.data)); n != tc.n || ok != tc.ok {
+			t.Errorf("parseCPUMax(%q) = %d, %v; want %d, %v", tc.data, n, ok, tc.n, tc.ok)
+		}
+	}
+	for _, tc := range []struct {
+		data string
+		mb   int64
+		ok   bool
+	}{{"4294967296\n", 4096, true}, {"max\n", 0, false}, {"x", 0, false}} {
+		if mb, ok := cgroupLimitMB([]byte(tc.data)); mb != tc.mb || ok != tc.ok {
+			t.Errorf("cgroupLimitMB(%q) = %d, %v", tc.data, mb, ok)
 		}
 	}
 }

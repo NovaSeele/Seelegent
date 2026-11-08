@@ -45,12 +45,12 @@ const stateText = computed(() => {
   return t('task.gate.state.none')
 })
 
-/** Where a gate waiting for a slot stands: its place in line, else the slot count from the settings. */
+/** Where a gate waiting for a slot stands: its place in line, else the slot count in use (Health.resources). */
 const queueText = computed(() => {
   if (view.value.wait !== 'slot') return ''
   const place = queuePlace(tasks.eventLog(props.task.id)?.items.value)
   if (place) return t('task.gate.queued.place', place)
-  const limit = connection.settings?.gateConcurrency ?? 0
+  const limit = connection.health?.resources?.gateConcurrency.value ?? 0
   return limit > 0 ? t('task.gate.queued.limit', { limit }) : ''
 })
 

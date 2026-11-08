@@ -1,5 +1,6 @@
 /// <reference types="vitest/config" />
 import { readdirSync } from 'node:fs'
+import os from 'node:os'
 import { fileURLToPath, URL } from 'node:url'
 
 import vue from '@vitejs/plugin-vue'
@@ -77,6 +78,9 @@ export default defineConfig({
     // Each test file gets its own VM context in a reused worker instead of a new process with a new jsdom
     // (measured with --maxWorkers=2: 50-58 s wall and 123-140 CPU-s before, 7-10 s and 18-26 CPU-s after).
     pool: 'vmThreads',
+    // A light default on a shared machine (vitest's own is one worker per CPU but one): a quarter of the CPUs,
+    // from 1 to 4, so a small machine is not swamped and a big one gains little more; --maxWorkers overrides it.
+    maxWorkers: Math.max(1, Math.min(4, Math.floor(os.availableParallelism() / 4))),
     // dev/*.spec.mjs test the mock daemon's pure helpers, so dev mode keeps matching the daemon.
     include: ['src/**/*.spec.ts', 'dev/**/*.spec.mjs'],
   },

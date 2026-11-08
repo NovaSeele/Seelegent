@@ -33,6 +33,15 @@ func MergePatch(s Settings, patch []byte) (Settings, error) {
 	if err != nil {
 		return s, err
 	}
+	// An auto setting left on auto is no key in the tree (omitempty); it is still a known one.
+	for _, k := range AutoSettingKeys() {
+		if _, ok := cur[k]; !ok {
+			cur[k] = nil
+		}
+		if _, ok := def[k]; !ok {
+			def[k] = nil
+		}
+	}
 	v := &validator{}
 	applyPatch(v, cur, def, p, "")
 	// Unknown keys were left out of cur, so the checks below still run and every problem is reported at once.

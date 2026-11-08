@@ -55,7 +55,7 @@ func (d *daemon) open() {
 	set := config.Defaults()
 	set.Port = 47831
 	// The engine tests must not depend on this machine's free memory.
-	set.MinFreeMemoryMB, set.MinFreeCommitMB, set.CriticalFreeMemoryMB = 0, 0, 0
+	set.MinFreeMemoryMB, set.MinFreeCommitMB, set.CriticalFreeMemoryMB = config.Int(0), config.Int(0), config.Int(0)
 	a, err := New(t.Context(), Options{
 		Paths: d.paths, Settings: &set, Env: d.queue.Env(os.Environ()), RealHome: filepath.Join(d.paths.Home, "home"),
 		Launcher: fakecli.Launcher(t), NoQuotaReaders: true, NoGh: true,

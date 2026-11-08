@@ -39,11 +39,11 @@ const (
 
 // Sampler is the Resources of the daemon: platform.Memory cached for sampleTTL, so the start checks, the watchdog
 // and GET /health may ask often. Changed is signaled when a new reading lands on the other side of a threshold of
-// the settings (or Kick says the thresholds changed). It is safe for concurrent use.
+// the effective resource values (or Kick says the thresholds changed). It is safe for concurrent use.
 type Sampler struct {
-	read     func() platform.MemoryStatus
-	clk      clock.Clock
-	settings func() config.Settings
+	read   func() platform.MemoryStatus
+	clk    clock.Clock
+	limits func() config.Resources
 
 	mu   sync.Mutex
 	last platform.MemoryStatus
@@ -52,12 +52,13 @@ type Sampler struct {
 	wake chan struct{}
 }
 
-// NewSampler returns a sampler over read (platform.Memory in the daemon), with the thresholds of settings.
-func NewSampler(read func() platform.MemoryStatus, clk clock.Clock, settings func() config.Settings) *Sampler {
+// NewSampler returns a sampler over read (platform.Memory in the daemon), with the thresholds of limits (the
+// effective resource values: config.EffectiveResources).
+func NewSampler(read func() platform.MemoryStatus, clk clock.Clock, limits func() config.Resources) *Sampler {
 	if clk == nil {
 		clk = clock.Real()
 	}
-	return &Sampler{read: read, clk: clk, settings: settings, wake: make(chan struct{})}
+	return &Sampler{read: read, clk: clk, limits: limits, wake: make(chan struct{})}
 }
 
 // Sample returns the cached reading, or a new one when it is older than sampleTTL.
@@ -69,7 +70,7 @@ func (s *Sampler) Sample() platform.MemoryStatus {
 		return s.last
 	}
 	m := s.read()
-	if s.have && crossed(s.settings(), s.last, m) {
+	if s.have && crossed(s.limits(), s.last, m) {
 		s.signalLocked()
 	}
 	s.last, s.at, s.have = m, now, true
@@ -97,7 +98,7 @@ func (s *Sampler) signalLocked() {
 }
 
 // crossed reports whether reading b is on another side than a of one of the thresholds of set.
-func crossed(set config.Settings, a, b platform.MemoryStatus) bool {
+func crossed(set config.Resources, a, b platform.MemoryStatus) bool {
 	if a.Known != b.Known || commitKnown(a) != commitKnown(b) {
 		return true
 	}
@@ -172,7 +173,7 @@ func (h memHold) detail() string {
 
 // resumeLevels are the readings at which the watchdog stops holding (lead decision 2): minFreeMemoryMB and
 // minFreeCommitMB when they are on, else twice criticalFreeMemoryMB.
-func resumeLevels(set config.Settings) (phys, commit int64) {
+func resumeLevels(set config.Resources) (phys, commit int64) {
 	crit := int64(set.CriticalFreeMemoryMB)
 	phys, commit = 2*crit, 2*crit
 	if set.MinFreeMemoryMB > 0 {
@@ -185,19 +186,19 @@ func resumeLevels(set config.Settings) (phys, commit int64) {
 }
 
 // critical reports whether m is below criticalFreeMemoryMB (physical, or commit when it is known).
-func critical(set config.Settings, m platform.MemoryStatus) bool {
+func critical(set config.Resources, m platform.MemoryStatus) bool {
 	crit := int64(set.CriticalFreeMemoryMB)
 	return crit > 0 && m.Known && (m.AvailPhysMB < crit || (commitKnown(m) && m.AvailCommitMB < crit))
 }
 
 // resumed reports whether m is back at the resume levels.
-func resumed(set config.Settings, m platform.MemoryStatus) bool {
+func resumed(set config.Resources, m platform.MemoryStatus) bool {
 	phys, commit := resumeLevels(set)
 	return m.AvailPhysMB >= phys && (!commitKnown(m) || m.AvailCommitMB >= commit)
 }
 
 // memoryHold returns why a new start (worker turn or gate run) must wait now, or nil.
-func (s *Service) memoryHold(set config.Settings) *memHold {
+func (s *Service) memoryHold(set config.Resources) *memHold {
 	if s.o.Resources == nil {
 		return nil
 	}
@@ -227,7 +228,7 @@ func (s *Service) memoryHold(set config.Settings) *memHold {
 
 // admitDelay spaces worker starts while free memory is below twice its threshold: it returns 0 and counts the
 // start when one may go now, else how long to wait before trying again.
-func (s *Service) admitDelay(set config.Settings) time.Duration {
+func (s *Service) admitDelay(set config.Resources) time.Duration {
 	if s.o.Resources == nil {
 		return 0
 	}
@@ -286,7 +287,7 @@ func (s *Service) holdForMemory(r *run, id string) bool {
 	waited := false
 	for r.ctx.Err() == nil {
 		wake := s.memoryWake()
-		h := s.memoryHold(s.settings())
+		h := s.memoryHold(s.limits())
 		if h == nil {
 			break
 		}
@@ -305,7 +306,7 @@ func (s *Service) holdStart(r *run, id string, release func()) bool {
 	if s.o.Resources == nil {
 		return false
 	}
-	set := s.settings()
+	set := s.limits()
 	wake := s.memoryWake()
 	if h := s.memoryHold(set); h != nil {
 		release()
@@ -390,6 +391,16 @@ func (s *Service) LowMemory() bool {
 	s.resMu.Lock()
 	defer s.resMu.Unlock()
 	return s.low
+}
+
+// limits are the effective values of the machine-sized settings now (config.EffectiveResources of the settings on
+// the machine profile, which the daemon reads at start and when the settings change, never per reading).
+func (s *Service) limits() config.Resources {
+	var m config.Machine
+	if s.o.Machine != nil {
+		m = s.o.Machine()
+	}
+	return config.EffectiveResources(s.settings(), m)
 }
 
 // gateRun is a gate run in flight, which the watchdog may stop.
@@ -477,7 +488,7 @@ func (s *Service) checkMemory() {
 	if idle, _ := s.idle(); idle {
 		return
 	}
-	set := s.settings()
+	set := s.limits()
 	var m platform.MemoryStatus
 	if set.CriticalFreeMemoryMB > 0 {
 		m = s.o.Resources.Sample()

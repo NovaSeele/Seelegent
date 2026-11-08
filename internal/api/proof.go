@@ -188,12 +188,20 @@ type ProofRunResult struct {
 	Tail  string   `json:"tail,omitempty"`
 }
 
+// EnvGateTask is the variable that carries the task id in the environment of the task's gate commands; a
+// regression run asked for from one sends it as ProofRunRequest.GateTask.
+const EnvGateTask = "SEELEGENT_TASK"
+
 // ProofRunRequest starts a regression run.
 type ProofRunRequest struct {
 	Cwd     string `json:"cwd"`
 	Feature string `json:"feature,omitempty"`
 	// Force runs even while other tasks of the repository are active.
 	Force bool `json:"force,omitempty"`
+	// GateTask is the task whose gate command asks for the run (SEELEGENT_TASK in a gate command's environment;
+	// `seelegent proof run` sends it). While that gate holds a gate slot, the run's commands share it instead of
+	// waiting for another one. An id the daemon does not know changes nothing.
+	GateTask string `json:"gateTask,omitempty"`
 }
 
 // ProofStats are the gate statistics of a project.

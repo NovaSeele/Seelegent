@@ -2,55 +2,29 @@
 
 package platform
 
-import (
-	"os"
-	"path/filepath"
-	"strings"
-)
+import "os"
 
-// cgroupRoot is where cgroup v2 is mounted.
-const cgroupRoot = "/sys/fs/cgroup"
-
-// memoryStatus reads MemAvailable from /proc/meminfo and lowers it to what the cgroup v2 memory limits of this
-// process (its own group and every parent, inside a container or a systemd slice with MemoryMax) still allow.
-// Commit stays unknown (0).
+// memoryStatus reads MemAvailable and MemTotal from /proc/meminfo and lowers them to what the cgroup memory limits
+// of this process (its own group and every parent, inside a container or a systemd slice with MemoryMax; cgroup
+// v2, else v1) allow. Commit stays unknown (0).
 func memoryStatus() MemoryStatus {
 	data, err := os.ReadFile("/proc/meminfo")
 	if err != nil {
 		return MemoryStatus{}
 	}
 	m := parseMeminfo(data)
-	if free, ok := cgroupFree(); ok && m.Known && free < m.AvailPhysMB {
-		m.AvailPhysMB = free
+	if !m.Known {
+		return m
+	}
+	room := cgroupFS{root: "/"}.memory()
+	if room.limited && room.free < m.AvailPhysMB {
+		m.AvailPhysMB, m.CgroupV1 = room.free, room.v1
+	}
+	if room.limited && room.limit < m.TotalPhysMB {
+		m.TotalPhysMB, m.CgroupV1 = room.limit, room.v1
 	}
 	return m
 }
 
-// cgroupFree is the smallest room left under the memory.max of this process's cgroup and its parents, in MiB, each
-// level against its own working set (cgroupFreeMB); false when none of them has a limit.
-func cgroupFree() (int64, bool) {
-	self, err := os.ReadFile("/proc/self/cgroup")
-	if err != nil {
-		return 0, false
-	}
-	p, ok := cgroupV2Path(self)
-	if !ok {
-		return 0, false
-	}
-	var least int64
-	found := false
-	for dir := filepath.Join(cgroupRoot, p); strings.HasPrefix(dir, cgroupRoot); dir = filepath.Dir(dir) {
-		limit, err1 := os.ReadFile(filepath.Join(dir, "memory.max"))
-		cur, err2 := os.ReadFile(filepath.Join(dir, "memory.current"))
-		if err1 == nil && err2 == nil {
-			stat, _ := os.ReadFile(filepath.Join(dir, "memory.stat")) // unreadable: count all of memory.current
-			if free, ok := cgroupFreeMB(limit, cur, stat); ok && (!found || free < least) {
-				least, found = free, true
-			}
-		}
-		if dir == cgroupRoot {
-			break
-		}
-	}
-	return least, found
-}
+// cgroupCPUs is the smallest cgroup CPU quota of this process's cgroup and its parents, in whole CPUs.
+func cgroupCPUs() (int, bool) { return cgroupFS{root: "/"}.cpus() }

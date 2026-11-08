@@ -1,11 +1,26 @@
 /** Builders for API data in tests: complete objects with sensible defaults, overridden per test. */
 import type { TasksApi } from '@/api/tasks'
 import type { TaskEvent, TaskEventType } from '@/api/events'
-import type { Account, Provider, TaskDetail, TaskSummary } from '@/api/types'
+import type { Account, Health, Provider, TaskDetail, TaskSummary } from '@/api/types'
 
 export const T0 = Date.parse('2026-11-06T10:00:00.000Z')
 
 export const iso = (offsetMs = 0) => new Date(T0 + offsetMs).toISOString()
+
+/** The machine-sized settings of a Health, all auto, on a 16 GB / 8-CPU Windows machine. */
+export function makeHealthResources(): Pick<Health, 'resources' | 'machine'> {
+  const auto = (value: number) => ({ value, source: 'auto' as const })
+  return {
+    resources: {
+      minFreeMemoryMB: auto(2048),
+      criticalFreeMemoryMB: auto(1024),
+      minFreeCommitMB: auto(2457),
+      testParallelism: auto(2),
+      gateConcurrency: auto(1),
+    },
+    machine: { totalPhysMB: 16384, totalCommitMB: 24576, cpus: 8 },
+  }
+}
 
 export function makeTask(overrides: Partial<TaskSummary> = {}): TaskSummary {
   return {
