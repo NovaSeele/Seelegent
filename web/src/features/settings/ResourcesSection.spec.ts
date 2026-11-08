@@ -1,12 +1,15 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { h, ref } from 'vue'
 
 import { ApiError } from '@/api/client'
 import type { SettingsApi } from '@/api/settings'
 import type { Health, Settings } from '@/api/types'
+import Dialog from '@/components/ui/Dialog.vue'
 import { useConnectionStore } from '@/stores/connection'
+import { useLayersStore } from '@/stores/layers'
 import { useSettingsStore } from '@/stores/settings'
-import { setupApp } from '@/test/app'
+import { flush, installKeys, press, setupApp } from '@/test/app'
 import { makeHealthResources } from '@/test/fixtures'
 
 import { FIELDS } from './fields'
@@ -352,9 +355,9 @@ describe('Resources settings', () => {
       expect(row(item).get('[data-auto]').text(), item).toMatch(/^Auto/)
       expect(row(item).find('[data-explicit]').exists(), item).toBe(false)
     }
-    expect(row('minFreeMemory').get('[data-auto]').text()).toBe('Auto · 2 GB on this machine')
-    expect(row('minFreeCommit').get('[data-auto]').text()).toBe('Auto · 2.4 GB on this machine')
-    expect(row('testParallelism').get('[data-auto]').text()).toBe('Auto · 2 on this machine')
+    expect(row('minFreeMemory').get('[data-auto]').text()).toBe('Auto: 2 GB on this machine')
+    expect(row('minFreeCommit').get('[data-auto]').text()).toBe('Auto: 2.4 GB on this machine')
+    expect(row('testParallelism').get('[data-auto]').text()).toBe('Auto: 2 on this machine')
     // The free memory now stays next to the threshold, and the Set button is described by both.
     const set = row('minFreeMemory').get('[data-auto-set]')
     expect(set.attributes('aria-label')).toBe('Set Free memory to start yourself')
@@ -373,9 +376,9 @@ describe('Resources settings', () => {
     }
     useConnectionStore().health = next
     await flushPromises()
-    expect(row('minFreeMemory').get('[data-auto]').text()).toBe('Auto · 1 GB on this machine')
+    expect(row('minFreeMemory').get('[data-auto]').text()).toBe('Auto: 1 GB on this machine')
     // An auto value of 0 reads as the field's 0: off.
-    expect(row('minFreeCommit').get('[data-auto]').text()).toBe('Auto · off on this machine')
+    expect(row('minFreeCommit').get('[data-auto]').text()).toBe('Auto: off on this machine')
     wrapper.unmount()
   })
 
@@ -436,6 +439,76 @@ describe('Resources settings', () => {
     wrapper.unmount()
   })
 
+  it('closes a field opened from Auto on Esc, without closing the settings dialog', async () => {
+    const { plugins } = await setupApp()
+    const uninstall = installKeys()
+    const connection = useConnectionStore()
+    connection.settings = AUTO_SETTINGS
+    connection.health = health()
+    vi.spyOn(connection, 'refreshHealth').mockResolvedValue()
+    const patch = echo()
+    useSettingsStore().setApi({ patch } as unknown as SettingsApi)
+    const open = ref(true)
+    const wrapper = mount(
+      {
+        setup: () => () =>
+          h(
+            Dialog,
+            {
+              open: open.value,
+              title: 'Settings',
+              'onUpdate:open': (v: boolean) => (open.value = v),
+            },
+            { default: () => h(ResourcesSection) },
+          ),
+      },
+      { attachTo: document.body, global: { plugins } },
+    )
+    await flush()
+    const row = () => document.querySelector('[data-setting="gateConcurrency"]') as HTMLElement
+    ;(row().querySelector('[data-auto-set]') as HTMLButtonElement).click()
+    await flush()
+    const input = row().querySelector('input') as HTMLInputElement
+    expect(document.activeElement).toBe(input)
+    // The field starts at the value in use: nothing to undo, and Esc still must not reach the dialog.
+    press('Escape')
+    await flush()
+    expect(open.value).toBe(true)
+    expect(useLayersStore().stack).toHaveLength(1)
+    expect(row().querySelector('input')).toBeNull()
+    expect(row().querySelector('[data-auto]')?.textContent?.trim()).toBe('Auto: 1 on this machine')
+    expect(document.activeElement).toBe(row().querySelector('[data-auto-set]'))
+    // With a typed value, Esc puts the value in use back and closes the field the same way.
+    ;(row().querySelector('[data-auto-set]') as HTMLButtonElement).click()
+    await flush()
+    const again = row().querySelector('input') as HTMLInputElement
+    again.value = '3'
+    again.dispatchEvent(new Event('input'))
+    press('Escape')
+    await flush()
+    expect(open.value).toBe(true)
+    expect(row().querySelector('input')).toBeNull()
+    expect(document.activeElement).toBe(row().querySelector('[data-auto-set]'))
+    expect(patch).not.toHaveBeenCalled()
+    // Once back on Set, Esc closes the dialog as usual.
+    press('Escape')
+    await flush()
+    expect(open.value).toBe(false)
+    wrapper.unmount()
+    uninstall()
+  })
+
+  it('opens the field when the Auto box is clicked, without a second tab stop', async () => {
+    const wrapper = await mountSection(echo(), health(), AUTO_SETTINGS)
+    const row = () => wrapper.get('[data-setting="minFreeMemory"]')
+    expect(row().get('[data-auto]').attributes('tabindex')).toBeUndefined()
+    await row().get('[data-auto]').trigger('click')
+    await flushPromises()
+    expect(document.activeElement).toBe(row().get('input').element)
+    expect(row().get('input').element.value).toBe('2048')
+    wrapper.unmount()
+  })
+
   it('goes back to Auto without sending when the value in use is left as it is', async () => {
     const patch = echo()
     const wrapper = await mountSection(patch, health(), AUTO_SETTINGS)
@@ -447,13 +520,20 @@ describe('Resources settings', () => {
     expect(patch).not.toHaveBeenCalled()
     expect(row().find('input').exists()).toBe(false)
     expect(document.activeElement).toBe(row().get('[data-auto-set]').element)
+    // Tab out of it (to "Use auto", which "Set" replaces): the focus lands on "Set", not on the page.
+    await row().get('[data-auto-set]').trigger('click')
+    await flushPromises()
+    ;(row().get('[data-auto-reset]').element as HTMLElement).focus()
+    await flushPromises()
+    expect(row().find('input').exists()).toBe(false)
+    expect(document.activeElement).toBe(row().get('[data-auto-set]').element)
     // "Use auto" on a field opened from Auto closes it, without a request either.
     await row().get('[data-auto-set]').trigger('click')
     await flushPromises()
     await row().get('[data-auto-reset]').trigger('click')
     await flushPromises()
     expect(patch).not.toHaveBeenCalled()
-    expect(row().get('[data-auto]').text()).toBe('Auto · 2 on this machine')
+    expect(row().get('[data-auto]').text()).toBe('Auto: 2 on this machine')
     wrapper.unmount()
   })
 
@@ -534,15 +614,16 @@ describe('Resources settings', () => {
     wrapper.unmount()
   })
 
-  it('reads /health again when the settings change, so the auto values follow them', async () => {
+  it('reads /health again after a save, so the values in use follow the settings', async () => {
     const wrapper = await mountSection(echo(), health(), AUTO_SETTINGS)
     const refresh = vi.mocked(useConnectionStore().refreshHealth)
     expect(refresh).toHaveBeenCalledTimes(1)
-    useConnectionStore().settings = { ...AUTO_SETTINGS, minFreeMemoryMB: 4096 }
+    const input = wrapper.get('[data-setting="maxWorkers"] input')
+    await input.setValue('2')
+    await input.trigger('keydown', { key: 'Enter' })
     await flushPromises()
     expect(refresh).toHaveBeenCalledTimes(2)
     // Until it answers, Health may still have the value the user had set: the row says Auto, no stale number.
-    useConnectionStore().settings = AUTO_SETTINGS
     useConnectionStore().health = health({
       resources: {
         ...makeHealthResources().resources,
@@ -552,6 +633,49 @@ describe('Resources settings', () => {
     await flushPromises()
     expect(wrapper.get('[data-setting="minFreeMemory"] [data-auto]').text()).toBe('Auto')
     wrapper.unmount()
+  })
+
+  it('says when an auto threshold is worked out from the other one the user set', async () => {
+    const settings = { ...AUTO_SETTINGS, minFreeMemoryMB: 3072 } as Settings
+    // 'derived' is the daemon's coming third source; types.gen.ts does not have it yet.
+    const derived = (value: number) => ({ value, source: 'derived' }) as never
+    const wrapper = await mountSection(
+      echo(),
+      health({
+        resources: {
+          ...makeHealthResources().resources,
+          minFreeMemoryMB: { value: 3072, source: 'explicit' },
+          criticalFreeMemoryMB: derived(1536),
+        },
+      }),
+      settings,
+    )
+    expect(wrapper.get('[data-setting="criticalFreeMemory"] [data-auto]').text()).toBe(
+      'Auto: half of your Free memory to start, 1.5 GB',
+    )
+    // "Set" starts from the derived value.
+    await wrapper.get('[data-setting="criticalFreeMemory"] [data-auto-set]').trigger('click')
+    await flushPromises()
+    const input = wrapper.get('[data-setting="criticalFreeMemory"] input')
+      .element as HTMLInputElement
+    expect(input.value).toBe('1536')
+    wrapper.unmount()
+
+    const twice = await mountSection(
+      echo(),
+      health({
+        resources: {
+          ...makeHealthResources().resources,
+          minFreeMemoryMB: derived(6144),
+          criticalFreeMemoryMB: { value: 3072, source: 'explicit' },
+        },
+      }),
+      { ...AUTO_SETTINGS, criticalFreeMemoryMB: 3072 } as Settings,
+    )
+    expect(twice.get('[data-setting="minFreeMemory"] [data-auto]').text()).toBe(
+      'Auto: twice your Emergency memory floor, 6 GB',
+    )
+    twice.unmount()
   })
 
   it('is found by search, in English and in another language', async () => {

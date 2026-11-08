@@ -19,6 +19,13 @@
   min-width: 0;
 }
 
+/* The row's action (Set, Use auto, Default): one width for all, a full touch target, and the controls of a
+   section end on one line. */
+.sf__action {
+  flex: none;
+  min-width: max(var(--target-min), 72px);
+}
+
 /* A switch is narrow: its reset button sits right next to it. */
 .sf__control--switch {
   flex: 0 0 auto;
@@ -38,24 +45,6 @@
   gap: var(--space-1);
   color: var(--text-secondary);
   font-size: var(--fs-xs);
-}
-
-/* The Auto state sits where the number field would, at its height (NumberField sm), so the rows keep their rhythm. */
-.sf__auto {
-  display: flex;
-  align-items: center;
-  min-height: max(var(--control-sm), var(--target-min));
-  padding: var(--space-0) var(--space-2);
-  border: var(--border-width) dashed var(--border-strong);
-  border-radius: var(--radius-md);
-  color: var(--text-secondary);
-  font-size: var(--fs-sm);
-  font-variant-numeric: tabular-nums;
-}
-
-.sf__auto-tag {
-  color: var(--text-primary);
-  font-weight: var(--fw-medium);
 }
 
 .sf__readonly {

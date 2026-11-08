@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { useFormat } from '@/composables/useFormat'
@@ -11,9 +11,9 @@ import DaemonSection from './DaemonSection.vue'
 /**
  * Resources (docs/configuration.md "Resources"): the daemon settings of the section, the machine the auto values
  * are computed from (Health.machine), and a fresh reading of the machine's free memory while it is open, so the
- * thresholds sit next to what is free now. Health is read when the section opens, every READ_EVERY_MS while the
- * tab is visible, and right after the settings change (the auto values in use follow them); nothing runs once it
- * closes.
+ * thresholds sit next to what is free now. Health is read when the section opens and every READ_EVERY_MS while
+ * the tab is visible; nothing runs once it closes. After a settings change the connection store reads it again
+ * (the values in use follow the settings), open or not.
  */
 defineProps<{ highlight?: string }>()
 
@@ -50,8 +50,6 @@ const machineText = computed(() => {
     : t('settings.daemon.machine.full', { memory, cpus })
 })
 
-watch(() => connection.settings, read)
-
 onMounted(() => {
   read()
   timer = setInterval(read, READ_EVERY_MS)
@@ -73,6 +71,7 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .resources__machine {
+  margin-top: var(--space-2);
   padding-bottom: var(--space-3);
   border-bottom: var(--border-width) solid var(--border-subtle);
   color: var(--text-secondary);

@@ -97,7 +97,15 @@
     "criticalBelowMin": "El mínimo de memoria de emergencia debe ser menor que Memoria libre para iniciar mientras ambos estén activos.",
     "mbIs": "= {size}",
     "auto": "Automático",
-    "autoValue": "{value} en esta máquina",
+    "autoValue": "{auto}: {value} en esta máquina",
+    "autoZero": {
+      "off": "{auto}: desactivado en esta máquina",
+      "unlimited": "{auto}: sin límite en esta máquina"
+    },
+    "derived": {
+      "half": "{auto}: la mitad de tu {other}, {value}",
+      "twice": "{auto}: el doble de tu {other}, {value}"
+    },
     "set": "Fijar",
     "setOf": "Fijar un valor propio para {name}",
     "useAuto": "Usar automático",
@@ -106,10 +114,6 @@
     "explicitZero": {
       "off": "Fijado por ti: desactivado.",
       "unlimited": "Fijado por ti: sin límite."
-    },
-    "zeroIs": {
-      "off": "desactivado",
-      "unlimited": "sin límite"
     },
     "machine": {
       "full": "Esta máquina: {memory} de RAM, {cpus}",

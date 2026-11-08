@@ -97,7 +97,15 @@
     "criticalBelowMin": "둘 다 켜져 있을 때 비상 메모리 하한은 시작에 필요한 여유 메모리보다 작아야 합니다.",
     "mbIs": "= {size}",
     "auto": "자동",
-    "autoValue": "이 컴퓨터에서 {value}",
+    "autoValue": "{auto}: 이 컴퓨터에서 {value}",
+    "autoZero": {
+      "off": "{auto}: 이 컴퓨터에서는 끔",
+      "unlimited": "{auto}: 이 컴퓨터에서는 제한 없음"
+    },
+    "derived": {
+      "half": "{auto}: 직접 설정한 {other}의 절반, {value}",
+      "twice": "{auto}: 직접 설정한 {other}의 두 배, {value}"
+    },
     "set": "설정",
     "setOf": "{name} 직접 설정",
     "useAuto": "자동 사용",
@@ -106,10 +114,6 @@
     "explicitZero": {
       "off": "직접 설정한 값: 끔.",
       "unlimited": "직접 설정한 값: 제한 없음."
-    },
-    "zeroIs": {
-      "off": "끔",
-      "unlimited": "제한 없음"
     },
     "machine": {
       "full": "이 컴퓨터: RAM {memory}, {cpus}",

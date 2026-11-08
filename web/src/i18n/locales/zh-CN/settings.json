@@ -97,7 +97,15 @@
     "criticalBelowMin": "两者都开启时，紧急内存下限必须小于“启动所需空闲内存”。",
     "mbIs": "= {size}",
     "auto": "自动",
-    "autoValue": "本机为 {value}",
+    "autoValue": "{auto}：本机为 {value}",
+    "autoZero": {
+      "off": "{auto}：本机关闭",
+      "unlimited": "{auto}：本机不限"
+    },
+    "derived": {
+      "half": "{auto}：你设置的“{other}”的一半，{value}",
+      "twice": "{auto}：你设置的“{other}”的两倍，{value}"
+    },
     "set": "设置",
     "setOf": "自行设置{name}",
     "useAuto": "使用自动",
@@ -106,10 +114,6 @@
     "explicitZero": {
       "off": "由你设置：关闭。",
       "unlimited": "由你设置：不限。"
-    },
-    "zeroIs": {
-      "off": "关闭",
-      "unlimited": "不限"
     },
     "machine": {
       "full": "本机：{memory} 内存，{cpus}",

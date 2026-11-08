@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, useId } from 'vue'
+import { computed, ref, useId } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import Button from '@/components/ui/Button.vue'
@@ -12,6 +12,7 @@ import { useFormat } from '@/composables/useFormat'
 import { formatMB, freeMB } from '@/lib/memory'
 import { useConnectionStore } from '@/stores/connection'
 
+import AutoValue from './AutoValue.vue'
 import CommitField from './CommitField.vue'
 import { crossFieldClash, type FieldDef } from './fields'
 import SettingRow from './SettingRow.vue'
@@ -38,10 +39,10 @@ const value = computed(() => props.form.get(props.def.path))
 const error = computed(() => props.form.errors.value[props.def.path])
 const busy = computed(() => props.form.saving.value.has(props.def.path))
 const done = computed(() => props.form.saved.value.has(props.def.path))
-const { autoPath, isAuto, editing, showAuto, autoDetail, startValue, explicitNote } = useAutoField(
-  () => props.def,
-  props.form,
-)
+const rowEl = ref<HTMLElement | null>(null)
+const auto = useAutoField(() => props.def, props.form, rowEl)
+const { autoPath, isAuto, showAuto, autoLine, startValue, explicitNote } = auto
+const { customize, onUnchanged, onEscape, useAuto } = auto
 /** The number in a number field: the saved one, or the value in use when the user sets an auto one. */
 const numberShown = computed(() => (isAuto.value ? startValue.value : Number(value.value ?? 0)))
 
@@ -58,7 +59,6 @@ const options = computed(() =>
 
 const noteId = useId()
 const autoId = useId()
-const rowEl = ref<HTMLElement | null>(null)
 
 const hint = computed(() => {
   const def = props.def
@@ -117,37 +117,15 @@ function saveInRange(shown: number, value: number) {
   save(value)
 }
 
-function focusIn(selector: string) {
-  void nextTick(() => rowEl.value?.querySelector<HTMLElement>(selector)?.focus())
-}
-
-/** "Set" on an auto setting: the number field, starting from the value in use, with the focus in it. */
-function customize() {
-  editing.value = true
-  focusIn('input')
-}
-
-/**
- * The field shows its value again. A field opened from Auto with nothing new in it goes back to Auto (nothing is
- * sent); after Enter or Esc the focus moves to "Set", after a click elsewhere it stays where it went.
- */
-function onUnchanged() {
-  props.form.clear(props.def.path)
-  if (!isAuto.value || !editing.value) return
-  const focused = rowEl.value?.contains(document.activeElement) ?? false
-  editing.value = false
-  if (focused) focusIn('[data-auto-set]')
-}
-
-/** "Use auto": a set value goes back to auto (null); a field opened from Auto just closes. */
-async function useAuto() {
-  const focused = rowEl.value?.contains(document.activeElement) ?? false
-  if (isAuto.value) {
-    editing.value = false
-    props.form.clear(props.def.path)
-  } else if (!(await props.form.reset(props.def.path))) return
-  if (focused) focusIn('[data-auto-set]')
-}
+/** The row's action: "Set" on an auto setting, "Use auto" once set, "Default" on any other editable setting. */
+const action = computed(() => {
+  const kind = showAuto.value ? 'set' : autoPath.value ? 'useAuto' : 'reset'
+  if (kind === 'reset' && props.def.kind === 'readonly') return null
+  const run = { set: customize, useAuto, reset: () => void props.form.reset(props.def.path) }[kind]
+  const aria = t(`settings.daemon.${kind}Of`, { name: label.value })
+  return { kind, text: t(`settings.daemon.${kind}`), aria, run }
+})
+const setDescribedBy = computed(() => (hasNotes.value ? `${autoId} ${noteId}` : autoId))
 
 function saveLines(text: string) {
   save(
@@ -163,13 +141,13 @@ function saveLines(text: string) {
   <SettingRow :item="def.item" :highlighted="highlighted" :stacked="def.kind === 'lines'">
     <div class="sf-wrap">
       <div ref="rowEl" class="sf">
-        <div class="sf__control" :class="{ 'sf__control--switch': def.kind === 'bool' }">
-          <p v-if="showAuto" :id="autoId" class="sf__auto" data-auto>
-            <span>
-              <span class="sf__auto-tag">{{ t('settings.daemon.auto') }}</span>
-              <template v-if="autoDetail"> · {{ autoDetail }}</template>
-            </span>
-          </p>
+        <div
+          class="sf__control"
+          :class="{ 'sf__control--switch': def.kind === 'bool' }"
+          @keydown.esc="onEscape"
+        >
+          <!-- A click on the box acts like "Set"; the keyboard path is the Set button (one tab stop). -->
+          <AutoValue v-if="showAuto" :id="autoId" :line="autoLine" data-auto @click="customize" />
           <NumberField
             v-else-if="def.kind === 'number'"
             :model-value="numberShown"
@@ -231,40 +209,19 @@ function saveLines(text: string) {
         </div>
         <!-- Keyed: a click that closes a field opened from Auto must not land on the "Set" that replaces it. -->
         <Button
-          v-if="showAuto"
-          key="set"
-          data-auto-set
+          v-if="action"
+          :key="action.kind"
+          class="sf__action"
+          :data-auto-set="action.kind === 'set' ? '' : undefined"
+          :data-auto-reset="action.kind === 'useAuto' ? '' : undefined"
           size="sm"
           variant="ghost"
-          :aria-label="t('settings.daemon.setOf', { name: label })"
-          :aria-describedby="hasNotes ? `${autoId} ${noteId}` : autoId"
+          :aria-label="action.aria"
+          :aria-describedby="action.kind === 'set' ? setDescribedBy : undefined"
           :disabled="busy"
-          @click="customize"
+          @click="action.run"
         >
-          {{ t('settings.daemon.set') }}
-        </Button>
-        <Button
-          v-else-if="autoPath"
-          key="auto"
-          data-auto-reset
-          size="sm"
-          variant="ghost"
-          :aria-label="t('settings.daemon.useAutoOf', { name: label })"
-          :disabled="busy"
-          @click="useAuto"
-        >
-          {{ t('settings.daemon.useAuto') }}
-        </Button>
-        <Button
-          v-else-if="def.kind !== 'readonly'"
-          key="reset"
-          size="sm"
-          variant="ghost"
-          :aria-label="t('settings.daemon.resetOf', { name: label })"
-          :disabled="busy"
-          @click="form.reset(def.path)"
-        >
-          {{ t('settings.daemon.reset') }}
+          {{ action.text }}
         </Button>
         <span class="sf__state" aria-live="polite">
           <Spinner v-if="busy" size="sm" :label="t('settings.daemon.saving')" />

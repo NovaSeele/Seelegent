@@ -97,7 +97,15 @@
     "criticalBelowMin": "Ngưỡng RAM khẩn cấp phải nhỏ hơn RAM trống để bắt đầu khi cả hai đều bật.",
     "mbIs": "= {size}",
     "auto": "Tự động",
-    "autoValue": "{value} trên máy này",
+    "autoValue": "{auto}: {value} trên máy này",
+    "autoZero": {
+      "off": "{auto}: tắt trên máy này",
+      "unlimited": "{auto}: không giới hạn trên máy này"
+    },
+    "derived": {
+      "half": "{auto}: một nửa {other} bạn đặt, {value}",
+      "twice": "{auto}: gấp đôi {other} bạn đặt, {value}"
+    },
     "set": "Đặt",
     "setOf": "Tự đặt {name}",
     "useAuto": "Dùng tự động",
@@ -106,10 +114,6 @@
     "explicitZero": {
       "off": "Do bạn đặt: tắt.",
       "unlimited": "Do bạn đặt: không giới hạn."
-    },
-    "zeroIs": {
-      "off": "tắt",
-      "unlimited": "không giới hạn"
     },
     "machine": {
       "full": "Máy này: {memory} RAM, {cpus}",

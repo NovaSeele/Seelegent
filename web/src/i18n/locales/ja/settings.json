@@ -97,7 +97,15 @@
     "criticalBelowMin": "両方がオンのとき、緊急メモリ下限は「開始に必要な空きメモリ」より小さくする必要があります。",
     "mbIs": "= {size}",
     "auto": "自動",
-    "autoValue": "このマシンでは {value}",
+    "autoValue": "{auto}：このマシンでは {value}",
+    "autoZero": {
+      "off": "{auto}：このマシンではオフ",
+      "unlimited": "{auto}：このマシンでは無制限"
+    },
+    "derived": {
+      "half": "{auto}：設定した「{other}」の半分、{value}",
+      "twice": "{auto}：設定した「{other}」の 2 倍、{value}"
+    },
     "set": "設定",
     "setOf": "{name}を自分で設定する",
     "useAuto": "自動に戻す",
@@ -106,10 +114,6 @@
     "explicitZero": {
       "off": "手動で設定した値：オフ。",
       "unlimited": "手動で設定した値：無制限。"
-    },
-    "zeroIs": {
-      "off": "オフ",
-      "unlimited": "無制限"
     },
     "machine": {
       "full": "このマシン：RAM {memory}、{cpus}",
