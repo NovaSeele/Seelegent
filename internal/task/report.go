@@ -122,8 +122,7 @@ func (s *Service) report(ctx context.Context, t *Task, cwd string) api.TaskRepor
 	}
 	rep.BlockedCommands = blocked
 	rep.Consults = consultsReport(t)
-	if a := t.Attention; a != nil && (a.State == api.AttentionBlocked || a.State == api.AttentionQuestion ||
-		a.State == api.AttentionStalled || a.Reason == ReasonBackgroundWait) {
+	if a := t.Attention; a != nil && (api.NeedsLead(a.State) || a.Reason == ReasonBackgroundWait) {
 		rep.Attention = &api.ReportAttention{State: a.State, Reason: a.Reason, Detail: a.Detail}
 	}
 	return rep

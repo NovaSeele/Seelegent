@@ -81,8 +81,7 @@ func flagKey(t *Task) string {
 	if a == nil {
 		return ""
 	}
-	switch a.State {
-	case api.AttentionBlocked, api.AttentionQuestion, api.AttentionStalled:
+	if api.NeedsLead(a.State) {
 		return a.State + "|" + a.Reason + "|" + a.Since
 	}
 	return ""

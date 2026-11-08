@@ -131,6 +131,17 @@ const (
 	AttentionCleared = "cleared"
 )
 
+// NeedsLead reports whether an attention state waits for the lead: blocked, question or stalled. These are the flags
+// that wake a lead's wait and that status, ls --blocked and the report count; every place asks this one function so
+// the set cannot drift again (M18 hunt H16).
+func NeedsLead(state string) bool {
+	switch state {
+	case AttentionBlocked, AttentionQuestion, AttentionStalled:
+		return true
+	}
+	return false
+}
+
 // Attention says that a task needs someone to look at it.
 type Attention struct {
 	State  string `json:"state" ts:"'blocked' | 'question' | 'stalled' | 'background_wait' | 'info'"`
