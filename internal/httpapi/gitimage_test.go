@@ -3,13 +3,17 @@ package httpapi_test
 import (
 	"bytes"
 	"fmt"
+	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/NovaSeele/Seelegent/internal/api"
 )
@@ -179,5 +183,79 @@ func TestTaskImageLinks(t *testing.T) {
 	}
 	for _, p := range []string{"outer/secret.png", "art/deep/secret.png", "inner/deep/secret.png", "inner/in.png"} {
 		e.wantError(e.get(imageURL(sum.ID, p, "")), http.StatusBadRequest, api.CodeInvalidArgument, "path")
+	}
+}
+
+// A client that stops reading never keeps a working-tree image open for long: an image up to 1 MiB is read whole
+// and closed before the answer, a larger one streams under the route's write deadline, after which its file is
+// closed. fileHeld asks the OS whether any handle on the file is open (Windows, Linux; elsewhere the test skips).
+func TestTaskImageStalledClient(t *testing.T) {
+	const deadline = time.Second
+	e := newEnvWith(t, func(o *envOptions) { o.imageWriteTimeout = deadline })
+	initRepo(t, e.cwd)
+	small, large := filepath.Join(e.cwd, "small.png"), filepath.Join(e.cwd, "large.png")
+	writeFile(t, small, bytes.Repeat([]byte{'s'}, 1<<20))
+	writeFile(t, large, bytes.Repeat([]byte{'l'}, 10<<20))
+	if _, known := fileHeld(t, small); !known {
+		t.Skip("cannot tell whether a file is open on " + runtime.GOOS)
+	}
+	e.addAccount("first")
+	e.queue.Push(t, ok("c1", "done"))
+	sum := e.delegate("Draw.")
+	e.wait(sum.ID)
+
+	// stall sends a GET for path, reads the status line and headers, then reads nothing more.
+	stall := func(path string) {
+		t.Helper()
+		c, err := net.Dial("tcp", "127.0.0.1:"+strconv.Itoa(e.port))
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = c.Close() })
+		if tc, ok := c.(*net.TCPConn); ok {
+			_ = tc.SetReadBuffer(4 << 10)
+		}
+		req := "GET " + imageURL(sum.ID, path, "") + " HTTP/1.1\r\nHost: 127.0.0.1:" + strconv.Itoa(e.port) + "\r\n\r\n"
+		if _, err := io.WriteString(c, req); err != nil {
+			t.Fatal(err)
+		}
+		head := make([]byte, 0, 1024)
+		one := make([]byte, 1)
+		for !bytes.HasSuffix(head, []byte("\r\n\r\n")) {
+			if _, err := c.Read(one); err != nil {
+				t.Fatalf("%s: %v after %q", path, err, head)
+			}
+			head = append(head, one[0])
+		}
+		if !bytes.HasPrefix(head, []byte("HTTP/1.1 200 ")) {
+			t.Fatalf("%s: %q", path, head)
+		}
+	}
+	// released waits up to limit for the file's last handle to close and says how long that took.
+	released := func(path string, limit time.Duration) (time.Duration, bool) {
+		start := time.Now()
+		for {
+			if held, _ := fileHeld(t, path); !held {
+				return time.Since(start), true
+			}
+			if time.Since(start) > limit {
+				return time.Since(start), false
+			}
+			time.Sleep(50 * time.Millisecond)
+		}
+	}
+
+	stall("small.png")
+	if took, ok := released(small, time.Second); !ok {
+		t.Fatalf("small image still open after %v", took)
+	}
+
+	stall("large.png")
+	// The stream is under way and the file is open, or this test proves nothing.
+	if held, _ := fileHeld(t, large); !held {
+		t.Fatal("large image already closed while the client reads nothing: the socket buffers took it all")
+	}
+	if took, ok := released(large, deadline+5*time.Second); !ok {
+		t.Fatalf("large image still open after %v", took)
 	}
 }

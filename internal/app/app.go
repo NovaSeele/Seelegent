@@ -95,6 +95,8 @@ type Options struct {
 	Classifier httpapi.Classifier
 	// DevOrigins are extra loopback browser origins the HTTP API accepts (the Vite dev server); see httpapi.Options.
 	DevOrigins []string
+	// ImageWriteTimeout is httpapi.Options.ImageWriteTimeout (30 s when 0); tests shorten it.
+	ImageWriteTimeout time.Duration
 	// Gh is the gh CLI (looked up on Env's PATH when empty); NoGh means there is none (tests: the real gh must
 	// never run).
 	Gh   string
@@ -146,6 +148,8 @@ type App struct {
 	started0   time.Time
 	pid        int
 	patchMu    sync.Mutex
+	// imageWriteTimeout is Options.ImageWriteTimeout.
+	imageWriteTimeout time.Duration
 	// rescheduler re-arms the quota refresher when quotaRefreshMinutes changes (the Refresher; a fake in tests).
 	rescheduler interface{ Reschedule() }
 	// sampler is the cached memory reading the task engine and GET /health share; slots are the gate slots
@@ -214,8 +218,8 @@ func New(ctx context.Context, o Options) (*App, error) {
 		o.GuardExe = exe
 	}
 	a := &App{Paths: o.Paths, log: o.Logger, env: o.Env, info: o.Info, web: o.Web, classifier: o.Classifier,
-		devOrigins: o.DevOrigins,
-		redact:     logx.NewRedactor().String, started0: o.Clock.Now(), pid: os.Getpid(), stopCh: make(chan struct{}),
+		devOrigins: o.DevOrigins, imageWriteTimeout: o.ImageWriteTimeout,
+		redact: logx.NewRedactor().String, started0: o.Clock.Now(), pid: os.Getpid(), stopCh: make(chan struct{}),
 		setMemoryLimit: debug.SetMemoryLimit, readMachine: o.ReadMachine}
 	if a.readMachine == nil {
 		a.readMachine = systemMachine

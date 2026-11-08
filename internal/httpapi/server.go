@@ -214,6 +214,9 @@ type Options struct {
 	Logger *slog.Logger
 	// Heartbeat is the SSE ping interval (25 s when 0); tests shorten it.
 	Heartbeat time.Duration
+	// ImageWriteTimeout bounds how long an image larger than smallImageBytes may take to send (30 s when 0): its
+	// file stays open while it streams, so a client that stops reading must not hold it for ever. Tests shorten it.
+	ImageWriteTimeout time.Duration
 	// AccountsPoll is how often the account watcher looks for changes besides pool and task notices (30 s).
 	AccountsPoll time.Duration
 	// DevOrigins are extra browser origins accepted for development only (the Vite dev server, whose proxy keeps
@@ -263,6 +266,9 @@ func New(o Options) (*Server, error) {
 	}
 	if o.Heartbeat <= 0 {
 		o.Heartbeat = 25 * time.Second
+	}
+	if o.ImageWriteTimeout <= 0 {
+		o.ImageWriteTimeout = 30 * time.Second
 	}
 	if o.AccountsPoll <= 0 {
 		o.AccountsPoll = 30 * time.Second

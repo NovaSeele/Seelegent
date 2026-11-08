@@ -96,6 +96,7 @@ func (a *App) ListenHTTP(ctx context.Context, port int) (string, error) {
 		Members: a.Members, Consults: a.Tasks, Notes: a.Notes, Meetings: a.Meetings, Contests: a.Contests,
 		Hooks: a.Hooks, Tickets: a.Tickets, Automations: a.Automations, FreeMemory: a.sampler.Sample,
 		LowMemory: a.Tasks.LowMemory, Machine: a.Machine, Activity: a.Refresher.Touch,
+		ImageWriteTimeout: a.imageWriteTimeout,
 	})
 	if err != nil {
 		_ = ln.Close()

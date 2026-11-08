@@ -145,28 +145,29 @@ in the daemon.
 - `GET /tasks/{id}/git/diff` takes `base=start` (the default: the working tree against the task's start, or the
   empty tree when the repository had no commit then) or `base=head` (the uncommitted list); any other `base` is
   `400`. It accepts `turn` but does not use it; per-turn changes come from the turn snapshots (`outside-diff`).
-- `GET /tasks/{id}/git/image?path=&version=` (an addition to the contract) answers one image of the task's
-  repository for the Git view's previews: `version=worktree` (the default) reads the working tree, `version=head`
-  the blob at HEAD (`404` when HEAD is unborn or has no such file); any other version is `400`. `path` is
-  repository-relative (`\` reads as `/`); an empty or absolute path, a `..` segment, any `:` (a drive or a Windows
-  alternate data stream), a control character, a Windows device name as any segment (`CON`, `PRN`, `AUX`, `NUL`,
-  `COM1`–`9`, `LPT1`–`9`, with or without an extension), or a working-tree path that leaves the repository through
-  a link or junction is `400` with field `path`. The working-tree file is opened through `os.Root` on the
-  repository root (a relative symbolic link is followed only while it stays inside it; a link with an absolute
-  target, every Windows junction included, counts as leaving, even one that points back inside; there is no gap
-  between a check and the open; `O_NONBLOCK` on Unix, so a FIFO cannot hang the request) and must be a regular
-  file. Only `png`, `jpg`, `jpeg`, `gif`, `webp`, `avif`, `bmp`, `ico` and `svg` are served; any other extension is
-  `415 unsupported_media_type` (`details.reason: "not_image"`), and so is a Git LFS pointer (`details.reason:
-  "lfs_pointer"`). An image over 10 MiB is `413 too_large` with `details.size` (and the size in the message),
-  checked before reading: the open file's `Stat` for the working tree (the file is then streamed, never held
-  whole), `git cat-file --batch-check` for HEAD (then a capped read: gitx has no streaming read). A browser request
-  from another site (`Sec-Fetch-Site: cross-site` or `same-site`) is `403 forbidden` with `details.reason:
-  "cross_site"`; a request without the header (the CLI, MCP) is served. The answer's `Content-Type` comes from the
-  extension (never sniffed), with `X-Content-Type-Options: nosniff`, `Content-Security-Policy: default-src 'none';
-  style-src 'unsafe-inline'; sandbox; frame-ancestors 'none'` (an SVG opened as a page runs no script on the
-  daemon's origin) and `Cache-Control: no-store`. The Git view adds `v=<stamp>` (`GitFile.stamp`) to the URL; the
-  endpoint ignores it. It is a GET for the dashboard and the lead: it is not on the worker allow-list, so a worker
-  is refused it.
+- `GET /tasks/{id}/git/image?path=&version=` (an addition to the contract) answers one image of the task's repository
+  for the Git view's previews: `version=worktree` (the default) reads the working tree, `version=head` the blob at HEAD
+  (`404` when HEAD is unborn or has no such file); any other version is `400`. `path` is repository-relative (`\` reads
+  as `/`); an empty or absolute path, a `..` segment, any `:` (a drive or a Windows alternate data stream), a control
+  character, a Windows device name as any segment (`CON`, `PRN`, `AUX`, `NUL`, `COM1`–`9`, `LPT1`–`9`, with or without
+  an extension), or a working-tree path that leaves the repository through a link or junction is `400` with field
+  `path`. The working-tree file is opened through `os.Root` on the repository root (a relative symbolic link is followed
+  only while it stays inside it; a link with an absolute target, every Windows junction included, counts as leaving,
+  even one that points back inside; there is no gap between a check and the open; `O_NONBLOCK` on Unix, so a FIFO cannot
+  hang the request) and must be a regular file. Only `png`, `jpg`, `jpeg`, `gif`, `webp`, `avif`, `bmp`, `ico` and `svg`
+  are served; any other extension is `415 unsupported_media_type` (`details.reason: "not_image"`), and so is a Git LFS
+  pointer (`details.reason: "lfs_pointer"`). An image over 10 MiB is `413 too_large` with `details.size` (and the size
+  in the message), checked before reading: the open file's `Stat` for the working tree, `git cat-file --batch-check` for
+  HEAD (then a capped read: gitx has no streaming read). A working-tree image up to 1 MiB is read whole and its file
+  closed before the answer is written; a larger one is streamed, never held whole, under a write deadline of 30 seconds
+  for this route only (the server has no `WriteTimeout`, for the event stream), so a client that stops reading cannot
+  keep the file open. A browser request from another site (`Sec-Fetch-Site: cross-site` or `same-site`) is `403
+  forbidden` with `details.reason: "cross_site"`; a request without the header (the CLI, MCP) is served. The answer's
+  `Content-Type` comes from the extension (never sniffed), with `X-Content-Type-Options: nosniff`,
+  `Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; sandbox; frame-ancestors 'none'` (an SVG
+  opened as a page runs no script on the daemon's origin) and `Cache-Control: no-store`. The Git view adds `v=<stamp>`
+  (`GitFile.stamp`) to the URL; the endpoint ignores it. It is a GET for the dashboard and the lead: it is not on the
+  worker allow-list, so a worker is refused it.
 - `GET /tasks/{id}/git/commits/{sha}` (an addition to the contract) answers `GitCommitDetail`: the commit's files and
   parsed diffs against its first parent, 1 MiB in all (`truncated`), with `--no-textconv` and `--no-ext-diff` like
   the other diffs. The sha is checked as 4–64 hex digits before git sees it (`400`, field `sha`), resolved with
