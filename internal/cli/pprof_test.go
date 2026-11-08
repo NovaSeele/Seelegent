@@ -40,7 +40,7 @@ func TestDaemonRefusesPublicPprofAddr(t *testing.T) {
 	}
 }
 
-func pprofGet(t *testing.T, url, host string) (int, string) {
+func pprofGet(t *testing.T, url, host string) (code int, body string) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
@@ -56,8 +56,8 @@ func pprofGet(t *testing.T, url, host string) (int, string) {
 		t.Fatal(err)
 	}
 	defer func() { _ = resp.Body.Close() }()
-	body, _ := io.ReadAll(resp.Body)
-	return resp.StatusCode, string(body)
+	data, _ := io.ReadAll(resp.Body)
+	return resp.StatusCode, string(data)
 }
 
 // The debug server serves pprof and expvar on loopback and refuses a foreign Host header (DNS rebinding).
