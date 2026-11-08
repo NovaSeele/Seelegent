@@ -194,20 +194,34 @@ func TestNetLaneFailsClosed(t *testing.T) {
 		{Path: "b.txt", Status: api.GitModified, Hash: "b1", Size: 2},
 		{Path: "d.txt", Status: api.GitModified, Hash: "d1", Size: 2},
 	}}
+	// d.txt changed: on Windows and macOS D.TXT is the same file with d2; on Linux it is another file, and d.txt,
+	// dirty at the start and gone from the end, went back to HEAD, which is a change too.
 	end := snapshot.Manifest{Version: 1, Head: "h1", Files: []snapshot.File{
 		{Path: "b.txt", Status: api.GitModified, Hash: "b1", Size: 2},  // restored to what it was
 		{Path: "c.txt", Status: api.GitUntracked, Hash: "c1", Size: 2}, // new
-		{Path: "D.TXT", Status: api.GitModified, Hash: "d2", Size: 2},  // changed (another spelling on Windows)
+		{Path: "D.TXT", Status: api.GitModified, Hash: "d2", Size: 2},
 	}}
 	save(1, snapshot.KindStart, start)
 	save(2, snapshot.KindEnd, end)
 	union := []string{"a.txt", "b.txt", "c.txt", "d.txt"} // a.txt: created and deleted again
+	if got := h.s.netLane(tk, 2, union, nil); !slices.Equal(got, []string{"c.txt", "d.txt"}) {
+		t.Errorf("net = %v, want [c.txt d.txt]", got)
+	}
+	// The spelling matters only where the file system ignores letter case (snapshot.Key): with d.txt unchanged and a
+	// new D.TXT next to it, Linux sees d.txt as it was, Windows and macOS find D.TXT (listed first) as d.txt.
+	spelled := snapshot.Manifest{Version: 1, Head: "h1", Files: []snapshot.File{
+		{Path: "b.txt", Status: api.GitModified, Hash: "b1", Size: 2},
+		{Path: "c.txt", Status: api.GitUntracked, Hash: "c1", Size: 2},
+		{Path: "D.TXT", Status: api.GitUntracked, Hash: "d2", Size: 2},
+		{Path: "d.txt", Status: api.GitModified, Hash: "d1", Size: 2},
+	}}
+	save(2, snapshot.KindEnd, spelled)
 	want := []string{"c.txt"}
 	if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
 		want = []string{"c.txt", "d.txt"}
 	}
 	if got := h.s.netLane(tk, 2, union, nil); !slices.Equal(got, want) {
-		t.Errorf("net = %v, want %v", got, want)
+		t.Errorf("net with D.TXT next to d.txt = %v, want %v", got, want)
 	}
 	for name, change := range map[string]func(s, e *snapshot.Manifest){
 		"truncated end":   func(_, e *snapshot.Manifest) { e.Truncated = true },
@@ -548,8 +562,60 @@ func TestLaneScriptWriteIsRed(t *testing.T) {
 		fakeMtime(out, h.clk.Now().Add(time.Second)), agyTool(1, "DONE", cmd), agyResult("conv-p", "Wrote the docs.")))
 	sum := h.delegate(api.DelegateRequest{Title: "script write", Lane: []string{"src/"}})
 	tk := h.waitStatus(sum.ID, StatusDone)
-	if st := h.laneOf(tk, 1); st.State != api.StepRed || !slices.Equal(st.Files, []string{"docs/x.md"}) ||
+	st := h.laneOf(tk, 1)
+	if st.State != api.StepRed || !slices.Equal(st.Files, []string{"docs/x.md"}) ||
 		len(st.Unseen) != 0 || strings.Contains(st.Tail, gate.UnknownNote) {
+		t.Fatalf("lane = %+v", st)
+	}
+	// The lead sees why: a red lane has no fix turn (review G1).
+	if want := "Of these, " + gate.TimedNote + ":\ndocs/x.md: changed while `" + cmd + "` ran"; !strings.Contains(st.Tail,
+		want) {
+		t.Errorf("tail = %q, want %q", st.Tail, want)
+	}
+}
+
+// With the gate off the lane is a scope finding; a file counted by time says which command it changed during, and a
+// file a code runner's turn deleted says which runner ran (review G1).
+func TestGateOffLaneSaysWhy(t *testing.T) {
+	h := newHarness(t)
+	laneRepo(h)
+	h.agy("w", 1)
+	cmd := `node gen.js`
+	out := filepath.Join(h.cwd, "docs", "g.md")
+	h.queue.Push(t, script(agyInit("conv-w"), agyTool(1, "CALLING", cmd), fakeWrite(out, "g\n"),
+		fakeMtime(out, h.clk.Now()), "#!remove "+filepath.Join(h.cwd, "b.txt"), agyTool(1, "DONE", cmd),
+		agyResult("conv-w", "Generated.")))
+	no := false
+	sum := h.delegate(api.DelegateRequest{Title: "gate off why", Lane: []string{"src/"}, Gate: &no})
+	tk := h.waitStatus(sum.ID, StatusDone)
+	details := map[string]string{}
+	for _, f := range tk.LastTurn().Scope {
+		if f.Kind == api.FindingOutsideLane {
+			details[f.Path] = f.Detail
+		}
+	}
+	if d := details["docs/g.md"]; d != "outside the lane, changed while `node gen.js` ran" {
+		t.Errorf("docs/g.md: %q (scope %+v)", d, tk.LastTurn().Scope)
+	}
+	if d := details["b.txt"]; d != "outside the lane, deleted, and the worker ran `node gen.js`" {
+		t.Errorf("b.txt: %q (scope %+v)", d, tk.LastTurn().Scope)
+	}
+}
+
+// The daemon stamps the call event when it reads it, up to a second (and more on a busy machine) after the command
+// started: a file the script wrote 800 ms before the call's time still counts (review N1).
+func TestLaneWriteBeforeCallEventIsRed(t *testing.T) {
+	h := newHarness(t)
+	laneRepo(h)
+	h.agy("w", 1)
+	cmd := `node gen.js`
+	out := filepath.Join(h.cwd, "docs", "early.md")
+	h.queue.Push(t, script(agyInit("conv-e"), fakeWrite(out, "e\n"),
+		fakeMtime(out, h.clk.Now().Add(-800*time.Millisecond)), agyTool(1, "CALLING", cmd), agyTool(1, "DONE", cmd), agyResult("conv-e", "Generated the docs.")))
+	sum := h.delegate(api.DelegateRequest{Title: "early write", Lane: []string{"src/"}})
+	tk := h.waitStatus(sum.ID, StatusDone)
+	if st := h.laneOf(tk, 1); st.State != api.StepRed || !slices.Equal(st.Files, []string{"docs/early.md"}) ||
+		len(st.Unseen) != 0 {
 		t.Fatalf("lane = %+v", st)
 	}
 }

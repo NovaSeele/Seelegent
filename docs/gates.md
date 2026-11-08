@@ -237,19 +237,26 @@ latest instruction (field report 4):
   no turn's change in the first place, so they never reach the lane. Temporary targets are neither paths nor
   unknown: the temporary folder's variables (`$env:TEMP`, `%TEMP%`, `$TMPDIR`), `$(mktemp)`, `New-TemporaryFile`,
   `[IO.Path]::GetTempFileName()`, a `cd` into one, and a variable the same line assigned from one
-  (`t=$(mktemp); ... > "$t"`, `$f = Join-Path $env:TEMP x; ... > $f`); so are the null devices (`$null`, `nul`,
+  (`t=$(mktemp); ... > "$t"`, `$f = Join-Path $env:TEMP x; ... > $f`), each as a whole name (`$tmp/x` and
+  `${tmp}x` are temporary, `$tmpl/x` and `$template_dir/x` unknown); so are the null devices (`$null`, `nul`,
   `/dev/null`). A `cd` inside a subshell, a command substitution or a PowerShell block applies inside it; after
   the group the rest of the line is in an unknown folder (a POSIX subshell keeps its `cd`, cmd's `( )` and
   `Set-Location` in a block do not, so the reading does not guess).
 - **Scripts by time.** A code runner writes files no word of its command names (`python fix.py`, `node gen.js`,
   `go run ./tools/x`, `npm run format`, `make`). A file outside the lane counts as the worker's when its
   modification time in the end snapshot lies in one of the worker's command windows: from the command's call event
-  to its result event plus 2 s (a result with a duration and no call event starts at its time minus the duration;
-  a call without a result runs to the turn's end). A change outside every window, such as the lead editing while
+  to its result event, widened by 3 s on both sides (a result with a duration and no call event starts at its time
+  minus the duration; a call without a result runs to the turn's end). The daemon stamps an event when it reads the
+  worker's line, up to a second after it was written (the read backs off while the worker is quiet) and later on a
+  busy machine, so a script's first write can come before its call event's time; the 3 s are that second plus
+  room. A change outside every window, such as the lead editing while
   the worker thinks, stays a warning. A code runner whose start is not known (a result with neither a call event
   nor a duration, or no event at all) counts as a write Seelegent cannot read, and a file gone from the end
   snapshot (no time to compare) counts as the worker's when a code runner ran. Event times and file times come from
-  the same machine's clock.
+  the same machine's clock. A red lane gets no fix turn, so a file counted this way says why: the step's tail lists
+  it under "Of these, counted by time (no worker edit or command names them)" as ``docs/x.md: changed while `node
+  gen.js` ran`` (a deleted file: ``deleted, and the worker ran `node gen.js` ``), and with the gate off the
+  `outside_lane` finding's detail says the same ("outside the lane, changed while … ran").
 - The changed-file list of the turn (`files_changed`) is not narrowed: it still holds every file the snapshots saw
   change.
 

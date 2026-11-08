@@ -71,11 +71,12 @@ type workerWrites struct {
 	globs     []string
 	unknown   []string // the commands that wrote where Seelegent could not read
 	// runs are the windows the worker's commands ran in, and mtime a file's modification time (cmdwindows.go): a
-	// file that changed during a run is the worker's (the lane check only; nil mtime: no window applies). runners
-	// is true when a code runner ran: a file gone from the end snapshot, whose time is unknown, counts then.
-	runs    []commandRun
-	mtime   func(rel string) (time.Time, bool)
-	runners bool
+	// file that changed during a run is the worker's (the lane check only; nil mtime: no window applies). runner
+	// is the first code runner the worker ran ("" none): a file gone from the end snapshot, whose time is unknown,
+	// counts then.
+	runs   []commandRun
+	mtime  func(rel string) (time.Time, bool)
+	runner string
 }
 
 // newWorkerWrites reads a turn's edit-tool files (edited: relative to root, '/' separators) and its shell
@@ -153,6 +154,11 @@ func (w *workerWrites) addCommand(command string) {
 
 // wrote reports whether the worker plausibly made or changed rel (relative to the repository root).
 func (w *workerWrites) wrote(rel string) bool {
+	return w.named(rel) || w.why(rel) != ""
+}
+
+// named reports whether an edit or a command's words name rel (or a folder or glob holding it).
+func (w *workerWrites) named(rel string) bool {
 	k := snapshot.Key(rel)
 	for _, t := range w.keys {
 		if k == t || strings.HasPrefix(k, t+"/") {
@@ -164,11 +170,36 @@ func (w *workerWrites) wrote(rel string) bool {
 			return true
 		}
 	}
-	if w.mtime != nil {
-		if at, ok := w.mtime(rel); ok {
-			return ranDuring(w.runs, at)
-		}
-		return w.runners
-	}
 	return false
+}
+
+// why explains a file the worker wrote though nothing names it, for the lead (a red lane has no fix turn): the
+// command it changed during, or the code runner that ran when it was deleted. "" when a name covers it or it does
+// not count.
+func (w *workerWrites) why(rel string) string {
+	if w.mtime == nil || w.named(rel) {
+		return ""
+	}
+	if at, ok := w.mtime(rel); ok {
+		if r, ok := runAt(w.runs, at); ok {
+			return "changed while `" + clipCommand(r.command) + "` ran"
+		}
+		return ""
+	}
+	if w.runner != "" {
+		return "deleted, and the worker ran `" + clipCommand(w.runner) + "`"
+	}
+	return ""
+}
+
+// clipCommand keeps a command short for a message: its first line, at most 120 bytes.
+func clipCommand(c string) string {
+	c, _, more := strings.Cut(strings.TrimSpace(c), "\n")
+	if len(c) > 120 {
+		c, more = strings.ToValidUTF8(c[:120], ""), true
+	}
+	if more {
+		c += " …"
+	}
+	return c
 }

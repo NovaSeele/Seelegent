@@ -215,7 +215,7 @@ func (s *Service) gatePhase(r *run, t *Task) (bool, error) {
 		}
 		in.LaneFiles = s.netLane(t, ph.Turn, files, end)
 		touch := s.laneTouched(r.ctx, t, ph.Turn, end)
-		in.Touched, in.UnknownWrites = touch.wrote, touch.unknown
+		in.Touched, in.Why, in.UnknownWrites = touch.wrote, touch.why, touch.unknown
 	}
 	if p.GateOff {
 		// The gate is off: the phase is the verifier's alone; the lane was checked as scope findings (F12).
