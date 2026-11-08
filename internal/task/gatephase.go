@@ -236,9 +236,47 @@ func (s *Service) gatePhase(r *run, t *Task) (bool, error) {
 	}
 	// Only the task's own failures are worth a fix turn.
 	if p.AutoFixes < p.Budget && gate.Failing(res) != nil {
-		return s.fixTurn(t.ID, ph.Turn, res, barChanged, gate.FixPrompt(res, p.AutoFixes+1, p.Budget, others), ByGate)
+		if !stuckStyleFix(t, ph.Turn, res) {
+			return s.fixTurn(t.ID, ph.Turn, res, barChanged, gate.FixPrompt(res, p.AutoFixes+1, p.Budget, others),
+				ByGate)
+		}
+		res.Warnings = append(res.Warnings, "the automatic fix turn left the same line ending and BOM findings: "+
+			"no more fix turns, the lead decides")
 	}
 	return false, s.endGate(t.ID, ph.Turn, &res, barChanged)
+}
+
+// stuckStyleFix reports whether turn n is an automatic fix turn whose gate still has exactly the line ending and
+// BOM findings (same files, same kinds) of the gate that started it: another fix turn would not clear them either
+// (M18: two fix turns could not, one worker even converted a file to CRLF trying).
+func stuckStyleFix(t *Task, n int, res api.GateResult) bool {
+	now := styleFindings(res)
+	if len(now) == 0 {
+		return false
+	}
+	for _, tu := range t.Turns {
+		if tu.Gate != nil && tu.Gate.AutoFix == n {
+			return maps.Equal(styleFindings(*tu.Gate), now)
+		}
+	}
+	return false
+}
+
+// styleFindings returns the line ending and BOM findings of a gate's hygiene steps, as kind and path.
+func styleFindings(res api.GateResult) map[[2]string]bool {
+	out := map[[2]string]bool{}
+	for i := range res.Steps {
+		if res.Steps[i].Kind != api.StepHygiene {
+			continue
+		}
+		for _, f := range res.Steps[i].Findings {
+			switch f.Kind {
+			case api.FindingEOLChanged, api.FindingBOMChanged, api.FindingBOMNewFile:
+				out[[2]string{f.Kind, f.Path}] = true
+			}
+		}
+	}
+	return out
 }
 
 func failedGate(res api.GateResult) bool {

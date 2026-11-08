@@ -32,23 +32,23 @@ const (
 
 var utf8BOM = []byte{0xEF, 0xBB, 0xBF}
 
-// hygiene checks the files the turn changed that were clean when it started: line endings and BOM against HEAD,
-// junk files, a BOM in a new file of a repository that uses none, and new files the report never mentions
-// (old hygiene.js; test_scaffold is left out).
+// hygiene checks the files the turn changed. For those that were clean when the turn started: junk files, a BOM in
+// a new file of a repository that uses none, and new files the report never mentions (old hygiene.js;
+// test_scaffold is left out). For every changed file whose start is known: line endings and BOM against the styles
+// the file may keep (styleRefs), so only what the turn did is judged.
 func (s *Service) hygiene(ctx context.Context, root string, start, end snapshot.Manifest, changed []string,
 	response string) []api.Finding {
 	var out []api.Finding
 	report := strings.ToLower(response)
 	for _, rel := range changed {
-		if b, ok := start.Find(rel); ok && b.Status != "" {
-			continue // already changed before the turn: not the worker's doing
-		}
+		b, inStart := start.Find(rel)
+		dirty := inStart && b.Status != "" // already changed before the turn: those changes are not the worker's
 		f, ok := end.Find(rel)
 		if !ok || f.Missing {
 			continue
 		}
 		isNew := f.Status == api.GitUntracked || f.Status == api.GitAdded
-		if isNew && snapshot.JunkName(rel) {
+		if !dirty && isNew && snapshot.JunkName(rel) {
 			out = append(out, api.Finding{Kind: api.FindingJunkFile, Severity: api.SeverityRed, Path: rel})
 			continue
 		}
@@ -59,7 +59,7 @@ func (s *Service) hygiene(ctx context.Context, root string, start, end snapshot.
 		if err != nil {
 			continue
 		}
-		if isNew {
+		if !dirty && isNew {
 			if bytes.HasPrefix(data, utf8BOM) && s.repoWithoutBOM(ctx, root, start.Head, rel) {
 				out = append(out, api.Finding{Kind: api.FindingBOMNewFile, Severity: api.SeverityRed, Path: rel})
 				continue
@@ -70,18 +70,83 @@ func (s *Service) hygiene(ctx context.Context, root string, start, end snapshot.
 			}
 			continue
 		}
-		head, ok, err := s.o.Repos.Blob(ctx, root, start.Head, rel, hygieneMaxBytes+1, true)
-		if err != nil || !ok || len(head) > hygieneMaxBytes {
-			continue
+		var atStart []byte
+		if inStart && !b.Missing && b.Stored && !b.Binary && b.Size <= hygieneMaxBytes {
+			atStart, _ = s.o.Snapshots.Content(b)
 		}
-		if bytes.HasPrefix(head, utf8BOM) != bytes.HasPrefix(data, utf8BOM) {
+		if dirty && atStart == nil {
+			continue // dirty before the turn, and its content then is unknown
+		}
+		refs := s.styleRefs(ctx, root, start.Head, rel, atStart)
+		bom := bytes.HasPrefix(data, utf8BOM)
+		if known, kept := refs.match(func(ref []byte) bool { return bytes.HasPrefix(ref, utf8BOM) == bom }); known &&
+			!kept {
 			out = append(out, api.Finding{Kind: api.FindingBOMChanged, Severity: api.SeverityRed, Path: rel})
 		}
-		if eolChanged(head, data) {
+		if known, kept := refs.match(func(ref []byte) bool { return !eolChanged(ref, data) }); known && !kept &&
+			!s.committedKeeps(ctx, root, rel, data, refs) {
 			out = append(out, api.Finding{Kind: api.FindingEOLChanged, Severity: api.SeverityRed, Path: rel})
 		}
 	}
 	return out
+}
+
+// committedKeeps reports whether git normalizes data on commit (every CRLF to LF: core.autocrlf true or input, the
+// text and eol attributes) and that LF form keeps the style of a reference version: the working copy's line
+// endings then never reach a commit, whatever mix of them the worker left.
+func (s *Service) committedKeeps(ctx context.Context, root, rel string, data []byte, refs *fileRefs) bool {
+	if norm, err := s.o.Repos.Normalizes(ctx, root, rel, data); err != nil || !norm {
+		return false
+	}
+	lf := bytes.ReplaceAll(data, []byte("\r\n"), []byte("\n"))
+	_, kept := refs.match(func(ref []byte) bool { return !eolChanged(ref, lf) })
+	return kept
+}
+
+// fileRefs are the versions of one file whose line endings and BOM a turn may keep, read in order and only as far
+// as a comparison needs.
+type fileRefs struct {
+	load     []func() ([]byte, bool)
+	next     int
+	versions [][]byte
+}
+
+// styleRefs returns the reference versions of rel: its content at the start of the turn (atStart, nil when the
+// start snapshot did not keep it), then its blob at head as committed (no filters) and as a checkout writes it
+// (core.autocrlf, the eol attributes, smudge filters such as LFS). The checkout form alone does not say what the
+// worker changed: under core.autocrlf=true a file clean at the start may be LF or CRLF in the working tree (M18: an
+// LF working copy was flagged against the CRLF checkout form, and two fix turns could not clear it).
+func (s *Service) styleRefs(ctx context.Context, root, head, rel string, atStart []byte) *fileRefs {
+	r := &fileRefs{}
+	if atStart != nil {
+		r.load = append(r.load, func() ([]byte, bool) { return atStart, true })
+	}
+	for _, filters := range []bool{false, true} {
+		r.load = append(r.load, func() ([]byte, bool) {
+			data, ok, err := s.o.Repos.Blob(ctx, root, head, rel, hygieneMaxBytes+1, filters)
+			return data, err == nil && ok && len(data) <= hygieneMaxBytes
+		})
+	}
+	return r
+}
+
+// match reports whether any reference version could be read (known) and whether one of them satisfies keeps.
+func (r *fileRefs) match(keeps func(ref []byte) bool) (known, kept bool) {
+	for i := 0; i < len(r.versions) || r.next < len(r.load); {
+		if i == len(r.versions) {
+			data, ok := r.load[r.next]()
+			r.next++
+			if ok {
+				r.versions = append(r.versions, data)
+			}
+			continue
+		}
+		if keeps(r.versions[i]) {
+			return true, true
+		}
+		i++
+	}
+	return len(r.versions) > 0, false
 }
 
 // lineBreaks counts CRLF and bare LF line breaks.
@@ -98,10 +163,10 @@ func lineBreaks(data []byte) (crlf, lf int) {
 	return crlf, lf
 }
 
-// eolChanged reports a file whose line endings drifted from the style it has at HEAD (at least two line breaks
-// there): more bare LF in a CRLF file, or more CRLF in an LF file.
-func eolChanged(head, now []byte) bool {
-	hc, hl := lineBreaks(head)
+// eolChanged reports a file whose line endings drifted from the style of a reference version (at least two line
+// breaks there): more bare LF in a CRLF file, or more CRLF in an LF file.
+func eolChanged(ref, now []byte) bool {
+	hc, hl := lineBreaks(ref)
 	if hc+hl < 2 {
 		return false
 	}

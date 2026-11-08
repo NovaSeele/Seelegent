@@ -111,6 +111,9 @@ failing steps with their output tails and the files other tasks are changing. Th
 again. When the budget is used up the task ends `done` with the red gate and the attention reason `gate_red`
 (`hygiene` when the hygiene step is the only failure). Its detail says in plain English which steps failed
 ("command failed: npm test; syntax check failed: a.json"); the dashboard builds its own text from the steps.
+An automatic fix turn whose gate still has exactly the line ending and BOM findings (`eol_changed`, `bom_changed`,
+`bom_new_file`: same files, same kinds) of the gate that started it ends the loop at once, whatever budget is left:
+the task ends the same way, with the warning "the automatic fix turn left the same line ending and BOM findings".
 
 **Green.** With the verifier on and changed files, the verifier runs; otherwise the task is done.
 

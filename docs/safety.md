@@ -238,8 +238,15 @@ all; a turn without snapshots is `404 not_found`.
 
 ### Hygiene
 
-For the files the turn changed that were clean before it (not other tasks' files); line endings and BOM are
-compared with `HEAD`, files over 2 MiB, binary and scratch files are skipped:
+For the files the turn changed (not other tasks' files); files over 2 MiB, binary and scratch files are skipped, and
+the new-file kinds only look at files that were clean before the turn. Line endings and BOM judge what the turn did:
+they are a finding only when the file's style matches none of its content at the start of the turn (when the start
+snapshot kept it, that is when it was dirty then), its `HEAD` blob as committed and its `HEAD` blob as a checkout
+writes it. Line endings are also no finding when git normalizes the file on commit (`core.autocrlf` true or input,
+the `text` and `eol` attributes; asked through `git hash-object --path`, which writes nothing) and the LF form keeps
+the style: those line endings never reach a commit. So an LF working copy under `core.autocrlf=true` is never
+flagged against the CRLF checkout form, while an LF file that gets CRLF lines where nothing normalizes is. A file
+that was dirty before the turn but whose start content the snapshot did not keep is not checked:
 
 | Kind | Severity | When |
 |---|---|---|
