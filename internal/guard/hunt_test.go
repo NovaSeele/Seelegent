@@ -255,6 +255,84 @@ func TestFetchConfig(t *testing.T) {
 	expect(t, with(mirror, nil), map[string]bool{"git fetch": true, "cd x && git fetch origin": false}, POSIX)
 }
 
+// TestBranchCase (review of fix/m18-open-items, item 1): on a disk that ignores case, a new branch whose name matches
+// an existing one in all but case writes over it (git branch Main beside main rewinds main), on every command that
+// creates a branch; a new name, the same spelling, and a disk that keeps case pass.
+func TestBranchCase(t *testing.T) {
+	existing := []string{"refs/heads/main", "refs/heads/feature", "refs/heads/team/Login"}
+	var gotGlobals []string
+	folds := Checker{Branches: func(globals []string) ([]string, error) {
+		gotGlobals = globals
+		return existing, nil
+	}}
+	keeps := Checker{Branches: func([]string) ([]string, error) { return nil, nil }}
+	broken := Checker{Branches: func([]string) ([]string, error) { return nil, errors.New("exit status 128") }}
+	cases := []struct {
+		args string
+		deny bool
+	}{
+		{"fetch origin main:refs/heads/Main", true},
+		{"fetch origin main:Main", true},
+		{"fetch origin main:heads/MAIN", true},
+		{"fetch . old:Main", true},
+		{"fetch origin feature:Feature", true},
+		{"fetch origin main:refs/heads/main", false},
+		{"fetch origin main:main", false},
+		{"fetch origin main:Main2", false},
+		{"fetch origin main:refs/remotes/origin/Main", false},
+		{"fetch origin main:remotes/origin/Main", false},
+		{"fetch origin main:tags/Main", false},
+		{"fetch origin Main", false},
+		{"branch Main old", true},
+		{"branch Main", true},
+		{"branch --track Feature origin/feature", true},
+		{"branch team/login", true},
+		{"branch Team/Login", true},
+		{"branch team/Login2", false},
+		{"branch new-work", false},
+		{"branch --list Main", false},
+		{"branch -a", false},
+		{"branch -u origin/main Main", false},
+		{"checkout -b Main old", true},
+		{"checkout -bMain old", true},
+		{"checkout -b Feature", true},
+		{"checkout -b new-work", false},
+		{"worktree add -b Main ../wt old", true},
+		{"worktree add -bFeature ../wt", true},
+		{"worktree add ../Main", true},
+		{`worktree add ..\wt\Feature\`, true},
+		{"worktree add ../wt Main", true},
+		{"worktree add --detach ../Main", false},
+		{"worktree add -b new-work ../Main", false},
+		{"worktree add ../new-work", false},
+		{"worktree list", false},
+	}
+	for _, tc := range cases {
+		if got := folds.Git(strings.Fields(tc.args)); got.Deny != tc.deny {
+			t.Errorf("folding disk: git %s deny = %v, want %v", tc.args, got.Deny, tc.deny)
+		}
+		if got := keeps.Git(strings.Fields(tc.args)); got.Deny {
+			t.Errorf("disk that keeps case: git %s refused", tc.args)
+		}
+	}
+	for _, args := range []string{"branch Main", "checkout -b work", "worktree add ../wt", "fetch origin a:b"} {
+		if !broken.Git(strings.Fields(args)).Deny {
+			t.Errorf("branches cannot be read: git %s allowed", args)
+		}
+	}
+	if broken.Git([]string{"fetch", "origin"}).Deny || broken.Git([]string{"branch", "--list"}).Deny {
+		t.Error("a command that creates no branch needs no branch list")
+	}
+	folds.Git([]string{"-C", "../x", "branch", "work"})
+	if strings.Join(gotGlobals, " ") != "-C ../x" {
+		t.Errorf("branches read with globals %q, want -C ../x", gotGlobals)
+	}
+	// The hook: a name it cannot see is refused only where branches are compared.
+	expect(t, folds, map[string]bool{"git checkout -b $NAME": true, "git branch Main && git status": true,
+		"git checkout -b fix-1": false}, POSIX)
+	expect(t, keeps, map[string]bool{"git checkout -b $NAME": false}, POSIX)
+}
+
 // TestProgramOptions (H4): git options, settings, URLs and variables that make git run a command of the caller's
 // choosing are refused on both layers; plain grep, difftool and remote reads stay allowed.
 func TestProgramOptions(t *testing.T) {

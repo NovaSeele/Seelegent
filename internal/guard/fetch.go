@@ -107,7 +107,8 @@ func optionValues(args []word, full string, minLen int) (values []string, given,
 // ignores case) is empty, FETCH_HEAD, or under refs/remotes/ or refs/tags/. Outside those, a wildcard destination is
 // refused, and so is any destination when the refspec is forced (+ or --force), when the fetch prunes (deleting what
 // the remote no longer has; --prune, --prune-tags, or fetch.prune / remote.<name>.prune in the configuration), and
-// under refs/ anywhere but refs/heads/ (git updates such refs whatever their history, as if forced). A configuration
+// under refs/ anywhere but refs/heads/ (git updates such refs whatever their history, as if forced). A branch
+// destination whose name matches an existing branch in all but case is refused too (caseClash). A configuration
 // that cannot be read refuses the fetch.
 func (c Checker) fetchUnsafe(globals []string, f fetchPlan) bool {
 	var cfg []ConfigEntry
@@ -134,12 +135,20 @@ func (c Checker) fetchUnsafe(globals []string, f fetchPlan) bool {
 			prune = true
 		}
 	}
+	var branches []word
 	for _, s := range specs {
 		if unsafeRefspec(s, f.force, prune) {
 			return true
 		}
+		s = strings.TrimPrefix(strings.TrimSpace(s), "+")
+		if _, dst, ok := strings.Cut(s, ":"); ok && !strings.HasPrefix(s, "^") {
+			if ref := fetchBranchRef(dst); ref != "" {
+				branches = append(branches, word{text: ref})
+			}
+		}
 	}
-	return false
+	// A fast-forward into Main beside main writes over main on a disk that ignores case (see caseClash).
+	return c.caseClash(globals, branches)
 }
 
 // selected returns whether the fetch reads the configured remote sub: every remote when it names none, or names one

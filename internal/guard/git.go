@@ -130,10 +130,17 @@ func (c Checker) git(args []word, depth int) Result {
 		if p.unknown || !p.has("-b") || p.has("-B") || p.dashdash || len(p.pos) > 1 || p.has(danger...) {
 			return deny()
 		}
+		// -b Main beside main writes over main on a disk that ignores case (see caseClash).
+		if c.caseClash(globals, mapWords(p.values("-b"), headRef)) {
+			return deny()
+		}
 	case "branch":
 		danger := []string{"-d", "-D", "-m", "-M", "-C", "-f", "--delete", "--move", "--force", "--copy"}
 		p := scan(rest, opts{short: "u", long: set("--set-upstream-to", "--sort", "--format"), danger: danger})
 		if p.unknown || p.has(danger...) && !p.has("-l", "--list") {
+			return deny()
+		}
+		if !p.has(branchListing...) && len(p.pos) > 0 && c.caseClash(globals, mapWords(p.pos[:1], headRef)) {
 			return deny()
 		}
 	case "tag":
@@ -176,8 +183,14 @@ func (c Checker) git(args []word, depth int) Result {
 			return deny()
 		}
 		// worktree add -B resets an existing branch to the start point (H3).
-		if len(p.pos) > 0 && p.pos[0].text == "add" && p.has("-B") {
-			return deny()
+		if len(p.pos) > 0 && p.pos[0].text == "add" {
+			if p.has("-B") {
+				return deny()
+			}
+			// The new branch, given with -b or named after the path, must not match an existing one but in case.
+			if c.caseClash(globals, mapWords(append(p.values("-b"), worktreeBranch(p)...), headRef)) {
+				return deny()
+			}
 		}
 	case "replay":
 		// git replay updates the branches it rewrites unless told only to print the updates (H3).
@@ -589,6 +602,25 @@ type parsed struct {
 	dashdash bool
 	// unknown is set when an expansion stands where an option could be.
 	unknown bool
+	// vals holds the values of the options that take one (opts.short and opts.long, or given with "=").
+	vals []optValue
+}
+
+// optValue is the value given to an option ("-b" or "--name").
+type optValue struct {
+	name  string
+	value word
+}
+
+// values returns the values given to the options names.
+func (p parsed) values(names ...string) []word {
+	var out []word
+	for _, v := range p.vals {
+		if setHas(v.name, names...) {
+			out = append(out, v.value)
+		}
+	}
+	return out
 }
 
 func (p parsed) has(names ...string) bool {
@@ -636,6 +668,7 @@ func scan(args []word, o opts) parsed {
 			dyn := strings.IndexAny(t, "$%`(@")
 			if strings.HasPrefix(t, "--") && eq > 2 && (dyn < 0 || eq < dyn) {
 				p.long(t[:eq], true, o)
+				p.vals = append(p.vals, optValue{t[:eq], word{text: t[eq+1:], dynamic: true}})
 				continue
 			}
 			p.unknown = true
@@ -646,18 +679,28 @@ func scan(args []word, o opts) parsed {
 		case strings.HasPrefix(t, "--"):
 			if eq := strings.IndexByte(t, '='); eq > 0 {
 				p.long(t[:eq], true, o)
+				p.vals = append(p.vals, optValue{t[:eq], word{text: t[eq+1:]}})
 				continue
 			}
 			if o.long[t] {
+				if i+1 < len(args) {
+					p.vals = append(p.vals, optValue{t, args[i+1]})
+				}
 				i++
 			}
 			p.long(t, false, o)
 		case strings.HasPrefix(t, "-") && len(t) > 1:
 			for j := 1; j < len(t); j++ {
-				p.flags = append(p.flags, "-"+string(t[j]))
+				name := "-" + string(t[j])
+				p.flags = append(p.flags, name)
 				if strings.IndexByte(o.short, t[j]) >= 0 {
 					if j == len(t)-1 {
+						if i+1 < len(args) {
+							p.vals = append(p.vals, optValue{name, args[i+1]})
+						}
 						i++
+					} else {
+						p.vals = append(p.vals, optValue{name, word{text: t[j+1:]}})
 					}
 					break
 				}

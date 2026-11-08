@@ -52,6 +52,14 @@ script that edits a file mentioning `git stash`, is data. Long options count by 
   pass), `config --edit` and `--rename-section` (the editor or the renamed section can bring any key);
   `sparse-checkout` writes; `bisect` steps; `rerere forget|clear|gc`; `notes remove|prune`; `refs migrate`;
   `symbolic-ref -d`; `gc --prune=<date>` (plain `gc` and `gc --prune` keep the default expiry);
+- on a disk that ignores case, a new branch whose name matches an existing one in all but case (`Main` beside
+  `main`): git writes the loose ref `refs/heads/Main`, which is the file of `main`, and `main` moves to the new
+  branch's commit, packed or not. Checked for `branch <new>`, `checkout -b`, `worktree add -b` (and the branch
+  `worktree add <path> [<branch>]` creates without `-b`) and every fetch destination under `refs/heads/` (also the
+  short `src:Main`); `switch` and the `-B`, `-c`, `-m` forms are refused anyway. The branches are read with
+  `git for-each-ref refs/heads/` in the command's folder: always on Windows and macOS (`core.ignorecase=false`
+  does not change the disk), elsewhere when `core.ignorecase` is true. A list that cannot be read, or a branch
+  name the hook cannot see (`git checkout -b $NAME`), is refused there;
 - options, settings and URLs that make git run a command of the caller's choosing: `grep -O|--open-files-in-pager`,
   `difftool -x|--extcmd`, `--upload-pack`, `--receive-pack` and `--exec` on the transport commands (and `clone
   -u`), an `ext::` URL (also as a config value), `protocol.allow` and `protocol.<name>.allow`,

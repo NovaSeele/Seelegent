@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -273,6 +274,145 @@ func TestGuardFetchConfig(t *testing.T) {
 	}
 	if code, stderr := shim("fetch", "origin"); code != 0 {
 		t.Errorf("fetch origin next to a mirror remote: code %d, stderr %q", code, stderr)
+	}
+}
+
+// TestGuardBranchCase runs real git through the shim and the hook (review of fix/m18-open-items, item 1): on a disk
+// that ignores case, git branch Main old (or checkout -b, worktree add -b, fetch . old:Main) wrote the loose ref
+// refs/heads/Main over main, packed or not, and main moved back. Those are refused and main stays; a new name
+// passes. Where the disk keeps case and core.ignorecase is false (Linux), Main is just another branch.
+func TestGuardBranchCase(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not installed")
+	}
+	root := t.TempDir()
+	t.Setenv("GIT_CONFIG_GLOBAL", filepath.Join(root, "no-global"))
+	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
+	git := func(dir string, args ...string) string {
+		t.Helper()
+		c := exec.CommandContext(t.Context(), "git", append([]string{"-C", dir}, args...)...)
+		b, err := c.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %q: %v\n%s", args, err, b)
+		}
+		return strings.TrimSpace(string(b))
+	}
+	newRepo := func(name string, packed bool) (repo, old, head string) {
+		repo = filepath.Join(root, name)
+		git(root, "init", "-q", "-b", "main", repo)
+		git(repo, "config", "user.name", "T")
+		git(repo, "config", "user.email", "t@example.invalid")
+		git(repo, "config", "commit.gpgsign", "false")
+		git(repo, "commit", "-q", "--allow-empty", "-m", "one")
+		git(repo, "branch", "old")
+		git(repo, "commit", "-q", "--allow-empty", "-m", "two")
+		git(repo, "branch", "feature")
+		if packed {
+			git(repo, "pack-refs", "--all")
+		}
+		return repo, git(repo, "rev-parse", "old"), git(repo, "rev-parse", "main")
+	}
+	creates := [][]string{
+		{"fetch", ".", "old:refs/heads/Main"},
+		{"fetch", ".", "old:Main"},
+		{"branch", "Main", "old"},
+		{"branch", "Feature", "old"},
+		{"checkout", "-b", "Main", "old"},
+		{"worktree", "add", "-b", "Main", "WT", "old"},
+		{"worktree", "add", "-b", "Feature", "WT", "old"},
+	}
+	folds := foldsCase(runtime.GOOS)
+	for _, packed := range []bool{false, true} {
+		repo, old, head := newRepo(fmt.Sprintf("repo-%v", packed), packed)
+		if !folds {
+			git(repo, "config", "core.ignorecase", "true") // a disk that ignores case, as git init records it there
+		}
+		shim := func(args ...string) (int, string) {
+			var out, errOut bytes.Buffer
+			code := runGitShim(t.Context(), "", append([]string{"-C", repo}, args...), strings.NewReader(""), &out,
+				&errOut)
+			return code, errOut.String()
+		}
+		hook := func(args []string) bool {
+			data, err := json.Marshal(map[string]any{"cwd": repo, "tool_name": "Bash",
+				"tool_input": map[string]string{"command": "git " + strings.Join(args, " ")}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			return hookDecision(t.Context(), guard.HookClaude, bytes.NewReader(data)).Deny
+		}
+		for _, args := range creates {
+			args = append([]string{}, args...)
+			for i, a := range args {
+				if a == "WT" {
+					args[i] = filepath.Join(root, fmt.Sprintf("wt-%v", packed))
+				}
+			}
+			if code, stderr := shim(args...); code != 1 || !strings.HasPrefix(stderr, guard.Marker) {
+				t.Errorf("packed %v: shim git %q: code %d, stderr %q", packed, args, code, stderr)
+			}
+			if !hook(args) {
+				t.Errorf("packed %v: hook allowed git %q", packed, args)
+			}
+			if got := git(repo, "rev-parse", "main"); got != head {
+				t.Fatalf("packed %v: git %q moved main from %s to %s (old %s)", packed, args, head, got, old)
+			}
+		}
+		if code, stderr := shim("branch", "new-work", "old"); code != 0 {
+			t.Errorf("packed %v: a new branch: code %d, stderr %q", packed, code, stderr)
+		}
+		if code, stderr := shim("fetch", ".", "old:refs/heads/other"); code != 0 {
+			t.Errorf("packed %v: fetch into a new branch: code %d, stderr %q", packed, code, stderr)
+		}
+		if hook([]string{"checkout", "-b", "fix-1"}) {
+			t.Errorf("packed %v: hook refused a new branch", packed)
+		}
+	}
+	if !folds {
+		repo, _, head := newRepo("keeps-case", true)
+		git(repo, "config", "core.ignorecase", "false")
+		var out, errOut bytes.Buffer
+		if code := runGitShim(t.Context(), "", []string{"-C", repo, "branch", "Main", "old"}, strings.NewReader(""),
+			&out, &errOut); code != 0 {
+			t.Errorf("disk that keeps case: branch Main: code %d, stderr %q", code, errOut.String())
+		}
+		if got := git(repo, "rev-parse", "main"); got != head {
+			t.Errorf("disk that keeps case: main moved to %s", got)
+		}
+	}
+}
+
+// TestGitBranches: the reader lists branches when the disk ignores case (always on Windows and macOS, elsewhere by
+// core.ignorecase), none outside a repository.
+func TestGitBranches(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not installed")
+	}
+	root := t.TempDir()
+	t.Setenv("GIT_CONFIG_GLOBAL", filepath.Join(root, "no-global"))
+	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
+	repo := filepath.Join(root, "repo")
+	for _, args := range [][]string{{"init", "-q", "-b", "main", repo},
+		{"-C", repo, "-c", "user.name=T", "-c", "user.email=t@example.invalid", "commit", "-q", "--allow-empty",
+			"-m", "one"},
+		{"-C", repo, "config", "core.ignorecase", "false"}} {
+		if b, err := exec.CommandContext(t.Context(), "git", args...).CombinedOutput(); err != nil {
+			t.Fatalf("git %q: %v\n%s", args, err, b)
+		}
+	}
+	env := os.Environ()
+	for goos, want := range map[string]string{"windows": "refs/heads/main", "darwin": "refs/heads/main", "linux": ""} {
+		got, err := gitBranches(t.Context(), env, repo, goos)(nil)
+		if err != nil || strings.Join(got, ",") != want {
+			t.Errorf("%s with core.ignorecase=false: %q, %v; want %q", goos, got, err, want)
+		}
+	}
+	got, err := gitBranches(t.Context(), env, root, "linux")([]string{"-C", repo, "-c", "core.ignorecase=true"})
+	if err != nil || strings.Join(got, ",") != "refs/heads/main" {
+		t.Errorf("linux with core.ignorecase=true: %q, %v", got, err)
+	}
+	if got, err := gitBranches(t.Context(), env, root, "windows")(nil); err != nil || len(got) != 0 {
+		t.Errorf("outside a repository: %q, %v", got, err)
 	}
 }
 
