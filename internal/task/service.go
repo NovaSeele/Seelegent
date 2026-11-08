@@ -20,6 +20,7 @@ import (
 	"github.com/NovaSeele/Seelegent/internal/config"
 	"github.com/NovaSeele/Seelegent/internal/gitx"
 	"github.com/NovaSeele/Seelegent/internal/memory"
+	"github.com/NovaSeele/Seelegent/internal/platform"
 	"github.com/NovaSeele/Seelegent/internal/pool"
 	"github.com/NovaSeele/Seelegent/internal/role"
 	"github.com/NovaSeele/Seelegent/internal/snapshot"
@@ -131,6 +132,25 @@ type Toolchains interface {
 	Env(ctx context.Context, cwd string, env []string) map[string]string
 }
 
+// Resources is the machine's free memory as the resource checks see it (M19): a sampler that caches
+// platform.Memory for a short while, so callers may ask often; a fake in tests.
+type Resources interface {
+	// Sample returns the latest reading. A reading with Known false never holds anything back.
+	Sample() platform.MemoryStatus
+	// Changed is signaled (without blocking, coalesced) when memory may have been freed or the thresholds
+	// changed: a waiting start checks again.
+	Changed() <-chan struct{}
+}
+
+// GateSlots limits the gate commands that run at the same time (gateConcurrency); *gate.Slots satisfies it.
+type GateSlots interface {
+	// Acquire waits for a slot in FIFO order and returns the function that gives it back; onWait gets the
+	// caller's place in the queue (from 1) while it waits. It fails with ctx's error when ctx ends first.
+	Acquire(ctx context.Context, onWait func(pos int)) (release func(), err error)
+	// Limit is the current number of slots (0 = unlimited), for the queued gate event.
+	Limit() int
+}
+
 // Options configure a Service. DB, Accounts, Pool, Backends, Settings, TasksDir and Launcher are required.
 type Options struct {
 	DB       DB
@@ -186,6 +206,11 @@ type Options struct {
 	AccountStates func(ctx context.Context) ([]pool.AccountState, error)
 	// Ledger records the gate results of spec tasks and counts lane decisions (milestone 13); nil leaves them out.
 	Ledger Ledger
+	// Resources is the memory reading of the resource checks (minFreeMemoryMB, minFreeCommitMB,
+	// criticalFreeMemoryMB); nil turns the checks off.
+	Resources Resources
+	// GateSlots is shared with the proof regression runs (gateConcurrency); nil runs every gate command at once.
+	GateSlots GateSlots
 	// Clock is the time source (the system clock when nil).
 	Clock clock.Clock
 	// Logger receives engine logs (discarded when nil). Use a logx logger so secrets are masked.

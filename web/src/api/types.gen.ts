@@ -510,9 +510,16 @@ export interface AccountFailureData {
   error: string
 }
 
-/** WaitingQuotaData is the data of a waiting_quota event. */
+/**
+ * WaitingQuotaData is the data of a waiting_quota event. Without Reason the task waits for an account (Until is
+ * when one is expected back); with Reason WaitingMemory it waits for memory: AvailableMB is what the last reading
+ * found and NeedMB the threshold it is below (of physical memory or of commit, whichever holds the task).
+ */
 export interface WaitingQuotaData {
   until?: string
+  reason?: 'memory'
+  availableMB?: number
+  needMB?: number
 }
 
 /** RetryData is the data of a retry event. */
@@ -640,6 +647,12 @@ export interface GateStep {
   timedOut?: boolean
   /** Tail is the end of the command's output (gateOutputTailBytes), or the error. */
   tail?: string
+  /**
+   * Stopped says why the command was stopped before it ended (StepStoppedLowMemory); Stops counts such stops of
+   * this step in the current gate phase.
+   */
+  stopped?: 'low_memory'
+  stops?: number
   /** Files are the files out of lane (lane) or checked (auto). */
   files?: string[]
   /** Failures are the files an auto check refused, with why. */
@@ -683,6 +696,8 @@ export interface GateResult {
    * finished (or after gateSettleMinutes).
    */
   settled?: boolean
+  /** Reason says why a run ended in error without a failing command (GateReasonLowMemory). */
+  reason?: 'low_memory'
 }
 
 /** VerifierResult is the optional LLM review of a green gate. */
@@ -708,7 +723,7 @@ export interface CiteCheck {
 
 /** GateEventData is the data of a gate event; the event's turn is the turn the gate is about. */
 export interface GateEventData {
-  phase: 'start' | 'step' | 'result' | 'settling'
+  phase: 'start' | 'step' | 'result' | 'settling' | 'queued'
   /** Steps are the step labels (start). */
   steps?: string[]
   /** Plan are the planned steps with their kind and command (start), so a view can name them in its language. */
@@ -720,6 +735,11 @@ export interface GateEventData {
   result?: GateResult
   /** BarChanged lists what defines "done" that changed since the task started (result). */
   barChanged?: string[]
+  /** Wait is what the gate waits for (queued): GateWaitSlot or GateWaitMemory. */
+  wait?: 'slot' | 'memory'
+  /** Position is the gate's place in the slot queue, from 1 (queued, wait slot); Limit is gateConcurrency then. */
+  position?: number
+  limit?: number
 }
 
 /** GatePlanStep is a step of a gate as planned: what it checks, without its result. */
@@ -1807,6 +1827,8 @@ export interface TaskReport {
   cancelling?: boolean
   error?: string
   waiting_until?: string
+  /** Waiting is TaskSummary.Waiting: "memory" while a waiting_quota task waits for free memory. */
+  waiting?: 'memory'
   answered_by?: string
   /** Handback is true when the last turn summarized a takeover. */
   handback?: boolean
@@ -2122,6 +2144,51 @@ export interface Settings {
   githubEnterpriseHosts: string[]
   /** AutomationsEnabled is the master switch of scheduled automations (each one is still created disabled). */
   automationsEnabled: boolean
+  /** WorkerPriority is the process priority of worker trees (PriorityLow or PriorityNormal); next launch. */
+  workerPriority: 'low' | 'normal'
+  /**
+   * GatePriority is the process priority of gate commands, regression runs, automation prechecks and hooks;
+   * next command.
+   */
+  gatePriority: 'low' | 'normal'
+  /** MaxConcurrentWorkers caps the worker turns that run at the same time over all accounts; 0 = no cap. */
+  maxConcurrentWorkers: number
+  /** GateConcurrency caps the gate commands (and regression runs) that run at the same time; 0 = unlimited. */
+  gateConcurrency: number
+  /**
+   * MinFreeMemoryMB holds new worker turns and gate commands while the available physical memory is below it;
+   * 0 = off. An unknown reading never holds anything.
+   */
+  minFreeMemoryMB: number
+  /** MinFreeCommitMB is the same for the available commit (Windows only; elsewhere commit is unknown); 0 = off. */
+  minFreeCommitMB: number
+  /**
+   * CriticalFreeMemoryMB is the emergency floor: while free physical memory or free commit is below it, the
+   * watchdog stops the newest running gate command (its gate is queued again; the turn does not fail) and every
+   * new start waits. Workers are never stopped for it. 0 = off; when both are on it must be below
+   * MinFreeMemoryMB.
+   */
+  criticalFreeMemoryMB: number
+  /**
+   * WorkerMemoryLimitMB caps the memory of each worker tree (Windows Job Object; a turn over it fails);
+   * 0 = off.
+   */
+  workerMemoryLimitMB: number
+  /**
+   * WorkerCPURatePercent hard-caps the CPU of each worker tree to this share of the whole machine (Windows Job
+   * Object); 0 = off.
+   */
+  workerCPURatePercent: number
+  /**
+   * TestParallelism is the parallelism hint for tests and builds: the "Shared machine" section of full briefs
+   * and GOFLAGS=-p=N / CARGO_BUILD_JOBS=N in worker and gate environments; 0 = no hint and no variables.
+   */
+  testParallelism: number
+  /**
+   * DaemonMemoryLimitMB is the daemon's soft memory limit (debug.SetMemoryLimit); 0 = off. A GOMEMLIMIT in the
+   * daemon's environment wins.
+   */
+  daemonMemoryLimitMB: number
 }
 
 /** TierModels maps each tier to a model id (internal/config.TierModels). */
@@ -2194,6 +2261,7 @@ export type StreamEvent =
   | 'issues.changed'
   | 'automation.updated'
   | 'automation.deleted'
+  | 'resources.changed'
 
 /** Hello is the data of the hello frame. */
 export interface Hello {
@@ -2220,6 +2288,12 @@ export interface Changed {
   changedAt: string
 }
 
+/** ResourcesChanged is the data of resources.changed: Health.LowMemory flipped. Memory is the reading that flipped it. */
+export interface ResourcesChanged {
+  lowMemory: boolean
+  memory: MemoryStatus
+}
+
 /** MemoryChanged is the data of memory.changed. */
 export interface MemoryChanged {
   cwd: string
@@ -2244,6 +2318,28 @@ export interface Health {
    * another data directory refuses this daemon instead of using or stopping it.
    */
   homeId: string
+  /**
+   * OS is the daemon's operating system (Go's runtime.GOOS: windows, linux, darwin, ...), so the Settings page
+   * can mark the settings that only work on Windows.
+   */
+  os: string
+  /** Memory is the machine's free memory, read when the answer was made. */
+  memory: MemoryStatus
+  /**
+   * LowMemory is true while the memory watchdog holds every new start because free memory or free commit is
+   * below criticalFreeMemoryMB. resources.changed tells when it flips.
+   */
+  lowMemory: boolean
+}
+
+/**
+ * MemoryStatus is the free memory of the machine (platform.MemoryStatus). Known is false when the system gave no
+ * reading (the numbers are 0 then); AvailCommitMB is 0 where commit is unknown (everywhere but Windows).
+ */
+export interface MemoryStatus {
+  availPhysMB: number
+  availCommitMB: number
+  known: boolean
 }
 
 /**
@@ -2398,6 +2494,12 @@ export interface TaskSummary {
   lastEventAt?: string
   /** WaitingUntil is when an account is expected back (waiting_quota). */
   waitingUntil?: string
+  /**
+   * Waiting says what a waiting_quota task waits for besides an account: WaitingMemory while free memory or
+   * free commit is below minFreeMemoryMB / minFreeCommitMB. Empty (absent) while it waits for an account. Such a
+   * wait never raises an attention flag: the lead cannot act on it.
+   */
+  waiting?: 'memory'
   /** NeedsSince is since when the task waits for the lead or the user. */
   needsSince?: string
   attention: Attention | null
@@ -2474,7 +2576,8 @@ export interface Attention {
 /**
  * AttentionParams are the values an attention flag's text is made of. Only the fields of the reason are set:
  * stalled (Kind, Minutes, Tool, Command), looping (Kind, Count, Tool, Steps), no_accounts and auth (Backend),
- * deps_blocked (Kind, Task, Title), no_response (Denied), hygiene and work_at_risk (Count), question (Options).
+ * deps_blocked (Kind, Task, Title), no_response (Denied), hygiene and work_at_risk (Count), question (Options),
+ * resources_wait (Minutes, AvailableMB, NeedMB).
  */
 export interface AttentionParams {
   kind?:
@@ -2512,6 +2615,12 @@ export interface AttentionParams {
    * the question itself is the flag's detail.
    */
   options?: string[]
+  /**
+   * AvailableMB and NeedMB are the free memory found and the threshold it is below (resources_wait, with
+   * Minutes: how long the task has waited).
+   */
+  availableMB?: number
+  needMB?: number
 }
 
 /** Review is the lead's verdict on a task. */
@@ -2527,7 +2636,12 @@ export interface Review {
  */
 export interface Gate {
   state: 'running' | 'green' | 'red' | 'error' | 'skipped'
-  phase?: 'running' | 'settling' | 'verifying'
+  phase?: 'queued' | 'running' | 'settling' | 'verifying'
+  /**
+   * Wait says what a queued gate waits for: GateWaitSlot (gateConcurrency) or GateWaitMemory (minFreeMemoryMB,
+   * minFreeCommitMB). Absent in every other phase.
+   */
+  wait?: 'slot' | 'memory'
   autoFixes: number
   /** Turn is the turn the gate is about. */
   turn?: number

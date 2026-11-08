@@ -42,6 +42,24 @@ const (
 	LanesEnforce = "enforce"
 )
 
+// Process priorities of worker and gate trees (workerPriority, gatePriority).
+const (
+	// PriorityLow runs the tree below normal priority: BELOW_NORMAL_PRIORITY_CLASS on Windows, nice 10 on Unix.
+	PriorityLow = "low"
+	// PriorityNormal runs the tree at the daemon's own priority (the behavior before M19).
+	PriorityNormal = "normal"
+)
+
+// Ranges of the resource settings (M19). Each upper bound only catches typos.
+const (
+	MaxConcurrentWorkersMax = 256
+	GateConcurrencyMax      = 64
+	MemoryMBMax             = 1 << 20 // minFreeMemoryMB, minFreeCommitMB, criticalFreeMemoryMB, workerMemoryLimitMB: 1 TiB
+	CPURatePercentMax       = 100
+	TestParallelismMax      = 64
+	DaemonMemoryLimitMBMax  = 1 << 16 // 64 GiB
+)
+
 // Settings is the content of config.json: everything the user can configure in the daemon. Field names in JSON are
 // the ones the old version used in settings.json, so existing knowledge and the import stay simple. Display
 // preferences of the dashboard (theme, language, notifications) are not here: the browser keeps them.
@@ -128,6 +146,41 @@ type Settings struct {
 	GithubEnterpriseHosts []string `json:"githubEnterpriseHosts"`
 	// AutomationsEnabled is the master switch of scheduled automations (each one is still created disabled).
 	AutomationsEnabled bool `json:"automationsEnabled"`
+
+	// Resources (M19, docs/configuration.md "Resources"). A change applies without a restart; running trees keep
+	// the limits they started with.
+
+	// WorkerPriority is the process priority of worker trees (PriorityLow or PriorityNormal); next launch.
+	WorkerPriority string `json:"workerPriority" ts:"'low' | 'normal'"`
+	// GatePriority is the process priority of gate commands, regression runs, automation prechecks and hooks;
+	// next command.
+	GatePriority string `json:"gatePriority" ts:"'low' | 'normal'"`
+	// MaxConcurrentWorkers caps the worker turns that run at the same time over all accounts; 0 = no cap.
+	MaxConcurrentWorkers int `json:"maxConcurrentWorkers"`
+	// GateConcurrency caps the gate commands (and regression runs) that run at the same time; 0 = unlimited.
+	GateConcurrency int `json:"gateConcurrency"`
+	// MinFreeMemoryMB holds new worker turns and gate commands while the available physical memory is below it;
+	// 0 = off. An unknown reading never holds anything.
+	MinFreeMemoryMB int `json:"minFreeMemoryMB"`
+	// MinFreeCommitMB is the same for the available commit (Windows only; elsewhere commit is unknown); 0 = off.
+	MinFreeCommitMB int `json:"minFreeCommitMB"`
+	// CriticalFreeMemoryMB is the emergency floor: while free physical memory or free commit is below it, the
+	// watchdog stops the newest running gate command (its gate is queued again; the turn does not fail) and every
+	// new start waits. Workers are never stopped for it. 0 = off; when both are on it must be below
+	// MinFreeMemoryMB.
+	CriticalFreeMemoryMB int `json:"criticalFreeMemoryMB"`
+	// WorkerMemoryLimitMB caps the memory of each worker tree (Windows Job Object; a turn over it fails);
+	// 0 = off.
+	WorkerMemoryLimitMB int `json:"workerMemoryLimitMB"`
+	// WorkerCPURatePercent hard-caps the CPU of each worker tree to this share of the whole machine (Windows Job
+	// Object); 0 = off.
+	WorkerCPURatePercent int `json:"workerCPURatePercent"`
+	// TestParallelism is the parallelism hint for tests and builds: the "Shared machine" section of full briefs
+	// and GOFLAGS=-p=N / CARGO_BUILD_JOBS=N in worker and gate environments; 0 = no hint and no variables.
+	TestParallelism int `json:"testParallelism"`
+	// DaemonMemoryLimitMB is the daemon's soft memory limit (debug.SetMemoryLimit); 0 = off. A GOMEMLIMIT in the
+	// daemon's environment wins.
+	DaemonMemoryLimitMB int `json:"daemonMemoryLimitMB"`
 }
 
 // Backends holds the configuration of each worker backend.
@@ -252,5 +305,16 @@ func Defaults() Settings {
 		GithubPollMinutes:     10,
 		GithubEnterpriseHosts: []string{},
 		AutomationsEnabled:    true,
+		WorkerPriority:        PriorityLow,
+		GatePriority:          PriorityLow,
+		MaxConcurrentWorkers:  0,
+		GateConcurrency:       2,
+		MinFreeMemoryMB:       2048,
+		MinFreeCommitMB:       4096,
+		CriticalFreeMemoryMB:  1024,
+		WorkerMemoryLimitMB:   0,
+		WorkerCPURatePercent:  0,
+		TestParallelism:       4,
+		DaemonMemoryLimitMB:   0,
 	}
 }

@@ -2,6 +2,7 @@ package httpapi_test
 
 import (
 	"net/http"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -143,6 +144,9 @@ func TestStatic(t *testing.T) {
 	e.must(e.get("/api/v1/health"), http.StatusOK).json(t, &h)
 	if !h.OK || h.APIVersion != 1 || h.Port != e.port || len(h.Build) != 12 || h.PID == 0 || h.StartedAt == "" {
 		t.Errorf("health = %+v", h)
+	}
+	if h.OS != runtime.GOOS {
+		t.Errorf("health os = %q, want %q", h.OS, runtime.GOOS)
 	}
 }
 

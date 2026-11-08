@@ -28,6 +28,7 @@ import (
 	"github.com/NovaSeele/Seelegent/internal/config"
 	"github.com/NovaSeele/Seelegent/internal/gitx"
 	"github.com/NovaSeele/Seelegent/internal/memory"
+	"github.com/NovaSeele/Seelegent/internal/platform"
 	"github.com/NovaSeele/Seelegent/internal/pool"
 	"github.com/NovaSeele/Seelegent/internal/quota"
 	"github.com/NovaSeele/Seelegent/internal/role"
@@ -154,6 +155,11 @@ type Options struct {
 	PID             int
 	// HomeID identifies the data directory (config.HomeID) in GET /health.
 	HomeID string
+	// FreeMemory reads the machine's free memory for GET /health (platform.Memory, or a cached sampler); nil
+	// answers an unknown reading.
+	FreeMemory func() platform.MemoryStatus
+	// LowMemory reports whether the memory watchdog holds new starts (Health.LowMemory); nil answers false.
+	LowMemory func() bool
 
 	Tasks    Tasks
 	Accounts Accounts

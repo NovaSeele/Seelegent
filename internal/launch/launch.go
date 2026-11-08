@@ -43,6 +43,7 @@ import (
 	"time"
 
 	"github.com/NovaSeele/Seelegent/internal/fsutil"
+	"github.com/NovaSeele/Seelegent/internal/platform"
 )
 
 // File names inside a launch directory.
@@ -76,6 +77,10 @@ type Spec struct {
 	Timeout time.Duration `json:"timeout,omitempty"`
 	// KillGrace is the time between SIGTERM and SIGKILL on Unix; zero means platform.DefaultKillGrace.
 	KillGrace time.Duration `json:"killGrace,omitempty"`
+	// Tree are the resource limits of the worker tree (priority, memory and CPU caps; settings workerPriority,
+	// workerMemoryLimitMB, workerCPURatePercent). The zero value, and a launch.json written before M19, start the
+	// tree without limits.
+	Tree platform.TreeOptions `json:"tree,omitzero"`
 }
 
 // specFile is the content of launch.json: the spec and where its files are.
@@ -121,6 +126,9 @@ type Exit struct {
 	Error string `json:"error,omitempty"`
 	// StartedAt is when the worker started (zero if it never did).
 	StartedAt time.Time `json:"startedAt,omitzero"`
+	// MemoryLimitHit is true when the worker tree reached Spec.Tree.MemoryLimitMB (the launcher compares the
+	// job's peak memory with the cap; Windows only), so the turn fails saying so.
+	MemoryLimitHit bool `json:"memoryLimitHit,omitempty"`
 	// EndedAt is when the launch ended.
 	EndedAt time.Time `json:"endedAt"`
 }

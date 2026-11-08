@@ -129,9 +129,21 @@ type AccountProblemData struct {
 	Error     string `json:"error"`
 }
 
-// WaitingQuotaData is the data of a waiting_quota event.
+// Reasons of a waiting_quota event (WaitingQuotaData.Reason) and values of TaskSummary.Waiting.
+const (
+	// WaitingMemory: the task waits for free memory or free commit (minFreeMemoryMB, minFreeCommitMB), not for
+	// an account.
+	WaitingMemory = "memory"
+)
+
+// WaitingQuotaData is the data of a waiting_quota event. Without Reason the task waits for an account (Until is
+// when one is expected back); with Reason WaitingMemory it waits for memory: AvailableMB is what the last reading
+// found and NeedMB the threshold it is below (of physical memory or of commit, whichever holds the task).
 type WaitingQuotaData struct {
-	Until string `json:"until,omitempty"`
+	Until       string `json:"until,omitempty"`
+	Reason      string `json:"reason,omitempty" ts:"'memory'"`
+	AvailableMB int64  `json:"availableMB,omitempty"`
+	NeedMB      int64  `json:"needMB,omitempty"`
 }
 
 // RetryData is the data of a retry event.

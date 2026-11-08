@@ -49,7 +49,9 @@ type TaskReport struct {
 	Cancelling   bool            `json:"cancelling,omitempty"`
 	Error        string          `json:"error,omitempty"`
 	WaitingUntil string          `json:"waiting_until,omitempty"`
-	AnsweredBy   string          `json:"answered_by,omitempty"`
+	// Waiting is TaskSummary.Waiting: "memory" while a waiting_quota task waits for free memory.
+	Waiting    string `json:"waiting,omitempty" ts:"'memory'"`
+	AnsweredBy string `json:"answered_by,omitempty"`
 	// Handback is true when the last turn summarized a takeover.
 	Handback bool `json:"handback,omitempty"`
 	// Dashboard is the deep link to the task in the dashboard.

@@ -28,6 +28,22 @@ type Health struct {
 	// HomeID identifies the data directory the daemon serves (config.HomeID: a hash, never the path). A client of
 	// another data directory refuses this daemon instead of using or stopping it.
 	HomeID string `json:"homeId"`
+	// OS is the daemon's operating system (Go's runtime.GOOS: windows, linux, darwin, ...), so the Settings page
+	// can mark the settings that only work on Windows.
+	OS string `json:"os"`
+	// Memory is the machine's free memory, read when the answer was made.
+	Memory MemoryStatus `json:"memory"`
+	// LowMemory is true while the memory watchdog holds every new start because free memory or free commit is
+	// below criticalFreeMemoryMB. resources.changed tells when it flips.
+	LowMemory bool `json:"lowMemory"`
+}
+
+// MemoryStatus is the free memory of the machine (platform.MemoryStatus). Known is false when the system gave no
+// reading (the numbers are 0 then); AvailCommitMB is 0 where commit is unknown (everywhere but Windows).
+type MemoryStatus struct {
+	AvailPhysMB   int64 `json:"availPhysMB"`
+	AvailCommitMB int64 `json:"availCommitMB"`
+	Known         bool  `json:"known"`
 }
 
 // DaemonStop is the answer (202) of POST /daemon/stop: the daemon accepted the request and shuts down right after

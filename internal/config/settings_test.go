@@ -180,3 +180,107 @@ func TestGitHubEnterpriseHosts(t *testing.T) {
 		t.Errorf("loopback v6 = %+v, %v", h, err)
 	}
 }
+
+func TestResourceDefaults(t *testing.T) {
+	s := Defaults()
+	got := []any{s.WorkerPriority, s.GatePriority, s.MaxConcurrentWorkers, s.GateConcurrency, s.MinFreeMemoryMB,
+		s.MinFreeCommitMB, s.CriticalFreeMemoryMB, s.WorkerMemoryLimitMB, s.WorkerCPURatePercent, s.TestParallelism,
+		s.DaemonMemoryLimitMB}
+	want := []any{"low", "low", 0, 2, 2048, 4096, 1024, 0, 0, 4, 0}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("resource default %d = %v, want %v", i, got[i], want[i])
+		}
+	}
+}
+
+func TestResourceValidation(t *testing.T) {
+	bad := []struct {
+		field  string
+		mutate func(*Settings)
+	}{
+		{"workerPriority", func(s *Settings) { s.WorkerPriority = "idle" }},
+		{"workerPriority", func(s *Settings) { s.WorkerPriority = "" }},
+		{"gatePriority", func(s *Settings) { s.GatePriority = "high" }},
+		{"maxConcurrentWorkers", func(s *Settings) { s.MaxConcurrentWorkers = -1 }},
+		{"maxConcurrentWorkers", func(s *Settings) { s.MaxConcurrentWorkers = 257 }},
+		{"gateConcurrency", func(s *Settings) { s.GateConcurrency = -1 }},
+		{"gateConcurrency", func(s *Settings) { s.GateConcurrency = 65 }},
+		{"minFreeMemoryMB", func(s *Settings) { s.MinFreeMemoryMB = -1 }},
+		{"minFreeMemoryMB", func(s *Settings) { s.MinFreeMemoryMB = 1<<20 + 1 }},
+		{"minFreeCommitMB", func(s *Settings) { s.MinFreeCommitMB = 1<<20 + 1 }},
+		{"criticalFreeMemoryMB", func(s *Settings) { s.CriticalFreeMemoryMB = -1 }},
+		{"criticalFreeMemoryMB", func(s *Settings) { s.CriticalFreeMemoryMB = 2048 }}, // not below minFreeMemoryMB
+		{"criticalFreeMemoryMB", func(s *Settings) { s.MinFreeMemoryMB, s.CriticalFreeMemoryMB = 512, 600 }},
+		{"workerMemoryLimitMB", func(s *Settings) { s.WorkerMemoryLimitMB = -5 }},
+		{"workerCPURatePercent", func(s *Settings) { s.WorkerCPURatePercent = 101 }},
+		{"testParallelism", func(s *Settings) { s.TestParallelism = 65 }},
+		{"daemonMemoryLimitMB", func(s *Settings) { s.DaemonMemoryLimitMB = 65537 }},
+	}
+	for _, tt := range bad {
+		s := Defaults()
+		tt.mutate(&s)
+		var verr *ValidationError
+		if err := s.Validate(); !errors.As(err, &verr) || len(verr.Fields) != 1 || verr.Fields[0].Field != tt.field {
+			t.Errorf("%s: err = %v, want one error on %s", tt.field, err, tt.field)
+		}
+	}
+	for _, edge := range []func(*Settings){
+		func(s *Settings) {
+			s.WorkerPriority, s.GatePriority = PriorityNormal, PriorityNormal
+			s.MaxConcurrentWorkers, s.GateConcurrency, s.MinFreeMemoryMB, s.MinFreeCommitMB = 0, 0, 0, 0
+			s.CriticalFreeMemoryMB = 0
+			s.WorkerMemoryLimitMB, s.WorkerCPURatePercent, s.TestParallelism, s.DaemonMemoryLimitMB = 0, 0, 0, 0
+		},
+		func(s *Settings) {
+			s.MaxConcurrentWorkers, s.GateConcurrency = 256, 64
+			s.MinFreeMemoryMB, s.MinFreeCommitMB, s.WorkerMemoryLimitMB = 1<<20, 1<<20, 1<<20
+			s.WorkerCPURatePercent, s.TestParallelism, s.DaemonMemoryLimitMB = 100, 64, 65536
+			s.CriticalFreeMemoryMB = 1<<20 - 1
+		},
+		func(s *Settings) { s.MinFreeMemoryMB, s.CriticalFreeMemoryMB = 0, 1<<20 }, // the floor alone
+		func(s *Settings) { s.MinFreeMemoryMB, s.CriticalFreeMemoryMB = 4096, 0 },  // no floor
+	} {
+		s := Defaults()
+		edge(&s)
+		if err := s.Validate(); err != nil {
+			t.Errorf("edge values refused: %v", err)
+		}
+	}
+}
+
+func TestResourceSettingsPatch(t *testing.T) {
+	s := Defaults()
+	s, err := MergePatch(s, []byte(`{"workerPriority": "normal", "gateConcurrency": 0, "minFreeMemoryMB": 1536,
+		"testParallelism": 8, "daemonMemoryLimitMB": 300}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.WorkerPriority != PriorityNormal || s.GateConcurrency != 0 || s.MinFreeMemoryMB != 1536 ||
+		s.TestParallelism != 8 || s.DaemonMemoryLimitMB != 300 {
+		t.Fatalf("patch not applied: %+v", s)
+	}
+	s, err = MergePatch(s, []byte(`{"workerPriority": null, "gateConcurrency": null, "minFreeMemoryMB": null,
+		"testParallelism": null, "daemonMemoryLimitMB": null}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	d := Defaults()
+	if s.WorkerPriority != d.WorkerPriority || s.GateConcurrency != d.GateConcurrency ||
+		s.MinFreeMemoryMB != d.MinFreeMemoryMB || s.TestParallelism != d.TestParallelism ||
+		s.DaemonMemoryLimitMB != d.DaemonMemoryLimitMB {
+		t.Fatalf("null did not reset to the defaults: %+v", s)
+	}
+	if _, err := MergePatch(s, []byte(`{"gatePriority": "realtime", "workerCPURatePercent": 150}`)); !errors.Is(err,
+		ErrInvalid) {
+		t.Fatalf("out-of-range patch: err = %v", err)
+	}
+	c, err := Parse([]byte(`{"gatePriority": null, "maxConcurrentWorkers": 3}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Settings.GatePriority != PriorityLow || c.Settings.MaxConcurrentWorkers != 3 ||
+		c.Settings.MinFreeCommitMB != 4096 {
+		t.Fatalf("parse: missing keys must take the defaults: %+v", c.Settings)
+	}
+}

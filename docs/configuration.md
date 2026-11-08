@@ -157,6 +157,26 @@ Gates, lanes, the verifier and the proof ledger are described in [gates.md](gate
 | `snapshotRetentionDays` | integer ≥ 1 | `14` | How long the turn snapshots and attempt folders of a finished task are kept after its last change ([safety.md](safety.md)). |
 | `contentionWindowHours` | integer ≥ 1 | `24` | How far back tasks count when warning that several tasks touch the same files. |
 
+### Resources
+
+How much of the machine Seelegent's worker trees, gate commands and the daemon itself may use. Every change applies
+without restarting the daemon: a running worker or gate command keeps the limits it started with, the next one gets
+the new values (the "Applies" column). A memory reading the system cannot give never holds anything back.
+
+| Setting | Type | Default | Applies | Meaning |
+| --- | --- | --- | --- | --- |
+| `workerPriority` | `low`, `normal` | `"low"` | next launch | Process priority of worker trees. `low` is `BELOW_NORMAL_PRIORITY_CLASS` for the whole Job Object on Windows (every descendant included) and nice 10 for the process group on Unix; the launcher itself stays at normal priority. |
+| `gatePriority` | `low`, `normal` | `"low"` | next command | Process priority of gate commands, proof regression runs, automation prechecks and event hooks. git, quota reads and `gh` always run at normal priority. Low priority makes gates slower on a busy machine, so they may need a larger `gateTimeoutSec`. |
+| `maxConcurrentWorkers` | integer 0–256 | `0` | now | Worker turns that may run at the same time over all accounts (`maxConcurrentPerAccount` still caps each account); `0` = no cap. |
+| `gateConcurrency` | integer 0–64 | `2` | now | Gate commands and regression runs that may run at the same time; the others wait in order with the gate phase `queued`, and their timeout starts only when their command starts. `0` = unlimited. |
+| `minFreeMemoryMB` | integer 0–1048576 | `2048` | next check | A new worker turn or gate command waits while the available physical memory is below this many MB (the task shows status `waiting_quota` with `waiting: "memory"`, a gate phase `queued` with wait `memory`); `0` = off. |
+| `minFreeCommitMB` | integer 0–1048576 | `4096` | next check | The same for the available commit (RAM plus page file). Windows only: elsewhere commit is unknown and never holds anything. `0` = off. |
+| `criticalFreeMemoryMB` | integer 0–1048576 | `1024` | next check | Emergency floor. While free physical memory or free commit is below it, the newest running gate command is stopped (its gate is queued again and the turn does not fail; after 3 such stops in one gate phase the gate ends in error), every new start waits, and the dashboard shows that the machine is low on memory. Workers are never stopped for it. While both are on it must be below `minFreeMemoryMB`. `0` = off. |
+| `workerMemoryLimitMB` | integer 0–1048576 | `0` | next launch | Windows only: memory cap of each worker tree (Job Object). A turn that reaches it fails with a message saying so; edits already on disk stay. `0` = off. |
+| `workerCPURatePercent` | integer 0–100 | `0` | next launch | Windows only: hard cap of each worker tree's CPU, as a percentage of the whole machine (Job Object CPU rate control). `0` = off. |
+| `testParallelism` | integer 0–64 | `4` | next full brief, next gate | Parallelism hint for tests and builds: full briefs get a "Shared machine" section (test only the packages you changed; cap `-p`, `-j`, `--maxWorkers`, `cargo -j`, `pytest -n`), and worker and gate environments get `GOFLAGS=-p=N` (appended to an existing `GOFLAGS`, so it overrides a repository's own `-p`) and `CARGO_BUILD_JOBS=N`. `0` = no hint and no variables. |
+| `daemonMemoryLimitMB` | integer 0–65536 | `0` | now | Soft memory limit of the daemon process (Go's `debug.SetMemoryLimit`): the garbage collector works harder near it, the daemon is never stopped for it. A `GOMEMLIMIT` in the daemon's environment wins. `0` = off. |
+
 ### GitHub and automations
 
 | Setting | Type | Default | Meaning |

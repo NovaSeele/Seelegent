@@ -39,6 +39,9 @@ type ExecOptions struct {
 	TailBytes int
 	// LogFile, when set, receives the output (capped at MaxLogBytes).
 	LogFile string
+	// Tree are the resource limits of the command's process tree (gatePriority); the zero value runs it without
+	// limits.
+	Tree platform.TreeOptions
 }
 
 // ExecResult is how a command ended.
@@ -81,7 +84,7 @@ func Exec(ctx context.Context, cmdline string, o ExecOptions) ExecResult {
 		res.Cancelled, res.Err = true, "cancelled"
 		return res
 	}
-	tree, err := platform.StartTree(cmd)
+	tree, err := platform.StartTreeWith(cmd, o.Tree)
 	if err != nil {
 		res.Err = fmt.Sprintf("cannot start the command: %v", err)
 		res.Tail = res.Err

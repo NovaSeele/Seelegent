@@ -743,3 +743,31 @@ func waitDead(t *testing.T, pids ...int) {
 		}
 	}
 }
+
+// TestSpecTreeTravelsInLaunchJSON: the tree limits reach the launcher through launch.json, and a spec without
+// them (or one written before M19) reads as the zero value.
+func TestSpecTreeTravelsInLaunchJSON(t *testing.T) {
+	dir := t.TempDir()
+	f := FilesIn(dir)
+	tree := platform.TreeOptions{Priority: platform.PriorityLow, MemoryLimitMB: 4096, CPURatePercent: 50}
+	if err := writeJSON(f.Spec, specFile{Spec: Spec{Argv: []string{"x"}, Tree: tree}}); err != nil {
+		t.Fatal(err)
+	}
+	var got specFile
+	if err := readJSON(f.Spec, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Tree != tree {
+		t.Fatalf("tree = %+v, want %+v", got.Tree, tree)
+	}
+	if err := writeJSON(f.Spec, specFile{Spec: Spec{Argv: []string{"x"}}}); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(f.Spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), `"tree"`) {
+		t.Fatalf("a zero tree must be left out of launch.json:\n%s", data)
+	}
+}

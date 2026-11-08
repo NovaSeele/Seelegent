@@ -55,6 +55,45 @@ func StartWorkerTree(cmd *exec.Cmd, name string) (*Tree, error) {
 	return startTree(cmd, true, name)
 }
 
+// Priority is the process priority of a tree (TreeOptions.Priority).
+type Priority string
+
+// Priorities. The zero value "" is PriorityNormal.
+const (
+	// PriorityLow: BELOW_NORMAL_PRIORITY_CLASS for every process of the Job Object on Windows (the job's priority
+	// class limit, so descendants cannot raise it); nice 10 for the tree's process group on Unix.
+	PriorityLow Priority = "low"
+	// PriorityNormal: the priority the tree would get anyway (the caller's).
+	PriorityNormal Priority = "normal"
+)
+
+// TreeOptions are the resource limits of a tree started with StartTreeWith or StartWorkerTreeWith. The zero value
+// starts the tree as StartTree and StartWorkerTree do. A limit the operating system cannot apply is ignored.
+type TreeOptions struct {
+	// Priority is the process priority of every process of the tree; "" is PriorityNormal.
+	Priority Priority `json:"priority,omitempty"`
+	// MemoryLimitMB caps the memory committed by the whole tree (Windows: JOB_OBJECT_LIMIT_JOB_MEMORY; ignored
+	// elsewhere); 0 = no cap.
+	MemoryLimitMB int `json:"memoryLimitMB,omitempty"`
+	// CPURatePercent hard-caps the tree's CPU to this share of the whole machine, 1-100 (Windows: Job Object CPU
+	// rate control; ignored elsewhere); 0 = no cap.
+	CPURatePercent int `json:"cpuRatePercent,omitempty"`
+}
+
+// StartTreeWith is StartTree with resource limits.
+//
+// M19 contract stub: the options are not applied yet.
+func StartTreeWith(cmd *exec.Cmd, _ TreeOptions) (*Tree, error) {
+	return StartTree(cmd)
+}
+
+// StartWorkerTreeWith is StartWorkerTree with resource limits.
+//
+// M19 contract stub: the options are not applied yet.
+func StartWorkerTreeWith(cmd *exec.Cmd, name string, _ TreeOptions) (*Tree, error) {
+	return StartWorkerTree(cmd, name)
+}
+
 func startTree(cmd *exec.Cmd, worker bool, name string) (*Tree, error) {
 	t := &Tree{cmd: cmd}
 	if err := t.os.start(cmd, worker, name); err != nil {

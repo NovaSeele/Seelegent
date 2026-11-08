@@ -34,7 +34,13 @@ const (
 	ReasonVerifierRejected = "verifier_rejected"
 	// ReasonPeerObjection: a peer member objected in a consult; the lead answers it before accepting.
 	ReasonPeerObjection = "peer_objection"
+	// ReasonResourcesWait: the task has waited ResourcesWaitAfter for free memory (state info, who user; not
+	// NeedsLead: the lead cannot act on it). Params: Minutes, AvailableMB, NeedMB.
+	ReasonResourcesWait = "resources_wait"
 )
+
+// ResourcesWaitAfter is how long a task waits for resources before ReasonResourcesWait is raised.
+const ResourcesWaitAfter = 10 * time.Minute
 
 // objectionDetail names the peers who object and the first change each requires (or finding).
 func objectionDetail(t *Task, open []string) string {

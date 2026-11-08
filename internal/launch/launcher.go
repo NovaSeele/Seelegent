@@ -77,7 +77,7 @@ func supervise(ctx context.Context, f Files, sf specFile) Exit {
 	if err != nil {
 		return failed(err)
 	}
-	tree, err := platform.StartWorkerTree(cmd, name)
+	tree, err := platform.StartWorkerTreeWith(cmd, name, sf.Tree)
 	closeFiles()
 	if err != nil {
 		return failed(fmt.Errorf("start %s: %w", sf.Argv[0], err))

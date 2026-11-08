@@ -173,7 +173,11 @@ in the daemon.
   its wait, and the next daemon finishes it; that answer then carries `details.cancelRecorded: true` and says so in
   its message, and the CLI and the MCP `cancel` tool report the cancel as recorded instead of failing).
 - `GET /health` carries `homeId` (`config.HomeID`: 16 hex digits of the SHA-256 of `fsutil.Key(home)`), so a client
-  of another data directory refuses this daemon instead of using or stopping it.
+  of another data directory refuses this daemon instead of using or stopping it. It also carries `os`
+  (`runtime.GOOS`), `memory` (`{availPhysMB, availCommitMB, known}`, all zero unless the reading is known) and
+  `lowMemory` (the memory watchdog holds new starts, see `criticalFreeMemoryMB` in
+  [configuration.md](configuration.md)); the frame `resources.changed {lowMemory, memory}` says when `lowMemory`
+  flips (milestone 19).
 - `capabilities.takeover` is true for backends that can resume a session; `apiKey` for every backend but agy;
   `listModels` for codex.
 - Sign-in runs in a terminal window. Once the window is open the session is `in_terminal` ("finish signing in in the

@@ -59,6 +59,10 @@ type TaskSummary struct {
 	LastEventAt string `json:"lastEventAt,omitempty"`
 	// WaitingUntil is when an account is expected back (waiting_quota).
 	WaitingUntil string `json:"waitingUntil,omitempty"`
+	// Waiting says what a waiting_quota task waits for besides an account: WaitingMemory while free memory or
+	// free commit is below minFreeMemoryMB / minFreeCommitMB. Empty (absent) while it waits for an account. Such a
+	// wait never raises an attention flag: the lead cannot act on it.
+	Waiting string `json:"waiting,omitempty" ts:"'memory'"`
 	// NeedsSince is since when the task waits for the lead or the user.
 	NeedsSince string `json:"needsSince,omitempty"`
 
@@ -186,7 +190,8 @@ const (
 
 // AttentionParams are the values an attention flag's text is made of. Only the fields of the reason are set:
 // stalled (Kind, Minutes, Tool, Command), looping (Kind, Count, Tool, Steps), no_accounts and auth (Backend),
-// deps_blocked (Kind, Task, Title), no_response (Denied), hygiene and work_at_risk (Count), question (Options).
+// deps_blocked (Kind, Task, Title), no_response (Denied), hygiene and work_at_risk (Count), question (Options),
+// resources_wait (Minutes, AvailableMB, NeedMB).
 type AttentionParams struct {
 	Kind string `json:"kind,omitempty" ts:"'not_started' | 'no_output' | 'tool' | 'failed_calls' | 'repeated' | 'missing' | 'rejected' | 'failed' | 'cancelled' | 'timeout' | 'process_canceled' | 'start_failed' | 'launcher_lost' | 'exit_error' | 'no_result'"`
 	// ExitCode is the worker process's exit code of a failed flag whose kind is exit_error or no_result.
@@ -206,6 +211,10 @@ type AttentionParams struct {
 	// Options are the choices a worker's question lists (its "## Blocked" options), which the question card offers;
 	// the question itself is the flag's detail.
 	Options []string `json:"options,omitempty"`
+	// AvailableMB and NeedMB are the free memory found and the threshold it is below (resources_wait, with
+	// Minutes: how long the task has waited).
+	AvailableMB int64 `json:"availableMB,omitempty"`
+	NeedMB      int64 `json:"needMB,omitempty"`
 }
 
 // Review is the lead's verdict on a task.
@@ -218,8 +227,11 @@ type Review struct {
 // Gate is the state of a task's gate: the last gate run, or running while it runs (Phase running, settling or
 // verifying).
 type Gate struct {
-	State     string `json:"state" ts:"'running' | 'green' | 'red' | 'error' | 'skipped'"`
-	Phase     string `json:"phase,omitempty" ts:"'running' | 'settling' | 'verifying'"`
+	State string `json:"state" ts:"'running' | 'green' | 'red' | 'error' | 'skipped'"`
+	Phase string `json:"phase,omitempty" ts:"'queued' | 'running' | 'settling' | 'verifying'"`
+	// Wait says what a queued gate waits for: GateWaitSlot (gateConcurrency) or GateWaitMemory (minFreeMemoryMB,
+	// minFreeCommitMB). Absent in every other phase.
+	Wait      string `json:"wait,omitempty" ts:"'slot' | 'memory'"`
 	AutoFixes int    `json:"autoFixes"`
 	// Turn is the turn the gate is about.
 	Turn int `json:"turn,omitempty"`

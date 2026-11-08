@@ -127,6 +127,22 @@ func (s *Settings) Validate() error {
 	v.intRange("contentionWindowHours", s.ContentionWindowHours, 1, maxHours)
 	v.intRange("githubPollMinutes", s.GithubPollMinutes, 0, maxMinutes)
 	validateGitHubHosts(v, s.GithubEnterpriseHosts)
+
+	v.oneOf("workerPriority", s.WorkerPriority, PriorityLow, PriorityNormal)
+	v.oneOf("gatePriority", s.GatePriority, PriorityLow, PriorityNormal)
+	v.intRange("maxConcurrentWorkers", s.MaxConcurrentWorkers, 0, MaxConcurrentWorkersMax)
+	v.intRange("gateConcurrency", s.GateConcurrency, 0, GateConcurrencyMax)
+	v.intRange("minFreeMemoryMB", s.MinFreeMemoryMB, 0, MemoryMBMax)
+	v.intRange("minFreeCommitMB", s.MinFreeCommitMB, 0, MemoryMBMax)
+	v.intRange("criticalFreeMemoryMB", s.CriticalFreeMemoryMB, 0, MemoryMBMax)
+	if s.CriticalFreeMemoryMB > 0 && s.MinFreeMemoryMB > 0 && s.CriticalFreeMemoryMB >= s.MinFreeMemoryMB {
+		v.add("criticalFreeMemoryMB", "must be below minFreeMemoryMB (%d) while both are on (got %d)",
+			s.MinFreeMemoryMB, s.CriticalFreeMemoryMB)
+	}
+	v.intRange("workerMemoryLimitMB", s.WorkerMemoryLimitMB, 0, MemoryMBMax)
+	v.intRange("workerCPURatePercent", s.WorkerCPURatePercent, 0, CPURatePercentMax)
+	v.intRange("testParallelism", s.TestParallelism, 0, TestParallelismMax)
+	v.intRange("daemonMemoryLimitMB", s.DaemonMemoryLimitMB, 0, DaemonMemoryLimitMBMax)
 	return v.err()
 }
 

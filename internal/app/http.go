@@ -15,6 +15,7 @@ import (
 	"github.com/NovaSeele/Seelegent/internal/config"
 	"github.com/NovaSeele/Seelegent/internal/envx"
 	"github.com/NovaSeele/Seelegent/internal/httpapi"
+	"github.com/NovaSeele/Seelegent/internal/platform"
 )
 
 // httpShutdown bounds the graceful end of open requests at Close.
@@ -87,7 +88,7 @@ func (a *App) ListenHTTP(ctx context.Context, port int) (string, error) {
 		LogDir: a.Paths.Logs, Redact: a.redact, Web: a.web, Classifier: a.classifier, Logger: a.log,
 		DevOrigins: a.devOrigins, Stop: a.RequestStop, Proof: a.Proof, Gates: a.Tasks, HomeID: config.HomeID(a.Paths.Home),
 		Members: a.Members, Consults: a.Tasks, Notes: a.Notes, Meetings: a.Meetings, Contests: a.Contests,
-		Hooks: a.Hooks, Tickets: a.Tickets, Automations: a.Automations,
+		Hooks: a.Hooks, Tickets: a.Tickets, Automations: a.Automations, FreeMemory: platform.Memory,
 	})
 	if err != nil {
 		_ = ln.Close()
