@@ -4,10 +4,16 @@
 // The companion runs the same launcher code in about 12 MB of private memory instead of about 51 MB (it links no
 // crypto package, so not the 32 MiB entropy buffer Windows charges as commit; see launch.LimitRuntime). It is used
 // only when it is safe: the file sits next to the daemon's own executable, under its fixed name, and its build
-// information (read from the file, nothing is run) says it is the launcher's main package of the daemon's very
-// build: same module version, Go version and build settings (VCS revision, time and modified flag, -ldflags with the
-// version stamp, GOOS, GOARCH, ...). Anything else, a missing file included, falls back to `seelegent __launch`,
-// which always works.
+// information (read from the file, nothing is run) says it is the launcher's main package built from the same source
+// as the daemon: the same module version, Go version and build settings (VCS revision and time, GOOS, GOARCH, tags,
+// ...), from a clean checkout. Anything else, a missing file included, falls back to `seelegent __launch`, which
+// always works.
+//
+// The source is told by the VCS revision, so the build must name one and must not be from a modified tree: two
+// builds of one revision with different uncommitted edits carry the same information, and their launchers could
+// differ. -ldflags is no help there: with -trimpath (every Seelegent build) Go does not record it. The -X version
+// stamp it carries does not change the launcher's code, which does not link internal/buildinfo
+// (cmd/seelegent-launch's TestLinksNoCrypto checks that too).
 package launchbin
 
 import (
@@ -48,7 +54,8 @@ func FileName(goos string) string {
 func PathNextTo(exe string) string { return filepath.Join(filepath.Dir(exe), FileName(runtime.GOOS)) }
 
 // Match returns nil when the build companion is the companion of the build main: companion is the launcher's main
-// package of the same module version, Go version and build settings. Otherwise the error says what differs.
+// package of the same module version, Go version and build settings, and both name a VCS revision of a clean tree
+// (see the package comment). Otherwise the error says what differs.
 func Match(main, companion *debug.BuildInfo) error {
 	switch {
 	case main == nil:
@@ -64,6 +71,14 @@ func Match(main, companion *debug.BuildInfo) error {
 		return fmt.Errorf("it was built with %s, this executable with %s", companion.GoVersion, main.GoVersion)
 	}
 	want, got := settings(main), settings(companion)
+	switch {
+	case want["vcs.revision"] == "":
+		return errors.New("this executable names no VCS revision (built outside a git checkout, or with " +
+			"-buildvcs=false), so the source of the two cannot be compared")
+	case want["vcs.modified"] != "false":
+		return errors.New("this executable was built from a modified tree, so the source of the two cannot be " +
+			"compared (commit, or build from a clean checkout)")
+	}
 	for _, k := range slices.Sorted(maps.Keys(union(want, got))) {
 		if want[k] != got[k] {
 			return fmt.Errorf("its build setting %s is %q, this executable's %q", k, got[k], want[k])

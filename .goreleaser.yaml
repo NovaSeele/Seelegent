@@ -32,7 +32,7 @@ builds:
     # Reproducible: the binaries carry the commit's time, not the build's.
     mod_timestamp: &mod_timestamp "{{ .CommitTimestamp }}"
   # The companion launcher, shipped next to seelegent (docs/release.md). The daemon runs it only when its build
-  # information matches its own (flags, -ldflags, revision), so it shares every setting above through the anchors.
+  # information matches its own (revision, flags, targets), so it shares every setting above through the anchors.
   - id: seelegent-launch
     main: ./cmd/seelegent-launch
     binary: seelegent-launch

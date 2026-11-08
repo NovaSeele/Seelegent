@@ -28,21 +28,35 @@ func info(path string, settings ...string) *debug.BuildInfo {
 
 func TestMatch(t *testing.T) {
 	const daemon = "github.com/NovaSeele/Seelegent/cmd/seelegent"
-	main := info(daemon, "vcs.revision", "abc", "GOOS", "windows", "-ldflags", "-X v=1.2.3")
-	if err := Match(main, info(MainPackage, "GOOS", "windows", "-ldflags", "-X v=1.2.3", "vcs.revision", "abc")); err != nil {
+	main := info(daemon, "vcs.revision", "abc", "vcs.modified", "false", "GOOS", "windows", "-tags", "x")
+	if err := Match(main, info(MainPackage, "GOOS", "windows", "-tags", "x", "vcs.modified", "false",
+		"vcs.revision", "abc")); err != nil {
 		t.Errorf("same build: %v", err)
+	}
+	same := func(b *debug.BuildInfo) *debug.BuildInfo {
+		c := *b
+		c.Path = MainPackage
+		return &c
 	}
 	for name, c := range map[string]struct {
 		main, companion *debug.BuildInfo
 		want            string
 	}{
-		"no own info":      {nil, info(MainPackage), "this executable carries no build information"},
-		"no info":          {main, nil, "it carries no build information"},
-		"other program":    {main, info(daemon, "vcs.revision", "abc"), "not the Seelegent launcher"},
-		"other revision":   {main, info(MainPackage, "vcs.revision", "abd", "GOOS", "windows", "-ldflags", "-X v=1.2.3"), "vcs.revision"},
-		"other version":    {main, info(MainPackage, "vcs.revision", "abc", "GOOS", "windows", "-ldflags", "-X v=1.2.4"), "-ldflags"},
-		"setting missing":  {main, info(MainPackage, "vcs.revision", "abc", "GOOS", "windows"), "-ldflags"},
-		"setting extra":    {main, info(MainPackage, "vcs.revision", "abc", "GOOS", "windows", "-ldflags", "-X v=1.2.3", "vcs.modified", "true"), "vcs.modified"},
+		"no own info":   {nil, info(MainPackage), "this executable carries no build information"},
+		"no info":       {main, nil, "it carries no build information"},
+		"other program": {main, info(daemon, "vcs.revision", "abc"), "not the Seelegent launcher"},
+		"other revision": {main, info(MainPackage, "vcs.revision", "abd", "vcs.modified", "false", "GOOS", "windows",
+			"-tags", "x"), "vcs.revision"},
+		"other tags": {main, info(MainPackage, "vcs.revision", "abc", "vcs.modified", "false", "GOOS", "windows",
+			"-tags", "y"), "-tags"},
+		"setting missing": {main, info(MainPackage, "vcs.revision", "abc", "vcs.modified", "false", "GOOS",
+			"windows"), "-tags"},
+		"setting extra": {main, info(MainPackage, "vcs.revision", "abc", "vcs.modified", "false", "GOOS", "windows",
+			"-tags", "x", "GOAMD64", "v3"), "GOAMD64"},
+		"no revision": {info(daemon, "GOOS", "windows"), same(info(daemon, "GOOS", "windows")),
+			"names no VCS revision"},
+		"modified tree": {info(daemon, "vcs.revision", "abc", "vcs.modified", "true"),
+			same(info(daemon, "vcs.revision", "abc", "vcs.modified", "true")), "modified tree"},
 		"other go version": {main, func() *debug.BuildInfo { b := info(MainPackage); b.GoVersion = "go1.26.2"; return b }(), "built with go1.26.2"},
 		"other module":     {main, func() *debug.BuildInfo { b := info(MainPackage); b.Main.Version = "v1.2.4"; return b }(), "v1.2.4"},
 	} {
@@ -110,7 +124,8 @@ func TestResolverFallsBack(t *testing.T) {
 }
 
 // TestResolverUsesCompanion builds the real companion and checks that the resolver picks it when it is of the
-// daemon's build, notices when it is replaced by something else, and logs each change of decision once.
+// daemon's build, notices when it is replaced by something else, and logs each change of decision once. Built from
+// a modified tree (local work), the companion is refused, and that is what is checked then.
 func TestResolverUsesCompanion(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds cmd/seelegent-launch")
@@ -136,6 +151,13 @@ func TestResolverUsesCompanion(t *testing.T) {
 	self := *built
 	self.Path = "github.com/NovaSeele/Seelegent/cmd/seelegent"
 
+	if settings(built)["vcs.modified"] != "false" {
+		st := Inspect(exe, &self)
+		if st.Usable || !strings.Contains(st.Reason, "cannot be compared") {
+			t.Fatalf("built from a modified tree or without VCS data: Inspect = %+v, want it refused", st)
+		}
+		t.Skip("built from a modified tree or without VCS data: the companion is refused, as it must be")
+	}
 	var logs records
 	r := NewResolver(exe, &self, logs.logger())
 	for range 2 {

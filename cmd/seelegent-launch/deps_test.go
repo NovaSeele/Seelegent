@@ -7,7 +7,10 @@ import (
 	"testing"
 )
 
-// TestLinksNoCrypto: the launcher links no crypto package on any system Seelegent ships for. Importing any of them
+// buildinfoPkg is the package the -ldflags -X stamps go into.
+const buildinfoPkg = "github.com/NovaSeele/Seelegent/internal/buildinfo"
+
+// TestLinksNoCrypto: the launcher links no crypto package on any system Seelegent ships for, nor internal/buildinfo. Importing any of them
 // links the 32 MiB entropy buffer of crypto/internal/fips140/drbg (its initializer refers to it), which Windows
 // charges as commit in every launcher process; that buffer is what the companion executable exists to leave out.
 func TestLinksNoCrypto(t *testing.T) {
@@ -25,6 +28,10 @@ func TestLinksNoCrypto(t *testing.T) {
 		for _, pkg := range strings.Fields(string(out)) {
 			if pkg == "crypto" || strings.HasPrefix(pkg, "crypto/") {
 				t.Errorf("GOOS=%s: the launcher links %s; see TestLinksNoCrypto", goos, pkg)
+			}
+			if pkg == buildinfoPkg {
+				t.Errorf("GOOS=%s: the launcher links %s, so its code would depend on the -X version stamp, which "+
+					"builds with -trimpath do not record and the daemon cannot compare (launchbin)", goos, pkg)
 			}
 		}
 	}

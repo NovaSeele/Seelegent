@@ -61,7 +61,8 @@ Rules that keep it so:
   are in `internal/projectkey`, not `fsutil`; Windows tree names use `math/rand/v2` (unique, not secret).
 - Build the companion with the same command and flags as `seelegent` (`make build`, `scripts/build.ps1`, the bench
   and GoReleaser do): the daemon compares their build information and falls back when anything differs, with one
-  line in `logs/daemon.log` saying why.
+  line in `logs/daemon.log` saying why. It also falls back for a build from a modified tree (uncommitted changes),
+  whose source the build information cannot tell apart: commit before a bench that should measure the companion.
 - Development runs (`go run ./cmd/seelegent daemon`, tests, fakecli) have no companion next to the executable and
   use `seelegent __launch`; that is expected and logged once at info level.
 
@@ -144,7 +145,7 @@ curl -s 'http://127.0.0.1:6060/debug/vars?light=1'                        # goro
 
 `scripts/bench` (build tag `bench`) measures what Seelegent costs the machine. It builds `seelegent` and the
 companion launcher `seelegent-launch` next to it (with `-bin`, the daemon uses a companion of the same build next to
-that binary when there is one), starts a daemon on a free port picked for the run (`-port`), with `--pprof-addr` on another (`-pprof-port`) and a temp
+that binary when there is one; a build from a modified tree runs launches as `seelegent __launch`), starts a daemon on a free port picked for the run (`-port`), with `--pprof-addr` on another (`-pprof-port`) and a temp
 `SEELEGENT_HOME` and user home, adds 6 fake agy accounts with their quota readers on, runs 20 short tasks so the
 lists are not empty, and then:
 

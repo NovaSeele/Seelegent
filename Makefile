@@ -11,8 +11,8 @@ MODULE  := github.com/NovaSeele/Seelegent
 BIN_DIR := bin
 EXE     := $(if $(filter Windows_NT,$(OS)),.exe,)
 BINARY  := seelegent$(EXE)
-# The companion launcher, shipped next to seelegent (docs/release.md). It must be built with the same flags and
-# -ldflags as seelegent: the daemon uses it only when its build information matches its own.
+# The companion launcher, shipped next to seelegent (docs/release.md). It must be built with the same flags as
+# seelegent: the daemon uses it only when its build information matches its own.
 LAUNCHER := seelegent-launch$(EXE)
 
 VERSION ?= $(shell git describe --tags --dirty 2>/dev/null || echo dev)

@@ -33,10 +33,14 @@ The daemon uses it only when that is safe, and falls back to `seelegent __launch
 - it must be the file `seelegent-launch[.exe]` in the folder of the daemon's own executable (`os.Executable`, links
   resolved);
 - its build information, read from the file without running it (`debug/buildinfo`), must say it is
-  `cmd/seelegent-launch` of the daemon's own build: the same module version, Go version and build settings (VCS
-  revision, time and modified flag, `-ldflags` with the version stamp, `GOOS`, `GOARCH`, ...). So both must be built
-  by the same command with the same flags: `.goreleaser.yaml` shares them through YAML anchors, `make build`, `make
-  cross` and `scripts/build.ps1` build both.
+  `cmd/seelegent-launch` built from the daemon's source: the same module version, Go version and build settings
+  (VCS revision and time, `GOOS`, `GOARCH`, `-tags`, `CGO_ENABLED`, ...), so both must be built with the same flags:
+  `.goreleaser.yaml` shares them through YAML anchors, `make build`, `make cross` and `scripts/build.ps1` build both;
+- the daemon must name a VCS revision of a clean tree (`vcs.modified=false`): two builds of one revision with
+  different uncommitted edits carry the same information, so a build from a modified tree, or one without VCS data
+  (`-buildvcs=false`, a source archive), never uses the companion. `-ldflags` is not compared: with `-trimpath` Go
+  does not record it, and the `-X` version stamp does not change the launcher's code (it does not link
+  `internal/buildinfo`; `TestLinksNoCrypto` checks that too).
 
 The daemon looks at the file for every launch (one `stat`) and reads its build information again only when its
 path, modification time or size changed, so a companion that appears, goes or is replaced is noticed at the next
