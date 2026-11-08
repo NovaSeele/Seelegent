@@ -10,6 +10,7 @@ import (
 	"github.com/NovaSeele/Seelegent/internal/api"
 	"github.com/NovaSeele/Seelegent/internal/config"
 	"github.com/NovaSeele/Seelegent/internal/gate"
+	"github.com/NovaSeele/Seelegent/internal/platform"
 	"github.com/NovaSeele/Seelegent/internal/pool"
 )
 
@@ -21,13 +22,13 @@ func TestAdmitHeavyWaitsForMemory(t *testing.T) {
 	h := newHarnessWith(t, func(h *harness) {
 		h.res = mem
 		h.set(memorySettings(0))
-		h.set(func(s *config.Settings) { s.GateConcurrency = 1 })
-		slots = gate.NewSlots(func() int { return h.config().GateConcurrency })
+		h.set(func(s *config.Settings) { s.GateConcurrency = config.Int(1) })
+		slots = gate.NewSlots(func() int { return *h.config().GateConcurrency })
 		h.slots = slots
 	})
 	admitted := make(chan func(), 1)
 	go func() {
-		release, err := h.s.AdmitHeavy(t.Context())
+		release, err := h.s.AdmitHeavy(t.Context(), "")
 		if err != nil {
 			t.Error(err)
 			return
@@ -60,7 +61,7 @@ func TestAdmitHeavyWaitsForMemory(t *testing.T) {
 	mem.set(1000, 0)
 	ctx, cancel = context.WithCancel(t.Context())
 	cancel()
-	if _, err := h.s.AdmitHeavy(ctx); !errors.Is(err, context.Canceled) {
+	if _, err := h.s.AdmitHeavy(ctx, ""); !errors.Is(err, context.Canceled) {
 		t.Fatalf("AdmitHeavy on a cancelled context = %v", err)
 	}
 }
@@ -227,8 +228,8 @@ func TestQueueMoveLogged(t *testing.T) {
 func TestGateQueueLogsFewMoves(t *testing.T) {
 	var slots *gate.Slots
 	h := newHarnessWith(t, func(h *harness) {
-		h.set(func(s *config.Settings) { s.GateConcurrency = 1 })
-		slots = gate.NewSlots(func() int { return h.config().GateConcurrency })
+		h.set(func(s *config.Settings) { s.GateConcurrency = config.Int(1) })
+		slots = gate.NewSlots(func() int { return *h.config().GateConcurrency })
 		h.slots = slots
 	})
 	h.initRepo(map[string]string{"a.txt": "a\n"})
@@ -286,4 +287,92 @@ func TestGateQueueLogsFewMoves(t *testing.T) {
 			t.Errorf("logged a move %d -> %d (all: %v)", positions[i-1], positions[i], positions)
 		}
 	}
+}
+
+// TestAutoThresholdHoldsStill: with the thresholds on auto, the need comes from the machine profile, never from a
+// reading: readings that move (their totals included) log one waiting_quota event with one need.
+func TestAutoThresholdHoldsStill(t *testing.T) {
+	mem := newFakeMemory(1000)
+	h := newHarnessWith(t, func(h *harness) {
+		h.res = mem
+		h.machine = func() config.Machine { return config.NewMachine(16*1024, 0, 8, "linux") } // auto 2048
+	})
+	h.agy("w", 1)
+	h.queue.Push(t, okScript("conv-a", "Done."))
+	sum := h.delegate(api.DelegateRequest{Title: "auto"})
+	h.waitFor("the memory wait", func() bool { return h.task(sum.ID).MemoryWait != nil })
+	for i, total := range []int64{15000, 17000, 4000, 64000} {
+		mem.mu.Lock()
+		mem.m = platform.MemoryStatus{AvailPhysMB: 1000 + int64(i)*100, TotalPhysMB: total, Known: true}
+		close(mem.wake)
+		mem.wake = make(chan struct{})
+		mem.mu.Unlock()
+		h.clk.Advance(memoryRecheck)
+		time.Sleep(30 * time.Millisecond)
+	}
+	if mw := h.task(sum.ID).MemoryWait; mw == nil || mw.NeedMB != 2048 {
+		t.Fatalf("memory wait = %+v", mw)
+	}
+	var needs []int64
+	for _, e := range eventsOf(h.events(sum.ID), api.EventWaitingQuota) {
+		var d api.WaitingQuotaData
+		decode(t, e, &d)
+		needs = append(needs, d.NeedMB)
+	}
+	if len(needs) != 1 || needs[0] != 2048 {
+		t.Fatalf("waiting_quota needs = %v", needs)
+	}
+	mem.set(5000, 0)
+	h.waitStatus(sum.ID, StatusDone)
+}
+
+// TestRegressionInGateSharesSlot: with gateConcurrency 1, a regression run asked for from a gate command (its task
+// id as gateTask) while that gate holds the only slot shares it and starts at once: the gate does not deadlock on
+// its own slot. An id the daemon does not know (or "") waits for the slot as before.
+func TestRegressionInGateSharesSlot(t *testing.T) {
+	h := newHarnessWith(t, func(h *harness) {
+		h.set(func(s *config.Settings) { s.GateConcurrency = config.Int(1) })
+		h.slots = gate.NewSlots(func() int { return *h.config().GateConcurrency })
+	})
+	h.initRepo(map[string]string{"a.txt": "a\n"})
+	h.agy("w", 1)
+	h.queue.Push(t, editScript("conv-a", filepath.Join(h.cwd, "a.txt"), "a2\n", "A."))
+	sum := h.delegate(api.DelegateRequest{Title: "A", GateCommands: []string{gateCmd(t, "--wait", "a.release")}})
+	h.waitGateStarts(sum.ID, 1)
+	if !h.s.HoldsGateSlot(sum.ID) {
+		t.Fatal("the running gate holds no slot")
+	}
+
+	// The gate's own regression command: no second slot, no wait.
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	release, err := h.s.AdmitHeavy(ctx, sum.ID)
+	if err != nil {
+		t.Fatalf("a regression run from the gate that holds the slot waited: %v", err)
+	}
+	release()
+
+	// Anyone else waits for the slot while the gate holds it.
+	for _, other := range []string{"t-unknown", ""} {
+		short, stop := context.WithTimeout(t.Context(), 300*time.Millisecond)
+		if rel, err := h.s.AdmitHeavy(short, other); !errors.Is(err, context.DeadlineExceeded) {
+			if rel != nil {
+				rel()
+			}
+			t.Errorf("gateTask %q: AdmitHeavy = %v, want a wait for the slot", other, err)
+		}
+		stop()
+	}
+
+	h.write("a.release", "go")
+	h.waitStatus(sum.ID, StatusDone)
+	if h.s.HoldsGateSlot(sum.ID) {
+		t.Error("the slot is still counted after the gate ended")
+	}
+	// With the gate done, its id no longer shares anything: the run takes the free slot like any other.
+	release, err = h.s.AdmitHeavy(ctx, sum.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	release()
 }

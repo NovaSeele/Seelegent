@@ -160,6 +160,9 @@ type Options struct {
 	FreeMemory func() platform.MemoryStatus
 	// LowMemory reports whether the memory watchdog holds new starts (Health.LowMemory); nil answers false.
 	LowMemory func() bool
+	// Machine is the machine profile the auto resource settings are computed from (Health.Resources and
+	// Health.Machine); nil answers an unknown machine.
+	Machine func() config.Machine
 
 	Tasks    Tasks
 	Accounts Accounts
@@ -192,6 +195,10 @@ type Options struct {
 	LogDir string
 	// Redact masks secrets in log lines (logx.Redactor.String); identity when nil.
 	Redact func(string) string
+
+	// Activity is told of every API request that is not a worker's (the dashboard, the CLI, the lead's MCP
+	// calls), before it is served (quota.Refresher.Touch). It must not block. Nil tells nobody.
+	Activity func()
 
 	// Stop asks the daemon to shut down cleanly (POST /daemon/stop). It must only signal and return at once: the
 	// shutdown waits for the answer to be written. Nil answers 503.
@@ -355,13 +362,17 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if c := s.callerOf(r); c.Worker && !s.workerAllowed(r, c) {
+	c := s.callerOf(r)
+	if c.Worker && !s.workerAllowed(r, c) {
 		s.workerDenied(w, r)
 		return
 	}
 	if !isAPI {
 		s.serveWeb(w, r)
 		return
+	}
+	if s.o.Activity != nil && !c.Worker {
+		s.o.Activity()
 	}
 	s.mux.ServeHTTP(w, r)
 }

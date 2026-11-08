@@ -174,10 +174,17 @@ in the daemon.
   its message, and the CLI and the MCP `cancel` tool report the cancel as recorded instead of failing).
 - `GET /health` carries `homeId` (`config.HomeID`: 16 hex digits of the SHA-256 of `fsutil.Key(home)`), so a client
   of another data directory refuses this daemon instead of using or stopping it. It also carries `os`
-  (`runtime.GOOS`), `memory` (`{availPhysMB, availCommitMB, known}`, all zero unless the reading is known) and
+  (`runtime.GOOS`), `memory` (`{availPhysMB, availCommitMB, known, cgroupV1?}`, all zero unless the reading is known; `cgroupV1` when a
+  Linux cgroup v1 memory limit lowered it) and
   `lowMemory` (the memory watchdog holds new starts, see `criticalFreeMemoryMB` in
   [configuration.md](configuration.md)); the frame `resources.changed {lowMemory, memory}` says when `lowMemory`
-  flips (milestone 19).
+  flips (milestone 19). `resources` holds the values in use for the five auto settings (`gateConcurrency`,
+  `minFreeMemoryMB`, `minFreeCommitMB`, `criticalFreeMemoryMB`, `testParallelism`), each `{value, source}` with
+  `source` `auto` (computed from the machine), `explicit` (set by the user) or `derived` (an auto memory threshold
+  computed from the other one the user set: a floor half an explicit minimum, a minimum twice an explicit floor),
+  and `machine`
+  (`{totalPhysMB, totalCommitMB, cpus}`) is what the auto values come from. In `GET /settings` an auto setting is
+  absent; `PATCH /settings` with `null` returns one to auto.
 - `capabilities.takeover` is true for backends that can resume a session; `apiKey` for every backend but agy;
   `listModels` for codex.
 - Sign-in runs in a terminal window. Once the window is open the session is `in_terminal` ("finish signing in in the

@@ -149,6 +149,10 @@ func newTestDaemon(t *testing.T) *testDaemon {
 	}
 	d := &testDaemon{queue: fakecli.NewQueue(t), paths: paths, cwd: cwd}
 	set := config.Defaults()
+	// The engine tests must not depend on this machine's free memory.
+	set.MinFreeMemoryMB, set.MinFreeCommitMB, set.CriticalFreeMemoryMB = config.Int(0), config.Int(0), config.Int(0)
+	// Nor on its CPUs: the gate slots and the test hint the tests were written for.
+	set.GateConcurrency, set.TestParallelism = config.Int(2), config.Int(4)
 	a, err := app.New(t.Context(), app.Options{Paths: paths, Settings: &set, Env: d.queue.Env(os.Environ()),
 		RealHome: filepath.Join(home, "realhome"), Launcher: fakecli.Launcher(t), NoQuotaReaders: true, NoGh: true,
 		Bins: map[string]string{config.BackendAgy: fakecli.Exe(t), config.BackendClaude: "", config.BackendCodex: ""}})

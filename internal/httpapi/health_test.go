@@ -1,9 +1,11 @@
 package httpapi
 
 import (
+	"context"
 	"testing"
 
 	"github.com/NovaSeele/Seelegent/internal/api"
+	"github.com/NovaSeele/Seelegent/internal/config"
 	"github.com/NovaSeele/Seelegent/internal/platform"
 )
 
@@ -23,5 +25,39 @@ func TestHealthMemory(t *testing.T) {
 	}
 	if h := (&Server{o: Options{LowMemory: func() bool { return true }}}).health(); !h.LowMemory {
 		t.Fatalf("lowMemory not reported: %+v", h)
+	}
+}
+
+// fixedSettings is an httpapi.Settings with fixed settings.
+type fixedSettings struct{ s config.Settings }
+
+func (f fixedSettings) Settings() config.Settings { return f.s }
+func (f fixedSettings) PatchSettings(context.Context, []byte) (config.Settings, error) {
+	return f.s, nil
+}
+
+// TestHealthResources: GET /health carries the effective resource values with their source and the machine.
+func TestHealthResources(t *testing.T) {
+	set := config.Defaults()
+	set.TestParallelism = config.Int(3)
+	m := config.Machine{TotalPhysMB: 16 * 1024, TotalCommitMB: 24 * 1024, CPUs: 8, OS: "windows"}
+	s := &Server{o: Options{Settings: fixedSettings{set}, Machine: func() config.Machine { return m }}}
+	h := s.health()
+	auto := func(v int) api.EffectiveValue { return api.EffectiveValue{Value: v, Source: api.ResourceAuto} }
+	want := api.EffectiveResources{MinFreeMemoryMB: auto(2048), CriticalFreeMemoryMB: auto(1024),
+		MinFreeCommitMB: auto(2457), TestParallelism: api.EffectiveValue{Value: 3, Source: api.ResourceExplicit},
+		GateConcurrency: auto(1)}
+	if h.Resources != want || h.Machine != (api.Machine{TotalPhysMB: 16384, TotalCommitMB: 24576, CPUs: 8}) {
+		t.Fatalf("resources = %+v machine = %+v", h.Resources, h.Machine)
+	}
+	// A floor set alone above the auto minimum makes the minimum twice it: derived, not auto.
+	set.CriticalFreeMemoryMB = config.Int(3000)
+	s.o.Settings = fixedSettings{set}
+	h = s.health()
+	if got := h.Resources.MinFreeMemoryMB; got != (api.EffectiveValue{Value: 6000, Source: api.ResourceDerived}) {
+		t.Fatalf("minFreeMemoryMB = %+v", got)
+	}
+	if got := h.Resources.CriticalFreeMemoryMB; got.Source != api.ResourceExplicit {
+		t.Fatalf("criticalFreeMemoryMB = %+v", got)
 	}
 }

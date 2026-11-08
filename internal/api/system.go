@@ -36,6 +36,47 @@ type Health struct {
 	// LowMemory is true while the memory watchdog holds every new start because free memory or free commit is
 	// below criticalFreeMemoryMB. resources.changed tells when it flips.
 	LowMemory bool `json:"lowMemory"`
+	// Resources are the values the daemon uses for the machine-sized settings, each with where it comes from
+	// (the setting is auto, or the user set it), so a view can show "Auto (2 GB on this machine)".
+	Resources EffectiveResources `json:"resources"`
+	// Machine is what the auto values are computed from, read when the daemon started or the settings changed.
+	Machine Machine `json:"machine"`
+}
+
+// Sources of an effective resource value.
+const (
+	// ResourceAuto: the setting is auto (absent in config.json); the value comes from the machine.
+	ResourceAuto = "auto"
+	// ResourceExplicit: the user set the value.
+	ResourceExplicit = "explicit"
+	// ResourceDerived: the setting is auto, but its value comes from the user's other memory threshold: a floor
+	// (criticalFreeMemoryMB) half of an explicit minFreeMemoryMB, or a minFreeMemoryMB twice an explicit floor.
+	ResourceDerived = "derived"
+)
+
+// EffectiveValue is the value the daemon uses for one machine-sized setting and where it comes from.
+type EffectiveValue struct {
+	Value  int    `json:"value"`
+	Source string `json:"source" ts:"'auto' | 'explicit' | 'derived'"`
+}
+
+// EffectiveResources are the effective values of the machine-sized settings (config.EffectiveResources).
+type EffectiveResources struct {
+	MinFreeMemoryMB      EffectiveValue `json:"minFreeMemoryMB"`
+	CriticalFreeMemoryMB EffectiveValue `json:"criticalFreeMemoryMB"`
+	MinFreeCommitMB      EffectiveValue `json:"minFreeCommitMB"`
+	TestParallelism      EffectiveValue `json:"testParallelism"`
+	GateConcurrency      EffectiveValue `json:"gateConcurrency"`
+}
+
+// Machine is what the auto resource values are computed from (config.Machine).
+type Machine struct {
+	// TotalPhysMB is the physical memory in MiB (the cgroup memory limit when lower); 0 = unknown.
+	TotalPhysMB int64 `json:"totalPhysMB"`
+	// TotalCommitMB is the commit limit in MiB, rounded down to a whole GiB: Windows only, 0 = unknown.
+	TotalCommitMB int64 `json:"totalCommitMB"`
+	// CPUs are the logical CPUs the daemon may use.
+	CPUs int `json:"cpus"`
 }
 
 // MemoryStatus is the free memory of the machine (platform.MemoryStatus). Known is false when the system gave no
@@ -44,6 +85,8 @@ type MemoryStatus struct {
 	AvailPhysMB   int64 `json:"availPhysMB"`
 	AvailCommitMB int64 `json:"availCommitMB"`
 	Known         bool  `json:"known"`
+	// CgroupV1 is true when a cgroup v1 memory limit (Linux) lowered the reading.
+	CgroupV1 bool `json:"cgroupV1,omitempty"`
 }
 
 // DaemonStop is the answer (202) of POST /daemon/stop: the daemon accepted the request and shuts down right after

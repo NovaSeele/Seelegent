@@ -27,7 +27,8 @@ const facts = computed(() => {
   const memory = connection.health?.memory
   const phys = freeMB(memory, 'phys')
   const commit = freeMB(memory, 'commit')
-  const floor = connection.settings?.criticalFreeMemoryMB ?? 0
+  // The floor in use (auto, derived or set), never the setting itself: null there means auto, not off.
+  const floor = connection.health?.resources?.criticalFreeMemoryMB.value ?? 0
   // The amounts read together: free memory just under the floor must not read the same as the floor.
   const shownMB = [phys, commit, floor > 0 ? floor : null]
   const present = shownMB.filter((mb): mb is number => mb !== null)

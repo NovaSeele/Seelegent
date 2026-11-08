@@ -165,7 +165,9 @@ func (c *Config) merged() (*object, error) {
 		c.unknown = nil
 		return known, nil
 	}
-	merged, unknown, err := overlay(known, c.doc, "")
+	// An auto setting on auto is no key in known (omitempty): drop the file's own key, so a reset to auto removes it
+	// and it never counts as unknown.
+	merged, unknown, err := overlay(known, c.doc.without(AutoSettingKeys()...), "")
 	if err != nil {
 		return nil, err
 	}

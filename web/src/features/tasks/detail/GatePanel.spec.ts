@@ -6,7 +6,7 @@ import { useConnectionStore } from '@/stores/connection'
 import { useTasksStore } from '@/stores/tasks'
 import { setupApp } from '@/test/app'
 import { readFile } from '@/test/files'
-import { iso, makeDetail, makeEvent, makeTask } from '@/test/fixtures'
+import { iso, makeDetail, makeEvent, makeHealthResources, makeTask } from '@/test/fixtures'
 
 import {
   budgetUsedUp,
@@ -327,9 +327,16 @@ describe('GatePanel', () => {
 })
 
 describe('GatePanel queued', () => {
-  async function mountQueued(wait: 'slot' | 'memory') {
+  async function mountQueued(wait: 'slot' | 'memory', limit = 2) {
     const { plugins } = await setupApp()
-    useConnectionStore().settings = { gateConcurrency: 2 } as never
+    // The slot count in use comes from Health; the setting itself is auto (absent).
+    const connection = useConnectionStore()
+    connection.settings = {} as never
+    const { resources, machine } = makeHealthResources()
+    connection.health = {
+      resources: { ...resources, gateConcurrency: { value: limit, source: 'auto' } },
+      machine,
+    } as never
     const task = makeTask({
       id: 't1',
       status: 'running',
@@ -349,6 +356,14 @@ describe('GatePanel queued', () => {
     expect(summary.find('[role="status"]').exists()).toBe(false)
     expect(wrapper.get('details').classes()).toContain('tone-neutral')
     expect(wrapper.text()).not.toContain('The gate runs when the worker reports.')
+  })
+
+  it('takes the slot count in use from Health, not from the (auto) setting', async () => {
+    const wrapper = await mountQueued('slot', 3)
+    expect(wrapper.get('summary').text()).toContain('3 at a time')
+    // Unlimited in use: no count to give.
+    const unlimited = await mountQueued('slot', 0)
+    expect(unlimited.get('summary').text()).not.toContain('at a time')
   })
 
   it('gives the place in line when the task’s log is on screen', async () => {

@@ -78,9 +78,6 @@ func failingNames(c *api.TicketChecks) []string {
 
 // Poll updates the pull requests (state, head, checks) of the open tickets and syncs the inboxes. The manual tier
 // syncs only an inbox that synced fine before (public repositories).
-//
-// The tickets and repositories are read first: with nothing to poll, Poll returns without asking for the access
-// tier, which runs gh (twice) and calls GitHub once its short cache has expired.
 func (s *Service) Poll(ctx context.Context) error {
 	if !s.pollMu.TryLock() {
 		return nil
@@ -99,18 +96,18 @@ func (s *Service) Poll(ctx context.Context) error {
 		return err
 	}
 	byID := map[string]*repoRec{}
-	var syncs []*repoRec
+	var onGitHub []*repoRec
 	for _, r := range repos {
 		byID[r.ID] = r
 		if s.gh(r).ok() {
-			syncs = append(syncs, r)
+			onGitHub = append(onGitHub, r)
 		}
 	}
-	type pollRec struct {
-		id   string
-		repo *repoRec
+	type watched struct {
+		t *ticketRec
+		r *repoRec
 	}
-	var polls []pollRec
+	var open []watched
 	for _, t := range tickets {
 		if finished(t.Status) {
 			continue
@@ -120,19 +117,19 @@ func (s *Service) Poll(ctx context.Context) error {
 		if r == nil || !s.gh(r).ok() || !hasNumber && t.Status != api.TicketPROpen {
 			continue
 		}
-		polls = append(polls, pollRec{t.ID, r})
+		open = append(open, watched{t, r})
 	}
-	if len(polls) == 0 && len(syncs) == 0 {
-		return nil
+	if len(open) == 0 && len(onGitHub) == 0 {
+		return nil // nothing to watch: no access check either (it may run gh)
 	}
 	access := s.o.GitHub.Access(ctx, false)
 	var errs []error
-	for _, p := range polls {
-		if err := s.pollTicket(ctx, p.id, p.repo, access); err != nil {
+	for _, w := range open {
+		if err := s.pollTicket(ctx, w.t.ID, w.r, access); err != nil {
 			errs = append(errs, err)
 		}
 	}
-	for _, r := range syncs {
+	for _, r := range onGitHub {
 		if access.Tier == api.TierManual && (r.LastSyncAt.IsZero() || r.SyncError != "") {
 			continue
 		}

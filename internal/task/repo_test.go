@@ -215,14 +215,15 @@ func TestRepoListPaging(t *testing.T) {
 	var seen []string
 	cursor := ""
 	for range 10 {
-		page, next, err := r.List(ctx, Query{Limit: 5, Cursor: cursor})
+		page, next, err := r.listPage(ctx, Query{Limit: 5, Cursor: cursor})
 		if err != nil {
 			t.Fatal(err)
 		}
-		for _, tk := range page {
-			seen = append(seen, tk.ID)
-			if len(tk.Turns) != 1 {
-				t.Fatalf("%s has %d turns", tk.ID, len(tk.Turns))
+		for _, l := range page {
+			seen = append(seen, l.t.ID)
+			// A page carries the digest of the turns, not the turns.
+			if len(l.t.Turns) != 0 || !l.d.known || l.d.turns != 1 {
+				t.Fatalf("%s: %d turns loaded, digest %+v", l.t.ID, len(l.t.Turns), l.d)
 			}
 		}
 		if next == "" {
@@ -279,8 +280,24 @@ func TestRepoUnreadableIsError(t *testing.T) {
 	if _, err := r.Get(ctx, "t1"); err == nil {
 		t.Fatal("unreadable turn accepted")
 	}
+	// A page reads the turns only of a task without a digest (stored before the digest columns existed).
+	if err := st.Write(ctx, func(tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, `UPDATE tasks SET turn_count = -1`)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
 	if _, _, err := r.List(ctx, Query{}); err == nil {
 		t.Fatal("unreadable turn accepted by List")
+	}
+	if err := st.Write(ctx, func(tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, `UPDATE tasks SET data = 'nope', turn_count = 1`)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := r.List(ctx, Query{}); err == nil {
+		t.Fatal("unreadable task accepted by List")
 	}
 }
 

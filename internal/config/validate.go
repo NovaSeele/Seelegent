@@ -69,6 +69,13 @@ func (v *validator) intRange(field string, got, lo, hi int) {
 	}
 }
 
+// autoRange checks an auto setting, from 0 to hi: nil (auto) is always valid.
+func (v *validator) autoRange(field string, got *int, hi int) {
+	if got != nil {
+		v.intRange(field, *got, 0, hi)
+	}
+}
+
 func (v *validator) oneOf(field, got string, allowed ...string) {
 	if !slices.Contains(allowed, got) {
 		v.add(field, "must be one of %s (got %q)", strings.Join(allowed, ", "), got)
@@ -131,17 +138,23 @@ func (s *Settings) Validate() error {
 	v.oneOf("workerPriority", s.WorkerPriority, PriorityLow, PriorityNormal)
 	v.oneOf("gatePriority", s.GatePriority, PriorityLow, PriorityNormal)
 	v.intRange("maxConcurrentWorkers", s.MaxConcurrentWorkers, 0, MaxConcurrentWorkersMax)
-	v.intRange("gateConcurrency", s.GateConcurrency, 0, GateConcurrencyMax)
-	v.intRange("minFreeMemoryMB", s.MinFreeMemoryMB, 0, MemoryMBMax)
-	v.intRange("minFreeCommitMB", s.MinFreeCommitMB, 0, MemoryMBMax)
-	v.intRange("criticalFreeMemoryMB", s.CriticalFreeMemoryMB, 0, MemoryMBMax)
-	if s.CriticalFreeMemoryMB > 0 && s.MinFreeMemoryMB > 0 && s.CriticalFreeMemoryMB >= s.MinFreeMemoryMB {
-		v.add("criticalFreeMemoryMB", "must be below minFreeMemoryMB (%d) while both are on (got %d)",
-			s.MinFreeMemoryMB, s.CriticalFreeMemoryMB)
+	v.autoRange("gateConcurrency", s.GateConcurrency, GateConcurrencyMax)
+	v.autoRange("minFreeMemoryMB", s.MinFreeMemoryMB, MemoryMBMax)
+	v.autoRange("minFreeCommitMB", s.MinFreeCommitMB, MemoryMBMax)
+	v.autoRange("criticalFreeMemoryMB", s.CriticalFreeMemoryMB, MemoryMBMax)
+	// With one of the two on auto, EffectiveResources derives it so the floor stays below; only two explicit
+	// values can break the rule.
+	if c, m := s.CriticalFreeMemoryMB, s.MinFreeMemoryMB; c != nil && m != nil && *c > 0 && *m > 0 && *c >= *m {
+		v.add("criticalFreeMemoryMB", "must be below minFreeMemoryMB (%d) while both are on (got %d)", *m, *c)
+	}
+	// A lone floor makes the minimum twice the floor (when above the auto one), which must stay within the range.
+	if c := s.CriticalFreeMemoryMB; c != nil && s.MinFreeMemoryMB == nil && *c > MemoryMBMax/2 {
+		v.add("criticalFreeMemoryMB", "must be at most %d while minFreeMemoryMB is auto (it becomes twice this "+
+			"value; got %d)", MemoryMBMax/2, *c)
 	}
 	v.intRange("workerMemoryLimitMB", s.WorkerMemoryLimitMB, 0, MemoryMBMax)
 	v.intRange("workerCPURatePercent", s.WorkerCPURatePercent, 0, CPURatePercentMax)
-	v.intRange("testParallelism", s.TestParallelism, 0, TestParallelismMax)
+	v.autoRange("testParallelism", s.TestParallelism, TestParallelismMax)
 	v.intRange("daemonMemoryLimitMB", s.DaemonMemoryLimitMB, 0, DaemonMemoryLimitMBMax)
 	return v.err()
 }

@@ -157,18 +157,24 @@ type Settings struct {
 	GatePriority string `json:"gatePriority" ts:"'low' | 'normal'"`
 	// MaxConcurrentWorkers caps the worker turns that run at the same time over all accounts; 0 = no cap.
 	MaxConcurrentWorkers int `json:"maxConcurrentWorkers"`
-	// GateConcurrency caps the gate commands (and regression runs) that run at the same time; 0 = unlimited.
-	GateConcurrency int `json:"gateConcurrency"`
+	// The five settings below are auto when nil (no key or JSON null; a PATCH with null resets one to auto, and
+	// config.json then has no key: a computed value is never written): the value then comes from the machine
+	// (EffectiveResources). An explicit 0 still means off or unlimited. AutoSettingKeys lists them.
+
+	// GateConcurrency caps the gate commands (and regression runs) that run at the same time; 0 = unlimited;
+	// absent = auto (Health.resources has the value in use).
+	GateConcurrency *int `json:"gateConcurrency,omitempty" ts:"number | null"`
 	// MinFreeMemoryMB holds new worker turns and gate commands while the available physical memory is below it;
-	// 0 = off. An unknown reading never holds anything.
-	MinFreeMemoryMB int `json:"minFreeMemoryMB"`
-	// MinFreeCommitMB is the same for the available commit (Windows only; elsewhere commit is unknown); 0 = off.
-	MinFreeCommitMB int `json:"minFreeCommitMB"`
+	// 0 = off; absent = auto. An unknown reading never holds anything.
+	MinFreeMemoryMB *int `json:"minFreeMemoryMB,omitempty" ts:"number | null"`
+	// MinFreeCommitMB is the same for the available commit (Windows only; elsewhere commit is unknown); 0 = off;
+	// absent = auto.
+	MinFreeCommitMB *int `json:"minFreeCommitMB,omitempty" ts:"number | null"`
 	// CriticalFreeMemoryMB is the emergency floor: while free physical memory or free commit is below it, the
 	// watchdog stops the newest running gate command (its gate is queued again; the turn does not fail) and every
-	// new start waits. Workers are never stopped for it. 0 = off; when both are on it must be below
-	// MinFreeMemoryMB.
-	CriticalFreeMemoryMB int `json:"criticalFreeMemoryMB"`
+	// new start waits. Workers are never stopped for it. 0 = off; absent = auto; when both are set and on it must be
+	// below MinFreeMemoryMB.
+	CriticalFreeMemoryMB *int `json:"criticalFreeMemoryMB,omitempty" ts:"number | null"`
 	// WorkerMemoryLimitMB caps the memory of each worker tree (Windows Job Object; a turn over it fails);
 	// 0 = off.
 	WorkerMemoryLimitMB int `json:"workerMemoryLimitMB"`
@@ -176,8 +182,9 @@ type Settings struct {
 	// Object); 0 = off.
 	WorkerCPURatePercent int `json:"workerCPURatePercent"`
 	// TestParallelism is the parallelism hint for tests and builds: the "Shared machine" section of full briefs
-	// and GOFLAGS=-p=N / CARGO_BUILD_JOBS=N in worker and gate environments; 0 = no hint and no variables.
-	TestParallelism int `json:"testParallelism"`
+	// and GOFLAGS=-p=N / CARGO_BUILD_JOBS=N in worker and gate environments; 0 = no hint and no variables;
+	// absent = auto.
+	TestParallelism *int `json:"testParallelism,omitempty" ts:"number | null"`
 	// DaemonMemoryLimitMB is the daemon's soft memory limit (debug.SetMemoryLimit); 0 = off. A GOMEMLIMIT in the
 	// daemon's environment wins.
 	DaemonMemoryLimitMB int `json:"daemonMemoryLimitMB"`
@@ -308,13 +315,8 @@ func Defaults() Settings {
 		WorkerPriority:        PriorityLow,
 		GatePriority:          PriorityLow,
 		MaxConcurrentWorkers:  0,
-		GateConcurrency:       2,
-		MinFreeMemoryMB:       2048,
-		MinFreeCommitMB:       4096,
-		CriticalFreeMemoryMB:  1024,
 		WorkerMemoryLimitMB:   0,
 		WorkerCPURatePercent:  0,
-		TestParallelism:       4,
 		DaemonMemoryLimitMB:   0,
 	}
 }

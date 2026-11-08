@@ -67,6 +67,8 @@ type harness struct {
 	res   Resources
 	slots GateSlots
 	onLow func(bool, platform.MemoryStatus)
+	// machine is the machine profile of the next start (nil: unknown).
+	machine func() config.Machine
 
 	mu        sync.Mutex
 	refreshes []string
@@ -175,7 +177,7 @@ func (h *harness) start() {
 		DB: h.db, Accounts: h.accounts, Pool: p, Backends: backends,
 		Settings: h.config, TasksDir: filepath.Join(h.dir, "tasks"), Launcher: fakecli.Launcher(t),
 		Usage: h.usage, Memory: h.memory, Roles: h.roles, Members: h.members, Consoles: h.consoles, Clock: h.clk,
-		QuotaRefresh: func(id string) {
+		QuotaRefresh: func(id string, _ bool) {
 			h.mu.Lock()
 			h.refreshes = append(h.refreshes, id)
 			h.mu.Unlock()
@@ -189,6 +191,7 @@ func (h *harness) start() {
 		Resources:     h.res,
 		GateSlots:     h.slots,
 		OnLowMemory:   h.onLow,
+		Machine:       h.machine,
 		ContestEnded: func(_ context.Context, id string) (string, bool, error) {
 			h.mu.Lock()
 			defer h.mu.Unlock()

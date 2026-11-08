@@ -95,7 +95,32 @@
     "osOnly": "Solo en {os}.",
     "osOther": "Solo en {os}: no tiene efecto en el sistema donde corre el servicio.",
     "criticalBelowMin": "El mínimo de memoria de emergencia debe ser menor que Memoria libre para iniciar mientras ambos estén activos.",
-    "mbIs": "= {size}"
+    "mbIs": "= {size}",
+    "auto": "Automático",
+    "autoValue": "{auto}: {value} en esta máquina",
+    "autoZero": {
+      "off": "{auto}: desactivado en esta máquina",
+      "unlimited": "{auto}: sin límite en esta máquina"
+    },
+    "derived": {
+      "half": "{auto}: la mitad de tu «{other}», {value}",
+      "twice": "{auto}: el doble de tu «{other}», {value}"
+    },
+    "set": "Fijar",
+    "setOf": "Fijar un valor propio para {name}",
+    "useAuto": "Usar automático",
+    "useAutoOf": "Volver {name} a automático, según esta máquina",
+    "explicit": "Fijado por ti.",
+    "explicitZero": {
+      "off": "Fijado por ti: desactivado.",
+      "unlimited": "Fijado por ti: sin límite."
+    },
+    "machine": {
+      "full": "Esta máquina: {memory} de RAM, {cpus}",
+      "withCommit": "Esta máquina: {memory} de RAM, límite de commit de {commit}, {cpus}",
+      "cpusOnly": "Esta máquina: {cpus}",
+      "cpus": "{n} CPU | {n} CPU"
+    }
   },
   "units": {
     "min": "min",
@@ -481,7 +506,7 @@
     },
     "criticalFreeMemory": {
       "label": "Mínimo de memoria de emergencia",
-      "desc": "Por debajo de esta memoria o commit libres, el comando de gate más reciente se detiene y vuelve a la cola, y todo nuevo inicio espera hasta que la memoria vuelva a superar el umbral de inicio. Los workers nunca se detienen. Debe ser menor que Memoria libre para iniciar.",
+      "desc": "Por debajo de esta memoria o commit libres, el comando de gate más reciente se detiene y vuelve a la cola, y todo nuevo inicio espera hasta que la memoria vuelva a superar el umbral de inicio. Los workers nunca se detienen. Si fijas ambos, debe ser menor que Memoria libre para iniciar.",
       "keywords": "crítico watchdog poca memoria bloqueo"
     },
     "workerMemoryLimit": {

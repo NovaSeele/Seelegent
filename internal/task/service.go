@@ -168,9 +168,10 @@ type Options struct {
 
 	// Usage, QuotaRefresh, Memory, Roles and Consoles are optional.
 	Usage Usage
-	// QuotaRefresh asks for a background quota read of an account after a turn on it (quota.Refresher.Request);
+	// QuotaRefresh asks for a background quota read of an account after an attempt on it ended, saying whether the
+	// attempt failed (quota.Refresher.AfterRun: a run that went well skips the read when the quota is fresh);
 	// it must not block.
-	QuotaRefresh func(accountID string)
+	QuotaRefresh func(accountID string, failed bool)
 	Memory       Memory
 	Roles        Roles
 	Consoles     Consoles
@@ -215,6 +216,9 @@ type Options struct {
 	// OnLowMemory is told when the watchdog starts (low) or stops holding every new start, with the reading that
 	// flipped it (the resources.changed frame); nil tells nobody. It must not block.
 	OnLowMemory func(low bool, m platform.MemoryStatus)
+	// Machine is the machine profile the auto resource settings are computed from (config.EffectiveResources);
+	// nil is an unknown machine (the auto values at their low ends).
+	Machine func() config.Machine
 	// Clock is the time source (the system clock when nil).
 	Clock clock.Clock
 	// Logger receives engine logs (discarded when nil). Use a logx logger so secrets are masked.
@@ -262,14 +266,15 @@ type Service struct {
 	// resMu guards the resource state (resources.go): the watchdog's hold (low), whether it stopped a gate in
 	// this low-memory episode (stopped), the heavy commands in flight (newest last), the last spaced start, lowWake,
 	// closed and replaced whenever low flips, and activity, closed and replaced when a run or a heavy command starts
-	// (it wakes an idle watchdog).
-	resMu     sync.Mutex
-	low       bool
-	stopped   bool
-	gateRuns  []*gateRun
-	lastAdmit time.Time
-	lowWake   chan struct{}
-	activity  chan struct{}
+	// (it wakes an idle watchdog), and slotHolders, the tasks whose gate holds a gate slot now (with how many).
+	resMu       sync.Mutex
+	low         bool
+	stopped     bool
+	gateRuns    []*gateRun
+	slotHolders map[string]int
+	lastAdmit   time.Time
+	lowWake     chan struct{}
+	activity    chan struct{}
 }
 
 // toolEnv is the toolchain pin for commands run in dir with the daemon's environment.
@@ -331,6 +336,9 @@ func (s *Service) Start(ctx context.Context) error {
 	s.mu.Unlock()
 	if err := s.repo.BackfillFold(ctx); err != nil {
 		return fmt.Errorf("task: search titles: %w", err)
+	}
+	if err := s.repo.BackfillDigests(ctx); err != nil {
+		return fmt.Errorf("task: list columns: %w", err)
 	}
 	if err := s.recoverTasks(ctx); err != nil {
 		return err

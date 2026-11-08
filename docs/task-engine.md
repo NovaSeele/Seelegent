@@ -83,6 +83,11 @@ append the events in **one transaction**, then publish on the bus. The log and t
 4. **Follow.** The stream and stderr are tailed from the start. Message deltas of one step are **coalesced for 250 ms**
    and written as one `worker` event; any other event flushes them first. Each write carries the stream and stderr
    offsets it covers, committed in the same transaction (`attempts.data.streamOffset`, `stderrOffset`).
+   Writes are **group commits** (M19): a line's events join a batch and wake the follower's writer, which stores the
+   whole batch in one transaction and publishes it as one bus batch. The first line of a read chunk is written at
+   once; the lines parsed while that write runs (the rest of the chunk) go into the next one, so no timer delays an
+   event. A batch always ends on a line boundary, at most 256 events (a line that fills it writes it itself), and the
+   events, their seqs and their SSE frames are the ones a write per line gave.
    A launch directory removed while the worker runs (Unix allows it; the launcher keeps its lock on the unlinked
    file) is not taken for an ended worker: the daemon asks the launcher it knows (from `launch.Start`, or from a
    record that checked out) to stop with SIGTERM, kills what is left of the tree after a grace period, and fails the
@@ -136,7 +141,10 @@ gate commands, never on a running worker.
 
 The engine reads memory through `Options.Resources` (`task.Sampler` over `platform.Memory`: a reading is cached
 for 2 s, and `Changed` fires when one crosses a threshold or the settings change). A reading the system cannot give
-(`Known` false; commit is unknown when `AvailCommitMB` is 0) never holds anything.
+(`Known` false; commit is unknown when `AvailCommitMB` is 0) never holds anything. Every threshold below is the
+effective value (`config.EffectiveResources`: the user's value, or the auto value computed from the machine profile
+the daemon reads at start and on each settings change; see [configuration.md](configuration.md#resources)), so it
+does not move between readings.
 
 - **Start check.** Before a run asks the pool for an account, it compares free physical memory with
   `minFreeMemoryMB` and free commit with `minFreeCommitMB` (each `0` = off). Below either the task is
@@ -158,8 +166,8 @@ for 2 s, and `Changed` fires when one crosses a threshold or the settings change
   and `Running` say so); a release wakes the waiters, and a lowered cap stops nothing.
 - **Watchdog.** A goroutine checks memory on every sampler signal and every 2 s while a task runs, a heavy command
   (gate run or regression run command, `TrackHeavy`) is in flight or the machine is low. Otherwise it arms no timer
-  and sleeps until a run or a heavy command starts. With `criticalFreeMemoryMB` above 0, the machine turns **low** when free physical
-  memory, or free commit when it is known, drops below it, and turns back only at the resume level: physical at
+  and sleeps until a run or a heavy command starts. With `criticalFreeMemoryMB` above 0, the machine turns **low**
+  when free physical memory, or free commit when it is known, drops below it, and turns back only at the resume level: physical at
   `minFreeMemoryMB` (twice the critical line when that is off), commit at `minFreeCommitMB` (likewise). Between the
   two lines nothing flips, so a reading that swings around the critical line does not flicker. While low, every
   new start waits at the resume level instead of the `minFree` thresholds, `LowMemory()` is true (GET /health and
