@@ -114,6 +114,14 @@ func TestDecodeOldMeeting(t *testing.T) {
 		mt.Rounds[0].Runs == nil || mt.Attendees == nil || mt.Dissents == nil || mt.Usage.ByBackend == nil {
 		t.Errorf("undecided meeting %+v, %v", mt, err)
 	}
+
+	// A null entry is no answer at all, not an empty answer that reads as "answered".
+	mt, err = decodeOldMeeting([]byte(`{"id": "m1", "rounds": [{"n": 1, "answers": {"P1": null, "P2": {"stance": "x"}},
+	  "runs": {"P1": null, "P2": {"taskId": "t2", "turn": 1}}}]}`))
+	if err != nil || len(mt.Rounds[0].Answers) != 1 || mt.Rounds[0].Answers[0].Label != "P2" ||
+		len(mt.Rounds[0].Runs) != 1 || !mt.Rounds[0].Runs[0].Done {
+		t.Errorf("null entries %+v, %v", mt.Rounds, err)
+	}
 }
 
 func TestDecodeOldMeetingErrors(t *testing.T) {

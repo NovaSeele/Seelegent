@@ -90,7 +90,7 @@ func byLabel[T any](raw json.RawMessage, order []string, set func(*T, string)) (
 		}
 		return orEmpty(list), nil
 	}
-	var keyed map[string]T
+	var keyed map[string]*T // a null entry ("P1": null) is no answer or run at all: it is dropped
 	if err := json.Unmarshal(raw, &keyed); err != nil {
 		return nil, err
 	}
@@ -106,8 +106,11 @@ func byLabel[T any](raw json.RawMessage, order []string, set func(*T, string)) (
 	out := make([]T, 0, len(keyed))
 	for _, l := range labels {
 		v := keyed[l]
-		set(&v, l)
-		out = append(out, v)
+		if v == nil {
+			continue
+		}
+		set(v, l)
+		out = append(out, *v)
 	}
 	return out, nil
 }
