@@ -158,7 +158,8 @@ func accountExists(ctx context.Context, tx *sql.Tx, id string) (bool, error) {
 }
 
 const accountColumns = `id, backend, kind, label, enabled, priority, provider, key_hint, key_set_at, test_result,
-	tested_at, created_at, updated_at`
+	tested_at, budget_usd, budget_stop, budget_level, spent_usd, spent_tokens, spent_input_tokens, spent_output_tokens,
+	previous_key, created_at, updated_at`
 
 // Get returns the account with the id, or an error matching ErrNotFound.
 func (r *Repo) Get(ctx context.Context, id string) (Account, error) {
@@ -220,6 +221,11 @@ func (r *Repo) Update(ctx context.Context, id string, p Patch) (Account, error) 
 			return Account{}, err
 		}
 	}
+	if p.BudgetUSD != nil && *p.BudgetUSD != 0 {
+		if err := validateBudget(*p.BudgetUSD); err != nil {
+			return Account{}, err
+		}
+	}
 	var a Account
 	err := r.db.Write(ctx, func(tx *sql.Tx) error {
 		var err error
@@ -235,10 +241,36 @@ func (r *Repo) Update(ctx context.Context, id string, p Patch) (Account, error) 
 		if p.Priority != nil {
 			a.Priority = *p.Priority
 		}
+		if (p.BudgetUSD != nil || p.BudgetStop != nil) && a.Kind != KindAPIKey {
+			field := "budgetUsd"
+			if p.BudgetUSD == nil {
+				field = "budgetStop"
+			}
+			return withField(field, invalidf("only an API-key account has a budget"))
+		}
+		if p.BudgetUSD != nil {
+			a.BudgetUSD = nil
+			if v := *p.BudgetUSD; v != 0 {
+				a.BudgetUSD = &v
+			}
+		}
+		if p.BudgetStop != nil {
+			a.BudgetStop = *p.BudgetStop
+		}
+		var budget any
+		if a.BudgetUSD != nil {
+			budget = *a.BudgetUSD
+		}
 		a.UpdatedAt = r.stamp()
-		_, err = tx.ExecContext(ctx,
-			"UPDATE accounts SET label = ?, enabled = ?, priority = ?, updated_at = ? WHERE id = ?",
-			a.Label, a.Enabled, a.Priority, formatTime(a.UpdatedAt), id)
+		if _, err = tx.ExecContext(ctx, `UPDATE accounts SET label = ?, enabled = ?, priority = ?, budget_usd = ?,
+			budget_stop = ?, updated_at = ? WHERE id = ?`,
+			a.Label, a.Enabled, a.Priority, budget, a.BudgetStop, formatTime(a.UpdatedAt), id); err != nil {
+			return err
+		}
+		if err := refreshBudgetTx(ctx, tx, id); err != nil {
+			return err
+		}
+		a, err = getAccount(ctx, tx, id)
 		return err
 	})
 	if err != nil {
@@ -255,13 +287,36 @@ func (r *Repo) SetKeyHint(ctx context.Context, id, hint string) error {
 }
 
 func (r *Repo) setKeyHintTx(ctx context.Context, tx *sql.Tx, id, hint string) error {
-	now := formatTime(r.stamp())
+	_, err := r.setKeyTx(ctx, tx, id, hint)
+	return err
+}
+
+// setKeyTx records a new key hint (see SetKeyHint) and starts the spend count again: what the old key spent is
+// kept as the account's previous key, which it returns (nil when the old key spent nothing).
+func (r *Repo) setKeyTx(ctx context.Context, tx *sql.Tx, id, hint string) (*PreviousKey, error) {
+	stamp := r.stamp()
+	now := formatTime(stamp)
+	var oldHint string
+	err := tx.QueryRowContext(ctx, "SELECT key_hint FROM accounts WHERE id = ?", id).Scan(&oldHint)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, fmt.Errorf("account %s: %w", id, ErrNotFound)
+	}
+	if err != nil {
+		return nil, err
+	}
+	prev, err := archiveSpendTx(ctx, tx, id, oldHint, stamp)
+	if err != nil {
+		return nil, err
+	}
 	res, err := tx.ExecContext(ctx, `UPDATE accounts SET key_hint = ?, key_set_at = ?, test_result = '', tested_at = '',
 		test_reset_at = ?, updated_at = ? WHERE id = ?`, hint, now, now, now, id)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return mustAffect(res, "account", id)
+	if err := mustAffect(res, "account", id); err != nil {
+		return nil, err
+	}
+	return prev, refreshBudgetTx(ctx, tx, id)
 }
 
 // testResultRe matches a stored test result: a short reason code.
@@ -335,11 +390,26 @@ func scanAccount(s scanner) (Account, error) {
 		kind                             string
 		provider                         sql.NullString
 		keySet, tested, created, updated string
-		enabled, priority                int64
+		enabled, priority, stop          int64
+		budget                           sql.NullFloat64
+		previous                         string
 	)
 	if err := s.Scan(&a.ID, &a.Backend, &kind, &a.Label, &enabled, &priority, &provider, &a.KeyHint,
-		&keySet, &a.TestResult, &tested, &created, &updated); err != nil {
+		&keySet, &a.TestResult, &tested, &budget, &stop, &a.budgetLevel, &a.Spent.USD, &a.Spent.Tokens,
+		&a.Spent.Input, &a.Spent.Output, &previous, &created, &updated); err != nil {
 		return Account{}, err
+	}
+	if budget.Valid {
+		v := budget.Float64
+		a.BudgetUSD = &v
+	}
+	a.BudgetStop = stop != 0
+	if previous != "" {
+		var pk PreviousKey
+		if err := json.Unmarshal([]byte(previous), &pk); err != nil {
+			return Account{}, fmt.Errorf("account %s: previous key: %w", a.ID, err)
+		}
+		a.PreviousKey = &pk
 	}
 	a.Kind = Kind(kind)
 	a.Enabled = enabled != 0
@@ -437,7 +507,11 @@ func (r *Repo) UpdateProvider(ctx context.Context, p Provider) (Provider, error)
 			tier_standard = ?, tier_strong = ?, tier_max = ?, updated_at = ? WHERE id = ?`,
 			p.Name, p.Backend, p.Preset, p.BaseURL, p.WireAPI, p.Official, p.Enabled, p.AllowedModels,
 			modelsJSON(p.Models), p.Tiers.Fast, p.Tiers.Standard, p.Tiers.Strong, p.Tiers.Max, formatTime(p.UpdatedAt), p.ID)
-		return err
+		if err != nil || old.SpendSource() == p.SpendSource() {
+			return err
+		}
+		// The spend source changed: the budgets of its accounts are judged again (a cost may no longer count).
+		return refreshProviderBudgetsTx(ctx, tx, p.ID)
 	})
 	if err != nil {
 		return Provider{}, wrap("update provider", err)

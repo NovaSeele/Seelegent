@@ -8,6 +8,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/NovaSeele/Seelegent/internal/account"
 	"github.com/NovaSeele/Seelegent/internal/clock"
 )
 
@@ -16,7 +17,13 @@ type Store struct {
 	db    DB
 	clock clock.Clock
 	loc   *time.Location
+	// budget hears of API-key accounts whose budget state rose (nil: nobody listens).
+	budget func(context.Context, account.BudgetCrossing)
 }
+
+// OnBudget sets who hears of API-key accounts whose budget state rose to warn or reached while an attempt was
+// recorded. Call it while wiring, before the store is used.
+func (s *Store) OnBudget(fn func(context.Context, account.BudgetCrossing)) { s.budget = fn }
 
 // NewStore returns the usage store on db. Days and hours are local to loc (time.Local when nil); clk is the time
 // source (the system clock when nil).

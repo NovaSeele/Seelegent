@@ -89,6 +89,17 @@ type Account struct {
 	// its provider's endpoint changed (API-key accounts only). TestedAt is when.
 	TestResult string    `json:"testResult,omitempty"`
 	TestedAt   time.Time `json:"testedAt,omitzero"`
+	// BudgetUSD is the user's budget for the current key (nil: none); BudgetStop rests the account once it is
+	// reached. Spent is what the current key spent since KeySetAt: a running total kept with every recorded
+	// attempt (never summed from the usage table, which is pruned), counted whatever usageHistory says. The cost
+	// counts only when the provider's spend source gives one (Provider.SpendSource); tokens always.
+	BudgetUSD  *float64 `json:"budgetUsd,omitempty"`
+	BudgetStop bool     `json:"budgetStop"`
+	Spent      Spend    `json:"spent"`
+	// PreviousKey is what the key before the current one spent (nil when none was archived).
+	PreviousKey *PreviousKey `json:"previousKey,omitempty"`
+	// budgetLevel is the budget state last judged with the provider's spend source (BudgetStopped).
+	budgetLevel string
 	// CreatedAt and UpdatedAt are UTC times.
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
@@ -131,6 +142,9 @@ type Patch struct {
 	Label    *string
 	Enabled  *bool
 	Priority *int
+	// BudgetUSD sets the budget of an API-key account; 0 removes it.
+	BudgetUSD  *float64
+	BudgetStop *bool
 }
 
 // backends lists the valid backend ids.

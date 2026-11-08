@@ -58,8 +58,25 @@ func (s *Store) RecordAttempt(ctx context.Context, a Attempt) error {
 	if u.CostUSD > 0 {
 		cost = u.CostUSD
 	}
+	next := account.SpendRow{AccountID: a.AccountID, StartedAt: formatTime(started), CostUSD: max(0, u.CostUSD),
+		Input: int64(max(0, u.InputTokens)), Output: int64(max(0, u.OutputTokens)), Total: int64(total)}
+	var crossings []account.BudgetCrossing
 	err := s.db.Write(ctx, func(tx *sql.Tx) error {
-		_, err := tx.ExecContext(ctx, `INSERT INTO usage_turns (task_id, turn, attempt, account_id, backend, model,
+		// The attempt's earlier record, if any: its spend is taken back before the new one is added.
+		var prev *account.SpendRow
+		var old account.SpendRow
+		var oldCost sql.NullFloat64
+		err := tx.QueryRowContext(ctx, `SELECT account_id, started_at, cost_usd, input_tokens, output_tokens, total_tokens
+			FROM usage_turns WHERE task_id = ? AND turn = ? AND attempt = ?`, a.TaskID, a.Turn, a.Attempt).Scan(
+			&old.AccountID, &old.StartedAt, &oldCost, &old.Input, &old.Output, &old.Total)
+		switch {
+		case err == nil:
+			old.CostUSD = max(0, oldCost.Float64)
+			prev = &old
+		case !errors.Is(err, sql.ErrNoRows):
+			return err
+		}
+		_, err = tx.ExecContext(ctx, `INSERT INTO usage_turns (task_id, turn, attempt, account_id, backend, model,
 			project_key, project_name, started_at, ended_at, input_tokens, output_tokens, cached_tokens, total_tokens, cost_usd)
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 			ON CONFLICT (task_id, turn, attempt) DO UPDATE SET account_id = excluded.account_id,
@@ -70,10 +87,21 @@ func (s *Store) RecordAttempt(ctx context.Context, a Attempt) error {
 			a.TaskID, a.Turn, a.Attempt, a.AccountID, a.Backend, a.Model, a.ProjectKey, a.ProjectName,
 			formatTime(started), formatTime(a.EndedAt), max(0, u.InputTokens), max(0, u.OutputTokens),
 			max(0, u.CachedTokens), total, cost)
+		if err != nil {
+			return err
+		}
+		// The running spend of API-key accounts: kept here, in the same transaction, never summed from this table
+		// (it is pruned), and whatever the usageHistory setting says.
+		crossings, err = account.ApplySpendTx(ctx, tx, prev, next)
 		return err
 	})
 	if err != nil {
 		return fmt.Errorf("record usage of %s: %w", a.TaskID, err)
+	}
+	if s.budget != nil {
+		for _, c := range crossings {
+			s.budget(ctx, c)
+		}
 	}
 	return nil
 }

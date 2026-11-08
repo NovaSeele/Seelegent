@@ -21,6 +21,9 @@ type DirectNew struct {
 	NewProvider *Provider
 	// Key is the API key to store as pasted ("" for none); see NormalizeKey.
 	Key string
+	// BudgetUSD is the key's budget (nil: none); BudgetStop (default true) rests the account once it is reached.
+	BudgetUSD  *float64
+	BudgetStop *bool
 }
 
 // DirectResult is what AddDirect made.
@@ -58,6 +61,11 @@ func (m *Manager) AddDirect(ctx context.Context, in DirectNew, links []string) (
 	}
 	if n.Kind != KindAPIKey {
 		return res, withField("kind", invalidf("a key or a new provider is only for an api-key account"))
+	}
+	if in.BudgetUSD != nil {
+		if err := validateBudget(*in.BudgetUSD); err != nil {
+			return res, err
+		}
 	}
 	key := ""
 	if in.Key != "" {
@@ -165,6 +173,11 @@ func (m *Manager) AddDirect(ctx context.Context, in DirectNew, links []string) (
 		}
 		if err := m.fault(stepKey); err != nil {
 			return err
+		}
+		if in.BudgetUSD != nil || in.BudgetStop != nil {
+			if err := setBudgetTx(ctx, tx, a.ID, in.BudgetUSD, in.BudgetStop); err != nil {
+				return err
+			}
 		}
 		if res.Account, err = getAccount(ctx, tx, a.ID); err != nil {
 			return err

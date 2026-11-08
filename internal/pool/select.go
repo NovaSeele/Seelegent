@@ -194,6 +194,11 @@ func (v *view) evaluate(a *account.Account, req *Request, busy int) eval {
 		e.state = statePending
 		return e
 	}
+	if a.BudgetStopped() {
+		// budget_reached: rests until the user raises the budget or replaces the key (not an error).
+		e.state = stateResting
+		return e
+	}
 	if c, ok := v.cooldown(a.ID, req.Group); ok {
 		e.state, e.until = stateResting, c.Until
 		return e
