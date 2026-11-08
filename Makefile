@@ -74,6 +74,8 @@ test-web: ## Run the dashboard tests
 lint: ## Lint the Go code and the bench (LINT_J jobs, GOMEMLIMIT=2GiB)
 	$(GO) vet -p $(TEST_P) ./...
 	$(GO) vet -p $(TEST_P) -tags bench ./scripts/bench/
+	GOOS=windows $(GO) vet -p $(TEST_P) -tags bench ./scripts/bench/
+	GOOS=darwin $(GO) vet -p $(TEST_P) -tags bench ./scripts/bench/
 	GOMEMLIMIT=2GiB $(GOLANGCI_LINT) run --concurrency $(LINT_J) ./...
 
 lint-web: ## Lint and type-check the dashboard

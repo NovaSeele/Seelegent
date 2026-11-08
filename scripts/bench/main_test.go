@@ -24,7 +24,8 @@ const envSpawnLog = "BENCH_SPAWN_LOG"
 //   - by the daemon as gh (a copy named gh on the daemon's PATH): it answers the access check offline;
 //   - by the daemon's quota readers as `agy -p /usage ...` (FAKECLI_QUEUE set): it answers a healthy quota;
 //   - by the daemon's launchers as the worker CLI (FAKECLI_QUEUE set): fakecli replays the next queued script;
-//   - by the developer: it parses the bench flags and runs a scenario.
+//   - by the developer: it parses the bench flags and runs a scenario;
+//   - by `go test -run`: it runs the unit tests of the report instead.
 func TestMain(m *testing.M) {
 	if exeBase(os.Args[0]) == "gh" {
 		os.Exit(fakeGh(os.Args[1:]))
@@ -41,6 +42,10 @@ func TestMain(m *testing.M) {
 	}
 	o := registerFlags(flag.CommandLine)
 	flag.Parse()
+	if f := flag.Lookup("test.run"); f != nil && f.Value.String() != "" {
+		// `go test -tags bench -run Test ./scripts/bench`: the bench's own unit tests (report_unit_test.go), no bench.
+		os.Exit(m.Run())
+	}
 	if err := run(o); err != nil {
 		fmt.Fprintln(os.Stderr, "bench:", err)
 		os.Exit(1)

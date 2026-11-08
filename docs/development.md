@@ -80,8 +80,10 @@ went at full width together. The commands here therefore run narrow by default:
   to `-parallel` at a time, which defaults to GOMAXPROCS (every CPU). On a busy machine add `-parallel 4`, or set
   `GOMAXPROCS=8` for the whole run (it also caps each test binary's own threads): `GOMAXPROCS=8 go test -p 4
   -parallel 4 ./...`.
-- `make lint` also vets the bench (`go vet -tags bench ./scripts/bench/`), and `.golangci.yml` sets
-  `run.build-tags: [bench]`, so the linter checks it too (CI does both).
+- `make lint` also vets the bench (`go vet -tags bench ./scripts/bench/`, then again with `GOOS=windows` and
+  `GOOS=darwin` so every OS's files compile), and `.golangci.yml` sets `run.build-tags: [bench]`, so the linter
+  checks it too (CI does both). `go test -tags bench -run Test ./scripts/bench` runs the report's unit tests (made-up
+  numbers, no daemon); without `-run` the test binary runs the bench itself.
 - Never run the tests and the linter at the same time; test only the packages you changed while iterating
   (`go test -p 4 ./internal/task`).
 - Run long checks at low priority, so the desktop and the workers stay responsive:
@@ -124,7 +126,9 @@ lists are not empty, and then:
 
 - `-scenario idle` (default, `-duration 22m`, at least two quota cycles): nothing happens; this is the daemon
   left running all day. The result splits the idle CPU into the floor (between quota cycles), the CPU per quota
-  cycle and the window's average, and lists the start of every quota read and gh run.
+  cycle and per quota-reader spawn, and the window's average, and lists the start of every quota read and gh run.
+  The usage recorder's hourly snapshot and prune (the first of its 5-minute ticks after each hour, predicted from
+  the daemon's start) is kept out of the floor and reported as CPU per tick.
 - `-scenario idle-sse`: the same with one SSE client connected, a dashboard tab left open.
 - `-scenario load` (`-duration 5m`): 8 tasks whose fake workers stream `-rate 100` lines a second together, 3 SSE
   clients, and a list and a detail request every 250 ms (p50/p95/p99 recorded).
@@ -165,12 +169,17 @@ bin/seelegent-bench -scenario load -baseline <dir>/result.json   # prints the de
 
 Results go to `-out` (default `<temp>/seelegent-bench/<time>-<scenario>`, outside the repository): `result.json`,
 `result.md` (the tables), `setup-cpu.pprof`, `cpu.pprof`, `allocs-start.pprof`, `allocs-end.pprof`, `heap.pprof`, `goroutine.txt` and
-the daemon's log. Compare allocation profiles with `go tool pprof -top -sample_index=alloc_space -base
+the daemon's log; a load run adds `heap-gc-start.pb.gz` and `heap-gc-end.pb.gz`, the heap after a forced GC
+(`/debug/pprof/heap?gc=1`) at the end of the warmup and 30 s after the load stopped. Their inuse_space difference
+is the retained heap (`retainedHeapMB`, `retainedHeapPer10kEvents`); see what stayed with `go tool pprof
+-sample_index=inuse_space -diff_base heap-gc-start.pb.gz heap-gc-end.pb.gz`. Compare allocation profiles with `go tool pprof -top -sample_index=alloc_space -base
 allocs-start.pprof allocs-end.pprof`. The budget is judged on private bytes (commit), not the working set, which
 jumps with what the OS keeps resident: under 0.1% of one core and under 100 MB private when idle; growth under
-load not linear in the events; a private-bytes slope under 10 MB/h and a live-heap slope under 5 MB/h over the
-second half of the window, so a leak shows once the start-up growth is over. It is printed and flagged, never a
-failure. Every result carries the machine profile (OS, CPUs, RAM and commit, free memory and commit over the
+load not linear in the events (private growth under 5 MB and retained heap after GC under 1 MB per 10k events);
+a private-bytes slope under 10 MB/h and a live-heap slope under 5 MB/h over the second half of the window, so a
+leak shows once the start-up growth is over. A window under 15 minutes reports the slopes as `n/a: window too
+short` (with the raw numbers): a few minutes extrapolated to an hour give false results. It is printed and
+flagged, never a failure. Every result carries the machine profile (OS, CPUs, RAM and commit, free memory and commit over the
 window, system threads, the three other programs that used the most CPU), so runs on different machines or on a
 busy one can be told apart.
 

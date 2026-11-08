@@ -140,6 +140,9 @@ type loadGen struct {
 	sseBytes  atomic.Int64
 	sseConns  atomic.Int64
 	events    int64
+	// heapStart and heapEnd are the in-use heap after a forced GC (bytes), heapMeasured whether both were read.
+	heapStart, heapEnd int64
+	heapMeasured       bool
 }
 
 // delegateAll queues one long script per task and delegates the tasks.

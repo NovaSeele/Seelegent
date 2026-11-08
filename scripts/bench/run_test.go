@@ -46,6 +46,8 @@ type env struct {
 	// pid and homeID identify the daemon this bench started: it never uses or stops another one.
 	pid    int
 	homeID string
+	// started is when the daemon was started.
+	started time.Time
 }
 
 func run(o *options) error {
@@ -245,7 +247,7 @@ func (e *env) startDaemon(ctx context.Context) (*exec.Cmd, <-chan error, error) 
 	}
 	exited := make(chan error, 1)
 	go func() { exited <- cmd.Wait(); _ = logf.Close() }()
-	e.pid = cmd.Process.Pid
+	e.pid, e.started = cmd.Process.Pid, time.Now()
 	deadline := time.Now().Add(60 * time.Second)
 	for {
 		select {
@@ -524,7 +526,8 @@ func (e *env) scenario(ctx context.Context) (*result, error) {
 	sctx, stopSampler := context.WithCancel(ctx)
 	var wg sync.WaitGroup
 	wg.Go(func() { s.run(sctx, e.o.interval, 250*time.Millisecond) })
-	r := &result{Scenario: e.o.scenario, Started: time.Now(), Options: optionsOf(e.o), GOOS: runtime.GOOS,
+	r := &result{Scenario: e.o.scenario, Started: time.Now(), DaemonStarted: e.started, Options: optionsOf(e.o),
+		GOOS:   runtime.GOOS,
 		GOARCH: runtime.GOARCH, NumCPU: runtime.NumCPU(), Commit: cmpOrString(e.o.commit, gitCommit(ctx, e.root))}
 	// The setup profile runs from the daemon's start; the warmup waits for it.
 	var profWG sync.WaitGroup
@@ -573,6 +576,10 @@ func (e *env) scenario(ctx context.Context) (*result, error) {
 	_ = s.saveProfile(ctx, "/debug/pprof/allocs", filepath.Join(e.out, "allocs-start.pprof"), time.Minute)
 
 	gen := &loadGen{e: e, lat: map[string]*latencies{"list": {}, "detail": {}}}
+	var heapStartErr error
+	if e.o.scenario == "load" {
+		gen.heapStart, heapStartErr = e.heapAfterGC(ctx, s, heapStartFile)
+	}
 	lctx, stopLoad := context.WithCancel(ctx)
 	var lwg sync.WaitGroup
 	if e.o.scenario == "load" {
@@ -616,11 +623,37 @@ func (e *env) scenario(ctx context.Context) (*result, error) {
 	stopLoad()
 	lwg.Wait()
 	gen.finish(context.WithoutCancel(ctx))
+	if e.o.scenario == "load" && heapStartErr == nil {
+		// What the load left behind: the tasks are over, their goroutines and buffers should be gone.
+		if serr := sleep(ctx, retainedSettle); serr == nil {
+			var herr error
+			gen.heapEnd, herr = e.heapAfterGC(context.WithoutCancel(ctx), s, heapEndFile)
+			gen.heapMeasured = herr == nil
+		}
+	}
 	stopAll()
 	r.fill(s, gen, readSpawnLog(e.spawns))
 	r.Machine.TopOther = topOther(cpuStart, cpuEnd, s.treePIDs(), r.WindowEnd.Sub(r.WindowStart), 3)
 	r.Machine.OSVersion = osVersion()
 	return r, err
+}
+
+// retainedSettle is how long after the load stops the second heap profile is taken.
+const retainedSettle = 30 * time.Second
+
+// heapAfterGC saves the daemon's heap profile after a forced GC as file in the output folder and returns its
+// inuse_space total in bytes.
+func (e *env) heapAfterGC(ctx context.Context, s *sampler, file string) (int64, error) {
+	path := filepath.Join(e.out, file)
+	if err := s.saveProfile(ctx, heapGCPath, path, time.Minute); err != nil {
+		fmt.Fprintln(os.Stderr, "bench: heap profile after GC:", err)
+		return 0, err
+	}
+	n, err := inuseSpaceFile(path)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "bench:", err)
+	}
+	return n, err
 }
 
 func copyFile(from, to string) {

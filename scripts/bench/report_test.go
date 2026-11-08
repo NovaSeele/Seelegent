@@ -132,12 +132,22 @@ type spawnSummary struct {
 	MaxPeakWSMB  float64 `json:"maxPeakWSMB,omitempty"`
 }
 
+// budgetCheck is one budget line. Verdict is "ok", "over", or "n/a: <why>" when the value cannot be judged (it is
+// still reported); OK is false only for "over".
 type budgetCheck struct {
-	Name  string  `json:"name"`
-	Limit float64 `json:"limit"`
-	Value float64 `json:"value"`
-	OK    bool    `json:"ok"`
+	Name    string  `json:"name"`
+	Limit   float64 `json:"limit"`
+	Value   float64 `json:"value"`
+	OK      bool    `json:"ok"`
+	Verdict string  `json:"verdict"`
 }
+
+// minSlopeWindow is the shortest measured window whose slopes are judged: over a few minutes the second half's
+// slope extrapolates start-up growth and GC noise to a whole hour (a 5-minute load gave false OVER results).
+const minSlopeWindow = 15 * time.Minute
+
+// retainedBudgetMB is the retained heap after a forced GC that 10k load events may leave behind.
+const retainedBudgetMB = 1.0
 
 type loadSummary struct {
 	Tasks          int                     `json:"tasks"`
@@ -151,34 +161,57 @@ type loadSummary struct {
 	API            map[string]latencyStats `json:"api"`
 	WSMBPer10kEvts float64                 `json:"daemonWSGrowthMBPer10kEvents"`
 	PrivPer10kEvts float64                 `json:"daemonPrivateGrowthMBPer10kEvents"`
+	// The in-use heap after a forced GC at the end of the warmup and after the load (heapStartFile, heapEndFile),
+	// and what the load left: RetainedHeapMB = end - start. RetainedMeasured is false when either profile could not
+	// be read.
+	HeapAfterGCStartMB float64 `json:"heapAfterGCStartMB,omitempty"`
+	HeapAfterGCEndMB   float64 `json:"heapAfterGCEndMB,omitempty"`
+	RetainedHeapMB     float64 `json:"retainedHeapMB"`
+	RetainedPer10k     float64 `json:"retainedHeapPer10kEvents"`
+	RetainedMeasured   bool    `json:"retainedHeapMeasured"`
+}
+
+// setRetained fills the retained heap from the two in-use totals (bytes); ok false leaves it unmeasured.
+func (l *loadSummary) setRetained(start, end int64, ok bool) {
+	if !ok {
+		return
+	}
+	l.RetainedMeasured = true
+	l.HeapAfterGCStartMB, l.HeapAfterGCEndMB = round(float64(start)/mib, 2), round(float64(end)/mib, 2)
+	l.RetainedHeapMB = round(float64(end-start)/mib, 2)
+	if l.EventsStored > 0 {
+		l.RetainedPer10k = round(float64(end-start)/mib/(float64(l.EventsStored)/10000), 3)
+	}
 }
 
 // result is one bench run (result.json).
 type result struct {
-	Scenario    string            `json:"scenario"`
-	Commit      string            `json:"commit"`
-	GOOS        string            `json:"goos"`
-	GOARCH      string            `json:"goarch"`
-	NumCPU      int               `json:"numCPU"`
-	Options     map[string]string `json:"options"`
-	Started     time.Time         `json:"started"`
-	WindowStart time.Time         `json:"windowStart"`
-	WindowEnd   time.Time         `json:"windowEnd"`
-	Machine     machineSummary    `json:"machine"`
-	Setup       []setupPhase      `json:"setup"`
-	Daemon      daemonSummary     `json:"daemon"`
-	Tree        *treeSummary      `json:"tree,omitempty"`
-	TreeFinal   *jobStat          `json:"treeFinal,omitempty"`
-	Roles       []roleSummary     `json:"roles"`
-	Spawns      []spawnSummary    `json:"spawnLog"`
-	Runs        []spawnRun        `json:"runs"`
-	Idle        *idleSummary      `json:"idle,omitempty"`
-	DB          dbSummary         `json:"db"`
-	Load        *loadSummary      `json:"load,omitempty"`
-	Budget      []budgetCheck     `json:"budget"`
-	Errors      map[string]int    `json:"sampleErrors,omitempty"`
-	Processes   []*tracked        `json:"processes"`
-	Samples     []sample          `json:"samples"`
+	Scenario string            `json:"scenario"`
+	Commit   string            `json:"commit"`
+	GOOS     string            `json:"goos"`
+	GOARCH   string            `json:"goarch"`
+	NumCPU   int               `json:"numCPU"`
+	Options  map[string]string `json:"options"`
+	Started  time.Time         `json:"started"`
+	// DaemonStarted is when the bench started the daemon: the usage recorder's ticks are timed from it.
+	DaemonStarted time.Time      `json:"daemonStarted,omitzero"`
+	WindowStart   time.Time      `json:"windowStart"`
+	WindowEnd     time.Time      `json:"windowEnd"`
+	Machine       machineSummary `json:"machine"`
+	Setup         []setupPhase   `json:"setup"`
+	Daemon        daemonSummary  `json:"daemon"`
+	Tree          *treeSummary   `json:"tree,omitempty"`
+	TreeFinal     *jobStat       `json:"treeFinal,omitempty"`
+	Roles         []roleSummary  `json:"roles"`
+	Spawns        []spawnSummary `json:"spawnLog"`
+	Runs          []spawnRun     `json:"runs"`
+	Idle          *idleSummary   `json:"idle,omitempty"`
+	DB            dbSummary      `json:"db"`
+	Load          *loadSummary   `json:"load,omitempty"`
+	Budget        []budgetCheck  `json:"budget"`
+	Errors        map[string]int `json:"sampleErrors,omitempty"`
+	Processes     []*tracked     `json:"processes"`
+	Samples       []sample       `json:"samples"`
 }
 
 func optionsOf(o *options) map[string]string {
@@ -452,7 +485,7 @@ func (r *result) fill(s *sampler, g *loadGen, spawns []spawnRecord) {
 	sort.Slice(r.Spawns, func(i, j int) bool { return r.Spawns[i].Role < r.Spawns[j].Role })
 	r.Runs = spawnRuns(spawns)
 	if r.idleScenario() {
-		r.Idle = idleCost(base, win, r.Runs)
+		r.Idle = idleCost(base, win, r.Runs, recorderTicks(r.DaemonStarted, from, to, time.Local))
 	}
 
 	if r.Scenario == "load" || g.sseConns.Load() > 0 {
@@ -471,6 +504,7 @@ func (r *result) fill(s *sampler, g *loadGen, spawns []spawnRecord) {
 			l.WSMBPer10kEvts = round(d.WSGrowthMB/(float64(g.events)/10000), 2)
 			l.PrivPer10kEvts = round(d.PrivGrowthMB/(float64(g.events)/10000), 2)
 		}
+		l.setRetained(g.heapStart, g.heapEnd, g.heapMeasured)
 		r.Load = l
 	}
 	r.Budget = r.budget()
@@ -480,13 +514,25 @@ func (r *result) fill(s *sampler, g *loadGen, spawns []spawnRecord) {
 func (r *result) budget() []budgetCheck {
 	var out []budgetCheck
 	add := func(name string, limit, value float64) {
-		out = append(out, budgetCheck{Name: name, Limit: limit, Value: value, OK: value < limit})
+		v := budgetCheck{Name: name, Limit: limit, Value: value, OK: value < limit, Verdict: "ok"}
+		if !v.OK {
+			v.Verdict = "over"
+		}
+		out = append(out, v)
+	}
+	notJudged := func(name string, limit, value float64, why string) {
+		out = append(out, budgetCheck{Name: name, Limit: limit, Value: value, OK: true, Verdict: "n/a: " + why})
 	}
 	// Memory is judged on private bytes (commit): the working set jumps with what the OS keeps resident, not with
 	// what the daemon allocates, so it is reported as information only. A leak shows as a slope once the start is
-	// over; the limits allow for the noise of a few minutes of samples.
-	add("daemon private bytes slope over the second half MB/h", 10, r.Daemon.PrivSlope)
-	add("daemon live heap slope over the second half MB/h", 5, r.Daemon.HeapSlope)
+	// over; the limits allow for the noise of a window of minSlopeWindow or more. A shorter window's slope is
+	// reported but not judged.
+	slope := add
+	if r.WindowEnd.Sub(r.WindowStart) < minSlopeWindow {
+		slope = func(name string, limit, value float64) { notJudged(name, limit, value, "window too short") }
+	}
+	slope("daemon private bytes slope over the second half MB/h", 10, r.Daemon.PrivSlope)
+	slope("daemon live heap slope over the second half MB/h", 5, r.Daemon.HeapSlope)
 	if r.idleScenario() {
 		add("idle daemon CPU % of one core (window average)", 0.1, r.Daemon.CPUPercent)
 		add("idle daemon peak private MB", 100, r.Daemon.PeakPrivMB)
@@ -495,6 +541,9 @@ func (r *result) budget() []budgetCheck {
 		if r.Load != nil && r.Load.EventsStored > 0 {
 			// Not linear in the events: growth per 10k events must stay small.
 			add("load daemon private growth MB per 10k events", 5, r.Load.PrivPer10kEvts)
+		}
+		if l := r.Load; l != nil && l.RetainedMeasured && l.EventsStored > 0 {
+			add("load retained heap after GC MB per 10k events", retainedBudgetMB, l.RetainedPer10k)
 		}
 	}
 	return out
@@ -588,6 +637,13 @@ func writeMarkdown(w io.Writer, r *result) {
 		p("\n## Load\n\n%d tasks, %d events stored (%.1f/s), %d SSE clients (%d connects): %d frames (%.1f/s), %.2f MB. "+
 			"Daemon private growth %.2f MB per 10k events (WS %.2f).\n\n", l.Tasks, l.EventsStored, l.EventsPerSec,
 			l.SSEClients, l.SSEConnects, l.SSEFrames, l.SSEFramesPerS, l.SSEMB, l.PrivPer10kEvts, l.WSMBPer10kEvts)
+		if l.RetainedMeasured {
+			p("Retained heap after a forced GC: %.2f MB at the end of the warmup, %.2f MB after the load, %+.2f MB "+
+				"retained = %.3f MB per 10k events (%s and %s; compare with `go tool pprof -diff_base`).\n\n",
+				l.HeapAfterGCStartMB, l.HeapAfterGCEndMB, l.RetainedHeapMB, l.RetainedPer10k, heapStartFile, heapEndFile)
+		} else {
+			p("Retained heap after a forced GC: not measured (a heap profile could not be read).\n\n")
+		}
 		p("| request | count | errors | p50 ms | p95 ms | p99 ms | max ms |\n|---|---|---|---|---|---|---|\n")
 		names := make([]string, 0, len(l.API))
 		for n := range l.API {
@@ -601,9 +657,12 @@ func writeMarkdown(w io.Writer, r *result) {
 	}
 	p("\n## Budget\n\n| check | limit | value | |\n|---|---|---|---|\n")
 	for _, b := range r.Budget {
-		mark := "ok"
-		if !b.OK {
+		mark := b.Verdict
+		switch {
+		case !b.OK:
 			mark = "**over**"
+		case mark == "":
+			mark = "ok" // a result.json from before Verdict
 		}
 		p("| %s | %g | %g | %s |\n", b.Name, b.Limit, b.Value, mark)
 	}
@@ -654,7 +713,9 @@ func (r *result) metrics() []metric {
 	}
 	if x := r.Idle; x != nil {
 		m = append(m, metric{"idle floor daemon CPU % core", x.FloorPercent},
-			metric{"idle daemon CPU s per quota cycle", x.CPUPerCycle}, metric{"idle quota cycles", float64(x.Cycles)})
+			metric{"idle daemon CPU s per quota cycle", x.CPUPerCycle}, metric{"idle quota cycles", float64(x.Cycles)},
+			metric{"idle daemon CPU s per quota-reader spawn", x.CPUPerRead},
+			metric{"idle daemon CPU s per recorder tick", x.CPUPerTick})
 	}
 	for _, x := range r.Roles {
 		if x.Role != "daemon" {
@@ -669,6 +730,10 @@ func (r *result) metrics() []metric {
 			}
 		}
 		m = append(m, metric{"events/s", r.Load.EventsPerSec})
+		if r.Load.RetainedMeasured {
+			m = append(m, metric{"retained heap after GC MB", r.Load.RetainedHeapMB},
+				metric{"retained heap after GC MB per 10k events", r.Load.RetainedPer10k})
+		}
 	}
 	return m
 }
