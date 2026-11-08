@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/NovaSeele/Seelegent/internal/api"
+	"github.com/NovaSeele/Seelegent/internal/event"
 )
 
 // DB runs transactions on seelegent.db; *store.Store satisfies it.
@@ -498,11 +499,54 @@ func (r *Repo) Events(ctx context.Context, id string, after int64, limit int) ([
 		WHERE task_id = ? AND seq > ? ORDER BY seq LIMIT ?`, id, after, limit)
 }
 
-// TurnEvents returns up to limit events of type typ of turns from..to, ascending.
-func (r *Repo) TurnEvents(ctx context.Context, id string, typ api.EventType, from, to, limit int) ([]api.TaskEvent,
-	error) {
-	return r.events(ctx, id, `SELECT seq, ts, type, turn, attempt, data FROM task_events
-		WHERE task_id = ? AND type = ? AND turn BETWEEN ? AND ? ORDER BY seq LIMIT ?`, id, string(typ), from, to, limit)
+// CommandEvent is the part of a worker's shell tool event (a call or its result) that tells when the command ran.
+type CommandEvent struct {
+	TS                  time.Time
+	Turn, Attempt, Step int
+	Kind                event.Kind
+	ToolID, Command     string
+	DurationMs          int64
+}
+
+// commandEventsQuery selects the shell tool events of a task's turns that were not blocked. SQLite reads the
+// fields it needs out of the stored JSON, so a tool's output (megabytes for a test run) never leaves the database.
+const commandEventsQuery = `SELECT ts, turn, attempt, json_extract(data, '$.kind'),
+		COALESCE(json_extract(data, '$.step'), 0), COALESCE(json_extract(data, '$.tool.id'), ''),
+		json_extract(data, '$.tool.command'), COALESCE(json_extract(data, '$.tool.durationMs'), 0)
+	FROM task_events
+	WHERE task_id = ? AND type = ? AND turn BETWEEN ? AND ?
+		AND json_extract(data, '$.kind') IN (?, ?)
+		AND json_extract(data, '$.tool.command') <> ''
+		AND COALESCE(json_extract(data, '$.tool.blocked'), 0) = 0
+	ORDER BY seq LIMIT ?`
+
+// CommandEvents returns up to limit shell tool events (calls and results, not blocked) of the workers of turns
+// from..to, ascending.
+func (r *Repo) CommandEvents(ctx context.Context, id string, from, to, limit int) ([]CommandEvent, error) {
+	var out []CommandEvent
+	err := r.db.Read(ctx, func(tx *sql.Tx) error {
+		rows, err := tx.QueryContext(ctx, commandEventsQuery, id, string(api.EventWorker), from, to,
+			string(event.KindToolCall), string(event.KindToolResult), limit)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = rows.Close() }()
+		for rows.Next() {
+			var e CommandEvent
+			var ts, kind string
+			if err := rows.Scan(&ts, &e.Turn, &e.Attempt, &kind, &e.Step, &e.ToolID, &e.Command,
+				&e.DurationMs); err != nil {
+				return err
+			}
+			if e.TS, err = parseTime(ts); err != nil {
+				return err
+			}
+			e.Kind = event.Kind(kind)
+			out = append(out, e)
+		}
+		return rows.Err()
+	})
+	return out, err
 }
 
 // Tail returns the newest n events, ascending.

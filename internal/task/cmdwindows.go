@@ -2,12 +2,10 @@ package task
 
 import (
 	"context"
-	"encoding/json"
 	"slices"
 	"strconv"
 	"time"
 
-	"github.com/NovaSeele/Seelegent/internal/api"
 	"github.com/NovaSeele/Seelegent/internal/event"
 	"github.com/NovaSeele/Seelegent/internal/guard"
 	"github.com/NovaSeele/Seelegent/internal/snapshot"
@@ -22,7 +20,9 @@ import (
 // runSlack is added to a command's end: a file's time may trail its last event a little.
 const runSlack = 2 * time.Second
 
-// maxRunEvents bounds the worker events read for the run windows of one lane check.
+// maxRunEvents bounds the shell tool events read for the run windows of one lane check. Each is a few fields
+// (CommandEvents), so the bound holds the memory to a few megabytes; a runner past it has no known start and fails
+// closed.
 const maxRunEvents = 50000
 
 // commandRun is when one of a worker's shell commands ran.
@@ -36,46 +36,40 @@ type commandRun struct {
 // without a result (the command was still running when the turn ended) runs until the turn's end.
 func (s *Service) commandRuns(ctx context.Context, t *Task, from, to int) (runs []commandRun, timed map[string]bool) {
 	timed = map[string]bool{}
-	evs, err := s.repo.TurnEvents(ctx, t.ID, api.EventWorker, from, to, maxRunEvents)
+	evs, err := s.repo.CommandEvents(ctx, t.ID, from, to, maxRunEvents)
 	if err != nil {
 		s.log.Warn("task: read the command events for the lane", "task", t.ID, "err", err)
 		return nil, timed
 	}
+	if len(evs) == maxRunEvents {
+		s.log.Warn("task: the lane reads only the first command events", "task", t.ID, "events", maxRunEvents)
+	}
 	type open struct {
-		at   time.Time
-		turn int
+		at      time.Time
+		turn    int
+		command string
 	}
 	started := map[string]open{}
+	var order []string
 	for _, e := range evs {
-		raw, ok := e.Data.(json.RawMessage)
-		if !ok {
-			continue
-		}
-		var ev event.Event
-		if json.Unmarshal(raw, &ev) != nil || ev.Tool == nil || ev.Tool.Command == "" || ev.Tool.Blocked {
-			continue
-		}
-		at, err := api.ParseTime(e.TS)
-		if err != nil {
-			continue
-		}
-		id := ev.Tool.ID
+		id := e.ToolID
 		if id == "" {
-			id = "step " + strconv.Itoa(ev.Step)
+			id = "step " + strconv.Itoa(e.Step)
 		}
 		key := strconv.Itoa(e.Turn) + "/" + strconv.Itoa(e.Attempt) + "/" + id
-		switch ev.Kind {
+		switch e.Kind {
 		case event.KindToolCall:
 			if _, ok := started[key]; !ok {
-				started[key] = open{at: at, turn: e.Turn}
+				started[key] = open{at: e.TS, turn: e.Turn, command: e.Command}
+				order = append(order, key)
 			}
 		case event.KindToolResult:
-			run := commandRun{command: ev.Tool.Command, end: at}
+			run := commandRun{command: e.Command, end: e.TS}
 			if o, ok := started[key]; ok {
 				run.start = o.at
 				delete(started, key)
-			} else if ev.Tool.DurationMs > 0 {
-				run.start = at.Add(-time.Duration(ev.Tool.DurationMs) * time.Millisecond)
+			} else if e.DurationMs > 0 {
+				run.start = e.TS.Add(-time.Duration(e.DurationMs) * time.Millisecond)
 			} else {
 				continue // no start: untimed
 			}
@@ -83,12 +77,17 @@ func (s *Service) commandRuns(ctx context.Context, t *Task, from, to int) (runs 
 			timed[run.command] = true
 		}
 	}
-	for _, o := range started {
+	for _, key := range order {
+		o, ok := started[key]
+		if !ok {
+			continue
+		}
 		end := s.clk.Now()
 		if tu := t.TurnN(o.turn); tu != nil && !tu.EndedAt.IsZero() {
 			end = tu.EndedAt
 		}
-		runs = append(runs, commandRun{start: o.at, end: end})
+		runs = append(runs, commandRun{command: o.command, start: o.at, end: end})
+		timed[o.command] = true
 	}
 	return runs, timed
 }

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -376,5 +377,78 @@ func TestRepoAttentionIDs(t *testing.T) {
 	ids, err := r.AttentionIDs(ctx, StatusDone, StatusFailed)
 	if err != nil || len(ids) != 1 || ids[0] != "t1" {
 		t.Fatalf("AttentionIDs = %v, %v", ids, err)
+	}
+}
+
+// The lane's run windows read only the fields of the shell tool events: SQLite filters and extracts them, so a test
+// run's megabytes of output never reach Go (review N2), and blocked calls, other tools and other turns stay out.
+func TestRepoCommandEventsLeaveOutput(t *testing.T) {
+	ctx := context.Background()
+	r := NewRepo(openStore(t), func() time.Time { return testEpoch })
+	tk := newTestTask("t1", testEpoch)
+	tk.Turns = append(tk.Turns, &Turn{N: 2, By: ByLead, Message: "more", Status: TurnRunning, StartedAt: testEpoch})
+	if _, err := r.Create(ctx, tk, nil); err != nil {
+		t.Fatal(err)
+	}
+	big := strings.Repeat("x", 4<<20)
+	ev := func(turn int, at time.Duration, e event.Event) NewEvent {
+		return NewEvent{Type: api.EventWorker, Turn: turn, Attempt: 1, TS: testEpoch.Add(at), Data: e}
+	}
+	evs := []NewEvent{
+		ev(1, 0, event.Event{Kind: event.KindMessage, Text: "running the tests"}),
+		ev(1, time.Second, event.Event{Kind: event.KindToolCall, Step: 2,
+			Tool: &event.Tool{ID: "c1", Name: "run", State: event.ToolCalling, Command: "go test ./..."}}),
+		ev(1, 2*time.Second, event.Event{Kind: event.KindToolCall, Step: 3,
+			Tool: &event.Tool{ID: "e1", Name: "edit", State: event.ToolCalling}}), // no command
+		ev(1, 3*time.Second, event.Event{Kind: event.KindToolCall, Step: 4,
+			Tool: &event.Tool{ID: "b1", Name: "run", State: event.ToolFailed, Command: "rm -rf /", Blocked: true}}),
+	}
+	for i := range 5 {
+		evs = append(evs, ev(1, time.Duration(4+i)*time.Second, event.Event{Kind: event.KindToolResult, Step: 5 + i,
+			Tool: &event.Tool{ID: fmt.Sprint("r", i), Name: "run", State: event.ToolDone, Command: "npm test",
+				Output: big, DurationMs: 1500}}))
+	}
+	evs = append(evs, ev(2, 10*time.Second, event.Event{Kind: event.KindToolCall, Step: 1,
+		Tool: &event.Tool{ID: "c9", Name: "run", State: event.ToolCalling, Command: "make"}}))
+	if _, err := r.Append(ctx, "t1", evs, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	var before, after runtime.MemStats
+	runtime.GC()
+	runtime.ReadMemStats(&before)
+	got, err := r.CommandEvents(ctx, "t1", 1, 1, 100)
+	runtime.ReadMemStats(&after)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []CommandEvent{{TS: testEpoch.Add(time.Second), Turn: 1, Attempt: 1, Step: 2, Kind: event.KindToolCall,
+		ToolID: "c1", Command: "go test ./..."}}
+	for i := range 5 {
+		want = append(want, CommandEvent{TS: testEpoch.Add(time.Duration(4+i) * time.Second), Turn: 1, Attempt: 1,
+			Step: 5 + i, Kind: event.KindToolResult, ToolID: fmt.Sprint("r", i), Command: "npm test",
+			DurationMs: 1500})
+	}
+	if len(got) != len(want) {
+		t.Fatalf("CommandEvents = %+v, want %+v", got, want)
+	}
+	for i := range want {
+		if !got[i].TS.Equal(want[i].TS) {
+			t.Errorf("event %d at %v, want %v", i, got[i].TS, want[i].TS)
+		}
+		got[i].TS = want[i].TS
+		if got[i] != want[i] {
+			t.Errorf("event %d = %+v, want %+v", i, got[i], want[i])
+		}
+	}
+	// 20 MB of output sit in the rows: reading them whole allocates about twice that (42 MB measured), the
+	// extracted fields about 2 MB (SQLite's own pages), whatever the output's size.
+	if n := after.TotalAlloc - before.TotalAlloc; n > 8<<20 {
+		t.Errorf("CommandEvents allocated %d bytes: the outputs were read", n)
+	}
+	cols, _, _ := strings.Cut(commandEventsQuery, "FROM")
+	if c := strings.ReplaceAll(cols, "json_extract(data,", ""); strings.Contains(c, "data") ||
+		strings.Contains(c, "output") {
+		t.Errorf("the query selects more than the command fields: %s", cols)
 	}
 }
