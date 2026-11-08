@@ -14,10 +14,10 @@ import (
 // NewProvider) and, optionally, its key (POST /accounts with newProvider or apiKey).
 type DirectNew struct {
 	New
-	// NewProvider, when set, is the provider to create, or to reuse when an enabled provider with the same preset,
-	// backend, base URL, official flag and models exists. New.Provider must then be empty, and New.Backend may be
-	// (the provider's backend is used). Its ID may be empty: the preset id (else the backend) is used, with "-2",
-	// "-3", ... when taken.
+	// NewProvider, when set, is the provider to create, or to reuse unchanged when an enabled provider with the same
+	// preset, backend, base URL, official flag, wire API, models, allow-list and tiers exists. New.Provider must
+	// then be empty, and New.Backend may be (the provider's backend is used). Its ID may be empty: the preset id
+	// (else the backend) is used, with "-2", "-3", ... when taken.
 	NewProvider *Provider
 	// Key is the API key to store as pasted ("" for none); see NormalizeKey.
 	Key string
@@ -198,9 +198,9 @@ func providerIDBase(p Provider) string {
 	return p.Backend
 }
 
-// ensureProviderTx returns the enabled provider that matches p (same preset, backend, base URL, official flag
-// and models; with the same id unless autoID), or inserts p (validated) under its id, or under the first free
-// "<id>-<n>" when autoID. A reused provider without tier models takes p's tier models, if p has some.
+// ensureProviderTx returns the enabled provider that matches p exactly (same preset, backend, base URL, official
+// flag, wire API, models, allow-list and tiers; with the same id unless autoID), unchanged, or inserts p
+// (validated) under its id, or under the first free "<id>-<n>" when autoID.
 func (r *Repo) ensureProviderTx(ctx context.Context, tx *sql.Tx, p Provider, autoID bool) (Provider, bool, error) {
 	list, err := listProvidersTx(ctx, tx)
 	if err != nil {
@@ -208,17 +208,13 @@ func (r *Repo) ensureProviderTx(ctx context.Context, tx *sql.Tx, p Provider, aut
 	}
 	for i := range list {
 		e := &list[i]
+		// A reused provider is never changed (its other accounts rely on it as it is), so it must already be
+		// exactly what was asked for: endpoint, wire, models, allow-list and tiers (a model-per-task provider stays
+		// one). Anything else creates a new provider ("anthropic-2").
 		if !e.Enabled || e.Preset != p.Preset || e.Backend != p.Backend || e.BaseURL != p.BaseURL ||
-			e.Official != p.Official || !slices.Equal(e.Models, p.Models) || (!autoID && e.ID != p.ID) {
+			e.Official != p.Official || e.WireAPI != p.WireAPI || e.AllowedModels != p.AllowedModels ||
+			!slices.Equal(e.Models, p.Models) || e.Tiers != p.Tiers || (!autoID && e.ID != p.ID) {
 			continue
-		}
-		if e.ModelPerTask() && !p.ModelPerTask() {
-			e.Tiers, e.UpdatedAt = p.Tiers, r.stamp()
-			if _, err := tx.ExecContext(ctx, `UPDATE providers SET tier_fast = ?, tier_standard = ?, tier_strong = ?,
-				tier_max = ?, updated_at = ? WHERE id = ?`, e.Tiers.Fast, e.Tiers.Standard, e.Tiers.Strong, e.Tiers.Max,
-				formatTime(e.UpdatedAt), e.ID); err != nil {
-				return Provider{}, false, err
-			}
 		}
 		return *e, false, nil
 	}

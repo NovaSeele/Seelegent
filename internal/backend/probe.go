@@ -127,7 +127,7 @@ func ProbeKey(ctx context.Context, p account.Provider, key string, o ProbeOption
 		out.Reason, out.Message = ProbeRefused, fmt.Sprintf("the service refused this key (HTTP %d)", code)
 	case code == http.StatusMethodNotAllowed || (code == http.StatusNotFound && presetAddress(p)):
 		out.Reason = ProbeNoModelsEndpoint
-		out.Message = "this service has no model list to check the key against; it was not tested"
+		out.Message = "key not verified: this service has no model list to check it against; the first turn will test it"
 	case code == http.StatusNotFound:
 		out.Reason = ProbeNotFound
 		out.Message = fmt.Sprintf("wrong address: %s answered 404 (%s)", redactedURL(req.URL), notFoundHint(p))

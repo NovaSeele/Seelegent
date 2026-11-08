@@ -241,7 +241,7 @@
     "ok": "密钥可用",
     "refused": "密钥被拒绝",
     "not_found": "地址错误",
-    "no_models_endpoint": "此处无法列出模型",
+    "no_models_endpoint": "未验证：第一次运行时会检验",
     "unreachable": "无法连接服务",
     "redirected": "被重定向到别处",
     "error": "测试失败",

@@ -209,7 +209,7 @@
     "ok": "Key works",
     "refused": "Key refused",
     "not_found": "Wrong address",
-    "no_models_endpoint": "Cannot list models here",
+    "no_models_endpoint": "Not verified: the first turn will test it",
     "unreachable": "Service unreachable",
     "redirected": "Redirected elsewhere",
     "error": "Test failed",

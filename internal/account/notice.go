@@ -115,8 +115,17 @@ func badKey(reason, format string, args ...any) error {
 		err: fmt.Errorf("%w: %w: %s", ErrInvalid, ErrBadKey, fmt.Sprintf(format, args...))}
 }
 
-// envAssignment matches a leading "NAME=" or "export NAME=" (a line copied from a .env file or a shell).
-var envAssignment = regexp.MustCompile(`^(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*`)
+// envAssignment matches a leading "NAME=" or "export NAME=" (a line copied from a .env file or a shell). Only
+// environment-style names count (upper case, digits, "_"): a key may itself hold "=" (base64 padding) or look like
+// "abc_DEF=xyz".
+var envAssignment = regexp.MustCompile(`^(?:export\s+)?([A-Z_][A-Z0-9_]*)\s*=\s*`)
+
+// Limits of the NAME= prefix removal: what follows must look like a whole key, and a notice names the variable only
+// when it is short (a long "name" may be part of the key, which a notice never quotes).
+const (
+	minKeyAfterName = 8
+	maxNoticeName   = 40
+)
 
 // NormalizeKey cleans a pasted API key and checks it: surrounding whitespace, a leading "NAME=" and surrounding
 // quotes are removed (each removal is a notice), then a key that holds "://", whitespace or control characters is
@@ -125,10 +134,15 @@ var envAssignment = regexp.MustCompile(`^(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\
 func NormalizeKey(raw string) (string, []Notice, error) {
 	key := strings.TrimSpace(raw)
 	var notices []Notice
-	if m := envAssignment.FindStringSubmatch(key); m != nil && len(key) > len(m[0]) {
-		key = strings.TrimSpace(key[len(m[0]):])
-		notices = append(notices, Notice{Code: NoticeKeyNameRemoved, Field: "apiKey",
-			Message: fmt.Sprintf("removed %s= from the start of the key", m[1])})
+	if m := envAssignment.FindStringSubmatch(key); m != nil {
+		if rest := strings.TrimSpace(key[len(m[0]):]); len(rest) >= minKeyAfterName && !strings.HasPrefix(rest, "=") {
+			key = rest
+			msg := "removed a NAME= prefix from the start of the key"
+			if len(m[1]) <= maxNoticeName {
+				msg = fmt.Sprintf("removed %s= from the start of the key", m[1])
+			}
+			notices = append(notices, Notice{Code: NoticeKeyNameRemoved, Field: "apiKey", Message: msg})
+		}
 	}
 	if len(key) >= 2 && (key[0] == '"' || key[0] == '\'' || key[0] == '`') && key[len(key)-1] == key[0] {
 		key = strings.TrimSpace(key[1 : len(key)-1])

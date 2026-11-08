@@ -241,7 +241,7 @@
     "ok": "La clave funciona",
     "refused": "Clave rechazada",
     "not_found": "Dirección incorrecta",
-    "no_models_endpoint": "No se pueden listar los modelos aquí",
+    "no_models_endpoint": "Sin verificar: el primer turno la probará",
     "unreachable": "Servicio inalcanzable",
     "redirected": "Redirigido a otro sitio",
     "error": "La prueba falló",

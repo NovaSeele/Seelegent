@@ -241,7 +241,7 @@
     "ok": "キーは有効",
     "refused": "キーが拒否されました",
     "not_found": "アドレスが違います",
-    "no_models_endpoint": "ここではモデル一覧を取得できません",
+    "no_models_endpoint": "未確認: 最初のターンで確認されます",
     "unreachable": "サービスに接続できません",
     "redirected": "別の場所にリダイレクトされました",
     "error": "テストに失敗しました",

@@ -209,7 +209,7 @@
     "ok": "Khóa dùng được",
     "refused": "Khóa bị từ chối",
     "not_found": "Sai địa chỉ",
-    "no_models_endpoint": "Không liệt kê được mô hình ở đây",
+    "no_models_endpoint": "Chưa xác minh: lượt chạy đầu sẽ kiểm tra",
     "unreachable": "Không kết nối được dịch vụ",
     "redirected": "Bị chuyển hướng sang nơi khác",
     "error": "Kiểm tra thất bại",

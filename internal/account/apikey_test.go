@@ -100,6 +100,7 @@ func TestNormalizeKey(t *testing.T) {
 		{"  " + secret + "\n", nil},
 		{"ANTHROPIC_API_KEY=" + secret, []string{NoticeKeyNameRemoved}},
 		{"export LLM_API_KEY = \"" + secret + "\"", []string{NoticeKeyNameRemoved, NoticeKeyQuotesRemoved}},
+		{"LLM_API_KEY=" + secret, []string{NoticeKeyNameRemoved}},
 		{"'" + secret + "'", []string{NoticeKeyQuotesRemoved}},
 		{"gsk_abcdEFGH1234", nil},
 	}
@@ -143,7 +144,26 @@ func TestNormalizeKey(t *testing.T) {
 			t.Errorf("the error quotes the key: %v", err)
 		}
 	}
-	_, _, err := NormalizeKey("https://api.anthropic.com/v1/")
+	// Keys that hold "=" or look like name=value are kept whole: only an env-style NAME= followed by a whole key
+	// is a pasted .env line. A notice never quotes key characters.
+	for _, in := range []string{"QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVpkZWZnaGlqa2xtbm9wZGVm==", "abc_DEF=xyz12345",
+		"ABCDEFGH==ijklmnopqrst", "KEY=short"} {
+		key, notices, err := NormalizeKey(in)
+		if err != nil || key != in || len(notices) != 0 {
+			t.Errorf("NormalizeKey(%q) = %q, %v, %v; want it unchanged", in, key, notices, err)
+		}
+	}
+	long := strings.Repeat("A", 41)
+	key, notices, err := NormalizeKey(long + "=" + secret)
+	if err != nil || key != secret || len(notices) != 1 || strings.Contains(notices[0].Message, long) ||
+		notices[0].Message != "removed a NAME= prefix from the start of the key" {
+		t.Errorf("long name: %q, %+v, %v", key, notices, err)
+	}
+	if key, notices, err := NormalizeKey(`export OPENAI_API_KEY="sk-proj-0123456789"`); err != nil ||
+		key != "sk-proj-0123456789" || len(notices) != 2 || notices[0].Message != "removed OPENAI_API_KEY= from the start of the key" {
+		t.Errorf("export line: %q, %+v, %v", key, notices, err)
+	}
+	_, _, err = NormalizeKey("https://api.anthropic.com/v1/")
 	if !strings.Contains(err.Error(), "this looks like a URL, not an API key") {
 		t.Errorf("URL error = %v", err)
 	}
@@ -302,6 +322,39 @@ func TestAddDirect(t *testing.T) {
 	res3, err := f.m.AddDirect(ctx, DirectNew{NewProvider: other}, nil)
 	if err != nil || !res3.ProviderCreated || res3.Provider.ID != "custom-anthropic-2" || res3.Account.KeyHint != "" {
 		t.Fatalf("third AddDirect = %+v, %v", res3, err)
+	}
+	// A reused provider is never changed: tiers asked for on a model-per-task provider make a new provider, and the
+	// first one stays model-per-task.
+	tiered := np()
+	tiered.Tiers.Standard = "glm-5"
+	res5, err := f.m.AddDirect(ctx, DirectNew{NewProvider: tiered}, nil)
+	if err != nil || !res5.ProviderCreated || res5.Provider.ID != "custom-anthropic-3" || res5.Provider.ModelPerTask() {
+		t.Fatalf("tiers on a model-per-task provider = %+v, %v", res5, err)
+	}
+	if first, err := f.m.GetProvider(ctx, res.Provider.ID); err != nil || !first.ModelPerTask() {
+		t.Fatalf("the reused provider changed: %+v, %v", first, err)
+	}
+	// The wire and the allow-list are part of the match: custom OpenAI providers on one base URL with another wire
+	// are not merged.
+	openai := func(wire string) *Provider {
+		p, err := FromPreset("", "custom-openai")
+		if err != nil {
+			t.Fatal(err)
+		}
+		p.BaseURL, p.WireAPI = "https://llm.example/v1", wire
+		return &p
+	}
+	chat, err := f.m.AddDirect(ctx, DirectNew{NewProvider: openai(WireChat)}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	responses, err := f.m.AddDirect(ctx, DirectNew{NewProvider: openai(WireResponses)}, nil)
+	if err != nil || !responses.ProviderCreated || responses.Provider.ID == chat.Provider.ID {
+		t.Fatalf("another wire = %+v, %v (first %s)", responses.Provider, err, chat.Provider.ID)
+	}
+	again, err := f.m.AddDirect(ctx, DirectNew{NewProvider: openai(WireChat)}, nil)
+	if err != nil || again.ProviderCreated || again.Provider.ID != chat.Provider.ID {
+		t.Fatalf("same wire = %+v, %v", again.Provider, err)
 	}
 	// An existing provider by id, with a key; backend and kind come from it.
 	res4, err := f.m.AddDirect(ctx, DirectNew{New: New{Provider: "custom-anthropic-2", Label: "Mine"}, Key: "sk-x-12345678"}, nil)

@@ -241,7 +241,7 @@
     "ok": "키 작동",
     "refused": "키 거부됨",
     "not_found": "잘못된 주소",
-    "no_models_endpoint": "여기서는 모델 목록을 볼 수 없음",
+    "no_models_endpoint": "확인 안 됨: 첫 실행에서 확인합니다",
     "unreachable": "서비스에 연결할 수 없음",
     "redirected": "다른 곳으로 리디렉션됨",
     "error": "테스트 실패",

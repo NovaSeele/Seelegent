@@ -287,10 +287,20 @@ func (r *Repo) MarkRunOK(ctx context.Context, id string, started time.Time) (cha
 
 func (r *Repo) recordTest(ctx context.Context, id, result string, started time.Time, onlyIfNotOK bool) (bool, error) {
 	changed := false
-	query := `UPDATE accounts SET test_result = ?, tested_at = ? WHERE id = ? AND kind = 'api-key' AND key_hint <> ''
-		AND test_reset_at <= ?`
+	const match = ` WHERE id = ? AND kind = 'api-key' AND key_hint <> '' AND test_reset_at <= ?`
+	query := `UPDATE accounts SET test_result = ?, tested_at = ?` + match
 	if onlyIfNotOK {
 		query += " AND test_result <> 'ok'"
+		// After every good turn: a read settles the usual cases (a sign-in account, a key already marked ok)
+		// without taking the write lock.
+		var n int
+		err := r.db.Read(ctx, func(tx *sql.Tx) error {
+			return tx.QueryRowContext(ctx, `SELECT count(*) FROM accounts`+match+` AND test_result <> 'ok'`, id,
+				formatTime(started)).Scan(&n)
+		})
+		if err != nil || n == 0 {
+			return false, wrap("record key test", err)
+		}
 	}
 	err := r.db.Write(ctx, func(tx *sql.Tx) error {
 		res, err := tx.ExecContext(ctx, query, result, formatTime(r.stamp()), id, formatTime(started))
