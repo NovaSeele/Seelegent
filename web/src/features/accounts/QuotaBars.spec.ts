@@ -50,7 +50,8 @@ async function render(account: Account, flash: string) {
 describe('QuotaBars', () => {
   it('draws the routing group: 5h then weekly, % left, reset in the tooltip, +N', async () => {
     const wrapper = await render(agy(), 'gemini-3.8-flash')
-    expect(wrapper.findAll('.qb__name').map((n) => n.text())).toEqual(['5h', 'Weekly'])
+    // Short window names on the bars ("Weekly" did not fit beside +N); the full name is in the tooltip.
+    expect(wrapper.findAll('.qb__name').map((n) => n.text())).toEqual(['5h', '7d'])
     expect(wrapper.findAll('.qb__value').map((n) => n.text())).toEqual(['62% left', '10% left'])
     const tips = wrapper.findAllComponents(Tooltip).map((tip) => tip.props('text'))
     expect(tips[0]).toBe('Gemini Models · 5h · resets in 3 hours')
@@ -81,7 +82,7 @@ describe('QuotaBars', () => {
       },
     })
     const wrapper = await render(account, 'gemini-3.8-flash')
-    expect(wrapper.findAll('.qb__name').map((n) => n.text())).toEqual(['5h', 'Gemini · Weekly'])
+    expect(wrapper.findAll('.qb__name').map((n) => n.text())).toEqual(['5h', 'Gemini · 7d'])
   })
 
   it('draws one bar when the routing group has no weekly window', async () => {

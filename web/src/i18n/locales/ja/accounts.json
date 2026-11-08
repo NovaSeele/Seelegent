@@ -227,6 +227,12 @@
       "week": "週次",
       "month": "月次"
     },
+    "spanShort": {
+      "hours": "{n}時間",
+      "day": "1日",
+      "week": "7日",
+      "month": "30日"
+    },
     "quota": {
       "tip": "{group} · {window}",
       "lowestTip": "全ウィンドウで最も少ないもの: {group} · {window}",
