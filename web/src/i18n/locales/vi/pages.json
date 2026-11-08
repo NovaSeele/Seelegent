@@ -1,9 +1,4 @@
 {
-  "placeholder": {
-    "title": "Màn hình này đang được làm",
-    "desc": "Trang đang được dựng lại cho bảng điều khiển mới và sẽ hiện dữ liệu trực tiếp ở đây.",
-    "listEmpty": "Chưa có gì"
-  },
   "notFound": {
     "title": "Không tìm thấy trang",
     "desc": "Địa chỉ này không khớp trang nào. Có thể trang đã chuyển chỗ.",
