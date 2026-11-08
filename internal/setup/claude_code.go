@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/NovaSeele/Seelegent/internal/envx"
 	"github.com/NovaSeele/Seelegent/internal/fsutil"
 )
 
@@ -81,17 +82,11 @@ var removeArgs = []string{"mcp", "remove", "--scope", "user", ServerName}
 const batchMeta = `% ! & | < > ^ "`
 
 // batchUnsafe returns the first argument cmd.exe would misread when bin is a batch file (.cmd or .bat) on Windows,
-// such as the npm shim claude.cmd, or "" (H10). Go quotes arguments for the program's own parser, which a batch
-// file does not have, so such an argument is refused instead of escaped.
+// such as the npm shim claude.cmd, quoted, or "" (H10). The rule is envx.BatchUnsafeArg, shared with the worker
+// launch in backend.
 func batchUnsafe(bin, goos string, args []string) string {
-	ext := strings.ToLower(filepath.Ext(bin))
-	if goos != "windows" || ext != ".cmd" && ext != ".bat" {
-		return ""
-	}
-	for _, a := range args {
-		if strings.ContainsAny(a, "%!&|<>^\"\r\n") {
-			return strconv.Quote(a)
-		}
+	if a, bad := envx.BatchUnsafeArg(bin, goos, args); bad {
+		return strconv.Quote(a)
 	}
 	return ""
 }
