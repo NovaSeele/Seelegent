@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/NovaSeele/Seelegent/internal/account"
+	"github.com/NovaSeele/Seelegent/internal/gitx"
 	"github.com/NovaSeele/Seelegent/internal/guard"
 )
 
@@ -140,7 +141,7 @@ func TestGitShim(t *testing.T) {
 		!strings.HasPrefix(errOut.String(), guard.Marker) {
 		t.Fatalf("stash: code %d, stderr %q", code, errOut.String())
 	}
-	if _, err := exec.LookPath("git"); err != nil {
+	if _, err := gitx.NewBinary(nil, nil).Path(); err != nil {
 		t.Skip("git not installed")
 	}
 	out.Reset()
@@ -172,7 +173,8 @@ func TestGitShimIgnoresGuardVariable(t *testing.T) {
 // TestGitShimNoAutocorrect: with help.autocorrect=immediate git runs the command it guesses from a typo; the shim
 // turns that off, so git stsh does not stash.
 func TestGitShimNoAutocorrect(t *testing.T) {
-	if _, err := exec.LookPath("git"); err != nil {
+	exe, err := gitx.NewBinary(nil, nil).Path() // never a Windows batch wrapper
+	if err != nil {
 		t.Skip("git not installed")
 	}
 	repo := t.TempDir()
@@ -180,7 +182,7 @@ func TestGitShimNoAutocorrect(t *testing.T) {
 	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
 	run := func(args ...string) {
 		t.Helper()
-		c := exec.CommandContext(t.Context(), "git", append([]string{"-C", repo}, args...)...)
+		c := exec.CommandContext(t.Context(), exe, append([]string{"-C", repo}, args...)...)
 		if b, err := c.CombinedOutput(); err != nil {
 			t.Fatalf("git %q: %v\n%s", args, err, b)
 		}

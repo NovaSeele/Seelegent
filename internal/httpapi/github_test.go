@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/NovaSeele/Seelegent/internal/api"
+	"github.com/NovaSeele/Seelegent/internal/gitx"
 	"github.com/NovaSeele/Seelegent/internal/httpapi"
 )
 
@@ -26,7 +27,11 @@ func (e *env) dashboard() map[string]string {
 
 func gitRun(t *testing.T, dir string, args ...string) {
 	t.Helper()
-	cmd := exec.CommandContext(t.Context(), "git", args...)
+	exe, err := gitx.NewBinary(nil, nil).Path() // as the daemon finds it: never a Windows batch wrapper
+	if err != nil {
+		t.Skipf("no usable git: %v", err)
+	}
+	cmd := exec.CommandContext(t.Context(), exe, args...)
 	cmd.Dir = dir
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("git %v: %v\n%s", args, err, out)
