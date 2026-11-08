@@ -85,6 +85,8 @@ type MemoryStatus struct {
 	AvailPhysMB   int64 `json:"availPhysMB"`
 	AvailCommitMB int64 `json:"availCommitMB"`
 	Known         bool  `json:"known"`
+	// CgroupV1 is true when a cgroup v1 memory limit (Linux) lowered the reading.
+	CgroupV1 bool `json:"cgroupV1,omitempty"`
 }
 
 // DaemonStop is the answer (202) of POST /daemon/stop: the daemon accepted the request and shuts down right after

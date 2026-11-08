@@ -362,7 +362,8 @@ func (a *App) build(o Options) error {
 		return err
 	}
 	a.Proof = proof.New(proof.Options{Ledger: ledger, Git: proofGit{a.Git}, Exec: a.proofExec, Active: a.Tasks.ActiveIn,
-		TaskFeatures: a.Tasks.SpecFeatures, Publish: a.publishProofRun, LogDir: o.Paths.Logs, Now: now, Logger: a.log})
+		HoldsGateSlot: a.Tasks.HoldsGateSlot, TaskFeatures: a.Tasks.SpecFeatures, Publish: a.publishProofRun,
+		LogDir: o.Paths.Logs, Now: now, Logger: a.log})
 	if err := a.buildTeam(now); err != nil {
 		return err
 	}

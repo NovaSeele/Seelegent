@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -218,25 +219,39 @@ func TestRunNotStuckOnWriteError(t *testing.T) {
 	waitRun(t, s, root, run.ID)
 }
 
-// TestRunPassesGateTask: the task id of the gate that asked for a run reaches every command's Exec, so the daemon
-// can let it share that gate's slot.
-func TestRunPassesGateTask(t *testing.T) {
-	root := t.TempDir()
+// gateService is a proof service whose repository has the active task t-gate; holds says whether its gate holds
+// a gate slot now.
+func gateService(t *testing.T, root string, holds *atomic.Bool,
+	exec func(ctx context.Context, gateTask string) CmdResult) *Service {
+	t.Helper()
+	write(t, filepath.Join(root, "specs", "001-p", "spec.md"), specMD)
 	write(t, filepath.Join(root, "specs", "001-p", "tasks.md"), tasksMD)
 	st, err := store.Open(context.Background(), filepath.Join(t.TempDir(), "seelegent.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = st.Close() })
-	got := make(chan string, 10)
-	// The gate's own task is active; it does not refuse the run as another active task would.
 	s := New(Options{Ledger: NewLedger(st, nil), Git: fakeGit{root: root}, LogDir: t.TempDir(),
-		Active: func(context.Context, string) ([]string, error) { return []string{"t-gate"}, nil },
-		Exec: func(_ context.Context, _, _, _, gateTask string) CmdResult {
-			got <- gateTask
-			return CmdResult{Exit: code(0)}
+		Active:        func(context.Context, string) ([]string, error) { return []string{"t-gate"}, nil },
+		HoldsGateSlot: func(id string) bool { return id == "t-gate" && holds.Load() },
+		Exec: func(ctx context.Context, _, _, _, gateTask string) CmdResult {
+			return exec(ctx, gateTask)
 		}})
 	t.Cleanup(s.Close)
+	return s
+}
+
+// TestRunPassesGateTask: a run asked for from a gate that holds a gate slot does not count the gate's own task as
+// active, and the gate's task id reaches every command's Exec, so the daemon lets it share that slot.
+func TestRunPassesGateTask(t *testing.T) {
+	root := t.TempDir()
+	var holds atomic.Bool
+	holds.Store(true)
+	got := make(chan string, 10)
+	s := gateService(t, root, &holds, func(_ context.Context, gateTask string) CmdResult {
+		got <- gateTask
+		return CmdResult{Exit: code(0)}
+	})
 	run, err := s.StartRun(context.Background(), api.ProofRunRequest{Cwd: root, GateTask: "t-gate"})
 	if err != nil {
 		t.Fatal(err)
@@ -252,6 +267,66 @@ func TestRunPassesGateTask(t *testing.T) {
 		if id := <-got; id != "t-gate" {
 			t.Errorf("Exec got gateTask %q", id)
 		}
+	}
+}
+
+// TestGateTaskWithoutSlotConflicts: a gate task id only counts as the asking gate while that gate holds a slot: the
+// id of a running task whose gate holds none (or an unknown id) is refused like any other active task.
+func TestGateTaskWithoutSlotConflicts(t *testing.T) {
+	root := t.TempDir()
+	var holds atomic.Bool // the gate holds no slot
+	s := gateService(t, root, &holds, func(context.Context, string) CmdResult { return CmdResult{Exit: code(0)} })
+	for _, id := range []string{"t-gate", "t-other", ""} {
+		var conflict *ConflictError
+		if _, err := s.StartRun(context.Background(), api.ProofRunRequest{Cwd: root, GateTask: id}); !errors.As(err,
+			&conflict) {
+			t.Errorf("gateTask %q: %v, want a conflict for the active task", id, err)
+		}
+	}
+}
+
+// TestRunOutlivesItsGate: a gate starts a run without waiting for it (proof run without --wait) and ends; the run
+// is not tied to the gate: it completes and its results are recorded in the ledger.
+func TestRunOutlivesItsGate(t *testing.T) {
+	root := t.TempDir()
+	var holds atomic.Bool
+	holds.Store(true)
+	gateEnded := make(chan struct{})
+	var once sync.Once
+	s := gateService(t, root, &holds, func(ctx context.Context, _ string) CmdResult {
+		once.Do(func() {
+			<-gateEnded // the first command is still running when the gate ends
+		})
+		if ctx.Err() != nil {
+			return CmdResult{}
+		}
+		return CmdResult{Exit: code(0)}
+	})
+	ctx := context.Background()
+	run, err := s.StartRun(ctx, api.ProofRunRequest{Cwd: root, GateTask: "t-gate"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	holds.Store(false) // the gate gives its slot back and ends
+	close(gateEnded)
+	run = waitRun(t, s, root, run.ID)
+	if run.State != api.RunGreen || run.Counts.Green != run.Total || run.Total == 0 {
+		t.Fatalf("run after its gate ended = %+v", run)
+	}
+	m, err := s.Matrix(ctx, root, "specs/001-p")
+	if err != nil {
+		t.Fatal(err)
+	}
+	recorded := 0
+	for _, row := range m.Rows {
+		for _, tk := range row.Tasks {
+			if tk.Source == SourceRegression {
+				recorded++
+			}
+		}
+	}
+	if recorded == 0 {
+		t.Fatalf("nothing recorded in the ledger: %+v", m.Rows)
 	}
 }
 

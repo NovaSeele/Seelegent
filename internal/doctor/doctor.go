@@ -472,18 +472,30 @@ func expandPercent(e string, env []string) (string, bool) {
 
 // resources compares one reading of free memory with the effective minFreeMemoryMB and minFreeCommitMB of this
 // machine (auto from its size, derived from the other threshold, or set by the user): below either, new worker
-// turns and gate commands would wait now. The values, their sources and the machine come from the running
-// daemon's health (live) when it reports them, else they are computed here from the settings file; the message
-// says which. It is a single reading (free memory can swing by gigabytes within hours), so the suggestion is a
-// range to consider, never a prescription.
+// turns and gate commands would wait now. When the running daemon's health (live) reports them, the values, their
+// sources, the machine and the reading are all the daemon's own (its cgroup may differ from this process's);
+// else this process reads free memory (o.Memory, nil: the check is skipped) and the values are computed here from
+// the settings file. The message says which. It is a single reading (free memory can swing by gigabytes within
+// hours), so the suggestion is a range to consider, never a prescription.
 func resources(o Options, goos string, live *api.Health) (Check, bool) {
-	if o.Memory == nil {
+	fromDaemon := live != nil && live.Resources.MinFreeMemoryMB.Source != ""
+	if !fromDaemon && o.Memory == nil {
 		return Check{}, false
 	}
 	c := Check{Name: "resources"}
-	m := o.Memory()
+	var m platform.MemoryStatus
+	if fromDaemon {
+		lm := live.Memory
+		m = platform.MemoryStatus{AvailPhysMB: lm.AvailPhysMB, AvailCommitMB: lm.AvailCommitMB, Known: lm.Known,
+			CgroupV1: lm.CgroupV1}
+	} else {
+		m = o.Memory()
+	}
 	if !m.Known {
 		c.Status, c.Message = OK, "free memory cannot be read on this system: the memory thresholds hold nothing"
+		if fromDaemon {
+			c.Message = "the daemon cannot read free memory on this system: the memory thresholds hold nothing"
+		}
 		return c, true
 	}
 	r, src, from := effectiveResources(o.Settings, m, goos, live)
@@ -527,8 +539,9 @@ func resources(o Options, goos string, live *api.Health) (Check, bool) {
 	return c, true
 }
 
-// effectiveResources are the effective resource values with their sources and where they come from: the running
-// daemon's health (live; nil when it does not answer) when it reports them, else computed here.
+// effectiveResources are the effective resource values with their sources and where they and the reading come
+// from: the running daemon's health (live; nil when it does not answer) when it reports them, else computed here
+// on m, this process's reading.
 func effectiveResources(set config.Settings, m platform.MemoryStatus, goos string,
 	live *api.Health) (r config.Resources, src config.ResourceSources, from string) {
 	if live != nil && live.Resources.MinFreeMemoryMB.Source != "" {
@@ -539,7 +552,8 @@ func effectiveResources(set config.Settings, m platform.MemoryStatus, goos strin
 		src = config.ResourceSources{MinFreeMemoryMB: e.MinFreeMemoryMB.Source,
 			CriticalFreeMemoryMB: e.CriticalFreeMemoryMB.Source, MinFreeCommitMB: e.MinFreeCommitMB.Source,
 			TestParallelism: e.TestParallelism.Source, GateConcurrency: e.GateConcurrency.Source}
-		return r, src, fmt.Sprintf("values from the running daemon (machine: %d MB, %d CPUs)", mc.TotalPhysMB, mc.CPUs)
+		return r, src, fmt.Sprintf("reading and values from the running daemon (machine: %d MB, %d CPUs)",
+			mc.TotalPhysMB, mc.CPUs)
 	}
 	mc := config.NewMachine(m.TotalPhysMB, m.TotalCommitMB, platform.CPUs(), goos)
 	r, src = config.EffectiveResourceSources(set, mc)
@@ -547,8 +561,8 @@ func effectiveResources(set config.Settings, m platform.MemoryStatus, goos strin
 	if live != nil {
 		why = "the daemon does not report them"
 	}
-	return r, src, fmt.Sprintf("values computed here from the settings file, as %s (machine: %d MB, %d CPUs)", why,
-		mc.TotalPhysMB, mc.CPUs)
+	return r, src, fmt.Sprintf("read by this command, values computed here from the settings file, as %s "+
+		"(machine: %d MB, %d CPUs)", why, mc.TotalPhysMB, mc.CPUs)
 }
 
 // sourceWords say where an effective value comes from; other names the threshold a derived one comes from.
