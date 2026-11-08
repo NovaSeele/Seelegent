@@ -66,15 +66,16 @@ func TestFollowupNeverRunsPlantedGate(t *testing.T) {
 				w.cmds = []string{frozen, second}
 			case "legacy":
 				// A proof frozen before SpecTasks existed: the edited line no longer matches the frozen bar, so
-				// nothing of it is taken (fail closed) and the gate has no command left.
+				// nothing of it is taken (fail closed) but the command the gate ran for it before.
 				if _, err := h.s.mutate(t.Context(), sum.ID, func(t *Task) ([]NewEvent, error) {
-					t.Proof.SpecTasks = nil
+					t.Proof.SpecTasks, t.Proof.SpecLines = nil, nil
 					return nil, nil
 				}); err != nil {
 					t.Fatal(err)
 				}
 				on := true
 				req.Gate = &on
+				w.cmds = []string{frozen}
 			}
 			if _, err := h.s.Followup(t.Context(), sum.ID, req); err != nil {
 				t.Fatal(err)
@@ -99,6 +100,67 @@ func TestFollowupNeverRunsPlantedGate(t *testing.T) {
 			}
 			if !slices.Contains(last, "tasks.md#T001") {
 				t.Errorf("turn 2's gate result reports barChanged %q", last)
+			}
+		})
+	}
+}
+
+// TestFollowupAddedTaskGate: a followup that adds a task id takes that task's line only as frozen with the first
+// proof. Planted: the worker rewrote the line of T002 (not the task's own T001) before the lead adds it; nothing of
+// that line runs and it shows in barChanged. Added later: T003 was not in tasks.md at the freeze; its line is read
+// now and shown in barChanged as never frozen (bugs.md F77).
+func TestFollowupAddedTaskGate(t *testing.T) {
+	for _, mode := range []string{"taskIdsPlanted", "taskIdsAddedLater"} {
+		t.Run(mode, func(t *testing.T) {
+			h := newHarness(t)
+			h.set(func(s *config.Settings) { s.Lanes = config.LanesWarn })
+			h.agy("w", 1)
+			frozen := gateCmd(t, "b.txt", "ok")
+			planted := gateCmd(t, "--sleep", "0")
+			second := gateCmd(t, "b.txt", "k")
+			third := gateCmd(t, "b.txt", "o")
+			if err := mkdir(filepath.Join(h.cwd, "specs", "001-x")); err != nil {
+				t.Fatal(err)
+			}
+			tasksMD := "# Tasks\n\n- [ ] T001 Check `b.txt` Gate: `" + frozen + "`\n- [ ] T002 Check again Gate: `%s`\n"
+			h.initRepo(map[string]string{"b.txt": "ok\n",
+				"specs/001-x/tasks.md": fmt.Sprintf(tasksMD, second)})
+			edited, add, key, want := fmt.Sprintf(tasksMD, planted), "T002", "tasks.md#T002", []string{frozen}
+			if mode == "taskIdsAddedLater" {
+				edited = fmt.Sprintf(tasksMD, second) + "- [ ] T003 Third Gate: `" + third + "`\n"
+				add, key, want = "T003", "tasks.md#T003", []string{frozen, third}
+			}
+			h.queue.Push(t, editScript("conv-f", filepath.Join(h.cwd, "specs", "001-x", "tasks.md"), edited,
+				"Edited tasks.md."))
+			sum := h.delegate(api.DelegateRequest{Title: "frozen",
+				Spec: &api.SpecRequest{Dir: "specs/001-x", TaskIDs: []string{"T001"}}})
+			tk := h.waitStatus(sum.ID, StatusDone)
+			if got := stepCmds(tk); !slices.Equal(got, []string{frozen}) {
+				t.Fatalf("turn 1 ran %q", got)
+			}
+
+			h.queue.Push(t, editScript("conv-f", filepath.Join(h.cwd, "b.txt"), "ok\n", "Again."))
+			if _, err := h.s.Followup(t.Context(), sum.ID, api.FollowupRequest{Message: "And " + add + ".",
+				TaskIDs: []string{"T001", add}}); err != nil {
+				t.Fatal(err)
+			}
+			tk = h.waitStatus(sum.ID, StatusDone)
+			if got := stepCmds(tk); !slices.Equal(got, want) {
+				t.Errorf("turn 2 ran %q, want %q", got, want)
+			}
+			if !slices.Contains(tk.Proof.BarChanged, key) {
+				t.Errorf("turn 2 barChanged = %q, want %s in it", tk.Proof.BarChanged, key)
+			}
+			var last []string
+			for _, e := range eventsOf(h.events(sum.ID), api.EventGate) {
+				var d api.GateEventData
+				decode(t, e, &d)
+				if d.Phase == api.GateEventResult && e.Turn == 2 {
+					last = d.BarChanged
+				}
+			}
+			if !slices.Contains(last, key) {
+				t.Errorf("turn 2's gate result reports barChanged %q, want %s in it", last, key)
 			}
 		})
 	}
