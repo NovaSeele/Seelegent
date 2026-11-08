@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"strconv"
 	"strings"
 	"sync"
@@ -190,12 +191,16 @@ func (h *Hub) trimLocked(now time.Time) {
 // armLocked arms the age timer for when the oldest kept frame ages out, unless one is armed already or the ring is
 // empty. An armed timer is never moved: when it fires early (the oldest frame was trimmed for the frame or byte
 // limit since), expire trims nothing and arms it again for the new oldest frame.
+//
+// It fires a tenth of RingAge after the oldest frame's expiry (at least 1 ms, as trimLocked keeps a frame exactly
+// RingAge old): while frames arrive faster than they age out, each firing then trims a batch, not one frame, and
+// the timer re-arms about ten times per RingAge instead of after almost every frame.
 func (h *Hub) armLocked(now time.Time) {
 	if h.closed || h.stopExpiry != nil || h.head == len(h.ring) {
 		return
 	}
-	// trimLocked keeps a frame exactly RingAge old: fire just after.
-	d := max(h.ring[h.head].at.Add(h.o.RingAge).Sub(now), 0) + time.Millisecond
+	slack := max(h.o.RingAge/10, time.Millisecond)
+	d := max(h.ring[h.head].at.Add(h.o.RingAge+slack).Sub(now), 0)
 	h.expiryGen++
 	gen := h.expiryGen
 	h.stopExpiry = h.o.AfterFunc(d, func() { h.expire(gen) })
@@ -221,6 +226,20 @@ func (h *Hub) expire(gen uint64) {
 	now := h.o.Now()
 	h.trimLocked(now)
 	h.armLocked(now)
+}
+
+// RingStats is what the replay ring keeps now: its frames, their encoded bytes (what RingBytes limits) and an
+// estimate of the heap it holds (the frames' buffers by capacity and the ring's backing array). The daemon's
+// /debug/vars reports them, so a heap reading can tell the ring from a leak.
+func (h *Hub) RingStats() (frames, wireBytes, heapBytes int) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	kept := h.kept()
+	heap := cap(h.ring) * int(reflect.TypeFor[frame]().Size())
+	for i := range kept {
+		heap += cap(kept[i].wire)
+	}
+	return len(kept), h.ringBytes, heap
 }
 
 // sendLocked queues f to c, or drops c when its queue is full.

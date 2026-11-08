@@ -166,8 +166,8 @@ func TestHubRingAgeAndBytes(t *testing.T) {
 	}
 }
 
-// TestHubRingAgesOutWhenIdle: frames age out without another Publish; the empty ring releases its backing array and
-// no timer stays armed.
+// TestHubRingAgesOutWhenIdle: frames age out without another Publish, a tenth of RingAge late (the timer's slack);
+// the empty ring releases its backing array and no timer stays armed.
 func TestHubRingAgesOutWhenIdle(t *testing.T) {
 	h, clk := newTestHub(t, HubOptions{RingAge: time.Minute})
 	publishN(t, h, 2)
@@ -176,12 +176,26 @@ func TestHubRingAgesOutWhenIdle(t *testing.T) {
 	if n := len(clk.armed()); n != 1 {
 		t.Fatalf("%d timers armed after 3 publishes, want 1", n)
 	}
+	if frames, wire, heap := h.RingStats(); frames != 3 || wire == 0 || heap < wire {
+		t.Fatalf("RingStats = %d frames, %d wire bytes, %d heap bytes", frames, wire, heap)
+	}
 	clk.add(30 * time.Second)
-	clk.fire() // exactly a minute: not due yet (a frame RingAge old is kept; the timer fires just after)
+	clk.fire() // the first frames' expiry: not due yet (the slack)
+	h.mu.Lock()
+	kept := len(h.kept())
+	h.mu.Unlock()
+	if kept != 3 {
+		t.Fatalf("at the first frames' expiry: %d kept, want 3 until the slack passes", kept)
+	}
+	clk.add(6*time.Second - time.Millisecond)
+	clk.fire()
+	if n := len(clk.armed()); n != 1 {
+		t.Fatalf("%d timers armed just before the slack ends, want 1", n)
+	}
 	clk.add(time.Millisecond)
 	clk.fire()
 	h.mu.Lock()
-	kept := len(h.kept())
+	kept = len(h.kept())
 	h.mu.Unlock()
 	if kept != 1 {
 		t.Fatalf("after the first frames aged out: %d kept, want 1", kept)
@@ -200,6 +214,9 @@ func TestHubRingAgesOutWhenIdle(t *testing.T) {
 	}
 	if n := len(clk.armed()); n != 0 {
 		t.Fatalf("%d timers armed on an empty ring", n)
+	}
+	if frames, wire, heap := h.RingStats(); frames != 0 || wire != 0 || heap != 0 {
+		t.Fatalf("RingStats of an empty ring = %d, %d, %d", frames, wire, heap)
 	}
 	if sub, _ := h.subscribe("abcd1234.1"); sub.reset != api.ResetTooOld {
 		t.Fatalf("resume after the ring emptied = %+v", sub)
@@ -229,6 +246,35 @@ func TestHubCloseStopsTheAgeTimer(t *testing.T) {
 	h.mu.Unlock()
 	if kept != 1 || len(clk.armed()) != 0 {
 		t.Fatalf("after a stale timer: %d kept, %d armed", kept, len(clk.armed()))
+	}
+}
+
+// TestHubAgeTimerBatchesTrims: under a steady stream of frames the timer re-arms about ten times per RingAge, not
+// once per frame.
+func TestHubAgeTimerBatchesTrims(t *testing.T) {
+	h, clk := newTestHub(t, HubOptions{RingAge: time.Minute})
+	for range 600 { // ten frames a second for a minute, then ten minutes more
+		publishN(t, h, 1)
+		clk.add(100 * time.Millisecond)
+		clk.fire()
+	}
+	for range 6000 {
+		publishN(t, h, 1)
+		clk.add(100 * time.Millisecond)
+		clk.fire()
+	}
+	clk.mu.Lock()
+	n := len(clk.timers)
+	clk.mu.Unlock()
+	// 11 minutes, a firing about every 6 s (the slack), plus the first arm.
+	if n > 130 {
+		t.Fatalf("%d timers armed over 11 minutes of frames, want about 110", n)
+	}
+	h.mu.Lock()
+	kept, oldest := len(h.kept()), clk.now().Sub(h.kept()[0].at)
+	h.mu.Unlock()
+	if oldest > time.Minute+6*time.Second || kept > 670 {
+		t.Fatalf("ring keeps %d frames, the oldest %s old", kept, oldest)
 	}
 }
 
