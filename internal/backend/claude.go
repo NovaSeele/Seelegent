@@ -66,7 +66,7 @@ func (c *Claude) Command(t Turn) (Command, error) {
 	if t.ConversationID != "" {
 		argv = append(argv, "--resume", t.ConversationID)
 	}
-	if err := checkShimArgs(argv); err != nil {
+	if err := checkShimArgs(argv, runtime.GOOS); err != nil {
 		return Command{}, err
 	}
 	return Command{Argv: argv, Stdin: t.Prompt, HasStdin: true}, nil

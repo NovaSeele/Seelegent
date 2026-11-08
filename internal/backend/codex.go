@@ -7,7 +7,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -17,15 +16,25 @@ import (
 	"github.com/NovaSeele/Seelegent/internal/config"
 	"github.com/NovaSeele/Seelegent/internal/event"
 	"github.com/NovaSeele/Seelegent/internal/fsutil"
+	"github.com/NovaSeele/Seelegent/internal/launch"
 )
 
 // codexProviderID is the model provider Seelegent writes into config.toml for API-key accounts.
 const codexProviderID = "seelegent"
 
+// codexWindowsSandbox is the -c override that picks codex's unelevated Windows sandbox. Without a [windows] table
+// codex 0.167 refuses every shell command of a read-only or workspace-write turn ("rejected: blocked by policy");
+// the "elevated" sandbox needs a one-time administrator setup, so Seelegent never asks for it. The value is left
+// bare rather than quoted as TOML: codex reads a value that does not parse as TOML as a literal string, and a double
+// quote is one of the characters a codex.cmd shim cannot pass through cmd.exe (checkShimArgs).
+const codexWindowsSandbox = "windows.sandbox=unelevated"
+
 // Codex is the OpenAI Codex CLI.
 type Codex struct {
 	bin   string
 	quota QuotaReader
+	// goos is the operating system the CLI runs on (runtime.GOOS; tests set another).
+	goos string
 }
 
 // Name implements Backend.
@@ -44,16 +53,18 @@ func codexHome(p account.Profile) string { return filepath.Join(p.Home, ".codex"
 
 // Command implements Backend; the prompt goes on standard input ("-"):
 //
-//	codex exec [resume ID] --json --sandbox (read-only | <sandbox>) [--model M] --skip-git-repo-check -
+//	codex exec --json --sandbox (read-only | <sandbox>) [-c windows.sandbox=unelevated] [--model M]
+//	    --skip-git-repo-check [resume ID] -
+//
+// The exec options come before the resume subcommand: `codex exec resume` of codex-cli 0.167.0 has no --sandbox
+// ("unexpected argument '--sandbox' found", exit 2), so a continued turn written as `exec resume ID --sandbox ...`
+// never started. The -c override is added on Windows when the sandbox is read-only or workspace-write.
 func (c *Codex) Command(t Turn) (Command, error) {
 	bin, err := needBin(c.Name(), c.bin)
 	if err != nil {
 		return Command{}, err
 	}
 	argv := []string{bin, "exec"}
-	if t.ConversationID != "" {
-		argv = append(argv, "resume", t.ConversationID)
-	}
 	sandbox := t.Sandbox
 	switch {
 	case t.Plan:
@@ -67,12 +78,19 @@ func (c *Codex) Command(t Turn) (Command, error) {
 		return Command{}, fmt.Errorf("codex: unknown sandbox mode %q", sandbox)
 	}
 	argv = append(argv, "--json", "--sandbox", sandbox)
+	if c.goos == "windows" && sandbox != config.SandboxFullAccess {
+		argv = append(argv, "-c", codexWindowsSandbox)
+	}
 	if t.Model != "" {
 		argv = append(argv, "--model", t.Model)
 	}
 	// exec refuses to run outside a git repository without this flag; tasks may run in plain folders.
-	argv = append(argv, "--skip-git-repo-check", "-")
-	if err := checkShimArgs(argv); err != nil {
+	argv = append(argv, "--skip-git-repo-check")
+	if t.ConversationID != "" {
+		argv = append(argv, "resume", t.ConversationID)
+	}
+	argv = append(argv, "-")
+	if err := checkShimArgs(argv, c.goos); err != nil {
 		return Command{}, err
 	}
 	return Command{Argv: argv, Stdin: t.Prompt, HasStdin: true}, nil
@@ -93,9 +111,9 @@ func (*Codex) Filter(name, value string, _ account.Profile) (newValue string, ke
 
 // ProfileEnv implements account.EnvRules: CODEX_HOME is <home>/.codex, and on Windows USERPROFILE is the profile
 // home.
-func (*Codex) ProfileEnv(p account.Profile) map[string]string {
+func (c *Codex) ProfileEnv(p account.Profile) map[string]string {
 	env := map[string]string{"CODEX_HOME": codexHome(p)}
-	if runtime.GOOS == "windows" {
+	if c.goos == "windows" {
 		env["USERPROFILE"] = p.Home
 	}
 	return env
@@ -246,6 +264,118 @@ type codexParser struct {
 	base
 	lastAgentMessage string
 	steps            map[string]int // step number of each item id
+	// held is the turn's report event, kept from turn.completed or turn.failed until Finish: commands codex's own
+	// policy refused are known only from standard error, which is read alongside the stream, so the report gets
+	// them (DeniedActions) once both have been read. A turn still has exactly one report event.
+	held *event.Event
+	// policyDenied are the commands codex refused with "rejected: blocked by policy", in first-seen order.
+	policyDenied []string
+	// ranCommand is set by any command_execution item: codex ran at least one shell command.
+	ranCommand bool
+}
+
+// codexPolicyRejected is what codex prints on standard error after a command its policy refused, for example
+//
+//	ERROR codex_core::tools::router: error=exec_command failed: CreateProcess { message: "Rejected(\"`<command>`
+//	rejected: blocked by policy\")" }
+//
+// The stream shows no command item for such a call, and codex still ends the turn with turn.completed and the
+// agent's own account of it; Finish puts the refused commands in the report's denied actions and fails the turn when
+// no command ran at all.
+const codexPolicyRejected = "rejected: blocked by policy"
+
+// Stderr implements Parser: a command refused by codex's policy is remembered for the report and logged.
+func (p *codexParser) Stderr(line string) []event.Event {
+	i := strings.Index(line, codexPolicyRejected)
+	if i < 0 {
+		return nil
+	}
+	cmd := p.mask(policyCommand(line))
+	if cmd == "" {
+		cmd = p.mask(strings.TrimSpace(line))
+	}
+	p.policyDenied = appendUnique(p.policyDenied, cmd)
+	return []event.Event{p.log("codex refused a command (" + codexPolicyRejected + "): " + cmd)}
+}
+
+// policyCommand is the command codex quoted in backticks in a "rejected: blocked by policy" line: from the backtick
+// that opens it (right after `Rejected(` and its quote) to the backtick before " rejected: blocked by policy", so
+// a backtick inside the command (PowerShell's escape character) does not cut it. The escape levels are read once
+// from the opening and undone that many times, so a UNC path's \\ survives. Without `Rejected(` the command runs
+// from the first backtick, unescaped. "" when the line quotes no command.
+func policyCommand(line string) string {
+	end := strings.Index(line, "` "+codexPolicyRejected)
+	if end < 0 {
+		return ""
+	}
+	head := line[:end]
+	levels, start := 0, -1
+	if i := strings.Index(head, "Rejected("); i >= 0 {
+		rest := head[i+len("Rejected("):]
+		// How the quoted command opens, by levels of Rust debug escaping: the reason as is, debug-formatted once
+		// (Rejected(\"`...) or twice (Rejected(\\\"`...).
+		for n, open := range []string{"\"`", `\"` + "`", `\\\"` + "`"} {
+			if strings.HasPrefix(rest, open) {
+				levels, start = n, i+len("Rejected(")+len(open)
+				break
+			}
+		}
+	}
+	if start < 0 {
+		start = strings.IndexByte(head, '`') + 1
+		if start == 0 {
+			return ""
+		}
+	}
+	cmd := head[start:]
+	for range levels {
+		cmd = unescapeDebug(cmd)
+	}
+	return strings.TrimSpace(cmd)
+}
+
+// unescapeDebug undoes one level of \\ and \" escapes.
+func unescapeDebug(s string) string {
+	var b strings.Builder
+	for i := 0; i < len(s); i++ {
+		if s[i] == '\\' && i+1 < len(s) && (s[i+1] == '\\' || s[i+1] == '"') {
+			i++
+		}
+		b.WriteByte(s[i])
+	}
+	return b.String()
+}
+
+// Finish implements Parser: it emits the held report, with the commands codex's policy refused among its denied
+// actions, before the closing events of the base parser. A turn that codex reported as a success although its
+// policy refused every shell command the agent tried (and none ran) fails instead (fatal: another account runs
+// with the same sandbox), so that it reaches the lead as a failed task rather than as done work.
+func (p *codexParser) Finish(exit launch.Exit, stderrTail string) []event.Event {
+	out := p.base.Finish(exit, stderrTail)
+	if r := p.report; r != nil {
+		for _, c := range p.policyDenied {
+			r.DeniedActions = appendUnique(r.DeniedActions, c)
+		}
+		if r.Status == event.StatusSuccess && len(p.policyDenied) > 0 && !p.ranCommand &&
+			exit.Reason != launch.ReasonCanceled {
+			r.Status, r.Error = event.StatusError, policyRefusedText(p.policyDenied)
+			out = append(out, event.Fail(event.ClassFatal, r.Error))
+		}
+	}
+	if p.held != nil {
+		out = append([]event.Event{*p.held}, out...)
+		p.held = nil
+	}
+	return out
+}
+
+// policyRefusedPrefix starts the error of a codex turn whose every shell command codex's policy refused.
+const policyRefusedPrefix = "codex refused every shell command the worker tried (" + codexPolicyRejected + ")"
+
+// policyRefusedText is the error of a turn whose every shell command was refused.
+func policyRefusedText(cmds []string) string {
+	return policyRefusedPrefix + ": " + strings.Join(cmds, "; ") +
+		". The worker could not run commands; on Windows check the codex sandbox (windows.sandbox)."
 }
 
 type codexLine struct {
@@ -307,13 +437,15 @@ func (p *codexParser) Line(raw []byte) []event.Event {
 			out = append(out, event.Event{Kind: event.KindUsage, Usage: &u})
 			rep.Usage = &u
 		}
-		return append(out, p.setReport(rep))
+		p.hold(p.setReport(rep))
+		return out
 	case "turn.failed":
 		msg := errorText(ev.Error)
 		if msg == "" {
 			msg = "codex turn failed"
 		}
-		return []event.Event{p.setReport(event.Report{Status: event.StatusError, Response: p.lastAgentMessage, Error: msg})}
+		p.hold(p.setReport(event.Report{Status: event.StatusError, Response: p.lastAgentMessage, Error: msg}))
+		return nil
 	case "error":
 		// Not fatal in codex exec --json (reconnect and retry notices); remembered in case no result follows.
 		msg := ev.Message
@@ -362,6 +494,7 @@ func (p *codexParser) item(kind string, it *codexItem) []event.Event {
 		}
 		return []event.Event{p.log(*it.Text)}
 	case "command_execution":
+		p.ranCommand = true
 		t := &event.Tool{ID: it.ID, Name: "shell", Command: p.mask(it.Command)}
 		input, _ := json.Marshal(map[string]string{"command": it.Command})
 		t.Input = p.maskJSON(input)
@@ -439,3 +572,6 @@ func (p *codexParser) toolEvent(step int, t *event.Tool, started, completed, fai
 	}
 	return nil
 }
+
+// hold keeps the turn's report event for Finish.
+func (p *codexParser) hold(ev event.Event) { p.held = &ev }

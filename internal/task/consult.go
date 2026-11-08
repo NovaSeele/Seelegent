@@ -286,6 +286,12 @@ func (s *Service) finishConsult(taskID, consultID string, run *Task) {
 			rec.Error = "the consult run changed files: " + strings.Join(files, ", ")
 		}
 	}
+	// The run is closed before the consult's outcome is stored, so whoever sees the outcome never sees the run done
+	// and not reviewed. A daemon that stops in between leaves the consult running: resumeConsults follows it again
+	// and this function stores it (the run stays closed).
+	if run != nil {
+		s.closeHiddenRun(run.ID, "consult "+rec.Status)
+	}
 	_, err := s.mutate(ctx, taskID, func(t *Task) ([]NewEvent, error) {
 		for i := range t.Consults {
 			c := &t.Consults[i]
@@ -300,9 +306,6 @@ func (s *Service) finishConsult(taskID, consultID string, run *Task) {
 	})
 	if err != nil && !errors.Is(err, ErrNotFound) {
 		s.log.Warn("task: store the consult", "task", taskID, "consult", consultID, "err", err)
-	}
-	if run != nil {
-		s.closeHiddenRun(run.ID, "consult "+rec.Status)
 	}
 }
 
@@ -363,10 +366,10 @@ func (s *Service) OpenHiddenRuns(ctx context.Context, kind string) ([]HiddenRun,
 
 // stopOrphanConsults stops and closes the consult runs nobody reads: a run whose parent task has no consult that
 // names it (the daemon stopped between creating the run and storing its record), and a run whose consult has
-// already ended (the daemon stopped between storing the outcome and closing the run, or the record was ended
-// otherwise while its run stayed open), as meetings do with the runs of an ended meeting. A run whose consult is
-// still running is followed by resumeConsults. It runs at start, before the API serves, and outside any task lock
-// (StopHiddenRun takes its own).
+// already ended (an older daemon, which stored the outcome before closing the run, stopped in between, or the
+// record was ended otherwise while its run stayed open), as meetings do with the runs of an ended meeting. A run
+// whose consult is still running is followed by resumeConsults. It runs at start, before the API serves, and
+// outside any task lock (StopHiddenRun takes its own).
 func (s *Service) stopOrphanConsults(ctx context.Context) error {
 	runs, err := s.OpenHiddenRuns(ctx, KindConsult)
 	if err != nil {
