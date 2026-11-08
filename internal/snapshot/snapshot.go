@@ -35,12 +35,17 @@ import (
 
 // Limits of one snapshot.
 const (
-	// MaxFileBytes is the largest file whose content is kept; a larger one is recorded by size only.
+	// MaxFileBytes is the largest file whose content is kept; a larger one is recorded by size, hash and
+	// modification time.
 	MaxFileBytes = 8 << 20
 	// MaxFiles caps the files of one snapshot.
 	MaxFiles = 3000
 	// MaxTotalBytes caps the new content one snapshot copies.
 	MaxTotalBytes = 256 << 20
+	// MaxReadBytes caps what one snapshot reads outside those caps: the large files it hashes in a stream and the
+	// files of extra (Take). Past it a file is recorded by size and modification time only, and the manifest says
+	// so (HashBudgetSpent).
+	MaxReadBytes = 2 << 30
 )
 
 // Manifest kinds.
@@ -78,6 +83,9 @@ type Manifest struct {
 	Files   []File    `json:"files"`
 	// Truncated is set when the dirty files went over MaxFiles or MaxTotalBytes; later files are missing.
 	Truncated bool `json:"truncated,omitempty"`
+	// HashBudgetSpent is set when the snapshot read MaxReadBytes: the files after that point have neither hash
+	// nor content and are compared by size and modification time only, a weaker check (M18 review G3, G4).
+	HashBudgetSpent bool `json:"hashBudgetSpent,omitempty"`
 }
 
 // File is one file of a snapshot.
@@ -96,6 +104,25 @@ type File struct {
 	Binary bool `json:"binary,omitempty"`
 	// Link: a symbolic link, whose content is its target.
 	Link bool `json:"link,omitempty"`
+	// ModTime is the modification time in Unix nanoseconds (0 for a missing file, or in an older manifest). It is
+	// what tells a change apart when a file has no hash (see Changed).
+	ModTime int64 `json:"modTime,omitempty"`
+}
+
+// Changed reports whether a file differs between two snapshots. Two hashes decide when both sides have one;
+// otherwise (a file too large to hash, or read past MaxReadBytes) the size and, where both are known, the
+// modification time do, and weak is true.
+func Changed(before, after File) (changed, weak bool) {
+	if before.Missing || after.Missing {
+		return before.Missing != after.Missing, false
+	}
+	if before.Hash != "" && after.Hash != "" {
+		return before.Hash != after.Hash, false
+	}
+	if before.Size != after.Size {
+		return true, true
+	}
+	return before.ModTime != 0 && after.ModTime != 0 && before.ModTime != after.ModTime, true
 }
 
 // Find returns the entry of path (compared as Key) and whether there is one.
@@ -117,6 +144,8 @@ type Store struct {
 	// blobs orders put (shared) against the sweep's check-and-remove of one blob (exclusive): a blob reused while
 	// the sweep looks at it is either touched first, and kept, or removed first, and written again.
 	blobs sync.RWMutex
+	// readBudget is MaxReadBytes (smaller in tests).
+	readBudget int64
 }
 
 // New returns a store in dir.
@@ -124,7 +153,23 @@ func New(dir string, git Git, now func() time.Time) *Store {
 	if now == nil {
 		now = time.Now
 	}
-	return &Store{dir: dir, git: git, now: now}
+	return &Store{dir: dir, git: git, now: now, readBudget: MaxReadBytes}
+}
+
+// budget is what a snapshot may still read outside its caps (MaxReadBytes).
+type budget struct {
+	left  int64
+	spent bool
+}
+
+// take reserves n bytes, or reports that they do not fit any more.
+func (b *budget) take(n int64) bool {
+	if n > b.left {
+		b.spent = true
+		return false
+	}
+	b.left -= n
+	return true
 }
 
 // Git returns the git access of the store.
@@ -136,7 +181,9 @@ func (s *Store) Git() Git { return s.git }
 // The files of extra are read first and do not count against MaxFiles and MaxTotalBytes (each is still kept only
 // up to MaxFileBytes): the end snapshot passes the start snapshot's files and the turn's edited files there, and a
 // turn that creates thousands of new files (a build into dist/) must not push the files it may have destroyed out
-// of the comparison (M18 hunt H5). Only the other dirty files can be cut, which sets Truncated.
+// of the comparison (M18 hunt H5). Only the other dirty files can be cut, which sets Truncated. The files of extra
+// and the hashes of large files share one read budget instead, MaxReadBytes; past it a file is recorded by size
+// and modification time only, which sets HashBudgetSpent.
 func (s *Store) Take(ctx context.Context, root string, extra []string) (Manifest, error) {
 	head, dirty, err := s.git.Dirty(ctx, root)
 	if err != nil {
@@ -157,6 +204,7 @@ func (s *Store) Take(ctx context.Context, root string, extra []string) (Manifest
 	seen := map[string]bool{}
 	var files int
 	var total int64
+	read := &budget{left: s.readBudget}
 	add := func(rel, st string, capped bool) error {
 		k := Key(rel)
 		if seen[k] || st == api.GitUntracked && skipped(rel) {
@@ -170,7 +218,11 @@ func (s *Store) Take(ctx context.Context, root string, extra []string) (Manifest
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		f, n, err := s.record(root, rel, st)
+		var b *budget
+		if !capped {
+			b = read // the files of extra are read on the budget, the others under the caps
+		}
+		f, n, err := s.record(root, rel, st, b, read)
 		if err != nil {
 			return err
 		}
@@ -202,6 +254,7 @@ func (s *Store) Take(ctx context.Context, root string, extra []string) (Manifest
 		}
 	}
 	sort.Slice(m.Files, func(i, j int) bool { return m.Files[i].Path < m.Files[j].Path })
+	m.HashBudgetSpent = read.spent
 	return m, nil
 }
 
@@ -217,8 +270,9 @@ func skipped(rel string) bool {
 }
 
 // record reads one file and stores its content. It returns nil for something that is not a file (a folder, a
-// submodule, a FIFO) and the number of new bytes written.
-func (s *Store) record(root, rel, status string) (*File, int64, error) {
+// submodule, a FIFO) and the number of new bytes written. A file of up to MaxFileBytes is read on contents when
+// that is not nil (the files of extra); a larger one is hashed on hashes.
+func (s *Store) record(root, rel, status string, contents, hashes *budget) (*File, int64, error) {
 	full := filepath.Join(root, filepath.FromSlash(rel))
 	f := &File{Path: rel, Status: status}
 	st, err := os.Lstat(full)
@@ -233,14 +287,18 @@ func (s *Store) record(root, rel, status string) (*File, int64, error) {
 	}
 	f.Link = st.Mode()&os.ModeSymlink != 0
 	f.Size = st.Size()
+	f.ModTime = st.ModTime().UnixNano()
 	if !f.Link && !st.Mode().IsRegular() {
 		return nil, 0, nil
 	}
 	if f.Size > MaxFileBytes {
-		if !f.Link {
+		if !f.Link && f.Size <= MaxHashBytes && hashes.take(f.Size) {
 			f.Hash = hashLarge(full)
 		}
 		return f, 0, nil
+	}
+	if contents != nil && !contents.take(f.Size) {
+		return f, 0, nil // by size and modification time only
 	}
 	data, err := gitx.ReadWorktree(full, MaxFileBytes+1)
 	if err != nil {
@@ -265,7 +323,7 @@ func (s *Store) record(root, rel, status string) (*File, int64, error) {
 }
 
 // MaxHashBytes is the largest file over MaxFileBytes whose hash is still taken (its content is never kept); a
-// larger one is compared by size only.
+// larger one is compared by size and modification time.
 const MaxHashBytes = 1 << 30
 
 // hashLarge returns the hash of a file too large to keep, read in a stream, or "" when it is over MaxHashBytes or

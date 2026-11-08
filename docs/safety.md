@@ -121,8 +121,12 @@ known) and after it, the task engine records the repository's uncommitted files:
   written once with `fsutil.WriteFileAtomic`; a manifest per turn, `snapshots/tasks/<task>/t<n>-<kind>.json`
   (`start`, `end`, `restore-<time>`), names the files, their hashes and `HEAD`;
 - limits: 8 MiB per file, 3000 files and 256 MiB per snapshot (`truncated` is set past them). A file over 8 MiB is
-  recorded by its size and its hash (read in a stream, up to 1 GiB; by size alone past that), never its content, so
-  a change to it is still noticed as work at risk but cannot be restored. Untracked files under
+  recorded by its size and its hash (read in a stream, up to 1 GiB), never its content, so a change to it is still
+  noticed as work at risk but cannot be restored. Every file also records its modification time. The hashes of large
+  files and the files the end snapshot reads outside the limits (below) share one read budget of 2 GiB per
+  snapshot; past it, and for a file over 1 GiB, a file is compared by size and modification time only
+  (`hashBudgetSpent` on the manifest, `Weak` on the risk): a same-size change that kept the time is missed, and a
+  rewrite with the same bytes counts as a change. Untracked files under
   `node_modules`, `.venv`, `venv`, `__pycache__`, `.next`, `.nuxt`, `.turbo`, `.cache` and `.gradle` are not copied.
   The end snapshot reads the start snapshot's files and the files the edit tools changed first, outside those
   limits, so a turn that creates thousands of files cannot hide the files it destroyed; only the other dirty files
