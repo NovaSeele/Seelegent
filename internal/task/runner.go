@@ -1104,7 +1104,7 @@ func (s *Service) prompt(ctx context.Context, t *Task, tu *Turn, continuing, pla
 	}
 	in := brief.Input{Cwd: t.Cwd, Plan: t.Mode == ModePlan, PlanShell: planShell, Spec: spec, Deps: t.DepsContext,
 		Interrupted: len(tu.Attempts) > 0, Message: tu.Message, Baseline: displayPaths(t.Cwd, t.Baseline),
-		TestParallelism: s.limits().TestParallelism}
+		TestParallelism: s.limits().TestParallelism, DataDir: s.o.DataDir}
 	in.Lane, in.Gate = s.briefGate(t)
 	if tu.Handback {
 		in.Message = brief.HandbackElsewhere // a new conversation: the console's context is not available
