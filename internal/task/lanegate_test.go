@@ -279,33 +279,66 @@ func TestLaneCommandWriteIsRed(t *testing.T) {
 	}
 }
 
-// laneTouch reads the paths of PowerShell commands against the repository root, a removed folder counting for
-// every file under it (the field run: Remove-Item -Path src/components/lighting -Recurse).
+// workerWrites reads the paths of PowerShell commands against the task's folder, a removed folder counting for
+// every file under it (the field run: Remove-Item -Path src/components/lighting -Recurse), follows a cd of the same
+// line, and lists a command that writes where it cannot read without claiming a file.
 func TestLaneTouchCommands(t *testing.T) {
 	root := t.TempDir()
 	if err := mkdir(filepath.Join(root, "src", "components", "lighting")); err != nil {
 		t.Fatal(err)
 	}
-	l := &laneTouch{}
-	l.addCommand(root, root, "Remove-Item -Path src/components/lighting -Recurse -Force")
-	l.addCommand(root, root, `Set-Content -LiteralPath 'src\store.ts' -Value x`)
-	l.addCommand(root, filepath.Join(root, "src"), "rm old/*.vue")
-	l.addCommand(root, root, "echo x > ../outside.txt")
+	w := newWorkerWrites(root, root, nil, []string{
+		"Remove-Item -Path src/components/lighting -Recurse -Force",
+		`Set-Content -LiteralPath 'src\store.ts' -Value x`,
+		"cd src && rm old/*.vue",
+		"echo x > ../outside.txt",
+		"Set-Location lib; Remove-Item gen -Recurse",
+		"cd app && npm init -y > init.log",
+	})
 	for _, f := range []string{"src/components/lighting/Lamp.vue", "src/components/lighting/deep/a.ts",
-		"src/store.ts", "src/old/b.vue"} {
-		if !l.has(f) {
-			t.Errorf("%s not touched (%+v)", f, l)
+		"src/store.ts", "src/old/b.vue", "lib/gen/x.ts", "app/init.log"} {
+		if !w.wrote(f) {
+			t.Errorf("%s not touched (%+v)", f, w)
 		}
 	}
-	for _, f := range []string{"src/components/light.ts", "src/old/b.ts", "outside.txt", "src/store.tsx"} {
-		if l.has(f) {
-			t.Errorf("%s touched (%+v)", f, l)
+	for _, f := range []string{"src/components/light.ts", "src/old/b.ts", "outside.txt", "src/store.tsx",
+		"old/b.vue", "gen/x.ts", "init.log"} {
+		if w.wrote(f) {
+			t.Errorf("%s touched (%+v)", f, w)
 		}
 	}
-	if runtime.GOOS == "windows" {
-		if !l.has("SRC/Store.ts") {
-			t.Error("letter case matters on Windows")
-		}
+	if runtime.GOOS == "windows" && !w.wrote("SRC/Store.ts") {
+		t.Error("letter case matters on Windows")
+	}
+	if len(w.unknown) != 0 {
+		t.Errorf("unknown = %q", w.unknown)
+	}
+	// Writes whose place the line does not spell out claim nothing and are listed; the temporary folder is neither.
+	unknown := []string{"Remove-Item -Path $env:OUT -Recurse", "cd $(mktemp -d) && touch x", "cp -r ../tpl/* .",
+		"rm -rf ."}
+	w = newWorkerWrites(root, root, nil, append(slices.Clone(unknown), `echo x > $env:TEMP\log.txt`,
+		"rm -f $TMPDIR/x"))
+	if !slices.Equal(w.unknown, unknown) || w.wrote("src/store.ts") {
+		t.Errorf("unknown = %q, keys %q", w.unknown, w.keys)
+	}
+}
+
+// A worker's command that wrote where Seelegent could not read makes the lane fail closed: a file outside the lane
+// that no edit or readable command explains counts against it, and the lane step says why.
+func TestLaneUnknownWriteIsRed(t *testing.T) {
+	h := newHarness(t)
+	laneRepo(h)
+	h.agy("w", 1)
+	in := filepath.Join(h.cwd, "src", "x", "a.vue")
+	h.queue.Push(t, script(agyInit("conv-u"), agyEdit(1, in), fakeWrite(in, "b\n"),
+		agyTool(2, "DONE", "Remove-Item -Path $env:OUT -Recurse"),
+		fakeWrite(filepath.Join(h.cwd, "b.txt"), "gone\n"), agyResult("conv-u", "Changed a.vue.")))
+	sum := h.delegate(api.DelegateRequest{Title: "unknown write", Lane: []string{"src/x"}})
+	tk := h.waitStatus(sum.ID, StatusDone)
+	st := h.laneOf(tk, 1)
+	if st.State != api.StepRed || !slices.Equal(st.Files, []string{"b.txt"}) || len(st.Unseen) != 0 ||
+		!strings.Contains(st.Tail, gate.UnknownNote) || !strings.Contains(st.Tail, "$env:OUT") {
+		t.Fatalf("lane = %+v", st)
 	}
 }
 
@@ -326,6 +359,7 @@ func TestLaneTouchEditSpellings(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		spellings["backslashes"] = strings.ReplaceAll(abs, "/", `\`)
 		spellings["case"] = strings.ToUpper(abs)
+		spellings["git bash"] = "/" + strings.ToLower(abs[:1]) + filepath.ToSlash(abs[2:])
 		var out []byte
 		if out, err = exec.CommandContext(t.Context(), "cmd.exe", "/d", "/c", "mklink", "/J", link, h.cwd).
 			CombinedOutput(); err != nil {
@@ -342,9 +376,8 @@ func TestLaneTouchEditSpellings(t *testing.T) {
 		tu := &Turn{N: 1, By: ByLead, Status: TurnOK,
 			Attempts: []*Attempt{{N: 1, Outcome: &backend.Outcome{FilesEdited: []string{p}}}}}
 		files := turnFiles(tk, tu, liveState{})
-		l := &laneTouch{}
-		l.addEdited(files)
-		if !l.has("src/xy.ts") || l.has("src/x/a.vue") {
+		w := newWorkerWrites(tk.Cwd, tk.RepoRoot, files, nil)
+		if !w.wrote("src/xy.ts") || w.wrote("src/x/a.vue") {
 			t.Errorf("%s (%s): edited %v", name, p, files)
 		}
 	}

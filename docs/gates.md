@@ -211,17 +211,30 @@ latest instruction (field report 4):
   snapshots cannot tell (one is missing or truncated, or HEAD moved between them) every file a turn changed counts:
   the check fails closed.
 - **Touched by a worker.** A file outside the lane counts against it only when a worker plausibly touched it: its
-  edit tools reported it, or one of its shell commands writes, moves or deletes it as `guard.Writes` reads the
+  edit tools reported it, or one of its shell commands writes, moves or deletes it as `guard.WriteTargets` reads the
   command (redirections, `rm`, `mv`, `cp`/`Copy-Item` destinations, `sed -i`, and PowerShell's `Remove-Item`,
-  `Set-Content`, `Out-File`, `New-Item`, `Move-Item`, `Copy-Item` with `-Path`, `-LiteralPath` or positional paths),
-  relative paths resolved against the task's folder. A removed folder counts for every file under it. Both sides are
-  compared in canonical form (8.3 short names, junctions, letter case and separators do not matter). Any other file
-  outside the lane (the lead or the user editing the same tree, another program) is listed as `unseen` with the
-  warning "changed during the turn but not by a worker edit or command Seelegent saw": the step is `warn` at most,
-  and the report and the gate warnings still name it. The accepted cost: a file a worker's command changes as a side
-  effect (a build that rewrites a lock file, a script that writes a file it does not name) is only a warning too.
-  The command's own folder is not known: commands are resolved against the task's folder, so a `cd x && rm y` is
-  read as the task's `y`.
+  `Set-Content`, `Out-File`, `New-Item`, `Move-Item`, `Copy-Item` with `-Path`, `-LiteralPath` or positional paths).
+  Relative paths are resolved against the task's folder joined to the folder an earlier `cd`, `chdir`,
+  `Set-Location`, `sl` or `pushd` of the same line moved to (`popd`/`Pop-Location` go back), over `&&`, `;` and `|`:
+  `cd app && rm -rf dist` touches `app/dist`. A removed folder counts for every file under it, a glob for the files it
+  matches, and a target with a variable after a written-out folder (`src/$name.ts`) for that folder. The edit tools'
+  files and the commands' paths go through the same helper (`repoRel`: Git Bash `/c/...` paths, then canonical form
+  on both sides, so 8.3 short names, junctions, letter case and separators do not matter); the `unreported_file`
+  hygiene check uses the same reading. Any other file outside the lane (the lead or the user editing the same tree,
+  another program) is listed as `unseen` with the warning "changed during the turn but not by a worker edit or
+  command Seelegent saw": the step is `warn` at most, and the report and the gate warnings still name it. The
+  accepted cost: a file a worker's command changes as a side effect (a build that rewrites a lock file, a script that
+  writes a file it does not name) is only a warning too.
+- **Writes Seelegent cannot read fail closed.** A worker command that writes where the line does not spell out
+  (`Remove-Item $env:OUT -Recurse`, `del %OUT%\x`, `echo x > "$LOG"`, `cd $(mktemp -d) && touch x`, a write to the
+  repository root or the task's folder as a whole such as `cp -r ../tpl/* .`) claims no file but marks the
+  instruction's turns: an out-of-lane file that no edit or readable command explains then counts against the lane
+  too (red), and the step's tail names the command ("counted: no worker edit or readable command names them, but a
+  worker's command wrote where Seelegent could not read the path"). Files other tasks of the repository changed
+  during the turn are no turn's change in the first place, so they never reach the lane. Writes under the temporary
+  folder's variable (`$env:TEMP`, `%TEMP%`, `$TMPDIR`) and to the null devices (`$null`, `nul`, `/dev/null`) are
+  neither paths nor unknown. Not followed: a `cd` inside a subshell or a command substitution is taken as if it
+  moved the rest of the line too.
 - The changed-file list of the turn (`files_changed`) is not narrowed: it still holds every file the snapshots saw
   change.
 

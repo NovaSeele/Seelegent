@@ -282,7 +282,7 @@ func TestForeignNeverGreen(t *testing.T) {
 // TestLaneStepTouched: only a file a worker touched counts against the lane (F6); the others are a warning.
 func TestLaneStepTouched(t *testing.T) {
 	touched := func(f string) bool { return f == "src/xy.ts" }
-	st := LaneStep([]string{"src/x"}, []string{"src/x/a.vue", "src/xy.ts", "notes.md"}, api.LaneEnforce, touched)
+	st := LaneStep([]string{"src/x"}, []string{"src/x/a.vue", "src/xy.ts", "notes.md"}, api.LaneEnforce, touched, nil)
 	if st.State != api.StepRed || !slices.Equal(st.Files, []string{"src/xy.ts"}) || !slices.Equal(st.Unseen, []string{"notes.md"}) {
 		t.Fatalf("step = %+v", st)
 	}
@@ -293,17 +293,23 @@ func TestLaneStepTouched(t *testing.T) {
 		t.Errorf("warnings = %q", got)
 	}
 	// Only unseen files: a warning, never red.
-	st = LaneStep([]string{"src/x"}, []string{"notes.md"}, api.LaneEnforce, touched)
+	st = LaneStep([]string{"src/x"}, []string{"notes.md"}, api.LaneEnforce, touched, nil)
 	if st.State != api.StepWarn || len(st.Files) != 0 || Overall([]api.GateStep{st}) != api.GateGreen {
 		t.Errorf("unseen only = %+v", st)
 	}
 	// Lanes: warn keeps the touched files as a warning too.
-	st = LaneStep([]string{"src/x"}, []string{"src/xy.ts"}, api.LaneWarn, touched)
+	st = LaneStep([]string{"src/x"}, []string{"src/xy.ts"}, api.LaneWarn, touched, nil)
 	if st.State != api.StepWarn || !slices.Equal(LaneWarnings(st), []string{"outside the lane (lanes: warn): src/xy.ts"}) {
 		t.Errorf("warn mode = %+v %q", st, LaneWarnings(st))
 	}
+	// A command that wrote where Seelegent could not read makes an unexplained file count, and the tail says why.
+	st = LaneStep([]string{"src/x"}, []string{"notes.md"}, api.LaneEnforce, touched, []string{"rm -rf $OUT"})
+	if st.State != api.StepRed || !slices.Equal(st.Files, []string{"notes.md"}) || len(st.Unseen) != 0 ||
+		!strings.Contains(st.Tail, UnknownNote+": rm -rf $OUT") {
+		t.Fatalf("unknown write: %+v", st)
+	}
 	// A plain entry covers its folder; without a touch set every changed file counts.
-	if st = LaneStep([]string{"src/x"}, []string{"src/x/a.vue"}, api.LaneEnforce, nil); st.State != api.StepGreen {
+	if st = LaneStep([]string{"src/x"}, []string{"src/x/a.vue"}, api.LaneEnforce, nil, nil); st.State != api.StepGreen {
 		t.Errorf("in lane = %+v", st)
 	}
 }

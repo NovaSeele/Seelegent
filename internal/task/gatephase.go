@@ -207,7 +207,8 @@ func (s *Service) gatePhase(r *run, t *Task) (bool, error) {
 	if in.Lane != nil {
 		// The lane judges the net change, and only what a worker touched counts against it (F5, F6).
 		in.LaneFiles = s.netLane(t, ph.Turn, files, nil)
-		in.Touched = laneTouched(t, ph.Turn).has
+		touch := laneTouched(t, ph.Turn)
+		in.Touched, in.UnknownWrites = touch.wrote, touch.unknown
 	}
 	if p.GateOff {
 		// The gate is off: the phase is the verifier's alone; the lane was checked as scope findings (F12).

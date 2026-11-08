@@ -2,7 +2,6 @@ package task
 
 import (
 	"context"
-	"path/filepath"
 	"sort"
 	"time"
 
@@ -144,14 +143,10 @@ func turnFiles(t *Task, tu *Turn, live liveState) []string {
 	seen := map[string]bool{}
 	var out []string
 	for _, p := range abs {
-		if !filepath.IsAbs(p) {
-			p = filepath.Join(t.Cwd, p)
-		}
-		rel, ok := relInside(t.RepoRoot, p) // canonical: a CLI may report a short (8.3) or other spelling
+		rel, ok := repoRel(t.RepoRoot, t.Cwd, p) // canonical: a CLI may report a short (8.3) or other spelling
 		if !ok {
 			continue
 		}
-		rel = filepath.ToSlash(rel)
 		if k := snapshot.Key(rel); !seen[k] {
 			seen[k] = true
 			out = append(out, rel)

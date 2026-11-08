@@ -1,16 +1,8 @@
 package task
 
 import (
-	"path/filepath"
-	"regexp"
-	"runtime"
-	"slices"
-	"strings"
-
 	"github.com/NovaSeele/Seelegent/internal/api"
 	"github.com/NovaSeele/Seelegent/internal/gate"
-	"github.com/NovaSeele/Seelegent/internal/guard"
-	"github.com/NovaSeele/Seelegent/internal/proof"
 	"github.com/NovaSeele/Seelegent/internal/snapshot"
 )
 
@@ -19,103 +11,19 @@ import (
 // counts against it (F6). A file that changed without either (the lead or the user editing the same tree, a
 // command's side effects) is a warning.
 
-// laneTouch holds the files and folders (snapshot keys, relative to the repository root) a worker plausibly touched,
-// and the globs its commands named (rm src/*.vue).
-type laneTouch struct {
-	keys  []string
-	globs []string
-}
-
-// addRel records a path relative to the repository root ('/' or '\' separators).
-func (l *laneTouch) addRel(rel string) {
-	rel = filepath.ToSlash(rel)
-	if rel == "" || rel == "." {
-		return
-	}
-	if strings.ContainsAny(rel, "*?") {
-		if !slices.Contains(l.globs, rel) {
-			l.globs = append(l.globs, rel)
-		}
-		return
-	}
-	if k := snapshot.Key(rel); !slices.Contains(l.keys, k) {
-		l.keys = append(l.keys, k)
-	}
-}
-
-// addEdited records the files of a turn's edit tools (Turn.Edited: relative to the repository root, already
-// resolved through fsutil.Canonical, so 8.3 names, junctions and letter case do not matter).
-func (l *laneTouch) addEdited(rels []string) {
-	for _, r := range rels {
-		l.addRel(r)
-	}
-}
-
-// gitBashPath matches a Git Bash drive path (/c/Users/...).
-var gitBashPath = regexp.MustCompile(`^/([A-Za-z])(/.*)?$`)
-
-// addCommand records the paths a shell command writes, moves or deletes (guard.Writes), resolved against cwd and
-// made relative to root the same way the edit tools' files are (relInside: canonical paths on both sides). A folder
-// a command removes counts for every file under it (has).
-func (l *laneTouch) addCommand(root, cwd, command string) {
-	for _, p := range guard.Writes(command) {
-		p = strings.Trim(p, `"'`)
-		if p == "" || strings.HasPrefix(p, "~") || strings.HasPrefix(p, "$") || strings.HasPrefix(p, "%") ||
-			strings.HasPrefix(p, "/dev/") {
-			continue
-		}
-		if runtime.GOOS == "windows" {
-			if m := gitBashPath.FindStringSubmatch(filepath.ToSlash(p)); m != nil {
-				p = strings.ToUpper(m[1]) + ":" + filepath.FromSlash(m[2]+"/")
-			}
-		}
-		if !filepath.IsAbs(p) {
-			p = filepath.Join(cwd, filepath.FromSlash(p))
-		}
-		if strings.ContainsAny(p, "*?") {
-			// A glob cannot be made canonical as a whole: resolve its folder, keep its last part.
-			dir, base := filepath.Split(p)
-			if rel, ok := relInside(root, filepath.Clean(dir)); ok {
-				l.addRel(filepath.ToSlash(filepath.Join(rel, base)))
-			}
-			continue
-		}
-		if rel, ok := relInside(root, p); ok {
-			l.addRel(rel)
-		}
-	}
-}
-
-// has reports whether a worker touched rel: the file itself, a folder above it, or a glob that matches it.
-func (l *laneTouch) has(rel string) bool {
-	k := snapshot.Key(rel)
-	for _, t := range l.keys {
-		if k == t || strings.HasPrefix(k, t+"/") {
-			return true
-		}
-	}
-	for _, g := range l.globs {
-		if proof.Match(g, rel) {
-			return true
-		}
-	}
-	return false
-}
-
 // laneTouched collects what the workers of t's turns since the instruction, up to turn n, touched.
-func laneTouched(t *Task, n int) *laneTouch {
-	l := &laneTouch{}
-	root := claimRoot(t)
+func laneTouched(t *Task, n int) *workerWrites {
+	w := newWorkerWrites(t.Cwd, claimRoot(t), nil, nil)
 	for _, tu := range t.Turns[instructionStart(t, n):] {
 		if tu.N > n {
 			break
 		}
-		l.addEdited(turnFiles(t, tu, liveState{}))
+		w.addEdited(turnFiles(t, tu, liveState{}))
 		for _, c := range tu.Commands {
-			l.addCommand(root, t.Cwd, c)
+			w.addCommand(c)
 		}
 	}
-	return l
+	return w
 }
 
 // netChanged reports whether rel differs between the snapshot taken when the instruction's turn started and the
@@ -212,7 +120,7 @@ func (s *Service) laneOffFindings(t *Task, tu *Turn, changed, edited, commands [
 			}
 		}
 	}
-	touch := &laneTouch{}
+	touch := newWorkerWrites(t.Cwd, claimRoot(t), nil, nil)
 	if tu.N > 1 {
 		prev, _, _ := gateInput(t, tu.N-1)
 		if instructionStart(t, tu.N-1) == instructionStart(t, tu.N) {
@@ -223,8 +131,8 @@ func (s *Service) laneOffFindings(t *Task, tu *Turn, changed, edited, commands [
 	add(changed)
 	touch.addEdited(edited)
 	for _, c := range commands {
-		touch.addCommand(claimRoot(t), t.Cwd, c)
+		touch.addCommand(c)
 	}
 	files := s.netLane(t, tu.N, union, end)
-	return laneFindings(gate.LaneStep(t.Proof.Lane.Paths, files, laneMode, touch.has))
+	return laneFindings(gate.LaneStep(t.Proof.Lane.Paths, files, laneMode, touch.wrote, touch.unknown))
 }

@@ -108,15 +108,12 @@ func (s *Service) checkTurn(ctx context.Context, t *Task, tu *Turn, last *backen
 	editedKeys := map[string]bool{}
 	var editedAbs []string
 	for _, p := range abs {
-		if !filepath.IsAbs(p) {
-			p = filepath.Join(t.Cwd, p)
-		}
-		if slices.Contains(editedAbs, p) {
+		p, ok := commandPath(t.Cwd, p)
+		if !ok || slices.Contains(editedAbs, p) {
 			continue
 		}
 		editedAbs = append(editedAbs, p)
-		if rel, ok := relInside(root, p); ok {
-			rel = filepath.ToSlash(rel)
+		if rel, ok := repoRel(root, t.Cwd, p); ok {
 			if k := snapshot.Key(rel); !editedKeys[k] {
 				editedKeys[k] = true
 				c.edited = append(c.edited, rel)

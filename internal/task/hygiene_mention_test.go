@@ -180,6 +180,9 @@ func TestWorkerWrites(t *testing.T) {
 			t.Errorf("wrote(%q) = %v, want %v", rel, got, want)
 		}
 	}
+	if !slices.Equal(w.unknown, []string{"cp -r tpl ."}) {
+		t.Errorf("unknown = %q", w.unknown)
+	}
 }
 
 // A worker cut off before its report (a crash, a quota stop) names nothing: its new files are not unreported_file
