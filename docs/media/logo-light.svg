@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 372 96" width="372" height="96" role="img" aria-labelledby="title">
+  <title id="title">Seelegent</title>
+  <g fill="none" stroke="#1f2328" stroke-linecap="round" stroke-linejoin="round">
+    <path stroke-width="4" d="M30 48L68.2 26.4M30 48L67 48M30 48L68.2 69.6"/>
+    <circle cx="76" cy="22" r="7" stroke-width="4"/>
+    <circle cx="76" cy="48" r="7" stroke-width="4"/>
+    <circle cx="76" cy="74" r="7" stroke-width="4"/>
+    <path stroke-width="6" d="M125.66 31.25A10 8.5 0 1 0 117 44A10 8.5 0 1 1 108.34 56.75 M138 50H160A11 11 0 1 0 157.43 57.07 M171 50H193A11 11 0 1 0 190.43 57.07 M204 25V61 M215 50H237A11 11 0 1 0 234.43 57.07 M270 50A11 11 0 1 1 270 49.99M270 39V65A11 10 0 0 1 250.96 71.82 M281 50H303A11 11 0 1 0 300.43 57.07 M314 39V61M314 50A11 11 0 0 1 336 50V61 M353 28V55A6 6 0 0 0 359 61H362M347 39H363"/>
+  </g>
+  <circle cx="26" cy="48" r="12" fill="#1f2328"/>
+</svg>
