@@ -23,7 +23,8 @@ export interface MenuItem {
  * Action menu (WAI-ARIA menu button). The trigger slot receives `attrs` to bind on its button.
  * Keys: Enter / Space / ArrowDown open on the first item, ArrowUp on the last; ArrowUp/Down, Home/End move;
  * typing a letter jumps to the next item starting with it; Enter / Space choose; Esc or Tab close, Esc returns
- * focus to the trigger.
+ * focus to the trigger. When the trigger leaves the document (its row re-rendered) the menu closes and focus goes
+ * to this menu's new trigger, if it has one.
  */
 const props = withDefaults(
   defineProps<{
@@ -147,8 +148,18 @@ function typeahead(char: string) {
   }
 }
 
-function onPopoverClose(reason: 'escape' | 'outside') {
-  closeMenu(reason === 'escape')
+async function onPopoverClose(reason: 'escape' | 'outside' | 'detached') {
+  if (reason !== 'detached') {
+    closeMenu(reason === 'escape')
+    return
+  }
+  // The trigger left the document (its row re-rendered) while focus was in the menu. Hand focus to the trigger
+  // that replaced it, if this menu has one once the render settles; otherwise leave focus where it falls.
+  const hadFocus = !!document.activeElement?.closest(`[id="${id}"]`)
+  closeMenu(false)
+  await nextTick()
+  const trigger = triggerEl()
+  if (hadFocus && trigger?.isConnected) trigger.focus()
 }
 
 const triggerAttrs = computed(() => ({

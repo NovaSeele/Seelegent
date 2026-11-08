@@ -54,6 +54,10 @@ type Outcome struct {
 	DeniedActions []string `json:"deniedActions,omitempty"`
 	// Usage is the turn's token usage (camelCase JSON, see B12).
 	Usage event.Usage `json:"usage"`
+	// ThreadUsage is the conversation's usage total the CLI reported, for a CLI whose usage counts every earlier run
+	// of a resumed conversation (codex); Usage is then this run's part. The next run of the conversation starts from
+	// it.
+	ThreadUsage *event.Usage `json:"threadUsage,omitempty"`
 	// DurationMs is the duration the CLI reported.
 	DurationMs int64 `json:"durationMs,omitempty"`
 	// BackgroundWait is the CLI's line when Status is background_wait.

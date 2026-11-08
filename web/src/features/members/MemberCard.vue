@@ -9,6 +9,7 @@ import ProviderMark from '@/components/ui/ProviderMark.vue'
 import StatusPill from '@/components/ui/StatusPill.vue'
 import Switch from '@/components/ui/Switch.vue'
 import { useFormat } from '@/composables/useFormat'
+import { useProviderNames } from '@/composables/useProviderNames'
 
 import { RANK_TONE, trackFacts } from './memberModel'
 
@@ -27,6 +28,7 @@ const emit = defineEmits<{ edit: []; remove: []; toggle: [enabled: boolean] }>()
 
 const { t } = useI18n()
 const fmt = useFormat()
+const providerName = useProviderNames(() => [props.member.provider])
 
 /** The model or tier the member runs, after its backend (and provider) mark. */
 const runsModel = computed(() => {
@@ -61,7 +63,11 @@ const facts = computed(() => trackFacts(props.track))
       <div>
         <dt>{{ t('team.members.runsOn') }}</dt>
         <dd>
-          <ProviderMark :backend="member.backend" :provider="member.provider" size="sm" />
+          <ProviderMark
+            :backend="member.backend"
+            :provider-name="providerName(member.provider)"
+            size="sm"
+          />
           <template v-if="runsModel"> · {{ runsModel }}</template>
         </dd>
       </div>

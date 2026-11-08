@@ -74,9 +74,13 @@ describe('AppShell', () => {
   it('shows each rail entry with a tooltip carrying its name and shortcut', async () => {
     const { wrapper } = await open('/')
     const members = wrapper.get('a.rail__item[href="/members"]')
+    // jsdom lays nothing out; a tooltip whose anchor has no box stays closed (it would sit at 0,0), so give it one.
+    const anchor = members.element.closest<HTMLElement>('.tooltip-anchor')
+    if (anchor)
+      vi.spyOn(anchor, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 120, 48, 40))
     // The tooltip's hover delay runs on fake timers: no real sleep that a busy machine can outrun.
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
-    members.element.closest('.tooltip-anchor')?.dispatchEvent(new Event('pointerenter'))
+    anchor?.dispatchEvent(new Event('pointerenter'))
     vi.advanceTimersByTime(1000)
     vi.useRealTimers()
     await flushPromises()

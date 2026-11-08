@@ -212,7 +212,7 @@ func runDaemon(ctx context.Context, info buildinfo.Info, f daemonFlags, stderr i
 	}
 	var debug *pprofServer
 	if f.pprofAddr != "" {
-		if debug, err = startPprof(ctx, f.pprofAddr, log); err != nil {
+		if debug, err = startPprof(ctx, f.pprofAddr, log, a); err != nil {
 			_ = closeApp()
 			return failed(err)
 		}

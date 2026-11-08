@@ -42,8 +42,8 @@ func rootKey(root string) string {
 }
 
 // repoTasks returns the tasks of the repository at root that are active or changed within the contention window
-// (contentionWindowHours). The answer is reused for overlapTTL; the root of a task is the one recorded when its
-// first turn started, never a cached guess from its folder (bugs.md D14).
+// (contentionWindowHours). The answer is reused for overlapTTL and then dropped (sweepOverlaps); the root of a task
+// is the one recorded when its first turn started, never a cached guess from its folder (bugs.md D14).
 func (s *Service) repoTasks(ctx context.Context, root string) ([]*Task, error) {
 	key := rootKey(root)
 	now := s.clk.Now()
@@ -77,14 +77,50 @@ func (s *Service) repoTasks(ctx context.Context, root string) ([]*Task, error) {
 		}
 	}
 	s.overlapMu.Lock()
-	for k, old := range s.overlaps {
-		if now.Sub(old.at) >= overlapTTL {
-			delete(s.overlaps, k)
+	s.overlaps[key] = overlapCache{at: now, root: root, tasks: out}
+	start := !s.overlapSweep
+	s.overlapSweep = true
+	s.overlapMu.Unlock()
+	if start && !s.spawn("overlap sweep", "", s.sweepOverlaps) {
+		s.overlapMu.Lock()
+		s.overlapSweep = false
+		s.overlapMu.Unlock()
+	}
+	return out, nil
+}
+
+// sweepOverlaps drops each cached contention view when it expires, so an idle daemon does not keep the last
+// repository's tasks with their turns. One sweeper runs while the cache holds anything; it waits for the next
+// expiry and ends once the cache is empty.
+func (s *Service) sweepOverlaps() {
+	for {
+		s.overlapMu.Lock()
+		now := s.clk.Now()
+		var next time.Duration
+		for k, c := range s.overlaps {
+			left := overlapTTL - now.Sub(c.at)
+			if left <= 0 {
+				delete(s.overlaps, k)
+				continue
+			}
+			if next == 0 || left < next {
+				next = left
+			}
+		}
+		if len(s.overlaps) == 0 {
+			s.overlapSweep = false
+			s.overlapMu.Unlock()
+			return
+		}
+		s.overlapMu.Unlock()
+		t := s.clk.NewTimer(next)
+		select {
+		case <-s.root.Done():
+			t.Stop()
+			return
+		case <-t.C():
 		}
 	}
-	s.overlaps[key] = overlapCache{at: now, root: root, tasks: out}
-	s.overlapMu.Unlock()
-	return out, nil
 }
 
 // forgetOverlaps drops the cached contention views (a turn ended: its files changed).

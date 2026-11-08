@@ -81,6 +81,10 @@ func (s *Service) follow(r *run, h *launch.Handle, b backend.Backend, m attemptM
 	if m.patterns {
 		parser.MaskPatterns(logx.NewRedactor().String)
 	}
+	tp, _ := parser.(threadUsageParser)
+	if tp != nil {
+		tp.SetUsageBaseline(s.usageBaseline(id, turn, n))
+	}
 	f := s.newFollower(r, parser, id, turn, n, committed)
 	ctx, cancel := context.WithCancel(s.root)
 	defer cancel()
@@ -128,7 +132,61 @@ func (s *Service) follow(r *run, h *launch.Handle, b backend.Backend, m attemptM
 	for _, ev := range finish {
 		f.coll.Add(ev)
 	}
-	return attemptResult{outcome: f.coll.Outcome(exit), exit: exit, finish: finish}, nil
+	out := f.coll.Outcome(exit)
+	if tp != nil {
+		if u, ok := tp.ThreadUsage(); ok {
+			out.ThreadUsage = &u
+		}
+	}
+	return attemptResult{outcome: out, exit: exit, finish: finish}, nil
+}
+
+// threadUsageParser is a parser whose CLI reports usage as the conversation's running total (codex: the
+// turn.completed of a resumed thread counts every earlier run of it again). It gets the total before the attempt,
+// reports the attempt's part, and returns the new total, which the attempt's outcome keeps for the next one.
+type threadUsageParser interface {
+	SetUsageBaseline(event.Usage)
+	ThreadUsage() (event.Usage, bool)
+}
+
+// usageBaseline is the conversation's usage total before attempt n of turn (usageBaselineOf). A task that cannot be
+// read gives zero, so the attempt counts the whole total: too much rather than nothing.
+func (s *Service) usageBaseline(id string, turn, n int) event.Usage {
+	t, err := s.repo.Get(s.background(), id)
+	if err != nil {
+		s.log.Warn("task: read the usage before the attempt", "task", id, "err", err)
+		return event.Usage{}
+	}
+	return usageBaselineOf(t, turn, n)
+}
+
+// usageBaselineOf is the usage total of the conversation attempt n of turn continues, as the latest earlier attempt
+// in that conversation reported it; zero for an attempt that starts a new conversation. An attempt with usage but
+// no total ended before the outcome kept the total: its usage was the CLI's total then.
+func usageBaselineOf(t *Task, turn, n int) event.Usage {
+	tu := t.TurnN(turn)
+	if tu == nil || n < 1 || n > len(tu.Attempts) {
+		return event.Usage{}
+	}
+	cur := tu.Attempts[n-1]
+	if !cur.Continuing || cur.ConversationID == "" {
+		return event.Usage{}
+	}
+	var base event.Usage
+	for _, x := range t.Turns {
+		for _, a := range x.Attempts {
+			if x.N > turn || (x.N == turn && a.N >= n) || a.ConversationID != cur.ConversationID || a.Outcome == nil {
+				continue
+			}
+			switch {
+			case a.Outcome.ThreadUsage != nil:
+				base = *a.Outcome.ThreadUsage
+			case a.Usage != nil:
+				base = *a.Usage
+			}
+		}
+	}
+	return base
 }
 
 // activity is what the worker does now, as the task's active step shows it: its step label and open tool.

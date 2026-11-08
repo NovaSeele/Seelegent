@@ -12,6 +12,7 @@ import SegmentedControl from '@/components/ui/SegmentedControl.vue'
 import Select from '@/components/ui/Select.vue'
 import TextArea from '@/components/ui/TextArea.vue'
 import TextField from '@/components/ui/TextField.vue'
+import { useProviderNames } from '@/composables/useProviderNames'
 import { useAccountsStore } from '@/stores/accounts'
 import { useConnectionStore } from '@/stores/connection'
 import {
@@ -48,6 +49,7 @@ const roles = useRolesStore()
 const accounts = useAccountsStore()
 const connection = useConnectionStore()
 const toast = useToastStore()
+const providerName = useProviderNames(() => accounts.accounts.map((a) => a.provider))
 
 const draft = ref(draftOf(undefined))
 const idTouched = ref(false)
@@ -234,7 +236,11 @@ async function save() {
             @update:model-value="toggleAccount(account.id, $event)"
           >
             <template #description>
-              <ProviderMark :backend="account.backend" :provider="account.provider" size="sm" />
+              <ProviderMark
+                :backend="account.backend"
+                :provider-name="providerName(account.provider)"
+                size="sm"
+              />
             </template>
           </Checkbox>
         </div>
