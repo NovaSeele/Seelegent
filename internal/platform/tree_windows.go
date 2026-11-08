@@ -24,6 +24,9 @@ var (
 	modkernel32          = windows.NewLazySystemDLL("kernel32.dll")
 	procCreateJobObjectW = modkernel32.NewProc("CreateJobObjectW")
 	procOpenJobObjectW   = modkernel32.NewProc("OpenJobObjectW")
+	// NtResumeProcess is not documented, but it has been part of ntdll since Windows XP with the same signature
+	// (NTSTATUS NtResumeProcess(HANDLE)), and debuggers and Process Explorer rely on it.
+	procNtResumeProcess = windows.NewLazySystemDLL("ntdll.dll").NewProc("NtResumeProcess")
 )
 
 // Job Object pieces that golang.org/x/sys/windows does not define.
@@ -298,9 +301,17 @@ func (t *treeOS) exitCode(cmd *exec.Cmd) int {
 	return cmd.ProcessState.ExitCode()
 }
 
-// assignAndResume puts the suspended process pid into job and resumes its threads.
+// assignAndResume puts the suspended process pid into job and resumes it.
+//
+// The root is created suspended (its only thread does not run yet) so that it joins the job before it can start
+// anything. It is resumed through the process handle with NtResumeProcess. syscall.StartProcess closes the thread
+// handle of the new process, and finding the thread again through a toolhelp snapshot walks every thread of the
+// machine: about 65 ms with 10k threads, on every git, gh, quota, hook and gate command (M19 bench). Creating the
+// process inside the job (PROC_THREAD_ATTRIBUTE_JOB_LIST) would need no suspension, but exec.Cmd cannot pass
+// that attribute.
 func assignAndResume(job windows.Handle, pid uint32) error {
-	h, err := windows.OpenProcess(windows.PROCESS_SET_QUOTA|windows.PROCESS_TERMINATE, false, pid)
+	h, err := windows.OpenProcess(windows.PROCESS_SET_QUOTA|windows.PROCESS_TERMINATE|windows.PROCESS_SUSPEND_RESUME,
+		false, pid)
 	if err != nil {
 		return fmt.Errorf("open process %d: %w", pid, err)
 	}
@@ -308,39 +319,17 @@ func assignAndResume(job windows.Handle, pid uint32) error {
 	if err := windows.AssignProcessToJobObject(job, h); err != nil {
 		return fmt.Errorf("assign process %d to job: %w", pid, err)
 	}
-	return resumeThreads(pid)
+	return resumeProcess(h, pid)
 }
 
-// resumeThreads resumes every thread of process pid (a process created suspended has exactly one).
-func resumeThreads(pid uint32) error {
-	snap, err := windows.CreateToolhelp32Snapshot(windows.TH32CS_SNAPTHREAD, 0)
-	if err != nil {
+// resumeProcess resumes every thread of the suspended process h (one, for a process created suspended).
+func resumeProcess(h windows.Handle, pid uint32) error {
+	if err := procNtResumeProcess.Find(); err != nil {
 		return fmt.Errorf("resume process %d: %w", pid, err)
 	}
-	defer func() { _ = windows.CloseHandle(snap) }()
-	var entry windows.ThreadEntry32
-	entry.Size = uint32(unsafe.Sizeof(entry))
-	resumed := 0
-	for err = windows.Thread32First(snap, &entry); err == nil; err = windows.Thread32Next(snap, &entry) {
-		if entry.OwnerProcessID != pid {
-			continue
-		}
-		th, err := windows.OpenThread(windows.THREAD_SUSPEND_RESUME, false, entry.ThreadID)
-		if err != nil {
-			return fmt.Errorf("resume process %d: open thread: %w", pid, err)
-		}
-		_, rerr := windows.ResumeThread(th)
-		_ = windows.CloseHandle(th)
-		if rerr != nil {
-			return fmt.Errorf("resume process %d: %w", pid, rerr)
-		}
-		resumed++
-	}
-	if !errors.Is(err, windows.ERROR_NO_MORE_FILES) {
-		return fmt.Errorf("resume process %d: list threads: %w", pid, err)
-	}
-	if resumed == 0 {
-		return fmt.Errorf("resume process %d: no thread found", pid)
+	r, _, _ := procNtResumeProcess.Call(uintptr(h))
+	if status := windows.NTStatus(r); status != windows.STATUS_SUCCESS {
+		return fmt.Errorf("resume process %d: %w", pid, status)
 	}
 	return nil
 }
