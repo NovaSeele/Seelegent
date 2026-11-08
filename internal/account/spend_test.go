@@ -186,11 +186,7 @@ func TestBudgetThresholds(t *testing.T) {
 	if !got.BudgetStopped() || !got.BudgetStop {
 		t.Fatalf("not stopped at the budget: %+v", got)
 	}
-	err := ProviderBudgetReached([]Account{got}, "anthropic")
-	var be *BudgetReachedError
-	if !errors.As(err, &be) || err.Error() != "anthropic keys reached their budget ($0.10); raise it in Accounts" {
-		t.Fatalf("ProviderBudgetReached = %v", err)
-	}
+	var err error
 	stop := false
 	if got, err = f.m.Repo().Update(ctx, a.ID, Patch{BudgetStop: &stop}); err != nil || got.BudgetStopped() {
 		t.Fatalf("stop off: %+v, %v", got, err)
@@ -198,7 +194,7 @@ func TestBudgetThresholds(t *testing.T) {
 	stop = true
 	raised := 200.0
 	if got, err = f.m.Repo().Update(ctx, a.ID, Patch{BudgetStop: &stop, BudgetUSD: &raised}); err != nil ||
-		got.BudgetStopped() || ProviderBudgetReached([]Account{got}, "anthropic") != nil {
+		got.BudgetStopped() {
 		t.Fatalf("raised: %+v, %v", got, err)
 	}
 	zero := 0.0

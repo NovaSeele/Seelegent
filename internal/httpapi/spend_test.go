@@ -63,6 +63,26 @@ func TestSpendAndBudget(t *testing.T) {
 	e.wantError(e.req(http.MethodPatch, "/api/v1/accounts/"+created.ID, map[string]any{"budgetUsd": -1}, nil),
 		http.StatusBadRequest, api.CodeInvalidArgument, "budgetUsd")
 
+	// No credit left (G3): the same kind of hold, by reason and never as a date; delegate names the key; an edit of
+	// the account (switched off and on after a top-up) lifts it.
+	if err := e.a.Pool.MarkNoCredit(ctx, created.ID, "Credit balance is too low"); err != nil {
+		t.Fatal(err)
+	}
+	if a = account(); !a.Resting || a.RestReason != api.RestCredits || a.RestingUntil != "" {
+		t.Fatalf("no credit: %+v", a)
+	}
+	got = e.wantError(e.post("/api/v1/tasks", map[string]any{"prompt": "hi", "cwd": e.cwd, "backend": "claude",
+		"provider": "anthropic", "model": "claude-haiku-5-5"}), http.StatusBadRequest, api.CodeInvalidArgument, "")
+	if got.Message != "the anthropic key has no credit left; top up or change the key" || got.Details["reason"] != "credits" {
+		t.Fatalf("delegate without credit = %+v", got)
+	}
+	time.Sleep(2 * time.Millisecond) // the edit must come after the mark
+	e.must(e.req(http.MethodPatch, "/api/v1/accounts/"+created.ID, map[string]any{"enabled": true}, nil),
+		http.StatusOK)
+	if a = account(); a.Resting || a.RestReason != "" {
+		t.Fatalf("after an edit: %+v", a)
+	}
+
 	// A tokens-only provider: the budget can be set, its state is unknown, and the cost does not count.
 	var ds api.AccountCreated
 	e.must(e.post("/api/v1/accounts", map[string]any{"newProvider": map[string]any{"preset": "deepseek"},

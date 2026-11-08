@@ -62,9 +62,11 @@ type Account struct {
 	// Resting is true during a cooldown or while a quota window is at or below minRemaining.
 	Resting      bool   `json:"resting"`
 	RestingUntil string `json:"restingUntil,omitempty"`
-	// RestReason is budget_reached while an API-key account rests on its budget (no restingUntil: it rests until
-	// the budget is raised or the key replaced).
-	RestReason string `json:"restReason,omitempty" ts:"'budget_reached'"`
+	// RestReason says why the account is held until the user acts, never as a date (no restingUntil then):
+	// credits (a run reported that its credit or billing ran out; a new key, a passing key test or an edit such
+	// as switching it off and on lifts it) or budget_reached (an API-key account at its budget with budgetStop on;
+	// raising the budget, switching the stop off or a new key lifts it).
+	RestReason string `json:"restReason,omitempty" ts:"'credits' | 'budget_reached'"`
 	SigningIn  bool   `json:"signingIn"`
 	// Email is shown in the local UI only and never logged.
 	Email     string        `json:"email,omitempty"`
@@ -105,7 +107,12 @@ const (
 	BudgetUnknown = "unknown"
 	// RestBudgetReached is Account.restReason while the account rests on its budget.
 	RestBudgetReached = "budget_reached"
+	// RestCredits is Account.restReason while the account's credit or billing has run out.
+	RestCredits = "credits"
 )
+
+// RestReasons lists the values of Account.restReason.
+func RestReasons() []string { return []string{RestCredits, RestBudgetReached} }
 
 // BudgetStates lists the budget states.
 func BudgetStates() []string { return []string{BudgetOK, BudgetWarn, BudgetReached, BudgetUnknown} }

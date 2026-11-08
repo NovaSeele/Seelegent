@@ -41,7 +41,8 @@ type slimAccount struct {
 	// TestResult is an API-key account's key test state (not_tested, ok, refused, ...).
 	TestResult string `json:"testResult,omitempty"`
 	// Spend of an API-key account on its current key: spentUsd (only from a trusted spendSource, "cli"), tokens,
-	// the budget and its state (ok, warn, reached, unknown), and restReason budget_reached while it rests on it.
+	// the budget and its state (ok, warn, reached, unknown). RestReason (any account) is why it is held until the
+	// user acts: credits or budget_reached (no restingUntil then).
 	SpentUSD    *float64 `json:"spentUsd,omitempty"`
 	SpentTokens int64    `json:"spentTokens,omitempty"`
 	SpendSource string   `json:"spendSource,omitempty"`
@@ -139,8 +140,9 @@ func slimAccountOf(a api.Account) slimAccount {
 			out.SpentUSD = &spent
 		}
 		out.SpentTokens, out.SpendSource, out.BudgetUSD = a.SpentTokens, a.SpendSource, a.BudgetUSD
-		out.BudgetState, out.RestReason = a.BudgetState, a.RestReason
+		out.BudgetState = a.BudgetState
 	}
+	out.RestReason = a.RestReason
 	if a.Provider != "" {
 		out.Provider = &a.Provider
 	}

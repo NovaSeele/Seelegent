@@ -37,6 +37,9 @@ const (
 	// ReasonResourcesWait: the task has waited ResourcesWaitAfter for free memory (state info, who user; not
 	// NeedsLead: the lead cannot act on it). Params: Minutes, AvailableMB, NeedMB.
 	ReasonResourcesWait = "resources_wait"
+	// ReasonBudgetReached: the task waits because every account that could run it rests on its budget (who user:
+	// raise a budget, switch its stop off or change a key). Params: Account, BudgetUSD, Count.
+	ReasonBudgetReached = "budget_reached"
 )
 
 // ResourcesWaitAfter is how long a task waits for resources before ReasonResourcesWait is raised.
@@ -226,6 +229,14 @@ func computeAttention(t *Task, live liveState, acc accountHealth, now time.Time,
 		}
 		if t.Waiting == string(pool.ReasonNoAccount) {
 			return noAccounts(t.WaitDetail)
+		}
+		if t.Waiting == api.WaitingBudget {
+			var params *api.AttentionParams
+			if len(t.WaitBudget) > 0 {
+				params = &api.AttentionParams{Account: t.WaitBudget[0].AccountID,
+					BudgetUSD: t.WaitBudget[0].BudgetUSD, Count: len(t.WaitBudget)}
+			}
+			return att(api.AttentionBlocked, ReasonBudgetReached, WhoUser, t.WaitDetail, params)
 		}
 		return nil
 	case StatusDone:

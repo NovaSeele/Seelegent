@@ -143,6 +143,10 @@ const (
 	// WaitingBusy: every account that could run it and is not resting has no free slot (maxConcurrentPerAccount,
 	// or the maxConcurrentWorkers cap).
 	WaitingBusy = "busy"
+	// WaitingBudget: every account that could run it rests on its budget; no time ends the wait, the user raises
+	// a budget, switches its stop off or changes a key. Detail names them ("acc9 reached its $200 budget: raise
+	// the budget or change the key").
+	WaitingBudget = "budget_reached"
 )
 
 // WaitingQuotaData is the data of a waiting_quota event. Reason says what the task waits for; events written
@@ -152,7 +156,7 @@ const (
 // physical memory or of commit, whichever holds the task).
 type WaitingQuotaData struct {
 	Until       string `json:"until,omitempty"`
-	Reason      string `json:"reason,omitempty" ts:"'memory' | 'no_account' | 'resting' | 'busy'"`
+	Reason      string `json:"reason,omitempty" ts:"'memory' | 'no_account' | 'resting' | 'busy' | 'budget_reached'"`
 	Detail      string `json:"detail,omitempty"`
 	AvailableMB int64  `json:"availableMB,omitempty"`
 	NeedMB      int64  `json:"needMB,omitempty"`

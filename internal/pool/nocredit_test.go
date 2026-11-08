@@ -41,9 +41,9 @@ func TestNoCreditRestsUntilTheUserActs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cd := states[0].Cooldowns; len(cd) != 1 || cd[0].Group != "" || cd[0].Reason != "Credit balance is too low" ||
-		!cd[0].Passive {
-		t.Errorf("cooldowns = %+v", cd)
+	// A rest until the user acts: a reason, no cooldown with a date.
+	if st := states[0]; len(st.Cooldowns) != 0 || st.RestReason != RestCredits {
+		t.Errorf("state = %+v", st)
 	}
 
 	// A second key of the provider takes the work.

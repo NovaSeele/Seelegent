@@ -45,9 +45,10 @@ func (v *accountView) account(st *pool.AccountState) api.Account {
 			source = p.SpendSource()
 		}
 		spendDTO(&out, &a, source)
-		if a.BudgetStopped() {
-			out.Resting, out.RestReason = true, api.RestBudgetReached
-		}
+	}
+	if st.RestReason != "" {
+		// Rests until the user acts (pool.RestCredits, pool.RestBudget): a reason, never a date.
+		out.Resting, out.RestingUntil, out.RestReason = true, "", st.RestReason
 	}
 	return out
 }

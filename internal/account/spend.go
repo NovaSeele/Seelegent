@@ -9,7 +9,6 @@ import (
 	"math"
 	"net"
 	"net/url"
-	"slices"
 	"strings"
 	"time"
 
@@ -392,52 +391,4 @@ func refreshProviderBudgetsTx(ctx context.Context, tx *sql.Tx, providerID string
 		}
 	}
 	return nil
-}
-
-// BudgetReachedError says that every usable key of a provider rests on its budget: a task on the provider would
-// wait until the user raises a budget or replaces a key.
-type BudgetReachedError struct {
-	Provider string
-	// Budgets are the keys' budgets, each once, lowest first.
-	Budgets []float64
-}
-
-// Error is the message the lead reads: "anthropic keys reached their budget ($200); raise it in Accounts".
-func (e *BudgetReachedError) Error() string {
-	amounts := make([]string, 0, len(e.Budgets))
-	for _, b := range e.Budgets {
-		amounts = append(amounts, FormatUSD(b))
-	}
-	return fmt.Sprintf("%s keys reached their budget (%s); raise it in Accounts", e.Provider,
-		strings.Join(amounts, ", "))
-}
-
-// APIDetails are the error's details for the API (reason budget_reached).
-func (e *BudgetReachedError) APIDetails() map[string]any {
-	return map[string]any{"reason": "budget_reached", "provider": e.Provider, "budgets": e.Budgets}
-}
-
-// ProviderBudgetReached returns a *BudgetReachedError when the provider has enabled API-key accounts with a key and
-// every one of them rests on its budget (BudgetStopped); nil otherwise.
-func ProviderBudgetReached(accounts []Account, providerID string) error {
-	e := &BudgetReachedError{Provider: providerID}
-	usable := 0
-	for i := range accounts {
-		a := &accounts[i]
-		if a.Kind != KindAPIKey || a.Provider != providerID || !a.Enabled || a.KeyHint == "" {
-			continue
-		}
-		usable++
-		if !a.BudgetStopped() {
-			return nil
-		}
-		if !slices.Contains(e.Budgets, *a.BudgetUSD) {
-			e.Budgets = append(e.Budgets, *a.BudgetUSD)
-		}
-	}
-	if usable == 0 {
-		return nil
-	}
-	slices.Sort(e.Budgets)
-	return e
 }

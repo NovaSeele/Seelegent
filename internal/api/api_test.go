@@ -75,7 +75,7 @@ func TestNoticeAndTestUnions(t *testing.T) {
 		{reflect.TypeFor[KeyTestResult](), "Reason", TestReasons()},
 		{reflect.TypeFor[Account](), "TestResult", append([]string{TestNotTested}, TestReasons()...)},
 		{reflect.TypeFor[Account](), "BudgetState", BudgetStates()},
-		{reflect.TypeFor[Account](), "RestReason", []string{RestBudgetReached}},
+		{reflect.TypeFor[Account](), "RestReason", RestReasons()},
 	}
 	for _, c := range cases {
 		f, ok := c.typ.FieldByName(c.field)

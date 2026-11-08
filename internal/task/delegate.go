@@ -15,6 +15,7 @@ import (
 	"github.com/NovaSeele/Seelegent/internal/backend"
 	"github.com/NovaSeele/Seelegent/internal/config"
 	"github.com/NovaSeele/Seelegent/internal/fsutil"
+	"github.com/NovaSeele/Seelegent/internal/pool"
 	"github.com/NovaSeele/Seelegent/internal/role"
 )
 
@@ -119,7 +120,7 @@ func (s *Service) DelegateWith(ctx context.Context, req api.DelegateRequest, sp 
 		if p.Backend != backendName {
 			return api.TaskSummary{}, invalidf("provider %s serves %s, not %s", p.ID, p.Backend, backendName)
 		}
-		if err := s.providerBudget(ctx, p.ID); err != nil {
+		if err := s.providerResting(ctx, p.ID); err != nil {
 			return api.TaskSummary{}, err
 		}
 		prov = &p
@@ -466,7 +467,7 @@ func (s *Service) Answer(ctx context.Context, id string, req api.AnswerRequest) 
 func (s *Service) addTurn(ctx context.Context, t *Task, by, msg string, req api.FollowupRequest) (NewEvent, error) {
 	model, tier, effort := t.Model, t.Tier, t.Effort
 	if t.Provider != "" {
-		if err := s.providerBudget(ctx, t.Provider); err != nil {
+		if err := s.providerResting(ctx, t.Provider); err != nil {
 			return NewEvent{}, err
 		}
 	}
@@ -509,17 +510,14 @@ func (s *Service) addTurn(ctx context.Context, t *Task, by, msg string, req api.
 		Data: api.LeadMessageData{Message: msg, By: by, Model: model, Effort: effort, Tier: tier}}, nil
 }
 
-// providerBudget refuses work on a provider whose every usable key rests on its budget (account.BudgetReachedError,
-// details.reason budget_reached), instead of letting the task wait until the user raises a budget.
-func (s *Service) providerBudget(ctx context.Context, providerID string) error {
-	accounts, err := s.o.Accounts.List(ctx)
-	if err != nil {
-		return err
-	}
-	if err := account.ProviderBudgetReached(accounts, providerID); err != nil {
+// providerResting refuses work on a provider whose every usable key is held until the user acts (pool.ProviderRestError,
+// details.reason credits or budget_reached), instead of letting the task fail or wait for the user.
+func (s *Service) providerResting(ctx context.Context, providerID string) error {
+	err := s.o.Pool.ProviderResting(ctx, providerID)
+	if he := (*pool.ProviderRestError)(nil); errors.As(err, &he) {
 		return plainInvalid{err}
 	}
-	return nil
+	return err
 }
 
 // plainInvalid is a refusal that matches ErrInvalid but reads as its cause alone, for messages written for the

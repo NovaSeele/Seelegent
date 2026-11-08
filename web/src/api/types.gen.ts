@@ -69,10 +69,12 @@ export interface Account {
   resting: boolean
   restingUntil?: string
   /**
-   * RestReason is budget_reached while an API-key account rests on its budget (no restingUntil: it rests until
-   * the budget is raised or the key replaced).
+   * RestReason says why the account is held until the user acts, never as a date (no restingUntil then):
+   * credits (a run reported that its credit or billing ran out; a new key, a passing key test or an edit such
+   * as switching it off and on lifts it) or budget_reached (an API-key account at its budget with budgetStop on;
+   * raising the budget, switching the stop off or a new key lifts it).
    */
-  restReason?: 'budget_reached'
+  restReason?: 'credits' | 'budget_reached'
   signingIn: boolean
   /** Email is shown in the local UI only and never logged. */
   email?: string
@@ -675,7 +677,7 @@ export interface AccountFailureData {
  */
 export interface WaitingQuotaData {
   until?: string
-  reason?: 'memory' | 'no_account' | 'resting' | 'busy'
+  reason?: 'memory' | 'no_account' | 'resting' | 'busy' | 'budget_reached'
   detail?: string
   availableMB?: number
   needMB?: number
@@ -2760,10 +2762,11 @@ export interface TaskSummary {
    * Waiting says why a waiting_quota task waits: WaitingBusy (every account that could run it has no free
    * slot), WaitingResting (they rest; WaitingUntil is when one is back), WaitingNoAccount (none can run it), or
    * WaitingMemory while free memory or free commit is below minFreeMemoryMB / minFreeCommitMB (that wait never
-   * raises an attention flag: the lead cannot act on it). Absent for other statuses, and from older daemons,
-   * which reported only the memory wait.
+   * raises an attention flag: the lead cannot act on it), or WaitingBudget (every account rests on its budget;
+   * raises a budget_reached flag for the user). Absent for other statuses, and from older daemons, which reported
+   * only the memory wait.
    */
-  waiting?: 'memory' | 'no_account' | 'resting' | 'busy'
+  waiting?: 'memory' | 'no_account' | 'resting' | 'busy' | 'budget_reached'
   /** WaitDetail is the daemon's English explanation of Waiting, for example "acc6: 2 of 2 running" for busy. */
   waitDetail?: string
   /** NeedsSince is since when the task waits for the lead or the user. */
@@ -2843,7 +2846,7 @@ export interface Attention {
  * AttentionParams are the values an attention flag's text is made of. Only the fields of the reason are set:
  * stalled (Kind, Minutes, Tool, Command), looping (Kind, Count, Tool, Steps), no_accounts and auth (Backend),
  * deps_blocked (Kind, Task, Title), no_response (Denied), hygiene and work_at_risk (Count), question (Options),
- * resources_wait (Minutes, AvailableMB, NeedMB).
+ * resources_wait (Minutes, AvailableMB, NeedMB), budget_reached (Account, BudgetUSD, Count: how many accounts).
  */
 export interface AttentionParams {
   kind?:
@@ -2887,6 +2890,9 @@ export interface AttentionParams {
    */
   availableMB?: number
   needMB?: number
+  /** Account and BudgetUSD name the first account at its budget and that budget (budget_reached). */
+  account?: string
+  budgetUsd?: number
 }
 
 /** Review is the lead's verdict on a task. */

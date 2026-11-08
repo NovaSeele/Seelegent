@@ -92,8 +92,11 @@ in the daemon.
 
 - `TaskSummary.waiting` (an addition) says why a `waiting_quota` task waits: `busy` (every account that could run it
   has no free slot: `maxConcurrentPerAccount`, or the `maxConcurrentWorkers` cap), `resting` (`waitingUntil` is when
-  one is back), `no_account`, or `memory`; `waitDetail` is the daemon's English line for it (for `busy` the full
-  accounts, `acc6: 2 of 2 running`). The `waiting_quota` event carries the same as `reason` and `detail`. Both are
+  one is back), `budget_reached` (every account that could run it rests on its budget; no `waitingUntil`, the
+  task raises a `budget_reached` attention flag for the user with `params.account`, `params.budgetUsd` and
+  `params.count`, and wakes when a budget is raised, its stop switched off or a key changed), `no_account`, or
+  `memory`; `waitDetail` is the daemon's English line for it (for `busy` the full accounts, `acc6: 2 of 2 running`;
+  for `budget_reached` "acc9 reached its $200 budget: raise the budget or change the key"). The `waiting_quota` event carries the same as `reason` and `detail`. Both are
   absent for other statuses; events and daemons from before this addition carry only `memory` (an account wait
   had no reason), which the dashboard reads as waiting for quota. The lead's report (`TaskReport.waiting`) still
   names only the memory wait; `TaskReport.wait_detail` carries `waitDetail` while the task waits. A task without
@@ -253,9 +256,13 @@ in the daemon.
   `warn` (80%), `reached` or `unknown` (a budget on a source without cost: never enforced). A reached budget with
   `budgetStop` rests the account in the pool (`resting: true`, `restReason: "budget_reached"`, no `restingUntil`)
   until the budget is raised, `budgetStop` is turned off or the key replaced; it is not an error. Each rise to warn
-  or reached is logged once and wakes the pool. `POST /tasks` and followups on a provider whose every usable key
-  rests on its budget are `400 invalid_argument`, `details.reason: "budget_reached"`: "anthropic keys reached their
-  budget ($200); raise it in Accounts". Migration 0013 back-fills the totals from the attempts still stored since
+  or reached is logged once and wakes the pool. An account whose credit or billing ran out (a run ended with class
+  `credits`) is held the same way, by reason and never as a date: `resting: true`, `restReason: "credits"`, no
+  `restingUntil`, until a new key is stored, a key test passes (`testResult: ok` after the mark) or the account is
+  edited (switched off and on after a top-up); spend updates never count as an edit. One pool predicate decides both
+  holds. `POST /tasks` and followups on a provider whose every usable key is held are `400 invalid_argument`:
+  `details.reason: "budget_reached"`, "anthropic keys reached their budget ($200); raise it in Accounts", or
+  `details.reason: "credits"`, "the anthropic key has no credit left; top up or change the key". Migration 0013 back-fills the totals from the attempts still stored since
   the key was set. The task report adds `turn_cost_usd` for a task on a `cli` provider.
 - `POST /automations/{id}/confirm-token` takes `{revision}`, the `Automation.revision` the dashboard shows, and
   answers `409 bad_state` when the automation changed since (`400` without it), so a token enables exactly what

@@ -54,6 +54,7 @@ type Pool interface {
 	MarkAuthFailed(ctx context.Context, accountID, message string) error
 	MarkSucceeded(ctx context.Context, accountID string, started time.Time) error
 	MarkNoCredit(ctx context.Context, accountID, message string) error
+	ProviderResting(ctx context.Context, providerID string) error
 	Changed() <-chan struct{}
 }
 
