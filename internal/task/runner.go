@@ -732,12 +732,12 @@ func (s *Service) finishAttempt(r *run, id string, turn, n int, accountID, model
 		}
 		switch {
 		case status == AttemptCancelled || t.CancelRequested || t.Manual:
-			evs = append(evs, s.endTurn(t, tu, TurnCancelled, o))
+			evs = append(evs, s.endTurnChecked(t, tu, TurnCancelled, o, check))
 			if !t.Manual {
 				t.Status, t.CancelRequested = StatusCancelled, false
 			}
 		case status == AttemptOK:
-			evs = append(evs, s.endTurn(t, tu, TurnOK, o))
+			evs = append(evs, s.endTurnChecked(t, tu, TurnOK, o, check))
 			t.Status, t.Error = StatusDone, ""
 			if tu.Handback {
 				tu.HandbackText = o.Response
@@ -748,7 +748,7 @@ func (s *Service) finishAttempt(r *run, id string, turn, n int, accountID, model
 			tu.BackgroundContinues++
 			more = true
 		case status == AttemptBackgroundWait:
-			evs = append(evs, s.endTurn(t, tu, TurnOK, o))
+			evs = append(evs, s.endTurnChecked(t, tu, TurnOK, o, check))
 			t.Status, t.Error = StatusDone, ""
 		case status == AttemptQuota || status == AttemptAuth:
 			more = true
@@ -766,13 +766,13 @@ func (s *Service) finishAttempt(r *run, id string, turn, n int, accountID, model
 			}
 			more = true
 		default:
-			evs = append(evs, s.endTurn(t, tu, TurnFailed, o))
+			evs = append(evs, s.endTurnChecked(t, tu, TurnFailed, o, check))
 			t.Status, t.Error = StatusFailed, errText
 		}
 		if more && len(tu.Attempts) >= maxAttempts {
 			more, retry = false, 0
 			msg := fmt.Sprintf("gave up after %d attempts: %s", len(tu.Attempts), errText)
-			evs = append(evs, s.endTurn(t, tu, TurnFailed, o))
+			evs = append(evs, s.endTurnChecked(t, tu, TurnFailed, o, check))
 			t.Status, t.Error = StatusFailed, msg
 		}
 		if tu.Status != TurnRunning {
@@ -812,9 +812,19 @@ func (s *Service) finishAttempt(r *run, id string, turn, n int, accountID, model
 
 // endTurn closes a turn with the outcome of its last attempt and returns its turn_end event.
 func (s *Service) endTurn(t *Task, tu *Turn, status string, o backend.Outcome) NewEvent {
+	return s.endTurnChecked(t, tu, status, o, nil)
+}
+
+// endTurnChecked is endTurn with the turn's post-turn checks (nil when they did not run): the turn's Files then
+// come from its snapshots (checkedFiles), so the turn_end event, the report and the task view list the same files.
+// A turn checked later (lateCheck) keeps the edit-tool list in its turn_end event; applyCheck updates its Files.
+func (s *Service) endTurnChecked(t *Task, tu *Turn, status string, o backend.Outcome, c *turnCheck) NewEvent {
 	tu.Status, tu.EndedAt = status, s.now()
 	tu.Response = o.Response
-	tu.Files = displayPaths(t.Cwd, o.FilesEdited)
+	tu.Files = existingFiles(t.Cwd, displayPaths(t.Cwd, o.FilesEdited))
+	if c != nil && tu.Snap != nil && !tu.Snap.Checked {
+		tu.Files = checkedFiles(tu.Snap, c, tu.Files)
+	}
 	tu.Commands, tu.BlockedCommands, tu.DeniedActions = o.Commands, o.BlockedCommands, o.DeniedActions
 	var total event.Usage
 	for _, a := range tu.Attempts {
@@ -1091,7 +1101,8 @@ func (s *Service) prompt(ctx context.Context, t *Task, tu *Turn, continuing, pla
 	in.Constitution = readPrefix(filepath.Join(t.Cwd, ".specify", "memory", "constitution.md"), 4*brief.ConstitutionChars)
 	for _, x := range t.Turns {
 		if x.N < tu.N {
-			in.Earlier = append(in.Earlier, brief.Turn{N: x.N, Message: x.Message, Response: x.Response, Files: x.Files})
+			in.Earlier = append(in.Earlier, brief.Turn{N: x.N, Message: x.Message, Response: x.Response,
+				Files: briefFiles(x.Files)})
 		}
 	}
 	return brief.Worker(in)
@@ -1133,6 +1144,36 @@ func (s *Service) briefSpec(t *Task) *brief.Spec {
 		}
 	}
 	return sp
+}
+
+// briefFileCap is how many of an earlier turn's files a brief lists.
+const briefFileCap = 50
+
+// briefFiles caps an earlier turn's files for the brief: a turn that generated a whole folder lists its first
+// files and the count of the rest.
+func briefFiles(files []string) []string {
+	if len(files) <= briefFileCap {
+		return files
+	}
+	out := slices.Clone(files[:briefFileCap])
+	return append(out, fmt.Sprintf("and %d more", len(files)-briefFileCap))
+}
+
+// existingFiles drops the display paths (relative to cwd, or absolute) that no longer exist, and sorts the rest
+// without duplicates.
+func existingFiles(cwd string, paths []string) []string {
+	out := make([]string, 0, len(paths))
+	for _, p := range paths {
+		abs := filepath.FromSlash(p)
+		if !filepath.IsAbs(abs) {
+			abs = filepath.Join(cwd, abs)
+		}
+		if _, err := os.Lstat(abs); err == nil {
+			out = append(out, p)
+		}
+	}
+	slices.Sort(out)
+	return slices.Compact(out)
 }
 
 // displayPaths makes paths relative to cwd with '/' separators; paths outside it stay absolute.

@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"slices"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/NovaSeele/Seelegent/internal/api"
@@ -60,6 +61,10 @@ type turnCheck struct {
 	edited, changed, preexisting []string
 	risks                        []api.RiskFile
 	hygiene, scope               []api.Finding
+	// files are the turn's files by its snapshots, as display paths (relative to the task's Cwd, sorted): the
+	// changed ones that exist at the end and the tracked ones the turn deleted; deleted marks the latter.
+	files   []string
+	deleted map[string]bool
 	// truncated: the end snapshot hit its limits (snapshot.Store.Take).
 	truncated bool
 }
@@ -151,6 +156,7 @@ func (s *Service) checkTurn(ctx context.Context, t *Task, tu *Turn, last *backen
 			Binary: r.Binary})
 	}
 	c.changed, c.preexisting = changedFiles(start, end, editedKeys, others)
+	c.files, c.deleted = snapshotFiles(t.Cwd, root, end, c.changed)
 	if s.settings().Hygiene {
 		c.hygiene = s.hygiene(ctx, root, start, end, c.changed, response)
 	}
@@ -183,12 +189,73 @@ func changedFiles(start, end snapshot.Manifest, edited, others map[string]bool) 
 	return changed, preexisting
 }
 
+// snapshotFiles turns the changed files (relative to root) into a turn's file list: those that exist at the end,
+// and those deleted that git tracks (a file made and removed within the turn is not in changed; an untracked file
+// that was already there and is gone is not the turn's change to show). The paths are display paths, as
+// displayPaths makes them, sorted.
+func snapshotFiles(cwd, root string, end snapshot.Manifest, changed []string) ([]string, map[string]bool) {
+	show := displayUnder(cwd, root)
+	files := make([]string, 0, len(changed))
+	deleted := map[string]bool{}
+	for _, rel := range changed {
+		f, ok := end.Find(rel)
+		if !ok {
+			continue
+		}
+		if f.Missing {
+			if f.Status == "" || f.Status == api.GitUntracked || f.Status == api.GitAdded {
+				continue // not in HEAD: nothing a commit would delete
+			}
+			deleted[show(rel)] = true
+		}
+		files = append(files, show(rel))
+	}
+	slices.Sort(files)
+	return slices.Compact(files), deleted
+}
+
+// displayUnder returns a function that turns a path relative to root ('/' separators) into the display path
+// displayPaths would give its absolute form, comparing root and cwd once rather than per file.
+func displayUnder(cwd, root string) func(rel string) string {
+	if under, ok := relInside(root, cwd); ok {
+		under = filepath.ToSlash(under)
+		if under == "." {
+			return func(rel string) string { return rel }
+		}
+		return func(rel string) string {
+			if strings.HasPrefix(rel, under+"/") {
+				return rel[len(under)+1:]
+			}
+			return filepath.ToSlash(filepath.Join(root, filepath.FromSlash(rel)))
+		}
+	}
+	return func(rel string) string { return filepath.ToSlash(filepath.Join(root, filepath.FromSlash(rel))) }
+}
+
+// checkedFiles is a checked turn's Files: the files its snapshots show it changed. When a snapshot was truncated
+// those may miss some, so the edit-tool list (fallback, already without the files that no longer exist) is added,
+// and the deleted files are left out like the fallback's.
+func checkedFiles(snap *TurnSnap, c *turnCheck, fallback []string) []string {
+	if !snap.Truncated && !c.truncated {
+		return c.files
+	}
+	out := slices.Clone(fallback)
+	for _, f := range c.files {
+		if !c.deleted[f] {
+			out = append(out, f)
+		}
+	}
+	slices.Sort(out)
+	return slices.Compact(out)
+}
+
 // applyCheck stores a check's results on the turn and returns its snapshot_truncated and work_at_risk events, if
 // any.
 func applyCheck(t *Task, tu *Turn, c *turnCheck) []NewEvent {
 	if c == nil || tu.Snap == nil || tu.Snap.Checked {
 		return nil
 	}
+	tu.Files = checkedFiles(tu.Snap, c, tu.Files)
 	tu.Snap.Checked = true
 	tu.Snap.EndTruncated = c.truncated
 	tu.Edited = api.NonNil(c.edited)

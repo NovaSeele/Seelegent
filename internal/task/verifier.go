@@ -264,8 +264,8 @@ func (s *Service) verdictOf(parent, child *Task) *api.VerifierResult {
 			v.Detail += ": " + child.Error
 		}
 		return v
-	case len(tu.Files) > 0:
-		v.Detail = "the verifier changed files: " + strings.Join(tu.Files, ", ")
+	case len(lastEdits(child, tu)) > 0:
+		v.Detail = "the verifier changed files: " + strings.Join(lastEdits(child, tu), ", ")
 		return v
 	}
 	m := verdictRe.FindStringSubmatch(tu.Response)

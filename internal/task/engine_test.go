@@ -23,7 +23,7 @@ func TestDelegateDoneFollowupReview(t *testing.T) {
 	acc := h.agy("main", 0)
 	file := filepath.Join(h.cwd, "internal", "api", "handler.go")
 	h.queue.Push(t, script(agyInit("conv-1"), agyDelta(1, "Hello "), agyDelta(1, "wor"), agyDelta(1, "ld."),
-		agyEdit(2, file), agyTool(3, "CALLING", "go test ./..."), agyTool(3, "DONE", "go test ./..."),
+		agyEdit(2, file), fakeWrite(file, "package api\n"), agyTool(3, "CALLING", "go test ./..."), agyTool(3, "DONE", "go test ./..."),
 		agyResult("conv-1", "Added the check.")))
 	sum := h.delegate(api.DelegateRequest{Prompt: "Add a nil check.\nKeep it small."})
 	if sum.Title != "Add a nil check." || sum.Backend != "agy" || sum.TurnCount != 1 {

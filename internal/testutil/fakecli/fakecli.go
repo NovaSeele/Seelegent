@@ -23,7 +23,7 @@
 //	#!hang               sleep for five minutes (until cancelled)
 //	#!wait-file <path>   wait (up to five minutes) until path exists
 //	#!touch <path>       create path (tells the test the script got here)
-//	#!write <path>\t<q> write the Go-quoted string q to path (a change no edit tool reports)
+//	#!write <path>\t<q> write the Go-quoted string q to path, making its folders (a change no edit tool reports)
 //	#!remove <path>      remove path
 //	#!pid <path>         write the fake CLI's process id to path (for checks from outside, such as its priority)
 //	#!alloc <mb>         allocate and touch mb MiB, kept until the CLI exits (a worker that needs that much memory;
@@ -321,6 +321,7 @@ func runCLI(dir string) int {
 			_ = out.Flush()
 			p, q, _ := strings.Cut(arg, "\t")
 			if text, err := strconv.Unquote(q); err == nil {
+				_ = os.MkdirAll(filepath.Dir(p), 0o700)  //nolint:gosec // a path the test's own script names
 				_ = os.WriteFile(p, []byte(text), 0o600) //nolint:gosec // a path the test's own script names
 			}
 		case "remove":

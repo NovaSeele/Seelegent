@@ -14,7 +14,8 @@ import (
 func TestBootProjectsAndGitScope(t *testing.T) {
 	h := newHarness(t)
 	h.agy("only", 0)
-	h.queue.Push(t, script(agyInit("conv-b"), agyEdit(1, filepath.Join(h.cwd, "a.go")), agyResult("conv-b", "edited")))
+	h.queue.Push(t, script(agyInit("conv-b"), agyEdit(1, filepath.Join(h.cwd, "a.go")),
+		fakeWrite(filepath.Join(h.cwd, "a.go"), "package a\n"), agyResult("conv-b", "edited")))
 	done := h.delegate(api.DelegateRequest{Title: "first"})
 	h.waitStatus(done.ID, StatusDone)
 	other := filepath.Join(h.dir, "other")
