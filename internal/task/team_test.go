@@ -2,6 +2,7 @@ package task
 
 import (
 	"errors"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -188,6 +189,71 @@ func TestConsultPeerObjection(t *testing.T) {
 	}
 	if len(d.Consults) != 1 || d.Consults[0].Findings == nil {
 		t.Errorf("detail consults = %+v", d.Consults)
+	}
+}
+
+// TestConsultStateInSummary (N3): the summary counts the task's consults, and the end of a consult changes the
+// task record and publishes it, so a dashboard that shows the full record knows to read it again.
+func TestConsultStateInSummary(t *testing.T) {
+	h := newHarness(t)
+	h.initRepo(map[string]string{"a.txt": "one\n"})
+	h.agy("w", 1)
+	h.member(api.MemberInput{ID: "rev", Name: "Reviewer", Backend: "agy", Rank: api.RankPeer})
+	h.queue.Push(t, okScript("conv-p", "Done."))
+	sum := h.delegate(api.DelegateRequest{Title: "consulted"})
+	h.waitStatus(sum.ID, StatusDone)
+	if got, err := h.s.Summary(t.Context(), sum.ID); err != nil || got.ConsultState != nil {
+		t.Fatalf("summary without consults = %+v, %v", got.ConsultState, err)
+	}
+
+	release := filepath.Join(t.TempDir(), "release")
+	h.queue.Push(t, script(agyInit("conv-c"), "#!wait-file "+release, agyResult("conv-c",
+		"## Verdict\nobject\n\n## Required changes\n- set it to three\n")))
+	if _, err := h.s.Consult(t.Context(), sum.ID, api.ConsultRequest{Member: "rev"}); err != nil {
+		t.Fatal(err)
+	}
+	state := func() api.ConsultState {
+		t.Helper()
+		got, err := h.s.Summary(t.Context(), sum.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.ConsultState == nil {
+			t.Fatal("summary with a consult has no consultState")
+		}
+		return *got.ConsultState
+	}
+	if got := state(); got != (api.ConsultState{Total: 1, Running: 1}) {
+		t.Fatalf("while the consult runs: %+v", got)
+	}
+	page, err := h.s.List(t.Context(), Query{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Items) != 1 || page.Items[0].ConsultState == nil || page.Items[0].ConsultState.Running != 1 {
+		t.Errorf("listed summary = %+v", page.Items)
+	}
+
+	changed, done := h.s.Bus().TasksChanged([]string{sum.ID})
+	defer done()
+	if err := os.WriteFile(release, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-changed:
+	case <-time.After(waitLimit):
+		t.Fatal("the end of the consult published no task change")
+	}
+	h.waitFor("the consult to end", func() bool { return state().Running == 0 })
+	if got := state(); got != (api.ConsultState{Total: 1, Objections: 1}) {
+		t.Fatalf("after an objection: %+v", got)
+	}
+	if _, err := h.s.Review(t.Context(), sum.ID, api.ReviewRequest{Verdict: api.VerdictAccepted,
+		AnswerObjection: "one is right"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := state(); got != (api.ConsultState{Total: 1}) {
+		t.Errorf("after the answer: %+v", got)
 	}
 }
 

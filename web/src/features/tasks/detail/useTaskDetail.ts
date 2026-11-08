@@ -18,15 +18,20 @@ export function summaryOf(detail: TaskDetail): TaskSummary {
   return summary
 }
 
-/** What makes the record stale: the parts of a summary that change when turns or the outcome change. */
-function revision(task: TaskSummary | undefined): string {
+/**
+ * What makes the record stale: the parts of a summary that change when turns, the outcome or the consults change
+ * (a consult ends without touching the rest of the summary, N3).
+ */
+export function revision(task: TaskSummary | undefined): string {
   if (!task) return ''
+  const consults = task.consultState
   return [
     task.status,
     task.turnCount,
     task.review?.verdict ?? '',
     task.manual,
     task.filesChanged,
+    consults ? `${consults.total}/${consults.running}/${consults.objections}` : '',
   ].join('|')
 }
 

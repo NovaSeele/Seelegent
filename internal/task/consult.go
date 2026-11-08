@@ -492,6 +492,20 @@ func consultsReport(t *Task) []api.ReportConsult {
 	return out
 }
 
+// consultState counts the consults on t for its summary (nil while it has none).
+func consultState(t *Task) *api.ConsultState {
+	if len(t.Consults) == 0 {
+		return nil
+	}
+	st := &api.ConsultState{Total: len(t.Consults), Objections: len(unansweredObjections(t))}
+	for i := range t.Consults {
+		if t.Consults[i].Status == consultRunning {
+			st.Running++
+		}
+	}
+	return st
+}
+
 // unansweredObjections returns the ids of the peer objections on t without an answer.
 func unansweredObjections(t *Task) []string {
 	var ids []string
