@@ -84,6 +84,26 @@ func TestMain(m *testing.M) {
 		}
 		runtime.KeepAlive(b)
 		os.Exit(0)
+	case "hold":
+		// Allocates and touches the MiB given first, writes its pid to the file given second, waits (up to a minute)
+		// for <pidFile>.go and exits with the code given last: a process whose memory peak the test can place
+		// against a cap it moves, without ever being refused memory.
+		args := os.Args[len(os.Args)-3:]
+		mb, _ := strconv.Atoi(args[0])
+		code, _ := strconv.Atoi(args[2])
+		b := make([]byte, mb<<20)
+		for i := 0; i < len(b); i += 4096 {
+			b[i] = 1
+		}
+		writePids(args[1], os.Getpid())
+		for range 3000 {
+			if _, err := os.Stat(args[1] + ".go"); err == nil {
+				break
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
+		runtime.KeepAlive(b)
+		os.Exit(code)
 	case "low-owner":
 		// Owns a low-priority worker tree (root "parent" and its child), like a launcher, until <pidFile>.done
 		// exists; then closes the tree. It writes its own pid, the root's and the grandchild's to pidFile.

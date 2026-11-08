@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 	"time"
 
 	"github.com/NovaSeele/Seelegent/internal/fsutil"
@@ -83,6 +84,10 @@ func supervise(ctx context.Context, f Files, sf specFile) Exit {
 		return failed(fmt.Errorf("start %s: %w", sf.Argv[0], err))
 	}
 	defer func() { _ = tree.Close() }()
+	if refused := tree.Unapplied(); len(refused) > 0 {
+		appendLine(sf.Stderr, "launcher: the system refused these limits of the worker process tree, which runs "+
+			"without them: "+strings.Join(refused, ", "))
+	}
 	started := time.Now().UTC()
 	wt := tree.WorkerTree(f.Dir)
 	ready := Ready{LauncherPID: os.Getpid(), LauncherStart: wt.RootStart, Job: wt.Job, WorkerPID: tree.Pid(), StartedAt: started}
@@ -100,6 +105,7 @@ func supervise(ctx context.Context, f Files, sf specFile) Exit {
 	}()
 
 	reason := ReasonExited
+	memHit := false
 	var timeout <-chan time.Time
 	if sf.Timeout > 0 {
 		t := time.NewTimer(sf.Timeout)
@@ -126,6 +132,10 @@ loop:
 		case <-waited:
 			break loop
 		case <-ticker.C:
+			if !memHit && tree.Poll() {
+				memHit = true
+				noteMemoryLimit(sf)
+			}
 			if reason == ReasonExited && exists(sf.Cancel) {
 				stop(ReasonCanceled, "canceled; stopping the worker process tree")
 			}
@@ -141,10 +151,9 @@ loop:
 		}
 	}
 	// Read before Close: the job (and its notifications) go with it.
-	memHit := tree.MemoryLimitHit()
-	if memHit {
-		appendLine(sf.Stderr, fmt.Sprintf("launcher: the worker process tree reached its memory limit (%d MB)",
-			sf.Tree.MemoryLimitMB))
+	if !memHit && tree.MemoryLimitHit() {
+		memHit = true
+		noteMemoryLimit(sf)
 	}
 	// Anything the worker left behind (background commands) ends with the turn.
 	if err := tree.Close(); err != nil {
@@ -152,6 +161,12 @@ loop:
 	}
 	return Exit{Reason: reason, Code: tree.ExitCode(), StartedAt: started, MemoryLimitHit: memHit,
 		EndedAt: time.Now().UTC()}
+}
+
+// noteMemoryLimit says in stderr.txt that the worker tree ran into its memory cap.
+func noteMemoryLimit(sf specFile) {
+	appendLine(sf.Stderr, fmt.Sprintf("launcher: the worker process tree reached its memory limit (%d MB)",
+		sf.Tree.MemoryLimitMB))
 }
 
 // workerCommand builds the worker command with its files. closeFiles releases the launcher's copies of the files
