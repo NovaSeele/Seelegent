@@ -128,16 +128,33 @@ More: [task engine](task-engine.md), [gates](gates.md), [team](team.md).
 
 An API-key account only takes tasks that ask for its service: it is "used when a task asks for Anthropic
 (`provider: anthropic`)", as its row says. Its row shows the key test ("Works", "Not tested", "Refused") and, in
-place of quota, what the key has spent: an amount with "≈" is Claude Code's own estimate, not the service's bill;
-"Local · free" is a local service; services that report no cost show the tokens used. **Set budget** gives the key a
-budget in US dollars; with **Stop using this key when the budget is used up** ticked, the key rests once its spend
-reaches the budget, until you raise the budget or replace the key. Open a row (or use its ⋯ menu) for **Test again**,
-**Replace key**, **Change model** (it applies to every key of that service), **Set budget**, **Rename**, **Turn off**
-and **Remove**.
+place of quota, what the key has spent. Where the amount comes from depends on the service:
+
+- **OpenRouter** counts each key's spend itself: the row shows that count, with today, this week and this month in
+  its tooltip. A key with its own limit at OpenRouter offers **Use the key's OpenRouter limit** as its budget in one
+  click.
+- A service with **prices** (see below) shows its tokens at your prices.
+- **Anthropic** without prices shows Claude Code's own estimate, marked "≈": it is not the service's bill.
+- A local service (Ollama, localhost) says "Local · free".
+- Any other service shows the tokens used, with **Set prices to see cost**.
+
+DeepSeek and Moonshot report the balance of the whole service account, shared by every key on it, so it shows beside
+the spend as, for example, "Balance ¥187.60 (account-wide, read 2 min ago)", in the currency the service uses. A
+balance that may be out of date or cannot pay for requests says so, and a failed reading says why.
+
+**Set budget** gives the key a budget in US dollars; with **Stop using this key when the budget is used up** ticked,
+the key rests once its spend reaches the budget, until you raise the budget or replace the key. A budget on a service
+that has no cost to judge it by waits for that service's prices. Open a row (or use its ⋯ menu) for **Test again**,
+**Replace key**, **Change model** (it applies to every key of that service), **Set budget**, **Set prices**,
+**Rename**, **Turn off** and **Remove**.
 
 **Services** (at the bottom of the page, under Advanced, and in **Settings › API providers**) lists where API keys
 send their requests: each service's address, tier models, allowed models and key count, with **Add key** to add
 another key to it. A service that keys still use cannot be deleted; the confirmation names those accounts.
+**Prices** sets what a service charges, in US dollars per 1M tokens: one row per model for input, cached input
+(empty means the input price) and output, with `*` for any model without its own row. Seelegent ships no prices;
+the form links the service's own price page when it has one. New prices count from then on, and an empty table
+removes them.
 
 Add several accounts of the same backend to use several subscriptions. Turn **Use for work** off to keep an account
 without using it for now.
