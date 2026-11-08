@@ -7,9 +7,10 @@ import (
 
 // configEnvText is the refusal of a command that sets git configuration through environment variables.
 const configEnvText = Marker + ": this command sets GIT_CONFIG_PARAMETERS, GIT_CONFIG_COUNT, GIT_CONFIG_KEY_<n>, " +
-	"GIT_CONFIG_GLOBAL or GIT_CONFIG_SYSTEM. They can define git aliases and settings that the guard cannot see, for " +
-	"this git command and every later one of the same shell. Give a setting with git -c instead. If you truly need " +
-	"it, say so under ## Blocked."
+	"GIT_CONFIG_GLOBAL, GIT_CONFIG_SYSTEM or a variable that makes git run a program (GIT_ALLOW_PROTOCOL, " +
+	"GIT_SSH_COMMAND, GIT_SSH, GIT_PROXY_COMMAND, GIT_EXTERNAL_DIFF, GIT_EXEC_PATH). They can define git aliases, " +
+	"settings and commands that the guard cannot see, for this git command and every later one of the same shell. " +
+	"Give a setting with git -c instead. If you truly need it, say so under ## Blocked."
 
 func denyConfigEnv() Result { return Result{Deny: true, Reason: configEnvText} }
 
@@ -17,10 +18,16 @@ func denyConfigEnv() Result { return Result{Deny: true, Reason: configEnvText} }
 // children (GIT_CONFIG_PARAMETERS), the GIT_CONFIG_COUNT/KEY_<n>/VALUE_<n> list, and the files that replace the
 // global and system configuration. The guard resolves aliases with the hook's own environment, so an alias defined
 // in the command's environment would pass it.
-var configEnvName = regexp.MustCompile(`(?i)^GIT_CONFIG_(PARAMETERS|COUNT|GLOBAL|SYSTEM|KEY_\w*)$`)
+// The variables that make git run a program of their own are refused the same way (H4): GIT_ALLOW_PROTOCOL (ext::
+// URLs), GIT_SSH_COMMAND, GIT_SSH, GIT_PROXY_COMMAND, GIT_EXTERNAL_DIFF and GIT_EXEC_PATH.
+var configEnvName = regexp.MustCompile(`(?i)^(GIT_CONFIG_(PARAMETERS|COUNT|GLOBAL|SYSTEM|KEY_\w*)|` + programEnv + `)$`)
 
 // configEnvMention finds such a variable name in text (inline code, a .NET call).
-var configEnvMention = regexp.MustCompile(`(?i)\bGIT_CONFIG_(PARAMETERS|COUNT|GLOBAL|SYSTEM|KEY_\w*)\b`)
+var configEnvMention = regexp.MustCompile(`(?i)\b(GIT_CONFIG_(PARAMETERS|COUNT|GLOBAL|SYSTEM|KEY_\w*)|` +
+	programEnv + `)\b`)
+
+// programEnv are the names of the variables whose value git runs (or runs programs from).
+const programEnv = `GIT_ALLOW_PROTOCOL|GIT_SSH_COMMAND|GIT_SSH|GIT_PROXY_COMMAND|GIT_EXTERNAL_DIFF|GIT_EXEC_PATH`
 
 // configAssign reports a NAME=value (or NAME+=value) word that sets one of the configuration variables.
 func configAssign(t string) bool {

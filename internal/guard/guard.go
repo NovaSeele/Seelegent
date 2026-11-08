@@ -326,7 +326,7 @@ func (c Checker) command(ws []word, s *segment, sh Shell, depth int) Result {
 	if name == "git" {
 		return c.git(args, depth+1)
 	}
-	if strings.HasPrefix(name, "git-") && builtins[name[4:]] {
+	if strings.HasPrefix(name, "git-") && builtins[subcommand(name[4:])] {
 		return c.git(append([]word{{text: name[4:]}}, args...), depth+1)
 	}
 	if wr, ok := wrappers[name]; ok {

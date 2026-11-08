@@ -56,7 +56,7 @@ func (c Checker) git(args []word, depth int) Result {
 			if i+1 >= len(args) {
 				return allow
 			}
-			if args[i+1].dynamic || riskyConfigKey(configKey(args[i+1].text)) {
+			if args[i+1].dynamic || riskyConfig(args[i+1].text) {
 				return denyGit(args)
 			}
 			i += 2
@@ -66,9 +66,12 @@ func (c Checker) git(args []word, depth int) Result {
 				return denyGit(args)
 			}
 		case strings.HasPrefix(t, "-c") && len(t) > 2:
-			if riskyConfigKey(configKey(t[2:])) {
+			if riskyConfig(t[2:]) {
 				return denyGit(args)
 			}
+		case strings.HasPrefix(t, "--exec-path="):
+			// git runs its external commands and dashed helpers from this folder (H4).
+			return denyGit(args)
 		case globalValued[t]:
 			i += 2
 			continue
@@ -84,6 +87,9 @@ func (c Checker) git(args []word, depth int) Result {
 		return allow
 	}
 	deny := func() Result { return denyGit(args) }
+	if transports[sub] && runsProgram(sub, rest) {
+		return deny()
+	}
 	if alwaysDenied[sub] {
 		if sub == "replace" && listsOnly(rest, "-l", "--list") {
 			return allow
@@ -183,6 +189,42 @@ func (c Checker) git(args []word, depth int) Result {
 				return deny()
 			}
 		}
+	case "grep":
+		// grep -O<cmd> (--open-files-in-pager) runs a program on the files it found (H4).
+		p := scan(rest, opts{short: "efABCm", long: set("--max-depth", "--threads", "--max-count", "--context",
+			"--after-context", "--before-context", "--file"), danger: []string{"--open-files-in-pager"}})
+		if p.has("-O", "--open-files-in-pager") || optionUnknown(rest) {
+			return deny()
+		}
+	case "difftool":
+		// difftool -x <cmd> (--extcmd) runs any program on each file pair (H4).
+		p := scan(rest, opts{short: "tx", long: set("--tool", "--extcmd"), danger: []string{"--extcmd"}})
+		if p.has("-x", "--extcmd") || optionUnknown(rest) {
+			return deny()
+		}
+	case "clone":
+		// clone -c/--config sets configuration for the new repository, which runs while it is checked out.
+		for j, a := range rest {
+			switch {
+			case (a.text == "-c" || a.text == "--config") && j+1 < len(rest):
+				if rest[j+1].dynamic || riskyConfig(rest[j+1].text) {
+					return deny()
+				}
+			case strings.HasPrefix(a.text, "--config="):
+				if riskyConfig(strings.TrimPrefix(a.text, "--config=")) {
+					return deny()
+				}
+			}
+		}
+	case "send-email":
+		// The --*-cmd options and an --smtp-server path run programs.
+		for _, a := range rest {
+			name, value, _ := strings.Cut(a.text, "=")
+			if a.dynamic || strings.HasSuffix(name, "-cmd") || strings.HasPrefix(name, "--smtp-s") &&
+				(strings.HasPrefix(value, "/") || strings.Contains(value, `\`)) {
+				return deny()
+			}
+		}
 	case "repack":
 		// repack -a -d drops the unreachable objects of the old packs, where lost work still is (a dropped stash, a
 		// commit a reset left behind); -A and --cruft keep them.
@@ -252,6 +294,59 @@ func (c Checker) git(args []word, depth int) Result {
 func subcommand(s string) string {
 	s = strings.ToLower(s)
 	return strings.TrimSuffix(s, ".exe")
+}
+
+// transports are the subcommands that talk to a remote, whose options can name the program run on the other end.
+var transports = set("fetch", "clone", "ls-remote", "archive", "fetch-pack", "send-pack", "remote", "submodule",
+	"pull", "push")
+
+// programOptions are the transport options whose value git runs as a command (any prefix git accepts counts).
+var programOptions = []string{"--upload-pack", "--receive-pack", "--exec"}
+
+// runsProgram reports a transport command that runs a program of the caller's choosing (H4): --upload-pack,
+// --receive-pack or --exec (and clone's -u), or an ext:: URL, which git runs as a shell command when
+// protocol.ext.allow lets it.
+func runsProgram(sub string, rest []word) bool {
+	for _, a := range rest {
+		t := a.text
+		if strings.Contains(strings.ToLower(t), "ext::") {
+			return true
+		}
+		if a.dynamic {
+			continue
+		}
+		name, _, _ := strings.Cut(t, "=")
+		if strings.HasPrefix(name, "--") && len(name) > 3 {
+			for _, o := range programOptions {
+				if strings.HasPrefix(o, name) {
+					return true
+				}
+			}
+		}
+	}
+	if sub == "clone" {
+		p := scan(rest, opts{short: "obucj", long: set("--origin", "--branch", "--upload-pack", "--config",
+			"--depth", "--shallow-since", "--shallow-exclude", "--reference", "--reference-if-able",
+			"--separate-git-dir", "--jobs", "--filter", "--server-option", "--template", "--bundle-uri",
+			"--ref-format", "--revision")})
+		return p.has("-u")
+	}
+	return false
+}
+
+// optionUnknown reports an argument whose expansion starts where an option would ("-$X", "--x=$Y" aside): such a
+// word can turn into any option, so a reading command with risky options fails closed on it. A word that starts
+// with the expansion is taken as a pattern or path (git grep "$pattern").
+func optionUnknown(rest []word) bool {
+	for _, a := range rest {
+		if a.text == "--" && !a.dynamic {
+			return false
+		}
+		if a.dynamic && strings.HasPrefix(a.text, "-") {
+			return true
+		}
+	}
+	return false
 }
 
 // replayPrintsOnly reports whether git replay is told to print the ref updates instead of making them
@@ -351,12 +446,23 @@ func (c Checker) config(args, rest []word) Result {
 	if riskyConfigKey(strings.ToLower(pos[0].text)) {
 		return denyGit(args)
 	}
+	for _, w := range pos {
+		if strings.Contains(strings.ToLower(w.text), "ext::") {
+			return denyGit(args) // url.ext::sh -c ....insteadOf origin
+		}
+	}
 	return allow
 }
 
 // configWrites are the options of git config that write with a key alone or with a value.
 var configWrites = []string{"--add", "--unset", "--unset-all", "--replace-all", "--edit", "--rename-section",
 	"--remove-section"}
+
+// riskyConfig reports a "key=value" setting that runs a program: a risky key, or a value that is an ext:: URL (a
+// url.<base>.insteadOf that rewrites a remote into one).
+func riskyConfig(kv string) bool {
+	return riskyConfigKey(configKey(kv)) || strings.Contains(strings.ToLower(kv), "ext::")
+}
 
 // configKey returns the lower-case key of a "key=value" pair.
 func configKey(kv string) string {
@@ -372,6 +478,8 @@ func riskyConfigKey(k string) bool {
 	case "core.hookspath", "core.fsmonitor", "core.sshcommand", "core.editor", "core.pager", "core.askpass",
 		"core.gitproxy", "core.worktree", "sequence.editor", "diff.external", "gpg.program", "credential.helper",
 		"uploadpack.packobjectshook", "include.path", "alias",
+		// Commands git runs for alternates and for each hunk of add -p; protocol.allow lets ext:: URLs run (H4).
+		"core.alternaterefscommand", "interactive.difffilter", "protocol.allow",
 		// Not a program, but the same as gc --prune=now for every later gc, including git's automatic one.
 		"gc.pruneexpire",
 		// Makes git run the subcommand it guesses from a typo (git stsh: stash), which the guard reads as an
@@ -383,6 +491,9 @@ func riskyConfigKey(k string) bool {
 		if strings.HasPrefix(k, prefix) {
 			return true
 		}
+	}
+	if strings.HasPrefix(k, "protocol.") && strings.HasSuffix(k, ".allow") {
+		return true // protocol.ext.allow=always
 	}
 	for _, suffix := range []string{".clean", ".smudge", ".process", ".textconv", ".command", ".driver",
 		".program", ".cmd", ".helper", ".uploadpack", ".receivepack", ".proxy",

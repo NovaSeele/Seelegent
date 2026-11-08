@@ -43,9 +43,18 @@ script that edits a file mentioning `git stash`, is data. Long options count by 
   pass), `config --edit` and `--rename-section` (the editor or the renamed section can bring any key);
   `sparse-checkout` writes; `bisect` steps; `rerere forget|clear|gc`; `notes remove|prune`; `refs migrate`;
   `symbolic-ref -d`; `gc --prune=<date>` (plain `gc` and `gc --prune` keep the default expiry);
+- options, settings and URLs that make git run a command of the caller's choosing: `grep -O|--open-files-in-pager`,
+  `difftool -x|--extcmd`, `--upload-pack`, `--receive-pack` and `--exec` on the transport commands (and `clone
+  -u`), an `ext::` URL (also as a config value), `protocol.allow` and `protocol.<name>.allow`,
+  `core.alternateRefsCommand`, `interactive.diffFilter`, risky keys in `clone -c|--config`, `--exec-path=<dir>`
+  and `send-email`'s `--*-cmd` and `--smtp-server=<path>`; a reading command whose argument starts with an
+  expansion where an option would (`git grep "-O$x"`) fails closed, one that starts with the expansion (`git grep
+  "$pattern"`) is a pattern;
 - an alias that expands to any of the above (read with `git config --get alias.<name>` in the command's folder);
-- a command that sets `GIT_CONFIG_PARAMETERS`, `GIT_CONFIG_COUNT`, `GIT_CONFIG_KEY_<n>`, `GIT_CONFIG_GLOBAL` or
-  `GIT_CONFIG_SYSTEM` (`NAME=value git ...`, `env NAME=value`, `export`/`declare`, PowerShell's `$env:NAME = ...`,
+- a command that sets `GIT_CONFIG_PARAMETERS`, `GIT_CONFIG_COUNT`, `GIT_CONFIG_KEY_<n>`, `GIT_CONFIG_GLOBAL`,
+  `GIT_CONFIG_SYSTEM` or a variable whose value git runs (`GIT_ALLOW_PROTOCOL`, `GIT_SSH_COMMAND`, `GIT_SSH`,
+  `GIT_PROXY_COMMAND`, `GIT_EXTERNAL_DIFF`, `GIT_EXEC_PATH`; `GIT_PAGER` and `GIT_EDITOR` stay allowed, as their
+  usual values are `cat` and `true`) (`NAME=value git ...`, `env NAME=value`, `export`/`declare`, PowerShell's `$env:NAME = ...`,
   `Set-Item env:NAME` and `[Environment]::SetEnvironmentVariable`, cmd's `set` and `setx`, the environment of
   inline code that starts programs), whether or not the same line runs git: they define aliases and settings that
   the alias lookup above does not see, for that command and every later git command of the same shell;
