@@ -914,7 +914,7 @@ func (s *Service) setWaiting(id string, u *pool.Unavailable) {
 			turn = tu.N
 		}
 		return []NewEvent{{Type: api.EventWaitingQuota, Turn: turn,
-			Data: api.WaitingQuotaData{Until: api.FormatTime(u.Until)}}}, nil
+			Data: api.WaitingQuotaData{Until: api.FormatTime(u.Until), Reason: string(u.Reason), Detail: detail}}}, nil
 	})
 	if err != nil && s.root.Err() == nil {
 		s.log.Warn("task: set waiting", "task", id, "err", err)

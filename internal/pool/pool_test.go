@@ -351,6 +351,10 @@ func TestMinRemainingAndReasons(t *testing.T) {
 		!errors.Is(err, ErrAllBusy) {
 		t.Fatalf("err = %v", err)
 	}
+	// The message names the full account, the reason a task waits although quota is left.
+	if want := b.ID + ": 1 of 1 running; 1 resting (quota group Gemini Models)"; len(u.Slots) != 1 || u.Error() != want {
+		t.Fatalf("slots %+v, message %q, want %q", u.Slots, u.Error(), want)
+	}
 	// A never-read account waits rather than failing.
 	c := f.agy(0)
 	f.disable(a.ID)
@@ -363,6 +367,12 @@ func TestMinRemainingAndReasons(t *testing.T) {
 		if r.Error() == "" || errors.Is(r, ErrAllResting) {
 			t.Fatalf("%+v", r)
 		}
+	}
+	many := &Unavailable{Reason: ReasonBusy, Backend: "agy", Slots: []BusySlot{{"a1", 2, 2, false},
+		{"a2", 1, 2, true}, {"a3", 2, 2, false}, {"a4", 2, 2, false}, {"a5", 2, 2, false}}}
+	if got, want := many.Error(), "a1: 2 of 2 running; a2: 1 of 2 running, signing out; a3: 2 of 2 running; "+
+		"2 more busy"; got != want {
+		t.Fatalf("message %q, want %q", got, want)
 	}
 	if (&Unavailable{Reason: "odd"}).Is(ErrAllBusy) {
 		t.Fatal("unknown reason matched")

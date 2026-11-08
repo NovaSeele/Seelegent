@@ -377,8 +377,8 @@ func abs64(n int64) int64 {
 	return n
 }
 
-// waitingOf is TaskSummary.Waiting and TaskReport.Waiting: only the memory wait is shown (lead decision 3); the
-// pool's reasons stay internal.
+// waitingOf is TaskReport.Waiting: the lead's report shows only the memory wait (lead decision 3); its account
+// waits read from the status and waiting_until. The dashboard's TaskSummary carries every reason (summaryOf).
 func waitingOf(t *Task) string {
 	if t.Status == StatusWaitingQuota && t.Waiting == api.WaitingMemory {
 		return api.WaitingMemory

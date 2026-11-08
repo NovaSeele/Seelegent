@@ -129,19 +129,31 @@ type AccountProblemData struct {
 	Error     string `json:"error"`
 }
 
-// Reasons of a waiting_quota event (WaitingQuotaData.Reason) and values of TaskSummary.Waiting.
+// Reasons of a waiting_quota event (WaitingQuotaData.Reason) and values of TaskSummary.Waiting. The account
+// reasons are the pool's (pool.Reason).
 const (
 	// WaitingMemory: the task waits for free memory or free commit (minFreeMemoryMB, minFreeCommitMB), not for
 	// an account.
 	WaitingMemory = "memory"
+	// WaitingNoAccount: no enabled, signed-in account can run the task.
+	WaitingNoAccount = "no_account"
+	// WaitingResting: every account that could run it rests (quota used up or a cooldown); Until is when the
+	// first one is back.
+	WaitingResting = "resting"
+	// WaitingBusy: every account that could run it and is not resting has no free slot (maxConcurrentPerAccount,
+	// or the maxConcurrentWorkers cap).
+	WaitingBusy = "busy"
 )
 
-// WaitingQuotaData is the data of a waiting_quota event. Without Reason the task waits for an account (Until is
-// when one is expected back); with Reason WaitingMemory it waits for memory: AvailableMB is what the last reading
-// found and NeedMB the threshold it is below (of physical memory or of commit, whichever holds the task).
+// WaitingQuotaData is the data of a waiting_quota event. Reason says what the task waits for; events written
+// before it was set for account waits have none, which reads as an account wait (Until is when one is expected
+// back). Detail is the daemon's English explanation (for busy: which accounts are full, "acc6: 2 of 2 running").
+// With Reason WaitingMemory, AvailableMB is what the last reading found and NeedMB the threshold it is below (of
+// physical memory or of commit, whichever holds the task).
 type WaitingQuotaData struct {
 	Until       string `json:"until,omitempty"`
-	Reason      string `json:"reason,omitempty" ts:"'memory'"`
+	Reason      string `json:"reason,omitempty" ts:"'memory' | 'no_account' | 'resting' | 'busy'"`
+	Detail      string `json:"detail,omitempty"`
 	AvailableMB int64  `json:"availableMB,omitempty"`
 	NeedMB      int64  `json:"needMB,omitempty"`
 }

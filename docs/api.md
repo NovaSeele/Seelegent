@@ -89,6 +89,14 @@ in the daemon.
     `meeting.updated` and `contest.updated` carry the summary; `notes.changed` carries `{taskId}`; `hook.ran` carries
     the `HookRun`. The worker allow-list is unchanged: a worker may call none of the team routes.
 
+- `TaskSummary.waiting` (an addition) says why a `waiting_quota` task waits: `busy` (every account that could run it
+  has no free slot: `maxConcurrentPerAccount`, or the `maxConcurrentWorkers` cap), `resting` (`waitingUntil` is when
+  one is back), `no_account`, or `memory`; `waitDetail` is the daemon's English line for it (for `busy` the full
+  accounts, `acc6: 2 of 2 running`). The `waiting_quota` event carries the same as `reason` and `detail`. Both are
+  absent for other statuses; events and daemons from before this addition carry only `memory` (an account wait
+  had no reason), which the dashboard reads as waiting for quota. The lead's report (`TaskReport.waiting`) still
+  names only the memory wait.
+
 - `GET /git/branches` answers `null` for a folder that does not exist, keyed by the cwd as given. A batch of 50 cwds
   should not fail because one project folder was deleted. A relative cwd is still `400`.
 - `GET /tasks/{id}/turns/{n}/outside-diff` and `POST /tasks/{id}/turns/{n}/restore` (an addition to the contract,
