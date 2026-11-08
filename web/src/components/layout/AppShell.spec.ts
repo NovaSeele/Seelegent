@@ -3,7 +3,7 @@
  * came from (and over Watch on a cold open), and the app commands are searchable in the palette.
  */
 import { flushPromises, mount } from '@vue/test-utils'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createMemoryHistory } from 'vue-router'
 
 import { createAppRouter } from '@/router'
@@ -14,9 +14,20 @@ import { setupApp } from '@/test/app'
 
 import AppShell from './AppShell.vue'
 
-// Each test mounts the whole shell and loads lazy pages; on a loaded machine (the full suite in parallel) the first
-// transform of a page can take seconds, so the tests get room and wait for what they check instead of sleeping.
-describe('AppShell', { timeout: 20_000 }, () => {
+// The slow part of these tests was never the shell (F57): it was the first load of each lazy page, which compiles
+// the page's whole import graph in this worker (the tasks page: about 250 ms cold, 10 ms warm; many times more on a
+// loaded machine, and the width test visits seven pages). The pages are loaded once before the tests, under the
+// hook's own limit, so each test measures only the shell and keeps the default timeout. The tests still wait for
+// what they check instead of sleeping.
+describe('AppShell', () => {
+  beforeAll(async () => {
+    const loaders = createAppRouter(createMemoryHistory())
+      .getRoutes()
+      .flatMap((route) => Object.values(route.components ?? {}))
+      .filter((c): c is () => Promise<unknown> => typeof c === 'function')
+    await Promise.all(loaders.map((load) => load()))
+  }, 60_000)
+
   beforeEach(() => {
     document.body.innerHTML = ''
     localStorage.clear()
