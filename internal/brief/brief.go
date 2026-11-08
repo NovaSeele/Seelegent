@@ -245,15 +245,17 @@ func PlanRule(shell bool) string {
 }
 
 // ReadOnlyRun returns the first prompt of a fresh conversation of a hidden read-only run (a consult, a meeting
-// attendee, a contest judge, a verifier): the plan rule for the attempt's backend (PlanRule), then the run's brief.
-// A shell backend is also told where to take the line numbers of its [path:line] citations from, so they verify.
-func ReadOnlyRun(prompt string, shell bool) string {
+// attendee, a contest judge, a verifier): the plan rule for the attempt's backend (PlanRule), the data-folder rule
+// of every worker (DataRule for dataDir, "" naming ~/.seelegent, and the run's folder cwd; a run has no spec
+// folder), then the run's brief. A shell backend is also told where to take the line numbers of its [path:line]
+// citations from, so they verify.
+func ReadOnlyRun(prompt string, shell bool, dataDir, cwd string) string {
 	rule := PlanRule(shell)
 	if shell {
 		rule += " Take the line numbers of your path:line citations from `rg -n` (or `Select-String`) output, " +
 			"which numbers the lines of the file as they are, so the citations check out."
 	}
-	return rule + "\n\n" + prompt
+	return rule + "\n" + DataRule(dataDir, cwd, "") + "\n\n" + prompt
 }
 
 // SharedMachine asks the worker to keep its test and build runs light (the setting testParallelism): "" when n is
