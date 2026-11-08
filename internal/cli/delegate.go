@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -223,6 +224,9 @@ func delegate(cmd *cobra.Command, d deps, req api.DelegateRequest, wait int) (ap
 	if err != nil {
 		return api.TaskReport{}, api.WaitResult{}, err
 	}
+	// A flag raised from here on wakes the wait, so a task blocked as soon as it is created (no account can run it)
+	// does not hold the caller for the whole wait (final verification N2).
+	mark := time.Now()
 	sum, err := c.Delegate(cmd.Context(), req)
 	if err != nil {
 		return api.TaskReport{}, api.WaitResult{}, err
@@ -231,7 +235,7 @@ func delegate(cmd *cobra.Command, d deps, req api.DelegateRequest, wait int) (ap
 		_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Task %s created; waiting up to %d s for its report.\n", sum.ID, wait)
 	}
 	res, err := waitReports(cmd.Context(), c, cn, ops.Wait{IDs: []string{sum.ID}, Seconds: wait, WakeOnBlocked: true,
-		Cwd: req.Cwd})
+		Cwd: req.Cwd, Since: mark})
 	if err != nil {
 		return api.TaskReport{}, api.WaitResult{}, fmt.Errorf("task %s was created, but reading its report failed: %w",
 			sum.ID, err)

@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -105,10 +106,12 @@ func newFollowupCommand(d deps) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			mark := time.Now() // a flag raised from here on wakes the wait (N2)
 			if _, err := c.Followup(cmd.Context(), id, req); err != nil {
 				return err
 			}
-			res, err := waitReports(cmd.Context(), c, cn, ops.Wait{IDs: []string{id}, Seconds: wait, WakeOnBlocked: true})
+			res, err := waitReports(cmd.Context(), c, cn, ops.Wait{IDs: []string{id}, Seconds: wait, WakeOnBlocked: true,
+				Since: mark})
 			if err != nil {
 				return fmt.Errorf("the followup was sent, but reading the report failed: %w", err)
 			}

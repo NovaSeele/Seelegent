@@ -195,6 +195,9 @@ type call struct {
 	args json.RawMessage
 	req  *mcp.CallToolRequest
 	c    *client.Client
+	// started is when the call came in: the mark of the waits that follow a task the call created or followed up
+	// (a flag raised since wakes them, final verification N2).
+	started time.Time
 }
 
 // announce tells the host something before the call ends (such as the id of a task the call created, so a host
@@ -247,7 +250,7 @@ func (s *Server) wrap(name string, fn toolFunc) mcp.ToolHandler {
 		if s.o.ConfigErr != nil && !s.unavailable[name] {
 			return s.fail(name, fmt.Errorf("the settings cannot be read: %w", s.o.ConfigErr)), nil
 		}
-		k := &call{s: s, name: name, args: req.Params.Arguments, req: req}
+		k := &call{s: s, name: name, args: req.Params.Arguments, req: req, started: time.Now()}
 		res, err := fn(ctx, k)
 		if err != nil {
 			if ctx.Err() != nil {

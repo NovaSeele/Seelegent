@@ -93,7 +93,7 @@ func (d *daemon) wait(ids ...string) api.WaitResult {
 	d.t.Helper()
 	ctx, cancel := context.WithTimeout(d.t.Context(), limit)
 	defer cancel()
-	res, err := d.a.Tasks.Wait(ctx, api.WaitRequest{IDs: ids, TimeoutSeconds: 60, WakeOnBlocked: new(false)}, "")
+	res, err := d.a.Tasks.Wait(ctx, api.WaitRequest{IDs: ids, TimeoutSeconds: 60, WakeOnBlocked: new(false)}, "", time.Time{})
 	if err != nil {
 		d.t.Fatal(err)
 	}

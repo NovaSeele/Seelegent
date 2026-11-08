@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math"
 	"strings"
+	"time"
 
 	"github.com/NovaSeele/Seelegent/internal/api"
 	"github.com/NovaSeele/Seelegent/internal/client"
@@ -131,7 +132,7 @@ func (s *Server) delegate(ctx context.Context, k *call) (result, error) {
 		def = 0
 	}
 	res, err := s.waitReports(ctx, k, []string{sum.ID}, clampWait(a.WaitSeconds, def, maxWait), false,
-		a.WakeOnBlocked.or(true), cwd)
+		a.WakeOnBlocked.or(true), cwd, k.started)
 	if err != nil {
 		return result{}, fmt.Errorf("task %s was created, but reading its report failed: %w", sum.ID, err)
 	}
@@ -200,7 +201,7 @@ func (s *Server) followup(ctx context.Context, k *call) (result, error) {
 		return result{}, err
 	}
 	res, err := s.waitReports(ctx, k, []string{a.TaskID}, clampWait(a.WaitSeconds, defaultWait, maxWait), false,
-		a.WakeOnBlocked.or(true), "")
+		a.WakeOnBlocked.or(true), "", k.started)
 	if err != nil {
 		return result{}, fmt.Errorf("the followup was sent, but reading the report failed: %w", err)
 	}
@@ -224,7 +225,7 @@ func (s *Server) wait(ctx context.Context, k *call) (result, error) {
 		return result{}, errors.New("task_ids is required (one or more task ids)")
 	}
 	res, err := s.waitReports(ctx, k, a.TaskIDs, clampWait(a.WaitSeconds, defaultWait, maxWait), a.Any.or(false),
-		a.WakeOnBlocked.or(true), "")
+		a.WakeOnBlocked.or(true), "", time.Time{})
 	if err != nil {
 		return result{}, err
 	}
@@ -237,9 +238,14 @@ func (s *Server) wait(ctx context.Context, k *call) (result, error) {
 // waitReports waits for ids (ops.WaitReports over the call's client): reports relative to cwd when given, else to
 // each task's folder, and a daemon that goes away during the wait is found or started again within the wait (found
 // only, never started, after it said it was stopping).
+//
+// since (zero: none) is k.started when the call created or followed up the tasks: a flag raised since then wakes the
+// wait although it was there when the wait began (a task blocked as soon as it is created, final verification N2).
 func (s *Server) waitReports(ctx context.Context, k *call, ids []string, seconds int, anyDone, wake bool,
-	cwd string) (api.WaitResult, error) {
-	return ops.WaitReports(ctx, s.connector(k), s.waitOpts(ids, seconds, anyDone, wake, cwd))
+	cwd string, since time.Time) (api.WaitResult, error) {
+	o := s.waitOpts(ids, seconds, anyDone, wake, cwd)
+	o.Since = since
+	return ops.WaitReports(ctx, s.connector(k), o)
 }
 
 // connector is the daemon lookup of the call's waits (ops.Connect): it reuses the call's client, finds the daemon

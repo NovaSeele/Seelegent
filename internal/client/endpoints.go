@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/NovaSeele/Seelegent/internal/api"
 )
@@ -46,10 +47,12 @@ func (c *Client) Cancel(ctx context.Context, id string, req api.CancelRequest) (
 	return sum, status == http.StatusOK, err
 }
 
-// Wait is POST /wait. cwd (optional, absolute) is the folder the reports show files relative to.
-func (c *Client) Wait(ctx context.Context, req api.WaitRequest, cwd string) (api.WaitResult, error) {
+// Wait is POST /wait. cwd (optional, absolute) is the folder the reports show files relative to. since (zero: none)
+// is a mark taken before the caller created or followed up the tasks: a flag raised at or after it wakes the wait
+// although it was there when the wait began.
+func (c *Client) Wait(ctx context.Context, req api.WaitRequest, cwd string, since time.Time) (api.WaitResult, error) {
 	var res api.WaitResult
-	_, err := c.Do(ctx, http.MethodPost, "/wait"+query("cwd", cwd), req, &res)
+	_, err := c.Do(ctx, http.MethodPost, "/wait"+query("cwd", cwd, "since", api.FormatTime(since)), req, &res)
 	return res, err
 }
 

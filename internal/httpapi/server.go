@@ -54,7 +54,7 @@ type Tasks interface {
 	Events(ctx context.Context, id string, after int64, limit, tail int) (api.EventPage, error)
 	Prompt(ctx context.Context, id string, turn, n int) (string, error)
 	Report(ctx context.Context, id, cwd string) (api.TaskReport, error)
-	Wait(ctx context.Context, req api.WaitRequest, reportCwd string) (api.WaitResult, error)
+	Wait(ctx context.Context, req api.WaitRequest, reportCwd string, since time.Time) (api.WaitResult, error)
 	Boot(ctx context.Context) ([]api.TaskSummary, error)
 	Projects(ctx context.Context) ([]api.Project, error)
 	GitScope(ctx context.Context, id string) (task.GitScope, error)

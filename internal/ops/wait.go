@@ -54,6 +54,9 @@ type Wait struct {
 	Any, WakeOnBlocked bool
 	// Cwd makes the reports' paths relative to it (else to each task's folder).
 	Cwd string
+	// Since (zero: none) is a mark taken before the tasks were created or followed up: a flag raised at or after it
+	// wakes the wait although it was there when the wait began (delegate and followup; final verification N2).
+	Since time.Time
 	// RetryPause is the pause before looking for the daemon again (default 1 s).
 	RetryPause time.Duration
 	// StopGrace is how long to look for a daemon that comes back after it said it was stopping (DefaultStopGrace).
@@ -192,7 +195,7 @@ func waitOn(ctx context.Context, c *client.Client, w Wait, deadline time.Time) (
 		left := max(int(math.Ceil(time.Until(deadline).Seconds())), 0)
 		call := min(left, MaxWaitCall)
 		res, err := c.Wait(ctx, api.WaitRequest{IDs: w.IDs, TimeoutSeconds: call, Any: w.Any,
-			WakeOnBlocked: &wake, Reports: true}, w.Cwd)
+			WakeOnBlocked: &wake, Reports: true}, w.Cwd, w.Since)
 		if err != nil {
 			return api.WaitResult{}, err
 		}

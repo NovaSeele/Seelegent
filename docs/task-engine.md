@@ -142,7 +142,9 @@ when the worker produces something new or a new turn starts.
 All waits share one notifier: each wait registers for its own tasks (`Bus.TasksChanged`) and wakes only when one of
 their records changes. A wait ends when its tasks are finished (all, or
 with `any` the first), when a still-pending task **newly** needs the lead (flags raised before the wait began do
-not count), on its timeout, or when its context ends. Ending a wait never touches a task (a cancelled MCP wait used
+not count, except those raised at or after the wait's `since` mark: the create-then-wait paths, `delegate` and
+`followup`, pass a mark taken before the creation, so a task blocked at once by `no_accounts` wakes them), on its
+timeout, or when its context ends. Ending a wait never touches a task (a cancelled MCP wait used
 to cancel workers). SSE subscribers get bounded buffers and are told when they fell behind.
 
 ## Dependencies

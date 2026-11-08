@@ -247,7 +247,7 @@ func (s *Server) notes(ctx context.Context, k *call) (result, error) {
 		return result{value: sent, summary: fmt.Sprintf("%d note%s sent to task %s.", len(sent.Sent),
 			plural(len(sent.Sent)), a.TaskID)}, nil
 	}
-	res, err := s.waitReports(ctx, k, []string{a.TaskID}, secs, false, a.WakeOnBlocked.or(true), "")
+	res, err := s.waitReports(ctx, k, []string{a.TaskID}, secs, false, a.WakeOnBlocked.or(true), "", k.started)
 	if err != nil {
 		return result{}, fmt.Errorf("the notes were sent, but reading the report failed: %w", err)
 	}

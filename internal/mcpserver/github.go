@@ -442,7 +442,7 @@ func (s *Server) withTicketTask(ctx context.Context, k *call, a *issuesArgs, tas
 	if taskID == "" || seconds == 0 {
 		return result{value: out, summary: sum}, nil
 	}
-	res, err := s.waitReports(ctx, k, []string{taskID}, seconds, false, a.WakeOnBlocked.or(true), "")
+	res, err := s.waitReports(ctx, k, []string{taskID}, seconds, false, a.WakeOnBlocked.or(true), "", k.started)
 	if err != nil {
 		return result{}, fmt.Errorf("task %s was started, but reading its report failed: %w", taskID, err)
 	}

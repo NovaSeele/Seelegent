@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/NovaSeele/Seelegent/internal/api"
 	"github.com/NovaSeele/Seelegent/internal/task"
@@ -228,12 +229,20 @@ func (s *Server) wait(w http.ResponseWriter, r *http.Request) (code int, body an
 	if err != nil {
 		return 0, nil, err
 	}
+	// since: a flag raised at or after this mark (taken before the caller created or followed up the tasks) wakes
+	// the wait although it was there when the wait began (final verification N2).
+	var since time.Time
+	if raw := r.URL.Query().Get("since"); raw != "" {
+		if since, err = api.ParseTime(raw); err != nil {
+			return 0, nil, invalid("since must be an RFC 3339 time").withField("since")
+		}
+	}
 	// The daemon shutting down (Close: POST /daemon/stop or Ctrl+C) ends the wait at once with daemon_stopping, so
 	// the shutdown does not wait out open waits and the caller knows not to start the daemon again.
 	wctx, cancel := context.WithCancelCause(r.Context())
 	defer cancel(nil)
 	defer context.AfterFunc(s.ctx, func() { cancel(errStopping) })()
-	res, err := s.o.Tasks.Wait(wctx, req, cwd)
+	res, err := s.o.Tasks.Wait(wctx, req, cwd, since)
 	switch {
 	case r.Context().Err() != nil:
 		return 0, nil, nil // the client left; nobody reads an answer

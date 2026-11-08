@@ -157,8 +157,12 @@ in the daemon.
   removed from or moved to another provider is followed by `providers.changed` (because `Provider.accounts` counts
   them), whichever of the handler and that watcher sees the change first. Accounts cannot change provider through
   the API today; the watcher covers it if they ever do.
-- `POST /tasks/wait` takes the cwd for its report from an optional `cwd` query parameter. A wait whose client went
-  away writes nothing. When the daemon shuts down (`Server.Close`, on `POST /daemon/stop` and on Ctrl+C) every open
+- `POST /wait` takes the cwd for its report from an optional `cwd` query parameter. A flag that needs the lead and
+  was already raised when the wait began does not end it, unless the optional `since` query parameter (RFC 3339) is
+  given and the flag was raised at or after it: `delegate` and `followup` (CLI and MCP, and the MCP tools that start
+  or follow up a task: `notes` send, `issues` triage and ticket tasks) pass a mark taken before they created or
+  followed up the task, so a task blocked as soon as it is created (`no_accounts`) returns its report at once
+  instead of after the whole wait. A wait whose client went away writes nothing. When the daemon shuts down (`Server.Close`, on `POST /daemon/stop` and on Ctrl+C) every open
   wait ends at once with `503 daemon_stopping` (a wait that ended on its own just before is answered normally), so
   `http.Server.Shutdown` does not sit out the waits; the clients take that code to mean "do not start the daemon
   again" (see [cli.md](cli.md) and [mcp.md](mcp.md)). The other long waits do the same: `GET /meetings/{id}/wait`,
