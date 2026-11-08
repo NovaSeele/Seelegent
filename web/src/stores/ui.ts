@@ -15,7 +15,7 @@ import {
   type UiFont,
 } from '@/config/themes'
 import { useMediaQuery } from '@/composables/useMediaQuery'
-import { activateLocale, detectLocale, type Locale } from '@/i18n'
+import { activateLocale, FALLBACK_LOCALE, type Locale } from '@/i18n'
 import type { FileIconSetId } from '@/lib/fileicons'
 import { readStored, writeStored, type StoredValue } from '@/lib/storage'
 
@@ -23,10 +23,6 @@ function persisted<T>(spec: StoredValue<T>): Ref<T> {
   const value = ref(readStored(spec)) as Ref<T>
   watch(value, (next) => writeStored(spec, next))
   return value
-}
-
-export function browserLocale(): Locale {
-  return detectLocale(typeof navigator === 'undefined' ? [] : (navigator.languages ?? []))
 }
 
 export const useUiStore = defineStore('ui', () => {
@@ -50,8 +46,8 @@ export const useUiStore = defineStore('ui', () => {
   const motionOff = computed(
     () => motion.value === 'off' || (motion.value === 'system' && prefersReducedMotion.value),
   )
-  /** The language in use: the saved choice, else the browser's. */
-  const locale = computed<Locale>(() => localeChoice.value ?? browserLocale())
+  /** The language in use: the saved choice, else English (never guessed from the browser's languages). */
+  const locale = computed<Locale>(() => localeChoice.value ?? FALLBACK_LOCALE)
   /** Collapsing the sidebar only applies where panes sit side by side. */
   const sidebarHidden = computed(() => sidebarCollapsed.value && railUp.value)
 
@@ -86,7 +82,7 @@ export const useUiStore = defineStore('ui', () => {
     fileIcons.value = next
   }
 
-  /** Switches the UI language without a reload; null follows the browser again. */
+  /** Switches the UI language without a reload; null goes back to the default, English. */
   async function setLocale(next: Locale | null) {
     localeChoice.value = next
     await activateLocale(locale.value)

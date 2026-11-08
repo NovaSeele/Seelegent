@@ -6,6 +6,5 @@
     "prefix": "언어:",
     "apply": "언어: {name}",
     "group": "언어"
-  },
-  "browser": "브라우저 설정 따르기"
+  }
 }

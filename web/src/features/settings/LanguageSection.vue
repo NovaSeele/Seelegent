@@ -3,23 +3,24 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import Icon from '@/components/ui/Icon.vue'
-import { LOCALE_NAMES, SUPPORTED_LOCALES, type Locale } from '@/i18n'
-import { browserLocale, useUiStore } from '@/stores/ui'
+import { FALLBACK_LOCALE, LOCALE_NAMES, SUPPORTED_LOCALES, type Locale } from '@/i18n'
+import { useUiStore } from '@/stores/ui'
 
 import SettingRow from './SettingRow.vue'
 
 /**
- * Language: follow the browser, or one of the seven languages. Each is listed by its own name, with the name in
- * the current language under it. The switch applies at once, without reloading.
+ * Language: one of the seven languages, English until the user picks another (never guessed from the browser).
+ * Each is listed by its own name, with the name in the current language under it. The switch applies at once,
+ * without reloading.
  */
 defineProps<{ highlight?: string }>()
 
-const { t, locale } = useI18n()
+const { locale } = useI18n()
 const ui = useUiStore()
 
 const choice = computed({
-  get: () => ui.localeChoice ?? 'browser',
-  set: (value: Locale | 'browser') => void ui.setLocale(value === 'browser' ? null : value),
+  get: () => ui.localeChoice ?? FALLBACK_LOCALE,
+  set: (value: Locale) => void ui.setLocale(value),
 })
 
 const displayNames = computed(() => {
@@ -42,15 +43,6 @@ const options = computed(() =>
 <template>
   <SettingRow item="locale" stacked :highlighted="highlight === 'locale'">
     <div class="langs" role="radiogroup" aria-labelledby="setting-locale">
-      <label class="lang" :class="{ 'lang--checked': choice === 'browser' }">
-        <input v-model="choice" class="sr-only" type="radio" name="locale" value="browser" />
-        <Icon name="monitor" class="lang__icon" />
-        <span class="lang__text">
-          <span class="lang__name">{{ t('locale.browser') }}</span>
-          <span class="lang__sub">{{ LOCALE_NAMES[browserLocale()] }}</span>
-        </span>
-        <Icon v-if="choice === 'browser'" name="check" class="lang__check" />
-      </label>
       <label
         v-for="option in options"
         :key="option.value"

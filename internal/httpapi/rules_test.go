@@ -26,7 +26,7 @@ func TestRequestChecks(t *testing.T) {
 	for _, h := range []string{"127.0.0.1:" + port, "localhost:" + port, "LOCALHOST:" + port} {
 		e.must(e.req(http.MethodGet, "/api/v1/health", nil, map[string]string{"Host": h}), http.StatusOK)
 	}
-	r := e.req(http.MethodGet, "/api/v1/health", nil, map[string]string{"Host": "evil.example", "Accept-Language": "vi"})
+	r := e.req(http.MethodGet, "/api/v1/health", nil, map[string]string{"Host": "evil.example", "X-Seelegent-Lang": "vi"})
 	if got := r.err(t); !strings.Contains(got.Message, "daemon chỉ trả lời") {
 		t.Errorf("Vietnamese message = %q", got.Message)
 	}

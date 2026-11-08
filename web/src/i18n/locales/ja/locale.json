@@ -6,6 +6,5 @@
     "prefix": "言語:",
     "apply": "言語: {name}",
     "group": "言語"
-  },
-  "browser": "ブラウザーに合わせる"
+  }
 }

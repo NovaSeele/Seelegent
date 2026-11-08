@@ -1,7 +1,8 @@
 /**
- * Fetch wrapper for the daemon's HTTP API (/api/v1). Every request sends Accept-Language (the daemon localises
- * its messages); mutating requests also send `X-Seelegent: 1` (the daemon's CSRF check, together with a
- * same-origin Origin). Failures surface as typed errors:
+ * Fetch wrapper for the daemon's HTTP API (/api/v1). Every request sends X-Seelegent-Lang, the dashboard's
+ * language (the daemon localises its messages by it and ignores the browser's Accept-Language); mutating requests
+ * also send `X-Seelegent: 1` (the daemon's CSRF check, together with a same-origin Origin). Failures surface as
+ * typed errors:
  *   ApiError      the daemon answered with an error status ({ "error": { "code", "message", "details"? } })
  *   NetworkError  no answer (daemon down, connection refused, CORS)
  *   AbortError    the caller's AbortSignal fired (a DOMException, passed through unchanged)
@@ -69,7 +70,7 @@ export interface RequestOptions {
 
 export interface ApiClientOptions {
   baseUrl?: string
-  /** BCP 47 tag for Accept-Language, read on every request so language switches apply at once. */
+  /** BCP 47 tag for X-Seelegent-Lang, read on every request so language switches apply at once. */
   getLocale?: () => string
   fetch?: typeof fetch
 }
@@ -126,7 +127,7 @@ export function createApiClient(options: ApiClientOptions = {}) {
   async function request<T>(method: Method, path: string, opts: RequestOptions = {}): Promise<T> {
     const headers: Record<string, string> = {
       Accept: 'application/json',
-      'Accept-Language': getLocale(),
+      'X-Seelegent-Lang': getLocale(),
       ...opts.headers,
     }
     if (MUTATING.has(method)) headers['X-Seelegent'] = '1'

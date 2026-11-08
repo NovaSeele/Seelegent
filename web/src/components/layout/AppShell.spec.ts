@@ -126,7 +126,7 @@ describe('AppShell', () => {
     await router.push('/settings/language')
     await settle(() => {
       expect(wrapper.get('h1').text()).toBe('Tasks')
-      expect(document.querySelector('[role=dialog]')?.textContent).toContain('Browser default')
+      expect(document.querySelector('[role=dialog]')?.textContent).toContain('Tiếng Việt')
       expect(document.getElementById('settings-section-title')?.textContent?.trim()).toBe(
         'Language',
       )

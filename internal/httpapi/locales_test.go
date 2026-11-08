@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// Every middleware message exists in each language of the dashboard, and Accept-Language reaches each of them
+// Every middleware message exists in each language of the dashboard, and X-Seelegent-Lang reaches each of them
 // (M18 review: the table had en and vi only).
 func TestMessagesInEveryLocale(t *testing.T) {
 	for id, tr := range messages {
@@ -24,9 +24,15 @@ func TestMessagesInEveryLocale(t *testing.T) {
 		"zh-CN": "zh-CN", "zh-Hans": "zh-CN", "zh": "zh-CN", "fr-FR, ja;q=0.5": "ja", "de": "en",
 	} {
 		r := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", http.NoBody)
-		r.Header.Set("Accept-Language", header)
+		r.Header.Set("X-Seelegent-Lang", header)
 		if got := language(r); got != want {
-			t.Errorf("Accept-Language %q -> %s, want %s", header, got, want)
+			t.Errorf("X-Seelegent-Lang %q -> %s, want %s", header, got, want)
 		}
+	}
+	// The browser's own language never picks one: English unless the dashboard says otherwise.
+	r := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", http.NoBody)
+	r.Header.Set("Accept-Language", "vi-VN,vi;q=0.9")
+	if got := language(r); got != "en" {
+		t.Errorf("Accept-Language vi-VN alone -> %s, want en", got)
 	}
 }

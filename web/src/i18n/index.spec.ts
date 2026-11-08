@@ -1,28 +1,42 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import {
-  activateLocale,
-  createAppI18n,
-  detectLocale,
-  FALLBACK_LOCALE,
-  matchLocale,
-  pluralIndex,
-} from '.'
+import { useUiStore } from '@/stores/ui'
+import { setupApp } from '@/test/app'
 
-describe('detectLocale', () => {
-  it('matches the base language of the first supported tag', () => {
-    expect(detectLocale(['fr-FR', 'vi-VN', 'en-US'])).toBe('vi')
-    expect(detectLocale(['EN-gb'])).toBe('en')
+import { activateLocale, createAppI18n, FALLBACK_LOCALE, matchLocale, pluralIndex } from '.'
+
+describe('default locale', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+    localStorage.clear()
   })
 
+  it('is English with no stored choice, whatever languages the browser prefers', async () => {
+    localStorage.clear()
+    vi.spyOn(navigator, 'languages', 'get').mockReturnValue(['vi-VN'])
+    vi.spyOn(navigator, 'language', 'get').mockReturnValue('vi-VN')
+    await setupApp()
+    const ui = useUiStore()
+    expect(FALLBACK_LOCALE).toBe('en')
+    expect(ui.localeChoice).toBeNull()
+    expect(ui.locale).toBe('en')
+  })
+
+  it('keeps the language chosen in Settings', async () => {
+    vi.spyOn(navigator, 'languages', 'get').mockReturnValue(['vi-VN'])
+    await setupApp()
+    const ui = useUiStore()
+    await ui.setLocale('ja')
+    expect(ui.locale).toBe('ja')
+    await ui.setLocale(null)
+    expect(ui.locale).toBe('en')
+  })
+})
+
+describe('matchLocale', () => {
   it('maps every Chinese variant to zh-CN', () => {
     expect(matchLocale('zh')).toBe('zh-CN')
     expect(matchLocale('zh-TW')).toBe('zh-CN')
-  })
-
-  it('falls back when nothing is supported', () => {
-    expect(detectLocale(['fr', 'de'])).toBe(FALLBACK_LOCALE)
-    expect(detectLocale([])).toBe(FALLBACK_LOCALE)
   })
 })
 

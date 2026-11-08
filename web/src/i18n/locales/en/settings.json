@@ -259,7 +259,7 @@
     },
     "locale": {
       "label": "Language",
-      "desc": "Browser default follows the languages your browser prefers.",
+      "desc": "Language of the dashboard: English unless you pick another one here.",
       "keywords": "language locale translation"
     },
     "concurrency": {
