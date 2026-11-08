@@ -15,6 +15,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path"
@@ -236,6 +237,9 @@ func (s *Store) record(root, rel, status string) (*File, int64, error) {
 		return nil, 0, nil
 	}
 	if f.Size > MaxFileBytes {
+		if !f.Link {
+			f.Hash = hashLarge(full)
+		}
 		return f, 0, nil
 	}
 	data, err := gitx.ReadWorktree(full, MaxFileBytes+1)
@@ -258,6 +262,26 @@ func (s *Store) record(root, rel, status string) (*File, int64, error) {
 	}
 	f.Stored = true
 	return f, n, nil
+}
+
+// MaxHashBytes is the largest file over MaxFileBytes whose hash is still taken (its content is never kept); a
+// larger one is compared by size only.
+const MaxHashBytes = 1 << 30
+
+// hashLarge returns the hash of a file too large to keep, read in a stream, or "" when it is over MaxHashBytes or
+// cannot be read. A change to such a file can then still be noticed (M18 hunt H18).
+func hashLarge(full string) string {
+	file, err := os.Open(full)
+	if err != nil {
+		return ""
+	}
+	defer func() { _ = file.Close() }()
+	h := sha256.New()
+	n, err := io.Copy(h, io.LimitReader(file, MaxHashBytes+1))
+	if err != nil || n > MaxHashBytes {
+		return ""
+	}
+	return hex.EncodeToString(h.Sum(nil))
 }
 
 // Hash is the content hash the store uses.
@@ -405,6 +429,13 @@ func (s *Store) Sweep(ctx context.Context, keep func(taskID string) bool) (int, 
 			return removed, err
 		}
 		for _, f := range files {
+			if tempName(f.Name()) {
+				// A manifest write cut short (a crash between the temp file and the rename): not a manifest.
+				if err := s.removeStale(filepath.Join(dir, f.Name()), cutoff); err != nil {
+					return removed, err
+				}
+				continue
+			}
 			data, err := fsutil.ReadFile(filepath.Join(dir, f.Name()))
 			if err != nil {
 				return removed, err
@@ -435,7 +466,7 @@ func (s *Store) Sweep(ctx context.Context, keep func(taskID string) bool) (int, 
 			}
 			return err
 		}
-		if d.IsDir() || !hashRe.MatchString(d.Name()) || used[d.Name()] {
+		if d.IsDir() || used[d.Name()] || !hashRe.MatchString(d.Name()) && !tempName(d.Name()) {
 			return nil
 		}
 		return s.removeStale(p, cutoff)
@@ -443,7 +474,13 @@ func (s *Store) Sweep(ctx context.Context, keep func(taskID string) bool) (int, 
 	return removed, err
 }
 
-// removeStale removes the blob at p unless it was written or reused after cutoff.
+// tempName reports the name of a temp file fsutil.WriteFileAtomic writes before its rename. One left behind by a
+// crash is skipped by the sweep, and removed once it is older than blobGrace (M18 hunt H19).
+func tempName(name string) bool {
+	return strings.HasPrefix(name, ".") && strings.HasSuffix(name, ".tmp")
+}
+
+// removeStale removes the blob (or leftover temp file) at p unless it was written or reused after cutoff.
 func (s *Store) removeStale(p string, cutoff time.Time) error {
 	s.blobs.Lock()
 	defer s.blobs.Unlock()

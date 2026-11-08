@@ -120,7 +120,9 @@ known) and after it, the task engine records the repository's uncommitted files:
 - each file's bytes go into a content-addressed store in the data directory, `snapshots/blobs/<aa>/<sha256>`,
   written once with `fsutil.WriteFileAtomic`; a manifest per turn, `snapshots/tasks/<task>/t<n>-<kind>.json`
   (`start`, `end`, `restore-<time>`), names the files, their hashes and `HEAD`;
-- limits: 8 MiB per file, 3000 files and 256 MiB per snapshot (`truncated` is set past them); untracked files under
+- limits: 8 MiB per file, 3000 files and 256 MiB per snapshot (`truncated` is set past them). A file over 8 MiB is
+  recorded by its size and its hash (read in a stream, up to 1 GiB; by size alone past that), never its content, so
+  a change to it is still noticed as work at risk but cannot be restored. Untracked files under
   `node_modules`, `.venv`, `venv`, `__pycache__`, `.next`, `.nuxt`, `.turbo`, `.cache` and `.gradle` are not copied.
   The end snapshot reads the start snapshot's files and the files the edit tools changed first, outside those
   limits, so a turn that creates thousands of files cannot hide the files it destroyed; only the other dirty files
@@ -138,7 +140,9 @@ database or that finished and were not updated for `snapshotRetentionDays` (defa
 are not finished, and tasks with a running attempt or a watch, are never swept. A snapshot names its blobs only
 once it is saved, after they were written or reused, so every blob is dated with the store's clock when it is
 written or reused, and the sweep keeps unnamed blobs dated within an hour before it started (`blobGrace`, well
-above the 2- and 3-minute limits of a snapshot and of the post-turn checks).
+above the 2- and 3-minute limits of a snapshot and of the post-turn checks). A temp file that a crash left between
+a write and its rename (`.<name>.<n>.tmp`, in a task's folder or the blob store) is skipped, and removed once it is
+older than that hour.
 
 ## Post-turn checks
 

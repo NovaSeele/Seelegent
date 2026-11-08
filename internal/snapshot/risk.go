@@ -73,11 +73,12 @@ func Analyze(in Input) []Risk {
 		}
 		k := Key(before.Path)
 		after, ok := in.End.Find(before.Path)
-		if !ok || after.Hash == before.Hash && after.Missing == before.Missing {
-			continue // unchanged, or not seen at the end (truncated): nothing to say
+		if !ok {
+			continue // not seen at the end: nothing to say
 		}
-		if before.Size > MaxFileBytes && after.Size == before.Size && !after.Missing {
-			continue // too large to compare by content; the same size is taken as unchanged
+		if after.Hash == before.Hash && after.Missing == before.Missing &&
+			(before.Hash != "" || after.Size == before.Size) {
+			continue // unchanged; a file too large to hash is compared by size
 		}
 		if in.Others[k] || Scratch(before.Path) || JunkName(before.Path) {
 			continue
