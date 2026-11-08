@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -75,6 +76,26 @@ func addArgs(want Entry, env map[string]string) []string {
 
 var removeArgs = []string{"mcp", "remove", "--scope", "user", ServerName}
 
+// batchMeta are the characters cmd.exe reads in a batch file's arguments however Go quotes them: it expands
+// %VAR% (and !VAR!), cuts the line at an unquoted & | < >, and ^ and " change the quoting itself.
+const batchMeta = `% ! & | < > ^ "`
+
+// batchUnsafe returns the first argument cmd.exe would misread when bin is a batch file (.cmd or .bat) on Windows,
+// such as the npm shim claude.cmd, or "" (H10). Go quotes arguments for the program's own parser, which a batch
+// file does not have, so such an argument is refused instead of escaped.
+func batchUnsafe(bin, goos string, args []string) string {
+	ext := strings.ToLower(filepath.Ext(bin))
+	if goos != "windows" || ext != ".cmd" && ext != ".bat" {
+		return ""
+	}
+	for _, a := range args {
+		if strings.ContainsAny(a, "%!&|<>^\"\r\n") {
+			return strconv.Quote(a)
+		}
+	}
+	return ""
+}
+
 // commandLine shows a command for the user to run by hand.
 func commandLine(bin string, args []string) string {
 	parts := []string{bin}
@@ -119,6 +140,15 @@ func (c claudeCode) install(ctx context.Context, o op, want Entry) Item {
 		if cfg.state != stateAbsent {
 			it.Snippet = commandLine("claude", removeArgs) + "\n" + it.Snippet
 		}
+		return it
+	}
+	if bad := batchUnsafe(bin, o.env.goos(), addArgs(want, env)); bad != "" {
+		// H10: claude.cmd runs through cmd.exe, which would cut the line at & or expand %VAR% in the path; a
+		// command line typed by hand goes through the same file, so the snippet is the entry itself.
+		it.Action = ActionManual
+		it.Detail = fmt.Sprintf("the claude CLI is a batch file (%s) that cmd.exe would misread: %s holds %s; with "+
+			"Claude Code closed, add the entry to %s by hand", filepath.Base(bin), bad, batchMeta, path)
+		it.Snippet = c.reader().snippet(Entry{Command: want.Command, Args: want.Args, Env: env})
 		return it
 	}
 	if o.req.DryRun {

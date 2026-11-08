@@ -77,7 +77,9 @@ The exit code is 1 when any item is `conflict` or `error`. Other items still run
   the item is `manual` with the command to run. An update runs `remove` and then `add`; when the `add` fails, setup
   adds the previous entry back with the CLI. If that fails too, it copies the backup over `~/.claude.json` only when
   the file is still exactly what the `remove` left (nothing Claude Code wrote since is lost); otherwise the error names
-  the backup to restore by hand.
+  the backup to restore by hand. On Windows the CLI is often the npm shim `claude.cmd`, which `cmd.exe` runs: an
+  argument holding `% ! & | < > ^ "` (in the executable's path or an env value) would be cut or expanded there, so
+  setup runs nothing and the item is `manual` with the entry to add to `~/.claude.json` while Claude Code is closed.
 - Setup records the host files and folders it creates (they did not exist before) in `setup-created.json` in the
   data folder. `--remove` deletes such a file once it holds nothing but an empty server list (for example
   `{"mcpServers": {}}`, an empty `settings.json`, or a `config.toml` with only white space), together with its

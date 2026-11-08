@@ -134,6 +134,45 @@ func TestClaudeCodeCLIFailsOrMissing(t *testing.T) {
 	wantAction(t, rep, "claude", KindMCP, ActionError)
 }
 
+// TestClaudeBatchShimRefusesMetacharacters (H10): on Windows the claude CLI is often the npm shim claude.cmd, which
+// cmd.exe runs: an executable path or env value holding & or %VAR% would be cut or expanded there. Setup runs
+// nothing and reports the entry to add by hand; a plain path still goes through the CLI.
+func TestClaudeBatchShimRefusesMetacharacters(t *testing.T) {
+	for _, c := range []struct {
+		dir    string
+		manual bool
+	}{{"a&b", true}, {"%USERPROFILE%", true}, {"x^y", true}, {"it!s", true}, {"Program Files (x86)", false}} {
+		m := newMachine(t)
+		exe := m.write(c.dir+"/"+exeBase, "binary")
+		cfg := fakeClaude(t, m)
+		m.bins["claude"] = m.path("npm", "claude.cmd")
+		env := m.env()
+		env.GOOS = "windows"
+		rep, err := Run(t.Context(), env, Request{Exe: exe, Hosts: []string{"claude"}, NoSkill: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !c.manual {
+			wantAction(t, rep, "claude", KindMCP, ActionAdded)
+			continue
+		}
+		it := wantAction(t, rep, "claude", KindMCP, ActionManual)
+		if len(m.runs) != 0 || exists(cfg) {
+			t.Errorf("%s: ran %q", c.dir, m.runs)
+		}
+		if !strings.Contains(it.Detail, "claude.cmd") || !strings.Contains(it.Snippet, `"mcpServers"`) ||
+			!strings.Contains(it.Snippet, strings.ReplaceAll(exe, `\`, `\\`)) {
+			t.Errorf("%s: %q / %q", c.dir, it.Detail, it.Snippet)
+		}
+	}
+	// The same paths through claude.exe (no batch file) or on another OS go through the CLI.
+	if batchUnsafe(`C:\x\claude.exe`, "windows", []string{"a&b"}) != "" ||
+		batchUnsafe("/usr/bin/claude.cmd", "linux", []string{"a&b"}) != "" ||
+		batchUnsafe(`C:\x\CLAUDE.CMD`, "windows", []string{"ok", "50%"}) != `"50%"` {
+		t.Error("batchUnsafe")
+	}
+}
+
 // An update removes the entry and adds the new one; when the add fails, the old entry comes back.
 func TestClaudeCodeAddFailsAfterRemove(t *testing.T) {
 	const original = `{"numStartups": 5, "mcpServers": {"seelegent": {"type": "stdio", "command": "OLD", ` +
