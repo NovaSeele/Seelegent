@@ -55,6 +55,8 @@ type NewEvent struct {
 type Repo struct {
 	db  DB
 	now func() time.Time
+	// backfillBatch is the batch size of BackfillDigests.
+	backfillBatch int
 }
 
 // NewRepo returns a repository on db. now is the clock (time.Now when nil).
@@ -62,7 +64,7 @@ func NewRepo(db DB, now func() time.Time) *Repo {
 	if now == nil {
 		now = time.Now
 	}
-	return &Repo{db: db, now: now}
+	return &Repo{db: db, now: now, backfillBatch: backfillBatch}
 }
 
 // Create inserts a new task with its turns and attempts and appends evs. It returns the stored events.

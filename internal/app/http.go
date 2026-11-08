@@ -115,6 +115,8 @@ func (a *App) ListenHTTP(ctx context.Context, port int) (string, error) {
 		}
 	}()
 	a.log.Info("http: listening", "addr", ln.Addr().String())
+	// Older task rows get their list digest once the daemon answers (a large database must not delay the start).
+	a.Tasks.BackfillDigests()
 	return ln.Addr().String(), nil
 }
 

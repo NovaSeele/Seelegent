@@ -38,6 +38,12 @@ SQLite, migration `0004_tasks.sql` (and `0005_memory_roles.sql` for memory, revi
   marks removed (`foldText`), which the title search matches, so "tieng viet" finds "Tiếng Việt" in NFC or NFD. It is
   written on every save; at start `BackfillFold` fills only the rows where it is empty. A later change to `foldText`
   needs a migration that empties `title_fold` so those rows are recomputed.
+- `tasks.kind` and the turn digest (migration `0011_task_list.sql`: `turn_count`, `tokens_used`, `files_changed`,
+  `gate_turn`, `gate_state`, `last_account_id`, `last_account_label`): what a list entry shows from the turns,
+  written on every save, so lists, Boot and summaries do not load turns. Rows stored before the migration have
+  `turn_count` -1 and their lists load their turns; once the daemon listens, a background backfill stores their
+  digest in batches of 100 (resting 50 ms between batches, stopped by the daemon's close and resumed at the next
+  start). A task whose turns cannot be read is logged and keeps -1 (its list entries keep reporting the error).
 - `task_events`: the append-only log. `seq` starts at 1 per task and grows by one, assigned in the transaction that
   writes the event.
 

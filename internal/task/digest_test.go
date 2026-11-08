@@ -44,7 +44,7 @@ func TestListDigestMatchesTurns(t *testing.T) {
 	if got := listJSON(t, h, ids); !bytes.Equal(got, want) {
 		t.Errorf("lists without a stored digest differ:\n%s\nwant\n%s", got, want)
 	}
-	if err := h.s.repo.BackfillDigests(ctx); err != nil {
+	if _, err := h.s.repo.BackfillDigests(ctx, noPause, failSkip(t)); err != nil {
 		t.Fatal(err)
 	}
 	var missing int
