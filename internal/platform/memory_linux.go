@@ -2,5 +2,13 @@
 
 package platform
 
-// memoryStatus is a stub of the M19 contract: the reading is not implemented yet, so it is never known.
-func memoryStatus() MemoryStatus { return MemoryStatus{} }
+import "os"
+
+// memoryStatus reads MemAvailable from /proc/meminfo; commit stays unknown (0).
+func memoryStatus() MemoryStatus {
+	data, err := os.ReadFile("/proc/meminfo")
+	if err != nil {
+		return MemoryStatus{}
+	}
+	return parseMeminfo(data)
+}
