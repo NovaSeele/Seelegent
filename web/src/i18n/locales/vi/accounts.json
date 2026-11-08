@@ -58,7 +58,8 @@
     "model": "Đổi mô hình",
     "budget": "Đặt ngân sách",
     "turnOff": "Tắt",
-    "turnOn": "Bật"
+    "turnOn": "Bật",
+    "prices": "Đặt giá"
   },
   "done": {
     "added": "Đã thêm {name}",
@@ -72,7 +73,9 @@
     "priority": "Đã đặt ưu tiên của {name} là {n}",
     "budgetSet": "Đã đặt ngân sách của {name} là {budget}",
     "budgetRemoved": "Đã bỏ ngân sách của {name}",
-    "modelSet": "Đã lưu mô hình của {service}"
+    "modelSet": "Đã lưu mô hình của {service}",
+    "pricesSet": "Đã lưu giá của {service}",
+    "pricesCleared": "Đã bỏ giá của {service}"
   },
   "quota": {
     "window": "Khung {window}",
@@ -282,7 +285,8 @@
     "ok": "Trong ngân sách",
     "warn": "Đã dùng 80% ngân sách",
     "reached": "Đã hết ngân sách",
-    "unknown": "Không biết chi phí của dịch vụ này"
+    "unknown": "Không biết chi phí của dịch vụ này",
+    "unknownNeedsPrices": "Ngân sách {budget} đang chờ giá: hãy đặt giá cho dịch vụ này để đối chiếu"
   },
   "restReason": {
     "budget_reached": "Đã hết ngân sách ({spent} / {budget})",
@@ -292,7 +296,9 @@
   "spendSource": {
     "cli": "Ước tính của Claude Code",
     "free": "Cục bộ · miễn phí",
-    "none": "Dịch vụ này không báo chi phí"
+    "none": "Dịch vụ này không báo chi phí",
+    "service": "Số liệu chính dịch vụ đếm cho khóa này",
+    "prices": "Theo giá bạn đặt cho dịch vụ này"
   },
   "service": {
     "label": "Dịch vụ",
@@ -358,7 +364,8 @@
     "save": "Lưu ngân sách",
     "remove": "Bỏ ngân sách",
     "positive": "Nhập số tiền lớn hơn 0",
-    "noCost": "Dịch vụ này không báo chi phí nên không đối chiếu được ngân sách: khóa sẽ không bao giờ bị dừng vì nó."
+    "noCost": "Dịch vụ này không báo chi phí nên không đối chiếu được ngân sách: khóa sẽ không bao giờ bị dừng vì nó.",
+    "suggested": "Dùng giới hạn OpenRouter của khóa, {amount}"
   },
   "model": {
     "title": "Mô hình của {service}",
@@ -407,24 +414,26 @@
   },
   "spend": {
     "short": {
-      "budget": "≈ {spent} / {budget}",
-      "over": "≈ {spent} / {budget}",
-      "since": "≈ {spent} từ {date}",
-      "cost": "≈ {spent}",
-      "tokens": "Không báo chi phí · {tokens} token"
+      "budget": "{spent} / {budget}",
+      "over": "{spent} / {budget}",
+      "since": "{spent} từ {date}",
+      "cost": "{spent}",
+      "tokens": "{tokens} token"
     },
     "long": {
-      "budget": "≈ đã tiêu {spent} trên {budget} · còn {left}",
-      "over": "≈ đã tiêu {spent} trên {budget} · vượt {left}",
-      "since": "≈ đã tiêu {spent} từ khi đặt khóa ({date})",
-      "cost": "≈ đã tiêu {spent}",
-      "tokens": "Dịch vụ này không báo chi phí · {tokens} token"
+      "budget": "đã tiêu {spent} trên {budget} · còn {left}",
+      "over": "đã tiêu {spent} trên {budget} · vượt {left}",
+      "since": "đã tiêu {spent} từ khi đặt khóa ({date})",
+      "cost": "đã tiêu {spent}",
+      "tokens": "{tokens} token, chưa biết chi phí"
     },
     "free": "Cục bộ · miễn phí",
     "estimateTip": "Ước tính của chính Claude Code, không phải hóa đơn của dịch vụ",
     "setBudget": "Đặt ngân sách",
     "barLabel": "Ngân sách đã dùng",
-    "budgetUnknown": "Ngân sách {budget} không được áp dụng: dịch vụ này không báo chi phí"
+    "budgetUnknown": "Ngân sách {budget} không được áp dụng: dịch vụ này không báo chi phí",
+    "unpricedTokens": "{tokens} token chưa có giá",
+    "setPrices": "Đặt giá để xem chi phí"
   },
   "facts": {
     "model": "Mô hình: {model}",
@@ -436,6 +445,60 @@
     "addKey": "Thêm khóa",
     "official": "api.anthropic.com (chính thức)",
     "allows": "cho phép {models}",
-    "usedByNames": "{names} vẫn đang dùng nó: hãy xóa (các) tài khoản đó trước."
+    "usedByNames": "{names} vẫn đang dùng nó: hãy xóa (các) tài khoản đó trước.",
+    "prices": "Giá",
+    "pricesOf": "Giá của {name}"
+  },
+  "balance": {
+    "title": "Số dư {amount}",
+    "shared": "chung cả tài khoản",
+    "accountWide": "Số dư của cả tài khoản {provider}, dùng chung cho mọi khóa của nó",
+    "readAt": "đọc {time}",
+    "stale": "có thể đã cũ",
+    "granted": "Được tặng {amount}",
+    "paid": "Đã nạp {amount}",
+    "unavailable": "không đủ để trả cho yêu cầu"
+  },
+  "serviceUsage": {
+    "total": "Dịch vụ đếm cho khóa này: {amount}",
+    "daily": "hôm nay {amount}",
+    "weekly": "tuần này {amount}",
+    "monthly": "tháng này {amount}",
+    "limit": "giới hạn {amount}, {reset}",
+    "reset": {
+      "daily": "đặt lại mỗi ngày",
+      "weekly": "đặt lại mỗi tuần",
+      "monthly": "đặt lại mỗi tháng",
+      "never": "không đặt lại"
+    }
+  },
+  "serviceError": {
+    "refused": "Đọc chi tiêu: dịch vụ từ chối khóa",
+    "no_credit": "Đọc chi tiêu: dịch vụ báo đã hết tín dụng",
+    "unreachable": "Đọc chi tiêu: không kết nối được dịch vụ",
+    "redirected": "Đọc chi tiêu: dịch vụ chuyển đi nơi khác (khóa không được gửi tới đó)",
+    "error": "Đọc chi tiêu: dịch vụ trả về lỗi"
+  },
+  "prices": {
+    "title": "Giá của {service}",
+    "model": "Mô hình",
+    "anyModel": "* là mọi mô hình không có hàng riêng.",
+    "input": "Đầu vào",
+    "cachedInput": "Đầu vào đã cache",
+    "output": "Đầu ra",
+    "perMillion": "Đô la Mỹ cho mỗi 1 triệu token",
+    "pricingLink": "Trang giá của {service}",
+    "add": "Thêm hàng",
+    "remove": "Xóa hàng của {model}",
+    "save": "Lưu giá",
+    "empty": "Chưa có giá: chi tiêu của dịch vụ này chỉ được đếm bằng token. Thêm một hàng để tính bằng đô la.",
+    "appliesFromNow": "Giá mới áp dụng cho công việc từ giờ; chi tiêu đã tính giữ nguyên giá cũ.",
+    "error": {
+      "modelRequired": "Nhập mô hình, hoặc * cho mọi mô hình",
+      "modelTooLong": "Tối đa 200 ký tự",
+      "duplicate": "Mô hình này đã có hàng",
+      "invalid": "Nhập giá từ 0 đến 10.000",
+      "tooMany": "Tối đa 200 hàng"
+    }
   }
 }

@@ -88,7 +88,7 @@ function onEnter(event: KeyboardEvent) {
       @submit.prevent="save(amount)"
       @keydown.enter="onEnter"
     >
-      <AccountSpend v-if="account" :account="account" />
+      <AccountSpend v-if="account" :account="account" plain />
       <NumberField
         :model-value="amount"
         :label="t('accounts.form.budget')"

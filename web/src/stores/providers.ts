@@ -10,6 +10,8 @@ import type { ProviderChanges, ProvidersApi } from '@/api/providers'
 import type {
   KeyTestRequest,
   KeyTestResult,
+  PriceInput,
+  PriceTable,
   Provider,
   ProviderInput,
   ProviderPreset,
@@ -70,6 +72,18 @@ export const useProvidersStore = defineStore('providers', () => {
     return client.test(body)
   }
 
+  /**
+   * Replaces a provider's price table (PUT /providers/{id}/prices; [] clears it) and puts the answer on the
+   * provider at once (prices and spend source); the accounts follow through their own updates.
+   */
+  async function setPrices(id: string, prices: PriceInput[]): Promise<PriceTable> {
+    const table = await client.setPrices(id, { prices })
+    items.value = items.value.map((p) =>
+      p.id === id ? { ...p, prices: table.prices, spendSource: table.spendSource } : p,
+    )
+    return table
+  }
+
   /** 409 conflict while accounts use the provider. */
   async function remove(id: string): Promise<void> {
     await client.remove(id)
@@ -93,6 +107,7 @@ export const useProvidersStore = defineStore('providers', () => {
     update,
     upsert,
     test,
+    setPrices,
     remove,
     nameOf,
   }

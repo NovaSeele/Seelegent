@@ -58,7 +58,8 @@
     "model": "更改模型",
     "budget": "设置预算",
     "turnOff": "关闭",
-    "turnOn": "开启"
+    "turnOn": "开启",
+    "prices": "设置价格"
   },
   "done": {
     "added": "已添加 {name}",
@@ -72,7 +73,9 @@
     "priority": "已将 {name} 的优先级设为 {n}",
     "budgetSet": "{name} 的预算已设为 {budget}",
     "budgetRemoved": "已移除 {name} 的预算",
-    "modelSet": "已保存 {service} 的模型"
+    "modelSet": "已保存 {service} 的模型",
+    "pricesSet": "已保存 {service} 的价格",
+    "pricesCleared": "已移除 {service} 的价格"
   },
   "quota": {
     "window": "{window} 窗口",
@@ -282,7 +285,8 @@
     "ok": "在预算内",
     "warn": "已用预算的 80%",
     "reached": "已达预算",
-    "unknown": "此服务的花费未知"
+    "unknown": "此服务的花费未知",
+    "unknownNeedsPrices": "预算 {budget} 在等待价格:为此服务设置价格后才能核对"
   },
   "restReason": {
     "budget_reached": "已达预算（{spent} / {budget}）",
@@ -292,7 +296,9 @@
   "spendSource": {
     "cli": "Claude Code 的估算",
     "free": "本地 · 免费",
-    "none": "此服务不报告费用"
+    "none": "此服务不报告费用",
+    "service": "服务自己为这个密钥统计的金额",
+    "prices": "按你为此服务设置的价格计算"
   },
   "service": {
     "label": "服务",
@@ -358,7 +364,8 @@
     "save": "保存预算",
     "remove": "移除预算",
     "positive": "请输入大于 0 的金额",
-    "noCost": "此服务不报告费用,无法核对预算:密钥不会因预算而停用。"
+    "noCost": "此服务不报告费用,无法核对预算:密钥不会因预算而停用。",
+    "suggested": "使用该密钥在 OpenRouter 的上限 {amount}"
   },
   "model": {
     "title": "{service} 的模型",
@@ -407,24 +414,26 @@
   },
   "spend": {
     "short": {
-      "budget": "≈ {spent} / {budget}",
-      "over": "≈ {spent} / {budget}",
-      "since": "≈ {spent},自 {date}",
-      "cost": "≈ {spent}",
-      "tokens": "未报告费用 · {tokens} token"
+      "budget": "{spent} / {budget}",
+      "over": "{spent} / {budget}",
+      "since": "{spent},自 {date}",
+      "cost": "{spent}",
+      "tokens": "{tokens} token"
     },
     "long": {
-      "budget": "≈ 已花费 {spent} / {budget} · 剩余 {left}",
-      "over": "≈ 已花费 {spent} / {budget} · 超出 {left}",
-      "since": "≈ 自设置密钥起已花费 {spent}({date})",
-      "cost": "≈ 已花费 {spent}",
-      "tokens": "此服务不报告费用 · {tokens} token"
+      "budget": "已花费 {spent} / {budget} · 剩余 {left}",
+      "over": "已花费 {spent} / {budget} · 超出 {left}",
+      "since": "自设置密钥起已花费 {spent}({date})",
+      "cost": "已花费 {spent}",
+      "tokens": "{tokens} token,费用未知"
     },
     "free": "本地 · 免费",
     "estimateTip": "Claude Code 自己的估算,不是服务的账单",
     "setBudget": "设置预算",
     "barLabel": "已用预算",
-    "budgetUnknown": "预算 {budget} 不生效:此服务不报告费用"
+    "budgetUnknown": "预算 {budget} 不生效:此服务不报告费用",
+    "unpricedTokens": "{tokens} token 没有价格",
+    "setPrices": "设置价格以查看费用"
   },
   "facts": {
     "model": "模型:{model}",
@@ -436,6 +445,60 @@
     "addKey": "添加密钥",
     "official": "api.anthropic.com(官方)",
     "allows": "允许 {models}",
-    "usedByNames": "{names} 仍在使用它:请先删除这些账号。"
+    "usedByNames": "{names} 仍在使用它:请先删除这些账号。",
+    "prices": "价格",
+    "pricesOf": "{name} 的价格"
+  },
+  "balance": {
+    "title": "余额 {amount}",
+    "shared": "整个账号",
+    "accountWide": "整个 {provider} 账号的余额,由它的所有密钥共用",
+    "readAt": "{time}读取",
+    "stale": "可能已过时",
+    "granted": "赠送 {amount}",
+    "paid": "充值 {amount}",
+    "unavailable": "不足以支付请求"
+  },
+  "serviceUsage": {
+    "total": "服务为此密钥统计:{amount}",
+    "daily": "今天 {amount}",
+    "weekly": "本周 {amount}",
+    "monthly": "本月 {amount}",
+    "limit": "上限 {amount},{reset}",
+    "reset": {
+      "daily": "每天重置",
+      "weekly": "每周重置",
+      "monthly": "每月重置",
+      "never": "不重置"
+    }
+  },
+  "serviceError": {
+    "refused": "读取花费:服务拒绝了密钥",
+    "no_credit": "读取花费:服务表示余额不足",
+    "unreachable": "读取花费:无法连接到服务",
+    "redirected": "读取花费:服务转到了别处(密钥没有发往那里)",
+    "error": "读取花费:服务返回了错误"
+  },
+  "prices": {
+    "title": "{service} 的价格",
+    "model": "模型",
+    "anyModel": "* 表示没有单独一行的任意模型。",
+    "input": "输入",
+    "cachedInput": "缓存输入",
+    "output": "输出",
+    "perMillion": "每 100 万 token 的美元价格",
+    "pricingLink": "{service} 的价格页面",
+    "add": "添加一行",
+    "remove": "删除 {model} 这一行",
+    "save": "保存价格",
+    "empty": "没有价格:此服务的花费只按 token 统计。添加一行即可按美元统计。",
+    "appliesFromNow": "新价格适用于从现在起的工作;已统计的花费保持原价。",
+    "error": {
+      "modelRequired": "请输入模型,或用 * 表示任意模型",
+      "modelTooLong": "最多 200 个字符",
+      "duplicate": "这个模型已经有一行",
+      "invalid": "请输入 0 到 10,000 之间的价格",
+      "tooMany": "最多 200 行"
+    }
   }
 }

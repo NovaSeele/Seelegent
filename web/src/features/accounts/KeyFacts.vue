@@ -15,7 +15,7 @@ import { useAccountState } from './useAccountState'
  * the routing rule: an API-key account only takes tasks that ask for its service (pool/select.go), said plainly.
  */
 const props = defineProps<{ account: Account; now: number }>()
-const emit = defineEmits<{ budget: [] }>()
+const emit = defineEmits<{ budget: []; prices: [] }>()
 
 const { t } = useI18n()
 const providers = useProvidersStore()
@@ -39,7 +39,7 @@ const model = computed(() => {
   <div class="keyfacts">
     <p v-if="account.testedAt" class="keyfacts__line">{{ testTitle }}</p>
     <p v-if="model" class="keyfacts__line">{{ model }}</p>
-    <AccountSpend :account="account" @budget="emit('budget')" />
+    <AccountSpend :account="account" @budget="emit('budget')" @prices="emit('prices')" />
     <p v-if="account.provider" class="keyfacts__routing">
       {{ t('accounts.routing', { service, id: account.provider }) }}
     </p>

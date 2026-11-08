@@ -96,6 +96,7 @@ const details = computed(() =>
         :account="account"
         compact
         @budget="emit('dialog', 'budget')"
+        @prices="emit('dialog', 'prices')"
       />
       <QuotaBars v-else class="row__quota" :account="account" :now="now" />
       <div class="row__controls" @click.stop>
@@ -150,7 +151,12 @@ const details = computed(() =>
       </p>
       <AccountFacts :account="account" :now="now" :has-session="!!session" />
       <template v-if="account.kind === 'api-key'">
-        <KeyFacts :account="account" :now="now" @budget="emit('dialog', 'budget')" />
+        <KeyFacts
+          :account="account"
+          :now="now"
+          @budget="emit('dialog', 'budget')"
+          @prices="emit('dialog', 'prices')"
+        />
         <KeyActions :account="account" @dialog="emit('dialog', $event)" />
       </template>
       <QuotaGroups v-else :account="account" :now="now" />

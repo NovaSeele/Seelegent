@@ -61,7 +61,12 @@ const { actions, session, kindLabel, routing, next, menu, onMenu, setEnabled, se
     <AccountFacts :account="account" :now="now" :has-session="!!session" />
 
     <template v-if="account.kind === 'api-key'">
-      <KeyFacts :account="account" :now="now" @budget="emit('dialog', 'budget')" />
+      <KeyFacts
+        :account="account"
+        :now="now"
+        @budget="emit('dialog', 'budget')"
+        @prices="emit('dialog', 'prices')"
+      />
       <KeyActions :account="account" @dialog="emit('dialog', $event)" />
     </template>
     <QuotaGroups v-else :account="account" :now="now" />

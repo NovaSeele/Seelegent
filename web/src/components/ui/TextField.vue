@@ -20,7 +20,7 @@ const props = withDefaults(
     disabled?: boolean
     autocomplete?: string
     /** The on-screen keyboard to show (inputmode), e.g. numeric for a number that may also be pasted as a link. */
-    inputmode?: 'text' | 'numeric' | 'url'
+    inputmode?: 'text' | 'numeric' | 'decimal' | 'url'
     /** Keyboard shortcut that focuses the field (aria-keyshortcuts). */
     keyshortcuts?: string
     /** Id of a <datalist> of suggestions (the field still takes any text). */

@@ -45,14 +45,19 @@ describe('spendView', () => {
     expect(view?.ratio).toBeUndefined()
   })
 
-  it('shows only tokens when the service reports no cost, and says a budget there is not enforced', () => {
+  it('shows only tokens until the service has prices, and says a budget there waits for them', () => {
     const none = spendView(key({ spendSource: 'none', spentTokens: 1_200_000, budgetUsd: 50 }))
     expect(none).toMatchObject({
       kind: 'tokens',
       tokens: 1_200_000,
       budget: 50,
       budgetUnknown: true,
+      needsPrices: true,
+      estimate: false,
     })
+    expect(
+      spendView(key({ spendSource: 'none', spentTokens: 9, spentUnpricedTokens: 4 }))?.tokens,
+    ).toBe(4)
     expect(none?.ratio).toBeUndefined()
     expect(spendView(key({ spentTokens: 5 }))?.kind).toBe('tokens')
   })
@@ -62,5 +67,37 @@ describe('spendView', () => {
       kind: 'free',
       budgetUnknown: false,
     })
+  })
+
+  it('marks only the CLI’s amount as an estimate, and an unknown source as none', () => {
+    expect(spendView(key({ spendSource: 'cli' }))?.estimate).toBe(true)
+    expect(spendView(key({ spendSource: 'prices', spentUsd: 2 }))).toMatchObject({
+      source: 'prices',
+      kind: 'cost',
+      estimate: false,
+      needsPrices: false,
+      tokens: 0,
+    })
+    expect(
+      spendView(key({ spendSource: 'prices', spentUsd: 2, spentUnpricedTokens: 30 }))?.tokens,
+    ).toBe(30)
+    expect(
+      spendView(key({ spendSource: 'later' as unknown as 'none', spentTokens: 3 })),
+    ).toMatchObject({ source: 'none', kind: 'tokens' })
+  })
+
+  it('offers the service’s own limit as the budget only while none is set', () => {
+    const service = (budgetUsd?: number) =>
+      spendView(
+        key({
+          spendSource: 'service',
+          spentUsd: 1,
+          suggestedBudgetUsd: 25,
+          ...(budgetUsd ? { budgetUsd } : {}),
+        }),
+      )
+    expect(service()?.suggested).toBe(25)
+    expect(service(10)?.suggested).toBeUndefined()
+    expect(service(10)?.ratio).toBeCloseTo(0.1)
   })
 })

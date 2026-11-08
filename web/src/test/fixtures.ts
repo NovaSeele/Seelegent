@@ -156,6 +156,8 @@ export function makeProvider(overrides: Partial<Provider> = {}): Provider {
     official: false,
     allowedModels: '',
     tiers: { fast: '', standard: '', strong: '', max: '' },
+    prices: [],
+    spendSource: 'none',
     createdAt: iso(),
     updatedAt: iso(),
     ...overrides,

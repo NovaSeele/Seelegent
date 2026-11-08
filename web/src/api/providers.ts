@@ -1,6 +1,14 @@
 /** Typed endpoints of API providers (contract §4). */
 import type { ApiClient } from './client'
-import type { KeyTestRequest, KeyTestResult, Provider, ProviderInput, ProviderList } from './types'
+import type {
+  KeyTestRequest,
+  KeyTestResult,
+  PricesRequest,
+  PriceTable,
+  Provider,
+  ProviderInput,
+  ProviderList,
+} from './types'
 
 const enc = encodeURIComponent
 
@@ -20,6 +28,11 @@ export function createProvidersApi(client: ApiClient) {
      * refused; with accountId the stored key is used and the result is saved on the account.
      */
     test: (body: KeyTestRequest) => client.post<KeyTestResult>('/providers/test', { body }),
+    /** The provider's price table (USD per 1M tokens). */
+    prices: (id: string) => client.get<PriceTable>(`/providers/${enc(id)}/prices`),
+    /** Replaces the whole price table; [] removes every price. 400 with details.field prices[i].<field>. */
+    setPrices: (id: string, body: PricesRequest) =>
+      client.put<PriceTable>(`/providers/${enc(id)}/prices`, { body }),
   }
 }
 

@@ -58,7 +58,8 @@
     "model": "モデルを変更",
     "budget": "予算を設定",
     "turnOff": "オフにする",
-    "turnOn": "オンにする"
+    "turnOn": "オンにする",
+    "prices": "価格を設定"
   },
   "done": {
     "added": "{name} を追加しました",
@@ -72,7 +73,9 @@
     "priority": "{name} の優先度を {n} にしました",
     "budgetSet": "{name} の予算を {budget} に設定しました",
     "budgetRemoved": "{name} の予算を外しました",
-    "modelSet": "{service} のモデルを保存しました"
+    "modelSet": "{service} のモデルを保存しました",
+    "pricesSet": "{service} の価格を保存しました",
+    "pricesCleared": "{service} の価格を外しました"
   },
   "quota": {
     "window": "{window} ウィンドウ",
@@ -282,7 +285,8 @@
     "ok": "予算内",
     "warn": "予算の 80% を使用",
     "reached": "予算に達しました",
-    "unknown": "このサービスの支出は不明"
+    "unknown": "このサービスの支出は不明",
+    "unknownNeedsPrices": "予算 {budget} は価格待ちです:このサービスの価格を設定すると判定できます"
   },
   "restReason": {
     "budget_reached": "予算に達しました ({spent} / {budget})",
@@ -292,7 +296,9 @@
   "spendSource": {
     "cli": "Claude Code の推定",
     "free": "ローカル · 無料",
-    "none": "このサービスは費用を報告しません"
+    "none": "このサービスは費用を報告しません",
+    "service": "このキーについてサービス自身が数えた額",
+    "prices": "このサービスに設定した価格で計算"
   },
   "service": {
     "label": "サービス",
@@ -358,7 +364,8 @@
     "save": "予算を保存",
     "remove": "予算を外す",
     "positive": "0 より大きい金額を入力してください",
-    "noCost": "このサービスは費用を報告しないため、予算を確認できません。予算でキーが止まることはありません。"
+    "noCost": "このサービスは費用を報告しないため、予算を確認できません。予算でキーが止まることはありません。",
+    "suggested": "キーの OpenRouter 上限 {amount} を使う"
   },
   "model": {
     "title": "{service} のモデル",
@@ -407,24 +414,26 @@
   },
   "spend": {
     "short": {
-      "budget": "≈ {spent} / {budget}",
-      "over": "≈ {spent} / {budget}",
-      "since": "≈ {spent}({date} から)",
-      "cost": "≈ {spent}",
-      "tokens": "費用の報告なし · {tokens} トークン"
+      "budget": "{spent} / {budget}",
+      "over": "{spent} / {budget}",
+      "since": "{spent}({date} から)",
+      "cost": "{spent}",
+      "tokens": "{tokens} トークン"
     },
     "long": {
-      "budget": "≈ {budget} 中 {spent} 使用 · 残り {left}",
-      "over": "≈ {budget} 中 {spent} 使用 · {left} 超過",
-      "since": "≈ キー設定以降 {spent} 使用({date})",
-      "cost": "≈ {spent} 使用",
-      "tokens": "このサービスは費用を報告しません · {tokens} トークン"
+      "budget": "{budget} 中 {spent} 使用 · 残り {left}",
+      "over": "{budget} 中 {spent} 使用 · {left} 超過",
+      "since": "キー設定以降 {spent} 使用({date})",
+      "cost": "{spent} 使用",
+      "tokens": "{tokens} トークン、費用は不明"
     },
     "free": "ローカル · 無料",
     "estimateTip": "Claude Code 自身の推定で、サービスの請求額ではありません",
     "setBudget": "予算を設定",
     "barLabel": "予算の使用量",
-    "budgetUnknown": "予算 {budget} は適用されません:このサービスは費用を報告しません"
+    "budgetUnknown": "予算 {budget} は適用されません:このサービスは費用を報告しません",
+    "unpricedTokens": "価格のないトークン {tokens}",
+    "setPrices": "価格を設定して費用を表示"
   },
   "facts": {
     "model": "モデル:{model}",
@@ -436,6 +445,60 @@
     "addKey": "キーを追加",
     "official": "api.anthropic.com(公式)",
     "allows": "許可:{models}",
-    "usedByNames": "{names} がまだ使っています。先にそのアカウントを削除してください。"
+    "usedByNames": "{names} がまだ使っています。先にそのアカウントを削除してください。",
+    "prices": "価格",
+    "pricesOf": "{name} の価格"
+  },
+  "balance": {
+    "title": "残高 {amount}",
+    "shared": "アカウント全体",
+    "accountWide": "{provider} アカウント全体の残高で、すべてのキーで共有されます",
+    "readAt": "{time}に取得",
+    "stale": "古い可能性があります",
+    "granted": "付与 {amount}",
+    "paid": "入金 {amount}",
+    "unavailable": "リクエストを支払えません"
+  },
+  "serviceUsage": {
+    "total": "サービスがこのキーについて数えた額:{amount}",
+    "daily": "今日 {amount}",
+    "weekly": "今週 {amount}",
+    "monthly": "今月 {amount}",
+    "limit": "上限 {amount}、{reset}",
+    "reset": {
+      "daily": "毎日リセット",
+      "weekly": "毎週リセット",
+      "monthly": "毎月リセット",
+      "never": "リセットなし"
+    }
+  },
+  "serviceError": {
+    "refused": "支出の取得:サービスがキーを拒否しました",
+    "no_credit": "支出の取得:サービスはクレジットがないと言っています",
+    "unreachable": "支出の取得:サービスに接続できませんでした",
+    "redirected": "支出の取得:サービスが別の場所へ転送しました(キーはそこへ送っていません)",
+    "error": "支出の取得:サービスがエラーを返しました"
+  },
+  "prices": {
+    "title": "{service} の価格",
+    "model": "モデル",
+    "anyModel": "* は専用の行がないすべてのモデルです。",
+    "input": "入力",
+    "cachedInput": "キャッシュ入力",
+    "output": "出力",
+    "perMillion": "100 万トークンあたりの米ドル",
+    "pricingLink": "{service} の価格ページ",
+    "add": "行を追加",
+    "remove": "{model} の行を削除",
+    "save": "価格を保存",
+    "empty": "価格がありません:このサービスの支出はトークン数だけで数えます。行を追加するとドルで数えます。",
+    "appliesFromNow": "新しい価格はこれからの作業に適用されます。計上済みの支出は元の価格のままです。",
+    "error": {
+      "modelRequired": "モデルを入力してください(* は任意のモデル)",
+      "modelTooLong": "200 文字までです",
+      "duplicate": "このモデルの行はすでにあります",
+      "invalid": "0 から 10,000 の価格を入力してください",
+      "tooMany": "200 行までです"
+    }
   }
 }

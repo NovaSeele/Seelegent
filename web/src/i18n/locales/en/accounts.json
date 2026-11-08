@@ -58,7 +58,8 @@
     "model": "Change model",
     "budget": "Set budget",
     "turnOff": "Turn off",
-    "turnOn": "Turn on"
+    "turnOn": "Turn on",
+    "prices": "Set prices"
   },
   "done": {
     "added": "Added {name}",
@@ -72,7 +73,9 @@
     "priority": "Priority of {name} set to {n}",
     "budgetSet": "Budget of {name} set to {budget}",
     "budgetRemoved": "Budget of {name} removed",
-    "modelSet": "Model of {service} saved"
+    "modelSet": "Model of {service} saved",
+    "pricesSet": "Prices of {service} saved",
+    "pricesCleared": "Prices of {service} removed"
   },
   "quota": {
     "window": "{window} window",
@@ -282,7 +285,8 @@
     "ok": "Within budget",
     "warn": "80% of the budget used",
     "reached": "Budget reached",
-    "unknown": "Spend not known for this service"
+    "unknown": "Spend not known for this service",
+    "unknownNeedsPrices": "Budget {budget} waits for prices: set this service's prices to judge it"
   },
   "restReason": {
     "budget_reached": "Budget reached ({spent} of {budget})",
@@ -292,7 +296,9 @@
   "spendSource": {
     "cli": "Claude Code's estimate",
     "free": "Local · free",
-    "none": "Cost not reported by this service"
+    "none": "Cost not reported by this service",
+    "service": "The service's own count for this key",
+    "prices": "At your prices for this service"
   },
   "service": {
     "label": "Service",
@@ -358,7 +364,8 @@
     "save": "Save budget",
     "remove": "Remove budget",
     "positive": "Enter an amount above 0",
-    "noCost": "This service reports no cost, so the budget cannot be checked: the key is never stopped by it."
+    "noCost": "This service reports no cost, so the budget cannot be checked: the key is never stopped by it.",
+    "suggested": "Use the key's OpenRouter limit, {amount}"
   },
   "model": {
     "title": "Model of {service}",
@@ -407,24 +414,26 @@
   },
   "spend": {
     "short": {
-      "budget": "≈ {spent} / {budget}",
-      "over": "≈ {spent} / {budget}",
-      "since": "≈ {spent} since {date}",
-      "cost": "≈ {spent}",
-      "tokens": "Cost not reported · {tokens} tokens"
+      "budget": "{spent} / {budget}",
+      "over": "{spent} / {budget}",
+      "since": "{spent} since {date}",
+      "cost": "{spent}",
+      "tokens": "{tokens} tokens"
     },
     "long": {
-      "budget": "≈ {spent} spent of {budget} · {left} left",
-      "over": "≈ {spent} spent of {budget} · {left} over",
-      "since": "≈ {spent} spent since the key was set ({date})",
-      "cost": "≈ {spent} spent",
-      "tokens": "Cost not reported by this service · {tokens} tokens"
+      "budget": "{spent} spent of {budget} · {left} left",
+      "over": "{spent} spent of {budget} · {left} over",
+      "since": "{spent} spent since the key was set ({date})",
+      "cost": "{spent} spent",
+      "tokens": "{tokens} tokens, no cost known"
     },
     "free": "Local · free",
     "estimateTip": "Claude Code's own estimate, not the service's bill",
     "setBudget": "Set budget",
     "barLabel": "Budget used",
-    "budgetUnknown": "Budget {budget} is not enforced: this service reports no cost"
+    "budgetUnknown": "Budget {budget} is not enforced: this service reports no cost",
+    "unpricedTokens": "{tokens} tokens without a price",
+    "setPrices": "Set prices to see cost"
   },
   "facts": {
     "model": "Model: {model}",
@@ -436,6 +445,60 @@
     "addKey": "Add key",
     "official": "api.anthropic.com (official)",
     "allows": "allows {models}",
-    "usedByNames": "{names} still uses it: remove that account first. | {names} still use it: remove those accounts first."
+    "usedByNames": "{names} still uses it: remove that account first. | {names} still use it: remove those accounts first.",
+    "prices": "Prices",
+    "pricesOf": "Prices of {name}"
+  },
+  "balance": {
+    "title": "Balance {amount}",
+    "shared": "account-wide",
+    "accountWide": "Balance of the whole {provider} account, shared by all its keys",
+    "readAt": "read {time}",
+    "stale": "may be out of date",
+    "granted": "Granted {amount}",
+    "paid": "Paid {amount}",
+    "unavailable": "cannot pay for requests"
+  },
+  "serviceUsage": {
+    "total": "Counted by the service for this key: {amount}",
+    "daily": "today {amount}",
+    "weekly": "this week {amount}",
+    "monthly": "this month {amount}",
+    "limit": "limit {amount}, {reset}",
+    "reset": {
+      "daily": "resets daily",
+      "weekly": "resets weekly",
+      "monthly": "resets monthly",
+      "never": "no reset"
+    }
+  },
+  "serviceError": {
+    "refused": "Reading the spend: the service refused the key",
+    "no_credit": "Reading the spend: the service says no credit is left",
+    "unreachable": "Reading the spend: the service could not be reached",
+    "redirected": "Reading the spend: the service sent it elsewhere (the key was not sent there)",
+    "error": "Reading the spend: the service answered with an error"
+  },
+  "prices": {
+    "title": "Prices of {service}",
+    "model": "Model",
+    "anyModel": "* stands for any model without its own row.",
+    "input": "Input",
+    "cachedInput": "Cached input",
+    "output": "Output",
+    "perMillion": "US dollars per 1M tokens",
+    "pricingLink": "{service}'s price page",
+    "add": "Add a row",
+    "remove": "Remove the row of {model}",
+    "save": "Save prices",
+    "empty": "No prices: this service's spend is counted in tokens only. Add a row to count it in dollars.",
+    "appliesFromNow": "New prices apply to work from now on; spend already counted keeps its price.",
+    "error": {
+      "modelRequired": "Enter a model, or * for any model",
+      "modelTooLong": "At most 200 characters",
+      "duplicate": "This model has a row already",
+      "invalid": "Enter a price from 0 to 10,000",
+      "tooMany": "At most 200 rows"
+    }
   }
 }

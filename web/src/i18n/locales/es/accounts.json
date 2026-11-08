@@ -58,7 +58,8 @@
     "model": "Cambiar modelo",
     "budget": "Fijar presupuesto",
     "turnOff": "Desactivar",
-    "turnOn": "Activar"
+    "turnOn": "Activar",
+    "prices": "Fijar precios"
   },
   "done": {
     "added": "Se añadió {name}",
@@ -72,7 +73,9 @@
     "priority": "Prioridad de {name} fijada en {n}",
     "budgetSet": "Presupuesto de {name} fijado en {budget}",
     "budgetRemoved": "Presupuesto de {name} quitado",
-    "modelSet": "Modelo de {service} guardado"
+    "modelSet": "Modelo de {service} guardado",
+    "pricesSet": "Precios de {service} guardados",
+    "pricesCleared": "Precios de {service} quitados"
   },
   "quota": {
     "window": "Ventana de {window}",
@@ -282,7 +285,8 @@
     "ok": "Dentro del presupuesto",
     "warn": "80% del presupuesto usado",
     "reached": "Presupuesto agotado",
-    "unknown": "Gasto desconocido para este servicio"
+    "unknown": "Gasto desconocido para este servicio",
+    "unknownNeedsPrices": "El presupuesto de {budget} espera precios: fija los precios de este servicio para juzgarlo"
   },
   "restReason": {
     "budget_reached": "Presupuesto agotado ({spent} de {budget})",
@@ -292,7 +296,9 @@
   "spendSource": {
     "cli": "Estimación de Claude Code",
     "free": "Local · gratis",
-    "none": "Este servicio no informa el coste"
+    "none": "Este servicio no informa el coste",
+    "service": "La cuenta propia del servicio para esta clave",
+    "prices": "A tus precios para este servicio"
   },
   "service": {
     "label": "Servicio",
@@ -358,7 +364,8 @@
     "save": "Guardar presupuesto",
     "remove": "Quitar presupuesto",
     "positive": "Escribe un importe mayor que 0",
-    "noCost": "Este servicio no informa del coste, así que el presupuesto no se puede comprobar: nunca detiene la clave."
+    "noCost": "Este servicio no informa del coste, así que el presupuesto no se puede comprobar: nunca detiene la clave.",
+    "suggested": "Usar el límite de OpenRouter de la clave, {amount}"
   },
   "model": {
     "title": "Modelo de {service}",
@@ -407,24 +414,26 @@
   },
   "spend": {
     "short": {
-      "budget": "≈ {spent} / {budget}",
-      "over": "≈ {spent} / {budget}",
-      "since": "≈ {spent} desde el {date}",
-      "cost": "≈ {spent}",
-      "tokens": "Coste no informado · {tokens} tokens"
+      "budget": "{spent} / {budget}",
+      "over": "{spent} / {budget}",
+      "since": "{spent} desde el {date}",
+      "cost": "{spent}",
+      "tokens": "{tokens} tokens"
     },
     "long": {
-      "budget": "≈ {spent} gastados de {budget} · quedan {left}",
-      "over": "≈ {spent} gastados de {budget} · {left} de más",
-      "since": "≈ {spent} gastados desde que se puso la clave ({date})",
-      "cost": "≈ {spent} gastados",
-      "tokens": "Este servicio no informa del coste · {tokens} tokens"
+      "budget": "{spent} gastados de {budget} · quedan {left}",
+      "over": "{spent} gastados de {budget} · {left} de más",
+      "since": "{spent} gastados desde que se puso la clave ({date})",
+      "cost": "{spent} gastados",
+      "tokens": "{tokens} tokens, coste desconocido"
     },
     "free": "Local · gratis",
     "estimateTip": "La estimación de Claude Code, no la factura del servicio",
     "setBudget": "Fijar presupuesto",
     "barLabel": "Presupuesto usado",
-    "budgetUnknown": "El presupuesto de {budget} no se aplica: este servicio no informa del coste"
+    "budgetUnknown": "El presupuesto de {budget} no se aplica: este servicio no informa del coste",
+    "unpricedTokens": "{tokens} tokens sin precio",
+    "setPrices": "Fija precios para ver el coste"
   },
   "facts": {
     "model": "Modelo: {model}",
@@ -436,6 +445,60 @@
     "addKey": "Añadir clave",
     "official": "api.anthropic.com (oficial)",
     "allows": "permite {models}",
-    "usedByNames": "{names} aún lo usa: quita antes esa cuenta. | {names} aún lo usan: quita antes esas cuentas."
+    "usedByNames": "{names} aún lo usa: quita antes esa cuenta. | {names} aún lo usan: quita antes esas cuentas.",
+    "prices": "Precios",
+    "pricesOf": "Precios de {name}"
+  },
+  "balance": {
+    "title": "Saldo {amount}",
+    "shared": "de toda la cuenta",
+    "accountWide": "Saldo de toda la cuenta de {provider}, compartido por todas sus claves",
+    "readAt": "leído {time}",
+    "stale": "puede estar desactualizado",
+    "granted": "Regalado {amount}",
+    "paid": "Pagado {amount}",
+    "unavailable": "no alcanza para pagar peticiones"
+  },
+  "serviceUsage": {
+    "total": "Contado por el servicio para esta clave: {amount}",
+    "daily": "hoy {amount}",
+    "weekly": "esta semana {amount}",
+    "monthly": "este mes {amount}",
+    "limit": "límite {amount}, {reset}",
+    "reset": {
+      "daily": "se reinicia cada día",
+      "weekly": "se reinicia cada semana",
+      "monthly": "se reinicia cada mes",
+      "never": "sin reinicio"
+    }
+  },
+  "serviceError": {
+    "refused": "Al leer el gasto: el servicio rechazó la clave",
+    "no_credit": "Al leer el gasto: el servicio dice que no queda crédito",
+    "unreachable": "Al leer el gasto: no se pudo contactar con el servicio",
+    "redirected": "Al leer el gasto: el servicio lo envió a otro sitio (la clave no se envió allí)",
+    "error": "Al leer el gasto: el servicio respondió con un error"
+  },
+  "prices": {
+    "title": "Precios de {service}",
+    "model": "Modelo",
+    "anyModel": "* es cualquier modelo sin fila propia.",
+    "input": "Entrada",
+    "cachedInput": "Entrada en caché",
+    "output": "Salida",
+    "perMillion": "Dólares estadounidenses por 1M de tokens",
+    "pricingLink": "Página de precios de {service}",
+    "add": "Añadir fila",
+    "remove": "Quitar la fila de {model}",
+    "save": "Guardar precios",
+    "empty": "Sin precios: el gasto de este servicio se cuenta solo en tokens. Añade una fila para contarlo en dólares.",
+    "appliesFromNow": "Los precios nuevos se aplican al trabajo desde ahora; el gasto ya contado conserva su precio.",
+    "error": {
+      "modelRequired": "Escribe un modelo, o * para cualquiera",
+      "modelTooLong": "Como mucho 200 caracteres",
+      "duplicate": "Este modelo ya tiene una fila",
+      "invalid": "Escribe un precio de 0 a 10.000",
+      "tooMany": "Como mucho 200 filas"
+    }
   }
 }

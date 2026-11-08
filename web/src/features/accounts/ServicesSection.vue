@@ -16,6 +16,7 @@ import { useActions } from './accountView'
 import AddAccountDialog from './AddAccountDialog.vue'
 import { serviceValue } from './apiKey'
 import { allowList } from './providerForm'
+import PricesDialog from './PricesDialog.vue'
 import ProviderDialog from './ProviderDialog.vue'
 import ServiceItem from './ServiceItem.vue'
 
@@ -45,6 +46,7 @@ const dialogOpen = ref(false)
 const adding = ref(false)
 const addService = ref('')
 const deleting = ref<Provider | null>(null)
+const pricing = ref<Provider | null>(null)
 const deleteBusy = ref(false)
 const deleteError = ref('')
 
@@ -182,6 +184,7 @@ function setEnabled(provider: Provider, enabled: boolean) {
           :keys="usersOf(provider).length"
           :busy="actions.isBusy(provider.id)"
           @add-key="addKey(provider)"
+          @prices="pricing = provider"
           @edit="edit(provider)"
           @remove="askDelete(provider)"
           @enabled="setEnabled(provider, $event)"
@@ -191,6 +194,7 @@ function setEnabled(provider: Provider, enabled: boolean) {
 
     <ProviderDialog v-model:open="dialogOpen" :provider="editing" />
     <AddAccountDialog v-model:open="adding" :service="addService" />
+    <PricesDialog :open="pricing !== null" :provider="pricing" @update:open="pricing = null" />
     <ConfirmDialog
       :open="deleting !== null"
       :title="t('accounts.providers.deleteTitle', { name: deleting?.name ?? '' })"

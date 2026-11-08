@@ -116,6 +116,25 @@ describe('ServicesSection', () => {
     wrapper.unmount()
   })
 
+  it('opens the service’s prices from "Prices", and offers none for a local service', async () => {
+    const { wrapper } = await mountSection({}, { collapsible: false })
+    await wrapper.find('button[aria-label="Prices of DeepSeek"]').trigger('click')
+    await flushPromises()
+    expect(document.body.textContent).toContain('US dollars per 1M tokens')
+    expect(document.body.querySelector('[role="dialog"]')?.textContent).toContain(
+      'Prices of DeepSeek',
+    )
+    wrapper.unmount()
+    const ollama = makeProvider({ id: 'ollama', name: 'Ollama', spendSource: 'free' })
+    const local = await mountSection(
+      { list: vi.fn(() => Promise.resolve({ items: [ollama], presets: [] })) },
+      { collapsible: false },
+    )
+    expect(local.wrapper.find('.svc').exists()).toBe(true)
+    expect(local.wrapper.find('button[aria-label="Prices of Ollama"]').exists()).toBe(false)
+    local.wrapper.unmount()
+  })
+
   it('names the accounts that still use a service, and shows the daemon’s refusal', async () => {
     const remove = vi.fn(() => Promise.reject(new ApiError(409, 'conflict', 'provider in use')))
     const { wrapper } = await mountSection({ remove }, { collapsible: false })

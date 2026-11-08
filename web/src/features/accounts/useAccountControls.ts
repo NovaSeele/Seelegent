@@ -10,7 +10,7 @@ import { canSignIn, offConsequence, useActions } from './accountView'
 import { useKeyTest } from './useKeyTest'
 
 export type AccountDialog =
-  'rename' | 'key' | 'delete' | 'logout' | 'off' | 'priority' | 'budget' | 'model'
+  'rename' | 'key' | 'delete' | 'logout' | 'off' | 'priority' | 'budget' | 'model' | 'prices'
 
 /**
  * The controls an account card or list row shares: its type line ("Subscription · Own sign-in", "API key ·
@@ -90,6 +90,9 @@ export function useAccountControls(
         ...(a.provider
           ? [{ id: 'model', label: t('accounts.action.model'), icon: 'gauge' } as const]
           : []),
+        ...(a.provider && a.spendSource !== 'free' && a.spendSource !== 'service'
+          ? [{ id: 'prices', label: t('accounts.action.prices'), icon: 'quota' } as const]
+          : []),
         ...(a.spendSource !== 'free'
           ? [{ id: 'budget', label: t('accounts.action.budget'), icon: 'quota' } as const]
           : []),
@@ -124,6 +127,7 @@ export function useAccountControls(
     'priority',
     'budget',
     'model',
+    'prices',
   ])
 
   function onMenu(item: string) {

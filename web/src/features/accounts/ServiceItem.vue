@@ -18,6 +18,7 @@ import { allowList, tierModels } from './providerForm'
 const props = defineProps<{ provider: Provider; keys: number; busy: boolean }>()
 const emit = defineEmits<{
   addKey: []
+  prices: []
   edit: []
   remove: []
   enabled: [value: boolean]
@@ -63,6 +64,16 @@ const allowed = computed(() => {
     <div class="svc__actions">
       <Button size="sm" variant="secondary" icon="plus" @click="emit('addKey')">
         {{ t('accounts.services.addKey') }}
+      </Button>
+      <Button
+        v-if="provider.spendSource !== 'free'"
+        size="sm"
+        variant="ghost"
+        icon="quota"
+        :aria-label="t('accounts.services.pricesOf', { name: provider.name })"
+        @click="emit('prices')"
+      >
+        {{ t('accounts.services.prices') }}
       </Button>
       <Switch
         :model-value="provider.enabled"

@@ -12,3 +12,21 @@ export function formatUSD(value: number): string {
   }
   return `$${value.toFixed(2)}`
 }
+
+/**
+ * An amount in the currency a service named ("USD", "CNY"), never converted: US dollars as formatUSD writes them,
+ * others with the currency's narrow symbol ("¥187.60"), or the code after the number when Intl does not know it.
+ */
+export function formatMoney(value: number, currency: string, locale = 'en'): string {
+  const code = currency.trim().toUpperCase()
+  if (code === 'USD') return formatUSD(value)
+  try {
+    return new Intl.NumberFormat(locale, {
+      style: 'currency',
+      currency: code,
+      currencyDisplay: 'narrowSymbol',
+    }).format(value)
+  } catch {
+    return `${value.toFixed(2)} ${currency}`
+  }
+}

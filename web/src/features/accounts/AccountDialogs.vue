@@ -11,12 +11,14 @@ import NumberField from '@/components/ui/NumberField.vue'
 import TextField from '@/components/ui/TextField.vue'
 import { useNow } from '@/composables/useNow'
 import { useAccountsStore } from '@/stores/accounts'
+import { useProvidersStore } from '@/stores/providers'
 import { useToastStore } from '@/stores/toast'
 
 import { offConsequence } from './accountView'
 import BudgetDialog from './BudgetDialog.vue'
 import KeyDialog from './KeyDialog.vue'
 import ModelDialog from './ModelDialog.vue'
+import PricesDialog from './PricesDialog.vue'
 import type { AccountDialog } from './useAccountControls'
 
 /**
@@ -30,6 +32,7 @@ const dialog = defineModel<AccountDialog | null>({ required: true })
 
 const { t } = useI18n()
 const accounts = useAccountsStore()
+const providers = useProvidersStore()
 const toast = useToastStore()
 
 const label = ref('')
@@ -52,6 +55,7 @@ watch(
 )
 
 const name = computed(() => props.account?.label ?? '')
+const provider = computed(() => providers.items.find((p) => p.id === props.account?.provider))
 
 // Read while the dialog is open, so a turn that ends meanwhile updates the wording.
 const now = useNow(30_000)
@@ -166,6 +170,7 @@ const turnOff = () =>
   <KeyDialog :open="dialog === 'key'" :account="account" @update:open="dialog = null" />
   <BudgetDialog :open="dialog === 'budget'" :account="account" @update:open="dialog = null" />
   <ModelDialog :open="dialog === 'model'" :account="account" @update:open="dialog = null" />
+  <PricesDialog :open="dialog === 'prices'" :provider="provider" @update:open="dialog = null" />
 
   <ConfirmDialog
     :open="dialog === 'delete'"
