@@ -12,9 +12,62 @@ import (
 	"github.com/NovaSeele/Seelegent/internal/platform"
 )
 
+// fakeNow is the hub's clock in tests: Now, and AfterFunc timers that fire only through fire.
 type fakeNow struct {
-	mu sync.Mutex
-	t  time.Time
+	mu     sync.Mutex
+	t      time.Time
+	timers []*fakeAfter
+}
+
+// fakeAfter is one AfterFunc timer.
+type fakeAfter struct {
+	at      time.Time
+	f       func()
+	stopped bool
+	fired   bool
+}
+
+func (f *fakeNow) afterFunc(d time.Duration, fn func()) func() bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	t := &fakeAfter{at: f.t.Add(d), f: fn}
+	f.timers = append(f.timers, t)
+	return func() bool {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		was := !t.stopped && !t.fired
+		t.stopped = true
+		return was
+	}
+}
+
+// armed returns the timers neither stopped nor fired.
+func (f *fakeNow) armed() []*fakeAfter {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var out []*fakeAfter
+	for _, t := range f.timers {
+		if !t.stopped && !t.fired {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
+// fire runs the armed timers that are due now.
+func (f *fakeNow) fire() {
+	f.mu.Lock()
+	var due []*fakeAfter
+	for _, t := range f.timers {
+		if !t.stopped && !t.fired && !t.at.After(f.t) {
+			t.fired = true
+			due = append(due, t)
+		}
+	}
+	f.mu.Unlock()
+	for _, t := range due {
+		t.f()
+	}
 }
 
 func (f *fakeNow) now() time.Time {
@@ -32,7 +85,7 @@ func (f *fakeNow) add(d time.Duration) {
 func newTestHub(t *testing.T, o HubOptions) (*Hub, *fakeNow) {
 	t.Helper()
 	clk := &fakeNow{t: time.Date(2026, 11, 7, 10, 0, 0, 0, time.UTC)}
-	o.Now, o.Instance = clk.now, "abcd1234"
+	o.Now, o.AfterFunc, o.Instance = clk.now, clk.afterFunc, "abcd1234"
 	h, err := NewHub(o)
 	if err != nil {
 		t.Fatal(err)
@@ -110,6 +163,72 @@ func TestHubRingAgeAndBytes(t *testing.T) {
 	h2.mu.Unlock()
 	if n == 0 || n > 2 || size > 100 {
 		t.Fatalf("ring %d frames, %d bytes", n, size)
+	}
+}
+
+// TestHubRingAgesOutWhenIdle: frames age out without another Publish; the empty ring releases its backing array and
+// no timer stays armed.
+func TestHubRingAgesOutWhenIdle(t *testing.T) {
+	h, clk := newTestHub(t, HubOptions{RingAge: time.Minute})
+	publishN(t, h, 2)
+	clk.add(30 * time.Second)
+	publishN(t, h, 1)
+	if n := len(clk.armed()); n != 1 {
+		t.Fatalf("%d timers armed after 3 publishes, want 1", n)
+	}
+	clk.add(30 * time.Second)
+	clk.fire() // exactly a minute: not due yet (a frame RingAge old is kept; the timer fires just after)
+	clk.add(time.Millisecond)
+	clk.fire()
+	h.mu.Lock()
+	kept := len(h.kept())
+	h.mu.Unlock()
+	if kept != 1 {
+		t.Fatalf("after the first frames aged out: %d kept, want 1", kept)
+	}
+	armed := clk.armed()
+	if len(armed) != 1 || !armed[0].at.Equal(clk.now().Add(30*time.Second)) {
+		t.Fatalf("re-armed timers: %+v", armed)
+	}
+	clk.add(30 * time.Second)
+	clk.fire()
+	h.mu.Lock()
+	ring, size := h.ring, h.ringBytes
+	h.mu.Unlock()
+	if ring != nil || size != 0 {
+		t.Fatalf("aged-out ring: %d frames (cap %d), %d bytes; want released", len(ring), cap(ring), size)
+	}
+	if n := len(clk.armed()); n != 0 {
+		t.Fatalf("%d timers armed on an empty ring", n)
+	}
+	if sub, _ := h.subscribe("abcd1234.1"); sub.reset != api.ResetTooOld {
+		t.Fatalf("resume after the ring emptied = %+v", sub)
+	}
+	// A new frame arms the timer again.
+	publishN(t, h, 1)
+	if n := len(clk.armed()); n != 1 {
+		t.Fatalf("%d timers armed after a new frame, want 1", n)
+	}
+}
+
+// TestHubCloseStopsTheAgeTimer: Close cancels the armed timer, and a timer that fires after Close does nothing.
+func TestHubCloseStopsTheAgeTimer(t *testing.T) {
+	h, clk := newTestHub(t, HubOptions{RingAge: time.Minute})
+	publishN(t, h, 1)
+	armed := clk.armed()
+	if len(armed) != 1 {
+		t.Fatalf("%d timers armed, want 1", len(armed))
+	}
+	h.Close()
+	if n := len(clk.armed()); n != 0 {
+		t.Fatalf("%d timers armed after Close", n)
+	}
+	armed[0].f() // a timer already running when Close stopped it
+	h.mu.Lock()
+	kept := len(h.kept())
+	h.mu.Unlock()
+	if kept != 1 || len(clk.armed()) != 0 {
+		t.Fatalf("after a stale timer: %d kept, %d armed", kept, len(clk.armed()))
 	}
 }
 
