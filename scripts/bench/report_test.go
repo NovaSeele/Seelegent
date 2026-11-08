@@ -146,15 +146,25 @@ type budgetCheck struct {
 // retainedHeap is the load scenario's retained-heap check: the daemon's live heap after forced GCs just before the
 // load tasks start (after the warmup) and again once every load task ended, the SSE clients and pollers stopped and
 // SettleSeconds passed. The delta is what the load left behind; unlike the slopes it does not count the state of
-// attempts that are still running.
+// attempts that are still running. The SSE replay ring keeps the last frames for 10 minutes, so at the end it still
+// holds the load's frames: ExRingDeltaMB, the budgeted value, is the delta without the ring's heap at either
+// reading (the raw delta when the daemon does not report its ring: RingUnknown).
 type retainedHeap struct {
-	StartMB       float64 `json:"startMB"`
-	EndMB         float64 `json:"endMB"`
-	DeltaMB       float64 `json:"deltaMB"`
-	SettleSeconds float64 `json:"settleSeconds"`
-	Note          string  `json:"note,omitempty"`
+	StartMB         float64 `json:"startMB"`
+	EndMB           float64 `json:"endMB"`
+	DeltaMB         float64 `json:"deltaMB"`
+	StartRingMB     float64 `json:"startSseRingMB"`
+	EndRingMB       float64 `json:"endSseRingMB"`
+	StartRingFrames int     `json:"startSseRingFrames"`
+	EndRingFrames   int     `json:"endSseRingFrames"`
+	ExRingDeltaMB   float64 `json:"deltaExcludingSseRingMB"`
+	RingUnknown     bool    `json:"sseRingUnknown,omitempty"`
+	SettleSeconds   float64 `json:"settleSeconds"`
+	Note            string  `json:"note,omitempty"`
 	// Error is why the end could not be read; the budget row is then left out.
 	Error string `json:"error,omitempty"`
+	// start is the first reading (the ring in bytes, for the end's arithmetic).
+	start heapReading
 }
 
 // goSysBreakdown is where Go's Sys goes at the end of the run (runtime.MemStats, MB): the heap, and what lies outside
@@ -549,8 +559,12 @@ func (r *result) budget() []budgetCheck {
 		}
 	}
 	if x := r.Retained; x.measured() {
-		out = append(out, budgetCheck{Name: "live heap retained after load (after GC) MB", Limit: 3, Value: x.DeltaMB,
-			OK: x.DeltaMB <= 3})
+		c := budgetCheck{Name: "live heap retained after load, excluding the SSE replay ring (after GC) MB", Limit: 3,
+			Value: x.ExRingDeltaMB, OK: x.ExRingDeltaMB <= 3}
+		if x.RingUnknown {
+			c.Note = "the daemon does not report its SSE ring: raw delta"
+		}
+		out = append(out, c)
 	}
 	if r.idleScenario() {
 		add("idle daemon CPU % of one core (window average)", 0.1, r.Daemon.CPUPercent)
@@ -633,6 +647,13 @@ func writeMarkdown(w io.Writer, r *result) {
 		if x.measured() {
 			p("| live heap retained after load (after GC) start / end / delta | %.2f / %.2f / %+.2f MB |\n", x.StartMB,
 				x.EndMB, x.DeltaMB)
+			if x.RingUnknown {
+				p("| SSE replay ring start / end | not reported by this daemon |\n")
+			} else {
+				p("| SSE replay ring start / end | %.2f / %.2f MB (%d / %d frames) |\n", x.StartRingMB, x.EndRingMB,
+					x.StartRingFrames, x.EndRingFrames)
+			}
+			p("| live heap retained after load, excluding the SSE replay ring | %+.2f MB |\n", x.ExRingDeltaMB)
 		} else {
 			p("| live heap retained after load (after GC) | start %.2f MB, end not read: %s |\n", x.StartMB, x.Error)
 		}
@@ -642,7 +663,9 @@ func writeMarkdown(w io.Writer, r *result) {
 	if x := r.Retained; x != nil {
 		p("Retained heap: the live heap after forced GCs (`/debug/pprof/heap?gc=1` twice, then `/gc/heap/live` from "+
 			"`/debug/vars?light=1`) just before the load tasks start and %.0f s after every load task ended and the SSE "+
-			"clients and pollers stopped; profiles in heap-before-load.pprof and heap-after-load.pprof.", x.SettleSeconds)
+			"clients and pollers stopped; profiles in heap-before-load.pprof and heap-after-load.pprof. The SSE replay "+
+			"ring (daemon.sseRing in the same answer) keeps the last frames for 10 minutes, so the budget is the delta "+
+			"without it.", x.SettleSeconds)
 		if x.Note != "" {
 			p(" Note: %s.", x.Note)
 		}
@@ -758,7 +781,9 @@ func (r *result) metrics() []metric {
 	}
 	if x := r.Retained; x.measured() {
 		m = append(m, metric{"live heap before load MB", x.StartMB}, metric{"live heap after load MB", x.EndMB},
-			metric{"live heap retained after load MB", x.DeltaMB})
+			metric{"live heap retained after load MB", x.DeltaMB},
+			metric{"live heap retained after load excl. SSE ring MB", x.ExRingDeltaMB},
+			metric{"SSE ring after load MB", x.EndRingMB})
 	}
 	if t := r.Tree; t != nil {
 		m = append(m, metric{"tree CPU % core", t.CPUPercent}, metric{"tree processes/h", t.StartedPerHour})

@@ -644,13 +644,17 @@ const retainSettle = 5 * time.Second
 // retainedStart reads the live heap after forced GCs before the load starts (heap-before-load.pprof); nil when it
 // cannot be read, and then the check is skipped.
 func (e *env) retainedStart(ctx context.Context, s *sampler) *retainedHeap {
-	live, err := s.liveAfterGC(ctx, filepath.Join(e.out, "heap-before-load.pprof"))
+	h, err := s.liveAfterGC(ctx, filepath.Join(e.out, "heap-before-load.pprof"))
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "bench: live heap before the load:", err)
 		s.noteErr("retained heap start: " + err.Error())
 		return nil
 	}
-	return &retainedHeap{StartMB: round(mb(live), 2), SettleSeconds: retainSettle.Seconds()}
+	rh := &retainedHeap{StartMB: round(mb(h.live), 2), SettleSeconds: retainSettle.Seconds(), start: h}
+	if h.ring != nil {
+		rh.StartRingMB, rh.StartRingFrames = round(mb(h.ring.HeapBytes), 2), h.ring.Frames
+	}
+	return rh
 }
 
 // retainedEnd reads the live heap after forced GCs once every load task ended and the SSE clients and pollers
@@ -663,15 +667,23 @@ func (e *env) retainedEnd(ctx context.Context, s *sampler, rh *retainedHeap, not
 		rh.Error = err.Error()
 		return
 	}
-	live, err := s.liveAfterGC(ctx, filepath.Join(e.out, "heap-after-load.pprof"))
+	h, err := s.liveAfterGC(ctx, filepath.Join(e.out, "heap-after-load.pprof"))
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "bench: live heap after the load:", err)
 		s.noteErr("retained heap end: " + err.Error())
 		rh.Error = err.Error()
 		return
 	}
-	rh.EndMB = round(mb(live), 2)
+	rh.EndMB = round(mb(h.live), 2)
 	rh.DeltaMB = round(rh.EndMB-rh.StartMB, 2)
+	// The ring is not a leak: it keeps the last frames for RingAge (10 min), so it is taken out of the budgeted
+	// delta. Bytes, not MB, so the rounding does not add up.
+	rh.ExRingDeltaMB, rh.RingUnknown = rh.DeltaMB, true
+	if s0, s1 := rh.start.ring, h.ring; s0 != nil && s1 != nil {
+		rh.EndRingMB, rh.EndRingFrames, rh.RingUnknown = round(mb(s1.HeapBytes), 2), s1.Frames, false
+		ex := (float64(h.live) - float64(s1.HeapBytes)) - (float64(rh.start.live) - float64(s0.HeapBytes))
+		rh.ExRingDeltaMB = round(ex/mib, 2)
+	}
 }
 
 // goSysEnd reads the daemon's full runtime.MemStats (/debug/vars without light=1) at the end of the run, after the

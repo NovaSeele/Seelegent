@@ -189,11 +189,17 @@ until every one ended and the SSE clients and pollers stopped, waits 5 s more, a
 Each reading fetches `/debug/pprof/heap?gc=1` twice on the pprof port (every fetch runs a full GC first; the second
 also clears what `sync.Pool` keeps for one more cycle), saves the second profile (`heap-before-load.pprof`,
 `heap-after-load.pprof`), and then reads `/gc/heap/live` (the bytes the last GC marked live) from
-`/debug/vars?light=1`. The result shows the start, the end and the delta in MB; the budget allows a delta of at most
-3 MB. `go tool pprof -top -sample_index=inuse_space -base heap-before-load.pprof heap-after-load.pprof` shows what
-stayed. The idle scenarios keep the slopes as budgets. Every result carries the machine profile (OS, CPUs, RAM and commit, free memory and commit over the
-window, system threads, the three other programs that used the most CPU), so runs on different machines or on a
-busy one can be told apart.
+`/debug/vars?light=1`. The same answer carries the SSE replay ring (`daemon.sseRing`: frames, encoded bytes and the
+heap they hold), which keeps the last frames for 10 minutes and so still holds the load's frames at the end
+reading; that is not a leak. The result shows the start, the end and the raw delta in MB, the ring at both
+readings, and the delta without the ring, which is the budgeted value: at most 3 MB. A daemon that does not report
+its ring (an older build) is judged on the raw delta, with a note.
+`go tool pprof -top -sample_index=inuse_space -base heap-before-load.pprof heap-after-load.pprof` shows what
+stayed. The idle scenarios keep the slopes as budgets.
+
+Every result carries the machine profile (OS, CPUs, RAM and commit, free memory and commit over the window, system
+threads, the three other programs that used the most CPU), so runs on different machines or on a busy one can be
+told apart.
 
 On Windows a CPU profile counts goroutines blocked in a system call as CPU: a launcher or the daemon waiting in
 `ReadFile` on a pipe shows up as `os.(*File).Read`, `bytes.Buffer.ReadFrom` or `io.Copy` with large sample counts
