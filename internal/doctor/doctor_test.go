@@ -183,8 +183,9 @@ func TestResourcesCheck(t *testing.T) {
 	}
 }
 
-// TestResourcesFromDaemon: with the daemon running, the values, sources and machine come from its health, not from
-// the settings file; a daemon that does not report them, or none, falls back to computing them here.
+// TestResourcesFromDaemon: with the daemon running, the values, sources, machine and the memory reading come from
+// its health, not from the settings file or this process; a daemon that does not report them, or none, falls back
+// to this process's reading and values computed here.
 func TestResourcesFromDaemon(t *testing.T) {
 	read := func() platform.MemoryStatus {
 		return platform.MemoryStatus{AvailPhysMB: 1500, TotalPhysMB: 16384, Known: true, CgroupV1: true}
@@ -195,15 +196,29 @@ func TestResourcesFromDaemon(t *testing.T) {
 			CriticalFreeMemoryMB: v(3000, api.ResourceExplicit), MinFreeCommitMB: v(0, api.ResourceAuto),
 			TestParallelism: v(2, api.ResourceAuto), GateConcurrency: v(1, api.ResourceAuto)},
 		Machine: api.Machine{TotalPhysMB: 16384, CPUs: 8},
+		// The daemon's own reading (its cgroup v1 limit) differs from this process's.
+		Memory: api.MemoryStatus{AvailPhysMB: 5000, Known: true, CgroupV1: true},
+	}
+	notLocal := func() platform.MemoryStatus {
+		t.Error("the local reading was taken although the daemon reports one")
+		return platform.MemoryStatus{}
 	}
 	// The settings file says off; the daemon's values win.
 	set := config.Defaults()
 	set.MinFreeMemoryMB = config.Int(0)
-	c, _ := resources(Options{Settings: set, Memory: read}, "linux", live)
-	if c.Status != Warn || !strings.Contains(c.Message, "minFreeMemoryMB 6000, derived from your criticalFreeMemoryMB") ||
-		!strings.Contains(c.Message, "values from the running daemon (machine: 16384 MB, 8 CPUs)") ||
+	c, _ := resources(Options{Settings: set, Memory: notLocal}, "linux", live)
+	if c.Status != Warn || !strings.Contains(c.Message, "free memory 5000 MB") ||
+		!strings.Contains(c.Message, "minFreeMemoryMB 6000, derived from your criticalFreeMemoryMB") ||
+		!strings.Contains(c.Message, "reading and values from the running daemon (machine: 16384 MB, 8 CPUs)") ||
 		!strings.Contains(c.Message, "cgroup v1") {
 		t.Errorf("from the daemon: %+v", c)
+	}
+	// The daemon cannot read memory: said so, never replaced by this process's reading.
+	unknown := *live
+	unknown.Memory = api.MemoryStatus{}
+	if c, _ = resources(Options{Settings: set, Memory: notLocal}, "linux", &unknown); c.Status != OK ||
+		!strings.Contains(c.Message, "the daemon cannot read free memory") {
+		t.Errorf("daemon reading unknown: %+v", c)
 	}
 	// An older daemon without resources in its health: computed here, and said so.
 	c, _ = resources(Options{Settings: set, Memory: read}, "linux", &api.Health{})

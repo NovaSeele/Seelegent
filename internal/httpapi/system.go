@@ -111,7 +111,8 @@ func effectiveResources(set config.Settings, m config.Machine) api.EffectiveReso
 
 // memoryStatus is the API form of a known reading.
 func memoryStatus(m platform.MemoryStatus) api.MemoryStatus {
-	return api.MemoryStatus{AvailPhysMB: m.AvailPhysMB, AvailCommitMB: m.AvailCommitMB, Known: m.Known}
+	return api.MemoryStatus{AvailPhysMB: m.AvailPhysMB, AvailCommitMB: m.AvailCommitMB, Known: m.Known,
+		CgroupV1: m.CgroupV1}
 }
 
 // PublishResourcesChanged sends resources.changed: the memory watchdog started (lowMemory) or stopped holding new

@@ -174,7 +174,8 @@ in the daemon.
   its message, and the CLI and the MCP `cancel` tool report the cancel as recorded instead of failing).
 - `GET /health` carries `homeId` (`config.HomeID`: 16 hex digits of the SHA-256 of `fsutil.Key(home)`), so a client
   of another data directory refuses this daemon instead of using or stopping it. It also carries `os`
-  (`runtime.GOOS`), `memory` (`{availPhysMB, availCommitMB, known}`, all zero unless the reading is known) and
+  (`runtime.GOOS`), `memory` (`{availPhysMB, availCommitMB, known, cgroupV1?}`, all zero unless the reading is known; `cgroupV1` when a
+  Linux cgroup v1 memory limit lowered it) and
   `lowMemory` (the memory watchdog holds new starts, see `criticalFreeMemoryMB` in
   [configuration.md](configuration.md)); the frame `resources.changed {lowMemory, memory}` says when `lowMemory`
   flips (milestone 19). `resources` holds the values in use for the five auto settings (`gateConcurrency`,

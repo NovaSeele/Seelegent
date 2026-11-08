@@ -2385,6 +2385,8 @@ export interface MemoryStatus {
   availPhysMB: number
   availCommitMB: number
   known: boolean
+  /** CgroupV1 is true when a cgroup v1 memory limit (Linux) lowered the reading. */
+  cgroupV1?: boolean
 }
 
 /**
