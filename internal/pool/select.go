@@ -256,6 +256,13 @@ func (p *Pool) choose(v *view, req *Request) (Choice, *Unavailable) {
 		}
 		u.Candidates++
 	}
+	if limit := v.settings.MaxConcurrentWorkers; limit > 0 && len(free) > 0 && p.runningLocked() >= limit {
+		// maxConcurrentWorkers: every free account counts as busy until a running turn ends (a release wakes the
+		// waiters). Lowering the cap stops nothing.
+		u.Busy += len(free)
+		u.Capped = limit
+		free = nil
+	}
 	if len(free) == 0 {
 		switch {
 		case u.Candidates == 0:
@@ -269,6 +276,16 @@ func (p *Pool) choose(v *view, req *Request) (Choice, *Unavailable) {
 	}
 	best := pick(free, req.Prefer)
 	return Choice{Account: *best.a, Model: best.model, Remaining: best.remaining, RemainingKnown: best.known}, nil
+}
+
+// runningLocked counts the turns running on every account (leases, takeover consoles included). The caller holds
+// p.mu.
+func (p *Pool) runningLocked() int {
+	n := 0
+	for _, held := range p.leases {
+		n += len(held)
+	}
+	return n
 }
 
 // pick returns the best free account: preferred accounts first (if any is free), then priority, running turns,
