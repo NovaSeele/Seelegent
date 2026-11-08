@@ -20,7 +20,7 @@ embedded at build time. It builds and runs on Windows, Linux and macOS.
 
 | Tool | Version | Notes |
 |---|---|---|
-| Go | 1.21 or newer | `go.mod` pins `toolchain go1.27.3`; with the default `GOTOOLCHAIN=auto` an older Go downloads it on first use. |
+| Go | 1.21 or newer | `go.mod` needs Go 1.26 or newer and pins `toolchain go1.27.3`. Any Go from 1.21 on works with the default `GOTOOLCHAIN=auto`: it downloads go1.27.3 on first use. If `go env GOTOOLCHAIN` prints `local`, set `GOTOOLCHAIN=auto`. |
 | Node.js | 22.12 or newer | CI uses Node 24. |
 | pnpm | 11.20.0 | Pinned in `web/package.json`; `corepack enable` picks it up. |
 | Git | any recent | |

@@ -32,8 +32,10 @@ Problems in Seelegent's own code and release process, for example:
   `Host` (`127.0.0.1`, `localhost` or `[::1]` with the daemon's port), else it is refused with `421`, which guards
   against DNS rebinding. Changing requests need the `X-Seelegent: 1` header, and an `Origin`, when sent, must be the
   daemon's own, else `403`. A caller inside a worker's process tree may use only a small allow-list. Enabling an
-  automation and storing the GitHub token answer only the dashboard's own requests. A way around any of these is in
-  scope. See [docs/api.md](docs/api.md#request-checks-in-order).
+  automation and storing the GitHub token answer only the dashboard's own requests. These checks stop web pages,
+  MCP and CLI callers, and worker process trees; a web page or worker that gets around them is in scope. A program
+  already running as your user that forges the headers is not (see the end of this page). See
+  [docs/api.md](docs/api.md#request-checks-in-order).
 - **Secrets.** API keys and the GitHub token are stored in their own files: encrypted with DPAPI on Windows, plain
   text with owner-only (0600) permissions elsewhere. The dashboard shows only their last four characters, the logs
   mask secrets, a worker's output is masked for its account's API key, and no MCP tool or command reaches the
@@ -46,7 +48,7 @@ Problems in Seelegent's own code and release process, for example:
 - **The push to GitHub.** Before Seelegent pushes a ticket branch it scans every file it adds and refuses `.env`
   files, keys and certificates, credential files, tokens in file content and other risky files. A secret that gets
   through is in scope. See [docs/github.md](docs/github.md).
-- **Automations.** Every automation is created disabled and runs only after you confirm it in the dashboard. A way to
+- **Automations.** Every automation is created **Off** and runs only after you confirm it in the dashboard. A way to
   enable one without that confirmation is in scope. See [docs/automations.md](docs/automations.md).
 - **Installers and updates.** `scripts/install.ps1`, `scripts/install.sh` and `seelegent update` check every archive
   against the release's `checksums.txt`. A way to make them install something else is in scope. See
@@ -60,8 +62,8 @@ These are design decisions, not vulnerabilities:
   ordinary call of a worker CLI (`agy`, `claude` or `codex`) on an account you own, and each provider's terms apply.
 - **It never asks for passwords.** Each worker CLI signs in with its own flow and keeps its tokens in that account's
   profile folder under your data directory (`~/.seelegent/profiles/`), on your machine.
-- **It sends no telemetry.** What leaves the machine is listed in the README under
-  [Data and privacy](README.md#data-and-privacy).
+- **It sends no telemetry.** What leaves the machine is listed in the usage guide under
+  [Data and privacy](docs/usage.md#data-and-privacy).
 - **It is not a sandbox.** Worker CLIs run as your user, with your permissions. The git guard, the snapshots and the
   post-turn checks are guards that tell the lead and the dashboard what happened; they do not contain a worker. A
   worker that reaches outside its process tree through a service of the same user (the Windows Task Scheduler or

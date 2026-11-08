@@ -59,7 +59,7 @@ dụng cho từng tài khoản.
 - **Một đội ngũ, không chỉ là worker.** Các thành viên có tên và cấp bậc cho ý kiến thứ hai, họp trước những quyết định
   khó, và chạy một brief thành cuộc thi 2 đến 5 phiên bản trong các worktree riêng. → [Làm việc nhóm](docs/team.md)
 - **Từ issue tới pull request nháp, hoặc theo lịch.** Phân loại issue GitHub thành ticket có worktree và nhánh riêng,
-  mở pull request nháp sau khi quét bí mật, và chạy các lần giao việc đã lưu theo lịch. →
+  mở pull request nháp sau khi quét bí mật khi bạn hoặc lead yêu cầu, và chạy các lần giao việc đã lưu theo lịch. →
   [GitHub](docs/github.md) · [Tự động](docs/automations.md)
 
 ### Xem thực tế
@@ -135,12 +135,14 @@ các host lead. Các tùy chọn như `--version`, `--install-dir` và `--no-set
 
 1. **Kiểm tra bản cài:** `seelegent doctor` kiểm tra bản cài và chỉ cách sửa những gì hỏng. Mục `warn` là bình
    thường với bản cài mới; mục `fail` luôn kèm cách sửa.
-2. **Kết nối host lead:** trình cài đặt đã chạy `seelegent setup`, lệnh này đăng ký MCP server `seelegent` và skill
-   của lead với mọi host lead tìm thấy, trong số chín host nó biết. Chạy lại sau khi cài thêm host mới (`--dry-run`
+2. **Kết nối host lead:** trình cài đặt đã chạy `seelegent setup`, lệnh này đăng ký MCP server `seelegent` với mọi
+   host lead tìm thấy, trong số chín host nó biết, và cài skill của lead cho Claude Code, Codex CLI, OpenCode và
+   Antigravity CLI. Chạy lại sau khi cài thêm host mới (`--dry-run`
    cho xem trước thay đổi, `--remove` gỡ bỏ), rồi khởi động lại host. → [Thiết lập](docs/setup.md)
 3. **Thêm tài khoản:** `seelegent ui` khởi động daemon nếu cần và mở http://127.0.0.1:47821/. Ở trang **Tài khoản**,
-   chọn **Thêm tài khoản**, chọn backend và loại tài khoản, rồi **Đăng nhập**: luồng đăng nhập của chính CLI worker sẽ
-   chạy, trong trình duyệt hoặc một cửa sổ terminal, và Seelegent không bao giờ thấy mật khẩu của bạn.
+   chọn **Thêm tài khoản**, rồi chọn backend và loại tài khoản. Với tài khoản có đăng nhập riêng, luồng đăng nhập của
+   chính CLI worker bắt đầu ngay, trong trình duyệt hoặc một cửa sổ terminal (nút **Đăng nhập** trên thẻ tài khoản để
+   thử lại), và Seelegent không bao giờ thấy mật khẩu của bạn.
 4. **Giao việc.** Trong một thư mục dự án, nhờ lead kiểu như *"Dùng Seelegent để thêm kiểm tra dữ liệu nhập cho form
    đăng ký, rồi review diff."* Lead gọi `delegate`, chờ báo cáo, đọc diff, chạy test, rồi gửi `followup` hoặc đóng
    tác vụ bằng `review`. Từ terminal:

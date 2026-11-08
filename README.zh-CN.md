@@ -52,7 +52,7 @@ profile 中进行的普通 CLI 调用，每个账号仍须遵守对应服务商�
 - **一个团队，而不只是 worker。** 有名字、有级别的成员可以给出第二意见、在艰难决定前开会，还能把同一份 brief 作为
   2 到 5 个变体的竞赛，在各自的 worktree 中运行。→ [团队](docs/team.md)
 - **从 issue 到草稿 pull request，或按计划执行。** 把 GitHub issue 分拣为拥有独立 worktree 和分支的工单，在扫描机密后
-  创建草稿 pull request，并按计划运行已保存的委派。→ [GitHub](docs/github.md) · [自动化](docs/automations.md)
+  按你或 lead 的要求创建草稿 pull request，并按计划运行已保存的委派。→ [GitHub](docs/github.md) · [自动化](docs/automations.md)
 
 ### 实际效果
 
@@ -125,12 +125,12 @@ lead 宿主运行 `seelegent setup`。完成后请打开新的终端并重启 le
 
 1. **检查安装：** `seelegent doctor` 检查安装情况并说明如何修复失败项。全新安装出现 `warn` 是正常的；`fail` 会附带
    修复方法。
-2. **连接 lead 宿主：** 安装脚本已经运行过 `seelegent setup`，它会把 `seelegent` MCP 服务器和 lead skill 注册到找到
-   的每个 lead 宿主（它支持九种宿主）。安装新宿主后请再运行一次（`--dry-run` 先预览改动，`--remove` 撤销），然后
+2. **连接 lead 宿主：** 安装脚本已经运行过 `seelegent setup`，它会把 `seelegent` MCP 服务器注册到找到的每个 lead
+   宿主（它支持九种宿主），并为 Claude Code、Codex CLI、OpenCode 和 Antigravity CLI 安装 lead skill。安装新宿主后请再运行一次（`--dry-run` 先预览改动，`--remove` 撤销），然后
    重启宿主。→ [设置](docs/setup.md)
 3. **添加账号：** `seelegent ui` 会在需要时启动守护进程，并打开 http://127.0.0.1:47821/。在 **账号** 页面选择
-   **添加账号**，选好后端和类型，再点 **登录**：运行的是 worker CLI 自己的登录流程，在浏览器或终端窗口中完成，
-   Seelegent 永远看不到你的密码。
+   **添加账号**，选好后端和类型。对于使用独立登录的账号，worker CLI 自己的登录流程会立即开始，在浏览器或终端窗口
+   中完成（账号卡片上的 **登录** 用于重试），Seelegent 永远看不到你的密码。
 4. **委派工作。** 在项目文件夹中对 lead 说类似这样的话：*“用 Seelegent 给注册表单加上输入校验，然后审阅 diff。”*
    lead 会调用 `delegate`，等待报告，阅读 diff，运行测试，然后发送 `followup` 或用 `review` 结束任务。在终端中：
    `seelegent delegate --cwd . --model fast "Describe this project in five lines"`。

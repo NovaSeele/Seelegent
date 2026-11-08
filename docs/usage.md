@@ -38,9 +38,10 @@ run. Each section ends with a link to the page that has every detail. New to See
 
 2. Open a new terminal and run `seelegent doctor`. A `warn` is fine on a fresh install (no daemon, no account yet); a
    `fail` comes with a fix.
-3. The installer has already run `seelegent setup`, which registers the `seelegent` MCP server and the lead skill
-   with every lead host it finds (Claude Code, Claude Desktop, Codex CLI, OpenCode, the Antigravity CLI and app,
-   Gemini CLI, Cursor, Windsurf). Run it again after you install a new host:
+3. The installer has already run `seelegent setup`, which registers the `seelegent` MCP server with every lead host
+   it finds, out of nine it knows. Claude Code, Codex CLI, OpenCode and the Antigravity CLI also get the lead skill;
+   Claude Desktop, the Antigravity app, Gemini CLI, Cursor and Windsurf get the MCP entry only. Run it again after
+   you install a new host:
 
    ```sh
    seelegent setup --dry-run          # show what would change
@@ -85,17 +86,17 @@ folder and task ids instead of the whole spec. Tasks that stall, loop or ask a q
 that need you (a sign-in, no account left) go to the top of the dashboard. You can take a task over in a console
 and hand it back.
 
-**Gates, lanes and proof.** After every worker report the daemon runs the task's gate: the lead's commands, the
-spec's `Gate:` lines or the repository's detected test, lint and build commands, the project doctrine, syntax checks
-and the hygiene check. A red gate goes back to the worker as an automatic fix turn (2 by default) before the lead is
+**Gates, lanes and proof.** After every worker report the daemon runs the task's gate: the lead's commands and the
+spec's `Gate:` lines, plus, with `--gate-detect` (`gate: true`), the repository's detected test, lint and build
+commands, then the project doctrine, syntax checks and the hygiene check. A red gate goes back to the worker as an automatic fix turn (2 by default) before the lead is
 woken. Lanes list the files a task may change, so parallel workers stay off each other's files. An optional verifier
 reviews a green gate read-only.
 
 **Team, GitHub and automations.** Members are named workers with a backend, a model or tier, a role and a rank
 (`worker`, `senior`, `peer`); a peer's objection in a consult blocks acceptance until the lead answers it. Event
 hooks run your own shell commands on task, account and daemon events. A connected repository's issues become
-tickets; once the work is accepted, Seelegent commits, pushes the ticket branch, opens a draft pull request and
-follows its CI checks. It uses `gh` when it is signed in, else a token you store in the dashboard, else a manual
+tickets; once the work is accepted and you or the lead ask for it, Seelegent commits, pushes the ticket branch,
+opens a draft pull request and follows its CI checks. It uses `gh` when it is signed in, else a token you store in the dashboard, else a manual
 mode with a compare link. Automations run on a schedule (hourly, daily, weekdays, weekly or cron, in a time zone)
 with a precheck command and quota rules.
 
@@ -110,8 +111,9 @@ More: [task engine](task-engine.md), [gates](gates.md), [team](team.md).
    DeepSeek, Moonshot Kimi, Z.ai GLM, OpenRouter, OpenAI, Groq, a local Ollama, or a custom endpoint).
 3. On **Accounts**, choose **Add account**, pick the backend and the kind (its own sign-in, this computer's sign-in
    for `agy`, or an API key), then give it a name and a priority (higher numbers are used first).
-4. For an account with its own sign-in, choose **Sign in**. The worker CLI's own sign-in runs, in your browser or a
-   terminal window, or asks you to paste a code. Seelegent never sees your password.
+4. For an account with its own sign-in, the worker CLI's own sign-in starts right after **Add account**, in your
+   browser or a terminal window, or asks you to paste a code; the account card's **Sign in** button tries again.
+   Seelegent never sees your password.
 
 Add several accounts of the same backend to use several subscriptions. Turn **Use for work** off to keep an account
 without using it for now.
@@ -202,7 +204,7 @@ More: [every MCP tool and its arguments](mcp.md), [every command](cli.md), [the 
 - **Take over** opens the worker's conversation in a console on the same account; when you close it, the worker
   writes a hand-back report.
 
-`Ctrl+K` (`Cmd+K` on macOS) opens the command palette and `Ctrl+,` the settings. The dashboard comes in seven
+`Ctrl+K` opens the command palette and `Ctrl+,` the settings (`Cmd+K` and `Cmd+,` on macOS). The dashboard comes in seven
 languages (English, Tiếng Việt, 简体中文, Español, 한국어, 日本語, Русский) and follows your browser's language unless
 you pick one in **Settings › Language**.
 
@@ -247,7 +249,8 @@ More: [follow up and review](getting-started.md#6-follow-up-and-review), [review
   in the middle of a task, the task moves to another account with a handover of what happened so far.
 - When no account can run a task, it shows **Waiting for quota** (it starts by itself after a reset) or **No
   accounts left** (add or turn on an account).
-- `seelegent status` (or the lead's `status`) shows each account's quota and the active tasks; **Usage** shows
+- `seelegent status` (or the lead's `status`) shows each account's quota and every queued, running or waiting
+  task, the ones that need you first; **Usage** shows
   tokens, cost, tasks and turns over 7 or 30 days, and each account's quota over time.
 
 More: [quota settings](configuration.md#accounts-quota-and-timeouts), [a run, turn by turn](task-engine.md#a-run).
@@ -255,15 +258,15 @@ More: [quota settings](configuration.md#accounts-quota-and-timeouts), [a run, tu
 ## Gates and proof
 
 - After every worker report the daemon runs the task's **gate**: the lead's commands (`--gate`, or the `gate`
-  argument of `delegate`), the spec's `Gate:` lines, or the repository's detected test, lint and build commands
-  (`--gate-detect`, `gate: true`), plus syntax and hygiene checks.
+  argument of `delegate`) and the spec's `Gate:` lines, plus, with `--gate-detect` (`gate: true`), the repository's
+  detected test, lint and build commands, plus syntax and hygiene checks.
 - A red gate goes back to the worker as an automatic fix turn, twice at most by default, before the lead is woken.
   When the fix turns are used up the task shows **Gate failed**: read the failing steps in the gate panel, then
   follow up or reject.
 - **Lanes** list the files a task may change (`--lane`), so parallel workers stay off each other's files.
 - `--verify` runs a read-only second-opinion verifier once the gate is green.
 - With a Spec Kit feature (`--spec` and `--task`), the **Proof** page shows which requirements are proven and runs
-  regression runs of every gate command (`seelegent proof matrix`, `seelegent proof run`).
+  regression runs of every gate command (`seelegent proof matrix <feature>`, `seelegent proof run`).
 
 <p align="center">
   <a href="media/gates-proof.mp4"><img src="media/gates-proof.webp" width="720"
@@ -276,15 +279,18 @@ More: [gates, lanes and proof](gates.md).
 
 - Workers cannot run git commands that can throw away uncommitted work or rewrite history (`reset`, `restore`,
   `stash`, `checkout` except `checkout -b`, `switch`, `clean`, `rebase`, `merge`, `pull`, `push`, `commit -a`,
-  `--amend` and more), also inside shells, interpreters, pipes or git aliases. The lead can lift the guard for one
-  turn with `allow_git` (`--allow-git`) when a worker should commit.
+  `--amend` and more), also inside shells, interpreters, pipes or git aliases. When a worker should commit, the lead
+  can lift the guard with `allow_git` (`--allow-git`). It applies to the current command only: the `delegate` or
+  `followup` that set it, that turn and its automatic fix turns. A later `followup` must pass it again.
 - Before and after every turn Seelegent records the repository's uncommitted files, without touching your index,
   stash or refs. Files a turn may have lost show up as **work at risk** with the banner **Work may be lost**.
 - Restore them with **Restore files** in the task's **Safety checks** panel (once the worker has stopped), or
-  `seelegent restore <id> --turn N [--file path]`. The current content is kept in a backup snapshot first.
+  `seelegent restore <id> --turn N [--file path]`. The current content is kept in a backup snapshot first. Files
+  changed again after the turn ended are skipped unless you choose **Restore anyway** (`--force`).
 - Post-turn checks also report line-ending and BOM changes, stray files, writes outside the project and files other
-  tasks changed too.
-- None of these layers fails a task on its own: they tell the lead and the dashboard what happened.
+  tasks changed too. Red hygiene (line endings, a BOM, junk files) makes the gate red, which sends the worker an
+  automatic fix turn; the guard, the snapshots and the other checks only tell the lead and the dashboard what
+  happened.
 - A worker cannot call Seelegent itself (it cannot start, change or review tasks), cannot turn on an automation and
   cannot store a GitHub token. Only you, in the dashboard, can do the last two.
 - Before a push, Seelegent scans every file it adds, and it pushes one commit of its own, never the worker's commits:
@@ -330,9 +336,10 @@ More: [team](team.md).
 2. **Sync** brings its open issues into the inbox; you can also add local issues.
 3. **Triage** an issue: `assign` makes a ticket with its own worktree and branch (`seelegent/<n>-<slug>`) and starts
    a task there; `meeting` opens a meeting first; `skip` records why not.
-4. Once the ticket's work is accepted, **pr** commits, pushes the ticket branch and opens a draft pull request,
-   after a secret scan of every added file. Seelegent then follows the CI checks, and `fix-checks` starts a task with
-   the failing ones.
+4. Once the ticket's work is accepted, **Open pull request** (the lead's `pr` action) commits, pushes the ticket
+   branch and opens a draft pull request, after a secret scan of every added file. Nothing is pushed until you or the
+   lead ask. Seelegent then follows the CI checks, and **Fix checks** (`fix-checks`) starts a task with the failing
+   ones.
 
 Your own checkout is never changed, and Seelegent never force-pushes, merges or closes issues.
 
@@ -343,7 +350,7 @@ More: [GitHub](github.md).
 - An automation is a saved delegation on a schedule (hourly, daily, weekdays, weekly or cron, in a time zone), with
   an optional precheck command and quota rules: a run is skipped when quota is low, and an optional extra run uses
   a weekly quota that is about to reset unused.
-- Every automation is created **disabled**. The lead (or `seelegent automations enable`) can only ask; you confirm
+- Every automation is created **Off**. The lead (or `seelegent automations enable`) can only ask; you confirm
   exactly what it runs on the **Automations** page. Any change to what it runs or when turns it off again.
 - `seelegent automations preview` shows the next run times, `run` starts one run now, `runs` shows the history.
 
@@ -383,8 +390,10 @@ More: [resource settings and their formulas](configuration.md#resources),
 - `seelegent doctor` checks the data folder, settings, database, daemon, git, each enabled worker CLI, accounts, PATH
   and free memory against the resource thresholds, and says how to fix what fails. It changes nothing apart from a
   write test in the data folder (`.doctor-write-test`, removed again).
-- `seelegent status` shows the daemon, the backends, each account's quota and the tasks that need you.
-- `seelegent task <id> --steps 30` prints a task's last worker steps; `--full` the whole task.
+- `seelegent status` shows the daemon, the backends, each account's quota and every queued, running or waiting
+  task, the ones that need you first.
+- `seelegent task <id> --steps 30` prints a task's report and its last worker steps; `--full --json` prints the
+  whole task (`--full` alone, as text, prints only a short header).
 - `seelegent restart` restarts the daemon; running workers keep running and are picked up again. Its log is
   `~/.seelegent/logs/daemon.log` (secrets masked).
 - A lead whose `wait` times out loses nothing: the task keeps running, and `wait` picks it up again.
@@ -401,9 +410,11 @@ More: [when something is stuck](getting-started.md#7-when-something-is-stuck), [
 - Everything runs on your machine. The daemon listens on `127.0.0.1` only. Seelegent itself sends no telemetry; the
   worker CLIs follow their own settings.
 - Data lives in `~/.seelegent` (set `SEELEGENT_HOME` to move it): `config.json` (settings), `seelegent.db` (tasks,
-  accounts, usage, team, tickets, automations), `profiles/` (one isolated profile per account, with its API key),
-  `github/` (the token), `snapshots/`, `contests/` (stored contest diffs), `worktrees/` (only for contests and
-  tickets), `run/` and `logs/`.
+  accounts, usage, team, tickets, automations), `tasks/` (each attempt's prompt, stream, stderr and gate logs: the
+  workers' full transcripts, the most sensitive files here), `profiles/` (one isolated profile per account, with
+  its API key), `github/` (the token), `snapshots/` and `backups/` (turn snapshots and the backups taken before a
+  restore), `guard/` (the git guard's files), `contests/` (stored contest diffs), `worktrees/` (only for contests
+  and tickets), `run/` and `logs/`.
 - Seelegent never asks for passwords. Each worker CLI signs in with its own flow and keeps its tokens in the account's
   profile. API keys and the GitHub token are each stored in their own file, encrypted with DPAPI on Windows and as
   owner-only (0600) plain text elsewhere; the dashboard shows only their last four characters, and logs mask secrets.
@@ -441,7 +452,7 @@ which imports settings, providers, accounts with their profiles and API keys, pr
 roles, members, hooks, meeting records and automations (every automation off, to confirm again). Tasks, review
 notes, contests, proof records, usage history and the GitHub folder are not imported: connect your repositories and
 store the token again. The old folder is never changed. On Windows, if the old launcher is in the install folder, it
-is kept as `seelegent-node`. Stop the old daemon before you install, and run `seelegent migrate --dry-run` to see
+is kept as `seelegent-node.cmd`. Stop the old daemon before you install, and run `seelegent migrate --dry-run` to see
 what would be imported.
 
 More: [seelegent migrate](setup.md#seelegent-migrate).

@@ -61,8 +61,8 @@ cada cuenta.
 - **Un equipo, no solo workers.** Miembros con nombre y rango dan segundas opiniones, se reúnen antes de decisiones
   difíciles y convierten un brief en un concurso de 2 a 5 variantes en worktrees separados. → [Equipo](docs/team.md)
 - **Del issue al pull request en borrador, o con un horario.** Clasifica issues de GitHub en tickets con su propio
-  worktree y rama, abre un pull request en borrador tras revisar que no haya secretos y ejecuta delegaciones guardadas
-  con un horario. → [GitHub](docs/github.md) · [Rutinas](docs/automations.md)
+  worktree y rama, abre un pull request en borrador tras revisar que no haya secretos cuando tú o el lead lo piden y
+  ejecuta delegaciones guardadas con un horario. → [GitHub](docs/github.md) · [Rutinas](docs/automations.md)
 
 ### Míralo en acción
 
@@ -138,12 +138,14 @@ Después, abre una terminal nueva y reinicia los hosts del lead. Las opciones co
 1. **Comprueba la instalación:** `seelegent doctor` revisa la instalación y explica cómo arreglar lo que falla. Un
    `warn` es normal en una instalación nueva; un `fail` viene con la forma de arreglarlo.
 2. **Conecta los hosts del lead:** el instalador ya ejecutó `seelegent setup`, que registra el servidor MCP
-   `seelegent` y la skill del lead en cada host del lead que encuentra, de los nueve que conoce. Vuelve a ejecutarlo
+   `seelegent` en cada host del lead que encuentra, de los nueve que conoce, e instala la skill del lead en Claude
+   Code, Codex CLI, OpenCode y Antigravity CLI. Vuelve a ejecutarlo
    cuando instales un host nuevo (`--dry-run` muestra antes los cambios, `--remove` los deshace) y reinicia el host. →
    [Configuración inicial](docs/setup.md)
 3. **Añade una cuenta:** `seelegent ui` arranca el daemon si hace falta y abre http://127.0.0.1:47821/. En **Cuentas**,
-   elige **Añadir cuenta**, el backend y el tipo, y después **Iniciar sesión**: se ejecuta el inicio de sesión de la
-   propia CLI del worker, en el navegador o en una ventana de terminal, y Seelegent nunca ve tu contraseña.
+   elige **Añadir cuenta**, el backend y el tipo. En una cuenta con su propio inicio de sesión, el de la propia CLI
+   del worker empieza enseguida, en el navegador o en una ventana de terminal (**Iniciar sesión** en la tarjeta lo
+   reintenta), y Seelegent nunca ve tu contraseña.
 4. **Delega.** En la carpeta de un proyecto, pídele al lead algo como *«Usa Seelegent para añadir validación de datos
    al formulario de registro y luego revisa el diff»*. El lead llama a `delegate`, espera el informe, lee el diff, pasa
    los tests y después envía un `followup` o cierra la tarea con `review`. Desde una terminal:

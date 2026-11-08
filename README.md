@@ -56,7 +56,8 @@ account you own, in its own isolated profile, and each provider's terms still ap
 - **A team, not only workers.** Named members with ranks give second opinions, hold meetings before hard
   decisions, and run one brief as a contest of 2 to 5 variants in separate worktrees. → [Team](docs/team.md)
 - **From issue to draft pull request, or on a schedule.** Triage GitHub issues into tickets with their own worktree
-  and branch, open a draft pull request after a secret scan, and run saved delegations on a schedule. →
+  and branch, open a draft pull request after a secret scan when you or the lead ask, and run saved delegations
+  on a schedule. →
   [GitHub](docs/github.md) · [Automations](docs/automations.md)
 
 ### See it in action
@@ -132,12 +133,14 @@ build from source, see [CONTRIBUTING.md](CONTRIBUTING.md#development-setup).
 1. **Check the install:** `seelegent doctor` checks the install and says how to fix what fails. A `warn` is fine on
    a fresh install; a `fail` comes with a fix.
 2. **Connect your lead hosts:** the installer already ran `seelegent setup`, which registers the `seelegent` MCP
-   server and the lead skill with every lead host it finds, out of nine it knows. Run it again after installing a new
-   host (`--dry-run` shows the changes first, `--remove` undoes them), then restart the host. →
+   server with every lead host it finds, out of nine it knows, and installs the lead skill for Claude Code, Codex
+   CLI, OpenCode and the Antigravity CLI. Run it again after installing a new host (`--dry-run` shows the changes
+   first, `--remove` undoes them), then restart the host. →
    [Setup](docs/setup.md)
 3. **Add an account:** `seelegent ui` starts the daemon if needed and opens http://127.0.0.1:47821/. On
-   **Accounts**, choose **Add account**, pick the backend and the kind, then **Sign in**: the worker CLI's own
-   sign-in runs, in your browser or a terminal window, and Seelegent never sees your password.
+   **Accounts**, choose **Add account** and pick the backend and the kind. For an account with its own sign-in, the
+   worker CLI's own sign-in starts right away, in your browser or a terminal window (the card's **Sign in** tries
+   again), and Seelegent never sees your password.
 4. **Delegate.** In a project folder, ask your lead something like *"Use Seelegent to add input validation to the
    signup form, then review the diff."* The lead calls `delegate`, waits for the report, reads the diff, runs the
    tests, and then sends a `followup` or closes the task with `review`. From a terminal:
