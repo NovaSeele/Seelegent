@@ -265,14 +265,15 @@ type Service struct {
 	// resMu guards the resource state (resources.go): the watchdog's hold (low), whether it stopped a gate in
 	// this low-memory episode (stopped), the heavy commands in flight (newest last), the last spaced start, lowWake,
 	// closed and replaced whenever low flips, and activity, closed and replaced when a run or a heavy command starts
-	// (it wakes an idle watchdog).
-	resMu     sync.Mutex
-	low       bool
-	stopped   bool
-	gateRuns  []*gateRun
-	lastAdmit time.Time
-	lowWake   chan struct{}
-	activity  chan struct{}
+	// (it wakes an idle watchdog), and slotHolders, the tasks whose gate holds a gate slot now (with how many).
+	resMu       sync.Mutex
+	low         bool
+	stopped     bool
+	gateRuns    []*gateRun
+	slotHolders map[string]int
+	lastAdmit   time.Time
+	lowWake     chan struct{}
+	activity    chan struct{}
 }
 
 // toolEnv is the toolchain pin for commands run in dir with the daemon's environment.

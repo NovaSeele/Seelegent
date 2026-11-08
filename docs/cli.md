@@ -79,7 +79,7 @@ allowed, and so do the read commands of `members`, `meeting`, `contest`, `notes`
 | `memory read\|append\|replace --cwd D [text\|@file]` | A project's notes for workers. | `Memory` |
 | `proof index [--cwd D]` | Every Spec Kit feature of the repository (default: the current folder) with its requirement counts, and the latest regression runs ([gates.md](gates.md)). | `ProofIndex` |
 | `proof matrix <feature>\|--feature F [--cwd D]` | The requirement matrix of a feature: each FR/SC with its status and covering tasks. | `ProofMatrix` |
-| `proof run [<feature>] [--force] [--wait N] [--cwd D]` | Starts a regression run of every gate command (or one feature's); `--wait N` polls until it ends or N s pass (default 0). Refused (`conflict`, with the active task ids) while other tasks of the repository are active, unless `--force`. | `ProofRun` |
+| `proof run [<feature>] [--force] [--wait N] [--cwd D]` | Starts a regression run of every gate command (or one feature's); `--wait N` polls until it ends or N s pass (default 0). Refused (`conflict`, with the active task ids) while other tasks of the repository are active, unless `--force`. Run from a gate command, it sends the gate's task id (`SEELEGENT_TASK`) so the run shares the gate's slot ([gates.md](gates.md)). | `ProofRun` |
 | `proof run-status <run-id> [--cwd D]` (alias `run_status`) | A regression run's state and results. | `ProofRun` |
 | `proof cancel-run <run-id> [--cwd D]` (alias `cancel_run`) | Stops a running regression run; a finished one is printed as it is. | `ProofRun` |
 | `proof stats [--since T] [--cwd D]` | Gate, lane and verifier statistics (`--since`: RFC 3339). | `ProofStats` |

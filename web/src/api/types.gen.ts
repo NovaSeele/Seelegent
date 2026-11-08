@@ -1736,6 +1736,12 @@ export interface ProofRunRequest {
   feature?: string
   /** Force runs even while other tasks of the repository are active. */
   force?: boolean
+  /**
+   * GateTask is the task whose gate command asks for the run (SEELEGENT_TASK in a gate command's environment;
+   * `seelegent proof run` sends it). While that gate holds a gate slot, the run's commands share it instead of
+   * waiting for another one. An id the daemon does not know changes nothing.
+   */
+  gateTask?: string
 }
 
 /** ProofStats are the gate statistics of a project. */

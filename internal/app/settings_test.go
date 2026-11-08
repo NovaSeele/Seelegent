@@ -131,7 +131,7 @@ func TestProofExecStoppedForMemory(t *testing.T) {
 		time.Sleep(500 * time.Millisecond)
 		cancel(gate.ErrLowMemory)
 	}()
-	res := d.a.proofExec(ctx, cmd, d.cwd, filepath.Join(t.TempDir(), "cmd.log"))
+	res := d.a.proofExec(ctx, cmd, d.cwd, filepath.Join(t.TempDir(), "cmd.log"), "")
 	if res.Exit != nil || !res.Stopped || !strings.HasSuffix(res.Tail, "stopped: machine low on memory") {
 		t.Fatalf("result exit=%v tail=%q", res.Exit, res.Tail)
 	}
