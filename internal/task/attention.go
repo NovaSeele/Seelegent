@@ -220,7 +220,12 @@ func computeAttention(t *Task, live liveState, acc accountHealth, now time.Time,
 			return att(api.AttentionBlocked, ReasonNoResponse, WhoLead, detail, params)
 		}
 		if q := parseBlocked(tu.Response); q != nil {
-			return att(api.AttentionQuestion, ReasonQuestion, WhoLead, q.Text)
+			// The options follow as a numbered list, which the dashboard's question card offers as choices.
+			detail := q.Text
+			for i, o := range q.Options {
+				detail += fmt.Sprintf("\n%d. %s", i+1, o)
+			}
+			return att(api.AttentionQuestion, ReasonQuestion, WhoLead, detail)
 		}
 		if g := tu.Gate; g != nil && (g.State == api.GateRed || g.State == api.GateError) && !hygieneOnly(g) {
 			return att(api.AttentionBlocked, ReasonGateRed, WhoLead, gateDetail(g))

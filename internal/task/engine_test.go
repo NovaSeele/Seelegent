@@ -557,7 +557,9 @@ func TestAnswerQuestion(t *testing.T) {
 	h.queue.Push(t, okScript("conv-q", "## Blocked\n\nWhich database?\n\n- SQLite\n- Postgres"))
 	sum := h.delegate(api.DelegateRequest{})
 	tk := h.waitStatus(sum.ID, StatusDone)
-	if a := tk.Attention; a == nil || a.State != api.AttentionQuestion || a.Detail != "Which database?" {
+	// The options follow the question as a numbered list, which the dashboard offers as choices (design review).
+	if a := tk.Attention; a == nil || a.State != api.AttentionQuestion ||
+		a.Detail != "Which database?\n1. SQLite\n2. Postgres" {
 		t.Fatalf("attention = %+v", tk.Attention)
 	}
 	rep, _ := h.s.Report(t.Context(), sum.ID, "")
