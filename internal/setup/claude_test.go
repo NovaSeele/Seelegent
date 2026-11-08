@@ -329,6 +329,27 @@ func TestHookInstallRemove(t *testing.T) {
 	}
 }
 
+// TestHookRemoveEveryCopy (H21): --remove deletes every Seelegent reminder hook, also a second copy in another
+// group or in the same group, and keeps the user's own hooks.
+func TestHookRemoveEveryCopy(t *testing.T) {
+	m := newMachine(t)
+	fakeClaude(t, m)
+	ours := `{"type": "command", "command": "\"C:/x/seelegent.exe\" hook claude-agent"}`
+	cfg := m.write(".claude/settings.json", `{"hooks": {"PreToolUse": [
+  {"matcher": "Agent", "hooks": [`+ours+`]},
+  {"matcher": "Bash", "hooks": [{"type": "command", "command": "echo hi"}, `+ours+`]},
+  {"matcher": "Agent", "hooks": [`+strings.Replace(ours, "C:/x", "D:/old", 1)+`, `+ours+`]}
+]}}`)
+	rep := run(t, m, Request{Remove: true, Hosts: []string{"claude"}, NoSkill: true})
+	it := wantAction(t, rep, "claude", KindHook, ActionRemoved)
+	got := read(t, cfg)
+	if strings.Contains(got, "claude-agent") || !strings.Contains(got, "echo hi") || !strings.Contains(it.Detail, "4") {
+		t.Errorf("%q left %s", it.Detail, got)
+	}
+	rep = run(t, m, Request{Remove: true, Hosts: []string{"claude"}, NoSkill: true})
+	wantAction(t, rep, "claude", KindHook, ActionSkipped)
+}
+
 func TestAgentHookOutput(t *testing.T) {
 	out := AgentHookOutput([]byte(`{"tool_name":"Agent","tool_input":{"subagent_type":"general-purpose","prompt":"x"}}`))
 	var got struct {

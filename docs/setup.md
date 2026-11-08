@@ -23,7 +23,7 @@ seelegent setup [--host a,b] [--dry-run] [--remove] [--no-skill] [--hooks] [--fo
 | `--dry-run` | Report every action without writing a file or running a host CLI. |
 | `--remove` | Remove what setup added: the MCP entry, the skill and the hook. An entry or skill that is not Seelegent's is left alone. |
 | `--no-skill` | Leave the skill alone. |
-| `--hooks` | Also install the Claude Code reminder hook. `--remove` always removes it. |
+| `--hooks` | Also install the Claude Code reminder hook. `--remove` always removes it, every copy of it. |
 | `--force` | Replace an entry or skill named `seelegent` that another program wrote (the old one is backed up first). |
 | `--exe` | The executable the hosts start. Default: the running `seelegent`, with symbolic links resolved. It must be named `seelegent` (`seelegent.exe` on Windows), because setup recognizes its own entries by that name: with any other name (a `seelegent-dev.exe` build, a test binary) setup refuses before writing anything, a dry run too, and says to install or copy the binary as `seelegent` or to pass `--exe`. `--remove` is not checked. |
 | `--json` | Print the report as JSON (`setup.Report`). When an item failed, the report is the only document printed (exit 1). |

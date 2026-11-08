@@ -136,6 +136,24 @@ func findHook(f hostFile) (*hookSpot, error) {
 	return s, nil
 }
 
+// removeAll deletes every reminder hook, not only the first one found (H21: a hook added twice, by hand or by
+// an old version, stayed behind and still ran). It reports how many it removed.
+func (s *hookSpot) removeAll() (int, error) {
+	n := 0
+	for s.group >= 0 {
+		if err := s.removeOurHook(); err != nil {
+			return n, err
+		}
+		n++
+		next, err := findHook(hostFile{data: s.doc.bytes(), existed: true})
+		if err != nil {
+			return n, err
+		}
+		s.doc, s.group, s.inner, s.cmd = next.doc, next.group, next.inner, next.cmd
+	}
+	return n, nil
+}
+
 // at extends preToolUse with more path elements.
 func at(elem ...any) jpath { return append(append(jpath{}, preToolUse...), elem...) }
 
@@ -233,11 +251,15 @@ func (c claudeCode) removeHook(o op) Item {
 		return it
 	}
 	it.Action, it.Detail = ActionRemoved, "removed the reminder hook"
+	n, err := s.removeAll()
+	if err != nil {
+		return failItem(it, err)
+	}
+	if n > 1 {
+		it.Detail = fmt.Sprintf("removed the reminder hook (%d copies)", n)
+	}
 	if o.req.DryRun {
 		return planned(it)
-	}
-	if err := s.removeOurHook(); err != nil {
-		return failItem(it, err)
 	}
 	var note string
 	if it.Backup, note, err = o.writeHostFile(s.file, s.doc.bytes(), bareSettings); err != nil {
@@ -253,7 +275,7 @@ func bareSettings(data []byte) bool {
 	if err != nil {
 		return false
 	}
-	if s.group >= 0 && s.removeOurHook() != nil {
+	if _, err := s.removeAll(); err != nil {
 		return false
 	}
 	return s.doc.onlyEmpty("hooks")
