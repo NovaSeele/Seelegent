@@ -94,8 +94,13 @@ type GateStep struct {
 	// this step in the current gate phase.
 	Stopped string `json:"stopped,omitempty" ts:"'low_memory'"`
 	Stops   int    `json:"stops,omitempty"`
-	// Files are the files out of lane (lane) or checked (auto).
+	// Files are the files out of lane (lane) or checked (auto). For the lane they are the files a worker touched:
+	// with its edit tools or through a command Seelegent saw write them.
 	Files []string `json:"files,omitempty"`
+	// Unseen are the files out of lane that changed during the turns although no worker edit or command Seelegent
+	// saw touched them (the lead or the user editing the same tree, or a command's side effects): lane only, a
+	// warning, never red.
+	Unseen []string `json:"unseen,omitempty"`
 	// Failures are the files an auto check refused, with why.
 	Failures []GateFailure `json:"failures,omitempty"`
 	// Findings are the red hygiene findings.

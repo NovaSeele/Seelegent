@@ -28,8 +28,11 @@ When the task starts, its proof is resolved and frozen (`TaskDetail.proof`):
   `gate: true` (`--gate-detect`), the test, lint and build commands found in the repository (`go.mod`,
   `package.json` scripts `lint`, `typecheck`, `test`, `build`, `Cargo.toml`, a pytest setup, a Makefile with a
   `test`, `check` or `lint` target; the nearest project folder at or above `cwd`). With spec task ids, the lead's
-  commands replace the tasks' own and prove those tasks. `gate: false` turns all commands off; the lane and hygiene
-  steps still run.
+  commands replace the tasks' own and prove those tasks. `gate: false` turns the gate phase off: no commands, no
+  automatic fix turn, no settling (with `verify: true` the phase still runs, for the verifier alone). The lane is
+  still checked after each turn with the rules of [the lane check](#the-lane-check), as information only: warn
+  `outside_lane` scope findings on the turn and the report's `lane` (`out_of_lane`, and a warning "outside the lane
+  (gate off, information only)").
 - **Doctrine**: the checks of the repository's `.seelegent/doctrine.json`
   (`{"version": 1, "checks": [{"id", "run", "principle"?, "when"?: [globs]}]}`), frozen so a worker cannot loosen
   them. A check with `when` runs only when a changed file matches. A file that cannot be read is reported as
@@ -62,20 +65,26 @@ lead or the user resets the automatic fix count.
 
 When a turn of a gated task ends well, the task stays `running` with `gatePhase {state, turn, since, childId?,
 wait?, position?, stops?}` while the daemon runs the gate. The phase survives a daemon restart (the new daemon runs the gate again) and ends
-on cancel (a running step becomes `not_run`). Takeover is refused during the phase.
+on cancel (a running step becomes `not_run`). Takeover is refused during the phase. A followup by the lead or the
+user during the phase (the worker's turn has ended; the gate runs, waits for a slot or for memory, settles, or the
+verifier reviews) supersedes it: the gate's commands are stopped as on a cancel, the gate is stored `skipped` with
+the warning "superseded by a followup: the gate stopped before it ended", a running verifier is cancelled, and the
+new turn starts. A followup while the worker's turn runs is refused (`409`) with what the task is doing ("the
+worker's turn is still running", "the gate is running", "its gate waits for the other workers of the repository").
 
 Steps, in order (`GateResult.steps`):
 
 | Kind | What | Fails when |
 |---|---|---|
-| `lane` | the files the turns since the lead's instruction changed, against the lane | a file is outside it (`lanes: enforce`; `warn` only warns; `off` has no step) |
+| `lane` | the net change since the lead's instruction against the lane ([the lane check](#the-lane-check)) | a file a worker touched is outside it (`lanes: enforce`; `warn` only warns; `off` has no step); a file outside it that no worker edit or command touched only warns |
 | `hygiene` | the milestone 12 hygiene findings still open ([safety.md](safety.md)) | any red finding |
 | `auto` | syntax of the changed `.json`, `.go`, `.js`/`.cjs`/`.mjs` files (`gateAutoChecks`) | a parse error the HEAD version did not have |
 | `doctrine` | each doctrine check | its command exits non-zero |
 | `task` | each lead or spec gate command | its command exits non-zero |
 | `detect` | each detected command | its command exits non-zero |
 
-The `gates: false` setting keeps only the lane and hygiene steps. Commands run through the platform shell
+A red lane does not stop the steps after it: the commands still run, so their failures can get an automatic fix
+turn while the lane waits for the lead. The `gates: false` setting keeps only the lane and hygiene steps. Commands run through the platform shell
 (`cmd /c` on Windows, `sh -c` elsewhere). The lead's commands run in the task's folder (`cd <dir> &&` from the
 repository root when the task works in a sub folder, as in a monorepo package), a detected command in the folder
 of the project file it came from, and a spec's `Gate:` and `Feature gate:` lines at the repository root, the same
@@ -143,17 +152,28 @@ Each step is published as a `gate` task event (`phase: start | step | settling |
 (`Turn.gate`), so the dashboard shows it live. The `start` event carries the plan (each step's kind, command and
 folder), so a view names the steps in its own language.
 
-**Settling.** When the gate fails while another worker of the same repository is at work (running, not in its own
+**Settling.** When a doctrine check or a gate command (`task`, `detect`) fails while another worker of the same repository is at work (running, not in its own
 gate phase), the failure may be that worker's half-done change. The task waits (`gatePhase.state: settling`) until
 the others stop, `gateSettleMinutes` at most, polling every `gateSettlePollMs`, then runs the gate once more
 (`settled: true`). A failing doctrine check whose output names only files other active tasks changed (their real
-changes, not their lanes) is marked `foreign` with `causedBy`. It still counts: the gate stays red, so the lead sees
+changes, not their lanes) is marked `foreign` with `causedBy`. A red lane, hygiene or syntax step never settles:
+it depends on the task's own turns, which another worker cannot change, so the gate ends at once. It still counts: the gate stays red, so the lead sees
 it. It only spares the task an automatic fix turn it could do nothing with; the step, the attention detail and the
 report name the tasks it may be caused by.
 
-**Red.** While `autoFixes < budget`, the daemon opens an automatic fix turn (`by: "gate"`) whose message lists the
-failing steps with their output tails and the files other tasks are changing. The worker fixes, the gate runs
-again. When the budget is used up the task ends `done` with the red gate and the attention reason `gate_red`
+**Red.** While `autoFixes < budget` and a step other than the lane failed, the daemon opens an automatic fix turn
+(`by: "gate"`) whose message gives the first such step with its output tail and the files other tasks are
+changing, and ends with "Do not read or search Seelegent's data folder or its processes: everything you need is in
+this message." The worker fixes, the gate runs again. The lane never gets a fix turn: the lead decides about files
+outside it. A gate red only on its lane ends at once, whatever budget is left: the task is `done` with the attention
+reason `gate_red` (who: lead), its detail and the gate warning name the files ("files outside the lane: ... No
+automatic fix turn for the lane: the lead decides"), and the lead widens the lane with a followup's `lane`, accepts
+or rejects. When the lane is red together with another step, the fix prompt names the lane and the files outside it
+as information, never as work, with the line "Do NOT delete, revert or move any file to get back inside the lane:
+the lead decides about those files. Leave them as they are and name them under ## Open issues." No fix prompt tells
+a worker to undo, revert or delete its own files: the junk-file hint only lets it remove a leftover it is sure its
+own commands made. A followup after the lead rejected a task with files outside its lane starts with "Do not delete
+or move files unless the message below names that exact file and says so; the lead rejected for: <notes>". When the budget is used up the task ends `done` with the red gate and the attention reason `gate_red`
 (`hygiene` when the hygiene step is the only failure). Its detail says in plain English which steps failed
 ("command failed: npm test; syntax check failed: a.json"); the dashboard builds its own text from the steps.
 An automatic fix turn whose gate still has exactly the line ending and BOM findings (`eol_changed`, `bom_changed`,
@@ -174,13 +194,44 @@ commands, and answers `## Verdict` `accept` or `reject` with `## Reasons` (`path
 (`verifier.unverified_cites`). The child is never listed, is accepted automatically, and is cancelled with its
 parent.
 
-A reject with budget left opens an automatic fix turn (`by: "verifier"`) with the reasons. A reject without budget
+A reject with budget left opens an automatic fix turn (`by: "verifier"`) with the reasons and the line "Do not
+delete, revert or move files to answer this review unless a reason above names that exact file and change: the lead
+decides about files outside your lane." A reject without budget
 ends the task with the attention reason `verifier_rejected`. A verifier that fails or answers without a verdict is
 recorded as `error` and does not hold the task. `verify` events (`phase: start | verdict`) follow it.
 
+## The lane check
+
+The lane step (and, for a task whose gate is off, the post-turn lane findings) judges what changed since the lead's
+latest instruction (field report 4):
+
+- **Net change.** The files that some turn since the instruction changed are compared between the start snapshot of
+  the instruction's turn and the end snapshot of the latest turn, by their manifest entries (hash, else size and
+  time; [safety.md](safety.md)). A file created and deleted again, or changed and restored, is no change. When the
+  snapshots cannot tell (one is missing or truncated, or HEAD moved between them) every file a turn changed counts:
+  the check fails closed.
+- **Touched by a worker.** A file outside the lane counts against it only when a worker plausibly touched it: its
+  edit tools reported it, or one of its shell commands writes, moves or deletes it as `guard.Writes` reads the
+  command (redirections, `rm`, `mv`, `cp`/`Copy-Item` destinations, `sed -i`, and PowerShell's `Remove-Item`,
+  `Set-Content`, `Out-File`, `New-Item`, `Move-Item`, `Copy-Item` with `-Path`, `-LiteralPath` or positional paths),
+  relative paths resolved against the task's folder. A removed folder counts for every file under it. Both sides are
+  compared in canonical form (8.3 short names, junctions, letter case and separators do not matter). Any other file
+  outside the lane (the lead or the user editing the same tree, another program) is listed as `unseen` with the
+  warning "changed during the turn but not by a worker edit or command Seelegent saw": the step is `warn` at most,
+  and the report and the gate warnings still name it. The accepted cost: a file a worker's command changes as a side
+  effect (a build that rewrites a lock file, a script that writes a file it does not name) is only a warning too.
+  The command's own folder is not known: commands are resolved against the task's folder, so a `cd x && rm y` is
+  read as the task's `y`.
+- The changed-file list of the turn (`files_changed`) is not narrowed: it still holds every file the snapshots saw
+  change.
+
 ## Lanes and claims
 
-A lane is a list of files, folders (`dir/`) and globs relative to the repository root. `.` and `..` segments are
+A lane is a list of files, folders and globs relative to the repository root. A plain path (no `*` or `?`) covers
+that path and everything under it, with or without a trailing `/`, whether or not the folder exists yet: `src/x`
+covers `src/x/a.vue` but not `src/xy.ts`. Two plain paths overlap when one is the other or lies under it; a glob
+and a plain path when the glob can match the plain path or a file under it (`src/x/*.ts` and `src/*/a.ts` overlap
+`src/x`, `src/*.ts` does not). `.` and `..` segments are
 resolved first (`src/../lib` is `lib`, `a/./b` is `a/b`); then a path that is absolute, leaves the repository or is
 the root itself is refused (`400`), and such a token of a spec task is left out of its lane.
 

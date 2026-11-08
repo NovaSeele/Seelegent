@@ -164,6 +164,7 @@ func (s *Service) checkTurn(ctx context.Context, t *Task, tu *Turn, last *backen
 		c.hygiene = s.hygiene(ctx, root, start, end, c.changed, response, reported)
 	}
 	c.scope = s.scope(ctx, t, root, editedAbs, commands, response)
+	c.scope = append(c.scope, s.laneOffFindings(t, tu, c.changed, c.edited, commands, &end)...)
 	return c
 }
 
@@ -320,6 +321,7 @@ func (s *Service) preCheck(ctx context.Context, id string, turn int, status stri
 	}
 	return c
 }
+
 
 // lateCheck runs the post-turn checks of a turn that ended without them (a cancel, a failure) and saves them.
 func (s *Service) lateCheck(ctx context.Context, id string, turn int) {

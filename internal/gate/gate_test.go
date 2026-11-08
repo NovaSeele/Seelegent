@@ -76,8 +76,11 @@ func TestPlanAndRun(t *testing.T) {
 		t.Errorf("steps = %+v", steps)
 	}
 	r := Runner{Root: root, Env: os.Environ(), Timeout: time.Minute}
+	// A red lane does not stop the gate (field report 4, F4): the commands still run, so a fix turn can work on
+	// their failures while the lane waits for the lead.
 	res, ok := r.Run(context.Background(), steps, nil)
-	if !ok || res.State != api.GateRed || !reflect.DeepEqual(res.NotRun, []string{"hygiene", "syntax", "vet", "T001, T002"}) {
+	if !ok || res.State != api.GateRed || len(res.NotRun) != 0 || res.Steps[3].State != api.StepGreen ||
+		res.Steps[4].State != api.StepGreen || len(res.Warnings) != 0 {
 		t.Fatalf("run = %+v", res)
 	}
 	// Warn mode: the lane only warns and the commands run.
@@ -188,20 +191,45 @@ func TestFixPromptAndForeign(t *testing.T) {
 		{Kind: api.StepLane, Label: "lane", State: api.StepGreen},
 		{Kind: api.StepTask, Label: "T001", Cmd: "go test ./...", State: api.StepRed, Exit: &exit, Tail: "FAIL x_test.go:3"},
 	}}
-	p := FixPrompt(res, 1, 2, []Other{{ID: "t2", Title: "Other", Lane: []string{"web/"}}})
+	p := FixPrompt(res, nil, 1, 2, []Other{{ID: "t2", Title: "Other", Lane: []string{"web/"}}})
 	for _, want := range []string{"automatic fix 1/2", "Command: go test ./...", "Exit: 1", "FAIL x_test.go:3",
-		"Do not weaken", "t2 (Other) on web/"} {
+		"Do not weaken", "t2 (Other) on web/", NoLookingLine} {
 		if !strings.Contains(p, want) {
 			t.Errorf("prompt misses %q:\n%s", want, p)
 		}
 	}
+	if strings.Contains(p, NoDeleteLine) || strings.Contains(p, "outside it") {
+		t.Errorf("a green lane is named:\n%s", p)
+	}
+	// A lane alone is never a fix turn's work (F4).
 	lane := api.GateResult{Steps: []api.GateStep{{Kind: api.StepLane, Label: "lane", State: api.StepRed, Files: []string{"x.go"}}}}
-	if p := FixPrompt(lane, 2, 2, nil); !strings.Contains(p, "Out of lane: x.go") || !strings.Contains(p, "Never use git checkout") {
-		t.Errorf("lane prompt:\n%s", p)
+	if Fixable(lane) != nil || Failing(lane) == nil {
+		t.Error("a red lane is fixable")
+	}
+	// Lane and command red: the fix turn works on the command; the lane is information with the no-delete line.
+	both := api.GateResult{State: api.GateRed, Steps: []api.GateStep{
+		{Kind: api.StepLane, Label: "lane", State: api.StepRed, Files: []string{"src/xy.ts", "README.md"}},
+		{Kind: api.StepTask, Label: "T001", Cmd: "go test ./...", State: api.StepRed, Exit: &exit, Tail: "FAIL"},
+	}}
+	if s := Fixable(both); s == nil || s.Kind != api.StepTask {
+		t.Fatalf("fixable = %+v", s)
+	}
+	p = FixPrompt(both, []string{"src/x/"}, 1, 2, nil)
+	for _, want := range []string{"Step: T001 (task)", "your lane is src/x/", "outside it: src/xy.ts, README.md",
+		NoDeleteLine, NoLookingLine} {
+		if !strings.Contains(p, want) {
+			t.Errorf("lane and command prompt misses %q:\n%s", want, p)
+		}
+	}
+	for _, bad := range []string{"Undo", "Stay inside your lane", "Step: lane"} {
+		if strings.Contains(p, bad) {
+			t.Errorf("lane and command prompt has %q:\n%s", bad, p)
+		}
 	}
 	hyg := api.GateResult{Steps: []api.GateStep{{Kind: api.StepHygiene, Label: "hygiene", State: api.StepRed,
-		Findings: []api.Finding{{Kind: api.FindingEOLChanged, Path: "a.txt"}}}}}
-	if p := FixPrompt(hyg, 1, 1, nil); !strings.Contains(p, "line endings") || !strings.Contains(p, "a.txt (eol_changed)") {
+		Findings: []api.Finding{{Kind: api.FindingEOLChanged, Path: "a.txt"}, {Kind: api.FindingJunkFile, Path: "x.log"}}}}}
+	if p := FixPrompt(hyg, nil, 1, 1, nil); !strings.Contains(p, "line endings") || !strings.Contains(p, "a.txt (eol_changed)") ||
+		!strings.Contains(p, "Remove one only when you are sure your own commands left it") {
 		t.Errorf("hygiene prompt:\n%s", p)
 	}
 
@@ -248,5 +276,34 @@ func TestForeignNeverGreen(t *testing.T) {
 	}
 	if Failing(api.GateResult{Steps: steps}) != nil {
 		t.Error("a foreign failure is no fix turn's work")
+	}
+}
+
+// TestLaneStepTouched: only a file a worker touched counts against the lane (F6); the others are a warning.
+func TestLaneStepTouched(t *testing.T) {
+	touched := func(f string) bool { return f == "src/xy.ts" }
+	st := LaneStep([]string{"src/x"}, []string{"src/x/a.vue", "src/xy.ts", "notes.md"}, api.LaneEnforce, touched)
+	if st.State != api.StepRed || !slices.Equal(st.Files, []string{"src/xy.ts"}) || !slices.Equal(st.Unseen, []string{"notes.md"}) {
+		t.Fatalf("step = %+v", st)
+	}
+	if !strings.Contains(st.Tail, "Out of lane:\nsrc/xy.ts") || !strings.Contains(st.Tail, UnseenNote) {
+		t.Errorf("tail = %q", st.Tail)
+	}
+	if got := LaneWarnings(st); !slices.Equal(got, []string{"outside the lane, " + UnseenNote + ": notes.md"}) {
+		t.Errorf("warnings = %q", got)
+	}
+	// Only unseen files: a warning, never red.
+	st = LaneStep([]string{"src/x"}, []string{"notes.md"}, api.LaneEnforce, touched)
+	if st.State != api.StepWarn || len(st.Files) != 0 || Overall([]api.GateStep{st}) != api.GateGreen {
+		t.Errorf("unseen only = %+v", st)
+	}
+	// Lanes: warn keeps the touched files as a warning too.
+	st = LaneStep([]string{"src/x"}, []string{"src/xy.ts"}, api.LaneWarn, touched)
+	if st.State != api.StepWarn || !slices.Equal(LaneWarnings(st), []string{"outside the lane (lanes: warn): src/xy.ts"}) {
+		t.Errorf("warn mode = %+v %q", st, LaneWarnings(st))
+	}
+	// A plain entry covers its folder; without a touch set every changed file counts.
+	if st = LaneStep([]string{"src/x"}, []string{"src/x/a.vue"}, api.LaneEnforce, nil); st.State != api.StepGreen {
+		t.Errorf("in lane = %+v", st)
 	}
 }

@@ -656,8 +656,17 @@ export interface GateStep {
    */
   stopped?: 'low_memory'
   stops?: number
-  /** Files are the files out of lane (lane) or checked (auto). */
+  /**
+   * Files are the files out of lane (lane) or checked (auto). For the lane they are the files a worker touched:
+   * with its edit tools or through a command Seelegent saw write them.
+   */
   files?: string[]
+  /**
+   * Unseen are the files out of lane that changed during the turns although no worker edit or command Seelegent
+   * saw touched them (the lead or the user editing the same tree, or a command's side effects): lane only, a
+   * warning, never red.
+   */
+  unseen?: string[]
   /** Failures are the files an auto check refused, with why. */
   failures?: GateFailure[]
   /** Findings are the red hygiene findings. */
@@ -1996,9 +2005,13 @@ export interface Finding {
     | 'unreported_file'
     | 'outside_repo_write'
     | 'unfetched_url'
+    | 'outside_lane'
     | 'skipped'
   severity: 'red' | 'warn'
-  /** Path is relative to the repository root (hygiene) or absolute (outside_repo_write); empty for URLs. */
+  /**
+   * Path is relative to the repository root (hygiene, outside_lane) or absolute (outside_repo_write); empty for
+   * URLs.
+   */
   path?: string
   /** Detail is a short explanation (the command, the URLs). */
   detail?: string
@@ -2845,8 +2858,8 @@ export interface DelegateRequest {
   afterMode?: 'accepted' | 'done'
   allowGit?: boolean
   /**
-   * Gate: true adds the test, lint and build commands found in the repository; false turns the gate's commands
-   * off (lane and hygiene still run). GateCommands are the lead's own gate commands; with spec task ids they
+   * Gate: true adds the test, lint and build commands found in the repository; false turns the gate phase off
+   * (no commands, no fix turns; the lane is still checked after each turn, as information). GateCommands are the lead's own gate commands; with spec task ids they
    * replace the tasks' Gate: lines and the feature gate, and prove those tasks.
    */
   gate?: boolean

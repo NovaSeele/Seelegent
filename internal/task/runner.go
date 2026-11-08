@@ -254,7 +254,9 @@ func (s *Service) endRun(r *run) {
 
 // runTask works on the task until its open turn ended, it was cancelled or taken over, or the daemon stops.
 func (s *Service) runTask(r *run) {
-	baselineTried, snapTried := false, false
+	// snapTried is the turn whose start snapshot was tried: once per turn, so an automatic fix turn the same run
+	// goes on with gets its own (field report 4, F5: it had none, and the lane could not see its net change).
+	baselineTried, snapTried := false, 0
 	for {
 		t, err := s.repo.Get(s.root, r.id)
 		if err != nil {
@@ -308,8 +310,8 @@ func (s *Service) runTask(r *run) {
 			baselineTried = true
 			s.takeBaseline(r.ctx, t)
 			continue
-		case s.o.Snapshots != nil && t.RepoRoot != "" && tu.Snap == nil && len(tu.Attempts) == 0 && !snapTried:
-			snapTried = true
+		case s.o.Snapshots != nil && t.RepoRoot != "" && tu.Snap == nil && len(tu.Attempts) == 0 && snapTried != tu.N:
+			snapTried = tu.N
 			s.takeStartSnapshot(r.ctx, t, tu)
 			continue
 		default:

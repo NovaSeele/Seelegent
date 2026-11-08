@@ -174,6 +174,7 @@
       "junkFile": "不要なファイル",
       "unreportedFile": "変更されたが報告にない",
       "outsideRepoWrite": "リポジトリ外への書き込み",
+      "outsideLane": "レーン外の変更",
       "unfetchedUrl": "ワーカーが開いていない URL",
       "skipped": "チェックをスキップ"
     },
@@ -277,7 +278,7 @@
       "forced": "{tasks} のレーンを強制的に取得"
     },
     "commands": "コマンド",
-    "off": "オフ (レーンと衛生チェックは実行)",
+    "off": "オフ (レーンは情報としてのみチェック)",
     "noCommands": "コマンドなし",
     "detected": "自動検出",
     "doctrine": "プロジェクトの原則",

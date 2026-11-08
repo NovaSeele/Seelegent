@@ -31,9 +31,11 @@ const (
 	gateHeadMax = 4 << 20
 )
 
-// wantsGate reports whether turn tu of t, which just ended well, gets a gate phase.
+// wantsGate reports whether turn tu of t, which just ended well, gets a gate phase. A task whose lead turned the gate
+// off has none: no fix turn, no settling; its lane is checked after each turn as scope findings (laneOffFindings,
+// field report 4, F12). With verify on, such a task still gets the phase, for the verifier alone.
 func wantsGate(t *Task, tu *Turn) bool {
-	return gated(t) && t.Proof != nil && tu.Status == TurnOK && !tu.Handback
+	return gated(t) && t.Proof != nil && (!t.Proof.GateOff || t.Proof.Verify) && tu.Status == TurnOK && !tu.Handback
 }
 
 // instructionStart returns the index of the turn that holds the lead's (or user's) latest instruction at or before
@@ -202,6 +204,15 @@ func (s *Service) gatePhase(r *run, t *Task) (bool, error) {
 	if laneMode == config.LanesOff {
 		in.Lane = nil
 	}
+	if in.Lane != nil {
+		// The lane judges the net change, and only what a worker touched counts against it (F5, F6).
+		in.LaneFiles = s.netLane(t, ph.Turn, files, nil)
+		in.Touched = laneTouched(t, ph.Turn).has
+	}
+	if p.GateOff {
+		// The gate is off: the phase is the verifier's alone; the lane was checked as scope findings (F12).
+		in.Lane, in.Hygienic = nil, false
+	}
 	steps := gate.Plan(in)
 	if len(steps) == 0 {
 		return s.afterGreen(t, ph.Turn, nil, files)
@@ -225,8 +236,9 @@ func (s *Service) gatePhase(r *run, t *Task) (bool, error) {
 	if res.Reason == api.GateReasonLowMemory {
 		return outOfMemory(res)
 	}
-	if failedGate(res) && s.othersWorking(r.ctx, t) {
-		// Another worker may be half way through a change the gate trips over: wait for it, then run again.
+	if commandFailed(res) && s.othersWorking(r.ctx, t) {
+		// Another worker may be half way through a change the gate trips over: wait for it, then run again. Only a
+		// command can change its mind: the lane and the turn's own findings depend on the turns alone (F7).
 		if !s.settle(r, t) {
 			return s.gateStopped(t.ID)
 		}
@@ -267,17 +279,42 @@ func (s *Service) gatePhase(r *run, t *Task) (bool, error) {
 	if !failedGate(res) {
 		return s.afterGreen(t, ph.Turn, &res, files, barChanged...)
 	}
-	// Only the task's own failures are worth a fix turn.
-	if p.AutoFixes < p.Budget && gate.Failing(res) != nil {
-		if !onlyFailures(res, stuck) {
-			// Other failures are worth another turn; the repeated findings are left out of its prompt and stay red.
-			msg := gate.FixPrompt(withoutFindings(res, stuck), p.AutoFixes+1, p.Budget, others)
-			return s.fixTurn(t.ID, ph.Turn, res, barChanged, msg, ByGate)
-		}
+	// Only the task's own failures are worth a fix turn, and never the lane: the lead decides about files outside it
+	// (F4: a fix turn told to get back inside its lane deleted seven files of its own work). The repeated line
+	// ending and BOM findings are left out of the prompt and stay red.
+	fix := withoutFindings(res, stuck)
+	if p.AutoFixes < p.Budget && gate.Fixable(fix) != nil {
+		msg := gate.FixPrompt(fix, lane, p.AutoFixes+1, p.Budget, others)
+		return s.fixTurn(t.ID, ph.Turn, res, barChanged, msg, ByGate)
+	}
+	if p.AutoFixes < p.Budget && len(stuck) > 0 && gate.Fixable(res) != nil {
 		res.Warnings = append(res.Warnings, "the automatic fix turn left the same line ending and BOM findings: "+
 			"no more fix turns, the lead decides")
 	}
+	if st := laneStep(res); st != nil && st.State == api.StepRed && gate.Fixable(fix) == nil {
+		res.Warnings = append(res.Warnings, laneStopWarning(st.Files))
+	}
 	return false, s.endGate(t.ID, ph.Turn, &res, barChanged)
+}
+
+// laneStopWarning is the warning of a gate that stops for the lead on its lane.
+func laneStopWarning(files []string) string {
+	return fmt.Sprintf("files outside the lane: %s. No automatic fix turn for the lane: the lead decides (widen the "+
+		"lane with a followup's lane, accept, or reject)", strings.Join(files, ", "))
+}
+
+// commandFailed reports whether a doctrine check or a gate command failed: a failure that another worker's
+// half-done change may cause, so that settling and running the gate again can change it (F7).
+func commandFailed(res api.GateResult) bool {
+	for i := range res.Steps {
+		switch st := &res.Steps[i]; st.Kind {
+		case api.StepDoctrine, api.StepTask, api.StepDetect:
+			if stepFailed(st.State) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // stuckStyle returns the line ending and BOM findings of res when turn n is an automatic fix turn whose gate still
@@ -299,15 +336,15 @@ func stuckStyle(t *Task, n int, res api.GateResult) map[[2]string]bool {
 	return nil
 }
 
-// onlyFailures reports whether the findings of stuck (not empty) are all the task's own failures in res: every
-// other own step passed and the hygiene step has no other red finding.
+// onlyFailures reports whether the findings of stuck (not empty) are all the task's own failures in res besides the
+// lane (which no fix turn works on): every other own step passed and the hygiene step has no other red finding.
 func onlyFailures(res api.GateResult, stuck map[[2]string]bool) bool {
 	if len(stuck) == 0 {
 		return false
 	}
 	for i := range res.Steps {
 		st := &res.Steps[i]
-		if !stepFailed(st.State) || st.Foreign {
+		if !stepFailed(st.State) || st.Foreign || st.Kind == api.StepLane {
 			continue
 		}
 		if st.Kind != api.StepHygiene {
@@ -797,7 +834,15 @@ func (s *Service) endGate(id string, turn int, res *api.GateResult, barChanged [
 
 // cancelGate ends the gate phase of a cancelled task: a gate still running is marked skipped, a pending verdict
 // becomes an error.
-func cancelGate(t *Task, ph *GatePhase, now time.Time) []NewEvent {
+func cancelGate(t *Task, ph *GatePhase, now time.Time) []NewEvent { return stopGate(t, ph, now, "") }
+
+// supersededNote says why a gate stopped for a lead followup.
+const supersededNote = "superseded by a followup: the gate stopped before it ended"
+
+// stopGate ends the gate phase ph of t: a gate still running (or settling between its runs) is marked skipped, a
+// pending verdict becomes an error. why, when set, is added to the skipped gate's warnings and is the verdict's
+// detail ("cancelled" otherwise).
+func stopGate(t *Task, ph *GatePhase, now time.Time, why string) []NewEvent {
 	t.GatePhase = nil
 	tu := t.TurnN(ph.Turn)
 	if tu == nil {
@@ -814,12 +859,18 @@ func cancelGate(t *Task, ph *GatePhase, now time.Time) []NewEvent {
 			}
 		}
 		cp.State, cp.EndedAt = api.GateSkipped, api.FormatTime(now)
+		if why != "" {
+			cp.Warnings = append(slices.Clone(cp.Warnings), why)
+		}
 		tu.Gate = &cp
 		evs = append(evs, gateResultEvent(ph.Turn, &cp, nil))
 	}
 	if v := tu.Verifier; v != nil && v.Verdict == api.GateRunning {
 		cp := *v
 		cp.Verdict, cp.Detail = api.VerdictError, "cancelled"
+		if why != "" {
+			cp.Detail = why
+		}
 		tu.Verifier = &cp
 		evs = append(evs, NewEvent{Type: api.EventVerify, Turn: ph.Turn, Data: api.VerifyEventData{Phase: "result",
 			ChildID: v.ChildID, Result: &cp}})

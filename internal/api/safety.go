@@ -39,13 +39,17 @@ const (
 	FindingOutsideWrite   = "outside_repo_write"
 	FindingUnfetchedURL   = "unfetched_url"
 	FindingHygieneSkipped = "skipped"
+
+	// FindingOutsideLane: a file outside the lane of a task whose gate is off (the lane is information only).
+	FindingOutsideLane = "outside_lane"
 )
 
 // Finding is one result of the hygiene check or the scope warnings of a turn.
 type Finding struct {
-	Kind     string `json:"kind" ts:"'eol_changed' | 'bom_changed' | 'bom_new_file' | 'junk_file' | 'unreported_file' | 'outside_repo_write' | 'unfetched_url' | 'skipped'"`
+	Kind     string `json:"kind" ts:"'eol_changed' | 'bom_changed' | 'bom_new_file' | 'junk_file' | 'unreported_file' | 'outside_repo_write' | 'unfetched_url' | 'outside_lane' | 'skipped'"`
 	Severity string `json:"severity" ts:"'red' | 'warn'"`
-	// Path is relative to the repository root (hygiene) or absolute (outside_repo_write); empty for URLs.
+	// Path is relative to the repository root (hygiene, outside_lane) or absolute (outside_repo_write); empty for
+	// URLs.
 	Path string `json:"path,omitempty"`
 	// Detail is a short explanation (the command, the URLs).
 	Detail string `json:"detail,omitempty"`

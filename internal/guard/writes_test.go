@@ -38,6 +38,18 @@ func TestWrites(t *testing.T) {
 		{`perl -pi -e 's/a/b/' /etc/x`, []string{"/etc/x"}, []string{"s/a/b/"}},
 		{`perl -i.bak -pe 's/a/b/' /etc/x /etc/y`, []string{"/etc/x", "/etc/y"}, []string{"s/a/b/"}},
 		{`perl -i -p fix.pl /etc/x`, []string{"/etc/x"}, []string{"fix.pl"}},
+		// PowerShell's file cmdlets, named or positional, and redirections (field report 4, F6).
+		{`Remove-Item -Path src/components/lighting -Recurse -Force`, []string{"src/components/lighting"}, []string{"-Recurse"}},
+		{`Remove-Item -LiteralPath 'src\a b.vue'`, []string{`src\a b.vue`}, nil},
+		{`Remove-Item src/old.ts`, []string{"src/old.ts"}, nil},
+		{`Set-Content -Path src/a.ts -Value 'x'`, []string{"src/a.ts"}, nil},
+		{`Set-Content src/b.ts 'x'`, []string{"src/b.ts"}, nil},
+		{`'x' | Out-File -FilePath logs/out.txt -Encoding utf8`, []string{"logs/out.txt"}, nil},
+		{`New-Item -ItemType Directory -Path src/new`, []string{"src/new"}, nil},
+		{`Move-Item -Path src/a.ts -Destination lib/a.ts`, []string{"src/a.ts", "lib/a.ts"}, nil},
+		{`Copy-Item src/a.ts lib/b.ts`, []string{"lib/b.ts"}, []string{"src/a.ts"}},
+		{`Get-Content a.txt > b.txt`, []string{"b.txt"}, []string{"a.txt"}},
+		{`powershell -Command "Remove-Item -Path src/x -Recurse"`, []string{"src/x"}, nil},
 	} {
 		got := Writes(tc.line)
 		for _, w := range tc.want {

@@ -298,6 +298,10 @@ A red finding makes a done task's attention `hygiene`.
 - `outside_repo_write` (warn): an edit tool, or a shell command's redirection, copy or move target or a file
   `sed -i`/`perl -i` edits in place (`guard.Writes`), wrote outside the task's folder, the repository, the temp folder and the worker's profile
   folders. Git Bash paths (`/c/...`) are mapped on Windows; dynamic words and `~` are skipped. At most 20.
+- `outside_lane` (warn): a task whose gate is off (`gate: false`) has no lane step; its lane is checked after each
+  turn with the gate's rules ([gates.md](gates.md#the-lane-check)) and each file outside it is a warning, with the
+  detail `outside the lane` (a worker touched it) or `outside the lane, changed during the turn but not by a worker
+  edit or command Seelegent saw`.
 - `unfetched_url` (warn): a URL in the report that appears nowhere in the prompt, the messages, the commands or the
   tool events of the turn (local hosts ignored). At most 10.
 
