@@ -152,6 +152,9 @@ func (r *run) note(ev event.Event, now time.Time, replay bool) {
 	case event.KindToolResult:
 		l.tool, l.command, l.toolSince = "", "", time.Time{}
 		if ev.Tool != nil {
+			if ev.Tool.Name != "" {
+				l.step = ev.Tool.Name // agy reports a quick tool only when it is done (F9)
+			}
 			if pathOnly && mark == "" {
 				// Content unknown: each such edit is its own step.
 				l.edits++
@@ -166,7 +169,7 @@ func (r *run) note(ev event.Event, now time.Time, replay bool) {
 			l.edited = append(l.edited, ev.File.Path)
 		}
 	case event.KindMessage:
-		l.waiting, l.step = time.Time{}, "writing"
+		l.waiting, l.step = time.Time{}, "responding"
 	case event.KindBackgroundWait:
 		l.waiting = now
 	default:
@@ -251,7 +254,6 @@ func (s *Service) endRun(r *run) {
 
 // runTask works on the task until its open turn ended, it was cancelled or taken over, or the daemon stops.
 func (s *Service) runTask(r *run) {
-	baselineTried, snapTried := false, false
 	for {
 		t, err := s.repo.Get(s.root, r.id)
 		if err != nil {
@@ -301,14 +303,6 @@ func (s *Service) runTask(r *run) {
 			return
 		case r.ctx.Err() != nil:
 			return
-		case !t.BaselineTaken && !baselineTried && tu.N == 1 && len(tu.Attempts) == 0:
-			baselineTried = true
-			s.takeBaseline(r.ctx, t)
-			continue
-		case s.o.Snapshots != nil && t.RepoRoot != "" && tu.Snap == nil && len(tu.Attempts) == 0 && !snapTried:
-			snapTried = true
-			s.takeStartSnapshot(r.ctx, t, tu)
-			continue
 		default:
 			more, err = s.newAttempt(r, t, tu)
 		}
@@ -346,6 +340,25 @@ func (s *Service) takeBaseline(ctx context.Context, t *Task) {
 	if err != nil && ctx.Err() == nil {
 		s.log.Warn("task: baseline", "task", t.ID, "err", err)
 	}
+}
+
+// beforeFirstLaunch takes what the first launch of turn tu needs from the worktree as it is right before the worker
+// starts: the task's baseline (its first turn) and the turn's start snapshot. It returns the task as stored then.
+func (s *Service) beforeFirstLaunch(ctx context.Context, t *Task, tu *Turn) (*Task, error) {
+	if !t.BaselineTaken && tu.N == 1 {
+		s.takeBaseline(ctx, t)
+		cur, err := s.repo.Get(ctx, t.ID)
+		if err != nil {
+			return nil, err
+		}
+		t = cur
+	}
+	if s.o.Snapshots != nil && t.RepoRoot != "" {
+		if x := t.TurnN(tu.N); x != nil && x.Snap == nil && len(x.Attempts) == 0 {
+			s.takeStartSnapshot(ctx, t, x)
+		}
+	}
+	return s.repo.Get(ctx, t.ID)
 }
 
 // attemptResult is how a followed attempt ended.
@@ -450,6 +463,23 @@ func (s *Service) newAttempt(r *run, t *Task, tu *Turn) (bool, error) {
 	if s.holdStart(r, t.ID, lease.Release) {
 		// Low memory: the account is free again for another task while this one waits (resources.go).
 		return true, nil
+	}
+	if len(tu.Attempts) == 0 {
+		// The turn's first launch, with the account in hand: the baseline and the start snapshot are taken now, not
+		// when the turn was queued, so what others changed while it waited for an account is not this turn's work
+		// (field report 4: a task that waited 2.5 h for quota diffed against its delegate-time snapshot). Retries
+		// of the turn keep this snapshot.
+		fresh, err := s.beforeFirstLaunch(ctx, t, tu)
+		if err != nil {
+			if ctx.Err() != nil {
+				return true, nil
+			}
+			return false, err
+		}
+		t, tu = fresh, fresh.TurnN(tu.N)
+		if tu == nil || len(tu.Attempts) > 0 {
+			return true, nil // the task moved on meanwhile: look at it again
+		}
 	}
 
 	acc := choice.Account
@@ -625,7 +655,7 @@ func classify(o backend.Outcome, exit launch.Exit, timeoutMinutes int) (status, 
 	case backend.OutcomeCanceled:
 		return AttemptCancelled, ""
 	case backend.OutcomeBackgroundWait:
-		return AttemptBackgroundWait, ""
+		return AttemptBackgroundWait, o.Error // BackgroundWaitTimeout when the time limit ended the wait
 	case backend.OutcomeFailed:
 	}
 	if exit.MemoryLimitHit {

@@ -57,13 +57,13 @@ type segment struct {
 	// stdin holds the bodies of the here-documents and here-strings (POSIX <<, <<-, <<<) the command reads: data
 	// for most commands, a script for a shell that reads its script from standard input.
 	stdin []string
+	// redirs are the targets of the command's output redirections (> file, >> file), in order (Writes).
+	redirs []word
 }
 
 // state is shared by a parser and the parsers of the substitutions it reads.
 type state struct {
 	out []*segment
-	// writes are the targets of output redirections (> file, >> file), when they are plain words.
-	writes []string
 	// heredocs are the byte ranges of the line that hold here-document bodies with their closing delimiter lines
 	// (POSIX only, and only those of the line itself, not of a nested script).
 	heredocs [][2]int
@@ -378,8 +378,8 @@ func (p *parser) fdRedirect(seg *segment) (bool, error) {
 	return true, p.redirect(seg)
 }
 
-// redirect reads a redirection operator at p.i of command seg; the target of an output redirection goes to the
-// state's writes, the body of a here-document or here-string to seg's stdin.
+// redirect reads a redirection operator at p.i of command seg; the target of an output redirection goes to seg's
+// redirs, the body of a here-document or here-string to seg's stdin.
 func (p *parser) redirect(seg *segment) error {
 	c := p.s[p.i]
 	p.i++
@@ -434,8 +434,8 @@ func (p *parser) redirect(seg *segment) error {
 		return nil
 	}
 	w, err := p.word()
-	if err == nil && c == '>' && !w.dynamic && w.text != "" {
-		p.st.writes = append(p.st.writes, w.text)
+	if err == nil && c == '>' && w.text != "" {
+		seg.redirs = append(seg.redirs, w)
 	}
 	return err
 }

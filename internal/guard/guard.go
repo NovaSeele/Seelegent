@@ -19,6 +19,7 @@ import (
 	"slices"
 	"strings"
 	"unicode/utf16"
+	"unicode/utf8"
 )
 
 // Marker starts every refusal; the backend parsers look for it to record blocked commands.
@@ -119,8 +120,12 @@ func (c Checker) Command(line string, shells ...Shell) Result {
 		}
 		read = read || !r.bad
 	}
-	if !read && mentionsGit.MatchString(line) {
-		return denyUnreadable()
+	if !read {
+		if at := gitMention(line); at != "" {
+			r := denyUnreadable()
+			r.Reason += " (mentions git: " + at + ")"
+			return r
+		}
 	}
 	return allow
 }
@@ -155,8 +160,55 @@ func withoutHeredocs(line string) string {
 	return string(b)
 }
 
-// mentionsGit is the fail-closed test for a line that could not be read.
+// mentionsGit is the fail-closed test for a line that could not be read. It matches git anywhere, after the
+// innocentGit words were blanked out, so that a script or file content that only holds such a word is not refused
+// (field report 4, F11) while any other spelling still is ($gitExe, git.exe, /usr/bin/git, .git/). The line is
+// tested as it is and once more with the quotes and escape characters of every dialect taken out, so g"it" or g`it
+// count too.
 var mentionsGit = regexp.MustCompile(`(?i)git`)
+
+// innocentGit are common words that hold "git" and name no git program or folder.
+var innocentGit = regexp.MustCompile(`(?i)digit|legit|\.git(?:ignore|attributes|keep)|git(?:hub|lab|ea)`)
+
+// blankInnocent replaces the innocentGit words of s by spaces of the same length (they are ASCII), so that
+// positions in the result are positions in s.
+func blankInnocent(s string) string {
+	return innocentGit.ReplaceAllStringFunc(s, func(w string) string { return strings.Repeat(" ", len(w)) })
+}
+
+// gitObfuscation are the characters a shell drops from a word: quotes and the escapes of POSIX, PowerShell and cmd.
+var gitObfuscation = strings.NewReplacer(`"`, "", "'", "", `\`, "", "`", "", "^", "")
+
+// mentionContext is how much text gitMention shows on each side of the match.
+const mentionContext = 24
+
+// gitMention returns the place where an unreadable line mentions git, quoted with some context, for the refusal, so
+// that a refused line can be understood from the task's events; "" when it does not.
+func gitMention(line string) string {
+	text := line
+	loc := mentionsGit.FindStringIndex(blankInnocent(text))
+	if loc == nil {
+		text = gitObfuscation.Replace(line)
+		if loc = mentionsGit.FindStringIndex(blankInnocent(text)); loc == nil {
+			return ""
+		}
+	}
+	from, to := max(loc[0]-mentionContext, 0), min(loc[1]+mentionContext, len(text))
+	for from > 0 && !utf8.RuneStart(text[from]) {
+		from--
+	}
+	for to < len(text) && !utf8.RuneStart(text[to]) {
+		to++
+	}
+	quote := strings.Join(strings.Fields(text[from:to]), " ")
+	if from > 0 {
+		quote = "…" + quote
+	}
+	if to < len(text) {
+		quote += "…"
+	}
+	return `"` + quote + `"`
+}
 
 func (c Checker) line(line string, sh Shell, depth int) Result {
 	if depth > maxDepth {

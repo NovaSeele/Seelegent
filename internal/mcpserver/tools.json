@@ -92,7 +92,7 @@
               "type": "boolean"
             }
           ],
-          "description": "Command or array of commands to run after the worker report (overrides tasks.md and feature gates; with task_ids they prove those tasks). Pass true to run the repository's detected test, lint and build commands. Pass false to disable gate commands (the lane and hygiene checks still run)."
+          "description": "Command or array of commands to run after the worker report (overrides tasks.md and feature gates; with task_ids they prove those tasks). Pass true to run the repository's detected test, lint and build commands. Pass false to turn the gate off: no commands, no fix turns; the lane is still checked and reported as information."
         },
         "lane": {
           "oneOf": [
@@ -109,7 +109,7 @@
               ]
             }
           ],
-          "description": "Allowed file paths/globs relative to repo root (a folder covers everything under it). Under lanes: \"enforce\" a claim that overlaps another active task's is refused unless force_lane; files changed outside the lane fail the gate. Pass false to drop the lane a spec would give."
+          "description": "Allowed file paths/globs relative to repo root (a path covers that file or folder and everything under it). Under lanes: \"enforce\" a claim that overlaps another active task's is refused unless force_lane; files a worker changed outside the lane fail the gate; other changes there are warnings. Pass false to drop the lane a spec would give."
         },
         "force_lane": {
           "type": "boolean",
@@ -256,7 +256,7 @@
               "type": "boolean"
             }
           ],
-          "description": "Command or array of commands to run after the worker report (overrides tasks.md and feature gates; with task_ids they prove those tasks). Pass true to run the repository's detected test, lint and build commands. Pass false to disable gate commands (the lane and hygiene checks still run)."
+          "description": "Command or array of commands to run after the worker report (overrides tasks.md and feature gates; with task_ids they prove those tasks). Pass true to run the repository's detected test, lint and build commands. Pass false to turn the gate off: no commands, no fix turns; the lane is still checked and reported as information."
         },
         "lane": {
           "oneOf": [
@@ -273,7 +273,7 @@
               ]
             }
           ],
-          "description": "Allowed file paths/globs relative to repo root (a folder covers everything under it). Under lanes: \"enforce\" a claim that overlaps another active task's is refused unless force_lane; files changed outside the lane fail the gate. Pass false to drop the lane a spec would give."
+          "description": "Allowed file paths/globs relative to repo root (a path covers that file or folder and everything under it). Under lanes: \"enforce\" a claim that overlaps another active task's is refused unless force_lane; files a worker changed outside the lane fail the gate; other changes there are warnings. Pass false to drop the lane a spec would give."
         },
         "force_lane": {
           "type": "boolean",

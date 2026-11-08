@@ -79,8 +79,9 @@ append the events in **one transaction**, then publish on the bus. The log and t
    the task records `gitStart`, the HEAD commit and branch it starts from (an empty head in a repository without
    commits, an empty branch when detached, nothing outside a repository); followups keep the first start, and the Git
    view lists the commits made since it ([api.md](api.md)). The
-   baseline is taken before the run waits for an account (`Pool.Wait`), so files changed while the task waits are
-   not in it. A retry on the same
+   baseline is taken right before the first launch, once an account is leased (`Pool.Wait`), so files someone
+   changed while the task waited for an account are in it, and the worker is told to leave them too. A retry on the
+   same
    conversation resends the request itself when the failed attempt never reported a session, and otherwise the retry
    note together with the request, so a followup is never lost.
 3. **Launch.** `account.Manager.Env` builds the environment (an API key that is missing is an `auth` outcome, not an
