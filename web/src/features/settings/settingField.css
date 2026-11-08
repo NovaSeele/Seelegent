@@ -1,0 +1,84 @@
+/* SettingField.vue (scoped). */
+.sf-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  width: 100%;
+}
+
+.sf {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  width: 100%;
+}
+
+/* The control fills the row's fixed column (SettingRow) next to its reset button and state. */
+.sf__control {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+/* A switch is narrow: its reset button sits right next to it. */
+.sf__control--switch {
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+.sf__state {
+  display: inline-flex;
+  align-items: center;
+  min-width: 64px;
+  min-height: var(--control-sm);
+}
+
+.sf__saved {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--text-secondary);
+  font-size: var(--fs-xs);
+}
+
+/* The Auto state sits where the number field would, at its height (NumberField sm), so the rows keep their rhythm. */
+.sf__auto {
+  display: flex;
+  align-items: center;
+  min-height: max(var(--control-sm), var(--target-min));
+  padding: var(--space-0) var(--space-2);
+  border: var(--border-width) dashed var(--border-strong);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-size: var(--fs-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.sf__auto-tag {
+  color: var(--text-primary);
+  font-weight: var(--fw-medium);
+}
+
+.sf__readonly {
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+}
+
+.sf__error {
+  color: var(--status-danger-fg);
+  font-size: var(--fs-xs);
+}
+
+.sf__note {
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+}
+
+.sf__note[data-os-note='other'] {
+  color: var(--text-secondary);
+}
+
+.sf__notes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}

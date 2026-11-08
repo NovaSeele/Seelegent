@@ -4,7 +4,7 @@
  * checks them again and its field errors show next to the field. Labels and descriptions are
  * settings.items.<item>.{label,desc,keywords}.
  */
-import type { Settings } from '@/api/types'
+import type { EffectiveResources, Settings } from '@/api/types'
 
 export type Unit = 'min' | 'h' | 's' | 'ms' | 'days' | 'bytes' | 'times' | 'pct' | 'mb'
 
@@ -279,6 +279,23 @@ export const FIELDS = {
 export type FieldSection = keyof typeof FIELDS
 
 export const isFieldSection = (id: string): id is FieldSection => Object.hasOwn(FIELDS, id)
+
+/**
+ * The machine-sized settings (docs/configuration.md "Resources"): absent or null = auto, the daemon computes the
+ * value from the machine and Health.resources has the value in use; a number the user set wins (0 = off).
+ */
+export const AUTO_PATHS = [
+  'gateConcurrency',
+  'minFreeMemoryMB',
+  'minFreeCommitMB',
+  'criticalFreeMemoryMB',
+  'testParallelism',
+] as const satisfies readonly (keyof EffectiveResources & keyof Settings)[]
+
+export type AutoPath = (typeof AUTO_PATHS)[number]
+
+export const isAutoPath = (path: string): path is AutoPath =>
+  (AUTO_PATHS as readonly string[]).includes(path)
 
 /**
  * Settings checked against each other (internal/config/validate.go): an error about one is shown on all of them,

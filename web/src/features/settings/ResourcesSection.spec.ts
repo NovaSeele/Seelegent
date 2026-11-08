@@ -50,13 +50,32 @@ function health(extra: Partial<Health> = {}): Health {
 
 const WINDOWS_ONLY = ['minFreeCommit', 'workerMemoryLimit', 'workerCpuRate']
 
+/** The five machine-sized settings; AUTO_SETTINGS has none of them: all auto. */
+const AUTO_KEYS = [
+  'gateConcurrency',
+  'minFreeMemoryMB',
+  'minFreeCommitMB',
+  'criticalFreeMemoryMB',
+  'testParallelism',
+] as const
+const AUTO_SETTINGS = Object.fromEntries(
+  Object.entries(SETTINGS).filter(([key]) => !(AUTO_KEYS as readonly string[]).includes(key)),
+) as unknown as Settings
+
+/** A patch that answers like the daemon: the settings with the body merged (null = auto). */
+const echo = () =>
+  vi.fn<SettingsApi['patch']>((body) =>
+    Promise.resolve({ ...useConnectionStore().settings, ...body } as Settings),
+  )
+
 async function mountSection(
   patch: SettingsApi['patch'] = vi.fn<SettingsApi['patch']>(),
   h: Health = health(),
+  settings: Settings = SETTINGS,
 ) {
   const { plugins } = await setupApp()
   const connection = useConnectionStore()
-  connection.settings = SETTINGS
+  connection.settings = settings
   connection.health = h
   // The section reads /health again when it opens; here it keeps the reading set above.
   vi.spyOn(connection, 'refreshHealth').mockResolvedValue()
@@ -316,6 +335,222 @@ describe('Resources settings', () => {
     expect(wrapper.get('[data-setting="minFreeMemory"]').text()).not.toContain(
       'not while tasks run',
     )
+    wrapper.unmount()
+  })
+
+  it('shows an auto setting as Auto with the value in use on this machine, live from Health', async () => {
+    const wrapper = await mountSection(undefined, health(), AUTO_SETTINGS)
+    const row = (item: string) => wrapper.get(`[data-setting="${item}"]`)
+    for (const item of [
+      'minFreeMemory',
+      'criticalFreeMemory',
+      'minFreeCommit',
+      'testParallelism',
+      'gateConcurrency',
+    ]) {
+      expect(row(item).find('input').exists(), item).toBe(false)
+      expect(row(item).get('[data-auto]').text(), item).toMatch(/^Auto/)
+      expect(row(item).find('[data-explicit]').exists(), item).toBe(false)
+    }
+    expect(row('minFreeMemory').get('[data-auto]').text()).toBe('Auto · 2 GB on this machine')
+    expect(row('minFreeCommit').get('[data-auto]').text()).toBe('Auto · 2.4 GB on this machine')
+    expect(row('testParallelism').get('[data-auto]').text()).toBe('Auto · 2 on this machine')
+    // The free memory now stays next to the threshold, and the Set button is described by both.
+    const set = row('minFreeMemory').get('[data-auto-set]')
+    expect(set.attributes('aria-label')).toBe('Set Free memory to start yourself')
+    const described = set.attributes('aria-describedby')?.split(' ') ?? []
+    expect(described).toContain(row('minFreeMemory').get('[data-auto]').attributes('id'))
+    expect(described).toContain(row('minFreeMemory').get('.sf__notes').attributes('id'))
+    // Settings that are not machine-sized keep their plain field and Default button.
+    expect(row('maxWorkers').find('input').exists()).toBe(true)
+    expect(row('maxWorkers').text()).toContain('Default')
+
+    const next = health()
+    next.resources = {
+      ...next.resources,
+      minFreeMemoryMB: { value: 1024, source: 'auto' },
+      minFreeCommitMB: { value: 0, source: 'auto' },
+    }
+    useConnectionStore().health = next
+    await flushPromises()
+    expect(row('minFreeMemory').get('[data-auto]').text()).toBe('Auto · 1 GB on this machine')
+    // An auto value of 0 reads as the field's 0: off.
+    expect(row('minFreeCommit').get('[data-auto]').text()).toBe('Auto · off on this machine')
+    wrapper.unmount()
+  })
+
+  it('shows the machine the auto values come from', async () => {
+    const wrapper = await mountSection()
+    expect(wrapper.get('[data-machine]').text()).toBe(
+      'This machine: 16 GB RAM, 24 GB commit limit, 8 CPUs',
+    )
+    useConnectionStore().health = health({
+      os: 'linux',
+      machine: { totalPhysMB: 8192, totalCommitMB: 0, cpus: 1 },
+    })
+    await flushPromises()
+    expect(wrapper.get('[data-machine]').text()).toBe('This machine: 8 GB RAM, 1 CPU')
+    useConnectionStore().health = health({
+      machine: { totalPhysMB: 0, totalCommitMB: 0, cpus: 4 },
+    })
+    await flushPromises()
+    expect(wrapper.get('[data-machine]').text()).toBe('This machine: 4 CPUs')
+    wrapper.unmount()
+  })
+
+  it('sets an auto setting from the value in use, then puts it back to auto with null', async () => {
+    const patch = echo()
+    const wrapper = await mountSection(patch, health(), AUTO_SETTINGS)
+    const row = () => wrapper.get('[data-setting="minFreeMemory"]')
+    await row().get('[data-auto-set]').trigger('click')
+    await flushPromises()
+    const input = row().get('input')
+    expect(input.element.value).toBe('2048')
+    expect(document.activeElement).toBe(input.element)
+    await input.setValue('3072')
+    await input.trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+    expect(patch.mock.calls.map(([body]) => body)).toEqual([{ minFreeMemoryMB: 3072 }])
+    expect(row().find('[data-auto]').exists()).toBe(false)
+    expect(row().get('[data-explicit]').text()).toBe('Set by you.')
+    // A screen reader hears that the user set it, with the field.
+    expect(row().get('input').attributes('aria-describedby')).toContain(
+      row().get('.sf__notes').attributes('id'),
+    )
+    const useAuto = row().get('[data-auto-reset]')
+    expect(useAuto.text()).toBe('Use auto')
+    expect(useAuto.attributes('aria-label')).toBe(
+      'Set Free memory to start back to auto, sized to this machine',
+    )
+    ;(useAuto.element as HTMLElement).focus()
+    await useAuto.trigger('click')
+    await flushPromises()
+    expect(patch.mock.calls.map(([body]) => body)).toEqual([
+      { minFreeMemoryMB: 3072 },
+      { minFreeMemoryMB: null },
+    ])
+    expect(row().get('[data-auto]').text()).toMatch(/^Auto/)
+    expect(row().find('[data-explicit]').exists()).toBe(false)
+    // The focus stays in the row: on Set, which took the place of Use auto.
+    expect(document.activeElement).toBe(row().get('[data-auto-set]').element)
+    wrapper.unmount()
+  })
+
+  it('goes back to Auto without sending when the value in use is left as it is', async () => {
+    const patch = echo()
+    const wrapper = await mountSection(patch, health(), AUTO_SETTINGS)
+    const row = () => wrapper.get('[data-setting="testParallelism"]')
+    await row().get('[data-auto-set]').trigger('click')
+    await flushPromises()
+    await row().get('input').trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+    expect(patch).not.toHaveBeenCalled()
+    expect(row().find('input').exists()).toBe(false)
+    expect(document.activeElement).toBe(row().get('[data-auto-set]').element)
+    // "Use auto" on a field opened from Auto closes it, without a request either.
+    await row().get('[data-auto-set]').trigger('click')
+    await flushPromises()
+    await row().get('[data-auto-reset]').trigger('click')
+    await flushPromises()
+    expect(patch).not.toHaveBeenCalled()
+    expect(row().get('[data-auto]').text()).toBe('Auto · 2 on this machine')
+    wrapper.unmount()
+  })
+
+  it('takes 0 on an auto setting and says what it means', async () => {
+    const patch = echo()
+    const wrapper = await mountSection(patch, health(), AUTO_SETTINGS)
+    const row = () => wrapper.get('[data-setting="gateConcurrency"]')
+    await row().get('[data-auto-set]').trigger('click')
+    await flushPromises()
+    await row().get('input').setValue('0')
+    await row().get('input').trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+    expect(patch).toHaveBeenLastCalledWith({ gateConcurrency: 0 })
+    expect(row().get('input').element.value).toBe('0')
+    expect(row().get('[data-explicit]').text()).toBe('Set by you: no limit.')
+    wrapper.unmount()
+  })
+
+  it('patches only the field that changed, never the values in use of the auto settings', async () => {
+    const patch = echo()
+    const wrapper = await mountSection(patch, health(), AUTO_SETTINGS)
+    for (const [item, value] of [
+      ['maxWorkers', '3'],
+      ['workerMemoryLimit', '4096'],
+      ['daemonMemoryLimit', '512'],
+    ] as const) {
+      const input = wrapper.get(`[data-setting="${item}"] input`)
+      await input.setValue(value)
+      await input.trigger('keydown', { key: 'Enter' })
+      await flushPromises()
+    }
+    expect(patch.mock.calls.map(([body]) => body)).toEqual([
+      { maxConcurrentWorkers: 3 },
+      { workerMemoryLimitMB: 4096 },
+      { daemonMemoryLimitMB: 512 },
+    ])
+    for (const [body] of patch.mock.calls) {
+      for (const key of AUTO_KEYS) expect(Object.keys(body), key).not.toContain(key)
+    }
+    // The auto settings are still auto (absent) after those saves.
+    for (const key of AUTO_KEYS) expect(useConnectionStore().settings?.[key], key).toBeUndefined()
+    // Setting one auto setting patches that one alone.
+    const critical = () => wrapper.get('[data-setting="criticalFreeMemory"]')
+    await critical().get('[data-auto-set]').trigger('click')
+    await flushPromises()
+    await critical().get('input').setValue('512')
+    await critical().get('input').trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+    expect(patch).toHaveBeenLastCalledWith({ criticalFreeMemoryMB: 512 })
+    wrapper.unmount()
+  })
+
+  it('names only a field the user set in a cross-field error', async () => {
+    const patch = vi.fn<SettingsApi['patch']>().mockRejectedValueOnce(
+      new ApiError(400, 'invalid_argument', '1 setting(s) are not valid', {
+        fields: [
+          {
+            field: 'criticalFreeMemoryMB',
+            message: 'must be below minFreeMemoryMB (2048) while both are on (got 3000)',
+          },
+        ],
+      }),
+    )
+    const wrapper = await mountSection(patch, health(), AUTO_SETTINGS)
+    // The start threshold is auto: the dashboard's own check does not apply, and the daemon's error stays on the
+    // floor the user typed, not on the auto setting it names.
+    const critical = () => wrapper.get('[data-setting="criticalFreeMemory"]')
+    await critical().get('[data-auto-set]').trigger('click')
+    await flushPromises()
+    await critical().get('input').setValue('3000')
+    await critical().get('input').trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+    expect(patch).toHaveBeenCalledWith({ criticalFreeMemoryMB: 3000 })
+    expect(critical().text()).toContain('must be below minFreeMemoryMB')
+    const min = wrapper.get('[data-setting="minFreeMemory"]')
+    expect(min.text()).not.toContain('must be below')
+    expect(min.find('[aria-invalid]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('reads /health again when the settings change, so the auto values follow them', async () => {
+    const wrapper = await mountSection(echo(), health(), AUTO_SETTINGS)
+    const refresh = vi.mocked(useConnectionStore().refreshHealth)
+    expect(refresh).toHaveBeenCalledTimes(1)
+    useConnectionStore().settings = { ...AUTO_SETTINGS, minFreeMemoryMB: 4096 }
+    await flushPromises()
+    expect(refresh).toHaveBeenCalledTimes(2)
+    // Until it answers, Health may still have the value the user had set: the row says Auto, no stale number.
+    useConnectionStore().settings = AUTO_SETTINGS
+    useConnectionStore().health = health({
+      resources: {
+        ...makeHealthResources().resources,
+        minFreeMemoryMB: { value: 4096, source: 'explicit' },
+      },
+    })
+    await flushPromises()
+    expect(wrapper.get('[data-setting="minFreeMemory"] [data-auto]').text()).toBe('Auto')
     wrapper.unmount()
   })
 

@@ -95,7 +95,28 @@
     "osOnly": "{os} only.",
     "osOther": "{os} only: has no effect on the system the service runs on.",
     "criticalBelowMin": "The emergency memory floor must be below Free memory to start while both are on.",
-    "mbIs": "= {size}"
+    "mbIs": "= {size}",
+    "auto": "Auto",
+    "autoValue": "{value} on this machine",
+    "set": "Set",
+    "setOf": "Set {name} yourself",
+    "useAuto": "Use auto",
+    "useAutoOf": "Set {name} back to auto, sized to this machine",
+    "explicit": "Set by you.",
+    "explicitZero": {
+      "off": "Set by you: off.",
+      "unlimited": "Set by you: no limit."
+    },
+    "zeroIs": {
+      "off": "off",
+      "unlimited": "no limit"
+    },
+    "machine": {
+      "full": "This machine: {memory} RAM, {cpus}",
+      "withCommit": "This machine: {memory} RAM, {commit} commit limit, {cpus}",
+      "cpusOnly": "This machine: {cpus}",
+      "cpus": "{n} CPU | {n} CPUs"
+    }
   },
   "units": {
     "min": "min",
@@ -481,7 +502,7 @@
     },
     "criticalFreeMemory": {
       "label": "Emergency memory floor",
-      "desc": "Below this much free memory or commit, the newest running gate command is stopped and queued again, and every new start waits until memory is back above the start threshold. Workers are never stopped. Must be below Free memory to start.",
+      "desc": "Below this much free memory or commit, the newest running gate command is stopped and queued again, and every new start waits until memory is back above the start threshold. Workers are never stopped. When you set both, keep it below Free memory to start.",
       "keywords": "critical watchdog low memory freeze"
     },
     "workerMemoryLimit": {
