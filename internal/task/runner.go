@@ -626,7 +626,11 @@ func (s *Service) launchAndFollow(r *run, t *Task, turn, n int, acc account.Acco
 	if err := saveMask(dir, env.Secrets); err != nil {
 		return failed(event.ClassFatal, fmt.Errorf("keep the mask list: %w", err))
 	}
-	h, err := launch.Start(r.stopCtx, launch.Options{Launcher: s.o.Launcher, Dir: launchDir, Spec: spec,
+	launcher := s.o.Launcher
+	if s.o.LauncherCommand != nil {
+		launcher = s.o.LauncherCommand()
+	}
+	h, err := launch.Start(r.stopCtx, launch.Options{Launcher: launcher, Dir: launchDir, Spec: spec,
 		Env: env.Vars, Started: r.setStarting})
 	if err != nil {
 		r.clearHandle()
