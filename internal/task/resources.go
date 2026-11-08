@@ -276,9 +276,31 @@ func (s *Service) waitMemory(ctx context.Context, w memWake) {
 	}
 }
 
-// holdStart is the start check of a worker turn, after its lease (release gives the lease back): while memory is
-// low it releases the lease, shows the task waiting for memory and waits; while memory is near its threshold it
-// spaces the starts. It reports whether the start was held (the caller tries the attempt again).
+// holdForMemory is the start check of a worker turn before it asks the pool for an account: while memory is low
+// it shows the task waiting for memory and waits, without touching the pool, until memory is back or the run
+// stops. It reports whether it waited (the caller looks at the task again).
+func (s *Service) holdForMemory(r *run, id string) bool {
+	if s.o.Resources == nil {
+		return false
+	}
+	waited := false
+	for r.ctx.Err() == nil {
+		wake := s.memoryWake()
+		h := s.memoryHold(s.settings())
+		if h == nil {
+			break
+		}
+		waited = true
+		s.setMemoryWaiting(id, *h)
+		s.waitMemory(r.ctx, wake)
+	}
+	return waited
+}
+
+// holdStart is the start check of a worker turn after its lease (release gives the lease back), the guard against
+// memory that fell while the turn waited for an account: while memory is low it releases the lease, shows the task
+// waiting for memory and waits; while memory is near its threshold it spaces the starts. It reports whether the
+// start was held (the caller tries the attempt again).
 func (s *Service) holdStart(r *run, id string, release func()) bool {
 	if s.o.Resources == nil {
 		return false
@@ -308,7 +330,9 @@ type MemoryWait struct {
 
 // setMemoryWaiting shows a task as waiting for memory (status waiting_quota, Waiting memory). The waiting_quota
 // event is logged when the wait starts and when its threshold changes; the reading is saved again only when it
-// moved by memoryDrift.
+// moved by memoryDrift. A memory wait that a pool wait interrupted keeps its start and logs no new event
+// (MemoryWait survives the pool wait; only a launch or the end of the run clears it), so resources_wait counts the
+// whole time.
 func (s *Service) setMemoryWaiting(id string, h memHold) {
 	_, err := s.mutate(s.background(), id, func(t *Task) ([]NewEvent, error) {
 		if t.CancelRequested || t.Manual || !Active(t.Status) {
@@ -325,12 +349,12 @@ func (s *Service) setMemoryWaiting(id string, h memHold) {
 			}
 		}
 		since := s.now()
-		if waiting {
+		if mw != nil {
 			since = mw.Since
 		}
 		t.Waiting, t.WaitDetail, t.WaitingUntil = api.WaitingMemory, h.detail(), time.Time{}
 		t.MemoryWait = &MemoryWait{Since: since, AvailableMB: h.avail, NeedMB: h.need}
-		if waiting && mw.NeedMB == h.need {
+		if mw != nil && mw.NeedMB == h.need {
 			return nil, nil
 		}
 		turn := 0
@@ -371,12 +395,14 @@ func (s *Service) LowMemory() bool {
 // gateRun is a gate run in flight, which the watchdog may stop.
 type gateRun struct{ cancel context.CancelCauseFunc }
 
-// trackGate records a gate run in flight (newest last) and returns its untrack.
-func (s *Service) trackGate(cancel context.CancelCauseFunc) func() {
+// TrackHeavy records a heavy command in flight, a gate run or a regression run command (newest last), which the
+// memory watchdog may stop by calling cancel with gate.ErrLowMemory. It returns its untrack.
+func (s *Service) TrackHeavy(cancel context.CancelCauseFunc) func() {
 	g := &gateRun{cancel: cancel}
 	s.resMu.Lock()
 	s.gateRuns = append(s.gateRuns, g)
 	s.resMu.Unlock()
+	s.poke()
 	return func() {
 		s.resMu.Lock()
 		s.gateRuns = slices.DeleteFunc(s.gateRuns, func(x *gateRun) bool { return x == g })
@@ -384,10 +410,43 @@ func (s *Service) trackGate(cancel context.CancelCauseFunc) func() {
 	}
 }
 
-// watchMemory is the low-memory watchdog: it reads memory every watchdogTick while tasks run (and at every
-// threshold crossing) and applies checkMemory.
+// poke wakes an idle watchdog: a run or a heavy command started.
+func (s *Service) poke() {
+	s.resMu.Lock()
+	if s.activity != nil {
+		close(s.activity)
+	}
+	s.activity = make(chan struct{})
+	s.resMu.Unlock()
+}
+
+// idle reports whether the watchdog has nothing to watch: no run, no heavy command in flight and no hold. It
+// returns the activity signal taken before it looked.
+func (s *Service) idle() (idle bool, activity <-chan struct{}) {
+	s.resMu.Lock()
+	act, busy := s.activity, len(s.gateRuns) > 0 || s.low
+	s.resMu.Unlock()
+	if busy {
+		return false, act
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.runs) == 0, act
+}
+
+// watchMemory is the low-memory watchdog: it reads memory every watchdogTick while a run or a heavy command is in
+// flight or the hold is on (and at every threshold crossing), and applies checkMemory. Idle, it arms no timer and
+// sleeps until a run or a heavy command starts.
 func (s *Service) watchMemory() {
 	for {
+		if idle, act := s.idle(); idle {
+			select {
+			case <-s.root.Done():
+				return
+			case <-act:
+			}
+			continue
+		}
 		wake := s.o.Resources.Changed()
 		s.checkMemory()
 		t := s.clk.NewTimer(watchdogTick)
@@ -405,7 +464,8 @@ func (s *Service) watchMemory() {
 // checkMemory applies the watchdog rules to a fresh reading (lead decisions 1 and 2):
 //
 //   - Below criticalFreeMemoryMB (physical, or commit when known), LowMemory turns true: every new start waits
-//     for the resume level, and the newest gate run in flight is stopped with gate.ErrLowMemory.
+//     for the resume level, and the newest heavy command in flight (gate run or regression run command) is
+//     stopped with gate.ErrLowMemory.
 //   - One stop per episode: no other gate is stopped until LowMemory has turned false (the resume level) and
 //     memory fell below the critical line again. A gate admitted just before the flag turned is stopped too, as
 //     long as nothing was stopped yet in that episode.
@@ -414,10 +474,7 @@ func (s *Service) watchMemory() {
 //
 // With nothing running and no hold, the watchdog reads nothing at all.
 func (s *Service) checkMemory() {
-	s.mu.Lock()
-	idle := len(s.runs) == 0
-	s.mu.Unlock()
-	if idle && !s.LowMemory() {
+	if idle, _ := s.idle(); idle {
 		return
 	}
 	set := s.settings()
@@ -447,7 +504,7 @@ func (s *Service) checkMemory() {
 	}
 	s.resMu.Unlock()
 	if victim != nil {
-		s.log.Warn("task: machine low on memory: stopping the newest gate command", "availPhysMB", m.AvailPhysMB,
+		s.log.Warn("task: machine low on memory: stopping the newest gate or regression command", "availPhysMB", m.AvailPhysMB,
 			"availCommitMB", m.AvailCommitMB, "criticalMB", set.CriticalFreeMemoryMB)
 		victim.cancel(gate.ErrLowMemory)
 	}

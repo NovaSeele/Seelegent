@@ -172,7 +172,8 @@ const (
 	GateEventResult   = "result"
 	GateEventSettling = "settling"
 	// GateEventQueued: the next gate command waits (Wait, and Position and Limit for a slot); sent again when
-	// its position changes.
+	// what it waits for changes, and when its position moves: every move at position 3 or less, further back
+	// only when the position halved (so a long queue does not log k² events).
 	GateEventQueued = "queued"
 )
 

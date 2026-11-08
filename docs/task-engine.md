@@ -138,33 +138,39 @@ The engine reads memory through `Options.Resources` (`task.Sampler` over `platfo
 for 2 s, and `Changed` fires when one crosses a threshold or the settings change). A reading the system cannot give
 (`Known` false; commit is unknown when `AvailCommitMB` is 0) never holds anything.
 
-- **Start check.** Right after the pool gives a lease, before the brief and the launch, a run compares free physical
-  memory with `minFreeMemoryMB` and free commit with `minFreeCommitMB` (each `0` = off). Below either it releases
-  the lease (nothing is launched, the account is not busy) and the task is `waiting_quota` with
-  `waiting: "memory"`, a `waitDetail` with both numbers, and `memoryWait {since, availableMB, needMB}`; a
-  `waiting_quota` event (`reason: "memory"`, `availableMB`, `needMB`) is written when the wait starts or its
-  threshold changes, not on every reading. The run looks again when the sampler signals, the machine leaves the
-  low-memory state, or after 10 s. The summary and the report show `waiting` only for this reason.
+- **Start check.** Before a run asks the pool for an account, it compares free physical memory with
+  `minFreeMemoryMB` and free commit with `minFreeCommitMB` (each `0` = off). Below either the task is
+  `waiting_quota` with `waiting: "memory"`, a `waitDetail` with both numbers, and
+  `memoryWait {since, availableMB, needMB}`, and the run waits without touching the pool (no lease, no account
+  signal) until the sampler signals, the machine leaves the low-memory state, or 10 s pass. A `waiting_quota` event
+  (`reason: "memory"`, `availableMB`, `needMB`) is written when the wait starts or its threshold changes, not on
+  every reading. The same check runs again right after the lease, as the guard for memory that fell while the run
+  waited for an account: below the threshold it releases the lease (nothing is launched) and waits the same way.
+  A pool wait in between keeps `memoryWait`, so a wait that goes back to memory keeps its `since` and writes no
+  new event; a launch or the end of the run clears it. The summary and the report show `waiting` only for this
+  reason.
   After `ResourcesWaitAfter` (10 min) the task carries an `info` flag for the user, `resources_wait`, with
   `params {minutes, availableMB, needMB}`: it does not need the lead and wakes no wait.
 - **Herd spacing.** While free memory is below twice `minFreeMemoryMB` (or commit below twice `minFreeCommitMB`),
   worker starts are spaced 5 s apart: a run that comes too soon releases its lease and sleeps the difference,
   without a status change.
 - **Concurrency.** `maxConcurrentWorkers` caps the leases over all accounts in the pool (`Unavailable.Capped`
-  says so); a release wakes the waiters, and a lowered cap stops nothing.
-- **Watchdog.** A goroutine checks memory on every sampler signal and every 2 s while a task runs or the machine
-  is low (otherwise it idles). With `criticalFreeMemoryMB` above 0, the machine turns **low** when free physical
+  and `Running` say so); a release wakes the waiters, and a lowered cap stops nothing.
+- **Watchdog.** A goroutine checks memory on every sampler signal and every 2 s while a task runs, a heavy command
+  (gate run or regression run command, `TrackHeavy`) is in flight or the machine is low. Otherwise it arms no timer
+  and sleeps until a run or a heavy command starts. With `criticalFreeMemoryMB` above 0, the machine turns **low** when free physical
   memory, or free commit when it is known, drops below it, and turns back only at the resume level: physical at
   `minFreeMemoryMB` (twice the critical line when that is off), commit at `minFreeCommitMB` (likewise). Between the
   two lines nothing flips, so a reading that swings around the critical line does not flicker. While low, every
   new start waits at the resume level instead of the `minFree` thresholds, `LowMemory()` is true (GET /health and
   the dashboard), and `OnLowMemory` publishes each flip.
-  **One stop per episode:** when the machine turns low, the newest running gate run (the last one to start) is
-  cancelled with the cause `gate.ErrLowMemory`; nothing else is stopped until the machine has come back to the
+  **One stop per episode:** when the machine turns low, the newest heavy command in flight (the last gate run or
+  regression run command to start) is cancelled with the cause `gate.ErrLowMemory`; nothing else is stopped until the machine has come back to the
   resume level and fallen again. The stopped gate is not a failure: its step shows `stopped: "low_memory"`, the
   phase counts `stops` (kept on the step as well, so a daemon restart keeps the count), the gate goes back to
   `queued` with `wait: "memory"` and runs again from the start once memory is back. The third stop in one gate
-  phase (`api.GateLowMemoryStopsMax`) ends the gate in `error` with `reason: "low_memory"` and no fix turn. Workers
+  phase (`api.GateLowMemoryStopsMax`) ends the gate in `error` with `reason: "low_memory"` and no fix turn. A
+  stopped regression run command fails with "stopped: machine low on memory" at the end of its tail. Workers
   are never stopped: a worker's own test and lint runs are bounded only by `workerMemoryLimitMB`.
 - **Daemon limit.** `daemonMemoryLimitMB` sets the daemon's soft memory limit (`debug.SetMemoryLimit`) at start and
   whenever it changes; `0` lifts the one it set; a `GOMEMLIMIT` in the daemon's environment wins.
