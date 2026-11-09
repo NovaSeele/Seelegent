@@ -26,10 +26,11 @@ import (
 // When the connection drops: a pending call that was sent and changes something (mcpwire.Mutating, as the worker
 // guard classifies it) is answered at once with a tool error saying the daemon went away during the call; the
 // others are sent again on the next session. While calls are pending the relay reconnects with backoff for Grace,
-// starting the daemon like the client does, except after the daemon said it was stopping (mcpwire.StoppingMethod):
-// then it only looks for one that comes back, as a wait does after 503 daemon_stopping. When Grace runs out, every
-// pending request is answered with an error; the next host request starts a new attempt. With nothing pending the
-// relay stays disconnected until the host sends something.
+// starting the daemon like the client does. For Grace after the daemon said it was stopping (mcpwire.StoppingMethod)
+// it starts none, whether calls were pending or not: it only looks for one that comes back, as a wait does after 503
+// daemon_stopping, so `seelegent update` never races a relay starting the executable being replaced. When Grace runs
+// out, every pending request is answered with an error; the next host request starts a new attempt. With nothing
+// pending the relay stays disconnected until the host sends something.
 type session struct {
 	o *Options
 	d *discovery
@@ -55,7 +56,8 @@ type session struct {
 	// queued are host notifications that wait for a connection.
 	queued [][]byte
 
-	stopping     bool // the daemon of the current connection said it shuts down
+	// noStartUntil: until then the relay starts no daemon (Grace after the stopping notice).
+	noStartUntil time.Time
 	reconnecting bool
 }
 
@@ -214,7 +216,7 @@ func (s *session) fromHost(ctx context.Context, line []byte) {
 		if s.conn != nil {
 			s.send(ctx, c)
 		} else {
-			s.reconnect(ctx, s.o.Start != nil)
+			s.reconnect(ctx)
 		}
 	case m.Method == "notifications/initialized":
 		s.initialized = line
@@ -289,7 +291,7 @@ func (s *session) fromDaemon(line []byte) {
 		return
 	}
 	if m.Method == mcpwire.StoppingMethod {
-		s.stopping = true
+		s.noStartUntil = time.Now().Add(s.o.Grace)
 		return
 	}
 	if m.Method != "" {
@@ -328,8 +330,6 @@ func (s *session) drop(ctx context.Context, why error) {
 	if s.conn == nil {
 		return
 	}
-	stopping := s.stopping
-	s.stopping = false
 	s.closeConn()
 	for _, c := range append([]*call(nil), s.pending...) {
 		switch {
@@ -348,23 +348,24 @@ func (s *session) drop(ctx context.Context, why error) {
 		return
 	}
 	s.logf("the connection to the daemon was lost (%v); reconnecting", why)
-	s.reconnect(ctx, s.o.Start != nil && !stopping)
+	s.reconnect(ctx)
 }
 
-// reconnect looks for the daemon (and starts it when start is true) with backoff for Grace, unless an attempt
-// runs already.
-func (s *session) reconnect(ctx context.Context, start bool) {
+// reconnect looks for the daemon with backoff for Grace, unless an attempt runs already. It may start one (when
+// Options.Start is set) only once noStartUntil has passed.
+func (s *session) reconnect(ctx context.Context) {
 	if s.reconnecting {
 		return
 	}
 	s.reconnecting = true
+	canStart, noStartUntil := s.o.Start != nil, s.noStartUntil
 	go func() {
 		end := time.Now().Add(s.o.Grace)
 		pause := s.o.PollInterval
 		var last error
 		for {
 			actx, cancel := context.WithDeadline(ctx, end)
-			c, err := s.d.connect(actx, start)
+			c, err := s.d.connect(actx, canStart && !time.Now().Before(noStartUntil))
 			cancel()
 			if err == nil {
 				s.dialCh <- dialResult{conn: c}

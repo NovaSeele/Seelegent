@@ -81,17 +81,22 @@ process. With the relay it lives in the daemon, so the relay rebuilds it:
   swallows), so the new session is where the host thinks it is and the `delegate` announcements still reach a host
   that asked for log messages.
 - Requests in flight when the connection dropped: read-only ones (`wait`, `task`, `status`, `tools/list`, ...) are
-  sent again with their own ids. Mutating ones (`ops.Mutating`, the worker guard's table: `delegate`, `followup`,
+  sent again with their own ids. A `wait` sent again starts over with its full timeout (`wait_seconds`), counted
+  from when the new daemon got it, so a host can wait up to the grace plus that timeout longer than it asked for. Mutating ones (`ops.Mutating`, the worker guard's table: `delegate`, `followup`,
   `review`, `cancel`, `consult`, memory writes, ...) are never sent again; the host gets a tool error at once, code
   `daemon_restarted`: "the connection to the Seelegent daemon was lost while this call ran (the daemon restarted or
   stopped); it may already have taken effect: check task or status before calling it again".
 - While requests are open it reconnects with backoff (250 ms doubling to 2 s) for 40 s (`mcpwire.StopGrace`, the
   same grace as a wait's), starting the daemon when nothing answers, as after a crash. A daemon that shuts down says
-  so first (`seelegent/relay/stopping`); then the relay only looks for a daemon that comes back and never starts
-  one, as a wait does after `503 daemon_stopping`, so it does not undo `seelegent stop` or race an update. When
+  so first (`seelegent/relay/stopping`); for 40 s after that notice the relay starts no daemon, whether requests
+  were open or not, and only looks for one that comes back, as a wait does after `503 daemon_stopping`, so it does
+  not undo `seelegent stop` or race an update replacing the executable. When
   the grace runs out, every open request is answered with an error (a tool error with code `daemon_unavailable`,
   or a JSON-RPC error for other methods), and the next request of the host tries again (and may start the daemon).
   With nothing open the relay waits for the host's next request before it reconnects.
+- A host that stops reading the relay's output stops the relay reading the daemon: after 45 s the daemon cuts the
+  connection off ([api.md](api.md#mcp-relay)), and the relay reconnects once the host reads again, as after a
+  restart.
 - An answer reaches the host only for a request that is still open, which it then leaves, so no id is ever answered
   twice; a late answer to a call the host cancelled is dropped. `notifications/cancelled` for a call that was sent
   goes to the daemon. Server notifications and requests go to the host as they are.
@@ -239,9 +244,12 @@ against a real daemon built through `internal/app` with the fake worker CLI and 
 port file, stale port files, waiting for a daemon that holds the lock, and a started daemon that exits for the lock.
 `internal/relay` runs the relay against a fake daemon: the handshake's environment (nothing outside the list),
 pass-through both ways, a crash with the replay and the re-sent and refused calls, a stopping daemon that is not
-started again, the grace running out, the fallback (404, no daemon inside a worker) and the autostart.
+started again (with calls open or idle), the grace running out, the fallback (404, 503, no daemon inside a worker)
+and the autostart.
 `internal/httpapi` (`relay_test.go`) runs real sessions through the route: the tool list, a relative `cwd`, a worker
-environment, a worker's connection (the session keeps it), the route's checks, a refused handshake, and sessions
-that end (no goroutine left) or are ended by the daemon's shutdown.
+environment, a worker's connection (the session keeps it), a caller the guard cannot classify (`503`), the
+route's checks, a refused handshake, and sessions that end (no goroutine left) or are ended by the daemon's
+shutdown, including one whose host reads nothing (the stop still ends within seconds); `relayconn_test.go` covers
+the write deadlines and the bounded `Close`.
 `internal/cli` runs the mcp command (autostart off, and inside a worker), two daemons on one data directory, and
 every command of [cli.md](cli.md).
