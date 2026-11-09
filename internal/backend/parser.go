@@ -299,7 +299,9 @@ func (b *base) Finish(exit launch.Exit, stderrTail string) []event.Event {
 	}
 	fail := event.Fail(class, r.Error)
 	if class == event.ClassTransient && cliReport {
-		fail.Error.Answer = b.recoveryAnswer(exit)
+		if fail.Error.Answer = b.recoveryAnswer(exit); fail.Error.Answer != "" {
+			fail.Error.Final = b.final
+		}
 	}
 	return append(out, fail)
 }

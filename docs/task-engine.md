@@ -116,7 +116,7 @@ append the events in **one transaction**, then publish on the bus. The log and t
 | quota | the account rests for that quota group (`pool.MarkExhausted`), next attempt |
 | auth | the account is marked signed out (`pool.MarkAuthFailed`), next attempt on another account |
 | credits | the key's credit or billing ran out (class `credits`, never a quota rest): the account is held with no end time (`pool.MarkNoCredit`, `restReason: credits`) until the user stores a new key, a key test passes or the user edits the account (switches it off and on after a top-up); next attempt on another account, or, when no other account can run the task, the task fails at once naming the key ("the anthropic key has no credit left; top up or change the key") instead of waiting; a sign-in account has no key: "the claude account work has no credit left; top up, then switch the account off and on" |
-| transient | `retry` event, wait 15 s then 45 s on the same account (only its own timer wakes it), then another account. A resumed attempt that ends by itself with the byte-identical, non-empty error of the transient attempt before it, in the same conversation id (not an error Seelegent made up from stderr), replays a stale error kept in the conversation (agy does this; the rule applies to every backend): with a response it counts as `ok` with a warning; without one the turn fails ("repeats a stale error from its conversation … check the diff and delegate a new task") instead of resuming or handing the work to another account to redo |
+| transient | `retry` event, wait 15 s then 45 s on the same account (only its own timer wakes it), then another account. A stale error needs evidence beyond the same text, since claude and codex word a real outage the same way every time: a CLI that keeps a run's error in the conversation and reports it again on every resume (capability `ReplaysErrors`, agy only), a reported duration more than 30 s beyond the process's wall time (agy then reports the whole conversation's: 555 s for a 15 s run), and a resumed attempt that ends by itself with the byte-identical, non-empty error of the transient attempt before it, in the same conversation id (not an error Seelegent made up from stderr). Such a replay counts as `ok` with a warning when its final answer is the complete report (as below); otherwise the turn fails ("repeats a stale error from its conversation … check the diff and delegate a new task") instead of resuming or handing the work to another account to redo |
 | background_wait | continue once with the background-wait prompt; the second time the turn ends `ok` |
 | error / timeout | turn and task `failed` |
 | cancelled | turn and task `cancelled`; the turn keeps the response and files of its latest attempt that gave a response, so a cancel during a retry's wait still shows the work |
@@ -124,15 +124,17 @@ append the events in **one transaction**, then publish on the bus. The log and t
 An ok or cancelled turn lists the files every attempt of the turn edited, not only its last attempt's.
 
 The worker CLIs retry network errors themselves, and some still end a run whose work finished with one. Each parser
-remembers the agent's final answer of this run (agy: a DONE `agent_response` with text; claude: a text block; codex:
-a completed `agent_message`); a later tool step clears it (agy: a tool step or a newer response; claude: a `tool_use`,
-also in the same message; codex: a `command_execution`, `mcp_tool_call`, `file_change` or `web_search` item). When
+remembers the agent's final answer of this run (agy: a DONE `agent_response` with text; claude: a text block of the
+main agent, never a subagent's message with `parent_tool_use_id`; codex: a completed `agent_message`); a later tool
+step clears it (agy: a tool step or a newer response; claude: a `tool_use`, also in the same message, or a
+`tool_result`; codex: a `command_execution`, `mcp_tool_call`, `file_change` or `web_search` item). When
 the run ends by itself (any exit code; never a timeout, a lost worker, a cancel, a budget stop or a failed start) with
 an error that reads as transient and as no other class (every rule is checked, so a sign-in, quota or credits wording
 alongside it rules it out) and is not a background wait, the parser still reports the transient failure but flags the
-answer (`error.answer`: the report's own response, else the final text). The runner counts that attempt as `ok` only
-when the answer is the complete report the turn asked for (its Summary … Open issues sections); a hand-back turn and
-a hidden run never do. The attempt keeps its usage and spend, and its outcome carries the answer as the response and
+answer (`error.answer`: the report's own response, else the final text) and the final text alone (`error.final`,
+`outcome.recoveryFinal`). The runner counts that attempt as `ok` only when the final text is the complete report
+the turn asked for (its Summary … Open issues sections; a report the agent wrote before more tool steps does not
+count); a hand-back turn and a hidden run never do. The attempt keeps its usage and spend, and its outcome carries the answer as the response and
 the warning "<backend> reported a network error after its final answer: <error>" (`outcome.warning`). Anything else
 (a progress line, a final text without the sections) stays transient and retries. A warning of an ok attempt reaches
 the lead as the report's `warnings` (MCP `task`/`wait`, the CLI's `Warning:` lines) and the dashboard as the

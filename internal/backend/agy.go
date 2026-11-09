@@ -49,7 +49,8 @@ func (a *Agy) Bin() string { return a.bin }
 
 // Capabilities implements Backend.
 func (*Agy) Capabilities() Capabilities {
-	return Capabilities{ActiveQuota: true, NativePreToolGuard: true, StdinPrompt: false, ResumeFlag: "--conversation"}
+	return Capabilities{ActiveQuota: true, NativePreToolGuard: true, StdinPrompt: false, ResumeFlag: "--conversation",
+		ReplaysErrors: true}
 }
 
 // Command implements Backend:

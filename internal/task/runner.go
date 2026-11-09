@@ -723,10 +723,10 @@ func (s *Service) finishAttempt(r *run, id string, turn, n int, accountID, model
 	cur, curErr := s.repo.Get(ctx, id)
 	if status == AttemptTransient && curErr == nil {
 		switch tu := cur.TurnN(turn); {
-		case o.RecoveryAnswer != "" && reportComplete(cur, tu, o.RecoveryAnswer):
+		case staleReplay(tu, n, o, res, b.Capabilities().ReplaysErrors):
+			status, errText = staleError(cur, tu, b.Name(), &o)
+		case o.RecoveryAnswer != "" && reportComplete(cur, tu, o.RecoveryFinal):
 			status, errText = recovered(b.Name(), &o)
-		case staleReplay(tu, n, o, res):
-			status, errText = staleError(b.Name(), &o)
 		}
 	}
 	group := b.QuotaGroup(model)
@@ -961,8 +961,9 @@ func reportComplete(t *Task, tu *Turn, text string) bool {
 	return summary && open
 }
 
-// recovered counts an attempt as done whose CLI reported a network error after the agent's complete report
-// (Outcome.RecoveryAnswer, reportComplete): the response is that report, and the warning keeps the error.
+// recovered counts an attempt as done whose CLI reported a network error after the agent's final answer, when that
+// answer is the complete report (Outcome.RecoveryFinal, reportComplete): the response is the run's answer
+// (Outcome.RecoveryAnswer), and the warning keeps the error.
 func recovered(backendName string, o *backend.Outcome) (status, text string) {
 	o.Warning = backendName + " reported a network error after its final answer: " + o.Error
 	o.Response = o.RecoveryAnswer
@@ -970,14 +971,25 @@ func recovered(backendName string, o *backend.Outcome) (status, text string) {
 	return AttemptOK, ""
 }
 
+// replaySlack is how much longer than the process ran a CLI's reported duration must be before it counts as the
+// duration of the whole conversation (staleReplay): startup and clock skew stay well under it.
+const replaySlack = 30 * time.Second
+
 // staleReplay reports whether attempt n of turn tu, which ended transient with outcome o, replayed its
-// conversation's error instead of meeting it again: it resumed the conversation of the attempt before it, which
-// also ended transient, and the CLI reported the byte-identical error text (agy keeps a network error in the
-// conversation and returns it on every resume). An error Seelegent made up because the CLI wrote no report, or an
-// attempt that ended any other way than by exiting, is never a replay.
-func staleReplay(tu *Turn, n int, o backend.Outcome, res attemptResult) bool {
-	if tu == nil || n < 2 || n > len(tu.Attempts) || o.Error == "" || res.interrupted ||
+// conversation's error instead of meeting it again. Identical text alone is no evidence: claude and codex word a
+// real outage the same way every time. So it needs a CLI that replays errors (replays: agy keeps a network error in
+// the conversation and returns it on every resume) and a reported duration far beyond the process's wall time
+// (agy then reports the whole conversation's duration: 555 s for a run of 15 s), and then: the attempt resumed the
+// conversation of the attempt before it, which also ended transient, and the CLI reported the byte-identical error.
+// An error Seelegent made up because the CLI wrote no report, or an attempt that ended any other way than by
+// exiting, is never a replay.
+func staleReplay(tu *Turn, n int, o backend.Outcome, res attemptResult, replays bool) bool {
+	if !replays || tu == nil || n < 2 || n > len(tu.Attempts) || o.Error == "" || res.interrupted ||
 		res.exit.Reason != launch.ReasonExited {
+		return false
+	}
+	if res.exit.StartedAt.IsZero() || res.exit.EndedAt.Before(res.exit.StartedAt) ||
+		time.Duration(o.DurationMs)*time.Millisecond <= res.exit.EndedAt.Sub(res.exit.StartedAt)+replaySlack {
 		return false
 	}
 	a, prev := tu.Attempts[n-1], tu.Attempts[n-2]
@@ -996,13 +1008,15 @@ func staleReplay(tu *Turn, n int, o backend.Outcome, res attemptResult) bool {
 	return true
 }
 
-// staleError judges an attempt that replayed its conversation's error (staleReplay). With a response the worker
-// finished: the attempt is a success with a warning. Without one, resuming again or redoing the work on another
-// account would not help: the turn fails with a message that says where the work may be.
-func staleError(backendName string, o *backend.Outcome) (status, text string) {
-	if strings.TrimSpace(o.Response) != "" {
+// staleError judges an attempt that replayed its conversation's error (staleReplay). When its final answer is the
+// complete report (reportComplete, as for a network error after the final answer) the worker finished: the attempt
+// is a success with a warning. Otherwise resuming again or redoing the work on another account would not help: the
+// turn fails with a message that says where the work may be.
+func staleError(t *Task, tu *Turn, backendName string, o *backend.Outcome) (status, text string) {
+	if o.RecoveryAnswer != "" && reportComplete(t, tu, o.RecoveryFinal) {
 		o.Warning = fmt.Sprintf("%s repeated the error of its previous attempt, which it replays from its "+
-			"conversation; its response is kept: %s", backendName, o.Error)
+			"conversation; its report is kept: %s", backendName, o.Error)
+		o.Response = o.RecoveryAnswer
 		o.Status, o.Class, o.Error = backend.OutcomeOK, "", ""
 		return AttemptOK, ""
 	}

@@ -44,6 +44,9 @@ type Capabilities struct {
 	// nothing (codex, which has no other tool to read files). Otherwise plan mode refuses shell commands and the
 	// worker reads with its file tools (agy, claude). The worker brief says which (brief.PlanRule).
 	PlanShell bool `json:"planShell"`
+	// ReplaysErrors: the CLI keeps a run's error in the conversation and reports it again, word for word, when the
+	// conversation is resumed (agy; the task engine then needs more than the same text to call an error stale).
+	ReplaysErrors bool `json:"replaysErrors"`
 }
 
 // Turn is the input of one worker turn.

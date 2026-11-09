@@ -4313,9 +4313,14 @@ export interface WorkerError {
    * Answer is set on a transient failure the CLI reported after the agent's final answer (no tool step after it),
    * when the process ended by itself: the answer (the report's response, else the final text). The CLIs retry
    * network errors themselves and some still end a finished run with one; the task engine counts the attempt as
-   * done, with a warning, when the answer is the complete report the turn asked for.
+   * done, with a warning, when the final text (Final) is the complete report the turn asked for.
    */
   answer?: string
+  /**
+   * Final is the agent's final answer alone (its last text with no tool step after it), set with Answer: the report
+   * the task engine checks. Answer may hold the whole run's text, an earlier report included.
+   */
+  final?: string
 }
 
 /** The data of an attention event: a raised flag, or {state: 'cleared'}. */

@@ -148,13 +148,35 @@ func codexRun() staleRun {
 
 func staleRuns() []staleRun { return []staleRun{agyRun(), claudeRun(), codexRun()} }
 
-// staleErrorOf is the error text a backend's rules class as transient.
+// staleErrorOf is the error text a backend's rules class as transient, in the CLI's own words: agy's carries the
+// source port, claude's and codex's read the same on every outage.
 func staleErrorOf(name string) string {
-	if name == config.BackendCodex {
+	switch name {
+	case config.BackendCodex:
 		return "stream disconnected before completion: error sending request for url " +
-			"(https://api.example.test/v1/responses) from 10.0.0.2:55383"
+			"(https://api.example.test/v1/responses)"
+	case config.BackendClaude:
+		return "API Error: Connection error."
 	}
 	return staleErr
+}
+
+// agyReplayed is a resumed agy run that reports its conversation's error again: final, when set, is the agent's
+// final answer of the run (DONE, no tool step after it); durSec is the duration agy reports, the whole
+// conversation's on a replay.
+func agyReplayed(conv, final string, durSec float64) string {
+	lines := []string{agyInit(conv)}
+	if final != "" {
+		lines = append(lines, agyDelta(1, final), jsonLine(map[string]any{"event": "step_update",
+			"step_update": map[string]any{"step_index": 1, "step_type": "agent_response", "state": "DONE"}}))
+	} else {
+		lines = append(lines, agyTool(1, "CALLING", "go test ./..."))
+	}
+	res := map[string]any{"status": "ERROR", "error": staleErr, "conversation_id": conv}
+	if durSec > 0 {
+		res["duration_seconds"] = durSec
+	}
+	return script(append(lines, jsonLine(map[string]any{"event": "result", "result": res}), "#!exit 0")...)
 }
 
 // startStale delegates a task whose first attempt fails with errText in conversation conv and waits for its retry.
@@ -166,27 +188,28 @@ func startStale(h *harness, b staleRun, conv string) api.TaskSummary {
 	return sum
 }
 
-// TestStaleReplayedErrorFails: a resumed attempt that reports the byte-identical error of the attempt before it in
-// the same conversation, with no response, replays a stale error. The turn fails at once with a message that says
-// where the work may be: no third attempt and no handoff to another account that would redo the work. Every
-// backend the same way.
+// TestStaleReplayedErrorFails: a resumed agy attempt that reports the byte-identical error of the attempt before it
+// in the same conversation, with the conversation's duration (555 s for a run of a moment), replays a stale error.
+// Without a complete report (nothing, or a progress line) the turn fails at once with a message that says where the
+// work may be: no third attempt and no handoff to another account that would redo the work.
 func TestStaleReplayedErrorFails(t *testing.T) {
-	for _, b := range staleRuns() {
-		t.Run(b.backend, func(t *testing.T) {
+	for name, final := range map[string]string{"silent": "", "progress": "The tests are still running."} {
+		t.Run(name, func(t *testing.T) {
 			h := newHarness(t)
+			b := agyRun()
 			b.setup(h)
-			conv := "conv-stale-" + b.backend
+			conv := "conv-stale-" + name
 			sum := startStale(h, b, conv)
-			h.queue.Push(t, b.failed(conv, "", staleErrorOf(b.backend)))
+			h.queue.Push(t, agyReplayed(conv, final, 555))
 			h.queue.Push(t, b.ok(conv, "must not run"))
 			h.waitFor("the resumed attempt", func() bool {
 				h.clk.Advance(5 * time.Second)
 				return h.queue.Left(t) == 1
 			})
 			tk := h.waitStatus(sum.ID, StatusFailed)
-			if !strings.Contains(tk.Error, b.backend+" repeats a stale error from its conversation") ||
+			if !strings.Contains(tk.Error, "agy repeats a stale error from its conversation") ||
 				!strings.Contains(tk.Error, "check the diff and delegate a new task") ||
-				!strings.Contains(tk.Error, staleErrorOf(b.backend)) {
+				!strings.Contains(tk.Error, staleErr) {
 				t.Errorf("error = %q", tk.Error)
 			}
 			at := tk.LastTurn().Attempts
@@ -205,65 +228,112 @@ func TestStaleReplayedErrorFails(t *testing.T) {
 	}
 }
 
-// TestStaleReplayedErrorWithResponse: the same replay with the worker's response (it repeated its report) is a
+// TestStaleReplayedErrorWithReport: the same replay after the agent's complete report (it repeated it) is a
 // success, with a warning the lead and the dashboard see.
-func TestStaleReplayedErrorWithResponse(t *testing.T) {
-	for _, b := range staleRuns() {
-		t.Run(b.backend, func(t *testing.T) {
+func TestStaleReplayedErrorWithReport(t *testing.T) {
+	h := newHarness(t)
+	b := agyRun()
+	b.setup(h)
+	sum := startStale(h, b, "conv-stale-ok")
+	h.queue.Push(t, agyReplayed("conv-stale-ok", fullReport, 612))
+	h.waitFor("the resumed attempt", func() bool {
+		h.clk.Advance(5 * time.Second)
+		return h.queue.Left(t) == 0
+	})
+	tk := h.waitStatus(sum.ID, StatusDone)
+	at := tk.LastTurn().Attempts
+	if len(at) != 2 || at[1].Status != AttemptOK || at[1].Outcome == nil ||
+		!strings.Contains(at[1].Outcome.Warning, "repeated the error of its previous attempt") {
+		t.Fatalf("attempts = %+v", at)
+	}
+	if tk.LastTurn().Response != fullReport {
+		t.Errorf("response = %q", tk.LastTurn().Response)
+	}
+	var end api.AttemptEndData
+	ends := eventsOf(h.events(sum.ID), api.EventAttemptEnd)
+	decode(t, ends[len(ends)-1], &end)
+	if end.Status != AttemptOK || end.Warning == "" {
+		t.Errorf("attempt_end = %+v", end)
+	}
+	rep, err := h.s.Report(t.Context(), sum.ID, "")
+	if err != nil || len(rep.Warnings) != 1 || !strings.Contains(rep.Warnings[0], staleErr) {
+		t.Errorf("report warnings = %q, %v", rep.Warnings, err)
+	}
+}
+
+// TestStaleReplayNeedsEvidence: the same error text in the same agy conversation without the conversation's duration
+// (a real outage that went on), or in another conversation, is no replay: the retries go on as before.
+func TestStaleReplayNeedsEvidence(t *testing.T) {
+	for name, second := range map[string]string{
+		"no-duration":        agyReplayed("conv-a", "", 0),
+		"run-duration":       agyReplayed("conv-a", "", 5),
+		"other-conversation": agyReplayed("conv-b", "", 555),
+	} {
+		t.Run(name, func(t *testing.T) {
 			h := newHarness(t)
+			b := agyRun()
 			b.setup(h)
-			conv := "conv-stale-ok-" + b.backend
-			sum := startStale(h, b, conv)
-			h.queue.Push(t, b.failed(conv, "## Report\nDone already.", staleErrorOf(b.backend)))
-			h.waitFor("the resumed attempt", func() bool {
+			sum := startStale(h, b, "conv-a")
+			h.queue.Push(t, second)
+			h.queue.Push(t, okScript("conv-a", "ok"))
+			h.waitFor("the third attempt", func() bool {
 				h.clk.Advance(5 * time.Second)
 				return h.queue.Left(t) == 0
 			})
 			tk := h.waitStatus(sum.ID, StatusDone)
-			at := tk.LastTurn().Attempts
-			if len(at) != 2 || at[1].Status != AttemptOK || at[1].Outcome == nil ||
-				!strings.Contains(at[1].Outcome.Warning, "repeated the error of its previous attempt") {
+			if at := tk.LastTurn().Attempts; len(at) != 3 || at[1].Status != AttemptTransient {
 				t.Fatalf("attempts = %+v", at)
-			}
-			if !strings.Contains(tk.LastTurn().Response, "Done already.") {
-				t.Errorf("response = %q", tk.LastTurn().Response)
-			}
-			var end api.AttemptEndData
-			ends := eventsOf(h.events(sum.ID), api.EventAttemptEnd)
-			decode(t, ends[len(ends)-1], &end)
-			if end.Status != AttemptOK || end.Warning == "" {
-				t.Errorf("attempt_end = %+v", end)
-			}
-			rep, err := h.s.Report(t.Context(), sum.ID, "")
-			if err != nil || len(rep.Warnings) != 1 || !strings.Contains(rep.Warnings[0], staleErrorOf(b.backend)) {
-				t.Errorf("report warnings = %q, %v", rep.Warnings, err)
 			}
 		})
 	}
 }
 
-// TestStaleReplayNeedsSameConversation: a resumed attempt whose CLI reports another conversation is no replay,
-// even with the same error text: the retries go on as before.
-func TestStaleReplayNeedsSameConversation(t *testing.T) {
-	h := newHarness(t)
-	b := agyRun()
-	b.setup(h)
-	sum := startStale(h, b, "conv-a")
-	h.queue.Push(t, b.failed("conv-b", "", staleErr))
-	h.queue.Push(t, okScript("conv-b", "ok"))
-	h.waitFor("the third attempt", func() bool {
-		h.clk.Advance(5 * time.Second)
-		return h.queue.Left(t) == 0
-	})
-	tk := h.waitStatus(sum.ID, StatusDone)
-	if at := tk.LastTurn().Attempts; len(at) != 3 || at[1].Status != AttemptTransient {
-		t.Fatalf("attempts = %+v", at)
+// TestRealOutageKeepsRetrying: claude and codex word a real outage the same way every time and do not replay
+// errors. Identical errors in the same conversation, the later ones after a progress line, stay transient: the 45 s
+// retry and the handoff to another account go on, with no success and no early failure.
+func TestRealOutageKeepsRetrying(t *testing.T) {
+	for _, b := range []staleRun{claudeRun(), codexRun()} {
+		t.Run(b.backend, func(t *testing.T) {
+			h := newHarness(t)
+			b.setup(h)
+			if _, _, err := h.accounts.Add(t.Context(), account.New{Backend: b.backend, Kind: account.KindIsolated,
+				Label: "second", Enabled: true}, nil); err != nil {
+				t.Fatal(err)
+			}
+			conv, errText := "conv-outage-"+b.backend, staleErrorOf(b.backend)
+			progress := "I have started the full test suite and am waiting for it."
+			sum := startStale(h, b, conv)
+			h.queue.Push(t, b.final(conv, progress, errText))
+			h.queue.Push(t, b.final(conv, progress, errText))
+			h.queue.Push(t, b.ok("conv-other", "All done."))
+			h.waitFor("the handoff", func() bool {
+				h.clk.Advance(5 * time.Second)
+				return h.queue.Left(t) == 0
+			})
+			tk := h.waitStatus(sum.ID, StatusDone)
+			at := tk.LastTurn().Attempts
+			if len(at) != 4 || at[1].Status != AttemptTransient || at[2].Status != AttemptTransient ||
+				!at[1].Continuing || at[1].ConversationID != conv || at[3].Status != AttemptOK ||
+				at[3].AccountID == at[0].AccountID {
+				t.Fatalf("attempts = %+v", at)
+			}
+			evs := h.events(sum.ID)
+			retries := eventsOf(evs, api.EventRetry)
+			if len(retries) != 2 {
+				t.Fatalf("retries = %+v", retries)
+			}
+			var second api.RetryData
+			decode(t, retries[1], &second)
+			if second.DelayMs != 45000 || len(eventsOf(evs, api.EventHandoff)) != 1 {
+				t.Errorf("second retry = %+v, handoffs %d", second, len(eventsOf(evs, api.EventHandoff)))
+			}
+		})
 	}
 }
 
-// TestStaleReplayRule: what counts as a replayed error, for any backend: the attempt resumed the conversation of
-// the attempt before it, that one ended transient, the CLI itself reported the whole error text again byte for
-// byte, and the process ended by itself.
+// TestStaleReplayRule: what counts as a replayed error: a backend that replays errors, a reported duration far
+// beyond the run's wall time, the attempt resumed the conversation of the attempt before it, that one ended
+// transient, the CLI itself reported the whole error text again byte for byte, and the process ended by itself.
 func TestStaleReplayRule(t *testing.T) {
 	turn := func() *Turn {
 		return &Turn{N: 1, Attempts: []*Attempt{
@@ -271,52 +341,69 @@ func TestStaleReplayRule(t *testing.T) {
 			{N: 2, Status: AttemptRunning, Continuing: true, ConversationID: "c1"},
 		}}
 	}
-	exited := attemptResult{exit: launch.Exit{Reason: launch.ReasonExited, Code: 1}}
+	start := time.Date(2026, 11, 10, 9, 0, 0, 0, time.UTC)
+	exited := attemptResult{exit: launch.Exit{Reason: launch.ReasonExited, Code: 1, StartedAt: start,
+		EndedAt: start.Add(15 * time.Second)}}
 	same := backend.Outcome{Status: backend.OutcomeFailed, Class: event.ClassTransient, Error: staleErr,
-		ConversationID: "c1"}
-	if !staleReplay(turn(), 2, same, exited) {
+		ConversationID: "c1", DurationMs: 555_000}
+	if !staleReplay(turn(), 2, same, exited, true) {
 		t.Fatal("the replay was not seen")
 	}
+	with := func(f func(o *backend.Outcome)) backend.Outcome {
+		o := same
+		f(&o)
+		return o
+	}
 	for name, c := range map[string]struct {
-		tu  func() *Turn
-		o   backend.Outcome
-		res attemptResult
+		tu      func() *Turn
+		o       backend.Outcome
+		res     attemptResult
+		replays bool
 	}{
-		"other port": {turn, backend.Outcome{Error: strings.Replace(staleErr, "55383", "55384", 1)}, exited},
+		"backend does not replay": {turn, same, exited, false},
+		"no duration":             {turn, with(func(o *backend.Outcome) { o.DurationMs = 0 }), exited, true},
+		"duration within slack":   {turn, with(func(o *backend.Outcome) { o.DurationMs = 40_000 }), exited, true},
+		"no start time": {turn, same, attemptResult{exit: launch.Exit{Reason: launch.ReasonExited,
+			EndedAt: start}}, true},
+		"other port": {turn, with(func(o *backend.Outcome) {
+			o.Error = strings.Replace(staleErr, "55383", "55384", 1)
+		}), exited, true},
 		"empty error": {func() *Turn {
 			tu := turn()
 			tu.Attempts[0].Outcome.Error = ""
 			return tu
-		}, backend.Outcome{}, exited},
-		"other conversation reported": {turn, backend.Outcome{Error: staleErr, ConversationID: "c2"}, exited},
+		}, with(func(o *backend.Outcome) { o.Error = "" }), exited, true},
+		"other conversation reported": {turn, with(func(o *backend.Outcome) { o.ConversationID = "c2" }), exited,
+			true},
 		"other conversation resumed": {func() *Turn {
 			tu := turn()
 			tu.Attempts[1].ConversationID = "c2"
 			return tu
-		}, same, exited},
+		}, same, exited, true},
 		"fresh conversation": {func() *Turn {
 			tu := turn()
 			tu.Attempts[1].Continuing = false
 			return tu
-		}, same, exited},
+		}, same, exited, true},
 		"previous not transient": {func() *Turn {
 			tu := turn()
 			tu.Attempts[0].Status = AttemptError
 			return tu
-		}, same, exited},
-		"first attempt": {func() *Turn { return &Turn{Attempts: turn().Attempts[1:]} }, same, exited},
-		"launcher lost": {turn, same, attemptResult{exit: launch.Exit{Reason: launch.ReasonLost}}},
-		"interrupted":   {turn, same, attemptResult{exit: exited.exit, interrupted: true}},
+		}, same, exited, true},
+		"first attempt": {func() *Turn { return &Turn{Attempts: turn().Attempts[1:]} }, same, exited, true},
+		"launcher lost": {turn, same, attemptResult{exit: launch.Exit{Reason: launch.ReasonLost, StartedAt: start,
+			EndedAt: start.Add(time.Second)}}, true},
+		"interrupted": {turn, same, attemptResult{exit: exited.exit, interrupted: true}, true},
 		"made up from stderr": {turn, same, attemptResult{exit: exited.exit, finish: []event.Event{{
 			Kind: event.KindReport, Report: &event.Report{Status: event.StatusError, Error: staleErr,
-				Synthesized: true}}}}},
+				Synthesized: true}}}}, true},
 	} {
 		tu := c.tu()
-		if staleReplay(tu, len(tu.Attempts), c.o, c.res) {
+		if staleReplay(tu, len(tu.Attempts), c.o, c.res, c.replays) {
 			t.Errorf("%s: seen as a replay", name)
 		}
 	}
-	if staleReplay(nil, 2, same, exited) {
+	if staleReplay(nil, 2, same, exited, true) {
 		t.Error("nil turn")
 	}
 }
@@ -472,6 +559,30 @@ func TestNoRecoveryOnBudgetStop(t *testing.T) {
 	tk := h.waitStatus(sum.ID, StatusCancelled)
 	if at := tk.LastTurn().Attempts; len(at) != 1 || at[0].Status != AttemptCancelled || at[0].Outcome == nil ||
 		at[0].Outcome.Warning != "" || at[0].Outcome.RecoveryAnswer != "" {
+		t.Fatalf("attempts = %+v", at)
+	}
+}
+
+// TestNoRecoveryAfterEarlierReport: agy's result response holds the whole run's text. A complete report, then more
+// tool steps, then a progress line and a network error: the final answer is the progress line, so the attempt stays
+// transient although the response has the report's sections.
+func TestNoRecoveryAfterEarlierReport(t *testing.T) {
+	h := newHarness(t)
+	h.agy("only", 0)
+	progress := "The tests are running; I am waiting for them."
+	done := func(step int) string {
+		return jsonLine(map[string]any{"event": "step_update", "step_update": map[string]any{"step_index": step,
+			"step_type": "agent_response", "state": "DONE"}})
+	}
+	h.queue.Push(t, script(agyInit("conv-n1"), agyDelta(1, fullReport), done(1), agyTool(2, "DONE", "go test ./..."),
+		agyDelta(3, progress), done(3),
+		jsonLine(map[string]any{"event": "result", "result": map[string]any{"status": "ERROR", "error": staleErr,
+			"response": fullReport + "\n" + progress, "conversation_id": "conv-n1"}}), "#!exit 0"))
+	sum := h.delegate(api.DelegateRequest{})
+	h.waitEvent(sum.ID, api.EventRetry)
+	at := h.task(sum.ID).LastTurn().Attempts
+	if len(at) != 1 || at[0].Status != AttemptTransient || at[0].Outcome == nil || at[0].Outcome.Warning != "" ||
+		at[0].Outcome.RecoveryFinal != progress {
 		t.Fatalf("attempts = %+v", at)
 	}
 }

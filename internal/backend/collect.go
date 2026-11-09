@@ -69,6 +69,9 @@ type Outcome struct {
 	// RecoveryAnswer is the answer of a transient failure the CLI reported after the agent's final answer
 	// (event.Error.Answer): the task engine may count the attempt as done.
 	RecoveryAnswer string `json:"recoveryAnswer,omitempty"`
+	// RecoveryFinal is the agent's final answer of that run (event.Error.Final): what the task engine checks for the
+	// complete report, since RecoveryAnswer may hold an earlier report of the run.
+	RecoveryFinal string `json:"recoveryFinal,omitempty"`
 	// Warning is an error the task engine overlooked (a network error after a complete report, an error the
 	// conversation replayed): the attempt counts as done, and the lead and the dashboard are told.
 	Warning string `json:"warning,omitempty"`
@@ -155,6 +158,7 @@ func (c *Collector) Outcome(exit launch.Exit) Outcome {
 		o.Class = c.failure.Class
 		o.Error = c.failure.Message
 		o.RecoveryAnswer = c.failure.Answer
+		o.RecoveryFinal = c.failure.Final
 		if o.Class == event.ClassQuotaExhausted && c.Backend == config.BackendClaude {
 			o.ResetAt = resetHint(o.Error, exit.EndedAt)
 		}

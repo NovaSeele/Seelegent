@@ -608,3 +608,69 @@ func TestPolicyCommand(t *testing.T) {
 		}
 	}
 }
+
+// errorOf finishes p with exit and returns its error event's Error, or nil.
+func errorOf(p Parser, exit launch.Exit) *event.Error {
+	for _, ev := range p.Finish(exit, "") {
+		if ev.Kind == event.KindError {
+			return ev.Error
+		}
+	}
+	return nil
+}
+
+// TestRecoveryFinalIsTheLastAnswer: the error carries the final answer alone (Final) next to the answer shown
+// (Answer). agy's result response holds the whole run's text, so a report the agent wrote before more tool steps is
+// in Answer but never in Final: the task engine checks Final.
+func TestRecoveryFinalIsTheLastAnswer(t *testing.T) {
+	p := mustBackend(t, "agy").NewParser(nil)
+	for _, l := range []string{
+		`{"event":"step_update","step_update":{"step_index":1,"step_type":"agent_response","state":"RUNNING","text_delta":"## Summary\nDone.\n## Open issues\nnone"}}`,
+		`{"event":"step_update","step_update":{"step_index":1,"step_type":"agent_response","state":"DONE"}}`,
+		`{"event":"step_update","step_update":{"step_index":2,"step_type":"tool","state":"DONE","tool_name":"run_command","tool_info":{"parameters":{"CommandLine":"go test ./..."},"output":"ok"}}}`,
+		`{"event":"step_update","step_update":{"step_index":3,"step_type":"agent_response","state":"RUNNING","text_delta":"The tests are running; I am waiting for them."}}`,
+		`{"event":"step_update","step_update":{"step_index":3,"step_type":"agent_response","state":"DONE"}}`,
+		`{"event":"result","result":{"status":"ERROR","response":"## Summary\nDone.\n## Open issues\nnone\nThe tests are running; I am waiting for them.","error":"request failed: read tcp 10.0.0.3:50122->203.0.113.9:443: wsarecv: connection reset"}}`,
+	} {
+		p.Line([]byte(l))
+	}
+	e := errorOf(p, launch.Exit{Reason: launch.ReasonExited})
+	if e == nil || !strings.Contains(e.Answer, "## Summary") || e.Final != "The tests are running; I am waiting for them." {
+		t.Fatalf("error = %+v", e)
+	}
+}
+
+// TestClaudeFinalAnswer: claude's final answer is the main agent's text with no tool step after it. A subagent's
+// text (parent_tool_use_id) never is, and a tool result clears an answer, also one written in the same message as
+// the tool call.
+func TestClaudeFinalAnswer(t *testing.T) {
+	const (
+		netErr = `{"type":"result","subtype":"success","is_error":true,"result":"API Error: Connection error.","session_id":"s"}`
+		task   = `{"type":"assistant","session_id":"s","message":{"content":[{"type":"text","text":"Delegating the search."},{"type":"tool_use","id":"toolu_1","name":"Task","input":{"prompt":"find it"}}]}}`
+		result = `{"type":"user","session_id":"s","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_1","content":"found"}]}}`
+	)
+	sub := `{"type":"assistant","session_id":"s","parent_tool_use_id":"toolu_1","message":{"content":[{"type":"text","text":"## Summary\nFound it.\n## Open issues\nnone"}]}}`
+	textThenTool := `{"type":"assistant","session_id":"s","message":{"content":[{"type":"tool_use","id":"toolu_2","name":"Bash","input":{"command":"go test ./..."}},{"type":"text","text":"Waiting for the tests."}]}}`
+	main := `{"type":"assistant","session_id":"s","message":{"content":[{"type":"text","text":"## Summary\nDone.\n## Open issues\nnone"}]}}`
+	feed := func(lines ...string) *event.Error {
+		p := mustBackend(t, "claude").NewParser(nil)
+		for _, l := range lines {
+			p.Line([]byte(l))
+		}
+		return errorOf(p, launch.Exit{Reason: launch.ReasonExited, Code: 1})
+	}
+	for name, lines := range map[string][]string{
+		"subagent text":                  {task, sub, netErr},
+		"subagent text, then its result": {task, sub, result, netErr},
+		"text then tool result":          {textThenTool, `{"type":"user","session_id":"s","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_2","content":"ok"}]}}`, netErr},
+	} {
+		if e := feed(lines...); e == nil || e.Class != event.ClassTransient || e.Answer != "" || e.Final != "" {
+			t.Errorf("%s: error = %+v", name, e)
+		}
+	}
+	// The main agent's text after the tool result is its final answer.
+	if e := feed(task, sub, result, main, netErr); e == nil || e.Final != "## Summary\nDone.\n## Open issues\nnone" ||
+		e.Answer != e.Final {
+		t.Errorf("main answer: error = %+v", e)
+	}
+}
