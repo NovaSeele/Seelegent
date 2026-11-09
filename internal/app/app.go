@@ -39,6 +39,8 @@ import (
 	"github.com/NovaSeele/Seelegent/internal/guard"
 	"github.com/NovaSeele/Seelegent/internal/hook"
 	"github.com/NovaSeele/Seelegent/internal/httpapi"
+	"github.com/NovaSeele/Seelegent/internal/launch"
+	"github.com/NovaSeele/Seelegent/internal/launchbin"
 	"github.com/NovaSeele/Seelegent/internal/logx"
 	"github.com/NovaSeele/Seelegent/internal/meeting"
 	"github.com/NovaSeele/Seelegent/internal/member"
@@ -57,9 +59,6 @@ import (
 	"github.com/NovaSeele/Seelegent/internal/usage"
 )
 
-// launchCommand is the hidden command that runs the detached launcher (internal/cli).
-const launchCommand = "__launch"
-
 // Options configure an App. Paths is required.
 type Options struct {
 	// Paths is the data directory.
@@ -70,8 +69,11 @@ type Options struct {
 	Env []string
 	// RealHome is the user's home folder (os.UserHomeDir when empty).
 	RealHome string
-	// Launcher runs the detached launcher ({os.Executable(), "__launch"} when nil).
+	// Launcher runs the detached launcher. When nil it is {os.Executable(), "__launch"}, or the companion executable
+	// seelegent-launch next to it when that is of this build (launchbin.Resolver, looked at for every launch).
 	Launcher []string
+	// launcherCommand picks the launcher command per launch when Launcher was left nil (launchbin.Resolver).
+	launcherCommand func() []string
 	// GuardExe is the seelegent executable the git guard hooks and the git shim run (os.Executable() when empty).
 	GuardExe string
 	// Bins sets the CLI of a backend (tests); backends not listed are looked up with backend.Find.
@@ -208,7 +210,13 @@ func New(ctx context.Context, o Options) (*App, error) {
 		if err != nil {
 			return nil, fmt.Errorf("app: own executable: %w", err)
 		}
-		o.Launcher = []string{exe, launchCommand}
+		if resolved, err := filepath.EvalSymlinks(exe); err == nil {
+			exe = resolved
+		}
+		o.Launcher = []string{exe, launch.Subcommand}
+		// The companion executable next to it runs the launches when it is of this build (launchbin).
+		self, _ := debug.ReadBuildInfo()
+		o.launcherCommand = launchbin.NewResolver(exe, self, o.Logger).Command
 	}
 	if o.GuardExe == "" {
 		exe, err := os.Executable()
@@ -373,7 +381,8 @@ func (a *App) build(o Options) error {
 	a.slots = gate.NewSlots(func() int { return a.Limits().GateConcurrency })
 	a.Tasks, err = task.New(task.Options{
 		DB: a.DB, Accounts: a.Accounts, Pool: p, Backends: a.Backends, Settings: a.Settings,
-		TasksDir: o.Paths.Tasks, DataDir: o.Paths.Home, Launcher: o.Launcher, Usage: a.Usage,
+		TasksDir: o.Paths.Tasks, DataDir: o.Paths.Home, Launcher: o.Launcher, LauncherCommand: o.launcherCommand,
+		Usage:        a.Usage,
 		QuotaRefresh: a.afterRun, Memory: a.Memory, Roles: a.Roles, Consoles: consoles, Clock: o.Clock,
 		Logger:        a.log,
 		BaseEnv:       func() []string { return a.env },

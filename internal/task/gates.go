@@ -15,6 +15,7 @@ import (
 	"github.com/NovaSeele/Seelegent/internal/config"
 	"github.com/NovaSeele/Seelegent/internal/fsutil"
 	"github.com/NovaSeele/Seelegent/internal/gate"
+	"github.com/NovaSeele/Seelegent/internal/projectkey"
 	"github.com/NovaSeele/Seelegent/internal/proof"
 )
 
@@ -341,7 +342,7 @@ func (s *Service) resolveProof(t *Task, req proofRequest, prev *Proof, tasksChan
 		p.Commands = append(p.Commands, gate.Detect(root, t.Cwd)...)
 	}
 	if prev == nil {
-		key, _, err := fsutil.ProjectKey(root)
+		key, _, err := projectkey.Key(root)
 		if err != nil {
 			return nil, invalidf("%v", err)
 		}
@@ -715,7 +716,7 @@ func (s *Service) bump(ctx context.Context, project, name string) {
 
 // Lanes returns the lane claims held in the repository of cwd.
 func (s *Service) Lanes(ctx context.Context, cwd string) (api.LanesView, error) {
-	canonical, _, _, err := fsutil.ProjectOf(cwd)
+	canonical, _, _, err := projectkey.Of(cwd)
 	if err != nil {
 		return api.LanesView{}, invalidf("%v", err)
 	}

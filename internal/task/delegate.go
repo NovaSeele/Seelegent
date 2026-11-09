@@ -16,6 +16,7 @@ import (
 	"github.com/NovaSeele/Seelegent/internal/config"
 	"github.com/NovaSeele/Seelegent/internal/fsutil"
 	"github.com/NovaSeele/Seelegent/internal/pool"
+	"github.com/NovaSeele/Seelegent/internal/projectkey"
 	"github.com/NovaSeele/Seelegent/internal/role"
 )
 
@@ -591,7 +592,7 @@ func checkSession(s *api.Session) (*api.Session, error) {
 // checkCwd validates a task folder: an absolute path to an existing folder. It returns the canonical path and the
 // project key and name.
 func checkCwd(cwd string) (canonical, key, name string, err error) {
-	canonical, key, name, err = fsutil.ProjectOf(cwd)
+	canonical, key, name, err = projectkey.Of(cwd)
 	if err != nil {
 		return "", "", "", invalidf("%v", err)
 	}

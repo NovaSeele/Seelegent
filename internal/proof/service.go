@@ -17,6 +17,7 @@ import (
 
 	"github.com/NovaSeele/Seelegent/internal/api"
 	"github.com/NovaSeele/Seelegent/internal/fsutil"
+	"github.com/NovaSeele/Seelegent/internal/projectkey"
 )
 
 // Errors of the proof service.
@@ -131,7 +132,7 @@ type Project struct {
 
 // ProjectOf resolves the repository of cwd (cwd itself when it is not in a git repository).
 func (s *Service) ProjectOf(ctx context.Context, cwd string) (Project, error) {
-	canonical, _, _, err := fsutil.ProjectOf(cwd)
+	canonical, _, _, err := projectkey.Of(cwd)
 	if err != nil {
 		return Project{}, fmt.Errorf("%w: %w", ErrInvalid, err)
 	}
@@ -143,7 +144,7 @@ func (s *Service) ProjectOf(ctx context.Context, cwd string) (Project, error) {
 			}
 		}
 	}
-	key, _, err := fsutil.ProjectKey(root)
+	key, _, err := projectkey.Key(root)
 	if err != nil {
 		return Project{}, err
 	}
@@ -642,7 +643,7 @@ func (s *Service) CancelRun(ctx context.Context, cwd, id string) (api.ProofRun, 
 
 // Counters returns the lane counters of the repository of cwd.
 func (s *Service) Counters(ctx context.Context, root string) (map[string]int, error) {
-	key, _, err := fsutil.ProjectKey(root)
+	key, _, err := projectkey.Key(root)
 	if err != nil {
 		return nil, err
 	}

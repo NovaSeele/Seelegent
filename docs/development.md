@@ -21,7 +21,7 @@ golangci-lint does not need to be installed: `make lint` runs the pinned v2 rele
 macOS / Linux (or Windows with make):
 
 ```sh
-make build          # pnpm install + build web/dist, then go build into bin/seelegent
+make build          # pnpm install + build web/dist, then go build into bin/seelegent and bin/seelegent-launch
 bin/seelegent version
 ```
 
@@ -41,6 +41,30 @@ release-check` validates `.goreleaser.yaml`. How releases, the installers and `s
 binary then serves no dashboard. Version, commit and date come from `-ldflags -X
 github.com/NovaSeele/Seelegent/internal/buildinfo.{version,commit,date}`; without them the binary reports `dev`
 and the VCS data that Go embeds.
+
+### The companion launcher
+
+Every task's worker is started by a detached launcher process (`internal/launch`) that lives for the whole turn.
+The daemon starts it as `seelegent-launch __launch <dir>` when the companion executable `seelegent-launch[.exe]`
+(`cmd/seelegent-launch`) sits next to its own executable and is of the same build, and as `seelegent __launch <dir>`
+otherwise; both run `launch.Main`, so there is one launcher code path ([release.md](release.md#the-companion-launcher)
+says when the companion is used). The companion exists to save memory: it is about 12 MB private on Windows instead
+of about 51 MB, because it links no crypto package (any of them brings in the 32 MiB entropy buffer of
+`crypto/internal/fips140/drbg`, which Windows charges as commit).
+
+Rules that keep it so:
+
+- Nothing `cmd/seelegent-launch` imports may import `crypto/...`: that is `internal/launch` and what it imports
+  (today `platform` and `fsutil`). `go test ./cmd/seelegent-launch` (`TestLinksNoCrypto`) runs `go list -deps` for
+  Windows, Linux and macOS and fails naming each crypto package found (`go list -deps -f '{{.ImportPath}}
+  {{.Imports}}'` then shows who imports it). Hashing that needs crypto lives outside that set: project keys (SHA-1)
+  are in `internal/projectkey`, not `fsutil`; Windows tree names use `math/rand/v2` (unique, not secret).
+- Build the companion with the same command and flags as `seelegent` (`make build`, `scripts/build.ps1`, the bench
+  and GoReleaser do): the daemon compares their build information and falls back when anything differs, with one
+  line in `logs/daemon.log` saying why. It also falls back for a build from a modified tree (uncommitted changes),
+  whose source the build information cannot tell apart: commit before a bench that should measure the companion.
+- Development runs (`go run ./cmd/seelegent daemon`, tests, fakecli) have no companion next to the executable and
+  use `seelegent __launch`; that is expected and logged once at info level.
 
 ## Test and lint
 
@@ -119,8 +143,9 @@ curl -s 'http://127.0.0.1:6060/debug/vars?light=1'                        # goro
 
 ### Benchmark
 
-`scripts/bench` (build tag `bench`) measures what Seelegent costs the machine. It builds `seelegent`, starts a
-daemon on a free port picked for the run (`-port`), with `--pprof-addr` on another (`-pprof-port`) and a temp
+`scripts/bench` (build tag `bench`) measures what Seelegent costs the machine. It builds `seelegent` and the
+companion launcher `seelegent-launch` next to it (with `-bin`, the daemon uses a companion of the same build next to
+that binary when there is one; a build from a modified tree runs launches as `seelegent __launch`), starts a daemon on a free port picked for the run (`-port`), with `--pprof-addr` on another (`-pprof-port`) and a temp
 `SEELEGENT_HOME` and user home, adds 6 fake agy accounts with their quota readers on, runs 20 short tasks so the
 lists are not empty, and then:
 

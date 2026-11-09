@@ -23,6 +23,7 @@ import (
 	"github.com/NovaSeele/Seelegent/internal/config"
 	"github.com/NovaSeele/Seelegent/internal/envx"
 	"github.com/NovaSeele/Seelegent/internal/fsutil"
+	"github.com/NovaSeele/Seelegent/internal/launchbin"
 	"github.com/NovaSeele/Seelegent/internal/platform"
 	"github.com/NovaSeele/Seelegent/internal/store"
 )
@@ -80,6 +81,9 @@ type Options struct {
 	GitWrapper string
 	// Memory reads the free memory now (platform.Memory); nil skips the resources check.
 	Memory func() platform.MemoryStatus
+	// Launcher looks at the companion launcher next to this executable (launchbin.Inspect); nil skips the launcher
+	// line.
+	Launcher func() launchbin.Status
 }
 
 // Run runs every check in a fixed order.
@@ -96,7 +100,11 @@ func Run(ctx context.Context, o Options) []Check {
 	if p, ok := oldPIDFile(ctx, o.Paths.Home, o.Processes); ok {
 		out = append(out, p)
 	}
-	out = append(out, portFile(o), dashboard(o.Web), git(o.GitPath, o.GitWrapper))
+	out = append(out, portFile(o), dashboard(o.Web))
+	if o.Launcher != nil {
+		out = append(out, launcher(o.Launcher()))
+	}
+	out = append(out, git(o.GitPath, o.GitWrapper))
 	out = append(out, backends(o)...)
 	out = append(out, accounts(ctx, o, c), pathEntries(o.Env, runtime.GOOS))
 	var live *api.Health
@@ -244,6 +252,13 @@ func dashboard(web fs.FS) Check {
 	}
 	return Check{Name: "dashboard", Status: Warn, Message: "the dashboard is not part of this build",
 		Fix: "build with web/dist (make build, or scripts/build.ps1)"}
+}
+
+// launcher says, as information (never a warning: launches work either way), whether the daemon runs the launches
+// in the companion launcher seelegent-launch, which takes about 40 MB less private memory per running task on
+// Windows than `seelegent __launch`.
+func launcher(s launchbin.Status) Check {
+	return Check{Name: "launcher", Status: OK, Message: launchbin.Describe(s)}
 }
 
 // git names the git Seelegent runs. A batch wrapper first on PATH (ServBay's or a package manager's git.cmd) is a

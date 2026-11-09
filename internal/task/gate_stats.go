@@ -5,8 +5,8 @@ import (
 	"time"
 
 	"github.com/NovaSeele/Seelegent/internal/api"
-	"github.com/NovaSeele/Seelegent/internal/fsutil"
 	"github.com/NovaSeele/Seelegent/internal/gate"
+	"github.com/NovaSeele/Seelegent/internal/projectkey"
 	"github.com/NovaSeele/Seelegent/internal/proof"
 )
 
@@ -19,7 +19,7 @@ func (s *Service) ProofStats(ctx context.Context, cwd string, since time.Time) (
 	key := ""
 	projects := map[string]bool{}
 	if cwd != "" {
-		canonical, _, _, err := fsutil.ProjectOf(cwd)
+		canonical, _, _, err := projectkey.Of(cwd)
 		if err != nil {
 			return api.ProofStats{}, invalidf("%v", err)
 		}
@@ -28,7 +28,7 @@ func (s *Service) ProofStats(ctx context.Context, cwd string, since time.Time) (
 			root = r
 		}
 		key = rootKey(root)
-		if pk, _, err := fsutil.ProjectKey(root); err == nil {
+		if pk, _, err := projectkey.Key(root); err == nil {
 			projects[pk] = true
 		}
 	}

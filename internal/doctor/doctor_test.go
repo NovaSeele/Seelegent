@@ -12,6 +12,7 @@ import (
 
 	"github.com/NovaSeele/Seelegent/internal/api"
 	"github.com/NovaSeele/Seelegent/internal/config"
+	"github.com/NovaSeele/Seelegent/internal/launchbin"
 	"github.com/NovaSeele/Seelegent/internal/platform"
 )
 
@@ -230,5 +231,23 @@ func TestResourcesFromDaemon(t *testing.T) {
 	if c.Status != Warn || !strings.Contains(c.Message, "minFreeMemoryMB 2048, auto for this machine") ||
 		!strings.Contains(c.Message, "the daemon is not running") {
 		t.Errorf("no daemon: %+v", c)
+	}
+}
+
+// TestLauncherCheck: the companion launcher is information, never a warning; the message says what is used.
+func TestLauncherCheck(t *testing.T) {
+	for _, c := range []struct {
+		st   launchbin.Status
+		want string
+	}{
+		{launchbin.Status{Path: "/bin/seelegent-launch", Present: true, Usable: true}, "launchers run in it"},
+		{launchbin.Status{Path: "/bin/seelegent-launch"}, "is not there"},
+		{launchbin.Status{Path: "/bin/seelegent-launch", Present: true, Reason: "it is not of this build: x"},
+			"is not used (it is not of this build: x)"},
+	} {
+		got := launcher(c.st)
+		if got.Name != "launcher" || got.Status != OK || !strings.Contains(got.Message, c.want) {
+			t.Errorf("launcher(%+v) = %+v, want OK naming %q", c.st, got, c.want)
+		}
 	}
 }

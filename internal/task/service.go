@@ -171,6 +171,9 @@ type Options struct {
 	DataDir string
 	// Launcher is the command that runs the detached launcher ({os.Executable(), "__launch"}).
 	Launcher []string
+	// LauncherCommand, when set, picks the launcher command for each launch instead of Launcher (the daemon's
+	// launchbin.Resolver: the companion executable when it is of the daemon's build, else Launcher).
+	LauncherCommand func() []string
 
 	// Usage, QuotaRefresh, Memory, Roles and Consoles are optional.
 	Usage Usage
