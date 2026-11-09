@@ -150,29 +150,55 @@ describe('style gates', () => {
   })
 })
 
-// A scroll frame (overflow auto/scroll/hidden) without a position of its own does not contain its absolute
-// descendants, and every .sr-only label is absolute. Those labels escape the frame and stretch the scroll height of
-// the nearest positioned ancestor instead. It came back twice: first the Tree tab scrolled the whole task pane away
-// (fixed in the process views only), then the /tasks sidebar's 47 ProviderMark labels gave .workspace a 4260px
-// scroll height in a 1062px pane, so scrolling the list to its end chained into an empty workspace. Hence the gate
-// covers every scroll frame in src. (.sr-only itself stays as it is: the settings pickers' hidden radios rely on it.)
+// A frame that clips or scrolls (overflow auto/scroll/hidden) without a position of its own does not contain its
+// absolute descendants, and every .sr-only label is absolute. Those labels escape the frame and stretch the scroll
+// height of the nearest positioned ancestor instead. It came back twice: first the Tree tab scrolled the whole task
+// pane away (fixed in the process views only), then the /tasks sidebar's 47 ProviderMark labels gave .workspace a
+// 4260px scroll height in a 1062px pane, so scrolling the list to its end chained into an empty workspace. Hence the
+// gate covers every auto/scroll frame in src. overflow:hidden is not gated (text ellipsis spans need no position):
+// clipping frames that hold .sr-only or absolute children are positioned by hand, and .list__rows is locked below as
+// the example. (.sr-only itself stays as it is: the settings pickers' hidden radios rely on it.)
 describe('scroll frames', () => {
   interface Rule {
     path: string
     selectors: string[]
     body: string
+    /** Inside @media, @container, @supports or another at-rule: it does not apply everywhere. */
+    conditional: boolean
   }
 
-  const rules: Rule[] = styled.flatMap(([path, css]) =>
-    [...css.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/([^{}]+)\{([^{}]*)\}/g)].map((m) => ({
-      path,
-      selectors: (m[1] ?? '')
-        .split(',')
-        .map((s) => s.trim().replace(/\s+/g, ' '))
-        .filter(Boolean),
-      body: m[2] ?? '',
-    })),
-  )
+  /** The innermost blocks of `css`, each with its selector list and whether an at-rule encloses it. */
+  function parseRules(path: string, css: string): Rule[] {
+    const text = css.replace(/\/\*[\s\S]*?\*\//g, '')
+    const out: Rule[] = []
+    const open: { prelude: string; start: number; leaf: boolean }[] = []
+    let mark = 0
+    for (let i = 0; i < text.length; i++) {
+      if (text[i] === '{') {
+        const parent = open.at(-1)
+        if (parent) parent.leaf = false
+        open.push({ prelude: text.slice(mark, i).trim(), start: i + 1, leaf: true })
+        mark = i + 1
+      } else if (text[i] === '}') {
+        const block = open.pop()
+        if (block?.leaf) {
+          out.push({
+            path,
+            selectors: block.prelude
+              .split(',')
+              .map((s) => s.trim().replace(/\s+/g, ' '))
+              .filter(Boolean),
+            body: text.slice(block.start, i),
+            conditional: open.some((b) => b.prelude.startsWith('@')),
+          })
+        }
+        mark = i + 1
+      }
+    }
+    return out
+  }
+
+  const rules: Rule[] = styled.flatMap(([path, css]) => parseRules(path, css))
 
   const scrolls = (body: string) =>
     [...body.matchAll(/(?:^|[;{\s])overflow(?:-x|-y)?\s*:\s*([^;]*)/g)].some((m) =>
@@ -180,8 +206,12 @@ describe('scroll frames', () => {
     )
   const positioned = (body: string) =>
     /(?:^|[;{\s])position\s*:\s*(?:relative|absolute|sticky|fixed)\b/.test(body)
+  // Only rules outside at-rules count: a position set under @media (e.g. .git__list's sticky from 900px) leaves the
+  // frame unpositioned at every other size.
   const ruleFor = (path: string, selector: string) =>
-    rules.filter((rule) => rule.path === path && rule.selectors.includes(selector))
+    rules.filter(
+      (rule) => rule.path === path && !rule.conditional && rule.selectors.includes(selector),
+    )
 
   it('positions every scroll frame', () => {
     const frames = rules.filter((rule) => scrolls(rule.body))
