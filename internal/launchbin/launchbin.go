@@ -3,7 +3,7 @@
 //
 // The companion runs the same launcher code in about 12 MB of private memory instead of about 51 MB (it links no
 // crypto package, so not the 32 MiB entropy buffer Windows charges as commit; see launch.LimitRuntime). It is used
-// only when it is safe: the file sits next to the daemon's own executable, under its fixed name, and its build
+// only when it is of the same build: the file sits next to the daemon's own executable, under its fixed name, and its build
 // information (read from the file, nothing is run) says it is the launcher's main package built from the same source
 // as the daemon: the same module version, Go version and build settings (VCS revision and time, GOOS, GOARCH, tags,
 // ...), from a clean checkout. Anything else, a missing file included, falls back to `seelegent __launch`, which

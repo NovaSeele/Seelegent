@@ -28,7 +28,7 @@ as commit to each process, so a launcher started as `seelegent __launch` costs a
 about 12 MB. `TestLinksNoCrypto` in `cmd/seelegent-launch` fails when a change pulls a `crypto/` package into it
 (for Windows, Linux and macOS); see [development.md](development.md#the-companion-launcher).
 
-The daemon uses it only when that is safe, and falls back to `seelegent __launch` otherwise (which always works):
+The daemon uses it only when it is of the same build, and falls back to `seelegent __launch` otherwise (which always works):
 
 - it must be the file `seelegent-launch[.exe]` in the folder of the daemon's own executable (`os.Executable`, links
   resolved);
@@ -41,6 +41,11 @@ The daemon uses it only when that is safe, and falls back to `seelegent __launch
   (`-buildvcs=false`, a source archive), never uses the companion. `-ldflags` is not compared: with `-trimpath` Go
   does not record it, and the `-X` version stamp does not change the launcher's code (it does not link
   `internal/buildinfo`; `TestLinksNoCrypto` checks that too).
+
+These checks show that the file is of the same build, not that it is genuine: build information can be written into
+any file. The companion is trusted exactly as much as the `seelegent` executable beside it: both sit in the same
+folder, and whoever can write to that folder can replace either one. Install Seelegent in a folder that only you
+(or administrators) can write to.
 
 The daemon looks at the file for every launch (one `stat`) and reads its build information again only when its
 path, modification time or size changed, so a companion that appears, goes or is replaced is noticed at the next
