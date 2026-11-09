@@ -17,6 +17,7 @@ const (
 	reportCommands     = 6
 	reportCommandChars = 120
 	reportErrorChars   = 300
+	reportWarningChars = 600
 	reportResponse     = 20000
 )
 
@@ -85,6 +86,15 @@ func (s *Service) report(ctx context.Context, t *Task, cwd string) api.TaskRepor
 		for _, a := range tu.Attempts {
 			if a.Status != AttemptOK {
 				notOK = true
+			}
+		}
+		for _, a := range tu.Attempts {
+			if a.Outcome != nil && a.Outcome.Warning != "" {
+				w := a.Outcome.Warning
+				if r := []rune(w); len(r) > reportWarningChars {
+					w = string(r[:reportWarningChars])
+				}
+				rep.Warnings = append(rep.Warnings, w)
 			}
 		}
 		if len(tu.Attempts) > 1 || notOK {

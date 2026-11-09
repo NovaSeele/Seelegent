@@ -65,7 +65,8 @@
       "credits": "Khóa đã hết tín dụng",
       "transient": "Lần chạy gặp lỗi tạm thời",
       "background_wait": "Worker đang chờ việc chạy nền",
-      "error": "Lần chạy thất bại"
+      "error": "Lần chạy thất bại",
+      "okWarning": "Lần chạy đã xong; CLI của worker báo một lỗi không làm dừng việc"
     },
     "quotaExhausted": "Tài khoản đã hết quota",
     "authFailed": "Tài khoản cần đăng nhập lại",

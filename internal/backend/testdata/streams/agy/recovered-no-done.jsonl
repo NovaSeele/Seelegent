@@ -1,0 +1,8 @@
+{"event":"init","conversation_id":"3a3a3a3a-0000-4000-8000-00000000000a","init":{"model":"gemini-3.8-flash-medium","cwd":"/work/demo"}}
+{"event":"step_update","step_update":{"step_index":1,"step_type":"agent_response","state":"RUNNING","text_delta":"I will read the store first. "}}
+{"event":"step_update","step_update":{"step_index":2,"step_type":"tool","state":"CALLING","tool_name":"view_file","tool_info":{"parameters":{"AbsolutePath":"/work/demo/internal/store/store.go","StartLine":1,"EndLine":120}}}}
+{"event":"step_update","step_update":{"step_index":2,"step_type":"tool","state":"DONE","tool_name":"view_file","duration_seconds":0.05,"tool_info":{"parameters":{"AbsolutePath":"/work/demo/internal/store/store.go","StartLine":1,"EndLine":120},"output":"package store\n"}}}
+{"event":"step_update","step_update":{"step_index":3,"step_type":"tool","state":"CALLING","tool_name":"replace_file_content","tool_info":{"parameters":{"TargetFile":"/work/demo/internal/store/store.go","Instruction":"close the rows"}}}}
+{"event":"step_update","step_update":{"step_index":3,"step_type":"tool","state":"DONE","tool_name":"replace_file_content","duration_seconds":0.4,"tool_info":{"parameters":{"TargetFile":"/work/demo/internal/store/store.go","Instruction":"close the rows"},"output":"The file was edited."}}}
+{"event":"result","result":{"status":"ERROR","error":"API error (attempt 2): request failed: Post \"https://api.example.test/v1internal:streamGenerateContent?alt=sse\": read tcp 10.0.0.2:55383->203.0.113.4:443: wsarecv: An existing connection was forcibly closed by the remote host.","usage":{"input_tokens":30400,"output_tokens":2210,"total_tokens":32610},"duration_seconds":538.2,"conversation_id":"3a3a3a3a-0000-4000-8000-00000000000a"}}
+#!exit 0

@@ -41,6 +41,13 @@ type base struct {
 	waiting        string // the background-wait line, while the CLI waits
 	lastError      string // last non-fatal error the CLI printed in its stream
 	step           int
+	// ownResponse is set when the CLI's report carried a response of its own (setReport fills an empty one with
+	// the run's whole text).
+	ownResponse bool
+	// final is the agent's final answer of this run (masked) while hasFinal: its last answer text with no tool step
+	// after it (markFinal, clearFinal). A resumed conversation starts a new parser, so it is never an earlier run's.
+	final    string
+	hasFinal bool
 }
 
 func newBase(name string, secrets []string, rules []rule) base {
@@ -162,6 +169,7 @@ func (b *base) session(id, model string) event.Event {
 func (b *base) setReport(r event.Report) event.Event {
 	r.Response = b.mask(r.Response)
 	r.Error = b.mask(r.Error)
+	b.ownResponse = strings.TrimSpace(r.Response) != ""
 	if r.Response == "" {
 		r.Response = b.text.String()
 	}
@@ -172,6 +180,44 @@ func (b *base) setReport(r event.Report) event.Event {
 	}
 	b.report = &r
 	return event.Event{Kind: event.KindReport, Report: &r}
+}
+
+// markFinal records text (masked) as the agent's final answer so far: its last answer text with no tool step after
+// it. An empty text records nothing.
+func (b *base) markFinal(text string) {
+	if strings.TrimSpace(text) != "" {
+		b.final, b.hasFinal = text, true
+	}
+}
+
+// clearFinal forgets the final answer: the agent went on (a tool step, or a newer answer that has not ended).
+func (b *base) clearFinal() { b.hasFinal = false }
+
+// recoveryAnswer is the answer of a run that may have finished before the CLI reported its failure, or "". The CLIs
+// retry network errors themselves, and some still end with one after the agent's work finished (agy also replays it
+// on every resume of the conversation). A run is such a candidate when the report is the CLI's own and not a
+// success, its error is a network or server error and nothing else by this backend's rules (onlyTransient: never
+// quota, sign-in or credits), the run has a final answer with no tool step after it, the process ended by itself
+// (any exit code: claude and codex exit 1 on an error result, agy 0; never a time limit, a cancel such as a budget
+// stop, a lost launcher or a failed start) and the CLI does not wait for a background command. The answer is the
+// report's own response, else the final answer. Only the task engine knows whether it is the complete report the
+// brief asks for (a progress line is not), so the run still fails transiently here; the engine decides.
+func (b *base) recoveryAnswer(exit launch.Exit) string {
+	r := b.report
+	if r == nil || r.Synthesized || r.Status == event.StatusSuccess || !b.hasFinal || b.waiting != "" ||
+		exit.Reason != launch.ReasonExited {
+		return ""
+	}
+	if b.bgWait != nil && b.bgWait.MatchString(r.Error) {
+		return ""
+	}
+	if !onlyTransient(b.rules, r.Error) {
+		return ""
+	}
+	if b.ownResponse {
+		return r.Response
+	}
+	return b.final
 }
 
 // log returns a log event with secrets masked.
@@ -251,7 +297,11 @@ func (b *base) Finish(exit launch.Exit, stderrTail string) []event.Event {
 	if !ok {
 		class = event.ClassFatal
 	}
-	return append(out, event.Fail(class, r.Error))
+	fail := event.Fail(class, r.Error)
+	if class == event.ClassTransient && cliReport {
+		fail.Error.Answer = b.recoveryAnswer(exit)
+	}
+	return append(out, fail)
 }
 
 // cliErrorText is the error text the CLI itself reported: the report's error, or the last error line of its

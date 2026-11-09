@@ -1,0 +1,7 @@
+{"type":"thread.started","thread_id":"0199a3f2-0000-7000-8000-00000000c0de"}
+{"type":"turn.started"}
+{"type":"item.started","item":{"id":"item_1","type":"file_change","changes":[{"path":"/work/app/internal/store/store.go","kind":"update"}],"status":"in_progress"}}
+{"type":"item.completed","item":{"id":"item_1","type":"file_change","changes":[{"path":"/work/app/internal/store/store.go","kind":"update"}],"status":"completed"}}
+{"type":"item.completed","item":{"id":"item_2","type":"agent_message","text":"## Report\nClosed the rows in store.go."}}
+{"type":"turn.failed","error":{"message":"You've hit your usage limit. Upgrade to Pro or try again in 2 hours 13 minutes."}}
+#!exit 1

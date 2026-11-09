@@ -8,12 +8,14 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/NovaSeele/Seelegent/internal/account"
+	"github.com/NovaSeele/Seelegent/internal/answer"
 	"github.com/NovaSeele/Seelegent/internal/api"
 	"github.com/NovaSeele/Seelegent/internal/backend"
 	"github.com/NovaSeele/Seelegent/internal/brief"
@@ -718,6 +720,15 @@ func (s *Service) finishAttempt(r *run, id string, turn, n int, accountID, model
 	set := s.settings()
 	o := res.outcome
 	status, errText := classify(o, res.exit, set.TaskTimeoutMinutes)
+	cur, curErr := s.repo.Get(ctx, id)
+	if status == AttemptTransient && curErr == nil {
+		switch tu := cur.TurnN(turn); {
+		case o.RecoveryAnswer != "" && reportComplete(cur, tu, o.RecoveryAnswer):
+			status, errText = recovered(b.Name(), &o)
+		case staleReplay(tu, n, o, res):
+			status, errText = staleError(b.Name(), &o)
+		}
+	}
 	group := b.QuotaGroup(model)
 	var until time.Time
 	switch status {
@@ -742,7 +753,7 @@ func (s *Service) finishAttempt(r *run, id string, turn, n int, accountID, model
 	maxAttempts := s.maxAttempts(ctx, b.Name())
 	// preCheck runs the post-turn checks only when this attempt may end the turn: when its budget is used up.
 	used, limit := n, maxAttempts
-	if cur, err := s.repo.Get(ctx, id); err == nil {
+	if curErr == nil {
 		if tu := cur.TurnN(turn); tu != nil {
 			counted, rests := attemptBudget(tu, n, status)
 			used = counted
@@ -784,7 +795,7 @@ func (s *Service) finishAttempt(r *run, id string, turn, n int, accountID, model
 			endErr = "" // the closing events say it already
 		}
 		evs = append(evs, NewEvent{Type: api.EventAttemptEnd, Turn: turn, Attempt: n,
-			Data: api.AttemptEndData{Status: status, Error: endErr}})
+			Data: api.AttemptEndData{Status: status, Error: endErr, Warning: o.Warning}})
 		switch status {
 		case AttemptQuota:
 			evs = append(evs, NewEvent{Type: api.EventQuotaExhausted, Turn: turn, Attempt: n,
@@ -802,7 +813,7 @@ func (s *Service) finishAttempt(r *run, id string, turn, n int, accountID, model
 		}
 		switch {
 		case status == AttemptCancelled || t.CancelRequested || t.Manual:
-			evs = append(evs, s.endTurnChecked(t, tu, TurnCancelled, o, check))
+			evs = append(evs, s.endTurnChecked(t, tu, TurnCancelled, keptOutcome(tu, o), check))
 			if !t.Manual {
 				t.Status, t.CancelRequested = StatusCancelled, false
 			}
@@ -895,9 +906,108 @@ func (s *Service) finishAttempt(r *run, id string, turn, n int, accountID, model
 }
 
 // endTurn closes a turn that has no outcome to record (cancelled, given up) and returns its turn_end event; its
-// post-turn checks run later (lateCheck).
+// post-turn checks run later (lateCheck). A cancelled turn keeps the latest response one of its attempts gave
+// (keptOutcome): a cancel during a retry's wait still shows the work done.
 func (s *Service) endTurn(t *Task, tu *Turn, status string) NewEvent {
-	return s.endTurnChecked(t, tu, status, backend.Outcome{}, nil)
+	o := backend.Outcome{}
+	if status == TurnCancelled {
+		o = keptOutcome(tu, o)
+	}
+	return s.endTurnChecked(t, tu, status, o, nil)
+}
+
+// keptOutcome is what a cancelled turn shows: o when it has a response, else the outcome of the turn's latest
+// attempt that gave one (its response and the files it touched), else o.
+func keptOutcome(tu *Turn, o backend.Outcome) backend.Outcome {
+	if strings.TrimSpace(o.Response) != "" {
+		return o
+	}
+	for i := len(tu.Attempts) - 1; i >= 0; i-- {
+		if a := tu.Attempts[i]; a.Outcome != nil && strings.TrimSpace(a.Outcome.Response) != "" {
+			return *a.Outcome
+		}
+	}
+	return o
+}
+
+// turnEdits are the files the turn's attempts edited, those of o (the attempt that ends it) included: a turn that
+// ends on a resumed or later attempt also lists what the earlier attempts changed.
+func turnEdits(tu *Turn, o backend.Outcome) []string {
+	var out []string
+	for _, a := range tu.Attempts {
+		if a.Outcome != nil {
+			out = append(out, a.Outcome.FilesEdited...)
+		}
+	}
+	return append(out, o.FilesEdited...)
+}
+
+// The sections a worker's report must have to count as finished work (brief: "## Summary" ... "## Open issues").
+var (
+	reportSummaryRe = regexp.MustCompile(`^summary\b`)
+	reportOpenRe    = regexp.MustCompile(`^open issues\b`)
+)
+
+// reportComplete reports whether text is the complete report turn tu of task t asks for: the worker brief's
+// sections from Summary to Open issues. A hand-back turn and a hidden run (consult, meeting, judge, verifier) have
+// formats of their own; their answers never count, so such an attempt stays transient as before.
+func reportComplete(t *Task, tu *Turn, text string) bool {
+	if t == nil || tu == nil || tu.Handback || Hidden(t.Kind) {
+		return false
+	}
+	secs := answer.Sections(text)
+	_, summary := answer.Pick(secs, reportSummaryRe)
+	_, open := answer.Pick(secs, reportOpenRe)
+	return summary && open
+}
+
+// recovered counts an attempt as done whose CLI reported a network error after the agent's complete report
+// (Outcome.RecoveryAnswer, reportComplete): the response is that report, and the warning keeps the error.
+func recovered(backendName string, o *backend.Outcome) (status, text string) {
+	o.Warning = backendName + " reported a network error after its final answer: " + o.Error
+	o.Response = o.RecoveryAnswer
+	o.Status, o.Class, o.Error = backend.OutcomeOK, "", ""
+	return AttemptOK, ""
+}
+
+// staleReplay reports whether attempt n of turn tu, which ended transient with outcome o, replayed its
+// conversation's error instead of meeting it again: it resumed the conversation of the attempt before it, which
+// also ended transient, and the CLI reported the byte-identical error text (agy keeps a network error in the
+// conversation and returns it on every resume). An error Seelegent made up because the CLI wrote no report, or an
+// attempt that ended any other way than by exiting, is never a replay.
+func staleReplay(tu *Turn, n int, o backend.Outcome, res attemptResult) bool {
+	if tu == nil || n < 2 || n > len(tu.Attempts) || o.Error == "" || res.interrupted ||
+		res.exit.Reason != launch.ReasonExited {
+		return false
+	}
+	a, prev := tu.Attempts[n-1], tu.Attempts[n-2]
+	if !a.Continuing || a.ConversationID == "" || prev.ConversationID != a.ConversationID ||
+		(o.ConversationID != "" && o.ConversationID != a.ConversationID) {
+		return false
+	}
+	if prev.Status != AttemptTransient || prev.Outcome == nil || prev.Outcome.Error != o.Error {
+		return false
+	}
+	for _, ev := range res.finish {
+		if ev.Kind == event.KindReport && ev.Report != nil && ev.Report.Synthesized {
+			return false
+		}
+	}
+	return true
+}
+
+// staleError judges an attempt that replayed its conversation's error (staleReplay). With a response the worker
+// finished: the attempt is a success with a warning. Without one, resuming again or redoing the work on another
+// account would not help: the turn fails with a message that says where the work may be.
+func staleError(backendName string, o *backend.Outcome) (status, text string) {
+	if strings.TrimSpace(o.Response) != "" {
+		o.Warning = fmt.Sprintf("%s repeated the error of its previous attempt, which it replays from its "+
+			"conversation; its response is kept: %s", backendName, o.Error)
+		o.Status, o.Class, o.Error = backend.OutcomeOK, "", ""
+		return AttemptOK, ""
+	}
+	return AttemptError, fmt.Sprintf("%s repeats a stale error from its conversation (%s); the work may already "+
+		"be on disk: check the diff and delegate a new task", backendName, o.Error)
 }
 
 // endTurnChecked closes a turn with the outcome of its last attempt and returns its turn_end event. c holds the
@@ -905,9 +1015,13 @@ func (s *Service) endTurn(t *Task, tu *Turn, status string) NewEvent {
 // come from its snapshots (checkedFiles), so the turn_end event, the report and the task view list the same files.
 // A turn checked later (lateCheck) keeps the edit-tool list in its turn_end event; applyCheck updates its Files.
 func (s *Service) endTurnChecked(t *Task, tu *Turn, status string, o backend.Outcome, c *turnCheck) NewEvent {
+	edited := o.FilesEdited
+	if status == TurnOK || status == TurnCancelled {
+		edited = turnEdits(tu, o)
+	}
 	tu.Status, tu.EndedAt = status, s.now()
 	tu.Response = o.Response
-	tu.Files = existingFiles(t.Cwd, displayPaths(t.Cwd, o.FilesEdited))
+	tu.Files = existingFiles(t.Cwd, displayPaths(t.Cwd, edited))
 	if c != nil && tu.Snap != nil && !tu.Snap.Checked {
 		tu.Files = checkedFiles(tu.Snap, c, tu.Files)
 	}
@@ -1217,6 +1331,12 @@ func (s *Service) prompt(ctx context.Context, t *Task, tu *Turn, continuing, pla
 		Interrupted: len(tu.Attempts) > 0, Message: tu.Message, Baseline: displayPaths(t.Cwd, t.Baseline),
 		TestParallelism: s.limits().TestParallelism, DataDir: s.o.DataDir}
 	in.Lane, in.Gate = s.briefGate(t)
+	if in.Interrupted {
+		// What the earlier attempts left: the files they edited and the last report one gave (old field report: a
+		// handoff redid a finished 9-minute job from scratch).
+		in.InterruptedFiles = briefFiles(existingFiles(t.Cwd, displayPaths(t.Cwd, turnEdits(tu, backend.Outcome{}))))
+		in.InterruptedReport = keptOutcome(tu, backend.Outcome{}).Response
+	}
 	if tu.Handback {
 		in.Message = brief.HandbackElsewhere // a new conversation: the console's context is not available
 	}

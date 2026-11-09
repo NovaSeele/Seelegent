@@ -210,6 +210,13 @@ func (*Agy) NewParser(secrets []string) Parser {
 type agyParser struct {
 	base
 	seen map[agySeenKey]struct{} // tool steps already reported, by step and state
+
+	// respStep and resp are the agent_response step being streamed and its text so far (masked).
+	respStep int
+	resp     strings.Builder
+	// finalStep is the step index of the last agent_response step that reached DONE with text: the final answer
+	// (base.markFinal) until a later tool step or agent_response step clears it.
+	finalStep int
 }
 
 // agySeenKey is a tool step's step index and state: a comparable key, so the dedup of step updates builds no
@@ -288,17 +295,38 @@ func (p *agyParser) Line(raw []byte) []event.Event {
 func (p *agyParser) step(s *agyStep) []event.Event {
 	switch s.StepType {
 	case "agent_response":
+		if s.StepIndex != p.respStep {
+			p.respStep = s.StepIndex
+			p.resp.Reset()
+		}
+		if s.StepIndex > p.finalStep {
+			p.clearFinal() // a newer response: the final one is only final once this one is DONE
+		}
 		var out []event.Event
 		if s.TextDelta != "" {
-			out = append(out, p.message(s.StepIndex, s.TextDelta))
+			msg := p.message(s.StepIndex, s.TextDelta)
+			p.resp.WriteString(msg.Text)
+			out = append(out, msg)
 		}
 		if s.State == "DONE" {
 			if u, ok := parseUsage(s.Usage); ok {
 				out = append(out, event.Event{Kind: event.KindUsage, Step: s.StepIndex, Usage: &u})
 			}
+			if text := p.resp.String(); strings.TrimSpace(text) != "" {
+				p.finalStep = s.StepIndex
+				p.markFinal(text)
+			} else if s.StepIndex >= p.finalStep {
+				p.clearFinal()
+			}
 		}
 		return out
 	case "tool":
+		switch s.State {
+		case "CALLING", "DONE", "ERROR":
+			if s.StepIndex >= p.finalStep {
+				p.clearFinal() // the agent went on working after its response
+			}
+		}
 		return p.tool(s)
 	}
 	return nil

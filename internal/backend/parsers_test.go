@@ -238,6 +238,191 @@ func TestAgyBackgroundWaitTimeout(t *testing.T) {
 	}
 }
 
+// TestRecoveredNetworkError: a CLI that ends a run whose work finished (its final answer, no tool step after it)
+// with a network error it had retried past. For every backend the run still fails transiently, and the error event
+// carries the answer, so the task engine can count it as done when it is a complete report; a tool step after the
+// answer, or a quota error, gives no answer. Fixtures are shaped like real runs, with their paths, hosts and IPs
+// replaced.
+func TestRecoveredNetworkError(t *testing.T) {
+	const report = "## Report\nClosed the rows in store.go; go test ./internal/store/ passes."
+	for _, c := range []struct {
+		backend, errHas, convID string
+	}{
+		{"agy", "wsarecv", "3a3a3a3a-0000-4000-8000-00000000000a"},
+		{"claude", "Connection error", "5a5a5a5a-1111-4222-8333-000000000001"},
+		{"codex", "stream disconnected", "0199a3f2-0000-7000-8000-00000000c0de"},
+	} {
+		t.Run(c.backend, func(t *testing.T) {
+			b := mustBackend(t, c.backend)
+			events, o := replay(t, b, "recovered.jsonl")
+			if o.Status != OutcomeFailed || o.Class != event.ClassTransient || !strings.Contains(o.Error, c.errHas) ||
+				o.RecoveryAnswer != report || o.ConversationID != c.convID || o.Warning != "" {
+				t.Fatalf("outcome = %+v", o)
+			}
+			if k := kinds(events); k[event.KindReport] != 1 || k[event.KindError] != 1 {
+				t.Errorf("event kinds = %v", k)
+			}
+			for _, f := range []struct {
+				file  string
+				class event.Class
+			}{
+				// The agent went on working after its answer: the error ended its work.
+				{"recovered-tool-after.jsonl", event.ClassTransient},
+				// Not a network error: the class stays.
+				{"recovered-quota.jsonl", event.ClassQuotaExhausted},
+			} {
+				_, o := replay(t, b, f.file)
+				if o.Status != OutcomeFailed || o.Class != f.class || o.RecoveryAnswer != "" {
+					t.Errorf("%s: outcome = %+v", f.file, o)
+				}
+			}
+		})
+	}
+	// agy: only tool steps and no answer, a real outage in the middle of the work.
+	if _, o := replay(t, mustBackend(t, "agy"), "recovered-no-done.jsonl"); o.Status != OutcomeFailed ||
+		o.Class != event.ClassTransient || o.RecoveryAnswer != "" {
+		t.Errorf("agy without a final answer: %+v", o)
+	}
+	// codex: an answer, then a reconnect error and no turn.failed (the CLI wrote no report): transient, no answer.
+	if _, o := replay(t, mustBackend(t, "codex"), "transient.jsonl"); o.Status != OutcomeFailed ||
+		o.Class != event.ClassTransient || o.RecoveryAnswer != "" {
+		t.Errorf("codex without a report: %+v", o)
+	}
+}
+
+// TestRecoveryAnswerRules: the answer, masking, and the ways a run may end, on the agy parser (the rules live in the
+// shared base).
+func TestRecoveryAnswerRules(t *testing.T) {
+	agy := mustBackend(t, "agy")
+	feed := func(lines ...string) Parser {
+		p := agy.NewParser([]string{"SECRETTOKEN"})
+		for _, l := range lines {
+			p.Line([]byte(l))
+		}
+		return p
+	}
+	done := []string{
+		`{"event":"step_update","step_update":{"step_index":7,"step_type":"agent_response","state":"RUNNING","text_delta":"All done (SECRETTOKEN)."}}`,
+		`{"event":"step_update","step_update":{"step_index":7,"step_type":"agent_response","state":"DONE"}}`,
+	}
+	netErr := `{"event":"result","result":{"status":"ERROR","error":"request failed: read tcp 10.0.0.3:50122->203.0.113.9:443: wsarecv: connection reset (SECRETTOKEN)"}}`
+	answerOf := func(p Parser, exit launch.Exit) (string, []event.Event) {
+		fin := p.Finish(exit, "")
+		for _, ev := range fin {
+			if ev.Kind == event.KindError {
+				return ev.Error.Answer, fin
+			}
+		}
+		return "", fin
+	}
+	exited := launch.Exit{Reason: launch.ReasonExited}
+	// The response of the result itself wins over the final answer; secrets are masked.
+	p := feed(append(done, `{"event":"result","result":{"status":"ERROR","response":"Result text.","error":"503 Service Unavailable"}}`)...)
+	if a, _ := answerOf(p, exited); a != "Result text." {
+		t.Errorf("result response: %q", a)
+	}
+	if a, _ := answerOf(feed(append(done, netErr)...), exited); a != "All done ([REDACTED])." {
+		t.Errorf("masked: %q", a)
+	}
+	// Any exit code of a process that ended by itself (claude and codex exit 1 on an error result).
+	if a, _ := answerOf(feed(append(done, netErr)...), launch.Exit{Reason: launch.ReasonExited, Code: 1}); a == "" {
+		t.Error("exit 1: no answer")
+	}
+	// A process stopped at the time limit, lost, or cancelled (a budget stop is a cancel): never a candidate.
+	for _, exit := range []launch.Exit{{Reason: launch.ReasonTimeout, Code: -1}, {Reason: launch.ReasonLost},
+		{Reason: launch.ReasonCanceled}, {Reason: launch.ReasonStartFailed}} {
+		if a, fin := answerOf(feed(append(done, netErr)...), exit); a != "" {
+			t.Errorf("%s: answer %q, finish %+v", exit.Reason, a, fin)
+		}
+	}
+	for name, lines := range map[string][]string{
+		// A later response that never reached DONE: the final answer is not the last one.
+		"unfinished later response": append(done, `{"event":"step_update","step_update":{"step_index":8,"step_type":"agent_response","state":"RUNNING","text_delta":"Now I will also"}}`, netErr),
+		// A tool step that failed after the answer.
+		"tool error after the answer": append(done, `{"event":"step_update","step_update":{"step_index":8,"step_type":"tool","state":"ERROR","tool_name":"run_command","tool_info":{"error":"boom"}}}`, netErr),
+		// An auth error after the answer keeps its class, and so does one that reads as both.
+		"auth":             append(done, `{"event":"result","result":{"status":"ERROR","error":"UNAUTHENTICATED: please sign in again"}}`),
+		"auth and network": append(done, `{"event":"result","result":{"status":"ERROR","error":"request failed: UNAUTHENTICATED, please sign in again"}}`),
+	} {
+		if a, _ := answerOf(feed(lines...), exited); a != "" {
+			t.Errorf("%s: answer %q", name, a)
+		}
+	}
+	// The background wait in the result error, after an answer, is still a background wait.
+	p = feed(append(done, `{"event":"result","result":{"status":"ERROR","error":"root agent idle; waiting up to 10m for 2 background tasks"}}`)...)
+	fin := p.Finish(exited, "")
+	if k := kinds(fin); k[event.KindBackgroundWait] != 1 || k[event.KindError] != 0 {
+		t.Errorf("background wait after the answer: %+v", fin)
+	}
+	// A wait line on stderr after the network error (agy still waits for a background command): no candidate.
+	p = feed(append(done, netErr)...)
+	p.Stderr("root agent idle; waiting up to 45m0s for 1 background task(s) to finish")
+	if a, _ := answerOf(p, exited); a != "" {
+		t.Errorf("network error then wait: %q", a)
+	}
+}
+
+// TestNetworkAndCreditsClassify: the network errors and out-of-credit keys of the CLIs and of the providers behind
+// API keys get their classes on claude and codex, and a network error counts as transient and nothing else.
+func TestNetworkAndCreditsClassify(t *testing.T) {
+	network := []string{
+		"API Error: Connection error.",
+		"API Error: Request timed out.",
+		"API Error: fetch failed",
+		"getaddrinfo ENOTFOUND api.example.test",
+		"getaddrinfo EAI_AGAIN api.example.test",
+		"connect ENETUNREACH 203.0.113.4:443",
+		"connect EHOSTUNREACH 203.0.113.4:443",
+		"write EPIPE",
+		"read ECONNABORTED",
+		"UND_ERR_SOCKET: other side closed",
+		"stream disconnected before completion: error sending request for url (https://api.example.test/v1/responses)",
+		"dns error: failed to lookup address information: No such host is known.",
+		"tcp connect error: connection timed out",
+		"operation timed out",
+		"connection closed before message completed",
+		"read tcp 10.0.0.2:55383->203.0.113.4:443: wsarecv: An existing connection was forcibly closed",
+		"write tcp 10.0.0.2:55383->203.0.113.4:443: wsasend: An established connection was aborted",
+		"dial tcp: lookup api.example.test: no such host",
+		"dial tcp 203.0.113.4:443: connect: network is unreachable",
+	}
+	credits := []string{
+		`API Error: 402 {"error":{"message":"Insufficient credits. Add more using https://example.test/credits","code":402}}`,
+		`API Error: 402 {"error":{"message":"Insufficient Balance","type":"unknown_error","code":"invalid_request_error"}}`,
+		"insufficient funds on this key",
+		"HTTP 402",
+		"402 Payment Required",
+	}
+	notNetwork := []string{"the test timed out after 30s", "process terminated", "signal: terminated"}
+	for _, name := range []string{"claude", "codex"} {
+		var rules []rule
+		if name == "claude" {
+			rules = claudeRules()
+		} else {
+			rules = codexRules()
+		}
+		for _, s := range network {
+			if c, ok := classifyText(rules, s); !ok || c != event.ClassTransient || !onlyTransient(rules, s) {
+				t.Errorf("%s %q = %s %v", name, s, c, ok)
+			}
+		}
+		for _, s := range credits {
+			if c, ok := classifyText(rules, s); !ok || c != event.ClassCredits || onlyTransient(rules, s) {
+				t.Errorf("%s %q = %s %v", name, s, c, ok)
+			}
+		}
+		for _, s := range notNetwork {
+			if c, ok := classifyText(rules, s); ok && c == event.ClassTransient {
+				t.Errorf("%s %q read as transient", name, s)
+			}
+		}
+	}
+	// A network error that also reads as auth is never transient only.
+	if onlyTransient(codexRules(), "request failed: token has expired") {
+		t.Error("auth and network read as transient only")
+	}
+}
+
 func TestClaudeStreamSuccess(t *testing.T) {
 	events, o := replay(t, mustBackend(t, "claude"), "success.jsonl")
 	if o.Status != OutcomeOK || o.ConversationID != "4f1c2b9e-5d3a-4e7f-9a10-b2c3d4e5f607" || o.Model != "claude-sonnet-5" {

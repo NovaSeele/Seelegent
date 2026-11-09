@@ -65,7 +65,8 @@
       "credits": "La clave no tiene crédito",
       "transient": "El intento tuvo un error temporal",
       "background_wait": "El worker espera un trabajo en segundo plano",
-      "error": "El intento falló"
+      "error": "El intento falló",
+      "okWarning": "El intento terminó; la CLI del worker informó de un error que no lo detuvo"
     },
     "quotaExhausted": "La cuenta se quedó sin cuota",
     "authFailed": "La cuenta debe volver a iniciar sesión",

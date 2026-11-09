@@ -111,6 +111,9 @@ type WorkerPromptData struct {
 type AttemptEndData struct {
 	Status string `json:"status" ts:"Attempt['status']"`
 	Error  string `json:"error,omitempty"`
+	// Warning is an error that did not fail an ok attempt (a network error the worker CLI reported after its
+	// complete report, an error its conversation replayed): the work counts, but the lead should know.
+	Warning string `json:"warning,omitempty"`
 }
 
 // TurnEndData is the data of a turn_end event.

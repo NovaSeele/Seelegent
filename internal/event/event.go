@@ -188,6 +188,11 @@ type Report struct {
 type Error struct {
 	Class   Class  `json:"class"`
 	Message string `json:"message"`
+	// Answer is set on a transient failure the CLI reported after the agent's final answer (no tool step after it),
+	// when the process ended by itself: the answer (the report's response, else the final text). The CLIs retry
+	// network errors themselves and some still end a finished run with one; the task engine counts the attempt as
+	// done, with a warning, when the answer is the complete report the turn asked for.
+	Answer string `json:"answer,omitempty"`
 }
 
 // Message returns a message event.

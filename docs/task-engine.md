@@ -69,12 +69,14 @@ append the events in **one transaction**, then publish on the bus. The log and t
 2. **Brief.** The same conversation gets a short continuation; a fresh conversation (first attempt, another account,
    or a retry that never got a conversation) gets the full brief from `internal/brief`, with role, project memory,
    review history, constitution, the git baseline, earlier turns, prerequisite context, and the "you continue an
-   interrupted task" section when an attempt came before. A plan-mode brief says how the backend of this attempt
-   (not the one the task started on) reads files (`Capabilities.PlanShell`, `brief.PlanRule`): agy's and claude's
-   plan modes refuse shell commands, so they read with their file tools; codex has no file tools and runs a plan
-   turn in its `read-only` sandbox, where shell commands that only read (`rg -n`, `Get-Content`, `git diff`, tests
-   that write nothing) work and every write is refused, so it reads with the shell. A hidden run (consult, meeting,
-   judge, verifier) gets the same rule at the top of each fresh conversation (`brief.ReadOnlyRun`), and on codex
+   interrupted task" section when an attempt came before, with the files the earlier attempts edited and the last
+   report one of them gave (capped at 4000 characters), and the instruction to verify that work rather than redo
+   it. A plan-mode brief says how the backend of this attempt (not the one the task started on) reads files
+   (`Capabilities.PlanShell`, `brief.PlanRule`): agy's and claude's plan modes refuse shell commands, so
+   they read with their file tools; codex has no file tools and runs a plan turn in its `read-only` sandbox, where
+   shell commands that only read (`rg -n`, `Get-Content`, `git diff`, tests that write nothing) work and every write
+   is refused, so it reads with the shell. A hidden run (consult, meeting, judge, verifier) gets the same rule at
+   the top of each fresh conversation (`brief.ReadOnlyRun`), and on codex
    also the advice to take its citation line numbers from `rg -n` or `Select-String`; below it comes the worker
    brief's data-folder rule (`brief.DataRule`: do not explore the data folder or Seelegent's processes, with the
    run's folder as the exception when it lies inside the data folder). Before the first attempt of a
@@ -114,10 +116,33 @@ append the events in **one transaction**, then publish on the bus. The log and t
 | quota | the account rests for that quota group (`pool.MarkExhausted`), next attempt |
 | auth | the account is marked signed out (`pool.MarkAuthFailed`), next attempt on another account |
 | credits | the key's credit or billing ran out (class `credits`, never a quota rest): the account is held with no end time (`pool.MarkNoCredit`, `restReason: credits`) until the user stores a new key, a key test passes or the user edits the account (switches it off and on after a top-up); next attempt on another account, or, when no other account can run the task, the task fails at once naming the key ("the anthropic key has no credit left; top up or change the key") instead of waiting; a sign-in account has no key: "the claude account work has no credit left; top up, then switch the account off and on" |
-| transient | `retry` event, wait 15 s then 45 s on the same account (only its own timer wakes it), then another account |
+| transient | `retry` event, wait 15 s then 45 s on the same account (only its own timer wakes it), then another account. A resumed attempt that ends by itself with the byte-identical, non-empty error of the transient attempt before it, in the same conversation id (not an error Seelegent made up from stderr), replays a stale error kept in the conversation (agy does this; the rule applies to every backend): with a response it counts as `ok` with a warning; without one the turn fails ("repeats a stale error from its conversation … check the diff and delegate a new task") instead of resuming or handing the work to another account to redo |
 | background_wait | continue once with the background-wait prompt; the second time the turn ends `ok` |
 | error / timeout | turn and task `failed` |
-| cancelled | turn and task `cancelled` |
+| cancelled | turn and task `cancelled`; the turn keeps the response and files of its latest attempt that gave a response, so a cancel during a retry's wait still shows the work |
+
+An ok or cancelled turn lists the files every attempt of the turn edited, not only its last attempt's.
+
+The worker CLIs retry network errors themselves, and some still end a run whose work finished with one. Each parser
+remembers the agent's final answer of this run (agy: a DONE `agent_response` with text; claude: a text block; codex:
+a completed `agent_message`); a later tool step clears it (agy: a tool step or a newer response; claude: a `tool_use`,
+also in the same message; codex: a `command_execution`, `mcp_tool_call`, `file_change` or `web_search` item). When
+the run ends by itself (any exit code; never a timeout, a lost worker, a cancel, a budget stop or a failed start) with
+an error that reads as transient and as no other class (every rule is checked, so a sign-in, quota or credits wording
+alongside it rules it out) and is not a background wait, the parser still reports the transient failure but flags the
+answer (`error.answer`: the report's own response, else the final text). The runner counts that attempt as `ok` only
+when the answer is the complete report the turn asked for (its Summary … Open issues sections); a hand-back turn and
+a hidden run never do. The attempt keeps its usage and spend, and its outcome carries the answer as the response and
+the warning "<backend> reported a network error after its final answer: <error>" (`outcome.warning`). Anything else
+(a progress line, a final text without the sections) stays transient and retries. A warning of an ok attempt reaches
+the lead as the report's `warnings` (MCP `task`/`wait`, the CLI's `Warning:` lines) and the dashboard as the
+`attempt_end` event's `warning`.
+
+Classification: auth and credits rules come before transient for every backend (claude's credits rule now comes
+before its transient rule, since a 402 body may also name a server error). The network wording covers Node, Rust, Go
+and Windows errors ("Connection error.", "fetch failed", `ENOTFOUND`, `UND_ERR_*`, "stream disconnected", "error
+sending request", "dns error", `wsarecv`, …), never a bare "timed out" or "terminated". Credits also match
+"insufficient credits/balance/funds", "status 402" and "402 Payment Required".
 
 A turn makes at most one attempt per account of the backend plus three, not counting attempts that ended on a quota
 limit: those rest the account and resume or hand over, so the turn waits rather than fails. A runaway loop of limits

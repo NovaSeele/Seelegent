@@ -318,6 +318,9 @@ func printReportBody(w io.Writer, r api.TaskReport, woke string) {
 	if r.Error != "" {
 		_, _ = fmt.Fprintf(w, "Error: %s\n", r.Error)
 	}
+	for _, warn := range r.Warnings {
+		_, _ = fmt.Fprintf(w, "Warning: %s\n", warn)
+	}
 	if woke == api.WokeTimeout && ops.Pending(r.Status) {
 		_, _ = fmt.Fprintf(w, "\nThe wait ended before the task did: run `seelegent wait %s`.\n", r.TaskID)
 	}

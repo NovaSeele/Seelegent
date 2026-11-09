@@ -209,6 +209,9 @@ func (*Claude) NewParser(secrets []string) Parser {
 type claudeParser struct {
 	base
 	calls map[string]claudeCall // tool calls by tool_use id
+	// answer is the text the agent wrote since its last tool_use block (masked): the final answer (base.markFinal)
+	// until a tool_use clears it.
+	answer strings.Builder
 }
 
 type claudeCall struct {
@@ -287,10 +290,15 @@ func (p *claudeParser) assistant(blocks []claudeBlock) []event.Event {
 		switch b.Type {
 		case "text":
 			if b.Text != "" {
-				out = append(out, p.message(p.step, b.Text))
+				msg := p.message(p.step, b.Text)
+				p.answer.WriteString(msg.Text)
+				p.markFinal(p.answer.String())
+				out = append(out, msg)
 				p.step++
 			}
 		case "tool_use":
+			p.answer.Reset()
+			p.clearFinal() // the agent went on working after its text
 			call := claudeCall{name: b.Name, input: p.maskJSON(b.Input), step: p.step}
 			if strings.EqualFold(b.Name, "Bash") || strings.EqualFold(b.Name, "PowerShell") {
 				call.cmd = p.mask(stringField(b.Input, "command"))

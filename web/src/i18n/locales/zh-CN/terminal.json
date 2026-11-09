@@ -65,7 +65,8 @@
       "credits": "密钥已没有余额",
       "transient": "本次尝试遇到临时错误",
       "background_wait": "worker 正在等待后台任务",
-      "error": "本次尝试失败"
+      "error": "本次尝试失败",
+      "okWarning": "本次尝试已完成；worker CLI 报告的错误没有中断它"
     },
     "quotaExhausted": "账号额度已用完",
     "authFailed": "账号需要重新登录",

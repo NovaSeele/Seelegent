@@ -799,6 +799,11 @@ export interface WorkerPromptData {
 export interface AttemptEndData {
   status: Attempt['status']
   error?: string
+  /**
+   * Warning is an error that did not fail an ok attempt (a network error the worker CLI reported after its
+   * complete report, an error its conversation replayed): the work counts, but the lead should know.
+   */
+  warning?: string
 }
 
 /** TurnEndData is the data of a turn_end event. */
@@ -2175,6 +2180,11 @@ export interface TaskReport {
   hygiene?: ReportFinding[]
   scope_warnings?: ReportFinding[]
   denied_actions?: string[]
+  /**
+   * Warnings are errors of the latest turn's attempts that did not fail them (a network error the worker CLI had
+   * recovered from, an error its conversation replayed): the work counts, but check it.
+   */
+  warnings?: string[]
   /**
    * Gate is the gate of the latest instruction once it ended; LastGate shows a gate still running or an
    * automatic fix turn at work. Lane, Bar and Verifier come with it (docs/gates.md).
@@ -4299,6 +4309,13 @@ export interface WorkerReport {
 export interface WorkerError {
   class: 'quota_exhausted' | 'auth_required' | 'credits' | 'transient' | 'fatal'
   message: string
+  /**
+   * Answer is set on a transient failure the CLI reported after the agent's final answer (no tool step after it),
+   * when the process ended by itself: the answer (the report's response, else the final text). The CLIs retry
+   * network errors themselves and some still end a finished run with one; the task engine counts the attempt as
+   * done, with a warning, when the answer is the complete report the turn asked for.
+   */
+  answer?: string
 }
 
 /** The data of an attention event: a raised flag, or {state: 'cleared'}. */
