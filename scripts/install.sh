@@ -155,6 +155,9 @@ sha256_of() {
 # json_strings KEY FILE prints every string value of KEY in a JSON file, one per line. Enough for GitHub's
 # release JSON (no escaped quotes in tags, names or URLs), pretty-printed or on one line.
 json_strings() {
+	# Each of the three characters becomes a line break: the repeated \n is deliberate (one per character, the
+	# portable spelling; POSIX leaves a shorter second set unspecified), not a word replacement.
+	# shellcheck disable=SC2020
 	tr ',{}' '\n\n\n' <"$2" |
 		sed -n "s/^[[:space:]]*\"$1\"[[:space:]]*:[[:space:]]*\"\([^\"]*\)\".*/\1/p"
 }

@@ -27,11 +27,22 @@ func statOf(pid int) (state string, ppid int, ok bool) {
 	return f[0], ppid, err == nil
 }
 
-// checkAdopted checks that the daemonised pid was re-parented to the launcher, the child subreaper.
+// checkAdopted checks that the daemonised pid is re-parented to the launcher, the child subreaper. The grandchild
+// writes its pid file as soon as it runs, while the intermediate that started it may still be exiting (a
+// race-enabled test binary lingers at its exit unless GORACE says otherwise): the adoption happens when the
+// intermediate is gone, so it is waited for.
 func checkAdopted(t *testing.T, pid, launcher int) {
 	t.Helper()
-	if _, ppid, ok := statOf(pid); !ok || ppid != launcher {
-		t.Fatalf("process %d has parent %d, want the launcher %d", pid, ppid, launcher)
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		_, ppid, ok := statOf(pid)
+		if ok && ppid == launcher {
+			return
+		}
+		if !ok || time.Now().After(deadline) {
+			t.Fatalf("process %d has parent %d, want the launcher %d", pid, ppid, launcher)
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
 }
 

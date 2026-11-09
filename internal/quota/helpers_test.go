@@ -12,6 +12,7 @@ import (
 
 	"github.com/NovaSeele/Seelegent/internal/account"
 	"github.com/NovaSeele/Seelegent/internal/store"
+	"github.com/NovaSeele/Seelegent/internal/testutil/raceenv"
 )
 
 // The test binary doubles as a fake CLI when QUOTA_FAKE is set, so the real process code (runCommand, startProc)
@@ -21,6 +22,7 @@ import (
 //   - QUOTA_FAKE=hang: sleep for five minutes;
 //   - QUOTA_FAKE=app-server: answer JSON-RPC requests on stdin like `codex app-server` (signed in, Plus plan).
 func TestMain(m *testing.M) {
+	raceenv.QuietExit()
 	switch os.Getenv("QUOTA_FAKE") {
 	case "print":
 		fmt.Fprint(os.Stdout, os.Getenv("QUOTA_FAKE_STDOUT"))

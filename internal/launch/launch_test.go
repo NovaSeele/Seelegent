@@ -21,6 +21,7 @@ import (
 	"github.com/NovaSeele/Seelegent/internal/fsutil"
 	"github.com/NovaSeele/Seelegent/internal/platform"
 	"github.com/NovaSeele/Seelegent/internal/testutil/priority"
+	"github.com/NovaSeele/Seelegent/internal/testutil/raceenv"
 )
 
 // The test binary plays three parts, chosen by its first argument:
@@ -30,6 +31,7 @@ import (
 //	worker <step>...        a fake worker CLI that runs the steps in order
 //	daemon <dir> <step>...  a daemon that starts a launch and exits at once (restart survival)
 func TestMain(m *testing.M) {
+	raceenv.QuietExit()
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
 		case "__launch":

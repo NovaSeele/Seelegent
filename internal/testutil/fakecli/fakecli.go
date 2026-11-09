@@ -55,6 +55,7 @@ import (
 	"time"
 
 	"github.com/NovaSeele/Seelegent/internal/launch"
+	"github.com/NovaSeele/Seelegent/internal/testutil/raceenv"
 )
 
 // EnvQueue names the queue directory of the fake CLI.
@@ -69,6 +70,7 @@ const launchArg = "__launch"
 // Main runs the launcher or the fake CLI when the binary was started as one, and the tests otherwise. It never
 // returns.
 func Main(m *testing.M) {
+	raceenv.QuietExit()
 	switch {
 	case len(os.Args) > 2 && os.Args[1] == launchArg:
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
