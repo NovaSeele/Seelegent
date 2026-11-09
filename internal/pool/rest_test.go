@@ -240,6 +240,83 @@ func TestMarkExhaustedPassiveNewKey(t *testing.T) {
 	}
 }
 
+// TestMarkExhaustedPassiveKeptForLadder: the rest of another account or group does not prune an ended passive
+// rest that the next rest of its own account and group still climbs from.
+func TestMarkExhaustedPassiveKeptForLadder(t *testing.T) {
+	for _, other := range []string{"other account", "other group"} {
+		t.Run(other, func(t *testing.T) {
+			f := newFixture(t)
+			ctx := t.Context()
+			a := f.apiKeyAccount("openai", "sk-test-0123456789abcdef")
+			b, group := a, "Other"
+			if other == "other account" {
+				b, group = f.apiKeyAccount("openai", "sk-test-0123456789abcdeg"), "Codex"
+			}
+			now := f.clk.Now()
+			if c, err := f.p.MarkExhausted(ctx, a.ID, Exhaustion{Group: "Codex"}); err != nil || !c.Until.Equal(now.Add(time.Minute)) {
+				t.Fatalf("first rest: %+v, %v", c, err)
+			}
+			f.clk.Advance(2 * time.Minute)
+			if _, err := f.p.MarkExhausted(ctx, b.ID, Exhaustion{Group: group}); err != nil {
+				t.Fatal(err)
+			}
+			f.clk.Advance(time.Minute)
+			now = f.clk.Now()
+			if c, err := f.p.MarkExhausted(ctx, a.ID, Exhaustion{Group: "Codex"}); err != nil || !c.Until.Equal(now.Add(5*time.Minute)) {
+				t.Fatalf("second rest: %+v, %v, want 5m", c, err)
+			}
+			// An ended passive rest is pruned once it is older than the ladder's gap; active ones at once.
+			f.clk.Advance(5*time.Minute + quota.PassiveLadderGap)
+			if _, err := f.p.MarkExhausted(ctx, b.ID, Exhaustion{Group: "Third"}); err != nil {
+				t.Fatal(err)
+			}
+			if n := f.cooldownRows(); n != 1 {
+				t.Fatalf("%d cooldown rows, want 1", n)
+			}
+		})
+	}
+}
+
+// TestNewKeyLiftsPassiveRest: storing a new key ends a running passive rest, and the next error rests from the
+// ladder's first step instead of bringing the old rest back.
+func TestNewKeyLiftsPassiveRest(t *testing.T) {
+	f := newFixture(t)
+	ctx := t.Context()
+	k := f.apiKeyAccount("openai", "sk-test-0123456789abcdef")
+	req := Request{Backend: "codex", Group: "Codex", Model: "gpt-x", Provider: "openai"}
+	hint := f.clk.Now().Add(time.Hour)
+	if _, err := f.p.MarkExhausted(ctx, k.ID, Exhaustion{Group: "Codex", ResetAt: hint}); err != nil {
+		t.Fatal(err)
+	}
+	f.clk.Advance(time.Minute)
+	f.restUntil(req)
+	// Another edit does not lift it.
+	label := "renamed"
+	if _, err := f.m.Update(ctx, k.ID, account.Patch{Label: &label}); err != nil {
+		t.Fatal(err)
+	}
+	f.restUntil(req)
+	f.clk.Advance(time.Second)
+	if _, err := f.m.SetKey(ctx, k.ID, "sk-test-fedcba9876543210"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.p.Select(ctx, req); err != nil {
+		t.Fatalf("new key did not lift the rest: %v", err)
+	}
+	if states, _ := f.p.States(ctx); len(states[0].Cooldowns) != 0 {
+		t.Fatalf("cooldowns %+v", states[0].Cooldowns)
+	}
+	f.clk.Advance(time.Second)
+	now := f.clk.Now()
+	c, err := f.p.MarkExhausted(ctx, k.ID, Exhaustion{Group: "Codex"})
+	if err != nil || !c.Until.Equal(now.Add(time.Minute)) {
+		t.Fatalf("rest with the new key: %+v, %v, want 1m", c, err)
+	}
+	if got := f.restUntil(req); !got.Equal(c.Until) {
+		t.Fatalf("resting until %s, want %s", got, c.Until)
+	}
+}
+
 func TestClearCooldownAndUnreadableRows(t *testing.T) {
 	f := newFixture(t)
 	ctx := t.Context()
