@@ -94,8 +94,12 @@ func (t *treeOS) start(cmd *exec.Cmd, worker bool, _ string, opt TreeOptions) er
 	return nil
 }
 
-// runNiced makes cmd run through `nice -n 10` when nice is on PATH, so the root starts at the lower priority and
-// everything it starts inherits it. It reports whether it did.
+// runNiced makes cmd run through `nice -n <step>` when nice is on PATH, so the root starts at nice 10 and
+// everything it starts inherits it. nice adds its step to the caller's own nice value, so the step is what brings
+// the caller's value to lowNice (20 for a caller at -10, the priority of a macOS GitHub runner), the same nice value
+// lowerNice sets. A caller already at lowNice or lower priority needs nothing: the tree inherits its priority, and
+// runNiced leaves cmd as it is and reports true. It reports false when it cannot tell (no nice on PATH, the
+// caller's nice value unknown): the caller lowers the group itself then.
 func runNiced(cmd *exec.Cmd) bool {
 	if cmd.Path == "" || cmd.Err != nil || len(cmd.Args) == 0 {
 		return false
@@ -104,7 +108,14 @@ func runNiced(cmd *exec.Cmd) bool {
 	if err != nil {
 		return false
 	}
-	cmd.Args = append([]string{nice, "-n", strconv.Itoa(lowNice), cmd.Path}, cmd.Args[1:]...)
+	cur, err := niceOf(unix.PRIO_PROCESS, 0)
+	if err != nil {
+		return false
+	}
+	if cur >= lowNice {
+		return true
+	}
+	cmd.Args = append([]string{nice, "-n", strconv.Itoa(lowNice - cur), cmd.Path}, cmd.Args[1:]...)
 	cmd.Path = nice
 	return true
 }

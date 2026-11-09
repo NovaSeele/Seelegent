@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strconv"
 	"strings"
 	"syscall"
 	"testing"
@@ -250,16 +251,22 @@ func TestTreeKillReachesNewSession(t *testing.T) {
 	waitDead(t, pids...)
 }
 
-// TestRunNiced: a command is wrapped in `nice -n 10` with its own path and arguments.
+// TestRunNiced: a command is wrapped in `nice -n <step>` with its own path and arguments, the step bringing this
+// process's nice value to 10.
 func TestRunNiced(t *testing.T) {
 	if _, err := exec.LookPath("nice"); err != nil {
 		t.Skip("no nice on PATH")
+	}
+	self := priority.MustOf(t, os.Getpid())
+	if priority.IsLow(self) {
+		t.Skip("the test already runs at low priority")
 	}
 	cmd := exec.Command("/bin/sh", "-c", "echo a b") //nolint:noctx // never started
 	if !runNiced(cmd) {
 		t.Fatal("not wrapped")
 	}
-	if got := strings.Join(cmd.Args[1:], "|"); got != "-n|10|/bin/sh|-c|echo a b" || filepath.Base(cmd.Path) != "nice" {
+	want := "-n|" + strconv.Itoa(lowNice-self) + "|/bin/sh|-c|echo a b"
+	if got := strings.Join(cmd.Args[1:], "|"); got != want || filepath.Base(cmd.Path) != "nice" {
 		t.Fatalf("path %s, args %q", cmd.Path, cmd.Args)
 	}
 	if runNiced(&exec.Cmd{}) {
