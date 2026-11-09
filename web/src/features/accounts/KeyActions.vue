@@ -23,11 +23,10 @@ const keyTest = useKeyTest()
 
 const items = computed(() => {
   const a = props.account
-  const list: { id: KeyAction; label: string; icon: 'refresh' | 'settings' | 'gauge' | 'quota' }[] =
-    []
+  const list: { id: KeyAction; label: string; icon: 'refresh' | 'key' | 'gauge' | 'quota' }[] = []
   if (a.keyHint) {
     list.push({ id: 'test', label: t('accounts.action.test'), icon: 'refresh' })
-    list.push({ id: 'key', label: t('accounts.action.replaceKey'), icon: 'settings' })
+    list.push({ id: 'key', label: t('accounts.action.replaceKey'), icon: 'key' })
   }
   if (a.provider) list.push({ id: 'model', label: t('accounts.action.model'), icon: 'gauge' })
   // A local service is free: there is nothing to budget.
