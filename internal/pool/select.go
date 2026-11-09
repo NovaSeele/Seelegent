@@ -131,19 +131,27 @@ func older(a, b *account.Account) bool {
 
 // cooldown returns the rest of an account for a group that is in force at now. A rest ends early when a quota
 // read made after it was set shows the group usable again (the old version dropped such cooldowns on refresh);
-// passive rests only end with time.
+// passive rests end with time, or when a new key is stored (KeySetAt after the rest began).
 func (v *view) cooldown(id, group string) (Cooldown, bool) {
 	c, ok := v.cooldowns[id][group]
 	if !ok || !c.Until.After(v.now) {
 		return Cooldown{}, false
 	}
-	if group == creditsGroup {
-		for i := range v.accounts {
-			if a := &v.accounts[i]; a.ID == id {
-				return v.noCredit(a)
-			}
+	var a *account.Account
+	for i := range v.accounts {
+		if v.accounts[i].ID == id {
+			a = &v.accounts[i]
+			break
 		}
-		return Cooldown{}, false
+	}
+	if group == creditsGroup {
+		if a == nil {
+			return Cooldown{}, false
+		}
+		return v.noCredit(a)
+	}
+	if c.Passive && a != nil && a.KeySetAt.After(c.CreatedAt) {
+		return Cooldown{}, false // a key stored since: the limit was the old key's
 	}
 	if snap, found := v.snaps[id]; !c.Passive && found && snap.FetchedAt.After(c.CreatedAt) {
 		if _, exhausted := snap.Exhausted(v.now, group, "", v.settings.MinRemaining); !exhausted {

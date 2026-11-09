@@ -45,8 +45,8 @@ type Exhaustion struct {
 // reset, until the hint, or quota.DefaultRest; an API-key account rests until the hint or for the next step of
 // the passive rest ladder (quota.NextPassiveRest: 1, 5, 15 minutes, then passiveCooldownMinutes), climbed from
 // the group's previous passive rest kept in its cooldown row (from the first step when the key was set since).
-// A passive rest that still runs is returned unchanged unless a later hint extends it; any other existing longer
-// rest is kept. Unknown accounts give an error matching account.ErrNotFound (never a panic).
+// A passive rest that still runs is returned unchanged unless a later hint extends it (a rest lifted by a new key
+// does not count); any other existing longer rest is kept. Unknown accounts give an error matching account.ErrNotFound (never a panic).
 func (p *Pool) MarkExhausted(ctx context.Context, accountID string, ex Exhaustion) (Cooldown, error) {
 	accounts, err := p.o.Accounts.List(ctx)
 	if err != nil {
@@ -94,6 +94,11 @@ func (p *Pool) MarkExhausted(ctx context.Context, accountID string, ex Exhaustio
 				prev = quota.PrevRest{Duration: prevUntil.Sub(prevCreated), Until: prevUntil}
 			}
 		}
+		if c.Passive && !prevCreated.IsZero() && a.KeySetAt.After(prevCreated) {
+			// A key stored since the previous rest lifted it (view.cooldown): it neither holds nor counts, and the
+			// ladder starts again.
+			prevUntil, prev = time.Time{}, quota.PrevRest{}
+		}
 		if c.Passive {
 			if prevUntil.After(now) && !prevCreated.IsZero() && !ex.ResetAt.After(prevUntil) {
 				// A passive rest still runs: the pool gives a resting account no run, so this error comes from a
@@ -102,9 +107,6 @@ func (p *Pool) MarkExhausted(ctx context.Context, accountID string, ex Exhaustio
 				kept = true
 				return nil
 			}
-			if a.KeySetAt.After(prevCreated) {
-				prev = quota.PrevRest{} // a new key since the previous rest: the ladder starts again
-			}
 			c.Until = quota.PassiveRest(c.CreatedAt, ex.ResetAt, prev, s.PassiveCooldownMinutes)
 		} else {
 			c.Until = quota.ActiveRest(snap, c.CreatedAt, ex.Group, ex.Model, s.MinRemaining, ex.ResetAt)
@@ -112,7 +114,10 @@ func (p *Pool) MarkExhausted(ctx context.Context, accountID string, ex Exhaustio
 		if prevUntil.After(c.Until) {
 			c.Until = prevUntil
 		}
-		if _, err := tx.ExecContext(ctx, "DELETE FROM cooldowns WHERE until <= ?", formatTime(c.CreatedAt)); err != nil {
+		// Expired rests are pruned; a passive one is kept PassiveLadderGap longer, since its account's next rest in
+		// that group climbs from it (whatever account or group rests first). Readers skip ended rests.
+		if _, err := tx.ExecContext(ctx, "DELETE FROM cooldowns WHERE until <= ? AND (passive = 0 OR until <= ?)",
+			formatTime(now), formatTime(now.Add(-quota.PassiveLadderGap))); err != nil {
 			return err
 		}
 		_, err = tx.ExecContext(ctx, `INSERT INTO cooldowns (account_id, quota_group, until, reason, passive, created_at)
