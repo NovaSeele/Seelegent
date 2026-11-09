@@ -188,43 +188,111 @@ func startStale(h *harness, b staleRun, conv string) api.TaskSummary {
 	return sum
 }
 
-// TestStaleReplayedErrorFails: a resumed agy attempt that reports the byte-identical error of the attempt before it
-// in the same conversation, with the conversation's duration (555 s for a run of a moment), replays a stale error.
-// Without a complete report (nothing, or a progress line) the turn fails at once with a message that says where the
-// work may be: no third attempt and no handoff to another account that would redo the work.
-func TestStaleReplayedErrorFails(t *testing.T) {
+// staleWarning is the warning on a replayed attempt whose next attempt starts a new conversation.
+const staleWarning = "agy replays a stale error from its conversation; the next attempt starts a new conversation"
+
+// TestStaleReplayStartsFreshConversation: a resumed agy attempt that reports the byte-identical error of the attempt
+// before it in the same conversation, with the conversation's duration (555 s for a run of a moment), replays a stale
+// error. Without a complete report (nothing, or a progress line) the attempt stays transient with a warning, and the
+// next one starts a new conversation on the same account: no resume flag, the full brief with the files the earlier
+// attempts edited. The turn ends ok when that attempt reports.
+func TestStaleReplayStartsFreshConversation(t *testing.T) {
 	for name, final := range map[string]string{"silent": "", "progress": "The tests are still running."} {
 		t.Run(name, func(t *testing.T) {
 			h := newHarness(t)
-			b := agyRun()
-			b.setup(h)
-			conv := "conv-stale-" + name
-			sum := startStale(h, b, conv)
+			h.agy("only", 0)
+			conv, fresh := "conv-stale-"+name, "conv-fresh-"+name
+			file := filepath.Join(h.cwd, "store.go")
+			h.queue.Push(t, script(agyInit(conv), "#!write "+file+"\t"+strconv.Quote("package store\n"),
+				agyEdit(1, file), agyTool(2, "CALLING", "go test ./..."),
+				jsonLine(map[string]any{"event": "result", "result": map[string]any{"status": "ERROR",
+					"error": staleErr, "conversation_id": conv}}), "#!exit 0"))
 			h.queue.Push(t, agyReplayed(conv, final, 555))
-			h.queue.Push(t, b.ok(conv, "must not run"))
-			h.waitFor("the resumed attempt", func() bool {
+			h.queue.Push(t, okScript(fresh, fullReport))
+			sum := h.delegate(api.DelegateRequest{})
+			h.waitFor("the fresh conversation", func() bool {
 				h.clk.Advance(5 * time.Second)
-				return h.queue.Left(t) == 1
+				return h.queue.Left(t) == 0
 			})
-			tk := h.waitStatus(sum.ID, StatusFailed)
-			if !strings.Contains(tk.Error, "agy repeats a stale error from its conversation") ||
-				!strings.Contains(tk.Error, "check the diff and delegate a new task") ||
-				!strings.Contains(tk.Error, staleErr) {
-				t.Errorf("error = %q", tk.Error)
-			}
+			tk := h.waitStatus(sum.ID, StatusDone)
 			at := tk.LastTurn().Attempts
-			if len(at) != 2 || at[0].Status != AttemptTransient || at[1].Status != AttemptError || !at[1].Continuing ||
-				at[1].ConversationID != conv {
+			if len(at) != 3 || at[0].Status != AttemptTransient || at[1].Status != AttemptTransient ||
+				!at[1].StaleReplay || !at[1].Continuing || at[1].ConversationID != conv || at[1].Outcome == nil ||
+				at[1].Outcome.Warning != staleWarning {
 				t.Fatalf("attempts = %+v", at)
 			}
-			h.clk.Advance(time.Minute)
-			time.Sleep(100 * time.Millisecond)
+			if a := at[2]; a.Status != AttemptOK || a.Continuing || a.StaleReplay || a.ConversationID != fresh ||
+				a.AccountID != at[0].AccountID {
+				t.Fatalf("fresh attempt = %+v", a)
+			}
+			if tk.ConversationID != fresh || tk.LastTurn().Response != fullReport {
+				t.Errorf("conversation = %q, response = %q", tk.ConversationID, tk.LastTurn().Response)
+			}
+			recs := h.queue.Records(t)
+			if len(recs) != 3 || !slices.Contains(recs[1].Args, "--conversation") ||
+				slices.Contains(recs[2].Args, "--conversation") || slices.Contains(recs[2].Args, conv) {
+				t.Fatalf("argv = %+v", recs)
+			}
+			p, err := h.s.Prompt(t.Context(), sum.ID, 1, 3)
+			if err != nil || !strings.Contains(p, "## Handoff") || !strings.Contains(p, "Files it edited: store.go") ||
+				!strings.Contains(p, "Do not redo work that is already there.") {
+				t.Errorf("brief of the fresh conversation (%v):\n%s", err, p)
+			}
 			evs := h.events(sum.ID)
-			if h.queue.Left(t) != 1 || len(eventsOf(evs, api.EventHandoff)) != 0 ||
-				len(eventsOf(evs, api.EventRetry)) != 1 {
-				t.Errorf("a third attempt or a handoff followed: %d scripts left, events %+v", h.queue.Left(t), evs)
+			ends := eventsOf(evs, api.EventAttemptEnd)
+			if len(ends) != 3 {
+				t.Fatalf("attempt_end events = %+v", ends)
+			}
+			var end api.AttemptEndData
+			decode(t, ends[1], &end)
+			if end.Status != AttemptTransient || end.Warning != staleWarning {
+				t.Errorf("attempt_end of the replay = %+v", end)
+			}
+			if len(eventsOf(evs, api.EventHandoff)) != 0 || len(eventsOf(evs, api.EventRetry)) != 2 {
+				t.Errorf("events = %+v", evs)
 			}
 		})
+	}
+}
+
+// TestSecondStaleReplayFails: a stale replay is answered with a new conversation once per turn. When the attempt in
+// the new conversation fails, and the one that resumes it replays that error too, the turn fails with a message that
+// says where the work may be: no further attempt and no handoff to another account that would redo the work.
+func TestSecondStaleReplayFails(t *testing.T) {
+	h := newHarness(t)
+	b := agyRun()
+	b.setup(h)
+	sum := startStale(h, b, "conv-one")
+	h.queue.Push(t, agyReplayed("conv-one", "", 555))
+	h.queue.Push(t, b.failed("conv-two", "", staleErr))
+	h.queue.Push(t, agyReplayed("conv-two", "", 610))
+	h.queue.Push(t, b.ok("conv-two", "must not run"))
+	h.waitFor("the second replay", func() bool {
+		h.clk.Advance(5 * time.Second)
+		return h.queue.Left(t) == 1
+	})
+	tk := h.waitStatus(sum.ID, StatusFailed)
+	if !strings.Contains(tk.Error, "agy repeats a stale error from its conversation") ||
+		!strings.Contains(tk.Error, "check the diff and delegate a new task") ||
+		!strings.Contains(tk.Error, staleErr) {
+		t.Errorf("error = %q", tk.Error)
+	}
+	at := tk.LastTurn().Attempts
+	if len(at) != 4 || !at[1].StaleReplay || at[2].Status != AttemptTransient || at[2].Continuing ||
+		at[2].ConversationID != "conv-two" || at[3].Status != AttemptError || !at[3].Continuing ||
+		at[3].ConversationID != "conv-two" || at[3].StaleReplay {
+		t.Fatalf("attempts = %+v", at)
+	}
+	for _, a := range at {
+		if a.AccountID != at[0].AccountID {
+			t.Errorf("attempt %d ran on %s, not %s", a.N, a.AccountID, at[0].AccountID)
+		}
+	}
+	h.clk.Advance(time.Minute)
+	time.Sleep(100 * time.Millisecond)
+	evs := h.events(sum.ID)
+	if h.queue.Left(t) != 1 || len(eventsOf(evs, api.EventHandoff)) != 0 {
+		t.Errorf("a fifth attempt or a handoff followed: %d scripts left, events %+v", h.queue.Left(t), evs)
 	}
 }
 
