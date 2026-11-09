@@ -296,6 +296,44 @@ func TestSecondStaleReplayFails(t *testing.T) {
 	}
 }
 
+// TestStaleReplayOnLastAttemptFails: a stale replay on the turn's last attempt has no attempt left for a new
+// conversation. The turn fails with the stale message (not "gave up after N attempts" and the network error), and the
+// attempt's warning promises no next attempt. Two accounts allow five attempts: three on the first (then it is left
+// out), a fourth on the second, and the fifth resumes the fourth's conversation and replays its error.
+func TestStaleReplayOnLastAttemptFails(t *testing.T) {
+	h := newHarness(t)
+	h.agy("one", 0)
+	h.agy("two", 0)
+	b := agyRun()
+	sum := startStale(h, b, "conv-a")
+	h.queue.Push(t, b.failed("conv-a", "", staleErr))
+	h.queue.Push(t, b.failed("conv-a", "", staleErr))
+	h.queue.Push(t, b.failed("conv-b", "", staleErr))
+	h.queue.Push(t, agyReplayed("conv-b", "", 555))
+	h.queue.Push(t, b.ok("conv-b", "must not run"))
+	h.waitFor("the replay on the last attempt", func() bool {
+		h.clk.Advance(5 * time.Second)
+		return h.queue.Left(t) == 1
+	})
+	tk := h.waitStatus(sum.ID, StatusFailed)
+	if !strings.HasPrefix(tk.Error, "agy repeats a stale error from its conversation") ||
+		!strings.Contains(tk.Error, "check the diff and delegate a new task") {
+		t.Errorf("error = %q", tk.Error)
+	}
+	at := tk.LastTurn().Attempts
+	if len(at) != 5 || at[3].AccountID == at[0].AccountID || at[3].Continuing || !at[4].Continuing ||
+		at[4].ConversationID != "conv-b" || at[4].Status != AttemptError || at[4].StaleReplay ||
+		at[4].Outcome == nil {
+		t.Fatalf("attempts = %+v", at)
+	}
+	if w := at[4].Outcome.Warning; !strings.Contains(w, "replays a stale error") || strings.Contains(w, "next attempt") {
+		t.Errorf("warning = %q", w)
+	}
+	if tk.ConversationID != "conv-b" {
+		t.Errorf("conversation = %q: a failed turn keeps the conversation", tk.ConversationID)
+	}
+}
+
 // TestStaleReplayedErrorWithReport: the same replay after the agent's complete report (it repeated it) is a
 // success, with a warning the lead and the dashboard see.
 func TestStaleReplayedErrorWithReport(t *testing.T) {

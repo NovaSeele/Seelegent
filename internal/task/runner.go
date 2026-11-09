@@ -721,12 +721,14 @@ func (s *Service) finishAttempt(r *run, id string, turn, n int, accountID, model
 	o := res.outcome
 	status, errText := classify(o, res.exit, set.TaskTimeoutMinutes)
 	cur, curErr := s.repo.Get(ctx, id)
+	maxAttempts := s.maxAttempts(ctx, b.Name())
 	// fresh: the attempt replayed its conversation's error; the next attempt starts a new conversation.
 	fresh := false
 	if status == AttemptTransient && curErr == nil {
 		switch tu := cur.TurnN(turn); {
 		case staleReplay(tu, n, o, res, b.Capabilities().ReplaysErrors):
-			status, errText = staleError(cur, tu, n, b.Name(), &o)
+			counted, _ := attemptBudget(tu, n, AttemptTransient)
+			status, errText = staleError(cur, tu, n, counted >= maxAttempts, b.Name(), &o)
 			fresh = status == AttemptTransient
 		case o.RecoveryAnswer != "" && reportComplete(cur, tu, o.RecoveryFinal):
 			status, errText = recovered(b.Name(), &o)
@@ -753,7 +755,6 @@ func (s *Service) finishAttempt(r *run, id string, turn, n int, accountID, model
 			s.log.Warn("task: rest the account without credit", "account", accountID, "err", err)
 		}
 	}
-	maxAttempts := s.maxAttempts(ctx, b.Name())
 	// preCheck runs the post-turn checks only when this attempt may end the turn: when its budget is used up.
 	used, limit := n, maxAttempts
 	if curErr == nil {
@@ -1024,9 +1025,10 @@ func staleReplay(tu *Turn, n int, o backend.Outcome, res attemptResult, replays 
 // finished: the attempt is a success with a warning. Otherwise resuming again would only replay the error, but the
 // work is not lost: the attempt stays transient with a warning, and finishAttempt makes the next attempt start a new
 // conversation (Attempt.StaleReplay), whose brief lists the files the earlier attempts edited and the last report
-// one gave. That happens once per turn: when an earlier attempt of the turn already replayed a stale error, the turn
-// fails with a message that says where the work may be.
-func staleError(t *Task, tu *Turn, n int, backendName string, o *backend.Outcome) (status, text string) {
+// one gave. That happens once per turn and only while the turn has an attempt left: when an earlier attempt of the
+// turn already replayed a stale error, or last (this attempt used up the turn's attempt budget), the turn fails with
+// a message that says where the work may be, not with "gave up after N attempts" and the stale error.
+func staleError(t *Task, tu *Turn, n int, last bool, backendName string, o *backend.Outcome) (status, text string) {
 	if o.RecoveryAnswer != "" && reportComplete(t, tu, o.RecoveryFinal) {
 		o.Warning = fmt.Sprintf("%s repeated the error of its previous attempt, which it replays from its "+
 			"conversation; its report is kept: %s", backendName, o.Error)
@@ -1034,11 +1036,17 @@ func staleError(t *Task, tu *Turn, n int, backendName string, o *backend.Outcome
 		o.Status, o.Class, o.Error = backend.OutcomeOK, "", ""
 		return AttemptOK, ""
 	}
+	failed := fmt.Sprintf("%s repeats a stale error from its conversation (%s); the work may already be on disk: "+
+		"check the diff and delegate a new task", backendName, o.Error)
 	for _, a := range tu.Attempts[:n-1] {
 		if a.StaleReplay {
-			return AttemptError, fmt.Sprintf("%s repeats a stale error from its conversation (%s); the work may "+
-				"already be on disk: check the diff and delegate a new task", backendName, o.Error)
+			return AttemptError, failed
 		}
+	}
+	if last {
+		o.Warning = backendName + " replays a stale error from its conversation; the turn has no attempt left " +
+			"for a new conversation"
+		return AttemptError, failed
 	}
 	o.Warning = backendName + " replays a stale error from its conversation; the next attempt starts a new " +
 		"conversation"
