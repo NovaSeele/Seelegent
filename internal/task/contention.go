@@ -6,13 +6,13 @@ import (
 	"time"
 
 	"github.com/NovaSeele/Seelegent/internal/api"
-	"github.com/NovaSeele/Seelegent/internal/fsutil"
+	"github.com/NovaSeele/Seelegent/internal/projectkey"
 )
 
 // Contention lists the files of cwd's repository that two or more tasks changed within contentionWindowHours
 // (GET /contention): the same data as the file overlaps of a task (M12), seen from the repository.
 func (s *Service) Contention(ctx context.Context, cwd string) (api.ContentionView, error) {
-	canonical, _, _, err := fsutil.ProjectOf(cwd)
+	canonical, _, _, err := projectkey.Of(cwd)
 	if err != nil {
 		return api.ContentionView{}, invalidf("%v", err)
 	}

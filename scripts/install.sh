@@ -271,6 +271,43 @@ install_binary() {
 	[ -z "$ib_kept" ] || rm -f "$ib_kept"
 }
 
+# install_companion NEW COMPANION installs the companion launcher seelegent-launch next to seelegent the way the
+# binary is installed (the replaced one kept as COMPANION.previous, for `seelegent update --rollback`), or, for a
+# release without one (NEW empty), moves the installed one to COMPANION.previous, so no launcher of another build
+# stays next to the binary. The daemon uses the companion only when it is of its own build and runs launches as
+# `seelegent __launch` otherwise, so a failure here is a warning, never a failed install.
+install_companion() {
+	ic_previous="$2.previous"
+	ic_note="launches run as \`seelegent __launch\` (the same, with more memory per running task)"
+	rm -f "$2".old-* "$2.new"
+	if [ -z "$1" ]; then
+		if [ -e "$2" ]; then
+			mv -f "$2" "$ic_previous" || warn "could not move the companion launcher $2 aside"
+		fi
+		return 0
+	fi
+	# A kept companion with no installed one belongs to an older install, not to the previous binary.
+	if [ ! -e "$2" ]; then
+		rm -f "$ic_previous"
+	fi
+	if ! cp "$1" "$2.new" || ! chmod 755 "$2.new"; then
+		rm -f "$2.new"
+		warn "could not copy the companion launcher next to $2; $ic_note"
+		return 0
+	fi
+	if [ -e "$2" ] && ! mv -f "$2" "$ic_previous"; then
+		rm -f "$2.new"
+		warn "could not move the companion launcher $2 aside; the old one stays and $ic_note"
+		return 0
+	fi
+	if ! mv -f "$2.new" "$2"; then
+		rm -f "$2.new"
+		[ ! -e "$ic_previous" ] || mv -f "$ic_previous" "$2" || true
+		warn "could not put the new companion launcher in place; $ic_note"
+	fi
+	return 0
+}
+
 # cleanup runs on every exit: it removes the download folder and, when the script stopped a daemon and then failed
 # before the new binary was in place, starts that daemon again with the binary that is installed.
 cleanup() {
@@ -391,6 +428,14 @@ main() {
 	done
 	[ -n "$new_bin" ] || die "$asset holds no seelegent binary"
 	chmod 755 "$new_bin"
+	# The companion launcher seelegent-launch (releases from before it have none).
+	new_companion=""
+	for candidate in "$tmp/x/seelegent-launch" "$tmp"/x/*/seelegent-launch; do
+		if [ -f "$candidate" ]; then
+			new_companion=$candidate
+			break
+		fi
+	done
 	reported=$("$new_bin" version --json 2>/dev/null | sed -n 's/^[[:space:]]*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' || true)
 	if [ "$reported" != "$rel_tag" ]; then
 		die "the downloaded seelegent does not run here or is not $rel_tag (it reported '$reported'); nothing was installed"
@@ -452,6 +497,7 @@ main() {
 	if [ -n "$previous" ]; then
 		say "The previous binary is kept as $previous (seelegent update --rollback)."
 	fi
+	install_companion "$new_companion" "$install_dir/seelegent-launch"
 
 	path_file=""
 	if [ "$no_path" = 1 ]; then

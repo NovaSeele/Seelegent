@@ -254,7 +254,8 @@ func TestClaudeStreamSuccess(t *testing.T) {
 		!slices.Equal(o.BlockedCommands, []string{"git commit -am wip"}) {
 		t.Errorf("commands %q blocked %q", o.Commands, o.BlockedCommands)
 	}
-	want := event.Usage{InputTokens: 2150, OutputTokens: 920, CachedTokens: 18000, TotalTokens: 3070, CostUSD: 0.0841}
+	want := event.Usage{InputTokens: 2150, OutputTokens: 920, CachedTokens: 18000, CacheWriteTokens: 4100,
+		TotalTokens: 3070, CostUSD: 0.0841}
 	if o.Usage != want || o.DurationMs != 38211 {
 		t.Errorf("usage %+v duration %d", o.Usage, o.DurationMs)
 	}

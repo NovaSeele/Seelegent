@@ -1,6 +1,6 @@
 // Package role keeps worker roles (profiles): a name, a description, binding rules, an output style, skills and
 // default tier and effort that a task can run with. A role is global, or belongs to one project (keyed by
-// fsutil.ProjectKey of its folder) where it overrides a global role with the same id. Roles live in seelegent.db
+// projectkey.Key of its folder) where it overrides a global role with the same id. Roles live in seelegent.db
 // (table roles, migration 0005), one JSON document per role; a role that cannot be read is an error.
 package role
 
@@ -19,7 +19,7 @@ import (
 	"time"
 
 	"github.com/NovaSeele/Seelegent/internal/api"
-	"github.com/NovaSeele/Seelegent/internal/fsutil"
+	"github.com/NovaSeele/Seelegent/internal/projectkey"
 )
 
 // Scopes.
@@ -140,7 +140,7 @@ func New(o Options) *Store {
 
 // project returns the project key and canonical folder of cwd, which must be an absolute path to a folder.
 func project(cwd string) (key, canonical string, err error) {
-	canonical, key, _, err = fsutil.ProjectOf(cwd)
+	canonical, key, _, err = projectkey.Of(cwd)
 	if err != nil {
 		return "", "", fmt.Errorf("%w: %w", ErrInvalid, err)
 	}
@@ -380,7 +380,7 @@ func (s *Store) scopeKey(scope, cwd string) (key, canonical string, err error) {
 	return "", "", fmt.Errorf("%w: scope %q must be global or project", ErrInvalid, scope)
 }
 
-// projectKeyPattern is what fsutil.ProjectKey returns.
+// projectKeyPattern is what projectkey.Key returns.
 var projectKeyPattern = regexp.MustCompile(`^[a-z0-9._-]*-[0-9a-f]{8}$`)
 
 // deleteKey is the project key a Delete names: a folder that may be gone, or a key.
@@ -393,7 +393,7 @@ func deleteKey(scope, project string) (string, error) {
 		return "", fmt.Errorf("%w: scope %q must be global or project", ErrInvalid, scope)
 	}
 	if filepath.IsAbs(project) {
-		key, _, err := fsutil.ProjectKey(project)
+		key, _, err := projectkey.Key(project)
 		if err != nil {
 			return "", fmt.Errorf("%w: %w", ErrInvalid, err)
 		}

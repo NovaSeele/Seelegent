@@ -61,7 +61,7 @@ allowed, and so do the read commands of `members`, `meeting`, `contest`, `notes`
 
 | Command | What it does | `--json` prints |
 |---|---|---|
-| `daemon [--port N] [--dev-origin URL]` (alias `serve`) | Runs the daemon in the foreground until Ctrl+C (or SIGTERM on Unix) or `seelegent stop`. Every command, the hidden `__launch` launcher included, ends its work on SIGINT and, on Unix, SIGTERM: a launcher then stops its worker tree and writes the exit record. | – |
+| `daemon [--port N] [--dev-origin URL]` (alias `serve`) | Runs the daemon in the foreground until Ctrl+C (or SIGTERM on Unix) or `seelegent stop`. Every command, the hidden `__launch` launcher included (and the companion `seelegent-launch __launch`, which runs the same code), ends its work on SIGINT and, on Unix, SIGTERM: a launcher then stops its worker tree and writes the exit record. | – |
 | `mcp` | The MCP server for a lead host ([mcp.md](mcp.md)). | – |
 | `ui [--no-open]` | Starts the daemon if needed, opens the dashboard in the browser (Windows, macOS, Linux) and prints `Dashboard: <url>`. | `{dashboard}` |
 | `status` | Daemon, backends, accounts (labels and quota, never e-mails) and the active tasks; a task that needs you is tagged `[BLOCKED: reason]`, `[QUESTION: reason]` or `[STALLED: reason]`. Prints `not running` (exit 0) when no daemon runs; a daemon that holds its lock without answering, or another program on the port, is exit 1. | `{running, dashboard?, health?, backends: Backend[], accounts: Account[], activeTasks: TaskSummary[]}` |
@@ -230,6 +230,7 @@ file (`.doctor-write-test`, atomically) and removing it again. Checks, in order:
 | `old_pid_file` (only when `<data dir>/daemon.pid` exists) | – | the old Node version's `daemon.pid`, which this version never reads or writes: its process is not running (delete the file), is the old daemon (stop it with the old version, then delete the file), or is another process that got the pid. Doctor deletes nothing: the old version's own stop needs the file while its daemon runs, and a pid alone does not prove which process it is | – |
 | `port_file` | no stale port file | a port file left by a daemon that is gone (never a fail) | – |
 | `dashboard` | embedded | not part of this build | – |
+| `launcher` | information only, never a warning: whether the daemon started from this executable runs launches in the companion `seelegent-launch[.exe]` next to it (present and of this build), or as `seelegent __launch` (not there, or not of this build, with the reason). See [release.md](release.md#the-companion-launcher) | – | – |
 | `git` | found (the `gitx` resolver; the message names the git used) | Windows: the first git on PATH is a batch wrapper (`git.cmd`, `git.bat`, such as ServBay's). Seelegent never runs it (cmd.exe would drop the `^` of `X^{tree}` and expand `%VAR%`) and uses a real `git.exe` instead, but hooks, gate commands and terminals still go through the wrapper | not found, or only a wrapper that names no `git.exe` |
 | `backend_<id>` | enabled and its CLI found (`backend.Find`), or disabled | – | enabled but not found |
 | `accounts` | counts: total, enabled and (daemon running) usable | no enabled account, or counts unknown | – |

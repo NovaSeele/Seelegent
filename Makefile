@@ -9,7 +9,11 @@ PNPM ?= pnpm
 
 MODULE  := github.com/NovaSeele/Seelegent
 BIN_DIR := bin
-BINARY  := seelegent$(if $(filter Windows_NT,$(OS)),.exe,)
+EXE     := $(if $(filter Windows_NT,$(OS)),.exe,)
+BINARY  := seelegent$(EXE)
+# The companion launcher, shipped next to seelegent (docs/release.md). It must be built with the same flags as
+# seelegent: the daemon uses it only when its build information matches its own.
+LAUNCHER := seelegent-launch$(EXE)
 
 VERSION ?= $(shell git describe --tags --dirty 2>/dev/null || echo dev)
 COMMIT  ?= $(shell git rev-parse --short=12 HEAD 2>/dev/null || echo unknown)
@@ -41,22 +45,25 @@ LINT_J ?= 4
 
 # Flags of the resource benchmark (scripts/bench), e.g. BENCH_ARGS="-scenario load -duration 5m".
 BENCH_ARGS ?=
-BENCH_BIN  := $(BIN_DIR)/seelegent-bench$(if $(filter Windows_NT,$(OS)),.exe,)
+BENCH_BIN  := $(BIN_DIR)/seelegent-bench$(EXE)
 
 .PHONY: web build cross snapshot release-check test test-web lint lint-web fmt generate clean dev-daemon bench
 
 web: ## Build the dashboard into web/dist
 	cd web && $(PNPM) install --frozen-lockfile && $(PNPM) build
 
-build: web ## Build bin/seelegent with the dashboard embedded
+build: web ## Build bin/seelegent with the dashboard embedded, and its companion launcher bin/seelegent-launch
 	$(GO) build -trimpath -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/$(BINARY) ./cmd/seelegent
+	$(GO) build -trimpath -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/$(LAUNCHER) ./cmd/seelegent-launch
 
-cross: web ## Build seelegent for every release target into dist/cross/<os>_<arch>/ (no archives)
+cross: web ## Build seelegent and seelegent-launch for every release target into dist/cross/<os>_<arch>/ (no archives)
 	for t in $(CROSS_TARGETS); do \
 		os=$${t%/*}; arch=$${t#*/}; ext=; \
 		if [ "$$os" = windows ]; then ext=.exe; fi; \
-		CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch $(GO) build -trimpath -ldflags "$(LDFLAGS)" \
-			-o dist/cross/$${os}_$${arch}/seelegent$$ext ./cmd/seelegent; \
+		for b in seelegent seelegent-launch; do \
+			CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch $(GO) build -trimpath -ldflags "$(LDFLAGS)" \
+				-o dist/cross/$${os}_$${arch}/$$b$$ext ./cmd/$$b; \
+		done; \
 	done
 
 snapshot: ## Build the release archives and checksums.txt into dist/ with GoReleaser, publishing nothing

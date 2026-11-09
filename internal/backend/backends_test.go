@@ -831,6 +831,20 @@ func TestParserHelpers(t *testing.T) {
 	if _, ok := parseUsage([]byte(`[1]`)); ok {
 		t.Error("parseUsage accepted an array")
 	}
+	// Cache writes: the total, its one-hour part from the split, the split's sum without a total, and a split
+	// larger than the total clamped to it.
+	for raw, want := range map[string][2]int64{
+		`{"input_tokens":1,"cache_creation_input_tokens":4100}`: {4100, 0},
+		`{"input_tokens":1,"cache_creation_input_tokens":4100,"cache_creation":{"ephemeral_5m_input_tokens":100,"ephemeral_1h_input_tokens":4000}}`: {4100, 4000},
+		`{"input_tokens":1,"cache_creation":{"ephemeral_5m_input_tokens":100,"ephemeral_1h_input_tokens":4000}}`:                                    {4100, 4000},
+		`{"input_tokens":1,"cache_creation_input_tokens":10,"cache_creation":{"ephemeral_1h_input_tokens":4000}}`:                                   {10, 10},
+		`{"input_tokens":1,"cache_creation_input_tokens":-5}`:                                                                                       {0, 0},
+	} {
+		u, ok := parseUsage([]byte(raw))
+		if !ok || u.CacheWriteTokens != want[0] || u.CacheWrite1hTokens != want[1] || u.InputTokens != 1 {
+			t.Errorf("parseUsage(%s) = %+v", raw, u)
+		}
+	}
 	if stringField([]byte(`not json`), "x") != "" || stringField([]byte(`{"a":" ","b":"v"}`), "a", "b") != "v" {
 		t.Error("stringField")
 	}

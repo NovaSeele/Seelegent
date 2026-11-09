@@ -130,6 +130,13 @@ func TestSpendSourcesMigration(t *testing.T) {
 			updated_at) VALUES ('deepseek', 'x', -1, 1, ?)`, after); err == nil {
 			t.Error("a negative price was stored")
 		}
+		// 0015: the cache-write price, NULL or not negative.
+		if _, err := tx.ExecContext(ctx, `UPDATE provider_prices SET cache_write_usd = 0.3375 WHERE model = '*'`); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE provider_prices SET cache_write_usd = -1 WHERE model = '*'`); err == nil {
+			t.Error("a negative cache-write price was stored")
+		}
 		if _, err := tx.ExecContext(ctx, `DELETE FROM accounts WHERE provider = 'deepseek'`); err != nil {
 			return err
 		}

@@ -147,4 +147,14 @@ func TestRecordAttemptPrices(t *testing.T) {
 	if src, usd := stored(); src != account.SpendPrices || usd != 0.9 {
 		t.Fatalf("stored again %s %v", src, usd)
 	}
+	// The same attempt with its cache writes (100k, 50k of them for one hour) at the default rule: 50k × 2.5 +
+	// 50k × 4 = 0.325 more, replacing the 0.9.
+	attempt.Usage.CacheWriteTokens, attempt.Usage.CacheWrite1hTokens = 100_000, 50_000
+	f.record(attempt)
+	if a, err = m.Get(ctx, id); err != nil || a.Spent.USD != 1.225 {
+		t.Fatalf("with cache writes: %+v, %v", a.Spent, err)
+	}
+	if src, usd := stored(); src != account.SpendPrices || usd != 1.225 {
+		t.Fatalf("stored with cache writes %s %v", src, usd)
+	}
 }

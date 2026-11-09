@@ -482,7 +482,8 @@ data is refused.
 To uninstall:
 
 1. `seelegent stop`, then `seelegent setup --remove` (removes the MCP entries, the lead skill and the hook).
-2. Delete the binary and the kept `seelegent.exe.previous` (`seelegent.previous`) next to it:
+2. Delete the binary, its companion launcher `seelegent-launch.exe` (`seelegent-launch`) and the kept `.previous`
+   files next to them:
    `%LOCALAPPDATA%\Programs\seelegent\bin\` on Windows, `~/.local/bin/seelegent*` elsewhere. Remove that folder from
    your PATH (the user `Path` on Windows, the `export PATH=...` line the installer added to your shell profile
    elsewhere).

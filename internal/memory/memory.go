@@ -1,5 +1,5 @@
 // Package memory keeps the per-project notes the lead writes for workers and the lead's review verdicts. Both are
-// keyed by the project key of the folder (fsutil.ProjectKey), so every spelling of one folder shares them, and both
+// keyed by the project key of the folder (projectkey.Key), so every spelling of one folder shares them, and both
 // live in seelegent.db (migration 0005): the notes in project_memory, the verdicts in review_history. The notes are
 // capped at MaxBytes; an append or replace that would exceed the cap is refused, never truncated.
 package memory
@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/NovaSeele/Seelegent/internal/api"
-	"github.com/NovaSeele/Seelegent/internal/fsutil"
+	"github.com/NovaSeele/Seelegent/internal/projectkey"
 )
 
 // MaxBytes caps the notes of one project. The old version had no cap; the notes go into every worker brief, so a
@@ -74,7 +74,7 @@ func (n Note) API() api.Memory {
 // Project returns the project key and canonical folder of cwd, which must be an absolute path to an existing
 // folder.
 func Project(cwd string) (key, canonical string, err error) {
-	canonical, key, _, err = fsutil.ProjectOf(cwd)
+	canonical, key, _, err = projectkey.Of(cwd)
 	if err != nil {
 		return "", "", fmt.Errorf("%w: %w", ErrInvalid, err)
 	}
