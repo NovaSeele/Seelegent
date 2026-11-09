@@ -26,6 +26,7 @@ import (
 // The test binary plays three parts, chosen by its first argument:
 //
 //	__launch <dir>          the launcher (Run)
+//	__die <dir>             a launcher that exits with dieCode before it does anything
 //	worker <step>...        a fake worker CLI that runs the steps in order
 //	daemon <dir> <step>...  a daemon that starts a launch and exits at once (restart survival)
 func TestMain(m *testing.M) {
@@ -45,6 +46,8 @@ func TestMain(m *testing.M) {
 				os.Exit(1)
 			}
 			os.Exit(0)
+		case "__die":
+			os.Exit(dieCode)
 		case "worker":
 			os.Exit(runWorker(os.Args[2:]))
 		case "daemon":
@@ -58,6 +61,9 @@ func TestMain(m *testing.M) {
 	}
 	os.Exit(m.Run())
 }
+
+// dieCode is the exit code of the __die launcher.
+const dieCode = 7
 
 // envPlainLauncher makes the test launcher keep Go's default handling of SIGTERM.
 const envPlainLauncher = "LAUNCH_TEST_PLAIN_LAUNCHER"
@@ -529,6 +535,31 @@ func TestStartFailedWorker(t *testing.T) {
 	}
 	if lines := collect(t, h, 0); len(lines) != 0 {
 		t.Fatalf("lines %v", texts(lines))
+	}
+}
+
+// TestStartNoticesALauncherThatDiesBeforeReady: a launcher that exits before it wrote a ready or an exit record
+// fails Start as soon as it is reaped, with its exit status, not at the ready timeout. (One that wrote its exit
+// record first still gives a handle: TestStartFailedWorker.)
+func TestStartNoticesALauncherThatDiesBeforeReady(t *testing.T) {
+	opts := testOptions(filepath.Join(t.TempDir(), "a1"), "exit:0")
+	opts.Launcher = []string{selfExe(), "__die"}
+	opts.ReadyTimeout = 30 * time.Second
+	began := time.Now()
+	h, err := Start(context.Background(), opts)
+	took := time.Since(began)
+	if err == nil {
+		t.Fatalf("Start gave a handle for %s, whose launcher died before the worker ran", h.Files().Dir)
+	}
+	if !strings.Contains(err.Error(), "launcher exited before starting the worker") {
+		t.Fatalf("Start: %v", err)
+	}
+	var exit *exec.ExitError
+	if !errors.As(err, &exit) || exit.ExitCode() != dieCode {
+		t.Fatalf("Start: %v, want the launcher's exit status %d", err, dieCode)
+	}
+	if took > 10*time.Second {
+		t.Fatalf("Start took %v to notice the dead launcher", took)
 	}
 }
 

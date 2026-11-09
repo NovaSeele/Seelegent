@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -212,5 +214,129 @@ func TestTailWakesWhenTheWatchedLauncherEnds(t *testing.T) {
 	ex := wait(t, h)
 	if late := returned.Sub(ex.EndedAt); late > exitCheckIdle {
 		t.Fatalf("Tail returned %v after the launcher wrote its exit record, want it woken by the watch", late)
+	}
+}
+
+// Goroutine stacks that tell the waits on a launcher apart.
+const (
+	reaperFrame = "created by github.com/NovaSeele/Seelegent/internal/launch.Start"
+	watchFrame  = "internal/platform.watchProcess"
+)
+
+// goroutinesWith counts the goroutines whose stack holds frame.
+func goroutinesWith(frame string) int {
+	buf := make([]byte, 1<<16)
+	for {
+		n := runtime.Stack(buf, true)
+		if n < len(buf) {
+			buf = buf[:n]
+			break
+		}
+		buf = make([]byte, 2*len(buf))
+	}
+	count := 0
+	for _, g := range strings.Split(string(buf), "\n\n") {
+		if strings.Contains(g, frame) {
+			count++
+		}
+	}
+	return count
+}
+
+// sameChan reports whether a and b are the same channel.
+func sameChan(a, b <-chan struct{}) bool { return a == b }
+
+// settledWatches waits up to a few seconds for the watches of earlier tests to end and returns how many are left.
+func settledWatches() int {
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		n := goroutinesWith(watchFrame)
+		if n == 0 || time.Now().After(deadline) {
+			return n
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+// TestStartedLaunchWaitsOnce: a launch this daemon started is waited for once, by the reaper (cmd.Wait): its tails
+// share the reaper's channel and start no platform.WatchProcess, so a running launcher blocks one goroutine (and
+// OS thread) of the daemon, not two. A handle attached to the same launch, as after a daemon restart, has no child
+// to reap and watches the launcher instead.
+func TestStartedLaunchWaitsOnce(t *testing.T) {
+	watches := settledWatches()
+	reapers := goroutinesWith(reaperFrame)
+	dir := filepath.Join(t.TempDir(), "a1")
+	h, err := Start(context.Background(), testOptions(dir, "print:one", "sleep:2000", "exit:0"))
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	t.Cleanup(func() { // a failed check leaves no launcher holding the temp dir
+		_ = h.Cancel()
+		select {
+		case <-h.reaped:
+		case <-time.After(10 * time.Second):
+		}
+	})
+	if n := goroutinesWith(reaperFrame) - reapers; n > 1 {
+		t.Fatalf("Start left %d goroutines waiting on its launcher, want one", n)
+	}
+	type result struct {
+		lines []string
+		err   error
+	}
+	tailed := make(chan result, 1)
+	go func() {
+		var r result
+		r.err = h.Tail(context.Background(), 0, func(b []byte, _ int64) error {
+			r.lines = append(r.lines, string(b))
+			return nil
+		})
+		tailed <- r
+	}()
+	deadline := time.Now().Add(5 * time.Second)
+	var done <-chan struct{}
+	for done == nil && time.Now().Before(deadline) {
+		h.watchMu.Lock()
+		if h.watch != nil {
+			done = h.watch.done
+		}
+		h.watchMu.Unlock()
+		time.Sleep(20 * time.Millisecond)
+	}
+	if done == nil {
+		t.Fatal("the tail does not watch the launcher")
+	}
+	if !sameChan(done, h.reaped) {
+		t.Fatal("the tail watches the launcher with a wait of its own, want the reaper's")
+	}
+	if n := goroutinesWith(watchFrame); n != watches {
+		t.Fatalf("%d process watches run during the tail, want %d: a started launch must not be watched twice", n,
+			watches)
+	}
+
+	attached, err := Attach(dir)
+	if err != nil {
+		t.Fatalf("Attach: %v", err)
+	}
+	if again, release := attached.watchLauncher(); again != nil {
+		if again == done {
+			t.Fatal("an attached handle shares the reaper of another handle")
+		}
+		if n := goroutinesWith(watchFrame); n != watches+1 {
+			t.Fatalf("%d process watches with an attached tail, want %d", n, watches+1)
+		}
+		release()
+	}
+
+	if r := <-tailed; r.err != nil || fmt.Sprint(r.lines) != "[one]" {
+		t.Fatalf("Tail: %v %v", r.lines, r.err)
+	}
+	select {
+	case <-h.reaped:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the launcher was not reaped after its launch ended")
+	}
+	if h.reapErr != nil {
+		t.Fatalf("reaping the launcher: %v", h.reapErr)
 	}
 }

@@ -91,10 +91,34 @@ type Options struct {
 	Started func(*Handle)
 }
 
-// Handle follows one launch from the daemon. It holds no process handle, so it is equally valid for a launch
-// started by an earlier daemon (see Attach). It is safe for concurrent use.
+// Handle follows one launch from the daemon. It is equally valid for a launch started by an earlier daemon (see
+// Attach): the files and the launcher lock are what it reads. It is safe for concurrent use.
+//
+// # One wait per launcher
+//
+// A wait for a process blocks an OS thread of the daemon (WaitForSingleObject on Windows, waitid or wait4 on Unix),
+// and the Go runtime never gives a thread back, so each running launcher costs one thread and its handles for every
+// wait on it. There is one:
+//
+//   - A handle from Start owns the launcher as a child: one goroutine calls cmd.Wait, which reaps the launcher on
+//     Unix (no zombie) and closes the process handle on Windows. It closes reaped when it returns, and that channel
+//     is everything else's news of the launcher's end: Start's look for a launcher that died before the worker ran
+//     (reapErr says how it ended) and the tails' watch (watchLauncher). platform.WatchProcess is never used for it,
+//     so on Unix nothing but cmd.Wait waits for the child and no pidfd poll can race its wait4.
+//   - A handle from Attach (after a daemon restart) has no child to wait for: the launcher belongs to an earlier
+//     daemon. Its tails watch the launcher with platform.WatchProcess, which never reaps (a process that is not a
+//     child cannot be reaped), and fall back to polling where the system cannot watch (noWatch).
+//
+// Either way the channel only says when to look at the files: the exit record, the ready record and the launcher
+// lock stay the answer. A wait that fails also closes reaped, which merely makes Exited look at the files at every
+// call from then on.
 type Handle struct {
 	files Files
+
+	// reaped is closed once cmd.Wait on the launcher returned (a handle from Start; nil for Attach); reapErr is
+	// what it returned, readable once reaped is closed.
+	reaped  chan struct{}
+	reapErr error
 
 	mu        sync.Mutex
 	lastProbe time.Time
@@ -165,13 +189,16 @@ func Start(ctx context.Context, opts Options) (*Handle, error) {
 	// and a worker cannot connect before its tree is known.
 	launcher := cmd.Process.Pid
 	start, _ := platform.ProcessStartTime(launcher)
-	h := &Handle{files: f, tree: &platform.WorkerTree{ID: f.Dir, RootPID: launcher, RootStart: start, Job: job}}
+	h := &Handle{files: f, tree: &platform.WorkerTree{ID: f.Dir, RootPID: launcher, RootStart: start, Job: job},
+		reaped: make(chan struct{})}
+	// The only wait on the launcher (see Handle): it reaps it if it ends while this daemon still runs.
+	go func() {
+		h.reapErr = cmd.Wait()
+		close(h.reaped)
+	}()
 	if opts.Started != nil {
 		opts.Started(h)
 	}
-
-	exited := make(chan error, 1)
-	go func() { exited <- cmd.Wait() }() // reap the launcher if it ends while this daemon still runs
 
 	timeout := opts.ReadyTimeout
 	if timeout <= 0 {
@@ -186,11 +213,11 @@ func Start(ctx context.Context, opts Options) (*Handle, error) {
 			return h, nil
 		}
 		select {
-		case err := <-exited:
+		case <-h.reaped:
 			if exists(f.Ready) || exists(f.Exit) {
 				return h, nil
 			}
-			return nil, fmt.Errorf("start launch: launcher exited before starting the worker: %w", err)
+			return nil, fmt.Errorf("start launch: launcher exited before starting the worker: %w", h.reapErr)
 		case <-ctx.Done():
 			// Ask a launcher that is still starting to stop the worker as soon as it runs.
 			_ = h.Cancel()
@@ -364,13 +391,17 @@ type launcherWatch struct {
 }
 
 // watchLauncher starts (or joins) a wait on the launcher process; release ends the caller's share, and the wait
-// ends with the last one. done is nil when the launcher cannot be waited for (its tree is not known or not
-// checked yet, or the system cannot wait for it): the caller looks for the end by polling then, and may try again
-// later. A launcher the system could not wait for once is not tried again (noWatch).
+// ends with the last one. A handle from Start shares its one wait, cmd.Wait (reaped), and starts none. done is nil
+// when the launcher cannot be waited for (its tree is not known or not checked yet, or the system cannot wait for
+// it): the caller looks for the end by polling then, and may try again later. A launcher the system could not wait
+// for once is not tried again (noWatch).
 func (h *Handle) watchLauncher() (done <-chan struct{}, release func()) {
 	h.watchMu.Lock()
 	defer h.watchMu.Unlock()
-	if h.noWatch {
+	if h.watch == nil && h.reaped != nil {
+		h.watch = &launcherWatch{done: h.reaped, cancel: func() {}}
+	}
+	if h.watch == nil && h.noWatch {
 		return nil, func() {}
 	}
 	if h.watch == nil {
