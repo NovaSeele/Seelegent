@@ -330,7 +330,7 @@
     },
     "passiveCooldown": {
       "label": "Descanso de clave de API",
-      "desc": "Cuánto descansa una cuenta con clave de API tras alcanzar un límite (su cuota no se puede leer).",
+      "desc": "Descanso más largo de una cuenta con clave de API tras alcanzar un límite sin hora de reinicio (su cuota no se puede leer). Los descansos suben a 1, 5 y 15 minutos y luego a este valor mientras sigan llegando límites, y vuelven a 1 minuto tras un rato de calma.",
       "keywords": "enfriamiento pasivo clave api límite de uso"
     },
     "usageHistory": {

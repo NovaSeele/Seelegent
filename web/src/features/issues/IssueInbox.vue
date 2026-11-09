@@ -243,6 +243,7 @@ function decide(issue: Issue) {
 }
 
 .issue__text {
+  position: relative;
   max-height: 320px;
   margin-top: var(--space-2);
   overflow: auto;

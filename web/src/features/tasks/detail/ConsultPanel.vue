@@ -124,6 +124,7 @@ watch(open, (value) => {
 }
 
 .cp__list {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: var(--space-3);

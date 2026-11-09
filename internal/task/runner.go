@@ -721,10 +721,15 @@ func (s *Service) finishAttempt(r *run, id string, turn, n int, accountID, model
 	o := res.outcome
 	status, errText := classify(o, res.exit, set.TaskTimeoutMinutes)
 	cur, curErr := s.repo.Get(ctx, id)
+	maxAttempts := s.maxAttempts(ctx, b.Name())
+	// fresh: the attempt replayed its conversation's error; the next attempt starts a new conversation.
+	fresh := false
 	if status == AttemptTransient && curErr == nil {
 		switch tu := cur.TurnN(turn); {
 		case staleReplay(tu, n, o, res, b.Capabilities().ReplaysErrors):
-			status, errText = staleError(cur, tu, b.Name(), &o)
+			counted, _ := attemptBudget(tu, n, AttemptTransient)
+			status, errText = staleError(cur, tu, n, counted >= maxAttempts, b.Name(), &o)
+			fresh = status == AttemptTransient
 		case o.RecoveryAnswer != "" && reportComplete(cur, tu, o.RecoveryFinal):
 			status, errText = recovered(b.Name(), &o)
 		}
@@ -750,7 +755,6 @@ func (s *Service) finishAttempt(r *run, id string, turn, n int, accountID, model
 			s.log.Warn("task: rest the account without credit", "account", accountID, "err", err)
 		}
 	}
-	maxAttempts := s.maxAttempts(ctx, b.Name())
 	// preCheck runs the post-turn checks only when this attempt may end the turn: when its budget is used up.
 	used, limit := n, maxAttempts
 	if curErr == nil {
@@ -784,6 +788,13 @@ func (s *Service) finishAttempt(r *run, id string, turn, n int, accountID, model
 		if o.ConversationID != "" {
 			a.ConversationID = o.ConversationID
 			t.AccountID, t.ConversationID = accountID, o.ConversationID
+		}
+		if fresh {
+			// Resuming would replay the error again: the task keeps its account (the next attempt stays on it when
+			// it can run) but forgets the conversation, so the next attempt starts a new one with the full brief and
+			// what the earlier attempts left (prompt: the handoff section).
+			a.StaleReplay = true
+			t.AccountID, t.ConversationID = accountID, ""
 		}
 		finish, said := closingEvents(res.finish)
 		evs := make([]NewEvent, 0, len(finish)+4)
@@ -836,11 +847,11 @@ func (s *Service) finishAttempt(r *run, id string, turn, n int, accountID, model
 		case status == AttemptTransient:
 			k := 0
 			for _, x := range tu.Attempts {
-				if x.Status == AttemptTransient && x.AccountID == accountID {
+				if x.Status == AttemptTransient && x.AccountID == accountID && !x.StaleReplay {
 					k++
 				}
 			}
-			if delays := retryDelays(); k <= len(delays) && !res.interrupted {
+			if delays := retryDelays(); k >= 1 && k <= len(delays) && !res.interrupted {
 				retry = delays[k-1]
 				evs = append(evs, NewEvent{Type: api.EventRetry, Turn: turn, Attempt: n,
 					Data: api.RetryData{DelayMs: retry.Milliseconds(), Error: errText}})
@@ -982,7 +993,8 @@ const replaySlack = 30 * time.Second
 // (agy then reports the whole conversation's duration: 555 s for a run of 15 s), and then: the attempt resumed the
 // conversation of the attempt before it, which also ended transient, and the CLI reported the byte-identical error.
 // An error Seelegent made up because the CLI wrote no report, or an attempt that ended any other way than by
-// exiting, is never a replay.
+// exiting, is never a replay; nor is an attempt in a new conversation, such as the one that follows a replay
+// (staleError).
 func staleReplay(tu *Turn, n int, o backend.Outcome, res attemptResult, replays bool) bool {
 	if !replays || tu == nil || n < 2 || n > len(tu.Attempts) || o.Error == "" || res.interrupted ||
 		res.exit.Reason != launch.ReasonExited {
@@ -1008,11 +1020,15 @@ func staleReplay(tu *Turn, n int, o backend.Outcome, res attemptResult, replays 
 	return true
 }
 
-// staleError judges an attempt that replayed its conversation's error (staleReplay). When its final answer is the
-// complete report (reportComplete, as for a network error after the final answer) the worker finished: the attempt
-// is a success with a warning. Otherwise resuming again or redoing the work on another account would not help: the
-// turn fails with a message that says where the work may be.
-func staleError(t *Task, tu *Turn, backendName string, o *backend.Outcome) (status, text string) {
+// staleError judges attempt n of turn tu, which replayed its conversation's error (staleReplay). When its final
+// answer is the complete report (reportComplete, as for a network error after the final answer) the worker
+// finished: the attempt is a success with a warning. Otherwise resuming again would only replay the error, but the
+// work is not lost: the attempt stays transient with a warning, and finishAttempt makes the next attempt start a new
+// conversation (Attempt.StaleReplay), whose brief lists the files the earlier attempts edited and the last report
+// one gave. That happens once per turn and only while the turn has an attempt left: when an earlier attempt of the
+// turn already replayed a stale error, or last (this attempt used up the turn's attempt budget), the turn fails with
+// a message that says where the work may be, not with "gave up after N attempts" and the stale error.
+func staleError(t *Task, tu *Turn, n int, last bool, backendName string, o *backend.Outcome) (status, text string) {
 	if o.RecoveryAnswer != "" && reportComplete(t, tu, o.RecoveryFinal) {
 		o.Warning = fmt.Sprintf("%s repeated the error of its previous attempt, which it replays from its "+
 			"conversation; its report is kept: %s", backendName, o.Error)
@@ -1020,8 +1036,21 @@ func staleError(t *Task, tu *Turn, backendName string, o *backend.Outcome) (stat
 		o.Status, o.Class, o.Error = backend.OutcomeOK, "", ""
 		return AttemptOK, ""
 	}
-	return AttemptError, fmt.Sprintf("%s repeats a stale error from its conversation (%s); the work may already "+
-		"be on disk: check the diff and delegate a new task", backendName, o.Error)
+	failed := fmt.Sprintf("%s repeats a stale error from its conversation (%s); the work may already be on disk: "+
+		"check the diff and delegate a new task", backendName, o.Error)
+	for _, a := range tu.Attempts[:n-1] {
+		if a.StaleReplay {
+			return AttemptError, failed
+		}
+	}
+	if last {
+		o.Warning = backendName + " replays a stale error from its conversation; the turn has no attempt left " +
+			"for a new conversation"
+		return AttemptError, failed
+	}
+	o.Warning = backendName + " replays a stale error from its conversation; the next attempt starts a new " +
+		"conversation"
+	return AttemptTransient, o.Error
 }
 
 // endTurnChecked closes a turn with the outcome of its last attempt and returns its turn_end event. c holds the
@@ -1246,7 +1275,8 @@ func (s *Service) attemptDir(id string, turn, n int) string {
 }
 
 // excluded lists the accounts this turn must not use again: those that needed a sign-in, and those that failed
-// transiently more often than the retries allow.
+// transiently more often than the retries allow. A replayed stale error (Attempt.StaleReplay) is no new failure of
+// the account: it does not count.
 func excluded(tu *Turn) []string {
 	var out []string
 	transient := map[string]int{}
@@ -1257,7 +1287,9 @@ func excluded(tu *Turn) []string {
 				out = append(out, a.AccountID)
 			}
 		case AttemptTransient:
-			transient[a.AccountID]++
+			if !a.StaleReplay {
+				transient[a.AccountID]++
+			}
 		}
 	}
 	for id, k := range transient {

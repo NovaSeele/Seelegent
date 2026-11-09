@@ -96,6 +96,7 @@ const Render = () => blocks.value.map(block)
 }
 
 .rt :deep(.rt-pre) {
+  position: relative;
   max-width: 100%;
   overflow-x: auto;
   padding: var(--space-2) var(--space-3);

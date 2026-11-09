@@ -191,6 +191,7 @@ function onKeydown(event: KeyboardEvent) {
 }
 
 .picker__list {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: var(--space-2);

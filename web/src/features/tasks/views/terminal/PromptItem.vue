@@ -132,6 +132,7 @@ watch(
 }
 
 .brief__text {
+  position: relative;
   max-height: 32em;
   margin: 0;
   padding: var(--space-2) var(--space-3) var(--space-3);

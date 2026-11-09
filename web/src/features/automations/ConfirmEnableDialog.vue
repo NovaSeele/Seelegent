@@ -271,6 +271,7 @@ async function turnOn() {
 }
 
 .conf__prompt {
+  position: relative;
   max-height: 280px;
   margin: 0;
   padding: var(--space-3);

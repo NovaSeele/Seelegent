@@ -161,6 +161,7 @@ function toggle(name: string, on: boolean) {
 }
 
 .skills__list {
+  position: relative;
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr));
   gap: var(--space-2);

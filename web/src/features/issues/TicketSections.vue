@@ -258,6 +258,7 @@ function outboxState(o: OutboxEntry): string {
 }
 
 .item__text {
+  position: relative;
   flex-basis: 100%;
   max-height: 160px;
   overflow: auto;

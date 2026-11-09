@@ -100,6 +100,7 @@ onBeforeUnmount(() => observer?.disconnect())
 
 <style scoped>
 .tabs {
+  position: relative;
   display: flex;
   gap: var(--space-1);
   overflow-x: auto;
