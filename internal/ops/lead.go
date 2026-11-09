@@ -11,14 +11,15 @@ import (
 	"strings"
 
 	"github.com/NovaSeele/Seelegent/internal/api"
+	"github.com/NovaSeele/Seelegent/internal/mcpwire"
 )
 
 // Environment variables that name the lead session.
 const (
 	// EnvLead names the lead host (setup writes it into every MCP entry): one of api.Leads.
-	EnvLead = "SEELEGENT_LEAD"
+	EnvLead = mcpwire.EnvLead
 	// EnvSession is the lead's session id; it wins over the host's own variables.
-	EnvSession = "SEELEGENT_SESSION"
+	EnvSession = mcpwire.EnvSession
 )
 
 // normLead returns the lead in lower case when it is one of api.Leads, else "".
@@ -37,11 +38,11 @@ func DetectLead(getenv func(string) string) string {
 		return l
 	}
 	switch {
-	case getenv("CLAUDE_CODE_SESSION_ID") != "":
+	case getenv(mcpwire.EnvClaudeSession) != "":
 		return api.LeadClaude
-	case getenv("CODEX_SESSION_ID") != "" || getenv("CODEX_THREAD_ID") != "":
+	case getenv(mcpwire.EnvCodexSession) != "" || getenv(mcpwire.EnvCodexThread) != "":
 		return api.LeadCodex
-	case getenv("GEMINI_SESSION_ID") != "" || getenv("GEMINI_CLI_SESSION") != "":
+	case getenv(mcpwire.EnvGeminiSession) != "" || getenv(mcpwire.EnvGeminiCLISession) != "":
 		return api.LeadGemini
 	}
 	return api.LeadCLI
@@ -52,9 +53,9 @@ func DetectLead(getenv func(string) string) string {
 func MCPSession(getenv func(string) string) *api.Session {
 	id := getenv(EnvSession)
 	if id == "" {
-		id = getenv("CLAUDE_CODE_SESSION_ID")
+		id = getenv(mcpwire.EnvClaudeSession)
 	}
-	return &api.Session{ID: id, HostID: getenv("CLAUDE_CODE_HOST_SESSION_ID"), Lead: DetectLead(getenv)}
+	return &api.Session{ID: id, HostID: getenv(mcpwire.EnvClaudeHostSession), Lead: DetectLead(getenv)}
 }
 
 // CLISession is the session the command line sends with a delegate: SEELEGENT_SESSION as its id and the lead as
