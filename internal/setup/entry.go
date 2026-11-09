@@ -12,6 +12,10 @@ import (
 // ServerName is the name of Seelegent's MCP server in every host config.
 const ServerName = "seelegent"
 
+// relayName is the companion's file name without extension (launchbin.Name), which runs the MCP relay with the
+// argument mcp.
+const relayName = "seelegent-launch"
+
 // EnvLead tells the MCP server which host started it (ops.EnvLead, which setup does not import).
 const EnvLead = "SEELEGENT_LEAD"
 
@@ -36,8 +40,8 @@ func LeadValue(hostID string) string {
 	return lead
 }
 
-// desired is the entry setup registers for a host: the executable with the argument "mcp" and, when the MCP server
-// knows the host, SEELEGENT_LEAD.
+// desired is the entry setup registers for a host: the command (seelegent, or the relay seelegent-launch) with the
+// argument "mcp" and, when the MCP server knows the host, SEELEGENT_LEAD.
 func desired(exe, hostID string) Entry {
 	e := Entry{Command: exe, Args: []string{"mcp"}}
 	if v := LeadValue(hostID); v != "" {
@@ -46,15 +50,15 @@ func desired(exe, hostID string) Entry {
 	return e
 }
 
-// isOurs reports whether e is a Seelegent entry: the Go executable (or the old seelegent.cmd shim) with the single
-// argument "mcp", or an entry of the Node version, `node <...seelegent...>/cli.js mcp`. Anything else under the name
+// isOurs reports whether e is a Seelegent entry: the Go executable (or the old seelegent.cmd shim), or the MCP relay
+// seelegent-launch, with the single argument "mcp", or an entry of the Node version, `node <...seelegent...>/cli.js mcp`. Anything else under the name
 // "seelegent" belongs to someone else and is never changed without --force.
 func isOurs(e Entry) bool {
 	base := strings.ToLower(path.Base(strings.ReplaceAll(e.Command, `\`, "/")))
 	for _, ext := range []string{".exe", ".cmd", ".bat"} {
 		base = strings.TrimSuffix(base, ext)
 	}
-	if base == "seelegent" && len(e.Args) == 1 && strings.EqualFold(e.Args[0], "mcp") {
+	if (base == "seelegent" || base == relayName) && len(e.Args) == 1 && strings.EqualFold(e.Args[0], "mcp") {
 		return true
 	}
 	// Node era: command node, args [<path>/cli.js, mcp] (or the whole line in command).

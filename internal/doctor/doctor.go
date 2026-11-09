@@ -102,7 +102,8 @@ func Run(ctx context.Context, o Options) []Check {
 	}
 	out = append(out, portFile(o), dashboard(o.Web))
 	if o.Launcher != nil {
-		out = append(out, launcher(o.Launcher()))
+		st := o.Launcher()
+		out = append(out, launcher(st), mcpRelay(st))
 	}
 	out = append(out, git(o.GitPath, o.GitWrapper))
 	out = append(out, backends(o)...)
@@ -259,6 +260,21 @@ func dashboard(web fs.FS) Check {
 // Windows than `seelegent __launch`.
 func launcher(s launchbin.Status) Check {
 	return Check{Name: "launcher", Status: OK, Message: launchbin.Describe(s)}
+}
+
+// mcpRelay says, as information, which MCP command `seelegent setup` registers with the lead hosts: the relay
+// `seelegent-launch mcp` when the companion is of this build (the MCP server then runs inside the daemon, about
+// 40 MB less private memory per host window on Windows), else `seelegent mcp`. Hosts set up before keep their
+// entry until `seelegent setup` (or an update) runs again.
+func mcpRelay(s launchbin.Status) Check {
+	if s.Usable {
+		return Check{Name: "mcp relay", Status: OK, Message: "setup registers `" + s.Path + " mcp` with the lead " +
+			"hosts: their MCP server runs inside the daemon (run `seelegent setup` for hosts that still start " +
+			"`seelegent mcp`)"}
+	}
+	return Check{Name: "mcp relay", Status: OK, Message: "setup registers `seelegent mcp` with the lead hosts " +
+		"(the relay `seelegent-launch mcp` needs " + s.Path + " of this build; " +
+		strings.TrimSuffix(s.Reason, ".") + ")"}
 }
 
 // git names the git Seelegent runs. A batch wrapper first on PATH (ServBay's or a package manager's git.cmd) is a

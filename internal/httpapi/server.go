@@ -27,6 +27,7 @@ import (
 	"github.com/NovaSeele/Seelegent/internal/backend"
 	"github.com/NovaSeele/Seelegent/internal/config"
 	"github.com/NovaSeele/Seelegent/internal/gitx"
+	"github.com/NovaSeele/Seelegent/internal/mcpwire"
 	"github.com/NovaSeele/Seelegent/internal/memory"
 	"github.com/NovaSeele/Seelegent/internal/platform"
 	"github.com/NovaSeele/Seelegent/internal/pool"
@@ -202,6 +203,9 @@ type Options struct {
 	// nil answer 501.
 	Tickets     Tickets
 	Automations Automations
+	// MCP serves the sessions of the companion's MCP relay (POST /mcp/relay, mcpserver.Relay); the route answers
+	// 404 when nil, as an older daemon does, and the relay then runs `seelegent mcp` instead.
+	MCP MCPRelay
 	// Backends are the worker CLIs by name.
 	Backends map[string]backend.Backend
 	// Probe configures the key tests of POST /providers/test (the zero value in production).
@@ -261,6 +265,8 @@ type Server struct {
 	suggestions  map[string]api.Suggestion
 	accountsKick chan struct{}
 	closed       bool
+	// relaySessions counts the relayed MCP sessions (relay.go).
+	relaySessions int
 
 	acc accountCache
 }
@@ -485,6 +491,9 @@ func (s *Server) routes() {
 	s.githubRoutes()
 	s.automationRoutes()
 	s.mux.HandleFunc("GET "+apiPrefix+"/events", s.serveEvents)
+	if s.o.MCP != nil {
+		s.mux.HandleFunc("POST "+mcpwire.RelayPath, s.serveRelay)
+	}
 	s.mux.HandleFunc(apiPrefix+"/", func(w http.ResponseWriter, r *http.Request) {
 		if allow := s.allowed(r); len(allow) > 0 {
 			// A route that exists, asked with another method: 405 with the methods it takes (final verification N4).

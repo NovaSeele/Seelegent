@@ -15,6 +15,12 @@ func (r Report) WriteText(w io.Writer) error {
 	}
 	if !r.Remove {
 		fmt.Fprintf(&b, "MCP server command: %s %s\n", quoteArg(r.Command), strings.Join(r.Args, " "))
+		switch {
+		case r.Relay:
+			b.WriteString("The hosts start the MCP relay; the MCP server runs inside the daemon.\n")
+		case r.RelayNote != "":
+			b.WriteString(r.RelayNote + "; the hosts start `seelegent mcp`.\n")
+		}
 	}
 	detected := 0
 	for _, h := range r.Hosts {

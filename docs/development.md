@@ -52,10 +52,18 @@ says when the companion is used). The companion exists to save memory: it is abo
 of about 51 MB, because it links no crypto package (any of them brings in the 32 MiB entropy buffer of
 `crypto/internal/fips140/drbg`, which Windows charges as commit).
 
+The companion's second role is the MCP relay: `seelegent-launch mcp` (`internal/relay`) copies a lead host's MCP
+messages to a session that runs inside the daemon (`POST /api/v1/mcp/relay`), so a host window costs a companion
+process instead of a full `seelegent mcp` ([mcp.md](mcp.md#the-mcp-relay)). `seelegent setup` registers it only for a
+companion of the same build, so development builds from a modified tree keep `seelegent mcp`; to try the relay,
+commit, build both with the same flags, and run `seelegent-launch mcp` by hand (it runs `seelegent mcp` from its
+folder when it cannot open a session, and says why on stderr).
+
 Rules that keep it so:
 
-- Nothing `cmd/seelegent-launch` imports may import `crypto/...`: that is `internal/launch` and what it imports
-  (today `platform` and `fsutil`). `go test ./cmd/seelegent-launch` (`TestLinksNoCrypto`) runs `go list -deps` for
+- Nothing `cmd/seelegent-launch` imports may import `crypto/...`: that is `internal/launch`, `internal/relay` and what
+  they import (today `platform`, `fsutil` and `mcpwire`). The relay therefore speaks raw HTTP/1.1 over `net` for its
+  upgrade and re-implements the few pieces of discovery it needs; `config`, `client`, `api` and `ops` link crypto. `go test ./cmd/seelegent-launch` (`TestLinksNoCrypto`) runs `go list -deps` for
   Windows, Linux and macOS and fails naming each crypto package found (`go list -deps -f '{{.ImportPath}}
   {{.Imports}}'` then shows who imports it). Hashing that needs crypto lives outside that set: project keys (SHA-1)
   are in `internal/projectkey`, not `fsutil`; Windows tree names use `math/rand/v2` (unique, not secret).

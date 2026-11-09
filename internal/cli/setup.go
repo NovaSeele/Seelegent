@@ -10,12 +10,14 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 
 	"github.com/spf13/cobra"
 
 	"github.com/NovaSeele/Seelegent/internal/buildinfo"
 	"github.com/NovaSeele/Seelegent/internal/config"
+	"github.com/NovaSeele/Seelegent/internal/launchbin"
 	"github.com/NovaSeele/Seelegent/internal/setup"
 )
 
@@ -133,7 +135,21 @@ func setupProcessEnv() (setup.Env, error) {
 	if err != nil {
 		return setup.Env{}, fmt.Errorf("home directory: %w", err)
 	}
-	return setup.Env{Home: home, GOOS: runtime.GOOS, Getenv: os.Getenv, LookPath: exec.LookPath, Run: runSetupHostCLI}, nil
+	return setup.Env{Home: home, GOOS: runtime.GOOS, Getenv: os.Getenv, LookPath: exec.LookPath, Run: runSetupHostCLI,
+		Relay: setupRelay}, nil
+}
+
+// setupRelay is the companion next to exe when it is of exe's build (launchbin.MatchFiles), so the hosts may start
+// it as the MCP relay; `seelegent update` replaces both together, which keeps them paired.
+func setupRelay(exe string) (string, error) {
+	companion := launchbin.PathNextTo(exe)
+	if _, err := os.Stat(companion); err != nil {
+		return "", fmt.Errorf("%s is not there", companion)
+	}
+	if err := launchbin.MatchFiles(exe, companion); err != nil {
+		return "", fmt.Errorf("%s is not of this build: %w", companion, err)
+	}
+	return companion, nil
 }
 
 // runSetupHostCLI runs a host CLI (claude mcp add ...) and captures its output.
@@ -181,4 +197,39 @@ func printSetupReport(cmd *cobra.Command, rep any, text func(io.Writer) error, f
 		return &quietError{msg: msg}
 	}
 	return nil
+}
+
+// resetHostsToPlainMCP points the MCP entries the lead hosts already have at `<exe> mcp` (update.Options.ResetHosts):
+// a rollback may restore a build whose setup and companion do not know the relay. Hosts without an entry are left
+// alone, and so is the skill.
+func resetHostsToPlainMCP(ctx context.Context, exe string) []string {
+	env, err := setupProcessEnv()
+	if err != nil {
+		return []string{"could not point the lead hosts at `seelegent mcp`: " + err.Error()}
+	}
+	env.Relay = nil
+	plan, err := setup.Run(ctx, env, setup.Request{Exe: exe, DryRun: true, NoSkill: true})
+	if err != nil {
+		return []string{"could not point the lead hosts at `seelegent mcp`: " + err.Error()}
+	}
+	var hosts []string
+	for _, it := range plan.Items {
+		if it.Kind == setup.KindMCP && it.Action == setup.ActionUpdated && !slices.Contains(hosts, it.Host) {
+			hosts = append(hosts, it.Host)
+		}
+	}
+	if len(hosts) == 0 {
+		return nil
+	}
+	rep, err := setup.Run(ctx, env, setup.Request{Exe: exe, Hosts: hosts, NoSkill: true})
+	if err != nil {
+		return []string{"could not point the lead hosts at `seelegent mcp`: " + err.Error()}
+	}
+	var warnings []string
+	for _, it := range rep.Items {
+		if it.Failed() {
+			warnings = append(warnings, fmt.Sprintf("setup %s %s: %s %s", it.Host, it.Kind, it.Action, it.Detail))
+		}
+	}
+	return warnings
 }

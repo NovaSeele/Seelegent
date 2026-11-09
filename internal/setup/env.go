@@ -32,6 +32,9 @@ type Env struct {
 	LookPath func(string) (string, error)
 	// Run runs a host CLI and returns its outcome; nil fails every run.
 	Run func(ctx context.Context, name string, args ...string) (RunResult, error)
+	// Relay returns the MCP relay to register instead of `<exe> mcp`: the companion seelegent-launch next to exe
+	// when it is of exe's build (launchbin), else an error that says why not. Nil never registers the relay.
+	Relay func(exe string) (string, error)
 }
 
 func (e Env) goos() string {

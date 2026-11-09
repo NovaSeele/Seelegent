@@ -92,6 +92,37 @@ type Server struct {
 
 // New builds the server with every tool registered.
 func New(o Options) (*Server, error) {
+	set, err := newToolSet(o.Tiers, Unavailable())
+	if err != nil {
+		return nil, err
+	}
+	return newServer(o, set)
+}
+
+// toolSet is the tool list and each tool's argument names: built once per tier models and shared by the servers of
+// the daemon's relayed sessions (Relay), so a session does not parse tools.json again.
+type toolSet struct {
+	defs        []toolDef
+	args        map[string][]string
+	unavailable map[string]bool
+}
+
+func newToolSet(tiers config.TierModels, unavailable map[string]bool) (*toolSet, error) {
+	defs, err := loadTools(tiers, unavailable)
+	if err != nil {
+		return nil, err
+	}
+	set := &toolSet{defs: defs, args: map[string][]string{}, unavailable: unavailable}
+	for _, d := range defs {
+		if set.args[d.Name], err = d.properties(); err != nil {
+			return nil, err
+		}
+	}
+	return set, nil
+}
+
+// newServer builds a server over a tool set (which it only reads).
+func newServer(o Options, set *toolSet) (*Server, error) {
 	if o.Daemon == nil {
 		return nil, errors.New("mcpserver: no daemon")
 	}
@@ -107,16 +138,7 @@ func New(o Options) (*Server, error) {
 	if o.Logger == nil {
 		o.Logger = slog.New(slog.DiscardHandler)
 	}
-	s := &Server{o: o, unavailable: Unavailable(), args: map[string][]string{}}
-	defs, err := loadTools(o.Tiers, s.unavailable)
-	if err != nil {
-		return nil, err
-	}
-	for _, d := range defs {
-		if s.args[d.Name], err = d.properties(); err != nil {
-			return nil, err
-		}
-	}
+	s := &Server{o: o, unavailable: set.unavailable, args: set.args}
 	s.mcp = mcp.NewServer(&mcp.Implementation{Name: serverName, Version: o.Version}, &mcp.ServerOptions{
 		Instructions: "Seelegent dispatches coding work to worker accounts (Antigravity/Gemini by default; other " +
 			"enabled backends and department members on request). You are the lead: design, write precise briefs, " +
@@ -128,7 +150,7 @@ func New(o Options) (*Server, error) {
 			Logging: &mcp.LoggingCapabilities{}}, //nolint:staticcheck // deprecated in 2026-07-28, still delivered
 	})
 	handlers := s.handlers()
-	for _, d := range defs {
+	for _, d := range set.defs {
 		h, ok := handlers[d.Name]
 		if s.unavailable[d.Name] {
 			h, ok = s.notAvailable(d.Name), true

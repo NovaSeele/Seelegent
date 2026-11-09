@@ -1,10 +1,10 @@
 package ops
 
-import "slices"
+import "github.com/NovaSeele/Seelegent/internal/mcpwire"
 
 // EnvWorker marks a worker process: the daemon sets SEELEGENT_WORKER=1 in every worker's environment
 // (account.EnvWorker). An MCP server or a command a worker starts inherits it.
-const EnvWorker = "SEELEGENT_WORKER"
+const EnvWorker = mcpwire.EnvWorker
 
 // WorkerMessage is the refusal a worker gets (the old worker guard's text).
 const WorkerMessage = "Seelegent is not available inside a Seelegent worker."
@@ -18,44 +18,9 @@ func (WorkerError) Error() string { return WorkerMessage }
 func IsWorker(getenv func(string) string) bool { return getenv(EnvWorker) == "1" }
 
 // Mutating reports whether operation name with this action changes anything, so a worker may not run it (old
-// mcp.js isMutating, inventory §1.3). The daemon refuses workers too (contract §1.3); this is the second layer, which
-// also covers operations whose daemon side is not built yet. Names are the MCP tool names; the command line maps
-// its commands onto them (run is delegate; stop, restart and ui are "daemon"). setup, migrate and restore are
-// command-line only: they change the host configs, the data folder and the user's files.
-func Mutating(name, action string) bool {
-	notIn := func(read ...string) bool { return !slices.Contains(read, action) }
-	switch name {
-	case "delegate", "followup", "review", "cancel", "consult", "daemon", "setup", "migrate", "restore":
-		return true
-	case "meeting":
-		return notIn("status", "list", "wait")
-	case "issues":
-		return notIn("repos", "list", "tickets", "ticket")
-	case "memory":
-		return action != "read"
-	case "profiles":
-		return action == "upsert" || action == "delete"
-	case "proof":
-		return action == "run" || action == "cancel_run"
-	case "notes":
-		return action != "list"
-	case "automations":
-		// The command line's show and preview only read: they are guarded as list. The daemon refuses every
-		// automation and GitHub endpoint to a worker all the same (its allow-list), so they answer forbidden there.
-		return notIn("list", "runs", "show", "preview")
-	case "contest":
-		return notIn("status", "wait", "list", "diff")
-	case "members":
-		// The MCP tool only lists (the old table never refused it); the command line's add, set and remove change.
-		return slices.Contains([]string{"add", "set", "remove"}, action)
-	case "hooks":
-		return action != "list"
-	case "update":
-		// Command-line only, every mode: it replaces the executable and restarts the daemon (old C-B12).
-		return true
-	}
-	return false
-}
+// mcp.js isMutating, inventory §1.3). The table is mcpwire.Mutating, which the companion's MCP relay shares to
+// tell which calls it may send again after a daemon restart.
+func Mutating(name, action string) bool { return mcpwire.Mutating(name, action) }
 
 // UnavailableError is a feature this version of Seelegent does not have yet. Front ends report it with the code
 // not_available.
