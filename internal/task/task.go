@@ -329,6 +329,9 @@ type Attempt struct {
 	StderrOffset int64 `json:"stderrOffset,omitempty"`
 	// Outcome is the folded result once the attempt ended.
 	Outcome *backend.Outcome `json:"outcome,omitempty"`
+	// StaleReplay: the attempt replayed its conversation's error (staleReplay) without a complete report, so the
+	// next attempt started a new conversation. A second replay in the same turn fails it (staleError).
+	StaleReplay bool `json:"staleReplay,omitempty"`
 
 	// Prompt is the full brief; stored in its own column and loaded only on request.
 	Prompt string `json:"-"`
