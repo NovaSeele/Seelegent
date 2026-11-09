@@ -10,6 +10,7 @@ import (
 
 	"github.com/NovaSeele/Seelegent/internal/api"
 	"github.com/NovaSeele/Seelegent/internal/client"
+	"github.com/NovaSeele/Seelegent/internal/mcpwire"
 )
 
 // Lookup says how Connect gets the daemon client.
@@ -31,7 +32,7 @@ type Connect func(ctx context.Context, how Lookup) (*client.Client, error)
 
 // DefaultStopGrace is how long a wait whose daemon said it was stopping looks (without starting one) for a daemon
 // that comes back, as after `seelegent restart`: its stop takes a few seconds and the start up to 20 s.
-const DefaultStopGrace = 40 * time.Second
+const DefaultStopGrace = mcpwire.StopGrace
 
 // CodeDaemonStopped is the error code of StoppedError (the CLI's --json and the MCP tools).
 const CodeDaemonStopped = "daemon_stopped"

@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/NovaSeele/Seelegent/internal/api"
+	"github.com/NovaSeele/Seelegent/internal/mcpwire"
 )
 
 func envOf(m map[string]string) func(string) string { return func(k string) string { return m[k] } }
@@ -43,5 +44,25 @@ func TestSessions(t *testing.T) {
 	}
 	if s := CLISession(envOf(map[string]string{"SEELEGENT_LEAD": "nobody"})); *s != (api.Session{Lead: "cli"}) {
 		t.Errorf("CLISession = %+v", s)
+	}
+}
+
+// TestSessionEnvCoversReads: every variable the MCP server reads through ops is in mcpwire.SessionEnv, the list the
+// companion's relay forwards to the daemon's MCP session (and nothing else is forwarded).
+func TestSessionEnvCoversReads(t *testing.T) {
+	read := map[string]bool{}
+	getenv := func(k string) string { read[k] = true; return "" }
+	MCPSession(getenv)
+	IsWorker(getenv)
+	DetectLead(getenv)
+	for k := range read {
+		if !mcpwire.Forwarded(k) {
+			t.Errorf("the MCP server reads %s, which the relay does not forward (mcpwire.SessionEnv)", k)
+		}
+	}
+	for _, k := range mcpwire.SessionEnv() {
+		if !read[k] {
+			t.Errorf("mcpwire.SessionEnv forwards %s, which the MCP server does not read", k)
+		}
 	}
 }

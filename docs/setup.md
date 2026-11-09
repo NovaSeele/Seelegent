@@ -28,7 +28,15 @@ seelegent setup [--host a,b] [--dry-run] [--remove] [--no-skill] [--hooks] [--fo
 | `--exe` | The executable the hosts start. Default: the running `seelegent`, with symbolic links resolved. It must be named `seelegent` (`seelegent.exe` on Windows), because setup recognizes its own entries by that name: with any other name (a `seelegent-dev.exe` build, a test binary) setup refuses before writing anything, a dry run too, and says to install or copy the binary as `seelegent` or to pass `--exe`. `--remove` is not checked. |
 | `--json` | Print the report as JSON (`setup.Report`). When an item failed, the report is the only document printed (exit 1). |
 
-Each host gets the entry `<exe> mcp` under the name `seelegent`. The entry's environment carries
+Each host gets the entry `<exe> mcp` under the name `seelegent`, or the MCP relay `<folder of exe>/seelegent-launch[.exe]
+mcp` when that companion is of the same build as `<exe>` (`launchbin.MatchFiles`: the checks of
+[release.md](release.md#the-companion-launcher), read from both files without running them). The relay runs the MCP
+server inside the daemon, about 40 MB less private memory per host window on Windows ([mcp.md](mcp.md#the-mcp-relay)).
+The report says which (`relay: true`, else `relayNote` with the reason; the text output prints a line). A build from
+a modified tree, or one without its companion, registers `<exe> mcp` as before. `seelegent update` replaces both
+executables together, so the pair stays matched, and its host refresh switches existing entries to the relay once
+the companion matches; a rollback first points existing entries back at `<exe> mcp`, because the restored build may
+not know the relay. `seelegent doctor` says which command setup registers (the `mcp relay` line). The entry's environment carries
 `SEELEGENT_LEAD`, which tells the MCP server which lead host started it. Its value is one the server knows: `claude`
 (Claude Code), `codex`, `opencode`, `agy` (Antigravity CLI and the Antigravity app) and `gemini` (Gemini CLI). Claude
 Desktop, Cursor and Windsurf have no value of their own, so their entries get no `SEELEGENT_LEAD`. The server then
@@ -54,8 +62,8 @@ The exit code is 1 when any item is `conflict` or `error`. Other items still run
 
 ### What setup changes
 
-- Seelegent's entry is recognised by its command: a file named `seelegent` (or `seelegent.exe`, `.cmd`, `.bat`) with
-  the single argument `mcp`, or the old version's `node …seelegent…/cli.js mcp`. Anything else under the name
+- Seelegent's entry is recognised by its command: a file named `seelegent` (or `seelegent.exe`, `.cmd`, `.bat`), or the
+  relay `seelegent-launch[.exe]`, with the single argument `mcp`, or the old version's `node …seelegent…/cli.js mcp`. Anything else under the name
   `seelegent` is foreign.
 - An existing Seelegent entry is updated in place. Its other keys and any extra environment variables (for example
   `SEELEGENT_HOME`) are kept. A `"disabled": true` is turned off.

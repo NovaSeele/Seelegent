@@ -245,6 +245,10 @@ func TestLauncherCheck(t *testing.T) {
 		{launchbin.Status{Path: "/bin/seelegent-launch", Present: true, Reason: "it is not of this build: x"},
 			"is not used (it is not of this build: x)"},
 	} {
+		if r := mcpRelay(c.st); r.Name != "mcp relay" || r.Status != OK ||
+			strings.HasPrefix(r.Message, "setup registers `seelegent mcp`") == c.st.Usable {
+			t.Errorf("mcpRelay(%+v) = %+v", c.st, r)
+		}
 		got := launcher(c.st)
 		if got.Name != "launcher" || got.Status != OK || !strings.Contains(got.Message, c.want) {
 			t.Errorf("launcher(%+v) = %+v, want OK naming %q", c.st, got, c.want)

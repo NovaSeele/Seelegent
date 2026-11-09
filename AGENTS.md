@@ -14,7 +14,10 @@ Seelegent is a Go daemon + CLI + MCP server in one binary, with a Vue 3 + TypeSc
   `store` (SQLite, migrations in `store/migrations/NNNN_name.sql`), `logx` (slog setup, log rotation, secret
   redaction), `platform` (hidden consoles, process trees, kill-tree, sign-in terminals; per-OS files), `launch`
   (detached worker launcher behind the hidden `seelegent __launch` and `seelegent-launch`), `launchbin` (whether the
-  daemon may start the companion launcher: next to it, same build), `account` (accounts, providers, profiles, API
+  daemon may start the companion launcher: next to it, same build), `relay` (`seelegent-launch mcp`, the MCP
+  relay to a session inside the daemon; no crypto, see [docs/mcp.md](docs/mcp.md)), `mcpwire` (what the MCP
+  server, the daemon's relay route and the relay share, dependency-free: session env, worker guard table, relay
+  protocol), `account` (accounts, providers, profiles, API
   keys, run environment), `event` (normalized turn events), `backend` (agy/claude/codex commands, env rules and
   stream parsers), `clock` (injectable time with a fake for tests), `quota` (quota readers per backend, quota
   cache, background refresher), `pool` (account selection, leases, rest periods, waiting, handover), `usage`

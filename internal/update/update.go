@@ -93,6 +93,10 @@ type Options struct {
 	// CheckCompanion checks that the companion launcher in a release's archive is of the build of the executable
 	// next to it (both extracted, not run): launchbin.MatchFiles when nil.
 	CheckCompanion func(exe, companion string) error
+	// ResetHosts points the lead hosts' existing MCP entries back at `<exe> mcp` before a rollback refreshes them
+	// with the restored build's setup: a build from before the MCP relay neither knows a `seelegent-launch mcp`
+	// entry as its own nor has a companion that runs it. It returns warnings. Nil does nothing.
+	ResetHosts func(ctx context.Context, exe string) []string
 }
 
 // Updater checks for, applies and rolls back updates.
@@ -747,6 +751,9 @@ func (u *Updater) Rollback(ctx context.Context) (RollbackResult, error) {
 		res.DaemonRestarted = true
 	}
 	res.OK, res.CurrentVersion = true, prevVersion
+	if u.o.ResetHosts != nil {
+		res.Warnings = append(res.Warnings, u.o.ResetHosts(ctx, u.o.Exe)...)
+	}
 	hosts, warnings := u.refreshHosts(ctx)
 	res.Hosts, res.Warnings = hosts, append(res.Warnings, warnings...)
 	u.sweepAll()
