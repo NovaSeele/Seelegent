@@ -163,7 +163,7 @@ without using it for now.
 
 <p align="center">
   <a href="media/accounts.mp4"><img src="media/accounts.webp" width="720"
-    alt="The Accounts page with quota windows and sign-in"></a>
+    alt="The Accounts page grouped by provider: quota for subscriptions, spend and budget for an API key; an API key added directly"></a>
 </p>
 
 More: [accounts and sign-in](getting-started.md#2-accounts-and-sign-in), [backend settings](configuration.md).
@@ -403,7 +403,7 @@ More: [GitHub](github.md).
 
 <p align="center">
   <a href="media/github-automations.mp4"><img src="media/github-automations.webp" width="720"
-    alt="An issue triaged into a ticket and a draft pull request; an automation schedule"></a>
+    alt="A local issue triaged into a ticket with its own branch and worktree; an automation reviewed and turned on"></a>
 </p>
 
 More: [automations](automations.md).
