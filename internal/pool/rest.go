@@ -44,8 +44,9 @@ type Exhaustion struct {
 // An account with active quota is read first (when Options.Refresh is set) and rests until its exhausted windows
 // reset, until the hint, or quota.DefaultRest; an API-key account rests until the hint or for the next step of
 // the passive rest ladder (quota.NextPassiveRest: 1, 5, 15 minutes, then passiveCooldownMinutes), climbed from
-// the group's previous passive rest kept in its cooldown row. An existing longer rest is kept. Unknown accounts
-// give an error matching account.ErrNotFound (never a panic).
+// the group's previous passive rest kept in its cooldown row (from the first step when the key was set since).
+// A passive rest that still runs is returned unchanged unless a later hint extends it; any other existing longer
+// rest is kept. Unknown accounts give an error matching account.ErrNotFound (never a panic).
 func (p *Pool) MarkExhausted(ctx context.Context, accountID string, ex Exhaustion) (Cooldown, error) {
 	accounts, err := p.o.Accounts.List(ctx)
 	if err != nil {
@@ -66,17 +67,19 @@ func (p *Pool) MarkExhausted(ctx context.Context, accountID string, ex Exhaustio
 	if !c.Passive {
 		snap = p.freshSnapshot(ctx, a.ID)
 	}
-	c.CreatedAt = p.o.Clock.Now().UTC()
+	now := p.o.Clock.Now().UTC()
+	kept := false
 	err = p.o.DB.Write(ctx, func(tx *sql.Tx) error {
+		c.CreatedAt, c.Reason, kept = now, ex.Reason, false
 		// The previous rest is read before expired rows are pruned below: an API key's ladder climbs from it.
 		var (
-			until, created string
-			passive        int
-			prevUntil      time.Time
-			prev           quota.PrevRest
+			until, created, reason string
+			passive                int
+			prevUntil, prevCreated time.Time
+			prev                   quota.PrevRest
 		)
-		err := tx.QueryRowContext(ctx, "SELECT until, passive, created_at FROM cooldowns WHERE account_id = ? AND quota_group = ?",
-			c.AccountID, c.Group).Scan(&until, &passive, &created)
+		err := tx.QueryRowContext(ctx, `SELECT until, created_at, reason, passive FROM cooldowns
+			WHERE account_id = ? AND quota_group = ?`, c.AccountID, c.Group).Scan(&until, &created, &reason, &passive)
 		switch {
 		case errors.Is(err, sql.ErrNoRows):
 		case err != nil:
@@ -87,10 +90,21 @@ func (p *Pool) MarkExhausted(ctx context.Context, accountID string, ex Exhaustio
 				prevUntil = u.UTC()
 			}
 			if cr, cerr := time.Parse(time.RFC3339Nano, created); uerr == nil && cerr == nil && passive != 0 {
-				prev = quota.PrevRest{Duration: prevUntil.Sub(cr), Until: prevUntil}
+				prevCreated = cr.UTC()
+				prev = quota.PrevRest{Duration: prevUntil.Sub(prevCreated), Until: prevUntil}
 			}
 		}
 		if c.Passive {
+			if prevUntil.After(now) && !prevCreated.IsZero() && !ex.ResetAt.After(prevUntil) {
+				// A passive rest still runs: the pool gives a resting account no run, so this error comes from a
+				// run that started before the rest (a burst). The rest stays as it is, step included.
+				c.Until, c.CreatedAt, c.Reason = prevUntil, prevCreated, reason
+				kept = true
+				return nil
+			}
+			if a.KeySetAt.After(prevCreated) {
+				prev = quota.PrevRest{} // a new key since the previous rest: the ladder starts again
+			}
 			c.Until = quota.PassiveRest(c.CreatedAt, ex.ResetAt, prev, s.PassiveCooldownMinutes)
 		} else {
 			c.Until = quota.ActiveRest(snap, c.CreatedAt, ex.Group, ex.Model, s.MinRemaining, ex.ResetAt)
@@ -110,6 +124,10 @@ func (p *Pool) MarkExhausted(ctx context.Context, accountID string, ex Exhaustio
 	})
 	if err != nil {
 		return Cooldown{}, fmt.Errorf("rest account %s: %w", accountID, err)
+	}
+	if kept {
+		p.o.Logger.Debug("pool: account already resting", "account", c.AccountID, "group", c.Group, "until", c.Until)
+		return c, nil
 	}
 	p.o.Logger.Info("pool: account resting", "account", c.AccountID, "group", c.Group, "until", c.Until,
 		"passive", c.Passive)

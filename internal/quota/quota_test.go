@@ -190,7 +190,9 @@ func TestNextPassiveRest(t *testing.T) {
 		{"ended 29 min ago", PrevRest{Duration: 5 * time.Minute, Until: t0.Add(-29 * time.Minute)}, time.Hour, 15 * time.Minute},
 		{"ended 30 min ago", PrevRest{Duration: 5 * time.Minute, Until: t0.Add(-30 * time.Minute)}, time.Hour, time.Minute},
 		{"ended 31 min ago", PrevRest{Duration: 15 * time.Minute, Until: t0.Add(-31 * time.Minute)}, time.Hour, time.Minute},
-		{"still running", PrevRest{Duration: 5 * time.Minute, Until: t0.Add(2 * time.Minute)}, time.Hour, 15 * time.Minute},
+		{"still running keeps the step", PrevRest{Duration: 5 * time.Minute, Until: t0.Add(2 * time.Minute)}, time.Hour, 5 * time.Minute},
+		{"ends at now steps up", PrevRest{Duration: 5 * time.Minute, Until: t0}, time.Hour, 15 * time.Minute},
+		{"running, cap lowered", PrevRest{Duration: time.Hour, Until: t0.Add(time.Minute)}, 10 * time.Minute, 10 * time.Minute},
 		{"no end", PrevRest{Duration: 5 * time.Minute}, time.Hour, time.Minute},
 	}
 	for _, c := range cases {

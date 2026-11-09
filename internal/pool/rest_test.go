@@ -150,12 +150,31 @@ func TestMarkExhaustedPassive(t *testing.T) {
 	if err != nil || !c.Until.Equal(now.Add(time.Minute)) {
 		t.Fatalf("after a quiet gap: %+v, %v", c, err)
 	}
-	// An error while the rest still runs climbs from it (1 to 5 minutes from now).
-	f.clk.Advance(30 * time.Second)
+	// Four reports in one burst: the runs started before the rest, so it stays at 1 minute, unchanged.
+	first := c
+	for i := range 3 {
+		f.clk.Advance(5 * time.Second)
+		if c, err = f.p.MarkExhausted(ctx, k.ID, Exhaustion{Group: "Codex", Reason: "later"}); err != nil ||
+			!c.Until.Equal(first.Until) || !c.CreatedAt.Equal(first.CreatedAt) || c.Reason != first.Reason || !c.Passive {
+			t.Fatalf("burst report %d: %+v, %v, want %+v", i+2, c, err, first)
+		}
+	}
+	if got := f.restUntil(req); !got.Equal(first.Until) {
+		t.Fatalf("burst moved the rest to %s", got)
+	}
+	// The next error after the rest steps up once, to 5 minutes.
+	f.clk.Advance(time.Minute)
 	now = f.clk.Now()
 	if c, err = f.p.MarkExhausted(ctx, k.ID, Exhaustion{Group: "Codex"}); err != nil || !c.Until.Equal(now.Add(5*time.Minute)) {
-		t.Fatalf("during a rest: %+v, %v", c, err)
+		t.Fatalf("after the burst: %+v, %v", c, err)
 	}
+	// A later hint still extends a running rest.
+	f.clk.Advance(time.Minute)
+	later := f.clk.Now().Add(10 * time.Minute)
+	if c, err = f.p.MarkExhausted(ctx, k.ID, Exhaustion{Group: "Codex", ResetAt: later}); err != nil || !c.Until.Equal(later) {
+		t.Fatalf("later hint during a rest: %+v, %v", c, err)
+	}
+	f.clk.Advance(10 * time.Minute)
 	// The provider's reset hint wins over the ladder, even a shorter one once the rest is over.
 	f.clk.Advance(5 * time.Minute)
 	hint := f.clk.Now().Add(3 * time.Minute)
@@ -190,6 +209,34 @@ func TestMarkExhaustedPassiveDefaultLadder(t *testing.T) {
 		}
 		// The next error comes 10 minutes after the rest ended: still within the gap.
 		f.clk.Advance(want + 10*time.Minute)
+	}
+}
+
+// TestMarkExhaustedPassiveNewKey: a key stored since the previous rest starts the ladder again at 1 minute.
+func TestMarkExhaustedPassiveNewKey(t *testing.T) {
+	f := newFixture(t)
+	ctx := t.Context()
+	k := f.apiKeyAccount("openai", "sk-test-0123456789abcdef")
+	for i, want := range []time.Duration{time.Minute, 5 * time.Minute} {
+		now := f.clk.Now()
+		if c, err := f.p.MarkExhausted(ctx, k.ID, Exhaustion{Group: "Codex"}); err != nil || !c.Until.Equal(now.Add(want)) {
+			t.Fatalf("rest %d: %+v, %v, want %s", i+1, c, err, want)
+		}
+		f.clk.Advance(want + time.Minute)
+	}
+	if _, err := f.m.SetKey(ctx, k.ID, "sk-test-fedcba9876543210"); err != nil {
+		t.Fatal(err)
+	}
+	f.clk.Advance(time.Minute)
+	now := f.clk.Now()
+	if c, err := f.p.MarkExhausted(ctx, k.ID, Exhaustion{Group: "Codex"}); err != nil || !c.Until.Equal(now.Add(time.Minute)) {
+		t.Fatalf("after a new key: %+v, %v", c, err)
+	}
+	// Without another new key the ladder climbs again from there.
+	f.clk.Advance(2 * time.Minute)
+	now = f.clk.Now()
+	if c, err := f.p.MarkExhausted(ctx, k.ID, Exhaustion{Group: "Codex"}); err != nil || !c.Until.Equal(now.Add(5*time.Minute)) {
+		t.Fatalf("second rest with the new key: %+v, %v", c, err)
 	}
 }
 

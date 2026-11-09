@@ -23,14 +23,18 @@ type PrevRest struct {
 
 // NextPassiveRest returns how long a passive account (API key) rests after a limit error at now with no reset
 // hint. A limit on an API key is mostly a per-minute rate limit, so rests climb a ladder: 1 minute, then 5, then
-// 15, then longest, each step capped at longest. The step after prev is used while prev still runs or ended less
-// than PassiveLadderGap before now; otherwise (no previous rest, or an old one) the ladder starts again at 1
-// minute. A previous rest of a length between steps (a provider's hint, an older setting) goes on to the next
-// longer step.
+// 15, then longest, each step capped at longest. The ladder steps up from prev only when prev has ended, less than
+// PassiveLadderGap before now; otherwise (no previous rest, or an old one) it starts again at 1 minute. A
+// previous rest of a length between steps (a provider's hint, an older setting) goes on to the next longer step.
+// While prev still runs the step stays the same: the pool never gives a resting account a run, so such an error
+// comes from a run that started before the rest, and the pool keeps that rest as it is.
 func NextPassiveRest(now time.Time, prev PrevRest, longest time.Duration) time.Duration {
 	steps := [...]time.Duration{time.Minute, 5 * time.Minute, 15 * time.Minute, longest}
 	if prev.Duration <= 0 || now.Sub(prev.Until) >= PassiveLadderGap {
 		return min(steps[0], longest)
+	}
+	if prev.Until.After(now) {
+		return min(prev.Duration, longest)
 	}
 	for _, s := range steps {
 		if s = min(s, longest); s > prev.Duration {
@@ -43,7 +47,7 @@ func NextPassiveRest(now time.Time, prev PrevRest, longest time.Duration) time.D
 // PassiveRest returns until when an account with passive quota (API key) rests after a limit error at now: the
 // reset time the provider gave (hint) when it lies in the future, else now plus the next step of the rest ladder
 // after prev (NextPassiveRest), whose longest step is passiveMinutes (passiveCooldownMinutes; 60 when not
-// positive).
+// positive). A caller keeps a previous rest that still runs instead (see NextPassiveRest).
 func PassiveRest(now, hint time.Time, prev PrevRest, passiveMinutes int) time.Time {
 	if hint.After(now) {
 		return hint
