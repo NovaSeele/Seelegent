@@ -42,6 +42,15 @@ The daemon uses it only when it is of the same build, and falls back to `seelege
   does not record it, and the `-X` version stamp does not change the launcher's code (it does not link
   `internal/buildinfo`; `TestLinksNoCrypto` checks that too).
 
+The companion has a second role: `seelegent-launch mcp` is the MCP relay a lead host starts instead of `seelegent mcp`
+([mcp.md](mcp.md#the-mcp-relay)). `seelegent setup` registers it under the same rule, checked from setup's side
+(`launchbin.MatchFiles` of `seelegent` and the companion next to it), and `seelegent update` replaces both files
+together, so a host never starts a relay of another build than its daemon; a relay that meets a daemon without the
+relay route (404) or another protocol runs `seelegent mcp` instead. Nothing else in the installers changes: they
+already put the companion next to `seelegent` before they run `seelegent setup`, so a fresh install or a re-run of
+setup picks the relay. A rollback points the hosts back at `seelegent mcp` before the restored build's setup runs
+(a build from before the relay neither knows the relay's entry nor has a companion that runs it).
+
 These checks show that the file is of the same build, not that it is genuine: build information can be written into
 any file. The companion is trusted exactly as much as the `seelegent` executable beside it: both sit in the same
 folder, and whoever can write to that folder can replace either one. Install Seelegent in a folder that only you
@@ -51,7 +60,7 @@ The daemon looks at the file for every launch (one `stat`) and reads its build i
 path, modification time or size changed, so a companion that appears, goes or is replaced is noticed at the next
 launch. Each change of decision is logged once in `logs/daemon.log`: info when it is used or absent, a warning with
 the reason when a file is there but not of this build. `seelegent doctor` reports it as the `launcher` line (always
-`ok`: launches work either way).
+`ok`: launches work either way), and which MCP command setup registers as the `mcp relay` line.
 
 ## Cutting a release
 

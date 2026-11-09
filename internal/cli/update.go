@@ -158,6 +158,7 @@ func newUpdater(cmd *cobra.Command, info buildinfo.Info, d deps, force bool) (*u
 		Run:           runExecutable,
 		Force:         force,
 		CurrentSchema: known,
+		ResetHosts:    resetHostsToPlainMCP,
 		DatabaseSchema: func(ctx context.Context) (int, bool, error) {
 			in, err := store.Inspect(ctx, paths.DB)
 			switch {

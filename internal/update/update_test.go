@@ -345,9 +345,23 @@ func TestApplyAndRollback(t *testing.T) {
 			}
 
 			e.daemon.calls = nil
+			// A rollback first points the hosts at `<exe> mcp` (the restored build may not know the MCP relay),
+			// then refreshes them with the restored build's setup.
+			var resets []string
+			setupsBefore := len(e.run.setupCalls)
+			u2.o.ResetHosts = func(_ context.Context, exe string) []string {
+				if len(e.run.setupCalls) != setupsBefore {
+					t.Error("ResetHosts ran after the refresh")
+				}
+				resets = append(resets, exe)
+				return []string{"reset warning"}
+			}
 			rb, err := u2.Rollback(ctx)
 			if err != nil {
 				t.Fatal(err)
+			}
+			if !slices.Equal(resets, []string{e.exe}) || !slices.Contains(rb.Warnings, "reset warning") {
+				t.Errorf("resets = %v, warnings = %v", resets, rb.Warnings)
 			}
 			if !rb.OK || rb.CurrentVersion != "v0.0.1" || rb.PreviousVersion != "v0.0.2" || !rb.DaemonRestarted {
 				t.Fatalf("Rollback = %+v", rb)

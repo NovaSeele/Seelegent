@@ -104,12 +104,16 @@ type Request struct {
 type Report struct {
 	DryRun bool `json:"dryRun"`
 	Remove bool `json:"remove"`
-	// Command and Args are the registered command line.
-	Command  string     `json:"command"`
-	Args     []string   `json:"args"`
-	Hosts    []HostInfo `json:"hosts"`
-	Items    []Item     `json:"items"`
-	Warnings []string   `json:"warnings,omitempty"`
+	// Command and Args are the registered command line: `<dir>/seelegent-launch mcp` (the MCP relay, Relay true)
+	// when the companion next to the executable is of its build, else `<exe> mcp`. RelayNote says why the relay is
+	// not used (empty when it is, and on remove).
+	Command   string     `json:"command"`
+	Args      []string   `json:"args"`
+	Relay     bool       `json:"relay"`
+	RelayNote string     `json:"relayNote,omitempty"`
+	Hosts     []HostInfo `json:"hosts"`
+	Items     []Item     `json:"items"`
+	Warnings  []string   `json:"warnings,omitempty"`
 }
 
 // Failed reports whether any item failed (conflict or error).
@@ -161,6 +165,9 @@ func Run(ctx context.Context, env Env, req Request) (Report, error) {
 	}
 	rep := Report{DryRun: req.DryRun, Remove: req.Remove, Command: req.Exe, Args: []string{"mcp"},
 		Warnings: exeWarnings(req.Exe), Items: []Item{}}
+	if !req.Remove {
+		rep.Command, rep.Relay, rep.RelayNote = mcpCommand(env, req.Exe)
+	}
 	detected := map[string]bool{}
 	for _, h := range hosts {
 		ok, why := h.detect(env)
@@ -191,7 +198,7 @@ func Run(ctx context.Context, env Env, req Request) (Report, error) {
 		if cancelled = ctx.Err(); cancelled != nil {
 			break // H22: what this run created so far is still recorded below, so --remove can delete it later
 		}
-		want := desired(req.Exe, h.id())
+		want := desired(rep.Command, h.id())
 		if req.Remove {
 			rep.Items = append(rep.Items, h.remove(ctx, o))
 		} else {
@@ -273,6 +280,21 @@ func (o op) skillItem(h host, selected []host, detected map[string]bool, done ma
 			Detail: "kept: also used by " + strings.Join(keepFor, ", ")}
 	}
 	return o.removeSkill(h.id(), dir)
+}
+
+// mcpCommand is the command the hosts start with the argument mcp: the MCP relay (the companion seelegent-launch
+// next to exe, which runs the MCP server inside the daemon in a process without crypto, about 40 MB less private
+// memory per host window on Windows) when env.Relay accepts it, else exe itself. note says why the relay is not
+// used.
+func mcpCommand(env Env, exe string) (cmd string, relay bool, note string) {
+	if env.Relay == nil {
+		return exe, false, ""
+	}
+	r, err := env.Relay(exe)
+	if err != nil {
+		return exe, false, "the MCP relay seelegent-launch is not used: " + err.Error()
+	}
+	return r, true, ""
 }
 
 // checkExe makes sure the registered executable is an absolute path to a file.
