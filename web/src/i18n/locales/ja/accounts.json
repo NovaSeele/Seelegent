@@ -298,7 +298,8 @@
     "free": "ローカル · 無料",
     "none": "このサービスは費用を報告しません",
     "service": "このキーについてサービス自身が数えた額",
-    "prices": "このサービスに設定した価格で計算"
+    "prices": "このサービスに設定した価格で計算",
+    "serviceWholeLife": "{service} がこのキーについて数えた額(Seelegent 以外での利用も含む)"
   },
   "service": {
     "label": "サービス",
@@ -364,8 +365,9 @@
     "save": "予算を保存",
     "remove": "予算を外す",
     "positive": "0 より大きい金額を入力してください",
-    "noCost": "このサービスは費用を報告しないため、予算を確認できません。予算でキーが止まることはありません。",
-    "suggested": "キーの OpenRouter 上限 {amount} を使う"
+    "noCost": "このサービスにはまだ価格がないため、支出に費用がありません。価格を設定すると予算を判定します。",
+    "suggested": "キーの OpenRouter 上限 {amount} を使う",
+    "serviceWholeLife": "Seelegent 以外でのこのキーの利用も予算に含まれます。予算はサービス自身がこのキーについて数えた額で判定します。"
   },
   "model": {
     "title": "{service} のモデル",

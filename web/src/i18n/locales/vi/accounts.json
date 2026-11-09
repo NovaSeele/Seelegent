@@ -298,7 +298,8 @@
     "free": "Cục bộ · miễn phí",
     "none": "Dịch vụ này không báo chi phí",
     "service": "Số liệu chính dịch vụ đếm cho khóa này",
-    "prices": "Theo giá bạn đặt cho dịch vụ này"
+    "prices": "Theo giá bạn đặt cho dịch vụ này",
+    "serviceWholeLife": "Số liệu {service} đếm cho khóa này, gồm cả lượt dùng ngoài Seelegent"
   },
   "service": {
     "label": "Dịch vụ",
@@ -364,8 +365,9 @@
     "save": "Lưu ngân sách",
     "remove": "Bỏ ngân sách",
     "positive": "Nhập số tiền lớn hơn 0",
-    "noCost": "Dịch vụ này không báo chi phí nên không đối chiếu được ngân sách: khóa sẽ không bao giờ bị dừng vì nó.",
-    "suggested": "Dùng giới hạn OpenRouter của khóa, {amount}"
+    "noCost": "Dịch vụ này chưa có giá nên chi tiêu chưa có chi phí: ngân sách chỉ được kiểm tra sau khi bạn đặt giá.",
+    "suggested": "Dùng giới hạn OpenRouter của khóa, {amount}",
+    "serviceWholeLife": "Lượt dùng khóa này ngoài Seelegent cũng tính vào ngân sách: ngân sách được đối chiếu với số liệu chính dịch vụ đếm cho khóa."
   },
   "model": {
     "title": "Mô hình của {service}",

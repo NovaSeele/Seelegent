@@ -298,7 +298,8 @@
     "free": "로컬 · 무료",
     "none": "이 서비스는 비용을 알려 주지 않음",
     "service": "이 키에 대해 서비스가 직접 센 금액",
-    "prices": "이 서비스에 설정한 가격 기준"
+    "prices": "이 서비스에 설정한 가격 기준",
+    "serviceWholeLife": "이 키에 대해 {service}이(가) 센 금액(Seelegent 밖에서 쓴 것 포함)"
   },
   "service": {
     "label": "서비스",
@@ -364,8 +365,9 @@
     "save": "예산 저장",
     "remove": "예산 없애기",
     "positive": "0보다 큰 금액을 입력하세요",
-    "noCost": "이 서비스는 비용을 보고하지 않아 예산을 확인할 수 없습니다. 예산 때문에 키가 멈추는 일은 없습니다.",
-    "suggested": "키의 OpenRouter 한도 {amount} 사용"
+    "noCost": "이 서비스에는 아직 가격이 없어 지출에 비용이 없습니다. 가격을 설정하면 예산을 확인합니다.",
+    "suggested": "키의 OpenRouter 한도 {amount} 사용",
+    "serviceWholeLife": "Seelegent 밖에서 이 키를 쓴 것도 예산에 포함됩니다. 예산은 서비스가 이 키에 대해 직접 센 금액으로 판단합니다."
   },
   "model": {
     "title": "{service}의 모델",

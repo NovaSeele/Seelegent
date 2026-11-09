@@ -298,7 +298,8 @@
     "free": "本地 · 免费",
     "none": "此服务不报告费用",
     "service": "服务自己为这个密钥统计的金额",
-    "prices": "按你为此服务设置的价格计算"
+    "prices": "按你为此服务设置的价格计算",
+    "serviceWholeLife": "{service} 为此密钥统计的金额,包括在 Seelegent 之外的使用"
   },
   "service": {
     "label": "服务",
@@ -364,8 +365,9 @@
     "save": "保存预算",
     "remove": "移除预算",
     "positive": "请输入大于 0 的金额",
-    "noCost": "此服务不报告费用,无法核对预算:密钥不会因预算而停用。",
-    "suggested": "使用该密钥在 OpenRouter 的上限 {amount}"
+    "noCost": "此服务还没有价格,所以花费没有金额:设置价格后才会核对预算。",
+    "suggested": "使用该密钥在 OpenRouter 的上限 {amount}",
+    "serviceWholeLife": "在 Seelegent 之外使用此密钥也会计入预算:预算按服务自己为此密钥统计的金额核对。"
   },
   "model": {
     "title": "{service} 的模型",
