@@ -13,12 +13,15 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/NovaSeele/Seelegent/internal/testutil/raceenv"
 )
 
 // roleEnv selects what the test binary does when it is started as a helper process.
 const roleEnv = "PLATFORM_TEST_ROLE"
 
 func TestMain(m *testing.M) {
+	raceenv.QuietExit()
 	switch os.Getenv(roleEnv) {
 	case "":
 		os.Exit(m.Run())

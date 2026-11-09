@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/NovaSeele/Seelegent/internal/launch"
+	"github.com/NovaSeele/Seelegent/internal/testutil/raceenv"
 )
 
 // The test binary doubles as the launcher and as a fake worker CLI, so the end-to-end tests run the real launcher
@@ -33,6 +34,7 @@ import (
 //	#!spawn           start a sleeper grandchild that writes its pid to FAKECLI_PIDFILE
 //	#!echo-env <NAME> print "NAME=<value>" (a non-JSON line)
 func TestMain(m *testing.M) {
+	raceenv.QuietExit()
 	switch {
 	case len(os.Args) > 2 && os.Args[1] == "__launch":
 		if err := launch.Run(context.Background(), os.Args[2]); err != nil {

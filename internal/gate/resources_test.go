@@ -15,12 +15,14 @@ import (
 	"github.com/NovaSeele/Seelegent/internal/api"
 	"github.com/NovaSeele/Seelegent/internal/platform"
 	"github.com/NovaSeele/Seelegent/internal/testutil/priority"
+	"github.com/NovaSeele/Seelegent/internal/testutil/raceenv"
 )
 
 // roleEnv makes the test binary a helper: "priority" writes its own priority (priority.Of) to the file named last.
 const roleEnv = "GATE_TEST_ROLE"
 
 func TestMain(m *testing.M) {
+	raceenv.QuietExit()
 	if os.Getenv(roleEnv) == "priority" {
 		v, err := priority.Of(os.Getpid())
 		if err != nil {
