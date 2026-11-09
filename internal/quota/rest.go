@@ -7,22 +7,56 @@ const (
 	// DefaultRest is how long an account with active quota rests after a quota error when no exhausted window says
 	// when it resets.
 	DefaultRest = time.Hour
-	// DefaultPassiveRest is the rest of a passive account when passiveCooldownMinutes is not set.
+	// DefaultPassiveRest is the longest rest of a passive account when passiveCooldownMinutes is not set.
 	DefaultPassiveRest = 60 * time.Minute
+	// PassiveLadderGap is how long after a passive rest ended a new limit error still climbs the rest ladder
+	// (NextPassiveRest); a later error starts again at the first step.
+	PassiveLadderGap = 30 * time.Minute
 )
 
+// PrevRest is the previous passive rest of an account for a quota group: how long it was set for and when it
+// ends or ended. The zero value means there was none (or it does not count, being an active account's rest).
+type PrevRest struct {
+	Duration time.Duration
+	Until    time.Time
+}
+
+// NextPassiveRest returns how long a passive account (API key) rests after a limit error at now with no reset
+// hint. A limit on an API key is mostly a per-minute rate limit, so rests climb a ladder: 1 minute, then 5, then
+// 15, then longest, each step capped at longest. The ladder steps up from prev only when prev has ended, less than
+// PassiveLadderGap before now; otherwise (no previous rest, or an old one) it starts again at 1 minute. A
+// previous rest of a length between steps (a provider's hint, an older setting) goes on to the next longer step.
+// While prev still runs the step stays the same: the pool never gives a resting account a run, so such an error
+// comes from a run that started before the rest, and the pool keeps that rest as it is.
+func NextPassiveRest(now time.Time, prev PrevRest, longest time.Duration) time.Duration {
+	steps := [...]time.Duration{time.Minute, 5 * time.Minute, 15 * time.Minute, longest}
+	if prev.Duration <= 0 || now.Sub(prev.Until) >= PassiveLadderGap {
+		return min(steps[0], longest)
+	}
+	if prev.Until.After(now) {
+		return min(prev.Duration, longest)
+	}
+	for _, s := range steps {
+		if s = min(s, longest); s > prev.Duration {
+			return s
+		}
+	}
+	return longest
+}
+
 // PassiveRest returns until when an account with passive quota (API key) rests after a limit error at now: the
-// reset time the provider gave (hint) when it lies in the future, else now plus passiveMinutes
-// (passiveCooldownMinutes; 60 when not positive).
-func PassiveRest(now, hint time.Time, passiveMinutes int) time.Time {
+// reset time the provider gave (hint) when it lies in the future, else now plus the next step of the rest ladder
+// after prev (NextPassiveRest), whose longest step is passiveMinutes (passiveCooldownMinutes; 60 when not
+// positive). A caller keeps a previous rest that still runs instead (see NextPassiveRest).
+func PassiveRest(now, hint time.Time, prev PrevRest, passiveMinutes int) time.Time {
 	if hint.After(now) {
 		return hint
 	}
-	d := DefaultPassiveRest
+	longest := DefaultPassiveRest
 	if passiveMinutes > 0 {
-		d = time.Duration(passiveMinutes) * time.Minute
+		longest = time.Duration(passiveMinutes) * time.Minute
 	}
-	return now.Add(d)
+	return now.Add(NextPassiveRest(now, prev, longest))
 }
 
 // ActiveRest returns until when an account with active quota rests after a quota error for model in group at

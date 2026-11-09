@@ -330,7 +330,7 @@
     },
     "passiveCooldown": {
       "label": "Nghỉ cho khóa API",
-      "desc": "Tài khoản dùng khóa API nghỉ bao lâu sau khi chạm giới hạn (không đọc được hạn mức của nó).",
+      "desc": "Thời gian nghỉ dài nhất của tài khoản dùng khóa API sau khi chạm giới hạn mà không biết giờ đặt lại (không đọc được hạn mức của nó). Khi giới hạn cứ lặp lại, thời gian nghỉ tăng dần 1, 5, 15 phút rồi đến giá trị này; sau một lúc yên ổn thì quay lại 1 phút.",
       "keywords": "nghỉ khóa api giới hạn tốc độ cooldown"
     },
     "usageHistory": {

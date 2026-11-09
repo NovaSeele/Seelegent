@@ -139,14 +139,19 @@ func TestWindowKeys(t *testing.T) {
 
 func TestRest(t *testing.T) {
 	hint := t0.Add(20 * time.Minute)
-	if got := PassiveRest(t0, hint, 60); !got.Equal(hint) {
+	// A hint in the future wins over the ladder, even at its top.
+	top := PrevRest{Duration: time.Hour, Until: t0}
+	if got := PassiveRest(t0, hint, top, 60); !got.Equal(hint) {
 		t.Errorf("PassiveRest with hint = %v", got)
 	}
-	if got := PassiveRest(t0, t0.Add(-time.Minute), 15); !got.Equal(t0.Add(15 * time.Minute)) {
+	if got := PassiveRest(t0, t0.Add(-time.Minute), PrevRest{}, 15); !got.Equal(t0.Add(time.Minute)) {
 		t.Errorf("PassiveRest past hint = %v", got)
 	}
-	if got := PassiveRest(t0, time.Time{}, 0); !got.Equal(t0.Add(time.Hour)) {
-		t.Errorf("PassiveRest default = %v", got)
+	if got := PassiveRest(t0, time.Time{}, PrevRest{Duration: 15 * time.Minute, Until: t0}, 15); !got.Equal(t0.Add(15 * time.Minute)) {
+		t.Errorf("PassiveRest capped = %v", got)
+	}
+	if got := PassiveRest(t0, time.Time{}, top, 0); !got.Equal(t0.Add(time.Hour)) {
+		t.Errorf("PassiveRest default longest = %v", got)
 	}
 	reset := t0.Add(3 * time.Hour)
 	s := Snapshot{Backend: "agy", FetchedAt: t0, Groups: []Group{{Name: "G", Windows: []Window{win("5h", 0, reset)}}}}
@@ -159,6 +164,41 @@ func TestRest(t *testing.T) {
 	fine := Snapshot{Backend: "agy", FetchedAt: t0, Groups: []Group{{Name: "G", Windows: []Window{win("5h", 0.9, reset)}}}}
 	if got := ActiveRest(fine, t0, "G", "", 0.03, time.Time{}); !got.Equal(t0.Add(DefaultRest)) {
 		t.Errorf("ActiveRest without data = %v", got)
+	}
+}
+
+func TestNextPassiveRest(t *testing.T) {
+	ended := func(d time.Duration) PrevRest { return PrevRest{Duration: d, Until: t0} }
+	cases := []struct {
+		name    string
+		prev    PrevRest
+		longest time.Duration
+		want    time.Duration
+	}{
+		{"none", PrevRest{}, time.Hour, time.Minute},
+		{"1 to 5", ended(time.Minute), time.Hour, 5 * time.Minute},
+		{"5 to 15", ended(5 * time.Minute), time.Hour, 15 * time.Minute},
+		{"15 to 60", ended(15 * time.Minute), time.Hour, time.Hour},
+		{"60 stays", ended(time.Hour), time.Hour, time.Hour},
+		{"cap 10: none", PrevRest{}, 10 * time.Minute, time.Minute},
+		{"cap 10: 1 to 5", ended(time.Minute), 10 * time.Minute, 5 * time.Minute},
+		{"cap 10: 5 to 10", ended(5 * time.Minute), 10 * time.Minute, 10 * time.Minute},
+		{"cap 10: 10 stays", ended(10 * time.Minute), 10 * time.Minute, 10 * time.Minute},
+		{"cap below the first step", PrevRest{}, 30 * time.Second, 30 * time.Second},
+		{"between steps goes up", ended(3 * time.Minute), time.Hour, 5 * time.Minute},
+		{"longer than the cap", ended(2 * time.Hour), time.Hour, time.Hour},
+		{"ended 29 min ago", PrevRest{Duration: 5 * time.Minute, Until: t0.Add(-29 * time.Minute)}, time.Hour, 15 * time.Minute},
+		{"ended 30 min ago", PrevRest{Duration: 5 * time.Minute, Until: t0.Add(-30 * time.Minute)}, time.Hour, time.Minute},
+		{"ended 31 min ago", PrevRest{Duration: 15 * time.Minute, Until: t0.Add(-31 * time.Minute)}, time.Hour, time.Minute},
+		{"still running keeps the step", PrevRest{Duration: 5 * time.Minute, Until: t0.Add(2 * time.Minute)}, time.Hour, 5 * time.Minute},
+		{"ends at now steps up", PrevRest{Duration: 5 * time.Minute, Until: t0}, time.Hour, 15 * time.Minute},
+		{"running, cap lowered", PrevRest{Duration: time.Hour, Until: t0.Add(time.Minute)}, 10 * time.Minute, 10 * time.Minute},
+		{"no end", PrevRest{Duration: 5 * time.Minute}, time.Hour, time.Minute},
+	}
+	for _, c := range cases {
+		if got := NextPassiveRest(t0, c.prev, c.longest); got != c.want {
+			t.Errorf("%s: NextPassiveRest = %v, want %v", c.name, got, c.want)
+		}
 	}
 }
 

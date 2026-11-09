@@ -594,7 +594,8 @@ func TestBackendWithoutQuotaReader(t *testing.T) {
 		t.Fatalf("state %+v", states[0])
 	}
 	cd, err := f.p.MarkExhausted(ctx, c.ID, Exhaustion{Group: "Claude"})
-	if err != nil || !cd.Passive || !cd.Until.Equal(f.clk.Now().Add(60*time.Minute)) {
+	// Its first passive rest is the ladder's first step.
+	if err != nil || !cd.Passive || !cd.Until.Equal(f.clk.Now().Add(time.Minute)) {
 		t.Fatalf("cooldown %+v, %v", cd, err)
 	}
 	// With a reader the same account waits for its first read.
