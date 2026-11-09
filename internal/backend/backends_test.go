@@ -42,7 +42,7 @@ func TestNewAndNames(t *testing.T) {
 		t.Errorf("New(gpt) = %v", err)
 	}
 	caps := map[string]Capabilities{
-		"agy":    {ActiveQuota: true, NativePreToolGuard: true, ResumeFlag: "--conversation"},
+		"agy":    {ActiveQuota: true, NativePreToolGuard: true, ResumeFlag: "--conversation", ReplaysErrors: true},
 		"claude": {ActiveQuota: true, NativePreToolGuard: true, StdinPrompt: true, ResumeFlag: "--resume"},
 		"codex":  {ActiveQuota: true, StdinPrompt: true, ResumeFlag: "resume", PlanShell: true},
 	}

@@ -65,7 +65,8 @@
       "credits": "The key has no credit left",
       "transient": "The attempt hit a temporary error",
       "background_wait": "The worker is waiting on background work",
-      "error": "The attempt failed"
+      "error": "The attempt failed",
+      "okWarning": "The attempt finished; the worker CLI reported an error that did not stop it"
     },
     "quotaExhausted": "The account ran out of quota",
     "authFailed": "The account needs to sign in again",

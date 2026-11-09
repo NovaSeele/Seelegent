@@ -139,6 +139,16 @@ function fold(f: Fold, event: TaskEvent): Draft | null {
     case 'turn_end':
       return { ...base, kind: 'turnEnd', ...event.data }
     case 'attempt_end':
+      // An ok attempt with a warning: the worker CLI reported an error that did not fail the work (a network error
+      // it had recovered from, an error its conversation replayed).
+      if (event.data.status === 'ok' && event.data.warning)
+        return notice(
+          'warn',
+          'warning',
+          'terminal.ev.attempt.okWarning',
+          {},
+          { detail: event.data.warning },
+        )
       return event.data.status === 'ok' || event.data.status === 'cancelled'
         ? null
         : notice(

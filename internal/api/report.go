@@ -40,6 +40,9 @@ type TaskReport struct {
 	Hygiene       []ReportFinding `json:"hygiene,omitempty"`
 	ScopeWarnings []ReportFinding `json:"scope_warnings,omitempty"`
 	DeniedActions []string        `json:"denied_actions,omitempty"`
+	// Warnings are errors of the latest turn's attempts that did not fail them (a network error the worker CLI had
+	// recovered from, an error its conversation replayed): the work counts, but check it.
+	Warnings []string `json:"warnings,omitempty"`
 	// Gate is the gate of the latest instruction once it ended; LastGate shows a gate still running or an
 	// automatic fix turn at work. Lane, Bar and Verifier come with it (docs/gates.md).
 	Gate     *ReportGate     `json:"gate,omitempty"`

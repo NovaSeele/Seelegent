@@ -149,6 +149,23 @@ describe('terminal timeline', () => {
     expect(items[1]).toMatchObject({ until: '2026-11-06T12:00:00Z' })
   })
 
+  it('warns about an ok attempt whose worker CLI reported an error that did not stop it', () => {
+    seq = 0
+    const warning =
+      'agy reported a network error it had recovered from: request failed: read tcp 10.0.0.2:55383->203.0.113.4:443'
+    const items = buildTimeline([
+      ev('attempt_end', { status: 'ok', warning }),
+      ev('attempt_end', { status: 'ok' }),
+    ])
+    expect(items).toHaveLength(1)
+    expect(items[0]).toMatchObject({
+      kind: 'notice',
+      tone: 'warn',
+      message: { key: 'terminal.ev.attempt.okWarning' },
+      detail: warning,
+    })
+  })
+
   it('names an attention flag by its reason and never shows the daemon prose', () => {
     seq = 0
     const set = (state: string, reason: string, detail?: string) =>

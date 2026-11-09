@@ -527,6 +527,12 @@ func (p *codexParser) item(kind string, it *codexItem) []event.Event {
 	started, completed := kind == "item.started", kind == "item.completed"
 	failed := it.Status == "failed" || (it.ExitCode != nil && *it.ExitCode != 0)
 	switch it.Type {
+	case "command_execution", "mcp_tool_call", "file_change", "web_search":
+		if started || completed {
+			p.clearFinal() // the agent went on working after its message
+		}
+	}
+	switch it.Type {
 	case "agent_message":
 		if it.Text == nil {
 			return nil
@@ -534,6 +540,9 @@ func (p *codexParser) item(kind string, it *codexItem) []event.Event {
 		delta := *it.Text
 		delta = strings.TrimPrefix(delta, p.lastAgentMessage)
 		p.lastAgentMessage = *it.Text
+		if completed {
+			p.markFinal(p.mask(*it.Text))
+		}
 		if delta == "" {
 			return nil
 		}
