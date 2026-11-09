@@ -618,8 +618,17 @@ func TestStopRestart(t *testing.T) {
 	if out := must(t, td, "restart").stdout; out != "Daemon restarted.\n" {
 		t.Fatalf("restart = %q", out)
 	}
-	if pid, ok := client.ReadPortFilePID(paths); !ok || pid != os.Getpid() {
-		t.Fatalf("port file pid = %d, %v", pid, ok)
+	// The daemon answers on its port before it records the port file (discovery also probes the configured port),
+	// so restart may return before the file is written: wait for it.
+	for deadline := time.Now().Add(10 * time.Second); ; {
+		pid, ok := client.ReadPortFilePID(paths)
+		if ok && pid == os.Getpid() {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("port file pid = %d, %v", pid, ok)
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
 	var st statusOut
 	must(t, td, "status", "--json").json(t, &st)
