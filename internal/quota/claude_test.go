@@ -93,6 +93,9 @@ func TestClaudeReader(t *testing.T) {
 
 func TestClaudeReaderCredentials(t *testing.T) {
 	r := NewClaudeReader(nil, "http://127.0.0.1:1/never", func() time.Time { return t0 })
+	// A missing sign-in means "sign-in required" on Linux and Windows only (on macOS the Keychain may hold it, see
+	// TestClaudeReaderBySystem), so this test reads as on Linux whatever system runs it.
+	r.goos = "linux"
 	if _, err := r.ReadQuota(t.Context(), testProfile(t, account.KindIsolated), nil); !errors.Is(err, ErrNeedsLogin) {
 		t.Fatalf("no credentials = %v", err)
 	}

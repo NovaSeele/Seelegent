@@ -15,6 +15,7 @@ import (
 	"github.com/NovaSeele/Seelegent/internal/api"
 	"github.com/NovaSeele/Seelegent/internal/config"
 	"github.com/NovaSeele/Seelegent/internal/fsutil"
+	"github.com/NovaSeele/Seelegent/internal/testutil/raceenv"
 )
 
 // envFakeDaemon makes the test binary, started as "<exe> daemon --port <n>", a fake daemon: it answers the health
@@ -22,6 +23,7 @@ import (
 const envFakeDaemon = "CLIENT_TEST_FAKE_DAEMON"
 
 func TestMain(m *testing.M) {
+	raceenv.QuietExit()
 	if len(os.Args) == 4 && os.Args[1] == "daemon" && os.Args[2] == "--port" {
 		switch os.Getenv(envFakeDaemon) {
 		case "1":
@@ -151,7 +153,10 @@ func TestSpawnDaemon(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := paths.Home + "\n" + paths.Home; string(data) != want {
-		t.Fatalf("daemon folder and home = %q, want %q", data, want)
+	// The folder is compared as a location: the system may report the working directory with symbolic links
+	// resolved (macOS: /var is /private/var), while the home is passed on exactly as given.
+	wd, home, _ := strings.Cut(string(data), "\n")
+	if same, err := fsutil.SamePath(wd, paths.Home); err != nil || !same || home != paths.Home {
+		t.Fatalf("daemon folder and home = %q, want %q twice", data, paths.Home)
 	}
 }
