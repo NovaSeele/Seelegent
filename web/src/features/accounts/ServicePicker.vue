@@ -8,6 +8,7 @@ import { useAccountsStore } from '@/stores/accounts'
 import { useProvidersStore } from '@/stores/providers'
 
 import { orderedPresets, parseService, serviceValue } from './apiKey'
+import ServiceChosen from './ServiceChosen.vue'
 import { useServiceNames } from './useServiceNames'
 
 /**
@@ -103,24 +104,12 @@ function onKeydown(event: KeyboardEvent) {
 
 <template>
   <div class="picker">
-    <div v-if="!open && chosen" class="picker__chosen">
-      <span class="picker__label">{{ t('accounts.service.label') }}</span>
-      <p class="picker__line">
-        <strong>{{ chosen.name }}</strong>
-        <span class="picker__cli">
-          <ProviderMark :backend="chosen.backend" :label="false" />
-          {{ t('accounts.service.runsOn', { cli: t(`accounts.backend.${chosen.backend}`) }) }}
-        </span>
-        <button
-          type="button"
-          class="picker__change"
-          :aria-label="t('accounts.service.changeOf', { name: chosen.name })"
-          @click="reopen"
-        >
-          {{ t('accounts.service.change') }}
-        </button>
-      </p>
-    </div>
+    <ServiceChosen
+      v-if="!open && chosen"
+      :name="chosen.name"
+      :backend="chosen.backend"
+      @change="reopen"
+    />
     <fieldset v-else class="picker__set" :aria-describedby="error ? `${id}-error` : undefined">
       <legend class="picker__label">{{ t('accounts.service.label') }}</legend>
       <TextField
@@ -169,7 +158,7 @@ function onKeydown(event: KeyboardEvent) {
           {{ t('accounts.service.noMatch') }}
         </p>
       </div>
-      <p v-if="chosen" class="picker__cli picker__cli--below">
+      <p v-if="chosen" class="picker__cli">
         {{ t('accounts.service.runsOn', { cli: t(`accounts.backend.${chosen.backend}`) }) }}
       </p>
       <p v-if="error" :id="`${id}-error`" class="picker__error">{{ error }}</p>
@@ -195,47 +184,10 @@ function onKeydown(event: KeyboardEvent) {
   font-weight: var(--fw-medium);
 }
 
-.picker__chosen {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-}
-
-.picker__line {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-1) var(--space-3);
-  min-height: var(--control-md);
-  padding: var(--space-1) var(--space-3);
-  border: var(--border-width) solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  background: var(--bg-surface);
-  font-size: var(--fs-sm);
-}
-
 .picker__cli {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
+  margin: 0;
   color: var(--text-secondary);
   font-size: var(--fs-xs);
-}
-
-.picker__cli--below {
-  margin: 0;
-}
-
-.picker__change {
-  margin-left: auto;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--link);
-  font: inherit;
-  font-size: var(--fs-xs);
-  text-decoration: underline;
-  cursor: pointer;
 }
 
 .picker__list {
