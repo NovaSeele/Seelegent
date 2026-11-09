@@ -487,6 +487,8 @@
     "anyModel": "* 表示没有单独一行的任意模型。",
     "input": "输入",
     "cachedInput": "缓存输入",
+    "cacheWrite": "缓存写入",
+    "cacheWriteHint": "缓存写入留空:按输入价格的 1.25 倍计(Anthropic 的规则);1 小时写入为输入的 2 倍,设置价格后为该价格的 1.6 倍。",
     "output": "输出",
     "perMillion": "每 100 万 token 的美元价格",
     "pricingLink": "{service} 的价格页面",

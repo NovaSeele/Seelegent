@@ -1,12 +1,13 @@
 /**
- * The Prices form's rules: rows of text (model, input, cached input, output; USD per 1M tokens) turned into the
- * PUT /providers/{id}/prices body, checked as the daemon checks it (a model on every row, unique ignoring case, at
- * most 200 characters; prices 0..10000; cached input empty means the input price; at most 200 rows), and the
+ * The Prices form's rules: rows of text (model, input, cached input, cache write, output; USD per 1M tokens) turned
+ * into the PUT /providers/{id}/prices body, checked as the daemon checks it (a model on every row, unique ignoring
+ * case, at most 200 characters; prices 0..10000; cached input empty means the input price, cache write empty means
+ * 1.25 × the input price; at most 200 rows), and the
  * daemon's field errors ("prices[2].outputUsd") mapped back to the row and column they are about.
  */
 import type { Price, PriceInput } from '@/api/types'
 
-export type PriceColumn = 'model' | 'input' | 'cached' | 'output'
+export type PriceColumn = 'model' | 'input' | 'cached' | 'write' | 'output'
 export type PriceProblem = 'modelRequired' | 'modelTooLong' | 'duplicate' | 'invalid' | 'tooMany'
 
 export interface PriceRow {
@@ -14,6 +15,7 @@ export interface PriceRow {
   model: string
   input: string
   cached: string
+  write: string
   output: string
 }
 
@@ -29,16 +31,26 @@ export function priceRow(key: number, price?: Price): PriceRow {
     model: price?.model ?? '',
     input: num(price?.inputUsd),
     cached: num(price?.cachedInputUsd),
+    write: num(price?.cacheWriteUsd),
     output: num(price?.outputUsd),
   }
 }
 
 /** "1.5", "1,5" and " 2 " read as numbers; anything else (or out of range) is not a price. */
-function parsePrice(text: string): number | null {
+export function parsePrice(text: string): number | null {
   const t = text.trim().replace(',', '.')
   if (!/^\d+(\.\d+)?$|^\.\d+$/.test(t)) return null
   const n = Number(t)
   return n >= 0 && n <= MAX_PRICE ? n : null
+}
+
+/** A five-minute cache write without its own price costs 1.25 × the input price (Anthropic's rule). */
+export const CACHE_WRITE_FACTOR = 1.25
+
+/** What an empty cache write stands for, as the form's placeholder: "" while the input is not a price. */
+export function defaultCacheWrite(input: string): string {
+  const n = parsePrice(input)
+  return n === null ? '' : String(Math.round(n * CACHE_WRITE_FACTOR * 1e6) / 1e6)
 }
 
 /** Field errors are keyed "<row>.<column>"; "table" is about the whole table. */
@@ -58,16 +70,20 @@ export function pricesInput(rows: readonly PriceRow[]): {
     seen.add(model.toLowerCase())
     const input = parsePrice(row.input)
     const output = parsePrice(row.output)
-    const cached = row.cached.trim() === '' ? undefined : parsePrice(row.cached)
+    const optional = (text: string) => (text.trim() === '' ? undefined : parsePrice(text))
+    const cached = optional(row.cached)
+    const write = optional(row.write)
     if (input === null) errors[`${i}.input`] = 'invalid'
     if (output === null) errors[`${i}.output`] = 'invalid'
     if (cached === null) errors[`${i}.cached`] = 'invalid'
-    if (input !== null && output !== null && cached !== null)
+    if (write === null) errors[`${i}.write`] = 'invalid'
+    if (input !== null && output !== null && cached !== null && write !== null)
       prices.push({
         model,
         inputUsd: input,
         outputUsd: output,
         ...(cached !== undefined ? { cachedInputUsd: cached } : {}),
+        ...(write !== undefined ? { cacheWriteUsd: write } : {}),
       })
   })
   return { prices, errors }
@@ -77,6 +93,7 @@ const SERVER_COLUMN: Readonly<Record<string, PriceColumn>> = {
   model: 'model',
   inputUsd: 'input',
   cachedInputUsd: 'cached',
+  cacheWriteUsd: 'write',
   outputUsd: 'output',
 }
 

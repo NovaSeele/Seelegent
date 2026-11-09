@@ -487,6 +487,8 @@
     "anyModel": "* es cualquier modelo sin fila propia.",
     "input": "Entrada",
     "cachedInput": "Entrada en caché",
+    "cacheWrite": "Escritura en caché",
+    "cacheWriteHint": "Escritura en caché vacía: 1,25 × la entrada, la regla de Anthropic (escrituras de una hora: 2 × la entrada; con un precio fijado, 1,6 × ese precio).",
     "output": "Salida",
     "perMillion": "Dólares estadounidenses por 1M de tokens",
     "pricingLink": "Página de precios de {service}",

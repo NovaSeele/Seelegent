@@ -487,6 +487,8 @@
     "anyModel": "* は専用の行がないすべてのモデルです。",
     "input": "入力",
     "cachedInput": "キャッシュ入力",
+    "cacheWrite": "キャッシュ書き込み",
+    "cacheWriteHint": "キャッシュ書き込みが空のとき:入力の 1.25 倍(Anthropic の規則)。1 時間の書き込みは入力の 2 倍、価格を設定した場合はその 1.6 倍です。",
     "output": "出力",
     "perMillion": "100 万トークンあたりの米ドル",
     "pricingLink": "{service} の価格ページ",

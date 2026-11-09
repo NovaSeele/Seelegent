@@ -487,6 +487,8 @@
     "anyModel": "*는 별도 행이 없는 모든 모델입니다.",
     "input": "입력",
     "cachedInput": "캐시된 입력",
+    "cacheWrite": "캐시 쓰기",
+    "cacheWriteHint": "캐시 쓰기를 비우면 입력의 1.25배(Anthropic 규칙)입니다. 1시간 쓰기는 입력의 2배, 가격을 정하면 그 가격의 1.6배입니다.",
     "output": "출력",
     "perMillion": "토큰 100만 개당 미국 달러",
     "pricingLink": "{service} 가격 페이지",

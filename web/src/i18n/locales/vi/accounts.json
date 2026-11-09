@@ -487,6 +487,8 @@
     "anyModel": "* là mọi mô hình không có hàng riêng.",
     "input": "Đầu vào",
     "cachedInput": "Đầu vào đã cache",
+    "cacheWrite": "Ghi cache",
+    "cacheWriteHint": "Ghi cache để trống: 1,25 × giá đầu vào, theo quy tắc của Anthropic (ghi 1 giờ: 2 × đầu vào; khi đã đặt giá: 1,6 × giá đó).",
     "output": "Đầu ra",
     "perMillion": "Đô la Mỹ cho mỗi 1 triệu token",
     "pricingLink": "Trang giá của {service}",

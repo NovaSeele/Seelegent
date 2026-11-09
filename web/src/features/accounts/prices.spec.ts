@@ -1,12 +1,20 @@
 import { describe, expect, it } from 'vitest'
 
-import { MAX_PRICE_ROWS, priceErrorKey, priceRow, pricesInput } from './prices'
+import { defaultCacheWrite, MAX_PRICE_ROWS, priceErrorKey, priceRow, pricesInput } from './prices'
 
-const row = (key: number, model: string, input: string, output: string, cached = '') => ({
+const row = (
+  key: number,
+  model: string,
+  input: string,
+  output: string,
+  cached = '',
+  write = '',
+) => ({
   key,
   model,
   input,
   cached,
+  write,
   output,
 })
 
@@ -63,5 +71,31 @@ describe('priceErrorKey', () => {
     expect(priceErrorKey('prices')).toBe('table')
     expect(priceErrorKey('prices[1].other')).toBeNull()
     expect(priceErrorKey('name')).toBeNull()
+  })
+})
+
+describe('cache write', () => {
+  it('is sent when set, left out when empty, and checked like the other prices', () => {
+    const { prices, errors } = pricesInput([
+      row(1, 'glm-5', '2', '8', '0.5', '2,5'),
+      row(2, 'glm-4', '1', '2'),
+      row(3, 'x', '1', '2', '', '10001'),
+    ])
+    expect(prices.slice(0, 2)).toEqual([
+      { model: 'glm-5', inputUsd: 2, cachedInputUsd: 0.5, cacheWriteUsd: 2.5, outputUsd: 8 },
+      { model: 'glm-4', inputUsd: 1, outputUsd: 2 },
+    ])
+    expect(errors).toEqual({ '2.write': 'invalid' })
+    expect(priceErrorKey('prices[4].cacheWriteUsd')).toBe('4.write')
+    expect(priceRow(1, { model: 'm', inputUsd: 3, outputUsd: 15, cacheWriteUsd: 3.75 }).write).toBe(
+      '3.75',
+    )
+  })
+
+  it('stands for 1.25 × the input price when empty', () => {
+    expect(defaultCacheWrite('3')).toBe('3.75')
+    expect(defaultCacheWrite('0,3')).toBe('0.375')
+    expect(defaultCacheWrite('')).toBe('')
+    expect(defaultCacheWrite('abc')).toBe('')
   })
 })

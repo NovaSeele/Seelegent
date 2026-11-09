@@ -11,13 +11,13 @@ import TextField from '@/components/ui/TextField.vue'
 import { useProvidersStore } from '@/stores/providers'
 import { useToastStore } from '@/stores/toast'
 
-import { type PriceRow, priceErrorKey, priceRow, pricesInput } from './prices'
+import { defaultCacheWrite, type PriceRow, priceErrorKey, priceRow, pricesInput } from './prices'
 import { allowList, listedModels, tierModels } from './providerForm'
 
 /**
- * A service's prices, in US dollars per 1M tokens: one row per model (input, cached input, output; "*" for any
- * model without its own row), rows added and removed, saved as one table. An empty table clears the prices: the
- * spend is then counted in tokens only. Each field shows its own error, from the form's checks or from the
+ * A service's prices, in US dollars per 1M tokens: one row per model (input, cached input, cache write, output;
+ * "*" for any model without its own row), rows added and removed, saved as one table. An empty optional price shows
+ * what it stands for as its placeholder. An empty table clears the prices: the spend is then counted in tokens only. Each field shows its own error, from the form's checks or from the
  * daemon's 400. The service's own price page is linked when it has one. New prices apply from now on.
  */
 const props = defineProps<{ provider: Provider | null | undefined }>()
@@ -46,9 +46,22 @@ watch(open, (value) => {
   rows.value = (props.provider?.prices ?? []).map((p) => priceRow(++keys, p))
 })
 
-const COLUMNS = ['model', 'input', 'cached', 'output'] as const
-const columnLabel = (c: (typeof COLUMNS)[number]) =>
-  t(`accounts.prices.${c === 'cached' ? 'cachedInput' : c}`)
+const COLUMNS = ['model', 'input', 'cached', 'write', 'output'] as const
+const LABELS = {
+  model: 'model',
+  input: 'input',
+  cached: 'cachedInput',
+  write: 'cacheWrite',
+  output: 'output',
+} as const
+const columnLabel = (c: (typeof COLUMNS)[number]) => t(`accounts.prices.${LABELS[c]}`)
+
+/** An empty optional price shows what it stands for: cached input the input price, cache write 1.25 × it. */
+function placeholder(row: PriceRow, column: (typeof COLUMNS)[number]): string | undefined {
+  if (column === 'cached') return row.input || undefined
+  if (column === 'write') return defaultCacheWrite(row.input) || undefined
+  return undefined
+}
 
 /** Focus the model field of row `index` (the nearest one left), or "Add a row" when there is none. */
 async function focusRow(index: number) {
@@ -134,7 +147,7 @@ async function save() {
             :label="columnLabel(column)"
             :inputmode="column === 'model' ? 'text' : 'decimal'"
             :list="column === 'model' ? `${id}-models` : undefined"
-            :placeholder="column === 'cached' ? row.input || undefined : undefined"
+            :placeholder="placeholder(row, column)"
             :error="errors[`${i}.${column}`]"
           />
           <span class="prices__remove">
@@ -163,7 +176,8 @@ async function save() {
         </a>
       </div>
       <p class="prices__hint">
-        {{ t('accounts.prices.anyModel') }} {{ t('accounts.prices.appliesFromNow') }}
+        {{ t('accounts.prices.anyModel') }} {{ t('accounts.prices.cacheWriteHint') }}
+        {{ t('accounts.prices.appliesFromNow') }}
       </p>
     </form>
     <template #footer>
@@ -195,26 +209,45 @@ async function save() {
 
 .prices__row {
   display: grid;
-  grid-template-columns: minmax(8rem, 2fr) repeat(3, minmax(4.5rem, 1fr)) auto;
+  grid-template-columns: minmax(8rem, 2fr) repeat(4, minmax(4.5rem, 1fr)) auto;
   align-items: start;
   gap: var(--space-2);
 }
 
 @media (width < 600px) {
   .prices__row {
-    grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
+    /* The model and the remove button on the first line, the four prices under them, two by two. */
+    grid-template-areas:
+      'model model remove'
+      'input cached .'
+      'write output .';
+    grid-template-columns: repeat(2, minmax(0, 1fr)) auto;
     padding-bottom: var(--space-2);
     border-bottom: var(--border-width) solid var(--border-subtle);
   }
 
-  /* The model and the remove button on the first line, the three prices under them. */
   .prices__model {
-    grid-column: 1 / 4;
+    grid-area: model;
+  }
+
+  .prices__input {
+    grid-area: input;
+  }
+
+  .prices__cached {
+    grid-area: cached;
+  }
+
+  .prices__write {
+    grid-area: write;
+  }
+
+  .prices__output {
+    grid-area: output;
   }
 
   .prices__remove {
-    grid-row: 1;
-    grid-column: 4;
+    grid-area: remove;
   }
 }
 

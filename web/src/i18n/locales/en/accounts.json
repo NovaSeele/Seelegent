@@ -487,6 +487,8 @@
     "anyModel": "* stands for any model without its own row.",
     "input": "Input",
     "cachedInput": "Cached input",
+    "cacheWrite": "Cache write",
+    "cacheWriteHint": "Cache write left empty: 1.25 × input, Anthropic's rule (one-hour writes: 2 × input; with a price set, 1.6 × it).",
     "output": "Output",
     "perMillion": "US dollars per 1M tokens",
     "pricingLink": "{service}'s price page",
