@@ -14,6 +14,7 @@ import (
 
 	"github.com/NovaSeele/Seelegent/internal/api"
 	"github.com/NovaSeele/Seelegent/internal/fsutil"
+	"github.com/NovaSeele/Seelegent/internal/mcpwire"
 	"github.com/NovaSeele/Seelegent/internal/platform"
 )
 
@@ -114,7 +115,13 @@ func addrPort(a net.Addr) netip.AddrPort {
 
 // callerOf returns the caller of r, classifying its connection on first use. A request without connection info
 // (a test handler called directly) is classified from RemoteAddr alone.
+//
+// A request this server handles in process (inProcessClient, the tools of a relayed MCP session) carries its caller
+// in its context: the caller of the relay's upgrade connection. Only this process can build such a context.
 func (s *Server) callerOf(r *http.Request) Caller {
+	if c, ok := r.Context().Value(inProcessKey{}).(Caller); ok {
+		return c
+	}
 	info, ok := r.Context().Value(connKey{}).(*connInfo)
 	if !ok {
 		remote, _ := netip.ParseAddrPort(r.RemoteAddr)
@@ -124,14 +131,18 @@ func (s *Server) callerOf(r *http.Request) Caller {
 	return info.caller
 }
 
-// workerAllowed is the worker allow-list: GET /health, GET /tasks/{own} and /tasks/{own}/events, and GET /spec
+// workerAllowed is the worker allow-list: POST /mcp/relay (whose tool calls carry the worker's caller), GET /health, GET /tasks/{own} and /tasks/{own}/events, and GET /spec
 // and /memory for the own task's folder or its repository root (for /spec, a dir inside that folder or the own
 // task's spec folder). Everything else is refused.
 func (s *Server) workerAllowed(r *http.Request, c Caller) bool {
+	p := strings.TrimSuffix(r.URL.Path, "/")
+	if r.Method == http.MethodPost && p == mcpwire.RelayPath && s.o.MCP != nil {
+		// A worker may open a relayed MCP session: its tool calls then run with this caller, under this list.
+		return true
+	}
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		return false
 	}
-	p := strings.TrimSuffix(r.URL.Path, "/")
 	if p == apiPrefix+"/health" {
 		return true
 	}

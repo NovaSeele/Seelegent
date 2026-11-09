@@ -23,6 +23,7 @@ endpoint tables.
 | §6 M15: `/github/*`, `/automations*` | `github.go` (over `httpapi.Tickets`, the ticket service, and `httpapi.Automations`, the automation service; each optional, its paths answer `501` without it); behaviour in [github.md](github.md) and [automations.md](automations.md) |
 | §7 SSE | `hub.go` (ids, ring, client queues), `stream.go` (the response), `feeds.go` (task bus and account watcher) |
 | §8 static dashboard | `web.go` |
+| MCP relay (not in the contract): `POST /api/v1/mcp/relay` | `relay.go` (upgrade, handshake, sessions), `inprocess.go` (the sessions' calls into this server); the session is `mcpserver.Relay` (`httpapi.MCPRelay`) |
 | DTOs | `internal/api`; `go generate ./internal/api` writes `web/src/api/types.gen.ts` (`internal/api/tsgen`), and a test fails when the file is stale |
 
 `internal/app/http.go` builds the server with the real services and runs it; `internal/cli/daemon.go` is the
@@ -376,6 +377,44 @@ in the daemon.
   must lie inside that cwd or be its own task's spec folder. Paths are compared as `fsutil` keys with links and
   junctions resolved, so an absolute `dir` of another project or a link inside the cwd that leads out of it is
   `403 forbidden` like a foreign cwd. `GET /memory` takes no other path.
+
+## MCP relay
+
+`POST /api/v1/mcp/relay` is the one route outside the contract. The companion's MCP relay (`seelegent-launch mcp`,
+[mcp.md](mcp.md#the-mcp-relay)) opens it so that a lead host's MCP server runs inside the daemon instead of in a
+`seelegent mcp` process of its own (about 53 MB private each on Windows; the relay costs about as much as a
+launcher). Constants and shapes are in `internal/mcpwire`, which the relay shares.
+
+1. The request is `POST /api/v1/mcp/relay` with `Connection: Upgrade`, `Upgrade: seelegent-mcp`, `X-Seelegent: 1`
+   and no body. Besides the Host check of `serve`, the route checks for itself: `X-Seelegent: 1` (else `403
+   forbidden`), no `Origin` header at all (else `403`: a browser sends Origin with every POST, and the route has no
+   use for one), and exactly its own Upgrade token (anything else, `websocket` included, is `426` with `details.reason:
+   "upgrade_required"`). Other methods are `405`. A daemon built without `Options.MCP` has no route (`404`), like an
+   older daemon; the relay then runs `seelegent mcp`.
+2. The caller is classified from the upgrade's connection, as for any request: its socket belongs to the relay's
+   process. A worker may open a session (the route is on the worker allow-list), and that classification stays
+   with the session: every tool call of it reaches this server through an in-process `http.RoundTripper`
+   (`inProcessClient`), whose request context carries the caller. `callerOf` takes the caller from that context;
+   no request from the network can carry it. So each call passes the Host and `X-Seelegent` checks and the worker
+   guard exactly as a `seelegent mcp` call from the relay's process would (a worker's relay gets `403`,
+   `details.caller: "worker"`, for `delegate`), and the session's own calls never go through the network.
+3. The daemon answers `101 Switching Protocols`, takes the connection over (`http.ResponseController.Hijack`) and
+   clears the server's deadlines on it. The relay sends one line, the handshake `{"protocol": 1, "env": {...},
+   "cwd": "...", "pid": N, "home": "..."}`; the daemon answers one line, `{"ok": true, "version": "...",
+   "revision": "..."}`, or `{"ok": false, "code": "protocol" | "bad_handshake" | "other_home", "error": "..."}` and
+   closes. `env` holds only the host's session variables `mcpwire.SessionEnv` (the daemon drops any other key and
+   never reads its own environment for the session); they can only add restrictions (`SEELEGENT_WORKER=1` makes the
+   session refuse mutating tools) and never undo the socket classification. `cwd` must be absolute: relative paths
+   of the tools resolve against it. A `home` whose `config.HomeID` is not this daemon's is `other_home`. The
+   handshake must come within 10 s and be at most 64 KiB.
+4. After that the connection carries newline-delimited MCP JSON-RPC both ways, served by `mcpserver.Relay` (the same
+   tools as `seelegent mcp`; the tool list is built once per tier models and shared by the sessions) until either
+   side closes it. At most 256 sessions run at once (`503 unavailable` beyond, and once the shutdown began).
+5. Shutdown: hijacked connections are not the `http.Server`'s any more, so `Server.Close` (the first step of
+   `App.Close`, before any service stops) ends them itself. Each session first gets the line
+   `{"jsonrpc":"2.0","method":"seelegent/relay/stopping"}` (`mcpwire.StoppingMethod`), then the connection closes;
+   in-process calls still running are cancelled, and `Close` waits for the sessions and those calls. The relay
+   reconnects to the next daemon without starting one ([mcp.md](mcp.md#the-mcp-relay)).
 
 ## The dashboard
 

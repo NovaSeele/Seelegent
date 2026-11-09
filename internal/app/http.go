@@ -15,6 +15,7 @@ import (
 	"github.com/NovaSeele/Seelegent/internal/config"
 	"github.com/NovaSeele/Seelegent/internal/envx"
 	"github.com/NovaSeele/Seelegent/internal/httpapi"
+	"github.com/NovaSeele/Seelegent/internal/mcpserver"
 )
 
 // httpShutdown bounds the graceful end of open requests at Close.
@@ -97,6 +98,8 @@ func (a *App) ListenHTTP(ctx context.Context, port int) (string, error) {
 		Hooks: a.Hooks, Tickets: a.Tickets, Automations: a.Automations, FreeMemory: a.sampler.Sample,
 		LowMemory: a.Tasks.LowMemory, Machine: a.Machine, Activity: a.Refresher.Touch,
 		ImageWriteTimeout: a.imageWriteTimeout, Spend: a.spendService(),
+		MCP: mcpserver.NewRelay(mcpserver.RelayOptions{Version: a.info.Version, Port: actual, Logger: a.log,
+			Tiers: func() config.TierModels { return a.Settings().Backends.Agy.Tiers }}),
 	})
 	if err != nil {
 		_ = ln.Close()
