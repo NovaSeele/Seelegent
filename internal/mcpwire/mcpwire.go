@@ -102,9 +102,10 @@ const (
 	// MaxHandshake bounds the handshake line.
 	MaxHandshake = 64 << 10
 	// StoppingMethod is the control notification the daemon writes before it closes a relayed session because it
-	// shuts down (stop, restart, update). The relay consumes it: the calls it then holds only look for a daemon that
-	// comes back, as a wait does after 503 daemon_stopping, so a relay never starts a daemon that was just stopped
-	// on purpose (or is being replaced by an update).
+	// shuts down (stop, restart, update). The relay consumes it: for StopGrace after it the relay starts no daemon,
+	// whether calls are pending or not; it only looks for one that comes back, as a wait does after 503
+	// daemon_stopping, so a relay never starts a daemon that was just stopped on purpose (or is being replaced by an
+	// update).
 	StoppingMethod = "seelegent/relay/stopping"
 )
 

@@ -347,3 +347,50 @@ func TestRelaySessionsEnd(t *testing.T) {
 		t.Fatal("the session stayed open after Close")
 	}
 }
+
+// TestRelayStuckHostDoesNotHoldTheStop: a relay whose host stopped reading leaves the daemon's writes blocked; the
+// daemon's stop (and so restart and update) still finishes within seconds.
+func TestRelayStuckHostDoesNotHoldTheStop(t *testing.T) {
+	e := newEnv(t)
+	rc := e.upgrade(nil)
+	if r := rc.hello(t, mcpwire.Handshake{Protocol: mcpwire.Protocol, Cwd: e.cwd}); !r.OK {
+		t.Fatalf("handshake: %+v", r)
+	}
+	var burst strings.Builder
+	burst.WriteString(`{"jsonrpc":"2.0","id":0,"method":"initialize","params":{"protocolVersion":"2025-06-18",` +
+		`"capabilities":{},"clientInfo":{"name":"stuck","version":"1"}}}` + "\n")
+	burst.WriteString(`{"jsonrpc":"2.0","method":"notifications/initialized"}` + "\n")
+	for i := 1; i <= 400; i++ {
+		burst.WriteString(`{"jsonrpc":"2.0","id":` + strconv.Itoa(i) + `,"method":"tools/list"}` + "\n")
+	}
+	_ = rc.c.SetWriteDeadline(time.Now().Add(limit))
+	if _, err := io.WriteString(rc.c, burst.String()); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(time.Second) // the answers fill the socket buffers; nothing reads them
+	ctx, cancel := context.WithTimeout(context.Background(), limit)
+	defer cancel()
+	start := time.Now()
+	if err := e.a.Close(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if d := time.Since(start); d > 8*time.Second {
+		t.Errorf("the stop took %s with a relay that reads nothing", d)
+	}
+}
+
+// TestRelayRefusesUnknownCaller: when the guard cannot classify the upgrade's connection (it fails closed: a worker
+// of no known task), the session would keep that for its whole life, so the upgrade is refused with 503 and the
+// relay runs `seelegent mcp`, which classifies every request.
+func TestRelayRefusesUnknownCaller(t *testing.T) {
+	e := newEnv(t)
+	e.who.set(&httpapi.Caller{Worker: true})
+	rc := e.upgrade(nil)
+	if rc.status != http.StatusServiceUnavailable {
+		t.Fatalf("upgrade answered %d, want 503", rc.status)
+	}
+	e.who.set(nil)
+	if rc := e.upgrade(nil); rc.status != http.StatusSwitchingProtocols {
+		t.Errorf("a classified caller got %d", rc.status)
+	}
+}

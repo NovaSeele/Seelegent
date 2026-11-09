@@ -397,7 +397,11 @@ launcher). Constants and shapes are in `internal/mcpwire`, which the relay share
    (`inProcessClient`), whose request context carries the caller. `callerOf` takes the caller from that context;
    no request from the network can carry it. So each call passes the Host and `X-Seelegent` checks and the worker
    guard exactly as a `seelegent mcp` call from the relay's process would (a worker's relay gets `403`,
-   `details.caller: "worker"`, for `delegate`), and the session's own calls never go through the network.
+   `details.caller: "worker"`, for `delegate`), and the session's own calls never go through the network. When the
+   guard cannot classify the connection and fails closed (a worker of no known task, as while the worker job
+   cannot be read), the upgrade is `503 unavailable` with `details.reason: "caller_unknown"`: a request heals on its
+   next connection, a session would keep that classification for its whole life. The relay then runs `seelegent
+   mcp`, which classifies every request, or, on a reconnect, tries again.
 3. The daemon answers `101 Switching Protocols`, takes the connection over (`http.ResponseController.Hijack`) and
    clears the server's deadlines on it. The relay sends one line, the handshake `{"protocol": 1, "env": {...},
    "cwd": "...", "pid": N, "home": "..."}`; the daemon answers one line, `{"ok": true, "version": "...",
@@ -409,12 +413,19 @@ launcher). Constants and shapes are in `internal/mcpwire`, which the relay share
    handshake must come within 10 s and be at most 64 KiB.
 4. After that the connection carries newline-delimited MCP JSON-RPC both ways, served by `mcpserver.Relay` (the same
    tools as `seelegent mcp`; the tool list is built once per tier models and shared by the sessions) until either
-   side closes it. At most 256 sessions run at once (`503 unavailable` beyond, and once the shutdown began).
+   side closes it. At most 256 sessions run at once (`503 unavailable` beyond, and once the shutdown began). Each
+   write to the relay has 45 s: a relay that reads nothing for that long (its host stopped reading the relay's
+   output) is cut off, and a failed write closes the connection, since it may have left half a message on it. The
+   relay reconnects when its host reads again and rebuilds the session.
 5. Shutdown: hijacked connections are not the `http.Server`'s any more, so `Server.Close` (the first step of
    `App.Close`, before any service stops) ends them itself. Each session first gets the line
    `{"jsonrpc":"2.0","method":"seelegent/relay/stopping"}` (`mcpwire.StoppingMethod`), then the connection closes;
-   in-process calls still running are cancelled, and `Close` waits for the sessions and those calls. The relay
-   reconnects to the next daemon without starting one ([mcp.md](mcp.md#the-mcp-relay)).
+   in-process calls still running are cancelled, and `Close` waits for the sessions and those calls. The notice
+   never waits behind a write the relay does not read: it first moves the connection's write deadline to 1 s from
+   now, which ends such a write (and closes the connection), so a host window that stopped reading cannot hold
+   `seelegent stop`, `restart` or `update`. `Close` waits 5 s; whatever still runs then gets its relay connection
+   closed and another 5 s, after which `Close` logs a warning and returns. The relay reconnects to the next daemon
+   without starting one ([mcp.md](mcp.md#the-mcp-relay)).
 
 ## The dashboard
 

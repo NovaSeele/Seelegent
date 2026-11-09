@@ -219,6 +219,8 @@ func (d *discovery) dial(ctx context.Context, port int) (*daemonConn, error) {
 			why += " (refused)"
 		case 421:
 			why += " (another program on the port?)"
+		case 503:
+			why += " (it cannot serve this relay now)"
 		}
 		return nil, &unusableError{why}
 	}

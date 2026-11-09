@@ -519,6 +519,39 @@ func TestStoppingDaemonIsNotStarted(t *testing.T) {
 	}
 }
 
+// TestIdleRelayStartsNoDaemonAfterStopping: the stopping notice holds for Grace whether calls were pending or not,
+// so the host's next request after `seelegent stop` (or during an update) only looks for a daemon; after Grace the
+// relay may start one again.
+func TestIdleRelayStartsNoDaemonAfterStopping(t *testing.T) {
+	f := newFakeDaemon(t)
+	var starts atomic.Int32
+	h := runRelay(t, f.port, nil, func(o *Options) {
+		o.Grace = time.Second
+		o.Start = func(context.Context, string, int) (<-chan error, error) {
+			starts.Add(1)
+			return nil, errors.New("not here")
+		}
+	})
+	s := f.next()
+	h.initialize(s)
+	f.stop()
+	s.send(t, map[string]any{"jsonrpc": "2.0", "method": mcpwire.StoppingMethod})
+	_ = s.c.Close()
+	time.Sleep(200 * time.Millisecond) // the relay drops the idle connection
+	h.request(40, "tools/list", nil)
+	time.Sleep(400 * time.Millisecond)
+	if n := starts.Load(); n != 0 {
+		t.Fatalf("the relay started a daemon %d times right after the stopping notice", n)
+	}
+	r := h.read() // Grace runs out: the request gets an error
+	if r["id"] != float64(40) || r["error"] == nil {
+		t.Fatalf("host got %v", r)
+	}
+	if starts.Load() == 0 {
+		t.Error("the relay never tried to start a daemon once Grace after the notice had passed")
+	}
+}
+
 func TestGraceRunsOut(t *testing.T) {
 	f := newFakeDaemon(t)
 	h := runRelay(t, f.port, map[string]string{mcpwire.EnvWorker: "1"}, func(o *Options) {
@@ -564,18 +597,22 @@ func TestGraceRunsOut(t *testing.T) {
 	}
 }
 
+// TestFallbackOnOlderDaemon: a daemon without the route (404), or one that refuses this relay's session (503, as
+// when it cannot classify the caller), makes the relay run `seelegent mcp`.
 func TestFallbackOnOlderDaemon(t *testing.T) {
-	f := newFakeDaemon(t)
-	f.status = 404
-	var ran atomic.Bool
-	h := runRelay(t, f.port, nil, func(o *Options) {
-		o.Fallback = func(context.Context) int { ran.Store(true); return 7 }
-	})
-	if code := <-h.done; code != 7 || !ran.Load() {
-		t.Fatalf("exit %d, fallback %v", code, ran.Load())
-	}
-	if !strings.Contains(h.stderr(), "HTTP 404") || !strings.Contains(h.stderr(), "seelegent mcp") {
-		t.Errorf("stderr = %q", h.stderr())
+	for _, status := range []int{404, 503} {
+		f := newFakeDaemon(t)
+		f.status = status
+		var ran atomic.Bool
+		h := runRelay(t, f.port, nil, func(o *Options) {
+			o.Fallback = func(context.Context) int { ran.Store(true); return 7 }
+		})
+		if code := <-h.done; code != 7 || !ran.Load() {
+			t.Fatalf("%d: exit %d, fallback %v", status, code, ran.Load())
+		}
+		if !strings.Contains(h.stderr(), "HTTP "+strconv.Itoa(status)) || !strings.Contains(h.stderr(), "seelegent mcp") {
+			t.Errorf("%d: stderr = %q", status, h.stderr())
+		}
 	}
 }
 
