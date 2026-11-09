@@ -152,7 +152,9 @@ that has no cost to judge it by waits for that service's prices. Open a row (or 
 send their requests: each service's address, tier models, allowed models and key count, with **Add key** to add
 another key to it. A service that keys still use cannot be deleted; the confirmation names those accounts.
 **Prices** sets what a service charges, in US dollars per 1M tokens: one row per model for input, cached input
-(empty means the input price) and output, with `*` for any model without its own row. Seelegent ships no prices;
+(empty means the input price), cache write and output, with `*` for any model without its own row. Cache write is
+the price of a five-minute prompt-cache write; left empty it follows Anthropic's rule, 1.25 × the input price, and
+one-hour writes cost 2 × the input price (1.6 × the cache write price when you set one). Seelegent ships no prices;
 the form links the service's own price page when it has one. New prices count from then on, and an empty table
 removes them.
 

@@ -8,6 +8,7 @@ import Tooltip from '@/components/ui/Tooltip.vue'
 import { useFormat } from '@/composables/useFormat'
 import { formatUSD } from '@/lib/usd'
 import { useAccountsStore } from '@/stores/accounts'
+import { useProvidersStore } from '@/stores/providers'
 
 import AccountBalance from './AccountBalance.vue'
 import { useActions } from './accountView'
@@ -30,7 +31,17 @@ const fmt = useFormat()
 const accounts = useAccountsStore()
 const actions = useActions()
 
+const providers = useProvidersStore()
+
 const view = computed(() => spendView(props.account))
+
+/** The service's count is the key's whole life, use outside Seelegent included: said plainly, every time. */
+const wholeLife = computed(() => {
+  if (view.value?.source !== 'service') return ''
+  const a = props.account
+  const service = providers.items.find((p) => p.id === a.provider)?.name ?? a.provider ?? ''
+  return t('accounts.spendSource.serviceWholeLife', { service })
+})
 const form = computed(() => (props.compact ? 'short' : 'long'))
 
 const text = computed(() => {
@@ -64,8 +75,9 @@ const tip = computed(() => {
   if (v.source === 'cli') return t('accounts.spend.estimateTip')
   if (v.source === 'prices') return t('accounts.spendSource.prices')
   const u = props.account.serviceUsage
-  if (!u) return t('accounts.spendSource.service')
+  if (!u) return wholeLife.value
   const parts = [
+    wholeLife.value,
     t('accounts.serviceUsage.total', { amount: formatUSD(u.totalUsd) }),
     t('accounts.serviceUsage.daily', { amount: formatUSD(u.dailyUsd) }),
     t('accounts.serviceUsage.weekly', { amount: formatUSD(u.weeklyUsd) }),
@@ -149,6 +161,7 @@ function useSuggested() {
     />
     <AccountBalance :account="account" :compact="compact" />
     <template v-if="!compact">
+      <p v-if="wholeLife" class="spend__note">{{ wholeLife }}</p>
       <p v-if="view.kind === 'cost' && view.tokens > 0" class="spend__note">
         {{ t('accounts.spend.unpricedTokens', { tokens: fmt.compact(view.tokens) }) }}
         <button v-if="!plain" type="button" class="spend__link" @click.stop="emit('prices')">

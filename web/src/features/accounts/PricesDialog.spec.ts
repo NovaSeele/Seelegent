@@ -133,4 +133,39 @@ describe('PricesDialog', () => {
     expect(setPrices).toHaveBeenCalledWith('deepseek', { prices: [] })
     expect(useToastStore().toasts.map((t) => t.message)).toEqual(['Prices of DeepSeek removed'])
   })
+
+  it('takes a cache write price, shows the default as its placeholder, and puts its errors on it', async () => {
+    const setPrices = vi.fn<ProvidersApi['setPrices']>(() =>
+      Promise.reject(
+        new ApiError(400, 'invalid_argument', 'bad', {
+          fields: [{ field: 'prices[0].cacheWriteUsd', message: 'must be finite' }],
+        }),
+      ),
+    )
+    await open(DEEPSEEK, setPrices)
+    expect(inputs('Cache write')[0]?.placeholder).toBe('0.3375')
+    type(inputs('Cache write')[0], 'x')
+    await flushPromises()
+    button('Save prices').click()
+    await flushPromises()
+    expect(setPrices).not.toHaveBeenCalled()
+    expect(inputs('Cache write')[0]?.getAttribute('aria-invalid')).toBe('true')
+    type(inputs('Cache write')[0], '0.4')
+    await flushPromises()
+    button('Save prices').click()
+    await flushPromises()
+    expect(setPrices).toHaveBeenCalledWith('deepseek', {
+      prices: [
+        {
+          model: 'deepseek-chat',
+          inputUsd: 0.27,
+          cachedInputUsd: 0.07,
+          cacheWriteUsd: 0.4,
+          outputUsd: 1.1,
+        },
+      ],
+    })
+    expect(text()).toContain('must be finite')
+    expect(text()).toContain("Cache write left empty: 1.25 × input, Anthropic's rule")
+  })
 })

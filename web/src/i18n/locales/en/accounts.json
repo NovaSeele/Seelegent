@@ -298,7 +298,8 @@
     "free": "Local · free",
     "none": "Cost not reported by this service",
     "service": "The service's own count for this key",
-    "prices": "At your prices for this service"
+    "prices": "At your prices for this service",
+    "serviceWholeLife": "{service}'s count for this key, including use outside Seelegent"
   },
   "service": {
     "label": "Service",
@@ -364,8 +365,9 @@
     "save": "Save budget",
     "remove": "Remove budget",
     "positive": "Enter an amount above 0",
-    "noCost": "This service reports no cost, so the budget cannot be checked: the key is never stopped by it.",
-    "suggested": "Use the key's OpenRouter limit, {amount}"
+    "noCost": "This service has no prices yet, so its spend has no cost: the budget is checked once you set its prices.",
+    "suggested": "Use the key's OpenRouter limit, {amount}",
+    "serviceWholeLife": "Use of this key outside Seelegent counts toward the budget too: it is checked against the service's own count for the key."
   },
   "model": {
     "title": "Model of {service}",
@@ -485,6 +487,8 @@
     "anyModel": "* stands for any model without its own row.",
     "input": "Input",
     "cachedInput": "Cached input",
+    "cacheWrite": "Cache write",
+    "cacheWriteHint": "Cache write left empty: 1.25 × input, Anthropic's rule (one-hour writes: 2 × input; with a price set, 1.6 × it).",
     "output": "Output",
     "perMillion": "US dollars per 1M tokens",
     "pricingLink": "{service}'s price page",

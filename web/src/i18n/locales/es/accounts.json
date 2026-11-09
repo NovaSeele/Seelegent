@@ -298,7 +298,8 @@
     "free": "Local · gratis",
     "none": "Este servicio no informa el coste",
     "service": "La cuenta propia del servicio para esta clave",
-    "prices": "A tus precios para este servicio"
+    "prices": "A tus precios para este servicio",
+    "serviceWholeLife": "La cuenta de {service} para esta clave, incluido el uso fuera de Seelegent"
   },
   "service": {
     "label": "Servicio",
@@ -364,8 +365,9 @@
     "save": "Guardar presupuesto",
     "remove": "Quitar presupuesto",
     "positive": "Escribe un importe mayor que 0",
-    "noCost": "Este servicio no informa del coste, así que el presupuesto no se puede comprobar: nunca detiene la clave.",
-    "suggested": "Usar el límite de OpenRouter de la clave, {amount}"
+    "noCost": "Este servicio aún no tiene precios, así que su gasto no tiene coste: el presupuesto se comprueba cuando fijes sus precios.",
+    "suggested": "Usar el límite de OpenRouter de la clave, {amount}",
+    "serviceWholeLife": "El uso de esta clave fuera de Seelegent también cuenta para el presupuesto: se compara con la cuenta propia del servicio para la clave."
   },
   "model": {
     "title": "Modelo de {service}",
@@ -485,6 +487,8 @@
     "anyModel": "* es cualquier modelo sin fila propia.",
     "input": "Entrada",
     "cachedInput": "Entrada en caché",
+    "cacheWrite": "Escritura en caché",
+    "cacheWriteHint": "Escritura en caché vacía: 1,25 × la entrada, la regla de Anthropic (escrituras de una hora: 2 × la entrada; con un precio fijado, 1,6 × ese precio).",
     "output": "Salida",
     "perMillion": "Dólares estadounidenses por 1M de tokens",
     "pricingLink": "Página de precios de {service}",

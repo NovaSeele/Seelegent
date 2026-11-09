@@ -85,7 +85,7 @@ export function useAccountControls(
         {
           id: 'key',
           label: t(a.keyHint ? 'accounts.action.replaceKey' : 'accounts.action.addKey'),
-          icon: 'settings',
+          icon: 'key',
         },
         ...(a.provider
           ? [{ id: 'model', label: t('accounts.action.model'), icon: 'gauge' } as const]

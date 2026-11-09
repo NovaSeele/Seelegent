@@ -13,11 +13,13 @@ import { useAccountsStore } from '@/stores/accounts'
 import { useToastStore } from '@/stores/toast'
 
 import AccountSpend from './AccountSpend.vue'
+import { spendSource } from './spend'
 
 /**
  * An API key's budget: an amount in US dollars and "Stop using this key when the budget is used up" (ticked by
- * default). The spend so far is shown above it. A service that reports no cost cannot be held to a budget, which
- * is said. "Remove budget" sends 0.
+ * default). The spend so far is shown above it. A service without prices cannot be held to a budget, which is
+ * said; for a service that counts the key's spend itself (OpenRouter), use outside Seelegent counts too, which is
+ * said as well. "Remove budget" sends 0.
  */
 const props = defineProps<{ account: Account | undefined }>()
 const open = defineModel<boolean>('open', { required: true })
@@ -32,7 +34,9 @@ const busy = ref(false)
 const error = ref('')
 
 const name = computed(() => props.account?.label ?? '')
-const noCost = computed(() => props.account?.spendSource !== 'cli')
+const source = computed(() => (props.account ? spendSource(props.account) : 'none'))
+// Without prices the spend has no cost to check a budget against (once one is set, the spend above says so).
+const noCost = computed(() => source.value === 'none' && !props.account?.budgetUsd)
 
 watch(open, (value) => {
   if (!value) return
@@ -98,6 +102,9 @@ function onEnter(event: KeyboardEvent) {
       />
       <Checkbox v-model="stop" :label="t('accounts.form.budgetStop')" />
       <p v-if="noCost" class="budget__note">{{ t('accounts.budget.noCost') }}</p>
+      <p v-if="source === 'service'" class="budget__note">
+        {{ t('accounts.budget.serviceWholeLife') }}
+      </p>
     </form>
     <template #footer>
       <Button v-if="account?.budgetUsd" variant="ghost" :disabled="busy" @click="save(0)">

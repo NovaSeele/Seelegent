@@ -3,8 +3,9 @@ import { describe, expect, it, vi } from 'vitest'
 
 import type { AccountsApi } from '@/api/accounts'
 import { useAccountsStore } from '@/stores/accounts'
+import { useProvidersStore } from '@/stores/providers'
 import { setupApp } from '@/test/app'
-import { makeAccount } from '@/test/fixtures'
+import { makeAccount, makeProvider } from '@/test/fixtures'
 
 import AccountSpend from './AccountSpend.vue'
 
@@ -90,7 +91,8 @@ describe('AccountSpend', () => {
     })
     expect(w.find('.spend__text').text()).toBe('$7.25 / $20')
     expect(tip(w)).toBe(
-      'Counted by the service for this key: $7.25 · today $0.50 · this week $2 · this month $7.25 · ' +
+      "anthropic's count for this key, including use outside Seelegent · " +
+        'Counted by the service for this key: $7.25 · today $0.50 · this week $2 · this month $7.25 · ' +
         'limit $20, resets monthly · may be out of date',
     )
   })
@@ -143,5 +145,20 @@ describe('AccountSpend', () => {
     })
     expect(w.find('.spend__text').text()).toBe('5 tokens, no cost known')
     expect(w.find('.spend__link').exists()).toBe(false)
+  })
+
+  it('says in full that the service counts the key’s use outside Seelegent too', async () => {
+    const { plugins } = await setupApp()
+    useProvidersStore().items = [makeProvider({ id: 'openrouter', name: 'OpenRouter' })]
+    const w = mount(AccountSpend, {
+      props: { account: key({ provider: 'openrouter', spendSource: 'service', spentUsd: 9 }) },
+      global: { plugins },
+    })
+    expect(w.find('.spend__note').text()).toBe(
+      "OpenRouter's count for this key, including use outside Seelegent",
+    )
+    expect(tip(w)).toBe("OpenRouter's count for this key, including use outside Seelegent")
+    const cli = await render({ spendSource: 'cli', spentUsd: 1 }, false)
+    expect(cli.find('.spend__note').exists()).toBe(false)
   })
 })

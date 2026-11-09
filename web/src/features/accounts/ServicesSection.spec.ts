@@ -112,7 +112,7 @@ describe('ServicesSection', () => {
     await addKey?.trigger('click')
     await flushPromises()
     expect(document.body.querySelector('.keyfield input')).toBeTruthy()
-    expect(document.querySelector('.picker__line')?.textContent).toContain('DeepSeek')
+    expect(document.querySelector('.chosen__line')?.textContent).toContain('DeepSeek')
     wrapper.unmount()
   })
 
