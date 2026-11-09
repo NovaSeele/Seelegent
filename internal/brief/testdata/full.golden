@@ -120,7 +120,11 @@ Did it
 Files touched: a.go, b.go
 ### Turn 2: the lead asked
 Second
-The previous attempt at the current request was interrupted before it finished (quota or sign-in problem on that worker account).
+The previous attempt at the current request was interrupted before it finished (a quota, sign-in or network problem on that worker account).
+Files it edited: internal/store/store.go, internal/store/store_test.go
+### The previous attempt reported
+Closed the rows; go test ./internal/store/ passes.
+Its work may already be done: check those files against the request, finish only what is missing, and report. Do not redo work that is already there.
 
 ## Current request from the lead
 Third request.

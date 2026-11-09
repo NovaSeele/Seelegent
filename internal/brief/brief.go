@@ -71,6 +71,8 @@ const (
 	ConstitutionChars = 6000
 	// TurnChars caps each earlier message and report in the handoff section.
 	TurnChars = 6000
+	// InterruptedReportChars caps the report of an interrupted attempt in the handoff section.
+	InterruptedReportChars = 4000
 	// BaselineShown is how many already-changed files are listed.
 	BaselineShown = 30
 	// DepChars caps each prerequisite's report in the dependency context.
@@ -119,6 +121,10 @@ type Input struct {
 	// Interrupted is true when an earlier attempt of this turn ran on another account (or conversation) and did not
 	// finish.
 	Interrupted bool
+	// InterruptedFiles are the files the earlier attempts of this turn edited, and InterruptedReport the last report
+	// one of them gave (worker text, masked): the new worker verifies that work instead of redoing it.
+	InterruptedFiles  []string
+	InterruptedReport string
 	// Message is this turn's request.
 	Message string
 }
@@ -221,7 +227,17 @@ func Worker(in Input) string {
 		}
 		if in.Interrupted {
 			lines = append(lines, "The previous attempt at the current request was interrupted before it finished "+
-				"(quota or sign-in problem on that worker account).")
+				"(a quota, sign-in or network problem on that worker account).")
+			if len(in.InterruptedFiles) > 0 {
+				lines = append(lines, "Files it edited: "+strings.Join(in.InterruptedFiles, ", "))
+			}
+			if r := strings.TrimSpace(in.InterruptedReport); r != "" {
+				lines = append(lines, "### The previous attempt reported", quoted(r, InterruptedReportChars))
+			}
+			if len(in.InterruptedFiles) > 0 || strings.TrimSpace(in.InterruptedReport) != "" {
+				lines = append(lines, "Its work may already be done: check those files against the request, finish "+
+					"only what is missing, and report. Do not redo work that is already there.")
+			}
 		}
 		parts = append(parts, strings.Join(lines, "\n"), "## Current request from the lead\n"+in.Message)
 	} else {
