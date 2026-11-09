@@ -300,6 +300,7 @@ const detailText = computed(() => {
 }
 
 .te__detail {
+  position: relative;
   max-height: 16em;
   overflow: auto;
   padding-left: calc(var(--icon-sm) + var(--space-2));

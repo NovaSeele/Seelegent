@@ -197,6 +197,7 @@ useGitCommands(
 
 <style scoped>
 .git {
+  position: relative;
   display: flex;
   flex: 1;
   flex-direction: column;
@@ -265,6 +266,7 @@ useGitCommands(
 }
 
 .git__list {
+  position: relative;
   max-height: 40vh;
   overflow: auto;
   border: var(--border-width) solid var(--border-subtle);

@@ -139,10 +139,14 @@ function onKeydown(event: KeyboardEvent) {
   min-height: 0;
 }
 
+/* Positioned so the rows' .sr-only labels stay inside this scroll frame instead of stretching the workspace, and
+   contained so a scroll that reaches the end of the list never chains into the workspace behind it. */
 .split__sidebar-body {
+  position: relative;
   flex: 1;
   min-height: 0;
   overflow: auto;
+  overscroll-behavior: contain;
 }
 
 .split--side-by-side .split__sidebar {

@@ -78,6 +78,7 @@ function groupLabel(match: CommandMatch) {
 
 <style scoped>
 .palette__list {
+  position: relative;
   flex: 1;
   min-height: 0;
   margin: 0;

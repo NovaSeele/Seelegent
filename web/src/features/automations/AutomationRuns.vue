@@ -138,6 +138,7 @@ watch([open, () => props.automation?.id], async ([now, id]) => {
 }
 
 .run__detail {
+  position: relative;
   display: block;
   margin-top: var(--space-1);
   max-height: 120px;

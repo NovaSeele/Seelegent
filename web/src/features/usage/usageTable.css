@@ -22,6 +22,7 @@
 }
 
 .usage-table__scroll {
+  position: relative;
   overflow-x: auto;
 }
 

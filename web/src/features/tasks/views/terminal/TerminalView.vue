@@ -186,6 +186,7 @@ onBeforeUnmount(unregister)
 }
 
 .term__scroll {
+  position: relative;
   flex: 1;
   min-height: 0;
   overflow-y: auto;

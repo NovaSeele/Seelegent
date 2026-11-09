@@ -151,6 +151,7 @@ watch(urgent, (value) => {
 }
 
 .gate__body {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: var(--space-3);

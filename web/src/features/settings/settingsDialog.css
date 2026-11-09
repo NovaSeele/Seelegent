@@ -38,6 +38,7 @@
 }
 
 .settings__list {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: var(--space-0);
@@ -152,6 +153,7 @@
 }
 
 .settings__body {
+  position: relative;
   flex: 1;
   min-height: 0;
   padding: var(--space-4) var(--space-6) var(--space-6);

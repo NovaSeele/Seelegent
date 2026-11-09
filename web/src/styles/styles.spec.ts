@@ -103,11 +103,12 @@ describe('themes', () => {
   })
 })
 
-describe('style gates', () => {
-  const styled = Object.entries(sources)
-    .filter(([path]) => !path.startsWith(THEMES_DIR))
-    .map(([path, source]) => [path, styleText(path, source)] as const)
+/** Every non-theme file with its CSS. */
+const styled = Object.entries(sources)
+  .filter(([path]) => !path.startsWith(THEMES_DIR))
+  .map(([path, source]) => [path, styleText(path, source)] as const)
 
+describe('style gates', () => {
   // File-type glyph colours are fixed per type (like VS Code) and provider hues per backend, not themed, so each
   // lives in a table of its own.
   const COLOUR_TABLES = ['src/styles/fileicons.css', 'src/styles/providers.css']
@@ -149,23 +150,68 @@ describe('style gates', () => {
   })
 })
 
-// Design review (Tree tab): a scroll frame without a position does not contain its absolute descendants (every
-// .sr-only label is absolute), so they stretch the scroll height of the pane around it and the whole task pane
-// scrolls away. The process views' scroll frames are positioned.
-describe('task view scroll frames', () => {
-  it('position every scroll frame of the process views', () => {
-    const missing: string[] = []
-    for (const [path, source] of Object.entries(sources)) {
-      if (!path.startsWith('src/features/tasks/views/process/') || !path.endsWith('.vue')) continue
-      const css = styleText(path, source)
-      for (const m of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
-        const body = m[2] ?? ''
-        const scrolls = /overflow(-x|-y)?:\s*(auto|scroll)/.test(body)
-        if (scrolls && !/position:\s*(relative|absolute|sticky|fixed)/.test(body)) {
-          missing.push(`${path}: ${(m[1] ?? '').trim()}`)
-        }
-      }
-    }
+// A scroll frame (overflow auto/scroll/hidden) without a position of its own does not contain its absolute
+// descendants, and every .sr-only label is absolute. Those labels escape the frame and stretch the scroll height of
+// the nearest positioned ancestor instead. It came back twice: first the Tree tab scrolled the whole task pane away
+// (fixed in the process views only), then the /tasks sidebar's 47 ProviderMark labels gave .workspace a 4260px
+// scroll height in a 1062px pane, so scrolling the list to its end chained into an empty workspace. Hence the gate
+// covers every scroll frame in src. (.sr-only itself stays as it is: the settings pickers' hidden radios rely on it.)
+describe('scroll frames', () => {
+  interface Rule {
+    path: string
+    selectors: string[]
+    body: string
+  }
+
+  const rules: Rule[] = styled.flatMap(([path, css]) =>
+    [...css.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/([^{}]+)\{([^{}]*)\}/g)].map((m) => ({
+      path,
+      selectors: (m[1] ?? '')
+        .split(',')
+        .map((s) => s.trim().replace(/\s+/g, ' '))
+        .filter(Boolean),
+      body: m[2] ?? '',
+    })),
+  )
+
+  const scrolls = (body: string) =>
+    [...body.matchAll(/(?:^|[;{\s])overflow(?:-x|-y)?\s*:\s*([^;]*)/g)].some((m) =>
+      /\b(?:auto|scroll)\b/.test(m[1] ?? ''),
+    )
+  const positioned = (body: string) =>
+    /(?:^|[;{\s])position\s*:\s*(?:relative|absolute|sticky|fixed)\b/.test(body)
+  const ruleFor = (path: string, selector: string) =>
+    rules.filter((rule) => rule.path === path && rule.selectors.includes(selector))
+
+  it('positions every scroll frame', () => {
+    const frames = rules.filter((rule) => scrolls(rule.body))
+    // Guards the parser: a regression that finds no frames would pass vacuously.
+    expect(frames.length).toBeGreaterThan(30)
+    const missing = frames
+      .filter((rule) => !positioned(rule.body))
+      .flatMap((rule) =>
+        rule.selectors
+          .filter(
+            (selector) => !ruleFor(rule.path, selector).some((other) => positioned(other.body)),
+          )
+          .map((selector) => `${rule.path}: ${selector}`),
+      )
     expect(missing).toEqual([])
+  })
+
+  it('keeps the task sidebar scroll from chaining into the workspace', () => {
+    const body = ruleFor('src/components/layout/SplitLayout.vue', '.split__sidebar-body')
+      .map((rule) => rule.body)
+      .join('\n')
+    expect(body).toMatch(/overscroll-behavior:\s*contain/)
+    expect(positioned(body)).toBe(true)
+  })
+
+  it('positions the account list clipping frame', () => {
+    const body = ruleFor('src/features/accounts/AccountList.vue', '.list__rows')
+      .map((rule) => rule.body)
+      .join('\n')
+    expect(body).toMatch(/overflow:\s*hidden/)
+    expect(positioned(body)).toBe(true)
   })
 })

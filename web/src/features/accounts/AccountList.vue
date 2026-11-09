@@ -131,7 +131,9 @@ onBeforeUnmount(() => observer?.disconnect())
   text-align: center;
 }
 
+/* A clipping frame: positioned so the rows' absolute .sr-only labels are clipped here, not by the page. */
 .list__rows {
+  position: relative;
   margin: 0;
   padding: 0;
   overflow: hidden;

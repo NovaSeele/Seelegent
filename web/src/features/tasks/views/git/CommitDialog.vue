@@ -167,6 +167,7 @@ const fileLabel = (file: GitFile) => (file.oldPath ? `${file.oldPath} → ${file
 }
 
 .cd__list {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: var(--space-1);

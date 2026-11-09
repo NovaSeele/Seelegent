@@ -175,6 +175,7 @@ const outputId = computed(() => `tool-out-${props.item.key}`)
 }
 
 .tool__out {
+  position: relative;
   max-height: 24em;
   margin: var(--space-1) 0 var(--space-1);
   padding: var(--space-2) var(--space-3);

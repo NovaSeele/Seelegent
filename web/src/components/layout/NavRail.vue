@@ -135,6 +135,7 @@ watch(locale, () => void nextTick(updateFade))
 }
 
 .rail__groups {
+  position: relative;
   display: flex;
   flex-direction: column;
   flex: 1;

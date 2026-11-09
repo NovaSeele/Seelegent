@@ -141,6 +141,7 @@ const options = computed(() => [
 }
 
 .hist__list {
+  position: relative;
   max-height: 40vh;
   overflow: auto;
   border: var(--border-width) solid var(--border-subtle);
