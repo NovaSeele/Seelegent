@@ -21,7 +21,10 @@ type fakeGit struct{ root string }
 func (g fakeGit) Root(context.Context, string) (string, error) { return g.root, nil }
 func (g fakeGit) Head(context.Context, string) (string, bool)  { return "abc123", true }
 
-func newService(t *testing.T, root string, exec func(cmd string) CmdResult, active []string) (*Service, *[]api.ProofRun) {
+// newService returns the service and a function that counts the runs it published so far: Publish is called from
+// the run's goroutine, which may still be publishing when the run's record already says it ended.
+func newService(t *testing.T, root string, exec func(cmd string) CmdResult, active []string) (svc *Service,
+	published func() int) {
 	t.Helper()
 	st, err := store.Open(context.Background(), filepath.Join(t.TempDir(), "seelegent.db"))
 	if err != nil {
@@ -29,8 +32,8 @@ func newService(t *testing.T, root string, exec func(cmd string) CmdResult, acti
 	}
 	t.Cleanup(func() { _ = st.Close() })
 	var mu sync.Mutex
-	var published []api.ProofRun
-	s := New(Options{Ledger: NewLedger(st, nil), Git: fakeGit{root: root},
+	var runs []api.ProofRun
+	svc = New(Options{Ledger: NewLedger(st, nil), Git: fakeGit{root: root},
 		Exec: func(_ context.Context, cmd, dir, _, _ string) CmdResult {
 			if same, _ := fsutil.SamePath(dir, root); !same {
 				t.Errorf("dir = %s", dir)
@@ -38,10 +41,14 @@ func newService(t *testing.T, root string, exec func(cmd string) CmdResult, acti
 			return exec(cmd)
 		},
 		Active:  func(context.Context, string) ([]string, error) { return active, nil },
-		Publish: func(r api.ProofRun) { mu.Lock(); published = append(published, r); mu.Unlock() },
+		Publish: func(r api.ProofRun) { mu.Lock(); runs = append(runs, r); mu.Unlock() },
 		LogDir:  t.TempDir()})
-	t.Cleanup(s.Close)
-	return s, &published
+	t.Cleanup(svc.Close)
+	return svc, func() int {
+		mu.Lock()
+		defer mu.Unlock()
+		return len(runs)
+	}
 }
 
 func code(n int) *int { return &n }
@@ -101,11 +108,13 @@ func TestRegressionRunAndMatrix(t *testing.T) {
 		run.GitHead != "abc123" {
 		t.Fatalf("run = %+v", run)
 	}
+	mu.Lock()
 	if strings.Join(ran, "|") != "go test ./internal/p|go build ./...|echo ok|go vet ./...|doctrine-cmd" {
 		t.Errorf("ran %v", ran)
 	}
-	if len(*published) < 3 {
-		t.Errorf("published %d", len(*published))
+	mu.Unlock()
+	if n := published(); n < 3 {
+		t.Errorf("published %d", n)
 	}
 	m, err := s.Matrix(ctx, root, "specs/001-p")
 	if err != nil {
