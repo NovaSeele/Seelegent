@@ -330,7 +330,7 @@
     },
     "passiveCooldown": {
       "label": "API-key rest",
-      "desc": "How long an API-key account rests after it hits a limit (its quota cannot be read).",
+      "desc": "Longest rest of an API-key account after it hits a limit with no reset time (its quota cannot be read). Rests climb 1, 5 and 15 minutes, then this, while limits keep coming, and start again at 1 minute after a quiet spell.",
       "keywords": "cooldown passive api key rate limit"
     },
     "usageHistory": {

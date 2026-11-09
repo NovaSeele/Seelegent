@@ -124,26 +124,72 @@ func TestMarkExhaustedPassive(t *testing.T) {
 	ctx := t.Context()
 	k := f.apiKeyAccount("openai", "sk-test-0123456789abcdef")
 	req := Request{Backend: "codex", Group: "Codex", Model: "gpt-x", Provider: "openai"}
-	now := f.clk.Now()
 	f.setting(func(s *config.Settings) { s.PassiveCooldownMinutes = 30 })
-	c, err := f.p.MarkExhausted(ctx, k.ID, Exhaustion{Group: "Codex", Reason: "429"})
-	if err != nil || !c.Passive || !c.Until.Equal(now.Add(30*time.Minute)) {
-		t.Fatalf("passive cooldown %+v, %v", c, err)
+	// Three limit errors in a row climb the ladder 1, 5, 15 minutes; the next one is capped by the setting.
+	for i, want := range []time.Duration{time.Minute, 5 * time.Minute, 15 * time.Minute, 30 * time.Minute, 30 * time.Minute} {
+		now := f.clk.Now()
+		c, err := f.p.MarkExhausted(ctx, k.ID, Exhaustion{Group: "Codex", Reason: "429"})
+		if err != nil || !c.Passive || !c.Until.Equal(now.Add(want)) {
+			t.Fatalf("rest %d: %+v, %v, want %s", i+1, c, err, want)
+		}
+		if got := f.restUntil(req); !got.Equal(c.Until) {
+			t.Fatalf("rest %d: resting until %s", i+1, got)
+		}
+		// A quota "read" never lifts a passive rest; only time does.
+		f.clk.Advance(want - time.Second)
+		f.restUntil(req)
+		f.clk.Advance(time.Second)
+		if _, err := f.p.Select(ctx, req); err != nil {
+			t.Fatalf("after rest %d: %v", i+1, err)
+		}
 	}
-	if got := f.restUntil(req); !got.Equal(c.Until) {
-		t.Fatalf("resting until %s", got)
+	// After a quiet gap of 40 minutes the ladder starts again at 1 minute.
+	f.clk.Advance(40 * time.Minute)
+	now := f.clk.Now()
+	c, err := f.p.MarkExhausted(ctx, k.ID, Exhaustion{Group: "Codex"})
+	if err != nil || !c.Until.Equal(now.Add(time.Minute)) {
+		t.Fatalf("after a quiet gap: %+v, %v", c, err)
 	}
-	// A quota "read" never lifts a passive rest; only time does.
-	f.clk.Advance(29 * time.Minute)
-	f.restUntil(req)
-	f.clk.Advance(time.Minute)
-	if _, err := f.p.Select(ctx, req); err != nil {
-		t.Fatalf("after the rest: %v", err)
+	// An error while the rest still runs climbs from it (1 to 5 minutes from now).
+	f.clk.Advance(30 * time.Second)
+	now = f.clk.Now()
+	if c, err = f.p.MarkExhausted(ctx, k.ID, Exhaustion{Group: "Codex"}); err != nil || !c.Until.Equal(now.Add(5*time.Minute)) {
+		t.Fatalf("during a rest: %+v, %v", c, err)
 	}
-	// The provider's reset hint wins over the setting.
+	// The provider's reset hint wins over the ladder, even a shorter one once the rest is over.
+	f.clk.Advance(5 * time.Minute)
 	hint := f.clk.Now().Add(3 * time.Minute)
 	if c, err = f.p.MarkExhausted(ctx, k.ID, Exhaustion{Group: "Codex", ResetAt: hint}); err != nil || !c.Until.Equal(hint) {
 		t.Fatalf("hinted %+v, %v", c, err)
+	}
+	// An existing longer rest is kept: a hint of an hour, then an error without one.
+	long := f.clk.Now().Add(time.Hour)
+	if c, err = f.p.MarkExhausted(ctx, k.ID, Exhaustion{Group: "Codex", ResetAt: long}); err != nil || !c.Until.Equal(long) {
+		t.Fatalf("long hint %+v, %v", c, err)
+	}
+	if c, err = f.p.MarkExhausted(ctx, k.ID, Exhaustion{Group: "Codex"}); err != nil || !c.Until.Equal(long) {
+		t.Fatalf("longer rest not kept: %+v, %v", c, err)
+	}
+	// Each quota group has its own ladder.
+	now = f.clk.Now()
+	if c, err = f.p.MarkExhausted(ctx, k.ID, Exhaustion{Group: "Other"}); err != nil || !c.Until.Equal(now.Add(time.Minute)) {
+		t.Fatalf("other group: %+v, %v", c, err)
+	}
+}
+
+// TestMarkExhaustedPassiveDefaultLadder checks the ladder with the default setting (60): 1, 5, 15, then 60.
+func TestMarkExhaustedPassiveDefaultLadder(t *testing.T) {
+	f := newFixture(t)
+	ctx := t.Context()
+	k := f.apiKeyAccount("openai", "sk-test-0123456789abcdef")
+	for i, want := range []time.Duration{time.Minute, 5 * time.Minute, 15 * time.Minute, time.Hour, time.Hour} {
+		now := f.clk.Now()
+		c, err := f.p.MarkExhausted(ctx, k.ID, Exhaustion{Group: "Codex", Reason: "429"})
+		if err != nil || !c.Until.Equal(now.Add(want)) {
+			t.Fatalf("rest %d: %+v, %v, want %s", i+1, c, err, want)
+		}
+		// The next error comes 10 minutes after the rest ended: still within the gap.
+		f.clk.Advance(want + 10*time.Minute)
 	}
 }
 

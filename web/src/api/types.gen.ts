@@ -2448,8 +2448,9 @@ export interface Settings {
   /** MinRemaining skips an account for a quota group once its remaining fraction is at or below this value. */
   minRemaining: number
   /**
-   * PassiveCooldownMinutes is how long an API-key account rests after a quota error when its provider has no
-   * quota endpoint to tell the reset time.
+   * PassiveCooldownMinutes is the longest rest of an API-key account after a quota error when its provider gives
+   * no reset time: rests climb 1, 5, 15 minutes, then this, while the errors keep coming (a new error less than
+   * 30 minutes after the last rest ended), and start again at 1 minute after a quiet spell.
    */
   passiveCooldownMinutes: number
   /** UsageHistory turns the hourly usage snapshots on or off. */
