@@ -8,7 +8,7 @@ Code: `internal/mcpserver` (tools), `internal/client` (typed API client, discove
 `internal/ops` (what the tools share with the command line: the worker guard table, the lead session, the tasks
 that need the lead, recent steps, the wait that survives a restart, the `not_available` refusal, naming a repo
 and an issue),
-`internal/cli/mcp.go` (the command). The tool list is `internal/mcpserver/tools.json`, embedded in the binary. The
+`internal/cli/mcp.go` (the command), `internal/relay` and `mcpserver.Relay` (the MCP relay, below). The tool list is `internal/mcpserver/tools.json`, embedded in the binary. The
 command line ([cli.md](cli.md)) offers the same operations as commands.
 
 ## Starting it from a host
@@ -30,8 +30,71 @@ own lines, and only warnings and errors of the MCP SDK).
 | `CLAUDE_CODE_HOST_SESSION_ID` | Host session id sent with `delegate` (`session.hostId`). |
 | `SEELEGENT_LEAD` | Lead host sent with `delegate` (`session.lead`: `claude`, `codex`, `opencode`, `gemini`, `agy` or `cli`); the worker brief says "The lead for this task is Claude Code." and so on. Without it (or with another value) the host is detected: `CLAUDE_CODE_SESSION_ID` → `claude`, `CODEX_SESSION_ID`/`CODEX_THREAD_ID` → `codex`, `GEMINI_SESSION_ID`/`GEMINI_CLI_SESSION` → `gemini`, else `cli`. |
 
+`seelegent setup` registers the MCP relay `seelegent-launch mcp` instead when the companion next to `seelegent` is of
+its build (see below); the environment table holds for both.
+
 The server reads `config.json` without writing it. If it cannot be read, the server still starts and every
 available tool answers with "the settings cannot be read: ..." so the host sees why.
+
+## The MCP relay
+
+Each lead host window starts its own MCP server and keeps it for the whole session. As `seelegent mcp` that is a
+full Seelegent process: measured on Windows about 53 MB private each (25 to 44 MB working set), most of it the
+32 MiB entropy buffer every binary that links crypto carries ([release.md](release.md#the-companion-launcher)); nine
+windows held about 480 MB of commit. The companion `seelegent-launch` (the launcher executable, which links no crypto
+package) has a second role for that: `seelegent-launch mcp` is a thin relay (`internal/relay`), and the MCP server
+runs inside the daemon (`mcpserver.Relay`, behind `POST /api/v1/mcp/relay`, see [api.md](api.md#mcp-relay)).
+`seelegent setup` registers it when the companion next to `seelegent` is of the same build ([setup.md](setup.md)).
+
+What the relay does:
+
+- It finds the daemon like the client: `SEELEGENT_HOME` (else `~/.seelegent`), the running daemon's
+  `run/daemon.port` when a daemon holds `run/daemon.lock`, then `SEELEGENT_PORT`, else `config.json`'s `port`, else
+  47821. It opens the upgrade, sends the handshake and copies newline-delimited JSON-RPC between the host's stdin
+  and stdout and the session. It reads nothing from stdin before the session is open.
+- When nothing answers it starts the daemon like the client: under `run/start.lock`, not while another daemon holds
+  `run/daemon.lock`, `seelegent[.exe] daemon --port <port>` from its own folder, detached and hidden, in the data
+  directory, with `SEELEGENT_HOME`; a 20 s deadline covers the whole start, and a started daemon that exits with code
+  3 (another took the lock) is waited for. Never inside a worker (`SEELEGENT_WORKER=1`) or with
+  `SEELEGENT_NO_AUTO_START=1`.
+- Its handshake carries only the variables the MCP server reads (`mcpwire.SessionEnv`: `SEELEGENT_WORKER`,
+  `SEELEGENT_LEAD`, `SEELEGENT_SESSION`, `CLAUDE_CODE_SESSION_ID`, `CLAUDE_CODE_HOST_SESSION_ID`,
+  `CODEX_SESSION_ID`, `CODEX_THREAD_ID`, `GEMINI_SESSION_ID`, `GEMINI_CLI_SESSION`; `ops` reads them through the same
+  package, and a test fails when the two drift), its working directory (relative tool paths resolve against it, as
+  in `seelegent mcp`) and its data directory (a daemon of another one refuses). Never the rest of the environment:
+  the lead's environment holds API keys and tokens.
+- The daemon classifies the caller from the relay's connection, so the worker guard is the same as for
+  `seelegent mcp` ([api.md](api.md#mcp-relay)).
+- **Fallback.** When no session opens at the start (a daemon of an older build answers 404, a refused or mismatched
+  handshake, another program or another data directory's daemon on the port, no daemon after the start, an
+  unreadable `config.json` or `SEELEGENT_PORT`), it writes one line to stderr saying why and runs `seelegent[.exe] mcp`
+  from its own folder with the host's stdin, stdout and stderr, and exits with its code. The host then works as
+  before, without the saving; `seelegent mcp` reports the problem in its tool errors.
+
+### Daemon restarts
+
+`seelegent mcp` survives a daemon restart (update, `seelegent restart`) because the session lives in the host's
+process. With the relay it lives in the daemon, so the relay rebuilds it:
+
+- It keeps the host's `initialize` request, its `notifications/initialized` and its last `logging/setLevel`. On a
+  new connection it sends them again (the requests under ids of its own, `seelegent-relay-N`, whose answers it
+  swallows), so the new session is where the host thinks it is and the `delegate` announcements still reach a host
+  that asked for log messages.
+- Requests in flight when the connection dropped: read-only ones (`wait`, `task`, `status`, `tools/list`, ...) are
+  sent again with their own ids. Mutating ones (`ops.Mutating`, the worker guard's table: `delegate`, `followup`,
+  `review`, `cancel`, `consult`, memory writes, ...) are never sent again; the host gets a tool error at once, code
+  `daemon_restarted`: "the connection to the Seelegent daemon was lost while this call ran (the daemon restarted or
+  stopped); it may already have taken effect: check task or status before calling it again".
+- While requests are open it reconnects with backoff (250 ms doubling to 2 s) for 40 s (`mcpwire.StopGrace`, the
+  same grace as a wait's), starting the daemon when nothing answers, as after a crash. A daemon that shuts down says
+  so first (`seelegent/relay/stopping`); then the relay only looks for a daemon that comes back and never starts
+  one, as a wait does after `503 daemon_stopping`, so it does not undo `seelegent stop` or race an update. When
+  the grace runs out, every open request is answered with an error (a tool error with code `daemon_unavailable`,
+  or a JSON-RPC error for other methods), and the next request of the host tries again (and may start the daemon).
+  With nothing open the relay waits for the host's next request before it reconnects.
+- An answer reaches the host only for a request that is still open, which it then leaves, so no id is ever answered
+  twice; a late answer to a call the host cancelled is dropped. `notifications/cancelled` for a call that was sent
+  goes to the daemon. Server notifications and requests go to the host as they are.
 
 ## One daemon per data directory
 
@@ -141,6 +204,7 @@ structured content is `{error: {code, message, status, details}}`:
 | Route, tool or option not built yet (501, or refused locally) | "Seelegent error: ... is not available in this version of Seelegent yet; nothing was done (...)" (code `not_available`) |
 | Other API error | "Seelegent error: <message>" with the API's code and details |
 | No daemon, foreign program (or another data directory's daemon) on the port, busy daemon, start failed | the reason and what to do (code `daemon_unavailable`) |
+| The daemon restarted under a mutating call relayed by `seelegent-launch mcp` | "Seelegent error: the connection to the Seelegent daemon was lost while this call ran ..." (code `daemon_restarted`) |
 | The daemon was stopped during a wait and did not come back | "Seelegent error: the Seelegent daemon was stopped during the wait; ..." (code `daemon_stopped`) |
 
 ## Worker guard
@@ -173,5 +237,11 @@ against a stub API, the locally refused options, the task id announcement and th
 against a real daemon built through `internal/app` with the fake worker CLI and a temp data directory.
 `internal/client` tests discovery and start against fake daemons: several servers racing to start one daemon, the
 port file, stale port files, waiting for a daemon that holds the lock, and a started daemon that exits for the lock.
+`internal/relay` runs the relay against a fake daemon: the handshake's environment (nothing outside the list),
+pass-through both ways, a crash with the replay and the re-sent and refused calls, a stopping daemon that is not
+started again, the grace running out, the fallback (404, no daemon inside a worker) and the autostart.
+`internal/httpapi` (`relay_test.go`) runs real sessions through the route: the tool list, a relative `cwd`, a worker
+environment, a worker's connection (the session keeps it), the route's checks, a refused handshake, and sessions
+that end (no goroutine left) or are ended by the daemon's shutdown.
 `internal/cli` runs the mcp command (autostart off, and inside a worker), two daemons on one data directory, and
 every command of [cli.md](cli.md).
