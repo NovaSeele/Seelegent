@@ -38,7 +38,7 @@ func linkDir(src, dst string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), mklinkTimeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "cmd.exe")
-	HideWindow(cmd)
+	HideWindowShared(cmd)
 	sysProcAttr(cmd).CmdLine = `cmd.exe /d /s /c "mklink /J ` + quoted(dst) + " " + quoted(src) + `"`
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("%w: mklink /J: %w: %s", errNoLink, err, strings.TrimSpace(string(out)))

@@ -8,6 +8,7 @@
   "stale": "显示的是上次的数字；刷新失败：{error}",
   "historyFailed": "无法加载配额历史：{error}",
   "dataSince": "用量数据从 {date} 开始保存。",
+  "tokensNote": "令牌数不含 CLI 单独报告的缓存读取（如 Claude Code）。",
   "noCost": "未报告",
   "showTable": "以表格显示",
   "showChart": "以图表显示",

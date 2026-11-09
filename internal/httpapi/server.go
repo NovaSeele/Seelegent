@@ -28,6 +28,7 @@ import (
 	"github.com/NovaSeele/Seelegent/internal/config"
 	"github.com/NovaSeele/Seelegent/internal/gitx"
 	"github.com/NovaSeele/Seelegent/internal/memory"
+	"github.com/NovaSeele/Seelegent/internal/platform"
 	"github.com/NovaSeele/Seelegent/internal/pool"
 	"github.com/NovaSeele/Seelegent/internal/quota"
 	"github.com/NovaSeele/Seelegent/internal/role"
@@ -66,6 +67,9 @@ type Tasks interface {
 // Accounts is the account store (account.Manager).
 type Accounts interface {
 	Add(ctx context.Context, n account.New, links []string) (account.Account, []string, error)
+	AddDirect(ctx context.Context, in account.DirectNew, links []string) (account.DirectResult, error)
+	StoredKey(ctx context.Context, id string) (account.Account, string, error)
+	RecordTest(ctx context.Context, id, result string, started time.Time) (bool, error)
 	Get(ctx context.Context, id string) (account.Account, error)
 	List(ctx context.Context) ([]account.Account, error)
 	Update(ctx context.Context, id string, p account.Patch) (account.Account, error)
@@ -77,6 +81,7 @@ type Accounts interface {
 	GetProvider(ctx context.Context, id string) (account.Provider, error)
 	ListProviders(ctx context.Context) ([]account.Provider, error)
 	DeleteProvider(ctx context.Context, id string) error
+	SetPrices(ctx context.Context, providerID string, prices []account.Price) (account.Provider, error)
 }
 
 // Pool is the account pool (pool.Pool).
@@ -90,6 +95,14 @@ type Pool interface {
 type Quota interface {
 	Refresh(ctx context.Context, id string) (quota.Snapshot, error)
 	RefreshAll(ctx context.Context) []quota.Result
+	Request(id string)
+}
+
+// Spend reads the spend services of API-key accounts (quota.ServiceRefresher).
+type Spend interface {
+	// Refresh reads one account's service now; ErrPassive when it has none.
+	Refresh(ctx context.Context, id string) (account.ServiceSpend, error)
+	// Request asks for a read soon (a key was stored). It never blocks.
 	Request(id string)
 }
 
@@ -138,7 +151,8 @@ type Git interface {
 	Status(ctx context.Context, cwd string) (api.RepoStatus, error)
 	Branch(ctx context.Context, cwd string) (*api.BranchInfo, error)
 	Diff(ctx context.Context, root, rel, base string, untracked bool) (api.FileDiff, error)
-	TaskGit(ctx context.Context, tf gitx.TaskFiles) (api.TaskGit, error)
+	TaskGitView(ctx context.Context, tf gitx.TaskFiles) (api.TaskGit, error)
+	HeadFile(ctx context.Context, root, rel string, limit int) (data []byte, size int64, ok bool, err error)
 	TaskCommit(ctx context.Context, tf gitx.TaskFiles, sha string) (api.GitCommitDetail, error)
 	Commit(ctx context.Context, tf gitx.TaskFiles, message string, files []string) (api.CommitResult, error)
 }
@@ -154,6 +168,14 @@ type Options struct {
 	PID             int
 	// HomeID identifies the data directory (config.HomeID) in GET /health.
 	HomeID string
+	// FreeMemory reads the machine's free memory for GET /health (platform.Memory, or a cached sampler); nil
+	// answers an unknown reading.
+	FreeMemory func() platform.MemoryStatus
+	// LowMemory reports whether the memory watchdog holds new starts (Health.LowMemory); nil answers false.
+	LowMemory func() bool
+	// Machine is the machine profile the auto resource settings are computed from (Health.Resources and
+	// Health.Machine); nil answers an unknown machine.
+	Machine func() config.Machine
 
 	Tasks    Tasks
 	Accounts Accounts
@@ -182,10 +204,18 @@ type Options struct {
 	Automations Automations
 	// Backends are the worker CLIs by name.
 	Backends map[string]backend.Backend
+	// Probe configures the key tests of POST /providers/test (the zero value in production).
+	Probe backend.ProbeOptions
+	// Spend reads the spend services of API-key accounts (quota.ServiceRefresher); nil reads none.
+	Spend Spend
 	// LogDir is the folder of daemon.log and hooks.log (GET /logs).
 	LogDir string
 	// Redact masks secrets in log lines (logx.Redactor.String); identity when nil.
 	Redact func(string) string
+
+	// Activity is told of every API request that is not a worker's (the dashboard, the CLI, the lead's MCP
+	// calls), before it is served (quota.Refresher.Touch). It must not block. Nil tells nobody.
+	Activity func()
 
 	// Stop asks the daemon to shut down cleanly (POST /daemon/stop). It must only signal and return at once: the
 	// shutdown waits for the answer to be written. Nil answers 503.
@@ -200,6 +230,9 @@ type Options struct {
 	Logger *slog.Logger
 	// Heartbeat is the SSE ping interval (25 s when 0); tests shorten it.
 	Heartbeat time.Duration
+	// ImageWriteTimeout bounds how long an image larger than smallImageBytes may take to send (30 s when 0): its
+	// file stays open while it streams, so a client that stops reading must not hold it for ever. Tests shorten it.
+	ImageWriteTimeout time.Duration
 	// AccountsPoll is how often the account watcher looks for changes besides pool and task notices (30 s).
 	AccountsPoll time.Duration
 	// DevOrigins are extra browser origins accepted for development only (the Vite dev server, whose proxy keeps
@@ -249,6 +282,9 @@ func New(o Options) (*Server, error) {
 	}
 	if o.Heartbeat <= 0 {
 		o.Heartbeat = 25 * time.Second
+	}
+	if o.ImageWriteTimeout <= 0 {
+		o.ImageWriteTimeout = 30 * time.Second
 	}
 	if o.AccountsPoll <= 0 {
 		o.AccountsPoll = 30 * time.Second
@@ -329,16 +365,20 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 	// Every answer, refusals included: no page may frame the dashboard (clickjacking), and no link leaks the
-	// daemon's URL to another site.
+	// daemon's URL to another site. An API answer is also never loaded by another origin's page as a resource (an
+	// <img> or <script> of another site, which no CORS check covers).
+	isAPI := r.URL.Path == apiPrefix || strings.HasPrefix(r.URL.Path, apiPrefix+"/")
 	h := w.Header()
 	h.Set("X-Frame-Options", "DENY")
 	h.Set("Content-Security-Policy", "frame-ancestors 'none'")
 	h.Set("Referrer-Policy", "no-referrer")
+	if isAPI {
+		h.Set("Cross-Origin-Resource-Policy", "same-origin")
+	}
 	if !s.hostAllowed(r.Host) {
 		s.writeError(w, r, translated(api.CodeMisdirected, "misdirected"))
 		return
 	}
-	isAPI := r.URL.Path == apiPrefix || strings.HasPrefix(r.URL.Path, apiPrefix+"/")
 	if isAPI && mutating(r.Method) {
 		if r.Header.Get("X-Seelegent") != "1" {
 			s.writeError(w, r, translated(api.CodeForbidden, "no_header"))
@@ -349,13 +389,17 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if c := s.callerOf(r); c.Worker && !s.workerAllowed(r, c) {
+	c := s.callerOf(r)
+	if c.Worker && !s.workerAllowed(r, c) {
 		s.workerDenied(w, r)
 		return
 	}
 	if !isAPI {
 		s.serveWeb(w, r)
 		return
+	}
+	if s.o.Activity != nil && !c.Worker {
+		s.o.Activity()
 	}
 	s.mux.ServeHTTP(w, r)
 }

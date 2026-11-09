@@ -2,7 +2,9 @@ package backend
 
 import (
 	"slices"
+	"time"
 
+	"github.com/NovaSeele/Seelegent/internal/config"
 	"github.com/NovaSeele/Seelegent/internal/event"
 	"github.com/NovaSeele/Seelegent/internal/launch"
 )
@@ -22,13 +24,21 @@ const (
 	OutcomeCanceled OutcomeStatus = "canceled"
 )
 
+// BackgroundWaitTimeout is the error of a background-wait outcome that the turn's time limit ended: the worker's
+// commands, a dev server among them, are gone.
+const BackgroundWaitTimeout = "the turn reached its time limit while waiting for a background command; its process " +
+	"tree was stopped"
+
 // Outcome summarizes a finished turn.
 type Outcome struct {
 	Status OutcomeStatus `json:"status"`
 	// Class is set when Status is failed.
 	Class event.Class `json:"class,omitempty"`
-	// Error is the failure message (secrets masked).
+	// Error is the failure message (secrets masked), or why a background wait ended (BackgroundWaitTimeout).
 	Error string `json:"error,omitempty"`
+	// ResetAt is when the limit resets, when Class is quota_exhausted and the claude CLI's Error says so ("resets
+	// 3:10am (Asia/Ho_Chi_Minh)"); zero otherwise. The task engine passes it to the pool as the rest's hint.
+	ResetAt time.Time `json:"resetAt,omitzero"`
 	// Response is the agent's final answer.
 	Response string `json:"response,omitempty"`
 	// ConversationID resumes the conversation.
@@ -45,14 +55,35 @@ type Outcome struct {
 	DeniedActions []string `json:"deniedActions,omitempty"`
 	// Usage is the turn's token usage (camelCase JSON, see B12).
 	Usage event.Usage `json:"usage"`
+	// ThreadUsage is the conversation's usage total the CLI reported, for a CLI whose usage counts every earlier run
+	// of a resumed conversation (codex); Usage is then this run's part. The next run of the conversation starts from
+	// it.
+	ThreadUsage *event.Usage `json:"threadUsage,omitempty"`
+	// ThreadTracked is set on every outcome of such a CLI, with or without ThreadUsage: Usage is this run's part.
+	// An outcome without it was recorded before Seelegent kept the total, and its Usage was the CLI's total.
+	ThreadTracked bool `json:"threadTracked,omitempty"`
 	// DurationMs is the duration the CLI reported.
 	DurationMs int64 `json:"durationMs,omitempty"`
 	// BackgroundWait is the CLI's line when Status is background_wait.
 	BackgroundWait string `json:"backgroundWait,omitempty"`
+	// RecoveryAnswer is the answer of a transient failure the CLI reported after the agent's final answer
+	// (event.Error.Answer): the task engine may count the attempt as done.
+	RecoveryAnswer string `json:"recoveryAnswer,omitempty"`
+	// RecoveryFinal is the agent's final answer of that run (event.Error.Final): what the task engine checks for the
+	// complete report, since RecoveryAnswer may hold an earlier report of the run.
+	RecoveryFinal string `json:"recoveryFinal,omitempty"`
+	// Warning is an error the task engine overlooked (a network error after a complete report, an error the
+	// conversation replayed): the attempt counts as done, and the lead and the dashboard are told.
+	Warning string `json:"warning,omitempty"`
 }
 
 // Collector folds a turn's events into its Outcome. Feed it every event the parser emits, in order.
 type Collector struct {
+	// Backend is the name of the backend whose events these are. Only Claude Code's limit messages are read for a
+	// reset time: the grammar is its own, and agy's and codex's wordings ("will reset after 7h44m", zone
+	// abbreviations such as PT) could be misread; their quota readers give the reset times instead.
+	Backend string
+
 	o         Outcome
 	report    *event.Report
 	failure   *event.Error
@@ -126,9 +157,17 @@ func (c *Collector) Outcome(exit launch.Exit) Outcome {
 		o.Status = OutcomeFailed
 		o.Class = c.failure.Class
 		o.Error = c.failure.Message
+		o.RecoveryAnswer = c.failure.Answer
+		o.RecoveryFinal = c.failure.Final
+		if o.Class == event.ClassQuotaExhausted && c.Backend == config.BackendClaude {
+			o.ResetAt = resetHint(o.Error, exit.EndedAt)
+		}
 	case c.waiting != "":
 		o.Status = OutcomeBackgroundWait
 		o.BackgroundWait = c.waiting
+		if exit.Reason == launch.ReasonTimeout {
+			o.Error = BackgroundWaitTimeout
+		}
 	default:
 		o.Status = OutcomeFailed
 		o.Class = event.ClassFatal

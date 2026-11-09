@@ -25,9 +25,22 @@ export const STATUS_TONE: Readonly<Record<AccountStatus, Tone>> = {
   disabled: 'muted',
 }
 
-/** The i18n key of a kind (catalog keys have no hyphen). */
-export const kindKey = (kind: Account['kind']): 'isolated' | 'system' | 'apiKey' =>
-  kind === 'api-key' ? 'apiKey' : kind
+export type TestResult = NonNullable<Account['testResult']>
+
+/**
+ * The tone of an API-key account's test state in its Status pill: a passing key is green, an untested or
+ * unverifiable one neutral, a refused key or a wrong address red, a service that was down or answered oddly amber.
+ */
+export const TEST_TONE: Readonly<Record<TestResult, Tone>> = {
+  ok: 'success',
+  not_tested: 'neutral',
+  no_models_endpoint: 'neutral',
+  refused: 'danger',
+  not_found: 'danger',
+  redirected: 'danger',
+  unreachable: 'attention',
+  error: 'attention',
+}
 
 /** Can this account sign in (isolated and system accounts; API-key accounts use a key)? */
 export const canSignIn = (account: Account): boolean => account.kind !== 'api-key'
@@ -48,14 +61,15 @@ export const readyForWork = (account: Account, now: number): boolean =>
   account.busy < account.maxConcurrent
 
 /**
- * What the card's pill shows. A Ready account (ok, or error with old numbers) that is out of quota or resting
- * shows that instead of Ready (attention tone for out of quota, neutral for resting), and the matching chip is
- * left out; every other status keeps its own word.
+ * What the card's pill shows. A Ready account (ok, or error with old numbers) that is held until the user acts (no
+ * credit left, budget reached), out of quota or resting shows that instead of Ready (attention tone for a hold and
+ * for out of quota, neutral for resting), and the matching chip is left out; every other status keeps its own word.
  */
-export type PillState = 'status' | 'exhausted' | 'resting'
+export type PillState = 'status' | 'held' | 'exhausted' | 'resting'
 
 export function pillState(account: Account, now: number): PillState {
   if (account.status !== 'ok' && account.status !== 'error') return 'status'
+  if (account.restReason) return 'held'
   if (isExhausted(account, now)) return 'exhausted'
   if (account.resting) return 'resting'
   return 'status'
@@ -112,6 +126,7 @@ export function offConsequence(
 }
 
 export const PILL_TONE: Readonly<Record<Exclude<PillState, 'status'>, Tone>> = {
+  held: 'attention',
   exhausted: 'attention',
   resting: 'neutral',
 }

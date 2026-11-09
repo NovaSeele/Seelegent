@@ -11,8 +11,16 @@
  * - `hello` with another `build` than the page was loaded with: the dashboard reloads to the new bundle.
  *   Another `instance` (daemon restart) also resyncs, in case the daemon's own reset was missed.
  * - task.* frames go to the tasks store, account.* (sign-in progress included) to the accounts store,
- *   settings.updated here. Other frames (providers.changed, roles.changed, memory.changed, hook.ran) go to the
- *   stores that `subscribe` to them, through the same hold-and-replay path, so none is lost during a resync.
+ *   settings.updated and resources.changed (the memory watchdog's lowMemory, into health) here; after
+ *   settings.updated /health is read again, since the effective resource values (Health.resources) follow the
+ *   settings. Other frames
+ *   (providers.changed, roles.changed, memory.changed, hook.ran) go to the stores that `subscribe` to them,
+ *   through the same hold-and-replay path, so none is lost during a resync.
+ * - A tab hidden for HIDDEN_PAUSE_MS closes the stream (and stops any retry of /state), so a background tab neither
+ *   keeps reading the API nor counts as a client: the daemon's idle policy needs none. It is a deliberate pause,
+ *   not an outage: the status stays as it was and no banner shows. When the tab shows again the stream reopens from
+ *   the last event id, the way a reconnect does: missed frames are replayed, or the daemon's `reset` brings a fresh
+ *   /state snapshot.
  * - After every snapshot but the first, `onResync` listeners run: data that is not in /state (providers, roles,
  *   usage) is read again, since frames about it may have fallen between the old stream and the new one (old
  *   bug B9: pages stayed stale after a reconnect).
@@ -45,6 +53,9 @@ export interface ConnectionDeps {
   random?: () => number
 }
 
+/** How long a hidden tab keeps the event stream open before it pauses it (see the header). */
+export const HIDDEN_PAUSE_MS = 5 * 60_000
+
 /** Frames held while a resync reads /state; beyond this the oldest are dropped (the snapshot covers them). */
 export const MAX_HELD_FRAMES = 5000
 
@@ -61,6 +72,7 @@ export type NoticeName = Exclude<
   | 'account.deleted'
   | 'account.login'
   | 'settings.updated'
+  | 'resources.changed'
 >
 
 interface HeldFrame {
@@ -83,6 +95,7 @@ export const useConnectionStore = defineStore('connection', () => {
   const clockOffsetMs = ref(0)
   const stream = shallowRef<EventStream<ServerEvents> | null>(null)
 
+  let client: ApiClient = defaultApi
   let tasksApi: TasksApi = createTasksApi(defaultApi)
   let reload: () => void = () => window.location.reload()
   let random: () => number = Math.random
@@ -100,6 +113,23 @@ export const useConnectionStore = defineStore('connection', () => {
   let attempt = 0
   let retryTimer: ReturnType<typeof setTimeout> | undefined
   let stopped = false
+  /** Bumped by every /health read; an answer applies only while it is the newest. */
+  let healthSeq = 0
+  /**
+   * healthSeq when the last live resources.changed frame came: a /health read begun at or before it answers with a
+   * lowMemory and memory older than the frame's, so those two keep the frame's values.
+   */
+  let lowSeq = -1
+  /** The stream is closed because the tab has been hidden for HIDDEN_PAUSE_MS. */
+  const paused = ref(false)
+  let pauseTimer: ReturnType<typeof setTimeout> | undefined
+  /** The stream was running when it paused: it reopens on resume (else the boot read runs again). */
+  let resumeStream = false
+  /**
+   * A /state read was owed when the stream paused (a retry was waiting, or a read was on its way, maybe to fail):
+   * resume reads it, since the stream's replay does not bring the snapshot a reset asked for.
+   */
+  let syncOwed = false
 
   function setStatus(next: ConnectionStatus): void {
     status.value = next
@@ -119,6 +149,7 @@ export const useConnectionStore = defineStore('connection', () => {
   function applySnapshot(state: BootState): void {
     if (checkBuild(state.health.build)) return
     health.value = state.health
+    healthSeq++ // a /health read already on its way is older than this snapshot
     settings.value = state.settings
     backends.value = state.backends
     projects.value = state.projects
@@ -149,6 +180,10 @@ export const useConnectionStore = defineStore('connection', () => {
       syncing = false
       again = false
       if (stopped) return
+      if (paused.value) {
+        syncOwed = true
+        return
+      }
       const events = stream.value
       // Before the stream runs, a failed boot read is the connection state; once it runs the stream says.
       const delay = backoffDelay(attempt++, random)
@@ -161,6 +196,7 @@ export const useConnectionStore = defineStore('connection', () => {
     }
     if (stopped) return
     attempt = 0
+    syncOwed = false
     applySnapshot(state)
     if (again) {
       // Keep the held frames: the next snapshot's id is looked up among them.
@@ -180,7 +216,8 @@ export const useConnectionStore = defineStore('connection', () => {
     const events = stream.value
     if (events && !events.running) {
       events.setLastEventId(state.lastEventId)
-      events.start()
+      if (paused.value) resumeStream = true
+      else events.start()
     }
   }
 
@@ -250,8 +287,20 @@ export const useConnectionStore = defineStore('connection', () => {
         // A careful replay skips settings on purpose: a settings frame carries no time, so it cannot be ordered
         // against the snapshot just applied, and an older frame would undo a newer value. The snapshot wins; a
         // change that raced it shows with the next settings.updated or resync. Live frames always apply.
-        if (!careful) settings.value = data as Settings
+        if (!careful) {
+          settings.value = data as Settings
+          void refreshHealth()
+        }
         break
+      case 'resources.changed': {
+        // Like settings, it carries no time: a careful replay leaves lowMemory to the snapshot just applied.
+        const change = data as ServerEvents['resources.changed']
+        if (!careful && health.value) {
+          health.value = { ...health.value, lowMemory: change.lowMemory, memory: change.memory }
+          lowSeq = healthSeq
+        }
+        break
+      }
       default:
         for (const listener of [...(listeners.get(name) ?? [])]) listener(data)
         break
@@ -294,7 +343,8 @@ export const useConnectionStore = defineStore('connection', () => {
   function start(deps: ConnectionDeps = {}): EventStream<ServerEvents> {
     if (stream.value) return stream.value
     stopped = false
-    tasksApi = createTasksApi(deps.api ?? defaultApi)
+    client = deps.api ?? defaultApi
+    tasksApi = createTasksApi(client)
     if (deps.reload) reload = deps.reload
     if (deps.random) random = deps.random
     const events = createEventStream<ServerEvents>({
@@ -307,7 +357,7 @@ export const useConnectionStore = defineStore('connection', () => {
           retryAt.value = null
           hasConnected.value = true
         } else if (state === 'closed') {
-          if (stopped) return
+          if (stopped || paused.value) return
           status.value = 'offline'
           retryAt.value = retryIn === null ? null : Date.now() + retryIn
         } else if (status.value !== 'offline') {
@@ -323,23 +373,58 @@ export const useConnectionStore = defineStore('connection', () => {
 
     if (typeof window !== 'undefined') {
       const retry = () => retryNow()
-      const onVisible = () => {
-        if (document.visibilityState === 'visible') retry()
+      const onVisibility = () => {
+        if (document.visibilityState !== 'hidden') {
+          clearTimeout(pauseTimer)
+          pauseTimer = undefined
+          if (paused.value) resume()
+          else retry()
+        } else if (pauseTimer === undefined && !paused.value) {
+          pauseTimer = setTimeout(pause, HIDDEN_PAUSE_MS)
+        }
       }
       window.addEventListener('online', retry)
-      document.addEventListener('visibilitychange', onVisible)
+      document.addEventListener('visibilitychange', onVisibility)
+      if (document.visibilityState === 'hidden') onVisibility()
       cleanup = () => {
         window.removeEventListener('online', retry)
-        document.removeEventListener('visibilitychange', onVisible)
+        document.removeEventListener('visibilitychange', onVisibility)
       }
     }
     return events
   }
 
+  /** Closes the stream of a tab hidden for HIDDEN_PAUSE_MS, and any retry of /state, without changing the status. */
+  function pause(): void {
+    pauseTimer = undefined
+    const events = stream.value
+    if (!events || stopped) return
+    paused.value = true
+    resumeStream = events.running
+    if (retryTimer !== undefined || syncing) syncOwed = true
+    clearTimeout(retryTimer)
+    retryTimer = undefined
+    events.stop()
+  }
+
+  /**
+   * The tab shows again: the stream reopens from its last event id, and a /state read owed since the pause (or the
+   * boot read, when the stream never ran) runs; frames that come meanwhile are held as in any resync.
+   */
+  function resume(): void {
+    paused.value = false
+    const events = stream.value
+    if (!events || stopped) return
+    const owed = syncOwed || !resumeStream
+    if (resumeStream) events.start()
+    resumeStream = false
+    if (owed && !syncing) void sync()
+  }
+
   /** Retries at once: the boot read when it is still failing, else the stream. */
   function retryNow(): void {
     const events = stream.value
-    if (!events) return
+    if (!events || paused.value) return
     if (!events.running) {
       if (!syncing) void sync()
       return
@@ -351,6 +436,11 @@ export const useConnectionStore = defineStore('connection', () => {
     stopped = true
     clearTimeout(retryTimer)
     retryTimer = undefined
+    clearTimeout(pauseTimer)
+    pauseTimer = undefined
+    paused.value = false
+    resumeStream = false
+    syncOwed = false
     stream.value?.stop()
     stream.value = null
     cleanup?.()
@@ -362,6 +452,26 @@ export const useConnectionStore = defineStore('connection', () => {
     pageBuild = ''
     instance = ''
     snapshots = 0
+  }
+
+  /**
+   * Reads GET /health again (the free memory shown next to the resource settings is read when the daemon answers;
+   * the effective resource values change with the settings). Only the newest read applies, so a slow answer never
+   * puts back values older than one already shown; a resources.changed frame that came while it was on its way
+   * keeps its lowMemory and memory (the rest of the answer, the resources after a settings change, still applies).
+   * A failure keeps the last reading: the connection state says when the daemon is gone.
+   */
+  async function refreshHealth(signal?: AbortSignal): Promise<void> {
+    const seq = ++healthSeq
+    try {
+      const next = await client.get<Health>('/health', { signal })
+      const shown = health.value
+      if (!shown || seq !== healthSeq) return
+      health.value =
+        lowSeq >= seq ? { ...next, lowMemory: shown.lowMemory, memory: shown.memory } : next
+    } catch {
+      // Kept as it was.
+    }
   }
 
   /** The server's idea of now (epoch ms). */
@@ -378,12 +488,14 @@ export const useConnectionStore = defineStore('connection', () => {
     projects,
     hasConnected,
     clockOffsetMs,
+    paused,
     stream,
     setStatus,
     start,
     retryNow,
     stop,
     sync,
+    refreshHealth,
     serverNow,
     subscribe,
     onResync,

@@ -34,6 +34,10 @@ export interface Message {
   params?: Record<string, string | number>
   /** Shown instead when the catalog has no `key` (an attention reason this dashboard does not know). */
   fallback?: string
+  /** Params that are memory amounts in MB, shown with the shared formatter ("1.5 GB"). */
+  mb?: readonly string[]
+  /** Params whose values are catalog keys, translated when shown (a setting's name). */
+  keys?: readonly string[]
 }
 
 /** A line of a notice's detail: an optional translated label (a gate step's kind), then data shown as it is. */
@@ -72,7 +76,8 @@ export type TimelineItem =
 
 export type TimelineKind = TimelineItem['kind']
 
-type Draft = TimelineItem & { step?: number }
+/** `merge`: a later event with the same merge key, right after it, updates this item instead of adding one. */
+type Draft = TimelineItem & { step?: number; merge?: string }
 
 /** What folding needs to remember between events. */
 interface Fold {
@@ -134,6 +139,16 @@ function fold(f: Fold, event: TaskEvent): Draft | null {
     case 'turn_end':
       return { ...base, kind: 'turnEnd', ...event.data }
     case 'attempt_end':
+      // An ok attempt with a warning: the worker CLI reported an error that did not fail the work (a network error
+      // it had recovered from, an error its conversation replayed).
+      if (event.data.status === 'ok' && event.data.warning)
+        return notice(
+          'warn',
+          'warning',
+          'terminal.ev.attempt.okWarning',
+          {},
+          { detail: event.data.warning },
+        )
       return event.data.status === 'ok' || event.data.status === 'cancelled'
         ? null
         : notice(
@@ -158,14 +173,43 @@ function fold(f: Fold, event: TaskEvent): Draft | null {
       )
     case 'auth_failed':
       return notice('error', 'accounts', 'terminal.ev.authFailed', {}, { detail: event.data.error })
-    case 'waiting_quota':
-      return notice(
-        'warn',
-        'statusWaiting',
-        'terminal.ev.waitingQuota',
-        {},
-        { until: event.data.until },
-      )
+    case 'waiting_quota': {
+      const data = event.data
+      if (data.reason === 'busy' || data.reason === 'no_account') {
+        const key = data.reason === 'busy' ? 'terminal.ev.waitingSlot' : 'terminal.ev.noAccounts'
+        return notice('warn', 'statusWaiting', key, {}, { detail: data.detail })
+      }
+      if (data.reason === 'budget_reached') {
+        // No time ends it: the daemon's line says which account and what to do.
+        return notice(
+          'warn',
+          'statusWaiting',
+          'terminal.ev.budgetReached',
+          {},
+          { detail: data.detail },
+        )
+      }
+      if (data.reason !== 'memory') {
+        // resting, or no reason (events of an older daemon): waiting for quota.
+        return notice(
+          'warn',
+          'statusWaiting',
+          'terminal.ev.waitingQuota',
+          {},
+          { until: data.until },
+        )
+      }
+      // Each new reading of a wait that goes on updates its line instead of adding one.
+      const item =
+        data.availableMB !== undefined && data.needMB
+          ? notice('warn', 'gauge', 'terminal.ev.waitingMemory', {
+              available: data.availableMB,
+              need: data.needMB,
+            })
+          : notice('warn', 'gauge', 'terminal.ev.waitingResources')
+      if (item.kind === 'notice' && item.message.params) item.message.mb = ['available', 'need']
+      return merged(f, item, `memory:${event.turn ?? 0}.${event.attempt ?? 0}`)
+    }
     case 'retry':
       return notice(
         'warn',
@@ -275,17 +319,40 @@ function fold(f: Fold, event: TaskEvent): Draft | null {
       if (!n) return null
       const flag = shownFlag(event)
       if (flag) f.flagShown = { reason: flag, turn: event.turn ?? 0 }
-      return notice(n.tone, n.icon, n.message.key, n.message.params, {
+      const item = notice(n.tone, n.icon, n.message.key, n.message.params, {
         note: n.note,
         detail: n.detail,
         lines: n.lines,
       })
+      // A queued gate is told again whenever its place in line changes: one line that follows it.
+      return event.type === 'gate' && event.data.phase === 'queued'
+        ? merged(f, item, `gate-queued:${event.turn ?? 0}`)
+        : item
     }
     case 'error':
       return notice('error', 'error', 'terminal.ev.error', {}, { detail: event.data.message })
     case 'worker':
       return foldWorker(f.items, f.open, event, base, notice)
   }
+}
+
+/**
+ * `item`, or the last item updated with its text when that one has the same merge key: a wait that is told again
+ * (a new reading, a new place in line) keeps one line, with its first time.
+ */
+function merged(f: Fold, item: Draft, merge: string): Draft {
+  const last = f.items.at(-1)
+  if (last?.kind === 'notice' && item.kind === 'notice' && last.merge === merge) {
+    last.tone = item.tone
+    last.icon = item.icon
+    last.message = item.message
+    last.note = item.note
+    last.lines = item.lines
+    last.rev = item.rev
+    return last
+  }
+  item.merge = merge
+  return item
 }
 
 /**

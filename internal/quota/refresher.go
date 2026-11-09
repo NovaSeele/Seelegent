@@ -5,8 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"math/rand/v2"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/NovaSeele/Seelegent/internal/account"
@@ -28,6 +30,16 @@ const (
 	// misread answer must not drop an account for good, but a really signed-out account should not run a CLI every
 	// cycle either: every 6 hours is cheap and bounds the damage of a wrong "signed out".
 	NeedsLoginRecheck = 6 * time.Hour
+
+	// IdleAfter, IdleFactor and IdleMaxInterval are the idle policy (RefresherOptions.Busy): when nothing is busy
+	// and nobody called (Touch) for IdleAfter, the cycles stretch to the interval times IdleFactor, at most
+	// IdleMaxInterval (never shorter than the interval). Quota shown or used after a quiet hour is read again at
+	// the first call (Touch), so stretching costs no freshness anyone sees.
+	IdleAfter       = 30 * time.Minute
+	IdleFactor      = 6
+	IdleMaxInterval = time.Hour
+	// AfterRunFresh is how old an account's quota may be for AfterRun to skip the read after a run that went well.
+	AfterRunFresh = 2 * time.Minute
 )
 
 // Accounts lists the accounts; *account.Manager satisfies it.
@@ -57,10 +69,15 @@ type RefresherOptions struct {
 	Clock clock.Clock
 	// Jitter returns a random number in [0, n) (math/rand/v2 when nil).
 	Jitter func(n int64) int64
-	// Logger receives one line per failed read (discarded when nil).
+	// Logger receives a line when an account's read starts failing, fails differently or recovers, and Debug lines
+	// while a failure repeats (discarded when nil).
 	Logger *slog.Logger
 	// OnUpdate is called with every stored snapshot (the pool uses it to wake waiting tasks).
 	OnUpdate func(Snapshot)
+	// Busy reports whether fresh quota may be needed any moment: a task is pending or a dashboard is connected.
+	// It turns the idle policy on (IdleAfter); nil keeps every cycle at the interval. It is asked when a cycle is
+	// due and again every interval while the cycles are stretched, so it must be cheap.
+	Busy func(ctx context.Context) bool
 
 	// onWait is called when a refresh starts waiting for a read of the account already in flight (tests).
 	onWait func(accountID string)
@@ -92,7 +109,12 @@ type Refresher struct {
 	inflight map[string]*refreshCall
 	last     map[string]*refreshCall // the last finished read per account
 	gen      uint64                  // number of reads started so far
-	pending  map[string]bool         // accounts asked for with Request, not yet read
+	// pending are the accounts asked for with Request (0) or RequestIfOlder (the age that makes a read worth it),
+	// not yet read.
+	pending map[string]time.Duration
+
+	activity  atomic.Int64 // Clock time of the last Touch (or of NewRefresher), in Unix nanoseconds
+	stretched atomic.Bool  // Run holds back a due cycle because the daemon is idle
 }
 
 type refreshCall struct {
@@ -124,14 +146,16 @@ func NewRefresher(o RefresherOptions) (*Refresher, error) {
 	if o.Logger == nil {
 		o.Logger = slog.New(slog.DiscardHandler)
 	}
-	return &Refresher{o: o, kick: make(chan struct{}, 1), resched: make(chan struct{}, 1),
+	r := &Refresher{o: o, kick: make(chan struct{}, 1), resched: make(chan struct{}, 1),
 		request: make(chan struct{}, 1),
 		sem:     make(chan struct{}, o.Parallel), inflight: map[string]*refreshCall{}, last: map[string]*refreshCall{},
-		pending: map[string]bool{}}, nil
+		pending: map[string]time.Duration{}}
+	r.activity.Store(o.Clock.Now().UnixNano())
+	return r, nil
 }
 
-// Run refreshes every account at once and then once per interval (±10 % jitter) until ctx ends, and serves
-// Request meanwhile. Start it in its own goroutine; it never fails.
+// Run refreshes every account at once and then once per interval (±10 % jitter; stretched while the daemon is
+// idle, see Options.Busy) until ctx ends, and serves Request meanwhile. Start it in its own goroutine; it never fails.
 func (r *Refresher) Run(ctx context.Context) {
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -151,10 +175,16 @@ func (r *Refresher) Run(ctx context.Context) {
 // sleep waits for the next cycle after one that ended at last. A Reschedule re-arms the wait with the interval as
 // it is now, still counted from last (a cycle starts at once when that time has passed), so a lowered interval
 // applies without waiting for the old timer and without a burst of reads. It reports false when ctx ended.
+//
+// With the idle policy (Options.Busy), a cycle that comes due while the daemon is idle is held back until the
+// stretched interval has passed since last, looking again every interval (Busy has no signal of its own); a Touch
+// during the hold starts the cycle at once.
 func (r *Refresher) sleep(ctx context.Context, last time.Time) bool {
-	wait := r.nextWait()
+	defer r.stretched.Store(false)
+	base := r.nextWait()
+	due := last.Add(base) // when to look next
 	for {
-		t := r.o.Clock.NewTimer(wait)
+		t := r.o.Clock.NewTimer(due.Sub(r.o.Clock.Now()))
 		select {
 		case <-ctx.Done():
 			t.Stop()
@@ -163,14 +193,51 @@ func (r *Refresher) sleep(ctx context.Context, last time.Time) bool {
 			t.Stop()
 			return true
 		case <-t.C():
-			return true
 		case <-r.resched:
 			t.Stop()
-			wait = last.Add(r.nextWait()).Sub(r.o.Clock.Now())
-			if wait <= 0 {
-				return true
-			}
+			base = r.nextWait()
 		}
+		now := r.o.Clock.Now()
+		if now.Before(last.Add(base)) {
+			due = last.Add(base)
+			continue
+		}
+		if !r.idle(ctx, now) {
+			return true
+		}
+		limit := last.Add(stretch(base))
+		if !now.Before(limit) {
+			return true
+		}
+		r.stretched.Store(true)
+		due = now.Add(base)
+		if limit.Before(due) {
+			due = limit
+		}
+	}
+}
+
+// stretch is the interval of the cycles while the daemon is idle.
+func stretch(base time.Duration) time.Duration {
+	return max(base, min(base*IdleFactor, IdleMaxInterval))
+}
+
+// idle reports whether the cycles may stretch: the idle policy is on, nothing is busy, and nobody called for
+// IdleAfter.
+func (r *Refresher) idle(ctx context.Context, now time.Time) bool {
+	if r.o.Busy == nil || now.Sub(time.Unix(0, r.activity.Load())) < IdleAfter {
+		return false
+	}
+	return !r.o.Busy(ctx)
+}
+
+// Touch records a call from a person or a lead (a dashboard request, a CLI or MCP call): the idle policy stretches
+// the cycles only after IdleAfter without one. A cycle held back for idleness starts at once, so whoever called
+// next sees quota no older than the interval (the call itself never waits for it). It never blocks.
+func (r *Refresher) Touch() {
+	r.activity.Store(r.o.Clock.Now().UnixNano())
+	if r.stretched.Load() {
+		r.Reschedule()
 	}
 }
 
@@ -186,14 +253,42 @@ func (r *Refresher) Reschedule() {
 // Request asks Run to read one account soon, in the background (for example to confirm that a run refused for its
 // sign-in really means the account is signed out). It never blocks; repeated requests for an account that has not
 // been read yet are merged. The read has the semantics of Refresh.
-func (r *Refresher) Request(id string) {
+func (r *Refresher) Request(id string) { r.request1(id, 0) }
+
+// RequestIfOlder is Request for an account whose cached quota is older than maxAge, or whose last read failed;
+// fresher quota is kept. The cache is looked at when the request is served, so it never blocks.
+func (r *Refresher) RequestIfOlder(id string, maxAge time.Duration) { r.request1(id, maxAge) }
+
+// AfterRun asks for a read of the account a worker run just ended on: always after a run that failed (its quota or
+// sign-in may be what failed), otherwise only when its quota is older than AfterRunFresh.
+func (r *Refresher) AfterRun(id string, failed bool) {
+	if failed {
+		r.Request(id)
+		return
+	}
+	r.RequestIfOlder(id, AfterRunFresh)
+}
+
+// request1 records a request; an unconditional one (maxAge 0) wins over a conditional one for the same account.
+func (r *Refresher) request1(id string, maxAge time.Duration) {
 	r.mu.Lock()
-	r.pending[id] = true
+	if old, ok := r.pending[id]; !ok || old > maxAge {
+		r.pending[id] = maxAge
+	}
 	r.mu.Unlock()
 	select {
 	case r.request <- struct{}{}:
 	default:
 	}
+}
+
+// fresh reports whether the cached quota of account id was read successfully less than maxAge ago.
+func (r *Refresher) fresh(ctx context.Context, id string, maxAge time.Duration) bool {
+	snap, found, err := r.o.Store.Get(ctx, id)
+	if err != nil || !found || snap.Error != nil || !snap.Known() {
+		return false
+	}
+	return r.o.Clock.Now().Sub(snap.FetchedAt) < maxAge
 }
 
 // serveRequests reads the accounts asked for with Request until ctx ends.
@@ -207,13 +302,13 @@ func (r *Refresher) serveRequests(ctx context.Context) {
 		case <-r.request:
 		}
 		r.mu.Lock()
-		ids := make([]string, 0, len(r.pending))
-		for id := range r.pending {
-			ids = append(ids, id)
-		}
+		asked := maps.Clone(r.pending)
 		clear(r.pending)
 		r.mu.Unlock()
-		for _, id := range ids {
+		for id, maxAge := range asked {
+			if maxAge > 0 && r.fresh(ctx, id, maxAge) {
+				continue
+			}
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
@@ -409,14 +504,37 @@ func (r *Refresher) readAndStore(ctx context.Context, a account.Account) Result 
 		return res
 	}
 	res.Snapshot, res.Err = snap, readErr
-	if readErr != nil {
-		r.o.Logger.Warn("quota refresh failed", "account", a.ID, "backend", a.Backend, "kind", KindOf(readErr),
-			"err", snap.Error.Message)
-	}
+	r.logRead(a, prev, found, snap, readErr)
 	if r.o.OnUpdate != nil {
 		r.o.OnUpdate(snap)
 	}
 	return res
+}
+
+// logRead logs the outcome of a read against the previous stored snapshot, so a state that lasts is logged once:
+// Warn when the error kind changes (none to a kind, or one kind to another), Debug when the same kind repeats
+// (an expired token, for example, fails every cycle until the CLI's next run renews it), and one Info line when an
+// account that had an error reads again. The last kind comes from the store, not from memory: reads of one account
+// never overlap, so prev is the previous read, and a restart does not log a known state again.
+func (r *Refresher) logRead(a account.Account, prev Snapshot, found bool, snap Snapshot, readErr error) {
+	var was Kind
+	if found {
+		was = prev.ErrorKind()
+	}
+	switch {
+	case readErr == nil:
+		if was != "" {
+			r.o.Logger.Info("quota refresh recovered", "account", a.ID, "backend", a.Backend, "was", was)
+		}
+	case errors.Is(readErr, ErrPassive):
+		// Nothing to read is not a failure (Merge records no error).
+	case snap.ErrorKind() == was:
+		r.o.Logger.Debug("quota refresh failed again", "account", a.ID, "backend", a.Backend, "kind", was,
+			"err", snap.Error.Message)
+	default:
+		r.o.Logger.Warn("quota refresh failed", "account", a.ID, "backend", a.Backend, "kind", snap.ErrorKind(),
+			"err", snap.Error.Message)
+	}
 }
 
 // read runs the account's reader with the time limit, turning a panic into an error.

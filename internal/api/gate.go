@@ -13,9 +13,20 @@ const (
 
 // Gate phases of TaskSummary.Gate while the task waits for its gate.
 const (
+	// GatePhaseQueued: a gate command waits for a gate slot or for free memory (Gate.Wait says which); its
+	// timeout starts only when the command starts.
+	GatePhaseQueued    = "queued"
 	GatePhaseRunning   = "running"
 	GatePhaseSettling  = "settling"
 	GatePhaseVerifying = "verifying"
+)
+
+// What a queued gate waits for (Gate.Wait, GateEventData.Wait).
+const (
+	// GateWaitSlot: every gate slot is taken (gateConcurrency).
+	GateWaitSlot = "slot"
+	// GateWaitMemory: free memory or free commit is below minFreeMemoryMB / minFreeCommitMB.
+	GateWaitMemory = "memory"
 )
 
 // Gate step kinds.
@@ -45,6 +56,24 @@ const (
 	StepNotRun  = "not_run"
 )
 
+// Why a gate step's command was stopped before it ended by itself (GateStep.Stopped).
+const (
+	// StepStoppedLowMemory: the memory watchdog stopped it (free memory or commit below criticalFreeMemoryMB). The
+	// gate is queued again and the step runs again; the turn does not fail.
+	StepStoppedLowMemory = "low_memory"
+)
+
+// Why a gate run ended in error without a failing command (GateResult.Reason).
+const (
+	// GateReasonLowMemory: the machine kept running out of memory: the watchdog stopped this gate's commands
+	// GateLowMemoryStopsMax times in one gate phase, so the gate gave up (state error).
+	GateReasonLowMemory = "low_memory"
+)
+
+// GateLowMemoryStopsMax is how many watchdog stops one gate phase takes before it ends in error with
+// GateReasonLowMemory.
+const GateLowMemoryStopsMax = 3
+
 // GateStep is one step of a gate run.
 type GateStep struct {
 	Kind  string `json:"kind" ts:"'lane' | 'hygiene' | 'auto' | 'doctrine' | 'task' | 'detect'"`
@@ -61,8 +90,17 @@ type GateStep struct {
 	TimedOut bool  `json:"timedOut,omitempty"`
 	// Tail is the end of the command's output (gateOutputTailBytes), or the error.
 	Tail string `json:"tail,omitempty"`
-	// Files are the files out of lane (lane) or checked (auto).
+	// Stopped says why the command was stopped before it ended (StepStoppedLowMemory); Stops counts such stops of
+	// this step in the current gate phase.
+	Stopped string `json:"stopped,omitempty" ts:"'low_memory'"`
+	Stops   int    `json:"stops,omitempty"`
+	// Files are the files out of lane (lane) or checked (auto). For the lane they are the files a worker touched:
+	// with its edit tools or through a command Seelegent saw write them.
 	Files []string `json:"files,omitempty"`
+	// Unseen are the files out of lane that changed during the turns although no worker edit or command Seelegent
+	// saw touched them (the lead or the user editing the same tree, or a command's side effects): lane only, a
+	// warning, never red.
+	Unseen []string `json:"unseen,omitempty"`
 	// Failures are the files an auto check refused, with why.
 	Failures []GateFailure `json:"failures,omitempty"`
 	// Findings are the red hygiene findings.
@@ -100,6 +138,8 @@ type GateResult struct {
 	// Settled: the first run failed while other tasks of the repository were running; this is the run after they
 	// finished (or after gateSettleMinutes).
 	Settled bool `json:"settled,omitempty"`
+	// Reason says why a run ended in error without a failing command (GateReasonLowMemory).
+	Reason string `json:"reason,omitempty" ts:"'low_memory'"`
 }
 
 // Verifier verdicts.
@@ -136,11 +176,15 @@ const (
 	GateEventStep     = "step"
 	GateEventResult   = "result"
 	GateEventSettling = "settling"
+	// GateEventQueued: the next gate command waits (Wait, and Position and Limit for a slot); sent again when
+	// what it waits for changes, and when its position moves: every move at position 3 or less, further back
+	// only when the position halved (so a long queue does not log k² events).
+	GateEventQueued = "queued"
 )
 
 // GateEventData is the data of a gate event; the event's turn is the turn the gate is about.
 type GateEventData struct {
-	Phase string `json:"phase" ts:"'start' | 'step' | 'result' | 'settling'"`
+	Phase string `json:"phase" ts:"'start' | 'step' | 'result' | 'settling' | 'queued'"`
 	// Steps are the step labels (start).
 	Steps []string `json:"steps,omitempty"`
 	// Plan are the planned steps with their kind and command (start), so a view can name them in its language.
@@ -152,6 +196,11 @@ type GateEventData struct {
 	Result *GateResult `json:"result,omitempty"`
 	// BarChanged lists what defines "done" that changed since the task started (result).
 	BarChanged []string `json:"barChanged,omitempty"`
+	// Wait is what the gate waits for (queued): GateWaitSlot or GateWaitMemory.
+	Wait string `json:"wait,omitempty" ts:"'slot' | 'memory'"`
+	// Position is the gate's place in the slot queue, from 1 (queued, wait slot); Limit is gateConcurrency then.
+	Position int `json:"position,omitempty"`
+	Limit    int `json:"limit,omitempty"`
 }
 
 // GatePlanStep is a step of a gate as planned: what it checks, without its result.

@@ -5,6 +5,11 @@
 // and refreshes the lead hosts that already have a Seelegent entry. The executable's path never changes, so the
 // hosts' MCP entries keep working (old C-B1).
 //
+// The companion launcher seelegent-launch next to the executable (package launchbin) goes with it: the one in the
+// release's archive, checked to be of the new executable's build, replaces it the same way (the replaced one is kept
+// for --rollback too), and a release without one removes it. A running companion (a launcher still runs a task's
+// worker) is renamed aside like a running executable and deleted by a later update or rollback.
+//
 // A failed step leaves the old executable in place: every replacement is a rename in the executable's folder that
 // is undone on failure, and a new daemon that does not start (or answers as another build) is stopped and the old
 // executable put back, unless that daemon migrated the database past what the old executable knows (then the new one
@@ -28,6 +33,7 @@ import (
 	"time"
 
 	"github.com/NovaSeele/Seelegent/internal/fsutil"
+	"github.com/NovaSeele/Seelegent/internal/launchbin"
 )
 
 // Daemon controls the daemon of the data folder.
@@ -84,6 +90,9 @@ type Options struct {
 	CurrentSchema int
 	// LockDir is the folder of the executable's update lock (the user's cache folder + seelegent when empty).
 	LockDir string
+	// CheckCompanion checks that the companion launcher in a release's archive is of the build of the executable
+	// next to it (both extracted, not run): launchbin.MatchFiles when nil.
+	CheckCompanion func(exe, companion string) error
 }
 
 // Updater checks for, applies and rolls back updates.
@@ -99,6 +108,9 @@ func New(o Options) *Updater {
 	}
 	if o.HTTP == nil {
 		o.HTTP = NewHTTPClient()
+	}
+	if o.CheckCompanion == nil {
+		o.CheckCompanion = launchbin.MatchFiles
 	}
 	return &Updater{o: o}
 }
@@ -288,6 +300,17 @@ func cacheLockDir() (dir string, ok bool) {
 	return dir, os.MkdirAll(dir, 0o700) == nil
 }
 
+// companion is where the executable's companion launcher sits.
+func (u *Updater) companion() string {
+	return filepath.Join(filepath.Dir(u.o.Exe), launchbin.FileName(u.o.GOOS))
+}
+
+// sweepAll sweeps the leftovers of the executable and of its companion launcher.
+func (u *Updater) sweepAll() {
+	sweep(u.o.Exe)
+	sweep(u.companion())
+}
+
 // checkExe makes sure the executable to replace is an installed seelegent (not a `go run` or test build).
 func (u *Updater) checkExe() error {
 	want := binaryName(u.o.GOOS)
@@ -321,7 +344,7 @@ func (u *Updater) Apply(ctx context.Context, tag string) (ApplyResult, error) {
 		return res, err
 	}
 	defer unlock()
-	sweep(u.o.Exe)
+	u.sweepAll()
 	u.sweepDownloads()
 
 	dlCtx, cancel := u.withTimeout(ctx, 10*time.Minute)
@@ -340,7 +363,7 @@ func (u *Updater) Apply(ctx context.Context, tag string) (ApplyResult, error) {
 	if err != nil {
 		return res, err
 	}
-	defer func() { _ = os.Remove(staged) }() // gone after a successful swap
+	defer staged.remove() // gone after a successful swap
 	if err := u.checkSchema(ctx, build, &res.Warnings); err != nil {
 		return res, err
 	}
@@ -356,7 +379,7 @@ func (u *Updater) Apply(ctx context.Context, tag string) (ApplyResult, error) {
 		}
 	}
 	u.progress("Replacing %s...", u.o.Exe)
-	sw, err := replaceExe(u.o.Exe, staged, PreviousPath(u.o.Exe))
+	sw, err := replacePair(u.o.Exe, staged.exe, u.companion(), staged.companion, true)
 	if err != nil {
 		return res, u.restartAfterFailure(ctx, running, u.o.Current, err)
 	}
@@ -370,7 +393,7 @@ func (u *Updater) Apply(ctx context.Context, tag string) (ApplyResult, error) {
 	res.Applied, res.Version, res.Previous = true, rel.Version.String(), sw.aside
 	hosts, warnings := u.refreshHosts(ctx)
 	res.Hosts, res.Warnings = hosts, append(res.Warnings, warnings...)
-	sweep(u.o.Exe)
+	u.sweepAll()
 	res.Message = fmt.Sprintf("updated %s -> %s", u.o.Current, rel.Version)
 	return res, nil
 }
@@ -387,44 +410,92 @@ func (u *Updater) sweepDownloads() {
 	}
 }
 
-// stage downloads and checks the release's archive and returns the new executable next to the installed one
-// (<exe>.new), ready to be renamed into place, and what it reports about itself.
-func (u *Updater) stage(ctx context.Context, rel Release) (staged string, build buildVersion, err error) {
+// staged is what stage put next to the installed files, ready to be renamed into place.
+type staged struct {
+	// exe is the new executable (<exe>.new); companion the new companion launcher (<companion>.new), "" when the
+	// release has none.
+	exe, companion string
+}
+
+// remove deletes what was not renamed into place.
+func (s staged) remove() {
+	_ = os.Remove(s.exe)
+	if s.companion != "" {
+		_ = os.Remove(s.companion)
+	}
+}
+
+// stage downloads and checks the release's archive and puts the new executable next to the installed one
+// (<exe>.new), with what it reports about itself, and the release's companion launcher, checked to be of the new
+// executable's build, next to the installed one (<companion>.new).
+func (u *Updater) stage(ctx context.Context, rel Release) (st staged, build buildVersion, err error) {
 	archive, sums, err := rel.assets(u.o.GOOS, u.o.GOARCH)
 	if err != nil {
-		return "", build, err
+		return st, build, err
 	}
 	tmp, err := os.MkdirTemp(u.o.WorkDir, "download-")
 	if err != nil {
-		return "", build, err
+		return st, build, err
 	}
 	defer func() { _ = os.RemoveAll(tmp) }()
 	u.progress("Downloading %s...", archive.Name)
 	sumData, err := u.readAll(ctx, sums.URL, "", maxChecksums)
 	if err != nil {
-		return "", build, err
+		return st, build, err
 	}
 	arc := filepath.Join(tmp, archive.Name)
 	if err := u.download(ctx, archive.URL, arc, maxArchive); err != nil {
-		return "", build, err
+		return st, build, err
 	}
 	if err := verify(arc, archive.Name, sumData); err != nil {
-		return "", build, err
+		return st, build, err
 	}
 	u.progress("Checksum verified (SHA-256).")
 	extracted := filepath.Join(tmp, binaryName(u.o.GOOS))
 	if err := extractBinary(arc, extracted, u.o.GOOS); err != nil {
-		return "", build, err
+		return st, build, err
 	}
 	if build, err = u.checkRuns(ctx, extracted, rel.Version); err != nil {
-		return "", build, err
+		return st, build, err
 	}
-	staged = u.o.Exe + newSuffix
-	_ = os.Remove(staged)
-	if err := copyExecutable(extracted, staged); err != nil {
-		return "", build, fmt.Errorf("copy the new executable next to %s: %w", u.o.Exe, err)
+	companion, err := u.extractCompanion(arc, tmp, extracted)
+	if err != nil {
+		return st, build, err
 	}
-	return staged, build, nil
+	st.exe = u.o.Exe + newSuffix
+	_ = os.Remove(st.exe)
+	if err := copyExecutable(extracted, st.exe); err != nil {
+		return staged{}, build, fmt.Errorf("copy the new executable next to %s: %w", u.o.Exe, err)
+	}
+	if companion != "" {
+		st.companion = u.companion() + newSuffix
+		_ = os.Remove(st.companion)
+		if err := copyExecutable(companion, st.companion); err != nil {
+			_ = os.Remove(st.exe)
+			return staged{}, build, fmt.Errorf("copy the new companion launcher next to %s: %w", u.o.Exe, err)
+		}
+	}
+	return st, build, nil
+}
+
+// extractCompanion extracts the companion launcher from the archive arc into dir and checks that it is of the build
+// of exe, the executable extracted from the same archive. It returns "" when the archive holds none (a release from
+// before the companion).
+func (u *Updater) extractCompanion(arc, dir, exe string) (string, error) {
+	name := launchbin.FileName(u.o.GOOS)
+	out := filepath.Join(dir, name)
+	err := extractFile(arc, out, name)
+	if errors.Is(err, errNoEntry) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	if err := u.o.CheckCompanion(exe, out); err != nil {
+		return "", fmt.Errorf("the downloaded %s is not of the downloaded %s's build: %w; nothing was installed",
+			name, binaryName(u.o.GOOS), err)
+	}
+	return out, nil
 }
 
 // buildVersion is what `seelegent version --json` reports about a build.
@@ -557,7 +628,7 @@ type undoInfo struct {
 // executable, which stays for another try (it is never deleted here). When the failed daemon migrated the database
 // past what the replaced executable knows, nothing is put back (see keepAfterMigration). Every step runs on a
 // context of its own, so a cancelled command still finishes the undo.
-func (u *Updater) undoAfterStartFailure(ctx context.Context, sw *swap, cause error, in undoInfo) error {
+func (u *Updater) undoAfterStartFailure(ctx context.Context, sw *pair, cause error, in undoInfo) error {
 	uctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), undoTimeout)
 	defer cancel()
 	head := fmt.Sprintf("the daemon of %s did not start properly", in.failed)
@@ -579,6 +650,10 @@ func (u *Updater) undoAfterStartFailure(ctx context.Context, sw *swap, cause err
 	if in.rollback {
 		what = fmt.Sprintf("the rollback was undone: %s stays installed and the kept version is still at %s", in.back,
 			sw.src)
+	}
+	if sw.companionErr != nil {
+		what += fmt.Sprintf(" (but its companion launcher could not be put back: %v; launches run as `seelegent "+
+			"__launch` until the next update)", sw.companionErr)
 	}
 	u.progress("Starting the daemon of %s...", in.back)
 	if err := u.startExpect(uctx, in.back); err != nil {
@@ -625,7 +700,7 @@ func (u *Updater) Rollback(ctx context.Context) (RollbackResult, error) {
 		return res, err
 	}
 	defer unlock()
-	sweep(u.o.Exe)
+	u.sweepAll()
 	prev := PreviousPath(u.o.Exe)
 	if _, err := os.Stat(prev); errors.Is(err, fs.ErrNotExist) {
 		return res, fmt.Errorf("%w next to %s: a rollback goes back once, to the version the last update replaced",
@@ -654,7 +729,12 @@ func (u *Updater) Rollback(ctx context.Context) (RollbackResult, error) {
 		}
 	}
 	u.progress("Putting back %s...", prevVersion)
-	sw, err := replaceExe(u.o.Exe, prev, "")
+	// The kept companion goes back with the kept executable; without one, the current companion goes too.
+	prevCompanion := PreviousPath(u.companion())
+	if _, err := os.Lstat(prevCompanion); err != nil {
+		prevCompanion = ""
+	}
+	sw, err := replacePair(u.o.Exe, prev, u.companion(), prevCompanion, false)
 	if err != nil {
 		return res, u.restartAfterFailure(ctx, running, res.PreviousVersion, err)
 	}
@@ -669,7 +749,7 @@ func (u *Updater) Rollback(ctx context.Context) (RollbackResult, error) {
 	res.OK, res.CurrentVersion = true, prevVersion
 	hosts, warnings := u.refreshHosts(ctx)
 	res.Hosts, res.Warnings = hosts, append(res.Warnings, warnings...)
-	sweep(u.o.Exe)
+	u.sweepAll()
 	res.Message = fmt.Sprintf("rolled back %s -> %s", res.PreviousVersion, prevVersion)
 	return res, nil
 }

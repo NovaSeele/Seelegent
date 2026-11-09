@@ -1,11 +1,21 @@
 package app
 
 import (
+	"context"
+	"math"
 	"net/http"
+	"os"
+	"path/filepath"
+	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
+
+	"github.com/NovaSeele/Seelegent/internal/config"
+	"github.com/NovaSeele/Seelegent/internal/gate"
 )
 
 // countReschedule stands in for the quota refresher.
@@ -62,5 +72,109 @@ func TestPatchSettingsReschedulesQuota(t *testing.T) {
 	}
 	if got := d.a.Settings().QuotaRefreshMinutes; got != cur {
 		t.Errorf("quotaRefreshMinutes = %d, want %d", got, cur)
+	}
+}
+
+// memoryLimits records the calls of debug.SetMemoryLimit.
+type memoryLimits struct{ calls []int64 }
+
+func (m *memoryLimits) set(n int64) int64 { m.calls = append(m.calls, n); return 0 }
+
+// TestDaemonMemoryLimit: daemonMemoryLimitMB sets the daemon's soft memory limit when it changes, 0 lifts the one it
+// set, and a GOMEMLIMIT in the daemon's environment wins.
+func TestDaemonMemoryLimit(t *testing.T) {
+	d := newDaemon(t)
+	fake := &memoryLimits{}
+	d.a.setMemoryLimit = fake.set
+	patch := func(body string) {
+		t.Helper()
+		if _, err := d.a.PatchSettings(t.Context(), []byte(body)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	patch(`{"maxConcurrentPerAccount": 3}`)
+	patch(`{"daemonMemoryLimitMB": 512}`)
+	patch(`{"daemonMemoryLimitMB": 512}`) // unchanged
+	patch(`{"daemonMemoryLimitMB": 0}`)
+	patch(`{"daemonMemoryLimitMB": 0}`)
+	if want := []int64{512 << 20, math.MaxInt64}; !slices.Equal(fake.calls, want) {
+		t.Fatalf("SetMemoryLimit calls = %v, want %v", fake.calls, want)
+	}
+
+	// At start, and with GOMEMLIMIT set.
+	start := &memoryLimits{}
+	a := &App{setMemoryLimit: start.set}
+	a.applyMemoryLimit(0)
+	a.applyMemoryLimit(256)
+	if want := []int64{256 << 20}; !slices.Equal(start.calls, want) {
+		t.Fatalf("calls = %v, want %v", start.calls, want)
+	}
+	env := &memoryLimits{}
+	a = &App{setMemoryLimit: env.set, env: []string{"PATH=/bin", "GOMEMLIMIT=1GiB"}}
+	a.applyMemoryLimit(256)
+	a.applyMemoryLimit(0)
+	if len(env.calls) != 0 {
+		t.Fatalf("GOMEMLIMIT is set, yet SetMemoryLimit was called: %v", env.calls)
+	}
+}
+
+// TestProofExecStoppedForMemory: a regression run command the memory watchdog stops says so in its tail.
+func TestProofExecStoppedForMemory(t *testing.T) {
+	d := newDaemon(t)
+	cmd := "sleep 30"
+	if runtime.GOOS == "windows" {
+		cmd = "ping -n 30 127.0.0.1 >nul"
+	}
+	ctx, cancel := context.WithCancelCause(t.Context())
+	defer cancel(nil)
+	go func() {
+		time.Sleep(500 * time.Millisecond)
+		cancel(gate.ErrLowMemory)
+	}()
+	res := d.a.proofExec(ctx, cmd, d.cwd, filepath.Join(t.TempDir(), "cmd.log"), "")
+	if res.Exit != nil || !res.Stopped || !strings.HasSuffix(res.Tail, "stopped: machine low on memory") {
+		t.Fatalf("result exit=%v tail=%q", res.Exit, res.Tail)
+	}
+}
+
+// TestMachineProfile: the machine profile is read at start and again on a settings change, never per memory
+// reading; the effective values follow it; config.json never gets an auto value.
+func TestMachineProfile(t *testing.T) {
+	d := newDaemon(t)
+	var reads atomic.Int32
+	d.a.readMachine = func() config.Machine {
+		reads.Add(1)
+		return config.NewMachine(32*1024, 0, 24, "linux")
+	}
+	for range 5 {
+		d.a.sampler.Sample()
+		d.a.Limits()
+	}
+	if n := reads.Load(); n != 0 {
+		t.Fatalf("%d machine reads between settings changes", n)
+	}
+	if _, err := d.a.PatchSettings(t.Context(), []byte(`{"workerPriority": "normal"}`)); err != nil {
+		t.Fatal(err)
+	}
+	if n := reads.Load(); n != 1 {
+		t.Fatalf("%d machine reads after a settings change, want 1", n)
+	}
+	if r := d.a.Limits(); r.TestParallelism != 6 || r.GateConcurrency != 3 || r.MinFreeMemoryMB != 0 {
+		t.Fatalf("limits = %+v", r)
+	}
+	if _, err := d.a.PatchSettings(t.Context(), []byte(`{"minFreeMemoryMB": null}`)); err != nil {
+		t.Fatal(err)
+	}
+	if r := d.a.Limits(); r.MinFreeMemoryMB != 2048 {
+		t.Fatalf("auto minFreeMemoryMB = %d", r.MinFreeMemoryMB)
+	}
+	data, err := os.ReadFile(d.paths.Config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, k := range []string{"minFreeMemoryMB", "testParallelism", "gateConcurrency"} {
+		if strings.Contains(string(data), `"`+k+`"`) {
+			t.Errorf("config.json has the auto setting %s: %s", k, data)
+		}
 	}
 }

@@ -1,0 +1,8 @@
+{"type":"thread.started","thread_id":"0199a3f2-0000-7000-8000-00000000c0de"}
+{"type":"turn.started"}
+{"type":"item.started","item":{"id":"item_1","type":"file_change","changes":[{"path":"/work/app/internal/store/store.go","kind":"update"}],"status":"in_progress"}}
+{"type":"item.completed","item":{"id":"item_1","type":"file_change","changes":[{"path":"/work/app/internal/store/store.go","kind":"update"}],"status":"completed"}}
+{"type":"item.completed","item":{"id":"item_2","type":"agent_message","text":"Closed the rows. Now the tests."}}
+{"type":"item.started","item":{"id":"item_3","type":"command_execution","command":"bash -lc 'go test ./internal/store/'","aggregated_output":"","exit_code":null,"status":"in_progress"}}
+{"type":"turn.failed","error":{"message":"stream disconnected before completion: error sending request for url (https://api.example.test/v1/responses)"}}
+#!exit 1

@@ -4,10 +4,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createApiClient } from '@/api/client'
 import type { BootState } from '@/api/types'
 import { FakeEventSource, setupApp } from '@/test/app'
-import { iso, makeAccount, makeTask } from '@/test/fixtures'
+import { iso, makeAccount, makeHealthResources, makeTask } from '@/test/fixtures'
 
 import { useAccountsStore } from './accounts'
-import { useConnectionStore } from './connection'
+import { HIDDEN_PAUSE_MS, useConnectionStore } from './connection'
 import { useTasksStore } from './tasks'
 
 function boot(overrides: Partial<BootState> = {}): BootState {
@@ -22,6 +22,10 @@ function boot(overrides: Partial<BootState> = {}): BootState {
       port: 47831,
       startedAt: iso(),
       homeId: '0123456789abcdef',
+      os: 'windows',
+      memory: { availPhysMB: 0, availCommitMB: 0, known: false },
+      lowMemory: false,
+      ...makeHealthResources(),
     },
     settings: {} as BootState['settings'],
     accounts: [makeAccount()],
@@ -112,6 +116,149 @@ describe('connection store', () => {
     expect(FakeEventSource.instances).toHaveLength(2)
     FakeEventSource.last.open()
     expect(store.status).toBe('online')
+  })
+
+  describe('hidden tab', () => {
+    let visibility: DocumentVisibilityState = 'visible'
+
+    function setVisibility(next: DocumentVisibilityState) {
+      visibility = next
+      document.dispatchEvent(new Event('visibilitychange'))
+    }
+
+    beforeEach(() => {
+      visibility = 'visible'
+      vi.spyOn(document, 'visibilityState', 'get').mockImplementation(() => visibility)
+    })
+
+    afterEach(() => vi.restoreAllMocks())
+
+    async function online(fetch: typeof globalThis.fetch) {
+      const store = start(fetch)
+      await flushPromises()
+      FakeEventSource.last.open()
+      return store
+    }
+
+    it('keeps the stream through a short absence', async () => {
+      const fetch = vi.fn<typeof globalThis.fetch>(async () => json(boot()))
+      const store = await online(fetch)
+      setVisibility('hidden')
+      await vi.advanceTimersByTimeAsync(HIDDEN_PAUSE_MS - 1000)
+      setVisibility('visible')
+      await vi.advanceTimersByTimeAsync(HIDDEN_PAUSE_MS)
+      expect(FakeEventSource.instances).toHaveLength(1)
+      expect(FakeEventSource.last.closed).toBe(false)
+      expect(store.paused).toBe(false)
+      expect(fetch).toHaveBeenCalledTimes(1)
+    })
+
+    it('closes the stream after 5 minutes hidden, quietly, and reads nothing until the tab shows', async () => {
+      const fetch = vi.fn<typeof globalThis.fetch>(async () => json(boot()))
+      const store = await online(fetch)
+      const first = FakeEventSource.last
+      first.emit('task.created', JSON.stringify(makeTask({ id: 't2' })), 'a1b2c3d4.50')
+      setVisibility('hidden')
+      await vi.advanceTimersByTimeAsync(HIDDEN_PAUSE_MS)
+      expect(first.closed).toBe(true)
+      expect(store.paused).toBe(true)
+      // A deliberate pause, not an outage: no offline status, no retry countdown.
+      expect(store.status).toBe('online')
+      expect(store.retryAt).toBeNull()
+      window.dispatchEvent(new Event('online'))
+      await vi.advanceTimersByTimeAsync(60 * 60_000)
+      expect(FakeEventSource.instances).toHaveLength(1)
+      expect(fetch).toHaveBeenCalledTimes(1)
+
+      // Visible again: the stream reopens from the last event, and missed frames are replayed.
+      setVisibility('visible')
+      expect(store.paused).toBe(false)
+      expect(FakeEventSource.instances).toHaveLength(2)
+      expect(FakeEventSource.last.url).toBe('/api/v1/events?lastEventId=a1b2c3d4.50')
+      FakeEventSource.last.open()
+      FakeEventSource.last.emit(
+        'task.updated',
+        JSON.stringify(makeTask({ id: 't1', title: 'while hidden' })),
+        'a1b2c3d4.51',
+      )
+      expect(useTasksStore().get('t1')?.title).toBe('while hidden')
+      expect(store.status).toBe('online')
+    })
+
+    it('resyncs from /state when the daemon cannot replay what the tab missed', async () => {
+      const fetch = vi
+        .fn<typeof globalThis.fetch>()
+        .mockResolvedValueOnce(json(boot()))
+        .mockResolvedValueOnce(
+          json(boot({ tasks: [makeTask({ id: 't1', title: 'fresh' })], lastEventId: 'b.9' })),
+        )
+      const store = await online(fetch)
+      setVisibility('hidden')
+      await vi.advanceTimersByTimeAsync(HIDDEN_PAUSE_MS)
+      setVisibility('visible')
+      FakeEventSource.last.open()
+      FakeEventSource.last.emit('reset', '{"reason":"too_old"}')
+      await flushPromises()
+      expect(fetch).toHaveBeenCalledTimes(2)
+      expect(useTasksStore().get('t1')?.title).toBe('fresh')
+      expect(store.status).toBe('online')
+    })
+
+    it('reads the /state a reset asked for once visible, when it was still failing at the pause', async () => {
+      const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValueOnce(json(boot()))
+      const store = await online(fetch)
+      fetch.mockRejectedValue(new TypeError('timeout'))
+      FakeEventSource.last.emit('reset', '{"reason":"too_old"}')
+      setVisibility('hidden')
+      await vi.advanceTimersByTimeAsync(HIDDEN_PAUSE_MS)
+      expect(store.paused).toBe(true)
+      fetch.mockResolvedValue(json(boot({ tasks: [makeTask({ id: 't1', title: 'fresh' })] })))
+      setVisibility('visible')
+      FakeEventSource.last.open()
+      await vi.advanceTimersByTimeAsync(60_000)
+      expect(useTasksStore().get('t1')?.title).toBe('fresh')
+      expect(store.status).toBe('online')
+    })
+
+    it('reads the /state a reset asked for once visible, when that read failed during the pause', async () => {
+      let fail: (reason: unknown) => void = () => {}
+      const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValueOnce(json(boot()))
+      const store = await online(fetch)
+      fetch.mockReturnValueOnce(new Promise<Response>((_, reject) => (fail = reject)))
+      FakeEventSource.last.emit('reset', '{"reason":"too_old"}')
+      setVisibility('hidden')
+      await vi.advanceTimersByTimeAsync(HIDDEN_PAUSE_MS)
+      expect(store.paused).toBe(true)
+      fail(new TypeError('timeout'))
+      await flushPromises()
+      // Paused: the failed read is not retried while hidden...
+      await vi.advanceTimersByTimeAsync(60 * 60_000)
+      expect(fetch).toHaveBeenCalledTimes(2)
+      // ...but it is owed: the tab reads it as soon as it shows.
+      fetch.mockResolvedValue(json(boot({ tasks: [makeTask({ id: 't1', title: 'fresh' })] })))
+      setVisibility('visible')
+      FakeEventSource.last.open()
+      await vi.advanceTimersByTimeAsync(60_000)
+      expect(fetch).toHaveBeenCalledTimes(3)
+      expect(useTasksStore().get('t1')?.title).toBe('fresh')
+    })
+
+    it('stops retrying an unreachable daemon while hidden, and tries again once visible', async () => {
+      const fetch = vi.fn<typeof globalThis.fetch>().mockRejectedValue(new TypeError('refused'))
+      const store = start(fetch)
+      await flushPromises()
+      expect(store.status).toBe('offline')
+      setVisibility('hidden')
+      await vi.advanceTimersByTimeAsync(HIDDEN_PAUSE_MS)
+      const calls = fetch.mock.calls.length
+      await vi.advanceTimersByTimeAsync(60 * 60_000)
+      expect(fetch).toHaveBeenCalledTimes(calls)
+      fetch.mockResolvedValue(json(boot()))
+      setVisibility('visible')
+      await flushPromises()
+      expect(fetch).toHaveBeenCalledTimes(calls + 1)
+      expect(FakeEventSource.instances).toHaveLength(1)
+    })
   })
 
   it('applies task and account frames', async () => {
@@ -254,6 +401,85 @@ describe('connection store', () => {
     await flushPromises()
     expect(fetch).toHaveBeenCalledTimes(3)
     expect(useTasksStore().get('t1')?.title).toBe('after')
+  })
+
+  it('reads /health again after settings.updated, and only the newest answer applies', async () => {
+    const answers: ((value: Response) => void)[] = []
+    const fetch = vi.fn<typeof globalThis.fetch>(async (input) => {
+      if (String(input) === '/api/v1/state') return json(boot())
+      return new Promise<Response>((resolve) => answers.push(resolve))
+    })
+    const store = start(fetch)
+    await flushPromises()
+    const source = FakeEventSource.last
+    source.open()
+    const withGates = (value: number) => ({
+      ...boot().health,
+      resources: {
+        ...makeHealthResources().resources,
+        gateConcurrency: { value, source: 'explicit' as const },
+      },
+    })
+    source.emit('settings.updated', JSON.stringify({ gateConcurrency: 3 }), 'a1b2c3d4.42')
+    source.emit('settings.updated', JSON.stringify({ gateConcurrency: 4 }), 'a1b2c3d4.43')
+    await flushPromises()
+    const reads = fetch.mock.calls.filter(([input]) => String(input) === '/api/v1/health')
+    expect(reads).toHaveLength(2)
+    answers[1]?.(json(withGates(4)))
+    await flushPromises()
+    expect(store.health?.resources.gateConcurrency.value).toBe(4)
+    // The first read answers last: it is older than what is shown and does not apply.
+    answers[0]?.(json(withGates(3)))
+    await flushPromises()
+    expect(store.health?.resources.gateConcurrency.value).toBe(4)
+    expect(store.settings?.gateConcurrency).toBe(4)
+  })
+
+  it('keeps a resources.changed frame that comes while a /health read is on its way', async () => {
+    const answers: ((value: Response) => void)[] = []
+    const low = { availPhysMB: 300, availCommitMB: 900, known: true }
+    const fetch = vi.fn<typeof globalThis.fetch>(async (input) => {
+      if (String(input) === '/api/v1/state') {
+        return json(boot({ health: { ...boot().health, lowMemory: true, memory: low } }))
+      }
+      return new Promise<Response>((resolve) => answers.push(resolve))
+    })
+    const store = start(fetch)
+    await flushPromises()
+    const source = FakeEventSource.last
+    source.open()
+    // A save while memory is low: the read starts, the daemon answers while lowMemory is still true...
+    source.emit('settings.updated', JSON.stringify({ gateConcurrency: 3 }), 'a1b2c3d4.42')
+    await flushPromises()
+    // ...then the watchdog recovers, and its frame comes before that answer.
+    const recovered = { availPhysMB: 9000, availCommitMB: 12000, known: true }
+    source.emit(
+      'resources.changed',
+      JSON.stringify({ lowMemory: false, memory: recovered }),
+      'a1b2c3d4.43',
+    )
+    expect(store.health?.lowMemory).toBe(false)
+    const { resources } = makeHealthResources()
+    answers[0]?.(
+      json({
+        ...boot().health,
+        lowMemory: true,
+        memory: low,
+        resources: { ...resources, gateConcurrency: { value: 3, source: 'explicit' } },
+      }),
+    )
+    await flushPromises()
+    // The answer's resources apply; its older lowMemory and memory do not.
+    expect(store.health?.resources.gateConcurrency).toEqual({ value: 3, source: 'explicit' })
+    expect(store.health?.lowMemory).toBe(false)
+    expect(store.health?.memory).toEqual(recovered)
+
+    // A read that starts after the frame applies whole.
+    source.emit('settings.updated', JSON.stringify({ gateConcurrency: 2 }), 'a1b2c3d4.44')
+    await flushPromises()
+    answers[1]?.(json({ ...boot().health, lowMemory: true, memory: low }))
+    await flushPromises()
+    expect(store.health?.lowMemory).toBe(true)
   })
 
   it('careful replay keeps the snapshot for settings, older accounts and deleted tasks', async () => {

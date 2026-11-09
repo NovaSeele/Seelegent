@@ -71,8 +71,8 @@
       "short": "Quota"
     },
     "waitingWorker": {
-      "label": "Chờ worker rảnh",
-      "short": "Chờ worker"
+      "label": "Chờ chỗ trống",
+      "short": "Hết chỗ"
     },
     "blocked": {
       "label": "Cần xử lý",
@@ -105,6 +105,10 @@
     "blockedDeps": {
       "label": "Tác vụ trước thất bại",
       "short": "Trước thất bại"
+    },
+    "waitingResources": {
+      "label": "Chờ tài nguyên",
+      "short": "Tài nguyên"
     }
   },
   "attention": {
@@ -114,6 +118,7 @@
     "noResponse": "Worker không trả lời",
     "auth": "Cần đăng nhập",
     "noAccounts": "Hết tài khoản",
+    "budgetReached": "Đã hết ngân sách",
     "failed": "Thất bại",
     "review": "Chờ duyệt",
     "quotaWait": "Chờ quota",
@@ -128,7 +133,8 @@
     "verifierRejected": "Bị duyệt lần hai từ chối",
     "peerObjection": "Thành viên ngang hàng phản đối",
     "backgroundWait": "Đang chờ lệnh chạy nền",
-    "unknown": "Cần xem lại"
+    "unknown": "Cần xem lại",
+    "resourcesWait": "Chờ tài nguyên"
   },
   "stage": {
     "explore": "Khám phá",

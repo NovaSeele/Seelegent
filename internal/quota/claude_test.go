@@ -124,3 +124,71 @@ func TestClaudeReaderCredentials(t *testing.T) {
 		t.Fatalf("email = %q", got)
 	}
 }
+
+// On macOS the sign-in lives in the Keychain, so a profile without a token in .credentials.json is not signed out
+// there: its quota is unavailable. Linux and Windows keep "sign-in required"; a refused token (HTTP 401), an
+// expired token and a broken file mean the same on every system.
+func TestClaudeReaderBySystem(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") == "Bearer tok-ok" {
+			_, _ = w.Write([]byte(claudeUsageOK))
+			return
+		}
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer srv.Close()
+	exp := strconv.FormatInt(t0.Add(time.Hour).UnixMilli(), 10)
+	cases := []struct {
+		name  string
+		creds string // "" = no file
+		mac   Kind   // kind on darwin
+		other Kind   // kind on linux and windows
+	}{
+		{"no file", "", KindUnavailable, KindNeedsLogin},
+		{"no OAuth entry", `{}`, KindUnavailable, KindNeedsLogin},
+		{"empty OAuth entry", `{"claudeAiOauth":{}}`, KindUnavailable, KindNeedsLogin},
+		{"not JSON", `{not json`, KindFormat, KindFormat},
+		{"expired", `{"claudeAiOauth":{"accessToken":"tok-ok","expiresAt":1}}`, KindTokenExpired, KindTokenExpired},
+		{"refused", `{"claudeAiOauth":{"accessToken":"tok-401","expiresAt":` + exp + `}}`, KindNeedsLogin, KindNeedsLogin},
+		{"signed in", `{"claudeAiOauth":{"accessToken":"tok-ok","expiresAt":` + exp + `}}`, "", ""},
+	}
+	for _, goos := range []string{"darwin", "linux", "windows"} {
+		r := NewClaudeReader(srv.Client(), srv.URL, func() time.Time { return t0 })
+		r.goos = goos
+		for _, c := range cases {
+			t.Run(goos+"/"+c.name, func(t *testing.T) {
+				want := c.other
+				if goos == "darwin" {
+					want = c.mac
+				}
+				prof := testProfile(t, account.KindIsolated)
+				if c.creds != "" {
+					writeFile(t, filepath.Join(prof.Home, ".credentials.json"), c.creds)
+				}
+				_, terr := r.token(prof.Home)
+				_, err := r.ReadQuota(t.Context(), prof, nil)
+				var gotTok, got Kind
+				if terr != nil {
+					gotTok = KindOf(terr)
+				}
+				if err != nil {
+					got = KindOf(err)
+				}
+				// token() decides the answer unless it finds a usable token, which goes to the server.
+				wantTok := want
+				if c.name == "refused" {
+					wantTok = ""
+				}
+				if gotTok != wantTok {
+					t.Fatalf("token kind = %q (%v), want %q", gotTok, terr, wantTok)
+				}
+				if got != want {
+					t.Fatalf("read kind = %q (%v), want %q", got, err, want)
+				}
+				if goos == "darwin" && want == KindUnavailable && !strings.Contains(err.Error(), "Keychain") {
+					t.Fatalf("message = %v", err)
+				}
+			})
+		}
+	}
+}

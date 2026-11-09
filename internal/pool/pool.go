@@ -32,11 +32,13 @@
 package pool
 
 import (
+	"cmp"
 	"context"
 	"database/sql"
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -47,9 +49,11 @@ import (
 	"github.com/NovaSeele/Seelegent/internal/quota"
 )
 
-// Accounts lists the accounts; *account.Manager satisfies it.
+// Accounts lists the accounts and records runs that proved an API key; *account.Manager satisfies it.
 type Accounts interface {
 	List(ctx context.Context) ([]account.Account, error)
+	// MarkRunOK records that a turn that started at started ended well on the account (account.Repo.MarkRunOK).
+	MarkRunOK(ctx context.Context, id string, started time.Time) (bool, error)
 }
 
 // Quotas is the quota cache; *quota.Store satisfies it.
@@ -193,6 +197,9 @@ const (
 	ReasonResting Reason = "resting"
 	// ReasonBusy: every matching account that is not resting runs its maximum of turns.
 	ReasonBusy Reason = "busy"
+	// ReasonBudget: every matching account rests because it reached its budget (RestBudget). It matches
+	// ErrAllResting: the request waits, until the user raises a budget, switches its stop off or changes a key.
+	ReasonBudget Reason = "budget_reached"
 )
 
 // Errors matched by Unavailable; use errors.Is.
@@ -215,26 +222,227 @@ type Unavailable struct {
 	Busy       int    `json:"busy"`
 	Backend    string `json:"backend"`
 	Group      string `json:"group,omitempty"`
+	// Capped is the maxConcurrentWorkers cap that holds the request although an account is free (0 when none does);
+	// Running is how many worker turns run then.
+	Capped  int `json:"capped,omitempty"`
+	Running int `json:"running,omitempty"`
+	// Slots are the busy accounts with their running turns, in the order of the accounts (ReasonBusy).
+	Slots []BusySlot `json:"slots,omitempty"`
+	// KeyProviders are the providers whose API-key accounts of the backend are free now, for a request that names
+	// no provider and waits on its sign-in accounts (resting or busy). Such a request never takes them (keys cost
+	// money); Error names them so the lead can pass provider. In account order, each once.
+	KeyProviders []KeyProvider `json:"keyProviders,omitempty"`
+	// NoCredit are the matching accounts left out because their credit ran out (MarkNoCredit). They do not count
+	// as candidates: with nothing else the reason is no_account, and the caller fails rather than waits.
+	NoCredit []NoCredit `json:"noCredit,omitempty"`
+	// BudgetReached are the matching accounts that rest on their budget (RestBudget), counted in Resting.
+	BudgetReached []BudgetHold `json:"budgetReached,omitempty"`
 }
+
+// BudgetHold is an API-key account that rests on its budget (Unavailable.BudgetReached).
+type BudgetHold struct {
+	AccountID string  `json:"accountId"`
+	Label     string  `json:"label,omitempty"`
+	Provider  string  `json:"provider"`
+	BudgetUSD float64 `json:"budgetUsd"`
+	SpentUSD  float64 `json:"spentUsd"`
+}
+
+// budgetHold describes account a, which rests on its budget.
+func budgetHold(a *account.Account) BudgetHold {
+	h := BudgetHold{AccountID: a.ID, Label: a.Label, Provider: a.Provider, SpentUSD: a.Spent.USD}
+	if a.BudgetUSD != nil {
+		h.BudgetUSD = *a.BudgetUSD
+	}
+	return h
+}
+
+// restingReason is the reason of a request that only waits on resting accounts: ReasonBudget when each of them
+// rests on its budget, else ReasonResting.
+func (u *Unavailable) restingReason() Reason {
+	if u.Resting > 0 && len(u.BudgetReached) == u.Resting {
+		return ReasonBudget
+	}
+	return ReasonResting
+}
+
+// NoCredit is an account whose credit ran out (Unavailable.NoCredit).
+type NoCredit struct {
+	AccountID string `json:"accountId"`
+	Label     string `json:"label,omitempty"`
+	// Provider is the API-key account's provider ("" for a sign-in account).
+	Provider string `json:"provider,omitempty"`
+}
+
+// KeyProvider is a provider with a free API-key account (Unavailable.KeyProviders).
+type KeyProvider struct {
+	ID string `json:"id"`
+	// NeedsModel: the provider maps no tier to a model, so a task on it needs an explicit model. The pool does
+	// not read providers: the caller that does sets it before Error.
+	NeedsModel bool `json:"needsModel,omitempty"`
+}
+
+// BusySlot is a matching account that has no free slot: Running of Limit (maxConcurrentPerAccount) turns run on
+// it, or a sign-out holds it (Held).
+type BusySlot struct {
+	AccountID string `json:"accountId"`
+	Running   int    `json:"running"`
+	Limit     int    `json:"limit"`
+	Held      bool   `json:"held,omitempty"`
+}
+
+// maxSlotsShown is how many busy accounts Unavailable.Error names, and maxKeyProvidersShown how many providers.
+const (
+	maxSlotsShown        = 3
+	maxKeyProvidersShown = 3
+)
 
 // Error implements error.
 func (u *Unavailable) Error() string {
 	var b strings.Builder
 	switch u.Reason {
 	case ReasonNoAccount:
+		if len(u.NoCredit) > 0 {
+			// The only thing to say: the lead can do nothing else, and the generic text would hide it.
+			u.writeNoCredit(&b)
+			return b.String()
+		}
 		fmt.Fprintf(&b, "no enabled, signed-in %s account can run this", u.Backend)
+	case ReasonBudget:
+		// What the user must do is all there is to say: no time ends the wait.
+		u.writeBudget(&b)
+		if len(u.NoCredit) > 0 {
+			b.WriteString("; ")
+			u.writeNoCredit(&b)
+		}
+		return b.String()
 	case ReasonResting:
 		fmt.Fprintf(&b, "all %d %s accounts are resting", u.Resting, u.Backend)
 		if !u.Until.IsZero() {
 			fmt.Fprintf(&b, " until %s", u.Until.UTC().Format(time.RFC3339))
 		}
 	default:
-		fmt.Fprintf(&b, "all %s accounts are busy (%d busy, %d resting)", u.Backend, u.Busy, u.Resting)
+		if u.Capped > 0 {
+			fmt.Fprintf(&b, "%d worker turns run already (maxConcurrentWorkers %d)", u.Running, u.Capped)
+			break
+		}
+		if len(u.Slots) == 0 {
+			fmt.Fprintf(&b, "all %s accounts are busy (%d busy, %d resting)", u.Backend, u.Busy, u.Resting)
+			break
+		}
+		// "acc6: 2 of 2 running": which accounts are full, the reason a task waits although quota is left.
+		for i, sl := range u.Slots {
+			if i == maxSlotsShown {
+				fmt.Fprintf(&b, "; %d more busy", len(u.Slots)-i)
+				break
+			}
+			if i > 0 {
+				b.WriteString("; ")
+			}
+			fmt.Fprintf(&b, "%s: %d of %d running", sl.AccountID, sl.Running, sl.Limit)
+			if sl.Held {
+				b.WriteString(", signing out")
+			}
+		}
+		if u.Resting > 0 {
+			fmt.Fprintf(&b, "; %d resting", u.Resting)
+		}
 	}
 	if u.Group != "" {
 		fmt.Fprintf(&b, " (quota group %s)", u.Group)
 	}
+	u.writeKeyProviders(&b)
+	if len(u.BudgetReached) > 0 {
+		b.WriteString("; ")
+		u.writeBudget(&b)
+	}
+	if len(u.NoCredit) > 0 {
+		b.WriteString("; ")
+		u.writeNoCredit(&b)
+	}
 	return b.String()
+}
+
+// writeBudget names the accounts at their budget: "acc9 reached its $200 budget: raise the budget or change the
+// key".
+func (u *Unavailable) writeBudget(b *strings.Builder) {
+	if len(u.BudgetReached) == 1 {
+		h := u.BudgetReached[0]
+		fmt.Fprintf(b, "%s reached its %s budget: raise the budget or change the key", h.AccountID,
+			account.FormatUSD(h.BudgetUSD))
+		return
+	}
+	for i, h := range u.BudgetReached {
+		if i > 0 {
+			b.WriteString(", ")
+		}
+		fmt.Fprintf(b, "%s (%s)", h.AccountID, account.FormatUSD(h.BudgetUSD))
+	}
+	b.WriteString(" reached their budgets: raise the budgets or change the keys")
+}
+
+// writeNoCredit names the accounts without credit, each provider once, and what to do: a key is topped up or
+// changed ("the anthropic key has no credit left; top up or change the key"); a sign-in account has no key, it is
+// switched off and on after a top-up ("the claude account work has no credit left; top up, then switch the account
+// off and on").
+func (u *Unavailable) writeNoCredit(b *strings.Builder) {
+	var names []string
+	keys, signIns := false, false
+	for _, nc := range u.NoCredit {
+		name := "the " + nc.Provider + " key"
+		if nc.Provider == "" {
+			name = "the " + u.Backend + " account " + cmp.Or(nc.Label, nc.AccountID)
+		}
+		if slices.Contains(names, name) {
+			continue
+		}
+		names = append(names, name)
+		if nc.Provider == "" {
+			signIns = true
+		} else {
+			keys = true
+		}
+	}
+	one := len(names) == 1
+	verb, todo := "have", ""
+	if one {
+		verb = "has"
+	}
+	switch {
+	case keys && signIns:
+		todo = "top up, then change the keys or switch the accounts off and on"
+	case signIns && one:
+		todo = "top up, then switch the account off and on"
+	case signIns:
+		todo = "top up, then switch the accounts off and on"
+	case one:
+		todo = "top up or change the key"
+	default:
+		todo = "top up or change the keys"
+	}
+	fmt.Fprintf(b, "%s %s no credit left; %s", strings.Join(names, ", "), verb, todo)
+}
+
+// writeKeyProviders adds the free API-key accounts: "; free API-key accounts: pass provider: anthropic and a
+// model, or provider: zai".
+func (u *Unavailable) writeKeyProviders(b *strings.Builder) {
+	if len(u.KeyProviders) == 0 {
+		return
+	}
+	b.WriteString("; free API-key accounts: pass ")
+	for i, kp := range u.KeyProviders {
+		if i == maxKeyProvidersShown {
+			fmt.Fprintf(b, ", or %d more", len(u.KeyProviders)-i)
+			break
+		}
+		if i > 0 {
+			b.WriteString(", or ")
+		}
+		fmt.Fprintf(b, "provider: %s", kp.ID)
+		if kp.NeedsModel {
+			b.WriteString(" and a model")
+		}
+	}
 }
 
 // Is matches the reason's sentinel error.
@@ -242,7 +450,7 @@ func (u *Unavailable) Is(target error) bool {
 	switch u.Reason {
 	case ReasonNoAccount:
 		return target == ErrNoAccount
-	case ReasonResting:
+	case ReasonResting, ReasonBudget:
 		return target == ErrAllResting
 	case ReasonBusy:
 		return target == ErrAllBusy

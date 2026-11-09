@@ -68,6 +68,10 @@ func newDaemon(t *testing.T) *daemon {
 	d := &daemon{t: t, queue: fakecli.NewQueue(t), home: home, cwd: cwd, cls: &switchClassifier{}}
 	set := config.Defaults()
 	set.Port = 47831
+	// The engine tests must not depend on this machine's free memory.
+	set.MinFreeMemoryMB, set.MinFreeCommitMB, set.CriticalFreeMemoryMB = config.Int(0), config.Int(0), config.Int(0)
+	// Nor on its CPUs: the gate slots and the test hint the tests were written for.
+	set.GateConcurrency, set.TestParallelism = config.Int(2), config.Int(4)
 	a, err := app.New(t.Context(), app.Options{Paths: paths, Settings: &set, Env: d.queue.Env(os.Environ()),
 		RealHome: filepath.Join(home, "realhome"), Launcher: fakecli.Launcher(t), NoQuotaReaders: true, NoGh: true,
 		Bins:       map[string]string{config.BackendAgy: fakecli.Exe(t), config.BackendClaude: "", config.BackendCodex: ""},
@@ -422,8 +426,11 @@ func TestStatusMemoryProfiles(t *testing.T) {
 func TestWorkerRefusedByDaemon(t *testing.T) {
 	d := newDaemon(t)
 	d.cls.worker.Store(true)
-	for _, name := range []string{"delegate", "status", "memory"} {
-		args := map[string]any{"prompt": "x", "cwd": d.cwd, "action": "append", "text": "x"}
+	for name, args := range map[string]map[string]any{
+		"delegate": {"prompt": "x", "cwd": d.cwd},
+		"status":   {},
+		"memory":   {"cwd": d.cwd, "action": "append", "text": "x"},
+	} {
 		if msg := fails(t, d.cs, name, args); msg != "Seelegent is not available inside a Seelegent worker." {
 			t.Fatalf("%s as a worker = %q", name, msg)
 		}

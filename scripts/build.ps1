@@ -1,6 +1,7 @@
 <#
 .SYNOPSIS
-    Builds bin\seelegent.exe with the dashboard embedded (the same steps as `make build`).
+    Builds bin\seelegent.exe with the dashboard embedded and its companion launcher bin\seelegent-launch.exe (the
+    same steps as `make build`).
 
 .PARAMETER SkipWeb
     Reuse the current web\dist instead of rebuilding the dashboard.
@@ -59,10 +60,14 @@ try {
         "-X $module/internal/buildinfo.date=$date"
     ) -join ' '
 
-    $exe = if ($env:OS -eq 'Windows_NT' -or $IsWindows) { 'seelegent.exe' } else { 'seelegent' }
-    $out = Join-Path 'bin' $exe
-    Invoke-Native go @('build', '-trimpath', '-ldflags', $ldflags, '-o', $out, './cmd/seelegent')
-    Write-Host "Built $out ($version, $commit)"
+    # seelegent and its companion launcher seelegent-launch, with the same flags: the daemon uses the companion only
+    # when its build information matches its own (docs/release.md).
+    $ext = if ($env:OS -eq 'Windows_NT' -or $IsWindows) { '.exe' } else { '' }
+    foreach ($name in @('seelegent', 'seelegent-launch')) {
+        $out = Join-Path 'bin' ($name + $ext)
+        Invoke-Native go @('build', '-trimpath', '-ldflags', $ldflags, '-o', $out, "./cmd/$name")
+        Write-Host "Built $out ($version, $commit)"
+    }
 }
 finally {
     Pop-Location

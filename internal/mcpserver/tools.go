@@ -4,6 +4,7 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/NovaSeele/Seelegent/internal/config"
@@ -54,4 +55,20 @@ func loadTools(tiers config.TierModels, unavailable map[string]bool) ([]toolDef,
 		}
 	}
 	return defs, nil
+}
+
+// properties returns the names of the tool's arguments (its input schema's properties), sorted.
+func (d toolDef) properties() ([]string, error) {
+	var schema struct {
+		Properties map[string]json.RawMessage `json:"properties"`
+	}
+	if err := json.Unmarshal(d.InputSchema, &schema); err != nil {
+		return nil, fmt.Errorf("mcpserver: tools.json: %s: %w", d.Name, err)
+	}
+	names := make([]string, 0, len(schema.Properties))
+	for n := range schema.Properties {
+		names = append(names, n)
+	}
+	slices.Sort(names)
+	return names, nil
 }

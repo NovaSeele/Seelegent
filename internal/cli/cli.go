@@ -15,7 +15,9 @@ import (
 	"github.com/NovaSeele/Seelegent/internal/buildinfo"
 	"github.com/NovaSeele/Seelegent/internal/client"
 	"github.com/NovaSeele/Seelegent/internal/guard"
+	"github.com/NovaSeele/Seelegent/internal/launch"
 	"github.com/NovaSeele/Seelegent/internal/ops"
+	"github.com/NovaSeele/Seelegent/internal/platform"
 )
 
 // Exit codes returned by Run.
@@ -34,7 +36,11 @@ const annOp = "seelegent.op"
 
 // Execute runs the command line with the process arguments and exits with its status code.
 func Execute() {
-	ctx, stop := signal.NotifyContext(context.Background(), stopSignals()...)
+	if isLaunch(os.Args[1:]) {
+		// The launcher the daemon starts: the same code as the companion executable cmd/seelegent-launch.
+		os.Exit(launch.Main(os.Args[1:], os.Stderr))
+	}
+	ctx, stop := signal.NotifyContext(context.Background(), platform.StopSignals()...)
 	if code, ok := shimMain(ctx); ok {
 		stop()
 		os.Exit(code)

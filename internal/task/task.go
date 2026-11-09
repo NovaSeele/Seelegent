@@ -7,6 +7,7 @@ import (
 	"github.com/NovaSeele/Seelegent/internal/api"
 	"github.com/NovaSeele/Seelegent/internal/backend"
 	"github.com/NovaSeele/Seelegent/internal/event"
+	"github.com/NovaSeele/Seelegent/internal/pool"
 )
 
 // Status is where a task stands (see the transition table in state.go).
@@ -80,6 +81,7 @@ const (
 	AttemptOK             = "ok"
 	AttemptQuota          = "quota"
 	AttemptAuth           = "auth"
+	AttemptCredits        = "credits"
 	AttemptTransient      = "transient"
 	AttemptBackgroundWait = "background_wait"
 	AttemptError          = "error"
@@ -132,7 +134,6 @@ type Task struct {
 	Spec    *api.SpecRef    `json:"spec,omitempty"`
 	// SpecOutside is true when the spec directory lies outside the task's folder.
 	SpecOutside bool `json:"specOutside,omitempty"`
-	AllowGit    bool `json:"allowGit,omitempty"`
 	// Prefer lists the accounts the lead asked for, tried first.
 	Prefer []string `json:"prefer,omitempty"`
 
@@ -163,9 +164,16 @@ type Task struct {
 
 	Error        string    `json:"error,omitempty"`
 	WaitingUntil time.Time `json:"waitingUntil,omitzero"`
-	// Waiting is why a waiting_quota task waits (pool reason no_account, resting or busy); WaitDetail says more.
-	Waiting              string         `json:"waiting,omitempty"`
-	WaitDetail           string         `json:"waitDetail,omitempty"`
+	// Waiting is why a waiting_quota task waits: a pool reason (no_account, resting or busy), or api.WaitingMemory
+	// while it waits for free memory (resources.go, with MemoryWait); WaitDetail says more.
+	Waiting    string `json:"waiting,omitempty"`
+	WaitDetail string `json:"waitDetail,omitempty"`
+	// WaitBudget are the accounts at their budget while Waiting is api.WaitingBudget (nil otherwise).
+	WaitBudget []pool.BudgetHold `json:"waitBudget,omitempty"`
+	// MemoryWait is set by a memory wait: since when, and the last reading against its threshold. A pool wait in
+	// between keeps it (so the wait's start survives); a launch or the end of the run clears it. Attention reads it
+	// only while Waiting is api.WaitingMemory.
+	MemoryWait           *MemoryWait    `json:"memoryWait,omitempty"`
 	NeedsSince           time.Time      `json:"needsSince,omitzero"`
 	Attention            *api.Attention `json:"attention,omitempty"`
 	AttentionDismissedAt time.Time      `json:"attentionDismissedAt,omitzero"`
@@ -230,9 +238,14 @@ type Turn struct {
 	TaskIDsPassed bool `json:"taskIdsPassed,omitempty"`
 	// ProofChanged is true when the followup that opened the turn changed the task's lane or gate commands: the
 	// continuation repeats them.
-	ProofChanged bool      `json:"proofChanged,omitempty"`
-	StartedAt    time.Time `json:"startedAt"`
-	EndedAt      time.Time `json:"endedAt,omitzero"`
+	ProofChanged bool `json:"proofChanged,omitempty"`
+	// AllowGit turns the git guard off for this turn. It belongs to one lead command: the delegate or followup that
+	// opened the turn sets it (a followup without allow_git turns it off), and the automatic fix turns of that
+	// command (gate auto-fix, verifier reject) inherit it from the turn they fix; retries and handovers run the
+	// same turn. A takeover's handback turn has it off.
+	AllowGit  bool      `json:"allowGit,omitempty"`
+	StartedAt time.Time `json:"startedAt"`
+	EndedAt   time.Time `json:"endedAt,omitzero"`
 
 	Response        string       `json:"response,omitempty"`
 	Files           []string     `json:"files,omitempty"`
@@ -373,15 +386,29 @@ func (t *Task) projectDir() string {
 	return t.Cwd
 }
 
-// FilesChanged returns the files edited in any turn, without duplicates, in first-seen order.
+// FilesChanged returns the files changed in any turn, without duplicates, in first-seen order.
 func (t *Task) FilesChanged() []string {
 	var out []string
+	seen := map[string]bool{}
 	for _, tu := range t.Turns {
 		for _, f := range tu.Files {
-			if !slices.Contains(out, f) {
+			if !seen[f] {
+				seen[f] = true
 				out = append(out, f)
 			}
 		}
 	}
 	return out
+}
+
+// lastEdits lists the files the edit tools of a turn's last finished attempt changed, as display paths. The
+// verifier is judged by them: its Files also hold what its test runs wrote (caches, build output), which is not
+// an edit of the code it reviews.
+func lastEdits(t *Task, tu *Turn) []string {
+	for i := len(tu.Attempts) - 1; i >= 0; i-- {
+		if o := tu.Attempts[i].Outcome; o != nil {
+			return displayPaths(t.Cwd, o.FilesEdited)
+		}
+	}
+	return nil
 }

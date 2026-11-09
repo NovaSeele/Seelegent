@@ -200,6 +200,13 @@ func (s *Service) startVerifier(t *Task, turn int, res *api.GateResult, files, b
 		return append(evs, NewEvent{Type: api.EventVerify, Turn: turn,
 			Data: api.VerifyEventData{Phase: "start", ChildID: child.ID}}), nil
 	})
+	if errors.Is(err, errNoChange) {
+		// The phase ended meanwhile (a cancel, or a lead followup that superseded the gate): no verdict is needed.
+		if _, _, cerr := s.Cancel(ctx, child.ID, api.CancelRequest{}); cerr != nil {
+			s.log.Warn("task: cancel the verify task", "task", child.ID, "err", cerr)
+		}
+		return false, nil
+	}
 	if err != nil {
 		return false, err
 	}
@@ -264,8 +271,8 @@ func (s *Service) verdictOf(parent, child *Task) *api.VerifierResult {
 			v.Detail += ": " + child.Error
 		}
 		return v
-	case len(tu.Files) > 0:
-		v.Detail = "the verifier changed files: " + strings.Join(tu.Files, ", ")
+	case len(lastEdits(child, tu)) > 0:
+		v.Detail = "the verifier changed files: " + strings.Join(lastEdits(child, tu), ", ")
 		return v
 	}
 	m := verdictRe.FindStringSubmatch(tu.Response)
@@ -293,6 +300,10 @@ func (s *Service) verdictOf(parent, child *Task) *api.VerifierResult {
 	}
 	return v
 }
+
+// verifierNoDelete keeps a rejected worker from deleting its own work to answer the review (field report 4, F4).
+const verifierNoDelete = "Do not delete, revert or move files to answer this review unless a reason above names " +
+	"that exact file and change: the lead decides about files outside your lane."
 
 // applyVerdict records the verdict on the parent and the verify task, then opens a fix turn (reject, budget left)
 // or ends the phase.
@@ -330,7 +341,7 @@ func (s *Service) applyVerdict(id string, turn int, v *api.VerifierResult) (bool
 			reasons.WriteString("- " + r + "\n")
 		}
 		msg := "The pre-lead verifier reviewed your changes and rejected them.\n\n## Reasons\n" + reasons.String() +
-			"\nPlease fix the reported issues and verify."
+			"\nPlease fix the reported issues and verify. " + verifierNoDelete
 		return s.fixTurn(id, turn, api.GateResult{}, nil, msg, ByVerifier)
 	}
 	return false, s.endVerify(id, turn, v, nil)

@@ -71,8 +71,8 @@
       "short": "Квота"
     },
     "waitingWorker": {
-      "label": "Ждёт свободного исполнителя",
-      "short": "Нет исп."
+      "label": "Ждёт свободного слота",
+      "short": "Нет слота"
     },
     "blocked": {
       "label": "Требует действий",
@@ -105,6 +105,10 @@
     "blockedDeps": {
       "label": "Предыдущая задача упала",
       "short": "Сбой пред."
+    },
+    "waitingResources": {
+      "label": "Ждёт ресурсы",
+      "short": "Ресурсы"
     }
   },
   "attention": {
@@ -114,6 +118,7 @@
     "noResponse": "Исполнитель не отвечает",
     "auth": "Нужен вход",
     "noAccounts": "Нет доступных аккаунтов",
+    "budgetReached": "Бюджет исчерпан",
     "failed": "Ошибка",
     "review": "Ждёт проверки",
     "quotaWait": "Ждёт квоту",
@@ -128,7 +133,8 @@
     "verifierRejected": "Отклонено вторым мнением",
     "peerObjection": "Коллега возражает",
     "backgroundWait": "Ждёт фоновую команду",
-    "unknown": "Требует внимания"
+    "unknown": "Требует внимания",
+    "resourcesWait": "Ждёт ресурсы"
   },
   "stage": {
     "explore": "Поиск",

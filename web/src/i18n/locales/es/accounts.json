@@ -16,10 +16,11 @@
     "disabled": "Desactivada"
   },
   "kind": {
-    "isolated": "Sesión propia",
-    "system": "Sesión de este equipo",
-    "apiKey": "Clave de API",
-    "apiKeyOf": "Clave de API · {provider}"
+    "apiKeyOf": "Clave de API · {provider}",
+    "line": {
+      "isolated": "Suscripción · Sesión propia",
+      "system": "Suscripción · Este equipo"
+    }
   },
   "keyHint": "clave {hint}",
   "busy": "{busy} de {max} huecos ocupados",
@@ -48,9 +49,17 @@
     "rename": "Renombrar",
     "login": "Iniciar sesión",
     "logout": "Cerrar sesión",
-    "key": "Poner clave de API",
     "delete": "Eliminar cuenta",
-    "more": "Más acciones para {name}"
+    "more": "Más acciones para {name}",
+    "priority": "Prioridad: {n}…",
+    "test": "Probar de nuevo",
+    "addKey": "Añadir clave",
+    "replaceKey": "Cambiar la clave",
+    "model": "Cambiar modelo",
+    "budget": "Fijar presupuesto",
+    "turnOff": "Desactivar",
+    "turnOn": "Activar",
+    "prices": "Fijar precios"
   },
   "done": {
     "added": "Se añadió {name}",
@@ -60,7 +69,13 @@
     "deleted": "Se eliminó {name}",
     "logout": "Sesión cerrada",
     "refreshedAll": "Cuota actualizada",
-    "off": "{name} ya no recibe trabajo"
+    "off": "{name} ya no recibe trabajo",
+    "priority": "Prioridad de {name} fijada en {n}",
+    "budgetSet": "Presupuesto de {name} fijado en {budget}",
+    "budgetRemoved": "Presupuesto de {name} quitado",
+    "modelSet": "Modelo de {service} guardado",
+    "pricesSet": "Precios de {service} guardados",
+    "pricesCleared": "Precios de {service} quitados"
   },
   "quota": {
     "window": "Ventana de {window}",
@@ -99,44 +114,45 @@
   },
   "add": {
     "title": "Añadir cuenta",
-    "step1": "Paso 1 de 2: qué tipo de cuenta.",
-    "step2": "Paso 2 de 2: sus datos.",
-    "backend": "Backend",
-    "kind": "Tipo",
-    "backendDesc": {
-      "agy": "Modelos Gemini a través de la CLI de Antigravity.",
-      "claude": "Modelos Claude a través de Claude Code.",
-      "codex": "Modelos de OpenAI a través de Codex."
+    "connect": {
+      "legend": "¿Cómo se conecta esta cuenta?",
+      "subscription": "Iniciar sesión con una suscripción",
+      "subscriptionDesc": "Usa tu plan de Gemini, Claude o ChatGPT. Inicias sesión una vez en el navegador.",
+      "apiKey": "Usar una clave de API",
+      "apiKeyDesc": "Paga por token con una clave de Anthropic, DeepSeek, OpenRouter, OpenAI y otros."
     },
-    "kindDesc": {
-      "isolated": "Su propio perfil; inicias sesión una vez en el navegador.",
-      "system": "Usa la sesión que ya hay en este equipo.",
-      "apiKey": "Paga por token a través de un proveedor de API."
+    "product": {
+      "legend": "¿Qué suscripción?",
+      "agy": "Gemini, con Antigravity",
+      "claude": "Claude Pro o Max, con Claude Code",
+      "codex": "ChatGPT, con Codex"
     },
+    "useSystem": "Usar la sesión que ya hay en este equipo",
+    "signIn": "Iniciar sesión",
+    "made": "Se añadió {name}. Termina su inicio de sesión abajo; también puedes cerrar esto y hacerlo luego desde su fila.",
+    "done": "Hecho",
     "defaultLabel": "{backend} {n}",
     "label": "Nombre",
     "priorityHint": "Los números más altos se usan primero (−1000 a 1000).",
-    "provider": "Proveedor",
-    "noProvider": "Este backend aún no tiene proveedor. Añade uno antes en Proveedores de API.",
-    "keyHint": "Opcional; puedes añadirla después. Luego solo se muestran sus últimos caracteres.",
-    "keyless": "Se añadió {name}, pero no tiene clave: la clave fue rechazada y la cuenta no se pudo quitar de nuevo. Introduce aquí una clave para ella.",
     "loginFailed": "Se añadió {name}, pero no se pudo iniciar su inicio de sesión: {error}. Usa Iniciar sesión en su tarjeta para volver a intentarlo.",
-    "systemTaken": "Ya añadida: {name}",
-    "next": "Siguiente",
-    "submit": "Añadir cuenta"
+    "next": "Siguiente"
   },
   "key": {
-    "title": "Clave de API de {name}",
+    "titleAdd": "Añadir una clave a {name}",
+    "titleReplace": "Cambiar la clave de {name}",
     "current": "La clave guardada termina en {hint}. Una clave nueva la sustituye.",
     "none": "Aún no hay clave guardada.",
-    "label": "Clave de API",
-    "hint": "La guarda el servicio; el panel no vuelve a mostrarla.",
-    "save": "Guardar clave",
+    "save": "Probar y guardar",
+    "saveUntested": "Guardar sin probar",
     "clear": "Quitar clave"
   },
   "rename": {
     "title": "Renombrar cuenta",
     "submit": "Renombrar"
+  },
+  "priorityDialog": {
+    "title": "Prioridad de {name}",
+    "submit": "Guardar prioridad"
   },
   "delete": {
     "title": "¿Eliminar {name}?",
@@ -160,28 +176,27 @@
     "withProvider": "{backend} ({provider})"
   },
   "providers": {
-    "title": "Proveedores de API",
-    "desc": "Adónde envían sus peticiones las cuentas con clave de API: compatibles con Anthropic para Claude Code, compatibles con OpenAI para Codex.",
-    "add": "Añadir proveedor",
-    "search": "Buscar proveedores",
-    "loading": "Cargando proveedores…",
-    "loadFailed": "No se pudieron cargar los proveedores: {error}",
-    "empty": "Aún no hay proveedores.",
-    "noMatch": "Ningún proveedor coincide.",
-    "usedBy": "lo usa {n} cuenta | lo usan {n} cuentas",
+    "title": "Servicios",
+    "desc": "Adónde envían sus peticiones las claves de API. Casi nadie necesita cambiar esto.",
+    "add": "Añadir servicio",
+    "search": "Buscar servicios",
+    "loading": "Cargando servicios…",
+    "loadFailed": "No se pudieron cargar los servicios: {error}",
+    "empty": "Aún no hay servicios. Añadir una clave de API crea uno.",
+    "noMatch": "Ningún servicio coincide.",
     "anyModel": "cualquier modelo",
     "patternModels": "patrón {pattern}",
     "enabledOf": "Usar {name}",
     "editOf": "Editar {name}",
     "deleteOf": "Eliminar {name}",
     "deleteTitle": "¿Eliminar {name}?",
-    "deleteDesc": "Las cuentas ya no podrán usarlo. No se puede eliminar un proveedor que aún usan cuentas.",
-    "deleteConfirm": "Eliminar proveedor",
-    "inUse": "Aún hay cuentas que lo usan; muévelas o elimínalas primero. {error}",
+    "deleteDesc": "Las claves de API ya no podrán usarlo.",
+    "deleteConfirm": "Eliminar servicio",
+    "inUse": "Aún hay cuentas que lo usan; quítalas antes. {error}",
     "deleted": "Se eliminó {name}",
     "saved": "Se guardó {name}",
-    "addTitle": "Añadir proveedor de API",
-    "editTitle": "Editar proveedor de API",
+    "addTitle": "Añadir servicio",
+    "editTitle": "Editar servicio",
     "preset": "Partir de",
     "blank": "En blanco",
     "id": "ID",
@@ -194,8 +209,300 @@
     "modelsPattern": "Permitidos por el patrón {pattern}; escribir una lista sustituye este patrón.",
     "allowAny": "Permitir cualquier modelo",
     "anyOnSave": "Al guardar se permite cualquier modelo y se quita el patrón.",
-    "tierModels": "Siempre permitidos (modelos de nivel): {models}",
     "enabled": "Las cuentas pueden usarlo",
-    "save": "Guardar proveedor"
+    "save": "Guardar proveedor",
+    "tiers": "Modelo de cada nivel"
+  },
+  "testResult": {
+    "not_tested": "Sin probar",
+    "ok": "La clave funciona",
+    "refused": "Clave rechazada",
+    "not_found": "Dirección incorrecta",
+    "no_models_endpoint": "Sin verificar: el primer turno la probará",
+    "unreachable": "Servicio inalcanzable",
+    "redirected": "Redirigido a otro sitio",
+    "error": "La prueba falló",
+    "creditUnseen": "Esta prueba no puede ver el saldo de crédito",
+    "testedAt": "Probada {time}"
+  },
+  "notice": {
+    "base_url_trimmed": "URL base acortada",
+    "official_preset": "Cambiado a la plantilla de Anthropic",
+    "key_name_removed": "Se quitó el nombre de variable de la clave",
+    "key_quotes_removed": "Se quitaron las comillas de la clave",
+    "key_assignment": "Parece NOMBRE=valor: pega solo la parte después de =",
+    "key_prefix": "La clave parece de otro servicio",
+    "provider_reused": "Se reutilizó un proveedor existente"
+  },
+  "keyError": {
+    "empty": "Pega la clave de API",
+    "too_long": "Esta clave es demasiado larga",
+    "url": "Esto parece una dirección web, no una clave.",
+    "whitespace": "Pega solo la clave: tiene espacios o saltos de línea dentro.",
+    "control": "La clave contiene caracteres invisibles"
+  },
+  "modelPerTask": "Modelo elegido por tarea",
+  "modelPerTaskHint": "Este proveedor no tiene modelo predeterminado: cada tarea indica el modelo que usa.",
+  "view": {
+    "label": "Vista de cuentas",
+    "list": "Lista",
+    "cards": "Tarjetas"
+  },
+  "list": {
+    "col": {
+      "account": "Cuenta",
+      "status": "Estado",
+      "slots": "Huecos",
+      "quota": "Cuota o gasto",
+      "controls": "Trabajo · Prioridad"
+    },
+    "slots": "{busy}/{max} ocupados",
+    "expand": "Mostrar detalles de {name}",
+    "collapse": "Ocultar detalles de {name}",
+    "enabledFor": "Usar {name} para trabajar",
+    "span": {
+      "hours": "{n} h",
+      "day": "Diaria",
+      "week": "Semanal",
+      "month": "Mensual"
+    },
+    "spanShort": {
+      "hours": "{n} h",
+      "day": "1 d",
+      "week": "7 d",
+      "month": "30 d"
+    },
+    "quota": {
+      "tip": "{group} · {window}",
+      "lowestTip": "La más baja de todas las ventanas: {group} · {window}",
+      "more": "{n} ventana más, visible al abrir la fila | {n} ventanas más, visibles al abrir la fila",
+      "moreShort": "+{n}",
+      "passive": "Sin cuota que leer",
+      "checking": "Leyendo la cuota…"
+    }
+  },
+  "budgetState": {
+    "ok": "Dentro del presupuesto",
+    "warn": "80% del presupuesto usado",
+    "reached": "Presupuesto agotado",
+    "unknown": "Gasto desconocido para este servicio",
+    "unknownNeedsPrices": "El presupuesto de {budget} espera precios: fija los precios de este servicio para juzgarlo"
+  },
+  "restReason": {
+    "budget_reached": "Presupuesto agotado ({spent} de {budget})",
+    "credits": "Sin crédito",
+    "creditsHint": "Recarga saldo y luego prueba la clave o apaga y enciende la cuenta."
+  },
+  "spendSource": {
+    "cli": "Estimación de Claude Code",
+    "free": "Local · gratis",
+    "none": "Este servicio no informa el coste",
+    "service": "La cuenta propia del servicio para esta clave",
+    "prices": "A tus precios para este servicio",
+    "serviceWholeLife": "La cuenta de {service} para esta clave, incluido el uso fuera de Seelegent"
+  },
+  "service": {
+    "label": "Servicio",
+    "search": "Buscar servicios",
+    "yours": "Tus servicios",
+    "presets": "Servicios",
+    "keys": "{n} clave | {n} claves",
+    "noKey": "Aún sin clave",
+    "change": "Cambiar",
+    "changeOf": "Cambiar el servicio ({name})",
+    "runsOn": "Funciona con {cli}",
+    "otherAnthropic": "Otro (compatible con Anthropic)",
+    "otherOpenai": "Otro (compatible con OpenAI)",
+    "noMatch": "Ningún servicio coincide.",
+    "detected": "Clave de {service} detectada",
+    "required": "Elige el servicio de la clave"
+  },
+  "keyField": {
+    "label": "Clave de API",
+    "hint": "Después de guardarla solo se muestran sus 4 últimos caracteres.",
+    "show": "Mostrar",
+    "hide": "Ocultar",
+    "showLabel": "Mostrar la clave",
+    "nameRemoved": "Se quitó {name}= del principio"
+  },
+  "modelPicker": {
+    "label": "Modelo que usan los workers",
+    "lead": "Que elija el lead (cualquier modelo)",
+    "perTier": "Un modelo distinto por nivel",
+    "perTierOption": "Un modelo por nivel (abajo)",
+    "leadHint": "Cada tarea indica su modelo; se rechaza la tarea que no indique ninguno.",
+    "fromService": "Se fija en {service} para todas sus claves: cámbialo con Cambiar modelo en una cuenta.",
+    "tier": {
+      "fast": "Rápido",
+      "standard": "Estándar",
+      "strong": "Potente",
+      "max": "Máximo"
+    },
+    "tierEmpty": "elegido por tarea",
+    "tierHint": "Nivel vacío: las tareas de ese nivel deben indicar su modelo."
+  },
+  "form": {
+    "testAndAdd": "Probar y añadir",
+    "addUntested": "Añadir sin probar",
+    "listModels": "Probar la clave y listar modelos",
+    "testing": "Probando la clave…",
+    "more": "Más opciones",
+    "advanced": "Avanzado",
+    "budget": "Presupuesto (USD)",
+    "budgetHint": "0 para no tener presupuesto. Solo las claves de Anthropic informan un coste (la estimación de Claude Code); los demás servicios cuentan tokens.",
+    "budgetStop": "Dejar de usar esta clave cuando se agote el presupuesto",
+    "baseUrl": "URL base",
+    "baseUrlHint": "La dirección del servicio. Claude Code añade /v1/messages por sí mismo, así que no lo pongas.",
+    "baseUrlRequired": "Escribe la dirección del servicio",
+    "wireApi": "API de transporte",
+    "wireChat": "Chat Completions",
+    "wireResponses": "Responses",
+    "extraModels": "Modelos permitidos adicionales",
+    "extraModelsHint": "Separados por comas; vacío permite cualquier modelo."
+  },
+  "budget": {
+    "title": "Presupuesto de {name}",
+    "save": "Guardar presupuesto",
+    "remove": "Quitar presupuesto",
+    "positive": "Escribe un importe mayor que 0",
+    "noCost": "Este servicio aún no tiene precios, así que su gasto no tiene coste: el presupuesto se comprueba cuando fijes sus precios.",
+    "suggested": "Usar el límite de OpenRouter de la clave, {amount}",
+    "serviceWholeLife": "El uso de esta clave fuera de Seelegent también cuenta para el presupuesto: se compara con la cuenta propia del servicio para la clave."
+  },
+  "model": {
+    "title": "Modelo de {service}",
+    "desc": "Se aplica a todas las claves de {service}.",
+    "save": "Guardar modelo"
+  },
+  "needs": {
+    "title": "Te necesitan",
+    "row": "{name}: {problem}.",
+    "problem": {
+      "no_key": "sin clave",
+      "needs_login": "sesión cerrada",
+      "no_plan": "su plan no puede usar este backend",
+      "refused": "el servicio rechazó la clave",
+      "not_found": "la dirección del servicio parece incorrecta",
+      "redirected": "el servicio envió la prueba a otro sitio",
+      "credits": "sin crédito",
+      "budget_reached": "presupuesto alcanzado ({spent} de {budget})"
+    },
+    "action": {
+      "key": "Añadir clave",
+      "login": "Iniciar sesión",
+      "replaceKey": "Cambiar la clave",
+      "test": "Probar la clave",
+      "budget": "Subir presupuesto"
+    }
+  },
+  "testState": {
+    "ok": "Funciona",
+    "not_tested": "Sin probar",
+    "refused": "Rechazada",
+    "not_found": "Dirección errónea",
+    "no_models_endpoint": "Sin verificar",
+    "unreachable": "Inaccesible",
+    "redirected": "Redirigida",
+    "error": "Prueba fallida"
+  },
+  "testHelp": {
+    "ok": "La clave funciona. {n} modelo disponible. | La clave funciona. {n} modelos disponibles.",
+    "refused": "El servicio rechazó esta clave.",
+    "not_found": "Dirección errónea: ahí no responde nada. Quita /v1 del final de la URL base.",
+    "no_models_endpoint": "No se puede verificar este servicio: no tiene una lista de modelos con la que comprobar la clave. La primera tarea la probará.",
+    "unreachable": "No se pudo contactar con el servicio. Revisa su dirección y tu conexión.",
+    "redirected": "El servicio envió la prueba a otra dirección; la clave no se envió allí.",
+    "error": "El servicio respondió con un error (HTTP {status})."
+  },
+  "spend": {
+    "short": {
+      "budget": "{spent} / {budget}",
+      "over": "{spent} / {budget}",
+      "since": "{spent} desde el {date}",
+      "cost": "{spent}",
+      "tokens": "{tokens} tokens"
+    },
+    "long": {
+      "budget": "{spent} gastados de {budget} · quedan {left}",
+      "over": "{spent} gastados de {budget} · {left} de más",
+      "since": "{spent} gastados desde que se puso la clave ({date})",
+      "cost": "{spent} gastados",
+      "tokens": "{tokens} tokens, coste desconocido"
+    },
+    "free": "Local · gratis",
+    "estimateTip": "La estimación de Claude Code, no la factura del servicio",
+    "setBudget": "Fijar presupuesto",
+    "barLabel": "Presupuesto usado",
+    "budgetUnknown": "El presupuesto de {budget} no se aplica: este servicio no informa del coste",
+    "unpricedTokens": "{tokens} tokens sin precio",
+    "setPrices": "Fija precios para ver el coste"
+  },
+  "facts": {
+    "model": "Modelo: {model}",
+    "models": "Modelos: {models}"
+  },
+  "routing": "Se usa cuando una tarea pide {service} (provider: {id}).",
+  "services": {
+    "advanced": "Avanzado",
+    "addKey": "Añadir clave",
+    "official": "api.anthropic.com (oficial)",
+    "allows": "permite {models}",
+    "usedByNames": "{names} aún lo usa: quita antes esa cuenta. | {names} aún lo usan: quita antes esas cuentas.",
+    "prices": "Precios",
+    "pricesOf": "Precios de {name}"
+  },
+  "balance": {
+    "title": "Saldo {amount}",
+    "shared": "de toda la cuenta",
+    "accountWide": "Saldo de toda la cuenta de {provider}, compartido por todas sus claves",
+    "readAt": "leído {time}",
+    "stale": "puede estar desactualizado",
+    "granted": "Regalado {amount}",
+    "paid": "Pagado {amount}",
+    "unavailable": "no alcanza para pagar peticiones"
+  },
+  "serviceUsage": {
+    "total": "Contado por el servicio para esta clave: {amount}",
+    "daily": "hoy {amount}",
+    "weekly": "esta semana {amount}",
+    "monthly": "este mes {amount}",
+    "limit": "límite {amount}, {reset}",
+    "reset": {
+      "daily": "se reinicia cada día",
+      "weekly": "se reinicia cada semana",
+      "monthly": "se reinicia cada mes",
+      "never": "sin reinicio"
+    }
+  },
+  "serviceError": {
+    "refused": "Al leer el gasto: el servicio rechazó la clave",
+    "no_credit": "Al leer el gasto: el servicio dice que no queda crédito",
+    "unreachable": "Al leer el gasto: no se pudo contactar con el servicio",
+    "redirected": "Al leer el gasto: el servicio lo envió a otro sitio (la clave no se envió allí)",
+    "error": "Al leer el gasto: el servicio respondió con un error"
+  },
+  "prices": {
+    "title": "Precios de {service}",
+    "model": "Modelo",
+    "anyModel": "* es cualquier modelo sin fila propia.",
+    "input": "Entrada",
+    "cachedInput": "Entrada en caché",
+    "cacheWrite": "Escritura en caché",
+    "cacheWriteHint": "Escritura en caché vacía: 1,25 × la entrada, la regla de Anthropic (escrituras de una hora: 2 × la entrada; con un precio fijado, 1,6 × ese precio).",
+    "output": "Salida",
+    "perMillion": "Dólares estadounidenses por 1M de tokens",
+    "pricingLink": "Página de precios de {service}",
+    "add": "Añadir fila",
+    "remove": "Quitar la fila de {model}",
+    "save": "Guardar precios",
+    "empty": "Sin precios: el gasto de este servicio se cuenta solo en tokens. Añade una fila para contarlo en dólares.",
+    "appliesFromNow": "Los precios nuevos se aplican al trabajo desde ahora; el gasto ya contado conserva su precio.",
+    "error": {
+      "modelRequired": "Escribe un modelo, o * para cualquiera",
+      "modelTooLong": "Como mucho 200 caracteres",
+      "duplicate": "Este modelo ya tiene una fila",
+      "invalid": "Escribe un precio de 0 a 10.000",
+      "tooMany": "Como mucho 200 filas"
+    }
   }
 }

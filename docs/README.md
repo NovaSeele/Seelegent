@@ -1,12 +1,15 @@
 # Seelegent documentation
 
 Start with the [README](../README.md) for what Seelegent is, then [getting-started.md](getting-started.md) for a
-first run. The other pages describe what the current version does, one area each.
+first run and the [usage guide](usage.md) for everyday work. The other pages describe what the current version
+does, one area each.
 
 ## For users
 
 - [Getting started](getting-started.md): install, accounts and sign-in, connecting the lead hosts, a dashboard tour,
   the first task, followup and review, and what to do when a task is stuck.
+- [Usage guide](usage.md): everyday work, task by task: accounts, delegating, the dashboard, quota, gates, the git
+  guard, the team, GitHub tickets, automations, resources, troubleshooting, update and uninstall.
 - [Setup and migration](setup.md): what `seelegent setup` writes for each lead host, the lead skill and reminder
   hook, and what `seelegent migrate` imports from the old version.
 - [Installation, updates and releases](release.md): what the installers do, their options, `seelegent update` and
@@ -34,6 +37,9 @@ first run. The other pages describe what the current version does, one area each
 
 ## For contributors
 
+- [Contributing](../CONTRIBUTING.md): how to report bugs, the checks a pull request must pass, and the pull request
+  flow. Security problems go through [SECURITY.md](../SECURITY.md); everyone follows the
+  [Code of Conduct](../CODE_OF_CONDUCT.md).
 - [Development](development.md): prerequisites, build, tests and lint, development ports, the git workflow.
 - [Web UI layout](ui-layout.md): breakpoints, page widths and the navigation rail of the dashboard.
 - [AGENTS.md](../AGENTS.md): package layout and coding rules for agents working on this repository.

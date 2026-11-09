@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/NovaSeele/Seelegent/internal/api"
+	"github.com/NovaSeele/Seelegent/internal/task"
 )
 
 // TestStreamResume covers contract §7: hello first, resume with Last-Event-ID replays exactly the missed frames,
@@ -76,5 +78,43 @@ func TestStreamResume(t *testing.T) {
 	}
 	if f := q.next(); f.event != "reset" {
 		t.Fatalf("query reset = %+v", f)
+	}
+}
+
+// TestStreamLiveCoalesced: a burst of live notices (the worker's active step changed many times a second) gives one
+// task.updated frame, not one per 100 ms: each frame reads the task's summary from the database (bench, M19).
+func TestStreamLiveCoalesced(t *testing.T) {
+	e := newEnv(t)
+	e.addAccount("first")
+	e.queue.Push(t, ok("c1", "done"))
+	sum := e.delegate("Live me.")
+	e.wait(sum.ID)
+	time.Sleep(1500 * time.Millisecond) // the frames that follow the end of the turn go out first
+	var boot api.BootState
+	e.must(e.get("/api/v1/state"), http.StatusOK).json(t, &boot)
+	live := e.stream(boot.LastEventID)
+	if f := live.next(); f.event != "hello" {
+		t.Fatalf("first = %+v", f)
+	}
+	bus := e.a.Tasks.Bus()
+	for range 20 {
+		bus.Publish(task.Notice{Kind: task.NoticeLive, TaskID: sum.ID})
+		time.Sleep(25 * time.Millisecond) // 500 ms: five task.updated frames at the task's 100 ms
+	}
+	time.Sleep(1200 * time.Millisecond)
+	bus.Publish(task.Notice{Kind: task.NoticeEvent, TaskID: sum.ID,
+		Event: &api.TaskEvent{TaskID: sum.ID, Type: "marker", Data: map[string]string{}}})
+	updates := 0
+	for {
+		f := live.next()
+		if f.event == "task.event" {
+			break
+		}
+		if f.event == "task.updated" {
+			updates++
+		}
+	}
+	if updates != 1 {
+		t.Errorf("task.updated frames = %d, want 1", updates)
 	}
 }

@@ -84,7 +84,9 @@ type Options struct {
 	Log    io.Writer
 	Redact func(string) string
 	// Ran is called after each run (hook.ran).
-	Ran    func(api.HookRun)
+	Ran func(api.HookRun)
+	// Tree returns the limits of a hook's process tree (gatePriority); nil runs hooks without limits.
+	Tree   func() platform.TreeOptions
 	Now    func() time.Time
 	Logger *slog.Logger
 }
@@ -692,7 +694,11 @@ func (s *Service) run(j job) api.HookRun {
 	out := &capped{limit: maxOutput}
 	cmd.Stdout, cmd.Stderr = out, out
 	platform.HideWindow(cmd)
-	tree, err := platform.StartTree(cmd)
+	var opt platform.TreeOptions
+	if s.o.Tree != nil {
+		opt = s.o.Tree()
+	}
+	tree, err := platform.StartTreeWith(cmd, opt)
 	if err != nil {
 		r.Error = err.Error()
 	} else {

@@ -71,8 +71,8 @@
       "short": "Cuota"
     },
     "waitingWorker": {
-      "label": "Esperando un worker libre",
-      "short": "Sin worker"
+      "label": "Esperando un hueco libre",
+      "short": "Sin hueco"
     },
     "blocked": {
       "label": "Requiere acción",
@@ -105,6 +105,10 @@
     "blockedDeps": {
       "label": "Falló la tarea previa",
       "short": "Previa falló"
+    },
+    "waitingResources": {
+      "label": "Esperando recursos",
+      "short": "Recursos"
     }
   },
   "attention": {
@@ -114,6 +118,7 @@
     "noResponse": "El worker no responde",
     "auth": "Requiere iniciar sesión",
     "noAccounts": "Sin cuentas disponibles",
+    "budgetReached": "Presupuesto agotado",
     "failed": "Falló",
     "review": "Pendiente de revisión",
     "quotaWait": "Esperando cuota",
@@ -128,7 +133,8 @@
     "verifierRejected": "Rechazado en la revisión",
     "peerObjection": "Un par se opone",
     "backgroundWait": "Esperando un comando en segundo plano",
-    "unknown": "Necesita revisión"
+    "unknown": "Necesita revisión",
+    "resourcesWait": "Esperando recursos"
   },
   "stage": {
     "explore": "Explorar",

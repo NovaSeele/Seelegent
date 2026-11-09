@@ -99,7 +99,7 @@ does), with two additions: `gate` of `delegate` and `followup` also takes `true`
 | `review` | `POST /tasks/{id}/review` | yes; `answer_objection` is sent as `answerObjection`, which accepting a task a peer objected to needs; a senior's objection comes back as a `Warning:` line |
 | `cancel` | `POST /tasks/{id}/cancel` | yes; 202 is reported as `cancelling` |
 | `task` | `GET /tasks/{id}/report` (or `GET /tasks/{id}` with `full`), `GET /tasks/{id}/events?tail=` | yes |
-| `status` | `GET /accounts`, `GET /tasks?status=`, `GET /backends` | yes |
+| `status` | `GET /accounts`, `GET /tasks?status=`, `GET /backends` | yes: an API-key account carries `testResult`, its spend (`spentUsd` only from a spend source with a cost: `service`, `prices` or `cli`; `spentTokens`, `spendSource`, `budgetUsd`, `budgetState`), `balance` when its spend service reported one (`amount`, `currency` as the service gives it, `accountWide` for DeepSeek and Moonshot, `stale`), `restReason` on any account held until the user acts (`credits`, `budget_reached`; no `restingUntil` then) and, when its provider has no tier models, `modelPerTask: true`; the summary then names those providers ("Model per task (pass model in delegate): provider ..."), and a delegate on them without `model` is refused at once with the provider's models as examples |
 | `memory` | `GET`, `POST` (append), `PUT` (replace) `/memory` | yes |
 | `profiles` | `GET /roles`, `POST /roles`, `DELETE /roles/{id}`, `GET /roles/skills` | yes |
 | `members` | `GET /members` | yes: id, name, backend, model, tier, rank, provider, role, enabled and why a member cannot be used |
@@ -111,12 +111,16 @@ does), with two additions: `gate` of `delegate` and `followup` also takes `true`
 | `issues` | `/github/repos*`, `/github/tickets*`, `GET /github/access` | yes ([github.md](github.md)): `repo` is a repo id or a connected repository's folder (matched with `fsutil.Key`); `key` a bare number means `gh#n`. `list`, `add`, `suggest` and `triage` answer the old slim issue (`key`, `title`, `labels`, `suggestion`, `decision`, `ticket` as id and status), the ticket actions the old slim ticket (checks as state, head and failing names, and `refused`: why the last `pr` stopped); `full: true` returns the records. `triage` sends `by: "lead"`; `decision` becomes `action`, `gate`/`lane` map as in `delegate`. `triage` assign, `add_task`, `retry` (a failed ticket's task again) and `fix_checks` wait like `delegate` only when `wait_seconds` is given (default 0) and then add the report as `task`. `repo_settings` without `shared_dirs` reads the setting. No action reaches the token |
 | `automations` | `/automations*` | yes ([automations.md](automations.md)): `create` never enables (the daemon creates every automation disabled); `enable` is `POST /automations/{id}/enable`, which only records the request and answers `{automation, confirm, confirmUrl, message}`: the user confirms in the dashboard. `disable` is `PATCH {enabled: false}`, which also withdraws a request. `update` sends only the arguments given; `min_remaining` and `use_before_reset` keep the other quota field. `runs` limit 1..200 (default 20). The slim view is the old one plus `enableRequested` |
 
-Argument handling follows the old server: unknown arguments are ignored, numbers and booleans may arrive as
-strings, a single string is accepted where a list is expected, wait seconds are clamped (`delegate`/`followup`/`wait`
-0..3000, default 600, and 0 for a `delegate` with `after`; `cancel` 0..60, default 15). `mode: full` maps to the
-API's `edit`. `lane: false`, `verify: false` and `force_lane: false` mean "off" and are accepted. Relative paths
-resolve against the server's working directory. `followup`, `wait` and `task` build reports with the task's own
-project, not the server's working directory.
+Argument handling follows the old server, with one change: an argument the tool's input schema does not have is
+refused with a tool error (`invalid_argument`) that names it and lists the valid ones (the old server ignored it, so
+`tier: "strong"` ran on the default tier; tiers go in `model`). The schemas do not say `additionalProperties: false`:
+hosts that pass tool schemas through the Gemini API (agy, Antigravity, Gemini CLI) have rejected that keyword, and
+one refused schema hides every tool on that host. Numbers
+and booleans may arrive as strings, a single string is accepted where a list is expected, wait seconds are clamped
+(`delegate`/`followup`/`wait` 0..3000, default 600, and 0 for a `delegate` with `after`; `cancel` 0..60, default 15).
+`mode: full` maps to the API's `edit`. `lane: false`, `verify: false` and `force_lane: false` mean "off" and are
+accepted. Relative paths resolve against the server's working directory. `followup`, `wait` and `task` build reports
+with the task's own project, not the server's working directory.
 
 ## Results
 

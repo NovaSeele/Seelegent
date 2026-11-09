@@ -10,26 +10,13 @@ import (
 	"slices"
 	"testing"
 	"time"
+	"unsafe"
 
 	"golang.org/x/sys/windows"
 )
 
-// runOSRole runs the Windows-only helper roles:
-//   - console: writes 1 to the file named last when the process has a console window, else 0.
-func runOSRole(role string) bool {
-	if role != "console" {
-		return false
-	}
-	win, _, _ := windows.NewLazySystemDLL("kernel32.dll").NewProc("GetConsoleWindow").Call()
-	mark := "0"
-	if win != 0 {
-		mark = "1"
-	}
-	if err := os.WriteFile(os.Args[len(os.Args)-1], []byte(mark), 0o600); err != nil {
-		os.Exit(3)
-	}
-	return true
-}
+// runOSRole runs the Windows-only helper roles (see console_windows_test.go).
+func runOSRole(role string) bool { return runConsoleRole(role) }
 
 // TestStaleOwner: the owner of a client socket is trusted only while it runs and when it started before the
 // connection was accepted (a reused process id is a different process).
@@ -186,44 +173,168 @@ func TestSocketOwnerUnavailableJob(t *testing.T) {
 	}
 }
 
-// TestHiddenStartsHaveNoConsoleWindow: every way Seelegent starts a hidden process (HideWindow, the detached
-// launcher, a process tree) sets CREATE_NO_WINDOW, and the process really has no console window, so no window
-// flashes when a worker or a git call starts (old L14 and L19).
-func TestHiddenStartsHaveNoConsoleWindow(t *testing.T) {
-	dir := t.TempDir()
-	check := func(name string, cmd *exec.Cmd, wait func() error, want uint32) {
+// TestTreeMemoryCap: a tree that needs more than its job memory cap fails, and MemoryLimitHit says why; one that
+// stays under it, or has no cap, reports nothing.
+func TestTreeMemoryCap(t *testing.T) {
+	run := func(mb string, opt TreeOptions) (code int, hit bool) {
 		t.Helper()
-		attr := cmd.SysProcAttr
-		if attr == nil || !attr.HideWindow || attr.CreationFlags&want != want {
-			t.Errorf("%s: SysProcAttr %+v, want HideWindow and flags %#x", name, attr, want)
+		tree, err := StartTreeWith(helper("alloc", mb), opt)
+		if err != nil {
+			t.Fatalf("StartTreeWith: %v", err)
 		}
-		if err := wait(); err != nil {
-			t.Fatalf("%s: %v", name, err)
+		_ = tree.Wait()
+		code, hit = tree.ExitCode(), tree.MemoryLimitHit()
+		if err := tree.Close(); err != nil {
+			t.Fatal(err)
 		}
-		mark, err := os.ReadFile(filepath.Join(dir, name))
-		if err != nil || string(mark) != "0" {
-			t.Errorf("%s: console window %q, %v", name, mark, err)
+		if tree.MemoryLimitHit() {
+			t.Fatal("MemoryLimitHit after Close must be false")
 		}
+		return code, hit
 	}
+	if code, hit := run("200", TreeOptions{MemoryLimitMB: 64}); code == 0 || !hit {
+		t.Fatalf("200 MB under a 64 MB cap: exit %d, limit hit %v; want a failure and a hit", code, hit)
+	}
+	if code, hit := run("8", TreeOptions{MemoryLimitMB: 256}); code != 0 || hit {
+		t.Fatalf("8 MB under a 256 MB cap: exit %d, limit hit %v", code, hit)
+	}
+	if code, hit := run("8", TreeOptions{}); code != 0 || hit {
+		t.Fatalf("no cap: exit %d, limit hit %v", code, hit)
+	}
+}
 
-	hidden := helper("console", filepath.Join(dir, "hidden"))
-	HideWindow(hidden)
-	if err := hidden.Start(); err != nil {
+// TestTreeMemoryLimitPeak: a tree whose peak memory reached 93% of its cap but was never refused memory reports
+// no hit: not when its owner killed it (exit code 1 is the kill's; review N1), and not when it failed by itself while
+// the job's port works (the port's report decides). Only without a port does a failure near the cap count.
+func TestTreeMemoryLimitPeak(t *testing.T) {
+	for _, tc := range []struct {
+		name           string
+		kill, withPort bool
+		want           bool
+	}{
+		{"killed, port", true, true, false},
+		{"killed, no port", true, false, false},
+		{"failed, port", false, true, false},
+		{"failed, no port", false, false, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			pidFile := filepath.Join(t.TempDir(), "pid")
+			tree, err := StartTreeWith(helper("hold", "64", pidFile, "3"), TreeOptions{MemoryLimitMB: 1024})
+			if err != nil {
+				t.Fatalf("StartTreeWith: %v", err)
+			}
+			defer func() { _ = tree.Close() }()
+			if !tc.withPort {
+				dropPort(tree)
+			}
+			readPids(t, pidFile)
+			capAbovePeak(t, tree, 93)
+			if tc.kill {
+				if err := tree.Kill(0); err != nil {
+					t.Fatal(err)
+				}
+			} else if err := os.WriteFile(pidFile+".go", nil, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			_ = tree.Wait()
+			if code, hit := tree.ExitCode(), tree.MemoryLimitHit(); code == 0 || hit != tc.want {
+				t.Fatalf("exit %d, limit hit %v; want a failure and hit %v", code, hit, tc.want)
+			}
+		})
+	}
+}
+
+// TestTreePollSeesLimit: Poll drains the job's port and reports a refused allocation.
+func TestTreePollSeesLimit(t *testing.T) {
+	tree, err := StartTreeWith(helper("alloc", "200"), TreeOptions{MemoryLimitMB: 64})
+	if err != nil {
+		t.Fatalf("StartTreeWith: %v", err)
+	}
+	_ = tree.Wait()
+	if !tree.Poll() || !tree.MemoryLimitHit() {
+		t.Error("the job's report must reach Poll and MemoryLimitHit")
+	}
+	_ = tree.Close()
+	if tree.Poll() {
+		t.Error("Poll after Close must be false")
+	}
+}
+
+// capAbovePeak moves the job's memory cap so that its peak so far is pct percent of it.
+func capAbovePeak(t *testing.T, tree *Tree, pct uint64) {
+	t.Helper()
+	tree.mu.Lock()
+	defer tree.mu.Unlock()
+	var info windows.JOBOBJECT_EXTENDED_LIMIT_INFORMATION
+	if err := windows.QueryInformationJobObject(tree.os.job, windows.JobObjectExtendedLimitInformation,
+		uintptr(unsafe.Pointer(&info)), uint32(unsafe.Sizeof(info)), nil); err != nil {
 		t.Fatal(err)
 	}
-	check("hidden", hidden, hidden.Wait, windows.CREATE_NO_WINDOW)
+	limit := uint64(info.PeakJobMemoryUsed) * 100 / pct
+	info.JobMemoryLimit = uintptr(limit)
+	if _, err := windows.SetInformationJobObject(tree.os.job, windows.JobObjectExtendedLimitInformation,
+		uintptr(unsafe.Pointer(&info)), uint32(unsafe.Sizeof(info))); err != nil {
+		t.Fatal(err)
+	}
+	tree.os.memCap = limit
+	t.Logf("peak %d MiB, cap %d MiB", info.PeakJobMemoryUsed>>20, limit>>20)
+}
 
-	detached, err := StartDetached(func() *exec.Cmd { return helper("console", filepath.Join(dir, "detached")) })
+// dropPort closes the job's completion port, as if it could not be set up.
+func dropPort(tree *Tree) {
+	tree.mu.Lock()
+	defer tree.mu.Unlock()
+	_ = windows.CloseHandle(tree.os.port)
+	tree.os.port = 0
+}
+
+// TestTreeJobLimits: the job holds what the options ask for (read back from the job).
+func TestTreeJobLimits(t *testing.T) {
+	tree, err := StartTreeWith(helper("sleeper", filepath.Join(t.TempDir(), "pid")),
+		TreeOptions{Priority: PriorityLow, MemoryLimitMB: 512, CPURatePercent: 25})
+	if err != nil {
+		t.Fatalf("StartTreeWith: %v", err)
+	}
+	defer func() { _ = tree.Close() }()
+	var rate jobCPURateControl
+	if err := windows.QueryInformationJobObject(tree.os.job, windows.JobObjectCpuRateControlInformation,
+		uintptr(unsafe.Pointer(&rate)), uint32(unsafe.Sizeof(rate)), nil); err != nil {
+		t.Fatalf("query CPU rate: %v", err)
+	}
+	if rate.controlFlags != jobCPURateControlEnable|jobCPURateControlHardCap || rate.cpuRate != 2500 {
+		t.Errorf("CPU rate control %+v, want enabled hard cap at 2500 (25%%)", rate)
+	}
+	var info windows.JOBOBJECT_EXTENDED_LIMIT_INFORMATION
+	if err := windows.QueryInformationJobObject(tree.os.job, windows.JobObjectExtendedLimitInformation,
+		uintptr(unsafe.Pointer(&info)), uint32(unsafe.Sizeof(info)), nil); err != nil {
+		t.Fatalf("query limits: %v", err)
+	}
+	want := uint32(windows.JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE | windows.JOB_OBJECT_LIMIT_PRIORITY_CLASS |
+		windows.JOB_OBJECT_LIMIT_JOB_MEMORY)
+	b := info.BasicLimitInformation
+	if b.LimitFlags != want || b.PriorityClass != windows.BELOW_NORMAL_PRIORITY_CLASS || info.JobMemoryLimit != 512<<20 {
+		t.Errorf("limits: flags %#x (want %#x), class %#x, memory %d", b.LimitFlags, want, b.PriorityClass,
+			info.JobMemoryLimit)
+	}
+	if tree.os.port == 0 {
+		t.Error("a memory cap needs the job's completion port")
+	}
+	if refused := tree.Unapplied(); refused != nil {
+		t.Errorf("refused limits: %v", refused)
+	}
+
+	// No options: kill-on-close only, no CPU rate control, no port.
+	plain, err := StartTreeWith(helper("sleeper", filepath.Join(t.TempDir(), "pid")), TreeOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	check("detached", detached, detached.Wait, windows.CREATE_NO_WINDOW|windows.CREATE_NEW_PROCESS_GROUP)
-
-	cmd := helper("console", filepath.Join(dir, "tree"))
-	tree, err := StartTree(cmd)
-	if err != nil {
-		t.Fatal(err)
+	defer func() { _ = plain.Close() }()
+	rate = jobCPURateControl{}
+	if err := windows.QueryInformationJobObject(plain.os.job, windows.JobObjectCpuRateControlInformation,
+		uintptr(unsafe.Pointer(&rate)), uint32(unsafe.Sizeof(rate)), nil); err != nil {
+		t.Fatalf("query CPU rate: %v", err)
 	}
-	t.Cleanup(func() { _ = tree.Close() })
-	check("tree", cmd, tree.Wait, windows.CREATE_NO_WINDOW)
+	if rate.controlFlags != 0 || plain.os.port != 0 {
+		t.Errorf("plain tree: CPU rate %+v, port %v", rate, plain.os.port)
+	}
 }

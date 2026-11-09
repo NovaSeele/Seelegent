@@ -44,6 +44,10 @@ const (
 	ClassQuotaExhausted Class = "quota_exhausted"
 	// ClassAuthRequired: the account must sign in again (or its API key/provider is unusable).
 	ClassAuthRequired Class = "auth_required"
+	// ClassCredits: the account's credit balance or billing ran out (an API key without credit). It is not a quota
+	// rest: no time ends it. The account rests until the user acts (tops up and edits the account, or changes
+	// the key) and the task tries another account.
+	ClassCredits Class = "credits"
 	// ClassTransient: a network or server hiccup; retrying the same turn may work.
 	ClassTransient Class = "transient"
 	// ClassFatal: anything else; retrying will not help.
@@ -135,7 +139,12 @@ type Usage struct {
 	OutputTokens int64 `json:"outputTokens"`
 	// CachedTokens is the part of the input served from a prompt cache.
 	CachedTokens int64 `json:"cachedTokens,omitempty"`
-	TotalTokens  int64 `json:"totalTokens"`
+	// CacheWriteTokens is the input written to a prompt cache (Claude Code's cache_creation_input_tokens; apart
+	// from InputTokens there), CacheWrite1hTokens the part of it cached for one hour instead of five minutes (they
+	// cost more).
+	CacheWriteTokens   int64 `json:"cacheWriteTokens,omitempty"`
+	CacheWrite1hTokens int64 `json:"cacheWrite1hTokens,omitempty"`
+	TotalTokens        int64 `json:"totalTokens"`
 	// CostUSD is the cost the CLI reports, when it does.
 	CostUSD float64 `json:"costUsd,omitempty"`
 }
@@ -143,11 +152,13 @@ type Usage struct {
 // Add returns the sum of u and v.
 func (u Usage) Add(v Usage) Usage {
 	return Usage{
-		InputTokens:  u.InputTokens + v.InputTokens,
-		OutputTokens: u.OutputTokens + v.OutputTokens,
-		CachedTokens: u.CachedTokens + v.CachedTokens,
-		TotalTokens:  u.TotalTokens + v.TotalTokens,
-		CostUSD:      u.CostUSD + v.CostUSD,
+		InputTokens:        u.InputTokens + v.InputTokens,
+		OutputTokens:       u.OutputTokens + v.OutputTokens,
+		CachedTokens:       u.CachedTokens + v.CachedTokens,
+		CacheWriteTokens:   u.CacheWriteTokens + v.CacheWriteTokens,
+		CacheWrite1hTokens: u.CacheWrite1hTokens + v.CacheWrite1hTokens,
+		TotalTokens:        u.TotalTokens + v.TotalTokens,
+		CostUSD:            u.CostUSD + v.CostUSD,
 	}
 }
 
@@ -177,6 +188,14 @@ type Report struct {
 type Error struct {
 	Class   Class  `json:"class"`
 	Message string `json:"message"`
+	// Answer is set on a transient failure the CLI reported after the agent's final answer (no tool step after it),
+	// when the process ended by itself: the answer (the report's response, else the final text). The CLIs retry
+	// network errors themselves and some still end a finished run with one; the task engine counts the attempt as
+	// done, with a warning, when the final text (Final) is the complete report the turn asked for.
+	Answer string `json:"answer,omitempty"`
+	// Final is the agent's final answer alone (its last text with no tool step after it), set with Answer: the report
+	// the task engine checks. Answer may hold the whole run's text, an earlier report included.
+	Final string `json:"final,omitempty"`
 }
 
 // Message returns a message event.

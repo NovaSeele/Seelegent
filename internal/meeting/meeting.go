@@ -28,6 +28,7 @@ import (
 	"github.com/NovaSeele/Seelegent/internal/answer"
 	"github.com/NovaSeele/Seelegent/internal/api"
 	"github.com/NovaSeele/Seelegent/internal/fsutil"
+	"github.com/NovaSeele/Seelegent/internal/projectkey"
 	"github.com/NovaSeele/Seelegent/internal/task"
 )
 
@@ -386,7 +387,7 @@ func (s *Service) Open(ctx context.Context, req api.MeetingRequest) (api.Meeting
 	if strings.TrimSpace(req.Cwd) == "" {
 		return api.Meeting{}, invalidf("cwd is required")
 	}
-	cwd, _, _, err := fsutil.ProjectOf(req.Cwd)
+	cwd, _, _, err := projectkey.Of(req.Cwd)
 	if err != nil {
 		return api.Meeting{}, invalidf("%v", err)
 	}

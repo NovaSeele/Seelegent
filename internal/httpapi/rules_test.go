@@ -2,11 +2,13 @@ package httpapi_test
 
 import (
 	"net/http"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/NovaSeele/Seelegent/internal/api"
+	"github.com/NovaSeele/Seelegent/internal/httpapi"
 )
 
 // TestRequestChecks covers contract §1: the Host check, X-Seelegent and Origin, the body limit, unknown fields,
@@ -144,10 +146,14 @@ func TestStatic(t *testing.T) {
 	if !h.OK || h.APIVersion != 1 || h.Port != e.port || len(h.Build) != 12 || h.PID == 0 || h.StartedAt == "" {
 		t.Errorf("health = %+v", h)
 	}
+	if h.OS != runtime.GOOS {
+		t.Errorf("health os = %q, want %q", h.OS, runtime.GOOS)
+	}
 }
 
 // TestAntiFraming: every answer forbids framing and referrers, the dashboard, the API, the stream and refusals
-// alike (clickjacking defense).
+// alike (clickjacking defense). Every API answer, refusals before the routes included (the Host check, the
+// X-Seelegent check, the worker guard), also carries Cross-Origin-Resource-Policy: same-origin.
 func TestAntiFraming(t *testing.T) {
 	e := newEnv(t)
 	answers := map[string]http.Header{
@@ -159,12 +165,28 @@ func TestAntiFraming(t *testing.T) {
 		"api 404":       e.must(e.get("/api/v1/nope"), http.StatusNotFound).header,
 		"no header":     e.must(e.req(http.MethodPost, "/api/v1/quota/refresh", nil, map[string]string{"X-Seelegent": ""}), http.StatusForbidden).header,
 		"wrong host":    e.must(e.req(http.MethodGet, "/", nil, map[string]string{"Host": "evil.test"}), http.StatusMisdirectedRequest).header,
-		"stream":        e.stream("").header,
+		"api wrong host": e.must(e.req(http.MethodGet, "/api/v1/health", nil, map[string]string{"Host": "evil.test"}),
+			http.StatusMisdirectedRequest).header,
+		"stream": e.stream("").header,
 	}
+	// The worker guard's refusal, on a new connection (the caller is cached per connection).
+	e.client.Transport = &http.Transport{DisableKeepAlives: true}
+	e.who.set(&httpapi.Caller{Worker: true})
+	answers["worker guard"] = e.must(e.get("/api/v1/tasks"), http.StatusForbidden).header
+	e.who.set(nil)
 	for name, h := range answers {
 		if h.Get("X-Frame-Options") != "DENY" || h.Get("Content-Security-Policy") != "frame-ancestors 'none'" ||
 			h.Get("Referrer-Policy") != "no-referrer" {
 			t.Errorf("%s: headers %v", name, h)
+		}
+		// Only API answers are kept from other origins' pages; the dashboard's page and assets are not.
+		want := ""
+		switch name {
+		case "api", "api 404", "no header", "api wrong host", "worker guard", "stream":
+			want = "same-origin"
+		}
+		if got := h.Get("Cross-Origin-Resource-Policy"); got != want {
+			t.Errorf("%s: Cross-Origin-Resource-Policy %q, want %q", name, got, want)
 		}
 	}
 }

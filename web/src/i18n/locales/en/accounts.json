@@ -16,10 +16,11 @@
     "disabled": "Off"
   },
   "kind": {
-    "isolated": "Own sign-in",
-    "system": "This computer's sign-in",
-    "apiKey": "API key",
-    "apiKeyOf": "API key · {provider}"
+    "apiKeyOf": "API key · {provider}",
+    "line": {
+      "isolated": "Subscription · Own sign-in",
+      "system": "Subscription · This computer"
+    }
   },
   "keyHint": "key {hint}",
   "busy": "{busy} of {max} slots busy",
@@ -35,7 +36,7 @@
     "ready": "Ready for work",
     "busy": "Running turns",
     "resting": "Resting or out of quota",
-    "needsYou": "Need you"
+    "needsYou": "Needs you"
   },
   "empty": {
     "title": "No accounts yet",
@@ -48,9 +49,17 @@
     "rename": "Rename",
     "login": "Sign in",
     "logout": "Sign out",
-    "key": "Set API key",
     "delete": "Delete account",
-    "more": "More actions for {name}"
+    "more": "More actions for {name}",
+    "priority": "Priority: {n}…",
+    "test": "Test again",
+    "addKey": "Add key",
+    "replaceKey": "Replace key",
+    "model": "Change model",
+    "budget": "Set budget",
+    "turnOff": "Turn off",
+    "turnOn": "Turn on",
+    "prices": "Set prices"
   },
   "done": {
     "added": "Added {name}",
@@ -60,7 +69,13 @@
     "deleted": "Deleted {name}",
     "logout": "Signed out",
     "refreshedAll": "Quota refreshed",
-    "off": "Work turned off for {name}"
+    "off": "Work turned off for {name}",
+    "priority": "Priority of {name} set to {n}",
+    "budgetSet": "Budget of {name} set to {budget}",
+    "budgetRemoved": "Budget of {name} removed",
+    "modelSet": "Model of {service} saved",
+    "pricesSet": "Prices of {service} saved",
+    "pricesCleared": "Prices of {service} removed"
   },
   "quota": {
     "window": "{window} window",
@@ -99,44 +114,45 @@
   },
   "add": {
     "title": "Add account",
-    "step1": "Step 1 of 2: what kind of account.",
-    "step2": "Step 2 of 2: its details.",
-    "backend": "Backend",
-    "kind": "Kind",
-    "backendDesc": {
-      "agy": "Gemini models through the Antigravity CLI.",
-      "claude": "Claude models through Claude Code.",
-      "codex": "OpenAI models through Codex."
+    "connect": {
+      "legend": "How does this account connect?",
+      "subscription": "Sign in with a subscription",
+      "subscriptionDesc": "Uses your Gemini, Claude or ChatGPT plan. You sign in once in the browser.",
+      "apiKey": "Use an API key",
+      "apiKeyDesc": "Pays per token with a key from Anthropic, DeepSeek, OpenRouter, OpenAI and others."
     },
-    "kindDesc": {
-      "isolated": "Its own profile; you sign in once in the browser.",
-      "system": "Uses the sign-in already on this computer.",
-      "apiKey": "Pays per token through an API provider."
+    "product": {
+      "legend": "Which subscription?",
+      "agy": "Gemini, through Antigravity",
+      "claude": "Claude Pro or Max, through Claude Code",
+      "codex": "ChatGPT, through Codex"
     },
+    "useSystem": "Use the sign-in already on this computer",
+    "signIn": "Sign in",
+    "made": "{name} was added. Finish its sign-in below; you can also close this and do it later from its row.",
+    "done": "Done",
     "defaultLabel": "{backend} {n}",
     "label": "Name",
     "priorityHint": "Higher numbers are used first (−1000 to 1000).",
-    "provider": "Provider",
-    "noProvider": "No provider is set up for this backend yet. Add one under API providers first.",
-    "keyHint": "Optional; you can add it later. Only its last characters are shown afterwards.",
-    "keyless": "{name} was added, but it has no key: the key was refused and the account could not be removed again. Enter a key for it here.",
     "loginFailed": "{name} was added, but its sign-in could not start: {error}. Use Sign in on its card to try again.",
-    "systemTaken": "Already added: {name}",
-    "next": "Next",
-    "submit": "Add account"
+    "next": "Next"
   },
   "key": {
-    "title": "API key of {name}",
+    "titleAdd": "Add a key to {name}",
+    "titleReplace": "Replace the key of {name}",
     "current": "Saved key ends in {hint}. A new key replaces it.",
     "none": "No key saved yet.",
-    "label": "API key",
-    "hint": "Stored by the daemon; the dashboard never shows it again.",
-    "save": "Save key",
+    "save": "Test and save",
+    "saveUntested": "Save without testing",
     "clear": "Remove key"
   },
   "rename": {
     "title": "Rename account",
     "submit": "Rename"
+  },
+  "priorityDialog": {
+    "title": "Priority of {name}",
+    "submit": "Save priority"
   },
   "delete": {
     "title": "Delete {name}?",
@@ -160,28 +176,27 @@
     "withProvider": "{backend} ({provider})"
   },
   "providers": {
-    "title": "API providers",
-    "desc": "Where API-key accounts send their requests: Anthropic-compatible for Claude Code, OpenAI-compatible for Codex.",
-    "add": "Add provider",
-    "search": "Search providers",
-    "loading": "Loading providers…",
-    "loadFailed": "Could not load providers: {error}",
-    "empty": "No providers yet.",
-    "noMatch": "No provider matches.",
-    "usedBy": "used by {n} account | used by {n} accounts",
+    "title": "Services",
+    "desc": "Where API keys send their requests. Most people never need to change this.",
+    "add": "Add service",
+    "search": "Search services",
+    "loading": "Loading services…",
+    "loadFailed": "Could not load services: {error}",
+    "empty": "No services yet. Adding an API key makes one.",
+    "noMatch": "No service matches.",
     "anyModel": "any model",
     "patternModels": "pattern {pattern}",
     "enabledOf": "Use {name}",
     "editOf": "Edit {name}",
     "deleteOf": "Delete {name}",
     "deleteTitle": "Delete {name}?",
-    "deleteDesc": "Accounts can no longer use it. A provider that accounts still use cannot be deleted.",
-    "deleteConfirm": "Delete provider",
-    "inUse": "Accounts still use it; move or delete them first. {error}",
+    "deleteDesc": "API keys can no longer use it.",
+    "deleteConfirm": "Delete service",
+    "inUse": "Accounts still use it; remove them first. {error}",
     "deleted": "Deleted {name}",
     "saved": "Saved {name}",
-    "addTitle": "Add API provider",
-    "editTitle": "Edit API provider",
+    "addTitle": "Add service",
+    "editTitle": "Edit service",
     "preset": "Start from",
     "blank": "Blank",
     "id": "ID",
@@ -194,8 +209,300 @@
     "modelsPattern": "Allowed by pattern {pattern}; entering a list replaces this pattern.",
     "allowAny": "Allow any model",
     "anyOnSave": "Any model is allowed once you save; the pattern is removed.",
-    "tierModels": "Always allowed (tier models): {models}",
     "enabled": "Accounts can use it",
-    "save": "Save provider"
+    "save": "Save provider",
+    "tiers": "Model of each tier"
+  },
+  "testResult": {
+    "not_tested": "Not tested",
+    "ok": "Key works",
+    "refused": "Key refused",
+    "not_found": "Wrong address",
+    "no_models_endpoint": "Not verified: the first turn will test it",
+    "unreachable": "Service unreachable",
+    "redirected": "Redirected elsewhere",
+    "error": "Test failed",
+    "creditUnseen": "This test cannot see the credit balance",
+    "testedAt": "Tested {time}"
+  },
+  "notice": {
+    "base_url_trimmed": "Base URL shortened",
+    "official_preset": "Switched to the Anthropic preset",
+    "key_name_removed": "Variable name removed from the key",
+    "key_quotes_removed": "Quotes removed from the key",
+    "key_assignment": "This looks like NAME=value: paste only the part after =",
+    "key_prefix": "Key looks like another service's",
+    "provider_reused": "Existing provider reused"
+  },
+  "keyError": {
+    "empty": "Paste the API key",
+    "too_long": "This key is too long",
+    "url": "This looks like a web address, not a key.",
+    "whitespace": "Paste only the key: it has spaces or line breaks inside.",
+    "control": "The key contains invisible characters"
+  },
+  "modelPerTask": "Model chosen per task",
+  "modelPerTaskHint": "This provider has no default model: each task names the model it runs.",
+  "view": {
+    "label": "Accounts view",
+    "list": "List",
+    "cards": "Cards"
+  },
+  "list": {
+    "col": {
+      "account": "Account",
+      "status": "Status",
+      "slots": "Slots",
+      "quota": "Quota or spend",
+      "controls": "Use for work · Priority"
+    },
+    "slots": "{busy}/{max} busy",
+    "expand": "Show details of {name}",
+    "collapse": "Hide details of {name}",
+    "enabledFor": "Use {name} for work",
+    "span": {
+      "hours": "{n}h",
+      "day": "Daily",
+      "week": "Weekly",
+      "month": "Monthly"
+    },
+    "spanShort": {
+      "hours": "{n}h",
+      "day": "1d",
+      "week": "7d",
+      "month": "30d"
+    },
+    "quota": {
+      "tip": "{group} · {window}",
+      "lowestTip": "Lowest of all windows: {group} · {window}",
+      "more": "{n} more window, shown when the row is open | {n} more windows, shown when the row is open",
+      "moreShort": "+{n}",
+      "passive": "No quota to read",
+      "checking": "Reading quota…"
+    }
+  },
+  "budgetState": {
+    "ok": "Within budget",
+    "warn": "80% of the budget used",
+    "reached": "Budget reached",
+    "unknown": "Spend not known for this service",
+    "unknownNeedsPrices": "Budget {budget} waits for prices: set this service's prices to judge it"
+  },
+  "restReason": {
+    "budget_reached": "Budget reached ({spent} of {budget})",
+    "credits": "No credit left",
+    "creditsHint": "Top up, then test the key or turn the account off and on."
+  },
+  "spendSource": {
+    "cli": "Claude Code's estimate",
+    "free": "Local · free",
+    "none": "Cost not reported by this service",
+    "service": "The service's own count for this key",
+    "prices": "At your prices for this service",
+    "serviceWholeLife": "{service}'s count for this key, including use outside Seelegent"
+  },
+  "service": {
+    "label": "Service",
+    "search": "Search services",
+    "yours": "Your services",
+    "presets": "Services",
+    "keys": "{n} key | {n} keys",
+    "noKey": "No key yet",
+    "change": "Change",
+    "changeOf": "Change the service ({name})",
+    "runsOn": "Runs through {cli}",
+    "otherAnthropic": "Other (Anthropic-compatible)",
+    "otherOpenai": "Other (OpenAI-compatible)",
+    "noMatch": "No service matches.",
+    "detected": "Detected {service} key",
+    "required": "Choose the service the key is from"
+  },
+  "keyField": {
+    "label": "API key",
+    "hint": "Shown only as its last 4 characters after saving.",
+    "show": "Show",
+    "hide": "Hide",
+    "showLabel": "Show the key",
+    "nameRemoved": "Removed {name}= from the start"
+  },
+  "modelPicker": {
+    "label": "Model workers use",
+    "lead": "Let the lead choose (any model)",
+    "perTier": "Different model per tier",
+    "perTierOption": "A model per tier (below)",
+    "leadHint": "Each task names its model; a task that names none is refused.",
+    "fromService": "Set on {service} for all its keys: use Change model on an account to change it.",
+    "tier": {
+      "fast": "Fast",
+      "standard": "Standard",
+      "strong": "Strong",
+      "max": "Max"
+    },
+    "tierEmpty": "chosen per task",
+    "tierHint": "An empty tier: tasks of that tier must name their model."
+  },
+  "form": {
+    "testAndAdd": "Test and add",
+    "addUntested": "Add without testing",
+    "listModels": "Check key and list models",
+    "testing": "Testing the key…",
+    "more": "More options",
+    "advanced": "Advanced",
+    "budget": "Budget (USD)",
+    "budgetHint": "0 for no budget. Only Anthropic keys report a cost (Claude Code's estimate); other services count tokens.",
+    "budgetStop": "Stop using this key when the budget is used up",
+    "baseUrl": "Base URL",
+    "baseUrlHint": "The service's address. Claude Code adds /v1/messages itself, so leave it off.",
+    "baseUrlRequired": "Enter the service's address",
+    "wireApi": "Wire API",
+    "wireChat": "Chat Completions",
+    "wireResponses": "Responses",
+    "extraModels": "Extra allowed models",
+    "extraModelsHint": "Separated by commas; empty allows any model."
+  },
+  "budget": {
+    "title": "Budget of {name}",
+    "save": "Save budget",
+    "remove": "Remove budget",
+    "positive": "Enter an amount above 0",
+    "noCost": "This service has no prices yet, so its spend has no cost: the budget is checked once you set its prices.",
+    "suggested": "Use the key's OpenRouter limit, {amount}",
+    "serviceWholeLife": "Use of this key outside Seelegent counts toward the budget too: it is checked against the service's own count for the key."
+  },
+  "model": {
+    "title": "Model of {service}",
+    "desc": "Applies to every key of {service}.",
+    "save": "Save model"
+  },
+  "needs": {
+    "title": "Needs you",
+    "row": "{name}: {problem}.",
+    "problem": {
+      "no_key": "no key",
+      "needs_login": "signed out",
+      "no_plan": "its plan cannot use this backend",
+      "refused": "the service refused the key",
+      "not_found": "the service's address looks wrong",
+      "redirected": "the service sent the test elsewhere",
+      "credits": "no credit left",
+      "budget_reached": "budget reached ({spent} of {budget})"
+    },
+    "action": {
+      "key": "Add key",
+      "login": "Sign in",
+      "replaceKey": "Replace key",
+      "test": "Test key",
+      "budget": "Raise budget"
+    }
+  },
+  "testState": {
+    "ok": "Works",
+    "not_tested": "Not tested",
+    "refused": "Refused",
+    "not_found": "Wrong address",
+    "no_models_endpoint": "Not verified",
+    "unreachable": "Unreachable",
+    "redirected": "Redirected",
+    "error": "Test failed"
+  },
+  "testHelp": {
+    "ok": "Key works. {n} model available. | Key works. {n} models available.",
+    "refused": "The service refused this key.",
+    "not_found": "Wrong address: nothing answers there. Remove /v1 from the end of the base URL.",
+    "no_models_endpoint": "Can't verify this service: it has no model list to check the key against. The first task will test it.",
+    "unreachable": "Could not reach the service. Check its address and your connection.",
+    "redirected": "The service sent the test to another address; the key was not sent there.",
+    "error": "The service answered with an error (HTTP {status})."
+  },
+  "spend": {
+    "short": {
+      "budget": "{spent} / {budget}",
+      "over": "{spent} / {budget}",
+      "since": "{spent} since {date}",
+      "cost": "{spent}",
+      "tokens": "{tokens} tokens"
+    },
+    "long": {
+      "budget": "{spent} spent of {budget} · {left} left",
+      "over": "{spent} spent of {budget} · {left} over",
+      "since": "{spent} spent since the key was set ({date})",
+      "cost": "{spent} spent",
+      "tokens": "{tokens} tokens, no cost known"
+    },
+    "free": "Local · free",
+    "estimateTip": "Claude Code's own estimate, not the service's bill",
+    "setBudget": "Set budget",
+    "barLabel": "Budget used",
+    "budgetUnknown": "Budget {budget} is not enforced: this service reports no cost",
+    "unpricedTokens": "{tokens} tokens without a price",
+    "setPrices": "Set prices to see cost"
+  },
+  "facts": {
+    "model": "Model: {model}",
+    "models": "Models: {models}"
+  },
+  "routing": "Used when a task asks for {service} (provider: {id}).",
+  "services": {
+    "advanced": "Advanced",
+    "addKey": "Add key",
+    "official": "api.anthropic.com (official)",
+    "allows": "allows {models}",
+    "usedByNames": "{names} still uses it: remove that account first. | {names} still use it: remove those accounts first.",
+    "prices": "Prices",
+    "pricesOf": "Prices of {name}"
+  },
+  "balance": {
+    "title": "Balance {amount}",
+    "shared": "account-wide",
+    "accountWide": "Balance of the whole {provider} account, shared by all its keys",
+    "readAt": "read {time}",
+    "stale": "may be out of date",
+    "granted": "Granted {amount}",
+    "paid": "Paid {amount}",
+    "unavailable": "cannot pay for requests"
+  },
+  "serviceUsage": {
+    "total": "Counted by the service for this key: {amount}",
+    "daily": "today {amount}",
+    "weekly": "this week {amount}",
+    "monthly": "this month {amount}",
+    "limit": "limit {amount}, {reset}",
+    "reset": {
+      "daily": "resets daily",
+      "weekly": "resets weekly",
+      "monthly": "resets monthly",
+      "never": "no reset"
+    }
+  },
+  "serviceError": {
+    "refused": "Reading the spend: the service refused the key",
+    "no_credit": "Reading the spend: the service says no credit is left",
+    "unreachable": "Reading the spend: the service could not be reached",
+    "redirected": "Reading the spend: the service sent it elsewhere (the key was not sent there)",
+    "error": "Reading the spend: the service answered with an error"
+  },
+  "prices": {
+    "title": "Prices of {service}",
+    "model": "Model",
+    "anyModel": "* stands for any model without its own row.",
+    "input": "Input",
+    "cachedInput": "Cached input",
+    "cacheWrite": "Cache write",
+    "cacheWriteHint": "Cache write left empty: 1.25 × input, Anthropic's rule (one-hour writes: 2 × input; with a price set, 1.6 × it).",
+    "output": "Output",
+    "perMillion": "US dollars per 1M tokens",
+    "pricingLink": "{service}'s price page",
+    "add": "Add a row",
+    "remove": "Remove the row of {model}",
+    "save": "Save prices",
+    "empty": "No prices: this service's spend is counted in tokens only. Add a row to count it in dollars.",
+    "appliesFromNow": "New prices apply to work from now on; spend already counted keeps its price.",
+    "error": {
+      "modelRequired": "Enter a model, or * for any model",
+      "modelTooLong": "At most 200 characters",
+      "duplicate": "This model has a row already",
+      "invalid": "Enter a price from 0 to 10,000",
+      "tooMany": "At most 200 rows"
+    }
   }
 }

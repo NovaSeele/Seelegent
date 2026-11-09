@@ -29,10 +29,21 @@ const DefaultKillGrace = 3 * time.Second
 // ErrNotStarted is returned by Tree methods when the tree was never started.
 var ErrNotStarted = errors.New("process tree not started")
 
-// HideWindow prepares cmd so that starting it never shows a console window on Windows (the process gets a hidden
-// console that its own children inherit, so they do not flash windows either). It does nothing elsewhere. Call it
-// before cmd.Start for every helper command the daemon runs (quota readers, model lists, git, ...).
+// HideWindow prepares cmd so that starting it never shows a console window on Windows: the process gets a hidden
+// console of its own, which its children inherit, so they do not flash windows either. It does nothing elsewhere.
+// Call it before cmd.Start for every command the daemon runs; it is the right choice for any command line that
+// comes from a user, a repository or a worker (gate, hook and precheck commands), which must not reach the
+// daemon's console.
 func HideWindow(cmd *exec.Cmd) { hideWindow(cmd) }
+
+// HideWindowShared is HideWindow for Seelegent's own fixed helper programs (git, gh, the backends' quota readers,
+// taskkill, toolchain probes, node --check): on Windows the process shares the caller's console when the caller
+// has one, which saves a console host (conhost.exe, about 8 MB, and some milliseconds) per command, and gets a
+// process group of its own. A program on a shared console can change it for everyone on it (its code page with
+// chcp, its modes) and send a console control event to every process on it (GenerateConsoleCtrlEvent with group
+// 0, which would stop the daemon), so never use it for a command line that comes from a user, a repository or a
+// worker. Without a console of the caller's it is HideWindow. It does nothing elsewhere.
+func HideWindowShared(cmd *exec.Cmd) { hideWindowShared(cmd) }
 
 // SetCmdLine sets the raw command line of cmd on Windows, for programs such as cmd.exe that parse their own; it
 // does nothing elsewhere.
@@ -46,7 +57,15 @@ func SetCmdLine(cmd *exec.Cmd, line string) { setCmdLine(cmd, line) }
 // newCmd must return a fresh, unstarted command each time it is called: if breaking away from the job is refused,
 // the start is retried without it on a second command. The started command is returned.
 func StartDetached(newCmd func() *exec.Cmd) (*exec.Cmd, error) {
-	return startDetached(newCmd)
+	return startDetached(newCmd, true)
+}
+
+// StartDetachedNoConsole is StartDetached for a process that starts console programs only through HideWindow,
+// StartTree or StartWorkerTree, such as the worker launcher: on Windows it gets no console at all
+// (DETACHED_PROCESS), which saves a console host (conhost.exe) for as long as it runs. A console program it started
+// without HideWindow would open a visible console window. Elsewhere it is StartDetached.
+func StartDetachedNoConsole(newCmd func() *exec.Cmd) (*exec.Cmd, error) {
+	return startDetached(newCmd, false)
 }
 
 // ProcessAlive reports whether a process with the given id exists. It cannot tell a reused id from the original
@@ -78,7 +97,7 @@ func OpenURL(ctx context.Context, rawURL string) error {
 		return fmt.Errorf("open url %q: only http and https URLs are opened", rawURL)
 	}
 	cmd := openURLCommand(ctx, u.String())
-	HideWindow(cmd)
+	HideWindowShared(cmd)
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("open url: %w", err)
 	}

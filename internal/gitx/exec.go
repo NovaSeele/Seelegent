@@ -303,11 +303,62 @@ func (r *Repos) Exec(ctx context.Context, dir string, opt ExecOptions, args ...s
 
 // runsHooks reports whether args (already checked) name a subcommand that can run repository hooks.
 func runsHooks(args []string) bool {
-	i := 0
-	for i+1 < len(args) && args[i] == "-c" {
-		i += 2
+	switch subcommand(args) {
+	case "commit", "worktree", "push":
+		return true
 	}
-	return i < len(args) && (args[i] == "commit" || args[i] == "worktree" || args[i] == "push")
+	return false
+}
+
+// subcommand is the git subcommand args name, after git's own options ("" when there is none): `-c`, `-C` and the
+// other options that take their value as the next argument skip two arguments, every other option one.
+func subcommand(args []string) string {
+	for i := 0; i < len(args); i++ {
+		switch a := args[i]; {
+		case a == "--":
+			return ""
+		case a == "-c" || a == "-C" || a == "--git-dir" || a == "--work-tree" || a == "--namespace" ||
+			a == "--config-env" || a == "--super-prefix":
+			i++
+		case strings.HasPrefix(a, "-"):
+		default:
+			return a
+		}
+	}
+	return ""
+}
+
+// runsUserCode reports whether git with args can run a program the repository or its configuration names: a
+// hook (commit, merge, checkout, push, a fetch's automatic gc, ...), a clean or smudge filter (add, checkout,
+// reset, stash, `hash-object --path`, ...; Git LFS is one) or a credential helper (fetch, push, clone,
+// ls-remote). Such a git gets a console of its own: what it runs must not change the daemon's console or send it a
+// console event.
+// The read-only commands the daemon runs all the time (status, diff with --no-ext-diff --no-textconv, rev-parse,
+// ls-files, show, cat-file, ...) share it; a configured clean filter is the one thing status or diff may still
+// start, for a file whose timestamps changed, and it comes from git's configuration, not from the checked-out
+// files.
+func runsUserCode(args []string) bool {
+	switch subcommand(args) {
+	case "add", "am", "apply", "bisect", "checkout", "checkout-index", "cherry-pick", "clone", "commit", "fetch",
+		"filter-branch", "gc", "ls-remote", "maintenance", "merge", "notes", "pull", "push", "read-tree", "rebase",
+		"remote", "reset", "restore", "revert", "stash", "submodule", "switch", "update-index", "worktree":
+		return true
+	case "hash-object":
+		// Filters apply to a named file, or to stdin given a --path; --no-filters turns them off.
+		filtered, stdin, path := true, false, false
+		for _, a := range args {
+			switch {
+			case a == "--no-filters":
+				filtered = false
+			case a == "--stdin":
+				stdin = true
+			case a == "--path" || strings.HasPrefix(a, "--path="):
+				path = true
+			}
+		}
+		return filtered && (!stdin || path)
+	}
+	return false
 }
 
 // ExitCode is the exit code of a git command that ran and failed, or -1.

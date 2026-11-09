@@ -13,6 +13,7 @@ import (
 
 	"github.com/NovaSeele/Seelegent/internal/api"
 	"github.com/NovaSeele/Seelegent/internal/brief"
+	"github.com/NovaSeele/Seelegent/internal/config"
 	"github.com/NovaSeele/Seelegent/internal/event"
 	"github.com/NovaSeele/Seelegent/internal/memory"
 )
@@ -23,7 +24,7 @@ func TestDelegateDoneFollowupReview(t *testing.T) {
 	acc := h.agy("main", 0)
 	file := filepath.Join(h.cwd, "internal", "api", "handler.go")
 	h.queue.Push(t, script(agyInit("conv-1"), agyDelta(1, "Hello "), agyDelta(1, "wor"), agyDelta(1, "ld."),
-		agyEdit(2, file), agyTool(3, "CALLING", "go test ./..."), agyTool(3, "DONE", "go test ./..."),
+		agyEdit(2, file), fakeWrite(file, "package api\n"), agyTool(3, "CALLING", "go test ./..."), agyTool(3, "DONE", "go test ./..."),
 		agyResult("conv-1", "Added the check.")))
 	sum := h.delegate(api.DelegateRequest{Prompt: "Add a nil check.\nKeep it small."})
 	if sum.Title != "Add a nil check." || sum.Backend != "agy" || sum.TurnCount != 1 {
@@ -586,6 +587,53 @@ func TestDependencies(t *testing.T) {
 	f := h.delegate(api.DelegateRequest{Prompt: "Task F", After: []string{e.ID, d.ID}})
 	if _, stopped, err := h.s.Cancel(t.Context(), f.ID, api.CancelRequest{}); err != nil || !stopped {
 		t.Fatalf("cancel waiting: %v %v", stopped, err)
+	}
+}
+
+// TestBusyAccountWaitShowsReason: with the only account at maxConcurrentPerAccount, a second task waits for a free
+// slot, and the task view, the list and the event say busy and which account is full (field report: such a task
+// read "Waiting for quota" with most of the quota left).
+func TestBusyAccountWaitShowsReason(t *testing.T) {
+	h := newHarness(t)
+	h.set(func(s *config.Settings) { s.MaxConcurrentPerAccount = 1 })
+	acc := h.agy("only", 0)
+	h.queue.Push(t, hangScript("conv-a"))
+	a := h.delegate(api.DelegateRequest{})
+	h.runningWorker(a.ID)
+	b := h.delegate(api.DelegateRequest{Prompt: "Another task."})
+	h.waitFor("the second task to wait", func() bool { return h.task(b.ID).Status == StatusWaitingQuota })
+	want := acc.ID + ": 1 of 1 running"
+	det, err := h.s.Get(t.Context(), b.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if det.Waiting != api.WaitingBusy || !strings.HasPrefix(det.WaitDetail, want) || det.Attention != nil {
+		t.Fatalf("task view: waiting %q, detail %q, attention %+v", det.Waiting, det.WaitDetail, det.Attention)
+	}
+	page, err := h.s.List(t.Context(), Query{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, sum := range page.Items {
+		if sum.ID == b.ID {
+			found = sum.Waiting == api.WaitingBusy && sum.WaitDetail == det.WaitDetail
+		}
+	}
+	if !found {
+		t.Fatalf("summary of %s in the list: %+v", b.ID, page.Items)
+	}
+	ev := eventsOf(h.waitEvent(b.ID, api.EventWaitingQuota), api.EventWaitingQuota)
+	var d api.WaitingQuotaData
+	decode(t, ev[len(ev)-1], &d)
+	if d.Reason != api.WaitingBusy || d.Detail != det.WaitDetail {
+		t.Fatalf("event data = %+v", d)
+	}
+	if _, _, err := h.s.Cancel(t.Context(), a.ID, api.CancelRequest{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := h.s.Cancel(t.Context(), b.ID, api.CancelRequest{}); err != nil {
+		t.Fatal(err)
 	}
 }
 

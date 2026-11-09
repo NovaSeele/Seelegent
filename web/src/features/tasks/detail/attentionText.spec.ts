@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 
 import type { Attention } from '@/api/types'
+import { createFormatters } from '@/composables/useFormat'
 import { activateLocale, i18n, type Locale } from '@/i18n'
+import { mbFormatter } from '@/lib/memory'
 
 import { attentionText, depsText, inSentence } from './attentionText'
 
@@ -17,6 +19,55 @@ async function text(a: Attention, locale: Locale = 'en') {
 describe('attention text (F14)', () => {
   beforeEach(async () => {
     await activateLocale('en')
+  })
+
+  it('names the account at its budget and what to do (budget_reached)', async () => {
+    const view = await text(
+      at({
+        reason: 'budget_reached',
+        state: 'blocked',
+        detail: 'acc9 reached its $200 budget: raise the budget or change the key',
+        params: { account: 'acc9', budgetUsd: 200, count: 1 },
+      }),
+    )
+    expect(view.title).toBe('Budget reached')
+    expect(view.why).toBe('acc9 reached its $200 budget. Raise the budget or change the key.')
+    expect(view.said).toBe('')
+  })
+
+  it('says how long a task waited for resources and how much memory it needs', async () => {
+    const view = await text(
+      at({
+        reason: 'resources_wait',
+        state: 'info',
+        detail: 'free 1500 MB < threshold 2048 MB',
+        params: { minutes: 12, availableMB: 1500, needMB: 2048 },
+      }),
+    )
+    expect(view.title).toBe('Waiting for resources')
+    expect(view.why).toBe('Waiting for resources for over 12 minutes: 1500 MB free, needs 2048 MB.')
+    const formatted = attentionText(
+      at({ reason: 'resources_wait', params: { minutes: 12, availableMB: 1536, needMB: 2048 } }),
+      i18n.global.t as never,
+      i18n.global.te as never,
+      mbFormatter(createFormatters('en')),
+    )
+    expect(formatted.why).toBe(
+      'Waiting for resources for over 12 minutes: 1.5 GB free, needs 2 GB.',
+    )
+    // Two amounts that would both read "2 GB" are given in MB.
+    const close = attentionText(
+      at({ reason: 'resources_wait', params: { minutes: 12, availableMB: 2040, needMB: 2048 } }),
+      i18n.global.t as never,
+      i18n.global.te as never,
+      mbFormatter(createFormatters('en')),
+    )
+    expect(close.why).toBe(
+      'Waiting for resources for over 12 minutes: 2,040 MB free, needs 2,048 MB.',
+    )
+    expect(view.said).toBe('')
+    const plain = await text(at({ reason: 'resources_wait', params: { minutes: 10 } }))
+    expect(plain.why).toContain('short of free memory')
   })
 
   it('builds the sentence from params, not from the daemon detail', async () => {

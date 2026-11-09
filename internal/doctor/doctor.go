@@ -1,7 +1,7 @@
 // Package doctor checks a Seelegent installation for `seelegent doctor`: the data directory, the settings, the
 // database, the daemon and the build it runs, processes and the pid file of the old Node version, the embedded
-// dashboard, git, the enabled backend CLIs, the accounts (counts only), PATH and, when rustup is installed, whether
-// the first cargo on PATH is rustup's proxy.
+// dashboard, git, the enabled backend CLIs, the accounts (counts only), PATH, free memory against the start
+// thresholds and, when rustup is installed, whether the first cargo on PATH is rustup's proxy.
 // It reads only: it never starts or stops the daemon or any other process, never migrates the database and never
 // prints an e-mail address or key.
 package doctor
@@ -23,6 +23,7 @@ import (
 	"github.com/NovaSeele/Seelegent/internal/config"
 	"github.com/NovaSeele/Seelegent/internal/envx"
 	"github.com/NovaSeele/Seelegent/internal/fsutil"
+	"github.com/NovaSeele/Seelegent/internal/launchbin"
 	"github.com/NovaSeele/Seelegent/internal/platform"
 	"github.com/NovaSeele/Seelegent/internal/store"
 )
@@ -78,6 +79,11 @@ type Options struct {
 	// PATH, which Seelegent never runs ("" when the first git on PATH is no batch file; gitx.FirstWrapper).
 	GitPath    func() (string, error)
 	GitWrapper string
+	// Memory reads the free memory now (platform.Memory); nil skips the resources check.
+	Memory func() platform.MemoryStatus
+	// Launcher looks at the companion launcher next to this executable (launchbin.Inspect); nil skips the launcher
+	// line.
+	Launcher func() launchbin.Status
 }
 
 // Run runs every check in a fixed order.
@@ -94,9 +100,20 @@ func Run(ctx context.Context, o Options) []Check {
 	if p, ok := oldPIDFile(ctx, o.Paths.Home, o.Processes); ok {
 		out = append(out, p)
 	}
-	out = append(out, portFile(o), dashboard(o.Web), git(o.GitPath, o.GitWrapper))
+	out = append(out, portFile(o), dashboard(o.Web))
+	if o.Launcher != nil {
+		out = append(out, launcher(o.Launcher()))
+	}
+	out = append(out, git(o.GitPath, o.GitWrapper))
 	out = append(out, backends(o)...)
 	out = append(out, accounts(ctx, o, c), pathEntries(o.Env, runtime.GOOS))
+	var live *api.Health
+	if c != nil {
+		live = &h
+	}
+	if r, ok := resources(o, runtime.GOOS, live); ok {
+		out = append(out, r)
+	}
 	if c, ok := cargo(o.Env, o.RealHome, runtime.GOOS); ok {
 		out = append(out, c)
 	}
@@ -235,6 +252,13 @@ func dashboard(web fs.FS) Check {
 	}
 	return Check{Name: "dashboard", Status: Warn, Message: "the dashboard is not part of this build",
 		Fix: "build with web/dist (make build, or scripts/build.ps1)"}
+}
+
+// launcher says, as information (never a warning: launches work either way), whether the daemon runs the launches
+// in the companion launcher seelegent-launch, which takes about 40 MB less private memory per running task on
+// Windows than `seelegent __launch`.
+func launcher(s launchbin.Status) Check {
+	return Check{Name: "launcher", Status: OK, Message: launchbin.Describe(s)}
 }
 
 // git names the git Seelegent runs. A batch wrapper first on PATH (ServBay's or a package manager's git.cmd) is a
@@ -459,4 +483,117 @@ func expandPercent(e string, env []string) (string, bool) {
 		b.WriteString(v)
 		e = e[span[1]+1:]
 	}
+}
+
+// resources compares one reading of free memory with the effective minFreeMemoryMB and minFreeCommitMB of this
+// machine (auto from its size, derived from the other threshold, or set by the user): below either, new worker
+// turns and gate commands would wait now. When the running daemon's health (live) reports them, the values, their
+// sources, the machine and the reading are all the daemon's own (its cgroup may differ from this process's);
+// else this process reads free memory (o.Memory, nil: the check is skipped) and the values are computed here from
+// the settings file. The message says which. It is a single reading (free memory can swing by gigabytes within
+// hours), so the suggestion is a range to consider, never a prescription.
+func resources(o Options, goos string, live *api.Health) (Check, bool) {
+	fromDaemon := live != nil && live.Resources.MinFreeMemoryMB.Source != ""
+	if !fromDaemon && o.Memory == nil {
+		return Check{}, false
+	}
+	c := Check{Name: "resources"}
+	var m platform.MemoryStatus
+	if fromDaemon {
+		lm := live.Memory
+		m = platform.MemoryStatus{AvailPhysMB: lm.AvailPhysMB, AvailCommitMB: lm.AvailCommitMB, Known: lm.Known,
+			CgroupV1: lm.CgroupV1}
+	} else {
+		m = o.Memory()
+	}
+	if !m.Known {
+		c.Status, c.Message = OK, "free memory cannot be read on this system: the memory thresholds hold nothing"
+		if fromDaemon {
+			c.Message = "the daemon cannot read free memory on this system: the memory thresholds hold nothing"
+		}
+		return c, true
+	}
+	r, src, from := effectiveResources(o.Settings, m, goos, live)
+	commitKnown := m.AvailCommitMB > 0
+	reading := fmt.Sprintf("free memory %d MB (minFreeMemoryMB %d, %s)", m.AvailPhysMB, r.MinFreeMemoryMB,
+		sourceWords(src.MinFreeMemoryMB, "criticalFreeMemoryMB"))
+	if commitKnown {
+		reading += fmt.Sprintf(", free commit %d MB (minFreeCommitMB %d, %s)", m.AvailCommitMB, r.MinFreeCommitMB,
+			sourceWords(src.MinFreeCommitMB, ""))
+	}
+	if m.CgroupV1 {
+		reading += ", within the cgroup v1 memory limit"
+	}
+	reading += "; " + from
+	physLow := r.MinFreeMemoryMB > 0 && m.AvailPhysMB < int64(r.MinFreeMemoryMB)
+	commitLow := r.MinFreeCommitMB > 0 && commitKnown && m.AvailCommitMB < int64(r.MinFreeCommitMB)
+	if !physLow && !commitLow {
+		c.Status, c.Message = OK, "one reading: "+reading
+		return c, true
+	}
+	c.Status = Warn
+	c.Message = "right now " + reading + ". New worker turns and gate commands would wait for memory. This is a " +
+		"single reading; free memory can swing a lot within hours, so check again when the machine is in its usual state"
+	var hints []string
+	if physLow {
+		lo, hi := memoryRange(m.AvailPhysMB)
+		h := fmt.Sprintf("minFreeMemoryMB somewhere around %d-%d MB", lo, hi)
+		if commitKnown && !commitLow && r.MinFreeCommitMB > 0 {
+			h += fmt.Sprintf(" (free commit, %d MB, is above its threshold: on Windows commit is the stronger guard, "+
+				"so minFreeMemoryMB can be low or 0)", m.AvailCommitMB)
+		}
+		hints = append(hints, h)
+	}
+	if commitLow {
+		lo, hi := memoryRange(m.AvailCommitMB)
+		hints = append(hints, fmt.Sprintf("minFreeCommitMB somewhere around %d-%d MB", lo, hi))
+	}
+	c.Fix = "close memory-hungry programs, or, if this is the machine's usual state, consider setting " +
+		strings.Join(hints, " and ") + " (about half to three quarters of what is free now) in the dashboard's " +
+		"Settings, Resources; a value you set replaces the auto one, and Auto goes back to it"
+	return c, true
+}
+
+// effectiveResources are the effective resource values with their sources and where they and the reading come
+// from: the running daemon's health (live; nil when it does not answer) when it reports them, else computed here
+// on m, this process's reading.
+func effectiveResources(set config.Settings, m platform.MemoryStatus, goos string,
+	live *api.Health) (r config.Resources, src config.ResourceSources, from string) {
+	if live != nil && live.Resources.MinFreeMemoryMB.Source != "" {
+		e, mc := live.Resources, live.Machine
+		r = config.Resources{MinFreeMemoryMB: e.MinFreeMemoryMB.Value, CriticalFreeMemoryMB: e.CriticalFreeMemoryMB.Value,
+			MinFreeCommitMB: e.MinFreeCommitMB.Value, TestParallelism: e.TestParallelism.Value,
+			GateConcurrency: e.GateConcurrency.Value}
+		src = config.ResourceSources{MinFreeMemoryMB: e.MinFreeMemoryMB.Source,
+			CriticalFreeMemoryMB: e.CriticalFreeMemoryMB.Source, MinFreeCommitMB: e.MinFreeCommitMB.Source,
+			TestParallelism: e.TestParallelism.Source, GateConcurrency: e.GateConcurrency.Source}
+		return r, src, fmt.Sprintf("reading and values from the running daemon (machine: %d MB, %d CPUs)",
+			mc.TotalPhysMB, mc.CPUs)
+	}
+	mc := config.NewMachine(m.TotalPhysMB, m.TotalCommitMB, platform.CPUs(), goos)
+	r, src = config.EffectiveResourceSources(set, mc)
+	why := "the daemon is not running"
+	if live != nil {
+		why = "the daemon does not report them"
+	}
+	return r, src, fmt.Sprintf("read by this command, values computed here from the settings file, as %s "+
+		"(machine: %d MB, %d CPUs)", why, mc.TotalPhysMB, mc.CPUs)
+}
+
+// sourceWords say where an effective value comes from; other names the threshold a derived one comes from.
+func sourceWords(source, other string) string {
+	switch source {
+	case config.SourceExplicit:
+		return "set by you"
+	case config.SourceDerived:
+		return "derived from your " + other
+	}
+	return "auto for this machine"
+}
+
+// memoryRange is a threshold range to consider for a reading of free MB: half to three quarters of it, rounded down
+// to 256 MB, at least 256.
+func memoryRange(free int64) (lo, hi int64) {
+	round := func(n int64) int64 { return max(n/256*256, 256) }
+	return round(free / 2), round(free * 3 / 4)
 }

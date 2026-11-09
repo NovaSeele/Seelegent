@@ -30,6 +30,7 @@ func (v *accountView) account(st *pool.AccountState) api.Account {
 	out := api.Account{
 		ID: a.ID, Backend: a.Backend, Kind: string(a.Kind), Label: a.Label, Enabled: a.Enabled,
 		Priority: a.Priority, Provider: a.Provider, KeyHint: a.KeyHint, Status: api.AccountStatus(st.Status),
+		TestResult: a.TestState(), TestedAt: api.FormatTime(a.TestedAt),
 		TwinOf: st.TwinOf, Busy: st.Busy, MaxConcurrent: v.settings.MaxConcurrentPerAccount,
 		SigningIn: v.signingIn(a.ID), CreatedAt: api.FormatTime(a.CreatedAt), UpdatedAt: api.FormatTime(a.UpdatedAt),
 	}
@@ -37,6 +38,67 @@ func (v *accountView) account(st *pool.AccountState) api.Account {
 	until, resting := v.resting(st)
 	out.Resting, out.RestingUntil = resting, api.FormatTime(until)
 	out.Models = v.models(st)
+	if a.Kind == account.KindAPIKey {
+		var prov *account.Provider
+		if p, ok := v.providers[a.Provider]; ok {
+			out.ModelPerTask = p.ModelPerTask()
+			prov = &p
+		}
+		spendDTO(&out, &a, prov, v.now)
+	}
+	if st.RestReason != "" {
+		// Rests until the user acts (pool.RestCredits, pool.RestBudget): a reason, never a date.
+		out.Resting, out.RestingUntil, out.RestReason = true, "", st.RestReason
+	}
+	return out
+}
+
+// spendDTO fills an API-key account's spend, budget and spend-service fields; p is its provider (nil when gone).
+func spendDTO(out *api.Account, a *account.Account, p *account.Provider, now time.Time) {
+	source, usd := a.SpendOf(p)
+	stop := a.BudgetStop
+	out.SpentUSD, out.SpentTokens = usd, a.Spent.Tokens
+	out.SpentInputTokens, out.SpentOutputTokens = a.Spent.Input, a.Spent.Output
+	out.SpentUnpricedTokens = a.Spent.Unpriced
+	out.SpentSince, out.SpendSource, out.BudgetStop = api.FormatTime(a.KeySetAt), source, &stop
+	out.BudgetUSD, out.BudgetState = a.BudgetUSD, account.BudgetLevel(source, usd, a.BudgetUSD)
+	out.SuggestedBudgetUSD = a.SuggestedBudget()
+	if pk := a.PreviousKey; pk != nil {
+		out.PreviousKey = &api.PreviousKey{KeyHint: pk.KeyHint, Since: api.FormatTime(pk.Since),
+			Until: api.FormatTime(pk.Until), SpentUSD: pk.Spent.USD, SpentTokens: pk.Spent.Tokens,
+			SpentInputTokens: pk.Spent.Input, SpentOutputTokens: pk.Spent.Output,
+			SpentUnpricedTokens: pk.Spent.Unpriced, BudgetUSD: pk.BudgetUSD}
+	}
+	svc := a.Service
+	if svc == nil || p == nil || p.ServiceReading() == "" {
+		return
+	}
+	readAt, stale := api.FormatTime(svc.ReadAt), svc.Stale(now, quota.ServiceStaleAfter)
+	if b := svc.Balance; b != nil {
+		out.Balance = &api.Balance{Amount: b.Amount, Currency: b.Currency, AccountWide: b.AccountWide,
+			Available: b.Available, Granted: b.Granted, Paid: b.Paid, ReadAt: readAt, Stale: stale}
+		for _, m := range b.Other {
+			out.Balance.Other = append(out.Balance.Other, api.Money{Amount: m.Amount, Currency: m.Currency})
+		}
+	}
+	if u := svc.Usage; u != nil {
+		out.ServiceUsage = &api.ServiceUsage{TotalUSD: u.TotalUSD, DailyUSD: u.DailyUSD, WeeklyUSD: u.WeeklyUSD,
+			MonthlyUSD: u.MonthlyUSD, LimitUSD: u.LimitUSD, LimitRemainingUSD: u.LimitRemainingUSD,
+			LimitReset: u.LimitReset, ReadAt: readAt, Stale: stale}
+	}
+	if e := svc.Error; e != nil && e.At.After(svc.ReadAt) {
+		out.ServiceError = &api.ServiceError{Reason: e.Reason, Message: e.Message, At: api.FormatTime(e.At)}
+	}
+}
+
+// priceDTOs maps a price table ([] for none).
+func priceDTOs(in []account.Price) []api.Price {
+	out := make([]api.Price, 0, len(in))
+	for _, pr := range in {
+		out = append(out, api.Price{Model: pr.Model, InputUSD: pr.InputUSD, CachedInputUSD: pr.CachedInputUSD,
+			CacheWriteUSD: pr.CacheWriteUSD,
+			OutputUSD:     pr.OutputUSD, UpdatedAt: api.FormatTime(pr.UpdatedAt)})
+	}
 	return out
 }
 
@@ -162,8 +224,22 @@ func providerDTO(p account.Provider, accounts int) api.Provider {
 	return api.Provider{
 		ID: p.ID, Name: p.Name, Backend: p.Backend, BaseURL: p.BaseURL, Enabled: p.Enabled, Models: modelList(p.Models),
 		Accounts: accounts, Preset: p.Preset, WireAPI: p.WireAPI, Official: p.Official, AllowedModels: p.AllowedModels,
-		Tiers: p.Tiers, CreatedAt: api.FormatTime(p.CreatedAt), UpdatedAt: api.FormatTime(p.UpdatedAt),
+		Tiers: p.Tiers, ModelPerTask: p.ModelPerTask(), SpendSource: p.SpendSource(), CreatedAt: api.FormatTime(p.CreatedAt),
+		UpdatedAt: api.FormatTime(p.UpdatedAt), ServiceReading: p.ServiceReading(), PricingURL: p.PricingURL(),
+		Prices: priceDTOs(p.Prices),
 	}
+}
+
+// noticeDTOs maps notices (nil for none, so the field is left out).
+func noticeDTOs(in []account.Notice) []api.Notice {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]api.Notice, 0, len(in))
+	for _, n := range in {
+		out = append(out, api.Notice{Code: n.Code, Field: n.Field, Message: n.Message})
+	}
+	return out
 }
 
 // modelList is a copy of an allow-list, never nil.
@@ -171,8 +247,13 @@ func modelList(models []string) []string {
 	return append(make([]string, 0, len(models)), models...)
 }
 
-// presetDTOs lists the provider presets by id.
-func presetDTOs() []api.ProviderPreset {
+// presetDTOs lists the provider presets by id. "anthropic" suggests the claude backend's tier models from the
+// settings, when they are set; the other presets suggest none.
+func presetDTOs(set config.Settings) []api.ProviderPreset {
+	var claudeTiers config.TierModels
+	if b, ok := set.Backends.Backend(config.BackendClaude); ok {
+		claudeTiers = b.Tiers
+	}
 	presets := account.Presets()
 	ids := make([]string, 0, len(presets))
 	for id := range presets {
@@ -182,8 +263,16 @@ func presetDTOs() []api.ProviderPreset {
 	out := make([]api.ProviderPreset, 0, len(ids))
 	for _, id := range ids {
 		p := presets[id]
-		out = append(out, api.ProviderPreset{ID: id, Name: p.Name, Backend: p.Backend, BaseURL: p.BaseURL,
-			Enabled: true, Models: []string{}, WireAPI: p.WireAPI, Official: p.Official})
+		pr := api.ProviderPreset{ID: id, Name: p.Name, Backend: p.Backend, BaseURL: p.BaseURL,
+			Enabled: true, Models: []string{}, WireAPI: p.WireAPI, Official: p.Official,
+			PricingURL: account.PresetPricingURL(id)}
+		if prov, err := account.FromPreset(id, id); err == nil {
+			pr.ServiceReading = prov.ServiceReading()
+		}
+		if id == "anthropic" {
+			pr.Tiers = claudeTiers
+		}
+		out = append(out, pr)
 	}
 	return out
 }

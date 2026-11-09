@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 
 import Button from '@/components/ui/Button.vue'
 import Icon from '@/components/ui/Icon.vue'
+import ProviderMark from '@/components/ui/ProviderMark.vue'
 import { useFormat } from '@/composables/useFormat'
 import { attentionText } from '@/features/tasks/detail/attentionText'
 import { NEED_WORD_KEY, type NeedKind, statusWordKey } from '@/lib/taskStatus'
@@ -72,6 +73,7 @@ const target = computed(() =>
     </h3>
     <p class="need__meta">
       <span>{{ task.projectName }}</span>
+      <span>· <ProviderMark :backend="task.backend" size="sm" /></span>
       <span v-if="task.accountLabel">· {{ task.accountLabel }}</span>
     </p>
     <p v-if="detail" class="need__detail">{{ detail }}</p>

@@ -1,8 +1,6 @@
 package fsutil
 
 import (
-	"crypto/sha1" //nolint:gosec // a short, stable project name, not a security hash
-	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -73,6 +71,9 @@ func Key(p string) (string, error) {
 	return keyOf(c, runtime.GOOS), nil
 }
 
+// CanonicalKey is Key of a path that is already canonical (Canonical): it does not touch the file system.
+func CanonicalKey(canonical string) string { return keyOf(canonical, runtime.GOOS) }
+
 // keyOf builds the comparison key of an already canonical path for the given GOOS.
 func keyOf(canonical, goos string) string {
 	k := filepath.ToSlash(canonical)
@@ -88,63 +89,6 @@ func keyOf(canonical, goos string) string {
 // caseInsensitive reports whether file systems on goos ignore letter case by default.
 func caseInsensitive(goos string) bool {
 	return goos == "windows" || goos == "darwin" || goos == "ios"
-}
-
-// ProjectKey returns the key and display name of the project whose folder is dir: name is the base name of the
-// canonical path, and key is that name made safe for file names and URLs (lower-case letters, digits, '.', '_' and
-// '-') followed by '-' and the first 8 hex digits of the SHA-1 of Key(dir). Every spelling of the same folder (8.3
-// short names, junctions, letter case on Windows) gives the same key (old bug B11). These keys are not the old
-// version's; the M8 migration rebuilds the old keys by the old formula to map old data onto them.
-func ProjectKey(dir string) (key, name string, err error) {
-	c, err := Canonical(dir)
-	if err != nil {
-		return "", "", err
-	}
-	k := keyOf(c, runtime.GOOS)
-	name = filepath.Base(c)
-	if name == "." || name == string(filepath.Separator) || name == "" {
-		name = c
-	}
-	sum := sha1.Sum([]byte(k)) //nolint:gosec // a short, stable name, not a security hash
-	return safeName(name) + "-" + hex.EncodeToString(sum[:])[:8], name, nil
-}
-
-// ProjectOf checks a project folder, which must be an absolute path to an existing folder, and returns its canonical
-// path, project key and name (ProjectKey).
-func ProjectOf(cwd string) (canonical, key, name string, err error) {
-	if cwd == "" || !filepath.IsAbs(cwd) {
-		return "", "", "", fmt.Errorf("cwd %q is not an absolute path", cwd)
-	}
-	if st, err := os.Stat(cwd); err != nil || !st.IsDir() {
-		return "", "", "", fmt.Errorf("cwd %q is not an existing folder", cwd)
-	}
-	if canonical, err = Canonical(cwd); err != nil {
-		return "", "", "", err
-	}
-	key, name, err = ProjectKey(canonical)
-	return canonical, key, name, err
-}
-
-// safeName lower-cases s and replaces every run of other characters than letters, digits, '.', '_' and '-' by '-'.
-func safeName(s string) string {
-	var b strings.Builder
-	dash := false
-	for _, r := range strings.ToLower(s) {
-		ok := (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '.' || r == '_' || r == '-'
-		switch {
-		case ok:
-			b.WriteRune(r)
-			dash = false
-		case !dash:
-			b.WriteByte('-')
-			dash = true
-		}
-	}
-	out := strings.Trim(b.String(), "-")
-	if out == "" {
-		out = "project"
-	}
-	return out
 }
 
 // SamePath reports whether a and b name the same location (see Key).

@@ -16,6 +16,7 @@ import (
 	"github.com/NovaSeele/Seelegent/internal/fsutil"
 	"github.com/NovaSeele/Seelegent/internal/gate"
 	"github.com/NovaSeele/Seelegent/internal/proof"
+	"github.com/NovaSeele/Seelegent/internal/snapshot"
 )
 
 // The gate phase (docs/gates.md): when a turn of a gated task ends well, the task stays running with a GatePhase
@@ -31,9 +32,11 @@ const (
 	gateHeadMax = 4 << 20
 )
 
-// wantsGate reports whether turn tu of t, which just ended well, gets a gate phase.
+// wantsGate reports whether turn tu of t, which just ended well, gets a gate phase. A task whose lead turned the gate
+// off has none: no fix turn, no settling; its lane is checked after each turn as scope findings (laneOffFindings,
+// field report 4, F12). With verify on, such a task still gets the phase, for the verifier alone.
 func wantsGate(t *Task, tu *Turn) bool {
-	return gated(t) && t.Proof != nil && tu.Status == TurnOK && !tu.Handback
+	return gated(t) && t.Proof != nil && (!t.Proof.GateOff || t.Proof.Verify) && tu.Status == TurnOK && !tu.Handback
 }
 
 // instructionStart returns the index of the turn that holds the lead's (or user's) latest instruction at or before
@@ -145,20 +148,28 @@ func (s *Service) othersWorking(ctx context.Context, t *Task) bool {
 // variables are never inherited: a SEELEGENT_TURN_FILES from the daemon's environment would name other files when
 // this list is too long to pass (as the old version did). Commands run in root get the same Rust toolchain pin as
 // the worker (Toolchains): only set when the daemon's environment does not pin one itself.
+//
+// testParallelism adds GOFLAGS=-p=N (after the GOFLAGS the daemon has), CARGO_BUILD_JOBS=N and
+// PYTEST_XDIST_AUTO_NUM_WORKERS=N (unless the daemon's environment sets them): ParallelVars.
 func (s *Service) gateEnv(ctx context.Context, t *Task, root string, files []string) []string {
-	own := []string{"CI", "SEELEGENT_GATE", "SEELEGENT_TASK", "SEELEGENT_TURN_FILES"}
+	base := s.o.BaseEnv()
+	extra := ParallelVars(base, s.limits().TestParallelism)
+	maps.Copy(extra, s.toolEnv(ctx, root))
+	own := []string{"CI", "SEELEGENT_GATE", api.EnvGateTask, "SEELEGENT_TURN_FILES"}
+	for k := range extra {
+		own = append(own, k)
+	}
 	var env []string
-	for _, kv := range s.o.BaseEnv() {
+	for _, kv := range base {
 		name, _, _ := strings.Cut(kv, "=")
 		if !slices.ContainsFunc(own, func(n string) bool { return strings.EqualFold(n, name) }) {
 			env = append(env, kv)
 		}
 	}
-	pin := s.toolEnv(ctx, root)
-	for _, k := range slices.Sorted(maps.Keys(pin)) {
-		env = append(env, k+"="+pin[k])
+	for _, k := range slices.Sorted(maps.Keys(extra)) {
+		env = append(env, k+"="+extra[k])
 	}
-	env = append(env, "CI=1", "SEELEGENT_GATE=1", "SEELEGENT_TASK="+t.ID)
+	env = append(env, "CI=1", "SEELEGENT_GATE=1", api.EnvGateTask+"="+t.ID)
 	if v := strings.Join(files, "\n"); len(v) <= turnFilesEnvMax {
 		env = append(env, "SEELEGENT_TURN_FILES="+v)
 	}
@@ -194,6 +205,22 @@ func (s *Service) gatePhase(r *run, t *Task) (bool, error) {
 	if laneMode == config.LanesOff {
 		in.Lane = nil
 	}
+	if in.Lane != nil {
+		// The lane judges the net change, and only what a worker touched counts against it (F5, F6).
+		var end *snapshot.Manifest
+		if s.o.Snapshots != nil {
+			if e, err := s.o.Snapshots.Load(t.ID, ph.Turn, snapshot.KindEnd); err == nil {
+				end = &e
+			}
+		}
+		in.LaneFiles = s.netLane(t, ph.Turn, files, end)
+		touch := s.laneTouched(r.ctx, t, ph.Turn, end)
+		in.Touched, in.Why, in.UnknownWrites = touch.wrote, touch.why, touch.unknown
+	}
+	if p.GateOff {
+		// The gate is off: the phase is the verifier's alone; the lane was checked as scope findings (F12).
+		in.Lane, in.Hygienic = nil, false
+	}
 	steps := gate.Plan(in)
 	if len(steps) == 0 {
 		return s.afterGreen(t, ph.Turn, nil, files)
@@ -203,18 +230,31 @@ func (s *Service) gatePhase(r *run, t *Task) (bool, error) {
 		Timeout:   time.Duration(max(set.GateTimeoutSec, 1)) * time.Second,
 		TailBytes: max(set.GateOutputTailBytes, 1),
 		LogPrefix: filepath.Join(s.o.TasksDir, t.ID, fmt.Sprintf("gate-t%d-", ph.Turn)),
-		Checker:   gate.Checker{Env: s.o.BaseEnv(), Head: s.headBlob(t)}}
+		Checker:   gate.Checker{Env: s.o.BaseEnv(), Head: s.headBlob(t)},
+		Tree:      GateTree(set)}
+	// A gate the watchdog kept stopping ends at once: no settling, no fix turn (the worker cannot fix it).
+	outOfMemory := func(res api.GateResult) (bool, error) {
+		res.EndedAt = api.FormatTime(s.now())
+		return false, s.endGate(t.ID, ph.Turn, &res, s.barChanges(t))
+	}
 	res, ok := s.runGate(r, t.ID, ph.Turn, runner, steps)
 	if !ok {
 		return s.gateStopped(t.ID)
 	}
-	if failedGate(res) && s.othersWorking(r.ctx, t) {
-		// Another worker may be half way through a change the gate trips over: wait for it, then run again.
+	if res.Reason == api.GateReasonLowMemory {
+		return outOfMemory(res)
+	}
+	if commandFailed(res) && s.othersWorking(r.ctx, t) {
+		// Another worker may be half way through a change the gate trips over: wait for it, then run again. Only a
+		// command can change its mind: the lane and the turn's own findings depend on the turns alone (F7).
 		if !s.settle(r, t) {
 			return s.gateStopped(t.ID)
 		}
 		if res, ok = s.runGate(r, t.ID, ph.Turn, runner, steps); !ok {
 			return s.gateStopped(t.ID)
+		}
+		if res.Reason == api.GateReasonLowMemory {
+			return outOfMemory(res)
 		}
 		res.Settled = true
 	}
@@ -225,6 +265,9 @@ func (s *Service) gatePhase(r *run, t *Task) (bool, error) {
 		rest, ok := s.runGate(r, t.ID, ph.Turn, runner, pastHygiene(steps))
 		if !ok {
 			return s.gateStopped(t.ID)
+		}
+		if rest.Reason == api.GateReasonLowMemory {
+			return outOfMemory(rest)
 		}
 		res = withHygieneOf(rest, res)
 	}
@@ -244,17 +287,46 @@ func (s *Service) gatePhase(r *run, t *Task) (bool, error) {
 	if !failedGate(res) {
 		return s.afterGreen(t, ph.Turn, &res, files, barChanged...)
 	}
-	// Only the task's own failures are worth a fix turn.
-	if p.AutoFixes < p.Budget && gate.Failing(res) != nil {
-		if !onlyFailures(res, stuck) {
-			// Other failures are worth another turn; the repeated findings are left out of its prompt and stay red.
-			msg := gate.FixPrompt(withoutFindings(res, stuck), p.AutoFixes+1, p.Budget, others)
-			return s.fixTurn(t.ID, ph.Turn, res, barChanged, msg, ByGate)
+	// Only the task's own failures are worth a fix turn, and never the lane: the lead decides about files outside it
+	// (F4: a fix turn told to get back inside its lane deleted seven files of its own work). The repeated line
+	// ending and BOM findings are left out of the prompt and stay red.
+	fix := withoutFindings(res, stuck)
+	if p.AutoFixes < p.Budget && gate.Fixable(fix) != nil {
+		where := gate.Folders{Data: s.o.DataDir, Cwd: t.Cwd}
+		if t.Spec != nil && t.SpecOutside {
+			where.Spec = t.Spec.Dir
 		}
+		msg := gate.FixPrompt(fix, lane, p.AutoFixes+1, p.Budget, others, where)
+		return s.fixTurn(t.ID, ph.Turn, res, barChanged, msg, ByGate)
+	}
+	if p.AutoFixes < p.Budget && len(stuck) > 0 && gate.Fixable(res) != nil {
 		res.Warnings = append(res.Warnings, "the automatic fix turn left the same line ending and BOM findings: "+
 			"no more fix turns, the lead decides")
 	}
+	if st := laneStep(res); st != nil && st.State == api.StepRed && gate.Fixable(fix) == nil {
+		res.Warnings = append(res.Warnings, laneStopWarning(st.Files))
+	}
 	return false, s.endGate(t.ID, ph.Turn, &res, barChanged)
+}
+
+// laneStopWarning is the warning of a gate that stops for the lead on its lane.
+func laneStopWarning(files []string) string {
+	return fmt.Sprintf("files outside the lane: %s. No automatic fix turn for the lane: the lead decides (widen the "+
+		"lane with a followup's lane, accept, or reject)", strings.Join(files, ", "))
+}
+
+// commandFailed reports whether a doctrine check or a gate command failed: a failure that another worker's
+// half-done change may cause, so that settling and running the gate again can change it (F7).
+func commandFailed(res api.GateResult) bool {
+	for i := range res.Steps {
+		switch st := &res.Steps[i]; st.Kind {
+		case api.StepDoctrine, api.StepTask, api.StepDetect:
+			if stepFailed(st.State) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // stuckStyle returns the line ending and BOM findings of res when turn n is an automatic fix turn whose gate still
@@ -276,15 +348,15 @@ func stuckStyle(t *Task, n int, res api.GateResult) map[[2]string]bool {
 	return nil
 }
 
-// onlyFailures reports whether the findings of stuck (not empty) are all the task's own failures in res: every
-// other own step passed and the hygiene step has no other red finding.
+// onlyFailures reports whether the findings of stuck (not empty) are all the task's own failures in res besides the
+// lane (which no fix turn works on): every other own step passed and the hygiene step has no other red finding.
 func onlyFailures(res api.GateResult, stuck map[[2]string]bool) bool {
 	if len(stuck) == 0 {
 		return false
 	}
 	for i := range res.Steps {
 		st := &res.Steps[i]
-		if !stepFailed(st.State) || st.Foreign {
+		if !stepFailed(st.State) || st.Foreign || st.Kind == api.StepLane {
 			continue
 		}
 		if st.Kind != api.StepHygiene {
@@ -367,7 +439,194 @@ func (s *Service) headBlob(t *Task) func(ctx context.Context, rel string) ([]byt
 
 // runGate runs the steps once, recording the progress on the turn and in gate events. ok is false when the run
 // was cut short (cancel, takeover, shutdown).
+//
+// Before it runs, the gate takes a gate slot (gateConcurrency) and then checks memory; while it waits for either
+// the phase is queued (gateAdmit). A run the memory watchdog stopped (gate.StoppedAt) is counted on the phase and
+// run again as a whole once memory is back; after api.GateLowMemoryStopsMax stops the result is an error with
+// api.GateReasonLowMemory, which the phase ends with.
 func (s *Service) runGate(r *run, id string, turn int, runner gate.Runner, steps []api.GateStep) (api.GateResult, bool) {
+	for {
+		release, ok := s.gateAdmit(r, id, turn)
+		if !ok {
+			return api.GateResult{}, false
+		}
+		res, ok := s.runGateOnce(r, id, turn, runner, steps)
+		release()
+		at := gate.StoppedAt(res)
+		if !ok || at < 0 {
+			return res, ok
+		}
+		stops := s.countGateStop(id, turn, &res, at)
+		if stops >= api.GateLowMemoryStopsMax {
+			res.State, res.Reason = api.GateError, api.GateReasonLowMemory
+			res.Warnings = append(res.Warnings, fmt.Sprintf("the machine kept running out of memory: the gate was "+
+				"stopped %d times", stops))
+			return res, true
+		}
+		if r.ctx.Err() != nil {
+			return res, false
+		}
+	}
+}
+
+// gateAdmit waits for a gate slot, then for memory, showing the phase queued meanwhile. A gate never holds its slot
+// while it waits for memory: it gives the slot back and queues again. It returns the slot's release, or false
+// when the run was stopped meanwhile.
+func (s *Service) gateAdmit(r *run, id string, turn int) (func(), bool) {
+	release, err := s.admitHeavy(r.ctx, true, func(pos, limit int) {
+		s.gateQueued(id, turn, api.GateWaitSlot, pos, limit)
+	}, func() { s.gateQueued(id, turn, api.GateWaitMemory, 0, 0) })
+	if err != nil {
+		return nil, false
+	}
+	s.holdSlot(id, 1)
+	return func() {
+		s.holdSlot(id, -1)
+		release()
+	}, true
+}
+
+// holdSlot counts a gate slot taken (+1) or given back (-1) by the gate of task id (HoldsGateSlot).
+func (s *Service) holdSlot(id string, delta int) {
+	s.resMu.Lock()
+	defer s.resMu.Unlock()
+	if s.slotHolders == nil {
+		s.slotHolders = map[string]int{}
+	}
+	if s.slotHolders[id] += delta; s.slotHolders[id] <= 0 {
+		delete(s.slotHolders, id)
+	}
+}
+
+// HoldsGateSlot reports whether the gate of task id holds a gate slot now.
+func (s *Service) HoldsGateSlot(id string) bool {
+	s.resMu.Lock()
+	defer s.resMu.Unlock()
+	return s.slotHolders[id] > 0
+}
+
+// AdmitHeavy admits a heavy command outside a task gate (a regression run command): it waits for a gate slot
+// (gateConcurrency, in order with the task gates), then for memory like a gate, giving the slot back while it waits
+// for memory. It returns the slot's release, or ctx's error when ctx ended first.
+//
+// gateTask is the task whose gate command asked for the run (SEELEGENT_TASK in a gate's environment; "" from
+// anywhere else). While that task's gate holds a slot the command shares it: it takes no second slot, so a gate
+// command that runs a regression through the daemon cannot wait for a slot its own gate holds (with
+// gateConcurrency N, N such gates would wait for each other until gateTimeoutSec). It still waits for memory. An
+// id the daemon does not know, or a gate that holds no slot, waits for a slot as usual.
+func (s *Service) AdmitHeavy(ctx context.Context, gateTask string) (func(), error) {
+	return s.admitHeavy(ctx, gateTask == "" || !s.HoldsGateSlot(gateTask), nil, nil)
+}
+
+// admitHeavy is AdmitHeavy with the queue reports: onSlot with the place in line while it waits for a slot,
+// onMemory when it waits for memory (each may be nil). Without slot it waits for memory only.
+func (s *Service) admitHeavy(ctx context.Context, slot bool, onSlot func(pos, limit int), onMemory func()) (func(),
+	error) {
+	for {
+		release := func() {}
+		if sl := s.o.GateSlots; sl != nil && slot {
+			var onWait func(int)
+			if onSlot != nil {
+				onWait = func(pos int) { onSlot(pos, sl.Limit()) }
+			}
+			rel, err := sl.Acquire(ctx, onWait)
+			if rel != nil {
+				release = rel
+			}
+			if err == nil {
+				err = ctx.Err()
+			}
+			if err != nil {
+				release()
+				return nil, err
+			}
+		}
+		wake := s.memoryWake()
+		if s.memoryHold(s.limits()) == nil {
+			return release, nil
+		}
+		release()
+		if onMemory != nil {
+			onMemory()
+		}
+		s.waitMemory(ctx, wake)
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+	}
+}
+
+// queueNear is the slot queue position from which every move of a queued gate is logged.
+const queueNear = 3
+
+// queueMoveLogged reports whether a queued gate that moved in the slot queue from position was to pos logs a new
+// queued event: near the front (queueNear or less) every move, further back only when the position halved. With k
+// gates queued, each slot release would otherwise log k-1 events (k² over the queue); this keeps it to about
+// log2(k)+queueNear per gate. GatePhase.Position is the position last logged.
+func queueMoveLogged(was, pos int) bool {
+	return pos != was && (pos <= queueNear || pos <= was/2)
+}
+
+// gateQueued shows the gate phase of turn queued, waiting for wait, with a queued gate event: when the wait starts,
+// when what it waits for changes (slot, memory), and when its slot queue position moved enough (queueMoveLogged).
+// A smaller move changes nothing stored.
+func (s *Service) gateQueued(id string, turn int, wait string, pos, limit int) {
+	_, err := s.mutate(s.background(), id, func(t *Task) ([]NewEvent, error) {
+		ph := t.GatePhase
+		if ph == nil || ph.Turn != turn || t.CancelRequested {
+			return nil, errNoChange
+		}
+		if ph.State == api.GatePhaseQueued && ph.Wait == wait &&
+			(wait == api.GateWaitMemory || !queueMoveLogged(ph.Position, pos)) {
+			return nil, errNoChange
+		}
+		ph.State, ph.Wait, ph.Position = api.GatePhaseQueued, wait, pos
+		return []NewEvent{{Type: api.EventGate, Turn: turn, Data: api.GateEventData{Phase: api.GateEventQueued,
+			Wait: wait, Position: pos, Limit: limit}}}, nil
+	})
+	if err != nil && s.root.Err() == nil {
+		s.log.Warn("task: queue the gate", "task", id, "err", err)
+	}
+}
+
+// countGateStop counts a watchdog stop of the gate phase of turn (GatePhase.Stops survives a restart), copies the
+// count onto the stopped step at and stores the stopped run on the turn. It returns the count.
+func (s *Service) countGateStop(id string, turn int, res *api.GateResult, at int) int {
+	stops := 0
+	_, err := s.mutate(s.background(), id, func(t *Task) ([]NewEvent, error) {
+		ph := t.GatePhase
+		if ph == nil || ph.Turn != turn {
+			return nil, errNoChange
+		}
+		ph.Stops++
+		stops = ph.Stops
+		res.Steps[at].Stops = stops
+		if tu := t.TurnN(turn); tu != nil {
+			cp := *res
+			cp.Steps = slices.Clone(res.Steps)
+			tu.Gate = &cp
+		}
+		st := res.Steps[at]
+		return []NewEvent{{Type: api.EventGate, Turn: turn, Data: api.GateEventData{Phase: api.GateEventStep,
+			Index: at, Step: &st}}}, nil
+	})
+	if err != nil && s.root.Err() == nil {
+		s.log.Warn("task: count the gate's memory stop", "task", id, "err", err)
+	}
+	if stops == 0 {
+		// The phase is gone (cancelled meanwhile): the caller stops anyway.
+		stops = 1
+	}
+	return stops
+}
+
+// runGateOnce runs the steps once in a context the memory watchdog may stop (gate.ErrLowMemory).
+func (s *Service) runGateOnce(r *run, id string, turn int, runner gate.Runner, steps []api.GateStep) (
+	api.GateResult, bool) {
+	ctx, cancel := context.WithCancelCause(r.ctx)
+	defer cancel(nil)
+	untrack := s.TrackHeavy(cancel)
+	defer untrack()
 	started := api.FormatTime(s.now())
 	labels := make([]string, len(steps))
 	plan := make([]api.GatePlanStep, len(steps))
@@ -381,7 +640,7 @@ func (s *Service) runGate(r *run, id string, turn int, runner gate.Runner, steps
 		StartedAt: started}
 	s.saveGate(id, turn, live, NewEvent{Type: api.EventGate, Turn: turn,
 		Data: api.GateEventData{Phase: api.GateEventStart, Steps: labels, Plan: plan}})
-	res, ok := runner.Run(r.ctx, steps, func(i int, st api.GateStep) {
+	res, ok := runner.Run(ctx, steps, func(i int, st api.GateStep) {
 		live.Steps[i] = st
 		s.saveGate(id, turn, live, NewEvent{Type: api.EventGate, Turn: turn,
 			Data: api.GateEventData{Phase: api.GateEventStep, Index: i, Step: &st}})
@@ -401,7 +660,7 @@ func (s *Service) saveGate(id string, turn int, res api.GateResult, ev NewEvent)
 		cp.Steps = slices.Clone(res.Steps)
 		tu.Gate = &cp
 		if t.GatePhase.State != api.GatePhaseRunning {
-			t.GatePhase.State = api.GatePhaseRunning
+			t.GatePhase.State, t.GatePhase.Wait, t.GatePhase.Position = api.GatePhaseRunning, "", 0
 		}
 		return []NewEvent{ev}, nil
 	})
@@ -587,7 +846,15 @@ func (s *Service) endGate(id string, turn int, res *api.GateResult, barChanged [
 
 // cancelGate ends the gate phase of a cancelled task: a gate still running is marked skipped, a pending verdict
 // becomes an error.
-func cancelGate(t *Task, ph *GatePhase, now time.Time) []NewEvent {
+func cancelGate(t *Task, ph *GatePhase, now time.Time) []NewEvent { return stopGate(t, ph, now, "") }
+
+// supersededNote says why a gate stopped for a lead followup.
+const supersededNote = "superseded by a followup: the gate stopped before it ended"
+
+// stopGate ends the gate phase ph of t: a gate still running (or settling between its runs) is marked skipped, a
+// pending verdict becomes an error. why, when set, is added to the skipped gate's warnings and is the verdict's
+// detail ("cancelled" otherwise).
+func stopGate(t *Task, ph *GatePhase, now time.Time, why string) []NewEvent {
 	t.GatePhase = nil
 	tu := t.TurnN(ph.Turn)
 	if tu == nil {
@@ -604,12 +871,18 @@ func cancelGate(t *Task, ph *GatePhase, now time.Time) []NewEvent {
 			}
 		}
 		cp.State, cp.EndedAt = api.GateSkipped, api.FormatTime(now)
+		if why != "" {
+			cp.Warnings = append(slices.Clone(cp.Warnings), why)
+		}
 		tu.Gate = &cp
 		evs = append(evs, gateResultEvent(ph.Turn, &cp, nil))
 	}
 	if v := tu.Verifier; v != nil && v.Verdict == api.GateRunning {
 		cp := *v
 		cp.Verdict, cp.Detail = api.VerdictError, "cancelled"
+		if why != "" {
+			cp.Detail = why
+		}
 		tu.Verifier = &cp
 		evs = append(evs, NewEvent{Type: api.EventVerify, Turn: ph.Turn, Data: api.VerifyEventData{Phase: "result",
 			ChildID: v.ChildID, Result: &cp}})
@@ -653,8 +926,9 @@ func (s *Service) fixTurn(id string, turn int, res api.GateResult, barChanged []
 		if tu == nil {
 			return nil, errNoChange
 		}
+		// An automatic fix turn belongs to the command of the turn it fixes: it inherits its allow_git.
 		next := &Turn{N: len(t.Turns) + 1, By: by, Message: msg, Status: TurnRunning, Model: t.Model,
-			Tier: t.Tier, Effort: t.Effort, StartedAt: s.now()}
+			Tier: t.Tier, Effort: t.Effort, AllowGit: tu.AllowGit, StartedAt: s.now()}
 		var evs []NewEvent
 		if by == ByGate {
 			res.AutoFix = next.N

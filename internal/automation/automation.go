@@ -30,6 +30,7 @@ import (
 	"github.com/NovaSeele/Seelegent/internal/clock"
 	"github.com/NovaSeele/Seelegent/internal/gate"
 	"github.com/NovaSeele/Seelegent/internal/logx"
+	"github.com/NovaSeele/Seelegent/internal/platform"
 	"github.com/NovaSeele/Seelegent/internal/quota"
 	"github.com/NovaSeele/Seelegent/internal/task"
 )
@@ -113,7 +114,9 @@ type Options struct {
 	Quota   QuotaSource
 	// Precheck defaults to gate.Exec (the user's shell, process tree killed on timeout).
 	Precheck Precheck
-	Clock    clock.Clock
+	// Tree returns the limits of the default precheck's process tree (gatePriority); nil runs it without limits.
+	Tree  func() platform.TreeOptions
+	Clock clock.Clock
 	// MasterOn is the setting automationsEnabled; off, nothing runs on its schedule (run now still works).
 	MasterOn func() bool
 	// ConfirmURL is the dashboard page where the user confirms automation id.
@@ -156,7 +159,11 @@ func New(o Options) *Service {
 	}
 	if o.Precheck == nil {
 		o.Precheck = func(ctx context.Context, cmdline, dir string, timeout time.Duration) gate.ExecResult {
-			return gate.Exec(ctx, cmdline, gate.ExecOptions{Dir: dir, Timeout: timeout, TailBytes: 2000})
+			var tree platform.TreeOptions
+			if o.Tree != nil {
+				tree = o.Tree()
+			}
+			return gate.Exec(ctx, cmdline, gate.ExecOptions{Dir: dir, Timeout: timeout, TailBytes: 2000, Tree: tree})
 		}
 	}
 	if o.MasterOn == nil {

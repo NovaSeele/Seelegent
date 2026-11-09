@@ -27,6 +27,67 @@ describe('AccountCard', () => {
     expect(wrapper.text()).toContain(text)
   })
 
+  it('shows an account without credit as held, with what to do and no date', async () => {
+    const wrapper = await render(
+      makeAccount({
+        kind: 'api-key',
+        resting: true,
+        restReason: 'credits',
+        restingUntil: undefined,
+      }),
+    )
+    expect(wrapper.text()).toContain('No credit left')
+    expect(wrapper.text()).toContain('Top up, then test the key or turn the account off and on.')
+    expect(wrapper.text()).not.toContain('9999')
+    expect(wrapper.text()).not.toContain('Resting')
+  })
+
+  it('shows an account at its budget with the spend and the budget', async () => {
+    const wrapper = await render(
+      makeAccount({
+        kind: 'api-key',
+        resting: true,
+        restReason: 'budget_reached',
+        spentUsd: 200.4,
+        budgetUsd: 200,
+      }),
+    )
+    expect(wrapper.text()).toContain('Budget reached ($200.40 of $200)')
+    expect(wrapper.text()).not.toContain('Top up')
+  })
+
+  it('offers an API key its everyday actions, and opens their dialogs', async () => {
+    const key = makeAccount({
+      kind: 'api-key',
+      backend: 'claude',
+      provider: 'anthropic',
+      keyHint: '…QAA',
+      testResult: 'ok',
+      spendSource: 'cli',
+      spentUsd: 12.4,
+      budgetUsd: 200,
+    })
+    const wrapper = await render(key)
+    const buttons = wrapper.findAll('.keyactions button')
+    expect(buttons.map((b) => b.text())).toEqual([
+      'Test again',
+      'Replace key',
+      'Change model',
+      'Set budget',
+    ])
+    expect(wrapper.text()).toContain('Works')
+    expect(wrapper.text()).toContain('≈ $12.40 spent of $200 · $187.60 left')
+    expect(wrapper.text()).toContain('Used when a task asks for anthropic (provider: anthropic).')
+    await buttons[1]?.trigger('click')
+    await buttons[3]?.trigger('click')
+    expect(wrapper.emitted('dialog')).toEqual([['key'], ['budget']])
+    const noKey = await render(makeAccount({ kind: 'api-key', status: 'no_key', provider: 'x' }))
+    expect(noKey.findAll('.keyactions button').map((b) => b.text())).toEqual([
+      'Change model',
+      'Set budget',
+    ])
+  })
+
   it('keeps an account whose last quota read failed ready, with a note', async () => {
     const wrapper = await render(makeAccount({ status: 'error' }))
     expect(wrapper.text()).toContain('Ready')
@@ -101,7 +162,7 @@ describe('AccountCard', () => {
     const key = await render(
       makeAccount({ status: 'no_key', kind: 'api-key', backend: 'claude', provider: 'deepseek' }),
     )
-    expect(key.findAll('button').map((b) => b.text())).toContain('Set API key')
+    expect(key.findAll('button').map((b) => b.text())).toContain('Add key')
     expect(key.text()).toContain('API key · deepseek')
   })
 })

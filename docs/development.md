@@ -21,7 +21,7 @@ golangci-lint does not need to be installed: `make lint` runs the pinned v2 rele
 macOS / Linux (or Windows with make):
 
 ```sh
-make build          # pnpm install + build web/dist, then go build into bin/seelegent
+make build          # pnpm install + build web/dist, then go build into bin/seelegent and bin/seelegent-launch
 bin/seelegent version
 ```
 
@@ -42,11 +42,35 @@ binary then serves no dashboard. Version, commit and date come from `-ldflags -X
 github.com/NovaSeele/Seelegent/internal/buildinfo.{version,commit,date}`; without them the binary reports `dev`
 and the VCS data that Go embeds.
 
+### The companion launcher
+
+Every task's worker is started by a detached launcher process (`internal/launch`) that lives for the whole turn.
+The daemon starts it as `seelegent-launch __launch <dir>` when the companion executable `seelegent-launch[.exe]`
+(`cmd/seelegent-launch`) sits next to its own executable and is of the same build, and as `seelegent __launch <dir>`
+otherwise; both run `launch.Main`, so there is one launcher code path ([release.md](release.md#the-companion-launcher)
+says when the companion is used). The companion exists to save memory: it is about 12 MB private on Windows instead
+of about 51 MB, because it links no crypto package (any of them brings in the 32 MiB entropy buffer of
+`crypto/internal/fips140/drbg`, which Windows charges as commit).
+
+Rules that keep it so:
+
+- Nothing `cmd/seelegent-launch` imports may import `crypto/...`: that is `internal/launch` and what it imports
+  (today `platform` and `fsutil`). `go test ./cmd/seelegent-launch` (`TestLinksNoCrypto`) runs `go list -deps` for
+  Windows, Linux and macOS and fails naming each crypto package found (`go list -deps -f '{{.ImportPath}}
+  {{.Imports}}'` then shows who imports it). Hashing that needs crypto lives outside that set: project keys (SHA-1)
+  are in `internal/projectkey`, not `fsutil`; Windows tree names use `math/rand/v2` (unique, not secret).
+- Build the companion with the same command and flags as `seelegent` (`make build`, `scripts/build.ps1`, the bench
+  and GoReleaser do): the daemon compares their build information and falls back when anything differs, with one
+  line in `logs/daemon.log` saying why. It also falls back for a build from a modified tree (uncommitted changes),
+  whose source the build information cannot tell apart: commit before a bench that should measure the companion.
+- Development runs (`go run ./cmd/seelegent daemon`, tests, fakecli) have no companion next to the executable and
+  use `seelegent __launch`; that is expected and logged once at info level.
+
 ## Test and lint
 
 | What             | make                                                    | Without make                                                                                                                                       |
 | ---------------- | ------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Go tests         | `make test` (`GOTESTFLAGS=-race` for the race detector) | `go test ./...`                                                                                                                                    |
+| Go tests         | `make test` (`GOTESTFLAGS=-race` for the race detector) | `go test -p 4 ./...`                                                                                                                               |
 | Go lint          | `make lint`                                             | `go vet ./...` and `go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0 run ./...` (set `GOTOOLCHAIN=go1.27.3` for that command) |
 | Web tests        | `make test-web`                                         | `cd web; pnpm test`                                                                                                                                |
 | Web lint + types | `make lint-web`                                         | `cd web; pnpm lint; pnpm typecheck`                                                                                                                |
@@ -66,6 +90,163 @@ Worker trees (cancel, timeout and the worker guard) are a bar, not a sandbox: a 
 started outside its tree by a service of the same user (Windows: WMI `Win32_Process.Create`, the Task Scheduler or
 out-of-process COM; Linux: `systemd-run --user`, at, cron; macOS: launchd). Such processes escape cancel and are
 seen as the lead. See the `platform` package documentation.
+
+### Light mode
+
+A development machine usually runs Seelegent's workers too, and one froze when several `go test ./...` and lint runs
+went at full width together. The commands here therefore run narrow by default:
+
+- `make test` runs `go test -p $(TEST_P)` with `TEST_P ?= 4` (packages tested at once); `make lint` runs
+  golangci-lint with `--concurrency $(LINT_J)` (`LINT_J ?= 4`) and `GOMEMLIMIT=2GiB`, and `.golangci.yml` sets
+  `run.concurrency: 4` for a plain `golangci-lint run`. On an idle machine raise them: `make test TEST_P=12`.
+- Without make: `go test -p 4 ./...`, and `GOMEMLIMIT=2GiB golangci-lint run -j 4 ./...`.
+- `-p` caps the packages tested at once, not the tests inside one package: a package's `t.Parallel` tests run up
+  to `-parallel` at a time, which defaults to GOMAXPROCS (every CPU). On a busy machine add `-parallel 4`, or set
+  `GOMAXPROCS=8` for the whole run (it also caps each test binary's own threads): `GOMAXPROCS=8 go test -p 4
+  -parallel 4 ./...`.
+- `make lint` also vets the bench (`go vet -tags bench ./scripts/bench/`, then again with `GOOS=windows` and
+  `GOOS=darwin` so every OS's files compile), and `.golangci.yml` sets `run.build-tags: [bench]`, so the linter
+  checks it too (CI does both). `go test -tags bench -run Test ./scripts/bench` runs the report's unit tests (made-up
+  numbers, no daemon); without `-run` the test binary runs the bench itself.
+- Never run the tests and the linter at the same time; test only the packages you changed while iterating
+  (`go test -p 4 ./internal/task`).
+- Run long checks at low priority, so the desktop and the workers stay responsive:
+  - Windows (PowerShell): `$p = Start-Process go -ArgumentList 'test','-p','4','./...' -NoNewWindow -PassThru;
+    $p.PriorityClass = 'BelowNormal'; $p.WaitForExit()`, or start a shell at low priority with
+    `cmd /c start "" /belownormal pwsh` (everything it starts inherits the class). Setting
+    `(Get-Process -Id $PID).PriorityClass = 'BelowNormal'` in a script lowers what the script starts afterwards.
+  - Linux and macOS: `nice -n 10 go test -p 4 ./...` (and `ionice -c 3` on Linux for disk-heavy runs).
+- Low CPU priority does not lower memory use: check free memory before a heavy run (Windows:
+  `(Get-CimInstance Win32_OperatingSystem).FreePhysicalMemory/1MB` GB; Linux: `free -g`).
+
+### Profiling the daemon (pprof)
+
+`seelegent daemon --pprof-addr 127.0.0.1:6060` serves `net/http/pprof` and `/debug/vars` on that address, on a
+server and a mux of their own (never the API's port, never `http.DefaultServeMux`). The flag is hidden, off by
+default and never a setting. It takes loopback addresses only (`127.0.0.1`, `[::1]`, `localhost`; a `localhost`
+that resolves to anything else is refused once it listens) and refuses requests whose `Host` header is not
+`127.0.0.1`, `localhost`, `[::1]` or the address it listens on, with its port (the API's DNS-rebinding check).
+`/debug/vars` is expvar-style JSON: `pid`, `goroutines` and `runtime` (runtime/metrics: heap, live heap, allocations,
+GC cycles) always, `memstats` and `cmdline` unless the query has `light=1` (`runtime.ReadMemStats` stops the world, so a
+sampler polls `?light=1`). It is a development tool: heap and
+goroutine profiles can hold secrets (API keys, prompts, tokens in memory), so never share them or start a daemon
+with it on a machine others use.
+
+```sh
+SEELEGENT_HOME=$(mktemp -d) go run ./cmd/seelegent daemon --port 47831 --pprof-addr 127.0.0.1:6060
+go tool pprof -top http://127.0.0.1:6060/debug/pprof/profile?seconds=30   # CPU
+go tool pprof -top -sample_index=alloc_space http://127.0.0.1:6060/debug/pprof/allocs
+curl -s 'http://127.0.0.1:6060/debug/pprof/goroutine?debug=1' | head      # goroutines
+curl -s http://127.0.0.1:6060/debug/vars                                  # memstats, runtime metrics
+curl -s 'http://127.0.0.1:6060/debug/vars?light=1'                        # goroutines, runtime metrics
+```
+
+### Benchmark
+
+`scripts/bench` (build tag `bench`) measures what Seelegent costs the machine. It builds `seelegent` and the
+companion launcher `seelegent-launch` next to it (with `-bin`, the daemon uses a companion of the same build next to
+that binary when there is one; a build from a modified tree runs launches as `seelegent __launch`), starts a daemon on a free port picked for the run (`-port`), with `--pprof-addr` on another (`-pprof-port`) and a temp
+`SEELEGENT_HOME` and user home, adds 6 fake agy accounts with their quota readers on, runs 20 short tasks so the
+lists are not empty, and then:
+
+- `-scenario idle` (default, `-duration 22m`, at least two quota cycles): nothing happens; this is the daemon
+  left running all day. The result splits the idle CPU into the floor (between quota cycles), the CPU per quota
+  cycle and per quota-reader spawn, and the window's average, and lists the start of every quota read and gh run.
+  The usage recorder's hourly snapshot and prune (the first of its 5-minute ticks after each hour, predicted from
+  the daemon's start) is kept out of the floor and reported as CPU per tick.
+- `-scenario idle-sse`: the same with one SSE client connected, a dashboard tab left open.
+- `-scenario load` (`-duration 5m`): 8 tasks (`-tasks`) whose fake workers stream `-rate 100` lines a second
+  together, 3 SSE clients, and a list and a detail request every 250 ms (p50/p95/p99 recorded). The bench daemon's
+  config has no cap over all accounts and enough turns per account for every task to run at once: the default 2,
+  or more when `-tasks` does not fit (`-tasks 16` on the 6 accounts gets 3 per account).
+
+Every 5 s it samples the daemon's whole process tree (daemon, launchers, workers, quota readers, git and their
+consoles): working set, private bytes, CPU seconds and handles per role (Windows: toolhelp snapshot and process
+counters; Linux: `/proc`), spawns per hour by name, the daemon's goroutines and heap (`/debug/vars?light=1`, with
+memstats once a minute) and the database and WAL sizes. On Windows the daemon also runs in a Job Object of the
+bench's, whose accounting gives the exact CPU of the whole tree and every process started, short-lived ones
+included. Each sample records the machine too (free memory and commit, processes and threads on the system), and
+the result carries a machine profile (OS, logical CPUs, RAM, commit limit): the cost of starting a process tree on
+Windows grows with the system's thread count, and the defaults are computed per machine.
+
+The setup is measured on its own: the daemon's and the tree's CPU per account, per seed task and per load task
+start, with a CPU profile from the daemon's start (`-setup-profile 90s`, `setup-cpu.pprof`; the warmup waits for
+it). A CPU profile is taken after the measured window (`-cpuprofile 60s`, kept out of the CPU numbers), together
+with allocation profiles at the start and the end of the window.
+
+Benches can run at the same time: each talks only to the daemon it started. Before it uses the daemon and before
+it stops it, it checks that the API port answers with that process's pid and the HomeID of its own
+`SEELEGENT_HOME`, and that the pprof port's `/debug/vars` names the same pid; another daemon on the port is an
+error, never used or stopped (the bench kills only the process it launched).
+
+The bench is hermetic: the fake agy is the test binary itself (`internal/testutil/fakecli`), which logs each run so
+quota reads are counted exactly and answers a quota read instantly (a real agy costs far more); gh is a copy of the
+test binary named `gh`, first on the daemon's PATH, answering the access check offline; the daemon gets temp
+folders for `HOME`/`USERPROFILE`, `APPDATA`, `LOCALAPPDATA` and `GH_CONFIG_DIR`, and none of the machine's
+`GH_TOKEN`, `GITHUB_TOKEN`, `GH_ENTERPRISE_TOKEN`, `GITHUB_ENTERPRISE_TOKEN` or `GH_HOST`. It never uses this
+machine's GitHub sign-in or reaches the network. Its config turns the memory thresholds off, so a busy machine
+does not hold its tasks.
+
+```sh
+make bench                                            # idle, 10 minutes
+make bench BENCH_ARGS="-scenario load -duration 5m"
+go test -tags bench -c -o bin/seelegent-bench ./scripts/bench
+bin/seelegent-bench -scenario load -baseline <dir>/result.json   # prints the deltas against an earlier run
+```
+
+Results go to `-out` (default `<temp>/seelegent-bench/<time>-<scenario>`, outside the repository): `result.json`,
+`result.md` (the tables), `setup-cpu.pprof`, `cpu.pprof`, `allocs-start.pprof`, `allocs-end.pprof`, `heap.pprof`, `goroutine.txt` and
+the daemon's log (the load scenario adds `heap-before-load.pprof` and `heap-after-load.pprof`), and
+`memstats-end.json`: the daemon's full `runtime.MemStats` (`/debug/vars` without `light=1`) read at the end of every
+scenario, in the load scenario after the retained-heap reading. The result's "Go sys breakdown (end)" shows where
+Go's `Sys` goes: `HeapSys` (with `HeapInuse` and `HeapReleased`, the part returned to the OS) and what lies outside
+the heap, `StackSys` (goroutine stacks), `MSpanSys`, `MCacheSys`, `GCSys` (GC metadata), `BuckHashSys` (profiling)
+and `OtherSys`. Compare allocation profiles with `go tool pprof -top -sample_index=alloc_space -base
+allocs-start.pprof allocs-end.pprof`. The budget is judged on private bytes (commit), not the working set, which
+jumps with what the OS keeps resident: under 0.1% of one core and under 100 MB private when idle; under load a
+peak under 80 MB plus 2.5 MB per task running at once (100 MB for the default 8 tasks), since each running attempt
+holds its own state; daemon CPU under 8% of one core plus 0.25% per task (10% for 8 tasks: the stream lines are
+shared by the tasks, so the base carries the events, the SSE clients and the pollers, and the per-task part what
+one attempt adds by itself, measured at about 0.03%); an event delay (worker line to SSE frame) under 1 s at the
+95th percentile; growth under load not linear in the events; a private-bytes slope under 10 MB/h and a
+live-heap slope under 5 MB/h over the second half of the window, so a leak shows once the start-up growth is over.
+It is printed and flagged, never a failure.
+
+Under load the two slopes are shown as information only: the 8 tasks run through the whole window, and what each
+running attempt holds (the parser's state, the launcher's output buffers) grows with the events it has seen, so a
+rising slope there does not tell a leak from work in progress. The load scenario checks for leaks with the **live
+heap retained after load** instead. Just before the load tasks start (after the warmup) the bench forces a garbage
+collection in the daemon and reads its live heap; after the window it cancels the load tasks that still run, waits
+until every one ended and the SSE clients and pollers stopped, waits 5 s more, and reads the live heap the same way.
+Each reading fetches `/debug/pprof/heap?gc=1` twice on the pprof port (every fetch runs a full GC first; the second
+also clears what `sync.Pool` keeps for one more cycle), saves the second profile (`heap-before-load.pprof`,
+`heap-after-load.pprof`), and then reads `/gc/heap/live` (the bytes the last GC marked live) from
+`/debug/vars?light=1`. The same answer carries the SSE replay ring (`daemon.sseRing`: frames, encoded bytes and the
+heap they hold), which keeps the last frames for 10 minutes and so still holds the load's frames at the end
+reading; that is not a leak. The result shows the start, the end and the raw delta in MB, the ring at both
+readings, and the delta without the ring, which is the budgeted value: at most 3 MB. A daemon that does not report
+its ring (an older build) is judged on the raw delta, with a note.
+`go tool pprof -top -sample_index=inuse_space -base heap-before-load.pprof heap-after-load.pprof` shows what
+stayed. The idle scenarios keep the slopes as budgets, except over a window under 15 minutes: a few
+minutes extrapolated to an hour give false results, so a shorter window shows them as information only
+(window too short), with the raw numbers.
+
+Every result carries the machine profile (OS, CPUs, RAM and commit, free memory and commit over the window, system
+threads, the three other programs that used the most CPU), so runs on different machines or on a busy one can be
+told apart.
+
+On Windows a CPU profile counts goroutines blocked in a system call as CPU: a launcher or the daemon waiting in
+`ReadFile` on a pipe shows up as `os.(*File).Read`, `bytes.Buffer.ReadFrom` or `io.Copy` with large sample counts
+while the process is idle. Do not chase those; take the cost from the CPU seconds of the process counters (the
+result's tables), and read Windows profiles for the code that does run (for example the thread walk in
+`platform.resumeThreads`). Run it at low priority and on an otherwise quiet machine; the latency numbers depend on
+what else runs. The CPU seconds of one build vary by about a point of one core between runs, and on a hybrid CPU
+(performance and efficiency cores) a run whose daemon lands on efficiency cores can cost half as much again:
+compare builds over two runs each, alternating them.
+
+Hot paths have plain Go benchmarks (stream parsers, launcher line delivery, task repository writes and reads, the
+SSE hub and the task bus): `go test -p 4 -run '^$' -bench . ./internal/backend ./internal/launch ./internal/task
+./internal/httpapi`.
 
 ## Dev ports and the dashboard
 
@@ -88,6 +269,12 @@ seen as the lead. See the `platform` package documentation.
 - The HTTP API is described in [api.md](api.md); the binding contract is `contracts/api-v1.md` in the spec
   workspace.
 - `pnpm build` writes `web/dist`; the next `go build` embeds it (package `web`, `web.FS()`).
+
+## Database migrations
+
+Migrations live in `internal/store/migrations/NNNN_name.sql`, numbered without gaps. Never rewrite a migration
+that has run anywhere (an installed daemon, a release, a user's data folder): change the schema with a new one.
+Only a migration that never left an unmerged branch may still be renamed or changed.
 
 ## Toolchain decisions
 

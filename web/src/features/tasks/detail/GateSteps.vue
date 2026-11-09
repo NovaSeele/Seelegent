@@ -8,11 +8,13 @@ import Chip from '@/components/ui/Chip.vue'
 import Icon from '@/components/ui/Icon.vue'
 import { useFormat } from '@/composables/useFormat'
 
-import { stepCommand, stepNote, stepTone } from './gate'
+import { LOW_MEMORY_STOPS_MAX, stepBadge, stepCommand, stepNote } from './gate'
 
 /**
  * The steps of one gate run: each with its state, command, exit code and time, the files it is about, and the end
- * of its output (open for a failing step). Worker and command output is shown as text, never as HTML.
+ * of its output (open for a failing step). Worker and command output is shown as text, never as HTML. A step the
+ * memory watchdog stopped says so (with the stops of this gate phase) instead of failing, and a run that ended in
+ * error because the machine kept running out of memory says what to do next, with a link to the Resources settings.
  */
 const props = defineProps<{ result: GateResult; turn: number | null }>()
 
@@ -31,7 +33,7 @@ const notRunShown = computed(() => props.result.steps.some((s) => s.state === 'n
     <ol class="steps__list">
       <li v-for="(step, i) in result.steps" :key="i" class="steps__item">
         <div class="steps__row">
-          <Chip :tone="stepTone(step.state)">{{ t(`task.gate.stepState.${step.state}`) }}</Chip>
+          <Chip :tone="stepBadge(step).tone">{{ t(stepBadge(step).key) }}</Chip>
           <span class="steps__label">{{ t(`task.gate.kind.${step.kind}`) }}</span>
           <code v-if="step.cmd" class="steps__cmd">{{ stepCommand(step) }}</code>
           <span v-else-if="stepNote(step)" class="steps__muted">{{ stepNote(step) }}</span>
@@ -46,6 +48,9 @@ const notRunShown = computed(() => props.result.steps.some((s) => s.state === 'n
             step.taskIds.join(', ')
           }}</span>
         </div>
+        <p v-if="step.stopped === 'low_memory'" class="steps__note" data-stopped>
+          {{ t('task.gate.stoppedLowMemory', { n: step.stops ?? 1, max: LOW_MEMORY_STOPS_MAX }) }}
+        </p>
         <I18nT v-if="step.foreign" keypath="task.gate.foreign" tag="p" class="steps__note">
           <template #tasks>
             <template v-for="(c, ci) in step.causedBy ?? []" :key="c.taskId"
@@ -72,7 +77,11 @@ const notRunShown = computed(() => props.result.steps.some((s) => s.state === 'n
         <details
           v-if="step.tail && step.kind !== 'lane'"
           class="steps__tail"
-          :open="(step.state === 'red' || step.state === 'error') && !step.failures?.length"
+          :open="
+            (step.state === 'red' || step.state === 'error') &&
+            !step.failures?.length &&
+            !step.stopped
+          "
         >
           <summary class="steps__tail-summary">
             <Icon name="chevronRight" class="steps__chevron" />{{ t('task.gate.output') }}
@@ -83,6 +92,13 @@ const notRunShown = computed(() => props.result.steps.some((s) => s.state === 'n
     </ol>
     <p v-if="result.notRun.length && !notRunShown" class="steps__muted">
       {{ t('task.gate.notRun', { steps: result.notRun.join(', ') }) }}
+    </p>
+    <p v-if="result.reason === 'low_memory'" class="steps__note" data-reason>
+      {{ t('task.gate.lowMemory', { max: LOW_MEMORY_STOPS_MAX }) }}
+      {{ t('task.gate.lowMemoryNext', { setting: t('settings.items.gateConcurrency.label') }) }}
+      <RouterLink :to="{ name: 'settings', params: { section: 'resources' } }" class="steps__link">
+        {{ t('nav.lowMemory.settings') }}
+      </RouterLink>
     </p>
     <p v-if="result.settled" class="steps__muted">{{ t('task.gate.settled') }}</p>
     <ul v-if="result.warnings.length" class="steps__warnings">

@@ -20,11 +20,13 @@ import (
 
 	"github.com/NovaSeele/Seelegent/internal/fsutil"
 	"github.com/NovaSeele/Seelegent/internal/platform"
+	"github.com/NovaSeele/Seelegent/internal/testutil/priority"
 )
 
 // The test binary plays three parts, chosen by its first argument:
 //
 //	__launch <dir>          the launcher (Run)
+//	__die <dir>             a launcher that exits with dieCode before it does anything
 //	worker <step>...        a fake worker CLI that runs the steps in order
 //	daemon <dir> <step>...  a daemon that starts a launch and exits at once (restart survival)
 func TestMain(m *testing.M) {
@@ -44,6 +46,8 @@ func TestMain(m *testing.M) {
 				os.Exit(1)
 			}
 			os.Exit(0)
+		case "__die":
+			os.Exit(dieCode)
 		case "worker":
 			os.Exit(runWorker(os.Args[2:]))
 		case "daemon":
@@ -57,6 +61,9 @@ func TestMain(m *testing.M) {
 	}
 	os.Exit(m.Run())
 }
+
+// dieCode is the exit code of the __die launcher.
+const dieCode = 7
 
 // envPlainLauncher makes the test launcher keep Go's default handling of SIGTERM.
 const envPlainLauncher = "LAUNCH_TEST_PLAIN_LAUNCHER"
@@ -73,7 +80,7 @@ func selfExe() string {
 // runWorker runs the fake worker steps: print:<text>, partial:<text>, stderr:<text>, sleep:<ms>, env:<NAME>,
 // stdin, pid:<file>, spawn:<file> (a grandchild that writes its pid to file and sleeps), escape:<file> (the same,
 // daemonised: setsid + double fork on Unix, detached on Windows), escapeshort:<file> (a daemonised grandchild
-// that exits after 300 ms), exit:<code>.
+// that exits after 300 ms), alloc:<mb> (allocate and touch mb MiB), exit:<code>.
 func runWorker(steps []string) int {
 	for _, s := range steps {
 		op, arg, _ := strings.Cut(s, ":")
@@ -122,6 +129,13 @@ func runWorker(steps []string) int {
 				return 3
 			}
 			return 0 // without waiting: the grandchild is orphaned
+		case "alloc":
+			mb, _ := strconv.Atoi(arg)
+			b := make([]byte, mb<<20)
+			for i := 0; i < len(b); i += 4096 {
+				b[i] = 1
+			}
+			runtime.KeepAlive(b)
 		case "exit":
 			code, _ := strconv.Atoi(arg)
 			return code
@@ -524,6 +538,31 @@ func TestStartFailedWorker(t *testing.T) {
 	}
 }
 
+// TestStartNoticesALauncherThatDiesBeforeReady: a launcher that exits before it wrote a ready or an exit record
+// fails Start as soon as it is reaped, with its exit status, not at the ready timeout. (One that wrote its exit
+// record first still gives a handle: TestStartFailedWorker.)
+func TestStartNoticesALauncherThatDiesBeforeReady(t *testing.T) {
+	opts := testOptions(filepath.Join(t.TempDir(), "a1"), "exit:0")
+	opts.Launcher = []string{selfExe(), "__die"}
+	opts.ReadyTimeout = 30 * time.Second
+	began := time.Now()
+	h, err := Start(context.Background(), opts)
+	took := time.Since(began)
+	if err == nil {
+		t.Fatalf("Start gave a handle for %s, whose launcher died before the worker ran", h.Files().Dir)
+	}
+	if !strings.Contains(err.Error(), "launcher exited before starting the worker") {
+		t.Fatalf("Start: %v", err)
+	}
+	var exit *exec.ExitError
+	if !errors.As(err, &exit) || exit.ExitCode() != dieCode {
+		t.Fatalf("Start: %v, want the launcher's exit status %d", err, dieCode)
+	}
+	if took > 10*time.Second {
+		t.Fatalf("Start took %v to notice the dead launcher", took)
+	}
+}
+
 func TestStartValidates(t *testing.T) {
 	ctx := context.Background()
 	if _, err := Start(ctx, Options{Dir: t.TempDir(), Spec: Spec{Argv: []string{"x"}}}); err == nil {
@@ -707,9 +746,12 @@ func TestDeliverLongLine(t *testing.T) {
 	}
 }
 
-// waitPidFile waits up to 10 s for path to hold a pid.
+// pidWait is how long the tests wait for a pid file: helpers start slowly on a loaded machine.
+const pidWait = 30 * time.Second
+
+// waitPidFile waits up to pidWait for path to hold a pid.
 func waitPidFile(path string) {
-	for i := 0; i < 500; i++ {
+	for deadline := time.Now().Add(pidWait); time.Now().Before(deadline); {
 		if data, err := os.ReadFile(path); err == nil && strings.TrimSpace(string(data)) != "" {
 			return
 		}
@@ -717,9 +759,10 @@ func waitPidFile(path string) {
 	}
 }
 
+// readPid waits up to pidWait for path to hold a pid and returns it.
 func readPid(t *testing.T, path string) int {
 	t.Helper()
-	for i := 0; i < 500; i++ {
+	for deadline := time.Now().Add(pidWait); time.Now().Before(deadline); {
 		if data, err := os.ReadFile(path); err == nil {
 			if pid, err := strconv.Atoi(strings.TrimSpace(string(data))); err == nil {
 				return pid
@@ -741,5 +784,106 @@ func waitDead(t *testing.T, pids ...int) {
 			}
 			time.Sleep(20 * time.Millisecond)
 		}
+	}
+}
+
+// TestSpecTreeTravelsInLaunchJSON: the tree limits reach the launcher through launch.json, and a spec without
+// them (or one written before M19) reads as the zero value.
+func TestSpecTreeTravelsInLaunchJSON(t *testing.T) {
+	dir := t.TempDir()
+	f := FilesIn(dir)
+	tree := platform.TreeOptions{Priority: platform.PriorityLow, MemoryLimitMB: 4096, CPURatePercent: 50}
+	if err := writeJSON(f.Spec, specFile{Spec: Spec{Argv: []string{"x"}, Tree: tree}}); err != nil {
+		t.Fatal(err)
+	}
+	var got specFile
+	if err := readJSON(f.Spec, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Tree != tree {
+		t.Fatalf("tree = %+v, want %+v", got.Tree, tree)
+	}
+	if err := writeJSON(f.Spec, specFile{Spec: Spec{Argv: []string{"x"}}}); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(f.Spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), `"tree"`) {
+		t.Fatalf("a zero tree must be left out of launch.json:\n%s", data)
+	}
+}
+
+// TestWorkerTreePriority: Spec.Tree.Priority low runs the worker and its grandchild at low priority (Windows: the
+// job's BELOW_NORMAL class; Unix: nice 10 from the launcher); the zero value leaves them at the caller's.
+func TestWorkerTreePriority(t *testing.T) {
+	priority.AtNormal(t)
+	self := priority.MustOf(t, os.Getpid())
+	if priority.IsLow(self) {
+		t.Skip("the test already runs at low priority")
+	}
+	for _, tc := range []struct {
+		name string
+		tree platform.TreeOptions
+		low  bool
+	}{
+		{"low", platform.TreeOptions{Priority: platform.PriorityLow}, true},
+		{"zero", platform.TreeOptions{}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := filepath.Join(t.TempDir(), "a1")
+			workerPid, childPid := filepath.Join(dir, "worker.pid"), filepath.Join(dir, "child.pid")
+			opts := testOptions(dir, "spawn:"+childPid, "pid:"+workerPid, "sleep:60000")
+			opts.Spec.Tree = tc.tree
+			h, err := Start(context.Background(), opts)
+			if err != nil {
+				t.Fatalf("Start: %v", err)
+			}
+			r, _ := h.Ready()
+			pids := []int{readPid(t, workerPid), readPid(t, childPid)}
+			for _, p := range pids {
+				got := priority.MustOf(t, p)
+				if tc.low && !priority.IsLow(got) || !tc.low && got != self {
+					t.Errorf("process %d: priority %#x (this test %#x), low wanted: %v", p, got, self, tc.low)
+				}
+			}
+			if runtime.GOOS == "windows" {
+				if got := priority.MustOf(t, r.LauncherPID); got != self {
+					t.Errorf("launcher: priority %#x, want %#x", got, self)
+				}
+			}
+			if err := h.Cancel(); err != nil {
+				t.Fatal(err)
+			}
+			if ex := wait(t, h); ex.Reason != ReasonCanceled || ex.MemoryLimitHit {
+				t.Fatalf("exit %+v", ex)
+			}
+			waitDead(t, append(pids, r.LauncherPID)...)
+		})
+	}
+}
+
+// TestWorkerMemoryLimit: a worker that needs more than Spec.Tree.MemoryLimitMB fails and the exit record says the
+// limit was hit (Windows only: Unix has no tree memory cap); one under the cap does not.
+func TestWorkerMemoryLimit(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("no tree memory cap on " + runtime.GOOS)
+	}
+	run := func(mb string, limit int) Exit {
+		t.Helper()
+		opts := testOptions(filepath.Join(t.TempDir(), "a1"), "alloc:"+mb, "print:done")
+		opts.Spec.Tree = platform.TreeOptions{MemoryLimitMB: limit}
+		h, err := Start(context.Background(), opts)
+		if err != nil {
+			t.Fatalf("Start: %v", err)
+		}
+		return wait(t, h)
+	}
+	if ex := run("200", 64); ex.Reason != ReasonExited || ex.Code == 0 || !ex.MemoryLimitHit {
+		t.Fatalf("200 MB under a 64 MB cap: %+v", ex)
+	}
+	if ex := run("8", 256); ex.Reason != ReasonExited || ex.Code != 0 || ex.MemoryLimitHit {
+		t.Fatalf("8 MB under a 256 MB cap: %+v", ex)
 	}
 }

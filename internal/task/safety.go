@@ -2,16 +2,20 @@ package task
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"maps"
+	"os"
 	"path/filepath"
 	"slices"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/NovaSeele/Seelegent/internal/api"
 	"github.com/NovaSeele/Seelegent/internal/backend"
+	"github.com/NovaSeele/Seelegent/internal/launch"
 	"github.com/NovaSeele/Seelegent/internal/snapshot"
 )
 
@@ -60,14 +64,24 @@ type turnCheck struct {
 	edited, changed, preexisting []string
 	risks                        []api.RiskFile
 	hygiene, scope               []api.Finding
+	// files are the turn's files by its snapshots, as display paths (relative to the task's Cwd, sorted): the
+	// changed ones that exist at the end and the tracked ones the turn deleted.
+	files []string
 	// truncated: the end snapshot hit its limits (snapshot.Store.Take).
 	truncated bool
 }
 
 // checkTurn runs the post-turn checks of turn tu of t, whose last attempt ended with outcome last (it may not be
-// in tu yet). It returns nil when the turn has no start snapshot or the checks cannot run.
-func (s *Service) checkTurn(ctx context.Context, t *Task, tu *Turn, last *backend.Outcome) *turnCheck {
+// in tu yet). ok says the turn ended well (its last attempt succeeded): only then is its response a report whose
+// silence about a new file means something (unreported_file). It returns nil when the turn has no start snapshot
+// or the checks cannot run.
+func (s *Service) checkTurn(ctx context.Context, t *Task, tu *Turn, last *backend.Outcome, ok bool) *turnCheck {
 	if s.o.Snapshots == nil || tu == nil || tu.Snap == nil || tu.Snap.Checked {
+		return nil
+	}
+	if !workerRan(tu, last) {
+		// No worker ever ran in this turn (it waited for an account and was cancelled, or its launch failed): what
+		// changed meanwhile is someone else's work, never at risk from it (field report 4).
 		return nil
 	}
 	ctx, cancel := context.WithTimeout(ctx, checkTimeout)
@@ -95,15 +109,12 @@ func (s *Service) checkTurn(ctx context.Context, t *Task, tu *Turn, last *backen
 	editedKeys := map[string]bool{}
 	var editedAbs []string
 	for _, p := range abs {
-		if !filepath.IsAbs(p) {
-			p = filepath.Join(t.Cwd, p)
-		}
-		if slices.Contains(editedAbs, p) {
+		p, ok := commandPath(t.Cwd, p)
+		if !ok || slices.Contains(editedAbs, p) {
 			continue
 		}
 		editedAbs = append(editedAbs, p)
-		if rel, ok := relInside(root, p); ok {
-			rel = filepath.ToSlash(rel)
+		if rel, ok := repoRel(root, t.Cwd, p); ok {
 			if k := snapshot.Key(rel); !editedKeys[k] {
 				editedKeys[k] = true
 				c.edited = append(c.edited, rel)
@@ -151,10 +162,14 @@ func (s *Service) checkTurn(ctx context.Context, t *Task, tu *Turn, last *backen
 			Binary: r.Binary})
 	}
 	c.changed, c.preexisting = changedFiles(start, end, editedKeys, others)
+	c.files = snapshotFiles(t.Cwd, root, end, c.changed)
 	if s.settings().Hygiene {
-		c.hygiene = s.hygiene(ctx, root, start, end, c.changed, response)
+		reported := ok && strings.TrimSpace(response) != ""
+		writes := newWorkerWrites(t.Cwd, root, c.edited, commands)
+		c.hygiene = s.hygiene(ctx, root, t.Cwd, start, end, c.changed, response, reported, writes.wrote)
 	}
 	c.scope = s.scope(ctx, t, root, editedAbs, commands, response)
+	c.scope = append(c.scope, s.laneOffFindings(ctx, t, tu, c.changed, c.edited, commands, &end)...)
 	return c
 }
 
@@ -183,12 +198,65 @@ func changedFiles(start, end snapshot.Manifest, edited, others map[string]bool) 
 	return changed, preexisting
 }
 
+// snapshotFiles turns the changed files (relative to root) into a turn's file list: those that exist at the end,
+// and those deleted that git tracks (a file made and removed within the turn is not in changed; an untracked file
+// that was already there and is gone is not the turn's change to show). The paths are display paths, as
+// displayPaths makes them, sorted.
+func snapshotFiles(cwd, root string, end snapshot.Manifest, changed []string) []string {
+	show := displayUnder(cwd, root)
+	files := make([]string, 0, len(changed))
+	for _, rel := range changed {
+		f, ok := end.Find(rel)
+		if !ok {
+			continue
+		}
+		if f.Missing && (f.Status == "" || f.Status == api.GitUntracked || f.Status == api.GitAdded) {
+			continue // not in HEAD: nothing a commit would delete
+		}
+		files = append(files, show(rel))
+	}
+	slices.Sort(files)
+	return slices.Compact(files)
+}
+
+// displayUnder returns a function that turns a path relative to root ('/' separators) into the display path
+// displayPaths would give its absolute form, comparing root and cwd once rather than per file.
+func displayUnder(cwd, root string) func(rel string) string {
+	if under, ok := relInside(root, cwd); ok {
+		under = filepath.ToSlash(under)
+		if under == "." {
+			return func(rel string) string { return rel }
+		}
+		return func(rel string) string {
+			if strings.HasPrefix(rel, under+"/") {
+				return rel[len(under)+1:]
+			}
+			return filepath.ToSlash(filepath.Join(root, filepath.FromSlash(rel)))
+		}
+	}
+	return func(rel string) string { return filepath.ToSlash(filepath.Join(root, filepath.FromSlash(rel))) }
+}
+
+// checkedFiles is a checked turn's Files: the files its snapshots show it changed. When a snapshot was truncated
+// those may miss some, so the edit-tool list (fallback, already without the files that no longer exist) is added.
+// The snapshots' own files all stay, the tracked files they saw the turn delete included: those deletions are
+// known for certain, only the edit-tool list needs the check on disk.
+func checkedFiles(snap *TurnSnap, c *turnCheck, fallback []string) []string {
+	if !snap.Truncated && !c.truncated {
+		return c.files
+	}
+	out := append(slices.Clone(fallback), c.files...)
+	slices.Sort(out)
+	return slices.Compact(out)
+}
+
 // applyCheck stores a check's results on the turn and returns its snapshot_truncated and work_at_risk events, if
 // any.
 func applyCheck(t *Task, tu *Turn, c *turnCheck) []NewEvent {
 	if c == nil || tu.Snap == nil || tu.Snap.Checked {
 		return nil
 	}
+	tu.Files = checkedFiles(tu.Snap, c, tu.Files)
 	tu.Snap.Checked = true
 	tu.Snap.EndTruncated = c.truncated
 	tu.Edited = api.NonNil(c.edited)
@@ -240,7 +308,7 @@ func (s *Service) preCheck(ctx context.Context, id string, turn int, status stri
 	}
 	// The turn's end is announced only after this: a slow check delays the lead.
 	began := s.clk.Now()
-	c := s.checkTurn(ctx, t, t.TurnN(turn), o)
+	c := s.checkTurn(ctx, t, t.TurnN(turn), o, status == AttemptOK || status == AttemptBackgroundWait)
 	took := s.clk.Now().Sub(began)
 	if took > slowCheck {
 		s.log.Warn("task: post-turn checks were slow", "task", id, "turn", turn, "took", took)
@@ -248,6 +316,45 @@ func (s *Service) preCheck(ctx context.Context, id string, turn int, status stri
 		s.log.Debug("task: post-turn checks", "task", id, "turn", turn, "took", took)
 	}
 	return c
+}
+
+// workerRan reports whether a worker process ran in turn tu: one of its attempts got as far as starting the worker,
+// or reported a conversation, an edit or a command. last is the outcome of the attempt that just ended (not stored
+// yet), or nil. The launcher writes its ready record only after the worker was started (on Windows, resumed), so a
+// worker that crashed at once can leave none: its exit record's start time or any line on its stream counts too
+// (field report 4, review G4).
+func workerRan(tu *Turn, last *backend.Outcome) bool {
+	ran := func(o *backend.Outcome) bool {
+		return o != nil && (o.ConversationID != "" || len(o.FilesEdited) > 0 || len(o.Commands) > 0)
+	}
+	if ran(last) {
+		return true
+	}
+	for _, a := range tu.Attempts {
+		if ran(a.Outcome) {
+			return true
+		}
+		if a.LaunchDir != "" && launchRan(launch.FilesIn(a.LaunchDir)) {
+			return true
+		}
+	}
+	return false
+}
+
+// launchRan reports whether the launch in f started its worker: a ready record, an exit record with a start time,
+// or output on the worker's stream.
+func launchRan(f launch.Files) bool {
+	if _, err := os.Stat(f.Ready); err == nil {
+		return true
+	}
+	if b, err := os.ReadFile(f.Exit); err == nil {
+		var ex launch.Exit
+		if json.Unmarshal(b, &ex) == nil && !ex.StartedAt.IsZero() {
+			return true
+		}
+	}
+	st, err := os.Stat(f.Stream)
+	return err == nil && st.Size() > 0
 }
 
 // lateCheck runs the post-turn checks of a turn that ended without them (a cancel, a failure) and saves them.
@@ -263,7 +370,7 @@ func (s *Service) lateCheck(ctx context.Context, id string, turn int) {
 	if tu == nil || tu.Status == TurnRunning || tu.Snap == nil || tu.Snap.Checked {
 		return
 	}
-	c := s.checkTurn(ctx, t, tu, nil)
+	c := s.checkTurn(ctx, t, tu, nil, tu.Status == TurnOK)
 	if c == nil {
 		return
 	}

@@ -3,6 +3,7 @@
  * stores it now (summary.gate, the turns' gate and verifier, detail.proof), never from replayed events, so an old
  * gate event can never overwrite the current state (old bug: chips replayed from history).
  */
+import type { TaskEvent } from '@/api/events'
 import type {
   GateCause,
   GateResult,
@@ -18,10 +19,19 @@ import type { Tone } from '@/components/ui/tone'
 export type GateState = GateResult['state']
 export type GatePhase = NonNullable<NonNullable<TaskSummary['gate']>['phase']>
 export type StepState = GateStep['state']
+export type GateWait = NonNullable<NonNullable<TaskSummary['gate']>['wait']>
+
+/**
+ * api.GateLowMemoryStopsMax (internal/api/gate.go): memory-watchdog stops of one gate phase before the gate ends in
+ * error. tsgen does not write number constants; GatePanel.spec.ts fails when the Go value changes.
+ */
+export const LOW_MEMORY_STOPS_MAX = 3
 
 export interface GateView {
-  /** What the gate is doing now (running, settling, verifying), or null when it is not at work. */
+  /** What the gate is doing now (queued, running, settling, verifying), or null when it is not at work. */
   phase: GatePhase | null
+  /** What a queued gate waits for: a slot (gateConcurrency) or free memory; null in every other phase. */
+  wait: GateWait | null
   /** The state of the latest gate (summary first, else the latest turn's), or null when none ran yet. */
   state: GateState | null
   /** The turn the latest gate is about. */
@@ -59,6 +69,7 @@ export function gateOf(summary: TaskSummary, detail: TaskDetail | null): GateVie
   const result = latest?.gate ?? null
   return {
     phase: summary.gate?.phase ?? null,
+    wait: summary.gate?.phase === 'queued' ? (summary.gate.wait ?? null) : null,
     state: summary.gate?.state ?? result?.state ?? null,
     turn: summary.gate?.turn ?? latest?.n ?? null,
     result,
@@ -66,6 +77,24 @@ export function gateOf(summary: TaskSummary, detail: TaskDetail | null): GateVie
     proof: detail?.proof ?? null,
     fixTurns: fixTurnsOf(turns),
   }
+}
+
+/**
+ * A queued gate's place in the slot line, from the newest gate event of the log on screen (the daemon tells it
+ * again whenever it changes), or null when the newest gate event is not a slot wait.
+ */
+export function queuePlace(
+  events: readonly TaskEvent[] | undefined,
+): { position: number; limit: number } | null {
+  for (let i = (events?.length ?? 0) - 1; i >= 0; i--) {
+    const event = events?.[i]
+    if (event?.type !== 'gate') continue
+    const data = event.data
+    if (data.phase !== 'queued' || data.wait !== 'slot' || !data.position || !data.limit)
+      return null
+    return { position: data.position, limit: data.limit }
+  }
+  return null
 }
 
 /** Whether the task has anything gate-related to show. */
@@ -81,7 +110,13 @@ export function gateUrgent(view: GateView): boolean {
   )
 }
 
-export function gateTone(state: GateState | null, phase: GatePhase | null): Tone {
+export function gateTone(
+  state: GateState | null,
+  phase: GatePhase | null,
+  wait: GateWait | null = null,
+): Tone {
+  // A queued gate is not at work yet: it waits its turn, or for the machine to have memory again.
+  if (phase === 'queued') return wait === 'memory' ? 'attention' : 'neutral'
   if (phase) return 'running'
   switch (state) {
     case 'green':
@@ -112,6 +147,16 @@ export function stepTone(state: StepState): Tone {
     default:
       return 'neutral'
   }
+}
+
+/**
+ * A step's state word (task.gate.stepState.*) and tone. A step the memory watchdog stopped says "Stopped" in the
+ * attention tone whatever state the daemon gave it (error): it did not fail, the machine ran low on memory.
+ */
+export function stepBadge(step: Pick<GateStep, 'state' | 'stopped'>): { key: string; tone: Tone } {
+  if (step.stopped === 'low_memory')
+    return { key: 'task.gate.stepState.stopped', tone: 'attention' }
+  return { key: `task.gate.stepState.${step.state}`, tone: stepTone(step.state) }
 }
 
 /** Steps that did not pass (shown open), in gate order. */

@@ -71,8 +71,8 @@
       "short": "Quota"
     },
     "waitingWorker": {
-      "label": "Waiting for a worker",
-      "short": "No worker"
+      "label": "Waiting for a free slot",
+      "short": "No slot"
     },
     "blocked": {
       "label": "Needs action",
@@ -105,6 +105,10 @@
     "blockedDeps": {
       "label": "Earlier task failed",
       "short": "Dep failed"
+    },
+    "waitingResources": {
+      "label": "Waiting for resources",
+      "short": "Resources"
     }
   },
   "attention": {
@@ -114,6 +118,7 @@
     "noResponse": "Worker not responding",
     "auth": "Needs sign-in",
     "noAccounts": "No accounts left",
+    "budgetReached": "Budget reached",
     "failed": "Failed",
     "review": "Awaiting review",
     "quotaWait": "Waiting for quota",
@@ -128,7 +133,8 @@
     "verifierRejected": "Review rejected it",
     "peerObjection": "A peer objects",
     "backgroundWait": "Waiting on a background command",
-    "unknown": "Needs a look"
+    "unknown": "Needs a look",
+    "resourcesWait": "Waiting for resources"
   },
   "stage": {
     "explore": "Explore",

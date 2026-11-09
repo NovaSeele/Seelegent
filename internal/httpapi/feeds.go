@@ -16,6 +16,10 @@ import (
 const (
 	// coalesceTask is how long task.updated frames of one task are merged (contract §7).
 	coalesceTask = 100 * time.Millisecond
+	// coalesceLive is how long a task's live notices (its worker's active step changed: task.NoticeLive) are merged
+	// into one task.updated frame. The step label needs no 100 ms freshness, and a worker that streams tools and
+	// messages changes it many times a second: each frame reads the task's summary from the database.
+	coalesceLive = time.Second
 	// coalesceAccounts merges bursts of account changes into one diff.
 	coalesceAccounts = 500 * time.Millisecond
 	// taskBuffer is the room of the task bus subscription.
@@ -60,12 +64,16 @@ func (s *Server) taskFeed(ctx context.Context) {
 	bus := s.o.Tasks.Bus()
 	sub := bus.Subscribe(taskBuffer)
 	defer func() { sub.Close() }()
-	pending := map[string]bool{}
-	var timer *time.Timer
-	var fire <-chan time.Time
-	flush := func() {
-		for id := range pending {
-			delete(pending, id)
+	// pending are the tasks whose record changed (sent within coalesceTask); live those whose worker's active step
+	// changed only (sent within coalesceLive). A task in pending is dropped from live when its frame goes out.
+	pending, live := map[string]bool{}, map[string]bool{}
+	taskTimer, liveTimer := newFeedTimer(coalesceTask), newFeedTimer(coalesceLive)
+	defer taskTimer.stop()
+	defer liveTimer.stop()
+	send := func(ids map[string]bool) {
+		for id := range ids {
+			delete(ids, id)
+			delete(live, id)
 			sum, err := s.o.Tasks.Summary(ctx, id)
 			if err != nil {
 				if !errors.Is(err, task.ErrNotFound) && ctx.Err() == nil {
@@ -77,17 +85,17 @@ func (s *Server) taskFeed(ctx context.Context) {
 				s.publish(api.StreamTaskUpdated, sum)
 			}
 		}
-		fire = nil
 	}
 	for {
 		select {
 		case <-ctx.Done():
-			if timer != nil {
-				timer.Stop()
-			}
 			return
-		case <-fire:
-			flush()
+		case <-taskTimer.c():
+			taskTimer.fired()
+			send(pending)
+		case <-liveTimer.c():
+			liveTimer.fired()
+			send(live)
 		case n, open := <-sub.C():
 			if !open {
 				if ctx.Err() != nil {
@@ -96,6 +104,7 @@ func (s *Server) taskFeed(ctx context.Context) {
 				s.log.Warn("sse: the task feed fell behind; clients reload")
 				sub = bus.Subscribe(taskBuffer)
 				clear(pending)
+				clear(live)
 				s.publish(api.StreamReset, api.Reset{Reason: api.ResetOverflow})
 				continue
 			}
@@ -104,21 +113,49 @@ func (s *Server) taskFeed(ctx context.Context) {
 				s.publish(api.StreamTaskEvent, n.Event)
 			case n.Kind == task.NoticeTask && n.Created:
 				delete(pending, n.TaskID)
+				delete(live, n.TaskID)
 				if sum, err := s.o.Tasks.Summary(ctx, n.TaskID); err == nil && !task.Hidden(sum.Kind) {
 					s.publish(api.StreamTaskCreated, sum)
 				}
 			case n.Kind == task.NoticeTask:
 				pending[n.TaskID] = true
-				if fire == nil {
-					if timer == nil {
-						timer = time.NewTimer(coalesceTask)
-					} else {
-						timer.Reset(coalesceTask)
-					}
-					fire = timer.C
-				}
+				taskTimer.arm()
+			case n.Kind == task.NoticeLive && !pending[n.TaskID]:
+				live[n.TaskID] = true
+				liveTimer.arm()
 			}
 		}
+	}
+}
+
+// feedTimer is a coalescing timer: arm starts it unless it already runs; c is nil while it does not run.
+type feedTimer struct {
+	d     time.Duration
+	timer *time.Timer
+	fire  <-chan time.Time
+}
+
+func newFeedTimer(d time.Duration) *feedTimer { return &feedTimer{d: d} }
+
+func (t *feedTimer) c() <-chan time.Time { return t.fire }
+
+func (t *feedTimer) arm() {
+	if t.fire != nil {
+		return
+	}
+	if t.timer == nil {
+		t.timer = time.NewTimer(t.d)
+	} else {
+		t.timer.Reset(t.d)
+	}
+	t.fire = t.timer.C
+}
+
+func (t *feedTimer) fired() { t.fire = nil }
+
+func (t *feedTimer) stop() {
+	if t.timer != nil {
+		t.timer.Stop()
 	}
 }
 

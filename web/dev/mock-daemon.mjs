@@ -25,9 +25,13 @@
  * (every /hooks route answers 501 not_implemented, like the daemon until hooks land), MOCK_DEV_ORIGIN (default
  * http://localhost:5173; empty turns it off): one extra loopback http origin accepted by the Host and Origin
  * checks, like `seelegent daemon --dev-origin`, because the Vite proxy keeps the browser's Host and Origin.
+ * Resources: MOCK_OS (Health.os, default this machine's: windows, linux, darwin), MOCK_LOW_MEMORY=1 (the memory
+ * watchdog holds new starts from the start) or MOCK_LOW_MEMORY=flip (it turns on and off every 30 s, with a
+ * resources.changed frame each time); Health.memory is this machine's free memory (commit only on Windows).
  */
 import { randomBytes } from 'node:crypto'
 import { createServer } from 'node:http'
+import { availableParallelism, freemem, totalmem } from 'node:os'
 
 import { createAdminRoutes } from './mock-admin.mjs'
 
@@ -38,6 +42,9 @@ const RING = 2048
 const DEV_ORIGIN = devOrigin(process.env.MOCK_DEV_ORIGIN ?? 'http://localhost:5173')
 const INSTANCE = randomBytes(4).toString('hex')
 const BUILD = 'mock-build'
+const GOOS = { win32: 'windows', darwin: 'darwin', linux: 'linux' }
+const OS = process.env.MOCK_OS || GOOS[process.platform] || process.platform
+const LOW_MEMORY = process.env.MOCK_LOW_MEMORY ?? ''
 const STARTED = new Date()
 const MIN = 60_000
 const HOUR = 60 * MIN
@@ -254,6 +261,14 @@ const settings = {
   contentionWindowHours: 24,
   githubPollMinutes: 0,
   automationsEnabled: false,
+  workerPriority: 'low',
+  gatePriority: 'low',
+  maxConcurrentWorkers: 0,
+  // gateConcurrency, minFreeMemoryMB, minFreeCommitMB, criticalFreeMemoryMB and testParallelism are auto: absent
+  // until set (Health.resources has the values in use).
+  workerMemoryLimitMB: 0,
+  workerCPURatePercent: 0,
+  daemonMemoryLimitMB: 0,
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -861,6 +876,50 @@ function seedData() {
     since: ago(14 * MIN),
   }
 
+  // Waits for free memory (status waiting_quota, waiting "memory"), past the 10 min of a resources_wait flag.
+  const memoryWait = makeTask({
+    title: 'Run the full integration suite',
+    status: 'waiting_quota',
+    project: shop,
+    account: 'acc-work',
+    age: 14 * MIN,
+    attention: {
+      state: 'info',
+      reason: 'resources_wait',
+      who: 'user',
+      detail: 'Waiting for resources for 12 minutes: free 1500 MB < threshold 2048 MB.',
+      params: { minutes: 12, availableMB: 1500, needMB: 2048 },
+      since: ago(2 * MIN),
+    },
+  })
+  memoryWait.summary.waiting = 'memory'
+  startTurn(memoryWait, memoryWait.summary.title)
+  pushEvent(
+    memoryWait,
+    'waiting_quota',
+    { reason: 'memory', availableMB: 1820, needMB: 2048 },
+    false,
+  )
+  pushEvent(
+    memoryWait,
+    'waiting_quota',
+    { reason: 'memory', availableMB: 1500, needMB: 2048 },
+    false,
+  )
+
+  // A gate waiting for a slot (gateConcurrency 2), told again when its place in line moved.
+  const gateQueued = makeTask({
+    title: 'Add rate limiting to the public API',
+    status: 'running',
+    project: shop,
+    account: 'acc-work',
+    age: 9 * MIN,
+    gate: { state: 'running', phase: 'queued', wait: 'slot', autoFixes: 0, turn: 1 },
+  })
+  playTurn(gateQueued, gateQueued.summary.title, SCRIPT.slice(0, 3), 'ok', 'Added the limiter.')
+  pushEvent(gateQueued, 'gate', { phase: 'queued', wait: 'slot', position: 3, limit: 2 }, false)
+  pushEvent(gateQueued, 'gate', { phase: 'queued', wait: 'slot', position: 2, limit: 2 }, false)
+
   const quotaWait = makeTask({
     title: 'Refactor the billing service',
     status: 'waiting_quota',
@@ -1388,6 +1447,53 @@ function projectList() {
     .sort((a, b) => Date.parse(b.lastActivityAt) - Date.parse(a.lastActivityAt))
 }
 
+let lowMemory = LOW_MEMORY === '1' || LOW_MEMORY === 'flip'
+
+/** This machine's free memory as the daemon reports it (commit is known on Windows only; the mock guesses 2x). */
+function memory() {
+  const phys = Math.round(freemem() / 1048576)
+  return { availPhysMB: phys, availCommitMB: OS === 'windows' ? phys * 2 : 0, known: true }
+}
+
+const clamp = (n, lo, hi) => Math.max(lo, Math.min(n, hi))
+
+/** This machine's profile and the values in use for the auto settings (config.EffectiveResources, simplified). */
+function machineResources() {
+  const totalPhysMB = Math.round(totalmem() / 1048576)
+  const totalCommitMB = OS === 'windows' ? Math.floor((totalPhysMB * 1.5) / 1024) * 1024 : 0
+  const cpus = availableParallelism()
+  const minFree = clamp(Math.floor(totalPhysMB / 8), 512, 2048)
+  const auto = {
+    minFreeMemoryMB: minFree,
+    criticalFreeMemoryMB: Math.floor(minFree / 2),
+    minFreeCommitMB: totalCommitMB > 0 ? clamp(Math.floor(totalCommitMB / 10), 1024, 4096) : 0,
+    testParallelism: clamp(Math.floor(cpus / 4), 1, 8),
+    gateConcurrency: clamp(
+      Math.min(Math.floor(cpus / 8), Math.floor(totalPhysMB / 1024 / 8)),
+      1,
+      4,
+    ),
+  }
+  const resources = {}
+  for (const [key, value] of Object.entries(auto)) {
+    const set = settings[key]
+    resources[key] =
+      set === undefined || set === null
+        ? { value, source: 'auto' }
+        : { value: set, source: 'explicit' }
+  }
+  // Only one of the two memory thresholds set: the other is derived from it, like the daemon does. A minimum set to
+  // 0 (off) leaves the floor auto with the machine's value; a minimum is derived only from a floor at or above the
+  // auto minimum.
+  const { minFreeMemoryMB: min, criticalFreeMemoryMB: floor } = resources
+  if (min.source === 'explicit' && floor.source === 'auto' && min.value > 0) {
+    resources.criticalFreeMemoryMB = { value: Math.floor(min.value / 2), source: 'derived' }
+  } else if (floor.source === 'explicit' && min.source === 'auto' && floor.value >= min.value) {
+    resources.minFreeMemoryMB = { value: Math.min(floor.value * 2, 1048576), source: 'derived' }
+  }
+  return { resources, machine: { totalPhysMB, totalCommitMB, cpus } }
+}
+
 function health() {
   return {
     ok: true,
@@ -1398,7 +1504,17 @@ function health() {
     pid: process.pid,
     port: PORT,
     startedAt: STARTED.toISOString(),
+    homeId: 'mock0123456789ab',
+    os: OS,
+    memory: memory(),
+    lowMemory,
+    ...machineResources(),
   }
+}
+
+function flipLowMemory() {
+  lowMemory = !lowMemory
+  broadcast('resources.changed', { lowMemory, memory: memory() })
 }
 
 function intParam(url, name, min, max, fallback) {
@@ -1742,6 +1858,7 @@ const server = createServer((req, res) => {
 seedData()
 setInterval(tick, TICK_MS)
 setInterval(spawnTask, 90_000)
+if (LOW_MEMORY === 'flip') setInterval(flipLowMemory, 30_000)
 server.listen(PORT, '127.0.0.1', () => {
   console.log(
     `mock daemon on http://127.0.0.1:${PORT}/api/v1 (instance ${INSTANCE}, ${tasks.size} tasks)`,

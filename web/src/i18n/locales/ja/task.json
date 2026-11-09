@@ -46,6 +46,7 @@
       "callsFailed": "直近 {count} 回のツール呼び出しが失敗しました。",
       "repeated": "ワーカーは直近 {steps} ステップで同じ {tool} の呼び出しを {count} 回繰り返しました。",
       "noAccounts": "作業できる {backend} アカウントがありません。サインインするか有効にしてください。",
+      "budgetReached": "{account} は予算 {budget} に達しました。予算を上げるか、キーを変更してください。",
       "auth": "有効な {backend} アカウントはすべてサインインが必要です。",
       "depMissing": "前のタスク {task} はもう存在しません。",
       "depRejected": "前のタスク {title}（{task}）は却下されました。",
@@ -53,7 +54,9 @@
       "depsWaiting": "{tasks} の完了を待っています。",
       "depCancelled": "前のタスク {title}（{task}）はキャンセルされました。",
       "hygiene": "確認が必要な衛生チェックの指摘が {count} 件あります",
-      "workAtRisk": "{count} 件のファイルで変更が失われた可能性があります"
+      "workAtRisk": "{count} 件のファイルで変更が失われた可能性があります",
+      "resourcesWait": "{minutes} 分以上リソースを待っています：空き {available}、必要 {need}。",
+      "resourcesWaitPlain": "{minutes} 分以上リソースを待っています：マシンの空きメモリが足りません。"
     }
   },
   "question": {
@@ -172,6 +175,7 @@
       "junkFile": "不要なファイル",
       "unreportedFile": "変更されたが報告にない",
       "outsideRepoWrite": "リポジトリ外への書き込み",
+      "outsideLane": "レーン外の変更",
       "unfetchedUrl": "ワーカーが開いていない URL",
       "skipped": "チェックをスキップ"
     },
@@ -213,7 +217,8 @@
     "phase": {
       "running": "実行中",
       "settling": "他のタスクを待機中",
-      "verifying": "セカンドオピニオンのレビュー中"
+      "verifying": "セカンドオピニオンのレビュー中",
+      "queued": "順番待ち"
     },
     "turn": "ターン {n}",
     "fixTurns": "自動修正 {count} 回",
@@ -228,7 +233,8 @@
       "red": "失敗",
       "error": "エラー",
       "warn": "警告",
-      "not_run": "未実行"
+      "not_run": "未実行",
+      "stopped": "停止"
     },
     "kind": {
       "lane": "レーン",
@@ -273,7 +279,7 @@
       "forced": "{tasks} のレーンを強制的に取得"
     },
     "commands": "コマンド",
-    "off": "オフ (レーンと衛生チェックは実行)",
+    "off": "オフ (レーンは情報としてのみチェック)",
     "noCommands": "コマンドなし",
     "detected": "自動検出",
     "doctrine": "プロジェクトの原則",
@@ -283,7 +289,16 @@
     "bar": "開始後に変更",
     "usedUp": "自動修正を使い切りました ({n}/{max})",
     "nextStep": "ゲートはもう自分では直せません。フォローアップを送るか、タスクを引き継いでください。",
-    "causedBy": "{tasks} が原因の可能性"
+    "causedBy": "{tasks} が原因の可能性",
+    "queued": {
+      "slot": "ゲートの順番待ち",
+      "memory": "空きメモリ待ち",
+      "place": "{position} 番目、同時に {limit} 件まで",
+      "limit": "同時に {limit} 件まで"
+    },
+    "stoppedLowMemory": "マシンのメモリ不足で停止しました（{n}/{max}）。メモリが戻るとゲートを再実行します。",
+    "lowMemory": "マシンのメモリ不足が続きました：ゲートは {max} 回停止されました。",
+    "lowMemoryNext": "メモリを空けるか「{setting}」を下げてから、ゲートを再実行してください。"
   },
   "consults": {
     "title": "メンバーの意見",

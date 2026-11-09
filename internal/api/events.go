@@ -111,6 +111,9 @@ type WorkerPromptData struct {
 type AttemptEndData struct {
 	Status string `json:"status" ts:"Attempt['status']"`
 	Error  string `json:"error,omitempty"`
+	// Warning is an error that did not fail an ok attempt (a network error the worker CLI reported after its
+	// complete report, an error its conversation replayed): the work counts, but the lead should know.
+	Warning string `json:"warning,omitempty"`
 }
 
 // TurnEndData is the data of a turn_end event.
@@ -129,9 +132,37 @@ type AccountProblemData struct {
 	Error     string `json:"error"`
 }
 
-// WaitingQuotaData is the data of a waiting_quota event.
+// Reasons of a waiting_quota event (WaitingQuotaData.Reason) and values of TaskSummary.Waiting. The account
+// reasons are the pool's (pool.Reason).
+const (
+	// WaitingMemory: the task waits for free memory or free commit (minFreeMemoryMB, minFreeCommitMB), not for
+	// an account.
+	WaitingMemory = "memory"
+	// WaitingNoAccount: no enabled, signed-in account can run the task.
+	WaitingNoAccount = "no_account"
+	// WaitingResting: every account that could run it rests (quota used up or a cooldown); Until is when the
+	// first one is back.
+	WaitingResting = "resting"
+	// WaitingBusy: every account that could run it and is not resting has no free slot (maxConcurrentPerAccount,
+	// or the maxConcurrentWorkers cap).
+	WaitingBusy = "busy"
+	// WaitingBudget: every account that could run it rests on its budget; no time ends the wait, the user raises
+	// a budget, switches its stop off or changes a key. Detail names them ("acc9 reached its $200 budget: raise
+	// the budget or change the key").
+	WaitingBudget = "budget_reached"
+)
+
+// WaitingQuotaData is the data of a waiting_quota event. Reason says what the task waits for; events written
+// before it was set for account waits have none, which reads as an account wait (Until is when one is expected
+// back). Detail is the daemon's English explanation (for busy: which accounts are full, "acc6: 2 of 2 running").
+// With Reason WaitingMemory, AvailableMB is what the last reading found and NeedMB the threshold it is below (of
+// physical memory or of commit, whichever holds the task).
 type WaitingQuotaData struct {
-	Until string `json:"until,omitempty"`
+	Until       string `json:"until,omitempty"`
+	Reason      string `json:"reason,omitempty" ts:"'memory' | 'no_account' | 'resting' | 'busy' | 'budget_reached'"`
+	Detail      string `json:"detail,omitempty"`
+	AvailableMB int64  `json:"availableMB,omitempty"`
+	NeedMB      int64  `json:"needMB,omitempty"`
 }
 
 // RetryData is the data of a retry event.

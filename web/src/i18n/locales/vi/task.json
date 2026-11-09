@@ -46,6 +46,7 @@
       "callsFailed": "{count} lần gọi công cụ gần nhất đều thất bại.",
       "repeated": "Worker đã lặp lại cùng một lệnh gọi {tool} {count} lần trong {steps} bước gần nhất.",
       "noAccounts": "Không có tài khoản {backend} nào chạy được việc. Hãy đăng nhập hoặc bật một tài khoản.",
+      "budgetReached": "{account} đã dùng hết ngân sách {budget}. Hãy nâng ngân sách hoặc đổi khóa.",
       "auth": "Mọi tài khoản {backend} đang bật đều cần đăng nhập.",
       "depMissing": "Tác vụ trước {task} không còn tồn tại.",
       "depRejected": "Tác vụ trước {title} ({task}) đã bị từ chối.",
@@ -53,7 +54,9 @@
       "depsWaiting": "Đang chờ {tasks} hoàn tất.",
       "depCancelled": "Tác vụ trước {title} ({task}) đã bị huỷ.",
       "hygiene": "{count} phát hiện vệ sinh mã cần xem",
-      "workAtRisk": "{count} tệp có thể đã mất thay đổi"
+      "workAtRisk": "{count} tệp có thể đã mất thay đổi",
+      "resourcesWait": "Đã chờ tài nguyên hơn {minutes} phút: trống {available}, cần {need}.",
+      "resourcesWaitPlain": "Đã chờ tài nguyên hơn {minutes} phút: máy không đủ bộ nhớ trống."
     }
   },
   "question": {
@@ -172,6 +175,7 @@
       "junkFile": "Tệp rác",
       "unreportedFile": "Có thay đổi nhưng không có trong báo cáo",
       "outsideRepoWrite": "Ghi ra ngoài repo",
+      "outsideLane": "Thay đổi ngoài làn",
       "unfetchedUrl": "URL worker chưa từng mở",
       "skipped": "Bỏ qua kiểm tra"
     },
@@ -213,7 +217,8 @@
     "phase": {
       "running": "đang chạy",
       "settling": "chờ các tác vụ khác",
-      "verifying": "đang duyệt lần hai"
+      "verifying": "đang duyệt lần hai",
+      "queued": "đang xếp hàng"
     },
     "turn": "lượt {n}",
     "fixTurns": "{count} lượt tự sửa",
@@ -228,7 +233,8 @@
       "red": "Không đạt",
       "error": "Không chạy được",
       "warn": "Cảnh báo",
-      "not_run": "Không chạy"
+      "not_run": "Không chạy",
+      "stopped": "Đã dừng"
     },
     "kind": {
       "lane": "Làn",
@@ -273,7 +279,7 @@
       "forced": "đã giành chỗ của {tasks}"
     },
     "commands": "Lệnh",
-    "off": "Đã tắt (vẫn kiểm tra làn và vệ sinh mã)",
+    "off": "Đã tắt (vẫn kiểm tra làn, chỉ để tham khảo)",
     "noCommands": "Không có lệnh",
     "detected": "tự phát hiện",
     "doctrine": "Nguyên tắc dự án",
@@ -283,7 +289,16 @@
     "bar": "Đã đổi từ lúc bắt đầu",
     "usedUp": "đã hết lượt tự sửa ({n}/{max})",
     "nextStep": "Cổng không thể tự sửa thêm: hãy gửi chỉ dẫn tiếp hoặc tiếp quản tác vụ.",
-    "causedBy": "có thể do {tasks}"
+    "causedBy": "có thể do {tasks}",
+    "queued": {
+      "slot": "chờ lượt chạy cổng",
+      "memory": "chờ bộ nhớ trống",
+      "place": "thứ {position} trong hàng, {limit} cùng lúc",
+      "limit": "{limit} cùng lúc"
+    },
+    "stoppedLowMemory": "Bị dừng vì máy thiếu bộ nhớ ({n}/{max}); cổng chạy lại khi bộ nhớ trống trở lại.",
+    "lowMemory": "Máy liên tục thiếu bộ nhớ: cổng đã bị dừng {max} lần.",
+    "lowMemoryNext": "Giải phóng bớt bộ nhớ hoặc giảm “{setting}”, rồi chạy lại cổng."
   },
   "consults": {
     "title": "Ý kiến thành viên",

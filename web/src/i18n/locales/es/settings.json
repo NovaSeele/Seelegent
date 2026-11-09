@@ -69,6 +69,10 @@
     "language": {
       "label": "Idioma",
       "desc": "Idioma del panel. Los cambios se aplican al instante."
+    },
+    "resources": {
+      "label": "Recursos",
+      "desc": "Cuánto de esta máquina pueden usar los workers, los comandos de gate y el servicio. Los cambios se aplican sin reiniciar: lo que ya corre mantiene sus límites y el siguiente inicio usa los nuevos."
     }
   },
   "daemon": {
@@ -82,7 +86,41 @@
     "rangeWhole": "Introduce un número entero de {min} a {max}.",
     "rangePercent": "Introduce un porcentaje de {min} a {max}.",
     "lines": "Uno por línea; se guarda al salir del campo.",
-    "readonly": "Se fija al iniciar el servicio (seelegent config); aquí no se puede cambiar."
+    "readonly": "Se fija al iniciar el servicio (seelegent config); aquí no se puede cambiar.",
+    "rangeZero": {
+      "off": "De {min} a {max} (0 = desactivado)",
+      "unlimited": "De {min} a {max} (0 = sin límite)"
+    },
+    "nowFree": "Ahora: {free} libres",
+    "osOnly": "Solo en {os}.",
+    "osOther": "Solo en {os}: no tiene efecto en el sistema donde corre el servicio.",
+    "criticalBelowMin": "El mínimo de memoria de emergencia debe ser menor que Memoria libre para iniciar mientras ambos estén activos.",
+    "mbIs": "= {size}",
+    "auto": "Automático",
+    "autoValue": "{auto}: {value} en esta máquina",
+    "autoZero": {
+      "off": "{auto}: desactivado en esta máquina",
+      "unlimited": "{auto}: sin límite en esta máquina"
+    },
+    "derived": {
+      "half": "{auto}: la mitad de tu «{other}», {value}",
+      "twice": "{auto}: el doble de tu «{other}», {value}"
+    },
+    "set": "Fijar",
+    "setOf": "Fijar un valor propio para {name}",
+    "useAuto": "Usar automático",
+    "useAutoOf": "Volver {name} a automático, según esta máquina",
+    "explicit": "Fijado por ti.",
+    "explicitZero": {
+      "off": "Fijado por ti: desactivado.",
+      "unlimited": "Fijado por ti: sin límite."
+    },
+    "machine": {
+      "full": "Esta máquina: {memory} de RAM, {cpus}",
+      "withCommit": "Esta máquina: {memory} de RAM, límite de commit de {commit}, {cpus}",
+      "cpusOnly": "Esta máquina: {cpus}",
+      "cpus": "{n} CPU | {n} CPU"
+    }
   },
   "units": {
     "min": "min",
@@ -92,7 +130,8 @@
     "days": "días",
     "bytes": "bytes",
     "times": "veces",
-    "pct": "%"
+    "pct": "%",
+    "mb": "MB"
   },
   "options": {
     "tier": {
@@ -110,6 +149,10 @@
       "readOnly": "Solo lectura",
       "workspaceWrite": "Escritura en el espacio de trabajo",
       "dangerFullAccess": "Acceso total (peligroso)"
+    },
+    "priority": {
+      "low": "Baja",
+      "normal": "Normal"
     }
   },
   "backends": {
@@ -430,6 +473,61 @@
       "label": "Funciones experimentales",
       "desc": "Activa funciones que todavía se están probando.",
       "keywords": "beta vista previa"
+    },
+    "workerPriority": {
+      "label": "Prioridad de los workers",
+      "desc": "Prioridad de proceso de cada worker y de todo lo que inicia. Baja mantiene la máquina ágil mientras los workers compilan y prueban. Se aplica desde el siguiente inicio.",
+      "keywords": "cpu prioridad nice baja lento"
+    },
+    "gatePriority": {
+      "label": "Prioridad de los gates",
+      "desc": "Prioridad de proceso de los comandos de gate, las ejecuciones de regresión, las comprobaciones de automatizaciones y los hooks. Con prioridad baja los gates pueden tardar más y necesitar un límite de tiempo mayor.",
+      "keywords": "cpu prioridad nice test build"
+    },
+    "maxWorkers": {
+      "label": "Workers a la vez",
+      "desc": "Cuántos turnos de worker corren al mismo tiempo entre todas las cuentas (cada cuenta mantiene también su propio límite). Bajarlo no detiene nada: solo retiene los nuevos inicios.",
+      "keywords": "concurrencia paralelo límite total"
+    },
+    "gateConcurrency": {
+      "label": "Gates a la vez",
+      "desc": "Cuántos comandos de gate y ejecuciones de regresión corren al mismo tiempo. Los demás esperan en fila y su límite de tiempo empieza solo cuando arrancan.",
+      "keywords": "concurrencia paralelo cola turno"
+    },
+    "minFreeMemory": {
+      "label": "Memoria libre para iniciar",
+      "desc": "Un nuevo turno de worker o comando de gate espera mientras la máquina tenga menos memoria libre (RAM) que esto. La tarea muestra «Esperando recursos».",
+      "keywords": "ram memoria libre umbral espera"
+    },
+    "minFreeCommit": {
+      "label": "Commit libre para iniciar",
+      "desc": "Lo mismo para el commit libre (RAM más archivo de paginación).",
+      "keywords": "commit archivo de paginación swap memoria virtual"
+    },
+    "criticalFreeMemory": {
+      "label": "Mínimo de memoria de emergencia",
+      "desc": "Por debajo de esta memoria o commit libres, el comando de gate más reciente se detiene y vuelve a la cola, y todo nuevo inicio espera hasta que la memoria vuelva a superar el umbral de inicio. Los workers nunca se detienen. Si fijas ambos, debe ser menor que Memoria libre para iniciar.",
+      "keywords": "crítico watchdog poca memoria bloqueo"
+    },
+    "workerMemoryLimit": {
+      "label": "Tope de memoria por worker",
+      "desc": "Memoria máxima que puede usar cada worker con todo lo que inicia. Un turno que lo alcanza falla con un mensaje que lo dice; los cambios ya escritos en disco se conservan.",
+      "keywords": "ram límite tope job object"
+    },
+    "workerCpuRate": {
+      "label": "Tope de CPU por worker",
+      "desc": "CPU máxima que puede usar cada worker con todo lo que inicia, como porcentaje de toda la máquina (todos los núcleos juntos).",
+      "keywords": "cpu procesador límite tasa"
+    },
+    "testParallelism": {
+      "label": "Paralelismo de pruebas",
+      "desc": "Cuántos paquetes o trabajos ejecutan a la vez las pruebas y compilaciones: los briefs piden a los workers respetarlo, y los entornos de workers y gates reciben GOFLAGS=-p y CARGO_BUILD_JOBS.",
+      "keywords": "paralelo trabajos go test cargo pytest maxworkers"
+    },
+    "daemonMemoryLimit": {
+      "label": "Límite de memoria del servicio",
+      "desc": "Límite blando de memoria del propio servicio de Seelegent: cerca de él libera memoria con más fuerza y nunca se detiene por ello. Un GOMEMLIMIT definido para el servicio tiene prioridad.",
+      "keywords": "daemon gomemlimit servicio ram"
     }
   },
   "appearance": {
@@ -461,5 +559,8 @@
       "builtin": "Integrado",
       "namesOnly": "Solo nombres"
     }
+  },
+  "os": {
+    "windows": "Windows"
   }
 }

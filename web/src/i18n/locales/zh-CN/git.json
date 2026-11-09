@@ -5,6 +5,7 @@
   "notRepoDesc": "{cwd} 不在任何 git 仓库中，没有可提交的内容。",
   "noBranch": "分离头指针",
   "uncommittedCount": "{n} 个未提交的文件",
+  "sumShown": "（仅已列出的文件）",
   "refresh": "重新读取",
   "empty": "此任务没有改动",
   "emptyDesc": "worker 修改的文件会显示在这里，可供审阅和提交。",
@@ -44,6 +45,7 @@
     "files": "文件",
     "all": "全部文件（{n}）",
     "renameNote": "重命名的文件会连同旧路径的删除一起提交。",
+    "hiddenNote": "未跟踪文件夹中的 {n} 个文件未在此列出。在文件列表中展开文件夹即可提交其中的文件。",
     "active": "worker 仍在运行。请在任务完成后提交。",
     "confirm": "提交 {n} 个文件",
     "done": "已提交 {sha}：{summary}",
@@ -119,5 +121,24 @@
     "synced": "与 {name} 保持同步",
     "gone": "{name} 已不存在",
     "goneShort": "（已删除）"
+  },
+  "dir": {
+    "label": "未跟踪的文件夹",
+    "files": "{n} 个文件",
+    "more": "还有 {n} 个",
+    "listLabel": "{path} 中的文件",
+    "others": "此处另有 {n} 个文件不属于此任务"
+  },
+  "image": {
+    "before": "修改前 (HEAD)",
+    "after": "修改后（工作区）",
+    "alt": "{path}，{side}",
+    "pixels": "{width} × {height} px",
+    "tooLarge": "文件太大，无法预览（{size}）。",
+    "lfs": "此文件由 Git LFS 存储：仓库中只有指针，而不是图片。",
+    "unsupported": "无法预览此文件。",
+    "missing": "此版本的文件不存在。",
+    "failed": "无法加载图片：{error}",
+    "broken": "无法显示图片。"
   }
 }

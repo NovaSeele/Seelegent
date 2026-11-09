@@ -9,7 +9,8 @@ import type { Tone } from './tone'
 
 /**
  * Quota use for one bucket. Neutral while there is room, attention from `warnAt` (default 80% used, the old
- * dashboard's warning threshold), danger when exhausted. Shows "used" or "left" per `mode`.
+ * dashboard's warning threshold), danger when exhausted. Shows "used" or "left" per `mode`. `muted` keeps it in a
+ * neutral grey whatever the value, for a window that may not be the one that matters (it never warns).
  */
 const props = withDefaults(
   defineProps<{
@@ -19,8 +20,9 @@ const props = withDefaults(
     mode?: 'used' | 'left'
     warnAt?: number
     showValue?: boolean
+    muted?: boolean
   }>(),
-  { mode: 'used', warnAt: 0.8, showValue: true },
+  { mode: 'used', warnAt: 0.8, showValue: true, muted: false },
 )
 
 const { t } = useI18n()
@@ -28,7 +30,13 @@ const format = useFormat()
 
 const usedClamped = computed(() => Math.min(1, Math.max(0, props.used)))
 const tone = computed<Tone>(() =>
-  usedClamped.value >= 1 ? 'danger' : usedClamped.value >= props.warnAt ? 'attention' : 'neutral',
+  props.muted
+    ? 'muted'
+    : usedClamped.value >= 1
+      ? 'danger'
+      : usedClamped.value >= props.warnAt
+        ? 'attention'
+        : 'neutral',
 )
 const shown = computed(() => (props.mode === 'used' ? usedClamped.value : 1 - usedClamped.value))
 const text = computed(() =>

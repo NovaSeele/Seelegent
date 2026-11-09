@@ -74,7 +74,8 @@ func (s *Service) Takeover(ctx context.Context, id string) (api.TaskSummary, err
 		}
 		t.Manual = true
 		t.Console = &Console{AccountID: owner, Since: s.now(), From: prev}
-		t.Waiting, t.WaitDetail, t.WaitingUntil = "", "", time.Time{}
+		t.Waiting, t.WaitDetail, t.WaitingUntil, t.MemoryWait = "", "", time.Time{}, nil
+		t.WaitBudget = nil
 		turn := 0
 		if tu := t.LastTurn(); tu != nil {
 			turn = tu.N
@@ -105,7 +106,7 @@ func (s *Service) Takeover(ctx context.Context, id string) (api.TaskSummary, err
 			t.Console.OpenedAt = s.now()
 			var evs []NewEvent
 			if tu := t.LastTurn(); tu != nil && tu.Status == TurnRunning {
-				evs = append(evs, s.endTurn(t, tu, TurnCancelled, backend.Outcome{}))
+				evs = append(evs, s.endTurn(t, tu, TurnCancelled))
 			}
 			return evs, nil
 		})
@@ -164,8 +165,10 @@ func (s *Service) consoleFor(ctx context.Context, t *Task, b backend.Backend, di
 	if b.Bin() == "" {
 		return ConsoleSpec{}, fmt.Errorf("%w: %s is not installed", ErrUnavailable, b.Name())
 	}
+	// The console continues the latest command: its allow_git applies.
+	allowGit := t.LastTurn() != nil && t.LastTurn().AllowGit
 	env, err := s.o.Accounts.Env(ctx, acc, b, account.EnvOptions{Base: s.o.BaseEnv(), Model: t.Model,
-		AllowGit: t.AllowGit, Extra: s.toolEnv(ctx, t.Cwd)})
+		AllowGit: allowGit, Extra: s.toolEnv(ctx, t.Cwd)})
 	if err != nil {
 		return ConsoleSpec{}, fmt.Errorf("%w: console environment: %w", ErrUnavailable, err)
 	}
@@ -206,7 +209,7 @@ func (s *Service) revertTakeover(id string, prev Status, since time.Time, why st
 		}
 		var evs []NewEvent
 		if tu := t.LastTurn(); tu != nil && tu.Status == TurnRunning {
-			evs = append(evs, s.endTurn(t, tu, TurnCancelled, backend.Outcome{}))
+			evs = append(evs, s.endTurn(t, tu, TurnCancelled))
 		}
 		t.Status = back
 		turn := 0

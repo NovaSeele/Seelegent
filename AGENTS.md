@@ -5,13 +5,16 @@ Seelegent is a Go daemon + CLI + MCP server in one binary, with a Vue 3 + TypeSc
 
 ## Layout
 
-- `cmd/seelegent/main.go` only calls `internal/cli.Execute()`.
+- `cmd/seelegent/main.go` only calls `internal/cli.Execute()`. `cmd/seelegent-launch/main.go` (the companion
+  launcher shipped next to it) only calls `internal/launch.Main` and must link no `crypto/` package (its test checks;
+  see [docs/development.md](docs/development.md#the-companion-launcher)).
 - `internal/<pkg>/` — one job per package: `buildinfo`, `cli` (thin cobra commands; see [docs/cli.md](docs/cli.md)),
-  `fsutil` (atomic writes, file locks, path keys), `envx` (variable lookup in env lists, PATH/PATHEXT command
+  `fsutil` (atomic writes, file locks, path keys; no crypto), `projectkey` (project keys and names), `envx` (variable lookup in env lists, PATH/PATHEXT command
   lookup; stdlib only), `config` (data paths, settings, config.json; see [docs/configuration.md](docs/configuration.md)),
   `store` (SQLite, migrations in `store/migrations/NNNN_name.sql`), `logx` (slog setup, log rotation, secret
   redaction), `platform` (hidden consoles, process trees, kill-tree, sign-in terminals; per-OS files), `launch`
-  (detached worker launcher behind the hidden `seelegent __launch`), `account` (accounts, providers, profiles, API
+  (detached worker launcher behind the hidden `seelegent __launch` and `seelegent-launch`), `launchbin` (whether the
+  daemon may start the companion launcher: next to it, same build), `account` (accounts, providers, profiles, API
   keys, run environment), `event` (normalized turn events), `backend` (agy/claude/codex commands, env rules and
   stream parsers), `clock` (injectable time with a fake for tests), `quota` (quota readers per backend, quota
   cache, background refresher), `pool` (account selection, leases, rest periods, waiting, handover), `usage`
@@ -63,7 +66,7 @@ Seelegent is a Go daemon + CLI + MCP server in one binary, with a Vue 3 + TypeSc
 ## Commands
 
 ```sh
-go build ./... && go vet ./... && go test ./...
+go build ./... && go vet ./... && go test -p 4 ./...      # light mode (docs/development.md)
 make lint                                   # golangci-lint v2 (pinned)
 cd web && pnpm install && pnpm lint && pnpm typecheck && pnpm test && pnpm build
 make build                                  # or: pwsh -File scripts/build.ps1 (Windows)

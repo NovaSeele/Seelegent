@@ -23,8 +23,15 @@
 //	#!hang               sleep for five minutes (until cancelled)
 //	#!wait-file <path>   wait (up to five minutes) until path exists
 //	#!touch <path>       create path (tells the test the script got here)
-//	#!write <path>\t<q> write the Go-quoted string q to path (a change no edit tool reports)
+//	#!write <path>\t<q> write the Go-quoted string q to path, making its folders (a change no edit tool reports)
 //	#!remove <path>      remove path
+//	#!mtime <path>\t<ns> set path's modification time to ns Unix nanoseconds (a write at a given time)
+//	#!pid <path>         write the fake CLI's process id to path (for checks from outside, such as its priority)
+//	#!alloc <mb>         allocate and touch mb MiB, kept until the CLI exits (a worker that needs that much memory;
+//	                     under a job memory cap the Go runtime fails with "out of memory", exit code 2)
+//
+// In a line written to standard output, NowToken is replaced by the time it is written, in nanoseconds since the
+// Unix epoch (the bench measures the delay from a line written to its event seen).
 //
 // An empty queue makes the fake CLI fail with exit code 97 and "fakecli: no script" on standard error.
 package fakecli
@@ -38,6 +45,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -51,6 +59,9 @@ import (
 
 // EnvQueue names the queue directory of the fake CLI.
 const EnvQueue = "FAKECLI_QUEUE"
+
+// NowToken in a script's output line is replaced by the time the line is written (Unix nanoseconds).
+const NowToken = "{{fakecli.now}}" //nolint:gosec // a placeholder in test scripts, not a credential
 
 // launchArg is the launcher's command name, as the daemon passes it.
 const launchArg = "__launch"
@@ -279,9 +290,13 @@ func runCLI(dir string) int {
 	defer func() { _ = out.Flush() }()
 	sc := bufio.NewScanner(strings.NewReader(string(script)))
 	sc.Buffer(make([]byte, 1<<20), 1<<20)
+	var held [][]byte // the memory of #!alloc
 	for sc.Scan() {
 		line := sc.Text()
 		if !strings.HasPrefix(line, "#!") {
+			if strings.Contains(line, NowToken) {
+				line = strings.ReplaceAll(line, NowToken, strconv.FormatInt(time.Now().UnixNano(), 10))
+			}
 			_, _ = out.WriteString(line + "\n")
 			_ = out.Flush()
 			continue
@@ -316,14 +331,39 @@ func runCLI(dir string) int {
 			_ = out.Flush()
 			p, q, _ := strings.Cut(arg, "\t")
 			if text, err := strconv.Unquote(q); err == nil {
+				_ = os.MkdirAll(filepath.Dir(p), 0o700)  //nolint:gosec // a path the test's own script names
 				_ = os.WriteFile(p, []byte(text), 0o600) //nolint:gosec // a path the test's own script names
 			}
 		case "remove":
 			_ = out.Flush()
 			_ = os.Remove(arg) //nolint:gosec // a path the test's own script names
+		case "mtime":
+			_ = out.Flush()
+			p, ns, _ := strings.Cut(arg, "\t")
+			if n, err := strconv.ParseInt(ns, 10, 64); err == nil {
+				at := time.Unix(0, n)
+				_ = os.Chtimes(p, at, at)
+			}
+		case "pid":
+			_ = out.Flush()
+			_ = os.WriteFile(arg, []byte(strconv.Itoa(os.Getpid())), 0o600) //nolint:gosec // a path the test's own script names
+		case "alloc":
+			_ = out.Flush()
+			mb, _ := strconv.Atoi(arg)
+			held = append(held, touched(mb))
 		}
 	}
+	runtime.KeepAlive(held)
 	return 0
+}
+
+// touched allocates mb MiB and writes to every page, so the memory is committed and resident.
+func touched(mb int) []byte {
+	b := make([]byte, max(mb, 0)<<20)
+	for i := 0; i < len(b); i += 4096 {
+		b[i] = 1
+	}
+	return b
 }
 
 // readStdin reads standard input; the launcher gives the CLI a file or the null device, so it never blocks.

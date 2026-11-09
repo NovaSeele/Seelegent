@@ -14,6 +14,7 @@ import (
 	"github.com/NovaSeele/Seelegent/internal/logx"
 	"github.com/NovaSeele/Seelegent/internal/meeting"
 	"github.com/NovaSeele/Seelegent/internal/notes"
+	"github.com/NovaSeele/Seelegent/internal/platform"
 	"github.com/NovaSeele/Seelegent/internal/pool"
 	"github.com/NovaSeele/Seelegent/internal/task"
 )
@@ -55,7 +56,7 @@ func (a *App) buildTeam(now func() time.Time) error {
 		port = a.Settings().Port
 	}
 	a.Hooks = hook.New(hook.Options{DB: a.DB, Tasks: a.Tasks, Port: port, Log: hookLog, Redact: a.redact,
-		Now: now, Logger: a.log,
+		Now: now, Logger: a.log, Tree: func() platform.TreeOptions { return task.GateTree(a.Settings()) },
 		Ran: func(r api.HookRun) { a.withAPI(func(s *httpapi.Server) { s.PublishHookRun(r) }) }})
 	return nil
 }

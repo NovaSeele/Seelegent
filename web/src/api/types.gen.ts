@@ -21,6 +21,69 @@ export interface Account {
   /** KeyHint shows the last four characters of an API key ("…abcd"); the key itself is never sent. */
   keyHint?: string
   status: AccountStatus
+  /**
+   * TestResult is the test state of an API-key account (absent for the others): not_tested until a key test or
+   * a turn on the current key and provider endpoint succeeds, then ok, or the reason of the last failed test.
+   * Storing a key or changing the provider's endpoint makes it not_tested again. It never changes Status or
+   * selection: a not_tested account is picked like any other. TestedAt is when it was set (absent while
+   * not_tested).
+   */
+  testResult?:
+    | 'not_tested'
+    | 'ok'
+    | 'refused'
+    | 'not_found'
+    | 'no_models_endpoint'
+    | 'unreachable'
+    | 'redirected'
+    | 'error'
+  testedAt?: string
+  /**
+   * ModelPerTask is true for an API-key account whose provider has no tier models: a delegate on it must name
+   * its model (shown as "Model: chosen per task").
+   */
+  modelPerTask?: boolean
+  /**
+   * Spend of an API-key account (absent for the others). SpendSource says where SpentUSD comes from: service
+   * (the service's own count for this key, OpenRouter: its usage.total, the key's whole life), cli (Claude Code's
+   * own estimate, official Anthropic only), prices (tokens × the provider's prices; models without a price fall
+   * back to the CLI estimate on official Anthropic and count nothing elsewhere), free (local: 0) or none (no
+   * cost, tokens only). Without service, SpentUSD is a running total of the attempts since SpentSince (when the
+   * key was set), counted whatever usageHistory says. SpentTokens is every token reported, SpentInputTokens and
+   * SpentOutputTokens its parts, SpentUnpricedTokens the part counted without a cost (no price for the model).
+   * BudgetUSD is the user's budget for the key; BudgetStop (default true) rests the account once it is reached.
+   * BudgetState is ok, warn (80% or more), reached, or unknown when the spend source gives no cost (none, free:
+   * the account then never rests on its budget).
+   */
+  spentUsd?: number
+  spentTokens?: number
+  spentInputTokens?: number
+  spentOutputTokens?: number
+  spentUnpricedTokens?: number
+  spentSince?: string
+  spendSource?: 'service' | 'cli' | 'prices' | 'free' | 'none'
+  budgetUsd?: number
+  budgetStop?: boolean
+  budgetState?: 'ok' | 'warn' | 'reached' | 'unknown'
+  previousKey?: PreviousKey
+  /**
+   * SuggestedBudgetUSD is the spending limit set on the key at the service (OpenRouter limit), offered as the
+   * budget while the account has none; it is never applied on its own.
+   */
+  suggestedBudgetUsd?: number
+  /**
+   * Balance is what the service says is left (absent when it has no spend service or was not read yet):
+   * DeepSeek and Moonshot account balance (accountWide: shared by every key of that service account), or what
+   * is left of an OpenRouter key's limit (accountWide false).
+   */
+  balance?: Balance
+  /** ServiceUsage is what the service counted for this key (OpenRouter), in US dollars. */
+  serviceUsage?: ServiceUsage
+  /**
+   * ServiceError is the last failed read of the spend service, when it came after the last good one: Balance
+   * and ServiceUsage are then stale.
+   */
+  serviceError?: ServiceError
   twinOf?: string
   /** Busy is the number of running turns; MaxConcurrent the cap per account. */
   busy: number
@@ -28,6 +91,13 @@ export interface Account {
   /** Resting is true during a cooldown or while a quota window is at or below minRemaining. */
   resting: boolean
   restingUntil?: string
+  /**
+   * RestReason says why the account is held until the user acts, never as a date (no restingUntil then):
+   * credits (a run reported that its credit or billing ran out; a new key, a passing key test or an edit such
+   * as switching it off and on lifts it) or budget_reached (an API-key account at its budget with budgetStop on;
+   * raising the budget, switching the stop off or a new key lifts it).
+   */
+  restReason?: 'credits' | 'budget_reached'
   signingIn: boolean
   /** Email is shown in the local UI only and never logged. */
   email?: string
@@ -35,6 +105,190 @@ export interface Account {
   models: string[]
   createdAt: string
   updatedAt: string
+  /**
+   * Notices are set only in the answers to POST /accounts and PUT /accounts/{id}/key: what the call changed on
+   * its own (key cleaned, base URL trimmed, preset switched, provider reused) and advice about the key.
+   */
+  notices?: Notice[]
+}
+
+/** PreviousKey is what the key before an account's current one spent (kept when the key was replaced or removed). */
+export interface PreviousKey {
+  keyHint?: string
+  since?: string
+  until: string
+  spentUsd: number
+  spentTokens: number
+  spentInputTokens: number
+  spentOutputTokens: number
+  /** SpentUnpricedTokens is the part of SpentTokens counted without a cost. */
+  spentUnpricedTokens?: number
+  budgetUsd?: number
+}
+
+/** Balance is what a spend service says is left, in the currency it named ("USD", "CNY"; never converted). */
+export interface Balance {
+  amount: number
+  currency: string
+  /**
+   * AccountWide: shared by every key of the service account (DeepSeek, Moonshot); it cannot tell what this key
+   * spent. False for an OpenRouter key's limit_remaining.
+   */
+  accountWide: boolean
+  /** Available is false when the service says the balance cannot pay for a request. */
+  available: boolean
+  /**
+   * Granted is the part the service gave (DeepSeek granted, Moonshot voucher); Paid the part paid for (DeepSeek
+   * topped up, Moonshot cash). Absent when not reported.
+   */
+  granted?: number
+  paid?: number
+  /** Other are the balances in other currencies (DeepSeek reports one per currency). */
+  other?: Money[]
+  /**
+   * ReadAt is when the service was read; Stale is true when a later read failed or the reading is over 2 hours
+   * old.
+   */
+  readAt: string
+  stale: boolean
+}
+
+/** Money is an amount in a currency. */
+export interface Money {
+  amount: number
+  currency: string
+}
+
+/**
+ * ServiceUsage is what a service counted for one key (OpenRouter), in US dollars, over the key's whole life
+ * (totalUsd) and the current day, week and month. LimitUSD is the key's limit at the service (absent: none),
+ * LimitRemainingUSD what is left of it, LimitReset the period it starts over ("daily", "weekly", "monthly"; absent:
+ * never).
+ */
+export interface ServiceUsage {
+  totalUsd: number
+  dailyUsd: number
+  weeklyUsd: number
+  monthlyUsd: number
+  limitUsd?: number
+  limitRemainingUsd?: number
+  limitReset?: string
+  readAt: string
+  stale: boolean
+}
+
+/**
+ * ServiceError is a failed read of a spend service. Message names the host and the failure (English), never the
+ * key or the answer's body.
+ */
+export interface ServiceError {
+  reason: 'refused' | 'no_credit' | 'unreachable' | 'redirected' | 'error'
+  message: string
+  at: string
+}
+
+/**
+ * Price is one row of a provider's price table: US dollars per million tokens for a model ("*": every model
+ * without its own row). CachedInputUSD is the price of input served from a prompt cache; absent means the input
+ * price. CacheWriteUSD is the price of input written to the prompt cache for five minutes (one-hour writes cost
+ * 1.6 × it); absent means 1.25 × the input price (one-hour writes: 2 ×). Seelegent ships no prices.
+ */
+export interface Price {
+  model: string
+  inputUsd: number
+  cachedInputUsd?: number
+  cacheWriteUsd?: number
+  outputUsd: number
+  updatedAt?: string
+}
+
+/**
+ * PriceInput is one row of PUT /providers/{id}/prices (cachedInputUsd null or absent: the input price;
+ * cacheWriteUsd null or absent: 1.25 × the input price).
+ */
+export interface PriceInput {
+  model: string
+  inputUsd: number
+  cachedInputUsd?: number
+  cacheWriteUsd?: number
+  outputUsd: number
+}
+
+/** PricesRequest is PUT /providers/{id}/prices: the whole new table (an empty list removes every price). */
+export interface PricesRequest {
+  prices: PriceInput[]
+}
+
+/**
+ * PriceTable is GET and PUT /providers/{id}/prices: the provider's prices, sorted by model, the page where its
+ * service publishes them (absent when unknown) and its spend source with them.
+ */
+export interface PriceTable {
+  provider: string
+  prices: Price[]
+  pricingUrl?: string
+  spendSource: 'service' | 'cli' | 'prices' | 'free' | 'none'
+}
+
+/** AccountCreated is the answer to POST /accounts: the account, and the provider when the body had newProvider. */
+export interface AccountCreated extends Account {
+  /**
+   * NewProvider is the provider the call created or reused for newProvider (absent otherwise);
+   * ProviderCreated is true when it was created.
+   */
+  newProvider?: Provider
+  providerCreated?: boolean
+}
+
+/**
+ * Notice is something a save changed on its own, or advice that did not block it. Code names it for translation,
+ * Field the request field it is about (when any), Message is the English text.
+ */
+export interface Notice {
+  code:
+    | 'base_url_trimmed'
+    | 'official_preset'
+    | 'key_name_removed'
+    | 'key_quotes_removed'
+    | 'key_assignment'
+    | 'key_prefix'
+    | 'provider_reused'
+  field?: string
+  message: string
+}
+
+/**
+ * KeyTestRequest is POST /providers/test: the provider (an existing id, or newProvider as in POST /providers,
+ * id optional) and the key (apiKey, or accountId to use that account's stored key; then provider may be left out
+ * and the result is saved on the account).
+ */
+export interface KeyTestRequest {
+  provider?: string
+  newProvider?: ProviderInput
+  apiKey?: string
+  accountId?: string
+}
+
+/** KeyTestResult is the answer to POST /providers/test (status 200 also when the key is refused: the call worked). */
+export interface KeyTestResult {
+  ok: boolean
+  /** Status is the HTTP status the service answered (0 when it could not be reached). */
+  status: number
+  reason:
+    'ok' | 'refused' | 'not_found' | 'no_models_endpoint' | 'unreachable' | 'redirected' | 'error'
+  message: string
+  models: string[]
+  latencyMs: number
+  /** Notices are what the request's key or provider needed cleaning, and advice about the key. */
+  notices?: Notice[]
+  /** Saved is true when the result was stored on the account (accountId). */
+  saved?: boolean
+  /**
+   * CreditUnseen is true when the key passed while its account rested for lack of credit (restReason credits):
+   * the test lists models, which works at zero credit too, so it cannot see the balance. The pass still lifts
+   * the rest; Message then ends with "; this test cannot see the credit balance".
+   */
+  creditUnseen?: boolean
 }
 
 /**
@@ -91,15 +345,27 @@ export interface LoginSession {
   message?: string
 }
 
-/** NewAccount is POST /accounts. */
+/**
+ * NewAccount is POST /accounts. A sign-in account needs backend and kind. An API-key account names an existing
+ * provider, or gives newProvider (a provider to create, or to reuse unchanged when an enabled one has the same
+ * preset, backend, base URL, wire API, models, allow-list and tiers; its id is optional), and may give apiKey and a
+ * budget; it is all done in one transaction, so a failure leaves nothing behind. backend may then be left out (the
+ * provider's), kind too (api-key), and label ("<provider name> <n>").
+ */
 export interface NewAccount {
-  backend: 'agy' | 'claude' | 'codex'
-  kind: 'isolated' | 'system' | 'api-key'
-  label: string
+  backend?: 'agy' | 'claude' | 'codex'
+  kind?: 'isolated' | 'system' | 'api-key'
+  label?: string
   provider?: string
+  newProvider?: ProviderInput
+  /** APIKey is cleaned and checked like PUT /accounts/{id}/key. */
+  apiKey?: string
   /** Enabled defaults to true. */
   enabled?: boolean
   priority?: number
+  /** BudgetUSD is the key's budget in US dollars (API-key accounts; absent: none); BudgetStop defaults to true. */
+  budgetUsd?: number
+  budgetStop?: boolean
 }
 
 /** AccountPatch is PATCH /accounts/{id}; absent fields stay as they are. */
@@ -107,6 +373,12 @@ export interface AccountPatch {
   label?: string
   enabled?: boolean
   priority?: number
+  /**
+   * BudgetUSD sets an API-key account's budget in US dollars; 0 removes it. BudgetStop: rest the account once
+   * the budget is reached.
+   */
+  budgetUsd?: number
+  budgetStop?: boolean
 }
 
 /** KeyRequest is PUT /accounts/{id}/key. The key never appears in a response, an error or a log. */
@@ -148,8 +420,34 @@ export interface Provider {
    */
   allowedModels: string
   tiers: TierModels
+  /**
+   * ModelPerTask is true when no tier has a model: every delegate on the provider must name its model ("Model:
+   * chosen per task"). A valid set-up, not an error. Absent when false.
+   */
+  modelPerTask?: boolean
+  /**
+   * SpendSource says where its accounts' spend comes from, best first: "service" (the service counts each key's
+   * spend: OpenRouter), "free" (local: Ollama or a localhost base URL), "prices" (the user set prices),
+   * "cli" (the CLI's own cost estimate, official Anthropic only) or "none" (tokens only).
+   */
+  spendSource?: 'service' | 'cli' | 'prices' | 'free' | 'none'
+  /**
+   * ServiceReading says what its spend service reads with each key: key_usage (OpenRouter: the key's spend, which
+   * is the accounts' spend) or account_balance (DeepSeek, Moonshot: the balance shared by the service account,
+   * shown beside the spend). Absent when it has none.
+   */
+  serviceReading?: 'key_usage' | 'account_balance'
+  /** PricingURL is the page where the service publishes its prices (absent when unknown: custom or local). */
+  pricingUrl?: string
+  /** Prices is the user's price table, sorted by model ([] when none). */
+  prices: Price[]
   createdAt?: string
   updatedAt?: string
+  /**
+   * Notices are set only in the answers to POST and PATCH /providers: what the save changed on its own
+   * (base_url_trimmed, official_preset).
+   */
+  notices?: Notice[]
 }
 
 /** ProviderPreset is a provider template (Provider without accounts and times). */
@@ -162,6 +460,15 @@ export interface ProviderPreset {
   models: string[]
   wireApi?: string
   official: boolean
+  /**
+   * Tiers are suggested tier models: for "anthropic" the claude backend's tiers from the settings, when set;
+   * absent for the others (their models come from a key test).
+   */
+  tiers?: TierModels
+  /** PricingURL is the page where the preset's service publishes its prices (absent when it has none). */
+  pricingUrl?: string
+  /** ServiceReading is what the preset's spend service reads (see Provider.serviceReading). */
+  serviceReading?: 'key_usage' | 'account_balance'
 }
 
 /** ProviderList is GET /providers. */
@@ -492,6 +799,11 @@ export interface WorkerPromptData {
 export interface AttemptEndData {
   status: Attempt['status']
   error?: string
+  /**
+   * Warning is an error that did not fail an ok attempt (a network error the worker CLI reported after its
+   * complete report, an error its conversation replayed): the work counts, but the lead should know.
+   */
+  warning?: string
 }
 
 /** TurnEndData is the data of a turn_end event. */
@@ -510,9 +822,19 @@ export interface AccountFailureData {
   error: string
 }
 
-/** WaitingQuotaData is the data of a waiting_quota event. */
+/**
+ * WaitingQuotaData is the data of a waiting_quota event. Reason says what the task waits for; events written
+ * before it was set for account waits have none, which reads as an account wait (Until is when one is expected
+ * back). Detail is the daemon's English explanation (for busy: which accounts are full, "acc6: 2 of 2 running").
+ * With Reason WaitingMemory, AvailableMB is what the last reading found and NeedMB the threshold it is below (of
+ * physical memory or of commit, whichever holds the task).
+ */
 export interface WaitingQuotaData {
   until?: string
+  reason?: 'memory' | 'no_account' | 'resting' | 'busy' | 'budget_reached'
+  detail?: string
+  availableMB?: number
+  needMB?: number
 }
 
 /** RetryData is the data of a retry event. */
@@ -640,8 +962,23 @@ export interface GateStep {
   timedOut?: boolean
   /** Tail is the end of the command's output (gateOutputTailBytes), or the error. */
   tail?: string
-  /** Files are the files out of lane (lane) or checked (auto). */
+  /**
+   * Stopped says why the command was stopped before it ended (StepStoppedLowMemory); Stops counts such stops of
+   * this step in the current gate phase.
+   */
+  stopped?: 'low_memory'
+  stops?: number
+  /**
+   * Files are the files out of lane (lane) or checked (auto). For the lane they are the files a worker touched:
+   * with its edit tools or through a command Seelegent saw write them.
+   */
   files?: string[]
+  /**
+   * Unseen are the files out of lane that changed during the turns although no worker edit or command Seelegent
+   * saw touched them (the lead or the user editing the same tree, or a command's side effects): lane only, a
+   * warning, never red.
+   */
+  unseen?: string[]
   /** Failures are the files an auto check refused, with why. */
   failures?: GateFailure[]
   /** Findings are the red hygiene findings. */
@@ -683,6 +1020,8 @@ export interface GateResult {
    * finished (or after gateSettleMinutes).
    */
   settled?: boolean
+  /** Reason says why a run ended in error without a failing command (GateReasonLowMemory). */
+  reason?: 'low_memory'
 }
 
 /** VerifierResult is the optional LLM review of a green gate. */
@@ -708,7 +1047,7 @@ export interface CiteCheck {
 
 /** GateEventData is the data of a gate event; the event's turn is the turn the gate is about. */
 export interface GateEventData {
-  phase: 'start' | 'step' | 'result' | 'settling'
+  phase: 'start' | 'step' | 'result' | 'settling' | 'queued'
   /** Steps are the step labels (start). */
   steps?: string[]
   /** Plan are the planned steps with their kind and command (start), so a view can name them in its language. */
@@ -720,6 +1059,11 @@ export interface GateEventData {
   result?: GateResult
   /** BarChanged lists what defines "done" that changed since the task started (result). */
   barChanged?: string[]
+  /** Wait is what the gate waits for (queued): GateWaitSlot or GateWaitMemory. */
+  wait?: 'slot' | 'memory'
+  /** Position is the gate's place in the slot queue, from 1 (queued, wait slot); Limit is gateConcurrency then. */
+  position?: number
+  limit?: number
 }
 
 /** GatePlanStep is a step of a gate as planned: what it checks, without its result. */
@@ -909,8 +1253,17 @@ export interface TaskGit {
   root?: string
   branch?: string
   dirty: boolean
-  /** Files are the task's uncommitted changes, counted against HEAD; a commit may only name these. */
+  /**
+   * Files are the task's uncommitted changes, counted against HEAD; a commit may only name these. The files of
+   * UntrackedDirs are not among them.
+   */
   files: GitFile[]
+  /**
+   * UntrackedDirs are the untracked folders (no tracked file inside) holding more than GitCollapseOver of the
+   * task's untracked files, each shown as one row; their files are left out of Files. A commit may still name
+   * them, one by one.
+   */
+  untrackedDirs: GitDir[]
   /** Preexisting lists files that were already dirty when the task started. */
   preexisting: string[]
   suggestion: Suggestion | null
@@ -991,6 +1344,23 @@ export interface Suggestion {
   message?: string
 }
 
+/** GitDir is an untracked folder of TaskGit.UntrackedDirs. */
+export interface GitDir {
+  /** Path is relative to the repository root and ends with '/'. */
+  path: string
+  /** Count counts its untracked files; Bytes is their total size. */
+  count: number
+  bytes: number
+  /** Files are its first GitDirFiles files by path; Count minus their number are left out. */
+  files: GitFile[]
+  /**
+   * Others counts the folder's untracked files that are not the task's (already there when it started, or
+   * outside its folder and never touched by it). The row stands for the whole folder, so the repository view
+   * does not list them either.
+   */
+  others?: number
+}
+
 /** GitFile is one changed file. */
 export interface GitFile {
   path: string
@@ -1001,6 +1371,12 @@ export interface GitFile {
   /** Turn is the turn that last changed the file, when known. */
   turn?: number
   binary: boolean
+  /**
+   * Stamp changes whenever an image's preview would (TaskGit.Files and UntrackedDirs of the Git tab view only,
+   * images only): the working tree file's size and modification time, and its blob id at HEAD. The view adds it
+   * to the image URLs, so a rewritten image is read again although its status and line counts stay the same.
+   */
+  stamp?: string
 }
 
 /**
@@ -1716,6 +2092,12 @@ export interface ProofRunRequest {
   feature?: string
   /** Force runs even while other tasks of the repository are active. */
   force?: boolean
+  /**
+   * GateTask is the task whose gate command asks for the run (SEELEGENT_TASK in a gate command's environment;
+   * `seelegent proof run` sends it). While that gate holds a gate slot, the run's commands share it instead of
+   * waiting for another one. An id the daemon does not know changes nothing.
+   */
+  gateTask?: string
 }
 
 /** ProofStats are the gate statistics of a project. */
@@ -1768,6 +2150,12 @@ export interface TaskReport {
   effort?: string
   profile?: string
   tokens_used: number
+  /**
+   * TurnCostUSD is what the latest turn cost as the account spend counts it: tokens times the user's prices for
+   * the model (Provider.prices), else the CLI's own estimate (Claude Code total_cost_usd) on the official Anthropic
+   * API. Absent when neither gives a cost.
+   */
+  turn_cost_usd?: number
   spec?: ReportSpec
   /** Response is the worker's last report, with markdown links to file:// targets reduced to their text. */
   response?: string
@@ -1793,6 +2181,11 @@ export interface TaskReport {
   scope_warnings?: ReportFinding[]
   denied_actions?: string[]
   /**
+   * Warnings are errors of the latest turn's attempts that did not fail them (a network error the worker CLI had
+   * recovered from, an error its conversation replayed): the work counts, but check it.
+   */
+  warnings?: string[]
+  /**
    * Gate is the gate of the latest instruction once it ended; LastGate shows a gate still running or an
    * automatic fix turn at work. Lane, Bar and Verifier come with it (docs/gates.md).
    */
@@ -1807,6 +2200,13 @@ export interface TaskReport {
   cancelling?: boolean
   error?: string
   waiting_until?: string
+  /**
+   * WaitDetail is TaskSummary.WaitDetail while the task waits for an account: why, and the free API-key
+   * accounts a provider would reach.
+   */
+  wait_detail?: string
+  /** Waiting is TaskSummary.Waiting: "memory" while a waiting_quota task waits for free memory. */
+  waiting?: 'memory'
   answered_by?: string
   /** Handback is true when the last turn summarized a takeover. */
   handback?: boolean
@@ -1945,9 +2345,13 @@ export interface Finding {
     | 'unreported_file'
     | 'outside_repo_write'
     | 'unfetched_url'
+    | 'outside_lane'
     | 'skipped'
   severity: 'red' | 'warn'
-  /** Path is relative to the repository root (hygiene) or absolute (outside_repo_write); empty for URLs. */
+  /**
+   * Path is relative to the repository root (hygiene, outside_lane) or absolute (outside_repo_write); empty for
+   * URLs.
+   */
   path?: string
   /** Detail is a short explanation (the command, the URLs). */
   detail?: string
@@ -2122,6 +2526,58 @@ export interface Settings {
   githubEnterpriseHosts: string[]
   /** AutomationsEnabled is the master switch of scheduled automations (each one is still created disabled). */
   automationsEnabled: boolean
+  /** WorkerPriority is the process priority of worker trees (PriorityLow or PriorityNormal); next launch. */
+  workerPriority: 'low' | 'normal'
+  /**
+   * GatePriority is the process priority of gate commands, regression runs, automation prechecks and hooks;
+   * next command.
+   */
+  gatePriority: 'low' | 'normal'
+  /** MaxConcurrentWorkers caps the worker turns that run at the same time over all accounts; 0 = no cap. */
+  maxConcurrentWorkers: number
+  /**
+   * GateConcurrency caps the gate commands (and regression runs) that run at the same time; 0 = unlimited;
+   * absent = auto (Health.resources has the value in use).
+   */
+  gateConcurrency?: number | null
+  /**
+   * MinFreeMemoryMB holds new worker turns and gate commands while the available physical memory is below it;
+   * 0 = off; absent = auto. An unknown reading never holds anything.
+   */
+  minFreeMemoryMB?: number | null
+  /**
+   * MinFreeCommitMB is the same for the available commit (Windows only; elsewhere commit is unknown); 0 = off;
+   * absent = auto.
+   */
+  minFreeCommitMB?: number | null
+  /**
+   * CriticalFreeMemoryMB is the emergency floor: while free physical memory or free commit is below it, the
+   * watchdog stops the newest running gate command (its gate is queued again; the turn does not fail) and every
+   * new start waits. Workers are never stopped for it. 0 = off; absent = auto; when both are set and on it must be
+   * below MinFreeMemoryMB.
+   */
+  criticalFreeMemoryMB?: number | null
+  /**
+   * WorkerMemoryLimitMB caps the memory of each worker tree (Windows Job Object; a turn over it fails);
+   * 0 = off.
+   */
+  workerMemoryLimitMB: number
+  /**
+   * WorkerCPURatePercent hard-caps the CPU of each worker tree to this share of the whole machine (Windows Job
+   * Object); 0 = off.
+   */
+  workerCPURatePercent: number
+  /**
+   * TestParallelism is the parallelism hint for tests and builds: the "Shared machine" section of full briefs
+   * and GOFLAGS=-p=N / CARGO_BUILD_JOBS=N in worker and gate environments; 0 = no hint and no variables;
+   * absent = auto.
+   */
+  testParallelism?: number | null
+  /**
+   * DaemonMemoryLimitMB is the daemon's soft memory limit (debug.SetMemoryLimit); 0 = off. A GOMEMLIMIT in the
+   * daemon's environment wins.
+   */
+  daemonMemoryLimitMB: number
 }
 
 /** TierModels maps each tier to a model id (internal/config.TierModels). */
@@ -2150,6 +2606,7 @@ export type ErrorCode =
   | 'conflict'
   | 'bad_state'
   | 'too_large'
+  | 'unsupported_media_type'
   | 'misdirected_request'
   | 'upstream'
   | 'unavailable'
@@ -2194,6 +2651,7 @@ export type StreamEvent =
   | 'issues.changed'
   | 'automation.updated'
   | 'automation.deleted'
+  | 'resources.changed'
 
 /** Hello is the data of the hello frame. */
 export interface Hello {
@@ -2220,6 +2678,12 @@ export interface Changed {
   changedAt: string
 }
 
+/** ResourcesChanged is the data of resources.changed: Health.LowMemory flipped. Memory is the reading that flipped it. */
+export interface ResourcesChanged {
+  lowMemory: boolean
+  memory: MemoryStatus
+}
+
 /** MemoryChanged is the data of memory.changed. */
 export interface MemoryChanged {
   cwd: string
@@ -2244,6 +2708,62 @@ export interface Health {
    * another data directory refuses this daemon instead of using or stopping it.
    */
   homeId: string
+  /**
+   * OS is the daemon's operating system (Go's runtime.GOOS: windows, linux, darwin, ...), so the Settings page
+   * can mark the settings that only work on Windows.
+   */
+  os: string
+  /** Memory is the machine's free memory, read when the answer was made. */
+  memory: MemoryStatus
+  /**
+   * LowMemory is true while the memory watchdog holds every new start because free memory or free commit is
+   * below criticalFreeMemoryMB. resources.changed tells when it flips.
+   */
+  lowMemory: boolean
+  /**
+   * Resources are the values the daemon uses for the machine-sized settings, each with where it comes from
+   * (the setting is auto, or the user set it), so a view can show "Auto (2 GB on this machine)".
+   */
+  resources: EffectiveResources
+  /** Machine is what the auto values are computed from, read when the daemon started or the settings changed. */
+  machine: Machine
+}
+
+/** EffectiveValue is the value the daemon uses for one machine-sized setting and where it comes from. */
+export interface EffectiveValue {
+  value: number
+  source: 'auto' | 'explicit' | 'derived'
+}
+
+/** EffectiveResources are the effective values of the machine-sized settings (config.EffectiveResources). */
+export interface EffectiveResources {
+  minFreeMemoryMB: EffectiveValue
+  criticalFreeMemoryMB: EffectiveValue
+  minFreeCommitMB: EffectiveValue
+  testParallelism: EffectiveValue
+  gateConcurrency: EffectiveValue
+}
+
+/** Machine is what the auto resource values are computed from (config.Machine). */
+export interface Machine {
+  /** TotalPhysMB is the physical memory in MiB (the cgroup memory limit when lower); 0 = unknown. */
+  totalPhysMB: number
+  /** TotalCommitMB is the commit limit in MiB, rounded down to a whole GiB: Windows only, 0 = unknown. */
+  totalCommitMB: number
+  /** CPUs are the logical CPUs the daemon may use. */
+  cpus: number
+}
+
+/**
+ * MemoryStatus is the free memory of the machine (platform.MemoryStatus). Known is false when the system gave no
+ * reading (the numbers are 0 then); AvailCommitMB is 0 where commit is unknown (everywhere but Windows).
+ */
+export interface MemoryStatus {
+  availPhysMB: number
+  availCommitMB: number
+  known: boolean
+  /** CgroupV1 is true when a cgroup v1 memory limit (Linux) lowered the reading. */
+  cgroupV1?: boolean
 }
 
 /**
@@ -2398,6 +2918,17 @@ export interface TaskSummary {
   lastEventAt?: string
   /** WaitingUntil is when an account is expected back (waiting_quota). */
   waitingUntil?: string
+  /**
+   * Waiting says why a waiting_quota task waits: WaitingBusy (every account that could run it has no free
+   * slot), WaitingResting (they rest; WaitingUntil is when one is back), WaitingNoAccount (none can run it), or
+   * WaitingMemory while free memory or free commit is below minFreeMemoryMB / minFreeCommitMB (that wait never
+   * raises an attention flag: the lead cannot act on it), or WaitingBudget (every account rests on its budget;
+   * raises a budget_reached flag for the user). Absent for other statuses, and from older daemons, which reported
+   * only the memory wait.
+   */
+  waiting?: 'memory' | 'no_account' | 'resting' | 'busy' | 'budget_reached'
+  /** WaitDetail is the daemon's English explanation of Waiting, for example "acc6: 2 of 2 running" for busy. */
+  waitDetail?: string
   /** NeedsSince is since when the task waits for the lead or the user. */
   needsSince?: string
   attention: Attention | null
@@ -2474,7 +3005,8 @@ export interface Attention {
 /**
  * AttentionParams are the values an attention flag's text is made of. Only the fields of the reason are set:
  * stalled (Kind, Minutes, Tool, Command), looping (Kind, Count, Tool, Steps), no_accounts and auth (Backend),
- * deps_blocked (Kind, Task, Title), no_response (Denied), hygiene and work_at_risk (Count), question (Options).
+ * deps_blocked (Kind, Task, Title), no_response (Denied), hygiene and work_at_risk (Count), question (Options),
+ * resources_wait (Minutes, AvailableMB, NeedMB), budget_reached (Account, BudgetUSD, Count: how many accounts).
  */
 export interface AttentionParams {
   kind?:
@@ -2512,6 +3044,15 @@ export interface AttentionParams {
    * the question itself is the flag's detail.
    */
   options?: string[]
+  /**
+   * AvailableMB and NeedMB are the free memory found and the threshold it is below (resources_wait, with
+   * Minutes: how long the task has waited).
+   */
+  availableMB?: number
+  needMB?: number
+  /** Account and BudgetUSD name the first account at its budget and that budget (budget_reached). */
+  account?: string
+  budgetUsd?: number
 }
 
 /** Review is the lead's verdict on a task. */
@@ -2527,7 +3068,12 @@ export interface Review {
  */
 export interface Gate {
   state: 'running' | 'green' | 'red' | 'error' | 'skipped'
-  phase?: 'running' | 'settling' | 'verifying'
+  phase?: 'queued' | 'running' | 'settling' | 'verifying'
+  /**
+   * Wait says what a queued gate waits for: GateWaitSlot (gateConcurrency) or GateWaitMemory (minFreeMemoryMB,
+   * minFreeCommitMB). Absent in every other phase.
+   */
+  wait?: 'slot' | 'memory'
   autoFixes: number
   /** Turn is the turn the gate is about. */
   turn?: number
@@ -2613,9 +3159,17 @@ export interface Attempt {
   model?: string
   startedAt: string
   endedAt?: string
-  /** Status is running, ok, quota, auth, transient, background_wait, error or cancelled. */
+  /** Status is running, ok, quota, auth, credits, transient, background_wait, error or cancelled. */
   status:
-    'running' | 'ok' | 'quota' | 'auth' | 'transient' | 'background_wait' | 'error' | 'cancelled'
+    | 'running'
+    | 'ok'
+    | 'quota'
+    | 'auth'
+    | 'credits'
+    | 'transient'
+    | 'background_wait'
+    | 'error'
+    | 'cancelled'
   /** Kind is "console" for a takeover. */
   kind?: 'console'
   error?: string
@@ -2656,8 +3210,8 @@ export interface DelegateRequest {
   afterMode?: 'accepted' | 'done'
   allowGit?: boolean
   /**
-   * Gate: true adds the test, lint and build commands found in the repository; false turns the gate's commands
-   * off (lane and hygiene still run). GateCommands are the lead's own gate commands; with spec task ids they
+   * Gate: true adds the test, lint and build commands found in the repository; false turns the gate phase off
+   * (no commands, no fix turns; the lane is still checked after each turn, as information). GateCommands are the lead's own gate commands; with spec task ids they
    * replace the tasks' Gate: lines and the feature gate, and prove those tasks.
    */
   gate?: boolean
@@ -3753,8 +4307,20 @@ export interface WorkerReport {
 
 /** Error is a classified failure. */
 export interface WorkerError {
-  class: 'quota_exhausted' | 'auth_required' | 'transient' | 'fatal'
+  class: 'quota_exhausted' | 'auth_required' | 'credits' | 'transient' | 'fatal'
   message: string
+  /**
+   * Answer is set on a transient failure the CLI reported after the agent's final answer (no tool step after it),
+   * when the process ended by itself: the answer (the report's response, else the final text). The CLIs retry
+   * network errors themselves and some still end a finished run with one; the task engine counts the attempt as
+   * done, with a warning, when the final text (Final) is the complete report the turn asked for.
+   */
+  answer?: string
+  /**
+   * Final is the agent's final answer alone (its last text with no tool step after it), set with Answer: the report
+   * the task engine checks. Answer may hold the whole run's text, an earlier report included.
+   */
+  final?: string
 }
 
 /** The data of an attention event: a raised flag, or {state: 'cleared'}. */

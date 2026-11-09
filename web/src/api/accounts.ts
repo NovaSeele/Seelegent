@@ -1,6 +1,6 @@
 /** Typed endpoints of accounts, sign-in and quota (contract §4). Emails never go into a URL or a log. */
 import type { ApiClient } from './client'
-import type { Account, AccountPatch, LoginSession, NewAccount } from './types'
+import type { Account, AccountCreated, AccountPatch, LoginSession, NewAccount } from './types'
 
 export type { NewAccount }
 
@@ -14,7 +14,11 @@ export function createAccountsApi(client: ApiClient) {
   return {
     /** Priority descending, then label. */
     list: (signal?: AbortSignal) => client.get<Account[]>('/accounts', { signal }),
-    create: (body: NewAccount) => client.post<Account>('/accounts', { body }),
+    /**
+     * One atomic call: with newProvider the provider is created or reused, and with apiKey the key is stored, or
+     * nothing is left behind. The answer carries the notices and the provider it created or reused.
+     */
+    create: (body: NewAccount) => client.post<AccountCreated>('/accounts', { body }),
     update: (id: string, body: AccountChanges) => client.patch<Account>(path(id), { body }),
     /** 409 bad_state while the account runs a task. */
     remove: (id: string) => client.delete<void>(path(id)),

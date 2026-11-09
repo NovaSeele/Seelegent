@@ -185,7 +185,7 @@ function Install-Seelegent {
         } catch {
             [System.IO.File]::Move($previous, $Exe)
             if ($trashedPrevious) { [System.IO.File]::Move($trashedPrevious, $previous) }
-            throw "Could not put the new seelegent.exe in place: $($_.Exception.Message). The old one is back."
+            throw "Could not put the new $(Split-Path -Leaf $Exe) in place: $($_.Exception.Message). The old one is back."
         }
         if ($trashedPrevious) { Remove-Item -LiteralPath $trashedPrevious -Force -ErrorAction SilentlyContinue }
         return $previous
@@ -256,21 +256,47 @@ function Install-Seelegent {
         throw "checksums.txt does not list $Name; refusing to install a file that cannot be verified."
     }
 
-    function Expand-Executable([string] $Zip, [string] $Destination) {
+    # Extracts $Name (at the top of the archive or one folder down) to $Destination; $false when $Zip holds none.
+    function Expand-Executable([string] $Zip, [string] $Destination, [string] $Name = 'seelegent.exe') {
         Add-Type -AssemblyName System.IO.Compression.FileSystem
         $archive = [System.IO.Compression.ZipFile]::OpenRead($Zip)
         try {
             foreach ($entry in $archive.Entries) {
                 $parts = $entry.FullName.Replace('\', '/').TrimStart('.', '/').Split('/')
-                if ($entry.FullName -notmatch '\.\.' -and $parts.Count -le 2 -and $parts[-1] -eq 'seelegent.exe') {
+                if ($entry.FullName -notmatch '\.\.' -and $parts.Count -le 2 -and $parts[-1] -eq $Name) {
                     [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $Destination, $true)
-                    return
+                    return $true
                 }
             }
         } finally {
             $archive.Dispose()
         }
-        throw "$Zip holds no seelegent.exe."
+        return $false
+    }
+
+    # Installs the companion launcher seelegent-launch.exe next to seelegent.exe the way the executable is
+    # installed (the replaced one kept as .previous, for `seelegent update --rollback`), or, for a release without
+    # one ($New empty), moves the installed one to .previous, so no launcher of another build stays next to the
+    # executable. The daemon uses the companion only when it is of its own build and runs launches as
+    # `seelegent __launch` otherwise, so a failure here is a note, never a failed install.
+    function Install-Companion([string] $New, [string] $Companion) {
+        $previous = "$Companion.previous"
+        try {
+            Remove-Leftovers $Companion
+            if ($New) {
+                # A kept companion with no installed one belongs to an older install, not to the previous executable.
+                if (-not (Test-Path -LiteralPath $Companion) -and (Test-Path -LiteralPath $previous)) {
+                    [System.IO.File]::Move($previous, (Get-FreeName $Companion))
+                }
+                $null = Install-Executable $New $Companion
+            } elseif (Test-Path -LiteralPath $Companion) {
+                if (Test-Path -LiteralPath $previous) { [System.IO.File]::Move($previous, (Get-FreeName $Companion)) }
+                [System.IO.File]::Move($Companion, $previous)
+            }
+            Remove-Leftovers $Companion
+        } catch {
+            Write-Note "the companion launcher $Companion could not be installed: $($_.Exception.Message). Launches run as ``seelegent __launch`` (the same, with about 40 MB more memory per running task)."
+        }
     }
 
     # --- release information -------------------------------------------------------------------------------------
@@ -340,7 +366,9 @@ function Install-Seelegent {
         }
         Write-Step 'Checksum verified (SHA-256).'
         $newExe = Join-Path $temp 'seelegent.exe'
-        Expand-Executable $zip $newExe
+        if (-not (Expand-Executable $zip $newExe)) { throw "$zip holds no seelegent.exe." }
+        $newCompanion = Join-Path $temp 'seelegent-launch.exe'
+        if (-not (Expand-Executable $zip $newCompanion 'seelegent-launch.exe')) { $newCompanion = '' }
         $info = Invoke-Quiet $newExe @('version', '--json')
         $reported = $null
         try { $reported = ($info | ConvertFrom-Json).version } catch { $reported = $null }
@@ -398,6 +426,7 @@ function Install-Seelegent {
             throw
         }
         if ($previous) { Write-Step "The previous executable is kept as $previous (seelegent update --rollback)." }
+        Install-Companion $newCompanion (Join-Path $InstallDir 'seelegent-launch.exe')
         $shim = Move-OldShim $InstallDir
         if ($shim) { Write-Step "The old version's launcher seelegent.cmd is now $shim." }
 

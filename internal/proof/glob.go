@@ -37,9 +37,18 @@ func key(p string) string {
 	return p
 }
 
-// IsGlob reports whether a lane path matches more than one file: it holds * or ?, or ends with a slash (a folder).
+// IsGlob reports whether a lane path is a glob: it holds * or ?, or ends with a slash (a folder). A plain path is not
+// a glob, yet it still covers everything under it when it names a folder (Match).
 func IsGlob(p string) bool {
 	return strings.ContainsAny(p, "*?") || strings.HasSuffix(p, "/") || strings.HasSuffix(p, `\`)
+}
+
+// under reports whether the plain lane path entry covers file: the path itself or anything under it, so that the
+// lane src/x covers src/x/a.vue (field report 4, F4: a folder named without its trailing slash matched one file, the
+// gate called its seven components out of lane and the fix turn deleted them), but not src/xy.ts.
+func under(entry, file string) bool {
+	e, f := strings.TrimSuffix(key(entry), "/"), key(file)
+	return e != "" && (f == e || strings.HasPrefix(f, e+"/"))
 }
 
 // globRegexp compiles a lane glob: ** crosses folders, * and ? stay inside one, a trailing slash covers the folder.
@@ -76,13 +85,14 @@ func globRegexp(pattern string) *regexp.Regexp {
 	return regexp.MustCompile(b.String())
 }
 
-// Match reports whether the repository-relative file matches the lane path pattern: a glob, or else the same file.
+// Match reports whether the repository-relative file matches the lane path pattern: a glob, or else a plain path,
+// which covers that path itself and everything under it (whether or not it names an existing folder).
 func Match(pattern, file string) bool {
 	if pattern == "" || file == "" {
 		return false
 	}
 	if !IsGlob(pattern) {
-		return key(pattern) == key(file)
+		return under(pattern, file)
 	}
 	return globRegexp(pattern).MatchString(Clean(file))
 }
@@ -123,9 +133,40 @@ type PathPair struct {
 	Theirs string `json:"theirs"`
 }
 
+// globReaches reports whether the lane glob can match the plain lane path itself or a file under it, segment by
+// segment: src/x/*.ts and src/*/a.ts reach src/x, src/*.ts does not reach src/x (its * stays in src/).
+func globReaches(glob, plain string) bool {
+	g := key(glob)
+	if strings.HasSuffix(g, "/") {
+		g += "**"
+	}
+	p := strings.TrimSuffix(key(plain), "/")
+	if p == "" {
+		return false
+	}
+	gs, ps := strings.Split(g, "/"), strings.Split(p, "/")
+	for i, seg := range ps {
+		if i >= len(gs) {
+			return false // the glob ends above the plain path: it only names one of its folders
+		}
+		if gs[i] == "**" {
+			return true
+		}
+		ok, err := path.Match(gs[i], seg)
+		if err != nil {
+			return true // a malformed segment (an unclosed [): cannot tell, so report the overlap
+		}
+		if !ok {
+			return false
+		}
+	}
+	return true // the glob names the plain path, or goes on below it
+}
+
 // Overlap returns every pair of lane paths, one from mine and one from theirs, that can name the same file. Two
-// globs overlap when one's literal prefix starts with the other's (a cautious answer: src/*.go and src/*.ts are
-// reported as overlapping).
+// plain paths overlap when one is the other or lies under it (src/x and src/x/a.ts); a glob and a plain path when
+// the glob can match the plain path or a file under it (globReaches). Two globs overlap when one's literal prefix
+// starts with the other's (a cautious answer: src/*.go and src/*.ts are reported as overlapping).
 func Overlap(mine, theirs []string) []PathPair {
 	var out []PathPair
 	for _, m := range mine {
@@ -134,11 +175,11 @@ func Overlap(mine, theirs []string) []PathPair {
 			var hit bool
 			switch {
 			case !mg && !tg:
-				hit = key(m) == key(t)
+				hit = under(m, t) || under(t, m)
 			case !mg:
-				hit = Match(t, m)
+				hit = globReaches(t, m)
 			case !tg:
-				hit = Match(m, t)
+				hit = globReaches(m, t)
 			default:
 				pm, pt := literalPrefix(m), literalPrefix(t)
 				hit = strings.HasPrefix(pm, pt) || strings.HasPrefix(pt, pm)

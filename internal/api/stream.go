@@ -51,6 +51,9 @@ const (
 	StreamAutomationUpdated StreamEvent = "automation.updated"
 	// StreamAutomationDeleted: Deleted (milestone 15).
 	StreamAutomationDeleted StreamEvent = "automation.deleted"
+	// StreamResourcesChanged: ResourcesChanged, when the memory watchdog starts or stops holding new starts
+	// (milestone 19).
+	StreamResourcesChanged StreamEvent = "resources.changed"
 )
 
 // Reset reasons.
@@ -83,6 +86,12 @@ type Deleted struct {
 // Changed is the data of providers.changed, roles.changed and members.changed: refetch the list.
 type Changed struct {
 	ChangedAt string `json:"changedAt"`
+}
+
+// ResourcesChanged is the data of resources.changed: Health.LowMemory flipped. Memory is the reading that flipped it.
+type ResourcesChanged struct {
+	LowMemory bool         `json:"lowMemory"`
+	Memory    MemoryStatus `json:"memory"`
 }
 
 // MemoryChanged is the data of memory.changed.

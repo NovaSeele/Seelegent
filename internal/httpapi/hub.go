@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"strconv"
 	"strings"
 	"sync"
@@ -15,10 +16,12 @@ import (
 	"github.com/NovaSeele/Seelegent/internal/api"
 )
 
-// Hub limits (contract §7).
+// Hub limits (contract §7). A resume from before the ring gets a too_old reset and the client reloads its state, so
+// the ring only has to cover short disconnects: 2 MiB is plenty, and it is what an idle daemon may hold until the
+// frames age out.
 const (
 	ringFrames   = 2048
-	ringBytes    = 8 << 20
+	ringBytes    = 2 << 20
 	ringAge      = 10 * time.Minute
 	clientFrames = 512
 	clientBytes  = 4 << 20
@@ -35,6 +38,9 @@ type HubOptions struct {
 	RingAge      time.Duration
 	ClientFrames int
 	ClientBytes  int
+	// AfterFunc runs f once after d and returns a function that cancels it (time.AfterFunc when nil). The ring's
+	// age limit uses it, so frames expire on an idle daemon too; tests fake it together with Now.
+	AfterFunc func(d time.Duration, f func()) (stop func() bool)
 }
 
 // frame is one SSE frame, encoded once.
@@ -59,6 +65,10 @@ type Hub struct {
 	ringBytes int
 	clients   map[*hubClient]struct{}
 	closed    bool
+	// stopExpiry cancels the armed age timer (nil when none is armed): one timer for the whole ring, armed while it
+	// keeps frames, for when the oldest one ages out. expiryGen tells a stale timer from the armed one.
+	stopExpiry func() bool
+	expiryGen  uint64
 }
 
 // hubClient is one connected stream.
@@ -87,6 +97,9 @@ func NewHub(o HubOptions) (*Hub, error) {
 	}
 	if o.ClientBytes <= 0 {
 		o.ClientBytes = clientBytes
+	}
+	if o.AfterFunc == nil {
+		o.AfterFunc = func(d time.Duration, f func()) func() bool { return time.AfterFunc(d, f).Stop }
 	}
 	if o.Instance == "" {
 		var b [4]byte
@@ -141,6 +154,7 @@ func (h *Hub) Publish(event api.StreamEvent, v any) error {
 	h.ring = append(h.ring, f)
 	h.ringBytes += len(f.wire)
 	h.trimLocked(f.at)
+	h.armLocked(f.at)
 	for c := range h.clients {
 		h.sendLocked(c, f)
 	}
@@ -161,11 +175,71 @@ func (h *Hub) trimLocked(now time.Time) {
 		*f = frame{} // let the encoded frame go
 		h.head++
 	}
+	if h.head == len(h.ring) {
+		// Empty: release the backing array (a full ring's can be large) and the age timer.
+		h.ring, h.head, h.ringBytes = nil, 0, 0
+		h.disarmLocked()
+		return
+	}
 	if h.head > 0 && h.head*2 >= len(h.ring) {
 		n := copy(h.ring, h.ring[h.head:])
 		clear(h.ring[n:])
 		h.ring, h.head = h.ring[:n], 0
 	}
+}
+
+// armLocked arms the age timer for when the oldest kept frame ages out, unless one is armed already or the ring is
+// empty. An armed timer is never moved: when it fires early (the oldest frame was trimmed for the frame or byte
+// limit since), expire trims nothing and arms it again for the new oldest frame.
+//
+// It fires a tenth of RingAge after the oldest frame's expiry (at least 1 ms, as trimLocked keeps a frame exactly
+// RingAge old): while frames arrive faster than they age out, each firing then trims a batch, not one frame, and
+// the timer re-arms about ten times per RingAge instead of after almost every frame.
+func (h *Hub) armLocked(now time.Time) {
+	if h.closed || h.stopExpiry != nil || h.head == len(h.ring) {
+		return
+	}
+	slack := max(h.o.RingAge/10, time.Millisecond)
+	d := max(h.ring[h.head].at.Add(h.o.RingAge+slack).Sub(now), 0)
+	h.expiryGen++
+	gen := h.expiryGen
+	h.stopExpiry = h.o.AfterFunc(d, func() { h.expire(gen) })
+}
+
+// disarmLocked cancels the age timer.
+func (h *Hub) disarmLocked() {
+	if h.stopExpiry != nil {
+		h.stopExpiry()
+		h.stopExpiry = nil
+	}
+	h.expiryGen++
+}
+
+// expire is the age timer: it drops the frames that aged out and arms the timer again while frames are kept.
+func (h *Hub) expire(gen uint64) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if gen != h.expiryGen || h.closed {
+		return // cancelled after it had started
+	}
+	h.stopExpiry = nil
+	now := h.o.Now()
+	h.trimLocked(now)
+	h.armLocked(now)
+}
+
+// RingStats is what the replay ring keeps now: its frames, their encoded bytes (what RingBytes limits) and an
+// estimate of the heap it holds (the frames' buffers by capacity and the ring's backing array). The daemon's
+// /debug/vars reports them, so a heap reading can tell the ring from a leak.
+func (h *Hub) RingStats() (frames, wireBytes, heapBytes int) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	kept := h.kept()
+	heap := cap(h.ring) * int(reflect.TypeFor[frame]().Size())
+	for i := range kept {
+		heap += cap(kept[i].wire)
+	}
+	return len(kept), h.ringBytes, heap
 }
 
 // sendLocked queues f to c, or drops c when its queue is full.
@@ -257,6 +331,7 @@ func (h *Hub) Close() {
 		return
 	}
 	h.closed = true
+	h.disarmLocked()
 	for c := range h.clients {
 		delete(h.clients, c)
 		close(c.ch)

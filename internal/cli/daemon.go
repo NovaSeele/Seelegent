@@ -32,6 +32,8 @@ const daemonCloseTimeout = 30 * time.Second
 type daemonFlags struct {
 	port       int
 	devOrigins []string
+	// pprofAddr is the hidden --pprof-addr: a loopback address for net/http/pprof and /debug/vars ("" = off).
+	pprofAddr string
 }
 
 func newDaemonCommand(info buildinfo.Info) *cobra.Command {
@@ -51,12 +53,21 @@ func newDaemonCommand(info buildinfo.Info) *cobra.Command {
 			if f.port < 0 || f.port > 65535 {
 				return usagef("--port %d: must be 1..65535", f.port)
 			}
+			if f.pprofAddr != "" {
+				if err := checkPprofAddr(f.pprofAddr); err != nil {
+					return usagef("%v", err)
+				}
+			}
 			return runDaemon(cmd.Context(), info, f, cmd.ErrOrStderr())
 		},
 	}
 	cmd.Flags().IntVar(&f.port, "port", 0, "port on 127.0.0.1 (default: $SEELEGENT_PORT, else the settings' port)")
 	cmd.Flags().StringSliceVar(&f.devOrigins, "dev-origin", nil,
 		"development only: also accept this loopback browser origin, e.g. http://localhost:5173 for the Vite dev server")
+	cmd.Flags().StringVar(&f.pprofAddr, "pprof-addr", "",
+		"development only: serve net/http/pprof and /debug/vars on this loopback address, e.g. 127.0.0.1:6060 "+
+			"(profiles can hold secrets)")
+	_ = cmd.Flags().MarkHidden("pprof-addr")
 	return cmd
 }
 
@@ -199,6 +210,14 @@ func runDaemon(ctx context.Context, info buildinfo.Info, f daemonFlags, stderr i
 		}
 		return failed(err)
 	}
+	var debug *pprofServer
+	if f.pprofAddr != "" {
+		if debug, err = startPprof(ctx, f.pprofAddr, log, a); err != nil {
+			_ = closeApp()
+			return failed(err)
+		}
+		defer func() { _ = debug.Close() }()
+	}
 	if err := writePortFile(paths, addr); err != nil {
 		_ = closeApp()
 		return failed(fmt.Errorf("record the daemon port: %w", err))
@@ -211,6 +230,11 @@ func runDaemon(ctx context.Context, info buildinfo.Info, f daemonFlags, stderr i
 	case <-a.StopRequested(): // POST /daemon/stop (`seelegent stop`, `restart`): the same clean shutdown
 	}
 	log.Info("daemon: stopping")
+	if debug != nil {
+		if err := debug.Close(); err != nil {
+			log.Warn("daemon: close the pprof server", "err", err)
+		}
+	}
 	// The port file goes first, so discovery stops sending callers here; the lock is released after the close.
 	if err := os.Remove(paths.PortFile); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		log.Warn("daemon: remove the port file", "err", err)

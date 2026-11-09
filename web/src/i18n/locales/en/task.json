@@ -46,6 +46,7 @@
       "callsFailed": "The last {count} tool calls failed.",
       "repeated": "The worker repeated the same {tool} call {count} times in its last {steps} steps.",
       "noAccounts": "No {backend} account can run work. Sign one in or enable one.",
+      "budgetReached": "{account} reached its {budget} budget. Raise the budget or change the key.",
       "auth": "Every enabled {backend} account needs a sign-in.",
       "depMissing": "The earlier task {task} no longer exists.",
       "depRejected": "The earlier task {title} ({task}) was rejected.",
@@ -53,7 +54,9 @@
       "depsWaiting": "Waits for {tasks} to finish.",
       "depCancelled": "The earlier task {title} ({task}) was cancelled.",
       "hygiene": "{count} hygiene finding to look at | {count} hygiene findings to look at",
-      "workAtRisk": "{count} file may have lost changes | {count} files may have lost changes"
+      "workAtRisk": "{count} file may have lost changes | {count} files may have lost changes",
+      "resourcesWait": "Waiting for resources for over {minutes} minutes: {available} free, needs {need}.",
+      "resourcesWaitPlain": "Waiting for resources for over {minutes} minutes: the machine is short of free memory."
     }
   },
   "question": {
@@ -172,6 +175,7 @@
       "junkFile": "Junk file",
       "unreportedFile": "Changed but not in the report",
       "outsideRepoWrite": "Write outside the repository",
+      "outsideLane": "Changed outside the lane",
       "unfetchedUrl": "URL the worker never opened",
       "skipped": "Check skipped"
     },
@@ -213,7 +217,8 @@
     "phase": {
       "running": "running",
       "settling": "waiting for other tasks",
-      "verifying": "second-opinion review"
+      "verifying": "second-opinion review",
+      "queued": "queued"
     },
     "turn": "turn {n}",
     "fixTurns": "{count} automatic fix | {count} automatic fixes",
@@ -228,7 +233,8 @@
       "red": "Failed",
       "error": "Error",
       "warn": "Warning",
-      "not_run": "Not run"
+      "not_run": "Not run",
+      "stopped": "Stopped"
     },
     "kind": {
       "lane": "Lane",
@@ -273,7 +279,7 @@
       "forced": "claimed over {tasks}"
     },
     "commands": "Commands",
-    "off": "Turned off (lane and hygiene still run)",
+    "off": "Turned off (the lane is still checked, as information only)",
     "noCommands": "No commands",
     "detected": "detected",
     "doctrine": "Doctrine",
@@ -283,7 +289,16 @@
     "bar": "Changed since start",
     "usedUp": "automatic fixes used up ({n}/{max})",
     "nextStep": "The gate cannot fix this by itself any more: send a follow-up or take over the task.",
-    "causedBy": "may be caused by {tasks}"
+    "causedBy": "may be caused by {tasks}",
+    "queued": {
+      "slot": "waiting for a gate slot",
+      "memory": "waiting for free memory",
+      "place": "number {position} in line, {limit} at a time",
+      "limit": "{limit} at a time"
+    },
+    "stoppedLowMemory": "Stopped because the machine ran low on memory ({n} of {max}); the gate runs again once memory is back.",
+    "lowMemory": "The machine kept running out of memory: the gate was stopped {max} times.",
+    "lowMemoryNext": "Free some memory or lower “{setting}”, then run the gate again."
   },
   "consults": {
     "title": "Member opinions",

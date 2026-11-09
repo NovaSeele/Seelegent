@@ -47,12 +47,19 @@ func (a *App) PatchSettings(ctx context.Context, patch []byte) (config.Settings,
 	return out, nil
 }
 
-// settingsChanged tells the services that read a setting only when they arm a timer or wait: the pool (limits and
-// rest periods) and the quota refresher (quotaRefreshMinutes, re-armed from its last cycle).
+// settingsChanged tells the services that read a setting only when they arm a timer or wait: the pool (limits,
+// maxConcurrentWorkers and rest periods), the quota refresher (quotaRefreshMinutes, re-armed from its last cycle),
+// the gate slots (gateConcurrency), the starts held for memory (the thresholds) and the daemon's memory limit.
 func (a *App) settingsChanged(prev, next config.Settings) {
 	a.Pool.Notify()
 	if prev.QuotaRefreshMinutes != next.QuotaRefreshMinutes {
 		a.rescheduler.Reschedule()
+	}
+	a.refreshMachine()
+	a.slots.Notify()
+	a.sampler.Kick()
+	if prev.DaemonMemoryLimitMB != next.DaemonMemoryLimitMB {
+		a.applyMemoryLimit(next.DaemonMemoryLimitMB)
 	}
 }
 
@@ -87,7 +94,9 @@ func (a *App) ListenHTTP(ctx context.Context, port int) (string, error) {
 		LogDir: a.Paths.Logs, Redact: a.redact, Web: a.web, Classifier: a.classifier, Logger: a.log,
 		DevOrigins: a.devOrigins, Stop: a.RequestStop, Proof: a.Proof, Gates: a.Tasks, HomeID: config.HomeID(a.Paths.Home),
 		Members: a.Members, Consults: a.Tasks, Notes: a.Notes, Meetings: a.Meetings, Contests: a.Contests,
-		Hooks: a.Hooks, Tickets: a.Tickets, Automations: a.Automations,
+		Hooks: a.Hooks, Tickets: a.Tickets, Automations: a.Automations, FreeMemory: a.sampler.Sample,
+		LowMemory: a.Tasks.LowMemory, Machine: a.Machine, Activity: a.Refresher.Touch,
+		ImageWriteTimeout: a.imageWriteTimeout, Spend: a.spendService(),
 	})
 	if err != nil {
 		_ = ln.Close()
@@ -107,6 +116,8 @@ func (a *App) ListenHTTP(ctx context.Context, port int) (string, error) {
 		}
 	}()
 	a.log.Info("http: listening", "addr", ln.Addr().String())
+	// Older task rows get their list digest once the daemon answers (a large database must not delay the start).
+	a.Tasks.BackfillDigests()
 	return ln.Addr().String(), nil
 }
 
@@ -194,4 +205,12 @@ func (t *connTracker) closeNew() {
 	for _, c := range fresh {
 		_ = c.Close()
 	}
+}
+
+// spendService is the spend service reader for the API (nil, not a nil pointer, when there is none).
+func (a *App) spendService() httpapi.Spend {
+	if a.Spend == nil {
+		return nil
+	}
+	return a.Spend
 }

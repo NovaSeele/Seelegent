@@ -79,6 +79,9 @@ type Repos struct {
 	mu       sync.Mutex
 	locks    map[string]*sync.Mutex
 	branches map[string]branchEntry
+
+	// collapse replaces collapseUntracked when set (tests make it fail).
+	collapse func(ctx context.Context, root string, files []api.GitFile) ([]api.GitFile, []api.GitDir, error)
 }
 
 type branchEntry struct {
@@ -171,7 +174,8 @@ func (r *Repos) runGit(ctx context.Context, git, dir string, env []string, stdin
 	errBuf := &limitedBuffer{limit: 64 << 10}
 	cmd.Stdout = out
 	cmd.Stderr = errBuf
-	tree, err := platform.StartTree(cmd)
+	// git is a fixed helper program; one that can run hooks, filters or credential helpers gets a console of its own.
+	tree, err := platform.StartTreeWith(cmd, platform.TreeOptions{ShareConsole: !runsUserCode(args)})
 	if err != nil {
 		return nil, false, &Error{Args: args, Err: err}
 	}

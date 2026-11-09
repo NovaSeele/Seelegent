@@ -7,10 +7,13 @@ package brief
 import (
 	"fmt"
 	"strings"
+
+	"github.com/NovaSeele/Seelegent/internal/fsutil"
 )
 
-// workerRules is the fixed part of every worker brief (old WORKER_BRIEF).
-const workerRules = `You are a worker engineer on a team led by a lead engineer (the lead). The lead designs, reviews and tests; you implement.
+// rulesHead and rulesTail are the fixed part of every worker brief (old WORKER_BRIEF), around the data-folder
+// rule (DataRule), which depends on the task's folders.
+const rulesHead = `You are a worker engineer on a team led by a lead engineer (the lead). The lead designs, reviews and tests; you implement.
 Rules:
 - Do exactly the task below. Stay inside its scope; do not refactor or "improve" unrelated code.
 - Add only what the task asks for: no extra options, configuration or abstractions nobody asked for, and no handling for situations that cannot happen. If 200 lines could be 50, rewrite it.
@@ -22,7 +25,10 @@ Rules:
 - Never modify files outside this repository: toolchains, package caches (~/.cargo, ~/.npm and the like), global config, other projects. If the environment looks broken (wrong compiler, corrupt cache, missing tool), stop and report it to the lead under Open issues instead of repairing it.
 - When your report states facts from outside the repo (library or API behavior, versions, documentation), say how you know: write "fetched <URL>" only for pages you fetched in this task; otherwise mark the claim "(unverified)".
 - Files you created only to check your work (throwaway test settings, scratch scripts, debug output) must be deleted before your report. Do not add a test folder or test settings to a repo that has none unless the brief asks for them; if it does, name them under Open issues so the lead can remove them when the work is finished.
-- If the task names a way to verify (tests, build, lint, a command), run it and fix what fails. If it names none, run the cheapest relevant check you can find.
+- Put temporary things (browser profiles, downloads, caches, scratch scripts and their output) in the OS temp folder (TEMP/TMPDIR), the one place outside the repository you may write.
+`
+
+const rulesTail = `- If the task names a way to verify (tests, build, lint, a command), run it and fix what fails. If it names none, run the cheapest relevant check you can find.
 - If something is ambiguous or blocked, make the most reasonable choice, keep going, and report it.
 - If you cannot continue without a decision only the lead can make, stop, and add this section at the end of your report:
 ## Blocked
@@ -65,6 +71,8 @@ const (
 	ConstitutionChars = 6000
 	// TurnChars caps each earlier message and report in the handoff section.
 	TurnChars = 6000
+	// InterruptedReportChars caps the report of an interrupted attempt in the handoff section.
+	InterruptedReportChars = 4000
 	// BaselineShown is how many already-changed files are listed.
 	BaselineShown = 30
 	// DepChars caps each prerequisite's report in the dependency context.
@@ -79,6 +87,9 @@ type Input struct {
 	Lead string
 	// Cwd is the task's working folder.
 	Cwd string
+	// DataDir is Seelegent's data folder (config.Paths.Home); "" names it as ~/.seelegent. A Cwd inside it leaves
+	// the data-folder rule out.
+	DataDir string
 	// Plan is true in plan mode (read-only).
 	Plan bool
 	// PlanShell is true when the attempt's backend reads files in plan mode with read-only shell commands (codex's
@@ -102,11 +113,18 @@ type Input struct {
 	Lane []string
 	// Gate lists the commands Seelegent runs after the worker reports.
 	Gate []string
+	// TestParallelism is the parallelism tests and builds should keep to on this shared machine (the setting
+	// testParallelism); 0 leaves the "Shared machine" section out.
+	TestParallelism int
 	// Earlier are the turns before this one (the handoff section).
 	Earlier []Turn
 	// Interrupted is true when an earlier attempt of this turn ran on another account (or conversation) and did not
 	// finish.
 	Interrupted bool
+	// InterruptedFiles are the files the earlier attempts of this turn edited, and InterruptedReport the last report
+	// one of them gave (worker text, masked): the new worker verifies that work instead of redoing it.
+	InterruptedFiles  []string
+	InterruptedReport string
 	// Message is this turn's request.
 	Message string
 }
@@ -155,7 +173,11 @@ type Turn struct {
 // request. A turn after earlier ones (or after an interrupted attempt) carries the handoff section, so a worker on
 // another account never loses the task (old bug B7).
 func Worker(in Input) string {
-	head := workerRules
+	specDir := ""
+	if in.Spec != nil && in.Spec.Outside {
+		specDir = in.Spec.Dir
+	}
+	head := rulesHead + "- " + DataRule(in.DataDir, in.Cwd, specDir) + "\n" + rulesTail
 	if in.Lead != "" {
 		head += "\nThe lead for this task is " + in.Lead + "."
 	}
@@ -184,6 +206,9 @@ func Worker(in Input) string {
 	if s := GateSection(in.Lane, in.Gate); s != "" {
 		parts = append(parts, s)
 	}
+	if s := SharedMachine(in.TestParallelism); s != "" {
+		parts = append(parts, s)
+	}
 	if d := strings.TrimSpace(in.Deps); d != "" {
 		parts = append(parts, d)
 	}
@@ -202,7 +227,17 @@ func Worker(in Input) string {
 		}
 		if in.Interrupted {
 			lines = append(lines, "The previous attempt at the current request was interrupted before it finished "+
-				"(quota or sign-in problem on that worker account).")
+				"(a quota, sign-in or network problem on that worker account).")
+			if len(in.InterruptedFiles) > 0 {
+				lines = append(lines, "Files it edited: "+strings.Join(in.InterruptedFiles, ", "))
+			}
+			if r := strings.TrimSpace(in.InterruptedReport); r != "" {
+				lines = append(lines, "### The previous attempt reported", quoted(r, InterruptedReportChars))
+			}
+			if len(in.InterruptedFiles) > 0 || strings.TrimSpace(in.InterruptedReport) != "" {
+				lines = append(lines, "Its work may already be done: check those files against the request, finish "+
+					"only what is missing, and report. Do not redo work that is already there.")
+			}
 		}
 		parts = append(parts, strings.Join(lines, "\n"), "## Current request from the lead\n"+in.Message)
 	} else {
@@ -226,15 +261,31 @@ func PlanRule(shell bool) string {
 }
 
 // ReadOnlyRun returns the first prompt of a fresh conversation of a hidden read-only run (a consult, a meeting
-// attendee, a contest judge, a verifier): the plan rule for the attempt's backend (PlanRule), then the run's brief.
-// A shell backend is also told where to take the line numbers of its [path:line] citations from, so they verify.
-func ReadOnlyRun(prompt string, shell bool) string {
+// attendee, a contest judge, a verifier): the plan rule for the attempt's backend (PlanRule), the data-folder rule
+// of every worker (DataRule for dataDir, "" naming ~/.seelegent, and the run's folder cwd; a run has no spec
+// folder), then the run's brief. A shell backend is also told where to take the line numbers of its [path:line]
+// citations from, so they verify.
+func ReadOnlyRun(prompt string, shell bool, dataDir, cwd string) string {
 	rule := PlanRule(shell)
 	if shell {
 		rule += " Take the line numbers of your path:line citations from `rg -n` (or `Select-String`) output, " +
 			"which numbers the lines of the file as they are, so the citations check out."
 	}
-	return rule + "\n\n" + prompt
+	return rule + "\n" + DataRule(dataDir, cwd, "") + "\n\n" + prompt
+}
+
+// SharedMachine asks the worker to keep its test and build runs light (the setting testParallelism): "" when n is
+// 0. GOFLAGS=-p=N and CARGO_BUILD_JOBS=N in its environment only set defaults; scripts that pass their own -p or -j
+// need the explicit caps.
+func SharedMachine(n int) string {
+	if n <= 0 {
+		return ""
+	}
+	return fmt.Sprintf("## Shared machine\nOther workers and the user share this machine, and heavy test runs have "+
+		"frozen it. Test only the packages you changed, not the whole repository, unless the task asks for a full "+
+		"run. Cap parallelism at %[1]d: `go test -p %[1]d`, `golangci-lint run -j %[1]d`, vitest "+
+		"`--maxWorkers=%[1]d`, `cargo test -j %[1]d`, `pytest -n %[1]d`. Never run two heavy commands (tests, lint, "+
+		"builds) at the same time.", n)
 }
 
 // GateSection tells the worker its file lane and the gate commands that run after its report ("" when it has
@@ -243,8 +294,9 @@ func GateSection(lane, gate []string) string {
 	var lines []string
 	if lane != nil {
 		lines = append(lines, "## Your lane", "Change only these files (paths relative to the repository root; a "+
-			"trailing / covers the folder): "+strings.Join(lane, ", ")+". Seelegent checks this after your report; if "+
-			"the task needs another file, stop and explain it under ## Blocked.")
+			"path without wildcards covers that file or folder and everything under it): "+strings.Join(lane, ", ")+
+			". Seelegent checks this after your report; if the task needs another file, stop and explain it under "+
+			"## Blocked.")
 	}
 	if len(gate) > 0 {
 		if len(lines) > 0 {
@@ -330,7 +382,49 @@ func LeadName(host string) string {
 // Preview returns the first PreviewChars characters of a brief after the fixed rules, which every full brief starts
 // with, so previews of different tasks differ.
 func Preview(prompt string) string {
-	return cut(strings.TrimLeft(strings.TrimPrefix(prompt, workerRules), "\n"), PreviewChars, "")
+	if strings.HasPrefix(prompt, rulesHead) {
+		if i := strings.Index(prompt, rulesTail); i >= 0 {
+			prompt = prompt[i+len(rulesTail):]
+		}
+	}
+	return cut(strings.TrimLeft(prompt, "\n"), PreviewChars, "")
+}
+
+// DataRule is the rule about Seelegent's data folder (dataDir; named ~/.seelegent when "", and then no exception
+// can be told) that every worker brief and the gate's fix prompts carry: explore neither it nor the daemon's
+// processes (field report 4, F10). A Spec Kit workspace lives inside it (<data>/specs/<repo>-spec/), so the rule
+// names the exception: the task's folder (cwd) when that lies inside (the speckit-* steps work there), else its
+// spec folder outside the repository (specDir, an absolute path; "" for none) when that lies inside.
+func DataRule(dataDir, cwd, specDir string) string {
+	shown := "~/.seelegent"
+	if dataDir != "" {
+		shown = dataDir
+	}
+	head := "Do not explore " + shown + " or Seelegent's processes; inside it, "
+	switch {
+	case dataDir != "" && within(cwd, dataDir):
+		return head + "work only in " + cwd + "."
+	case dataDir != "" && within(specDir, dataDir):
+		return head + "read only " + specDir + " (your spec folder) and the paths this brief names."
+	}
+	return head + "read only the paths this brief names, such as the spec folder."
+}
+
+// within reports whether p lies in dir or is dir, compared through fsutil.Key.
+func within(p, dir string) bool {
+	if p == "" {
+		return false
+	}
+	kp, err := fsutil.Key(p)
+	if err != nil {
+		return false
+	}
+	kd, err := fsutil.Key(dir)
+	if err != nil {
+		return false
+	}
+	kd = strings.TrimSuffix(kd, "/")
+	return kp == kd || strings.HasPrefix(kp, kd+"/")
 }
 
 // quoted prepares text written by a worker or the lead for a brief section: cut to n characters with a "…" mark,

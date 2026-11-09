@@ -209,6 +209,9 @@ func (*Claude) NewParser(secrets []string) Parser {
 type claudeParser struct {
 	base
 	calls map[string]claudeCall // tool calls by tool_use id
+	// answer is the text the agent wrote since its last tool_use block (masked): the final answer (base.markFinal)
+	// until a tool_use clears it.
+	answer strings.Builder
 }
 
 type claudeCall struct {
@@ -223,7 +226,9 @@ type claudeLine struct {
 	Subtype   string `json:"subtype"`
 	SessionID string `json:"session_id"`
 	Model     string `json:"model"`
-	Message   *struct {
+	// ParentToolUseID is set on the messages of a subagent (the Task tool): their text is not the agent's answer.
+	ParentToolUseID string `json:"parent_tool_use_id"`
+	Message         *struct {
 		Content []claudeBlock `json:"content"`
 	} `json:"message"`
 	// result line
@@ -266,7 +271,7 @@ func (p *claudeParser) Line(raw []byte) []event.Event {
 		}
 	case "assistant":
 		if ev.Message != nil {
-			return p.assistant(ev.Message.Content)
+			return p.assistant(ev.Message.Content, ev.ParentToolUseID != "")
 		}
 		return nil
 	case "user":
@@ -280,17 +285,26 @@ func (p *claudeParser) Line(raw []byte) []event.Event {
 	return []event.Event{p.log(line)}
 }
 
-func (p *claudeParser) assistant(blocks []claudeBlock) []event.Event {
+// assistant reads an assistant message. sub: a subagent wrote it (parent_tool_use_id), so its text is never the
+// final answer.
+func (p *claudeParser) assistant(blocks []claudeBlock, sub bool) []event.Event {
 	var out []event.Event
 	for i := range blocks {
 		b := &blocks[i]
 		switch b.Type {
 		case "text":
 			if b.Text != "" {
-				out = append(out, p.message(p.step, b.Text))
+				msg := p.message(p.step, b.Text)
+				if !sub {
+					p.answer.WriteString(msg.Text)
+					p.markFinal(p.answer.String())
+				}
+				out = append(out, msg)
 				p.step++
 			}
 		case "tool_use":
+			p.answer.Reset()
+			p.clearFinal() // the agent went on working after its text
 			call := claudeCall{name: b.Name, input: p.maskJSON(b.Input), step: p.step}
 			if strings.EqualFold(b.Name, "Bash") || strings.EqualFold(b.Name, "PowerShell") {
 				call.cmd = p.mask(stringField(b.Input, "command"))
@@ -316,6 +330,9 @@ func (p *claudeParser) toolResults(blocks []claudeBlock) []event.Event {
 		if b.Type != "tool_result" {
 			continue
 		}
+		// A tool result is a step after any text: the agent must write a new text to have a final answer.
+		p.answer.Reset()
+		p.clearFinal()
 		call := p.calls[b.ToolUseID]
 		output := p.output(b.Content)
 		t := &event.Tool{

@@ -5,6 +5,7 @@
   "notRepoDesc": "{cwd} is not inside a git repository, so there is nothing to commit.",
   "noBranch": "detached",
   "uncommittedCount": "{n} uncommitted file | {n} uncommitted files",
+  "sumShown": "in the files listed",
   "refresh": "Read again",
   "empty": "No changes from this task",
   "emptyDesc": "Files the worker changes show up here, ready to review and commit.",
@@ -44,6 +45,7 @@
     "files": "Files",
     "all": "All files ({n}) | All files ({n})",
     "renameNote": "A renamed file is committed together with the removal of its old path.",
+    "hiddenNote": "{n} file in untracked folders is not listed here. Open its folder in the file list to commit it. | {n} files in untracked folders are not listed here. Open a folder in the file list to commit its files.",
     "active": "The worker is still running. Commit when the task has finished.",
     "confirm": "Commit {n} file | Commit {n} files",
     "done": "Committed {sha}: {summary}",
@@ -119,5 +121,24 @@
     "synced": "Up to date with {name}",
     "gone": "{name} no longer exists",
     "goneShort": "(gone)"
+  },
+  "dir": {
+    "label": "Untracked folders",
+    "files": "{n} file | {n} files",
+    "more": "and {n} more file | and {n} more files",
+    "listLabel": "Files in {path}",
+    "others": "{n} other file here is not this task's | {n} other files here are not this task's"
+  },
+  "image": {
+    "before": "Before (HEAD)",
+    "after": "After (working tree)",
+    "alt": "{path}, {side}",
+    "pixels": "{width} × {height} px",
+    "tooLarge": "Too large to preview ({size}).",
+    "lfs": "Stored with Git LFS: the repository holds a pointer, not the image.",
+    "unsupported": "This file cannot be previewed.",
+    "missing": "This version of the file does not exist.",
+    "failed": "Could not load the image: {error}",
+    "broken": "The image could not be shown."
   }
 }

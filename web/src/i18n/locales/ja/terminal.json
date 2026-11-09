@@ -62,13 +62,18 @@
       "running": "試行はまだ実行中です",
       "quota": "アカウントのクォータが切れました",
       "auth": "アカウントの再ログインが必要です",
+      "credits": "キーのクレジットが残っていません",
       "transient": "試行中に一時的なエラーが発生しました",
       "background_wait": "ワーカーはバックグラウンド処理を待っています",
-      "error": "試行に失敗しました"
+      "error": "試行に失敗しました",
+      "okWarning": "試行は完了しました。ワーカーの CLI が報告したエラーは作業を止めていません"
     },
     "quotaExhausted": "アカウントのクォータが切れました",
     "authFailed": "アカウントの再ログインが必要です",
     "waitingQuota": "クォータの回復待ち",
+    "waitingSlot": "空きスロット待ち",
+    "noAccounts": "使えるアカウントがありません",
+    "budgetReached": "待機中: アカウントが予算に達しました",
     "retry": "{seconds} 秒後に再試行",
     "handoff": "{from} から {to} へ移動",
     "reattach": "実行中のワーカーに再接続しました",
@@ -106,6 +111,7 @@
     "worker": {
       "quota_exhausted": "ワーカーのクォータが切れました",
       "auth_required": "ワーカーのログインが必要です",
+      "credits": "アカウントのクレジットが残っていません",
       "transient": "ワーカーで一時的なエラーが発生しました",
       "fatal": "ワーカーが失敗しました"
     },
@@ -122,7 +128,12 @@
       "red": "ゲート失敗",
       "error": "ゲートを実行できませんでした",
       "skipped": "ゲート停止",
-      "autoFix": "ターン {n} で自動修正"
+      "autoFix": "ターン {n} で自動修正",
+      "queued": "ゲートは順番待ちです",
+      "queuedSlot": "ゲートは順番待ちです：{position} 番目、同時に {limit} 件まで",
+      "queuedMemory": "ゲートは空きメモリを待っています",
+      "stoppedLowMemory": "ゲートのステップを停止：マシンのメモリ不足（{n}/{max}）",
+      "lowMemory": "マシンのメモリ不足が続きました（{max} 回停止）"
     },
     "lane": {
       "forced": "他の {count} タスクの予約を押し切ってレーンを確保",
@@ -134,6 +145,8 @@
       "accept": "レビューで変更が承認されました",
       "reject": "レビューで変更が却下されました",
       "error": "レビューを完了できませんでした"
-    }
+    },
+    "waitingMemory": "リソース待ち：空き {available}、必要 {need}",
+    "waitingResources": "リソース待ち"
   }
 }

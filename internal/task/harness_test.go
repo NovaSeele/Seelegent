@@ -21,6 +21,7 @@ import (
 	"github.com/NovaSeele/Seelegent/internal/launch"
 	"github.com/NovaSeele/Seelegent/internal/member"
 	"github.com/NovaSeele/Seelegent/internal/memory"
+	"github.com/NovaSeele/Seelegent/internal/platform"
 	"github.com/NovaSeele/Seelegent/internal/pool"
 	"github.com/NovaSeele/Seelegent/internal/proof"
 	"github.com/NovaSeele/Seelegent/internal/quota"
@@ -62,6 +63,12 @@ type harness struct {
 	s        *Service
 	// backends are more backends (besides agy) whose binary is the fake CLI, from the next start on.
 	backends []string
+	// res, slots and onLow are the resource options of the next start (resources_test.go); nil leaves them out.
+	res   Resources
+	slots GateSlots
+	onLow func(bool, platform.MemoryStatus)
+	// machine is the machine profile of the next start (nil: unknown).
+	machine func() config.Machine
 
 	mu        sync.Mutex
 	refreshes []string
@@ -73,6 +80,12 @@ var harnessEpoch = time.Date(2026, 11, 7, 9, 0, 0, 0, time.UTC)
 
 // newHarness builds and starts an engine. Accounts added before Start are seen by recovery.
 func newHarness(t *testing.T) *harness {
+	t.Helper()
+	return newHarnessWith(t, nil)
+}
+
+// newHarnessWith is newHarness with a change made before the engine starts (its options, settings).
+func newHarnessWith(t *testing.T, before func(h *harness)) *harness {
 	t.Helper()
 	dir := t.TempDir()
 	db, err := store.Open(context.Background(), filepath.Join(dir, "seelegent.db"))
@@ -101,6 +114,9 @@ func newHarness(t *testing.T) *harness {
 	h.roles = role.New(role.Options{DB: db, Home: filepath.Join(dir, "home"), Now: h.clk.Now})
 	h.members = member.New(member.Options{DB: db, Providers: h.accounts, Now: h.clk.Now})
 	t.Cleanup(h.killWorkers) // runs after the engine is closed
+	if before != nil {
+		before(h)
+	}
 	h.start()
 	return h
 }
@@ -161,7 +177,7 @@ func (h *harness) start() {
 		DB: h.db, Accounts: h.accounts, Pool: p, Backends: backends,
 		Settings: h.config, TasksDir: filepath.Join(h.dir, "tasks"), Launcher: fakecli.Launcher(t),
 		Usage: h.usage, Memory: h.memory, Roles: h.roles, Members: h.members, Consoles: h.consoles, Clock: h.clk,
-		QuotaRefresh: func(id string) {
+		QuotaRefresh: func(id string, _ bool) {
 			h.mu.Lock()
 			h.refreshes = append(h.refreshes, id)
 			h.mu.Unlock()
@@ -172,6 +188,10 @@ func (h *harness) start() {
 		Repos:         repos,
 		AccountStates: p.States,
 		Ledger:        proof.NewLedger(h.db, h.clk.Now),
+		Resources:     h.res,
+		GateSlots:     h.slots,
+		OnLowMemory:   h.onLow,
+		Machine:       h.machine,
 		ContestEnded: func(_ context.Context, id string) (string, bool, error) {
 			h.mu.Lock()
 			defer h.mu.Unlock()

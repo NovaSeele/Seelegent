@@ -20,6 +20,7 @@ import (
 	"github.com/NovaSeele/Seelegent/internal/config"
 	"github.com/NovaSeele/Seelegent/internal/gitx"
 	"github.com/NovaSeele/Seelegent/internal/memory"
+	"github.com/NovaSeele/Seelegent/internal/platform"
 	"github.com/NovaSeele/Seelegent/internal/pool"
 	"github.com/NovaSeele/Seelegent/internal/role"
 	"github.com/NovaSeele/Seelegent/internal/snapshot"
@@ -51,6 +52,9 @@ type Pool interface {
 	Handover(ctx context.Context, in pool.HandoverInput) (pool.Handover, error)
 	MarkExhausted(ctx context.Context, accountID string, ex pool.Exhaustion) (pool.Cooldown, error)
 	MarkAuthFailed(ctx context.Context, accountID, message string) error
+	MarkSucceeded(ctx context.Context, accountID string, started time.Time) error
+	MarkNoCredit(ctx context.Context, accountID, message string) error
+	ProviderResting(ctx context.Context, providerID string) error
 	Changed() <-chan struct{}
 }
 
@@ -131,6 +135,26 @@ type Toolchains interface {
 	Env(ctx context.Context, cwd string, env []string) map[string]string
 }
 
+// Resources is the machine's free memory as the resource checks see it (M19): a sampler that caches
+// platform.Memory for a short while, so callers may ask often; a fake in tests.
+type Resources interface {
+	// Sample returns the latest reading. A reading with Known false never holds anything back.
+	Sample() platform.MemoryStatus
+	// Changed is signaled (without blocking, coalesced) when memory may have been freed or the thresholds
+	// changed: a waiting start checks again.
+	Changed() <-chan struct{}
+}
+
+// GateSlots limits the gate commands that run at the same time (gateConcurrency); *gate.Slots satisfies it.
+type GateSlots interface {
+	// Acquire waits for a slot in FIFO order and returns the function that gives it back; onWait gets the
+	// caller's place in the queue (from 1) while it waits. It fails with ctx's error when ctx ends first, but a slot
+	// handed over as ctx ends can still come back with a nil error: defer release() before checking ctx.
+	Acquire(ctx context.Context, onWait func(pos int)) (release func(), err error)
+	// Limit is the current number of slots (0 = unlimited), for the queued gate event.
+	Limit() int
+}
+
 // Options configure a Service. DB, Accounts, Pool, Backends, Settings, TasksDir and Launcher are required.
 type Options struct {
 	DB       DB
@@ -142,14 +166,21 @@ type Options struct {
 	Settings func() config.Settings
 	// TasksDir holds one folder per task with its attempt folders (config.Paths.Tasks).
 	TasksDir string
+	// DataDir is the data folder (config.Paths.Home) for the worker brief's data-folder rule (brief.Input.DataDir);
+	// "" names it ~/.seelegent.
+	DataDir string
 	// Launcher is the command that runs the detached launcher ({os.Executable(), "__launch"}).
 	Launcher []string
+	// LauncherCommand, when set, picks the launcher command for each launch instead of Launcher (the daemon's
+	// launchbin.Resolver: the companion executable when it is of the daemon's build, else Launcher).
+	LauncherCommand func() []string
 
 	// Usage, QuotaRefresh, Memory, Roles and Consoles are optional.
 	Usage Usage
-	// QuotaRefresh asks for a background quota read of an account after a turn on it (quota.Refresher.Request);
+	// QuotaRefresh asks for a background quota read of an account after an attempt on it ended, saying whether the
+	// attempt failed (quota.Refresher.AfterRun: a run that went well skips the read when the quota is fresh);
 	// it must not block.
-	QuotaRefresh func(accountID string)
+	QuotaRefresh func(accountID string, failed bool)
 	Memory       Memory
 	Roles        Roles
 	Consoles     Consoles
@@ -186,6 +217,17 @@ type Options struct {
 	AccountStates func(ctx context.Context) ([]pool.AccountState, error)
 	// Ledger records the gate results of spec tasks and counts lane decisions (milestone 13); nil leaves them out.
 	Ledger Ledger
+	// Resources is the memory reading of the resource checks (minFreeMemoryMB, minFreeCommitMB,
+	// criticalFreeMemoryMB); nil turns the checks off.
+	Resources Resources
+	// GateSlots is shared with the proof regression runs (gateConcurrency); nil runs every gate command at once.
+	GateSlots GateSlots
+	// OnLowMemory is told when the watchdog starts (low) or stops holding every new start, with the reading that
+	// flipped it (the resources.changed frame); nil tells nobody. It must not block.
+	OnLowMemory func(low bool, m platform.MemoryStatus)
+	// Machine is the machine profile the auto resource settings are computed from (config.EffectiveResources);
+	// nil is an unknown machine (the auto values at their low ends).
+	Machine func() config.Machine
 	// Clock is the time source (the system clock when nil).
 	Clock clock.Clock
 	// Logger receives engine logs (discarded when nil). Use a logx logger so secrets are masked.
@@ -226,9 +268,24 @@ type Service struct {
 	// health is the accounts' state the attention rules read, refreshed by the attention watcher.
 	healthMu sync.Mutex
 	health   map[string]accountHealth
-	// overlaps caches the contention view of each repository for a few seconds.
-	overlapMu sync.Mutex
-	overlaps  map[string]overlapCache
+	// overlaps caches the contention view of each repository for a few seconds; overlapSweep is set while the
+	// goroutine that drops expired views runs (sweepOverlaps).
+	overlapMu    sync.Mutex
+	overlaps     map[string]overlapCache
+	overlapSweep bool
+
+	// resMu guards the resource state (resources.go): the watchdog's hold (low), whether it stopped a gate in
+	// this low-memory episode (stopped), the heavy commands in flight (newest last), the last spaced start, lowWake,
+	// closed and replaced whenever low flips, and activity, closed and replaced when a run or a heavy command starts
+	// (it wakes an idle watchdog), and slotHolders, the tasks whose gate holds a gate slot now (with how many).
+	resMu       sync.Mutex
+	low         bool
+	stopped     bool
+	gateRuns    []*gateRun
+	slotHolders map[string]int
+	lastAdmit   time.Time
+	lowWake     chan struct{}
+	activity    chan struct{}
 }
 
 // toolEnv is the toolchain pin for commands run in dir with the daemon's environment.
@@ -267,7 +324,8 @@ func New(o Options) (*Service, error) {
 	return &Service{
 		o: o, repo: NewRepo(o.DB, o.Clock.Now), bus: NewBus(), clk: o.Clock, log: o.Logger,
 		locks: map[string]*taskLock{}, runs: map[string]*run{}, watches: map[string]*consoleWatch{},
-		root: root, cancel: cancel, overlaps: map[string]overlapCache{},
+		root: root, cancel: cancel, overlaps: map[string]overlapCache{}, lowWake: make(chan struct{}),
+		activity: make(chan struct{}),
 	}, nil
 }
 
@@ -302,7 +360,43 @@ func (s *Service) Start(ctx context.Context) error {
 	s.refreshHealth(ctx)
 	s.spawn("attention", "", s.watchAttention)
 	s.spawn("sweep", "", s.watchSweep)
+	if s.o.Resources != nil {
+		s.spawn("memory", "", s.watchMemory)
+	}
 	return nil
+}
+
+// backfillPause is the rest between two batches of the digest backfill, so that it yields to the daemon's work.
+const backfillPause = 50 * time.Millisecond
+
+// BackfillDigests stores, in the background, the list digest of the tasks written before the digest columns existed
+// (Repo.BackfillDigests): the daemon calls it once it listens, so a large database after an upgrade never delays the
+// start. It stops when the engine closes; a task that cannot be read is logged and keeps loading its turns when
+// listed. Lists are right before, during and after it.
+func (s *Service) BackfillDigests() {
+	s.spawn("digests", "", func() {
+		ctx := s.root
+		pause := func(ctx context.Context) error {
+			t := s.clk.NewTimer(backfillPause)
+			defer t.Stop()
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-t.C():
+				return nil
+			}
+		}
+		skip := func(id string, err error) {
+			s.log.Warn("task: list digest not stored; the task's turns cannot be read", "task", id, "err", err)
+		}
+		n, err := s.repo.BackfillDigests(ctx, pause, skip)
+		switch {
+		case err != nil && ctx.Err() == nil:
+			s.log.Warn("task: list digest backfill stopped", "stored", n, "err", err)
+		case n > 0:
+			s.log.Info("task: list digests stored", "tasks", n)
+		}
+	})
 }
 
 // Close stops the engine: it stops following workers and waits (until ctx ends) for its goroutines. Workers keep

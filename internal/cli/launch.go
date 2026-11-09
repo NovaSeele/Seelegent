@@ -8,8 +8,11 @@ import (
 
 // launchCommandName is the hidden subcommand the daemon starts, detached, to run one worker turn (see package
 // launch). It is not meant to be typed by people.
-const launchCommandName = "__launch"
+const launchCommandName = launch.Subcommand
 
+// newLaunchCommand is the launcher as a cobra command, so that help hides it and tests can run it through Run. The
+// process the daemon starts never gets here: Execute hands `seelegent __launch` to launch.Main first, which runs
+// the same code as the companion executable (cmd/seelegent-launch) with the launcher's runtime limits.
 func newLaunchCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:    launchCommandName + " <dir>",
@@ -21,3 +24,6 @@ func newLaunchCommand() *cobra.Command {
 		},
 	}
 }
+
+// isLaunch reports whether args (without the program name) run the launcher, as the daemon starts it.
+func isLaunch(args []string) bool { return len(args) > 0 && args[0] == launchCommandName }

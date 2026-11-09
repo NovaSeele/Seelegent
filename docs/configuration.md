@@ -50,7 +50,8 @@ Seelegent works on, or the `gh` CLI, whose own credential store Seelegent then u
 ## How the file is read and written
 
 - A missing `config.json` means "all defaults"; it is written the first time a setting is saved.
-- Every key is optional. A missing key, or a key set to `null`, takes its default.
+- Every key is optional. A missing key, or a key set to `null`, takes its default. For the five auto settings
+  under [Resources](#resources) the default is computed from the machine, and it is never written to the file.
 - A UTF-8 byte order mark at the start (Notepad, Windows PowerShell 5.1's `Set-Content -Encoding UTF8`) is
   skipped; saves never write one.
 - A file that is not valid JSON, has a value of the wrong type, or holds a value out of range is an **error**: the
@@ -118,10 +119,10 @@ was refused fails instead of ending done.
 | Setting | Type | Default | Meaning |
 | --- | --- | --- | --- |
 | `maxConcurrentPerAccount` | integer 1–64 | `2` | Turns that may run at the same time on one account. |
-| `quotaRefreshMinutes` | integer ≥ 1 | `10` | How often quota is read from every account (each cycle ±10 % so accounts are not all read at the same instant). A change applies at once: the next cycle comes one new interval after the last one ended, or right away when that time has passed. Accounts marked signed out are read every 6 hours instead, or at once after a sign-in or a refused run. |
+| `quotaRefreshMinutes` | integer ≥ 1 | `10` | How often quota is read from every account (each cycle ±10 % so accounts are not all read at the same instant). A change applies at once: the next cycle comes one new interval after the last one ended, or right away when that time has passed. Accounts marked signed out are read every 6 hours instead, or at once after a sign-in or a refused run. When the daemon is idle (no pending task, no open dashboard, and no dashboard, CLI or MCP call for 30 minutes) the cycles stretch to 6× the interval, at most 60 minutes; the first call after that reads at once when the last cycle is older than the interval (the call does not wait for it). After a worker run that ended well the account is read only when its quota is over 2 minutes old; after a failed run, always. |
 | `minRemaining` | number 0 ≤ x < 1 | `0.03` | An account is skipped for a quota group once its remaining fraction is at or below this; it rests until the used-up windows reset. |
 | `passiveCooldownMinutes` | integer ≥ 1 | `60` | Rest after a quota error for API-key accounts whose provider cannot report the reset time. |
-| `usageHistory` | boolean | `true` | Record hourly usage snapshots (kept 30 days). The usage summary per task and account is recorded either way. |
+| `usageHistory` | boolean | `true` | Record hourly usage snapshots (kept 30 days). The usage summary per task and account, the spend of API-key accounts and their spend service readings are recorded either way. |
 | `taskTimeoutMinutes` | integer ≥ 1 | `45` | Hard limit of one worker turn. |
 | `linkIntoProfiles` | list of relative paths | `.gitconfig`, `.git-credentials`, `.npmrc`, `.ssh`, `.config`, `.cargo`, `.rustup`, `.m2`, `.gradle`, `.nuget`, `go` | Entries of your real home directory linked into every isolated profile so worker commands keep their configuration. `[]` links nothing. |
 
@@ -157,11 +158,64 @@ Gates, lanes, the verifier and the proof ledger are described in [gates.md](gate
 | `snapshotRetentionDays` | integer ≥ 1 | `14` | How long the turn snapshots and attempt folders of a finished task are kept after its last change ([safety.md](safety.md)). |
 | `contentionWindowHours` | integer ≥ 1 | `24` | How far back tasks count when warning that several tasks touch the same files. |
 
+### Resources
+
+How much of the machine Seelegent's worker trees, gate commands and the daemon itself may use. Every change applies
+without restarting the daemon: a running worker or gate command keeps the limits it started with, the next one gets
+the new values (the "Applies" column). A memory reading the system cannot give never holds anything back.
+
+`gateConcurrency`, `minFreeMemoryMB`, `minFreeCommitMB`, `criticalFreeMemoryMB` and `testParallelism` are **auto**
+by default: while the key is absent from `config.json` (or `null`), the daemon computes the value from the machine,
+so one default suits a 4 GB laptop and a 128 GB workstation. A value you set wins, and `0` still means off or
+unlimited; setting the key to `null` again (`PATCH /api/v1/settings` with `null`, or "Use auto" in the dashboard)
+returns it to auto. In the dashboard, "Set" opens the field at the value in use, and leaving it unchanged keeps
+the setting auto: to pin the current value, type a different number and then the one you want, or write it into
+`config.json` (or `PATCH` it). A computed value is never written to `config.json`. `GET /api/v1/health`
+(`resources`, each with a `source`, and `machine`) and `seelegent doctor` (check `resources`) show the values in use.
+The source is
+`explicit` for a value you set, `auto` for one computed from the machine, and `derived` for an auto memory threshold
+computed from the other one you set (see the last point below).
+
+| Auto setting | Formula | 8 GB, 4 CPUs (Windows, 12 GB commit) | 16 GB, 16 CPUs (Linux) | 31 GB, 24 CPUs (Windows, 36 GB commit) |
+| --- | --- | --- | --- | --- |
+| `minFreeMemoryMB` | 12.5% of the physical memory, from 512 to 2048 | 1024 | 2048 | 2048 |
+| `criticalFreeMemoryMB` | half of `minFreeMemoryMB` | 512 | 1024 | 1024 |
+| `minFreeCommitMB` | Windows with a known commit limit: 10% of it, from 1024 to 4096; else `0` | 1228 | 0 | 3686 |
+| `testParallelism` | a quarter of the CPUs, from 1 to 8 | 1 | 4 | 6 |
+| `gateConcurrency` | an eighth of the CPUs or one per 8 GB of memory, whichever is less, from 1 to 4 | 1 | 2 | 3 |
+
+- The machine is read once when the daemon starts and again when the settings change, never per memory reading, so
+  the auto thresholds hold still. Physical memory is the cgroup memory limit when that is lower (containers; cgroup
+  v2, else the v1 `memory.limit_in_bytes`); the
+  commit limit is rounded down to a whole GB, so a growing page file does not move them.
+- The CPUs are the ones the daemon may use: `GOMAXPROCS` (which follows the cgroup CPU limit on Linux), or, when
+  `GOMAXPROCS` is set in the daemon's environment, the logical CPUs lowered to the cgroup v2 `cpu.max` (v1:
+  `cpu.cfs_quota_us` / `cpu.cfs_period_us`).
+- When only one of `minFreeMemoryMB` and `criticalFreeMemoryMB` is set, the other is derived so the floor stays below
+  the minimum: an auto floor is half the minimum you set (half the auto minimum when yours is `0`), and an auto
+  minimum is twice a floor you set at or above the auto minimum. Such a value has the source `derived`. A floor set
+  alone may be at most 524288 (so that twice it stays in range); the rule "the floor must be below the minimum" is
+  checked when you set both.
+
+| Setting | Type | Default | Applies | Meaning |
+| --- | --- | --- | --- | --- |
+| `workerPriority` | `low`, `normal` | `"low"` | next launch | Process priority of worker trees. `low` is `BELOW_NORMAL_PRIORITY_CLASS` for the whole Job Object on Windows (every descendant included; the launcher itself stays at normal priority) and nice 10 on Unix (the launcher lowers its own nice before it starts the worker, so every descendant inherits it). Low priority only shares the CPU: it does not lower memory or disk pressure. |
+| `gatePriority` | `low`, `normal` | `"low"` | next command | Process priority of gate commands, proof regression runs, automation prechecks and event hooks. git, quota reads and `gh` always run at normal priority. Low priority makes gates slower on a busy machine, so they may need a larger `gateTimeoutSec`. |
+| `maxConcurrentWorkers` | integer 0–256 | `0` | now | Worker turns that may run at the same time over all accounts (`maxConcurrentPerAccount` still caps each account); `0` = no cap. |
+| `gateConcurrency` | integer 0–64 or `null` | auto | now | Gate commands and regression runs that may run at the same time; the others wait in order with the gate phase `queued`, and their timeout starts only when their command starts. `0` = unlimited. |
+| `minFreeMemoryMB` | integer 0–1048576 or `null` | auto | next check | A new worker turn or gate command waits while the available physical memory is below this many MB (the task shows status `waiting_quota` with `waiting: "memory"`, a gate phase `queued` with wait `memory`); `0` = off. |
+| `minFreeCommitMB` | integer 0–1048576 or `null` | auto | next check | The same for the available commit (RAM plus page file). Windows only: elsewhere commit is unknown and never holds anything. `0` = off. |
+| `criticalFreeMemoryMB` | integer 0–1048576 or `null` | auto | next check | Emergency floor. While free physical memory or free commit is below it, the newest running gate command is stopped (its gate is queued again and the turn does not fail; after 3 such stops in one gate phase the gate ends in error), every new start waits, and the dashboard shows that the machine is low on memory. Workers are never stopped for it. While both are set and on it must be below `minFreeMemoryMB`. `0` = off. |
+| `workerMemoryLimitMB` | integer 0–1048576 | `0` | next launch | Windows only: memory cap of each worker tree (Job Object). A turn that reaches it fails with a message saying so; edits already on disk stay. `0` = off. |
+| `workerCPURatePercent` | integer 0–100 | `0` | next launch | Windows only: hard cap of each worker tree's CPU, as a percentage of the whole machine (Job Object CPU rate control). `0` = off. |
+| `testParallelism` | integer 0–64 or `null` | auto | next full brief, next gate | Parallelism hint for tests and builds: full briefs get a "Shared machine" section (test only the packages you changed; cap `-p`, `-j`, `--maxWorkers`, `cargo -j`, `pytest -n`), and the environments of worker turns, gate commands and regression runs get `-p=N` appended to `GOFLAGS` (unless the daemon's `GOFLAGS` sets `-p` already), `CARGO_BUILD_JOBS=N` and `PYTEST_XDIST_AUTO_NUM_WORKERS=N` (unless the daemon's environment sets them). These are defaults only: a `-p`, `-j` or `-n` on a command line wins. `0` = no hint and no variables. |
+| `daemonMemoryLimitMB` | integer 0–65536 | `0` | now | Soft memory limit of the daemon process (Go's `debug.SetMemoryLimit`): the garbage collector works harder near it, the daemon is never stopped for it. A `GOMEMLIMIT` in the daemon's environment wins. `0` = off. |
+
 ### GitHub and automations
 
 | Setting | Type | Default | Meaning |
 | --- | --- | --- | --- |
-| `githubPollMinutes` | integer ≥ 0 | `10` | How often pull request states and GitHub inboxes are polled; `0` turns polling off. |
+| `githubPollMinutes` | integer ≥ 0 | `10` | How often pull request states and GitHub inboxes are polled; `0` turns polling off. A poll with no connected GitHub repository and no open ticket does nothing (it does not even check the access, which may run `gh`). |
 | `githubEnterpriseHosts` | list of strings | `[]` | GitHub Enterprise Server hosts whose remotes count as GitHub besides `github.com`: a host name (optionally with a port) or an `https` URL; `http` only for a loopback address. Any other host is never sent the token ([github.md](github.md)). |
 | `automationsEnabled` | boolean | `true` | Master switch of scheduled automations (each automation is still created disabled). |
 

@@ -34,7 +34,16 @@ const (
 	ReasonVerifierRejected = "verifier_rejected"
 	// ReasonPeerObjection: a peer member objected in a consult; the lead answers it before accepting.
 	ReasonPeerObjection = "peer_objection"
+	// ReasonResourcesWait: the task has waited ResourcesWaitAfter for free memory (state info, who user; not
+	// NeedsLead: the lead cannot act on it). Params: Minutes, AvailableMB, NeedMB.
+	ReasonResourcesWait = "resources_wait"
+	// ReasonBudgetReached: the task waits because every account that could run it rests on its budget (who user:
+	// raise a budget, switch its stop off or change a key). Params: Account, BudgetUSD, Count.
+	ReasonBudgetReached = "budget_reached"
 )
+
+// ResourcesWaitAfter is how long a task waits for resources before ReasonResourcesWait is raised.
+const ResourcesWaitAfter = 10 * time.Minute
 
 // objectionDetail names the peers who object and the first change each requires (or finding).
 func objectionDetail(t *Task, open []string) string {
@@ -207,8 +216,27 @@ func computeAttention(t *Task, live liveState, acc accountHealth, now time.Time,
 		if acc.known && acc.usable == 0 {
 			return noAccounts(noAccountDetail(t.Backend))
 		}
+		if t.Waiting == api.WaitingMemory {
+			// The lead cannot act on a memory wait: only a long one is shown, to the user, and it never needs the
+			// lead (needsLead: info).
+			if mw := t.MemoryWait; mw != nil && now.Sub(mw.Since) >= ResourcesWaitAfter {
+				return att(api.AttentionInfo, ReasonResourcesWait, WhoUser,
+					fmt.Sprintf("free %d MB < threshold %d MB", mw.AvailableMB, mw.NeedMB),
+					&api.AttentionParams{Minutes: int(now.Sub(mw.Since).Minutes()), AvailableMB: mw.AvailableMB,
+						NeedMB: mw.NeedMB})
+			}
+			return nil
+		}
 		if t.Waiting == string(pool.ReasonNoAccount) {
 			return noAccounts(t.WaitDetail)
+		}
+		if t.Waiting == api.WaitingBudget {
+			var params *api.AttentionParams
+			if len(t.WaitBudget) > 0 {
+				params = &api.AttentionParams{Account: t.WaitBudget[0].AccountID,
+					BudgetUSD: t.WaitBudget[0].BudgetUSD, Count: len(t.WaitBudget)}
+			}
+			return att(api.AttentionBlocked, ReasonBudgetReached, WhoUser, t.WaitDetail, params)
 		}
 		return nil
 	case StatusDone:
@@ -261,11 +289,23 @@ func computeAttention(t *Task, live liveState, acc accountHealth, now time.Time,
 			return att(api.AttentionBlocked, ReasonWorkAtRisk, WhoLead, fmt.Sprintf("%d file(s) at risk", n),
 				&api.AttentionParams{Count: n})
 		}
-		return att(api.AttentionInfo, ReasonReview, WhoLead, "")
+		return att(api.AttentionInfo, ReasonReview, WhoLead, backgroundTimeout(tu))
 	case StatusFailed:
 		return att(api.AttentionBlocked, ReasonFailed, WhoLead, t.Error, failedParams(t.Error))
 	}
 	return nil
+}
+
+// backgroundTimeout is backend.BackgroundWaitTimeout when the turn's time limit ended one of its attempts while the
+// CLI only waited for a background command (its dev server and other commands are gone), else "" (field report 4,
+// F8).
+func backgroundTimeout(tu *Turn) string {
+	for _, a := range tu.Attempts {
+		if a.Status == AttemptBackgroundWait && a.Outcome != nil && a.Outcome.Error == backend.BackgroundWaitTimeout {
+			return backend.BackgroundWaitTimeout
+		}
+	}
+	return ""
 }
 
 // failedParams are the params of a failed flag whose error says how the worker process ended (backend.exitText):
@@ -288,6 +328,10 @@ func failedParams(msg string) *api.AttentionParams {
 // a.json"), and which other tasks a foreign failure may be caused by. The dashboard builds its own text from the
 // turn's steps; this one is for the lead (MCP, CLI).
 func gateDetail(g *api.GateResult) string {
+	if g.Reason == api.GateReasonLowMemory {
+		return "the machine kept running out of memory: the watchdog stopped the gate's commands " +
+			fmt.Sprint(api.GateLowMemoryStopsMax) + " times"
+	}
 	var parts []string
 	for i := range g.Steps {
 		s := &g.Steps[i]
@@ -473,6 +517,7 @@ func sameParams(a, b *api.AttentionParams) bool {
 	return a.Kind == b.Kind && a.Minutes == b.Minutes && a.Count == b.Count && a.Steps == b.Steps &&
 		a.Tool == b.Tool && a.Command == b.Command && a.Backend == b.Backend && a.Task == b.Task &&
 		a.Title == b.Title && slices.Equal(a.Denied, b.Denied) && slices.Equal(a.Options, b.Options) &&
+		a.AvailableMB == b.AvailableMB && a.NeedMB == b.NeedMB &&
 		(a.ExitCode == nil) == (b.ExitCode == nil) && (a.ExitCode == nil || *a.ExitCode == *b.ExitCode)
 }
 

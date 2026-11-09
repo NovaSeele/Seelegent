@@ -132,6 +132,11 @@ export const ICONS = {
     ['polyline', '1 20 1 14 7 14'],
     ['path', 'M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15'],
   ],
+  /** A key (replacing an API key). */
+  key: [
+    ['circle', 7.5, 16.5, 4.5],
+    ['path', 'M10.7 13.3 20 4M17 7l2.5 2.5M14.5 9.5l2 2'],
+  ],
   copy: [
     ['rect', 9, 9, 12, 12, 2],
     ['path', 'M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1'],
@@ -201,6 +206,13 @@ export const ICONS = {
   quota: [
     ['path', 'M12 14l3.5-3.5'],
     ['path', 'M3.34 19a10 10 0 1 1 17.32 0'],
+  ],
+  // A full dial with ticks (the quota icon is the half arc): resource limits.
+  gauge: [
+    ['circle', 12, 13, 8],
+    ['path', 'M12 5v1.5M5.07 9l1.3.75M18.93 9l-1.3.75'],
+    ['path', 'M12 13l3.5-3.5'],
+    ['dot', 12, 13, 1.2],
   ],
   gates: [['path', 'M12 3 4.5 6v5.5c0 4.6 3.2 8.4 7.5 9.5 4.3-1.1 7.5-4.9 7.5-9.5V6z']],
   bell: [

@@ -15,9 +15,12 @@ import (
 	"io"
 	"io/fs"
 	"log/slog"
+	"math"
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
+	"runtime/debug"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -30,11 +33,14 @@ import (
 	"github.com/NovaSeele/Seelegent/internal/config"
 	"github.com/NovaSeele/Seelegent/internal/contest"
 	"github.com/NovaSeele/Seelegent/internal/envx"
+	"github.com/NovaSeele/Seelegent/internal/gate"
 	"github.com/NovaSeele/Seelegent/internal/github"
 	"github.com/NovaSeele/Seelegent/internal/gitx"
 	"github.com/NovaSeele/Seelegent/internal/guard"
 	"github.com/NovaSeele/Seelegent/internal/hook"
 	"github.com/NovaSeele/Seelegent/internal/httpapi"
+	"github.com/NovaSeele/Seelegent/internal/launch"
+	"github.com/NovaSeele/Seelegent/internal/launchbin"
 	"github.com/NovaSeele/Seelegent/internal/logx"
 	"github.com/NovaSeele/Seelegent/internal/meeting"
 	"github.com/NovaSeele/Seelegent/internal/member"
@@ -53,9 +59,6 @@ import (
 	"github.com/NovaSeele/Seelegent/internal/usage"
 )
 
-// launchCommand is the hidden command that runs the detached launcher (internal/cli).
-const launchCommand = "__launch"
-
 // Options configure an App. Paths is required.
 type Options struct {
 	// Paths is the data directory.
@@ -66,8 +69,11 @@ type Options struct {
 	Env []string
 	// RealHome is the user's home folder (os.UserHomeDir when empty).
 	RealHome string
-	// Launcher runs the detached launcher ({os.Executable(), "__launch"} when nil).
+	// Launcher runs the detached launcher. When nil it is {os.Executable(), "__launch"}, or the companion executable
+	// seelegent-launch next to it when that is of this build (launchbin.Resolver, looked at for every launch).
 	Launcher []string
+	// launcherCommand picks the launcher command per launch when Launcher was left nil (launchbin.Resolver).
+	launcherCommand func() []string
 	// GuardExe is the seelegent executable the git guard hooks and the git shim run (os.Executable() when empty).
 	GuardExe string
 	// Bins sets the CLI of a backend (tests); backends not listed are looked up with backend.Find.
@@ -91,10 +97,15 @@ type Options struct {
 	Classifier httpapi.Classifier
 	// DevOrigins are extra loopback browser origins the HTTP API accepts (the Vite dev server); see httpapi.Options.
 	DevOrigins []string
+	// ImageWriteTimeout is httpapi.Options.ImageWriteTimeout (30 s when 0); tests shorten it.
+	ImageWriteTimeout time.Duration
 	// Gh is the gh CLI (looked up on Env's PATH when empty); NoGh means there is none (tests: the real gh must
 	// never run).
 	Gh   string
 	NoGh bool
+	// ReadMachine reads the machine profile the auto resource settings are computed from (the system's, from
+	// platform.Memory, platform.CPUs and runtime.GOOS, when nil). It is read at start and when the settings change.
+	ReadMachine func() config.Machine
 }
 
 // App holds the daemon's services.
@@ -104,20 +115,23 @@ type App struct {
 	Accounts  *account.Manager
 	Quotas    *quota.Store
 	Refresher *quota.Refresher
-	Pool      *pool.Pool
-	Usage     *usage.Store
-	Memory    *memory.Store
-	Roles     *role.Store
-	Backends  map[string]backend.Backend
-	Tasks     *task.Service
-	Proof     *proof.Service
-	Git       *gitx.Repos
-	SignIn    *signin.Service
-	Members   *member.Store
-	Notes     *notes.Store
-	Meetings  *meeting.Service
-	Contests  *contest.Service
-	Hooks     *hook.Service
+	// Spend reads the spend services of API-key accounts (OpenRouter, DeepSeek, Moonshot); nil with
+	// Options.NoQuotaReaders.
+	Spend    *quota.ServiceRefresher
+	Pool     *pool.Pool
+	Usage    *usage.Store
+	Memory   *memory.Store
+	Roles    *role.Store
+	Backends map[string]backend.Backend
+	Tasks    *task.Service
+	Proof    *proof.Service
+	Git      *gitx.Repos
+	SignIn   *signin.Service
+	Members  *member.Store
+	Notes    *notes.Store
+	Meetings *meeting.Service
+	Contests *contest.Service
+	Hooks    *hook.Service
 	// GitHub, Tickets and Automations are milestone 15 (github.go).
 	GitHub      *github.Driver
 	Tickets     *ticket.Service
@@ -139,8 +153,22 @@ type App struct {
 	started0   time.Time
 	pid        int
 	patchMu    sync.Mutex
+	// imageWriteTimeout is Options.ImageWriteTimeout.
+	imageWriteTimeout time.Duration
 	// rescheduler re-arms the quota refresher when quotaRefreshMinutes changes (the Refresher; a fake in tests).
 	rescheduler interface{ Reschedule() }
+	// sampler is the cached memory reading the task engine and GET /health share; slots are the gate slots
+	// (gateConcurrency) of task gates and regression runs.
+	sampler *task.Sampler
+	slots   *gate.Slots
+	// machine is the machine profile (readMachine at start and on each settings change), never read per sample, so
+	// the auto thresholds hold still between readings.
+	machine     atomic.Pointer[config.Machine]
+	readMachine func() config.Machine
+	// setMemoryLimit is debug.SetMemoryLimit (a fake in tests); memoryLimitSet says daemonMemoryLimitMB set it.
+	setMemoryLimit func(int64) int64
+	memoryLimitMu  sync.Mutex
+	memoryLimitSet bool
 	// stopCh is closed (once) when someone asked the daemon to stop through the API.
 	stopCh   chan struct{}
 	stopOnce sync.Once
@@ -182,7 +210,13 @@ func New(ctx context.Context, o Options) (*App, error) {
 		if err != nil {
 			return nil, fmt.Errorf("app: own executable: %w", err)
 		}
-		o.Launcher = []string{exe, launchCommand}
+		if resolved, err := filepath.EvalSymlinks(exe); err == nil {
+			exe = resolved
+		}
+		o.Launcher = []string{exe, launch.Subcommand}
+		// The companion executable next to it runs the launches when it is of this build (launchbin).
+		self, _ := debug.ReadBuildInfo()
+		o.launcherCommand = launchbin.NewResolver(exe, self, o.Logger).Command
 	}
 	if o.GuardExe == "" {
 		exe, err := os.Executable()
@@ -195,8 +229,13 @@ func New(ctx context.Context, o Options) (*App, error) {
 		o.GuardExe = exe
 	}
 	a := &App{Paths: o.Paths, log: o.Logger, env: o.Env, info: o.Info, web: o.Web, classifier: o.Classifier,
-		devOrigins: o.DevOrigins,
-		redact:     logx.NewRedactor().String, started0: o.Clock.Now(), pid: os.Getpid(), stopCh: make(chan struct{})}
+		devOrigins: o.DevOrigins, imageWriteTimeout: o.ImageWriteTimeout,
+		redact: logx.NewRedactor().String, started0: o.Clock.Now(), pid: os.Getpid(), stopCh: make(chan struct{}),
+		setMemoryLimit: debug.SetMemoryLimit, readMachine: o.ReadMachine}
+	if a.readMachine == nil {
+		a.readMachine = systemMachine
+	}
+	a.refreshMachine()
 	if o.Settings != nil {
 		s := *o.Settings
 		a.settings.Store(&s)
@@ -228,6 +267,13 @@ func (a *App) build(o Options) error {
 	a.Accounts = account.NewManager(a.DB, account.NewProfiles(o.Paths.Profiles, o.RealHome), now)
 	a.Quotas = quota.NewStore(a.DB)
 	a.Usage = usage.NewStore(a.DB, o.Clock, time.Local)
+	a.Usage.OnBudget(func(_ context.Context, c account.BudgetCrossing) {
+		// The dashboard shows the state from the account (budgetState); the log keeps the moment it was crossed.
+		a.log.Info("account: budget "+c.State, "account", c.AccountID, "provider", c.Provider, "message", c.Message())
+		if a.Pool != nil {
+			a.Pool.Notify() // a reached budget changes what the pool may pick, and wakes the account frames
+		}
+	})
 	a.Memory = memory.New(a.DB, now)
 	a.Roles = role.New(role.Options{DB: a.DB, Home: o.RealHome, Now: now})
 	a.Members = member.New(member.Options{DB: a.DB, Providers: a.Accounts, Now: now,
@@ -279,6 +325,12 @@ func (a *App) build(o Options) error {
 				p.Notify()
 			}
 		},
+		// The idle policy: a pending task or an open dashboard keeps the cycles at quotaRefreshMinutes.
+		Busy: func(ctx context.Context) bool {
+			clients := 0
+			a.withAPI(func(s *httpapi.Server) { clients = s.Hub().Clients() })
+			return clients > 0 || a.Tasks != nil && a.Tasks.Busy(ctx)
+		},
 	})
 	if err != nil {
 		return err
@@ -293,6 +345,22 @@ func (a *App) build(o Options) error {
 		return err
 	}
 	a.Pool = p
+	if !o.NoQuotaReaders {
+		reader := backend.ServiceReader{}
+		a.Spend, err = quota.NewServiceRefresher(quota.ServiceOptions{
+			Accounts: a.Accounts, Read: reader.Read, Clock: o.Clock, Logger: a.log, NoCredit: p.MarkNoCredit,
+			OnUpdate: func(_ context.Context, _ string, crossings []account.BudgetCrossing) {
+				for _, c := range crossings {
+					a.log.Info("account: budget "+c.State, "account", c.AccountID, "provider", c.Provider,
+						"message", c.Message())
+				}
+				p.Notify() // a reading changes the account frames, a reached budget what the pool may pick
+			},
+		})
+		if err != nil {
+			return err
+		}
+	}
 
 	consoles := o.Consoles
 	if consoles == nil {
@@ -309,10 +377,14 @@ func (a *App) build(o Options) error {
 	// One toolchain probe for the daemon: worker turns, task gates and regression runs get the same pin (cached
 	// per folder).
 	a.toolchains = account.NewToolchains(o.RealHome, nil, now)
+	a.sampler = task.NewSampler(platform.Memory, o.Clock, a.Limits)
+	a.slots = gate.NewSlots(func() int { return a.Limits().GateConcurrency })
 	a.Tasks, err = task.New(task.Options{
 		DB: a.DB, Accounts: a.Accounts, Pool: p, Backends: a.Backends, Settings: a.Settings,
-		TasksDir: o.Paths.Tasks, Launcher: o.Launcher, Usage: a.Usage, QuotaRefresh: a.Refresher.Request,
-		Memory: a.Memory, Roles: a.Roles, Consoles: consoles, Clock: o.Clock, Logger: a.log,
+		TasksDir: o.Paths.Tasks, DataDir: o.Paths.Home, Launcher: o.Launcher, LauncherCommand: o.launcherCommand,
+		Usage:        a.Usage,
+		QuotaRefresh: a.afterRun, Memory: a.Memory, Roles: a.Roles, Consoles: consoles, Clock: o.Clock,
+		Logger:        a.log,
 		BaseEnv:       func() []string { return a.env },
 		Toolchains:    a.toolchains,
 		Dashboard:     a.dashboardLink,
@@ -325,12 +397,19 @@ func (a *App) build(o Options) error {
 		Ledger:        ledger,
 		Members:       a.Members,
 		ContestEnded:  a.contestEnded,
+		Resources:     a.sampler,
+		GateSlots:     a.slots,
+		Machine:       a.Machine,
+		OnLowMemory: func(low bool, m platform.MemoryStatus) {
+			a.withAPI(func(s *httpapi.Server) { s.PublishResourcesChanged(low, m) })
+		},
 	})
 	if err != nil {
 		return err
 	}
 	a.Proof = proof.New(proof.Options{Ledger: ledger, Git: proofGit{a.Git}, Exec: a.proofExec, Active: a.Tasks.ActiveIn,
-		TaskFeatures: a.Tasks.SpecFeatures, Publish: a.publishProofRun, LogDir: o.Paths.Logs, Now: now, Logger: a.log})
+		HoldsGateSlot: a.Tasks.HoldsGateSlot, TaskFeatures: a.Tasks.SpecFeatures, Publish: a.publishProofRun,
+		LogDir: o.Paths.Logs, Now: now, Logger: a.log})
 	if err := a.buildTeam(now); err != nil {
 		return err
 	}
@@ -355,6 +434,15 @@ func (a *App) build(o Options) error {
 		Logger: a.log,
 	})
 	return nil
+}
+
+// afterRun asks for the reads that follow an attempt on an account: its quota (sign-in accounts) and its spend
+// service (API-key accounts of OpenRouter, DeepSeek, Moonshot; debounced).
+func (a *App) afterRun(accountID string, failed bool) {
+	a.Refresher.AfterRun(accountID, failed)
+	if a.Spend != nil {
+		a.Spend.AfterTurn(accountID)
+	}
 }
 
 // quotaReader returns the quota reader of a backend, or nil.
@@ -410,6 +498,25 @@ func scopeAllowed(profiles string, env []string) []string {
 // Settings returns the current settings.
 func (a *App) Settings() config.Settings { return *a.settings.Load() }
 
+// Machine is the machine profile the auto resource settings are computed from.
+func (a *App) Machine() config.Machine { return *a.machine.Load() }
+
+// Limits are the effective values of the machine-sized settings (config.EffectiveResources).
+func (a *App) Limits() config.Resources { return config.EffectiveResources(a.Settings(), a.Machine()) }
+
+// refreshMachine reads the machine profile again.
+func (a *App) refreshMachine() {
+	m := a.readMachine()
+	a.machine.Store(&m)
+}
+
+// systemMachine is this machine's profile: total memory (the cgroup limit when lower), total commit (Windows) and
+// the CPUs the daemon may use.
+func systemMachine() config.Machine {
+	m := platform.Memory()
+	return config.NewMachine(m.TotalPhysMB, m.TotalCommitMB, platform.CPUs(), runtime.GOOS)
+}
+
 // dashboardLink is the deep link to a task in the dashboard.
 func (a *App) dashboardLink(id string) string {
 	port, err := config.ResolvePort(a.Settings(), func(k string) string { v, _ := envx.Lookup(a.env, k); return v })
@@ -431,11 +538,19 @@ func (a *App) Start(ctx context.Context) error {
 	runCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	a.cancel = cancel
 	a.mu.Unlock()
+	a.applyMemoryLimit(a.Settings().DaemonMemoryLimitMB)
 	a.wg.Add(1)
 	go func() {
 		defer a.wg.Done()
 		a.Refresher.Run(runCtx)
 	}()
+	if a.Spend != nil {
+		a.wg.Add(1)
+		go func() {
+			defer a.wg.Done()
+			a.Spend.Run(runCtx)
+		}()
+	}
 	if err := a.Proof.Start(ctx); err != nil {
 		a.log.Warn("app: abandon stale proof runs", "err", err)
 	}
@@ -447,6 +562,24 @@ func (a *App) Start(ctx context.Context) error {
 	a.startTeam(ctx, runCtx)
 	a.startGitHub(ctx)
 	return nil
+}
+
+// applyMemoryLimit sets the daemon's soft memory limit to mb MiB (daemonMemoryLimitMB), or lifts the one it set
+// when mb is 0. A GOMEMLIMIT in the daemon's environment wins: the setting is not applied then.
+func (a *App) applyMemoryLimit(mb int) {
+	if v, ok := envx.Lookup(a.env, "GOMEMLIMIT"); ok && v != "" {
+		return
+	}
+	a.memoryLimitMu.Lock()
+	defer a.memoryLimitMu.Unlock()
+	switch {
+	case mb > 0:
+		a.setMemoryLimit(int64(mb) << 20)
+		a.memoryLimitSet = true
+	case a.memoryLimitSet:
+		a.setMemoryLimit(math.MaxInt64) // the runtime's default: no limit
+		a.memoryLimitSet = false
+	}
 }
 
 // RequestStop asks the process that runs the App to shut it down (POST /daemon/stop). It only signals: the owner
@@ -515,4 +648,16 @@ func (terminals) Running(p task.ConsoleProcess) bool { return platform.ProcessRu
 func (terminals) Find(exitFile string) (task.ConsoleProcess, bool) {
 	pid, start, ok := platform.AttachTerminal(exitFile).Identity()
 	return task.ConsoleProcess{Pid: pid, Start: start}, ok
+}
+
+// DebugVars are the daemon's own values for /debug/vars (the --pprof-addr debug server): the SSE replay ring's
+// frames, encoded bytes and estimated heap bytes, so a heap reading can tell the ring from a leak. Cheap: no
+// stop-the-world.
+func (a *App) DebugVars() map[string]any {
+	out := map[string]any{}
+	a.withAPI(func(s *httpapi.Server) {
+		frames, wire, heap := s.Hub().RingStats()
+		out["sseRing"] = map[string]int{"frames": frames, "bytes": wire, "heapBytes": heap}
+	})
+	return out
 }

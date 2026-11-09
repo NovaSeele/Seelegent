@@ -2,12 +2,13 @@ package task
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"slices"
 	"strings"
 	"time"
 
 	"github.com/NovaSeele/Seelegent/internal/api"
-	"github.com/NovaSeele/Seelegent/internal/backend"
 	"github.com/NovaSeele/Seelegent/internal/memory"
 )
 
@@ -165,7 +166,7 @@ func (s *Service) Cancel(ctx context.Context, id string, req api.CancelRequest) 
 			// The console belongs to the user; the task just stops waiting for it.
 			t.Manual, t.Console = false, nil
 			if tu := t.LastTurn(); tu != nil && tu.Status == TurnRunning {
-				evs = append(evs, s.endTurn(t, tu, TurnCancelled, backend.Outcome{}))
+				evs = append(evs, s.endTurn(t, tu, TurnCancelled))
 			}
 			t.Status = StatusCancelled
 			direct = true
@@ -173,7 +174,7 @@ func (s *Service) Cancel(ctx context.Context, id string, req api.CancelRequest) 
 		}
 		if t.Status == StatusWaitingDeps || t.Status == StatusBlockedDeps {
 			if tu := t.LastTurn(); tu != nil && tu.Status == TurnRunning {
-				evs = append(evs, s.endTurn(t, tu, TurnCancelled, backend.Outcome{}))
+				evs = append(evs, s.endTurn(t, tu, TurnCancelled))
 			}
 			t.Status, t.DepsReason, t.DepsBlock = StatusCancelled, "", nil
 			direct = true
@@ -235,6 +236,31 @@ func (s *Service) DismissAttention(ctx context.Context, id string) (api.TaskSumm
 		return api.TaskSummary{}, err
 	}
 	return s.Summary(ctx, id)
+}
+
+// Busy reports whether any task is pending (queued, running, waiting for an account or memory, or waiting for its
+// prerequisites), hidden runs included: the quota refresher keeps its interval while one is (quota idle policy).
+// A database error counts as busy.
+func (s *Service) Busy(ctx context.Context) bool {
+	s.mu.Lock()
+	running := len(s.runs) > 0
+	s.mu.Unlock()
+	if running {
+		return true
+	}
+	busy := true
+	err := s.repo.db.Read(ctx, func(tx *sql.Tx) error {
+		var one int
+		err := tx.QueryRowContext(ctx, `SELECT 1 FROM tasks WHERE status IN (?, ?, ?, ?) LIMIT 1`,
+			string(StatusQueued), string(StatusRunning), string(StatusWaitingQuota), string(StatusWaitingDeps)).
+			Scan(&one)
+		busy = err == nil
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil
+		}
+		return err
+	})
+	return busy || err != nil
 }
 
 func (s *Service) hasRun(id string) bool {

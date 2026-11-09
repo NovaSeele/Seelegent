@@ -79,7 +79,7 @@ func runCommand(ctx context.Context, argv []string, dir string, env []string) (O
 	stdout := &limitedBuffer{limit: maxOutput}
 	stderr := &limitedBuffer{limit: maxOutput}
 	cmd.Stdout, cmd.Stderr = stdout, stderr
-	tree, err := platform.StartTree(cmd)
+	tree, err := platform.StartTreeWith(cmd, platform.TreeOptions{ShareConsole: true}) // a fixed helper program
 	if err != nil {
 		return Output{Code: -1}, fmt.Errorf("start %s: %w", argv[0], err)
 	}
@@ -121,7 +121,7 @@ func startProc(_ context.Context, argv []string, dir string, env []string) (*Pro
 		_ = stdin.Close()
 		return nil, err
 	}
-	tree, err := platform.StartTree(cmd)
+	tree, err := platform.StartTreeWith(cmd, platform.TreeOptions{ShareConsole: true}) // a fixed helper program
 	if err != nil {
 		_ = stdin.Close()
 		return nil, fmt.Errorf("start %s: %w", argv[0], err)

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { iso, makeAccount, T0 } from '@/test/fixtures'
 
-import { accountState, tightestWindow, windowName } from './accountState'
+import { accountState } from './accountState'
 
 describe('account state', () => {
   it('maps the pool status first, then the runtime', () => {
@@ -24,26 +24,5 @@ describe('account state', () => {
     for (const [overrides, state] of cases) {
       expect(accountState(makeAccount(overrides), T0), JSON.stringify(overrides)).toBe(state)
     }
-  })
-
-  it('finds the window with the least left across groups', () => {
-    const account = makeAccount({
-      quota: {
-        source: 'active',
-        groups: [
-          {
-            name: 'pro',
-            windows: [
-              { window: '5h', remaining: 0.4 },
-              { window: 'weekly', remaining: 0.2 },
-            ],
-          },
-          { name: 'flash', windows: [{ window: '5h', label: '5 hours', remaining: 0.3 }] },
-        ],
-      },
-    })
-    const window = tightestWindow(account)
-    expect(window && windowName(window)).toBe('pro · weekly')
-    expect(tightestWindow(makeAccount())).toBeUndefined()
   })
 })

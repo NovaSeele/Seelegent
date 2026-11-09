@@ -236,7 +236,7 @@ func runCommand(ctx context.Context, bin string, args []string, dir string, env 
 	cmd := exec.CommandContext(ctx, bin, args...)
 	cmd.Dir = dir
 	cmd.Env = env
-	platform.HideWindow(cmd)
+	platform.HideWindowShared(cmd) // a fixed helper program
 	var out limitedBuffer
 	out.limit = 1 << 20
 	cmd.Stdout = &out

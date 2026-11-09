@@ -15,6 +15,7 @@ import (
 	"github.com/NovaSeele/Seelegent/internal/config"
 	"github.com/NovaSeele/Seelegent/internal/fsutil"
 	"github.com/NovaSeele/Seelegent/internal/gate"
+	"github.com/NovaSeele/Seelegent/internal/projectkey"
 	"github.com/NovaSeele/Seelegent/internal/proof"
 )
 
@@ -31,7 +32,7 @@ type Ledger interface {
 // Proof is what a task's gate checks, frozen when the task starts (old bug D10: the doctrine was read from the
 // worktree, which the worker can edit, at every gate).
 type Proof struct {
-	// GateOff: the lead turned the gate's checks off (lane and hygiene still run).
+	// GateOff: the lead turned the gate off: no gate phase; the lane is checked after each turn as scope findings.
 	GateOff bool `json:"gateOff,omitempty"`
 	// Detect: the lead asked for the repository's test, lint and build commands (gate: true).
 	Detect bool `json:"detect,omitempty"`
@@ -71,6 +72,12 @@ type GatePhase struct {
 	Since time.Time `json:"since"`
 	// ChildID is the verify task while State is verifying.
 	ChildID string `json:"childId,omitempty"`
+	// Wait is what a queued gate waits for (api.GateWaitSlot or api.GateWaitMemory), Position its place in the
+	// slot queue; both only while State is api.GatePhaseQueued.
+	Wait     string `json:"wait,omitempty"`
+	Position int    `json:"position,omitempty"`
+	// Stops counts the memory watchdog's stops of this phase's gate runs (api.GateLowMemoryStopsMax ends it).
+	Stops int `json:"stops,omitempty"`
 }
 
 // proofRequest is the gate part of a delegate or followup. gateCommands nil leaves the lead's commands as they are;
@@ -335,7 +342,7 @@ func (s *Service) resolveProof(t *Task, req proofRequest, prev *Proof, tasksChan
 		p.Commands = append(p.Commands, gate.Detect(root, t.Cwd)...)
 	}
 	if prev == nil {
-		key, _, err := fsutil.ProjectKey(root)
+		key, _, err := projectkey.Key(root)
 		if err != nil {
 			return nil, invalidf("%v", err)
 		}
@@ -709,7 +716,7 @@ func (s *Service) bump(ctx context.Context, project, name string) {
 
 // Lanes returns the lane claims held in the repository of cwd.
 func (s *Service) Lanes(ctx context.Context, cwd string) (api.LanesView, error) {
-	canonical, _, _, err := fsutil.ProjectOf(cwd)
+	canonical, _, _, err := projectkey.Of(cwd)
 	if err != nil {
 		return api.LanesView{}, invalidf("%v", err)
 	}
@@ -783,28 +790,6 @@ func (s *Service) briefGate(t *Task) (lane, cmds []string) {
 		}
 	}
 	return lane, cmds
-}
-
-// gateSummary is the gate state a task summary shows: the running phase, else the last gate since the lead's
-// latest instruction (null when none ran).
-func gateSummary(t *Task) *api.Gate {
-	fixes := 0
-	if t.Proof != nil {
-		fixes = t.Proof.AutoFixes
-	}
-	if ph := t.GatePhase; ph != nil {
-		return &api.Gate{State: api.GateRunning, Phase: ph.State, AutoFixes: fixes, Turn: ph.Turn}
-	}
-	if len(t.Turns) == 0 {
-		return nil
-	}
-	start := instructionStart(t, t.Turns[len(t.Turns)-1].N)
-	for i := len(t.Turns) - 1; i >= start; i-- {
-		if g := t.Turns[i].Gate; g != nil {
-			return &api.Gate{State: g.State, AutoFixes: fixes, Turn: t.Turns[i].N}
-		}
-	}
-	return nil
 }
 
 // proofAPI is the task's proof as the API shows it.

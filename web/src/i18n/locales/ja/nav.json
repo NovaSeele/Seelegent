@@ -84,5 +84,13 @@
     "runningTitle": "実行中のタスク数",
     "waiting": "待機",
     "waitingTitle": "キューで待機中のタスク数"
+  },
+  "lowMemory": {
+    "low": "マシンのメモリが不足しています：新しい開始を保留中",
+    "freePhys": "空きメモリ {free}",
+    "freeCommit": "空きコミット {free}",
+    "settings": "リソース設定",
+    "floor": "{setting}（{floor}）を下回っています",
+    "waiting": "{count} 件のタスクが待機中"
   }
 }

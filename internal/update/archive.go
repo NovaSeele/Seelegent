@@ -85,9 +85,15 @@ func isBinaryEntry(name, bin string) bool {
 	return len(parts) <= 2 && parts[len(parts)-1] == bin
 }
 
+// errNoEntry: the archive does not hold the file asked for.
+var errNoEntry = errors.New("not in the archive")
+
 // extractBinary copies the executable out of the archive at src (zip, else tar.gz) into dst (mode 0755).
-func extractBinary(src, dst, goos string) error {
-	bin := binaryName(goos)
+func extractBinary(src, dst, goos string) error { return extractFile(src, dst, binaryName(goos)) }
+
+// extractFile copies the file named bin, at the top of the archive at src or one folder down, into dst (mode
+// 0755). The error wraps errNoEntry when the archive holds no such file.
+func extractFile(src, dst, bin string) error {
 	if strings.HasSuffix(src, ".zip") {
 		return extractZip(src, dst, bin)
 	}
@@ -112,7 +118,7 @@ func extractZip(src, dst, bin string) error {
 		_ = rc.Close()
 		return err
 	}
-	return fmt.Errorf("%s holds no %s", path.Base(src), bin)
+	return fmt.Errorf("%s holds no %s: %w", path.Base(src), bin, errNoEntry)
 }
 
 func extractTarGz(src, dst, bin string) error {
@@ -130,7 +136,7 @@ func extractTarGz(src, dst, bin string) error {
 	for {
 		h, err := tr.Next()
 		if errors.Is(err, io.EOF) {
-			return fmt.Errorf("%s holds no %s", path.Base(src), bin)
+			return fmt.Errorf("%s holds no %s: %w", path.Base(src), bin, errNoEntry)
 		}
 		if err != nil {
 			return fmt.Errorf("read %s: %w", path.Base(src), err)

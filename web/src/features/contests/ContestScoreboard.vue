@@ -4,9 +4,11 @@ import { useI18n } from 'vue-i18n'
 
 import type { Contest } from '@/api/types'
 import IconButton from '@/components/ui/IconButton.vue'
+import ProviderMark from '@/components/ui/ProviderMark.vue'
 import StatusPill from '@/components/ui/StatusPill.vue'
 import type { Tone } from '@/components/ui/tone'
 import { useFormat } from '@/composables/useFormat'
+import { useProviderNames } from '@/composables/useProviderNames'
 
 import { gateCell, outTone, runsOn, variantStatus, verifierCell } from './contestModel'
 
@@ -20,6 +22,7 @@ const emit = defineEmits<{ select: [label: string] }>()
 
 const { t } = useI18n()
 const fmt = useFormat()
+const providerName = useProviderNames(() => props.contest.scoreboard.map((r) => r.provider))
 
 const rows = computed(() => {
   const c = props.contest
@@ -40,7 +43,8 @@ const rows = computed(() => {
       return {
         r,
         mark,
-        runsOn: runsOn(r),
+        // The backend (and provider) is its ProviderMark; the text is the member and model.
+        runsOn: r.backend ? runsOn({ member: r.member, model: r.model }) : runsOn(r),
         out: r.disqualified
           ? t('team.contests.out', { reason: t(`team.contests.disqualified.${r.disqualified}`) })
           : '',
@@ -93,7 +97,15 @@ const rows = computed(() => {
               row.mark.text
             }}</span>
           </th>
-          <td>{{ row.runsOn }}</td>
+          <td>
+            <ProviderMark
+              v-if="row.r.backend"
+              :backend="row.r.backend"
+              :provider-name="providerName(row.r.provider)"
+              size="sm"
+            />
+            {{ row.runsOn }}
+          </td>
           <td>
             <StatusPill v-if="row.out" size="sm" :tone="row.outTone" :label="row.out" />
             <StatusPill v-else-if="row.status" size="sm" :status="row.status" />

@@ -13,6 +13,9 @@ import (
 	"github.com/NovaSeele/Seelegent/internal/ops"
 )
 
+// allowGitScope is how long --allow-git lasts (the flag help of delegate and followup).
+const allowGitScope = "for this command only: this turn and its automatic fix turns; a followup must pass it again"
+
 // gateFlags are the gate, lane and verifier options of delegate, run and followup (docs/gates.md).
 type gateFlags struct {
 	gate      []string
@@ -27,7 +30,7 @@ type gateFlags struct {
 func (o *gateFlags) add(fs *pflag.FlagSet) {
 	fs.StringArrayVar(&o.gate, "gate", nil, "gate command to run after the report (repeatable; replaces the spec's)")
 	fs.BoolVar(&o.detect, "gate-detect", false, "add the repository's detected test, lint and build commands")
-	fs.BoolVar(&o.noGate, "no-gate", false, "run no gate commands (lane and hygiene checks still run)")
+	fs.BoolVar(&o.noGate, "no-gate", false, "no gate phase or fix turns (the lane is still checked, as information)")
 	fs.StringSliceVar(&o.lane, "lane", nil, "files and globs the worker may change, relative to the repository root")
 	fs.BoolVar(&o.noLane, "no-lane", false, "drop the lane a spec would give")
 	fs.BoolVar(&o.forceLane, "force-lane", false, "claim the lane even where another task holds it")
@@ -93,7 +96,7 @@ func (f *delegateFlags) add(fs *pflag.FlagSet, withWait bool) {
 	fs.StringVar(&f.task, "task", "", "Spec Kit task ids, comma separated (needs --spec)")
 	fs.StringSliceVar(&f.after, "after", nil, "start after these tasks (comma separated)")
 	fs.StringVar(&f.afterMode, "after-mode", "", "accepted (default) or done")
-	fs.BoolVar(&f.allowGit, "allow-git", false, "let the worker commit")
+	fs.BoolVar(&f.allowGit, "allow-git", false, "let the worker commit, "+allowGitScope)
 	fs.StringVar(&f.member, "member", "", "department member (its backend, model or tier and role)")
 	f.gates.add(fs)
 	if withWait {
@@ -314,6 +317,9 @@ func printReportBody(w io.Writer, r api.TaskReport, woke string) {
 	printGate(w, r)
 	if r.Error != "" {
 		_, _ = fmt.Fprintf(w, "Error: %s\n", r.Error)
+	}
+	for _, warn := range r.Warnings {
+		_, _ = fmt.Fprintf(w, "Warning: %s\n", warn)
 	}
 	if woke == api.WokeTimeout && ops.Pending(r.Status) {
 		_, _ = fmt.Fprintf(w, "\nThe wait ended before the task did: run `seelegent wait %s`.\n", r.TaskID)

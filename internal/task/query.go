@@ -16,11 +16,11 @@ const (
 
 // Summary returns the summary of task id.
 func (s *Service) Summary(ctx context.Context, id string) (api.TaskSummary, error) {
-	t, err := s.repo.Get(ctx, id)
+	l, err := s.repo.getListed(ctx, id)
 	if err != nil {
 		return api.TaskSummary{}, err
 	}
-	return s.summary(t), nil
+	return s.summaryOf(l.t, l.d), nil
 }
 
 // Get returns task id with its turns.
@@ -59,13 +59,13 @@ func (s *Service) Get(ctx context.Context, id string) (api.TaskDetail, error) {
 
 // List returns one page of task summaries, newest first.
 func (s *Service) List(ctx context.Context, q Query) (api.TaskPage, error) {
-	tasks, next, err := s.repo.List(ctx, q)
+	tasks, next, err := s.repo.listPage(ctx, q)
 	if err != nil {
 		return api.TaskPage{}, err
 	}
 	page := api.TaskPage{Items: make([]api.TaskSummary, 0, len(tasks)), NextCursor: next}
-	for _, t := range tasks {
-		page.Items = append(page.Items, s.summary(t))
+	for _, l := range tasks {
+		page.Items = append(page.Items, s.summaryOf(l.t, l.d))
 	}
 	return page, nil
 }
@@ -162,31 +162,32 @@ func (s *Service) WorkerTrees() []*platform.WorkerTree {
 	return out
 }
 
-// summary converts a task into its summary, with what the worker does right now.
-func (s *Service) summary(t *Task) api.TaskSummary {
+// summary converts a task (with all its turns) into its summary, with what the worker does right now.
+func (s *Service) summary(t *Task) api.TaskSummary { return s.summaryOf(t, digestOf(t)) }
+
+// summaryOf is summary with the digest of the turns, which need not be loaded.
+func (s *Service) summaryOf(t *Task, d turnDigest) api.TaskSummary {
 	sum := api.TaskSummary{
 		ID: t.ID, Title: t.Title, Status: t.Status, Kind: t.Kind, Mode: t.Mode, Cwd: t.Cwd, ProjectKey: t.ProjectKey,
 		ProjectName: t.ProjectName, Backend: t.Backend, Provider: t.Provider, Model: t.Model, Effort: t.Effort,
 		Tier: t.Tier, AccountID: t.AccountID, Member: t.Member, Role: t.Role, Profile: t.Profile, Session: t.Session,
-		TurnCount: len(t.Turns), TokensUsed: t.TokensUsed(), FilesChanged: len(t.FilesChanged()),
+		TurnCount: d.turns, TokensUsed: d.tokens, FilesChanged: d.files,
 		CreatedAt: api.FormatTime(t.CreatedAt), UpdatedAt: api.FormatTime(t.UpdatedAt),
 		LastEventAt: api.FormatTime(t.LastEventAt), WaitingUntil: api.FormatTime(t.WaitingUntil),
 		NeedsSince: api.FormatTime(t.NeedsSince), Attention: t.Attention, Review: t.Review, Spec: t.Spec,
 		After: api.NonNil(t.After), AfterMode: t.AfterMode, DepsReason: t.DepsReason, Manual: t.Manual,
 		ParentID: t.ParentID, ContestID: t.ContestID, TicketID: t.TicketID, MeetingID: t.MeetingID,
-		AutomationID: t.AutomationID, Variant: t.Variant, LastEventSeq: t.LastEventSeq, Gate: gateSummary(t),
+		AutomationID: t.AutomationID, Variant: t.Variant, LastEventSeq: t.LastEventSeq, Gate: gateOf(t, d),
 		ConsultState: consultState(t),
+	}
+	if t.Status == StatusWaitingQuota {
+		sum.Waiting, sum.WaitDetail = t.Waiting, t.WaitDetail
 	}
 	if sum.AfterMode == "" { // tasks stored before afterMode was always set
 		sum.AfterMode = AfterAccepted
 	}
-	if tu := t.LastTurn(); tu != nil {
-		for i := len(tu.Attempts) - 1; i >= 0; i-- {
-			if a := tu.Attempts[i]; a.AccountID != "" {
-				sum.AccountID, sum.AccountLabel = a.AccountID, a.AccountLabel
-				break
-			}
-		}
+	if d.accountID != "" {
+		sum.AccountID, sum.AccountLabel = d.accountID, d.accountLabel
 	}
 	if live := s.live(t.ID); live.running {
 		step := &api.ActiveStep{Label: live.step, Tool: live.tool, Since: api.FormatTime(live.lastEvent)}

@@ -5,6 +5,7 @@
   "notRepoDesc": "{cwd} không nằm trong kho git nào nên không có gì để commit.",
   "noBranch": "detached",
   "uncommittedCount": "{n} tệp chưa commit",
+  "sumShown": "trong các tệp đang hiện",
   "refresh": "Đọc lại",
   "empty": "Tác vụ này chưa đổi tệp nào",
   "emptyDesc": "Tệp worker sửa sẽ hiện ở đây để xem lại và commit.",
@@ -44,6 +45,7 @@
     "files": "Tệp",
     "all": "Tất cả ({n})",
     "renameNote": "Tệp đổi tên được commit cùng việc xoá đường dẫn cũ.",
+    "hiddenNote": "{n} tệp trong thư mục chưa theo dõi không hiện ở đây. Mở thư mục trong danh sách tệp để commit các tệp của nó.",
     "active": "Worker vẫn đang chạy. Hãy commit khi tác vụ xong.",
     "confirm": "Commit {n} tệp",
     "done": "Đã commit {sha}: {summary}",
@@ -119,5 +121,24 @@
     "synced": "Đã đồng bộ với {name}",
     "gone": "{name} không còn tồn tại",
     "goneShort": "(đã mất)"
+  },
+  "dir": {
+    "label": "Thư mục chưa theo dõi",
+    "files": "{n} tệp",
+    "more": "và {n} tệp nữa",
+    "listLabel": "Các tệp trong {path}",
+    "others": "{n} tệp khác ở đây không thuộc tác vụ này"
+  },
+  "image": {
+    "before": "Trước (HEAD)",
+    "after": "Sau (thư mục làm việc)",
+    "alt": "{path}, {side}",
+    "pixels": "{width} × {height} px",
+    "tooLarge": "Quá lớn để xem trước ({size}).",
+    "lfs": "Tệp lưu bằng Git LFS: kho chỉ giữ con trỏ, không phải ảnh.",
+    "unsupported": "Không xem trước được tệp này.",
+    "missing": "Phiên bản này của tệp không tồn tại.",
+    "failed": "Không tải được ảnh: {error}",
+    "broken": "Không hiển thị được ảnh."
   }
 }

@@ -37,6 +37,7 @@ import type {
   ProofRun,
   ReattachData,
   Reset,
+  ResourcesChanged,
   RestoredData,
   RetryData,
   ReviewData,
@@ -290,6 +291,7 @@ export interface ServerEvents {
   'issues.changed': IssuesChanged
   'automation.updated': Automation
   'automation.deleted': Deleted
+  'resources.changed': ResourcesChanged
 }
 
 export type ServerEventName = keyof ServerEvents
@@ -322,4 +324,5 @@ export const SERVER_EVENT_NAMES: readonly ServerEventName[] = [
   'issues.changed',
   'automation.updated',
   'automation.deleted',
+  'resources.changed',
 ]

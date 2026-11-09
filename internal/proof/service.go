@@ -17,6 +17,7 @@ import (
 
 	"github.com/NovaSeele/Seelegent/internal/api"
 	"github.com/NovaSeele/Seelegent/internal/fsutil"
+	"github.com/NovaSeele/Seelegent/internal/projectkey"
 )
 
 // Errors of the proof service.
@@ -47,6 +48,9 @@ type CmdResult struct {
 	Exit *int
 	Ms   int64
 	Tail string
+	// Stopped: the memory watchdog stopped the command (the machine ran low on memory). It is no result: the run
+	// runs the command again (Exec waits for memory first), and gives up after api.GateLowMemoryStopsMax stops.
+	Stopped bool
 }
 
 // Git is what the service needs from git.
@@ -61,8 +65,12 @@ type Git interface {
 type Options struct {
 	Ledger *Ledger
 	Git    Git
-	// Exec runs one command in dir with the gate timeout, writing its output to logFile.
-	Exec func(ctx context.Context, cmd, dir, logFile string) CmdResult
+	// Exec runs one command in dir with the gate timeout, writing its output to logFile. gateTask is the
+	// request's GateTask (the task whose gate asked for the run, or "").
+	Exec func(ctx context.Context, cmd, dir, logFile, gateTask string) CmdResult
+	// HoldsGateSlot reports whether the gate of task id holds a gate slot now (task.Service.HoldsGateSlot); nil:
+	// none does. A run asked for from such a gate (GateTask) does not count that task as active.
+	HoldsGateSlot func(id string) bool
 	// Active returns the ids of the active tasks in the repository at root.
 	Active func(ctx context.Context, root string) ([]string, error)
 	// TaskFeatures returns the feature folders (absolute) the tasks of the repository at root work on.
@@ -124,7 +132,7 @@ type Project struct {
 
 // ProjectOf resolves the repository of cwd (cwd itself when it is not in a git repository).
 func (s *Service) ProjectOf(ctx context.Context, cwd string) (Project, error) {
-	canonical, _, _, err := fsutil.ProjectOf(cwd)
+	canonical, _, _, err := projectkey.Of(cwd)
 	if err != nil {
 		return Project{}, fmt.Errorf("%w: %w", ErrInvalid, err)
 	}
@@ -136,7 +144,7 @@ func (s *Service) ProjectOf(ctx context.Context, cwd string) (Project, error) {
 			}
 		}
 	}
-	key, _, err := fsutil.ProjectKey(root)
+	key, _, err := projectkey.Key(root)
 	if err != nil {
 		return Project{}, err
 	}
@@ -413,6 +421,12 @@ func (s *Service) StartRun(ctx context.Context, req api.ProofRunRequest) (api.Pr
 			return api.ProofRun{}, err
 		}
 	}
+	// The task whose gate asks for the run, while that gate holds a gate slot, is no other task. Any other id
+	// (unknown, or a task whose gate holds no slot) changes nothing. The run is not tied to the gate: it goes on
+	// after the gate ends (a gate may start it without waiting for it), and its next commands wait for a slot.
+	if req.GateTask != "" && s.o.HoldsGateSlot != nil && s.o.HoldsGateSlot(req.GateTask) {
+		active = slices.DeleteFunc(active, func(id string) bool { return id == req.GateTask })
+	}
 	if len(active) > 0 && !req.Force {
 		return api.ProofRun{}, &ConflictError{
 			Msg:     fmt.Sprintf("tasks are active in this repository (%s); pass force to run anyway", strings.Join(active, ", ")),
@@ -448,7 +462,7 @@ func (s *Service) StartRun(ctx context.Context, req api.ProofRunRequest) (api.Pr
 	go func() {
 		defer s.wg.Done()
 		defer cancel()
-		s.execute(rctx, p, run, cmds)
+		s.execute(rctx, p, run, cmds, req.GateTask)
 	}()
 	s.publish(run)
 	return run, nil
@@ -461,7 +475,7 @@ func (s *Service) publish(r api.ProofRun) {
 }
 
 // execute runs the commands of a regression run and records the results.
-func (s *Service) execute(ctx context.Context, p Project, run api.ProofRun, cmds []runCmd) {
+func (s *Service) execute(ctx context.Context, p Project, run api.ProofRun, cmds []runCmd, gateTask string) {
 	defer func() {
 		s.mu.Lock()
 		if a := s.active[p.Key]; a != nil && a.id == run.ID {
@@ -485,6 +499,7 @@ func (s *Service) execute(ctx context.Context, p Project, run api.ProofRun, cmds
 		}
 	}
 	got := map[string][]EntryCmd{}
+	outOfMemory := false
 	for i, c := range cmds {
 		if ctx.Err() != nil {
 			break
@@ -493,9 +508,14 @@ func (s *Service) execute(ctx context.Context, p Project, run api.ProofRun, cmds
 			State: api.RunRunning})
 		save()
 		log := filepath.Join(s.o.LogDir, p.Key, run.ID, fmt.Sprintf("%d.log", i+1))
-		res := s.o.Exec(ctx, c.cmd, p.Root, log)
-		if ctx.Err() != nil {
+		res := s.exec(ctx, c.cmd, p.Root, log, gateTask)
+		if ctx.Err() != nil || res.Stopped {
 			run.Results = run.Results[:len(run.Results)-1]
+			if res.Stopped && ctx.Err() == nil {
+				outOfMemory = true
+				run.Error = fmt.Sprintf("the machine kept running out of memory: %q was stopped %d times; nothing "+
+					"of this command was recorded", c.cmd, api.GateLowMemoryStopsMax)
+			}
 			break
 		}
 		state := api.GateGreen
@@ -527,7 +547,7 @@ func (s *Service) execute(ctx context.Context, p Project, run api.ProofRun, cmds
 	}
 	run.EndedAt = api.FormatTime(s.o.Now())
 	switch {
-	case ctx.Err() != nil:
+	case ctx.Err() != nil, outOfMemory:
 		run.State = api.RunCancelled
 	case run.Counts.Red > 0:
 		run.State = api.RunRed
@@ -537,6 +557,20 @@ func (s *Service) execute(ctx context.Context, p Project, run api.ProofRun, cmds
 		run.State = api.RunGreen
 	}
 	save()
+}
+
+// exec runs one command of a regression run. A command the memory watchdog stopped runs again (Exec waits for
+// memory first) until it ends by itself or was stopped api.GateLowMemoryStopsMax times; only the last attempt is
+// returned, so a stopped attempt never counts as a result.
+func (s *Service) exec(ctx context.Context, cmd, root, log, gateTask string) CmdResult {
+	for stops := 1; ; stops++ {
+		res := s.o.Exec(ctx, cmd, root, log, gateTask)
+		if !res.Stopped || ctx.Err() != nil || stops >= api.GateLowMemoryStopsMax {
+			return res
+		}
+		s.log.Warn("proof: a regression command was stopped for low memory; it runs again", "cmd", cmd,
+			"stops", stops)
+	}
 }
 
 // recordKey writes the aggregated result of one spec task of a regression run.
@@ -609,7 +643,7 @@ func (s *Service) CancelRun(ctx context.Context, cwd, id string) (api.ProofRun, 
 
 // Counters returns the lane counters of the repository of cwd.
 func (s *Service) Counters(ctx context.Context, root string) (map[string]int, error) {
-	key, _, err := fsutil.ProjectKey(root)
+	key, _, err := projectkey.Key(root)
 	if err != nil {
 		return nil, err
 	}

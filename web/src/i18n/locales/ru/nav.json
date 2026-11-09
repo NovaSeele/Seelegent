@@ -84,5 +84,13 @@
     "runningTitle": "Выполняемые задачи",
     "waiting": "Ждут",
     "waitingTitle": "Задачи в очереди"
+  },
+  "lowMemory": {
+    "low": "На машине мало памяти: новые запуски задержаны",
+    "freePhys": "свободно памяти: {free}",
+    "freeCommit": "свободно commit: {free}",
+    "settings": "Настройки ресурсов",
+    "floor": "ниже порога «{setting}» ({floor})",
+    "waiting": "{count} задача ждёт | {count} задачи ждут | {count} задач ждут | {count} задачи ждут"
   }
 }

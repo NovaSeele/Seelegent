@@ -73,6 +73,8 @@ var webFiles = fstest.MapFS{
 type envOptions struct {
 	queue  *fakecli.Queue
 	opener signin.Opener
+	// imageWriteTimeout is app.Options.ImageWriteTimeout.
+	imageWriteTimeout time.Duration
 }
 
 func newEnv(t *testing.T) *env { return newEnvWith(t, nil) }
@@ -96,11 +98,15 @@ func newEnvWith(t *testing.T, adjust func(*envOptions)) *env {
 		client: &http.Client{Timeout: limit}}
 	set := config.Defaults()
 	set.Port = 47831
+	// The engine tests must not depend on this machine's free memory.
+	set.MinFreeMemoryMB, set.MinFreeCommitMB, set.CriticalFreeMemoryMB = config.Int(0), config.Int(0), config.Int(0)
+	// Nor on its CPUs: the gate slots and the test hint the tests were written for.
+	set.GateConcurrency, set.TestParallelism = config.Int(2), config.Int(4)
 	a, err := app.New(t.Context(), app.Options{
 		Paths: paths, Settings: &set, Env: e.queue.Env(os.Environ()), RealHome: filepath.Join(home, "home"),
 		Launcher: fakecli.Launcher(t), NoQuotaReaders: true, NoGh: true,
 		Bins: map[string]string{config.BackendAgy: fakecli.Exe(t), config.BackendClaude: "", config.BackendCodex: ""},
-		Web:  webFiles, Classifier: e.who, SignInOpener: opts.opener,
+		Web:  webFiles, Classifier: e.who, SignInOpener: opts.opener, ImageWriteTimeout: opts.imageWriteTimeout,
 	})
 	if err != nil {
 		t.Fatal(err)

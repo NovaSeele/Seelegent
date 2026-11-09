@@ -275,6 +275,49 @@ type codexParser struct {
 	policyDenied []string
 	// ranCommand is set by any command_execution item: codex ran at least one shell command.
 	ranCommand bool
+	// baseline is the thread's usage total before this run (SetUsageBaseline) and thread the total turn.completed
+	// reported: see codexRunUsage.
+	baseline event.Usage
+	thread   *event.Usage
+}
+
+// The usage of turn.completed is the thread's running total, not this run's. In openai/codex at rust-v0.167.0,
+// codex exec --json fills it from usage.total of ThreadTokenUsage (codex-rs/exec/src/
+// event_processor_with_jsonl_output.rs:118-128, usage_from_last_total; set at :511-513, sent at :535-537), and a
+// resumed thread starts from the total of its recorded rollout (codex-rs/core/src/session/mod.rs:1746-1751, "Seed
+// usage info from the recorded rollout"). ThreadTokenUsage's `last` is one model request, not the run. So `codex
+// exec resume` reports every earlier run of the thread again (openai/codex issue #49574; exec reported
+// total_token_usage in 0.44.0 and 0.100.0 too). The parser takes the total before the run from the task engine
+// (SetUsageBaseline) and reports the difference; ThreadUsage hands the new total back for the next run.
+
+// SetUsageBaseline sets the thread's usage total before this run: the total codex reported at the end of the
+// thread's previous run, zero for a new thread.
+func (p *codexParser) SetUsageBaseline(u event.Usage) { p.baseline = u }
+
+// ThreadUsage returns the thread's usage total turn.completed reported; ok is false when it reported none (or only
+// zeros: codex sends zeros when no token count arrived in the run).
+func (p *codexParser) ThreadUsage() (event.Usage, bool) {
+	if p.thread == nil {
+		return event.Usage{}, false
+	}
+	return *p.thread, true
+}
+
+// codexRunUsage is one run's part of the thread total: total minus base, field by field. A total below base in any
+// field means codex's counter started again (another thread, or the count replaced after the context window filled),
+// and total is the run's usage as is.
+func codexRunUsage(total, base event.Usage) event.Usage {
+	if total.InputTokens < base.InputTokens || total.OutputTokens < base.OutputTokens ||
+		total.CachedTokens < base.CachedTokens || total.TotalTokens < base.TotalTokens || total.CostUSD < base.CostUSD {
+		return total
+	}
+	return event.Usage{
+		InputTokens:  total.InputTokens - base.InputTokens,
+		OutputTokens: total.OutputTokens - base.OutputTokens,
+		CachedTokens: total.CachedTokens - base.CachedTokens,
+		TotalTokens:  total.TotalTokens - base.TotalTokens,
+		CostUSD:      total.CostUSD - base.CostUSD,
+	}
 }
 
 // codexPolicyRejected is what codex prints on standard error after a command its policy refused, for example
@@ -433,10 +476,14 @@ func (p *codexParser) Line(raw []byte) []event.Event {
 		}
 		return p.item(ev.Type, ev.Item)
 	case "turn.completed":
-		u, ok := parseUsage(ev.Usage)
+		total, ok := parseUsage(ev.Usage)
 		var out []event.Event
 		rep := event.Report{Status: event.StatusSuccess, Response: p.lastAgentMessage}
 		if ok {
+			if !total.IsZero() {
+				p.thread = &total
+			}
+			u := codexRunUsage(total, p.baseline)
 			out = append(out, event.Event{Kind: event.KindUsage, Usage: &u})
 			rep.Usage = &u
 		}
@@ -480,6 +527,12 @@ func (p *codexParser) item(kind string, it *codexItem) []event.Event {
 	started, completed := kind == "item.started", kind == "item.completed"
 	failed := it.Status == "failed" || (it.ExitCode != nil && *it.ExitCode != 0)
 	switch it.Type {
+	case "command_execution", "mcp_tool_call", "file_change", "web_search":
+		if started || completed {
+			p.clearFinal() // the agent went on working after its message
+		}
+	}
+	switch it.Type {
 	case "agent_message":
 		if it.Text == nil {
 			return nil
@@ -487,6 +540,9 @@ func (p *codexParser) item(kind string, it *codexItem) []event.Event {
 		delta := *it.Text
 		delta = strings.TrimPrefix(delta, p.lastAgentMessage)
 		p.lastAgentMessage = *it.Text
+		if completed {
+			p.markFinal(p.mask(*it.Text))
+		}
 		if delta == "" {
 			return nil
 		}

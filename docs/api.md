@@ -48,8 +48,9 @@ extra passes. The flag refuses anything that is not `http://localhost|127.0.0.1|
 Warn line naming the extra origins at start-up.
 
 Every answer, refusals included, carries `X-Frame-Options: DENY`, `Content-Security-Policy: frame-ancestors 'none'`
-and `Referrer-Policy: no-referrer`. A request whose client went away gets nothing written (logged at Debug), never a
-500.
+and `Referrer-Policy: no-referrer`; every answer under `/api/`, refusals included, also carries
+`Cross-Origin-Resource-Policy: same-origin`, so no other origin's page can load one as an image or script. A
+request whose client went away gets nothing written (logged at Debug), never a 500.
 
 Files a worker can plant are read with `fsutil.ReadRegular`/`OpenRegular`, which never block on a FIFO and never
 follow a symbolic link: `GET /spec` answers 400 for a `tasks.md` that is not a regular file or is over 4 MiB, `GET
@@ -89,6 +90,20 @@ in the daemon.
     `meeting.updated` and `contest.updated` carry the summary; `notes.changed` carries `{taskId}`; `hook.ran` carries
     the `HookRun`. The worker allow-list is unchanged: a worker may call none of the team routes.
 
+- `TaskSummary.waiting` (an addition) says why a `waiting_quota` task waits: `busy` (every account that could run it
+  has no free slot: `maxConcurrentPerAccount`, or the `maxConcurrentWorkers` cap), `resting` (`waitingUntil` is when
+  one is back), `budget_reached` (every account that could run it rests on its budget; no `waitingUntil`, the
+  task raises a `budget_reached` attention flag for the user with `params.account`, `params.budgetUsd` and
+  `params.count`, and wakes when a budget is raised, its stop switched off or a key changed), `no_account`, or
+  `memory`; `waitDetail` is the daemon's English line for it (for `busy` the full accounts, `acc6: 2 of 2 running`;
+  for `budget_reached` "acc9 reached its $200 budget: raise the budget or change the key"). The `waiting_quota` event carries the same as `reason` and `detail`. Both are
+  absent for other statuses; events and daemons from before this addition carry only `memory` (an account wait
+  had no reason), which the dashboard reads as waiting for quota. The lead's report (`TaskReport.waiting`) still
+  names only the memory wait; `TaskReport.wait_detail` carries `waitDetail` while the task waits. A task without
+  `provider` whose sign-in accounts rest or are busy gets the free API-key accounts of its backend named there
+  (`; free API-key accounts: pass provider: anthropic and a model`, at most three providers, "and a model" when the
+  provider maps no tier); it never moves to them by itself, since keys cost money.
+
 - `GET /git/branches` answers `null` for a folder that does not exist, keyed by the cwd as given. A batch of 50 cwds
   should not fail because one project folder was deleted. A relative cwd is still `400`.
 - `GET /tasks/{id}/turns/{n}/outside-diff` and `POST /tasks/{id}/turns/{n}/restore` (an addition to the contract,
@@ -119,12 +134,46 @@ in the daemon.
   its turns touched, or a file under the task's folder that a commit made during one of its turns changed. A file
   only commits outside the turns changed is never listed. A committed file's diff compares the working tree with
   the start, so it also holds others' commits to that same file.
+- `TaskGit.untrackedDirs` groups the task's untracked files of a folder git itself shows as one entry (no tracked
+  file inside, `dir/` under `--untracked-files=normal`) when it holds more than 20 of them: one `GitDir` row with
+  the `path` (ending in `/`), the file `count`, their total `bytes` and the first 200 `files`; those files are left
+  out of `files`. Only this view groups: the snapshots, the safety checks and a commit still see every file, and a
+  commit may name a grouped file one by one (never the folder). The extra `git ls-files --others --directory` call
+  runs only when a top-level folder holds more than 20 untracked files, and only over those folders; when it fails
+  (a timeout on a huge folder) the failure is logged and the view lists every file instead. A row's `others` counts
+  the folder's untracked files that are not the task's; the repository panel leaves them out, as the row stands for
+  the folder. The view's images (in `files` and in the rows' `files`) carry a `stamp`: the working-tree file's size
+  and modification time (one `Lstat`) and its blob id at HEAD from the status line, so a rewritten image gets a new
+  URL although its status and counts stay the same.
 - When the commits since the start cannot be read (git times out on a big repository, an object is missing), the
   error is logged and `TaskGit` still answers with `files`: `historyState` is `history_unavailable`, `commits` and
   `committedFiles` are empty, and a later read tries again.
 - `GET /tasks/{id}/git/diff` takes `base=start` (the default: the working tree against the task's start, or the
   empty tree when the repository had no commit then) or `base=head` (the uncommitted list); any other `base` is
   `400`. It accepts `turn` but does not use it; per-turn changes come from the turn snapshots (`outside-diff`).
+- `GET /tasks/{id}/git/image?path=&version=` (an addition to the contract) answers one image of the task's repository
+  for the Git view's previews: `version=worktree` (the default) reads the working tree, `version=head` the blob at HEAD
+  (`404` when HEAD is unborn or has no such file); any other version is `400`. `path` is repository-relative (`\` reads
+  as `/`); an empty or absolute path, a `..` segment, any `:` (a drive or a Windows alternate data stream), a control
+  character, a Windows device name as any segment (`CON`, `PRN`, `AUX`, `NUL`, `COM1`–`9`, `LPT1`–`9`, with or without
+  an extension), or a working-tree path that leaves the repository through a link or junction is `400` with field
+  `path`. The working-tree file is opened through `os.Root` on the repository root (a relative symbolic link is followed
+  only while it stays inside it; a link with an absolute target, every Windows junction included, counts as leaving,
+  even one that points back inside; there is no gap between a check and the open; `O_NONBLOCK` on Unix, so a FIFO cannot
+  hang the request) and must be a regular file. Only `png`, `jpg`, `jpeg`, `gif`, `webp`, `avif`, `bmp`, `ico` and `svg`
+  are served; any other extension is `415 unsupported_media_type` (`details.reason: "not_image"`), and so is a Git LFS
+  pointer (`details.reason: "lfs_pointer"`). An image over 10 MiB is `413 too_large` with `details.size` (and the size
+  in the message), checked before reading: the open file's `Stat` for the working tree, `git cat-file --batch-check` for
+  HEAD (then a capped read: gitx has no streaming read). A working-tree image up to 1 MiB is read whole and its file
+  closed before the answer is written; a larger one is streamed, never held whole, under a write deadline of 30 seconds
+  for this route only (the server has no `WriteTimeout`, for the event stream), so a client that stops reading cannot
+  keep the file open. A browser request from another site (`Sec-Fetch-Site: cross-site` or `same-site`) is `403
+  forbidden` with `details.reason: "cross_site"`; a request without the header (the CLI, MCP) is served. The answer's
+  `Content-Type` comes from the extension (never sniffed), with `X-Content-Type-Options: nosniff`,
+  `Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; sandbox; frame-ancestors 'none'` (an SVG
+  opened as a page runs no script on the daemon's origin) and `Cache-Control: no-store`. The Git view adds `v=<stamp>`
+  (`GitFile.stamp`) to the URL; the endpoint ignores it. It is a GET for the dashboard and the lead: it is not on the
+  worker allow-list, so a worker is refused it.
 - `GET /tasks/{id}/git/commits/{sha}` (an addition to the contract) answers `GitCommitDetail`: the commit's files and
   parsed diffs against its first parent, 1 MiB in all (`truncated`), with `--no-textconv` and `--no-ext-diff` like
   the other diffs. The sha is checked as 4–64 hex digits before git sees it (`400`, field `sha`), resolved with
@@ -144,6 +193,133 @@ in the daemon.
   so a client that sends the whole provider back can still clear the list). Neither touches `tiers`. The list is
   stored in `providers.models`; rows from before that column get it back from their pattern when the pattern was
   built from a list. `Account.models` of an API-key account is its provider's tier models followed by that list.
+- Base URLs are cleaned when a provider is saved (`account.Provider.Check`) and again when a turn uses it
+  (`Manager.Credentials`, for rows saved before): a claude provider drops a trailing `/`, `/v1` or `/v1/messages`
+  (Claude Code adds `/v1/messages` itself); a claude provider without a preset or with `custom-anthropic` whose host
+  is `api.anthropic.com` becomes the official `anthropic` preset (no base URL, the key as `x-api-key`). Codex base
+  URLs keep their `/v1`. What a save changed on its own comes back in `notices` (`{code, field?, message}`; codes
+  `base_url_trimmed`, `official_preset`, `key_name_removed`, `key_quotes_removed`, `key_assignment`, `key_prefix`,
+  `provider_reused`) on `POST`/`PATCH /providers`, `POST /accounts` and `PUT /accounts/{id}/key`; notices never block a save.
+- API keys (`POST /accounts` `apiKey`, `PUT /accounts/{id}/key`, `POST /providers/test`) go through
+  `account.NormalizeKey`: surrounding whitespace and matching quotes are dropped, and so is a leading `NAME=` or
+  `export NAME=` (a pasted `.env` line), each with a notice; a key with `://` (a URL), inner whitespace or control
+  characters is `400 invalid_argument` with `details.field` (`apiKey`, or `key` for `PUT .../key`) and
+  `details.reason` (`url`, `whitespace`, `control`, `empty`, `too_long`). The message never holds the key. A
+  known prefix that does not fit the preset (`sk-ant-` outside Anthropic, an OpenRouter or Groq key on another
+  known preset, the official preset without `sk-ant-`) is a `key_prefix` notice only. Only an upper-case `NAME=`
+  followed by at least 8 characters is removed; a key kept whole that still reads as `name=value` (say
+  `llm_api_key=sk-…`) gets a `key_assignment` notice ("paste only the part after ="). Validation errors of
+  accounts and providers carry `details.field` (`newProvider.baseUrl` for a field of `newProvider`).
+- `POST /accounts` also takes an API-key account in one call: `provider` (existing) or `newProvider` (a
+  `ProviderInput`, `id` optional) and `apiKey`; `backend`, `kind` (`api-key`) and `label` (`"<provider name> <n>"`)
+  may be left out, and `budgetUsd`/`budgetStop` given. An enabled provider with the same preset, backend, base URL,
+  official flag, wire API, models, allow-list and tiers (and id, when given) is reused unchanged (`provider_reused`
+  notice); a reused provider is never modified, so tiers that differ (on a model-per-task provider, say) create a
+  new provider under a free id (the preset's, then `-2`, ...). Provider, account, profile folder and key are written in one transaction; a failure at any step leaves none
+  of them behind. The `201` answer is `AccountCreated`: the account plus `newProvider` and `providerCreated`. Old
+  bodies (`backend`, `kind`, `label`, `provider`, no key) work as before.
+- `Account.testResult` (API-key accounts only) is `not_tested` until a key test succeeds or a turn on the current key
+  ends well, then `ok` or the last failed test's reason, with `testedAt`; it is stored in `accounts.test_result`,
+  `tested_at`, `test_reset_at` (migration 0013 marks a key that already served a turn as `ok`). Storing a key or
+  changing the provider's endpoint (backend, base URL, wire API, official) resets it; a test or turn that started
+  before that reset does not count. It never changes `status` or account selection.
+- `POST /providers/test` (`KeyTestRequest`: `provider` or `newProvider`, and `apiKey` or `accountId`) makes one
+  call that spends no tokens: `GET {base}/v1/models` for claude providers (`api.anthropic.com` for the official
+  one), `GET {base}/models` for codex ones, with the key in the header the backend's environment rules would use
+  (`x-api-key` for the official provider, else `Authorization: Bearer`; `anthropic-version` for claude). 10 s
+  timeout, 1 MiB body cap, at most 3 redirects and only on the same scheme and host (a redirect elsewhere answers
+  `redirected` and the key is not sent there). It answers `200 KeyTestResult` whenever the call could be made, a
+  refused key included: `reason` is `ok`, `refused` (401/403), `not_found` (404 on a hand-made base URL),
+  `no_models_endpoint` (404 on a preset's address, or 405), `unreachable`, `redirected` or `error`, with `models`
+  on `ok`. With `accountId` the stored key is used, only against the account's own provider (`newProvider`, or a
+  `provider` other than the account's, is `400` with `details.field`, so a stored key never goes to an address the
+  caller chose), and the result is saved on it (`saved: true`). Only the provider, reason and status are logged. Workers may not call it.
+- A provider whose tiers have no model is "model per task" (`Provider.modelPerTask`, `Account.modelPerTask`): valid,
+  but a task on it must name its model. `POST /tasks` without `model`, or with only a tier it has no model for, is
+  `400 invalid_argument` at once with `details.reason: "no_default_model"`, `details.provider`,
+  `details.tier` and `details.models` (the provider's models, as examples). `ProviderPreset.tiers` suggests tier models: for
+  `anthropic` the claude backend's tiers from the settings, when set; none for the others.
+- `no_models_endpoint` from `POST /providers/test` is not a pass: the key is not verified (DeepSeek, Kimi and Z.ai
+  usually have no `/v1/models`), the account stays untested, and its first good turn marks it `ok`. Only `ok` is a
+  verified key.
+- Spend and budget of API-key accounts (`internal/account/spend.go`). `Account.spentUsd`, `spentTokens`,
+  `spentInputTokens`, `spentOutputTokens` are what the current key spent since `spentSince` (when the key was set):
+  a running total that `account.ApplySpendTx` keeps in the transaction of every `usage.RecordAttempt`, adding only
+  the difference when an attempt is recorded again. It is never summed from `usage_turns` (pruned after
+  `TurnRetentionDays`) and it counts whatever `usageHistory` says (that setting only stops the hourly snapshots).
+  The dollar amount comes from the provider's `spendSource` (`Provider.spendSource`, `account.Provider.SpendSource`,
+  the one place that decides; the next bullet has the details): `service` (OpenRouter: the key's usage as the
+  service counts it), `free` (Ollama, localhost/127.0.0.1/::1 base URLs), `prices` (the user's price table for the
+  provider), `cli` (the CLI's own estimate, Claude Code `total_cost_usd`, only for the official Anthropic API and
+  models without a price) or `none` (tokens only, counted in `spentUnpricedTokens`). Replacing or removing the
+  key resets the total and keeps the old one as `previousKey` (also logged). `budgetUsd` (`PATCH /accounts/{id}`,
+  or with `POST /accounts`; `0` removes it) and `budgetStop` (default true) set the budget; `budgetState` is `ok`,
+  `warn` (80%), `reached` or `unknown` (a budget on a source without cost: never enforced). A reached budget with
+  `budgetStop` rests the account in the pool (`resting: true`, `restReason: "budget_reached"`, no `restingUntil`)
+  until the budget is raised, `budgetStop` is turned off or the key replaced; it is not an error. Each rise to warn
+  or reached is logged once and wakes the pool. An account whose credit or billing ran out (a run ended with class
+  `credits`) is held the same way, by reason and never as a date: `resting: true`, `restReason: "credits"`, no
+  `restingUntil`, until a new key is stored, a key test passes (`testResult: ok` after the mark) or the account is
+  edited (switched off and on after a top-up); spend updates never count as an edit. The key test lists models,
+  which works at zero credit too: a pass while the account rests on credits sets `creditUnseen: true` on the
+  `KeyTestResult` and ends its message with "; this test cannot see the credit balance" (it still lifts the rest). One pool predicate decides both
+  holds. `POST /tasks` and followups on a provider whose every usable key is held are `400 invalid_argument`:
+  `details.reason: "budget_reached"`, "anthropic keys reached their budget ($200); raise it in Accounts", or
+  `details.reason: "credits"`, "the anthropic key has no credit left; top up or change the key". Migration 0013 back-fills the totals from the attempts still stored since
+  the key was set. The task report adds `turn_cost_usd` for a task whose attempts have a cost (`prices` or `cli`).
+- Spend sources (`internal/account/spend.go`, `prices.go`, `service.go`; reader `internal/backend/spendread.go`,
+  cadence `internal/quota/service.go`). Every attempt stores how it was counted (`usage_turns.spend_source`,
+  `spend_usd`, from `account.AttemptCost`), and recording it again takes back exactly that before adding the new
+  count, so a replaced attempt is never counted twice and a later price change never rewrites spend already counted.
+  - `service`: a provider whose base URL is an official host on https (`openrouter.ai`, `api.deepseek.com`,
+    `api.moonshot.ai`, `api.moonshot.cn`; any preset) has a spend service (`Provider.serviceReading`:
+    `key_usage` for OpenRouter, `account_balance` for DeepSeek and Moonshot). The daemon reads it with the account's
+    key (`GET https://openrouter.ai/api/v1/key`, `GET https://api.deepseek.com/user/balance`,
+    `GET https://api.moonshot.{ai,cn}/v1/users/me/balance`): 30 s after a turn on the key (turns meanwhile share the
+    read), right after a key is stored, and otherwise at most once an hour; `POST /accounts/{id}/refresh` reads it
+    at once. Same safety as the key test: 10 s, 1 MiB, redirects only to the same scheme and host (another host is
+    `serviceError.reason: "redirected"` and never gets the key); key and body are never logged or stored. A failed
+    read keeps the last values and records `serviceError` (`refused`, `no_credit`, `unreachable`, `redirected`,
+    `error`, with `message` and `at`); `balance.stale` and `serviceUsage.stale` are true when a read failed after
+    the last good one or the last good one is over 2 h old. A `402`, `is_available: false` (DeepSeek) or an
+    available balance at or below 0 (Moonshot) holds the account like a run's credit error (`restReason:
+    "credits"`), once per hold: a later read does not hold it again until the user acted (edit, key, passing test),
+    and a read with credit does not lift it. Currency is the service's (`USD`, `CNY`), never converted.
+  - OpenRouter's reading is the key's own: `spentUsd` is `serviceUsage.totalUsd` (the key's whole life, including
+    use outside Seelegent) with `spendSource: "service"`, and budgets are judged against it. `serviceUsage` adds
+    `dailyUsd`, `weeklyUsd`, `monthlyUsd`, `limitUsd`, `limitRemainingUsd`, `limitReset`; `balance` is the key's
+    limit left (`accountWide: false`) when it has a limit. The limit is offered as `suggestedBudgetUsd` while the
+    account has no budget, never set by itself. Before the first read the account counts its attempts like any
+    other (prices, else none).
+  - DeepSeek and Moonshot balances belong to the whole service account: other keys and apps draw from it and a
+    top-up raises it, so it is never the key's spend. It is shown as `balance` with `accountWide: true` (DeepSeek's
+    other currencies in `balance.other`, `granted`/`paid` from its `granted_balance`/`topped_up_balance`; Moonshot's `voucher_balance`/`cash_balance` likewise); the key's spend
+    is counted from its attempts, at the user's prices (`prices`) or as tokens (`none`). A budget on such an account
+    is `unknown` until prices are set.
+  - `prices`: `GET /providers/{id}/prices` and `PUT /providers/{id}/prices` (`PricesRequest {prices:
+    [{model, inputUsd, cachedInputUsd?, cacheWriteUsd?, outputUsd}]}`, the whole table; `[]` removes it; `prices`
+    absent is `400`) answer `PriceTable {provider, prices, pricingUrl?, spendSource}`. Prices are USD per 1M tokens, 0..10000, at
+    most 200 rows, models unique ignoring case; `model: "*"` prices any model without its own row;
+    `cachedInputUsd` absent or null means the input price; `cacheWriteUsd` is the price of a five-minute
+    prompt-cache write, absent or null meaning Anthropic's rule (1.25 × input; one-hour writes 2 × input), and
+    one-hour writes cost 1.6 × a set `cacheWriteUsd`. A bad row is `400 invalid_argument` with `details.field`
+    `prices[i].model|inputUsd|cachedInputUsd|cacheWriteUsd|outputUsd`. Cost of an attempt = uncached input ×
+    input + cache reads × cached input + five-minute cache writes × cache write + one-hour cache writes × its
+    rate + output × output, over 1M. Uncached input is Claude Code's `input_tokens` (it excludes cache reads and
+    writes) and Codex's `input_tokens − cached`; cache writes are Claude Code's `cache_creation_input_tokens`,
+    split by `cache_creation.ephemeral_5m_input_tokens` / `ephemeral_1h_input_tokens` when present (all
+    five-minute otherwise; `event.Usage.cacheWriteTokens`, `cacheWrite1hTokens`); Codex reports none. Prices are
+    stored in `provider_prices` (migration 0014; `cache_write_usd` from 0015), deleted with their provider, and shown on
+    `Provider.prices`; a change judges the budgets of the provider's accounts again and is followed by
+    `providers.changed`. No price is shipped: `Provider.pricingUrl` and `ProviderPreset.pricingUrl` link the
+    service's own price page. On the official Anthropic API a model with a price is counted at it and the others
+    keep the CLI's estimate.
+  - `free`: Ollama and loopback base URLs count 0 USD; tokens are still counted.
+  - Without a reading or prices (Z.ai, OpenAI, Groq, custom services) the source is `none`: `spentUsd` 0,
+    `spentUnpricedTokens` the tokens counted without a price, `budgetState: "unknown"`.
+  - The service reading is not a usage snapshot: it is read and stored whatever `usageHistory` says. It is
+    cleared with the key (the old key's spend goes to `previousKey`) and when the provider's endpoint changes. A
+    read that started before the key was replaced is dropped.
 - `POST /automations/{id}/confirm-token` takes `{revision}`, the `Automation.revision` the dashboard shows, and
   answers `409 bad_state` when the automation changed since (`400` without it), so a token enables exactly what
   the user read (F34). It and `POST /automations/{id}/confirm`, `PUT` and `DELETE /github/token` answer only
@@ -155,7 +331,7 @@ in the daemon.
   (harmless), but no change can be missing from both.
 - SSE: the `hello` frame carries an id like every frame (contract §7: "every frame"). On a fresh connect it is the
   current id; on a resume it is the client's id. A `reset` frame carries the current id, so a reconnect after it
-  resumes from there. `task.updated` is coalesced per task for 100 ms; account frames are sent when the account's
+  resumes from there. `task.updated` is coalesced per task for 100 ms, or for 1 s when only the worker's active step changed; account frames are sent when the account's
   JSON changed, checked on pool and task notices, after account writes and every 30 s. An account added to,
   removed from or moved to another provider is followed by `providers.changed` (because `Provider.accounts` counts
   them), whichever of the handler and that watcher sees the change first. Accounts cannot change provider through
@@ -173,7 +349,18 @@ in the daemon.
   its wait, and the next daemon finishes it; that answer then carries `details.cancelRecorded: true` and says so in
   its message, and the CLI and the MCP `cancel` tool report the cancel as recorded instead of failing).
 - `GET /health` carries `homeId` (`config.HomeID`: 16 hex digits of the SHA-256 of `fsutil.Key(home)`), so a client
-  of another data directory refuses this daemon instead of using or stopping it.
+  of another data directory refuses this daemon instead of using or stopping it. It also carries `os`
+  (`runtime.GOOS`), `memory` (`{availPhysMB, availCommitMB, known, cgroupV1?}`, all zero unless the reading is known; `cgroupV1` when a
+  Linux cgroup v1 memory limit lowered it) and
+  `lowMemory` (the memory watchdog holds new starts, see `criticalFreeMemoryMB` in
+  [configuration.md](configuration.md)); the frame `resources.changed {lowMemory, memory}` says when `lowMemory`
+  flips (milestone 19). `resources` holds the values in use for the five auto settings (`gateConcurrency`,
+  `minFreeMemoryMB`, `minFreeCommitMB`, `criticalFreeMemoryMB`, `testParallelism`), each `{value, source}` with
+  `source` `auto` (computed from the machine), `explicit` (set by the user) or `derived` (an auto memory threshold
+  computed from the other one the user set: a floor half an explicit minimum, a minimum twice an explicit floor),
+  and `machine`
+  (`{totalPhysMB, totalCommitMB, cpus}`) is what the auto values come from. In `GET /settings` an auto setting is
+  absent; `PATCH /settings` with `null` returns one to auto.
 - `capabilities.takeover` is true for backends that can resume a session; `apiKey` for every backend but agy;
   `listModels` for codex.
 - Sign-in runs in a terminal window. Once the window is open the session is `in_terminal` ("finish signing in in the

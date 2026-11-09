@@ -1,11 +1,26 @@
 /** Builders for API data in tests: complete objects with sensible defaults, overridden per test. */
 import type { TasksApi } from '@/api/tasks'
 import type { TaskEvent, TaskEventType } from '@/api/events'
-import type { Account, Provider, TaskDetail, TaskSummary } from '@/api/types'
+import type { Account, Health, Provider, TaskDetail, TaskSummary } from '@/api/types'
 
 export const T0 = Date.parse('2026-11-06T10:00:00.000Z')
 
 export const iso = (offsetMs = 0) => new Date(T0 + offsetMs).toISOString()
+
+/** The machine-sized settings of a Health, all auto, on a 16 GB / 8-CPU Windows machine. */
+export function makeHealthResources(): Pick<Health, 'resources' | 'machine'> {
+  const auto = (value: number) => ({ value, source: 'auto' as const })
+  return {
+    resources: {
+      minFreeMemoryMB: auto(2048),
+      criticalFreeMemoryMB: auto(1024),
+      minFreeCommitMB: auto(2457),
+      testParallelism: auto(2),
+      gateConcurrency: auto(1),
+    },
+    machine: { totalPhysMB: 16384, totalCommitMB: 24576, cpus: 8 },
+  }
+}
 
 export function makeTask(overrides: Partial<TaskSummary> = {}): TaskSummary {
   return {
@@ -84,6 +99,50 @@ export function makeAccount(overrides: Partial<Account> = {}): Account {
   }
 }
 
+/**
+ * `n` accounts as a busy install has them (the Accounts list at scale): Antigravity, Claude Code and Codex in turn,
+ * with the quota groups each backend reports (Antigravity's three, Claude's sub-limits), some busy, resting, signed
+ * out or on an API key.
+ */
+export function makeAccountFleet(n: number): Account[] {
+  const backends = ['agy', 'claude', 'codex'] as const
+  const w = (window: string, remaining: number, hours: number) => ({
+    window,
+    remaining,
+    resetAt: iso(hours * 3_600_000),
+  })
+  return Array.from({ length: n }, (_, i) => {
+    const backend = backends[i % 3] as Account['backend']
+    const left = ((i * 37) % 100) / 100
+    const groups =
+      backend === 'agy'
+        ? [
+            { name: 'Gemini Models', windows: [w('weekly', 0.9, 120), w('5h', left, 3)] },
+            { name: 'Claude and GPT models', windows: [w('weekly', 0, 100), w('5h', 0, 2)] },
+            { name: 'Gemini 4 Argon', windows: [w('weekly', 0, 140)] },
+          ]
+        : backend === 'claude'
+          ? [
+              { name: 'Claude', windows: [w('5h', left, 4), w('weekly', 0.7, 90)] },
+              { name: 'Claude Opus', windows: [w('weekly', 0.5, 90)] },
+            ]
+          : [{ name: 'Codex', windows: [w('5h', left, 2), w('weekly', 0.6, 60)] }]
+    const apiKey = backend !== 'agy' && i % 5 === 4
+    return makeAccount({
+      id: `acc-${i + 1}`,
+      backend,
+      kind: apiKey ? 'api-key' : 'isolated',
+      label: `${backend} ${i + 1}`,
+      priority: 20 - i,
+      status: i % 7 === 6 ? 'needs_login' : 'ok',
+      busy: i % 4 === 0 ? 1 : 0,
+      resting: i % 9 === 8,
+      ...(apiKey ? { provider: 'deepseek', keyHint: '…9f2c' } : {}),
+      quota: apiKey ? { source: 'passive', groups: [] } : { source: 'active', groups },
+    })
+  })
+}
+
 export function makeProvider(overrides: Partial<Provider> = {}): Provider {
   return {
     id: 'zai',
@@ -97,6 +156,8 @@ export function makeProvider(overrides: Partial<Provider> = {}): Provider {
     official: false,
     allowedModels: '',
     tiers: { fast: '', standard: '', strong: '', max: '' },
+    prices: [],
+    spendSource: 'none',
     createdAt: iso(),
     updatedAt: iso(),
     ...overrides,

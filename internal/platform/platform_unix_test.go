@@ -15,6 +15,10 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"golang.org/x/sys/unix"
+
+	"github.com/NovaSeele/Seelegent/internal/testutil/priority"
 )
 
 // runOSRole runs the Unix-only helper roles:
@@ -244,4 +248,45 @@ func TestTreeKillReachesNewSession(t *testing.T) {
 		t.Fatalf("Kill: %v", err)
 	}
 	waitDead(t, pids...)
+}
+
+// TestRunNiced: a command is wrapped in `nice -n 10` with its own path and arguments.
+func TestRunNiced(t *testing.T) {
+	if _, err := exec.LookPath("nice"); err != nil {
+		t.Skip("no nice on PATH")
+	}
+	cmd := exec.Command("/bin/sh", "-c", "echo a b") //nolint:noctx // never started
+	if !runNiced(cmd) {
+		t.Fatal("not wrapped")
+	}
+	if got := strings.Join(cmd.Args[1:], "|"); got != "-n|10|/bin/sh|-c|echo a b" || filepath.Base(cmd.Path) != "nice" {
+		t.Fatalf("path %s, args %q", cmd.Path, cmd.Args)
+	}
+	if runNiced(&exec.Cmd{}) {
+		t.Fatal("an empty command must not be wrapped")
+	}
+}
+
+// TestLowerNiceGroup: without a nice program the process group is lowered right after the start; the processes
+// already in it (the root and its child) get nice 10.
+func TestLowerNiceGroup(t *testing.T) {
+	priority.AtNormal(t)
+	if self := priority.MustOf(t, os.Getpid()); priority.IsLow(self) {
+		t.Skip("the test already runs at low priority")
+	}
+	pidFile := filepath.Join(t.TempDir(), "pids")
+	tree, err := StartTree(helper("parent", pidFile))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = tree.Close() }()
+	pids := readPids(t, pidFile)
+	if err := lowerNice(unix.PRIO_PGRP, tree.Pid()); err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range pids {
+		if got := priority.MustOf(t, p); got != lowNice {
+			t.Errorf("process %d: nice %d, want %d", p, got, lowNice)
+		}
+	}
 }

@@ -38,6 +38,12 @@ SQLite, migration `0004_tasks.sql` (and `0005_memory_roles.sql` for memory, revi
   marks removed (`foldText`), which the title search matches, so "tieng viet" finds "Tiếng Việt" in NFC or NFD. It is
   written on every save; at start `BackfillFold` fills only the rows where it is empty. A later change to `foldText`
   needs a migration that empties `title_fold` so those rows are recomputed.
+- `tasks.kind` and the turn digest (migration `0011_task_list.sql`: `turn_count`, `tokens_used`, `files_changed`,
+  `gate_turn`, `gate_state`, `last_account_id`, `last_account_label`): what a list entry shows from the turns,
+  written on every save, so lists, Boot and summaries do not load turns. Rows stored before the migration have
+  `turn_count` -1 and their lists load their turns; once the daemon listens, a background backfill stores their
+  digest in batches of 100 (resting 50 ms between batches, stopped by the daemon's close and resumed at the next
+  start). A task whose turns cannot be read is logged and keeps -1 (its list entries keep reporting the error).
 - `task_events`: the append-only log. `seq` starts at 1 per task and grows by one, assigned in the transaction that
   writes the event.
 
@@ -50,7 +56,12 @@ append the events in **one transaction**, then publish on the bus. The log and t
    account, or wait. Otherwise the pool picks the best free account (`Prefer` from the role first, `Exclude` the
    accounts that needed a sign-in this turn or failed transiently more than twice). No account at all: the task is
    `waiting_quota` with `waiting: no_account` and a blocked flag for the user, and looks again when the pool changes or
-   after a minute.
+   after a minute. Every account resting or busy: `waiting: resting` (with `waitingUntil`) or `waiting: busy`, with
+   the pool's line in `waitDetail` (for busy the full accounts, `acc6: 2 of 2 running`); the `waiting_quota` event
+   carries both as `reason` and `detail`, and is written again only when one of them or the time changes.
+   A task without `provider` never takes an API-key account (keys cost money), but when one of its backend would be
+   free with `provider` set, `waitDetail` names that provider (at most three, each once; "and a model" when the
+   provider maps no tier), and the report carries it as `wait_detail`.
    A hand-back turn waits for the conversation's own account while it rests or is busy instead of moving. When that
    account cannot run at all any more (signed out, disabled, removed, its models no longer allowed), the hand-back
    runs on another account in a new conversation, whose brief says plainly that the console's context is not
@@ -58,21 +69,26 @@ append the events in **one transaction**, then publish on the bus. The log and t
 2. **Brief.** The same conversation gets a short continuation; a fresh conversation (first attempt, another account,
    or a retry that never got a conversation) gets the full brief from `internal/brief`, with role, project memory,
    review history, constitution, the git baseline, earlier turns, prerequisite context, and the "you continue an
-   interrupted task" section when an attempt came before. A plan-mode brief says how the backend of this attempt
-   (not the one the task started on) reads files (`Capabilities.PlanShell`, `brief.PlanRule`): agy's and claude's
-   plan modes refuse shell commands, so they read with their file tools; codex has no file tools and runs a plan
-   turn in its `read-only` sandbox, where shell commands that only read (`rg -n`, `Get-Content`, `git diff`, tests
-   that write nothing) work and every write is refused, so it reads with the shell. A hidden run (consult, meeting,
-   judge, verifier) gets the same rule at the top of each fresh conversation (`brief.ReadOnlyRun`), and on codex
-   also the advice to take its citation line numbers from `rg -n` or `Select-String`. Before the first attempt of a
+   interrupted task" section when an attempt came before, with the files the earlier attempts edited and the last
+   report one of them gave (capped at 4000 characters), and the instruction to verify that work rather than redo
+   it. A plan-mode brief says how the backend of this attempt (not the one the task started on) reads files
+   (`Capabilities.PlanShell`, `brief.PlanRule`): agy's and claude's plan modes refuse shell commands, so
+   they read with their file tools; codex has no file tools and runs a plan turn in its `read-only` sandbox, where
+   shell commands that only read (`rg -n`, `Get-Content`, `git diff`, tests that write nothing) work and every write
+   is refused, so it reads with the shell. A hidden run (consult, meeting, judge, verifier) gets the same rule at
+   the top of each fresh conversation (`brief.ReadOnlyRun`), and on codex
+   also the advice to take its citation line numbers from `rg -n` or `Select-String`; below it comes the worker
+   brief's data-folder rule (`brief.DataRule`: do not explore the data folder or Seelegent's processes, with the
+   run's folder as the exception when it lies inside the data folder). Before the first attempt of a
    task the baseline is taken:
    `git status --porcelain` (literal pathspecs, `core.fsmonitor` off, no shell, 20 s timeout) lists the files under
    the task folder that already have uncommitted changes, and the brief tells the worker not to revert them. With it
    the task records `gitStart`, the HEAD commit and branch it starts from (an empty head in a repository without
    commits, an empty branch when detached, nothing outside a repository); followups keep the first start, and the Git
    view lists the commits made since it ([api.md](api.md)). The
-   baseline is taken before the run waits for an account (`Pool.Wait`), so files changed while the task waits are
-   not in it. A retry on the same
+   baseline is taken right before the first launch, once an account is leased (`Pool.Wait`), so files someone
+   changed while the task waited for an account are in it, and the worker is told to leave them too. A retry on the
+   same
    conversation resends the request itself when the failed attempt never reported a session, and otherwise the retry
    note together with the request, so a followup is never lost.
 3. **Launch.** `account.Manager.Env` builds the environment (an API key that is missing is an `auth` outcome, not an
@@ -83,6 +99,11 @@ append the events in **one transaction**, then publish on the bus. The log and t
 4. **Follow.** The stream and stderr are tailed from the start. Message deltas of one step are **coalesced for 250 ms**
    and written as one `worker` event; any other event flushes them first. Each write carries the stream and stderr
    offsets it covers, committed in the same transaction (`attempts.data.streamOffset`, `stderrOffset`).
+   Writes are **group commits** (M19): a line's events join a batch and wake the follower's writer, which stores the
+   whole batch in one transaction and publishes it as one bus batch. The first line of a read chunk is written at
+   once; the lines parsed while that write runs (the rest of the chunk) go into the next one, so no timer delays an
+   event. A batch always ends on a line boundary, at most 256 events (a line that fills it writes it itself), and the
+   events, their seqs and their SSE frames are the ones a write per line gave.
    A launch directory removed while the worker runs (Unix allows it; the launcher keeps its lock on the unlinked
    file) is not taken for an ended worker: the daemon asks the launcher it knows (from `launch.Start`, or from a
    record that checked out) to stop with SIGTERM, kills what is left of the tree after a grace period, and fails the
@@ -94,13 +115,43 @@ append the events in **one transaction**, then publish on the bus. The log and t
 | ok | turn `ok`, task `done` (a hand-back turn also logs `handback`); a gated task stays `running` in its gate phase first (below) |
 | quota | the account rests for that quota group (`pool.MarkExhausted`), next attempt |
 | auth | the account is marked signed out (`pool.MarkAuthFailed`), next attempt on another account |
-| transient | `retry` event, wait 15 s then 45 s on the same account (only its own timer wakes it), then another account |
+| credits | the key's credit or billing ran out (class `credits`, never a quota rest): the account is held with no end time (`pool.MarkNoCredit`, `restReason: credits`) until the user stores a new key, a key test passes or the user edits the account (switches it off and on after a top-up); next attempt on another account, or, when no other account can run the task, the task fails at once naming the key ("the anthropic key has no credit left; top up or change the key") instead of waiting; a sign-in account has no key: "the claude account work has no credit left; top up, then switch the account off and on" |
+| transient | `retry` event, wait 15 s then 45 s on the same account (only its own timer wakes it), then another account. A stale error needs evidence beyond the same text, since claude and codex word a real outage the same way every time: a CLI that keeps a run's error in the conversation and reports it again on every resume (capability `ReplaysErrors`, agy only), a reported duration more than 30 s beyond the process's wall time (agy then reports the whole conversation's: 555 s for a 15 s run), and a resumed attempt that ends by itself with the byte-identical, non-empty error of the transient attempt before it, in the same conversation id (not an error Seelegent made up from stderr). Such a replay counts as `ok` with a warning when its final answer is the complete report (as below); otherwise the turn fails ("repeats a stale error from its conversation … check the diff and delegate a new task") instead of resuming or handing the work to another account to redo |
 | background_wait | continue once with the background-wait prompt; the second time the turn ends `ok` |
 | error / timeout | turn and task `failed` |
-| cancelled | turn and task `cancelled` |
+| cancelled | turn and task `cancelled`; the turn keeps the response and files of its latest attempt that gave a response, so a cancel during a retry's wait still shows the work |
 
-A turn makes at most one attempt per account of the backend plus three. After every attempt the usage is recorded
-and a background quota read of the account is requested.
+An ok or cancelled turn lists the files every attempt of the turn edited, not only its last attempt's.
+
+The worker CLIs retry network errors themselves, and some still end a run whose work finished with one. Each parser
+remembers the agent's final answer of this run (agy: a DONE `agent_response` with text; claude: a text block of the
+main agent, never a subagent's message with `parent_tool_use_id`; codex: a completed `agent_message`); a later tool
+step clears it (agy: a tool step or a newer response; claude: a `tool_use`, also in the same message, or a
+`tool_result`; codex: a `command_execution`, `mcp_tool_call`, `file_change` or `web_search` item). When
+the run ends by itself (any exit code; never a timeout, a lost worker, a cancel, a budget stop or a failed start) with
+an error that reads as transient and as no other class (every rule is checked, so a sign-in, quota or credits wording
+alongside it rules it out) and is not a background wait, the parser still reports the transient failure but flags the
+answer (`error.answer`: the report's own response, else the final text) and the final text alone (`error.final`,
+`outcome.recoveryFinal`). The runner counts that attempt as `ok` only when the final text is the complete report
+the turn asked for (its Summary … Open issues sections; a report the agent wrote before more tool steps does not
+count); a hand-back turn and a hidden run never do. The attempt keeps its usage and spend, and its outcome carries the answer as the response and
+the warning "<backend> reported a network error after its final answer: <error>" (`outcome.warning`). Anything else
+(a progress line, a final text without the sections) stays transient and retries. A warning of an ok attempt reaches
+the lead as the report's `warnings` (MCP `task`/`wait`, the CLI's `Warning:` lines) and the dashboard as the
+`attempt_end` event's `warning`.
+
+Classification: auth and credits rules come before transient for every backend (claude's credits rule now comes
+before its transient rule, since a 402 body may also name a server error). The network wording covers Node, Rust, Go
+and Windows errors ("Connection error.", "fetch failed", `ENOTFOUND`, `UND_ERR_*`, "stream disconnected", "error
+sending request", "dns error", `wsarecv`, …), never a bare "timed out" or "terminated". Credits also match
+"insufficient credits/balance/funds", "status 402" and "402 Payment Required".
+
+A turn makes at most one attempt per account of the backend plus three, not counting attempts that ended on a quota
+limit: those rest the account and resume or hand over, so the turn waits rather than fails. A runaway loop of limits
+ends the turn after 50 of them. After every attempt the usage is recorded and a background quota read of the account
+is requested. Codex reports the thread's running total at `turn.completed`, so a resumed codex attempt records what
+it added to the total the conversation's previous attempt reported (kept as the outcome's `threadUsage`); a total
+below that one is taken as is.
 
 6. **Gate.** An edit task whose turn ended `ok` keeps its run: the task stays `running` with `gatePhase` set while
    the gate runs, settles, or the verifier child works ([gates.md](gates.md)). A red gate or a verifier reject with
@@ -109,12 +160,86 @@ and a background quota read of the account is requested.
    by a stopped daemon is picked up by the next one. Takeover is refused during the phase; a cancel ends it
    (`not_run` steps, verdict `error`) and cancels the verifier child.
 
+### Worker process trees and their limits
+
+The launcher starts the worker as the root of a process tree (`platform.StartWorkerTreeWith`), with the limits that
+travel in `launch.json` as `tree` (settings `workerPriority`, `workerMemoryLimitMB`, `workerCPURatePercent`, read at
+each launch):
+
+| Limit | Windows (Job Object) | Unix |
+|---|---|---|
+| priority `low` | `JOB_OBJECT_LIMIT_PRIORITY_CLASS` with `BELOW_NORMAL_PRIORITY_CLASS`, plus the same creation flag: every process of the job runs below normal and cannot raise itself; the launcher stays at normal | the launcher lowers its own nice to 10 before it starts the worker, so every descendant inherits it with no race. Linux keeps nice per thread: the launcher locks the starting goroutine to its thread, lowers that thread and forks from it |
+| memory cap | `JOB_OBJECT_LIMIT_JOB_MEMORY` (memory committed by the whole tree) | none |
+| CPU cap | CPU rate control, hard cap, as a percentage of the whole machine | none |
+
+When the memory cap refuses an allocation the job posts `JOB_OBJECT_MSG_JOB_MEMORY_LIMIT` to its completion port.
+The launcher drains the port on its cancel ticker (so the per-process packets do not pile up in kernel memory over
+a long turn) and once more after the worker exits; it then notes the hit in `stderr.txt` and writes
+`memoryLimitHit: true` into `exit.json`, and the turn fails saying so. The job's report on that port decides: a
+query of the job's limit violations does not help, as it only covers notification limits, which a hard cap never
+lets usage pass. Only when the port could not be set up does a worker that failed by itself after the job's peak
+memory reached 90% of the cap count as a hit; a tree the launcher stopped (cancel, timeout) never does. A limit
+the system refuses is left out and named in `stderr.txt` ("the system refused these limits ..."). A worker's own
+test and lint runs are bounded only by this cap; the start check and the memory watchdog act on new starts and
+gate commands, never on a running worker.
+
+### Resources: the start check and the memory watchdog
+
+The engine reads memory through `Options.Resources` (`task.Sampler` over `platform.Memory`: a reading is cached
+for 2 s, and `Changed` fires when one crosses a threshold or the settings change). A reading the system cannot give
+(`Known` false; commit is unknown when `AvailCommitMB` is 0) never holds anything. Every threshold below is the
+effective value (`config.EffectiveResources`: the user's value, or the auto value computed from the machine profile
+the daemon reads at start and on each settings change; see [configuration.md](configuration.md#resources)), so it
+does not move between readings.
+
+- **Start check.** Before a run asks the pool for an account, it compares free physical memory with
+  `minFreeMemoryMB` and free commit with `minFreeCommitMB` (each `0` = off). Below either the task is
+  `waiting_quota` with `waiting: "memory"`, a `waitDetail` with both numbers, and
+  `memoryWait {since, availableMB, needMB}`, and the run waits without touching the pool (no lease, no account
+  signal) until the sampler signals, the machine leaves the low-memory state, or 10 s pass. A `waiting_quota` event
+  (`reason: "memory"`, `availableMB`, `needMB`) is written when the wait starts or its threshold changes, not on
+  every reading. The same check runs again right after the lease, as the guard for memory that fell while the run
+  waited for an account: below the threshold it releases the lease (nothing is launched) and waits the same way.
+  A pool wait in between keeps `memoryWait`, so a wait that goes back to memory keeps its `since` and writes no
+  new event; a launch or the end of the run clears it. The summary and the report show `waiting` only for this
+  reason.
+  After `ResourcesWaitAfter` (10 min) the task carries an `info` flag for the user, `resources_wait`, with
+  `params {minutes, availableMB, needMB}`: it does not need the lead and wakes no wait.
+- **Herd spacing.** While free memory is below twice `minFreeMemoryMB` (or commit below twice `minFreeCommitMB`),
+  worker starts are spaced 5 s apart: a run that comes too soon releases its lease and sleeps the difference,
+  without a status change.
+- **Concurrency.** `maxConcurrentWorkers` caps the leases over all accounts in the pool (`Unavailable.Capped`
+  and `Running` say so); a release wakes the waiters, and a lowered cap stops nothing.
+- **Watchdog.** A goroutine checks memory on every sampler signal and every 2 s while a task runs, a heavy command
+  (gate run or regression run command, `TrackHeavy`) is in flight or the machine is low. Otherwise it arms no timer
+  and sleeps until a run or a heavy command starts. With `criticalFreeMemoryMB` above 0, the machine turns **low**
+  when free physical memory, or free commit when it is known, drops below it, and turns back only at the resume level: physical at
+  `minFreeMemoryMB` (twice the critical line when that is off), commit at `minFreeCommitMB` (likewise). Between the
+  two lines nothing flips, so a reading that swings around the critical line does not flicker. While low, every
+  new start waits at the resume level instead of the `minFree` thresholds, `LowMemory()` is true (GET /health and
+  the dashboard), and `OnLowMemory` publishes each flip.
+  **One stop per episode:** when the machine turns low, the newest heavy command in flight (the last gate run or
+  regression run command to start) is cancelled with the cause `gate.ErrLowMemory`; nothing else is stopped until the machine has come back to the
+  resume level and fallen again. The stopped gate is not a failure: its step shows `stopped: "low_memory"`, the
+  phase counts `stops` (kept on the step as well, so a daemon restart keeps the count), the gate goes back to
+  `queued` with `wait: "memory"` and runs again from the start once memory is back. The third stop in one gate
+  phase (`api.GateLowMemoryStopsMax`) ends the gate in `error` with `reason: "low_memory"` and no fix turn. A
+  stopped regression run command fails with "stopped: machine low on memory" at the end of its tail. Workers
+  are never stopped: a worker's own test and lint runs are bounded only by `workerMemoryLimitMB`.
+- **Daemon limit.** `daemonMemoryLimitMB` sets the daemon's soft memory limit (`debug.SetMemoryLimit`) at start and
+  whenever it changes; `0` lifts the one it set; a `GOMEMLIMIT` in the daemon's environment wins.
+
+Every resources setting applies without a restart: the pool, the gate slots and the sampler are notified on each
+settings change.
+
 ## Attention
 
 `computeAttention` maps the task and what the run knows about its worker onto the contract's states:
 
 - `blocked`: prerequisites failed (`deps_blocked`), no account can run it (`no_accounts`, for the user), every
-  account needs a sign-in (`auth`, for the user), the worker repeats itself (`looping`: the same call `loopRepeat`
+  account needs a sign-in (`auth`, for the user), every account that could run it rests on its budget
+  (`budget_reached`, for the user: waiting reason `budget_reached`, detail "acc9 reached its $200 budget: raise the
+  budget or change the key"; raising the budget, switching its stop off or a new key wakes the task), the worker repeats itself (`looping`: the same call `loopRepeat`
   times in its last 12 without progress, or five failed calls in a row; an edit that reports only its file is told
   apart by the file's content hash, or counts as new when the file cannot be read), a done turn with no answer
   (`no_response`), red hygiene findings (`hygiene`), files at risk not restored (`work_at_risk`), a failed task

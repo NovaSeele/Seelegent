@@ -71,8 +71,8 @@
       "short": "クォータ"
     },
     "waitingWorker": {
-      "label": "ワーカー待ち",
-      "short": "ワーカー"
+      "label": "空きスロット待ち",
+      "short": "枠待ち"
     },
     "blocked": {
       "label": "対応が必要",
@@ -105,6 +105,10 @@
     "blockedDeps": {
       "label": "前のタスクが失敗",
       "short": "前が失敗"
+    },
+    "waitingResources": {
+      "label": "リソース待ち",
+      "short": "リソース"
     }
   },
   "attention": {
@@ -114,6 +118,7 @@
     "noResponse": "ワーカーが応答しない",
     "auth": "ログインが必要",
     "noAccounts": "使えるアカウントがない",
+    "budgetReached": "予算に達しました",
     "failed": "失敗",
     "review": "レビュー待ち",
     "quotaWait": "クォータ待ち",
@@ -128,7 +133,8 @@
     "verifierRejected": "レビューで却下",
     "peerObjection": "ピアが異議を出しています",
     "backgroundWait": "バックグラウンドのコマンドを待機中",
-    "unknown": "確認が必要"
+    "unknown": "確認が必要",
+    "resourcesWait": "リソース待ち"
   },
   "stage": {
     "explore": "調査",

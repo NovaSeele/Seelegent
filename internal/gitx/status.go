@@ -30,6 +30,7 @@ func (r *Repos) Status(ctx context.Context, cwd string) (api.RepoStatus, error) 
 	if err != nil {
 		return api.RepoStatus{}, err
 	}
+	countUntracked(root, st.files)
 	return api.RepoStatus{Repo: true, Root: root, Branch: st.branch, Detached: st.detached,
 		Dirty: len(st.files) > 0, Files: api.NonNil(st.files), Upstream: st.upstream, Ahead: st.ahead,
 		Behind: st.behind, UpstreamGone: st.upstream != "" && !st.ab}, nil
@@ -73,9 +74,13 @@ type repoState struct {
 	upstream      string
 	ahead, behind int
 	ab            bool
+	// heads holds the blob id at HEAD (porcelain v2's hH) of the changed tracked images, by path: the HEAD half of
+	// their GitFile.Stamp.
+	heads map[string]string
 }
 
-// state reads `git status` of the repository at root, with line counts when numstat is set.
+// state reads `git status` of the repository at root, with the line counts of the changed tracked files when
+// numstat is set (countUntracked counts the untracked ones, for the files a caller shows).
 func (r *Repos) state(ctx context.Context, root string, numstat bool) (repoState, error) {
 	out, _, err := r.run(ctx, root, ReadTimeout, 0, "status", "--porcelain=v2", "--branch", "-z",
 		"--untracked-files=all")
@@ -98,11 +103,7 @@ func (r *Repos) state(ctx context.Context, root string, numstat bool) (repoState
 	stats := parseNumstat(diff)
 	for i := range st.files {
 		f := &st.files[i]
-		if f.Status == api.GitUntracked {
-			f.Additions, f.Binary = countLines(filepath.Join(root, filepath.FromSlash(f.Path)))
-			continue
-		}
-		if s, ok := stats[f.Path]; ok {
+		if s, ok := stats[f.Path]; ok && f.Status != api.GitUntracked {
 			f.Additions, f.Deletions, f.Binary = s.add, s.del, s.binary
 		}
 	}
@@ -147,10 +148,12 @@ func parseStatus(out []byte) repoState {
 		case '1':
 			if f := strings.SplitN(rec, " ", 9); len(f) == 9 {
 				st.files = append(st.files, api.GitFile{Path: f[8], Status: statusOf(f[1])})
+				st.headOf(f[8], f[6])
 			}
 		case '2':
 			if f := strings.SplitN(rec, " ", 10); len(f) == 10 {
 				gf := api.GitFile{Path: f[9], Status: api.GitRenamed}
+				st.headOf(f[9], f[6]) // the blob of the old path: the preview's "before"
 				if i+1 < len(recs) {
 					i++
 					gf.OldPath = recs[i]
@@ -172,6 +175,17 @@ func parseStatus(out []byte) repoState {
 	return st
 }
 
+// headOf keeps the blob id at HEAD of path when it is an image (see repoState.heads).
+func (st *repoState) headOf(path, oid string) {
+	if !isImage(path) {
+		return
+	}
+	if st.heads == nil {
+		st.heads = map[string]string{}
+	}
+	st.heads[path] = oid
+}
+
 // statusOf maps the XY code of a changed entry (index, worktree).
 func statusOf(xy string) string {
 	switch {
@@ -181,6 +195,15 @@ func statusOf(xy string) string {
 		return api.GitAdded
 	}
 	return api.GitModified
+}
+
+// countUntracked sets the line counts of the untracked files among files (paths relative to root).
+func countUntracked(root string, files []api.GitFile) {
+	for i := range files {
+		if f := &files[i]; f.Status == api.GitUntracked {
+			f.Additions, f.Binary = countLines(filepath.Join(root, filepath.FromSlash(f.Path)))
+		}
+	}
 }
 
 type lineStat struct {

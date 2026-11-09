@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"slices"
 	"sort"
 	"strings"
@@ -19,6 +20,7 @@ import (
 	"github.com/NovaSeele/Seelegent/internal/backend"
 	"github.com/NovaSeele/Seelegent/internal/config"
 	"github.com/NovaSeele/Seelegent/internal/fsutil"
+	"github.com/NovaSeele/Seelegent/internal/platform"
 )
 
 // logTailBytes bounds how much of a log GET /logs reads from its end.
@@ -63,8 +65,60 @@ func (s *Server) systemRoutes() {
 }
 
 func (s *Server) health() api.Health {
-	return api.Health{OK: true, Version: s.o.Version, Commit: s.o.Commit, Build: s.build(), APIVersion: api.APIVersion,
-		PID: s.o.PID, Port: s.o.Port, StartedAt: api.FormatTime(s.o.StartedAt), HomeID: s.o.HomeID}
+	h := api.Health{OK: true, Version: s.o.Version, Commit: s.o.Commit, Build: s.build(), APIVersion: api.APIVersion,
+		PID: s.o.PID, Port: s.o.Port, StartedAt: api.FormatTime(s.o.StartedAt), HomeID: s.o.HomeID, OS: runtime.GOOS}
+	if s.o.FreeMemory != nil {
+		if m := s.o.FreeMemory(); m.Known {
+			h.Memory = memoryStatus(m)
+		}
+	}
+	if s.o.LowMemory != nil {
+		h.LowMemory = s.o.LowMemory()
+	}
+	var m config.Machine
+	if s.o.Machine != nil {
+		m = s.o.Machine()
+	}
+	set := config.Defaults()
+	if s.o.Settings != nil {
+		set = s.o.Settings.Settings()
+	}
+	h.Resources = effectiveResources(set, m)
+	h.Machine = api.Machine{TotalPhysMB: m.TotalPhysMB, TotalCommitMB: m.TotalCommitMB, CPUs: m.CPUs}
+	return h
+}
+
+// effectiveResources are the API form of config.EffectiveResources with the source of each value.
+func effectiveResources(set config.Settings, m config.Machine) api.EffectiveResources {
+	r, src := config.EffectiveResourceSources(set, m)
+	value := func(v int, source string) api.EffectiveValue {
+		switch source {
+		case config.SourceExplicit:
+			return api.EffectiveValue{Value: v, Source: api.ResourceExplicit}
+		case config.SourceDerived:
+			return api.EffectiveValue{Value: v, Source: api.ResourceDerived}
+		}
+		return api.EffectiveValue{Value: v, Source: api.ResourceAuto}
+	}
+	return api.EffectiveResources{
+		MinFreeMemoryMB:      value(r.MinFreeMemoryMB, src.MinFreeMemoryMB),
+		CriticalFreeMemoryMB: value(r.CriticalFreeMemoryMB, src.CriticalFreeMemoryMB),
+		MinFreeCommitMB:      value(r.MinFreeCommitMB, src.MinFreeCommitMB),
+		TestParallelism:      value(r.TestParallelism, src.TestParallelism),
+		GateConcurrency:      value(r.GateConcurrency, src.GateConcurrency),
+	}
+}
+
+// memoryStatus is the API form of a known reading.
+func memoryStatus(m platform.MemoryStatus) api.MemoryStatus {
+	return api.MemoryStatus{AvailPhysMB: m.AvailPhysMB, AvailCommitMB: m.AvailCommitMB, Known: m.Known,
+		CgroupV1: m.CgroupV1}
+}
+
+// PublishResourcesChanged sends resources.changed: the memory watchdog started (lowMemory) or stopped holding new
+// starts, after reading m.
+func (s *Server) PublishResourcesChanged(lowMemory bool, m platform.MemoryStatus) {
+	s.publish(api.StreamResourcesChanged, api.ResourcesChanged{LowMemory: lowMemory, Memory: memoryStatus(m)})
 }
 
 // getState is GET /state. lastEventId is read before the snapshot: every frame is published after its change is

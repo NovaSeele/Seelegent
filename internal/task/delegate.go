@@ -15,6 +15,8 @@ import (
 	"github.com/NovaSeele/Seelegent/internal/backend"
 	"github.com/NovaSeele/Seelegent/internal/config"
 	"github.com/NovaSeele/Seelegent/internal/fsutil"
+	"github.com/NovaSeele/Seelegent/internal/pool"
+	"github.com/NovaSeele/Seelegent/internal/projectkey"
 	"github.com/NovaSeele/Seelegent/internal/role"
 )
 
@@ -119,12 +121,15 @@ func (s *Service) DelegateWith(ctx context.Context, req api.DelegateRequest, sp 
 		if p.Backend != backendName {
 			return api.TaskSummary{}, invalidf("provider %s serves %s, not %s", p.ID, p.Backend, backendName)
 		}
+		if err := s.providerResting(ctx, p.ID); err != nil {
+			return api.TaskSummary{}, err
+		}
 		prov = &p
 	}
 	t := &Task{
 		Title: title(req.Title, prompt), Status: StatusQueued, Kind: kind, Mode: mode, Cwd: cwd,
 		ProjectKey: key, ProjectName: name, Prompt: prompt, Backend: backendName, Provider: providerID,
-		AllowGit: req.AllowGit, Session: session, Role: req.Role, ParentID: sp.ParentID, MeetingID: sp.MeetingID,
+		Session: session, Role: req.Role, ParentID: sp.ParentID, MeetingID: sp.MeetingID,
 		ContestID: sp.ContestID, TicketID: sp.TicketID, AutomationID: sp.AutomationID, Variant: sp.Variant,
 		ProjectCwd: projectCwd, BaselineTaken: Hidden(kind),
 	}
@@ -199,7 +204,7 @@ func (s *Service) DelegateWith(ctx context.Context, req api.DelegateRequest, sp 
 	now := s.now()
 	t.CreatedAt, t.UpdatedAt = now, now
 	t.Turns = []*Turn{{N: 1, By: ByLead, Message: prompt, Status: TurnRunning, Model: model,
-		RequestedModel: reqModel, Tier: tier, Effort: effort, TaskIDs: taskIDs, StartedAt: now}}
+		RequestedModel: reqModel, Tier: tier, Effort: effort, TaskIDs: taskIDs, AllowGit: req.AllowGit, StartedAt: now}}
 	evs := []NewEvent{{Type: api.EventLeadMessage, Turn: 1,
 		Data: api.LeadMessageData{Message: prompt, By: ByLead, Model: model, Effort: effort, Tier: tier}}}
 	if t.Status == StatusWaitingDeps {
@@ -273,12 +278,12 @@ func (s *Service) Followup(ctx context.Context, id string, req api.FollowupReque
 		}
 		mem = &m
 	}
-	start := false
+	start, superseded, child := false, false, ""
 	// A new lane is checked and saved as one step, as in Delegate (old D25a): claimMu is held through the mutate
 	// (lock order claimMu, then the task).
 	s.claimMu.Lock()
 	_, err := s.mutate(ctx, id, func(t *Task) ([]NewEvent, error) {
-		start = false
+		start, superseded, child = false, false, ""
 		if Hidden(t.Kind) && mem != nil {
 			return nil, invalidf("task %s is a hidden %s run; its member cannot change", id, t.Kind)
 		}
@@ -288,13 +293,21 @@ func (s *Service) Followup(ctx context.Context, id string, req api.FollowupReque
 		if s.consoleOpen(id) {
 			return nil, badStatef("the takeover console of task %s is still open; close it first", id)
 		}
+		var pre []NewEvent
 		if Active(t.Status) {
-			return nil, badStatef("task %s is %s; wait for it or cancel it first", id, t.Status)
+			if !supersedable(t) || msg == "" {
+				return nil, badStatef("task %s is %s (%s); wait for it or cancel it first", id, t.Status, busyWith(t))
+			}
+			// The worker has reported and only the gate runs (or waits to run again): the lead's instruction
+			// supersedes it. The gate stops (its commands are killed with the run, below) and the new turn starts.
+			child = t.GatePhase.ChildID
+			pre = stopGate(t, t.GatePhase, s.now(), supersededNote)
+			t.Status, superseded = StatusDone, true
 		}
 		if err := s.checkContest(ctx, t); err != nil {
 			return nil, err
 		}
-		if t.AllowGit = derefOr(req.AllowGit, t.AllowGit); req.Profile != "" {
+		if req.Profile != "" {
 			if err := s.setProfile(ctx, t, req.Profile); err != nil {
 				return nil, err
 			}
@@ -318,6 +331,11 @@ func (s *Service) Followup(ctx context.Context, id string, req api.FollowupReque
 				tu.Message += "\n\n## Additional instructions from the " + who + "\n\n" + msg
 				evs = append(evs, NewEvent{Type: api.EventLeadMessage, Turn: 1, Data: api.LeadMessageData{Message: msg, By: by}})
 			}
+			// The force starts the delegated command (turn 1): it keeps the delegate's allow_git unless this request
+			// passes one.
+			if tu := t.TurnN(1); tu != nil {
+				tu.AllowGit = derefOr(req.AllowGit, tu.AllowGit)
+			}
 			laneEvs, _, err := s.followupProof(ctx, t, preq, false)
 			if err != nil {
 				return nil, err
@@ -339,9 +357,14 @@ func (s *Service) Followup(ctx context.Context, id string, req api.FollowupReque
 				return nil, err
 			}
 		}
+		note := rejectNote(t)
 		ev, err := s.addTurn(ctx, t, by, msg, turnReq)
 		if err != nil {
 			return nil, err
+		}
+		if note != "" {
+			// The worker reads the lead's reject with the instruction, never as a reason to delete its work (F4).
+			t.LastTurn().Message = note + "\n\n" + msg
 		}
 		laneEvs, changed, err := s.followupProof(ctx, t, preq, len(req.TaskIDs) > 0)
 		if err != nil {
@@ -349,17 +372,84 @@ func (s *Service) Followup(ctx context.Context, id string, req api.FollowupReque
 		}
 		t.LastTurn().ProofChanged = changed
 		start = true
-		return append([]NewEvent{ev}, laneEvs...), nil
+		return append(append(pre, ev), laneEvs...), nil
 	})
 	s.claimMu.Unlock()
 	if err != nil {
 		return api.TaskSummary{}, err
+	}
+	if superseded {
+		s.stopSupersededGate(id, child)
 	}
 	if start {
 		s.startRun(id)
 	}
 	s.checkDeps(s.background())
 	return s.Summary(ctx, id)
+}
+
+// rejectNote is the line a followup after the lead rejected a task with files outside its lane starts with, or "":
+// the reject must not push the worker to delete or move those files (field report 4, F4).
+func rejectNote(t *Task) string {
+	r, last := t.Review, t.LastTurn()
+	if r == nil || r.Verdict != api.VerdictRejected || last == nil {
+		return ""
+	}
+	if st := reportLaneStep(t, last.Gate, last); st == nil || len(st.Files)+len(st.Unseen) == 0 {
+		return ""
+	}
+	notes := r.Notes
+	if notes == "" {
+		notes = "(no notes)"
+	}
+	return "Do not delete or move files unless the message below names that exact file and says so; the lead " +
+		"rejected for: " + notes
+}
+
+// supersedable reports whether a followup may take over task t now: its worker has reported and the task is only in
+// its gate phase (the gate runs, is queued, settles or waits for the verifier), not cancelled or taken over.
+func supersedable(t *Task) bool {
+	if t.GatePhase == nil || t.CancelRequested || t.Manual || t.Status != StatusRunning {
+		return false
+	}
+	tu := t.LastTurn()
+	return tu == nil || tu.Status != TurnRunning
+}
+
+// busyWith says what an active task is doing, for a refused followup.
+func busyWith(t *Task) string {
+	switch {
+	case t.CancelRequested:
+		return "it is being cancelled"
+	case t.GatePhase != nil && t.GatePhase.State == api.GatePhaseSettling:
+		return "its gate waits for the other workers of the repository"
+	case t.GatePhase != nil && t.GatePhase.State == api.GatePhaseVerifying:
+		return "the verifier is reviewing it"
+	case t.GatePhase != nil:
+		return "the gate is running"
+	case t.Status == StatusQueued:
+		return "it is queued for a worker"
+	case t.Status == StatusWaitingQuota:
+		return "it waits for an account or for memory"
+	}
+	return "the worker's turn is still running"
+}
+
+// stopSupersededGate stops the gate a followup superseded: the run working on it is stopped (its gate commands are
+// killed through the run's context, as on a cancel) and the verify task, if any, is cancelled. The run then ends
+// and, as the task has an open turn, the next run starts it (endRun).
+func (s *Service) stopSupersededGate(id, child string) {
+	s.mu.Lock()
+	r := s.runs[id]
+	s.mu.Unlock()
+	if r != nil {
+		r.requestStop()
+	}
+	if child != "" {
+		if _, _, err := s.Cancel(s.background(), child, api.CancelRequest{}); err != nil {
+			s.log.Warn("task: cancel the verify task", "task", child, "err", err)
+		}
+	}
 }
 
 // Answer answers the question a task asked: a followup by the user.
@@ -377,6 +467,11 @@ func (s *Service) Answer(ctx context.Context, id string, req api.AnswerRequest) 
 // addTurn opens the next turn of a finished task.
 func (s *Service) addTurn(ctx context.Context, t *Task, by, msg string, req api.FollowupRequest) (NewEvent, error) {
 	model, tier, effort := t.Model, t.Tier, t.Effort
+	if t.Provider != "" {
+		if err := s.providerResting(ctx, t.Provider); err != nil {
+			return NewEvent{}, err
+		}
+	}
 	if req.Effort != "" {
 		effort = req.Effort
 	}
@@ -394,8 +489,10 @@ func (s *Service) addTurn(ctx context.Context, t *Task, by, msg string, req api.
 			return NewEvent{}, err
 		}
 	}
+	// allow_git is per command: a followup that does not pass it runs guarded (Turn.AllowGit).
 	tu := &Turn{N: len(t.Turns) + 1, By: by, Message: msg, Status: TurnRunning, Model: model,
-		RequestedModel: req.Model, Tier: tier, Effort: effort, StartedAt: s.now()}
+		RequestedModel: req.Model, Tier: tier, Effort: effort, AllowGit: derefOr(req.AllowGit, false),
+		StartedAt: s.now()}
 	if len(req.TaskIDs) > 0 {
 		if t.Spec == nil {
 			return NewEvent{}, invalidf("taskIds need a task with a spec")
@@ -413,6 +510,23 @@ func (s *Service) addTurn(ctx context.Context, t *Task, by, msg string, req api.
 	return NewEvent{Type: api.EventLeadMessage, Turn: tu.N,
 		Data: api.LeadMessageData{Message: msg, By: by, Model: model, Effort: effort, Tier: tier}}, nil
 }
+
+// providerResting refuses work on a provider whose every usable key is held until the user acts (pool.ProviderRestError,
+// details.reason credits or budget_reached), instead of letting the task fail or wait for the user.
+func (s *Service) providerResting(ctx context.Context, providerID string) error {
+	err := s.o.Pool.ProviderResting(ctx, providerID)
+	if he := (*pool.ProviderRestError)(nil); errors.As(err, &he) {
+		return plainInvalid{err}
+	}
+	return err
+}
+
+// plainInvalid is a refusal that matches ErrInvalid but reads as its cause alone, for messages written for the
+// lead ("anthropic keys reached their budget ($200); raise it in Accounts"); the cause's APIDetails stay reachable.
+type plainInvalid struct{ error }
+
+// Unwrap matches ErrInvalid and the cause.
+func (e plainInvalid) Unwrap() []error { return []error{ErrInvalid, e.error} }
 
 // resolveModel picks the model of a turn: an explicit model, else the tier, else the role's default tier, else the
 // settings' default tier (backend.ModelPolicy.Resolve). The effort defaults to the role's.
@@ -436,6 +550,9 @@ func (s *Service) resolveModel(backendName string, prov *account.Provider, model
 		return "", "", "", invalidf("tier %q must be one of %s", tier, strings.Join(config.Tiers(), ", "))
 	}
 	resolved, err = policy.Resolve(model, tier, defaultTier)
+	if nd := (*backend.NoDefaultModelError)(nil); errors.As(err, &nd) {
+		return "", "", "", plainInvalid{err}
+	}
 	if err != nil {
 		return "", "", "", fmt.Errorf("%w: %w", ErrInvalid, err)
 	}
@@ -475,7 +592,7 @@ func checkSession(s *api.Session) (*api.Session, error) {
 // checkCwd validates a task folder: an absolute path to an existing folder. It returns the canonical path and the
 // project key and name.
 func checkCwd(cwd string) (canonical, key, name string, err error) {
-	canonical, key, name, err = fsutil.ProjectOf(cwd)
+	canonical, key, name, err = projectkey.Of(cwd)
 	if err != nil {
 		return "", "", "", invalidf("%v", err)
 	}

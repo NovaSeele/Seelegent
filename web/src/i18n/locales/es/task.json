@@ -46,6 +46,7 @@
       "callsFailed": "Las últimas {count} llamadas a herramientas fallaron.",
       "repeated": "El worker repitió la misma llamada {tool} {count} veces en sus últimos {steps} pasos.",
       "noAccounts": "Ninguna cuenta de {backend} puede trabajar. Inicia sesión en una o activa una.",
+      "budgetReached": "{account} agotó su presupuesto de {budget}. Sube el presupuesto o cambia la clave.",
       "auth": "Todas las cuentas de {backend} activas necesitan iniciar sesión.",
       "depMissing": "La tarea previa {task} ya no existe.",
       "depRejected": "La tarea previa {title} ({task}) fue rechazada.",
@@ -53,7 +54,9 @@
       "depsWaiting": "Espera a que terminen {tasks}.",
       "depCancelled": "La tarea previa {title} ({task}) fue cancelada.",
       "hygiene": "{count} hallazgo de higiene por revisar | {count} hallazgos de higiene por revisar",
-      "workAtRisk": "{count} archivo puede haber perdido cambios | {count} archivos pueden haber perdido cambios"
+      "workAtRisk": "{count} archivo puede haber perdido cambios | {count} archivos pueden haber perdido cambios",
+      "resourcesWait": "Lleva más de {minutes} minutos esperando recursos: {available} libres, necesita {need}.",
+      "resourcesWaitPlain": "Lleva más de {minutes} minutos esperando recursos: a la máquina le falta memoria libre."
     }
   },
   "question": {
@@ -172,6 +175,7 @@
       "junkFile": "Archivo basura",
       "unreportedFile": "Cambiado pero no está en el informe",
       "outsideRepoWrite": "Escritura fuera del repositorio",
+      "outsideLane": "Cambio fuera del carril",
       "unfetchedUrl": "URL que el worker nunca abrió",
       "skipped": "Comprobación omitida"
     },
@@ -213,7 +217,8 @@
     "phase": {
       "running": "en marcha",
       "settling": "esperando a otras tareas",
-      "verifying": "segunda revisión"
+      "verifying": "segunda revisión",
+      "queued": "en cola"
     },
     "turn": "turno {n}",
     "fixTurns": "{count} corrección automática | {count} correcciones automáticas",
@@ -228,7 +233,8 @@
       "red": "Fallido",
       "error": "Error",
       "warn": "Aviso",
-      "not_run": "Sin ejecutar"
+      "not_run": "Sin ejecutar",
+      "stopped": "Detenido"
     },
     "kind": {
       "lane": "Carril",
@@ -273,7 +279,7 @@
       "forced": "reclamado sobre {tasks}"
     },
     "commands": "Comandos",
-    "off": "Desactivado (el carril y la higiene se siguen comprobando)",
+    "off": "Desactivado (el carril se sigue comprobando, solo como información)",
     "noCommands": "Sin comandos",
     "detected": "detectado",
     "doctrine": "Doctrina",
@@ -283,7 +289,16 @@
     "bar": "Cambiado desde el inicio",
     "usedUp": "correcciones automáticas agotadas ({n}/{max})",
     "nextStep": "El gate ya no puede corregirlo solo: envía un seguimiento o toma el control de la tarea.",
-    "causedBy": "puede deberse a {tasks}"
+    "causedBy": "puede deberse a {tasks}",
+    "queued": {
+      "slot": "esperando turno de gate",
+      "memory": "esperando memoria libre",
+      "place": "puesto {position} en la fila, {limit} a la vez",
+      "limit": "{limit} a la vez"
+    },
+    "stoppedLowMemory": "Detenido porque la máquina se quedó sin memoria ({n} de {max}); el gate vuelve a correr cuando haya memoria.",
+    "lowMemory": "La máquina se quedó sin memoria una y otra vez: el gate se detuvo {max} veces.",
+    "lowMemoryNext": "Libera memoria o baja «{setting}» y vuelve a ejecutar el gate."
   },
   "consults": {
     "title": "Opiniones de miembros",

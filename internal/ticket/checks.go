@@ -83,7 +83,6 @@ func (s *Service) Poll(ctx context.Context) error {
 		return nil
 	}
 	defer s.pollMu.Unlock()
-	access := s.o.GitHub.Access(ctx, false)
 	var tickets []*ticketRec
 	var repos []*repoRec
 	if err := s.o.DB.Read(ctx, func(tx *sql.Tx) error {
@@ -97,10 +96,18 @@ func (s *Service) Poll(ctx context.Context) error {
 		return err
 	}
 	byID := map[string]*repoRec{}
+	var onGitHub []*repoRec
 	for _, r := range repos {
 		byID[r.ID] = r
+		if s.gh(r).ok() {
+			onGitHub = append(onGitHub, r)
+		}
 	}
-	var errs []error
+	type watched struct {
+		t *ticketRec
+		r *repoRec
+	}
+	var open []watched
 	for _, t := range tickets {
 		if finished(t.Status) {
 			continue
@@ -110,12 +117,20 @@ func (s *Service) Poll(ctx context.Context) error {
 		if r == nil || !s.gh(r).ok() || !hasNumber && t.Status != api.TicketPROpen {
 			continue
 		}
-		if err := s.pollTicket(ctx, t.ID, r, access); err != nil {
+		open = append(open, watched{t, r})
+	}
+	if len(open) == 0 && len(onGitHub) == 0 {
+		return nil // nothing to watch: no access check either (it may run gh)
+	}
+	access := s.o.GitHub.Access(ctx, false)
+	var errs []error
+	for _, w := range open {
+		if err := s.pollTicket(ctx, w.t.ID, w.r, access); err != nil {
 			errs = append(errs, err)
 		}
 	}
-	for _, r := range repos {
-		if !s.gh(r).ok() || access.Tier == api.TierManual && (r.LastSyncAt.IsZero() || r.SyncError != "") {
+	for _, r := range onGitHub {
+		if access.Tier == api.TierManual && (r.LastSyncAt.IsZero() || r.SyncError != "") {
 			continue
 		}
 		if _, err := s.Sync(ctx, r.ID); err != nil {

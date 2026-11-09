@@ -200,7 +200,7 @@ defineExpose({ focus: () => input.value?.focus() })
 .fc--blocked {
   flex-direction: row;
   align-items: center;
-  min-height: calc(var(--control-sm) + 2 * var(--space-2));
+  min-height: var(--pane-foot-h);
   color: var(--text-secondary);
   font-size: var(--fs-sm);
 }
@@ -235,6 +235,11 @@ defineExpose({ focus: () => input.value?.focus() })
   font-size: var(--fs-sm);
   line-height: var(--lh-ui);
   resize: none;
+}
+
+/* One line: exactly one control high, so the bar is --pane-foot-h like the list's foot; longer text scrolls. */
+.fc:not(.fc--open) .fc__input {
+  block-size: var(--pane-foot-control);
 }
 
 .fc--open .fc__input {

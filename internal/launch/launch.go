@@ -4,22 +4,24 @@
 // # Protocol
 //
 // Every launch owns one directory. The daemon writes the spec (launch.json) and starts `seelegent __launch <dir>`
-// detached (platform.StartDetached). The launcher then:
+// detached and without a console (platform.StartDetachedNoConsole). The launcher then:
 //
 //  1. takes an exclusive lock on launcher.lock and holds it for its whole life. The operating system releases the
 //     lock when the launcher exits or crashes, so "lock held" is a liveness test that cannot be fooled by a reused
 //     process id (the old version checked pids and sometimes started a second worker on the same conversation);
-//  2. starts the worker as the root of a worker process tree (platform.StartWorkerTree): on Windows a kill-on-close
-//     Job Object named after launch.json's job name (the start fails if that name already exists); on Linux a
-//     process group, with the launcher made a child subreaper so that descendants that double-fork or call setsid
-//     re-parent to the launcher and stay in the tree (the launcher reaps them, and waits for the worker itself
-//     with wait4 so the worker's exit code stays exact); on macOS and the BSDs a process group plus the launcher's
-//     descendants, best effort. Stdout is appended to stream.jsonl and stderr to stderr.txt; then it writes
+//  2. starts the worker as the root of a worker process tree (platform.StartWorkerTreeWith): on Windows a
+//     kill-on-close Job Object named after launch.json's job name (the start fails if that name already exists);
+//     on Linux a process group, with the launcher made a child subreaper so that descendants that double-fork or
+//     call setsid re-parent to the launcher and stay in the tree (the launcher reaps them, and waits for the worker
+//     itself with wait4 so the worker's exit code stays exact); on macOS and the BSDs a process group plus the
+//     launcher's descendants, best effort. The tree gets the limits of Spec.Tree: low priority (the job's
+//     priority class on Windows; on Unix the launcher lowers its own nice before the start), and on Windows the
+//     job memory and CPU rate caps. Stdout is appended to stream.jsonl and stderr to stderr.txt; then it writes
 //     ready.json (with its own start time and the job name, which describe the tree: Handle.Tree);
-//  3. waits for the worker to exit, for the cancel file to appear (polled every 200 ms), for the timeout, or for
-//     its own context to end (SIGINT/SIGTERM on Unix). On cancel and timeout it stops the whole tree: on Unix
-//     SIGTERM to the group and every descendant, SIGKILL after the grace period, repeated until nothing is left;
-//     the job is terminated on Windows;
+//  3. waits for the worker to exit, for the cancel file to appear (polled every 200 ms at first, backing off to
+//     every second), for the timeout, or for its own context to end (SIGINT/SIGTERM on Unix). On cancel and
+//     timeout it stops the whole tree: on Unix SIGTERM to the group and every descendant, SIGKILL after the grace
+//     period, repeated until nothing is left; the job is terminated on Windows;
 //  4. when the worker has exited, stops whatever the worker left running in its tree, writes exit.json atomically
 //     and releases the lock.
 //
@@ -43,6 +45,7 @@ import (
 	"time"
 
 	"github.com/NovaSeele/Seelegent/internal/fsutil"
+	"github.com/NovaSeele/Seelegent/internal/platform"
 )
 
 // File names inside a launch directory.
@@ -76,6 +79,10 @@ type Spec struct {
 	Timeout time.Duration `json:"timeout,omitempty"`
 	// KillGrace is the time between SIGTERM and SIGKILL on Unix; zero means platform.DefaultKillGrace.
 	KillGrace time.Duration `json:"killGrace,omitempty"`
+	// Tree are the resource limits of the worker tree (priority, memory and CPU caps; settings workerPriority,
+	// workerMemoryLimitMB, workerCPURatePercent). The zero value, and a launch.json written before M19, start the
+	// tree without limits.
+	Tree platform.TreeOptions `json:"tree,omitzero"`
 }
 
 // specFile is the content of launch.json: the spec and where its files are.
@@ -121,6 +128,10 @@ type Exit struct {
 	Error string `json:"error,omitempty"`
 	// StartedAt is when the worker started (zero if it never did).
 	StartedAt time.Time `json:"startedAt,omitzero"`
+	// MemoryLimitHit is true when the worker tree reached Spec.Tree.MemoryLimitMB (Windows only: the job reported
+	// a refused allocation, or the worker failed after the job's peak memory reached 90% of the cap; see
+	// platform.Tree.MemoryLimitHit), so the turn fails saying so.
+	MemoryLimitHit bool `json:"memoryLimitHit,omitempty"`
 	// EndedAt is when the launch ended.
 	EndedAt time.Time `json:"endedAt"`
 }

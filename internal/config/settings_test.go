@@ -180,3 +180,124 @@ func TestGitHubEnterpriseHosts(t *testing.T) {
 		t.Errorf("loopback v6 = %+v, %v", h, err)
 	}
 }
+
+func TestResourceDefaults(t *testing.T) {
+	s := Defaults()
+	got := []any{s.WorkerPriority, s.GatePriority, s.MaxConcurrentWorkers, s.WorkerMemoryLimitMB,
+		s.WorkerCPURatePercent, s.DaemonMemoryLimitMB}
+	want := []any{"low", "low", 0, 0, 0, 0}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("resource default %d = %v, want %v", i, got[i], want[i])
+		}
+	}
+	if s.GateConcurrency != nil || s.MinFreeMemoryMB != nil || s.MinFreeCommitMB != nil ||
+		s.CriticalFreeMemoryMB != nil || s.TestParallelism != nil {
+		t.Errorf("the machine-sized settings must default to auto (nil): %+v", s)
+	}
+}
+
+func TestResourceValidation(t *testing.T) {
+	bad := []struct {
+		field  string
+		mutate func(*Settings)
+	}{
+		{"workerPriority", func(s *Settings) { s.WorkerPriority = "idle" }},
+		{"workerPriority", func(s *Settings) { s.WorkerPriority = "" }},
+		{"gatePriority", func(s *Settings) { s.GatePriority = "high" }},
+		{"maxConcurrentWorkers", func(s *Settings) { s.MaxConcurrentWorkers = -1 }},
+		{"maxConcurrentWorkers", func(s *Settings) { s.MaxConcurrentWorkers = 257 }},
+		{"gateConcurrency", func(s *Settings) { s.GateConcurrency = Int(-1) }},
+		{"gateConcurrency", func(s *Settings) { s.GateConcurrency = Int(65) }},
+		{"minFreeMemoryMB", func(s *Settings) { s.MinFreeMemoryMB = Int(-1) }},
+		{"minFreeMemoryMB", func(s *Settings) { s.MinFreeMemoryMB = Int(1<<20 + 1) }},
+		{"minFreeCommitMB", func(s *Settings) { s.MinFreeCommitMB = Int(1<<20 + 1) }},
+		{"criticalFreeMemoryMB", func(s *Settings) { s.CriticalFreeMemoryMB = Int(-1) }},
+		{"criticalFreeMemoryMB", func(s *Settings) { s.MinFreeMemoryMB, s.CriticalFreeMemoryMB = Int(2048), Int(2048) }},
+		{"criticalFreeMemoryMB", func(s *Settings) { s.MinFreeMemoryMB, s.CriticalFreeMemoryMB = Int(512), Int(600) }},
+		{"workerMemoryLimitMB", func(s *Settings) { s.WorkerMemoryLimitMB = -5 }},
+		{"workerCPURatePercent", func(s *Settings) { s.WorkerCPURatePercent = 101 }},
+		{"testParallelism", func(s *Settings) { s.TestParallelism = Int(65) }},
+		{"daemonMemoryLimitMB", func(s *Settings) { s.DaemonMemoryLimitMB = 65537 }},
+	}
+	for _, tt := range bad {
+		s := Defaults()
+		tt.mutate(&s)
+		var verr *ValidationError
+		if err := s.Validate(); !errors.As(err, &verr) || len(verr.Fields) != 1 || verr.Fields[0].Field != tt.field {
+			t.Errorf("%s: err = %v, want one error on %s", tt.field, err, tt.field)
+		}
+	}
+	for _, edge := range []func(*Settings){
+		func(s *Settings) {
+			s.WorkerPriority, s.GatePriority = PriorityNormal, PriorityNormal
+			s.MaxConcurrentWorkers, s.GateConcurrency, s.MinFreeMemoryMB, s.MinFreeCommitMB = 0, Int(0), Int(0), Int(0)
+			s.CriticalFreeMemoryMB = Int(0)
+			s.WorkerMemoryLimitMB, s.WorkerCPURatePercent, s.TestParallelism, s.DaemonMemoryLimitMB = 0, 0, Int(0), 0
+		},
+		func(s *Settings) {
+			s.MaxConcurrentWorkers, s.GateConcurrency = 256, Int(64)
+			s.MinFreeMemoryMB, s.MinFreeCommitMB, s.WorkerMemoryLimitMB = Int(1<<20), Int(1<<20), 1<<20
+			s.WorkerCPURatePercent, s.TestParallelism, s.DaemonMemoryLimitMB = 100, Int(64), 65536
+			s.CriticalFreeMemoryMB = Int(1<<20 - 1)
+		},
+		func(s *Settings) { s.MinFreeMemoryMB, s.CriticalFreeMemoryMB = Int(0), Int(1<<20) }, // the floor alone
+		func(s *Settings) { s.MinFreeMemoryMB, s.CriticalFreeMemoryMB = Int(4096), Int(0) },  // no floor
+		func(s *Settings) { s.CriticalFreeMemoryMB = Int(1 << 19) },                          // the minimum on auto
+		func(s *Settings) { s.MinFreeMemoryMB = Int(256) },                                   // the floor on auto
+	} {
+		s := Defaults()
+		edge(&s)
+		if err := s.Validate(); err != nil {
+			t.Errorf("edge values refused: %v", err)
+		}
+	}
+}
+
+func TestResourceSettingsPatch(t *testing.T) {
+	s := Defaults()
+	s, err := MergePatch(s, []byte(`{"workerPriority": "normal", "gateConcurrency": 0, "minFreeMemoryMB": 1536,
+		"testParallelism": 8, "daemonMemoryLimitMB": 300}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.WorkerPriority != PriorityNormal || !isInt(s.GateConcurrency, 0) || !isInt(s.MinFreeMemoryMB, 1536) ||
+		!isInt(s.TestParallelism, 8) || s.DaemonMemoryLimitMB != 300 || s.CriticalFreeMemoryMB != nil {
+		t.Fatalf("patch not applied: %+v", s)
+	}
+	// An explicit floor at or above an explicit minimum is refused, naming the floor.
+	if _, err := MergePatch(s, []byte(`{"criticalFreeMemoryMB": 1536}`)); !errors.Is(err, ErrInvalid) ||
+		!strings.Contains(err.Error(), "criticalFreeMemoryMB") {
+		t.Fatalf("floor above the minimum: %v", err)
+	}
+	// A lone floor whose double (the derived minimum) would be out of range is refused, naming the floor.
+	if _, err := MergePatch(Defaults(), []byte(`{"criticalFreeMemoryMB": 524289}`)); !errors.Is(err, ErrInvalid) ||
+		!strings.Contains(err.Error(), "criticalFreeMemoryMB") || strings.Contains(err.Error(), "minFreeMemoryMB:") {
+		t.Fatalf("lone floor above half the range: %v", err)
+	}
+	s, err = MergePatch(s, []byte(`{"workerPriority": null, "gateConcurrency": null, "minFreeMemoryMB": null,
+		"testParallelism": null, "daemonMemoryLimitMB": null}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	d := Defaults()
+	if s.WorkerPriority != d.WorkerPriority || s.GateConcurrency != nil || s.MinFreeMemoryMB != nil ||
+		s.TestParallelism != nil || s.DaemonMemoryLimitMB != d.DaemonMemoryLimitMB {
+		t.Fatalf("null did not reset to the defaults (auto): %+v", s)
+	}
+	if _, err := MergePatch(s, []byte(`{"gatePriority": "realtime", "workerCPURatePercent": 150}`)); !errors.Is(err,
+		ErrInvalid) {
+		t.Fatalf("out-of-range patch: err = %v", err)
+	}
+	c, err := Parse([]byte(`{"gatePriority": null, "maxConcurrentWorkers": 3, "testParallelism": null,
+		"gateConcurrency": 3}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Settings.GatePriority != PriorityLow || c.Settings.MaxConcurrentWorkers != 3 ||
+		c.Settings.MinFreeCommitMB != nil || c.Settings.TestParallelism != nil || !isInt(c.Settings.GateConcurrency, 3) {
+		t.Fatalf("parse: missing keys and null must take the defaults: %+v", c.Settings)
+	}
+}
+
+func isInt(p *int, n int) bool { return p != nil && *p == n }

@@ -13,13 +13,14 @@ import { useTasksCommands } from '@/features/tasks/useTasksCommands'
 
 import BottomNav from './BottomNav.vue'
 import ConnectionBanner from './ConnectionBanner.vue'
+import MemoryBanner from './MemoryBanner.vue'
 import NavRail from './NavRail.vue'
 import { DEFAULT_PAGE_WIDTH, PAGE_WIDTH_KEY } from './pageWidth'
 import TopAppBar from './TopAppBar.vue'
 
 /**
- * The app frame: navigation (rail from 600px, top bar + bottom bar on phones), the connection banner, the
- * workspace that renders the current page, and the app-wide overlays (settings, palette, toasts).
+ * The app frame: navigation (rail from 600px, top bar + bottom bar on phones), the connection and low-memory
+ * banners, the workspace that renders the current page, and the app-wide overlays (settings, palette, toasts).
  *
  * Overlay routes (settings) do not replace the page: the workspace keeps rendering the last normal route, and on
  * a cold open of an overlay URL it renders Watch.
@@ -73,6 +74,7 @@ watch(
     <NavRail v-else :active="activeNav" :compact="tier === 'compact'" />
     <div class="shell__main">
       <ConnectionBanner />
+      <MemoryBanner />
       <main id="main" ref="workspace" class="workspace" tabindex="-1" :data-page-width="pageWidth">
         <RouterView :route="background" />
       </main>

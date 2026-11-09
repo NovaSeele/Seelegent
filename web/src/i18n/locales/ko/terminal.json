@@ -62,13 +62,18 @@
       "running": "시도가 아직 실행 중입니다",
       "quota": "계정의 할당량이 소진되었습니다",
       "auth": "계정에 다시 로그인해야 합니다",
+      "credits": "키에 남은 크레딧이 없습니다",
       "transient": "시도 중 일시적인 오류가 발생했습니다",
       "background_wait": "워커가 백그라운드 작업을 기다리고 있습니다",
-      "error": "시도가 실패했습니다"
+      "error": "시도가 실패했습니다",
+      "okWarning": "시도가 끝났습니다. 워커 CLI가 보고한 오류는 작업을 멈추지 않았습니다"
     },
     "quotaExhausted": "계정의 할당량이 소진되었습니다",
     "authFailed": "계정에 다시 로그인해야 합니다",
     "waitingQuota": "할당량 대기 중",
+    "waitingSlot": "빈 슬롯 대기",
+    "noAccounts": "남은 계정 없음",
+    "budgetReached": "대기 중: 계정이 예산에 도달했습니다",
     "retry": "{seconds}초 후 다시 시도",
     "handoff": "{from}에서 {to}(으)로 이동",
     "reattach": "실행 중인 워커에 다시 연결했습니다",
@@ -106,6 +111,7 @@
     "worker": {
       "quota_exhausted": "워커의 할당량이 소진되었습니다",
       "auth_required": "워커가 로그인해야 합니다",
+      "credits": "계정에 남은 크레딧이 없습니다",
       "transient": "워커에 일시적인 오류가 발생했습니다",
       "fatal": "워커가 실패했습니다"
     },
@@ -122,7 +128,12 @@
       "red": "게이트 실패",
       "error": "게이트를 실행할 수 없습니다",
       "skipped": "게이트 중단",
-      "autoFix": "{n}번째 턴에서 자동 수정"
+      "autoFix": "{n}번째 턴에서 자동 수정",
+      "queued": "게이트 대기열에 들어감",
+      "queuedSlot": "게이트 대기열: {position}번째, 동시에 {limit}개",
+      "queuedMemory": "게이트가 여유 메모리를 기다립니다",
+      "stoppedLowMemory": "게이트 단계 중지: 컴퓨터 메모리 부족({n}/{max})",
+      "lowMemory": "컴퓨터 메모리가 계속 부족했습니다({max}번 중지)"
     },
     "lane": {
       "forced": "다른 작업 {count}개의 예약을 무시하고 레인을 잡았습니다",
@@ -134,6 +145,8 @@
       "accept": "2차 검토에서 변경을 승인했습니다",
       "reject": "2차 검토에서 변경을 거절했습니다",
       "error": "2차 검토를 마치지 못했습니다"
-    }
+    },
+    "waitingMemory": "리소스 대기: 여유 {available}, 필요 {need}",
+    "waitingResources": "리소스 대기"
   }
 }

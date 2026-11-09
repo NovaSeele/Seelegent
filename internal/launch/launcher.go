@@ -6,14 +6,20 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 	"time"
 
 	"github.com/NovaSeele/Seelegent/internal/fsutil"
 	"github.com/NovaSeele/Seelegent/internal/platform"
 )
 
-// cancelPoll is how often the launcher looks for the cancel file.
-const cancelPoll = 200 * time.Millisecond
+// The launcher looks for the cancel file (and lets its tree drain its notifications, Tree.Poll) every cancelPoll at
+// first, then twice as long each time up to maxCancelPoll: a cancel is seen within a second, and a long turn costs
+// the launcher one wake-up a second.
+const (
+	cancelPoll    = 200 * time.Millisecond
+	maxCancelPoll = time.Second
+)
 
 // lockWait is how long the launcher waits for the launch lock.
 const lockWait = 2 * time.Second
@@ -77,12 +83,16 @@ func supervise(ctx context.Context, f Files, sf specFile) Exit {
 	if err != nil {
 		return failed(err)
 	}
-	tree, err := platform.StartWorkerTree(cmd, name)
+	tree, err := platform.StartWorkerTreeWith(cmd, name, sf.Tree)
 	closeFiles()
 	if err != nil {
 		return failed(fmt.Errorf("start %s: %w", sf.Argv[0], err))
 	}
 	defer func() { _ = tree.Close() }()
+	if refused := tree.Unapplied(); len(refused) > 0 {
+		appendLine(sf.Stderr, "launcher: the system refused these limits of the worker process tree, which runs "+
+			"without them: "+strings.Join(refused, ", "))
+	}
 	started := time.Now().UTC()
 	wt := tree.WorkerTree(f.Dir)
 	ready := Ready{LauncherPID: os.Getpid(), LauncherStart: wt.RootStart, Job: wt.Job, WorkerPID: tree.Pid(), StartedAt: started}
@@ -100,14 +110,16 @@ func supervise(ctx context.Context, f Files, sf specFile) Exit {
 	}()
 
 	reason := ReasonExited
+	memHit := false
 	var timeout <-chan time.Time
 	if sf.Timeout > 0 {
 		t := time.NewTimer(sf.Timeout)
 		defer t.Stop()
 		timeout = t.C
 	}
-	ticker := time.NewTicker(cancelPoll)
-	defer ticker.Stop()
+	poll := backoff{min: cancelPoll, max: maxCancelPoll}
+	pollTimer := time.NewTimer(poll.next())
+	defer pollTimer.Stop()
 	grace := sf.KillGrace
 	if grace <= 0 {
 		grace = platform.DefaultKillGrace
@@ -125,7 +137,12 @@ loop:
 		select {
 		case <-waited:
 			break loop
-		case <-ticker.C:
+		case <-pollTimer.C:
+			pollTimer.Reset(poll.next())
+			if !memHit && tree.Poll() {
+				memHit = true
+				noteMemoryLimit(sf)
+			}
 			if reason == ReasonExited && exists(sf.Cancel) {
 				stop(ReasonCanceled, "canceled; stopping the worker process tree")
 			}
@@ -140,11 +157,23 @@ loop:
 			ctx = context.Background() // stop once; keep waiting for the worker
 		}
 	}
+	// Read before Close: the job (and its notifications) go with it.
+	if !memHit && tree.MemoryLimitHit() {
+		memHit = true
+		noteMemoryLimit(sf)
+	}
 	// Anything the worker left behind (background commands) ends with the turn.
 	if err := tree.Close(); err != nil {
 		appendLine(sf.Stderr, "launcher: stop leftover processes: "+err.Error())
 	}
-	return Exit{Reason: reason, Code: tree.ExitCode(), StartedAt: started, EndedAt: time.Now().UTC()}
+	return Exit{Reason: reason, Code: tree.ExitCode(), StartedAt: started, MemoryLimitHit: memHit,
+		EndedAt: time.Now().UTC()}
+}
+
+// noteMemoryLimit says in stderr.txt that the worker tree ran into its memory cap.
+func noteMemoryLimit(sf specFile) {
+	appendLine(sf.Stderr, fmt.Sprintf("launcher: the worker process tree reached its memory limit (%d MB)",
+		sf.Tree.MemoryLimitMB))
 }
 
 // workerCommand builds the worker command with its files. closeFiles releases the launcher's copies of the files

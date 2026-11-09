@@ -47,8 +47,13 @@ type TaskGit struct {
 	Root   string `json:"root,omitempty"`
 	Branch string `json:"branch,omitempty"`
 	Dirty  bool   `json:"dirty"`
-	// Files are the task's uncommitted changes, counted against HEAD; a commit may only name these.
+	// Files are the task's uncommitted changes, counted against HEAD; a commit may only name these. The files of
+	// UntrackedDirs are not among them.
 	Files []GitFile `json:"files"`
+	// UntrackedDirs are the untracked folders (no tracked file inside) holding more than GitCollapseOver of the
+	// task's untracked files, each shown as one row; their files are left out of Files. A commit may still name
+	// them, one by one.
+	UntrackedDirs []GitDir `json:"untrackedDirs"`
 	// Preexisting lists files that were already dirty when the task started.
 	Preexisting []string    `json:"preexisting"`
 	Suggestion  *Suggestion `json:"suggestion"`
@@ -116,6 +121,28 @@ type Suggestion struct {
 	Message string `json:"message,omitempty"`
 }
 
+// GitCollapseOver: an untracked folder with more of a task's files than this is one row of TaskGit
+// (UntrackedDirs); GitDirFiles is how many of its files the row lists.
+const (
+	GitCollapseOver = 20
+	GitDirFiles     = 200
+)
+
+// GitDir is an untracked folder of TaskGit.UntrackedDirs.
+type GitDir struct {
+	// Path is relative to the repository root and ends with '/'.
+	Path string `json:"path"`
+	// Count counts its untracked files; Bytes is their total size.
+	Count int   `json:"count"`
+	Bytes int64 `json:"bytes"`
+	// Files are its first GitDirFiles files by path; Count minus their number are left out.
+	Files []GitFile `json:"files"`
+	// Others counts the folder's untracked files that are not the task's (already there when it started, or
+	// outside its folder and never touched by it). The row stands for the whole folder, so the repository view
+	// does not list them either.
+	Others int `json:"others,omitempty"`
+}
+
 // GitFile is one changed file.
 type GitFile struct {
 	Path      string `json:"path"`
@@ -126,6 +153,34 @@ type GitFile struct {
 	// Turn is the turn that last changed the file, when known.
 	Turn   int  `json:"turn,omitempty"`
 	Binary bool `json:"binary"`
+	// Stamp changes whenever an image's preview would (TaskGit.Files and UntrackedDirs of the Git tab view only,
+	// images only): the working tree file's size and modification time, and its blob id at HEAD. The view adds it
+	// to the image URLs, so a rewritten image is read again although its status and line counts stay the same.
+	Stamp string `json:"stamp,omitempty"`
+}
+
+// GitImageType returns the Content-Type of an image the Git view previews by its extension (lower case, with the
+// dot), or false for any other extension.
+func GitImageType(ext string) (string, bool) {
+	switch ext {
+	case ".png":
+		return "image/png", true
+	case ".jpg", ".jpeg":
+		return "image/jpeg", true
+	case ".gif":
+		return "image/gif", true
+	case ".webp":
+		return "image/webp", true
+	case ".avif":
+		return "image/avif", true
+	case ".bmp":
+		return "image/bmp", true
+	case ".ico":
+		return "image/x-icon", true
+	case ".svg":
+		return "image/svg+xml", true
+	}
+	return "", false
 }
 
 // RepoStatus is GET /git/status. Repo false means cwd is not inside a git repository (the other fields are then

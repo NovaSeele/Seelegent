@@ -1,6 +1,7 @@
 package task
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -56,10 +57,24 @@ func TestPlanRuleFollowsAttemptBackend(t *testing.T) {
 	h.queue.Push(t, codexOK("th-plan", "The pool retries twice."))
 	sum := h.delegate(api.DelegateRequest{Title: "explain", Member: "dual", Mode: ModePlan,
 		Prompt: "Explain the pool."})
-	if sum.Backend != config.BackendAgy {
-		t.Fatalf("the task starts on %q", sum.Backend)
-	}
 	tk := h.waitStatus(sum.ID, StatusDone)
+	// The task starts on agy and moves to codex (no agy account). The summary delegate returns may already show
+	// codex on a busy machine, so the move is read from the handoff event.
+	moved := false
+	for _, e := range eventsOf(h.events(sum.ID), api.EventHandoff) {
+		data, err := json.Marshal(e.Data)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var d api.HandoffData
+		if json.Unmarshal(data, &d) == nil && d.Kind == api.HandoffBackend && d.From == config.BackendAgy &&
+			d.To == config.BackendCodex {
+			moved = true
+		}
+	}
+	if !moved {
+		t.Fatalf("no handoff from agy to codex: %+v", h.events(sum.ID))
+	}
 	a := tk.LastTurn().LastAttempt()
 	if tk.Backend != config.BackendCodex || a == nil || a.Backend != config.BackendCodex {
 		t.Fatalf("task backend %q, attempt %+v", tk.Backend, a)
@@ -105,7 +120,8 @@ func TestConsultCodexMemberPrompt(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !strings.HasPrefix(prompt, brief.ReadOnlyRun("", c.codex)) || !strings.Contains(prompt, "## Verdict") {
+		if !strings.HasPrefix(prompt, brief.PlanRule(c.codex)) || !strings.Contains(prompt, "## Verdict") ||
+			!strings.Contains(prompt, "\nDo not explore ~/.seelegent or Seelegent's processes") {
 			t.Errorf("%s consult prompt:\n%s", c.member, prompt)
 		}
 		if strings.Contains(prompt, "`rg -n`") != c.codex || strings.Contains(prompt, "file tools") == c.codex {

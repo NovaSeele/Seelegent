@@ -1,179 +1,73 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
-import { errorMessage, fieldProblems } from '@/api/client'
-import type { Account } from '@/api/types'
+import type { Account, AccountCreated } from '@/api/types'
 import Button from '@/components/ui/Button.vue'
-import ChoiceGroup from '@/components/ui/ChoiceGroup.vue'
 import Dialog from '@/components/ui/Dialog.vue'
-import NumberField from '@/components/ui/NumberField.vue'
-import Select from '@/components/ui/Select.vue'
-import TextField from '@/components/ui/TextField.vue'
-import { KeylessAccountError, useAccountsStore } from '@/stores/accounts'
 import { useProvidersStore } from '@/stores/providers'
 import { useToastStore } from '@/stores/toast'
 
-import { BACKENDS, kindKey } from './accountView'
+import ApiKeyForm from './ApiKeyForm.vue'
+import ConnectChoice, { type ConnectWay } from './ConnectChoice.vue'
+import SignInForm from './SignInForm.vue'
 
 /**
- * Adding an account in two steps: what it is (backend and kind), then its details (name, priority; for an API
- * key the provider and, optionally, the key). An isolated account starts its sign-in right away. The key field is
- * cleared whenever the dialog closes, and a key the daemon refuses removes the new account again (store).
+ * "Add account", one dialog for every kind: first how the account connects (ConnectChoice), then either the
+ * subscription sign-in (SignInForm, which shows the sign-in until it is done) or the API-key form (ApiKeyForm:
+ * service, key, model; "Test and add"). `service` ("provider:<id>" or "preset:<id>") opens the API-key form at
+ * once with that service chosen, for "Add key" in the Services section. Every step starts fresh when the dialog
+ * opens, and the typed key goes with it when the dialog closes.
  */
 const open = defineModel<boolean>('open', { required: true })
+const props = withDefaults(defineProps<{ service?: string }>(), { service: '' })
 
 const { t } = useI18n()
-const accounts = useAccountsStore()
 const providers = useProvidersStore()
 const toast = useToastStore()
 
-const step = ref<1 | 2>(1)
-const backend = ref<Account['backend']>('agy')
-const kind = ref<Account['kind']>('isolated')
-const label = ref('')
-const priority = ref(0)
-const provider = ref('')
-const key = ref('')
-const busy = ref(false)
-const errors = ref<Record<string, string>>({})
-const failure = ref('')
-const formEl = ref<HTMLFormElement | null>(null)
-/** Set when the account was created without its key; the dialog then only sets that account's key. */
-const keyless = ref<Account | null>(null)
-
-/** This computer's sign-in is one account per backend: the one already added for the chosen backend. */
-const systemAccount = computed(() =>
-  accounts.accounts.find((a) => a.kind === 'system' && a.backend === backend.value),
-)
-
-const backendOptions = computed(() =>
-  BACKENDS.map((value) => ({
-    value,
-    label: t(`accounts.backend.${value}`),
-    description: t(`accounts.add.backendDesc.${value}`),
-  })),
-)
-
-const kindOptions = computed(() => {
-  const kinds: Account['kind'][] =
-    backend.value === 'agy' ? ['isolated', 'system'] : ['isolated', 'api-key']
-  return kinds.map((value) => {
-    const taken = value === 'system' ? systemAccount.value : undefined
-    return {
-      value,
-      label: t(`accounts.kind.${kindKey(value)}`),
-      description: taken
-        ? t('accounts.add.systemTaken', { name: taken.label })
-        : t(`accounts.add.kindDesc.${kindKey(value)}`),
-      disabled: taken !== undefined,
-    }
-  })
-})
-
-const providerOptions = computed(() =>
-  providers.items
-    .filter((p) => p.backend === backend.value && p.enabled)
-    .map((p) => ({ value: p.id, label: p.name })),
-)
+type Step = 'connect' | 'signin' | 'key'
+const step = ref<Step>('connect')
+const way = ref<ConnectWay>('subscription')
+const keyForm = ref<InstanceType<typeof ApiKeyForm> | null>(null)
+const signIn = ref<InstanceType<typeof SignInForm> | null>(null)
 
 watch(open, (value) => {
-  if (value) {
-    providers.ensure()
-    return
-  }
-  step.value = 1
-  keyless.value = null
-  key.value = ''
-  label.value = ''
-  priority.value = 0
-  errors.value = {}
-  failure.value = ''
+  if (!value) return
+  providers.ensure()
+  step.value = props.service ? 'key' : 'connect'
 })
 
-watch(backend, () => {
-  if (!kindOptions.value.some((o) => o.value === kind.value && !o.disabled)) kind.value = 'isolated'
-})
+const description = computed(() =>
+  step.value === 'signin'
+    ? t('accounts.add.connect.subscription')
+    : step.value === 'key'
+      ? t('accounts.add.connect.apiKey')
+      : undefined,
+)
+/** Where focus goes when the dialog opens: the chosen card, or the key field. */
+const initialFocus = computed(() =>
+  step.value === 'key' ? '.keyfield input' : 'input[type="radio"]:checked',
+)
 
-watch(providerOptions, (options) => {
-  if (!options.some((o) => o.value === provider.value)) provider.value = options[0]?.value ?? ''
-})
+const busy = computed(() => !!keyForm.value?.busy || !!signIn.value?.busy)
 
-/** Step 2 starts at the name field (the submit button keeps focus otherwise, and Enter would add at once). */
-async function toDetails() {
-  step.value = 2
-  if (!label.value) {
-    const count = accounts.accounts.filter((a) => a.backend === backend.value).length
-    label.value = t('accounts.add.defaultLabel', {
-      backend: t(`accounts.backend.${backend.value}`),
-      n: count + 1,
-    })
-  }
-  await nextTick()
-  const first = formEl.value?.querySelector<HTMLInputElement>('input')
-  first?.focus()
-  first?.select()
+function next() {
+  step.value = way.value === 'apiKey' ? 'key' : 'signin'
 }
 
-/** The account exists but has no key (its key was refused and it could not be deleted again): set its key. */
-async function setKeyOfKeyless(account: Account) {
-  const saved = await accounts.setKey(account.id, key.value.trim())
+function onAdded(created: AccountCreated) {
   open.value = false
-  toast.show({ message: t('accounts.done.keySet', { name: saved.label }), tone: 'success' })
+  const notes = [...new Set((created.notices ?? []).map((n) => t(`accounts.notice.${n.code}`)))]
+  toast.show({
+    message: [t('accounts.done.added', { name: created.label }), ...notes].join('. '),
+    tone: 'success',
+  })
 }
 
-function showError(error: unknown) {
-  if (error instanceof KeylessAccountError) {
-    keyless.value = error.account
-    showError(error.reason)
-    failure.value = [t('accounts.add.keyless', { name: error.account.label }), failure.value]
-      .filter(Boolean)
-      .join(' ')
-    return
-  }
-  const problems = fieldProblems(error)
-  errors.value = Object.fromEntries(problems.map((p) => [p.field, p.message]))
-  if (!problems.length) failure.value = errorMessage(error)
-}
-
-/** Starts the new account's sign-in; the dialog is closed by then, so a failure is a toast (E-B11). */
-async function startLogin(account: Account) {
-  try {
-    await accounts.login(account.id)
-  } catch (error) {
-    toast.show({
-      message: t('accounts.add.loginFailed', { name: account.label, error: errorMessage(error) }),
-      tone: 'error',
-    })
-  }
-}
-
-async function submit() {
-  if (busy.value) return
-  busy.value = true
-  errors.value = {}
-  failure.value = ''
-  try {
-    if (keyless.value) return await setKeyOfKeyless(keyless.value)
-    const apiKey = kind.value === 'api-key' && key.value.trim() ? key.value.trim() : undefined
-    const created = await accounts.create(
-      {
-        backend: backend.value,
-        kind: kind.value,
-        label: label.value.trim(),
-        priority: priority.value,
-        ...(kind.value === 'api-key' ? { provider: provider.value } : {}),
-      },
-      apiKey,
-    )
-    open.value = false
-    toast.show({ message: t('accounts.done.added', { name: created.label }), tone: 'success' })
-    if (created.kind === 'isolated') await startLogin(created)
-  } catch (error) {
-    showError(error)
-  } finally {
-    busy.value = false
-  }
+function onSystem(account: Account) {
+  open.value = false
+  toast.show({ message: t('accounts.done.added', { name: account.label }), tone: 'success' })
 }
 </script>
 
@@ -181,100 +75,69 @@ async function submit() {
   <Dialog
     v-model:open="open"
     :title="t('accounts.add.title')"
-    :description="t(step === 1 ? 'accounts.add.step1' : 'accounts.add.step2')"
+    :description="description"
     :dismissible="!busy"
+    :initial-focus="initialFocus"
   >
-    <form
-      id="add-account"
-      ref="formEl"
-      class="add"
-      @submit.prevent="step === 1 ? toDetails() : submit()"
-    >
-      <template v-if="step === 1">
-        <ChoiceGroup
-          v-model="backend"
-          :legend="t('accounts.add.backend')"
-          :options="backendOptions"
-        />
-        <ChoiceGroup v-model="kind" :legend="t('accounts.add.kind')" :options="kindOptions" />
-      </template>
-      <TextField
-        v-else-if="keyless"
-        v-model="key"
-        type="password"
-        autocomplete="new-password"
-        :label="t('accounts.key.label')"
-        :hint="t('accounts.key.hint')"
-        :error="errors.key"
-      />
-      <template v-else>
-        <TextField v-model="label" :label="t('accounts.add.label')" :error="errors.label" />
-        <NumberField
-          :model-value="priority"
-          :label="t('accounts.priority')"
-          :hint="t('accounts.add.priorityHint')"
-          :error="errors.priority"
-          integer
-          @commit="priority = $event"
-        />
-        <template v-if="kind === 'api-key'">
-          <Select
-            v-if="providerOptions.length"
-            v-model="provider"
-            :label="t('accounts.add.provider')"
-            :options="providerOptions"
-          />
-          <p v-else class="add__note">{{ t('accounts.add.noProvider') }}</p>
-          <p v-if="errors.provider" class="add__error">{{ errors.provider }}</p>
-          <TextField
-            v-model="key"
-            type="password"
-            autocomplete="new-password"
-            :label="t('accounts.key.label')"
-            :hint="t('accounts.add.keyHint')"
-            :error="errors.key"
-          />
-        </template>
-      </template>
-      <p v-if="failure" class="add__error" role="alert">{{ failure }}</p>
-    </form>
+    <ConnectChoice v-if="step === 'connect'" v-model="way" form-id="add-connect" @next="next" />
+    <SignInForm
+      v-else-if="step === 'signin'"
+      ref="signIn"
+      form-id="add-signin"
+      @system="onSystem"
+    />
+    <ApiKeyForm v-else ref="keyForm" form-id="add-key" :service="service" @done="onAdded" />
+
     <template #footer>
-      <Button v-if="step === 2 && !keyless" variant="ghost" :disabled="busy" @click="step = 1">
+      <Button
+        v-if="step !== 'connect' && !(step === 'key' && service) && !signIn?.started"
+        variant="ghost"
+        :disabled="busy"
+        @click="step = 'connect'"
+      >
         {{ t('common.action.back') }}
       </Button>
-      <Button
-        type="submit"
-        form="add-account"
-        variant="primary"
-        :loading="busy"
-        :disabled="keyless ? !key.trim() : step === 2 && kind === 'api-key' && !provider"
-      >
-        {{
-          keyless
-            ? t('accounts.key.save')
-            : step === 1
-              ? t('accounts.add.next')
-              : t('accounts.add.submit')
-        }}
-      </Button>
+      <template v-if="step === 'connect'">
+        <Button type="submit" form="add-connect" variant="primary">
+          {{ t('accounts.add.next') }}
+        </Button>
+      </template>
+      <template v-else-if="step === 'signin'">
+        <Button v-if="signIn?.started" variant="primary" @click="open = false">
+          {{ t('accounts.add.done') }}
+        </Button>
+        <Button
+          v-else
+          type="submit"
+          form="add-signin"
+          variant="primary"
+          icon="external"
+          :loading="busy"
+        >
+          {{ t('accounts.add.signIn') }}
+        </Button>
+      </template>
+      <template v-else>
+        <Button
+          v-if="keyForm?.failed"
+          variant="secondary"
+          :disabled="busy || !keyForm.valid"
+          @click="keyForm?.submit(false)"
+        >
+          {{ t('accounts.form.addUntested') }}
+        </Button>
+        <!-- Disabled while the form cannot be sent (no service, no key or a key with a URL or spaces in it):
+             the field says why, and nothing reaches the daemon. -->
+        <Button
+          type="submit"
+          form="add-key"
+          variant="primary"
+          :loading="busy"
+          :disabled="!keyForm?.valid"
+        >
+          {{ t('accounts.form.testAndAdd') }}
+        </Button>
+      </template>
     </template>
   </Dialog>
 </template>
-
-<style scoped>
-.add {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-}
-
-.add__note {
-  color: var(--text-secondary);
-  font-size: var(--fs-sm);
-}
-
-.add__error {
-  color: var(--status-danger-fg);
-  font-size: var(--fs-sm);
-}
-</style>

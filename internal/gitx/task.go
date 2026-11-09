@@ -47,10 +47,21 @@ type TurnSpan struct {
 // TaskGit returns the repository of a task, the task's uncommitted changes in it, and what the task committed
 // since it started. The uncommitted changes are the dirty files the task's turns touched, plus dirty files under
 // the task's folder that were not dirty when the task started (a worker's shell commands change files the stream
-// never names). Suggestion is left nil for the caller.
+// never names). Every changed file is in Files (UntrackedDirs is empty): what a commit may name. Suggestion is
+// left nil for the caller.
 func (r *Repos) TaskGit(ctx context.Context, tf TaskFiles) (api.TaskGit, error) {
-	out := api.TaskGit{Files: []api.GitFile{}, Preexisting: []string{}, StartState: api.GitStartUnknown,
-		Commits: []api.GitCommit{}, CommittedFiles: []api.GitFile{}}
+	return r.taskGit(ctx, tf, false)
+}
+
+// TaskGitView is TaskGit as the Git tab shows it: the files of large untracked folders are grouped into
+// UntrackedDirs (collapseUntracked), and only the files shown have their lines counted.
+func (r *Repos) TaskGitView(ctx context.Context, tf TaskFiles) (api.TaskGit, error) {
+	return r.taskGit(ctx, tf, true)
+}
+
+func (r *Repos) taskGit(ctx context.Context, tf TaskFiles, view bool) (api.TaskGit, error) {
+	out := api.TaskGit{Files: []api.GitFile{}, UntrackedDirs: []api.GitDir{}, Preexisting: []string{},
+		StartState: api.GitStartUnknown, Commits: []api.GitCommit{}, CommittedFiles: []api.GitFile{}}
 	root, err := r.Root(ctx, tf.Cwd)
 	if errors.Is(err, ErrNotRepo) {
 		return out, nil
@@ -84,6 +95,11 @@ func (r *Repos) TaskGit(ctx context.Context, tf TaskFiles) (api.TaskGit, error) 
 		f.Turn = turn
 		out.Files = append(out.Files, f)
 	}
+	if view {
+		r.collapseView(ctx, root, st, &out)
+		stampImages(root, st.heads, out.Files)
+	}
+	countUntracked(root, out.Files)
 	out.Head = st.oid
 	// What the task committed is extra: when it cannot be read (git too slow on a big repository, a missing
 	// object), the uncommitted files and the commit dialog still work.
@@ -96,6 +112,38 @@ func (r *Repos) TaskGit(ctx context.Context, tf TaskFiles) (api.TaskGit, error) 
 		out.Commits, out.CommitsMore, out.CommittedFiles, out.OwnCommits = []api.GitCommit{}, 0, []api.GitFile{}, 0
 	}
 	return out, nil
+}
+
+// collapseView groups the large untracked folders of out.Files into out.UntrackedDirs, with their listed files'
+// line counts and stamps and the count of their files that are not the task's. Grouping is a convenience of the
+// view: when it fails (ls-files timed out on a huge folder), it is logged and every file stays in the list.
+func (r *Repos) collapseView(ctx context.Context, root string, st repoState, out *api.TaskGit) {
+	collapse := r.collapse
+	if collapse == nil {
+		collapse = r.collapseUntracked
+	}
+	files, dirs, err := collapse(ctx, root, out.Files)
+	if err != nil {
+		if ctx.Err() != nil {
+			return // the read is being cancelled; the history read that follows says so
+		}
+		r.git.log.Warn("gitx: the untracked folders could not be grouped; the view lists every file", "root", root,
+			"err", err)
+		return
+	}
+	out.Files, out.UntrackedDirs = files, dirs
+	for i := range out.UntrackedDirs {
+		d := &out.UntrackedDirs[i]
+		countUntracked(root, d.Files)
+		stampImages(root, st.heads, d.Files)
+		// Every file under such a folder is untracked: those that are not among the task's are someone else's.
+		for _, f := range st.files {
+			if f.Status == api.GitUntracked && strings.HasPrefix(f.Path, d.Path) {
+				d.Others++
+			}
+		}
+		d.Others -= d.Count
+	}
 }
 
 // touchedFiles maps the files the task's turns touched to repository-relative paths, with the last turn of each.

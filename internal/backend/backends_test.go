@@ -42,7 +42,7 @@ func TestNewAndNames(t *testing.T) {
 		t.Errorf("New(gpt) = %v", err)
 	}
 	caps := map[string]Capabilities{
-		"agy":    {ActiveQuota: true, NativePreToolGuard: true, ResumeFlag: "--conversation"},
+		"agy":    {ActiveQuota: true, NativePreToolGuard: true, ResumeFlag: "--conversation", ReplaysErrors: true},
 		"claude": {ActiveQuota: true, NativePreToolGuard: true, StdinPrompt: true, ResumeFlag: "--resume"},
 		"codex":  {ActiveQuota: true, StdinPrompt: true, ResumeFlag: "resume", PlanShell: true},
 	}
@@ -704,12 +704,42 @@ func TestClassifyRules(t *testing.T) {
 		{claudeRules(), "API Error: 401 {\"type\":\"authentication_error\"}", event.ClassAuthRequired},
 		{claudeRules(), "API Error: 429 rate_limit_error", event.ClassQuotaExhausted},
 		{claudeRules(), "API Error: 500 Internal server error", event.ClassTransient},
-		{claudeRules(), "Credit balance is too low", event.ClassQuotaExhausted},
+		// Credits are not a quota limit: no time ends them (review N1).
+		{claudeRules(), "Credit balance is too low", event.ClassCredits},
+		{claudeRules(), `API Error: 400 {"type":"error","error":{"type":"invalid_request_error","message":"Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits."}}`, event.ClassCredits},
+		{claudeRules(), "402 Payment Required", event.ClassCredits},
+		{codexRules(), "You exceeded your current quota, please check your plan and billing details.", event.ClassCredits},
+		{codexRules(), `{"error":{"code":"insufficient_quota"}}`, event.ClassCredits},
+		{codexRules(), "You've hit your usage limit. Try again at 3:10 PM.", event.ClassQuotaExhausted},
+		{agyRules(), "out of credits", event.ClassQuotaExhausted},
 		{codexRules(), "exceeded retry limit, last status: 429 Too Many Requests", event.ClassQuotaExhausted},
 		{codexRules(), "401 Unauthorized: invalid token", event.ClassAuthRequired},
 		{codexRules(), "Your access token could not be refreshed: refresh token was already used", event.ClassAuthRequired},
 		{codexRules(), "unexpected status 502 Bad Gateway", event.ClassTransient},
 		{codexRules(), "", ""},
+		// Claude Code's limit messages (field report 3, B1).
+		{claudeRules(), "You've hit your 5-hour limit · resets 3:10am (Asia/Ho_Chi_Minh)", event.ClassQuotaExhausted},
+		{claudeRules(), "You’ve hit your weekly limit · resets Nov 10, 3pm (Europe/Paris)", event.ClassQuotaExhausted},
+		{claudeRules(), "You've hit your session limit", event.ClassQuotaExhausted},
+		{claudeRules(), "You've hit your Opus limit", event.ClassQuotaExhausted},
+		{claudeRules(), "You've hit your sonnet limit", event.ClassQuotaExhausted},
+		{claudeRules(), "You've hit your usage limit", event.ClassQuotaExhausted},
+		{claudeRules(), "You've hit your limit", event.ClassQuotaExhausted},
+		{claudeRules(), "5-hour limit reached", event.ClassQuotaExhausted},
+		{claudeRules(), "Weekly limit reached ∙ resets Monday", event.ClassQuotaExhausted},
+		{claudeRules(), "Opus limit reached, now using Sonnet", event.ClassQuotaExhausted},
+		{claudeRules(), "Sonnet limit reached", event.ClassQuotaExhausted},
+		{claudeRules(), "5-hour limit - resets 9pm", event.ClassQuotaExhausted},
+		{claudeRules(), "Session limit · resets 4am", event.ClassQuotaExhausted},
+		{claudeRules(), "Claude AI usage limit reached|1762459200", event.ClassQuotaExhausted},
+		// Ordinary text in tool output or answers is not a limit.
+		{claudeRules(), "--- FAIL: TestBurst: time limit exceeded", ""},
+		{claudeRules(), "the rate limiter code drops the third call", ""},
+		{claudeRules(), "hit your timeout limit in the test", ""},
+		{claudeRules(), "the weekly limit is configurable", ""},
+		{claudeRules(), "the session limiter resets every minute", ""},
+		{claudeRules(), "limit-resets.go: added the weekly window", ""},
+		{claudeRules(), "white-hit your limiter", ""},
 	}
 	for _, c := range cases {
 		got, ok := classifyText(c.rules, c.text)
@@ -800,6 +830,20 @@ func TestParserHelpers(t *testing.T) {
 	}
 	if _, ok := parseUsage([]byte(`[1]`)); ok {
 		t.Error("parseUsage accepted an array")
+	}
+	// Cache writes: the total, its one-hour part from the split, the split's sum without a total, and a split
+	// larger than the total clamped to it.
+	for raw, want := range map[string][2]int64{
+		`{"input_tokens":1,"cache_creation_input_tokens":4100}`: {4100, 0},
+		`{"input_tokens":1,"cache_creation_input_tokens":4100,"cache_creation":{"ephemeral_5m_input_tokens":100,"ephemeral_1h_input_tokens":4000}}`: {4100, 4000},
+		`{"input_tokens":1,"cache_creation":{"ephemeral_5m_input_tokens":100,"ephemeral_1h_input_tokens":4000}}`:                                    {4100, 4000},
+		`{"input_tokens":1,"cache_creation_input_tokens":10,"cache_creation":{"ephemeral_1h_input_tokens":4000}}`:                                   {10, 10},
+		`{"input_tokens":1,"cache_creation_input_tokens":-5}`:                                                                                       {0, 0},
+	} {
+		u, ok := parseUsage([]byte(raw))
+		if !ok || u.CacheWriteTokens != want[0] || u.CacheWrite1hTokens != want[1] || u.InputTokens != 1 {
+			t.Errorf("parseUsage(%s) = %+v", raw, u)
+		}
 	}
 	if stringField([]byte(`not json`), "x") != "" || stringField([]byte(`{"a":" ","b":"v"}`), "a", "b") != "v" {
 		t.Error("stringField")

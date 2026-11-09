@@ -72,6 +72,11 @@ func extraSamples() map[string]struct {
 	}{
 		"attention-cleared": {EventAttention, Attention{State: AttentionCleared, Reason: "The worker went on",
 			Since: "2026-11-07T09:05:00.000Z"}},
+		"waiting_quota-memory": {EventWaitingQuota, WaitingQuotaData{Reason: WaitingMemory, AvailableMB: 1500,
+			NeedMB: 2048}},
+		"waiting_quota-busy": {EventWaitingQuota, WaitingQuotaData{Reason: WaitingBusy,
+			Detail: "acc6: 2 of 2 running"}},
+		"gate-queued": {EventGate, GateEventData{Phase: GateEventQueued, Wait: GateWaitSlot, Position: 2, Limit: 2}},
 	}
 }
 

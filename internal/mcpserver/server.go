@@ -86,6 +86,8 @@ type Server struct {
 	o           Options
 	mcp         *mcp.Server
 	unavailable map[string]bool
+	// args are the argument names of each tool (its input schema's properties, sorted).
+	args map[string][]string
 }
 
 // New builds the server with every tool registered.
@@ -105,10 +107,15 @@ func New(o Options) (*Server, error) {
 	if o.Logger == nil {
 		o.Logger = slog.New(slog.DiscardHandler)
 	}
-	s := &Server{o: o, unavailable: Unavailable()}
+	s := &Server{o: o, unavailable: Unavailable(), args: map[string][]string{}}
 	defs, err := loadTools(o.Tiers, s.unavailable)
 	if err != nil {
 		return nil, err
+	}
+	for _, d := range defs {
+		if s.args[d.Name], err = d.properties(); err != nil {
+			return nil, err
+		}
 	}
 	s.mcp = mcp.NewServer(&mcp.Implementation{Name: serverName, Version: o.Version}, &mcp.ServerOptions{
 		Instructions: "Seelegent dispatches coding work to worker accounts (Antigravity/Gemini by default; other " +
@@ -250,6 +257,10 @@ func (s *Server) wrap(name string, fn toolFunc) mcp.ToolHandler {
 		if s.o.ConfigErr != nil && !s.unavailable[name] {
 			return s.fail(name, fmt.Errorf("the settings cannot be read: %w", s.o.ConfigErr)), nil
 		}
+		if err := checkArgs(name, req.Params.Arguments, s.args[name]); err != nil {
+			s.o.Logger.Info("mcp: unknown arguments", "tool", name, "err", err)
+			return s.fail(name, err), nil
+		}
 		k := &call{s: s, name: name, args: req.Params.Arguments, req: req, started: time.Now()}
 		res, err := fn(ctx, k)
 		if err != nil {
@@ -312,6 +323,7 @@ func (s *Server) fail(name string, err error) *mcp.CallToolResult {
 	var apiErr *client.Error
 	var foreign *client.ForeignError
 	var notYetErr *ops.UnavailableError
+	var unknownErr *unknownArgsError
 	switch {
 	case errors.Is(err, ops.WorkerError{}):
 		text = ops.WorkerMessage
@@ -329,6 +341,9 @@ func (s *Server) fail(name string, err error) *mcp.CallToolResult {
 			Details: apiErr.Details}
 	case errors.As(err, &notYetErr):
 		info.Code = "not_available"
+	case errors.As(err, &unknownErr):
+		info = errorInfo{Code: string(api.CodeInvalidArgument), Message: err.Error(),
+			Details: map[string]any{"unknown": unknownErr.unknown, "valid": unknownErr.valid}}
 	case errors.Is(err, ops.StoppedError{}):
 		info.Code = ops.CodeDaemonStopped
 	case errors.As(err, &foreign), errors.Is(err, client.ErrNotRunning), errors.Is(err, client.ErrUnreachable):

@@ -4,12 +4,14 @@ import (
 	"context"
 	"maps"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/NovaSeele/Seelegent/internal/api"
 	"github.com/NovaSeele/Seelegent/internal/gate"
 	"github.com/NovaSeele/Seelegent/internal/gitx"
 	"github.com/NovaSeele/Seelegent/internal/proof"
+	"github.com/NovaSeele/Seelegent/internal/task"
 )
 
 // proofGit adapts the git views to proof.Git.
@@ -28,20 +30,38 @@ func (g proofGit) Head(ctx context.Context, root string) (string, bool) {
 }
 
 // proofExec runs one command of a regression run like a gate command: through the shell, from dir, with the gate
-// time limit, output tail and Rust toolchain pin.
-func (a *App) proofExec(ctx context.Context, cmd, dir, logFile string) proof.CmdResult {
+// time limit, output tail, Rust toolchain pin, testParallelism variables and gatePriority. Each command is admitted
+// like a task gate (task.Service.AdmitHeavy: one of the gateConcurrency slots, or the slot of gateTask's gate
+// when the run was asked for from a gate that holds one, then free memory) and the memory watchdog may stop it
+// (TrackHeavy); a stopped command says so in its tail.
+func (a *App) proofExec(ctx context.Context, cmd, dir, logFile, gateTask string) proof.CmdResult {
+	release, err := a.Tasks.AdmitHeavy(ctx, gateTask)
+	if err != nil {
+		return proof.CmdResult{Tail: "cancelled while waiting for a gate slot or for free memory"}
+	}
+	defer release()
+	ctx, cancel := context.WithCancelCause(ctx)
+	defer cancel(nil)
+	defer a.Tasks.TrackHeavy(cancel)()
 	set := a.Settings()
-	env := append([]string(nil), a.env...)
+	extra := task.ParallelVars(a.env, a.Limits().TestParallelism)
 	if a.toolchains != nil {
-		pin := a.toolchains.Env(ctx, dir, a.env)
-		for _, k := range slices.Sorted(maps.Keys(pin)) {
-			env = append(env, k+"="+pin[k])
+		maps.Copy(extra, a.toolchains.Env(ctx, dir, a.env))
+	}
+	env := make([]string, 0, len(a.env)+len(extra)+2)
+	for _, kv := range a.env {
+		name, _, _ := strings.Cut(kv, "=")
+		if _, over := extra[name]; !over {
+			env = append(env, kv)
 		}
+	}
+	for _, k := range slices.Sorted(maps.Keys(extra)) {
+		env = append(env, k+"="+extra[k])
 	}
 	env = append(env, "CI=1", "SEELEGENT_GATE=1")
 	res := gate.Exec(ctx, cmd, gate.ExecOptions{Dir: dir, Env: env,
 		Timeout:   time.Duration(max(set.GateTimeoutSec, 1)) * time.Second,
-		TailBytes: max(set.GateOutputTailBytes, 1), LogFile: logFile})
+		TailBytes: max(set.GateOutputTailBytes, 1), LogFile: logFile, Tree: task.GateTree(set)})
 	tail := res.Tail
 	if res.Err != "" && tail == "" {
 		tail = res.Err
@@ -49,7 +69,10 @@ func (a *App) proofExec(ctx context.Context, cmd, dir, logFile string) proof.Cmd
 	if res.TimedOut {
 		tail += "\n(timed out)"
 	}
-	return proof.CmdResult{Exit: res.Exit, Ms: res.Ms, Tail: tail}
+	if res.Stopped == api.StepStoppedLowMemory {
+		tail = strings.TrimSpace(tail + "\nstopped: machine low on memory")
+	}
+	return proof.CmdResult{Exit: res.Exit, Ms: res.Ms, Tail: tail, Stopped: res.Stopped == api.StepStoppedLowMemory}
 }
 
 // publishProofRun forwards a regression run's progress to the SSE stream once the HTTP API runs.

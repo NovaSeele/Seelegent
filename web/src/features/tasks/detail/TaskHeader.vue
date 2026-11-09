@@ -4,10 +4,12 @@ import { useI18n } from 'vue-i18n'
 
 import type { TaskSummary, Turn } from '@/api/types'
 import Button from '@/components/ui/Button.vue'
+import ProviderMark from '@/components/ui/ProviderMark.vue'
 import StatusPill from '@/components/ui/StatusPill.vue'
 import { useFormat } from '@/composables/useFormat'
 import { useNow } from '@/composables/useNow'
-import { displayStatus, isActive, isBlocked, statusWordKey } from '@/lib/taskStatus'
+import { useProviderNames } from '@/composables/useProviderNames'
+import { displayStatus, isActive, isBlocked, slotWaitDetail, statusWordKey } from '@/lib/taskStatus'
 
 import DepLinks from './DepLinks.vue'
 import { runTime } from './runTime'
@@ -38,8 +40,11 @@ const emit = defineEmits<{
 const { t } = useI18n()
 const fmt = useFormat()
 const now = useNow(1000)
+const providerName = useProviderNames(() => [props.task.provider])
 
 const status = computed(() => displayStatus(props.task))
+/** Which accounts are full while the task waits for a free slot. */
+const slot = computed(() => slotWaitDetail(props.task))
 
 // How long the worker ran (its turns), not how long the task waited for a review afterwards. Before the detail
 // with its turns arrives, the task's age stands in.
@@ -82,6 +87,11 @@ const age = computed(() => {
       <span
         >{{ task.model }}<template v-if="task.tier"> · {{ task.tier }}</template></span
       >
+      <ProviderMark
+        :backend="task.backend"
+        :provider-name="providerName(task.provider)"
+        size="sm"
+      />
       <span>{{ task.accountLabel ?? t('common.worker.unassigned') }}</span>
       <span v-if="task.turnCount">{{ t('task.header.turn', { n: task.turnCount }) }}</span>
       <span v-if="task.tokensUsed">
@@ -108,6 +118,9 @@ const age = computed(() => {
       <span class="th__step-time">
         {{ fmt.duration(Math.max(0, now - Date.parse(task.activeStep.since))) }}
       </span>
+    </p>
+    <p v-else-if="slot" class="th__step" data-slot>
+      <span class="th__step-label">{{ slot }}</span>
     </p>
     <p
       v-if="task.review"

@@ -50,6 +50,12 @@ jobs:
           go-version-file: go.mod
       - name: go.mod is tidy
         run: go mod tidy -diff
+      - name: Vet the bench (build tag bench)
+        run: go vet -tags bench ./scripts/bench/
+      - name: Vet the bench for Windows and macOS (proc_windows_test.go, proc_other_test.go)
+        run: |
+          GOOS=windows go vet -tags bench ./scripts/bench/
+          GOOS=darwin go vet -tags bench ./scripts/bench/
       - uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
           version: v2.15.0

@@ -59,6 +59,15 @@ type TaskSummary struct {
 	LastEventAt string `json:"lastEventAt,omitempty"`
 	// WaitingUntil is when an account is expected back (waiting_quota).
 	WaitingUntil string `json:"waitingUntil,omitempty"`
+	// Waiting says why a waiting_quota task waits: WaitingBusy (every account that could run it has no free
+	// slot), WaitingResting (they rest; WaitingUntil is when one is back), WaitingNoAccount (none can run it), or
+	// WaitingMemory while free memory or free commit is below minFreeMemoryMB / minFreeCommitMB (that wait never
+	// raises an attention flag: the lead cannot act on it), or WaitingBudget (every account rests on its budget;
+	// raises a budget_reached flag for the user). Absent for other statuses, and from older daemons, which reported
+	// only the memory wait.
+	Waiting string `json:"waiting,omitempty" ts:"'memory' | 'no_account' | 'resting' | 'busy' | 'budget_reached'"`
+	// WaitDetail is the daemon's English explanation of Waiting, for example "acc6: 2 of 2 running" for busy.
+	WaitDetail string `json:"waitDetail,omitempty"`
 	// NeedsSince is since when the task waits for the lead or the user.
 	NeedsSince string `json:"needsSince,omitempty"`
 
@@ -186,7 +195,8 @@ const (
 
 // AttentionParams are the values an attention flag's text is made of. Only the fields of the reason are set:
 // stalled (Kind, Minutes, Tool, Command), looping (Kind, Count, Tool, Steps), no_accounts and auth (Backend),
-// deps_blocked (Kind, Task, Title), no_response (Denied), hygiene and work_at_risk (Count), question (Options).
+// deps_blocked (Kind, Task, Title), no_response (Denied), hygiene and work_at_risk (Count), question (Options),
+// resources_wait (Minutes, AvailableMB, NeedMB), budget_reached (Account, BudgetUSD, Count: how many accounts).
 type AttentionParams struct {
 	Kind string `json:"kind,omitempty" ts:"'not_started' | 'no_output' | 'tool' | 'failed_calls' | 'repeated' | 'missing' | 'rejected' | 'failed' | 'cancelled' | 'timeout' | 'process_canceled' | 'start_failed' | 'launcher_lost' | 'exit_error' | 'no_result'"`
 	// ExitCode is the worker process's exit code of a failed flag whose kind is exit_error or no_result.
@@ -206,6 +216,13 @@ type AttentionParams struct {
 	// Options are the choices a worker's question lists (its "## Blocked" options), which the question card offers;
 	// the question itself is the flag's detail.
 	Options []string `json:"options,omitempty"`
+	// AvailableMB and NeedMB are the free memory found and the threshold it is below (resources_wait, with
+	// Minutes: how long the task has waited).
+	AvailableMB int64 `json:"availableMB,omitempty"`
+	NeedMB      int64 `json:"needMB,omitempty"`
+	// Account and BudgetUSD name the first account at its budget and that budget (budget_reached).
+	Account   string  `json:"account,omitempty"`
+	BudgetUSD float64 `json:"budgetUsd,omitempty"`
 }
 
 // Review is the lead's verdict on a task.
@@ -218,8 +235,11 @@ type Review struct {
 // Gate is the state of a task's gate: the last gate run, or running while it runs (Phase running, settling or
 // verifying).
 type Gate struct {
-	State     string `json:"state" ts:"'running' | 'green' | 'red' | 'error' | 'skipped'"`
-	Phase     string `json:"phase,omitempty" ts:"'running' | 'settling' | 'verifying'"`
+	State string `json:"state" ts:"'running' | 'green' | 'red' | 'error' | 'skipped'"`
+	Phase string `json:"phase,omitempty" ts:"'queued' | 'running' | 'settling' | 'verifying'"`
+	// Wait says what a queued gate waits for: GateWaitSlot (gateConcurrency) or GateWaitMemory (minFreeMemoryMB,
+	// minFreeCommitMB). Absent in every other phase.
+	Wait      string `json:"wait,omitempty" ts:"'slot' | 'memory'"`
 	AutoFixes int    `json:"autoFixes"`
 	// Turn is the turn the gate is about.
 	Turn int `json:"turn,omitempty"`
@@ -304,8 +324,8 @@ type Attempt struct {
 	Model        string `json:"model,omitempty"`
 	StartedAt    string `json:"startedAt"`
 	EndedAt      string `json:"endedAt,omitempty"`
-	// Status is running, ok, quota, auth, transient, background_wait, error or cancelled.
-	Status string `json:"status" ts:"'running' | 'ok' | 'quota' | 'auth' | 'transient' | 'background_wait' | 'error' | 'cancelled'"`
+	// Status is running, ok, quota, auth, credits, transient, background_wait, error or cancelled.
+	Status string `json:"status" ts:"'running' | 'ok' | 'quota' | 'auth' | 'credits' | 'transient' | 'background_wait' | 'error' | 'cancelled'"`
 	// Kind is "console" for a takeover.
 	Kind  string `json:"kind,omitempty" ts:"'console'"`
 	Error string `json:"error,omitempty"`
@@ -358,8 +378,8 @@ type DelegateRequest struct {
 	After     []string     `json:"after,omitempty"`
 	AfterMode string       `json:"afterMode,omitempty" ts:"'accepted' | 'done'"`
 	AllowGit  bool         `json:"allowGit,omitempty"`
-	// Gate: true adds the test, lint and build commands found in the repository; false turns the gate's commands
-	// off (lane and hygiene still run). GateCommands are the lead's own gate commands; with spec task ids they
+	// Gate: true adds the test, lint and build commands found in the repository; false turns the gate phase off
+	// (no commands, no fix turns; the lane is still checked after each turn, as information). GateCommands are the lead's own gate commands; with spec task ids they
 	// replace the tasks' Gate: lines and the feature gate, and prove those tasks.
 	Gate         *bool    `json:"gate,omitempty"`
 	GateCommands []string `json:"gateCommands,omitempty"`

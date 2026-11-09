@@ -6,6 +6,8 @@ import { computed, ref, useId, watch } from 'vue'
  * parsed value when the field loses focus or Enter is pressed (or after `debounce` ms of no typing), so an
  * autosaving form does not send every keystroke. Esc puts the last committed value back. An empty or unparsable
  * entry commits nothing and shows the value again. An `integer` field rounds the entry and shows what it sent.
+ * When the field's error goes away while it still holds an entry that was not saved (another field fixed the clash
+ * that refused it), the entry commits again: it may be valid now, and if not its error comes back.
  */
 const props = withDefaults(
   defineProps<{
@@ -23,11 +25,14 @@ const props = withDefaults(
     integer?: boolean
     /** The label sits before the input on the same row (a compact field in a toolbar or card footer). */
     inline?: boolean
+    /** Ids of more text about the field outside it (notes under a setting), read after the error and hint. */
+    describedby?: string
   }>(),
   {
     unit: undefined,
     hint: undefined,
     error: undefined,
+    describedby: undefined,
     size: 'md',
     debounce: 0,
   },
@@ -51,9 +56,23 @@ watch(
   },
 )
 
+watch(
+  () => props.error,
+  (now, before) => {
+    if (before && !now && text.value.trim() !== String(props.modelValue)) {
+      sent = undefined
+      commit()
+    }
+  },
+)
+
 const describedBy = computed(
   () =>
-    [props.error ? `${id}-error` : null, props.hint ? `${id}-hint` : null]
+    [
+      props.error ? `${id}-error` : null,
+      props.hint ? `${id}-hint` : null,
+      props.describedby ?? null,
+    ]
       .filter(Boolean)
       .join(' ') || undefined,
 )
