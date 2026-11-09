@@ -159,6 +159,7 @@ const loadingFirst = computed(() => !summary.value && !error.value)
 
 <style scoped>
 .td {
+  position: relative;
   display: flex;
   flex-direction: column;
   height: 100%;

@@ -92,7 +92,9 @@ defineExpose({ panel })
 </template>
 
 <style scoped>
+/* Fixed, as useFloating's inline style also sets: the panel lives in <body> and is placed in viewport pixels. */
 .popover {
+  position: fixed;
   z-index: var(--z-popover);
   min-width: 180px;
   max-width: min(360px, calc(100vw - var(--space-4)));

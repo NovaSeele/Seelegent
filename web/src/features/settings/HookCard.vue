@@ -217,6 +217,7 @@ async function test() {
 }
 
 .hook__output {
+  position: relative;
   max-height: 160px;
   margin-top: var(--space-1);
   overflow: auto;

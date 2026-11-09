@@ -229,6 +229,7 @@ const notRunShown = computed(() => props.result.steps.some((s) => s.state === 'n
 }
 
 .steps__pre {
+  position: relative;
   max-height: 16rem;
   margin: 0;
   padding: var(--space-2) var(--space-3);

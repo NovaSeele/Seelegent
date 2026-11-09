@@ -135,6 +135,7 @@ const format = useFormat()
 }
 
 .gcd__files {
+  position: relative;
   max-height: 14rem;
   overflow: auto;
   border: var(--border-width) solid var(--border-subtle);

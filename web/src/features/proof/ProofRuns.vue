@@ -179,6 +179,7 @@ function onToggle(run: ProofRun, event: Event) {
 }
 
 .runs__pre {
+  position: relative;
   max-height: 12rem;
   margin: var(--space-1) 0 0;
   padding: var(--space-2) var(--space-3);

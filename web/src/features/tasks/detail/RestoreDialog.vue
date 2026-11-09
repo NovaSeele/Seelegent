@@ -159,6 +159,7 @@ const why = (s: RestoreFailed) =>
 }
 
 .restore__files {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: var(--space-1);

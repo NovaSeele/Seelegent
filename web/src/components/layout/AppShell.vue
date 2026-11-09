@@ -116,6 +116,7 @@ watch(
 
 /* From 600px the workspace is an inset panel on the app background (radius-lg; the inset is its margin). */
 .workspace {
+  position: relative;
   flex: 1;
   min-height: 0;
   overflow: auto;

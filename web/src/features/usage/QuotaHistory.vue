@@ -142,6 +142,7 @@ const summary = computed(() =>
 }
 
 .qh__scroll {
+  position: relative;
   max-height: 360px;
   overflow: auto;
 }

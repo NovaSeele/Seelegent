@@ -93,6 +93,7 @@ async function confirm() {
 
 <style scoped>
 .bulk-list {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
