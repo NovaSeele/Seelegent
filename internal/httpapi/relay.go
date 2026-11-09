@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/NovaSeele/Seelegent/internal/api"
@@ -32,6 +33,13 @@ const relayHandshakeTimeout = 10 * time.Second
 
 // maxRelaySessions bounds the relayed sessions at once (one per lead host window); more answer 503.
 const maxRelaySessions = 256
+
+// relayWriteTimeout bounds one write to a relay: a relay that reads nothing for that long (its host stopped reading
+// the relay's output) is cut off. It reconnects when its host reads again and replays the session.
+const relayWriteTimeout = 45 * time.Second
+
+// relayStopWrite bounds the stopping notice, and gives a write in progress that long to finish first.
+const relayStopWrite = time.Second
 
 // stoppingLine is the control notification written before a session is closed for the daemon's shutdown.
 var stoppingLine = []byte(`{"jsonrpc":"2.0","method":"` + mcpwire.StoppingMethod + `"}` + "\n")
@@ -60,6 +68,15 @@ func (s *Server) serveRelay(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	caller := s.callerOf(r)
+	if caller.Worker && caller.TaskID == "" {
+		// The guard failed closed for this connection (no process tree, a job object that cannot be read): such a
+		// caller may only call /health. A request heals on its next connection, a session would keep the
+		// classification for its whole life, so the relay is refused: it runs `seelegent mcp` instead (which
+		// classifies every request) or, on a reconnect, tries again.
+		s.writeError(w, r, newError(api.CodeUnavailable, "the daemon cannot tell who opened this MCP session; "+
+			"use `seelegent mcp`").with("reason", "caller_unknown"))
+		return
+	}
 	if !s.relayStart() {
 		s.writeError(w, r, newError(api.CodeUnavailable, "the daemon is stopping, or holds %d relayed MCP "+
 			"sessions already", maxRelaySessions))
@@ -74,7 +91,9 @@ func (s *Server) serveRelay(w http.ResponseWriter, r *http.Request) {
 	}
 	// The server's read and write deadlines stay on a hijacked connection: clear them.
 	_ = conn.SetDeadline(time.Time{})
-	rc := &relayConn{c: conn, r: brw.Reader}
+	rc := &relayConn{c: conn, r: brw.Reader, writeTimeout: s.relayWriteTimeout}
+	s.relayTrack(rc, true)
+	defer s.relayTrack(rc, false)
 	defer func() { _ = rc.Close() }()
 	if _, err := io.WriteString(conn, "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: "+
 		mcpwire.UpgradeToken+"\r\n\r\n"); err != nil {
@@ -197,14 +216,45 @@ func (s *Server) relayDone() {
 	s.wg.Done()
 }
 
+// relayTrack adds (or removes) a session's connection to the ones Close closes when they outlast closeWait.
+func (s *Server) relayTrack(c *relayConn, add bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if add {
+		s.relayConns[c] = struct{}{}
+	} else {
+		delete(s.relayConns, c)
+	}
+}
+
+// closeRelays closes every session's connection and returns how many there were.
+func (s *Server) closeRelays() int {
+	s.mu.Lock()
+	conns := make([]*relayConn, 0, len(s.relayConns))
+	for c := range s.relayConns {
+		conns = append(conns, c)
+	}
+	s.mu.Unlock()
+	for _, c := range conns {
+		_ = c.Close()
+	}
+	return len(conns)
+}
+
 // relayConn is the hijacked connection of one session: reads go through the bufio.Reader of the hijack (it may
 // hold bytes already), writes are whole lines under one lock (the MCP SDK writes each message with one Write), so
 // the stopping notice never lands inside a message.
+//
+// No write blocks for long: each has writeTimeout, and a failed write closes the connection (it may have left half
+// a message on it). stopping does not wait behind a write blocked on a relay that reads nothing: it first moves the
+// write deadline to relayStopWrite from now, so that write fails (and closes the connection) by then.
 type relayConn struct {
-	c  net.Conn
-	r  *bufio.Reader
-	wm sync.Mutex
-	co sync.Once
+	c            net.Conn
+	r            *bufio.Reader
+	writeTimeout time.Duration
+	stop         atomic.Bool
+	wm           sync.Mutex
+	co           sync.Once
 }
 
 func (c *relayConn) Read(p []byte) (int, error) { return c.r.Read(p) }
@@ -212,7 +262,19 @@ func (c *relayConn) Read(p []byte) (int, error) { return c.r.Read(p) }
 func (c *relayConn) Write(p []byte) (int, error) {
 	c.wm.Lock()
 	defer c.wm.Unlock()
-	return c.c.Write(p)
+	if c.stop.Load() {
+		return 0, net.ErrClosed
+	}
+	_ = c.c.SetWriteDeadline(time.Now().Add(c.writeTimeout))
+	if c.stop.Load() {
+		// stopping moved the deadline before this write set its own: move it back.
+		_ = c.c.SetWriteDeadline(time.Now().Add(relayStopWrite))
+	}
+	n, err := c.c.Write(p)
+	if err != nil {
+		_ = c.Close()
+	}
+	return n, err
 }
 
 func (c *relayConn) Close() error {
@@ -221,10 +283,13 @@ func (c *relayConn) Close() error {
 	return err
 }
 
-// stopping tells the relay the daemon shuts down and closes the connection.
+// stopping tells the relay the daemon shuts down and closes the connection, within about 2*relayStopWrite even when
+// the relay reads nothing.
 func (c *relayConn) stopping() {
+	c.stop.Store(true)
+	_ = c.c.SetWriteDeadline(time.Now().Add(relayStopWrite)) // safe while a Write runs: it ends that Write
 	c.wm.Lock()
-	_ = c.c.SetWriteDeadline(time.Now().Add(time.Second))
+	_ = c.c.SetWriteDeadline(time.Now().Add(relayStopWrite))
 	_, _ = c.c.Write(stoppingLine)
 	c.wm.Unlock()
 	_ = c.Close()

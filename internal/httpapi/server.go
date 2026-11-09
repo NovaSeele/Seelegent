@@ -265,8 +265,12 @@ type Server struct {
 	suggestions  map[string]api.Suggestion
 	accountsKick chan struct{}
 	closed       bool
-	// relaySessions counts the relayed MCP sessions (relay.go).
+	// relaySessions counts the relayed MCP sessions, relayConns holds their connections (relay.go).
 	relaySessions int
+	relayConns    map[*relayConn]struct{}
+	// relayWriteTimeout and closeWait are the constants of the same names; tests shorten them.
+	relayWriteTimeout time.Duration
+	closeWait         time.Duration
 
 	acc accountCache
 }
@@ -306,7 +310,8 @@ func New(o Options) (*Server, error) {
 	s := &Server{o: o, log: o.Logger, classifier: o.Classifier, clock: o.Now, ctx: ctx, cancel: cancel,
 		devHosts: devHosts, devOrigins: devOrigins,
 		suggestions: map[string]api.Suggestion{}, accountsKick: make(chan struct{}, 1),
-		acc: accountCache{last: map[string]sentAccount{}}}
+		acc:        accountCache{last: map[string]sentAccount{}},
+		relayConns: map[*relayConn]struct{}{}, relayWriteTimeout: relayWriteTimeout, closeWait: closeWait}
 	hub, err := NewHub(HubOptions{Now: o.Now})
 	if err != nil {
 		cancel()
@@ -344,7 +349,37 @@ func (s *Server) Close() {
 	s.mu.Unlock()
 	s.cancel()
 	s.hub.Close()
-	s.wg.Wait()
+	if waitFor(&s.wg, s.closeWait) {
+		return
+	}
+	// A session (or an in-process call) did not end with the context: close the relays' connections, which ends
+	// their sessions, so that no stuck peer holds the daemon's stop, restart or update for ever.
+	n := s.closeRelays()
+	s.log.Warn("httpapi: requests still ran after the stop; closed the relayed MCP sessions' connections",
+		"sessions", n, "waited", s.closeWait)
+	if !waitFor(&s.wg, s.closeWait) {
+		s.log.Warn("httpapi: requests still run; stopping without them", "waited", 2*s.closeWait)
+	}
+}
+
+// closeWait is how long Close waits for the running requests and sessions, twice at most.
+const closeWait = 5 * time.Second
+
+// waitFor waits for wg at most d and reports whether it reached zero.
+func waitFor(wg *sync.WaitGroup, d time.Duration) bool {
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-done:
+		return true
+	case <-t.C:
+		return false
+	}
 }
 
 // HTTPServer returns an http.Server for addr with this handler, ConnContext and sane timeouts.
