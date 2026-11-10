@@ -49,6 +49,12 @@ func (s *Service) Start(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	// A poke from before Start (enabling or editing an automation) is stale: the loop works out its first delay from
+	// the database anyway. Left in the channel it would make the loop drop its first timer and arm another at once.
+	select {
+	case <-s.wake:
+	default:
+	}
 	s.wg.Add(2)
 	go func() { defer s.wg.Done(); s.loop() }()
 	go func() { defer s.wg.Done(); s.follow() }()

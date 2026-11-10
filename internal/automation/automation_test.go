@@ -638,12 +638,15 @@ func TestSchedulerLoop(t *testing.T) {
 		t.Fatal("no timer armed")
 	}
 	f.clock.Advance(31 * time.Second) // 09:00:01
+	// The loop may re-arm its timer (a poke, or a due run it found after the advance waits minTick on the fake
+	// clock), so time keeps moving in small steps until the run starts.
 	deadline := time.Now().Add(5 * time.Second)
 	for f.tasks.count() == 0 {
 		if time.Now().After(deadline) {
 			t.Fatal("the loop did not run the automation")
 		}
 		time.Sleep(10 * time.Millisecond)
+		f.clock.Advance(minTick)
 	}
 }
 
