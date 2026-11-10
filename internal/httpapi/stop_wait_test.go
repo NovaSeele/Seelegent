@@ -3,9 +3,7 @@ package httpapi_test
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"io"
-	"io/fs"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -13,6 +11,8 @@ import (
 	"time"
 
 	"github.com/NovaSeele/Seelegent/internal/api"
+	"github.com/NovaSeele/Seelegent/internal/launch"
+	"github.com/NovaSeele/Seelegent/internal/platform"
 )
 
 // An open meeting wait ends at once when the daemon stops, with daemon_stopping: Close does not sit out the HTTP
@@ -80,26 +80,50 @@ func TestMeetingWaitEndsWhenTheDaemonStops(t *testing.T) {
 	}
 }
 
-// letWorkersEnd creates release (the workers' wait-file) and waits until no launcher holds its lock any more.
+// letWorkersEnd creates release (the workers' wait-file) and waits until every worker launch of the test has
+// ended and its launcher is gone, so that no launcher or worker outlives the test and holds on to the data folder.
+// A launch still running after workerEndWait is canceled (its launcher stops the worker tree) and waited for.
+// Removing the launch lock cannot tell whether a launcher runs: Linux and macOS let a locked file be removed.
 func letWorkersEnd(t *testing.T, e *env, release string) {
 	t.Helper()
 	if err := os.WriteFile(release, nil, 0o600); err != nil {
 		t.Error(err)
-		return
 	}
-	end := time.Now().Add(limit)
-	for time.Now().Before(end) {
-		locks, _ := filepath.Glob(filepath.Join(e.paths.Tasks, "*", "*", "launch", "launcher.lock"))
-		held := 0
-		for _, l := range locks {
-			if err := os.Remove(l); err != nil && !errors.Is(err, fs.ErrNotExist) {
-				held++
+	dirs, err := filepath.Glob(filepath.Join(e.paths.Tasks, "*", "*", "launch"))
+	if err != nil {
+		t.Error(err)
+	}
+	for _, dir := range dirs {
+		h, err := launch.Attach(dir)
+		if err != nil {
+			continue
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), workerEndWait)
+		_, err = h.Wait(ctx)
+		cancel()
+		if err != nil {
+			_ = h.Cancel()
+			ctx, cancel := context.WithTimeout(context.Background(), limit)
+			_, err = h.Wait(ctx)
+			cancel()
+		}
+		if err != nil {
+			t.Errorf("launch %s: %v", dir, err)
+			continue
+		}
+		r, ok := h.Ready()
+		if !ok {
+			continue
+		}
+		for end := time.Now().Add(limit); platform.ProcessRunning(r.LauncherPID, r.LauncherStart); {
+			if time.Now().After(end) {
+				t.Errorf("launcher %d of %s still runs", r.LauncherPID, dir)
+				break
 			}
+			time.Sleep(20 * time.Millisecond)
 		}
-		if held == 0 {
-			return
-		}
-		time.Sleep(100 * time.Millisecond)
 	}
-	t.Error("a worker launcher still runs")
 }
+
+// workerEndWait is how long letWorkersEnd lets a released worker end by itself before it cancels the launch.
+const workerEndWait = 20 * time.Second

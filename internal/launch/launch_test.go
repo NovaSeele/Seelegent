@@ -279,7 +279,7 @@ func TestCancelStopsWholeTree(t *testing.T) {
 	if ex.Reason != ReasonCanceled {
 		t.Fatalf("exit %+v, want canceled", ex)
 	}
-	waitDead(t, r.WorkerPID, grandchild, r.LauncherPID)
+	waitDead(t, proc{"worker", r.WorkerPID}, proc{"grandchild", grandchild}, proc{"launcher", r.LauncherPID})
 	if lines := collect(t, h, 0); len(lines) != 1 || lines[0].text != "working" {
 		t.Fatalf("lines %v", texts(lines))
 	}
@@ -329,7 +329,7 @@ func TestCancelStopsDaemonisedChild(t *testing.T) {
 	if ex := wait(t, h); ex.Reason != ReasonCanceled {
 		t.Fatalf("exit %+v, want canceled", ex)
 	}
-	waitDead(t, grandchild, r.WorkerPID, r.LauncherPID)
+	waitDead(t, proc{"grandchild", grandchild}, proc{"worker", r.WorkerPID}, proc{"launcher", r.LauncherPID})
 	if left, err := tree.PIDs(); err != nil || len(left) != 0 {
 		t.Fatalf("tree of an ended launch: %v, %v", left, err)
 	}
@@ -351,7 +351,7 @@ func TestExitCodeWithDaemonisedChild(t *testing.T) {
 	if ex.Reason != ReasonExited || ex.Code != 7 {
 		t.Fatalf("exit %+v, want exited with 7", ex)
 	}
-	waitDead(t, readPid(t, childPid))
+	waitDead(t, proc{"grandchild", readPid(t, childPid)})
 }
 
 // TestTreeFromStartAndAttach: Start knows the tree at once and keeps it, whatever the files say later; Attach
@@ -449,7 +449,7 @@ func TestReadyWriteFailureStopsRun(t *testing.T) {
 	}
 	if data, err := os.ReadFile(pid); err == nil {
 		if p, err := strconv.Atoi(strings.TrimSpace(string(data))); err == nil {
-			waitDead(t, p)
+			waitDead(t, proc{"worker", p})
 		}
 	}
 }
@@ -776,13 +776,21 @@ func readPid(t *testing.T, path string) int {
 	return 0
 }
 
-func waitDead(t *testing.T, pids ...int) {
+// proc is a process a test waits for, with the part it plays (worker, grandchild, launcher).
+type proc struct {
+	name string
+	pid  int
+}
+
+// waitDead waits up to 15 s for every process of procs to be gone (a zombie still counts as alive). On a timeout
+// the failure names the process and, on Linux, what /proc says about it (procReport).
+func waitDead(t *testing.T, procs ...proc) {
 	t.Helper()
 	deadline := time.Now().Add(15 * time.Second)
-	for _, p := range pids {
-		for platform.ProcessAlive(p) {
+	for _, p := range procs {
+		for platform.ProcessAlive(p.pid) {
 			if time.Now().After(deadline) {
-				t.Fatalf("process %d still alive", p)
+				t.Fatalf("%s %d still alive%s", p.name, p.pid, procReport(p.pid))
 			}
 			time.Sleep(20 * time.Millisecond)
 		}
@@ -842,12 +850,18 @@ func TestWorkerTreePriority(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Start: %v", err)
 			}
+			t.Cleanup(func() {
+				if t.Failed() {
+					s, _ := h.StderrTail(4096)
+					t.Logf("launcher stderr:\n%s", s)
+				}
+			})
 			r, _ := h.Ready()
-			pids := []int{readPid(t, workerPid), readPid(t, childPid)}
-			for _, p := range pids {
-				got := priority.MustOf(t, p)
+			procs := []proc{{"worker", readPid(t, workerPid)}, {"grandchild", readPid(t, childPid)}}
+			for _, p := range procs {
+				got := priority.MustOf(t, p.pid)
 				if tc.low && !priority.IsLow(got) || !tc.low && got != self {
-					t.Errorf("process %d: priority %#x (this test %#x), low wanted: %v", p, got, self, tc.low)
+					t.Errorf("%s %d: priority %#x (this test %#x), low wanted: %v", p.name, p.pid, got, self, tc.low)
 				}
 			}
 			if runtime.GOOS == "windows" {
@@ -861,7 +875,7 @@ func TestWorkerTreePriority(t *testing.T) {
 			if ex := wait(t, h); ex.Reason != ReasonCanceled || ex.MemoryLimitHit {
 				t.Fatalf("exit %+v", ex)
 			}
-			waitDead(t, append(pids, r.LauncherPID)...)
+			waitDead(t, append(procs, proc{"launcher", r.LauncherPID})...)
 		})
 	}
 }
