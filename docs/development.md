@@ -319,11 +319,12 @@ Every branch passes these before it is merged (CI runs them on Linux, Windows an
   pushed.
 - Every merge done on GitHub (web button, `gh pr merge`, auto-merge) takes the name and email from the account
   profile of the person who merges. A merge commit or squash commit uses them for both author and committer. A
-  rebase merge keeps each commit's author but still uses them for the committer. So merge only while the account
-  profile name is `NovaSeele` and "Keep my email addresses private" is on. Commits then carry
-  `NovaSeele <92350459+NovaSeele@users.noreply.github.com>`.
-- After every merge, check `git log origin/main --format='%an <%ae> | %cn <%ce>' | sort -u`. Allowed addresses
-  are this noreply address and GitHub's own `noreply@github.com`.
+  rebase merge keeps each commit's author but still uses them for the committer. So merge only while "Keep my
+  email addresses private" is on; the email in those commits is then
+  `92350459+NovaSeele@users.noreply.github.com`. The profile name may appear.
+- After every merge, check `git log origin/main --format='%ae | %ce' | sort -u`. The only allowed addresses are
+  that noreply address and GitHub's own `noreply@github.com`. If any other address shows up, stop merging and
+  report it.
 - Conventional commit messages, for example `feat(task): add the wait endpoint` or `fix(pool): …`. Keep commits
   small; each one builds.
 - Every commit message ends with a blank line and
