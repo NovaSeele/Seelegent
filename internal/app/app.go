@@ -21,6 +21,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"runtime/debug"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -169,6 +170,9 @@ type App struct {
 	setMemoryLimit func(int64) int64
 	memoryLimitMu  sync.Mutex
 	memoryLimitSet bool
+	// listenPort is the port the HTTP API listens on (ListenHTTP), 0 before it does: the dashboard links use it,
+	// since a daemon started with --port listens where neither its settings nor its environment say.
+	listenPort atomic.Int32
 	// stopCh is closed (once) when someone asked the daemon to stop through the API.
 	stopCh   chan struct{}
 	stopOnce sync.Once
@@ -517,14 +521,21 @@ func systemMachine() config.Machine {
 	return config.NewMachine(m.TotalPhysMB, m.TotalCommitMB, platform.CPUs(), runtime.GOOS)
 }
 
-// dashboardLink is the deep link to a task in the dashboard.
-func (a *App) dashboardLink(id string) string {
-	port, err := config.ResolvePort(a.Settings(), func(k string) string { v, _ := envx.Lookup(a.env, k); return v })
-	if err != nil {
-		port = a.Settings().Port
+// dashboardBase is the dashboard's address without the trailing slash: the port the HTTP API listens on, or before
+// it listens the configured one ($SEELEGENT_PORT, then the settings).
+func (a *App) dashboardBase() string {
+	port := int(a.listenPort.Load())
+	if port == 0 {
+		var err error
+		if port, err = a.Port(); err != nil {
+			port = a.Settings().Port
+		}
 	}
-	return fmt.Sprintf("http://127.0.0.1:%d/tasks/%s", port, id)
+	return "http://127.0.0.1:" + strconv.Itoa(port)
 }
+
+// dashboardLink is the deep link to a task in the dashboard.
+func (a *App) dashboardLink(id string) string { return a.dashboardBase() + "/tasks/" + id }
 
 // Start starts the background work: the quota refresher and the task engine (which recovers what an earlier
 // daemon left).

@@ -136,3 +136,25 @@ func (t *connTracker) count(st http.ConnState) int {
 	}
 	return n
 }
+
+// TestDashboardLinksUseListenPort: a daemon started with --port listens where neither its settings nor its
+// environment say; the task and automation links name the port it listens on, not the configured one.
+func TestDashboardLinksUseListenPort(t *testing.T) {
+	d := newDaemon(t)
+	if got, want := d.a.dashboardLink("t1"), "http://127.0.0.1:47831/tasks/t1"; got != want {
+		t.Fatalf("before listening: %q, want the configured port %q", got, want)
+	}
+	addr, err := d.a.ListenHTTP(t.Context(), 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.HasSuffix(addr, ":47831") {
+		t.Fatalf("listened on the configured port %s; the test needs another one", addr)
+	}
+	if got, want := d.a.dashboardLink("t1"), "http://"+addr+"/tasks/t1"; got != want {
+		t.Fatalf("task link = %q, want %q", got, want)
+	}
+	if got, want := d.a.automationLink("a1"), "http://"+addr+"/automations?confirm=a1"; got != want {
+		t.Fatalf("automation link = %q, want %q", got, want)
+	}
+}

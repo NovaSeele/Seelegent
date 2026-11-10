@@ -111,6 +111,7 @@ func (a *App) ListenHTTP(ctx context.Context, port int) (string, error) {
 	a.mu.Lock()
 	a.api, a.httpSrv, a.httpConns = srv, hs, conns
 	a.mu.Unlock()
+	a.listenPort.Store(int32(actual)) //nolint:gosec // a TCP port fits
 	a.wg.Add(1)
 	go func() {
 		defer a.wg.Done()

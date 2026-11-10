@@ -48,6 +48,8 @@ type daemon struct {
 	cwd   string
 	cls   *switchClassifier
 	cs    *mcp.ClientSession
+	// base is the address the daemon listens on (a random port, never the configured 47831).
+	base string
 }
 
 func newDaemon(t *testing.T) *daemon {
@@ -96,6 +98,7 @@ func newDaemon(t *testing.T) *daemon {
 	}
 	hc := &http.Client{Transport: &http.Transport{DisableKeepAlives: true}}
 	c := client.New("http://"+addr, hc)
+	d.base = c.BaseURL()
 	d.cs = connect(t, mcpserver.Options{Daemon: fixedDaemon{c: c}, Version: "test", Port: 47831,
 		Tiers: set.Backends.Agy.Tiers, Getwd: func() (string, error) { return home, nil },
 		Getenv: func(k string) string {
@@ -247,6 +250,10 @@ func TestTasksEndToEnd(t *testing.T) {
 	if rep.Status != "done" || rep.Response != "Turn one." || rep.Turn != 1 || !strings.Contains(sum, "done") {
 		t.Fatalf("delegate = %+v (%s)", rep, sum)
 	}
+	// The dashboard link names the port the daemon listens on, not the configured one.
+	if want := d.base + "/tasks/" + rep.TaskID; rep.Dashboard != want {
+		t.Fatalf("delegate dashboard = %q, want %q", rep.Dashboard, want)
+	}
 	detail, err := d.a.Tasks.Get(t.Context(), rep.TaskID)
 	if err != nil || detail.Cwd != d.cwd || detail.Session == nil || detail.Session.ID != "sess-1" ||
 		detail.Session.Lead != api.LeadClaude {
@@ -371,7 +378,7 @@ func TestStatusMemoryProfiles(t *testing.T) {
 	}
 	var full map[string]any
 	ok(t, d.cs, "status", map[string]any{"full": true}, &full)
-	if full["dashboard"] != "http://127.0.0.1:47831/" {
+	if full["dashboard"] != d.base+"/" {
 		t.Fatalf("full status = %v", full)
 	}
 
