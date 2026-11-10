@@ -119,8 +119,10 @@ func (s *Server) status(ctx context.Context, k *call) (result, error) {
 	}
 	sum := statusSummary(accounts, tasks)
 	if a.Full.or(false) {
-		return result{value: fullStatus{Dashboard: s.dashboard(), Accounts: api.NonNil(accounts),
-			ActiveTasks: api.NonNil(tasks), Backends: backends}, summary: sum + " Dashboard: " + s.dashboard()}, nil
+		// The daemon found may listen on another port than the configured one (its port file): link to it.
+		dash := c.BaseURL() + "/"
+		return result{value: fullStatus{Dashboard: dash, Accounts: api.NonNil(accounts),
+			ActiveTasks: api.NonNil(tasks), Backends: backends}, summary: sum + " Dashboard: " + dash}, nil
 	}
 	out := slimStatus{Accounts: make([]slimAccount, 0, len(accounts)), ActiveTasks: make([]slimTask, 0, len(tasks))}
 	for i := range accounts {

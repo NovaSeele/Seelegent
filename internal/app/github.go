@@ -2,13 +2,11 @@ package app
 
 import (
 	"context"
-	"fmt"
 	"path/filepath"
 
 	"github.com/NovaSeele/Seelegent/internal/api"
 	"github.com/NovaSeele/Seelegent/internal/automation"
 	"github.com/NovaSeele/Seelegent/internal/backend"
-	"github.com/NovaSeele/Seelegent/internal/config"
 	"github.com/NovaSeele/Seelegent/internal/envx"
 	"github.com/NovaSeele/Seelegent/internal/github"
 	"github.com/NovaSeele/Seelegent/internal/httpapi"
@@ -74,11 +72,7 @@ func (a *App) quotaGroup(name, model string) string {
 
 // automationLink is the dashboard page where the user confirms an automation.
 func (a *App) automationLink(id string) string {
-	port, err := config.ResolvePort(a.Settings(), func(k string) string { v, _ := envx.Lookup(a.env, k); return v })
-	if err != nil {
-		port = a.Settings().Port
-	}
-	return fmt.Sprintf("http://127.0.0.1:%d/automations?confirm=%s", port, id)
+	return a.dashboardBase() + "/automations?confirm=" + id
 }
 
 // startGitHub recovers the ticket outbox and starts the poller and the scheduler. Failures are logged.
