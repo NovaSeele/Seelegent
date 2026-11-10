@@ -163,7 +163,8 @@ func newServer(o Options, set *toolSet) (*Server, error) {
 	return s, nil
 }
 
-// minLevel passes the records of h at or above min.
+// minLevel passes the records of h at or above min, except the SDK's errors about a session that simply ended
+// (sessionGone).
 type minLevel struct {
 	h   slog.Handler
 	min slog.Level
@@ -173,7 +174,12 @@ func (m minLevel) Enabled(ctx context.Context, l slog.Level) bool {
 	return l >= m.min && m.h.Enabled(ctx, l)
 }
 
-func (m minLevel) Handle(ctx context.Context, r slog.Record) error { return m.h.Handle(ctx, r) }
+func (m minLevel) Handle(ctx context.Context, r slog.Record) error {
+	if sessionGone(r) {
+		return nil
+	}
+	return m.h.Handle(ctx, r)
+}
 
 func (m minLevel) WithAttrs(attrs []slog.Attr) slog.Handler {
 	return minLevel{h: m.h.WithAttrs(attrs), min: m.min}
