@@ -168,6 +168,9 @@ func TestAfterRunSkipsFreshQuota(t *testing.T) {
 	quiet(1) // one minute old: kept
 	f.r.AfterRun(a.ID, true)
 	waitReads(2) // a failed run reads whatever the age
+	// Store it at this time first: a read stamped after the advance would look fresh, and AfterRun would skip it.
+	at := f.clk.Now().UTC()
+	stored(func(s Snapshot) bool { return s.FetchedAt.Equal(at) })
 	f.clk.Advance(AfterRunFresh)
 	f.r.AfterRun(a.ID, false)
 	waitReads(3) // two minutes old: read
