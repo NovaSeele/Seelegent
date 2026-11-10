@@ -70,13 +70,7 @@ func Sections(text string) []Section {
 }
 
 func normTitle(t string) string {
-	t = strings.ToLower(t)
-	t = strings.Map(func(r rune) rune {
-		if r == '*' || r == '_' || r == '`' {
-			return -1
-		}
-		return r
-	}, t)
+	t = strings.ToLower(StripInline(t))
 	return strings.TrimSpace(strings.TrimRight(t, ":."))
 }
 
@@ -125,12 +119,7 @@ func Bullets(body string) []string {
 func Questions(body string) []string {
 	var out []string
 	for _, q := range Bullets(body) {
-		q = strings.TrimSpace(strings.Map(func(r rune) rune {
-			if r == '*' || r == '_' || r == '`' {
-				return -1
-			}
-			return r
-		}, q))
+		q = strings.TrimSpace(StripInline(q))
 		if q != "" && !noneRe.MatchString(q) {
 			out = append(out, q)
 		}

@@ -91,6 +91,18 @@ describe('rich text', () => {
     }
   })
 
+  it('keeps underscores literal, in words and in code spans', () => {
+    for (const text of ['CORS_ORIGINS', 'snake_case_name', '_emphasis_']) {
+      expect(parseInline(text)).toEqual([{ t: 'text', v: text }])
+    }
+    expect(parseInline('set `CORS_ORIGINS` and `**x**`')).toEqual([
+      { t: 'text', v: 'set ' },
+      { t: 'code', v: 'CORS_ORIGINS' },
+      { t: 'text', v: ' and ' },
+      { t: 'code', v: '**x**' },
+    ])
+  })
+
   it('keeps an unclosed fence as code to the end', () => {
     expect(parseRichText('```\nx\ny')).toEqual([{ t: 'code', lang: '', v: 'x\ny' }])
   })
