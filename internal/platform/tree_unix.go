@@ -207,11 +207,39 @@ func (t *treeOS) close(cmd *exec.Cmd) error {
 	}
 	err := t.kill(0)
 	if t.reaper != nil {
-		t.reaper.waitRoot(closeReapWait)
+		deadline := time.Now().Add(closeReapWait)
+		t.reaper.waitRoot(time.Until(deadline))
+		t.waitReaped(deadline)
 		t.reaper.stop()
 		_ = cmd.Process.Release() // exec.Cmd.Wait is never called for a reaped root
 	}
 	return err
+}
+
+// waitReaped waits until the deadline for the reaper to reap every member of the tree that is a child of this
+// process. kill counts a zombie as gone, but the main thread of a multi-threaded process shows as a zombie while
+// its other threads are still exiting, and wait4 cannot reap it before they are done. Stopping the reaper then
+// would leave the process to whoever adopts it when this one exits: init, or the nearest child subreaper above,
+// which may never reap it (a test process that ran a worker tree itself is one).
+func (t *treeOS) waitReaped(deadline time.Time) {
+	self := os.Getpid()
+	for {
+		members, err := t.members()
+		if err != nil {
+			return
+		}
+		left := false
+		for _, p := range members {
+			if p.ppid == self {
+				left = true
+				break
+			}
+		}
+		if !left || time.Now().After(deadline) {
+			return
+		}
+		time.Sleep(groupPoll)
+	}
 }
 
 // signal sends sig to the process group and to every member of the tree found by walking the process list. The

@@ -3,6 +3,7 @@ package launch
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -25,6 +26,29 @@ func statOf(pid int) (state string, ppid int, ok bool) {
 	}
 	ppid, err = strconv.Atoi(f[1])
 	return f[0], ppid, err == nil
+}
+
+// procReport describes pid for a waitDead failure: its state, parent and nice value from /proc/<pid>/stat, the
+// whole stat line and /proc/<pid>/status, and this test process's id, so that a zombie left to the test process
+// (a child subreaper once a test ran Run in process) can be told from a process that is still running.
+func procReport(pid int) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "\ntest process: %d", os.Getpid())
+	stat, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/stat")
+	if err != nil {
+		fmt.Fprintf(&b, "\n/proc/%d/stat: %v", pid, err)
+		return b.String()
+	}
+	stat = bytes.TrimSpace(stat)
+	// After the name: [0]=state(3) [1]=ppid(4) ... [16]=nice(19).
+	if f := strings.Fields(string(stat[bytes.LastIndexByte(stat, ')')+1:])); len(f) > 16 {
+		fmt.Fprintf(&b, "\nstate %s, parent %s, nice %s", f[0], f[1], f[16])
+	}
+	fmt.Fprintf(&b, "\n/proc/%d/stat: %s", pid, stat)
+	if status, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/status"); err == nil {
+		fmt.Fprintf(&b, "\n/proc/%d/status:\n%s", pid, bytes.TrimSpace(status))
+	}
+	return b.String()
 }
 
 // checkAdopted checks that the daemonised pid is re-parented to the launcher, the child subreaper. The grandchild

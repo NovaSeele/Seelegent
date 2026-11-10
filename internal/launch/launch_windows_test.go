@@ -22,6 +22,9 @@ func detach(cmd *exec.Cmd) {
 // checkAdopted has nothing to check on Windows: membership comes from the job, not from parent ids.
 func checkAdopted(*testing.T, int, int) {}
 
+// procReport has nothing to add on Windows.
+func procReport(int) string { return "" }
+
 // TestWorkerMemoryLimitCancelNearCap: a worker whose job peak reached 93% of its cap, never refused memory, and that
 // the launcher then stopped (cancel) is no memory failure: the kill's exit code is not the cap's (review N1).
 func TestWorkerMemoryLimitCancelNearCap(t *testing.T) {
