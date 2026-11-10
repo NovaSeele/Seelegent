@@ -8,11 +8,11 @@ on:
 permissions:
   contents: read
 
-# A new push to a pull request cancels that PR's older run. Pushes to main queue instead, so every commit on main
-# gets a full result (and no "Run cancelled" mail).
+# A new push to a pull request cancels that PR's older run. Each push to main gets a group of its own (its run id),
+# so it is never cancelled: a group keeps only one pending run, and queueing would still cancel all but the newest.
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: ci-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: true
 
 jobs:
   go:
