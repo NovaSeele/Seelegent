@@ -312,10 +312,18 @@ Every branch passes these before it is merged (CI runs them on Linux, Windows an
 ## Git workflow and commits
 
 - `main` always builds and passes the checks. Work happens on short branches (`chore/…`, `feat/…`, `fix/…`,
-  `docs/…`, `ci/…`) that the lead reviews and merges with `git merge --no-ff`.
+  `docs/…`, `ci/…`) that the lead reviews.
+- `main` on GitHub takes changes only through pull requests. A ruleset with no bypass blocks direct pushes,
+  force pushes and deletion, and requires the six CI jobs to pass: go on ubuntu, windows and macos, lint,
+  release, and web. The flow is: push the branch, open a PR, wait for green CI, then merge. Tags can still be
+  pushed.
+- Merge pull requests with rebase (`gh pr merge N --rebase`). Merge commits and squash commits made by GitHub
+  take the name and email from the GitHub account profile. A rebase keeps each commit's author,
+  `NovaSeele <92350459+NovaSeele@users.noreply.github.com>`. After a merge, check
+  `git log origin/main --format='%an <%ae>' | sort -u`.
 - Conventional commit messages, for example `feat(task): add the wait endpoint` or `fix(pool): …`. Keep commits
   small; each one builds.
 - Every commit message ends with a blank line and
   `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
 - Stage the paths you changed explicitly and check `git status` before committing. Nothing is pushed until the
-  lead asks the user.
+  lead asks the user, and nothing ever goes to `main` directly.
