@@ -7,7 +7,7 @@
 
 **One lead agent plans and reviews. Worker coding CLIs on your own accounts write the code.**
 
-[Install](#install)&nbsp;· [Quick start](#quick-start)&nbsp;· [Usage guide](docs/usage.md)&nbsp;·
+[Install](#install)&nbsp;· [Quick start](#quick-start)&nbsp;· [Usage guide](docs/usage.md)&nbsp;· [Wiki](https://github.com/NovaSeele/Seelegent/wiki)&nbsp;·
 [Docs](docs/README.md)&nbsp;· [Contributing](CONTRIBUTING.md)
 
 **English**&nbsp;· [Tiếng Việt](README.vi.md)&nbsp;· [简⁠体⁠中⁠文](README.zh-CN.md)&nbsp;· [Español](README.es.md)&nbsp;·

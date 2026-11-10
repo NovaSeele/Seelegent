@@ -335,3 +335,7 @@ Every branch passes these before it is merged (CI runs them on Linux, Windows an
   `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
 - Stage the paths you changed explicitly and check `git status` before committing. Nothing is pushed until the
   lead asks the user, and nothing ever goes to `main` directly.
+- The GitHub Wiki has a single page, `Home`, which mirrors `docs/usage.md`. In that copy, relative links point at
+  `main` on github.com and images point at `raw.githubusercontent.com`. Whenever a change to `docs/usage.md`
+  reaches `main`, regenerate the page. Commit it in a clone of `Seelegent.wiki.git` with the noreply identity,
+  then push. Never edit the Wiki on the web, because those commits carry the account's default email.
