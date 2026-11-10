@@ -31,13 +31,15 @@ const word = computed(() =>
 
 /**
  * First line of why, in the reader's language (F14): the worker's question as it asked it, else the sentence built
- * from the flag's reason and params. The daemon's English detail is not shown here.
+ * from the flag's reason and params. A blocked task without such a sentence names its flag ("Gate failed"), as the
+ * task's banner does, unless the card's word already says it. The daemon's English detail is not shown here.
  */
 const detail = computed(() => {
   const a = task.value?.attention
   if (!a) return ''
   const view = attentionText(a, t, te)
-  const text = a.reason === 'question' ? (a.detail ?? '') : view.why || view.quote
+  const title = props.kind === 'blocked' && view.title !== t(word.value) ? view.title : ''
+  const text = a.reason === 'question' ? (a.detail ?? '') : view.why || view.quote || title
   return (
     text
       .split('\n')
