@@ -295,6 +295,18 @@ func TestTasksEndToEnd(t *testing.T) {
 	if reviewed["task_id"] != rep.TaskID || reviewed["status"] != "done" {
 		t.Fatalf("review = %v", reviewed)
 	}
+	// A rule reaches the project's notes, which memory reads back.
+	var lesson map[string]any
+	sum = ok(t, d.cs, "review", map[string]any{"task_id": rep.TaskID, "verdict": "accepted",
+		"rule": "Keep every brief short."}, &lesson)
+	if lesson["lesson_saved"] != true || !strings.Contains(sum, "Rule kept in the project's notes") {
+		t.Fatalf("review with rule = %v (%s)", lesson, sum)
+	}
+	var notes api.Memory
+	ok(t, d.cs, "memory", map[string]any{"cwd": d.cwd, "action": "read"}, &notes)
+	if !strings.Contains(notes.Text, "## Lessons from reviews\n- Keep every brief short.\n") {
+		t.Fatalf("notes = %q", notes.Text)
+	}
 	if msg := fails(t, d.cs, "review", map[string]any{"task_id": second.TaskID, "verdict": "acepted"}); !strings.HasPrefix(msg, "Seelegent error: ") {
 		t.Fatalf("bad verdict = %s", msg)
 	}

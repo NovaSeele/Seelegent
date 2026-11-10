@@ -67,8 +67,9 @@ append the events in **one transaction**, then publish on the bus. The log and t
    runs on another account in a new conversation, whose brief says plainly that the console's context is not
    available and that it must find out from the files what changed.
 2. **Brief.** The same conversation gets a short continuation; a fresh conversation (first attempt, another account,
-   or a retry that never got a conversation) gets the full brief from `internal/brief`, with role, project memory,
-   review history, constitution, the git baseline, earlier turns, prerequisite context, and the "you continue an
+   or a retry that never got a conversation) gets the full brief from `internal/brief`, with role, project memory
+   (the lessons from reviews included, [mcp.md](mcp.md#lessons-from-reviews)), review history, constitution, the
+   git baseline, earlier turns, prerequisite context, and the "you continue an
    interrupted task" section when an attempt came before, with the files the earlier attempts edited and the last
    report one of them gave (capped at 4000 characters), and the instruction to verify that work rather than redo
    it. A plan-mode brief says how the backend of this attempt (not the one the task started on) reads files

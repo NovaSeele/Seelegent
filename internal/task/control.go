@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"slices"
 	"strings"
 	"time"
@@ -20,6 +21,10 @@ const maxCancelWait = 60
 //
 // Accepting a task with an unanswered peer objection (a consult) needs req.AnswerObjection: the answer is stored
 // on the objection and added to the review notes.
+//
+// req.Rule is added to the project's notes as a lesson (memory.Store.AddLesson) after the verdict is recorded; a rule
+// that cannot be saved becomes a warning and the review still succeeds. A rejection without a rule carries a
+// reminder when reminderMin or more of the project's last reminderWindow verdicts were rejections.
 func (s *Service) Review(ctx context.Context, id string, req api.ReviewRequest) (api.TaskSummary, error) {
 	return s.ReviewWith(ctx, id, req, ReviewOptions{})
 }
@@ -83,10 +88,69 @@ func (s *Service) ReviewWith(ctx context.Context, id string, req api.ReviewReque
 			s.log.Warn("task: review history", "task", id, "err", err)
 		}
 	}
+	// The lesson and the reminder come after the verdict, which stands whatever happens to them.
+	lessonSaved, reminder := false, ""
+	if rule := strings.TrimSpace(req.Rule); rule != "" {
+		if err := s.saveLesson(context.WithoutCancel(ctx), t.projectDir(), rule); err != nil {
+			s.log.Warn("task: review lesson", "task", id, "err", err)
+			warnings = append(warnings, lessonWarning(err))
+		} else {
+			lessonSaved = true
+		}
+	} else if verdict == api.VerdictRejected && !o.SkipHistory {
+		reminder = s.rejectedReminder(context.WithoutCancel(ctx), id, t.projectDir())
+	}
 	s.checkDeps(s.background())
 	sum, err := s.Summary(ctx, id)
 	sum.Warnings, sum.Objections = warnings, objections
+	sum.LessonSaved, sum.Reminder = lessonSaved, reminder
 	return sum, err
+}
+
+// The review reminder: a rejection without a rule names how many of the project's last reminderWindow verdicts were
+// rejected, once that is reminderMin or more.
+const (
+	reminderWindow = 10
+	reminderMin    = 3
+)
+
+// errNoMemory: the engine has no project memory to keep a lesson in.
+var errNoMemory = errors.New("the daemon keeps no project memory")
+
+// saveLesson adds rule to the notes of the project in dir (memory.Store.AddLesson).
+func (s *Service) saveLesson(ctx context.Context, dir, rule string) error {
+	if s.o.Memory == nil {
+		return errNoMemory
+	}
+	_, err := s.o.Memory.AddLesson(ctx, dir, rule)
+	return err
+}
+
+// lessonWarning says why a review's rule was not saved.
+func lessonWarning(err error) string {
+	w := "rule not saved: " + err.Error()
+	if errors.Is(err, memory.ErrTooLarge) {
+		w += "; shorten the project's notes (memory replace), then add the rule again"
+	}
+	return w
+}
+
+// rejectedReminder is the review reminder for the project in dir, or "" below reminderMin rejections (or when the
+// history cannot be read).
+func (s *Service) rejectedReminder(ctx context.Context, id, dir string) string {
+	if s.o.Memory == nil {
+		return ""
+	}
+	rejected, total, err := s.o.Memory.CountVerdicts(ctx, dir, reminderWindow, api.VerdictRejected)
+	if err != nil {
+		s.log.Warn("task: review reminder", "task", id, "err", err)
+		return ""
+	}
+	if rejected < reminderMin {
+		return ""
+	}
+	return fmt.Sprintf("%d of the last %d reviews in this project were rejected. If they share a cause, pass rule to "+
+		"keep it in every brief.", rejected, total)
 }
 
 // objectionWarnings says the objections in English, for the lead: "senior sam objected: <first finding>".

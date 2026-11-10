@@ -292,6 +292,7 @@ type reviewArgs struct {
 	Verdict         string  `json:"verdict"`
 	Notes           string  `json:"notes"`
 	AnswerObjection *string `json:"answer_objection"`
+	Rule            string  `json:"rule"`
 }
 
 func (s *Server) review(ctx context.Context, k *call) (result, error) {
@@ -310,16 +311,23 @@ func (s *Server) review(ctx context.Context, k *call) (result, error) {
 	if err != nil {
 		return result{}, err
 	}
-	sum, err := c.Review(ctx, a.TaskID, api.ReviewRequest{Verdict: a.Verdict, Notes: a.Notes, AnswerObjection: answer})
+	sum, err := c.Review(ctx, a.TaskID, api.ReviewRequest{Verdict: a.Verdict, Notes: a.Notes, AnswerObjection: answer,
+		Rule: strings.TrimSpace(a.Rule)})
 	if err != nil {
 		return result{}, err
 	}
 	text := fmt.Sprintf("Task %s reviewed: %s.", sum.ID, a.Verdict)
+	if sum.LessonSaved {
+		text += "\nRule kept in the project's notes under \"Lessons from reviews\"; every later brief carries it."
+	}
 	for _, w := range sum.Warnings {
 		text += "\nWarning: " + w
 	}
-	return result{value: taskStatus{TaskID: sum.ID, Status: string(sum.Status), Warnings: sum.Warnings},
-		summary: text}, nil
+	if sum.Reminder != "" {
+		text += "\nNote: " + sum.Reminder
+	}
+	return result{value: taskStatus{TaskID: sum.ID, Status: string(sum.Status), Note: sum.Reminder,
+		Warnings: sum.Warnings, LessonSaved: sum.LessonSaved}, summary: text}, nil
 }
 
 // taskStatus is the answer of review and cancel.
@@ -328,6 +336,8 @@ type taskStatus struct {
 	Status   string   `json:"status"`
 	Note     string   `json:"note,omitempty"`
 	Warnings []string `json:"warnings,omitempty"`
+	// LessonSaved: review's rule is in the project's notes.
+	LessonSaved bool `json:"lesson_saved,omitempty"`
 }
 
 // cancelArgs are the arguments of cancel.

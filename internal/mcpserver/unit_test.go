@@ -41,7 +41,7 @@ var wantTools = []struct {
 	{"followup", []string{"task_id"}, "task_id message profile model effort task_ids gate lane force_lane allow_git " +
 		"verify wait_seconds wake_on_blocked provider force member"},
 	{"wait", []string{"task_ids"}, "task_ids wait_seconds any wake_on_blocked"},
-	{"review", []string{"task_id", "verdict"}, "task_id verdict notes answer_objection"},
+	{"review", []string{"task_id", "verdict"}, "task_id verdict notes answer_objection rule"},
 	{"cancel", []string{"task_id"}, "task_id wait_seconds"},
 	{"task", []string{"task_id"}, "task_id steps full"},
 	{"status", nil, "full"},
@@ -215,6 +215,76 @@ func TestToolsList(t *testing.T) {
 	init := cs.InitializeResult()
 	if init.ServerInfo.Name != "seelegent" || !strings.Contains(init.Instructions, "Live view: http://127.0.0.1:47831/") {
 		t.Errorf("initialize = %+v", init)
+	}
+	var rule struct {
+		Description string `json:"description"`
+	}
+	review, _ := json.Marshal(byName["review"].InputSchema)
+	var rs struct {
+		Properties map[string]json.RawMessage `json:"properties"`
+	}
+	_ = json.Unmarshal(review, &rs)
+	_ = json.Unmarshal(rs.Properties["rule"], &rule)
+	if !strings.HasPrefix(rule.Description, "One line the workers of this project should always follow") ||
+		!strings.Contains(rule.Description, "'Lessons from reviews'") {
+		t.Errorf("review rule = %q", rule.Description)
+	}
+}
+
+// TestReviewRule: review sends rule to the API only when given, and shows the lesson, warnings and the reminder.
+func TestReviewRule(t *testing.T) {
+	answerSum := api.TaskSummary{ID: "t1", Status: "done"}
+	st, c := newStub(t, map[string]http.HandlerFunc{
+		"POST /tasks/t1/review": func(w http.ResponseWriter, r *http.Request) {
+			var req api.ReviewRequest
+			_ = json.NewDecoder(r.Body).Decode(&req)
+			sum := answerSum
+			switch req.Rule {
+			case "":
+				sum.Reminder = "3 of the last 10 reviews in this project were rejected. If they share a cause, " +
+					"pass rule to keep it in every brief."
+			case "Run go vet.":
+				sum.LessonSaved = true
+			default:
+				sum.Warnings = []string{"rule not saved: too large: project memory would be 70000 bytes"}
+			}
+			reply(w, http.StatusOK, sum)
+		},
+	})
+	cs := stubSession(t, c, nil)
+
+	// Without rule: the request is the old one, and the reminder is a Note line.
+	var plain map[string]any
+	sum := ok(t, cs, "review", map[string]any{"task_id": "t1", "verdict": "rejected", "notes": "n"}, &plain)
+	var raw map[string]any
+	st.body(t, "POST /tasks/t1/review", &raw)
+	if _, has := raw["rule"]; has || raw["verdict"] != "rejected" || raw["notes"] != "n" {
+		t.Fatalf("request without rule = %v", raw)
+	}
+	if plain["task_id"] != "t1" || plain["status"] != "done" || !strings.HasPrefix(plain["note"].(string), "3 of the") ||
+		!strings.Contains(sum, "\nNote: 3 of the last 10 reviews") {
+		t.Fatalf("review without rule = %v (%s)", plain, sum)
+	}
+
+	// With rule: it reaches the API trimmed, and the answer says it was kept.
+	var saved map[string]any
+	sum = ok(t, cs, "review", map[string]any{"task_id": "t1", "verdict": "accepted", "rule": "  Run go vet.\n"}, &saved)
+	var req api.ReviewRequest
+	st.body(t, "POST /tasks/t1/review", &req)
+	if req.Rule != "Run go vet." || req.Verdict != "accepted" {
+		t.Fatalf("request with rule = %+v", req)
+	}
+	if saved["lesson_saved"] != true || saved["note"] != nil ||
+		!strings.Contains(sum, "Rule kept in the project's notes") || strings.Contains(sum, "Note:") {
+		t.Fatalf("review with rule = %v (%s)", saved, sum)
+	}
+
+	// A rule the daemon could not save comes back as a Warning line; the review succeeded.
+	var warned map[string]any
+	sum = ok(t, cs, "review", map[string]any{"task_id": "t1", "verdict": "accepted", "rule": "Too much."}, &warned)
+	if warned["lesson_saved"] != nil || !strings.Contains(sum, "\nWarning: rule not saved: too large") ||
+		strings.Contains(sum, "Rule kept") {
+		t.Fatalf("review with a rule not saved = %v (%s)", warned, sum)
 	}
 }
 

@@ -221,6 +221,25 @@ func TestTaskLifecycle(t *testing.T) {
 	if reviewed.Review == nil || reviewed.Review.Verdict != api.VerdictAccepted {
 		t.Fatalf("review = %+v", reviewed.Review)
 	}
+	// A rule goes into the project's notes; one that cannot be saved is a warning of a review that succeeds.
+	var lesson, tooLong api.TaskSummary
+	e.must(e.post("/api/v1/tasks/"+sum.ID+"/review", map[string]any{"verdict": "accepted", "rule": "Run go vet."}),
+		http.StatusOK).json(t, &lesson)
+	if !lesson.LessonSaved || len(lesson.Warnings) != 0 {
+		t.Fatalf("review with a rule = %+v", lesson)
+	}
+	var notes api.Memory
+	e.must(e.get("/api/v1/memory?cwd="+url.QueryEscape(e.cwd)), http.StatusOK).json(t, &notes)
+	if notes.Text != "## Lessons from reviews\n- Run go vet.\n" {
+		t.Fatalf("notes = %q", notes.Text)
+	}
+	e.must(e.post("/api/v1/tasks/"+sum.ID+"/review", map[string]any{"verdict": "rejected",
+		"rule": strings.Repeat("x", 301)}), http.StatusOK).json(t, &tooLong)
+	if tooLong.LessonSaved || len(tooLong.Warnings) != 1 ||
+		!strings.HasPrefix(tooLong.Warnings[0], "rule not saved: invalid: the rule is 301 bytes") ||
+		tooLong.Review == nil || tooLong.Review.Verdict != api.VerdictRejected {
+		t.Fatalf("review with a long rule = %+v", tooLong)
+	}
 
 	// Lists: keyset paging, filters.
 	var p1, p2, done api.TaskPage

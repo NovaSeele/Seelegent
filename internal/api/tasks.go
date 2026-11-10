@@ -97,10 +97,16 @@ type TaskSummary struct {
 	// LastEventSeq is the highest event seq of the task.
 	LastEventSeq int64 `json:"lastEventSeq"`
 
-	// Warnings are set only by a review: accepting over a senior member's objection names it and its first finding.
+	// Warnings are set only by a review: accepting over a senior member's objection names it and its first finding,
+	// and a rule that could not be saved says why ("rule not saved: ...").
 	Warnings []string `json:"warnings,omitempty"`
-	// Objections are the same warnings as values, for a text in the reader's language (F14).
+	// Objections are the senior objections among the warnings as values, for a text in the reader's language (F14).
 	Objections []SeniorObjection `json:"objections,omitempty"`
+	// LessonSaved is set only by a review whose rule is in the project's notes (added, or there already).
+	LessonSaved bool `json:"lessonSaved,omitempty"`
+	// Reminder is set only by a review rejected without a rule when many recent reviews of the project were
+	// rejected: "3 of the last 10 reviews in this project were rejected. ...".
+	Reminder string `json:"reminder,omitempty"`
 }
 
 // SeniorObjection is a senior member's standing objection to a task that was accepted anyway: the member and its
@@ -421,11 +427,14 @@ type FollowupRequest struct {
 }
 
 // ReviewRequest records the lead's verdict. AnswerObjection is the lead's written answer to a peer's objection
-// (consult); review accepted is refused without it while the objection stands.
+// (consult); review accepted is refused without it while the objection stands. Rule is a one-line lesson from the
+// review, added to the project's notes under "## Lessons from reviews" so every later brief carries it; a rule that
+// cannot be saved is a warning of the review, never its failure.
 type ReviewRequest struct {
 	Verdict         string `json:"verdict" ts:"Verdict"`
 	Notes           string `json:"notes,omitempty"`
 	AnswerObjection string `json:"answerObjection,omitempty"`
+	Rule            string `json:"rule,omitempty"`
 }
 
 // CancelRequest stops a task; WaitSeconds (0..60) is how long the call waits for the worker to stop.

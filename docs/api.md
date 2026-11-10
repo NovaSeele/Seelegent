@@ -105,6 +105,16 @@ in the daemon.
   (`; free API-key accounts: pass provider: anthropic and a model`, at most three providers, "and a model" when the
   provider maps no tier); it never moves to them by itself, since keys cost money.
 
+- `POST /tasks/{id}/review` takes `rule` (an addition): one line the project's workers should always follow, learned
+  from this review. After the verdict is recorded, it is added as a bullet under `## Lessons from reviews` in the
+  project's notes (`memory.Store.AddLesson`: white space collapsed to single spaces, at most 300 bytes, a rule the
+  section already has, ignoring case, is kept once), so every later full brief carries it. A rule that cannot be
+  saved (empty, too long, or notes that would pass the 64 KB cap) never fails the review: the answer's `warnings`
+  get `rule not saved: <why>`. The answer has `lessonSaved: true` when the rule is in the notes. A `rejected` review
+  without `rule` answers `reminder` (`3 of the last 10 reviews in this project were rejected. If they share a cause,
+  pass rule to keep it in every brief.`) when 3 or more of the project's last 10 verdicts, this one included, are
+  rejections. A request without `rule` is answered as before, plus that reminder.
+
 - `GET /git/branches` answers `null` for a folder that does not exist, keyed by the cwd as given. A batch of 50 cwds
   should not fail because one project folder was deleted. A relative cwd is still `400`.
 - `GET /tasks/{id}/turns/{n}/outside-diff` and `POST /tasks/{id}/turns/{n}/restore` (an addition to the contract,
