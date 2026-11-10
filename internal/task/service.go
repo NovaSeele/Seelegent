@@ -63,12 +63,14 @@ type Usage interface {
 	RecordAttempt(ctx context.Context, a usage.Attempt) error
 }
 
-// Memory gives briefs the project notes and the lead's verdicts and records new verdicts; *memory.Store
-// satisfies it.
+// Memory gives briefs the project notes and the lead's verdicts, records new verdicts and the lessons of reviews,
+// and counts recent verdicts for the review reminder; *memory.Store satisfies it.
 type Memory interface {
 	Get(ctx context.Context, cwd string) (memory.Note, error)
 	History(ctx context.Context, cwd string, n int) ([]string, error)
 	AddVerdict(ctx context.Context, v memory.Verdict) error
+	AddLesson(ctx context.Context, cwd, rule string) (memory.Note, error)
+	CountVerdicts(ctx context.Context, cwd string, n int, verdict string) (matched, total int, err error)
 }
 
 // Roles finds the role of a task; *role.Store satisfies it.

@@ -192,13 +192,14 @@ func printWait(w io.Writer, res api.WaitResult) {
 }
 
 func newReviewCommand(d deps) *cobra.Command {
-	var notes, objection string
+	var notes, objection, rule string
 	cmd := &cobra.Command{
 		Use:   "review <id> accepted|rejected",
 		Short: "Record your verdict on a task",
 		Args: func(_ *cobra.Command, args []string) error {
 			if len(args) != 2 || (args[1] != "accepted" && args[1] != "rejected") {
-				return usagef("usage: seelegent review <id> accepted|rejected [--notes text] [--answer-objection text|@file]")
+				return usagef("usage: seelegent review <id> accepted|rejected [--notes text] [--answer-objection text|@file] " +
+					"[--rule text]")
 			}
 			return nil
 		},
@@ -217,20 +218,29 @@ func newReviewCommand(d deps) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			sum, err := c.Review(cmd.Context(), id, api.ReviewRequest{Verdict: verdict, Notes: notes, AnswerObjection: answer})
+			sum, err := c.Review(cmd.Context(), id, api.ReviewRequest{Verdict: verdict, Notes: notes, AnswerObjection: answer,
+				Rule: strings.TrimSpace(rule)})
 			if err != nil {
 				return err
 			}
 			return emit(cmd, sum, func(w io.Writer) {
 				_, _ = fmt.Fprintf(w, "Task %s reviewed: %s\n", id, verdict)
+				if sum.LessonSaved {
+					_, _ = fmt.Fprintln(w, `Rule kept in the project's notes under "Lessons from reviews".`)
+				}
 				for _, warn := range sum.Warnings {
 					_, _ = fmt.Fprintf(w, "Warning: %s\n", warn)
+				}
+				if sum.Reminder != "" {
+					_, _ = fmt.Fprintf(w, "Note: %s\n", sum.Reminder)
 				}
 			})
 		},
 	}
 	cmd.Flags().StringVar(&notes, "notes", "", "review notes")
 	cmd.Flags().StringVar(&objection, "answer-objection", "", "answer to a peer member's objection (text or @file)")
+	cmd.Flags().StringVar(&rule, "rule", "", "one line the project's workers should always follow from now on, "+
+		"kept in the project's notes under \"Lessons from reviews\"")
 	return cmd
 }
 

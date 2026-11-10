@@ -2956,10 +2956,20 @@ export interface TaskSummary {
   variant?: string
   /** LastEventSeq is the highest event seq of the task. */
   lastEventSeq: number
-  /** Warnings are set only by a review: accepting over a senior member's objection names it and its first finding. */
+  /**
+   * Warnings are set only by a review: accepting over a senior member's objection names it and its first finding,
+   * and a rule that could not be saved says why ("rule not saved: ...").
+   */
   warnings?: string[]
-  /** Objections are the same warnings as values, for a text in the reader's language (F14). */
+  /** Objections are the senior objections among the warnings as values, for a text in the reader's language (F14). */
   objections?: SeniorObjection[]
+  /** LessonSaved is set only by a review whose rule is in the project's notes (added, or there already). */
+  lessonSaved?: boolean
+  /**
+   * Reminder is set only by a review rejected without a rule when many recent reviews of the project were
+   * rejected: "3 of the last 10 reviews in this project were rejected. ...".
+   */
+  reminder?: string
 }
 
 /**
@@ -3262,12 +3272,15 @@ export interface FollowupRequest {
 
 /**
  * ReviewRequest records the lead's verdict. AnswerObjection is the lead's written answer to a peer's objection
- * (consult); review accepted is refused without it while the objection stands.
+ * (consult); review accepted is refused without it while the objection stands. Rule is a one-line lesson from the
+ * review, added to the project's notes under "## Lessons from reviews" so every later brief carries it; a rule that
+ * cannot be saved is a warning of the review, never its failure.
  */
 export interface ReviewRequest {
   verdict: Verdict
   notes?: string
   answerObjection?: string
+  rule?: string
 }
 
 /** CancelRequest stops a task; WaitSeconds (0..60) is how long the call waits for the worker to stop. */

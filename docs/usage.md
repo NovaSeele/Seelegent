@@ -279,7 +279,9 @@ tests, then:
 - **Leave review notes** on lines of the diff in the **Git** view and send them all as one followup. Each note
   follows its line across turns and shows whether the next turn addressed it.
 - **Accept** or **Reject**: the buttons on the task, the lead's `review`, or
-  `seelegent review <id> accepted --notes "..."`.
+  `seelegent review <id> accepted --notes "..."`. When a review teaches something workers should always do, the
+  lead's `rule` (or `--rule "..."`) keeps it as one line under "Lessons from reviews" in the project's memory, which
+  every later brief carries ([mcp.md](mcp.md#lessons-from-reviews)).
 
 Accepting does not commit anything. Commit the accepted work yourself, or with the **Commit…** dialog of the Git
 view, which commits only the files you tick.

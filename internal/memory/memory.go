@@ -1,7 +1,11 @@
 // Package memory keeps the per-project notes the lead writes for workers and the lead's review verdicts. Both are
 // keyed by the project key of the folder (projectkey.Key), so every spelling of one folder shares them, and both
 // live in seelegent.db (migration 0005): the notes in project_memory, the verdicts in review_history. The notes are
-// capped at MaxBytes; an append or replace that would exceed the cap is refused, never truncated.
+// capped at MaxBytes; an append, replace or lesson that would exceed the cap is refused, never truncated.
+//
+// Lessons are the one-line rules the lead keeps from reviews (AddLesson): bullets in the LessonsHeading section of
+// the notes, so every later brief of the project carries them, unlike the verdicts, of which a brief shows only the
+// newest HistoryShown.
 package memory
 
 import (
@@ -9,6 +13,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -26,9 +31,15 @@ const HistoryShown = 8
 // notesChars caps the review notes kept in one history line.
 const notesChars = 200
 
+// LessonsHeading heads the section of the notes that holds the lessons from reviews.
+const LessonsHeading = "## Lessons from reviews"
+
+// MaxLessonBytes caps one lesson, after its white space is collapsed: a lesson is one line, not a paragraph.
+const MaxLessonBytes = 300
+
 // Errors.
 var (
-	// ErrInvalid: cwd is not an absolute path to an existing folder.
+	// ErrInvalid: cwd is not an absolute path to an existing folder, or a lesson is empty or over MaxLessonBytes.
 	ErrInvalid = errors.New("invalid")
 	// ErrTooLarge: the notes would exceed MaxBytes.
 	ErrTooLarge = errors.New("too large")
@@ -114,30 +125,127 @@ func get(ctx context.Context, tx *sql.Tx, n Note) (Note, error) {
 
 // Append adds text (trimmed, on its own line) to the notes of the project of cwd and returns the result.
 func (s *Store) Append(ctx context.Context, cwd, text string) (Note, error) {
-	return s.write(ctx, cwd, func(old string) string {
+	return s.write(ctx, cwd, func(old string) (string, bool) {
 		text = strings.TrimSpace(text)
 		if text == "" {
-			return old
+			return old, true
 		}
-		return old + text + "\n"
+		return old + text + "\n", true
 	})
 }
 
 // Replace sets the notes of the project of cwd to text (ending with a line break) and returns the result. An empty
 // text clears them.
 func (s *Store) Replace(ctx context.Context, cwd, text string) (Note, error) {
-	return s.write(ctx, cwd, func(string) string {
+	return s.write(ctx, cwd, func(string) (string, bool) {
 		if strings.TrimSpace(text) == "" {
-			return ""
+			return "", true
 		}
 		if !strings.HasSuffix(text, "\n") {
 			text += "\n"
 		}
-		return text
+		return text, true
 	})
 }
 
-func (s *Store) write(ctx context.Context, cwd string, change func(old string) string) (Note, error) {
+// AddLesson adds rule as a bullet ("- <rule>") at the end of the LessonsHeading section of the notes of the project
+// of cwd, creating that section at the end of the notes when they have none, and returns the result. The rule is
+// one line (see Lesson); an empty rule or one over MaxLessonBytes is ErrInvalid. A rule the section already has
+// (ignoring case) changes nothing: the notes come back as they are. The cap is Append's: notes that would exceed
+// MaxBytes are ErrTooLarge and stay as they were.
+func (s *Store) AddLesson(ctx context.Context, cwd, rule string) (Note, error) {
+	rule, err := Lesson(rule)
+	if err != nil {
+		return Note{}, err
+	}
+	return s.write(ctx, cwd, func(old string) (string, bool) { return addLesson(old, rule) })
+}
+
+// Lesson returns rule as AddLesson stores it: trimmed, every run of white space (line breaks included) collapsed to
+// one space, and a leading "- " or "* " dropped. An empty rule or one over MaxLessonBytes is ErrInvalid.
+func Lesson(rule string) (string, error) {
+	rule = oneLine(rule)
+	for _, mark := range []string{"- ", "* "} {
+		if r, isBullet := strings.CutPrefix(rule, mark); isBullet {
+			rule = strings.TrimSpace(r)
+			break
+		}
+	}
+	switch {
+	case rule == "" || rule == "-" || rule == "*":
+		return "", fmt.Errorf("%w: the rule is empty", ErrInvalid)
+	case len(rule) > MaxLessonBytes:
+		return "", fmt.Errorf("%w: the rule is %d bytes; a lesson is one line of at most %d bytes", ErrInvalid,
+			len(rule), MaxLessonBytes)
+	}
+	return rule, nil
+}
+
+// oneLine collapses every run of white space in s, line breaks included, to one space and trims it.
+func oneLine(s string) string { return strings.Join(strings.Fields(s), " ") }
+
+// addLesson returns notes with the bullet of rule at the end of their lessons section (a new section at the end of
+// the notes when they have none), or notes and false when the section already has the rule. Notes written with
+// CRLF line ends keep them.
+func addLesson(notes, rule string) (string, bool) {
+	eol := "\n"
+	if strings.Contains(notes, "\r\n") {
+		eol = "\r\n"
+	}
+	bullet := "- " + rule
+	if strings.TrimSpace(notes) == "" {
+		return LessonsHeading + eol + bullet + eol, true
+	}
+	lines := strings.Split(strings.TrimSuffix(notes, "\n"), "\n")
+	start, end := lessonsSection(lines)
+	if start < 0 {
+		return strings.TrimRight(notes, "\r\n") + eol + eol + LessonsHeading + eol + bullet + eol, true
+	}
+	last := start
+	for i := start + 1; i < end; i++ {
+		l := strings.TrimSpace(lines[i])
+		if l == "" {
+			continue
+		}
+		last = i
+		for _, mark := range []string{"- ", "* "} {
+			if b, isBullet := strings.CutPrefix(l, mark); isBullet && strings.EqualFold(oneLine(b), rule) {
+				return notes, false
+			}
+		}
+	}
+	lines = slices.Insert(lines, last+1, strings.TrimSuffix(bullet+eol, "\n"))
+	return strings.Join(lines, "\n") + "\n", true
+}
+
+// lessonsSection finds the lessons section in lines: the index of its heading (-1 when there is none) and the index
+// after its last line (that of the next heading of level 1 or 2, or len(lines)). Lines in fenced code are never
+// headings.
+func lessonsSection(lines []string) (start, end int) {
+	start = -1
+	fenced := false
+	for i, l := range lines {
+		t := strings.TrimRight(l, " \t\r")
+		if f := strings.TrimLeft(t, " "); strings.HasPrefix(f, "```") || strings.HasPrefix(f, "~~~") {
+			fenced = !fenced
+			continue
+		}
+		if fenced {
+			continue
+		}
+		switch {
+		case start < 0 && t == LessonsHeading:
+			start = i
+		case start >= 0 && (t == "#" || t == "##" || strings.HasPrefix(t, "# ") || strings.HasPrefix(t, "## ")):
+			return start, i
+		}
+	}
+	return start, len(lines)
+}
+
+// write runs change on the notes of the project of cwd and saves the result, in one transaction. A change that
+// answers false leaves the notes, and their time, as they are.
+func (s *Store) write(ctx context.Context, cwd string, change func(old string) (string, bool)) (Note, error) {
 	key, canonical, err := Project(cwd)
 	if err != nil {
 		return Note{}, err
@@ -148,7 +256,11 @@ func (s *Store) write(ctx context.Context, cwd string, change func(old string) s
 		if err != nil {
 			return err
 		}
-		text := change(cur.Text)
+		text, changed := change(cur.Text)
+		if !changed {
+			n = cur
+			return nil
+		}
 		if len(text) > MaxBytes {
 			return fmt.Errorf("%w: project memory would be %d bytes, over the %d byte cap", ErrTooLarge, len(text),
 				MaxBytes)
@@ -193,6 +305,24 @@ func (s *Store) AddVerdict(ctx context.Context, v Verdict) error {
 			VALUES (?, ?, ?, ?, ?, ?)`, key, s.now().UTC().Format(timeFormat), v.TaskID, v.Title, v.Verdict, notes)
 		return err
 	})
+}
+
+// CountVerdicts looks at the newest n verdicts of the project of cwd and returns how many of them are verdict and
+// how many there are (at most n).
+func (s *Store) CountVerdicts(ctx context.Context, cwd string, n int, verdict string) (matched, total int, err error) {
+	key, _, err := Project(cwd)
+	if err != nil {
+		return 0, 0, err
+	}
+	err = s.db.Read(ctx, func(tx *sql.Tx) error {
+		return tx.QueryRowContext(ctx, `SELECT COALESCE(SUM(verdict = ?), 0), COUNT(*) FROM (
+			SELECT verdict FROM review_history WHERE project_key = ? ORDER BY id DESC LIMIT ?)`, verdict, key, n).
+			Scan(&matched, &total)
+	})
+	if err != nil {
+		return 0, 0, err
+	}
+	return matched, total, nil
 }
 
 // History returns the newest n verdicts of the project of cwd, oldest first, as brief lines:

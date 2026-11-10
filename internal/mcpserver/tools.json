@@ -340,7 +340,7 @@
   },
   {
     "name": "review",
-    "description": "Close a task with your verdict after reviewing/testing it. The verdict and notes are shown in the dashboard and appended to the project's task history. Returns only the task id and its new status (plus `warnings` when a senior consulted on it objected). If a peer `consult` objected, `accepted` fails with peer_objection until you pass `answer_objection`.",
+    "description": "Close a task with your verdict after reviewing/testing it. The verdict and notes are shown in the dashboard and appended to the project's task history. Returns only the task id and its new status (plus `warnings` when a senior consulted on it objected or a `rule` could not be saved, and a `note` when many recent reviews of the project were rejected). If a peer `consult` objected, `accepted` fails with peer_objection until you pass `answer_objection`. Pass `rule` when the review taught something workers should always do.",
     "inputSchema": {
       "type": "object",
       "required": [
@@ -364,6 +364,10 @@
         "answer_objection": {
           "type": "string",
           "description": "Your written answer to a peer objection from `consult`. Required to accept a task a peer objected to; recorded on the consult and appended to the notes."
+        },
+        "rule": {
+          "type": "string",
+          "description": "One line the workers of this project should always follow from now on, learned from this review. It is added to the project's notes under 'Lessons from reviews' and shown in every later brief."
         }
       }
     }

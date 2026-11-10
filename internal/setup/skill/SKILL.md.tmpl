@@ -20,7 +20,7 @@ If the environment variable `SEELEGENT_WORKER` is `1`, you are a Seelegent worke
 - `wait` waits for `task_ids` up to `wait_seconds`; `any: true` wakes when the first one finishes. It also wakes early when a task needs you.
 - `task` shows a task's report; `steps: N` adds its last N tool steps, `full: true` the whole record.
 - `followup` sends the next instruction to a task (`task_id`, `message`), with the same `member`, `model`, `effort`, `profile`, `task_ids`, `allow_git`, `gate`, `lane`, `force_lane`, `verify`, `wait_seconds` and `wake_on_blocked` options as `delegate`. `force: true` starts a task held in `blocked_deps`. A followup cannot change the provider.
-- `review` closes a task: `verdict` `accepted` or `rejected`, with short `notes`. Verdicts go into the project's history, which later briefs show. After a peer's objection (see `consult`), `accepted` needs `answer_objection`.
+- `review` closes a task: `verdict` `accepted` or `rejected`, with short `notes`. Verdicts go into the project's history, of which later briefs show only the last few. When a review teaches something the project's workers should always do, pass it as `rule` (one line): it is kept in the project's notes under "Lessons from reviews", which every later brief carries. After a peer's objection (see `consult`), `accepted` needs `answer_objection`.
 - `cancel` stops a task (`task_id`). It waits up to `wait_seconds` (default 15, at most 60) and answers `cancelled`, or `cancelling` while the worker is still stopping.
 - `status` lists the accounts with their quota, the active tasks and the backends (`full: true` for everything).
 - `memory` keeps the project notes every brief of that project includes: `cwd`, `action` (`read`, `append` or `replace`), `text`.

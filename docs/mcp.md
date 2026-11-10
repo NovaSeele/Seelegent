@@ -164,7 +164,7 @@ does), with two additions: `gate` of `delegate` and `followup` also takes `true`
 | `delegate` | `POST /tasks`, then `POST /wait?cwd=`; with `variants` or `variant_specs`: `POST /contests`, then `GET /contests/{id}/wait` | yes. `member` runs the task as that member ([team.md](team.md)). `variants`/`variant_specs` start a contest, with `judge` (a member id, or `false` for machine scoring only) and `deadline_minutes`; a contest cannot take `after`. `gate` (a command, a list, `true` for the detected commands, `false`), `lane` (paths, or `false` for `noLane`), `force_lane` and `verify` map onto `gate`/`gateCommands`/`lane`/`noLane`/`forceLane`/`verify` ([gates.md](gates.md)) |
 | `followup` | `GET /tasks/{id}` (only to check `provider`), `POST /tasks/{id}/followup`, `POST /wait` | yes; `member` moves the task to that member; `gate: []` clears the lead's gate commands (sent as `gateCommands: []`), so the spec's frozen `Gate:` lines or the detected commands run again |
 | `wait` | `POST /wait` (`reports: true`) | yes |
-| `review` | `POST /tasks/{id}/review` | yes; `answer_objection` is sent as `answerObjection`, which accepting a task a peer objected to needs; a senior's objection comes back as a `Warning:` line |
+| `review` | `POST /tasks/{id}/review` | yes; `answer_objection` is sent as `answerObjection`, which accepting a task a peer objected to needs; a senior's objection comes back as a `Warning:` line. `rule` (an addition) is sent trimmed as `rule` (see [Lessons from reviews](#lessons-from-reviews)) |
 | `cancel` | `POST /tasks/{id}/cancel` | yes; 202 is reported as `cancelling` |
 | `task` | `GET /tasks/{id}/report` (or `GET /tasks/{id}` with `full`), `GET /tasks/{id}/events?tail=` | yes |
 | `status` | `GET /accounts`, `GET /tasks?status=`, `GET /backends` | yes: an API-key account carries `testResult`, its spend (`spentUsd` only from a spend source with a cost: `service`, `prices` or `cli`; `spentTokens`, `spendSource`, `budgetUsd`, `budgetState`), `balance` when its spend service reported one (`amount`, `currency` as the service gives it, `accountWide` for DeepSeek and Moonshot, `stale`), `restReason` on any account held until the user acts (`credits`, `budget_reached`; no `restingUntil` then) and, when its provider has no tier models, `modelPerTask: true`; the summary then names those providers ("Model per task (pass model in delegate): provider ..."), and a delegate on them without `model` is refused at once with the provider's models as examples |
@@ -189,6 +189,21 @@ and booleans may arrive as strings, a single string is accepted where a list is 
 `mode: full` maps to the API's `edit`. `lane: false`, `verify: false` and `force_lane: false` mean "off" and are
 accepted. Relative paths resolve against the server's working directory. `followup`, `wait` and `task` build reports
 with the task's own project, not the server's working directory.
+
+### Lessons from reviews
+
+A brief shows the project's notes in full but only the last 8 review verdicts, each cut to 200 characters, so a
+mistake workers keep making drops out of view. `review` therefore takes `rule`: one line the project's workers should
+always follow, learned from this review. The daemon adds it as a bullet (`- <rule>`) at the end of the
+`## Lessons from reviews` section of the project's notes (the section is created at the end of the notes when it is
+missing), so every later full brief of the project carries it; `memory` reads and edits it like any other note. The
+rule is one line of at most 300 bytes (white space, line breaks included, is collapsed to single spaces), and a rule
+the section already has (ignoring case) is kept once. It is saved after the verdict: a rule that cannot be saved
+(empty, too long, or notes that would pass their 64 KB cap) comes back as a `Warning: rule not saved: ...` line and
+the review stands. When it is in the notes, the answer carries `lesson_saved: true` and the line "Rule kept in the
+project's notes ...". A `rejected` review without `rule` adds a `Note:` line (and `note`) when 3 or more of the
+project's last 10 verdicts are rejections, so the lead can look for a shared cause; there is no text matching, the
+lead decides what the rule says.
 
 ## Results
 

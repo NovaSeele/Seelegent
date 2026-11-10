@@ -264,6 +264,15 @@ func TestTaskCommands(t *testing.T) {
 		t.Fatalf("review = %+v", sum)
 	}
 	wantErr(t, td, ExitUsage, codeUsage, "review", id, "maybe", "--json")
+	if out := must(t, td, "review", id, "accepted", "--rule", "Run go vet first.").stdout; !strings.Contains(out,
+		`Rule kept in the project's notes under "Lessons from reviews".`) {
+		t.Fatalf("review --rule:\n%s", out)
+	}
+	var lessons api.Memory
+	must(t, td, "memory", "read", "--cwd", d.cwd, "--json").json(t, &lessons)
+	if !strings.Contains(lessons.Text, "## Lessons from reviews\n- Run go vet first.\n") {
+		t.Fatalf("notes after review --rule = %q", lessons.Text)
+	}
 
 	// a lead named by SEELEGENT_LEAD; --wait 0 returns at once.
 	t.Setenv(ops.EnvLead, "Codex")
