@@ -7,7 +7,7 @@
 
 **計画とレビューは 1 つのリードエージェントが、コードはあなた自身のアカウントで動くコーディング CLI が書きます。**
 
-[インストール](#インストール)&nbsp;· [クイックスタート](#クイックスタート)&nbsp;· [使い方ガイド](docs/usage.md)&nbsp;·
+[インストール](#インストール)&nbsp;· [クイックスタート](#クイックスタート)&nbsp;· [使い方ガイド](docs/usage.md)&nbsp;· [Wiki](https://github.com/NovaSeele/Seelegent/wiki)&nbsp;·
 [ドキュメント](docs/README.md)&nbsp;· [コントリビュート](CONTRIBUTING.md)
 
 [English](README.md)&nbsp;· [Tiếng Việt](README.vi.md)&nbsp;· [简⁠体⁠中⁠文](README.zh-CN.md)&nbsp;· [Español](README.es.md)&nbsp;·

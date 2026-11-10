@@ -7,7 +7,7 @@
 
 **一个主导 agent 负责规划和审阅，运行在你自己账号上的编程 CLI 负责写代码。**
 
-[安装](#安装)&nbsp;· [快速上手](#快速上手)&nbsp;· [使用指南](docs/usage.md)&nbsp;· [文档](docs/README.md)&nbsp;·
+[安装](#安装)&nbsp;· [快速上手](#快速上手)&nbsp;· [使用指南](docs/usage.md)&nbsp;· [Wiki](https://github.com/NovaSeele/Seelegent/wiki)&nbsp;· [文档](docs/README.md)&nbsp;·
 [参与贡献](CONTRIBUTING.md)
 
 [English](README.md)&nbsp;· [Tiếng Việt](README.vi.md)&nbsp;· **简⁠体⁠中⁠文**&nbsp;· [Español](README.es.md)&nbsp;·

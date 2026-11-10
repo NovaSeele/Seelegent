@@ -7,7 +7,7 @@
 
 **리드 에이전트 하나가 계획하고 리뷰합니다. 코드는 여러분 계정에서 돌아가는 코딩 CLI가 씁니다.**
 
-[설치](#설치)&nbsp;· [빠른 시작](#빠른-시작)&nbsp;· [사용 가이드](docs/usage.md)&nbsp;· [문서](docs/README.md)&nbsp;·
+[설치](#설치)&nbsp;· [빠른 시작](#빠른-시작)&nbsp;· [사용 가이드](docs/usage.md)&nbsp;· [Wiki](https://github.com/NovaSeele/Seelegent/wiki)&nbsp;· [문서](docs/README.md)&nbsp;·
 [기여하기](CONTRIBUTING.md)
 
 [English](README.md)&nbsp;· [Tiếng Việt](README.vi.md)&nbsp;· [简⁠体⁠中⁠文](README.zh-CN.md)&nbsp;· [Español](README.es.md)&nbsp;·

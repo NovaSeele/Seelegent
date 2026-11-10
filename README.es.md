@@ -7,7 +7,7 @@
 
 **Un agente principal planifica y revisa. Las CLI de programación de tus propias cuentas escriben el código.**
 
-[Instalación](#instalación)&nbsp;· [Inicio rápido](#inicio-rápido)&nbsp;· [Guía de uso](docs/usage.md)&nbsp;·
+[Instalación](#instalación)&nbsp;· [Inicio rápido](#inicio-rápido)&nbsp;· [Guía de uso](docs/usage.md)&nbsp;· [Wiki](https://github.com/NovaSeele/Seelegent/wiki)&nbsp;·
 [Documentación](docs/README.md)&nbsp;· [Contribuir](CONTRIBUTING.md)
 
 [English](README.md)&nbsp;· [Tiếng Việt](README.vi.md)&nbsp;· [简⁠体⁠中⁠文](README.zh-CN.md)&nbsp;· **Español**&nbsp;·

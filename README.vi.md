@@ -7,7 +7,7 @@
 
 **Một agent lead lên kế hoạch và review. Các CLI lập trình chạy trên chính tài khoản của bạn viết code.**
 
-[Cài đặt](#cài-đặt)&nbsp;· [Bắt đầu nhanh](#bắt-đầu-nhanh)&nbsp;· [Hướng dẫn sử dụng](docs/usage.md)&nbsp;· [Tài liệu](docs/README.md)&nbsp;·
+[Cài đặt](#cài-đặt)&nbsp;· [Bắt đầu nhanh](#bắt-đầu-nhanh)&nbsp;· [Hướng dẫn sử dụng](docs/usage.md)&nbsp;· [Wiki](https://github.com/NovaSeele/Seelegent/wiki)&nbsp;· [Tài liệu](docs/README.md)&nbsp;·
 [Đóng góp](CONTRIBUTING.md)
 
 [English](README.md)&nbsp;· **Tiếng Việt**&nbsp;· [简⁠体⁠中⁠文](README.zh-CN.md)&nbsp;· [Español](README.es.md)&nbsp;·

@@ -7,7 +7,7 @@
 
 **Один ведущий агент планирует и проверяет. Код пишут CLI для программирования на ваших собственных аккаунтах.**
 
-[Установка](#установка)&nbsp;· [Быстрый старт](#быстрый-старт)&nbsp;· [Руководство](docs/usage.md)&nbsp;·
+[Установка](#установка)&nbsp;· [Быстрый старт](#быстрый-старт)&nbsp;· [Руководство](docs/usage.md)&nbsp;· [Wiki](https://github.com/NovaSeele/Seelegent/wiki)&nbsp;·
 [Документация](docs/README.md)&nbsp;· [Участие в разработке](CONTRIBUTING.md)
 
 [English](README.md)&nbsp;· [Tiếng Việt](README.vi.md)&nbsp;· [简⁠体⁠中⁠文](README.zh-CN.md)&nbsp;· [Español](README.es.md)&nbsp;·
