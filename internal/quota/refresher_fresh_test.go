@@ -191,7 +191,12 @@ func TestRequestReadsInBackground(t *testing.T) {
 	if n := f.reader.count(a.ID); n != 1 {
 		t.Fatalf("the cycle read a signed-out account: %d reads", n)
 	}
-	f.r.Request(a.ID)
+	// Two requests before the loop wakes are served by one read. Calling Request twice cannot pin that: the loop may
+	// take the first before the second comes, and then the second is a new request (CI saw 3 reads). So the first is
+	// recorded without waking the loop, and the second wakes it.
+	f.r.mu.Lock()
+	f.r.pending[a.ID] = 0
+	f.r.mu.Unlock()
 	f.r.Request(a.ID)
 	waitFor(t, "the requested read", func() bool {
 		snap, _, err := f.store.Get(t.Context(), a.ID)
