@@ -66,9 +66,10 @@ Seelegent is a Go daemon + CLI + MCP server in one binary, with a Vue 3 + TypeSc
 - Conventional commits ending with `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`. Stage paths
   explicitly (no blind `git add -A`), keep the tree clean.
 - `main` takes changes only through pull requests with green CI (a ruleset blocks direct and force pushes). Push
-  a feature branch and open a PR only when the lead asks; workers never push. Every merge done on GitHub writes the
-  account's name and email into the commits, so merge only with email privacy on, and check the emails
-  after each merge (see [docs/development.md](docs/development.md#git-workflow-and-commits)).
+  a feature branch and open a PR only when the lead asks; workers never push. Merge only with
+  `gh pr merge N --merge --author-email 92350459+NovaSeele@users.noreply.github.com` (never rebase, squash or the
+  web button), then check the emails on `main` (see
+  [docs/development.md](docs/development.md#git-workflow-and-commits)).
 
 ## Commands
 

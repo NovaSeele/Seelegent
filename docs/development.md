@@ -317,11 +317,15 @@ Every branch passes these before it is merged (CI runs them on Linux, Windows an
   force pushes and deletion, and requires the six CI jobs to pass: go on ubuntu, windows and macos, lint,
   release, and web. The flow is: push the branch, open a PR, wait for green CI, then merge. Tags can still be
   pushed.
-- Every merge done on GitHub (web button, `gh pr merge`, auto-merge) takes the name and email from the account
-  profile of the person who merges. A merge commit or squash commit uses them for both author and committer. A
-  rebase merge keeps each commit's author but still uses them for the committer. So merge only while "Keep my
-  email addresses private" is on; the email in those commits is then
-  `92350459+NovaSeele@users.noreply.github.com`. The profile name may appear.
+- Merge pull requests only like this:
+  `gh pr merge N --merge --author-email 92350459+NovaSeele@users.noreply.github.com`. Do not use rebase, squash,
+  auto-merge or the web button. Without `--author-email`, GitHub writes the merging account's default commit
+  email into the commits it makes:
+  - a merge commit or a squash commit gets it as the author;
+  - a rebase merge gets it as the committer of every rebased commit.
+  This happened even with "Keep my email addresses private" turned on. A merge commit made with
+  `--author-email` has that author, and GitHub's own `noreply@github.com` as committer. The branch's commits
+  keep their own identities.
 - After every merge, check `git log origin/main --format='%ae | %ce' | sort -u`. The only allowed addresses are
   that noreply address and GitHub's own `noreply@github.com`. If any other address shows up, stop merging and
   report it.
