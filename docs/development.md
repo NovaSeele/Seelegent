@@ -317,10 +317,13 @@ Every branch passes these before it is merged (CI runs them on Linux, Windows an
   force pushes and deletion, and requires the six CI jobs to pass: go on ubuntu, windows and macos, lint,
   release, and web. The flow is: push the branch, open a PR, wait for green CI, then merge. Tags can still be
   pushed.
-- Merge pull requests with rebase (`gh pr merge N --rebase`). Merge commits and squash commits made by GitHub
-  take the name and email from the GitHub account profile. A rebase keeps each commit's author,
-  `NovaSeele <92350459+NovaSeele@users.noreply.github.com>`. After a merge, check
-  `git log origin/main --format='%an <%ae>' | sort -u`.
+- Every merge done on GitHub (web button, `gh pr merge`, auto-merge) takes the name and email from the account
+  profile of the person who merges. A merge commit or squash commit uses them for both author and committer. A
+  rebase merge keeps each commit's author but still uses them for the committer. So merge only while the account
+  profile name is `NovaSeele` and "Keep my email addresses private" is on. Commits then carry
+  `NovaSeele <92350459+NovaSeele@users.noreply.github.com>`.
+- After every merge, check `git log origin/main --format='%an <%ae> | %cn <%ce>' | sort -u`. Allowed addresses
+  are this noreply address and GitHub's own `noreply@github.com`.
 - Conventional commit messages, for example `feat(task): add the wait endpoint` or `fix(pool): …`. Keep commits
   small; each one builds.
 - Every commit message ends with a blank line and
