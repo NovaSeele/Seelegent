@@ -124,7 +124,9 @@ export function needKind(task: TaskSummary, now = Date.now()): NeedKind | null {
     return now - Date.parse(task.updatedAt) < FAILED_NEEDS_MS ? 'failed' : null
   }
   if (task.status === 'blocked_deps') return 'depsBlocked'
-  if (awaitsReview(task)) return 'review'
+  // A finished task whose turn ended blocked (red gate, rejecting verifier, a peer's objection, hygiene) is not
+  // ready for review: it needs action, as its pill in the list and the header says (displayStatus).
+  if (awaitsReview(task)) return isBlocked(task) ? 'blocked' : 'review'
   return null
 }
 

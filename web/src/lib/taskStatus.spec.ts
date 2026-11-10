@@ -58,6 +58,29 @@ describe('task status', () => {
     expect(needKind(makeTask({ status: 'done', kind: 'commit-msg' }), now)).toBeNull()
   })
 
+  it('says a finished task with a red gate needs action, as its pill does, not that it awaits review', () => {
+    const gateRed = makeTask({
+      status: 'done',
+      review: null,
+      gate: { state: 'red', autoFixes: 2 },
+      attention: { state: 'blocked', reason: 'gate_red', who: 'lead', since: iso() },
+    })
+    expect(needKind(gateRed)).toBe('blocked')
+    expect(displayStatus(gateRed)).toBe('blocked')
+    expect(statusWordKey(gateRed)).toBe(NEED_WORD_KEY.blocked)
+    // A green gate leaves only the review flag (info): still awaiting review.
+    const green = makeTask({
+      status: 'done',
+      review: null,
+      gate: { state: 'green', autoFixes: 0 },
+      attention: { state: 'info', reason: 'review', who: 'lead', since: iso() },
+    })
+    expect(needKind(green)).toBe('review')
+    expect(
+      needKind({ ...gateRed, review: { verdict: 'accepted', at: iso() }, attention: null }),
+    ).toBe(null)
+  })
+
   it('hides helper runs and gates actions by state', () => {
     expect(isVisibleTask(makeTask({ kind: 'consult' }))).toBe(false)
     expect(isVisibleTask(makeTask({ kind: 'verify' }))).toBe(true)

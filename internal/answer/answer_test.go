@@ -78,3 +78,42 @@ func TestClip(t *testing.T) {
 		t.Error("brands")
 	}
 }
+
+// Demo bug: a consult's required change "set CORS_ORIGINS" read "set CORSORIGINS" because every '_' was dropped.
+func TestStripInline(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"CORS_ORIGINS", "CORS_ORIGINS"},
+		{"set CORS_ORIGINS to the dashboard origin", "set CORS_ORIGINS to the dashboard origin"},
+		{"snake_case_name", "snake_case_name"},
+		{"_emphasis_", "emphasis"},
+		{"an _emphatic_ word", "an emphatic word"},
+		{"`MAX_RETRY_COUNT`", "MAX_RETRY_COUNT"},
+		{"rename `old_name` to `new_name`", "rename old_name to new_name"},
+		{"`_x_ and **y**`", "_x_ and **y**"},
+		{"`` a `b` c ``", "a `b` c"},
+		{"**Set** CORS_ORIGINS in `config_file.go`", "Set CORS_ORIGINS in config_file.go"},
+		{"*one* and ***both***", "one and both"},
+		{"2 * 3 * 4", "2 * 3 * 4"},
+		{"a lone _ underscore and _unclosed", "a lone _ underscore and _unclosed"},
+		{"an `unclosed span with_underscore", "an `unclosed span with_underscore"},
+		{"`code` then _em_", "code then em"},
+		{"plain text", "plain text"},
+	}
+	for _, c := range cases {
+		if got := StripInline(c.in); got != c.want {
+			t.Errorf("StripInline(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
+func TestQuestionsKeepIdentifiers(t *testing.T) {
+	body := "- Set `CORS_ORIGINS` and DB_POOL_SIZE in **config.go**\n- rename snake_case_name\n- _none_\n"
+	got := Questions(body)
+	want := []string{"Set CORS_ORIGINS and DB_POOL_SIZE in config.go", "rename snake_case_name"}
+	if !slices.Equal(got, want) {
+		t.Errorf("questions = %q, want %q", got, want)
+	}
+	if secs := Sections("## __Required_changes__\n- x\n"); len(secs) != 1 || secs[0].Title != "required_changes" {
+		t.Errorf("sections = %+v", secs)
+	}
+}

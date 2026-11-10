@@ -49,6 +49,26 @@ describe('watch board', () => {
     ])
   })
 
+  it('puts a finished task with a red gate under needs action, not under awaiting review', () => {
+    const board = buildBoard(
+      [
+        makeTask({ id: 'green', status: 'done', needsSince: iso(-120_000) }),
+        makeTask({
+          id: 'red',
+          status: 'done',
+          needsSince: iso(-60_000),
+          gate: { state: 'red', autoFixes: 2 },
+          attention: { state: 'blocked', reason: 'gate_red', who: 'lead', since: iso(-60_000) },
+        }),
+      ],
+      T0,
+    )
+    expect(board.needs.map((n) => [n.id, n.kind])).toEqual([
+      ['red', 'blocked'],
+      ['green', 'review'],
+    ])
+  })
+
   it('lists running work (running, then waiting for quota, then queued) apart from what needs you', () => {
     const board = buildBoard(tasks, T0)
     expect(board.running).toEqual(['run-new', 'run-old', 'quota', 'queued'])
